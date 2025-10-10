@@ -161,7 +161,7 @@ def is_allowed(user_id, command=None):
         return False
     
     # Всегда разрешенные команды (даже для не-админов)
-    allowed_for_all = ["start", "menu", "back_to_menu", "uptime", "traffic", "selftest", "get_id", "manage_users"]
+    allowed_for_all = ["start", "menu", "back_to_menu", "uptime", "traffic", "selftest", "get_id", "get_id_inline"]
     if command in allowed_for_all:
         return True
     
@@ -264,6 +264,9 @@ def get_manage_users_keyboard():
         ],
         [
             InlineKeyboardButton(text="🔄 Изменить группу", callback_data="change_group"),
+            InlineKeyboardButton(text="🆔 Мой ID", callback_data="get_id_inline")
+        ],
+        [
             InlineKeyboardButton(text="🔙 Назад в меню", callback_data="back_to_menu")
         ]
     ])
@@ -348,6 +351,7 @@ def get_back_keyboard(callback_data="back_to_manage_users"):
     ])
     return keyboard
 
+# REVERTED to bot_old.py version
 def convert_json_to_vless(json_data, custom_name):
     """Конвертирует JSON-конфигурацию Xray в VLESS-ссылку с Reality."""
     try:
@@ -355,11 +359,6 @@ def convert_json_to_vless(json_data, custom_name):
         outbound = config['outbounds'][0]
         vnext = outbound['settings']['vnext'][0]
         user = vnext['users'][0]
-        
-        # Проверяем наличие realitySettings
-        if 'realitySettings' not in outbound['streamSettings']:
-             raise ValueError("Отсутствуют realitySettings в конфигурации streamSettings.")
-             
         reality = outbound['streamSettings']['realitySettings']
 
         vless_params = {
@@ -367,44 +366,26 @@ def convert_json_to_vless(json_data, custom_name):
             'address': vnext['address'],
             'port': vnext['port'],
             'security': outbound['streamSettings']['security'],
-            'host': reality.get('serverName', 'none'),
-            'fp': reality.get('fingerprint', 'none'),
-            'pbk': reality.get('publicKey', 'none'),
-            'sid': reality.get('shortId', 'none'),
+            'host': reality['serverName'],
+            'fp': reality['fingerprint'],
+            'pbk': reality['publicKey'],
+            'sid': reality['shortId'],
             'type': outbound['streamSettings']['network'],
-            'flow': user.get('flow', 'none'),
-            'encryption': user.get('encryption', 'none'),
+            'flow': user['flow'],
+            'encryption': user['encryption'],
             'headerType': 'none'
         }
-        
-        # Улучшенная логика формирования URL для Reality (xtls-rprx-vision/tls)
-        query_params = {
-            'security': vless_params['security'],
-            'encryption': vless_params['encryption'],
-            'pbk': vless_params['pbk'],
-            'fp': vless_params['fp'],
-            'type': vless_params['type'],
-        }
 
-        if vless_params['flow'] != 'none' and vless_params['flow']:
-             query_params['flow'] = vless_params['flow']
-        
-        if vless_params['type'] == 'grpc':
-            # Добавляем gRPC-специфичные параметры
-            query_params['serviceName'] = outbound['streamSettings'].get('grpcSettings', {}).get('serviceName', '')
-            query_params['mode'] = outbound['streamSettings'].get('grpcSettings', {}).get('mode', '')
-            
-        # Параметры Reality
-        query_params['sni'] = vless_params['host']
-        query_params['host'] = vless_params['host'] # дублируем для совместимости
-        query_params['sid'] = vless_params['sid']
-        
-        # Преобразование параметров в строку запроса
-        query_string = urllib.parse.urlencode({k: v for k, v in query_params.items() if v and v != 'none'}, quote_via=urllib.parse.quote)
-
-        # Формирование VLESS-ссылки
-        vless_url = (f"vless://{vless_params['id']}@{vless_params['address']}:{vless_params['port']}?"
-                     f"{query_string}"
+        vless_url = (f"vless://{vless_params['id']}@{vless_params['address']}:{vless_params['port']}"
+                     f"?security={vless_params['security']}"
+                     f"&encryption={vless_params['encryption']}"
+                     f"&pbk={urllib.parse.quote(vless_params['pbk'])}"
+                     f"&host={urllib.parse.quote(vless_params['host'])}"
+                     f"&headerType={vless_params['headerType']}"
+                     f"&fp={vless_params['fp']}"
+                     f"&type={vless_params['type']}"
+                     f"&flow={vless_params['flow']}"
+                     f"&sid={vless_params['sid']}"
                      f"#{urllib.parse.quote(custom_name)}")
 
         return vless_url
@@ -614,15 +595,10 @@ async def callback_handler(callback: types.CallbackQuery, state: FSMContext):
     message_id = callback.message.message_id
 
     # Проверка разрешений
-    if command.startswith("delete_user_") or command.startswith("set_group_") or command.startswith("select_user_change_group_"):
+    permission_check_command = command
+    if command.startswith(("delete_user_", "set_group_", "select_user_change_group_", "request_self_delete_", "confirm_self_delete_", "back_to_delete_users")):
          permission_check_command = "manage_users"
-    elif command.startswith("request_self_delete_") or command.startswith("confirm_self_delete_") or command == "back_to_delete_users":
-         permission_check_command = "manage_users"
-    elif command in ["reboot", "back_generate_vless"]:
-         permission_check_command = command
-    else:
-         permission_check_command = command
-
+    
     if not is_allowed(user_id, permission_check_command):
         if user_id not in ALLOWED_USERS:
             await send_access_denied_message(user_id, chat_id, command)
@@ -665,8 +641,9 @@ async def callback_handler(callback: types.CallbackQuery, state: FSMContext):
                 ALLOWED_USERS[target_user_id] = new_group
                 save_users()
                 await callback.message.edit_text(f"✅ Группа пользователя **{user_name}** изменена на **{new_group}**", reply_markup=get_back_keyboard("back_to_manage_users"), parse_mode="Markdown")
-                # Перезапуск, чтобы обновить права доступа без задержки
-                os.system(f"sudo systemctl restart tg-bot.service")
+                # ADDED from bot_old.py
+                log_path = os.path.join(LOG_DIR, "bot.log")
+                os.system(f"truncate -s 0 {log_path} && sudo systemctl restart tg-bot.service")
 
         elif command == "back_to_manage_users":
             # Удаляем предыдущее сообщение с кнопкой 'Назад' и отправляем новое меню управления
@@ -696,7 +673,8 @@ async def callback_handler(callback: types.CallbackQuery, state: FSMContext):
                     USER_NAMES.pop(str(target_user_id), None)
                     save_users()
                     await callback.message.edit_text(f"✅ Пользователь **{user_name}** удалён. Вы потеряли доступ к боту.", parse_mode="Markdown")
-                    os.system(f"sudo systemctl restart tg-bot.service")
+                    log_path = os.path.join(LOG_DIR, "bot.log")
+                    os.system(f"truncate -s 0 {log_path} && sudo systemctl restart tg-bot.service")
                 else:
                     await callback.message.edit_text(f"⚠️ Пользователь ID **`{target_user_id}`** уже был удален.", reply_markup=get_back_keyboard("back_to_manage_users"), parse_mode="Markdown")
         
@@ -710,17 +688,22 @@ async def callback_handler(callback: types.CallbackQuery, state: FSMContext):
                 USER_NAMES.pop(str(target_user_id), None)
                 save_users()
                 await callback.message.edit_text(f"✅ Пользователь **{user_name}** удалён", reply_markup=get_back_keyboard("back_to_manage_users"), parse_mode="Markdown")
-                os.system(f"sudo systemctl restart tg-bot.service")
+                log_path = os.path.join(LOG_DIR, "bot.log")
+                os.system(f"truncate -s 0 {log_path} && sudo systemctl restart tg-bot.service")
             else:
                 await callback.message.edit_text(f"⚠️ Пользователь ID **`{target_user_id}`** не найден", reply_markup=get_back_keyboard("back_to_manage_users"), parse_mode="Markdown")
         
+        # ADDED from bot_old.py
+        elif command == "get_id_inline":
+             await callback.message.answer(f"🆔 Ваш ID: {user_id}\nГруппа: {ALLOWED_USERS.get(user_id, 'не авторизован')}")
+
         # --- Other Callbacks ---
         elif command == "reboot":
              await reboot_handler(callback)
              
         elif command == "back_generate_vless":
             await state.clear()
-            await callback.message.edit_text("🔗 VLESS-ссылка", reply_markup=None)
+            await callback.message.delete()
             
         elif command == "back_to_menu":
              await callback.message.delete()
@@ -896,7 +879,8 @@ async def handle_group_selection_callback(callback: types.CallbackQuery, state: 
             reply_markup=get_back_keyboard("back_to_manage_users"),
             parse_mode="Markdown"
         )
-        os.system(f"sudo systemctl restart tg-bot.service")
+        log_path = os.path.join(LOG_DIR, "bot.log")
+        os.system(f"truncate -s 0 {log_path} && sudo systemctl restart tg-bot.service")
         
     elif callback.data == "back_to_manage_users":
         # Пользователь отменил выбор группы, возвращаем его в меню управления
@@ -906,10 +890,7 @@ async def handle_group_selection_callback(callback: types.CallbackQuery, state: 
              reply_markup=get_manage_users_keyboard()
         )
 
-
-# --- ACTION HANDLERS (CALLED BY TEXT OR COMMANDS) ---
-# ... (Остальные обработчики команд uptime, update, restart, reboot_handler, updatexray, traffic_handler, selftest, speedtest, top_handler, logs_handler, fall2ban_handler, sshlog_handler, handle_vless_file, handle_vless_name)
-# Я скопирую их ниже, но не буду их комментировать здесь, чтобы не увеличивать объем файла
+# --- ACTION HANDLERS ---
 
 @dp.message(Command("uptime"))
 async def uptime_handler(message: types.Message):
@@ -943,13 +924,8 @@ async def update_handler(message: types.Message):
     sent_message = await message.answer("🔄 Выполняю обновление VPS... Это может занять несколько минут.")
     LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = sent_message.message_id
 
-    # Используем nohup и & для неблокирующего выполнения в фоновом режиме, 
-    # а затем считываем статус после завершения (этот подход более надежен)
     cmd = "sudo DEBIAN_FRONTEND=noninteractive apt update && sudo DEBIAN_FRONTEND=noninteractive apt upgrade -y && sudo apt autoremove -y"
     
-    # Создаем временный файл для вывода
-    temp_output_file = f"/tmp/update_output_{user_id}_{datetime.now().timestamp()}.txt"
-
     process = await asyncio.create_subprocess_shell(
         cmd,
         stdout=asyncio.subprocess.PIPE,
@@ -963,22 +939,14 @@ async def update_handler(message: types.Message):
     await delete_previous_message(user_id, command, chat_id)
     
     if process.returncode == 0:
-        # Берем последние 4000 символов, чтобы не превысить лимит Telegram
         response_text = f"✅ Обновление завершено:\n<pre>{escape_html(output[-4000:])}</pre>"
     else:
-        # Показываем ошибку
         response_text = f"❌ Ошибка при обновлении (Код: {process.returncode}):\n<pre>{escape_html(error_output[-4000:])}</pre>"
 
     sent_message = await message.answer(response_text, parse_mode="HTML")
     LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = sent_message.message_id
-    
-    # Удаляем временный файл
-    try:
-        if os.path.exists(temp_output_file):
-             os.remove(temp_output_file)
-    except Exception as e:
-         logging.warning(f"Не удалось удалить временный файл {temp_output_file}: {e}")
 
+# REVERTED to bot_old.py version
 @dp.message(Command("restart"))
 async def restart_handler(message: types.Message):
     user_id = message.from_user.id
@@ -989,18 +957,20 @@ async def restart_handler(message: types.Message):
         return
     await delete_previous_message(user_id, command, chat_id)
     
-    sent_msg = await message.answer("♻️ Бот ушел перезагружаться... Ожидайте.")
+    sent_msg = await message.answer("♻️ Бот ушел перезагружаться…")
     LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = sent_msg.message_id
     
-    # Отправляем сообщение о перезапуске
-    # Очистка лога не требуется, так как systemd перезапускает службу
     try:
-        # Даем время, чтобы Telegram отправил сообщение
-        await asyncio.sleep(2) 
-        # Перезапуск сервиса через systemctl
-        os.system("sudo systemctl restart tg-bot.service") 
+        await asyncio.sleep(4)
+        await bot.edit_message_text(
+            text="Бот перезагружен ✅",
+            chat_id=chat_id,
+            message_id=sent_msg.message_id
+        )
+        log_path = os.path.join(LOG_DIR, "bot.log")
+        os.system(f"truncate -s 0 {log_path} && sudo systemctl restart tg-bot.service")
     except Exception as e:
-        logging.error(f"Ошибка при попытке перезапуска: {e}")
+        logging.error(f"Ошибка в restart_handler: {e}")
         await bot.edit_message_text(
             text=f"⚠️ Ошибка при попытке перезапуска сервиса: {str(e)}",
             chat_id=chat_id,
@@ -1022,16 +992,14 @@ async def reboot_handler(callback: types.CallbackQuery):
                 parse_mode="Markdown"
             )
         except TelegramBadRequest:
-            pass # Игнорируем ошибку, если сообщение уже изменено/удалено
+            pass 
 
-        # Записываем ID пользователя, чтобы после перезагрузки ему пришло уведомление
         try:
             with open(REBOOT_FLAG_FILE, "w") as f:
                 f.write(str(user_id))
         except Exception as e:
              logging.error(f"Не удалось записать флаг перезагрузки: {e}")
              
-        # Перезагрузка
         os.system("sudo reboot")
     else:
         await bot.edit_message_text(
@@ -1040,6 +1008,7 @@ async def reboot_handler(callback: types.CallbackQuery):
             message_id=message_id
         )
 
+# REVERTED to bot_old.py version
 @dp.message(Command("updatexray"))
 async def updatexray_handler(message: types.Message):
     user_id = message.from_user.id
@@ -1053,8 +1022,7 @@ async def updatexray_handler(message: types.Message):
     LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = sent_msg.message_id
 
     try:
-        # Проверяем, запущен ли контейнер amnezia-xray
-        check_container_cmd = "docker ps --filter name=amnezia-xray --format '{{.Names}}'"
+        check_container_cmd = "docker ps -a --filter name=amnezia-xray --format '{{.Names}}'"
         process_check = await asyncio.create_subprocess_shell(
             check_container_cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
         )
@@ -1062,33 +1030,25 @@ async def updatexray_handler(message: types.Message):
         container_check = stdout_check.decode().strip()
 
         if "amnezia-xray" not in container_check:
-            raise Exception("Контейнер `amnezia-xray` не найден или не запущен. Обновление невозможно.")
+            raise Exception("Контейнер amnezia-xray не найден")
 
-        # Команда для обновления Xray внутри контейнера (с использованием wget, unzip)
         update_cmd = (
             'docker exec amnezia-xray /bin/bash -c "'
-            'export XRAY_VERSION=$(curl -s "https://api.github.com/repos/XTLS/Xray-core/releases/latest" | grep -Po \'"tag_name": "\K[vV]?([0-9.]+)"\') && '
-            'echo "Найдена версия $XRAY_VERSION" && '
             'rm -f Xray-linux-64.zip xray && '
-            'wget -q -O Xray-linux-64.zip https://github.com/XTLS/Xray-core/releases/download/$XRAY_VERSION/Xray-linux-64.zip && '
+            'wget -q -O Xray-linux-64.zip https://github.com/XTLS/Xray-core/releases/latest/download/Xray-linux-64.zip && '
             'unzip -o Xray-linux-64.zip && '
             'cp xray /usr/bin/xray && '
             'rm Xray-linux-64.zip xray" && '
             'docker restart amnezia-xray'
         )
-        
         process_update = await asyncio.create_subprocess_shell(
             update_cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
         )
-        # Ждем завершения и считываем весь вывод
-        stdout_update, stderr_update = await process_update.communicate()
-        update_output = stdout_update.decode()
-        update_error = stderr_update.decode()
+        _, stderr_update = await process_update.communicate()
 
         if process_update.returncode != 0:
-            raise Exception(f"Команда обновления завершилась с ошибкой: {update_error[-500:]}")
+            raise Exception(f"Команда обновления завершилась с ошибкой: {stderr_update.decode()}")
 
-        # Проверка версии после обновления
         version_cmd = "docker exec amnezia-xray /usr/bin/xray version"
         process_version = await asyncio.create_subprocess_shell(
             version_cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
@@ -1096,7 +1056,7 @@ async def updatexray_handler(message: types.Message):
         stdout_version, stderr_version = await process_version.communicate()
 
         if process_version.returncode != 0:
-            raise Exception(f"Не удалось получить версию Xray после обновления: {stderr_version.decode()[-500:]}")
+            raise Exception(f"Не удалось получить версию Xray: {stderr_version.decode()}")
 
         version_output = stdout_version.decode()
         version_match = re.search(r'Xray\s+([\d\.]+)', version_output)
@@ -1123,26 +1083,20 @@ async def traffic_handler(message: types.Message):
         return
     await delete_previous_message(user_id, command, chat_id)
     
-    # Инициализация первого значения для расчета скорости
     counters = psutil.net_io_counters()
     TRAFFIC_PREV[user_id] = (counters.bytes_recv, counters.bytes_sent)
     
     msg_text = ("📡 **Мониторинг трафика включен**...\n\n_Обновление каждые 5 секунд. Чтобы остановить, выберите любую другую команду._")
     sent_message = await message.answer(msg_text, parse_mode="Markdown")
     
-    # Сохраняем ID сообщения для обновления в асинхронной задаче
     TRAFFIC_MESSAGE_IDS[user_id] = sent_message.message_id
     LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = sent_message.message_id
-    # Запускать traffic_monitor уже не нужно, так как он запущен в main()
-    # Теперь он будет обновлять только те сообщения, ID которых есть в TRAFFIC_MESSAGE_IDS
 
 async def traffic_monitor():
     """Асинхронный цикл для мониторинга и обновления сообщений о трафике."""
-    await asyncio.sleep(5) # Ждем, чтобы другие задачи успели выполниться
+    await asyncio.sleep(5) 
     while True:
-        # Создаем копию ключей, чтобы избежать ошибки изменения словаря во время итерации
         for user_id in list(TRAFFIC_MESSAGE_IDS.keys()): 
-            # Проверяем, что мониторинг все еще нужен
             if user_id not in TRAFFIC_MESSAGE_IDS:
                  continue
                  
@@ -1151,37 +1105,35 @@ async def traffic_monitor():
                 rx = counters.bytes_recv
                 tx = counters.bytes_sent
                 
-                # Защита от отсутствия предыдущих значений
                 prev_rx, prev_tx = TRAFFIC_PREV.get(user_id, (rx, tx))
                 
-                # Расчет скорости в Мбит/с (бит / 1024^2 / 5 секунд)
                 rx_speed = (rx - prev_rx) * 8 / 1024 / 1024 / TRAFFIC_INTERVAL
                 tx_speed = (tx - prev_tx) * 8 / 1024 / 1024 / TRAFFIC_INTERVAL
                 
                 TRAFFIC_PREV[user_id] = (rx, tx)
                 
+                # REVERTED message format to bot_old.py
                 msg_text = (
-                    f"📡 **Общий трафик VPS:**\n"
-                    f"⬇️ RX (Принято): **{format_traffic(rx)}**\n"
-                    f"⬆️ TX (Отправлено): **{format_traffic(tx)}**\n\n"
-                    f"⚡️ **Текущая скорость (Обновляется каждые {TRAFFIC_INTERVAL}с):**\n"
-                    f"⬇️ RX: **{rx_speed:.2f} Мбит/с**\n"
-                    f"⬆️ TX: **{tx_speed:.2f} Мбит/с**"
+                    f"📡 Общий трафик:\n"
+                    f"=========================\n"
+                    f"⬇️ RX: {format_traffic(rx)}\n"
+                    f"⬆️ TX: {format_traffic(tx)}\n\n"
+                    f"⚡️ Скорость соединения:\n"
+                    f"=========================\n"
+                    f"⬇️ RX: {rx_speed:.2f} Мбит/с\n"
+                    f"⬆️ TX: {tx_speed:.2f} Мбит/с"
                 )
                 
                 await bot.edit_message_text(
                     chat_id=user_id,
                     message_id=TRAFFIC_MESSAGE_IDS[user_id],
-                    text=msg_text,
-                    parse_mode="Markdown"
+                    text=msg_text
                 )
             except TelegramRetryAfter as e:
                 logging.warning(f"Ошибка TelegramRetryAfter для {user_id}: Подождите {e.retry_after} секунд")
                 await asyncio.sleep(e.retry_after)
             except TelegramBadRequest as e:
-                # Скорее всего, пользователь удалил сообщение
                 if "message is not modified" in str(e):
-                    # Игнорируем, если сообщение не изменилось
                     pass 
                 elif user_id in TRAFFIC_MESSAGE_IDS:
                     logging.warning(f"Ошибка TelegramBadRequest (удаление) для {user_id}: {e}")
@@ -1193,6 +1145,7 @@ async def traffic_monitor():
 
         await asyncio.sleep(TRAFFIC_INTERVAL)
 
+# REVERTED SSH part to bot_old.py logic
 @dp.message(Command("selftest"))
 async def selftest_handler(message: types.Message):
     user_id = message.from_user.id
@@ -1203,7 +1156,6 @@ async def selftest_handler(message: types.Message):
         return
     await delete_previous_message(user_id, command, chat_id)
     
-    # Получение метрик
     cpu = psutil.cpu_percent()
     mem = psutil.virtual_memory().percent
     disk = psutil.disk_usage('/').percent
@@ -1211,59 +1163,47 @@ async def selftest_handler(message: types.Message):
         uptime_sec = float(f.readline().split()[0])
     uptime_str = format_uptime(uptime_sec)
     
-    # Проверка пинга и внешнего IP
     ping_result = os.popen("ping -c 1 -W 2 8.8.8.8").read()
     ping_match = re.search(r'time=([\d\.]+) ms', ping_result)
     ping_time = ping_match.group(1) if ping_match else "N/A"
     internet = "✅ Интернет доступен" if ping_match else "❌ Нет интернета"
     external_ip = os.popen("curl -4 -s ifconfig.me").read().strip()
     
-    # Поиск последнего SSH входа
     last_login = "**N/A** (Нет файла логов)"
     if os.path.exists(SSH_LOG_FILE):
         try:
-            cmd = f"sudo tail -n 50 {SSH_LOG_FILE} | grep 'Accepted' | tail -n 1"
-            process = await asyncio.create_subprocess_shell(cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
-            stdout, _ = await process.communicate()
-            last_line = stdout.decode('utf-8', errors='ignore').strip()
-            
-            if last_line:
-                # Извлечение данных из последней строки лога
-                date_match = re.search(r'(\w{3}\s+\d{1,2}\s+\d{2}:\d{2}:\d{2})', last_line)
-                user_match = re.search(r'for (\S+)', last_line)
-                ip_match = re.search(r'from (\S+)', last_line)
+            with open(SSH_LOG_FILE, "r") as f:
+                lines = f.readlines()
+                for line in reversed(lines):
+                    if "Accepted" in line:
+                        date_match = re.search(r'^(\w{3}\s+\d{1,2}\s+\d{2}:\d{2}:\d{2})', line)
+                        user_match = re.search(r'for (\S+)', line)
+                        ip_match = re.search(r'from (\S+)', line)
 
-                if date_match and user_match and ip_match:
-                    # Преобразуем дату, добавляем текущий год, если его нет (для старых логов)
-                    log_timestamp = datetime.strptime(date_match.group(1), '%b %d %H:%M:%S')
-                    # Предполагаем, что это текущий год
-                    current_year = datetime.now().year
-                    dt_object = log_timestamp.replace(year=current_year)
-                    
-                    user = user_match.group(1)
-                    ip = ip_match.group(1)
-                    flag = get_country_flag(ip)
-                    
-                    # Проверяем, не прошло ли событие в прошлом году
-                    if dt_object > datetime.now():
-                         dt_object = dt_object.replace(year=current_year - 1)
-                         
-                    formatted_time = dt_object.strftime('%H:%M')
-                    formatted_date = dt_object.strftime('%d.%m.%Y')
-                    
-                    last_login = (f"👤 **{user}**\n"
-                                  f"🌍 IP: **{flag} {ip}**\n"
-                                  f"⏰ Время: **{formatted_time}**\n"
-                                  f"🗓️ Дата: **{formatted_date}**")
-                else:
-                    last_login = "**N/A** (Ошибка парсинга лога)"
-            else:
-                 last_login = "**N/A** (Нет успешных входов)"
+                        if date_match and user_match and ip_match:
+                            log_timestamp = datetime.strptime(date_match.group(1), '%b %d %H:%M:%S')
+                            current_year = datetime.now().year
+                            dt_object = log_timestamp.replace(year=current_year)
+                            
+                            user = user_match.group(1)
+                            ip = ip_match.group(1)
+                            flag = get_country_flag(ip)
+                            
+                            if dt_object > datetime.now():
+                                 dt_object = dt_object.replace(year=current_year - 1)
+                                 
+                            formatted_time = dt_object.strftime('%H:%M')
+                            formatted_date = dt_object.strftime('%d.%m.%Y')
+                            
+                            last_login = (f"👤 **{user}**\n"
+                                          f"🌍 IP: **{flag} {ip}**\n"
+                                          f"⏰ Время: **{formatted_time}**\n"
+                                          f"🗓️ Дата: **{formatted_date}**")
+                            break
         except Exception as e:
             logging.error(f"Ошибка при получении последнего SSH входа: {e}")
             last_login = f"**N/A** (Ошибка: {str(e)})"
             
-    # Общий трафик
     counters = psutil.net_io_counters()
     rx = counters.bytes_recv
     tx = counters.bytes_sent
@@ -1297,7 +1237,6 @@ async def speedtest_handler(message: types.Message):
     sent_message = await message.answer("🚀 Запуск speedtest... Это может занять до минуты.")
     LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = sent_message.message_id
 
-    # Используем speedtest-cli с форматом JSON
     cmd = "speedtest --format=json"
     process = await asyncio.create_subprocess_shell(
         cmd,
@@ -1311,22 +1250,15 @@ async def speedtest_handler(message: types.Message):
         output = stdout.decode('utf-8', errors='ignore')
         try:
             data = json.loads(output)
-            # Bandwidth в байтах/с. Переводим в Мбит/с (МБит/с = (Байт * 8) / (1024 * 1024))
-            # Или просто делим на 125000, т.к. 125000 Байт/с = 1 Мбит/с
             download_speed = data.get("download", {}).get("bandwidth", 0) / 125000
             upload_speed = data.get("upload", {}).get("bandwidth", 0) / 125000
-            ping_latency = data.get("ping", {}).get("latency", "N/A")
-            isp = data.get("isp", "N/A")
-            server_name = data.get("server", {}).get("name", "N/A")
             result_url = data.get("result", {}).get("url", "N/A")
             
-            response_text = (f"🚀 **Результаты Speedtest:**\n"
-                             f"⬇ Входящая: **{download_speed:.2f} Мбит/с**\n"
-                             f"⬆ Исходящая: **{upload_speed:.2f} Мбит/с**\n"
-                             f"⏱ Пинг: **{ping_latency:.2f} мс**\n"
-                             f"📡 Провайдер: **{isp}**\n"
-                             f"🌐 Тестовый сервер: **{server_name}**\n\n"
-                             f"🔗 [Посмотреть полный результат]({result_url})")
+            # REVERTED message format to bot_old.py
+            response_text = (f"🚀 Ваша скорость соединения:\n"
+                             f"⬇ Входящая: {download_speed:.2f} Мбит/с\n"
+                             f"⬆ Исходящая: {upload_speed:.2f} Мбит/с\n"
+                             f"Ссылка на результат:\n{result_url}")
         except json.JSONDecodeError as e:
             logging.error(f"Ошибка парсинга JSON от speedtest: {e}")
             response_text = f"❌ Ошибка при обработке результатов speedtest: <pre>{escape_html(str(e))}</pre>"
@@ -1334,7 +1266,7 @@ async def speedtest_handler(message: types.Message):
         error_output = stderr.decode('utf-8', errors='ignore')
         response_text = f"❌ Ошибка при запуске speedtest:\n<pre>{escape_html(error_output)}</pre>"
 
-    sent_message = await message.answer(response_text, parse_mode="Markdown" if process.returncode == 0 else "HTML", disable_web_page_preview=False if process.returncode == 0 else True)
+    sent_message = await message.answer(response_text, parse_mode="HTML", disable_web_page_preview=True)
     LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = sent_message.message_id
 
 @dp.message(Command("top"))
@@ -1347,7 +1279,7 @@ async def top_handler(message: types.Message):
         return
     await delete_previous_message(user_id, command, chat_id)
 
-    cmd = "ps aux --sort=-%cpu | head -n 15" # Увеличим до 15 строк для большей информативности
+    cmd = "ps aux --sort=-%cpu | head -n 15"
     process = await asyncio.create_subprocess_shell(
         cmd,
         stdout=asyncio.subprocess.PIPE,
@@ -1365,6 +1297,7 @@ async def top_handler(message: types.Message):
     sent_message = await message.answer(response_text, parse_mode="HTML")
     LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = sent_message.message_id
 
+# REVERTED to bot_old.py version
 @dp.message(Command("logs"))
 async def logs_handler(message: types.Message):
     user_id = message.from_user.id
@@ -1375,27 +1308,18 @@ async def logs_handler(message: types.Message):
         return
     await delete_previous_message(user_id, command, chat_id)
     try:
-        log_file = SYSLOG_FILE
-        if not os.path.exists(log_file):
-             log_file = SSH_LOG_FILE
-             
-        cmd = f"sudo tail -n 25 {log_file}"
-        process = await asyncio.create_subprocess_shell(cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
-        stdout, stderr = await process.communicate()
-        
-        if process.returncode == 0:
-            log_output = escape_html(stdout.decode('utf-8', errors='ignore'))
-            sent_message = await message.answer(f"📜 **Последние системные журналы ({os.path.basename(log_file)}):**\n<pre>{log_output}</pre>", parse_mode="HTML")
-        else:
-             error_output = escape_html(stderr.decode())
-             sent_message = await message.answer(f"❌ Ошибка при чтении журналов: <pre>{error_output}</pre>", parse_mode="HTML")
-             
+        log_file = SYSLOG_FILE if os.path.exists(SYSLOG_FILE) else SSH_LOG_FILE
+        with open(log_file, "r") as f:
+            lines = f.readlines()[-20:]
+        log_output = escape_html("".join(lines))
+        sent_message = await message.answer(f"📜 **Последние системные журналы ({os.path.basename(log_file)}):**\n<pre>{log_output}</pre>", parse_mode="HTML")
         LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = sent_message.message_id
     except Exception as e:
         logging.error(f"Ошибка при чтении журналов: {e}")
         sent_message = await message.answer(f"⚠️ Ошибка при чтении журналов: {str(e)}")
         LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = sent_message.message_id
 
+# REVERTED to bot_old.py version
 @dp.message(Command("fall2ban"))
 async def fall2ban_handler(message: types.Message):
     user_id = message.from_user.id
@@ -1411,33 +1335,27 @@ async def fall2ban_handler(message: types.Message):
              LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = sent_message.message_id
              return
 
-        # Ищем последние 20 строк, содержащих "Ban"
-        cmd = f"sudo grep 'Ban ' {F2B_LOG_FILE} | tail -n 20"
-        process = await asyncio.create_subprocess_shell(cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
-        stdout, _ = await process.communicate()
-        lines = stdout.decode('utf-8', errors='ignore').splitlines()
+        with open(F2B_LOG_FILE, "r", encoding='utf-8', errors='ignore') as f:
+            lines = f.readlines()[-20:]
         
         log_entries = []
         for line in reversed(lines):
-            ip_match = re.search(r'Ban (\S+)', line)
-            date_match = re.search(r'(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})', line)
-            if ip_match and date_match:
-                ip = ip_match.group(1)
-                flag = get_country_flag(ip)
-                
-                # Парсим дату и время
-                dt = datetime.strptime(date_match.group(1), "%Y-%m-%d %H:%M:%S")
-                # Для логов Fail2Ban, скорее всего, нужна локальная временная зона, 
-                # но для универсальности оставлю без смещения, если оно не было введено ранее.
-                
-                formatted_time = dt.strftime('%H:%M')
-                formatted_date = dt.strftime('%d.%m.%Y')
+            if "Ban" in line:
+                ip_match = re.search(r'Ban (\S+)', line)
+                date_match = re.search(r'(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})', line)
+                if ip_match and date_match:
+                    ip = ip_match.group(1)
+                    flag = get_country_flag(ip)
+                    
+                    dt = datetime.strptime(date_match.group(1), "%Y-%m-%d %H:%M:%S")
+                    formatted_time = dt.strftime('%H:%M')
+                    formatted_date = dt.strftime('%d.%m.%Y')
 
-                log_entries.append(f"🌍 IP: **{flag} {ip}**\n⏰ Время: **{formatted_time}**\n🗓️ Дата: **{formatted_date}**")
-            
-            if len(log_entries) >= 10:
-                break
+                    log_entries.append(f"🌍 IP: **{flag} {ip}**\n⏰ Время: **{formatted_time}**\n🗓️ Дата: **{formatted_date}**")
                 
+                if len(log_entries) >= 10:
+                    break
+                    
         if log_entries:
             log_output = "\n\n".join(log_entries)
             sent_message = await message.answer(f"🔒 **Последние 10 блокировок IP (Fail2Ban):**\n\n{log_output}", parse_mode="Markdown")
@@ -1450,6 +1368,7 @@ async def fall2ban_handler(message: types.Message):
         sent_message = await message.answer(f"⚠️ Ошибка при чтении журнала Fail2Ban: {str(e)}")
         LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = sent_message.message_id
 
+# REVERTED to bot_old.py version
 @dp.message(Command("sshlog"))
 async def sshlog_handler(message: types.Message):
     user_id = message.from_user.id
@@ -1465,54 +1384,36 @@ async def sshlog_handler(message: types.Message):
              LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = sent_message.message_id
              return
              
-        # Ищем последние 20 строк, содержащих "Accepted"
-        cmd = f"sudo grep 'Accepted' {SSH_LOG_FILE} | tail -n 20"
-        process = await asyncio.create_subprocess_shell(cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
-        stdout, _ = await process.communicate()
-        lines = stdout.decode('utf-8', errors='ignore').splitlines()
+        with open(SSH_LOG_FILE, "r", encoding='utf-8', errors='ignore') as f:
+            lines = f.readlines()[-50:]
         
         log_entries = []
         for line in reversed(lines):
-            # Парсинг логов (формат /var/log/auth.log может отличаться)
-            # Пример: Oct 10 10:00:00 hostname sshd[1234]: Accepted publickey for user from 1.1.1.1 port 50000 ssh2: RSA SHA256:....
-            # Или: 2023-10-10T10:00:00+03:00 hostname sshd[1234]: Accepted... (если используется rsyslog с ISO-форматом)
-            
-            # Попытка парсинга стандартного формата
-            user_match = re.search(r'for (\S+)', line)
-            ip_match = re.search(r'from (\S+)', line)
-            
-            # Поиск даты (более сложная задача)
-            # Для универсальности, ищем дату в начале строки (Oct 10 10:00:00 или ISO-формат)
-            date_match = re.search(r'^(\w{3}\s+\d{1,2}\s+\d{2}:\d{2}:\d{2})', line) # стандартный syslog
-            if not date_match:
-                 date_match = re.search(r'^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})', line) # ISO
-            
-            if date_match and user_match and ip_match:
-                try:
-                    date_str = date_match.group(1)
-                    if 'T' in date_str: # ISO format
-                        dt_object = datetime.strptime(date_str, '%Y-%m-%dT%H:%M:%S')
-                    else: # Syslog format
-                         # Добавляем текущий год для парсинга
+            if "Accepted" in line:
+                user_match = re.search(r'for (\S+)', line)
+                ip_match = re.search(r'from (\S+)', line)
+                date_match = re.search(r'^(\w{3}\s+\d{1,2}\s+\d{2}:\d{2}:\d{2})', line)
+                
+                if date_match and user_match and ip_match:
+                    try:
+                        date_str = date_match.group(1)
                         dt_object = datetime.strptime(f"{datetime.now().year} {date_str}", '%Y %b %d %H:%M:%S')
-                        # Корректируем год, если время в будущем (значит, событие из прошлого года)
                         if dt_object > datetime.now():
                              dt_object = dt_object.replace(year=datetime.now().year - 1)
 
+                        user = user_match.group(1)
+                        ip = ip_match.group(1)
+                        flag = get_country_flag(ip)
+                        
+                        formatted_time = dt_object.strftime('%H:%M')
+                        formatted_date = dt_object.strftime('%d.%m.%Y')
 
-                    user = user_match.group(1)
-                    ip = ip_match.group(1)
-                    flag = get_country_flag(ip)
-                    
-                    formatted_time = dt_object.strftime('%H:%M')
-                    formatted_date = dt_object.strftime('%d.%m.%Y')
-
-                    log_entries.append(f"👤 Пользователь: **{user}**\n🌍 IP: **{flag} {ip}**\n⏰ Время: **{formatted_time}**\n🗓️ Дата: **{formatted_date}**")
-                    if len(log_entries) >= 10:
-                        break
-                except (ValueError, IndexError) as e:
-                    logging.warning(f"Ошибка парсинга строки SSH лога: {e} | {line.strip()}")
-                    continue
+                        log_entries.append(f"👤 Пользователь: **{user}**\n🌍 IP: **{flag} {ip}**\n⏰ Время: **{formatted_time}**\n🗓️ Дата: **{formatted_date}**")
+                        if len(log_entries) >= 10:
+                            break
+                    except (ValueError, IndexError) as e:
+                        logging.warning(f"Ошибка парсинга строки SSH лога: {e} | {line.strip()}")
+                        continue
 
         if log_entries:
             log_output = "\n\n".join(log_entries)
@@ -1550,7 +1451,6 @@ async def handle_vless_file(message: types.Message, state: FSMContext):
         file_content = await bot.download_file(file_path)
         json_data = file_content.read().decode('utf-8')
         
-        # Предварительная проверка JSON
         try:
              json.loads(json_data)
         except json.JSONDecodeError:
@@ -1604,7 +1504,7 @@ async def handle_vless_name(message: types.Message, state: FSMContext):
          
     data = await state.get_data()
     json_data = data.get("json_data")
-    await state.clear() # Сразу очищаем состояние FSM
+    await state.clear()
 
     if not json_data:
         await delete_previous_message(user_id, command, chat_id)
@@ -1615,7 +1515,6 @@ async def handle_vless_name(message: types.Message, state: FSMContext):
     vless_url = convert_json_to_vless(json_data, custom_name)
 
     try:
-        # Генерация QR-кода
         qr = qrcode.QRCode(version=1, error_correction=qrcode.constants.ERROR_CORRECT_H, box_size=10, border=4)
         qr.add_data(vless_url)
         qr.make(fit=True)
@@ -1654,8 +1553,6 @@ async def initial_reboot_check():
             with open(REBOOT_FLAG_FILE, "r") as f:
                 user_id = int(f.read().strip())
             
-            # Отправляем уведомление, но только если это не ADMIN_USER_ID, чтобы избежать дублирования
-            # Хотя, лучше отправить всем, кто запросил.
             await bot.send_message(
                 chat_id=user_id, 
                 text="✅ **Сервер успешно перезагружен! Бот снова в сети.**",
@@ -1665,7 +1562,6 @@ async def initial_reboot_check():
         except Exception as e:
             logging.error(f"Ошибка при отправке уведомления о перезагрузке: {e}")
         finally:
-            # Удаляем флаг
             os.remove(REBOOT_FLAG_FILE)
 
 async def main():
@@ -1673,16 +1569,12 @@ async def main():
     try:
         load_users()
         await refresh_user_names()
-        # Проверяем, был ли ребут, и уведомляем
         await initial_reboot_check()
         
-        # Запускаем фоновый мониторинг трафика
         asyncio.create_task(traffic_monitor())
         
-        # Регистрируем функцию загрузки пользователей на старт
         dp.startup.register(load_users) 
         
-        # Запуск бота
         await dp.start_polling(bot, allowed_updates=dp.resolve_used_update_types())
 
     except Exception as e:
