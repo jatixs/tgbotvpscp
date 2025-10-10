@@ -32,7 +32,7 @@ VPS Manager Telegram Bot — это Telegram-бот для удаленного 
 2. Клонирование и настройка
 Клонируйте репозиторий и перейдите в него:
 
-git clone [https://github.com/ВАШ_НИКНЕЙМ/VpsManagerBot.git](https://github.com/ВАШ_НИКНЕЙМ/VpsManagerBot.git)
+git clone [https://github.com/jatixs/tg_vps_cm.git](https://github.com/jatixs/tg_vps_cm.git)
 cd VpsManagerBot
 
 3. Запуск скрипта развертывания
