@@ -70,7 +70,7 @@
 
 ```bash
 git clone https://github.com/jatixs/tg_vps_cm.git
-cd VpsManagerBot
+cd tg_vps_cm
 ```
 
 ---
