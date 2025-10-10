@@ -5,16 +5,19 @@
 # Скрипт выполняет следующие действия:
 # 1. Устанавливает необходимые пакеты (Python, git, venv).
 # 2. Создает пользователя 'tgbot' для безопасного запуска сервиса.
-# 3. Клонирует или обновляет репозиторий.
-# 4. Создает и активирует виртуальное окружение Python (venv).
-# 5. Устанавливает зависимости.
-# 6. Настраивает файл .env с токеном и ID администратора.
+# 3. Копирует файлы проекта в директорию установки.
+# 4. Создает и активирует виртуальное окружение Python (venv) и устанавливает зависимости.
+# 5. Настраивает файл .env с токеном и ID администратора.
+# 6. НАСТРАИВАЕТ ПРАВА SUDO для пользователя 'tgbot'.
 # 7. Создает systemd-сервис для автозапуска бота.
 # 8. Запускает и включает сервис.
 
 # --- КОНФИГУРАЦИЯ ---
-# Читаем конфигурацию из .env.example
-source .env.example
+# БЕЗОПАСНОЕ ЧТЕНИЕ КОНФИГУРАЦИИ ИЗ .env.example
+if [ -f .env.example ]; then
+    BOT_INSTALL_PATH=$(grep '^BOT_INSTALL_PATH' .env.example | cut -d'=' -f2 | tr -d '"')
+fi
+
 # Путь установки по умолчанию, если не задан в .env.example
 BOT_INSTALL_PATH="${BOT_INSTALL_PATH:-/opt/tg-bot}"
 SERVICE_NAME="tg-bot"
@@ -27,7 +30,7 @@ echo "=== Запуск скрипта развертывания ${SERVICE_NAME}
 # --- 1. ПРОВЕРКА И УСТАНОВКА ОСНОВНЫХ ПАКЕТОВ ---
 echo "1. Обновление пакетов и установка зависимостей..."
 sudo apt update -y
-sudo apt install -y python3 python3-pip python3-venv git curl sudo speedtest-cli
+sudo apt install -y python3 python3-pip python3-venv git curl sudo rsync speedtest-cli
 
 if [ $? -ne 0 ]; then
     echo "❌ Ошибка при установке базовых пакетов. Проверьте подключение и права."
@@ -50,11 +53,19 @@ sudo mkdir -p ${BOT_INSTALL_PATH}
 sudo chown -R ${SERVICE_USER}:${SERVICE_USER} ${BOT_INSTALL_PATH}
 sudo chmod -R 755 ${BOT_INSTALL_PATH}
 
-# --- 3. КОПИРОВАНИЕ ФАЙЛОВ И НАСТРОЙКА VENV ---
-echo "3. Копирование файлов и настройка Python VENV..."
+# --- 3. КОПИРОВАНИЕ ФАЙЛОВ ПРОЕКТА ---
+echo "3. Копирование файлов проекта..."
 
-# Копируем текущие файлы в целевую директорию
-sudo cp -r ./* ${BOT_INSTALL_PATH}/
+# Используем rsync для безопасного копирования, исключая ненужные файлы
+sudo rsync -a --delete \
+    --exclude='deploy.sh' \
+    --exclude='.git/' \
+    --exclude='__pycache__/' \
+    --exclude='*.swp' \
+    ./ "${BOT_INSTALL_PATH}/"
+
+# --- 4. НАСТРОЙКА PYTHON VENV И ЗАВИСИМОСТЕЙ ---
+echo "4. Настройка Python VENV..."
 
 # Переключаемся в директорию установки
 cd ${BOT_INSTALL_PATH} || { echo "❌ Не удалось перейти в директорию ${BOT_INSTALL_PATH}"; exit 1; }
@@ -75,59 +86,64 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 
-# --- 4. НАСТРОЙКА ПЕРЕМЕННЫХ ОКРУЖЕНИЯ (TG_BOT_TOKEN и TG_ADMIN_ID) ---
-echo "4. Настройка файла .env..."
+# --- 5. НАСТРОЙКА ПЕРЕМЕННЫХ ОКРУЖЕНИЯ (.env) ---
+echo "5. Настройка файла .env..."
 
-# Запрашиваем данные у пользователя
 read -p "Введите TG_BOT_TOKEN: " TG_BOT_TOKEN_USER
 read -p "Введите TG_ADMIN_ID (ваш числовой ID): " TG_ADMIN_ID_USER
 
-# Создаем .env файл
 sudo tee .env > /dev/null <<EOF
 # Файл переменных окружения для systemd сервиса
-
-# Токен Telegram-бота
 TG_BOT_TOKEN="${TG_BOT_TOKEN_USER}"
-
-# ID Главного Администратора (числовой)
 TG_ADMIN_ID="${TG_ADMIN_ID_USER}"
 EOF
 
-# Устанавливаем права для .env
 sudo chown ${SERVICE_USER}:${SERVICE_USER} .env
 sudo chmod 600 .env
 echo "Файл .env успешно создан."
 
-# --- 5. СОЗДАНИЕ СЕРВИСА SYSTEMD ---
-echo "5. Создание systemd сервиса..."
+# --- 6. НАСТРОЙКА ПРАВ SUDO ДЛЯ ПОЛЬЗОВАТЕЛЯ БОТА (ВАЖНО!) ---
+echo "6. Настройка прав sudo для пользователя '${SERVICE_USER}'..."
+SUDOERS_FILE="/etc/sudoers.d/99-${SERVICE_USER}"
+# Предоставляем пользователю tgbot права на выполнение строго определённых команд без пароля
+sudo tee ${SUDOERS_FILE} > /dev/null <<EOF
+# Разрешения для Telegram-бота
+${SERVICE_USER} ALL=(ALL) NOPASSWD: /usr/bin/systemctl restart ${SERVICE_NAME}.service
+${SERVICE_USER} ALL=(ALL) NOPASSWD: /sbin/reboot
+${SERVICE_USER} ALL=(ALL) NOPASSWD: /usr/bin/apt update
+${SERVICE_USER} ALL=(ALL) NOPASSWD: /usr/bin/apt upgrade -y
+${SERVICE_USER} ALL=(ALL) NOPASSWD: /usr/bin/apt autoremove -y
+${SERVICE_USER} ALL=(ALL) NOPASSWD: /usr/bin/tail -n 25 /var/log/syslog
+${SERVICE_USER} ALL=(ALL) NOPASSWD: /usr/bin/tail -n 50 /var/log/auth.log
+${SERVICE_USER} ALL=(ALL) NOPASSWD: /usr/bin/grep 'Ban ' /var/log/fail2ban.log
+${SERVICE_USER} ALL=(ALL) NOPASSWD: /usr/bin/grep 'Accepted' /var/log/auth.log
+EOF
+sudo chmod 440 ${SUDOERS_FILE}
+echo "Безопасные права sudo настроены."
+
+# --- 7. СОЗДАНИЕ СЕРВИСА SYSTEMD ---
+echo "7. Создание systemd сервиса..."
 
 SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}.service"
-
 sudo tee ${SERVICE_FILE} > /dev/null <<EOF
 [Unit]
 Description=${SERVICE_NAME} Telegram Bot
 After=network.target
 
 [Service]
-# Перезапуск, если бот упадет
 Restart=always
-# Задержка перед перезапуском
 RestartSec=5
-# Пользователь, от имени которого запускается сервис
 User=${SERVICE_USER}
-# Рабочая директория
 WorkingDirectory=${BOT_INSTALL_PATH}
-# Загружаем переменные окружения из .env
 EnvironmentFile=${BOT_INSTALL_PATH}/.env
-# Команда для запуска: venv/bin/python bot.py
 ExecStart=${VENV_PATH}/bin/python ${BOT_INSTALL_PATH}/bot.py
 
 [Install]
 WantedBy=multi-user.target
 EOF
 
-# --- 6. ЗАПУСК СЕРВИСА ---
-echo "6. Перезагрузка systemd, запуск и включение сервиса..."
+# --- 8. ЗАПУСК СЕРВИСА ---
+echo "8. Перезагрузка systemd, запуск и включение сервиса..."
 
 sudo systemctl daemon-reload
 sudo systemctl enable ${SERVICE_NAME}.service
