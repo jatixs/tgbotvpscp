@@ -69,8 +69,8 @@
 ### 2. Клонирование и настройка
 
 ```bash
-git clone https://github.com/jatixs/tg_vps_cm.git
-cd tg_vps_cm
+git clone https://github.com/jatixs/tgbotvpscp.git
+cd tgbotvpscp
 ```
 
 ---
