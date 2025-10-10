@@ -2,7 +2,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/version-1.10.6-blue?style=flat-square" />
-  <img src="https://img.shields.io/badge/build-25-purple?style=flat-square" />
+  <img src="https://img.shields.io/badge/build-26-purple?style=flat-square" />
   <img src="https://img.shields.io/badge/date-Октябрь%202025-green?style=flat-square" />
   <img src="https://img.shields.io/badge/status-stable-success?style=flat-square" />
 </p>
