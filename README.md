@@ -81,7 +81,7 @@ if [ -d "tgbotvpscp" ]; then cd tgbotvpscp && git pull; else git clone https://g
 
 ---
 
-### 4. Проверка и завершение
+### 3. Проверка и завершение
 
 После успешного выполнения скрипта:
 
