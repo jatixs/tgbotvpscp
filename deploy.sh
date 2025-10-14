@@ -35,7 +35,25 @@ install_extras() {
         read -p "❓ Speedtest-CLI не найден. Хотите установить его для проверки скорости сети? (y/n): " INSTALL_SPEEDTEST
         if [[ "$INSTALL_SPEEDTEST" == "y" || "$INSTALL_SPEEDTEST" == "Y" ]]; then
             echo "Установка Speedtest-CLI..."
-            sudo apt install -y speedtest-cli
+            # Проверяем версию Ubuntu
+            if [ -f /etc/os-release ]; then
+                . /etc/os-release
+                if [ "$VERSION_CODENAME" == "noble" ]; then
+                    echo "Обнаружена Ubuntu Noble. Используется специальный метод установки Speedtest-CLI."
+                    sudo apt-get install -y curl
+                    curl -s https://packagecloud.io/install/repositories/ookla/speedtest-cli/script.deb.sh | sudo bash
+                    # Автоматически заменяем 'noble' на 'jammy'
+                    sudo sed -i 's/noble/jammy/g' /etc/apt/sources.list.d/ookla_speedtest-cli.list
+                    sudo apt update
+                    sudo apt-get install -y speedtest
+                else
+                    echo "Используется стандартный метод установки Speedtest-CLI."
+                    sudo apt install -y speedtest-cli
+                fi
+            else
+                 # Стандартный метод для систем без /etc/os-release
+                 sudo apt install -y speedtest-cli
+            fi
             echo "✅ Speedtest-CLI установлен."
         else
             echo "Пропускаем установку Speedtest-CLI."
