@@ -1,8 +1,8 @@
 <h1 align="center">📝 Telegram VPS Management Bot — Changelog</h1>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-1.10.6-blue?style=flat-square" />
-  <img src="https://img.shields.io/badge/build-28(stable)-purple?style=flat-square" />
+  <img src="https://img.shields.io/badge/version-1.10.7-blue?style=flat-square" />
+  <img src="https://img.shields.io/badge/build-28-purple?style=flat-square" />
   <img src="https://img.shields.io/badge/date-Октябрь%202025-green?style=flat-square" />
   <img src="https://img.shields.io/badge/status-stable-success?style=flat-square" />
 </p>
