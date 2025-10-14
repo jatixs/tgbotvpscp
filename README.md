@@ -7,7 +7,7 @@
 <p align="center">
   <img src="https://img.shields.io/badge/version-1.10.7-blue?style=flat-square" />
   <img src="https://img.shields.io/badge/python-3.10%2B-green?style=flat-square" />
-  <img src="https://img.shields.io/badge/license-GNU-lightgrey?style=flat-square" />
+  <img src="https://img.shields.io/badge/license-GPL-3.0 license-lightgrey?style=flat-square" />
   <img src="https://img.shields.io/badge/aiogram-v3-orange?style=flat-square" />
   <img src="https://img.shields.io/badge/platform-Ubuntu%2020.04%2B-important?style=flat-square" />
 </p>
@@ -127,4 +127,4 @@ VpsManagerBot/
 
 **Версия:** 1.10.7 (Build 30)  
 **Автор:** *Jatix*  
-📜 Лицензия: GNU 
+📜 Лицензия: GPL-3.0 license 
