@@ -73,18 +73,6 @@
 if [ -d "tgbotvpscp" ]; then cd tgbotvpscp && git pull; else git clone https://github.com/jatixs/tgbotvpscp.git && cd tgbotvpscp; fi && chmod +x deploy.sh && sudo ./deploy.sh
 ```
 
----
-
-### 3. Запуск скрипта развертывания
-
-Скрипт `deploy.sh` полностью автоматизирует процесс:  
-установка зависимостей, создание виртуального окружения, настройка `systemd`-сервиса и автозапуск.
-
-```bash
-chmod +x deploy.sh
-sudo ./deploy.sh
-```
-
 Скрипт deploy.sh полностью автоматизирует процесс, предложит выбрать режим установки (Root или Secure), а затем попросит вас ввести:
 - `TG_BOT_TOKEN` — токен вашего бота  
 - `TG_ADMIN_ID` — ваш числовой ID администратора  
