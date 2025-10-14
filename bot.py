@@ -57,11 +57,6 @@ console_handler.setLevel(logging.INFO)
 console_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
 logging.getLogger().addHandler(console_handler)
 
-# Системные файлы (пути к ним обычно фиксированы)
-SSH_LOG_FILE = "/var/log/auth.log"
-F2B_LOG_FILE = "/var/log/fail2ban.log"
-SYSLOG_FILE = "/var/log/syslog"
-
 # Прочие настройки
 TRAFFIC_INTERVAL = 5
 ALLOWED_USERS = {}
@@ -162,26 +157,35 @@ def is_allowed(user_id, command=None):
     if user_id not in ALLOWED_USERS:
         return False
 
-    # Всегда разрешенные команды (даже для не-админов)
-    allowed_for_all = ["start", "menu", "back_to_menu", "uptime", "traffic", "selftest", "get_id", "get_id_inline"]
-    if command in allowed_for_all:
+    # Команды, доступные ВСЕМ авторизованным пользователям
+    user_commands = ["start", "menu", "back_to_menu", "uptime", "traffic", "selftest", "get_id", "get_id_inline"]
+    if command in user_commands:
         return True
 
-    # Команды только для Администраторов в режиме 'root'
-    admin_commands = [
-        "manage_users", "reboot_confirm", "generate_vless", "fall2ban",
-        "sshlog", "logs", "restart", "speedtest", "top", "update", "updatexray",
-        "adduser"
-    ]
-    if command in admin_commands:
-        # Проверяем, что это админ И что установка в режиме root
-        is_admin_group = user_id == ADMIN_USER_ID or ALLOWED_USERS.get(user_id) == "Админы"
-        return is_admin_group and INSTALL_MODE == "root"
-
-    # Если команда не определена или это callback, предполагаем, что она для админов,
-    # если только она не была явно разрешена выше
+    # Является ли пользователь админом?
     is_admin_group = user_id == ADMIN_USER_ID or ALLOWED_USERS.get(user_id) == "Админы"
-    return is_admin_group and INSTALL_MODE == "root"
+    if not is_admin_group:
+        return False # Если не админ и команда не из общего списка, то доступ запрещен
+
+    # Команды, требующие ТОЛЬКО прав админа (безопасны в secure режиме)
+    admin_only_commands = [
+        "manage_users", "generate_vless", "speedtest", "top", "updatexray", "adduser"
+    ]
+    if command in admin_only_commands:
+        return True # Доступ разрешен для админов в любом режиме
+
+    # Команды, требующие ROOT (опасные, только в root режиме)
+    root_only_commands = [
+        "reboot_confirm", "reboot", "fall2ban", "sshlog", "logs", "restart", "update"
+    ]
+    if command in root_only_commands:
+        return INSTALL_MODE == "root" # Разрешаем только если админ и режим 'root'
+
+    # Для колбэков, связанных с управлением пользователями
+    if command and any(cmd in command for cmd in ["delete_user", "set_group", "change_group"]):
+        return True
+
+    return False # Запрещаем все остальное по умолчанию
 
 async def refresh_user_names():
     """Обновляет имена пользователей, используя API Telegram."""
@@ -239,26 +243,35 @@ async def send_access_denied_message(user_id, chat_id, command):
     LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = sent_message.message_id
 
 def get_main_reply_keyboard(user_id):
-    """Создает основное меню в зависимости от режима установки."""
+    """Создает основное меню в зависимости от прав пользователя и режима установки."""
     is_admin = user_id == ADMIN_USER_ID or ALLOWED_USERS.get(user_id) == "Админы"
 
-    # Полное меню для админов в режиме 'root'
-    if is_admin and INSTALL_MODE == "root":
-        buttons = [
-            [KeyboardButton(text="👤 Пользователи"), KeyboardButton(text="🔗 VLESS-ссылка")],
-            [KeyboardButton(text="🛠 Сведения о сервере"), KeyboardButton(text="📡 Трафик сети")],
-            [KeyboardButton(text="🔥 Топ процессов"), KeyboardButton(text="📜 SSH-лог")],
-            [KeyboardButton(text="🔒 Fail2Ban Log"), KeyboardButton(text="📜 Последние события")],
-            [KeyboardButton(text="🚀 Скорость сети"), KeyboardButton(text="⏱ Аптайм")],
-            [KeyboardButton(text="🔄 Обновление VPS"), KeyboardButton(text="🩻 Обновление X-ray")],
-            [KeyboardButton(text="🔄 Перезагрузка сервера"), KeyboardButton(text="♻️ Перезапуск бота")]
-        ]
-    # Урезанное меню для всех остальных случаев (не админ, или режим 'secure')
-    else:
-        buttons = [
-            [KeyboardButton(text="🛠 Сведения о сервере"), KeyboardButton(text="📡 Трафик сети")],
-            [KeyboardButton(text="⏱ Аптайм"), KeyboardButton(text="🆔 Мой ID")]
-        ]
+    # Меню для обычного пользователя (минимальный набор)
+    buttons = [
+        [KeyboardButton(text="🛠 Сведения о сервере"), KeyboardButton(text="📡 Трафик сети")],
+        [KeyboardButton(text="⏱ Аптайм"), KeyboardButton(text="🆔 Мой ID")]
+    ]
+
+    if is_admin:
+        # Меню для Админа в режиме SECURE (расширенный безопасный набор)
+        if INSTALL_MODE == 'secure':
+            buttons = [
+                [KeyboardButton(text="👤 Пользователи"), KeyboardButton(text="🔗 VLESS-ссылка")],
+                [KeyboardButton(text="🚀 Скорость сети"), KeyboardButton(text="🔥 Топ процессов")],
+                [KeyboardButton(text="🩻 Обновление X-ray")],
+            ] + buttons # Добавляем базовые кнопки в конец
+        # Меню для Админа в режиме ROOT (полный доступ)
+        elif INSTALL_MODE == 'root':
+            buttons = [
+                [KeyboardButton(text="👤 Пользователи"), KeyboardButton(text="🔗 VLESS-ссылка")],
+                [KeyboardButton(text="🛠 Сведения о сервере"), KeyboardButton(text="📡 Трафик сети")],
+                [KeyboardButton(text="🔥 Топ процессов"), KeyboardButton(text="📜 SSH-лог")],
+                [KeyboardButton(text="🔒 Fail2Ban Log"), KeyboardButton(text="📜 Последние события")],
+                [KeyboardButton(text="🚀 Скорость сети"), KeyboardButton(text="⏱ Аптайм")],
+                [KeyboardButton(text="🔄 Обновление VPS"), KeyboardButton(text="🩻 Обновление X-ray")],
+                [KeyboardButton(text="🔄 Перезагрузка сервера"), KeyboardButton(text="♻️ Перезапуск бота")]
+            ]
+
     keyboard = ReplyKeyboardMarkup(keyboard=buttons, resize_keyboard=True, input_field_placeholder="Выберите опцию в меню...")
     return keyboard
 
@@ -493,7 +506,7 @@ async def manage_users_handler(message: types.Message):
     command = "manage_users"
     if not is_allowed(user_id, command):
         # Это сообщение не должно появляться, так как кнопка скрыта, но оставляем для безопасности
-        await bot.send_message(message.chat.id, "⛔ Эта функция недоступна в безопасном режиме установки.")
+        await bot.send_message(message.chat.id, "⛔ У вас нет прав для выполнения этой команды.")
         return
     await delete_previous_message(user_id, command, message.chat.id)
 
@@ -516,7 +529,7 @@ async def reboot_confirm_handler(message: types.Message):
     user_id = message.from_user.id
     command = "reboot_confirm"
     if not is_allowed(user_id, command):
-        await bot.send_message(message.chat.id, "⛔ Эта функция недоступна в безопасном режиме установки.")
+        await bot.send_message(message.chat.id, "⛔ Эта функция доступна только в режиме 'root'.")
         return
     await delete_previous_message(user_id, command, message.chat.id)
     sent_message = await message.answer("⚠️ Вы уверены, что хотите **перезагрузить сервер**? Все активные соединения будут разорваны.", reply_markup=get_reboot_confirmation_keyboard(), parse_mode="Markdown")
@@ -527,7 +540,7 @@ async def generate_vless_handler(message: types.Message, state: FSMContext):
     user_id = message.from_user.id
     command = "generate_vless"
     if not is_allowed(user_id, command):
-        await bot.send_message(message.chat.id, "⛔ Эта функция недоступна в безопасном режиме установки.")
+        await bot.send_message(message.chat.id, "⛔ У вас нет прав для выполнения этой команды.")
         return
     await delete_previous_message(user_id, command, message.chat.id)
     sent_message = await message.answer("📤 **Отправьте файл конфигурации Xray (JSON)**\n\n_Важно: файл должен содержать рабочую конфигурацию outbound с Reality._", reply_markup=get_back_keyboard("back_generate_vless"), parse_mode="Markdown")
@@ -607,7 +620,7 @@ async def callback_handler(callback: types.CallbackQuery, state: FSMContext):
          permission_check_command = "manage_users"
 
     # Для базовых команд, типа "назад в меню", проверка не нужна, если пользователь уже авторизован
-    if command not in ["back_to_menu", "back_generate_vless"] and not is_allowed(user_id, permission_check_command):
+    if command not in ["back_to_menu", "back_generate_vless", "back_to_manage_users"] and not is_allowed(user_id, permission_check_command):
         if user_id not in ALLOWED_USERS:
             await send_access_denied_message(user_id, chat_id, command)
         else:
@@ -649,17 +662,24 @@ async def callback_handler(callback: types.CallbackQuery, state: FSMContext):
                 ALLOWED_USERS[target_user_id] = new_group
                 save_users()
                 await callback.message.edit_text(f"✅ Группа пользователя **{user_name}** изменена на **{new_group}**", reply_markup=get_back_keyboard("back_to_manage_users"), parse_mode="Markdown")
-                # Упрощаем перезапуск - теперь он единый для всех
-                os.system(f"sudo systemctl restart tg-bot.service")
+                if INSTALL_MODE == "root":
+                    os.system(f"sudo systemctl restart tg-bot.service")
+                else:
+                    # В secure режиме просто уведомляем, что нужен рестарт
+                    await callback.message.answer("ℹ️ Для полного применения изменений рекомендуется перезапустить бота вручную.")
 
         elif command == "back_to_manage_users":
-            # Удаляем предыдущее сообщение с кнопкой 'Назад' и отправляем новое меню управления
-            await bot.delete_message(chat_id, message_id)
-            # Убедимся, что у пользователя есть доступ, прежде чем снова показать меню
-            if is_allowed(user_id, "manage_users"):
-                await manage_users_handler(callback.message)
-            else:
-                await start_or_menu_handler(callback.message, state) # Возврат в главное меню
+            # Собираем актуальный список пользователей
+            user_list = "\n".join([
+                f" • {USER_NAMES.get(str(uid), f'ID: {uid}')} (**{group}**)"
+                for uid, group in ALLOWED_USERS.items()
+            ])
+            # Редактируем текущее сообщение, чтобы оно стало главным меню управления
+            await callback.message.edit_text(
+                f"👤 **Управление пользователями**:\n\n{user_list}\n\nВыберите действие:",
+                reply_markup=get_manage_users_keyboard(),
+                parse_mode="Markdown"
+            )
 
         elif command == "back_to_delete_users":
             await callback.message.edit_text("➖ Выберите пользователя для удаления:", reply_markup=get_delete_users_keyboard(user_id))
@@ -684,7 +704,11 @@ async def callback_handler(callback: types.CallbackQuery, state: FSMContext):
                     USER_NAMES.pop(str(target_user_id), None)
                     save_users()
                     await callback.message.edit_text(f"✅ Пользователь **{user_name}** удалён. Вы потеряли доступ к боту.", parse_mode="Markdown")
-                    os.system(f"sudo systemctl restart tg-bot.service")
+                    if INSTALL_MODE == "root":
+                        os.system(f"sudo systemctl restart tg-bot.service")
+                    else:
+                        # В secure режиме просто уведомляем, что нужен рестарт
+                        await callback.message.answer("ℹ️ Для полного применения изменений рекомендуется перезапустить бота вручную.")
                 else:
                     await callback.message.edit_text(f"⚠️ Пользователь ID **`{target_user_id}`** уже был удален.", reply_markup=get_back_keyboard("back_to_manage_users"), parse_mode="Markdown")
 
@@ -698,7 +722,11 @@ async def callback_handler(callback: types.CallbackQuery, state: FSMContext):
                 USER_NAMES.pop(str(target_user_id), None)
                 save_users()
                 await callback.message.edit_text(f"✅ Пользователь **{user_name}** удалён", reply_markup=get_back_keyboard("back_to_manage_users"), parse_mode="Markdown")
-                os.system(f"sudo systemctl restart tg-bot.service")
+                if INSTALL_MODE == "root":
+                    os.system(f"sudo systemctl restart tg-bot.service")
+                else:
+                    # В secure режиме просто уведомляем, что нужен рестарт
+                    await callback.message.answer("ℹ️ Для полного применения изменений рекомендуется перезапустить бота вручную.")
             else:
                 await callback.message.edit_text(f"⚠️ Пользователь ID **`{target_user_id}`** не найден", reply_markup=get_back_keyboard("back_to_manage_users"), parse_mode="Markdown")
 
@@ -887,7 +915,11 @@ async def handle_group_selection_callback(callback: types.CallbackQuery, state: 
             reply_markup=get_back_keyboard("back_to_manage_users"),
             parse_mode="Markdown"
         )
-        os.system(f"sudo systemctl restart tg-bot.service")
+        if INSTALL_MODE == "root":
+            os.system(f"sudo systemctl restart tg-bot.service")
+        else:
+            # В secure режиме просто уведомляем, что нужен рестарт
+            await callback.message.answer("ℹ️ Для полного применения изменений рекомендуется перезапустить бота вручную.")
 
     elif callback.data == "back_to_manage_users":
         # Пользователь отменил выбор группы, возвращаем его в меню управления
@@ -1167,36 +1199,41 @@ async def selftest_handler(message: types.Message):
     external_ip = os.popen("curl -4 -s ifconfig.me").read().strip()
 
     last_login = "**N/A** (Нет файла логов)"
-    if os.path.exists(SSH_LOG_FILE):
+    if INSTALL_MODE == "root":
         try:
-            with open(SSH_LOG_FILE, "r") as f:
-                lines = f.readlines()
-                for line in reversed(lines):
-                    if "Accepted" in line:
-                        date_match = re.search(r'^(\w{3}\s+\d{1,2}\s+\d{2}:\d{2}:\d{2})', line)
-                        user_match = re.search(r'for (\S+)', line)
-                        ip_match = re.search(r'from (\S+)', line)
+            cmd = "journalctl -u ssh --no-pager -n 100 -g 'Accepted' | tail -n 1"
+            process = await asyncio.create_subprocess_shell(
+                cmd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE
+            )
+            stdout, _ = await process.communicate()
+            line = stdout.decode().strip()
 
-                        if date_match and user_match and ip_match:
-                            log_timestamp = datetime.strptime(date_match.group(1), '%b %d %H:%M:%S')
-                            current_year = datetime.now().year
-                            dt_object = log_timestamp.replace(year=current_year)
+            if "Accepted" in line:
+                date_match = re.search(r'^(\w{3}\s+\d{1,2}\s+\d{2}:\d{2}:\d{2})', line)
+                user_match = re.search(r'for (\S+)', line)
+                ip_match = re.search(r'from (\S+)', line)
 
-                            user = user_match.group(1)
-                            ip = ip_match.group(1)
-                            flag = get_country_flag(ip)
+                if date_match and user_match and ip_match:
+                    log_timestamp = datetime.strptime(date_match.group(1), '%b %d %H:%M:%S')
+                    current_year = datetime.now().year
+                    dt_object = log_timestamp.replace(year=current_year)
 
-                            if dt_object > datetime.now():
-                                 dt_object = dt_object.replace(year=current_year - 1)
+                    user = user_match.group(1)
+                    ip = ip_match.group(1)
+                    flag = get_country_flag(ip)
 
-                            formatted_time = dt_object.strftime('%H:%M')
-                            formatted_date = dt_object.strftime('%d.%m.%Y')
+                    if dt_object > datetime.now():
+                         dt_object = dt_object.replace(year=current_year - 1)
 
-                            last_login = (f"👤 **{user}**\n"
-                                          f"🌍 IP: **{flag} {ip}**\n"
-                                          f"⏰ Время: **{formatted_time}**\n"
-                                          f"🗓️ Дата: **{formatted_date}**")
-                            break
+                    formatted_time = dt_object.strftime('%H:%M')
+                    formatted_date = dt_object.strftime('%d.%m.%Y')
+
+                    last_login = (f"👤 **{user}**\n"
+                                  f"🌍 IP: **{flag} {ip}**\n"
+                                  f"⏰ Время: **{formatted_time}**\n"
+                                  f"🗓️ Дата: **{formatted_date}**")
         except Exception as e:
             logging.error(f"Ошибка при получении последнего SSH входа: {e}")
             last_login = f"**N/A** (Ошибка: {str(e)})"
@@ -1215,9 +1252,12 @@ async def selftest_handler(message: types.Message):
         f"{internet}\n"
         f"⌛ Задержка (8.8.8.8): **{ping_time} мс**\n"
         f"🌐 Внешний IP: **`{external_ip}`**\n"
-        f"📡 Трафик⬇ **{format_traffic(rx)}** / ⬆ **{format_traffic(tx)}**\n\n"
-        f"📄 **Последний успешный вход SSH:**\n{last_login}"
+        f"📡 Трафик⬇ **{format_traffic(rx)}** / ⬆ **{format_traffic(tx)}**"
     )
+
+    if INSTALL_MODE == "root":
+        response_text += f"\n\n📄 **Последний успешный вход SSH:**\n{last_login}"
+
 
     sent_message = await message.answer(response_text, parse_mode="Markdown")
     LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = sent_message.message_id
@@ -1234,7 +1274,7 @@ async def speedtest_handler(message: types.Message):
     sent_message = await message.answer("🚀 Запуск speedtest... Это может занять до минуты.")
     LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = sent_message.message_id
 
-    cmd = "speedtest --format=json"
+    cmd = "speedtest --accept-license --accept-gdpr --format=json"
     process = await asyncio.create_subprocess_shell(
         cmd,
         stdout=asyncio.subprocess.PIPE,
@@ -1303,11 +1343,18 @@ async def logs_handler(message: types.Message):
         return
     await delete_previous_message(user_id, command, chat_id)
     try:
-        log_file = SYSLOG_FILE if os.path.exists(SYSLOG_FILE) else SSH_LOG_FILE
-        with open(log_file, "r") as f:
-            lines = f.readlines()[-20:]
-        log_output = escape_html("".join(lines))
-        sent_message = await message.answer(f"📜 **Последние системные журналы ({os.path.basename(log_file)}):**\n<pre>{log_output}</pre>", parse_mode="HTML")
+        cmd = "journalctl -n 20 --no-pager"
+        process = await asyncio.create_subprocess_shell(
+            cmd,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE
+        )
+        stdout, stderr = await process.communicate()
+        if process.returncode != 0:
+            raise Exception(stderr.decode())
+
+        log_output = escape_html(stdout.decode())
+        sent_message = await message.answer(f"📜 **Последние системные журналы:**\n<pre>{log_output}</pre>", parse_mode="HTML")
         LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = sent_message.message_id
     except Exception as e:
         logging.error(f"Ошибка при чтении журналов: {e}")
@@ -1324,6 +1371,7 @@ async def fall2ban_handler(message: types.Message):
         return
     await delete_previous_message(user_id, command, chat_id)
     try:
+        F2B_LOG_FILE = "/var/log/fail2ban.log"
         if not os.path.exists(F2B_LOG_FILE):
              sent_message = await message.answer(f"⚠️ Файл лога Fail2Ban не найден: `{F2B_LOG_FILE}`", parse_mode="Markdown")
              LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = sent_message.message_id
@@ -1372,14 +1420,17 @@ async def sshlog_handler(message: types.Message):
         return
     await delete_previous_message(user_id, command, chat_id)
     try:
-        if not os.path.exists(SSH_LOG_FILE):
-             sent_message = await message.answer(f"⚠️ Файл лога SSH не найден: `{SSH_LOG_FILE}`", parse_mode="Markdown")
-             LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = sent_message.message_id
-             return
+        cmd = "journalctl -u ssh -n 50 --no-pager --since '1 month ago'"
+        process = await asyncio.create_subprocess_shell(
+            cmd,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE
+        )
+        stdout, stderr = await process.communicate()
+        if process.returncode != 0:
+            raise Exception(stderr.decode())
 
-        with open(SSH_LOG_FILE, "r", encoding='utf-8', errors='ignore') as f:
-            lines = f.readlines()[-50:]
-
+        lines = stdout.decode().strip().split('\n')
         log_entries = []
         for line in reversed(lines):
             if "Accepted" in line:
