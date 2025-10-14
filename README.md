@@ -1,11 +1,11 @@
 <h1 align="center">🤖 VPS Manager Telegram Bot</h1>
 
 <p align="center">
-  <b>v1.10.6</b> — надёжный Telegram-бот для мониторинга и управления вашим VPS или выделенным сервером.
+  <b>v1.10.7</b> — надёжный Telegram-бот для мониторинга и управления вашим VPS или выделенным сервером.
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-1.10.6-blue?style=flat-square" />
+  <img src="https://img.shields.io/badge/version-1.10.7-blue?style=flat-square" />
   <img src="https://img.shields.io/badge/python-3.10%2B-green?style=flat-square" />
   <img src="https://img.shields.io/badge/license-GNU-lightgrey?style=flat-square" />
   <img src="https://img.shields.io/badge/aiogram-v3-orange?style=flat-square" />
@@ -70,7 +70,7 @@
 Скопируйте и выполните следующую команду. Она автоматически скачает репозиторий, перейдет в нужную папку и запустит установщик:
 
 ```bash
-git clone [https://github.com/jatixs/tgbotvpscp.git](https://github.com/jatixs/tgbotvpscp.git) && cd tgbotvpscp && chmod +x deploy.sh && sudo ./deploy.sh
+if [ -d "tgbotvpscp" ]; then cd tgbotvpscp && git pull; else git clone https://github.com/jatixs/tgbotvpscp.git && cd tgbotvpscp; fi && chmod +x deploy.sh && sudo ./deploy.sh
 ```
 
 ---
