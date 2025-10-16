@@ -230,9 +230,12 @@ async def get_user_name(user_id):
 async def send_access_denied_message(user_id, chat_id, command):
     """Отправляет сообщение об отказе в доступе."""
     await delete_previous_message(user_id, command, chat_id)
-    # Используем t.me/bot_username?start=... чтобы получить User ID
-    # Но для универсальности оставим ссылку на админа
-    admin_link = f"https://t.me/{ (await bot.get_me()).username }?start=getid"
+    try:
+        bot_info = await bot.get_me()
+        bot_username = bot_info.username
+        admin_link = f"https://t.me/{bot_username}?start={user_id}"
+    except Exception:
+        admin_link = f"https://t.me/user?id={ADMIN_USER_ID}&text=Мой ID для доступа: {user_id}"
 
 
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
@@ -1051,25 +1054,45 @@ async def reboot_handler(callback: types.CallbackQuery):
 # =================================================================================
 
 async def detect_xray_client():
-    """Определяет установленный Xray клиент (Marzban, Amnezia, 3x-UI) по Docker контейнерам."""
-    clients = {
-        "marzban": "marzban",
-        "amnezia": "amnezia-xray",
-        "3x-ui": "3x-ui"
+    """
+    Определяет установленный Xray клиент и его контейнер.
+    Возвращает кортеж (client_name, container_name) или (None, None).
+    """
+    # Конфигурации для более надежного обнаружения
+    client_configs = {
+        "marzban": {"image": "gozargah/marzban", "name_filter": "marzban"},
+        "amnezia": {"image": None, "name_filter": "amnezia-xray"},
+        "3x-ui": {"image": None, "name_filter": "3x-ui"}
     }
-    
-    for client_name, container_name in clients.items():
-        cmd = f"docker ps -a --filter name={container_name} --format '{{{{.Names}}}}'"
+
+    for client_name, config in client_configs.items():
+        container_name = None
+        # Приоритет 1: Обнаружение по образу Docker (наиболее надежно для Marzban)
+        if config["image"]:
+            cmd = f"docker ps -a --filter \"ancestor={config['image']}\" --format '{{{{.Names}}}}' | head -n 1"
+            process = await asyncio.create_subprocess_shell(
+                cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
+            )
+            stdout, _ = await process.communicate()
+            container_name = stdout.decode().strip()
+            if container_name:
+                logging.info(f"Обнаружен клиент {client_name} по образу Docker. Имя контейнера: {container_name}")
+                return client_name, container_name
+
+        # Приоритет 2: Поиск по имени контейнера (для других клиентов)
+        cmd = f"docker ps -a --filter name={config['name_filter']} --format '{{{{.Names}}}}' | head -n 1"
         process = await asyncio.create_subprocess_shell(
             cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
         )
         stdout, _ = await process.communicate()
-        if container_name in stdout.decode().strip():
-            logging.info(f"Обнаружен клиент Xray: {client_name}")
-            return client_name
-            
+        container_name = stdout.decode().strip()
+        if container_name:
+            logging.info(f"Обнаружен клиент {client_name} по имени контейнера: {container_name}")
+            return client_name, container_name
+
     logging.info("Поддерживаемый клиент Xray не обнаружен.")
-    return None
+    return None, None
+
 
 @dp.message(Command("updatexray"))
 async def updatexray_handler(message: types.Message, state: FSMContext):
@@ -1085,7 +1108,7 @@ async def updatexray_handler(message: types.Message, state: FSMContext):
     LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = sent_msg.message_id
 
     try:
-        client = await detect_xray_client()
+        client, container_name = await detect_xray_client()
         
         if not client:
             await bot.edit_message_text(
@@ -1104,15 +1127,15 @@ async def updatexray_handler(message: types.Message, state: FSMContext):
             update_cmd, version_cmd = "", ""
             if client == "amnezia":
                 update_cmd = (
-                    'docker exec amnezia-xray /bin/bash -c "'
+                    f'docker exec {container_name} /bin/bash -c "'
                     'rm -f Xray-linux-64.zip xray && '
                     'wget -q -O Xray-linux-64.zip https://github.com/XTLS/Xray-core/releases/latest/download/Xray-linux-64.zip && '
                     'unzip -o Xray-linux-64.zip && '
                     'cp xray /usr/bin/xray && '
                     'rm Xray-linux-64.zip xray" && '
-                    'docker restart amnezia-xray'
+                    f'docker restart {container_name}'
                 )
-                version_cmd = "docker exec amnezia-xray /usr/bin/xray version"
+                version_cmd = f"docker exec {container_name} /usr/bin/xray version"
             elif client == "3x-ui":
                 update_cmd = "bash <(curl -L https://raw.githubusercontent.com/mhsanaei/3x-ui/master/install.sh) xray"
                 version_cmd = "/usr/local/x-ui/xray version"
@@ -1126,7 +1149,6 @@ async def updatexray_handler(message: types.Message, state: FSMContext):
                 error_details = stderr_update.decode() or stdout_update.decode()
                 raise Exception(f"Команда обновления завершилась с ошибкой:\n<pre>{escape_html(error_details)}</pre>")
             
-            # ... (остальная логика получения версии)
             process_version = await asyncio.create_subprocess_shell(version_cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
             stdout_version, _ = await process_version.communicate()
             version_output = stdout_version.decode()
@@ -1138,14 +1160,13 @@ async def updatexray_handler(message: types.Message, state: FSMContext):
             )
             await bot.edit_message_text(final_message, chat_id=chat_id, message_id=sent_msg.message_id, parse_mode="HTML")
 
-        # --- НОВАЯ ИНТЕРАКТИВНАЯ ЛОГИКА ДЛЯ MARZBAN ---
+        # --- ИНТЕРАКТИВНАЯ ЛОГИКА ДЛЯ MARZBAN ---
         elif client == "marzban":
             await bot.edit_message_text(
-                "✅ Обнаружен **Marzban**. Получаю список версий Xray с GitHub...",
+                f"✅ Обнаружен **Marzban** (контейнер: `{container_name}`). Получаю список версий Xray с GitHub...",
                 chat_id=chat_id, message_id=sent_msg.message_id, parse_mode="Markdown"
             )
             
-            # Получаем версии через API GitHub
             api_url = "https://api.github.com/repos/XTLS/Xray-core/releases?per_page=5"
             response = requests.get(api_url, timeout=10)
             if response.status_code != 200:
@@ -1154,7 +1175,6 @@ async def updatexray_handler(message: types.Message, state: FSMContext):
             releases = response.json()
             versions = [release['tag_name'] for release in releases]
             
-            # Создаем клавиатуру с выбором версий
             buttons = []
             for version in versions:
                 buttons.append([InlineKeyboardButton(text=f"🚀 {version}", callback_data=f"xray_install_{version}")])
@@ -1165,6 +1185,8 @@ async def updatexray_handler(message: types.Message, state: FSMContext):
                 "👇 **Выберите версию Xray для установки на Marzban:**",
                 chat_id=chat_id, message_id=sent_msg.message_id, reply_markup=keyboard, parse_mode="Markdown"
             )
+            # Сохраняем имя контейнера в FSM для следующего шага
+            await state.update_data(marzban_container_name=container_name)
             await state.set_state(UpdateXrayStates.waiting_for_version_choice)
 
     except Exception as e:
@@ -1172,28 +1194,35 @@ async def updatexray_handler(message: types.Message, state: FSMContext):
         await bot.edit_message_text(f"⚠️ **Ошибка:**\n\n{str(e)}", chat_id=chat_id, message_id=sent_msg.message_id, parse_mode="HTML")
         await state.clear()
 
-# --- НОВЫЙ ОБРАБОТЧИК ДЛЯ ВЫБОРА ВЕРСИИ MARZBAN ---
+# --- ОБРАБОТЧИК ДЛЯ ВЫБОРА ВЕРСИИ MARZBAN ---
 @dp.callback_query(UpdateXrayStates.waiting_for_version_choice)
 async def handle_xray_version_choice(callback: types.CallbackQuery, state: FSMContext):
     await callback.answer()
-    await state.clear()
     
     chat_id = callback.message.chat.id
     message_id = callback.message.message_id
     
-    if callback.data == "xray_install_cancel":
-        await bot.edit_message_text("❌ Обновление отменено.", chat_id=chat_id, message_id=message_id)
-        return
-        
     try:
+        if callback.data == "xray_install_cancel":
+            await bot.edit_message_text("❌ Обновление отменено.", chat_id=chat_id, message_id=message_id)
+            await state.clear()
+            return
+            
+        fsm_data = await state.get_data()
+        container_name = fsm_data.get("marzban_container_name")
+        if not container_name:
+            raise Exception("Не удалось определить имя контейнера Marzban. Процесс прерван.")
+        
+        await state.clear()
+
         selected_version = callback.data.split("_")[2]
         await bot.edit_message_text(
-            f"⚙️ Выбрана версия **{selected_version}**. Начинаю установку...",
+            f"⚙️ Выбрана версия **{selected_version}**. Начинаю установку для контейнера `{container_name}`...",
             chat_id=chat_id, message_id=message_id, parse_mode="Markdown"
         )
         
-        # Команды извлечены и адаптированы из вашего скрипта change.sh
-        # 1. Создаем папку, скачиваем, распаковываем и удаляем архив
+        # Команды извлечены и адаптированы из скрипта change.sh
+        # 1. Создание папки, скачивание, распаковка и удаление архива
         download_cmd = (
             f"sudo mkdir -p /var/lib/marzban/xray-core && "
             f"cd /var/lib/marzban/xray-core && "
@@ -1202,15 +1231,15 @@ async def handle_xray_version_choice(callback: types.CallbackQuery, state: FSMCo
             f"sudo rm Xray-linux-64.zip"
         )
         
-        # 2. Прописываем путь в .env (идемпотентно - удаляем старую строку и добавляем новую)
+        # 2. Прописывание пути в .env (идемпотентно - удаляем старую строку и добавляем новую)
         env_file = "/opt/marzban/.env"
         config_cmd = (
             f"sudo sed -i '/^XRAY_EXECUTABLE_PATH=/d' {env_file} && "
             f"echo 'XRAY_EXECUTABLE_PATH=\"/var/lib/marzban/xray-core/xray\"' | sudo tee -a {env_file}"
         )
         
-        # 3. Перезапускаем Marzban через Docker (надежнее, чем команда marzban)
-        restart_cmd = "sudo docker restart marzban"
+        # 3. Перезапуск Marzban с использованием динамического имени контейнера
+        restart_cmd = f"sudo docker restart {container_name}"
         
         full_cmd = f"{download_cmd} && {config_cmd} && {restart_cmd}"
         
@@ -1223,7 +1252,7 @@ async def handle_xray_version_choice(callback: types.CallbackQuery, state: FSMCo
             error_details = stderr.decode() or stdout.decode()
             raise Exception(f"Процесс установки завершился с ошибкой:\n<pre>{escape_html(error_details)}</pre>")
         
-        # Проверяем версию после установки
+        # Проверка версии после установки
         version_cmd = "sudo /var/lib/marzban/xray-core/xray version"
         process_version = await asyncio.create_subprocess_shell(
             version_cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
