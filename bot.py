@@ -41,6 +41,7 @@ os.makedirs(CONFIG_DIR, exist_ok=True)
 
 USERS_FILE = os.path.join(CONFIG_DIR, "users.json")
 REBOOT_FLAG_FILE = os.path.join(CONFIG_DIR, "reboot_flag.txt")
+RESTART_FLAG_FILE = os.path.join(CONFIG_DIR, "restart_flag.txt")
 
 LOG_FILE = os.path.join(LOG_DIR, "bot.log")
 logging.basicConfig(level=logging.INFO, filename=LOG_FILE, format='%(asctime)s - %(levelname)s - %(message)s', encoding='utf-8')
@@ -799,11 +800,14 @@ async def restart_handler(message: types.Message):
         return
     await delete_previous_message(user_id, command, chat_id)
     sent_msg = await message.answer("♻️ Бот ушел перезагружаться…")
-    LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = sent_msg.message_id
     try:
+        with open(RESTART_FLAG_FILE, "w") as f:
+            f.write(f"{chat_id}:{sent_msg.message_id}")
         os.system(f"sudo systemctl restart tg-bot.service")
     except Exception as e:
         logging.error(f"Ошибка в restart_handler: {e}")
+        if os.path.exists(RESTART_FLAG_FILE):
+            os.remove(RESTART_FLAG_FILE)
         await bot.edit_message_text(text=f"⚠️ Ошибка при попытке перезапуска сервиса: {str(e)}", chat_id=chat_id, message_id=sent_msg.message_id)
 
 async def reboot_handler(callback: types.CallbackQuery):
@@ -1311,6 +1315,19 @@ async def handle_vless_name(message: types.Message, state: FSMContext):
         sent_message = await message.answer(f"🔗 **VLESS ссылка для «{escape_html(custom_name)}»:**\n\n" f"Код:\n<code>{escape_html(vless_url)}</code>\n\n" f"⚠️ Ошибка при генерации QR-кода или отправке: {escape_html(str(e))}", parse_mode="HTML")
         LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = sent_message.message_id
 
+async def initial_restart_check():
+    if os.path.exists(RESTART_FLAG_FILE):
+        try:
+            with open(RESTART_FLAG_FILE, "r") as f:
+                content = f.read().strip()
+                chat_id, message_id = map(int, content.split(':'))
+            await bot.edit_message_text(chat_id=chat_id, message_id=message_id, text="✅ Бот перезагружен.")
+            logging.info(f"Изменено сообщение о перезапуске в чате ID: {chat_id}")
+        except Exception as e:
+            logging.error(f"Ошибка при изменении сообщения о перезапуске: {e}")
+        finally:
+            os.remove(RESTART_FLAG_FILE)
+
 async def initial_reboot_check():
     if os.path.exists(REBOOT_FLAG_FILE):
         try:
@@ -1329,6 +1346,7 @@ async def main():
         load_users()
         await refresh_user_names()
         await initial_reboot_check()
+        await initial_restart_check()
         asyncio.create_task(traffic_monitor())
         await dp.start_polling(bot, allowed_updates=dp.resolve_used_update_types())
     except Exception as e:
