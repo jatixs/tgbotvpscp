@@ -7,6 +7,8 @@ import urllib.parse
 import logging
 import requests
 import sys
+import shutil
+from typing import Optional
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import Command, StateFilter
 from aiogram.exceptions import TelegramRetryAfter, TelegramBadRequest
@@ -186,6 +188,206 @@ def is_allowed(user_id, command=None):
         return True
 
     return False # Запрещаем все остальное по умолчанию
+
+async def run_shell_command(cmd: str):
+    """Выполняет shell-команду и возвращает stdout/stderr."""
+    process = await asyncio.create_subprocess_shell(
+        cmd,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
+    stdout, stderr = await process.communicate()
+    if process.returncode != 0:
+        error_out = stderr.decode().strip() or stdout.decode().strip()
+        raise RuntimeError(f"Команда '{cmd}' завершилась с ошибкой: {error_out}")
+    return stdout.decode(), stderr.decode()
+
+async def detect_xray_client() -> Optional[str]:
+    """Определяет установленный клиент управления Xray."""
+    try:
+        process = await asyncio.create_subprocess_shell(
+            "docker ps -a --filter name=amnezia-xray --format '{{.Names}}'",
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        stdout, _ = await process.communicate()
+        if process.returncode == 0:
+            containers = [line.strip() for line in stdout.decode().splitlines() if line.strip()]
+            if any(name == "amnezia-xray" for name in containers):
+                return "amnezia"
+    except FileNotFoundError:
+        pass
+
+    if shutil.which("marzban"):
+        return "marzban"
+
+    potential_dirs = [
+        "/usr/local/3x-ui",
+        "/usr/local/x-ui",
+        "/opt/3x-ui",
+        "/opt/x-ui",
+    ]
+    if any(os.path.isdir(path) for path in potential_dirs):
+        return "3x-ui"
+
+    try:
+        process = await asyncio.create_subprocess_shell(
+            "systemctl list-unit-files --type=service --no-legend | grep -E '3x-ui|x-ui'",
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        stdout, _ = await process.communicate()
+        if process.returncode == 0 and stdout.decode().strip():
+            return "3x-ui"
+    except FileNotFoundError:
+        pass
+
+    return None
+
+async def update_xray_amnezia() -> str:
+    """Обновляет Xray для клиента Amnezia и возвращает версию."""
+    process = await asyncio.create_subprocess_shell(
+        "docker ps -a --filter name=amnezia-xray --format '{{.Names}}'",
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
+    stdout_check, _ = await process.communicate()
+    container_check = stdout_check.decode().strip()
+
+    if "amnezia-xray" not in container_check:
+        raise RuntimeError("Контейнер amnezia-xray не найден")
+
+    update_cmd = (
+        'docker exec amnezia-xray /bin/bash -c "'
+        'rm -f Xray-linux-64.zip xray && '
+        'wget -q -O Xray-linux-64.zip https://github.com/XTLS/Xray-core/releases/latest/download/Xray-linux-64.zip && '
+        'unzip -o Xray-linux-64.zip && '
+        'cp xray /usr/bin/xray && '
+        'rm Xray-linux-64.zip xray" && '
+        'docker restart amnezia-xray'
+    )
+    await run_shell_command(update_cmd)
+
+    version_cmd = "docker exec amnezia-xray /usr/bin/xray version"
+    stdout_version, _ = await run_shell_command(version_cmd)
+
+    version_match = re.search(r'Xray\s+([\d\.]+)', stdout_version)
+    return version_match.group(1) if version_match else "неизвестной версии"
+
+async def get_marzban_project_dir() -> str:
+    """Определяет директорию установки Marzban."""
+    if shutil.which("marzban"):
+        try:
+            stdout, _ = await run_shell_command("marzban config show")
+            match = re.search(r"PROJECT_DIR\s*=\s*['\"]?([^'\"\n]+)", stdout)
+            if match:
+                project_dir = match.group(1).strip()
+                if os.path.isdir(project_dir):
+                    return project_dir
+        except Exception:
+            pass
+
+    fallback_dirs = [
+        "/opt/marzban",
+        "/var/lib/marzban",
+        "/usr/local/marzban",
+    ]
+    for path in fallback_dirs:
+        if os.path.isdir(path):
+            return path
+
+    raise RuntimeError("Не удалось определить директорию установки Marzban")
+
+async def get_compose_command() -> str:
+    """Выбирает доступную команду docker compose."""
+    try:
+        await run_shell_command("docker compose version")
+        return "docker compose"
+    except Exception:
+        pass
+
+    try:
+        await run_shell_command("docker-compose version")
+        return "docker-compose"
+    except Exception:
+        pass
+
+    raise RuntimeError("Команда docker compose не найдена")
+
+async def update_xray_marzban() -> str:
+    """Обновляет Xray в установке Marzban и возвращает версию."""
+    project_dir = await get_marzban_project_dir()
+    compose_file = os.path.join(project_dir, "docker-compose.yml")
+    if not os.path.exists(compose_file):
+        raise RuntimeError("Файл docker-compose.yml Marzban не найден")
+
+    compose_cmd = await get_compose_command()
+    update_cmd = f"cd {project_dir} && {compose_cmd} pull xray && {compose_cmd} up -d xray"
+    await run_shell_command(update_cmd)
+
+    container_cmd = f"cd {project_dir} && {compose_cmd} ps -q xray"
+    stdout_container, _ = await run_shell_command(container_cmd)
+    container_id = stdout_container.strip().splitlines()
+    if not container_id:
+        raise RuntimeError("Не удалось получить ID контейнера Xray для Marzban")
+    container_id = container_id[0]
+
+    version_cmd = (
+        f"docker exec {container_id} /usr/local/bin/xray version"
+        f" || docker exec {container_id} /usr/bin/xray version"
+    )
+    stdout_version, _ = await run_shell_command(version_cmd)
+    version_match = re.search(r'Xray\s+([\d\.]+)', stdout_version)
+    return version_match.group(1) if version_match else "неизвестной версии"
+
+async def detect_3xui_base_path() -> str:
+    """Находит базовую директорию установки 3x-UI."""
+    candidates = [
+        "/usr/local/3x-ui",
+        "/usr/local/x-ui",
+        "/opt/3x-ui",
+        "/opt/x-ui",
+    ]
+    for path in candidates:
+        if os.path.isdir(path):
+            return path
+    raise RuntimeError("Не удалось определить директорию установки 3x-UI")
+
+async def update_xray_3xui() -> str:
+    """Обновляет Xray для панели 3x-UI и возвращает версию."""
+    base_path = await detect_3xui_base_path()
+    bin_dir = os.path.join(base_path, "bin")
+    if not os.path.isdir(bin_dir):
+        raise RuntimeError("Каталог bin 3x-UI не найден")
+
+    potential_binaries = [
+        os.path.join(bin_dir, "xray-linux-64"),
+        os.path.join(bin_dir, "xray"),
+    ]
+    target_binary = None
+    for binary in potential_binaries:
+        if os.path.exists(binary):
+            target_binary = binary
+            break
+
+    if not target_binary:
+        raise RuntimeError("Не найден исполняемый файл Xray в установке 3x-UI")
+
+    update_cmd = (
+        "TMP_DIR=$(mktemp -d) && "
+        "cd $TMP_DIR && "
+        "wget -q -O Xray-linux-64.zip https://github.com/XTLS/Xray-core/releases/latest/download/Xray-linux-64.zip && "
+        "unzip -o Xray-linux-64.zip xray >/dev/null && "
+        f"install -m 755 xray {target_binary} && "
+        "cd / && rm -rf $TMP_DIR && "
+        "(systemctl restart 3x-ui || systemctl restart x-ui || true)"
+    )
+    await run_shell_command(update_cmd)
+
+    version_cmd = f"{target_binary} version"
+    stdout_version, _ = await run_shell_command(version_cmd)
+    version_match = re.search(r'Xray\s+([\d\.]+)', stdout_version)
+    return version_match.group(1) if version_match else "неизвестной версии"
 
 async def refresh_user_names():
     """Обновляет имена пользователей, используя API Telegram."""
@@ -1053,48 +1255,30 @@ async def updatexray_handler(message: types.Message):
     LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = sent_msg.message_id
 
     try:
-        check_container_cmd = "docker ps -a --filter name=amnezia-xray --format '{{.Names}}'"
-        process_check = await asyncio.create_subprocess_shell(
-            check_container_cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
-        )
-        stdout_check, _ = await process_check.communicate()
-        container_check = stdout_check.decode().strip()
+        client = await detect_xray_client()
+        if not client:
+            raise RuntimeError("Не удалось определить установленный клиент (Marzban, Amnezia или 3x-UI)")
 
-        if "amnezia-xray" not in container_check:
-            raise Exception("Контейнер amnezia-xray не найден")
+        client_title = {
+            "amnezia": "Amnezia",
+            "marzban": "Marzban",
+            "3x-ui": "3x-UI",
+        }.get(client, client)
 
-        update_cmd = (
-            'docker exec amnezia-xray /bin/bash -c "'
-            'rm -f Xray-linux-64.zip xray && '
-            'wget -q -O Xray-linux-64.zip https://github.com/XTLS/Xray-core/releases/latest/download/Xray-linux-64.zip && '
-            'unzip -o Xray-linux-64.zip && '
-            'cp xray /usr/bin/xray && '
-            'rm Xray-linux-64.zip xray" && '
-            'docker restart amnezia-xray'
-        )
-        process_update = await asyncio.create_subprocess_shell(
-            update_cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
-        )
-        _, stderr_update = await process_update.communicate()
-
-        if process_update.returncode != 0:
-            raise Exception(f"Команда обновления завершилась с ошибкой: {stderr_update.decode()}")
-
-        version_cmd = "docker exec amnezia-xray /usr/bin/xray version"
-        process_version = await asyncio.create_subprocess_shell(
-            version_cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
-        )
-        stdout_version, stderr_version = await process_version.communicate()
-
-        if process_version.returncode != 0:
-            raise Exception(f"Не удалось получить версию Xray: {stderr_version.decode()}")
-
-        version_output = stdout_version.decode()
-        version_match = re.search(r'Xray\s+([\d\.]+)', version_output)
-        version = version_match.group(1) if version_match else "неизвестной версии"
+        if client == "amnezia":
+            version = await update_xray_amnezia()
+        elif client == "marzban":
+            version = await update_xray_marzban()
+        elif client == "3x-ui":
+            version = await update_xray_3xui()
+        else:
+            raise RuntimeError(f"Обнаружен неизвестный тип клиента: {client}")
 
         await delete_previous_message(user_id, command, chat_id)
-        sent_msg = await message.answer(f"✅ Ваша версия Xray обновлена до **`{version}`**", parse_mode="Markdown")
+        sent_msg = await message.answer(
+            f"✅ Клиент **{client_title}** обновил Xray до версии **`{version}`**",
+            parse_mode="Markdown"
+        )
         LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = sent_msg.message_id
 
     except Exception as e:
