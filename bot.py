@@ -1040,6 +1040,27 @@ async def reboot_handler(callback: types.CallbackQuery):
             message_id=message_id
         )
 
+async def detect_xray_client():
+    """Определяет установленный Xray клиент (Marzban, Amnezia, 3x-UI) по Docker контейнерам."""
+    clients = {
+        "marzban": "marzban",
+        "amnezia": "amnezia-xray",
+        "3x-ui": "3x-ui"
+    }
+    
+    for client_name, container_name in clients.items():
+        cmd = f"docker ps -a --filter name={container_name} --format '{{{{.Names}}}}'"
+        process = await asyncio.create_subprocess_shell(
+            cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
+        )
+        stdout, _ = await process.communicate()
+        if container_name in stdout.decode().strip():
+            logging.info(f"Обнаружен клиент Xray: {client_name}")
+            return client_name
+            
+    logging.info("Поддерживаемый клиент Xray не обнаружен.")
+    return None
+
 @dp.message(Command("updatexray"))
 async def updatexray_handler(message: types.Message):
     user_id = message.from_user.id
@@ -1048,61 +1069,88 @@ async def updatexray_handler(message: types.Message):
     if not is_allowed(user_id, command):
         await send_access_denied_message(user_id, chat_id, command)
         return
+        
     await delete_previous_message(user_id, command, chat_id)
-    sent_msg = await message.answer("🔄 Обновление Xray начато... Ожидайте.")
+    sent_msg = await message.answer("🔍 Определяю установленный клиент Xray...")
     LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = sent_msg.message_id
 
     try:
-        check_container_cmd = "docker ps -a --filter name=amnezia-xray --format '{{.Names}}'"
-        process_check = await asyncio.create_subprocess_shell(
-            check_container_cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
-        )
-        stdout_check, _ = await process_check.communicate()
-        container_check = stdout_check.decode().strip()
+        client = await detect_xray_client()
+        
+        if not client:
+            await bot.edit_message_text(
+                "❌ Не удалось определить поддерживаемый клиент Xray (Marzban, Amnezia, 3x-UI). Обновление невозможно.",
+                chat_id=chat_id, message_id=sent_msg.message_id
+            )
+            return
 
-        if "amnezia-xray" not in container_check:
-            raise Exception("Контейнер amnezia-xray не найден")
-
-        update_cmd = (
-            'docker exec amnezia-xray /bin/bash -c "'
-            'rm -f Xray-linux-64.zip xray && '
-            'wget -q -O Xray-linux-64.zip https://github.com/XTLS/Xray-core/releases/latest/download/Xray-linux-64.zip && '
-            'unzip -o Xray-linux-64.zip && '
-            'cp xray /usr/bin/xray && '
-            'rm Xray-linux-64.zip xray" && '
-            'docker restart amnezia-xray'
+        await bot.edit_message_text(
+            f"✅ Обнаружен клиент: **{client.upper()}**. Начинаю обновление Xray...",
+            chat_id=chat_id, message_id=sent_msg.message_id, parse_mode="Markdown"
         )
+        
+        update_cmd = ""
+        version_cmd = ""
+        
+        if client == "amnezia":
+            update_cmd = (
+                'docker exec amnezia-xray /bin/bash -c "'
+                'rm -f Xray-linux-64.zip xray && '
+                'wget -q -O Xray-linux-64.zip https://github.com/XTLS/Xray-core/releases/latest/download/Xray-linux-64.zip && '
+                'unzip -o Xray-linux-64.zip && '
+                'cp xray /usr/bin/xray && '
+                'rm Xray-linux-64.zip xray" && '
+                'docker restart amnezia-xray'
+            )
+            version_cmd = "docker exec amnezia-xray /usr/bin/xray version"
+
+        elif client == "marzban":
+            # Используем официальный скрипт Marzban для обновления
+            update_cmd = (
+                "sudo bash -c "
+                "\"$(curl -sL https://github.com/Gozargah/Marzban-scripts/raw/master/marzban.sh)\" --update-xray"
+            )
+            version_cmd = "docker exec marzban xray version"
+
+        elif client == "3x-ui":
+            # Используем официальный скрипт 3x-UI для обновления
+            update_cmd = "bash <(curl -L https://raw.githubusercontent.com/mhsanaei/3x-ui/master/install.sh) xray"
+            version_cmd = "/usr/local/x-ui/xray version" # 3x-ui может не использовать Docker для xray
+        
+        # --- Выполнение обновления ---
         process_update = await asyncio.create_subprocess_shell(
             update_cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
         )
-        _, stderr_update = await process_update.communicate()
+        stdout_update, stderr_update = await process_update.communicate()
 
         if process_update.returncode != 0:
-            raise Exception(f"Команда обновления завершилась с ошибкой: {stderr_update.decode()}")
+            error_details = stderr_update.decode() or stdout_update.decode()
+            raise Exception(f"Команда обновления завершилась с ошибкой:\n<pre>{escape_html(error_details)}</pre>")
 
-        version_cmd = "docker exec amnezia-xray /usr/bin/xray version"
+        # --- Получение новой версии ---
         process_version = await asyncio.create_subprocess_shell(
             version_cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
         )
         stdout_version, stderr_version = await process_version.communicate()
 
         if process_version.returncode != 0:
-            raise Exception(f"Не удалось получить версию Xray: {stderr_version.decode()}")
+            raise Exception(f"Не удалось получить версию Xray после обновления: {stderr_version.decode()}")
 
         version_output = stdout_version.decode()
         version_match = re.search(r'Xray\s+([\d\.]+)', version_output)
         version = version_match.group(1) if version_match else "неизвестной версии"
 
-        await delete_previous_message(user_id, command, chat_id)
-        sent_msg = await message.answer(f"✅ Ваша версия Xray обновлена до **`{version}`**", parse_mode="Markdown")
-        LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = sent_msg.message_id
+        final_message = (
+            f"✅ **Xray для клиента `{client.upper()}` успешно обновлен до версии `{version}`!**\n\n"
+            f"📃 **Лог выполнения:**\n<pre>{escape_html(stdout_update.decode()[-1000:])}</pre>"
+        )
+        await bot.edit_message_text(final_message, chat_id=chat_id, message_id=sent_msg.message_id, parse_mode="HTML")
 
     except Exception as e:
         logging.error(f"Ошибка в updatexray_handler: {e}")
-        error_msg = f"⚠️ Ошибка при обновлении Xray: {escape_html(str(e))}"
-        await delete_previous_message(user_id, command, chat_id)
-        sent_msg = await message.answer(error_msg, parse_mode="HTML")
-        LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = sent_msg.message_id
+        error_msg = f"⚠️ **Ошибка при обновлении Xray:**\n\n{str(e)}"
+        await bot.edit_message_text(error_msg, chat_id=chat_id, message_id=sent_msg.message_id, parse_mode="HTML")
+
 
 @dp.message(Command("traffic"))
 async def traffic_handler(message: types.Message):
