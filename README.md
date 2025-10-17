@@ -70,7 +70,7 @@
 Скопируйте и выполните следующую команду. Она автоматически скачает репозиторий, перейдет в нужную папку и запустит установщик:
 
 ```bash
-if [ -d "tgbotvpscp" ]; then cd tgbotvpscp && git pull; else git clone https://github.com/jatixs/tgbotvpscp.git && cd tgbotvpscp; fi && chmod +x deploy.sh && sudo ./deploy.sh
+bash <(wget -qO- https://raw.githubusercontent.com/jatixs/tgbotvpscp/main/deploy.sh)
 ```
 
 Скрипт deploy.sh полностью автоматизирует процесс, предложит выбрать режим установки (Root или Secure), а затем попросит вас ввести:
