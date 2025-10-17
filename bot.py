@@ -383,7 +383,7 @@ def format_uptime(seconds):
     if mins > 0:
         parts.append(f"{mins}м")
     if seconds < 60 or not parts:
-         parts.append(f"{secs}с")
+       parts.append(f"{secs}с")
     return " ".join(parts) if parts else "0с"
 
 async def delete_previous_message(user_id: int, command, chat_id: int):
@@ -397,7 +397,7 @@ async def delete_previous_message(user_id: int, command, chat_id: int):
                 await bot.delete_message(chat_id=chat_id, message_id=msg_id)
         except TelegramBadRequest as e:
             if "message to delete not found" not in str(e):
-                 logging.error(f"Ошибка при удалении предыдущего сообщения для {user_id}/{cmd}: {e}")
+                logging.error(f"Ошибка при удалении предыдущего сообщения для {user_id}/{cmd}: {e}")
         except Exception as e:
             logging.error(f"Ошибка при удалении предыдущего сообщения для {user_id}/{cmd}: {e}")
 
@@ -413,7 +413,7 @@ async def start_or_menu_handler(message: types.Message, state: FSMContext):
         return
     await delete_previous_message(user_id, ["start", "menu", "manage_users", "reboot_confirm", "generate_vless", "adduser"], chat_id)
     if str(user_id) not in USER_NAMES:
-         await refresh_user_names()
+       await refresh_user_names()
     sent_message = await message.answer(
         "👋 Привет! Выбери команду на клавиатуре ниже. Чтобы вызвать меню снова, используй /menu.",
         reply_markup=get_main_reply_keyboard(user_id)
@@ -527,7 +527,7 @@ async def callback_handler(callback: types.CallbackQuery, state: FSMContext):
     
     permission_check_command = command
     if command.startswith(("delete_user_", "set_group_", "select_user_change_group_", "request_self_delete_", "confirm_self_delete_", "back_to_delete_users", "xray_install_")):
-         permission_check_command = "manage_users"
+       permission_check_command = "manage_users"
 
     if command not in ["back_to_menu", "back_generate_vless", "back_to_manage_users"] and not is_allowed(user_id, permission_check_command):
         if user_id not in ALLOWED_USERS:
@@ -621,16 +621,16 @@ async def callback_handler(callback: types.CallbackQuery, state: FSMContext):
             else:
                 await callback.message.edit_text(f"⚠️ Пользователь ID **`{target_user_id}`** не найден", reply_markup=get_back_keyboard("back_to_manage_users"), parse_mode="Markdown")
         elif command == "get_id_inline":
-             await callback.message.answer(f"🆔 Ваш ID: {user_id}\nГруппа: {ALLOWED_USERS.get(user_id, 'не авторизован')}")
+           await callback.message.answer(f"🆔 Ваш ID: {user_id}\nГруппа: {ALLOWED_USERS.get(user_id, 'не авторизован')}")
         elif command == "reboot":
-             await reboot_handler(callback)
+           await reboot_handler(callback)
         elif command == "back_generate_vless":
             await state.clear()
             await callback.message.delete()
         elif command == "back_to_menu":
-             await callback.message.delete()
-             sent_message = await bot.send_message(chat_id=chat_id, text="📋 Главное меню:", reply_markup=get_main_reply_keyboard(user_id))
-             LAST_MESSAGE_IDS.setdefault(user_id, {})["menu"] = sent_message.message_id
+           await callback.message.delete()
+           sent_message = await bot.send_message(chat_id=chat_id, text="📋 Главное меню:", reply_markup=get_main_reply_keyboard(user_id))
+           LAST_MESSAGE_IDS.setdefault(user_id, {})["menu"] = sent_message.message_id
     except TelegramRetryAfter as e:
         logging.error(f"TelegramRetryAfter в callback_handler: {e.retry_after} секунд")
         await callback.message.answer(f"⚠️ Telegram ограничивает запросы. Повторите через {e.retry_after} секунд.")
@@ -699,7 +699,7 @@ async def handle_user_id(message: types.Message, state: FSMContext):
     except (TelegramBadRequest, ValueError) as e:
         error_text = str(e)
         if "Bad Request: chat not found" in error_text or "Неверный формат" in error_text:
-             error_text = (f"❌ **Не удалось найти пользователя `{input_text}`.**\n\n" "Возможные причины:\n" "1. Пользователь не существует или закрыл личку.\n" "2. Пользователь должен **сначала написать боту команду /start**.\n\n" "💡 **Решение:** Добавляйте по **User ID** (число) или попросите пользователя написать /start.")
+            error_text = (f"❌ **Не удалось найти пользователя `{input_text}`.**\n\n" "Возможные причины:\n" "1. Пользователь не существует или закрыл личку.\n" "2. Пользователь должен **сначала написать боту команду /start**.\n\n" "💡 **Решение:** Добавляйте по **User ID** (число) или попросите пользователя написать /start.")
         else:
             error_text = f"⚠️ Произошла непредвиденная ошибка: {escape_html(str(e))}"
         await delete_previous_message(user_id, command, chat_id)
@@ -762,9 +762,9 @@ async def uptime_handler(message: types.Message):
         sent_message = await message.answer(f"⏱ Время работы: **{uptime_str}**", parse_mode="Markdown")
         LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = sent_message.message_id
     except Exception as e:
-         logging.error(f"Ошибка в uptime_handler: {e}")
-         sent_message = await message.answer(f"⚠️ Ошибка при получении аптайма: {str(e)}")
-         LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = sent_message.message_id
+       logging.error(f"Ошибка в uptime_handler: {e}")
+       sent_message = await message.answer(f"⚠️ Ошибка при получении аптайма: {str(e)}")
+       LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = sent_message.message_id
 
 @dp.message(Command("update"))
 async def update_handler(message: types.Message):
@@ -824,7 +824,7 @@ async def reboot_handler(callback: types.CallbackQuery):
             with open(REBOOT_FLAG_FILE, "w") as f:
                 f.write(str(user_id))
         except Exception as e:
-             logging.error(f"Не удалось записать флаг перезагрузки: {e}")
+            logging.error(f"Не удалось записать флаг перезагрузки: {e}")
         os.system("sudo reboot")
     else:
         await bot.edit_message_text("⛔ Отказано. Только администраторы могут перезагрузить сервер.", chat_id=chat_id, message_id=message_id)
@@ -832,8 +832,7 @@ async def reboot_handler(callback: types.CallbackQuery):
 async def detect_xray_client():
     clients = {
         "marzban": "marzban",
-        "amnezia": "amnezia-xray",
-        "3x-ui": "3x-ui"
+        "amnezia": "amnezia-xray"
     }
     for client_name, container_filter in clients.items():
         cmd = f"docker ps -a --filter name={container_filter} --format '{{{{.Names}}}}' | head -n 1"
@@ -861,7 +860,7 @@ async def updatexray_handler(message: types.Message, state: FSMContext):
     try:
         client, container_name = await detect_xray_client()
         if not client:
-            await bot.edit_message_text("❌ Не удалось определить поддерживаемый клиент Xray (Marzban, Amnezia, 3x-UI). Обновление невозможно.", chat_id=chat_id, message_id=sent_msg.message_id)
+            await bot.edit_message_text("❌ Не удалось определить поддерживаемый клиент Xray (Marzban, Amnezia). Обновление невозможно.", chat_id=chat_id, message_id=sent_msg.message_id)
             return
 
         version = "неизвестной"
@@ -891,23 +890,6 @@ async def updatexray_handler(message: types.Message, state: FSMContext):
             if version_match:
                 version = version_match.group(1)
 
-        elif client == "3x-ui":
-            client_name_display = "3x-UI"
-            await bot.edit_message_text(f"✅ Обнаружен: **{client_name_display}**. Начинаю обновление...", chat_id=chat_id, message_id=sent_msg.message_id, parse_mode="Markdown")
-            update_cmd = "bash <(curl -L https://raw.githubusercontent.com/mhsanaei/3x-ui/master/install.sh) xray"
-            process_update = await asyncio.create_subprocess_shell(update_cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
-            _, stderr_update = await process_update.communicate()
-            if process_update.returncode != 0:
-                raise Exception(f"Команда обновления завершилась с ошибкой:\n<pre>{escape_html(stderr_update.decode())}</pre>")
-
-            version_cmd = "/usr/local/x-ui/xray version"
-            process_version = await asyncio.create_subprocess_shell(version_cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
-            stdout_version, _ = await process_version.communicate()
-            version_output = stdout_version.decode('utf-8', 'ignore')
-            version_match = re.search(r'Xray\s+([\d\.]+)', version_output)
-            if version_match:
-                version = version_match.group(1)
-
         elif client == "marzban":
             client_name_display = "Marzban"
             await bot.edit_message_text(f"✅ Обнаружен **Marzban**. Выполняю обновление, это может занять минуту...", chat_id=chat_id, message_id=sent_msg.message_id, parse_mode="Markdown")
@@ -927,7 +909,6 @@ async def updatexray_handler(message: types.Message, state: FSMContext):
                 f"echo 'XRAY_EXECUTABLE_PATH = /var/lib/marzban/xray-core/xray' | tee -a {env_file}"
             )
             
-            # САМАЯ НАДЕЖНАЯ КОМАНДА ПЕРЕЗАПУСКА
             restart_cmd = f"docker restart {container_name}"
             
             full_marzban_cmd = f"{check_deps_cmd} && {download_unzip_cmd} && {update_env_cmd} && {restart_cmd}"
@@ -939,7 +920,6 @@ async def updatexray_handler(message: types.Message, state: FSMContext):
                 error_output = stderr_update.decode()
                 raise Exception(f"Процесс обновления Marzban завершился с ошибкой:\n<pre>{escape_html(error_output)}</pre>")
             
-            # После прямого рестарта, единственный способ узнать версию - `docker exec`
             version_cmd = f'docker exec {container_name} /var/lib/marzban/xray-core/xray version'
             process_version = await asyncio.create_subprocess_shell(version_cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
             stdout_version, _ = await process_version.communicate()
@@ -979,7 +959,7 @@ async def traffic_monitor():
     while True:
         for user_id in list(TRAFFIC_MESSAGE_IDS.keys()):
             if user_id not in TRAFFIC_MESSAGE_IDS:
-                 continue
+                continue
             try:
                 counters = psutil.net_io_counters()
                 rx = counters.bytes_recv
@@ -1044,7 +1024,7 @@ async def selftest_handler(message: types.Message):
                     ip = ip_match.group(1)
                     flag = get_country_flag(ip)
                     if dt_object > datetime.now():
-                         dt_object = dt_object.replace(year=current_year - 1)
+                        dt_object = dt_object.replace(year=current_year - 1)
                     formatted_time = dt_object.strftime('%H:%M')
                     formatted_date = dt_object.strftime('%d.%m.%Y')
                     last_login = (f"👤 **{user}**\n" f"🌍 IP: **{flag} {ip}**\n" f"⏰ Время: **{formatted_time}**\n" f"🗓️ Дата: **{formatted_date}**")
@@ -1148,9 +1128,9 @@ async def fall2ban_handler(message: types.Message):
     try:
         F2B_LOG_FILE = "/var/log/fail2ban.log"
         if not os.path.exists(F2B_LOG_FILE):
-             sent_message = await message.answer(f"⚠️ Файл лога Fail2Ban не найден: `{F2B_LOG_FILE}`", parse_mode="Markdown")
-             LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = sent_message.message_id
-             return
+            sent_message = await message.answer(f"⚠️ Файл лога Fail2Ban не найден: `{F2B_LOG_FILE}`", parse_mode="Markdown")
+            LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = sent_message.message_id
+            return
         with open(F2B_LOG_FILE, "r", encoding='utf-8', errors='ignore') as f:
             lines = f.readlines()[-20:]
         log_entries = []
@@ -1205,7 +1185,7 @@ async def sshlog_handler(message: types.Message):
                         date_str = date_match.group(1)
                         dt_object = datetime.strptime(f"{datetime.now().year} {date_str}", '%Y %b %d %H:%M:%S')
                         if dt_object > datetime.now():
-                             dt_object = dt_object.replace(year=datetime.now().year - 1)
+                            dt_object = dt_object.replace(year=datetime.now().year - 1)
                         user = user_match.group(1)
                         ip = ip_match.group(1)
                         flag = get_country_flag(ip)
@@ -1248,9 +1228,9 @@ async def handle_vless_file(message: types.Message, state: FSMContext):
         file_content = await bot.download_file(file_path)
         json_data = file_content.read().decode('utf-8')
         try:
-             json.loads(json_data)
+            json.loads(json_data)
         except json.JSONDecodeError:
-             raise ValueError("Содержимое файла не является корректным JSON.")
+            raise ValueError("Содержимое файла не является корректным JSON.")
         await state.update_data(json_data=json_data)
         await delete_previous_message(user_id, command, chat_id)
         sent_message = await message.answer("📝 Введите **имя** для VLESS ссылки:", reply_markup=get_back_keyboard("back_generate_vless"), parse_mode="Markdown")
@@ -1287,7 +1267,7 @@ async def handle_vless_name(message: types.Message, state: FSMContext):
         return
     custom_name = message.text.strip()
     if not custom_name:
-         custom_name = f"VLESS_Config_by_{message.from_user.first_name or user_id}"
+       custom_name = f"VLESS_Config_by_{message.from_user.first_name or user_id}"
     data = await state.get_data()
     json_data = data.get("json_data")
     await state.clear()
