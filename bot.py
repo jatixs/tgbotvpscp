@@ -870,7 +870,7 @@ async def restart_handler(message: types.Message):
         process = await asyncio.create_subprocess_shell(restart_cmd)
         await process.wait() # Wait briefly to ensure command is sent
         # Don't wait for completion, systemd handles the restart
-        logging.info(f"Restart command sent for tg-bot.service") # Removed {SERVICE_NAME}
+        logging.info(f"Restart command sent for {SERVICE_NAME}.service")
     except Exception as e:
         logging.error(f"Ошибка в restart_handler при отправке команды перезапуска: {e}")
         if os.path.exists(RESTART_FLAG_FILE):
@@ -1512,7 +1512,6 @@ async def sshlog_handler(message: types.Message):
         logging.error(f"Ошибка при чтении журнала SSH: {e}")
         sent_message = await message.answer(f"⚠️ Ошибка при чтении журнала SSH: {str(e)}")
         LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = sent_message.message_id
-
 
 @dp.message(StateFilter(GenerateVlessStates.waiting_for_file), F.document)
 async def handle_vless_file(message: types.Message, state: FSMContext):
