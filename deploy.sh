@@ -153,11 +153,14 @@ install_logic() {
     msg_info "5. Настройка переменных окружения..."
     msg_question "Введите ваш Telegram Bot Token: " TG_BOT_TOKEN_USER
     msg_question "Введите ваш Telegram User ID (только цифры): " TG_ADMIN_ID_USER
+    # Add prompt for TG_ADMIN_USERNAME
+    msg_question "Введите ваш Telegram Username (без @, необязательно): " TG_ADMIN_USERNAME_USER
 
     sudo tee .env > /dev/null <<EOF
 TG_BOT_TOKEN="${TG_BOT_TOKEN_USER}"
 TG_ADMIN_ID="${TG_ADMIN_ID_USER}"
 INSTALL_MODE="${mode}"
+TG_ADMIN_USERNAME="${TG_ADMIN_USERNAME_USER}"
 EOF
 
     local owner="root:root"
@@ -278,6 +281,34 @@ update_bot() {
         msg_error "Не удалось скачать файл. Проверьте URL."
         exit 1
     fi
+    
+    msg_info "1.1 Скачивание обновленного requirements.txt..."
+    if ${DOWNLOADER} "${REQUIREMENTS_URL}" | sudo tee "${BOT_INSTALL_PATH}/requirements.txt" > /dev/null; then
+        msg_success "Файл requirements.txt успешно обновлен."
+    else
+        msg_warning "Не удалось скачать requirements.txt. Используется старая версия."
+        # Don't exit, maybe requirements didn't change
+    fi
+    
+    msg_info "1.2 Обновление зависимостей Python..."
+    # Determine execution user based on install mode (read from .env if possible)
+    local exec_user_cmd=""
+    if [ -f "${BOT_INSTALL_PATH}/.env" ]; then
+        source "${BOT_INSTALL_PATH}/.env"
+        if [ "$INSTALL_MODE" == "secure" ]; then
+             exec_user_cmd="sudo -u ${SERVICE_USER}"
+        fi
+    fi
+    # Use pushd/popd for correct context
+    pushd ${BOT_INSTALL_PATH} > /dev/null || { msg_error "Не удалось перейти в ${BOT_INSTALL_PATH}"; exit 1; }
+    run_with_spinner "Установка/обновление зависимостей" $exec_user_cmd ${VENV_PATH}/bin/pip install -r requirements.txt --upgrade
+    if [ $? -ne 0 ]; then
+        msg_error "Ошибка при обновлении зависимостей Python."
+        popd > /dev/null
+        exit 1
+    fi
+    popd > /dev/null
+
 
     msg_info "2. Перезапуск сервиса для применения изменений..."
     if sudo systemctl restart ${SERVICE_NAME}; then
@@ -289,44 +320,60 @@ update_bot() {
     fi
 }
 
-main_menu() {
-    clear
-    echo -e "${C_BLUE}${C_BOLD}"
-    echo "╔══════════════════════════════════════════════════════╗"
-    echo "║                                                      ║"
-    echo "║          Скрипт управления Telegram-ботом            ║"
-    echo "║                                                      ║"
-    echo "╚══════════════════════════════════════════════════════╝"
-    echo -e "${C_RESET}"
-    echo -e "${C_GREEN}  1)${C_RESET} ${C_BOLD}Установить (Secure):${C_RESET} Рекомендуемый, безопасный режим"
-    echo -e "${C_YELLOW}  2)${C_RESET} ${C_BOLD}Установить (Root):${C_RESET}   Менее безопасный, полный доступ"
-    echo -e "${C_CYAN}  3)${C_RESET} ${C_BOLD}Обновить бота:${C_RESET}         Скачать новую версию bot.py"
-    echo -e "${C_RED}  4)${C_RESET} ${C_BOLD}Удалить бота:${C_RESET}          Полное удаление с сервера"
-    echo -e "  5) ${C_BOLD}Выход${C_RESET}"
-    echo "--------------------------------------------------------"
-    read -p "$(echo -e "${C_BOLD}Введите номер опции [1-5]: ${C_RESET}")" choice
+# --- MODIFIED PART START ---
 
-    case $choice in
-        1) install_secure ;;
-        2)
-            if [ "$(id -u)" -ne 0 ]; then
-                msg_error "Для установки от имени root, запустите скрипт с 'sudo'."
-                exit 1
-            fi
-            install_root
-            ;;
-        3) update_bot ;;
-        4)
-            msg_question "ВЫ УВЕРЕНЫ, что хотите ПОЛНОСТЬЮ удалить бота? (y/n): " confirm_uninstall
-            if [[ "$confirm_uninstall" =~ ^[Yy]$ ]]; then
-                uninstall_bot
-            else
-                msg_info "Удаление отменено."
-            fi
-            ;;
-        5) exit 0 ;;
-        *) msg_error "Неверный выбор." ;;
-    esac
+main_menu() {
+    while true; do
+        clear
+        echo -e "${C_BLUE}${C_BOLD}"
+        echo "╔══════════════════════════════════════════════════════╗"
+        echo "║                                                      ║"
+        echo "║             VPS Manager Telegram Bot                 ║"
+        echo "║                   by Jatix                           ║"
+        echo "╚══════════════════════════════════════════════════════╝"
+        echo -e "${C_RESET}"
+        echo -e "${C_GREEN}  1)${C_RESET} ${C_BOLD}Установить (Secure):${C_RESET} Рекомендуемый, безопасный режим"
+        echo -e "${C_YELLOW}  2)${C_RESET} ${C_BOLD}Установить (Root):${C_RESET}   Менее безопасный, полный доступ"
+        echo -e "${C_CYAN}  3)${C_RESET} ${C_BOLD}Обновить бота:${C_RESET}         Обновление бота до новейшей версии"
+        echo -e "${C_RED}  4)${C_RESET} ${C_BOLD}Удалить бота:${C_RESET}          Полное удаление с сервера"
+        echo -e "  5) ${C_BOLD}Выход${C_RESET}"
+        echo "--------------------------------------------------------"
+        read -p "$(echo -e "${C_BOLD}Введите номер опции [1-5]: ${C_RESET}")" choice
+
+        case $choice in
+            1) install_secure ;;
+            2)
+                if [ "$(id -u)" -ne 0 ]; then
+                    msg_error "Для установки от имени root, запустите скрипт с 'sudo'."
+                else
+                    install_root
+                fi
+                ;;
+            3) update_bot ;;
+            4)
+                msg_question "ВЫ УВЕРЕНЫ, что хотите ПОЛНОСТЬЮ удалить бота? (y/n): " confirm_uninstall
+                if [[ "$confirm_uninstall" =~ ^[Yy]$ ]]; then
+                    uninstall_bot
+                else
+                    msg_info "Удаление отменено."
+                fi
+                ;;
+            5)
+                break
+                ;;
+            *)
+                msg_error "Неверный выбор."
+                sleep 2
+                continue
+                ;;
+        esac
+        echo
+        read -n 1 -s -r -p "Нажмите любую клавишу для возврата в меню..."
+    done
+    
+    echo -e "\n${C_CYAN}👋 До свидания!${C_RESET}"
 }
+
+# --- MODIFIED PART END ---
 
 main_menu
