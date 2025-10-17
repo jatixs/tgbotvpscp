@@ -153,12 +153,16 @@ install_logic() {
     msg_info "5. Настройка переменных окружения..."
     msg_question "Введите ваш Telegram Bot Token: " TG_BOT_TOKEN_USER
     msg_question "Введите ваш Telegram User ID (только цифры): " TG_ADMIN_ID_USER
-
+    # --- ИЗМЕНЕНИЕ НАЧАЛО ---
+    msg_question "Введите ваш Telegram Username (без @, для кнопки 'Отправить ID'): " TG_ADMIN_USERNAME_USER
+    
     sudo tee .env > /dev/null <<EOF
 TG_BOT_TOKEN="${TG_BOT_TOKEN_USER}"
 TG_ADMIN_ID="${TG_ADMIN_ID_USER}"
+TG_ADMIN_USERNAME="${TG_ADMIN_USERNAME_USER}"
 INSTALL_MODE="${mode}"
 EOF
+    # --- ИЗМЕНЕНИЕ КОНЕЦ ---
 
     local owner="root:root"
     if [ "$mode" == "secure" ]; then owner="${SERVICE_USER}:${SERVICE_USER}"; fi
