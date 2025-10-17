@@ -14,6 +14,20 @@ REQUIREMENTS_URL="https://raw.githubusercontent.com/jatixs/tgbotvpscp/main/requi
 # Запоминаем исходную директорию, откуда запущен скрипт, в самом начале
 INITIAL_SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 
+# --- АВТОВЫБОР ЗАГРУЗЧИКА ---
+# Проверяем, есть ли curl или wget, и выбираем подходящий
+if command -v curl &> /dev/null; then
+    DOWNLOADER="curl -sSLf"
+    DOWNLOADER_PIPE="curl -s" # Для передачи в bash
+elif command -v wget &> /dev/null; then
+    DOWNLOADER="wget -qO-"
+    DOWNLOADER_PIPE="wget -qO-"
+else
+    echo "❌ Ошибка: Ни curl, ни wget не найдены. Установите один из них."
+    echo "sudo apt update && sudo apt install curl"
+    exit 1
+fi
+
 
 # =================================================================================
 # ФУНКЦИЯ ПРОВЕРКИ И УСТАНОВКИ ДОПОЛНЕНИЙ
@@ -45,8 +59,7 @@ install_extras() {
                 . /etc/os-release
                 if [ "$VERSION_CODENAME" == "noble" ]; then
                     echo "Обнаружена Ubuntu Noble. Используется специальный метод установки Speedtest-CLI."
-                    sudo apt-get install -y curl
-                    curl -s https://packagecloud.io/install/repositories/ookla/speedtest-cli/script.deb.sh | sudo bash
+                    ${DOWNLOADER_PIPE} https://packagecloud.io/install/repositories/ookla/speedtest-cli/script.deb.sh | sudo bash
                     # Автоматически заменяем 'noble' на 'jammy'
                     sudo sed -i 's/noble/jammy/g' /etc/apt/sources.list.d/ookla_speedtest-cli.list
                     sudo apt update
@@ -73,8 +86,9 @@ install_extras() {
 # =================================================================================
 common_install_steps() {
     echo "1. Обновление пакетов и установка базовых зависимостей..."
+    # Добавили wget в список
     sudo apt update -y
-    sudo apt install -y python3 python3-pip python3-venv git curl sudo rsync docker.io
+    sudo apt install -y python3 python3-pip python3-venv git curl wget sudo rsync docker.io
     if [ $? -ne 0 ]; then
         echo "❌ Ошибка при установке базовых пакетов."
         exit 1
@@ -86,12 +100,12 @@ common_install_steps() {
 
     echo "3. Скачивание файлов проекта из GitHub..."
     # Скачиваем bot.py
-    if ! curl -sSLf "${BOT_PY_URL}" | sudo tee "${BOT_INSTALL_PATH}/bot.py" > /dev/null; then
+    if ! ${DOWNLOADER} "${BOT_PY_URL}" | sudo tee "${BOT_INSTALL_PATH}/bot.py" > /dev/null; then
         echo "❌ Не удалось скачать bot.py. Проверьте URL и доступ в интернет."
         exit 1
     fi
     # Скачиваем requirements.txt
-    if ! curl -sSLf "${REQUIREMENTS_URL}" | sudo tee "${BOT_INSTALL_PATH}/requirements.txt" > /dev/null; then
+    if ! ${DOWNLOADER} "${REQUIREMENTS_URL}" | sudo tee "${BOT_INSTALL_PATH}/requirements.txt" > /dev/null; then
         echo "❌ Не удалось скачать requirements.txt. Проверьте URL и доступ в интернет."
         exit 1
     fi
@@ -116,7 +130,6 @@ install_secure() {
     sudo chmod -R 750 ${BOT_INSTALL_PATH}
 
     echo "4. Настройка виртуального окружения Python..."
-    # ВАЖНО: Используем pushd и popd для временного перехода в директорию
     pushd ${BOT_INSTALL_PATH} > /dev/null || { echo "❌ Не удалось перейти в ${BOT_INSTALL_PATH}"; exit 1; }
     if [ ! -d "${VENV_PATH}" ]; then
         sudo -u ${SERVICE_USER} ${PYTHON_BIN} -m venv venv
@@ -139,8 +152,6 @@ INSTALL_MODE="secure"
 EOF
     sudo chown ${SERVICE_USER}:${SERVICE_USER} .env
     sudo chmod 600 .env
-
-    # Возвращаемся из директории /opt/tg-bot
     popd > /dev/null
 
     echo "6. Создание systemd сервиса..."
@@ -178,7 +189,6 @@ install_root() {
     sudo chmod -R 755 ${BOT_INSTALL_PATH}
 
     echo "4. Настройка виртуального окружения Python..."
-    # ВАЖНО: Используем pushd и popd для временного перехода в директорию
     pushd ${BOT_INSTALL_PATH} > /dev/null || { echo "❌ Не удалось перейти в ${BOT_INSTALL_PATH}"; exit 1; }
     if [ ! -d "${VENV_PATH}" ]; then
         ${PYTHON_BIN} -m venv venv
@@ -201,8 +211,6 @@ INSTALL_MODE="root"
 EOF
     sudo chown root:root .env
     sudo chmod 600 .env
-
-    # Возвращаемся из директории /opt/tg-bot
     popd > /dev/null
 
     echo "6. Настройка прав sudo для пользователя 'root'..."
@@ -312,8 +320,7 @@ update_bot() {
     fi
 
     echo "1. Скачивание последней версии ядра из репозитория..."
-    # Используем curl для скачивания и tee для записи с правами sudo
-    if curl -sSLf "${BOT_PY_URL}" | sudo tee "${BOT_INSTALL_PATH}/bot.py" > /dev/null; then
+    if ${DOWNLOADER} "${BOT_PY_URL}" | sudo tee "${BOT_INSTALL_PATH}/bot.py" > /dev/null; then
         echo "✅ Бот успешно обновлен."
     else
         echo "❌ Не удалось скачать файл. Проверьте URL в скрипте и наличие доступа в интернет."
@@ -335,11 +342,9 @@ update_bot() {
 # =================================================================================
 cleanup_after_install() {
     echo "-----------------------------------"
-    # Используем предварительно сохраненный путь INITIAL_SCRIPT_DIR
     read -p "❓ Установка завершена. Хотите удалить установочную папку '${INITIAL_SCRIPT_DIR}'? (y/n): " confirm_cleanup
     if [[ "$confirm_cleanup" == "y" || "$confirm_cleanup" == "Y" ]]; then
         echo "Удаление установочной папки..."
-        # Переходим в домашнюю директорию, чтобы не было проблем с удалением текущей
         cd ~
         rm -rf "$INITIAL_SCRIPT_DIR"
         echo "✅ Папка удалена."
