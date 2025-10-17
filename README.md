@@ -1,14 +1,14 @@
 <h1 align="center">🤖 VPS Manager Telegram Bot</h1>
 
 <p align="center">
-  <b>v1.10.7</b> — надёжный Telegram-бот для мониторинга и управления вашим VPS или выделенным сервером.
+  <b>v1.10.8</b> — надёжный Telegram-бот для мониторинга и управления вашим VPS или выделенным сервером.
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-1.10.7-blue?style=flat-square" />
-  <img src="https://img.shields.io/badge/python-3.10%2B-green?style=flat-square" />
+  <img src="https://img.shields.io/badge/version-1.10.8-blue?style=flat-square" />
+  <img src="https://img.shields.io/badge/python-3.14-green?style=flat-square" />
   <img src="https://img.shields.io/badge/license-GPL-lightgrey?style=flat-square" />
-  <img src="https://img.shields.io/badge/aiogram-v3-orange?style=flat-square" />
+  <img src="https://img.shields.io/badge/aiogram-v3.22.0-orange?style=flat-square" />
   <img src="https://img.shields.io/badge/platform-Ubuntu%2020.04%2B-important?style=flat-square" />
 </p>
 
