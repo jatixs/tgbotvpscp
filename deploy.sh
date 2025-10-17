@@ -8,8 +8,9 @@ SERVICE_NAME="tg-bot"
 SERVICE_USER="tgbot"
 PYTHON_BIN="/usr/bin/python3"
 VENV_PATH="${BOT_INSTALL_PATH}/venv"
-# Ссылка на исходный код bot.py для обновлений
-BOT_PY_URL="https://raw.githubusercontent.com/jatixs/tgbotvpscp/refs/heads/main/bot.py"
+# Ссылки на исходные файлы в GitHub
+BOT_PY_URL="https://raw.githubusercontent.com/jatixs/tgbotvpscp/main/bot.py"
+REQUIREMENTS_URL="https://raw.githubusercontent.com/jatixs/tgbotvpscp/main/requirements.txt"
 # Запоминаем исходную директорию, откуда запущен скрипт, в самом начале
 INITIAL_SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 
@@ -83,10 +84,17 @@ common_install_steps() {
 
     sudo mkdir -p ${BOT_INSTALL_PATH}
 
-    echo "3. Копирование файлов проекта..."
-    sudo rsync -a --delete \
-        --exclude='deploy.sh' --exclude='.git/' --exclude='__pycache__/' \
-        ./ "${BOT_INSTALL_PATH}/"
+    echo "3. Скачивание файлов проекта из GitHub..."
+    # Скачиваем bot.py
+    if ! curl -sSLf "${BOT_PY_URL}" | sudo tee "${BOT_INSTALL_PATH}/bot.py" > /dev/null; then
+        echo "❌ Не удалось скачать bot.py. Проверьте URL и доступ в интернет."
+        exit 1
+    fi
+    # Скачиваем requirements.txt
+    if ! curl -sSLf "${REQUIREMENTS_URL}" | sudo tee "${BOT_INSTALL_PATH}/requirements.txt" > /dev/null; then
+        echo "❌ Не удалось скачать requirements.txt. Проверьте URL и доступ в интернет."
+        exit 1
+    fi
 }
 
 
