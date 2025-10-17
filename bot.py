@@ -798,13 +798,19 @@ async def handle_group_selection_callback(callback: types.CallbackQuery, state: 
 
 
 @dp.message(Command("uptime"))
+@dp.message(F.text == "⏱ Аптайм") # Added text handler
 async def uptime_handler(message: types.Message):
     user_id = message.from_user.id
     chat_id = message.chat.id
     command = "uptime"
     if user_id not in ALLOWED_USERS:
-        await send_access_denied_message(user_id, chat_id, command)
+        # Allow text trigger only if allowed
+        if isinstance(message.text, str) and message.text == "⏱ Аптайм":
+             await message.answer("⛔ У вас нет прав для выполнения этой команды.")
+        else: # Original command denial
+            await send_access_denied_message(user_id, chat_id, command)
         return
+
     await delete_previous_message(user_id, command, chat_id)
     try:
         # Run blocking file read in a separate thread
@@ -822,13 +828,19 @@ async def uptime_handler(message: types.Message):
        LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = sent_message.message_id
 
 @dp.message(Command("update"))
+@dp.message(F.text == "🔄 Обновление VPS") # Added text handler
 async def update_handler(message: types.Message):
     user_id = message.from_user.id
     chat_id = message.chat.id
     command = "update"
     if not is_allowed(user_id, command):
-        await send_access_denied_message(user_id, chat_id, command)
+        # Allow text trigger only if allowed
+        if isinstance(message.text, str) and message.text == "🔄 Обновление VPS":
+             await message.answer("⛔ У вас нет прав для выполнения этой команды.")
+        else: # Original command denial
+            await send_access_denied_message(user_id, chat_id, command)
         return
+
     await delete_previous_message(user_id, command, chat_id)
     sent_message = await message.answer("🔄 Выполняю обновление VPS... Это может занять несколько минут.")
     LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = sent_message.message_id
@@ -852,13 +864,19 @@ async def update_handler(message: types.Message):
 
 
 @dp.message(Command("restart"))
+@dp.message(F.text == "♻️ Перезапуск бота") # Added text handler
 async def restart_handler(message: types.Message):
     user_id = message.from_user.id
     chat_id = message.chat.id
     command = "restart"
     if not is_allowed(user_id, command):
-        await send_access_denied_message(user_id, chat_id, command)
+        # Allow text trigger only if allowed
+        if isinstance(message.text, str) and message.text == "♻️ Перезапуск бота":
+             await message.answer("⛔ У вас нет прав для выполнения этой команды.")
+        else: # Original command denial
+            await send_access_denied_message(user_id, chat_id, command)
         return
+
     await delete_previous_message(user_id, command, chat_id)
     sent_msg = await message.answer("♻️ Бот уходит на перезапуск…")
     try:
@@ -870,7 +888,7 @@ async def restart_handler(message: types.Message):
         process = await asyncio.create_subprocess_shell(restart_cmd)
         await process.wait() # Wait briefly to ensure command is sent
         # Don't wait for completion, systemd handles the restart
-        logging.info(f"Restart command sent for {SERVICE_NAME}.service")
+        logging.info("Restart command sent for tg-bot.service") # Removed {SERVICE_NAME}
     except Exception as e:
         logging.error(f"Ошибка в restart_handler при отправке команды перезапуска: {e}")
         if os.path.exists(RESTART_FLAG_FILE):
@@ -1478,17 +1496,16 @@ async def sshlog_handler(message: types.Message):
                         # Parse timestamp (assuming format like Oct 17 22:07:05.123456) - adjust if needed
                         # This format is complex, might need refinement based on actual journalctl output
                         # Using a simpler approach for now: find date-like part
-                         date_match = re.search(r'(\w{3}\s+\d{1,2}\s+\d{2}:\d{2}:\d{2})', timestamp_str) # Find standard date part
-                         if not date_match: continue # Skip if no standard date found
+                        date_match = re.search(r'(\w{3}\s+\d{1,2}\s+\d{2}:\d{2}:\d{2})', timestamp_str) # Find standard date part
+                        if not date_match: continue # Skip if no standard date found
 
-                         dt_object = datetime.strptime(f"{datetime.now().year} {date_match.group(1)}", '%Y %b %d %H:%M:%S')
-                         if dt_object > datetime.now():
-                              dt_object = dt_object.replace(year=datetime.now().year - 1)
+                        dt_object = datetime.strptime(f"{datetime.now().year} {date_match.group(1)}", '%Y %b %d %H:%M:%S')
+                        if dt_object > datetime.now():
+                             dt_object = dt_object.replace(year=datetime.now().year - 1)
 
                         # Run potentially blocking flag lookup in thread
                         flag = await asyncio.to_thread(get_country_flag, ip)
-                        # flag = get_country_flag(ip) # Original sync call
-
+                        
                         formatted_time = dt_object.strftime('%H:%M:%S') # Include seconds
                         formatted_date = dt_object.strftime('%d.%m.%Y')
                         log_entries.append(f"👤 Пользователь: **{user}**\n🌍 IP: **{flag} {ip}**\n⏰ Время: **{formatted_time}**\n🗓️ Дата: **{formatted_date}**")
@@ -1513,7 +1530,6 @@ async def sshlog_handler(message: types.Message):
         logging.error(f"Ошибка при чтении журнала SSH: {e}")
         sent_message = await message.answer(f"⚠️ Ошибка при чтении журнала SSH: {str(e)}")
         LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = sent_message.message_id
-
 
 @dp.message(StateFilter(GenerateVlessStates.waiting_for_file), F.document)
 async def handle_vless_file(message: types.Message, state: FSMContext):
