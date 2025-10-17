@@ -86,7 +86,7 @@ install_extras() {
                     run_with_spinner "Установка Speedtest-CLI" sudo apt install -y speedtest-cli
                 fi
             else
-                 run_with_spinner "Установка Speedtest-CLI" sudo apt install -y speedtest-cli
+                run_with_spinner "Установка Speedtest-CLI" sudo apt install -y speedtest-cli
             fi
             msg_success "Speedtest-CLI установлен."
         else
@@ -137,11 +137,11 @@ install_logic() {
 
     msg_info "4. Настройка виртуального окружения Python..."
     pushd ${BOT_INSTALL_PATH} > /dev/null || { msg_error "Не удалось перейти в ${BOT_INSTALL_PATH}"; exit 1; }
-    
+
     if [ ! -d "${VENV_PATH}" ]; then
         run_with_spinner "Создание venv" $exec_user_cmd ${PYTHON_BIN} -m venv venv
     fi
-    
+
     run_with_spinner "Обновление pip" $exec_user_cmd ${VENV_PATH}/bin/pip install --upgrade pip
     run_with_spinner "Установка зависимостей Python" $exec_user_cmd ${VENV_PATH}/bin/pip install -r requirements.txt
     if [ $? -ne 0 ]; then
@@ -165,7 +165,7 @@ EOF
     sudo chown ${owner} .env
     sudo chmod 600 .env
     popd > /dev/null
-    
+
     if [ "$mode" == "root" ]; then
       msg_info "6. Настройка прав sudo для пользователя 'root'..."
       SUDOERS_FILE="/etc/sudoers.d/98-${SERVICE_NAME}-root"
@@ -201,7 +201,7 @@ create_and_start_service() {
         group=${SERVICE_USER}
         desc_mode="Secure Mode"
     fi
-    
+
     msg_info "Создание systemd сервиса..."
     SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}.service"
     sudo tee ${SERVICE_FILE} > /dev/null <<EOF
@@ -268,7 +268,7 @@ update_bot() {
     echo -e "\n${C_BOLD}=== Начало обновления bot.py ===${C_RESET}"
     if [ ! -f "${BOT_INSTALL_PATH}/bot.py" ]; then
         msg_error "Установка бота не найдена в ${BOT_INSTALL_PATH}."
-        exit 1
+        return 1
     fi
 
     msg_info "1. Скачивание последней версии ядра из репозитория..."
@@ -276,7 +276,7 @@ update_bot() {
         msg_success "Файл bot.py успешно обновлен."
     else
         msg_error "Не удалось скачать файл. Проверьте URL."
-        exit 1
+        return 1
     fi
 
     msg_info "2. Перезапуск сервиса для применения изменений..."
@@ -285,48 +285,64 @@ update_bot() {
         echo -e "\n${C_GREEN}${C_BOLD}🎉 Обновление завершено!${C_RESET}\n"
     else
         msg_error "Ошибка при перезапуске. Логи: sudo journalctl -u ${SERVICE_NAME} -xe"
-        exit 1
+        return 1
     fi
 }
 
-main_menu() {
-    clear
-    echo -e "${C_BLUE}${C_BOLD}"
-    echo "╔══════════════════════════════════════════════════════╗"
-    echo "║                                                      ║"
-    echo "║          Скрипт управления Telegram-ботом            ║"
-    echo "║                                                      ║"
-    echo "╚══════════════════════════════════════════════════════╝"
-    echo -e "${C_RESET}"
-    echo -e "${C_GREEN}  1)${C_RESET} ${C_BOLD}Установить (Secure):${C_RESET} Рекомендуемый, безопасный режим"
-    echo -e "${C_YELLOW}  2)${C_RESET} ${C_BOLD}Установить (Root):${C_RESET}   Менее безопасный, полный доступ"
-    echo -e "${C_CYAN}  3)${C_RESET} ${C_BOLD}Обновить бота:${C_RESET}         Скачать новую версию bot.py"
-    echo -e "${C_RED}  4)${C_RESET} ${C_BOLD}Удалить бота:${C_RESET}          Полное удаление с сервера"
-    echo -e "  5) ${C_BOLD}Выход${C_RESET}"
-    echo "--------------------------------------------------------"
-    read -p "$(echo -e "${C_BOLD}Введите номер опции [1-5]: ${C_RESET}")" choice
+# --- MODIFIED PART START ---
 
-    case $choice in
-        1) install_secure ;;
-        2)
-            if [ "$(id -u)" -ne 0 ]; then
-                msg_error "Для установки от имени root, запустите скрипт с 'sudo'."
-                exit 1
-            fi
-            install_root
-            ;;
-        3) update_bot ;;
-        4)
-            msg_question "ВЫ УВЕРЕНЫ, что хотите ПОЛНОСТЬЮ удалить бота? (y/n): " confirm_uninstall
-            if [[ "$confirm_uninstall" =~ ^[Yy]$ ]]; then
-                uninstall_bot
-            else
-                msg_info "Удаление отменено."
-            fi
-            ;;
-        5) exit 0 ;;
-        *) msg_error "Неверный выбор." ;;
-    esac
+main_menu() {
+    while true; do
+        clear
+        echo -e "${C_BLUE}${C_BOLD}"
+        echo "╔══════════════════════════════════════════════════════╗"
+        echo "║                                                      ║"
+        echo "║             VPS Manager Telegram Bot                 ║"
+        echo "║                   by Jatix                           ║"
+        echo "╚══════════════════════════════════════════════════════╝"
+        echo -e "${C_RESET}"
+        echo -e "${C_GREEN}  1)${C_RESET} ${C_BOLD}Установить (Secure):${C_RESET} Рекомендуемый, безопасный режим"
+        echo -e "${C_YELLOW}  2)${C_RESET} ${C_BOLD}Установить (Root):${C_RESET}   Менее безопасный, полный доступ"
+        echo -e "${C_CYAN}  3)${C_RESET} ${C_BOLD}Обновить бота:${C_RESET}         Обновление бота до новейшей версии"
+        echo -e "${C_RED}  4)${C_RESET} ${C_BOLD}Удалить бота:${C_RESET}          Полное удаление с сервера"
+        echo -e "  5) ${C_BOLD}Выход${C_RESET}"
+        echo "--------------------------------------------------------"
+        read -p "$(echo -e "${C_BOLD}Введите номер опции [1-5]: ${C_RESET}")" choice
+
+        case $choice in
+            1) install_secure ;;
+            2)
+                if [ "$(id -u)" -ne 0 ]; then
+                    msg_error "Для установки от имени root, запустите скрипт с 'sudo'."
+                else
+                    install_root
+                fi
+                ;;
+            3) update_bot ;;
+            4)
+                msg_question "ВЫ УВЕРЕНЫ, что хотите ПОЛНОСТЬЮ удалить бота? (y/n): " confirm_uninstall
+                if [[ "$confirm_uninstall" =~ ^[Yy]$ ]]; then
+                    uninstall_bot
+                else
+                    msg_info "Удаление отменено."
+                fi
+                ;;
+            5)
+                break
+                ;;
+            *)
+                msg_error "Неверный выбор."
+                sleep 2
+                continue
+                ;;
+        esac
+        echo
+        read -n 1 -s -r -p "Нажмите любую клавишу для возврата в меню..."
+    done
+    
+    echo -e "\n${C_CYAN}👋 До свидания!${C_RESET}"
 }
+
+# --- MODIFIED PART END ---
 
 main_menu
