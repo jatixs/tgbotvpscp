@@ -3,18 +3,32 @@
 # --- Конфигурация ---
 BOT_INSTALL_PATH="/opt/tg-bot"
 SERVICE_NAME="tg-bot"
-WATCHDOG_SERVICE_NAME="tg-watchdog" # Имя сервиса для watchdog
+WATCHDOG_SERVICE_NAME="tg-watchdog"
 SERVICE_USER="tgbot"
 PYTHON_BIN="/usr/bin/python3"
 VENV_PATH="${BOT_INSTALL_PATH}/venv"
 
-# URLы файлов
-BOT_PY_URL="https://raw.githubusercontent.com/jatixs/tgbotvpscp/main/bot.py"
-REQUIREMENTS_URL="https://raw.githubusercontent.com/jatixs/tgbotvpscp/main/requirements.txt"
-WATCHDOG_PY_URL="https://raw.githubusercontent.com/jatixs/tgbotvpscp/main/watchdog.py" # URL для watchdog.py
+# --- GitHub Репозиторий и Ветка ---
+GITHUB_REPO="jatixs/tgbotvpscp"
+# Определяем ветку: используем первый аргумент скрипта ($1) или 'main' по умолчанию
+GIT_BRANCH="${1:-main}" # Если $1 пустой, используется 'main'
+GITHUB_RAW_BASE_URL="https://raw.githubusercontent.com/${GITHUB_REPO}"
+
+# --- URLы файлов (теперь динамические) ---
+# Для 'main' ветки URL будет обычный, для других добавляем /refs/heads/
+if [ "$GIT_BRANCH" == "main" ]; then
+    BRANCH_PATH="$GIT_BRANCH"
+else
+    BRANCH_PATH="refs/heads/${GIT_BRANCH}"
+fi
+
+BOT_PY_URL="${GITHUB_RAW_BASE_URL}/${BRANCH_PATH}/bot.py"
+REQUIREMENTS_URL="${GITHUB_RAW_BASE_URL}/${BRANCH_PATH}/requirements.txt"
+WATCHDOG_PY_URL="${GITHUB_RAW_BASE_URL}/${BRANCH_PATH}/watchdog.py"
 
 # --- Цвета и функции вывода ---
 C_RESET='\033[0m'
+# ... (остальные цвета и функции msg_*, spinner, run_with_spinner - без изменений) ...
 C_RED='\033[0;31m'
 C_GREEN='\033[0;32m'
 C_YELLOW='\033[0;33m'
@@ -28,7 +42,6 @@ msg_warning() { echo -e "${C_YELLOW}⚠️  $1${C_RESET}"; }
 msg_error() { echo -e "${C_RED}❌ $1${C_RESET}"; }
 msg_question() { read -p "$(echo -e "${C_YELLOW}❓ $1${C_RESET}")" $2; }
 
-# --- Спиннер ---
 spinner() {
     local pid=$1
     local msg=$2
@@ -39,7 +52,7 @@ spinner() {
         printf "\r${C_BLUE}⏳ ${spin:$i:1} ${msg}...${C_RESET}"
         sleep .1
     done
-    printf "\r" # Очистить строку спиннера
+    printf "\r"
 }
 
 run_with_spinner() {
@@ -47,14 +60,11 @@ run_with_spinner() {
     shift
     "$@" > /dev/null 2>&1 &
     local pid=$!
-    spinner "$msg" "$@" # Передаем команду для возможного вывода ошибки
+    spinner "$msg" "$@"
     wait $pid
     local exit_code=$?
     if [ $exit_code -ne 0 ]; then
         msg_error "Ошибка во время '$msg'. Код выхода: $exit_code"
-        # Можно добавить вывод логов при ошибке
-        # echo "Command output:"
-        # cat command_output.log # Если перенаправляли вывод в файл
     fi
     return $exit_code
 }
@@ -68,7 +78,16 @@ else
     exit 1
 fi
 
-# --- Установка доп. пакетов ---
+# --- Вывод информации о ветке ---
+msg_info "Используется ветка GitHub: ${C_BOLD}${GIT_BRANCH}${C_RESET}"
+msg_info "URL файла bot.py: ${BOT_PY_URL}" # Для отладки можно показать URL
+
+# --- Остальной код скрипта (install_extras, common_install_steps, install_logic, и т.д.) ---
+# --- В функциях common_install_steps и update_bot уже используются переменные ---
+# --- BOT_PY_URL, REQUIREMENTS_URL, WATCHDOG_PY_URL, так что там менять не нужно. ---
+
+# ... (весь остальной код deploy.sh без изменений) ...
+
 install_extras() {
     local packages_to_install=()
     if ! command -v fail2ban-client &> /dev/null; then
@@ -107,24 +126,22 @@ install_extras() {
     fi
 }
 
-# --- Общие шаги установки ---
 common_install_steps() {
     msg_info "1. Обновление пакетов и установка базовых зависимостей..."
     run_with_spinner "Обновление списка пакетов" sudo apt-get update -y || { msg_error "Не удалось обновить пакеты"; exit 1; }
     run_with_spinner "Установка зависимостей (python3, pip, venv, git, curl, sudo)" sudo apt-get install -y python3 python3-pip python3-venv git curl wget sudo || { msg_error "Не удалось установить базовые зависимости"; exit 1; }
 
-    install_extras # Установка fail2ban, speedtest
+    install_extras
 
     msg_info "2. Создание директории для бота..."
     sudo mkdir -p "${BOT_INSTALL_PATH}/logs" "${BOT_INSTALL_PATH}/config" || { msg_error "Не удалось создать директории бота"; exit 1; }
 
-    msg_info "3. Скачивание файлов проекта из GitHub..."
+    msg_info "3. Скачивание файлов проекта из ветки '${GIT_BRANCH}'..."
     if ! ${DOWNLOADER} "${BOT_PY_URL}" | sudo tee "${BOT_INSTALL_PATH}/bot.py" > /dev/null; then msg_error "Не удалось скачать bot.py."; exit 1; fi
     if ! ${DOWNLOADER} "${REQUIREMENTS_URL}" | sudo tee "${BOT_INSTALL_PATH}/requirements.txt" > /dev/null; then msg_error "Не удалось скачать requirements.txt."; exit 1; fi
     if ! ${DOWNLOADER} "${WATCHDOG_PY_URL}" | sudo tee "${BOT_INSTALL_PATH}/watchdog.py" > /dev/null; then msg_error "Не удалось скачать watchdog.py."; exit 1; fi
 }
 
-# --- Логика установки (Secure/Root) ---
 install_logic() {
     local mode=$1
     local exec_user_cmd=""
@@ -136,21 +153,19 @@ install_logic() {
             sudo useradd -r -s /bin/false -d ${BOT_INSTALL_PATH} ${SERVICE_USER} || { msg_error "Не удалось создать пользователя ${SERVICE_USER}"; exit 1; }
         fi
         sudo chown -R ${SERVICE_USER}:${SERVICE_USER} ${BOT_INSTALL_PATH}
-        sudo chmod -R 750 ${BOT_INSTALL_PATH} # Даем права группе (для watchdog?)
+        sudo chmod -R 750 ${BOT_INSTALL_PATH}
         exec_user_cmd="sudo -u ${SERVICE_USER}"
         owner="${SERVICE_USER}:${SERVICE_USER}"
     else # Root mode
         sudo chown -R root:root ${BOT_INSTALL_PATH}
-        sudo chmod -R 750 ${BOT_INSTALL_PATH} # 755 не нужно, если запускается от root
+        sudo chmod -R 750 ${BOT_INSTALL_PATH}
     fi
 
     msg_info "4. Настройка виртуального окружения Python..."
-    # Создаем venv от имени нужного пользователя
     if [ ! -d "${VENV_PATH}" ]; then
         run_with_spinner "Создание venv" $exec_user_cmd ${PYTHON_BIN} -m venv "${VENV_PATH}" || { msg_error "Не удалось создать venv"; exit 1; }
     fi
 
-    # Устанавливаем зависимости от имени нужного пользователя
     run_with_spinner "Обновление pip" $exec_user_cmd "${VENV_PATH}/bin/pip" install --upgrade pip || msg_warning "Не удалось обновить pip, но продолжаем..."
     run_with_spinner "Установка зависимостей Python" $exec_user_cmd "${VENV_PATH}/bin/pip" install -r "${BOT_INSTALL_PATH}/requirements.txt" || { msg_error "Не удалось установить зависимости Python."; exit 1; }
 
@@ -159,7 +174,6 @@ install_logic() {
     msg_question "Введите ваш Telegram User ID (только цифры): " TG_ADMIN_ID_USER
     msg_question "Введите ваш Telegram Username (без @, необязательно): " TG_ADMIN_USERNAME_USER
 
-    # Создаем .env файл
     sudo bash -c "cat > ${BOT_INSTALL_PATH}/.env" <<EOF
 TG_BOT_TOKEN="${TG_BOT_TOKEN_USER}"
 TG_ADMIN_ID="${TG_ADMIN_ID_USER}"
@@ -168,7 +182,7 @@ INSTALL_MODE="${mode}"
 EOF
 
     sudo chown ${owner} "${BOT_INSTALL_PATH}/.env"
-    sudo chmod 600 "${BOT_INSTALL_PATH}/.env" # Только владелец может читать/писать
+    sudo chmod 600 "${BOT_INSTALL_PATH}/.env"
 
     if [ "$mode" == "root" ]; then
       msg_info "6. Настройка прав sudo для перезапуска/перезагрузки (только для root)..."
@@ -180,7 +194,6 @@ root ALL=(ALL) NOPASSWD: /sbin/reboot
 EOF
       sudo chmod 440 ${SUDOERS_FILE}
     elif [ "$mode" == "secure" ]; then
-      # Даем пользователю root право перезапускать watchdog от имени tgbot
       SUDOERS_WATCHDOG="/etc/sudoers.d/99-${WATCHDOG_SERVICE_NAME}-restart"
       sudo tee ${SUDOERS_WATCHDOG} > /dev/null <<EOF
 Defaults:${SERVICE_USER} !requiretty
@@ -190,11 +203,9 @@ EOF
        msg_info "Настроены права sudo для перезапуска бота из watchdog."
     fi
 
-    # Создаем и запускаем сервисы
     create_and_start_service "${SERVICE_NAME}" "${BOT_INSTALL_PATH}/bot.py" "${mode}" "Telegram Bot"
     create_and_start_service "${WATCHDOG_SERVICE_NAME}" "${BOT_INSTALL_PATH}/watchdog.py" "root" "Watchdog" # Watchdog всегда от root
 
-    # Напоминание про внешний мониторинг
     local server_ip=$(curl -s 4.ipinfo.io/ip || echo "YOUR_SERVER_IP")
     echo ""
     echo "-----------------------------------------------------"
@@ -204,7 +215,6 @@ EOF
     echo "-----------------------------------------------------"
 }
 
-# --- Функции установки режимов ---
 install_secure() {
     echo -e "\n${C_BOLD}=== Начало безопасной установки (отдельный пользователь) ===${C_RESET}"
     common_install_steps
@@ -213,25 +223,23 @@ install_secure() {
 
 install_root() {
     echo -e "\n${C_BOLD}=== Начало установки от имени Root ===${C_RESET}"
-    if [ "$(id -u)" -ne 0 ]; then
-        msg_error "Для установки от имени root, запустите скрипт с 'sudo'."
-        exit 1
-    fi
     common_install_steps
     install_logic "root"
 }
 
-# --- Функция создания systemd-сервиса ---
 create_and_start_service() {
     local svc_name=$1
     local script_path=$2
-    local install_mode=$3 # 'secure', 'root', или режим watchdog'а
+    local install_mode=$3
     local description=$4
 
     local user="root"
     local group="root"
     local env_file_line=""
     local desc_mode_suffix=""
+    local after_line="After=network.target"
+    local requires_line=""
+
 
     if [ "$install_mode" == "secure" ] && [ "$svc_name" == "$SERVICE_NAME" ]; then
         user=${SERVICE_USER}
@@ -241,12 +249,9 @@ create_and_start_service() {
     elif [ "$svc_name" == "$SERVICE_NAME" ]; then # Root mode for bot
         env_file_line="EnvironmentFile=${BOT_INSTALL_PATH}/.env"
         desc_mode_suffix="(Root Mode)"
-    # Для watchdog user/group остаются root, env_file не нужен ему явно (он сам читает)
     elif [ "$svc_name" == "$WATCHDOG_SERVICE_NAME" ]; then
-         # Watchdog требует sudo для перезапуска сервиса бота
-         # Добавим зависимость от сети и основного бота
          after_line="After=network.target ${SERVICE_NAME}.service"
-         # requires_line="Requires=${SERVICE_NAME}.service" # Может вызвать цикл остановки?
+         # requires_line="Requires=${SERVICE_NAME}.service" # Let's avoid this for now
     fi
 
     msg_info "Создание systemd сервиса для ${svc_name}..."
@@ -254,7 +259,7 @@ create_and_start_service() {
     sudo tee ${SERVICE_FILE} > /dev/null <<EOF
 [Unit]
 Description=${description} Service ${desc_mode_suffix}
-${after_line:-After=network.target}
+${after_line}
 ${requires_line}
 
 [Service]
@@ -276,19 +281,17 @@ EOF
     sudo systemctl enable ${svc_name}.service &> /dev/null
     run_with_spinner "Запуск ${svc_name}" sudo systemctl start ${svc_name}
 
-    sleep 2 # Даем время сервису запуститься
+    sleep 2
 
     if sudo systemctl is-active --quiet ${svc_name}.service; then
         msg_success "Сервис ${svc_name} успешно запущен!"
         msg_info "Для проверки статуса: sudo systemctl status ${svc_name}"
     else
         msg_error "Сервис ${svc_name} не запустился. Проверьте логи: sudo journalctl -u ${svc_name} -n 50 --no-pager"
-        # Не выходим из скрипта, если watchdog не запустился, но бот запустился
         if [ "$svc_name" == "$SERVICE_NAME" ]; then exit 1; fi
     fi
 }
 
-# --- Удаление бота ---
 uninstall_bot() {
     echo -e "\n${C_BOLD}=== Начало удаления Telegram-бота и Watchdog ===${C_RESET}"
 
@@ -314,18 +317,17 @@ uninstall_bot() {
 
     msg_info "4. Удаление пользователя '${SERVICE_USER}' (если существует)..."
     if id "${SERVICE_USER}" &>/dev/null; then
-        sudo userdel -r "${SERVICE_USER}" &> /dev/null || msg_warning "Не удалось полностью удалить пользователя ${SERVICE_USER} (возможно, остались файлы)."
+        sudo userdel -r "${SERVICE_USER}" &> /dev/null || msg_warning "Не удалось полностью удалить пользователя ${SERVICE_USER}."
     fi
 
     msg_success "Удаление полностью завершено."
 }
 
-# --- Обновление бота ---
 update_bot() {
     echo -e "\n${C_BOLD}=== Начало обновления бота и watchdog ===${C_RESET}"
     if [ ! -f "${BOT_INSTALL_PATH}/bot.py" ]; then msg_error "Установка бота не найдена в ${BOT_INSTALL_PATH}."; return 1; fi
 
-    msg_info "1. Скачивание последних версий файлов..."
+    msg_info "1. Скачивание последних версий файлов из ветки '${GIT_BRANCH}'..."
     if ! ${DOWNLOADER} "${BOT_PY_URL}" | sudo tee "${BOT_INSTALL_PATH}/bot.py" > /dev/null; then msg_error "Не удалось скачать bot.py."; return 1; fi
     msg_success "Файл bot.py успешно обновлен."
     if ! ${DOWNLOADER} "${WATCHDOG_PY_URL}" | sudo tee "${BOT_INSTALL_PATH}/watchdog.py" > /dev/null; then msg_error "Не удалось скачать watchdog.py."; return 1; fi
@@ -336,30 +338,26 @@ update_bot() {
     local exec_user_cmd=""
     local owner="root:root"
     if [ -f "${BOT_INSTALL_PATH}/.env" ]; then
-        # Читаем .env, чтобы определить режим установки
         INSTALL_MODE_DETECTED=$(grep '^INSTALL_MODE=' "${BOT_INSTALL_PATH}/.env" | cut -d'=' -f2 | tr -d '"')
         if [ "$INSTALL_MODE_DETECTED" == "secure" ]; then
              exec_user_cmd="sudo -u ${SERVICE_USER}"
              owner="${SERVICE_USER}:${SERVICE_USER}"
         fi
     fi
-    # Обновляем права на скачанные файлы
     sudo chown ${owner} "${BOT_INSTALL_PATH}/bot.py" "${BOT_INSTALL_PATH}/watchdog.py" "${BOT_INSTALL_PATH}/requirements.txt"
-    sudo chmod 640 "${BOT_INSTALL_PATH}/bot.py" "${BOT_INSTALL_PATH}/watchdog.py" "${BOT_INSTALL_PATH}/requirements.txt" # Права на чтение владельцу и группе
+    sudo chmod 640 "${BOT_INSTALL_PATH}/bot.py" "${BOT_INSTALL_PATH}/watchdog.py" "${BOT_INSTALL_PATH}/requirements.txt"
 
-    # Установка зависимостей от нужного пользователя
     run_with_spinner "Установка/обновление зависимостей" $exec_user_cmd "${VENV_PATH}/bin/pip" install -r "${BOT_INSTALL_PATH}/requirements.txt" --upgrade || { msg_error "Ошибка при обновлении зависимостей Python."; return 1; }
 
     msg_info "3. Перезапуск сервисов..."
-    # Перезапускаем watchdog сначала, затем бота
-    if sudo systemctl restart ${WATCHDOG_SERVICE_NAME}; then msg_success "Сервис ${WATCHDOG_SERVICE_NAME} успешно перезапущен."; else msg_error "Ошибка при перезапуске ${WATCHDOG_SERVICE_NAME}. Логи: sudo journalctl -u ${WATCHDOG_SERVICE_NAME} -n 50 --no-pager"; fi
-    sleep 1 # Небольшая пауза
+    # Сначала бота, т.к. watchdog может зависеть от него (в after)
     if sudo systemctl restart ${SERVICE_NAME}; then msg_success "Сервис ${SERVICE_NAME} успешно перезапущен."; else msg_error "Ошибка при перезапуске ${SERVICE_NAME}. Логи: sudo journalctl -u ${SERVICE_NAME} -n 50 --no-pager"; return 1; fi
+    sleep 1
+    if sudo systemctl restart ${WATCHDOG_SERVICE_NAME}; then msg_success "Сервис ${WATCHDOG_SERVICE_NAME} успешно перезапущен."; else msg_error "Ошибка при перезапуске ${WATCHDOG_SERVICE_NAME}. Логи: sudo journalctl -u ${WATCHDOG_SERVICE_NAME} -n 50 --no-pager"; fi
 
     echo -e "\n${C_GREEN}${C_BOLD}🎉 Обновление завершено!${C_RESET}\n"
 }
 
-# --- Главное меню ---
 main_menu() {
     while true; do
         clear
@@ -370,6 +368,8 @@ main_menu() {
         echo "║                   by Jatix                           ║"
         echo "╚══════════════════════════════════════════════════════╝"
         echo -e "${C_RESET}"
+        echo -e "  Используемая ветка: ${C_YELLOW}${GIT_BRANCH}${C_RESET}" # Показываем текущую ветку
+        echo "--------------------------------------------------------"
         echo -e "${C_GREEN}  1)${C_RESET} ${C_BOLD}Установить (Secure):${C_RESET} Рекомендуемый, безопасный режим"
         echo -e "${C_YELLOW}  2)${C_RESET} ${C_BOLD}Установить (Root):${C_RESET}   Менее безопасный, полный доступ"
         echo -e "${C_CYAN}  3)${C_RESET} ${C_BOLD}Обновить бота:${C_RESET}         Обновление бота и watchdog"
