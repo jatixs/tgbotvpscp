@@ -153,12 +153,6 @@ install_logic() {
     msg_info "5. Настройка переменных окружения..."
     msg_question "Введите ваш Telegram Bot Token: " TG_BOT_TOKEN_USER
     msg_question "Введите ваш Telegram User ID (только цифры): " TG_ADMIN_ID_USER
-<<<<<<< HEAD
-    # --- ИЗМЕНЕНИЕ НАЧАЛО ---
-    msg_question "Введите ваш Telegram Username (без @, для кнопки 'Отправить ID'): " TG_ADMIN_USERNAME_USER
-    
-=======
-    # Add prompt for TG_ADMIN_USERNAME
     msg_question "Введите ваш Telegram Username (без @, необязательно): " TG_ADMIN_USERNAME_USER
 
 >>>>>>> fix/fix
