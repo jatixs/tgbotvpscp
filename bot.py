@@ -19,6 +19,9 @@ import qrcode
 from PIL import Image
 import io
 from aiogram.types import BufferedInputFile
+import time 
+
+
 
 TOKEN = os.environ.get("TG_BOT_TOKEN")
 INSTALL_MODE = os.environ.get("INSTALL_MODE", "secure")
@@ -1144,26 +1147,34 @@ async def traffic_monitor():
 
 
 @dp.message(Command("selftest"))
-@dp.message(F.text == "🛠 Сведения о сервере") # Added text handler
+@dp.message(F.text == "🛠 Сведения о сервере")  # Added text handler
 async def selftest_handler(message: types.Message):
+    """
+    Отображает состояние сервера: CPU, RAM, Disk, сеть, аптайм, интернет и SSH-вход.
+    Работает корректно как под root, так и под пользователем tgbot.
+    """
     user_id = message.from_user.id
     chat_id = message.chat.id
     command = "selftest"
+
     if user_id not in ALLOWED_USERS:
-         # Allow text trigger only if allowed
         if isinstance(message.text, str) and message.text == "🛠 Сведения о сервере":
-             await message.answer("⛔ У вас нет прав для выполнения этой команды.")
-        else: # Original command denial
+            await message.answer("⛔ У вас нет прав для выполнения этой команды.")
+        else:
             await send_access_denied_message(user_id, chat_id, command)
         return
 
     await delete_previous_message(user_id, command, chat_id)
 
-    # Run blocking system stats collection in a separate thread
+    # --- Сбор системной статистики (без блокировок) ---
     def get_system_stats_sync():
-        cpu = psutil.cpu_percent(interval=0.1) # Recommended for non-blocking feel
+        # Первый вызов инициализирует psutil snapshot
+        psutil.cpu_percent(interval=None)
+        time.sleep(0.2)  # короткая задержка для корректных данных
+        cpu = psutil.cpu_percent(interval=None)
+
         mem = psutil.virtual_memory().percent
-        disk = psutil.disk_usage('/').percent
+        disk = psutil.disk_usage("/").percent
         with open("/proc/uptime") as f:
             uptime_sec = float(f.readline().split()[0])
         counters = psutil.net_io_counters()
@@ -1174,87 +1185,92 @@ async def selftest_handler(message: types.Message):
     try:
         cpu, mem, disk, uptime_sec, rx, tx = await asyncio.to_thread(get_system_stats_sync)
     except Exception as e:
-        logging.error(f"Error collecting system stats in selftest: {e}")
+        logging.error(f"Ошибка при сборе системной статистики: {e}")
         await message.answer(f"⚠️ Ошибка при сборе системной статистики: {e}")
-        return # Stop execution if basic stats fail
+        return
 
     uptime_str = format_uptime(uptime_sec)
 
-    # Perform network checks asynchronously
-    ping_cmd = "ping -c 1 -W 1 8.8.8.8" # Reduced timeout to 1 sec
-    ping_process = await asyncio.create_subprocess_shell(ping_cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+    # --- Проверка интернет-доступа и IP ---
+    ping_cmd = "ping -c 1 -W 1 8.8.8.8"
+    ping_process = await asyncio.create_subprocess_shell(
+        ping_cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
+    )
     ping_stdout, _ = await ping_process.communicate()
     ping_result = ping_stdout.decode()
-    ping_match = re.search(r'time=([\d\.]+) ms', ping_result)
+    ping_match = re.search(r"time=([\d\.]+) ms", ping_result)
     ping_time = ping_match.group(1) if ping_match else "N/A"
     internet = "✅ Интернет доступен" if ping_match else "❌ Нет интернета"
 
-    ip_cmd = "curl -4 -s --max-time 3 ifconfig.me" # Added timeout for curl
-    ip_process = await asyncio.create_subprocess_shell(ip_cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+    ip_cmd = "curl -4 -s --max-time 3 ifconfig.me"
+    ip_process = await asyncio.create_subprocess_shell(
+        ip_cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
+    )
     ip_stdout, _ = await ip_process.communicate()
     external_ip = ip_stdout.decode().strip() or "Не удалось определить"
 
-
+    # --- Последний SSH-вход ---
     last_login_info = ""
     if INSTALL_MODE == "root":
         try:
-            # Use journalctl without limiting lines initially, then tail
             cmd = "journalctl -u ssh --no-pager -g 'Accepted' | tail -n 1"
-            process = await asyncio.create_subprocess_shell(cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+            process = await asyncio.create_subprocess_shell(
+                cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
+            )
             stdout, stderr = await process.communicate()
             line = stdout.decode().strip()
             err_output = stderr.decode().strip()
 
             if process.returncode != 0 and err_output:
-                 logging.error(f"Error running journalctl for SSH log: {err_output}")
-                 last_login_info = "\n\n📄 **Последний успешный вход SSH:**\nОшибка чтения логов."
+                logging.error(f"Ошибка journalctl для SSH: {err_output}")
+                last_login_info = "\n\n📄 **Последний успешный вход SSH:**\nОшибка чтения логов."
             elif "Accepted" in line:
-                # Regex remains the same, parsing the single line from tail
-                date_match = re.search(r'^(\w{3}\s+\d{1,2}\s+\d{2}:\d{2}:\d{2})', line)
-                user_match = re.search(r'for (\S+)', line)
-                ip_match = re.search(r'from (\S+)', line)
+                date_match = re.search(r"^(\w{3}\s+\d{1,2}\s+\d{2}:\d{2}:\d{2})", line)
+                user_match = re.search(r"for (\S+)", line)
+                ip_match = re.search(r"from (\S+)", line)
                 if date_match and user_match and ip_match:
-                    log_timestamp = datetime.strptime(date_match.group(1), '%b %d %H:%M:%S')
+                    log_timestamp = datetime.strptime(date_match.group(1), "%b %d %H:%M:%S")
                     current_year = datetime.now().year
-                    # Adjust year if log entry date is in the future compared to now
                     dt_object = log_timestamp.replace(year=current_year)
                     if dt_object > datetime.now():
                         dt_object = dt_object.replace(year=current_year - 1)
 
                     user = user_match.group(1)
                     ip = ip_match.group(1)
-                    # Run potentially blocking flag lookup in thread
                     flag = await asyncio.to_thread(get_country_flag, ip)
-                    # flag = get_country_flag(ip) # Original sync call
-
-                    formatted_time = dt_object.strftime('%H:%M')
-                    formatted_date = dt_object.strftime('%d.%m.%Y')
-                    last_login = (f"👤 **{user}**\n"
-                                  f"🌍 IP: **{flag} {ip}**\n"
-                                  f"⏰ Время: **{formatted_time}**\n"
-                                  f"🗓️ Дата: **{formatted_date}**")
+                    formatted_time = dt_object.strftime("%H:%M")
+                    formatted_date = dt_object.strftime("%d.%m.%Y")
+                    last_login = (
+                        f"👤 **{user}**\n"
+                        f"🌍 IP: **{flag} {ip}**\n"
+                        f"⏰ Время: **{formatted_time}**\n"
+                        f"🗓️ Дата: **{formatted_date}**"
+                    )
                     last_login_info = f"\n\n📄 **Последний успешный вход SSH:**\n{last_login}"
                 else:
-                     logging.warning(f"Could not parse SSH log line: {line}")
-                     last_login_info = "\n\n📄 **Последний успешный вход SSH:**\nНе удалось разобрать строку лога."
+                    logging.warning(f"Не удалось разобрать строку SSH лога: {line}")
+                    last_login_info = "\n\n📄 **Последний успешный вход SSH:**\nНе удалось разобрать строку лога."
             else:
-                 last_login_info = "\n\n📄 **Последний успешный вход SSH:**\nНе найдено записей."
+                last_login_info = "\n\n📄 **Последний успешный вход SSH:**\nНе найдено записей."
         except Exception as e:
-            logging.error(f"Ошибка при получении последнего SSH входа: {e}")
+            logging.error(f"Ошибка при получении SSH-входа: {e}")
             last_login_info = f"\n\n📄 **Последний успешный вход SSH:**\nОшибка чтения логов."
     else:
         last_login_info = "\n\n📄 **Последний успешный вход SSH:**\n_Информация доступна только в режиме root_"
 
-    response_text = (f"🛠 **Состояние сервера:**\n\n"
-                     f"✅ Бот работает\n"
-                     f"📊 Процессор: **{cpu:.1f}%**\n" # Format CPU
-                     f"💾 ОЗУ: **{mem:.1f}%**\n" # Format MEM
-                     f"💽 ПЗУ: **{disk:.1f}%**\n" # Format Disk
-                     f"⏱ Время работы: **{uptime_str}**\n"
-                     f"{internet}\n"
-                     f"⌛ Задержка (8.8.8.8): **{ping_time} мс**\n"
-                     f"🌐 Внешний IP: `{external_ip}`\n"
-                     f"📡 Трафик⬇ **{format_traffic(rx)}** / ⬆ **{format_traffic(tx)}**")
+    # --- Формирование ответа ---
+    response_text = (
+        f"🛠 **Состояние сервера:**\n\n"
+        f"✅ Бот работает\n"
+        f"📊 Процессор: **{cpu:.1f}%**\n"
+        f"💾 ОЗУ: **{mem:.1f}%**\n"
+        f"💽 ПЗУ: **{disk:.1f}%**\n"
+        f"⏱ Время работы: **{uptime_str}**\n"
+        f"{internet}\n"
+        f"⌛ Задержка (8.8.8.8): **{ping_time} мс**\n"
+        f"🌐 Внешний IP: `{external_ip}`\n"
+        f"📡 Трафик ⬇ **{format_traffic(rx)}** / ⬆ **{format_traffic(tx)}**"
+    )
 
     response_text += last_login_info
 
