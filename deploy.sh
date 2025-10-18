@@ -154,8 +154,6 @@ install_logic() {
     msg_question "Введите ваш Telegram Bot Token: " TG_BOT_TOKEN_USER
     msg_question "Введите ваш Telegram User ID (только цифры): " TG_ADMIN_ID_USER
     msg_question "Введите ваш Telegram Username (без @, необязательно): " TG_ADMIN_USERNAME_USER
-
->>>>>>> fix/fix
     sudo tee .env > /dev/null <<EOF
 TG_BOT_TOKEN="${TG_BOT_TOKEN_USER}"
 TG_ADMIN_ID="${TG_ADMIN_ID_USER}"
