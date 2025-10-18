@@ -8,27 +8,39 @@ SERVICE_USER="tgbot"
 PYTHON_BIN="/usr/bin/python3"
 VENV_PATH="${BOT_INSTALL_PATH}/venv"
 
-# --- GitHub Репозиторий и Ветка ---
+# --- GitHub Репозиторий ---
 GITHUB_REPO="jatixs/tgbotvpscp"
-# Определяем ветку: используем первый аргумент скрипта ($1) или 'main' по умолчанию
-GIT_BRANCH="${1:-main}" # Если $1 пустой, используется 'main'
 GITHUB_RAW_BASE_URL="https://raw.githubusercontent.com/${GITHUB_REPO}"
 
-# --- URLы файлов (теперь динамические) ---
-# Для 'main' ветки URL будет обычный, для других добавляем /refs/heads/
-if [ "$GIT_BRANCH" == "main" ]; then
-    BRANCH_PATH="$GIT_BRANCH"
-else
-    BRANCH_PATH="refs/heads/${GIT_BRANCH}"
-fi
+# --- Переменная для текущей ветки ---
+CURRENT_BRANCH="main" # Ветка по умолчанию
 
-BOT_PY_URL="${GITHUB_RAW_BASE_URL}/${BRANCH_PATH}/bot.py"
-REQUIREMENTS_URL="${GITHUB_RAW_BASE_URL}/${BRANCH_PATH}/requirements.txt"
-WATCHDOG_PY_URL="${GITHUB_RAW_BASE_URL}/${BRANCH_PATH}/watchdog.py"
+# --- URLы файлов (будут обновляться при выборе ветки) ---
+BOT_PY_URL=""
+REQUIREMENTS_URL=""
+WATCHDOG_PY_URL=""
+
+# --- Функция для обновления URLов ---
+update_file_urls() {
+    local branch=$1
+    local branch_path=""
+    if [ "$branch" == "main" ]; then
+        branch_path="main"
+    else
+        branch_path="refs/heads/${branch}"
+    fi
+    BOT_PY_URL="${GITHUB_RAW_BASE_URL}/${branch_path}/bot.py"
+    REQUIREMENTS_URL="${GITHUB_RAW_BASE_URL}/${branch_path}/requirements.txt"
+    WATCHDOG_PY_URL="${GITHUB_RAW_BASE_URL}/${branch_path}/watchdog.py"
+    msg_info "URLы обновлены для ветки: ${C_YELLOW}${branch}${C_RESET}"
+    msg_info "URL bot.py: ${BOT_PY_URL}" # Debug
+}
+
+# --- Инициализация URLов при старте ---
+update_file_urls "$CURRENT_BRANCH"
 
 # --- Цвета и функции вывода ---
 C_RESET='\033[0m'
-# ... (остальные цвета и функции msg_*, spinner, run_with_spinner - без изменений) ...
 C_RED='\033[0;31m'
 C_GREEN='\033[0;32m'
 C_YELLOW='\033[0;33m'
@@ -69,7 +81,6 @@ run_with_spinner() {
     return $exit_code
 }
 
-# --- Проверка загрузчика ---
 if command -v curl &> /dev/null; then
     DOWNLOADER="curl -sSLf"
     DOWNLOADER_PIPE="curl -s"
@@ -78,15 +89,7 @@ else
     exit 1
 fi
 
-# --- Вывод информации о ветке ---
-msg_info "Используется ветка GitHub: ${C_BOLD}${GIT_BRANCH}${C_RESET}"
-msg_info "URL файла bot.py: ${BOT_PY_URL}" # Для отладки можно показать URL
-
-# --- Остальной код скрипта (install_extras, common_install_steps, install_logic, и т.д.) ---
-# --- В функциях common_install_steps и update_bot уже используются переменные ---
-# --- BOT_PY_URL, REQUIREMENTS_URL, WATCHDOG_PY_URL, так что там менять не нужно. ---
-
-# ... (весь остальной код deploy.sh без изменений) ...
+# --- Остальной код скрипта ---
 
 install_extras() {
     local packages_to_install=()
@@ -106,17 +109,14 @@ install_extras() {
 
     if [ ${#packages_to_install[@]} -gt 0 ]; then
         msg_info "Установка дополнительных пакетов: ${packages_to_install[*]}"
-        # Добавляем репозиторий speedtest если нужно
         if [[ " ${packages_to_install[*]} " =~ " speedtest " ]]; then
              run_with_spinner "Добавление репозитория Speedtest" bash -c "${DOWNLOADER_PIPE} https://packagecloud.io/install/repositories/ookla/speedtest-cli/script.deb.sh | sudo bash"
-             # Фикс для Ubuntu Noble
              if [ -f /etc/os-release ]; then . /etc/os-release; if [ "$VERSION_CODENAME" == "noble" ]; then sudo sed -i 's/noble/jammy/g' /etc/apt/sources.list.d/ookla_speedtest-cli.list; fi; fi
         fi
         run_with_spinner "Обновление списка пакетов после добавления репо" sudo apt-get update -y
         run_with_spinner "Установка пакетов" sudo apt-get install -y "${packages_to_install[@]}"
         if [ $? -ne 0 ]; then msg_error "Ошибка при установке доп. пакетов."; exit 1; fi
 
-        # Включаем fail2ban если ставили
         if [[ " ${packages_to_install[*]} " =~ " fail2ban " ]]; then
             sudo systemctl enable fail2ban &> /dev/null
             sudo systemctl start fail2ban &> /dev/null
@@ -136,7 +136,7 @@ common_install_steps() {
     msg_info "2. Создание директории для бота..."
     sudo mkdir -p "${BOT_INSTALL_PATH}/logs" "${BOT_INSTALL_PATH}/config" || { msg_error "Не удалось создать директории бота"; exit 1; }
 
-    msg_info "3. Скачивание файлов проекта из ветки '${GIT_BRANCH}'..."
+    msg_info "3. Скачивание файлов проекта из ветки '${CURRENT_BRANCH}'..."
     if ! ${DOWNLOADER} "${BOT_PY_URL}" | sudo tee "${BOT_INSTALL_PATH}/bot.py" > /dev/null; then msg_error "Не удалось скачать bot.py."; exit 1; fi
     if ! ${DOWNLOADER} "${REQUIREMENTS_URL}" | sudo tee "${BOT_INSTALL_PATH}/requirements.txt" > /dev/null; then msg_error "Не удалось скачать requirements.txt."; exit 1; fi
     if ! ${DOWNLOADER} "${WATCHDOG_PY_URL}" | sudo tee "${BOT_INSTALL_PATH}/watchdog.py" > /dev/null; then msg_error "Не удалось скачать watchdog.py."; exit 1; fi
@@ -251,7 +251,6 @@ create_and_start_service() {
         desc_mode_suffix="(Root Mode)"
     elif [ "$svc_name" == "$WATCHDOG_SERVICE_NAME" ]; then
          after_line="After=network.target ${SERVICE_NAME}.service"
-         # requires_line="Requires=${SERVICE_NAME}.service" # Let's avoid this for now
     fi
 
     msg_info "Создание systemd сервиса для ${svc_name}..."
@@ -327,7 +326,7 @@ update_bot() {
     echo -e "\n${C_BOLD}=== Начало обновления бота и watchdog ===${C_RESET}"
     if [ ! -f "${BOT_INSTALL_PATH}/bot.py" ]; then msg_error "Установка бота не найдена в ${BOT_INSTALL_PATH}."; return 1; fi
 
-    msg_info "1. Скачивание последних версий файлов из ветки '${GIT_BRANCH}'..."
+    msg_info "1. Скачивание последних версий файлов из ветки '${CURRENT_BRANCH}'..."
     if ! ${DOWNLOADER} "${BOT_PY_URL}" | sudo tee "${BOT_INSTALL_PATH}/bot.py" > /dev/null; then msg_error "Не удалось скачать bot.py."; return 1; fi
     msg_success "Файл bot.py успешно обновлен."
     if ! ${DOWNLOADER} "${WATCHDOG_PY_URL}" | sudo tee "${BOT_INSTALL_PATH}/watchdog.py" > /dev/null; then msg_error "Не удалось скачать watchdog.py."; return 1; fi
@@ -350,7 +349,6 @@ update_bot() {
     run_with_spinner "Установка/обновление зависимостей" $exec_user_cmd "${VENV_PATH}/bin/pip" install -r "${BOT_INSTALL_PATH}/requirements.txt" --upgrade || { msg_error "Ошибка при обновлении зависимостей Python."; return 1; }
 
     msg_info "3. Перезапуск сервисов..."
-    # Сначала бота, т.к. watchdog может зависеть от него (в after)
     if sudo systemctl restart ${SERVICE_NAME}; then msg_success "Сервис ${SERVICE_NAME} успешно перезапущен."; else msg_error "Ошибка при перезапуске ${SERVICE_NAME}. Логи: sudo journalctl -u ${SERVICE_NAME} -n 50 --no-pager"; return 1; fi
     sleep 1
     if sudo systemctl restart ${WATCHDOG_SERVICE_NAME}; then msg_success "Сервис ${WATCHDOG_SERVICE_NAME} успешно перезапущен."; else msg_error "Ошибка при перезапуске ${WATCHDOG_SERVICE_NAME}. Логи: sudo journalctl -u ${WATCHDOG_SERVICE_NAME} -n 50 --no-pager"; fi
@@ -358,6 +356,23 @@ update_bot() {
     echo -e "\n${C_GREEN}${C_BOLD}🎉 Обновление завершено!${C_RESET}\n"
 }
 
+# --- Функция выбора ветки ---
+select_branch() {
+    echo "--------------------------------------------------------"
+    msg_question "Введите имя ветки GitHub (например, 'main', 'develop', 'hotfix/1.2.3'): " new_branch
+    if [ -z "$new_branch" ]; then
+        msg_warning "Ввод пустой, ветка не изменена (${CURRENT_BRANCH})."
+    else
+        # Тут можно добавить проверку существования ветки через API GitHub или git ls-remote, но для простоты опустим
+        CURRENT_BRANCH="$new_branch"
+        update_file_urls "$CURRENT_BRANCH" # Обновляем URLы
+        msg_success "Выбрана ветка: ${CURRENT_BRANCH}"
+    fi
+    echo "--------------------------------------------------------"
+}
+
+
+# --- Главное меню ---
 main_menu() {
     while true; do
         clear
@@ -368,15 +383,16 @@ main_menu() {
         echo "║                   by Jatix                           ║"
         echo "╚══════════════════════════════════════════════════════╝"
         echo -e "${C_RESET}"
-        echo -e "  Используемая ветка: ${C_YELLOW}${GIT_BRANCH}${C_RESET}" # Показываем текущую ветку
+        echo -e "  Текущая ветка: ${C_YELLOW}${CURRENT_BRANCH}${C_RESET}" # Показываем текущую ветку
         echo "--------------------------------------------------------"
         echo -e "${C_GREEN}  1)${C_RESET} ${C_BOLD}Установить (Secure):${C_RESET} Рекомендуемый, безопасный режим"
         echo -e "${C_YELLOW}  2)${C_RESET} ${C_BOLD}Установить (Root):${C_RESET}   Менее безопасный, полный доступ"
         echo -e "${C_CYAN}  3)${C_RESET} ${C_BOLD}Обновить бота:${C_RESET}         Обновление бота и watchdog"
         echo -e "${C_RED}  4)${C_RESET} ${C_BOLD}Удалить бота:${C_RESET}          Полное удаление с сервера"
+        echo -e "  ${C_BLUE}6)${C_RESET} ${C_BOLD}Выбрать ветку:${C_RESET}        Изменить ветку для установки/обновления" # Новый пункт
         echo -e "  5) ${C_BOLD}Выход${C_RESET}"
         echo "--------------------------------------------------------"
-        read -p "$(echo -e "${C_BOLD}Введите номер опции [1-5]: ${C_RESET}")" choice
+        read -p "$(echo -e "${C_BOLD}Введите номер опции [1-6]: ${C_RESET}")" choice # Обновлен диапазон
 
         case $choice in
             1) install_secure ;;
@@ -391,10 +407,14 @@ main_menu() {
                 fi
                 ;;
             5) break ;;
+            6) select_branch ;; # Вызываем новую функцию
             *) msg_error "Неверный выбор." ;;
         esac
-        echo
-        read -n 1 -s -r -p "Нажмите любую клавишу для возврата в меню..."
+        # Убираем ожидание после выбора ветки
+        if [ "$choice" != "6" ]; then
+             echo
+             read -n 1 -s -r -p "Нажмите любую клавишу для возврата в меню..."
+        fi
     done
     echo -e "\n${C_CYAN}👋 До свидания!${C_RESET}"
 }
