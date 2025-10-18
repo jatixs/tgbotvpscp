@@ -19,7 +19,7 @@ import qrcode
 from PIL import Image
 import io
 from aiogram.types import BufferedInputFile
-import time 
+import time
 
 
 
@@ -219,10 +219,10 @@ async def send_access_denied_message(user_id, chat_id, command):
     ])
     sent_message = await bot.send_message(
         chat_id,
-        f"⛔ Вы не являетесь пользователем бота. Ваш ID: `{user_id}`.\n"
+        f"⛔ Вы не являетесь пользователем бота. Ваш ID: <code>{user_id}</code>.\n"
         "К командам нет доступа, обратитесь к администратору.",
         reply_markup=keyboard,
-        parse_mode="Markdown"
+        parse_mode="HTML"
     )
     LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = sent_message.message_id
 
@@ -407,15 +407,34 @@ def format_uptime(seconds):
        parts.append(f"{secs}с")
     return " ".join(parts) if parts else "0с"
 
+def get_server_timezone_label():
+    try:
+        offset_str = time.strftime("%z")
+        if not offset_str or len(offset_str) != 5:
+            return ""
+
+        sign = offset_str[0]
+        hours_str = offset_str[1:3]
+        mins_str = offset_str[3:5]
+
+        hours_int = int(hours_str)
+
+        if mins_str == "00":
+            return f" (GMT{sign}{hours_int})"
+        else:
+            return f" (GMT{sign}{hours_int}:{mins_str})"
+    except Exception:
+        return ""
+
 async def delete_previous_message(user_id: int, command, chat_id: int):
     if command != "traffic" and user_id in TRAFFIC_MESSAGE_IDS:
-        if TRAFFIC_MESSAGE_IDS.get(user_id): # Check if message ID exists before trying to delete
+        if TRAFFIC_MESSAGE_IDS.get(user_id):
             try:
                 await bot.delete_message(chat_id=user_id, message_id=TRAFFIC_MESSAGE_IDS.pop(user_id))
             except (TelegramBadRequest, KeyError) as e:
                  logging.warning(f"Could not delete traffic message for {user_id}: {e}")
         else:
-             TRAFFIC_MESSAGE_IDS.pop(user_id, None) # Remove user if ID was already gone
+             TRAFFIC_MESSAGE_IDS.pop(user_id, None)
 
     cmds_to_delete = [command] if not isinstance(command, list) else command
     for cmd in cmds_to_delete:
@@ -458,16 +477,16 @@ async def manage_users_handler(message: types.Message):
     await delete_previous_message(user_id, command, message.chat.id)
 
     user_list = "\n".join([
-        f" • {USER_NAMES.get(str(uid), f'ID: {uid}')} (**{group}**)"
+        f" • {USER_NAMES.get(str(uid), f'ID: {uid}')} (<b>{group}</b>)"
         for uid, group in ALLOWED_USERS.items() if uid != ADMIN_USER_ID
     ])
     if not user_list:
         user_list = "Других пользователей нет."
 
     sent_message = await message.answer(
-        f"👤 **Управление пользователями**:\n\n{user_list}\n\nВыберите действие:",
+        f"👤 <b>Управление пользователями</b>:\n\n{user_list}\n\nВыберите действие:",
         reply_markup=get_manage_users_keyboard(),
-        parse_mode="Markdown"
+        parse_mode="HTML"
     )
     LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = sent_message.message_id
 
@@ -479,7 +498,7 @@ async def reboot_confirm_handler(message: types.Message):
         await bot.send_message(message.chat.id, "⛔ Эта функция доступна только в режиме 'root'.")
         return
     await delete_previous_message(user_id, command, message.chat.id)
-    sent_message = await message.answer("⚠️ Вы уверены, что хотите **перезагрузить сервер**? Все активные соединения будут разорваны.", reply_markup=get_reboot_confirmation_keyboard(), parse_mode="Markdown")
+    sent_message = await message.answer("⚠️ Вы уверены, что хотите <b>перезагрузить сервер</b>? Все активные соединения будут разорваны.", reply_markup=get_reboot_confirmation_keyboard(), parse_mode="HTML")
     LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = sent_message.message_id
 
 @dp.message(F.text == "🔗 VLESS-ссылка")
@@ -490,7 +509,7 @@ async def generate_vless_handler(message: types.Message, state: FSMContext):
         await bot.send_message(message.chat.id, "⛔ У вас нет прав для выполнения этой команды.")
         return
     await delete_previous_message(user_id, command, message.chat.id)
-    sent_message = await message.answer("📤 **Отправьте файл конфигурации Xray (JSON)**\n\n_Важно: файл должен содержать рабочую конфигурацию outbound с Reality._", reply_markup=get_back_keyboard("back_generate_vless"), parse_mode="Markdown")
+    sent_message = await message.answer("📤 <b>Отправьте файл конфигурации Xray (JSON)</b>\n\n<i>Важно: файл должен содержать рабочую конфигурацию outbound с Reality.</i>", reply_markup=get_back_keyboard("back_generate_vless"), parse_mode="HTML")
     LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = sent_message.message_id
     await state.set_state(GenerateVlessStates.waiting_for_file)
 
@@ -547,7 +566,7 @@ async def get_id_handler(message: types.Message):
         return
     await delete_previous_message(user_id, command, message.chat.id)
     group = ALLOWED_USERS.get(user_id, 'не авторизован')
-    sent_message = await message.answer(f"🆔 Ваш ID: `{user_id}`\nГруппа: **{group}**", parse_mode="Markdown")
+    sent_message = await message.answer(f"🆔 Ваш ID: <code>{user_id}</code>\nГруппа: <b>{group}</b>", parse_mode="HTML")
     LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = sent_message.message_id
 
 @dp.callback_query()
@@ -571,7 +590,7 @@ async def callback_handler(callback: types.CallbackQuery, state: FSMContext):
     try:
         if command == "add_user":
             await delete_previous_message(user_id, "manage_users", chat_id)
-            sent_message = await callback.message.answer("📝 Введите ID или Alias пользователя (например, `@username`):", reply_markup=get_back_keyboard("back_to_manage_users"), parse_mode="Markdown")
+            sent_message = await callback.message.answer("📝 Введите ID или Alias пользователя (например, <code>@username</code>):", reply_markup=get_back_keyboard("back_to_manage_users"), parse_mode="HTML")
             LAST_MESSAGE_IDS.setdefault(user_id, {})["add_user"] = sent_message.message_id
             await state.set_state(ManageUsersStates.waiting_for_user_id)
         elif command == "delete_user":
@@ -581,10 +600,10 @@ async def callback_handler(callback: types.CallbackQuery, state: FSMContext):
         elif command.startswith("select_user_change_group_"):
             target_user_id = int(command.split("_")[4])
             if target_user_id not in ALLOWED_USERS:
-                await callback.message.edit_text(f"⚠️ Пользователь ID `{target_user_id}` не найден", reply_markup=get_back_keyboard("back_to_manage_users"), parse_mode="Markdown")
+                await callback.message.edit_text(f"⚠️ Пользователь ID <code>{target_user_id}</code> не найден", reply_markup=get_back_keyboard("back_to_manage_users"), parse_mode="HTML")
             else:
                 user_name = USER_NAMES.get(str(target_user_id), f"ID: {target_user_id}")
-                await callback.message.edit_text(f"👤 Пользователь: **{user_name}**\nТекущая группа: **{ALLOWED_USERS[target_user_id]}**\nВыберите новую группу:", reply_markup=get_group_selection_keyboard(target_user_id), parse_mode="Markdown")
+                await callback.message.edit_text(f"👤 Пользователь: <b>{user_name}</b>\nТекущая группа: <b>{ALLOWED_USERS[target_user_id]}</b>\nВыберите новую группу:", reply_markup=get_group_selection_keyboard(target_user_id), parse_mode="HTML")
         elif command.startswith("set_group_"):
             parts = command.split("_")
             target_user_id = int(parts[2])
@@ -592,30 +611,25 @@ async def callback_handler(callback: types.CallbackQuery, state: FSMContext):
             if target_user_id == ADMIN_USER_ID:
                 await callback.message.edit_text("⚠️ Нельзя изменить группу главного администратора", reply_markup=get_back_keyboard("back_to_manage_users"))
             elif target_user_id not in ALLOWED_USERS:
-                await callback.message.edit_text(f"⚠️ Пользователь ID `{target_user_id}` не найден", reply_markup=get_back_keyboard("back_to_manage_users"), parse_mode="Markdown")
+                await callback.message.edit_text(f"⚠️ Пользователь ID <code>{target_user_id}</code> не найден", reply_markup=get_back_keyboard("back_to_manage_users"), parse_mode="HTML")
             else:
                 user_name = USER_NAMES.get(str(target_user_id), f"ID: {target_user_id}")
                 ALLOWED_USERS[target_user_id] = new_group
                 save_users()
-                await callback.message.edit_text(f"✅ Группа пользователя **{user_name}** изменена на **{new_group}**", reply_markup=get_back_keyboard("back_to_manage_users"), parse_mode="Markdown")
-                # Removed automatic restart trigger to prevent potential issues
-                # if INSTALL_MODE == "root":
-                #     os.system(f"sudo systemctl restart tg-bot.service")
-                # else:
-                #     await callback.message.answer("ℹ️ Для полного применения изменений рекомендуется перезапустить бота вручную.")
+                await callback.message.edit_text(f"✅ Группа пользователя <b>{user_name}</b> изменена на <b>{new_group}</b>", reply_markup=get_back_keyboard("back_to_manage_users"), parse_mode="HTML")
                 await callback.message.answer("ℹ️ Для полного применения изменений рекомендуется перезапустить бота вручную командой или кнопкой (если доступна).")
         elif command == "back_to_manage_users":
             user_list = "\n".join([
-                f" • {USER_NAMES.get(str(uid), f'ID: {uid}')} (**{group}**)"
+                f" • {USER_NAMES.get(str(uid), f'ID: {uid}')} (<b>{group}</b>)"
                 for uid, group in ALLOWED_USERS.items() if uid != ADMIN_USER_ID
             ])
             if not user_list:
                 user_list = "Других пользователей нет."
 
             await callback.message.edit_text(
-                f"👤 **Управление пользователями**:\n\n{user_list}\n\nВыберите действие:",
+                f"👤 <b>Управление пользователями</b>:\n\n{user_list}\n\nВыберите действие:",
                 reply_markup=get_manage_users_keyboard(),
-                parse_mode="Markdown"
+                parse_mode="HTML"
             )
         elif command == "back_to_delete_users":
             await callback.message.edit_text("➖ Выберите пользователя для удаления:", reply_markup=get_delete_users_keyboard(user_id))
@@ -637,11 +651,10 @@ async def callback_handler(callback: types.CallbackQuery, state: FSMContext):
                     del ALLOWED_USERS[target_user_id]
                     USER_NAMES.pop(str(target_user_id), None)
                     save_users()
-                    await callback.message.edit_text(f"✅ Пользователь **{user_name}** удалён. Вы потеряли доступ к боту.", parse_mode="Markdown")
-                    # Removed automatic restart trigger
+                    await callback.message.edit_text(f"✅ Пользователь <b>{user_name}</b> удалён. Вы потеряли доступ к боту.", parse_mode="HTML")
                     await callback.message.answer("ℹ️ Для полного применения изменений рекомендуется перезапустить бота вручную.")
                 else:
-                    await callback.message.edit_text(f"⚠️ Пользователь ID `{target_user_id}` уже был удален.", reply_markup=get_back_keyboard("back_to_manage_users"), parse_mode="Markdown")
+                    await callback.message.edit_text(f"⚠️ Пользователь ID <code>{target_user_id}</code> уже был удален.", reply_markup=get_back_keyboard("back_to_manage_users"), parse_mode="HTML")
         elif command.startswith("delete_user_"):
             target_user_id = int(command.split("_")[2])
             if target_user_id == ADMIN_USER_ID:
@@ -651,11 +664,10 @@ async def callback_handler(callback: types.CallbackQuery, state: FSMContext):
                 del ALLOWED_USERS[target_user_id]
                 USER_NAMES.pop(str(target_user_id), None)
                 save_users()
-                await callback.message.edit_text(f"✅ Пользователь **{user_name}** удалён", reply_markup=get_back_keyboard("back_to_manage_users"), parse_mode="Markdown")
-                # Removed automatic restart trigger
+                await callback.message.edit_text(f"✅ Пользователь <b>{user_name}</b> удалён", reply_markup=get_back_keyboard("back_to_manage_users"), parse_mode="HTML")
                 await callback.message.answer("ℹ️ Для полного применения изменений рекомендуется перезапустить бота вручную.")
             else:
-                await callback.message.edit_text(f"⚠️ Пользователь ID `{target_user_id}` не найден", reply_markup=get_back_keyboard("back_to_manage_users"), parse_mode="Markdown")
+                await callback.message.edit_text(f"⚠️ Пользователь ID <code>{target_user_id}</code> не найден", reply_markup=get_back_keyboard("back_to_manage_users"), parse_mode="HTML")
         elif command == "get_id_inline":
            await callback.message.answer(f"🆔 Ваш ID: {user_id}\nГруппа: {ALLOWED_USERS.get(user_id, 'не авторизован')}")
         elif command == "reboot":
@@ -693,9 +705,9 @@ async def adduser_command_handler(message: types.Message, state: FSMContext):
         return
     await delete_previous_message(user_id, command, chat_id)
     sent_message = await message.answer(
-        "📝 Введите ID или Alias пользователя (например, `@username`):",
+        "📝 Введите ID или Alias пользователя (например, <code>@username</code>):",
         reply_markup=get_back_keyboard("back_to_manage_users"),
-        parse_mode="Markdown"
+        parse_mode="HTML"
     )
     LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = sent_message.message_id
     await state.set_state(ManageUsersStates.waiting_for_user_id)
@@ -728,7 +740,7 @@ async def handle_user_id(message: types.Message, state: FSMContext):
         if target_user_id in ALLOWED_USERS:
             await state.clear()
             await delete_previous_message(user_id, command, chat_id)
-            sent_message = await message.answer(f"⚠️ Пользователь **{user_name}** (ID: `{target_user_id}`) уже в списке разрешённых.", reply_markup=get_back_keyboard("back_to_manage_users"), parse_mode="Markdown")
+            sent_message = await message.answer(f"⚠️ Пользователь <b>{user_name}</b> (ID: <code>{target_user_id}</code>) уже в списке разрешённых.", reply_markup=get_back_keyboard("back_to_manage_users"), parse_mode="HTML")
             LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = sent_message.message_id
             return
         ALLOWED_USERS[target_user_id] = "Пользователи"
@@ -736,17 +748,17 @@ async def handle_user_id(message: types.Message, state: FSMContext):
         save_users()
         await state.update_data(target_user_id=target_user_id, user_name=user_name)
         await delete_previous_message(user_id, command, chat_id)
-        sent_message = await message.answer(f"👤 Пользователь: **{user_name}** (ID: `{target_user_id}`)\nТекущая группа: **Пользователи**\nВыберите группу:", reply_markup=get_group_selection_keyboard(target_user_id), parse_mode="Markdown")
+        sent_message = await message.answer(f"👤 Пользователь: <b>{user_name}</b> (ID: <code>{target_user_id}</code>)\nТекущая группа: <b>Пользователи</b>\nВыберите группу:", reply_markup=get_group_selection_keyboard(target_user_id), parse_mode="HTML")
         LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = sent_message.message_id
         await state.set_state(ManageUsersStates.waiting_for_group)
     except (TelegramBadRequest, ValueError) as e:
         error_text = str(e)
         if "Bad Request: chat not found" in error_text or "Неверный формат" in error_text or "user not found" in error_text:
-             error_text = (f"❌ **Не удалось найти пользователя `{input_text}`.**\n\n" "Возможные причины:\n" "1. Пользователь не существует или закрыл личку.\n" "2. Пользователь должен **сначала написать боту команду /start**.\n\n" "💡 **Решение:** Добавляйте по **User ID** (число) или попросите пользователя написать /start.")
+             error_text = (f"❌ <b>Не удалось найти пользователя <code>{input_text}</code>.</b>\n\n" "Возможные причины:\n" "1. Пользователь не существует или закрыл личку.\n" "2. Пользователь должен <b>сначала написать боту команду /start</b>.\n\n" "💡 <b>Решение:</b> Добавляйте по <b>User ID</b> (число) или попросите пользователя написать /start.")
         else:
             error_text = f"⚠️ Произошла непредвиденная ошибка: {escape_html(str(e))}"
         await delete_previous_message(user_id, command, chat_id)
-        sent_message = await message.answer(error_text, parse_mode="Markdown", reply_markup=get_back_keyboard("back_to_manage_users"))
+        sent_message = await message.answer(error_text, parse_mode="HTML", reply_markup=get_back_keyboard("back_to_manage_users"))
         LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = sent_message.message_id
         await state.clear()
     except Exception as e:
@@ -761,10 +773,9 @@ async def handle_user_id(message: types.Message, state: FSMContext):
 async def handle_group_selection_callback(callback: types.CallbackQuery, state: FSMContext):
     await callback.answer()
     user_id = callback.from_user.id
-    # chat_id = callback.message.chat.id # Not needed here
-    command = "adduser" # State command context
+    command = "adduser"
     if not is_allowed(user_id, command):
-        await send_access_denied_message(user_id, callback.message.chat.id, command) # Use callback chat_id
+        await send_access_denied_message(user_id, callback.message.chat.id, command)
         await state.clear()
         return
     data = await state.get_data()
@@ -781,49 +792,45 @@ async def handle_group_selection_callback(callback: types.CallbackQuery, state: 
         ALLOWED_USERS[target_user_id] = new_group
         save_users()
         await state.clear()
-        await callback.message.edit_text(f"✅ Пользователь **{user_name}** (ID: `{target_user_id}`) добавлен в группу **{new_group}**", reply_markup=get_back_keyboard("back_to_manage_users"), parse_mode="Markdown")
-        # Removed automatic restart trigger
+        await callback.message.edit_text(f"✅ Пользователь <b>{user_name}</b> (ID: <code>{target_user_id}</code>) добавлен в группу <b>{new_group}</b>", reply_markup=get_back_keyboard("back_to_manage_users"), parse_mode="HTML")
         await callback.message.answer("ℹ️ Для полного применения изменений рекомендуется перезапустить бота вручную.")
     elif callback.data == "back_to_manage_users":
         await state.clear()
-        # Re-fetch user list for consistency after potential state clearing
         user_list = "\n".join([
-            f" • {USER_NAMES.get(str(uid), f'ID: {uid}')} (**{group}**)"
+            f" • {USER_NAMES.get(str(uid), f'ID: {uid}')} (<b>{group}</b>)"
             for uid, group in ALLOWED_USERS.items() if uid != ADMIN_USER_ID
         ])
         if not user_list:
             user_list = "Других пользователей нет."
         await callback.message.edit_text(
-            f"👤 **Управление пользователями**:\n\n{user_list}\n\nВыберите действие:",
+            f"👤 <b>Управление пользователями</b>:\n\n{user_list}\n\nВыберите действие:",
             reply_markup=get_manage_users_keyboard(),
-            parse_mode="Markdown"
+            parse_mode="HTML"
         )
 
 
 @dp.message(Command("uptime"))
-@dp.message(F.text == "⏱ Аптайм") # Added text handler
+@dp.message(F.text == "⏱ Аптайм")
 async def uptime_handler(message: types.Message):
     user_id = message.from_user.id
     chat_id = message.chat.id
     command = "uptime"
     if user_id not in ALLOWED_USERS:
-        # Allow text trigger only if allowed
         if isinstance(message.text, str) and message.text == "⏱ Аптайм":
              await message.answer("⛔ У вас нет прав для выполнения этой команды.")
-        else: # Original command denial
+        else:
             await send_access_denied_message(user_id, chat_id, command)
         return
 
     await delete_previous_message(user_id, command, chat_id)
     try:
-        # Run blocking file read in a separate thread
         def read_uptime_file():
             with open("/proc/uptime") as f:
                 return float(f.readline().split()[0])
 
         uptime_sec = await asyncio.to_thread(read_uptime_file)
         uptime_str = format_uptime(uptime_sec)
-        sent_message = await message.answer(f"⏱ Время работы: **{uptime_str}**", parse_mode="Markdown")
+        sent_message = await message.answer(f"⏱ Время работы: <b>{uptime_str}</b>", parse_mode="HTML")
         LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = sent_message.message_id
     except Exception as e:
        logging.error(f"Ошибка в uptime_handler: {e}")
@@ -831,16 +838,15 @@ async def uptime_handler(message: types.Message):
        LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = sent_message.message_id
 
 @dp.message(Command("update"))
-@dp.message(F.text == "🔄 Обновление VPS") # Added text handler
+@dp.message(F.text == "🔄 Обновление VPS")
 async def update_handler(message: types.Message):
     user_id = message.from_user.id
     chat_id = message.chat.id
     command = "update"
     if not is_allowed(user_id, command):
-        # Allow text trigger only if allowed
         if isinstance(message.text, str) and message.text == "🔄 Обновление VPS":
              await message.answer("⛔ У вас нет прав для выполнения этой команды.")
-        else: # Original command denial
+        else:
             await send_access_denied_message(user_id, chat_id, command)
         return
 
@@ -853,49 +859,43 @@ async def update_handler(message: types.Message):
     output = stdout.decode('utf-8', errors='ignore')
     error_output = stderr.decode('utf-8', errors='ignore')
 
-    # Delete the "Updating..." message BEFORE sending the result
-    await delete_previous_message(user_id, command, chat_id) # Uses the stored message ID
+    await delete_previous_message(user_id, command, chat_id)
 
     if process.returncode == 0:
         response_text = f"✅ Обновление завершено:\n<pre>{escape_html(output[-4000:])}</pre>"
     else:
         response_text = f"❌ Ошибка при обновлении (Код: {process.returncode}):\n<pre>{escape_html(error_output[-4000:])}</pre>"
-    
-    # Send the final result and store its ID
+
     sent_message_final = await message.answer(response_text, parse_mode="HTML")
-    LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = sent_message_final.message_id # Store the new message ID
+    LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = sent_message_final.message_id
 
 
 @dp.message(Command("restart"))
-@dp.message(F.text == "♻️ Перезапуск бота") # Added text handler
+@dp.message(F.text == "♻️ Перезапуск бота")
 async def restart_handler(message: types.Message):
     user_id = message.from_user.id
     chat_id = message.chat.id
     command = "restart"
     if not is_allowed(user_id, command):
-        # Allow text trigger only if allowed
         if isinstance(message.text, str) and message.text == "♻️ Перезапуск бота":
              await message.answer("⛔ У вас нет прав для выполнения этой команды.")
-        else: # Original command denial
+        else:
             await send_access_denied_message(user_id, chat_id, command)
         return
 
     await delete_previous_message(user_id, command, chat_id)
     sent_msg = await message.answer("♻️ Бот уходит на перезапуск…")
     try:
-        # Write flag immediately before issuing restart
         with open(RESTART_FLAG_FILE, "w") as f:
             f.write(f"{chat_id}:{sent_msg.message_id}")
-        # Use asyncio.create_subprocess_shell for non-blocking restart
         restart_cmd = "sudo systemctl restart tg-bot.service"
         process = await asyncio.create_subprocess_shell(restart_cmd)
-        await process.wait() # Wait briefly to ensure command is sent
-        # Don't wait for completion, systemd handles the restart
-        logging.info("Restart command sent for tg-bot.service") # Removed {SERVICE_NAME}
+        await process.wait()
+        logging.info("Restart command sent for tg-bot.service")
     except Exception as e:
         logging.error(f"Ошибка в restart_handler при отправке команды перезапуска: {e}")
         if os.path.exists(RESTART_FLAG_FILE):
-            os.remove(RESTART_FLAG_FILE) # Clean up flag if command failed
+            os.remove(RESTART_FLAG_FILE)
         try:
             await bot.edit_message_text(text=f"⚠️ Ошибка при попытке перезапуска сервиса: {str(e)}", chat_id=chat_id, message_id=sent_msg.message_id)
         except Exception as edit_e:
@@ -909,18 +909,17 @@ async def reboot_handler(callback: types.CallbackQuery):
     command = "reboot"
     if is_allowed(user_id, command):
         try:
-            await bot.edit_message_text("✅ Подтверждено. **Запускаю перезагрузку VPS**...", chat_id=chat_id, message_id=message_id, parse_mode="Markdown")
+            await bot.edit_message_text("✅ Подтверждено. <b>Запускаю перезагрузку VPS</b>...", chat_id=chat_id, message_id=message_id, parse_mode="HTML")
         except TelegramBadRequest:
-            pass # Ignore if message was deleted
+            pass
         try:
             with open(REBOOT_FLAG_FILE, "w") as f:
                 f.write(str(user_id))
         except Exception as e:
             logging.error(f"Не удалось записать флаг перезагрузки: {e}")
-        # Use asyncio.create_subprocess_shell for non-blocking reboot
         reboot_cmd = "sudo reboot"
         process = await asyncio.create_subprocess_shell(reboot_cmd)
-        await process.wait() # Wait briefly to ensure command sent
+        await process.wait()
         logging.info("Reboot command sent.")
     else:
         await bot.edit_message_text("⛔ Отказано. Только администраторы могут перезагрузить сервер.", chat_id=chat_id, message_id=message_id)
@@ -943,16 +942,15 @@ async def detect_xray_client():
     return None, None
 
 @dp.message(Command("updatexray"))
-@dp.message(F.text == "🩻 Обновление X-ray") # Added text handler
+@dp.message(F.text == "🩻 Обновление X-ray")
 async def updatexray_handler(message: types.Message, state: FSMContext):
     user_id = message.from_user.id
     chat_id = message.chat.id
     command = "updatexray"
     if not is_allowed(user_id, command):
-        # Allow text trigger only if allowed
         if isinstance(message.text, str) and message.text == "🩻 Обновление X-ray":
              await message.answer("⛔ У вас нет прав для выполнения этой команды.")
-        else: # Original command denial
+        else:
             await send_access_denied_message(user_id, chat_id, command)
         return
 
@@ -966,9 +964,9 @@ async def updatexray_handler(message: types.Message, state: FSMContext):
             return
 
         version = "неизвестной"
-        client_name_display = client.capitalize() # Nicer display name
+        client_name_display = client.capitalize()
 
-        await bot.edit_message_text(f"✅ Обнаружен: **{client_name_display}**. Начинаю обновление...", chat_id=chat_id, message_id=sent_msg.message_id, parse_mode="Markdown")
+        await bot.edit_message_text(f"✅ Обнаружен: <b>{client_name_display}</b>. Начинаю обновление...", chat_id=chat_id, message_id=sent_msg.message_id, parse_mode="HTML")
 
         update_cmd = ""
         version_cmd = ""
@@ -976,32 +974,31 @@ async def updatexray_handler(message: types.Message, state: FSMContext):
         if client == "amnezia":
             update_cmd = (
                 f'docker exec {container_name} /bin/bash -c "'
-                'rm -f Xray-linux-64.zip xray geoip.dat geosite.dat && ' # Also remove geo files
+                'rm -f Xray-linux-64.zip xray geoip.dat geosite.dat && '
                 'wget -q -O Xray-linux-64.zip https://github.com/XTLS/Xray-core/releases/latest/download/Xray-linux-64.zip && '
                 'wget -q -O geoip.dat https://github.com/v2fly/geoip/releases/latest/download/geoip.dat && '
                 'wget -q -O geosite.dat https://github.com/v2fly/domain-list-community/releases/latest/download/dlc.dat && '
-                'unzip -o Xray-linux-64.zip xray && ' # Only extract xray binary
+                'unzip -o Xray-linux-64.zip xray && '
                 'cp xray /usr/bin/xray && '
-                'cp geoip.dat /usr/bin/geoip.dat && ' # Copy geo files
+                'cp geoip.dat /usr/bin/geoip.dat && '
                 'cp geosite.dat /usr/bin/geosite.dat && '
-                'rm Xray-linux-64.zip xray geoip.dat geosite.dat" && ' # Clean up all downloaded files
+                'rm Xray-linux-64.zip xray geoip.dat geosite.dat" && '
                 f'docker restart {container_name}'
             )
             version_cmd = f"docker exec {container_name} /usr/bin/xray version"
 
         elif client == "marzban":
-            # Marzban update logic remains the same
              check_deps_cmd = "command -v unzip >/dev/null 2>&1 || (DEBIAN_FRONTEND=noninteractive apt-get update -y && apt-get install -y unzip wget)"
              download_unzip_cmd = (
                 "mkdir -p /var/lib/marzban/xray-core && "
-                "cd /var/lib/marzban/xray-core && " # Change dir for cleanup
+                "cd /var/lib/marzban/xray-core && "
                 "wget -q -O Xray-linux-64.zip https://github.com/XTLS/Xray-core/releases/latest/download/Xray-linux-64.zip && "
                 "wget -q -O geoip.dat https://github.com/v2fly/geoip/releases/latest/download/geoip.dat && "
                 "wget -q -O geosite.dat https://github.com/v2fly/domain-list-community/releases/latest/download/dlc.dat && "
-                "unzip -o Xray-linux-64.zip xray && " # Extract only xray
-                "rm Xray-linux-64.zip" # Remove zip
+                "unzip -o Xray-linux-64.zip xray && "
+                "rm Xray-linux-64.zip"
             )
-             env_file = "/opt/marzban/.env" # Define env_file path
+             env_file = "/opt/marzban/.env"
              update_env_cmd = (
                  f"if ! grep -q '^XRAY_EXECUTABLE_PATH=' {env_file}; then echo 'XRAY_EXECUTABLE_PATH=/var/lib/marzban/xray-core/xray' >> {env_file}; else sed -i 's|^XRAY_EXECUTABLE_PATH=.*|XRAY_EXECUTABLE_PATH=/var/lib/marzban/xray-core/xray|' {env_file}; fi && "
                  f"if ! grep -q '^XRAY_ASSETS_PATH=' {env_file}; then echo 'XRAY_ASSETS_PATH=/var/lib/marzban/xray-core' >> {env_file}; else sed -i 's|^XRAY_ASSETS_PATH=.*|XRAY_ASSETS_PATH=/var/lib/marzban/xray-core|' {env_file}; fi"
@@ -1010,13 +1007,11 @@ async def updatexray_handler(message: types.Message, state: FSMContext):
              update_cmd = f"{check_deps_cmd} && {download_unzip_cmd} && {update_env_cmd} && {restart_cmd}"
              version_cmd = f'docker exec {container_name} /var/lib/marzban/xray-core/xray version'
 
-
-        # Execute update and version commands
         process_update = await asyncio.create_subprocess_shell(update_cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
         stdout_update, stderr_update = await process_update.communicate()
 
         if process_update.returncode != 0:
-            error_output = stderr_update.decode() or stdout_update.decode() # Show stdout if stderr is empty
+            error_output = stderr_update.decode() or stdout_update.decode()
             raise Exception(f"Процесс обновления {client_name_display} завершился с ошибкой:\n<pre>{escape_html(error_output)}</pre>")
 
         process_version = await asyncio.create_subprocess_shell(version_cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
@@ -1026,52 +1021,48 @@ async def updatexray_handler(message: types.Message, state: FSMContext):
         if version_match:
             version = version_match.group(1)
 
-        final_message = f"✅ Xray для {client_name_display} успешно обновлен до версии **{version}**"
-        await bot.edit_message_text(final_message, chat_id=chat_id, message_id=sent_msg.message_id, parse_mode="Markdown")
+        final_message = f"✅ Xray для <b>{client_name_display}</b> успешно обновлен до версии <b>{version}</b>"
+        await bot.edit_message_text(final_message, chat_id=chat_id, message_id=sent_msg.message_id, parse_mode="HTML")
 
     except Exception as e:
         logging.error(f"Ошибка в updatexray_handler: {e}")
-        error_msg = f"⚠️ **Ошибка обновления Xray:**\n\n{str(e)}"
-        # Prevent editing if message was deleted
+        error_msg = f"⚠️ <b>Ошибка обновления Xray:</b>\n\n{str(e)}"
         try:
              await bot.edit_message_text(error_msg , chat_id=chat_id, message_id=sent_msg.message_id, parse_mode="HTML")
         except TelegramBadRequest as edit_e:
              if "message to edit not found" in str(edit_e):
                   logging.warning("UpdateXray: Failed to edit error message, likely deleted.")
-                  await message.answer(error_msg, parse_mode="HTML") # Send as new message
+                  await message.answer(error_msg, parse_mode="HTML")
              else:
-                  raise # Re-raise other edit errors
+                  raise
     finally:
         await state.clear()
 
 
 @dp.message(Command("traffic"))
-@dp.message(F.text == "📡 Трафик сети") # Added text handler
+@dp.message(F.text == "📡 Трафик сети")
 async def traffic_handler(message: types.Message):
     user_id = message.from_user.id
     chat_id = message.chat.id
     command = "traffic"
     if user_id not in ALLOWED_USERS:
-        # Allow text trigger only if allowed
         if isinstance(message.text, str) and message.text == "📡 Трафик сети":
              await message.answer("⛔ У вас нет прав для выполнения этой команды.")
-        else: # Original command denial
+        else:
             await send_access_denied_message(user_id, chat_id, command)
         return
 
     await delete_previous_message(user_id, command, chat_id)
 
-    # Run blocking psutil call in thread
     def get_initial_counters():
         return psutil.net_io_counters()
 
     try:
         counters = await asyncio.to_thread(get_initial_counters)
         TRAFFIC_PREV[user_id] = (counters.bytes_recv, counters.bytes_sent)
-        msg_text = ("📡 **Мониторинг трафика включен**...\n\n_Обновление каждые 5 секунд. Чтобы остановить, выберите любую другую команду._")
-        sent_message = await message.answer(msg_text, parse_mode="Markdown")
+        msg_text = ("📡 <b>Мониторинг трафика включен</b>...\n\n<i>Обновление каждые 5 секунд. Чтобы остановить, выберите любую другую команду.</i>")
+        sent_message = await message.answer(msg_text, parse_mode="HTML")
         TRAFFIC_MESSAGE_IDS[user_id] = sent_message.message_id
-        # Store message ID under the command key as well for deletion logic
         LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = sent_message.message_id
     except Exception as e:
         logging.error(f"Error starting traffic monitor for {user_id}: {e}")
@@ -1079,31 +1070,29 @@ async def traffic_handler(message: types.Message):
 
 
 async def traffic_monitor():
-    await asyncio.sleep(TRAFFIC_INTERVAL) # Initial delay
+    await asyncio.sleep(TRAFFIC_INTERVAL)
     while True:
-        current_users = list(TRAFFIC_MESSAGE_IDS.keys()) # Copy keys to avoid modification issues
+        current_users = list(TRAFFIC_MESSAGE_IDS.keys())
         if not current_users:
-            await asyncio.sleep(TRAFFIC_INTERVAL) # Sleep if no users are monitoring
+            await asyncio.sleep(TRAFFIC_INTERVAL)
             continue
 
         for user_id in current_users:
-            if user_id not in TRAFFIC_MESSAGE_IDS: # Check if user stopped monitoring during iteration
+            if user_id not in TRAFFIC_MESSAGE_IDS:
                 continue
 
             message_id = TRAFFIC_MESSAGE_IDS.get(user_id)
-            if not message_id: # Skip if message ID somehow disappeared
+            if not message_id:
                 logging.warning(f"Traffic monitor: Missing message ID for user {user_id}")
                 TRAFFIC_MESSAGE_IDS.pop(user_id, None)
                 continue
 
             try:
-                # Run blocking psutil call in thread
                 def get_traffic_update():
                     counters_now = psutil.net_io_counters()
                     rx_now = counters_now.bytes_recv
                     tx_now = counters_now.bytes_sent
-                    prev_rx, prev_tx = TRAFFIC_PREV.get(user_id, (rx_now, tx_now)) # Default to current if no prev
-                    # Calculate speed, ensure non-negative delta
+                    prev_rx, prev_tx = TRAFFIC_PREV.get(user_id, (rx_now, tx_now))
                     rx_delta = max(0, rx_now - prev_rx)
                     tx_delta = max(0, tx_now - prev_tx)
                     rx_speed = rx_delta * 8 / 1024 / 1024 / TRAFFIC_INTERVAL
@@ -1111,7 +1100,7 @@ async def traffic_monitor():
                     return rx_now, tx_now, rx_speed, tx_speed
 
                 rx, tx, rx_speed, tx_speed = await asyncio.to_thread(get_traffic_update)
-                TRAFFIC_PREV[user_id] = (rx, tx) # Update previous values
+                TRAFFIC_PREV[user_id] = (rx, tx)
 
                 msg_text = (f"📡 Общий трафик:\n"
                             f"=========================\n"
@@ -1129,30 +1118,26 @@ async def traffic_monitor():
                 await asyncio.sleep(e.retry_after)
             except TelegramBadRequest as e:
                 if "message is not modified" in str(e):
-                    pass # Ignore if content is the same
+                    pass
                 elif "message to edit not found" in str(e) or "chat not found" in str(e):
                     logging.warning(f"Traffic Monitor: Message/Chat not found for user {user_id}. Stopping monitor.")
                     TRAFFIC_MESSAGE_IDS.pop(user_id, None)
                     TRAFFIC_PREV.pop(user_id, None)
                 else:
                     logging.error(f"Traffic Monitor: Unexpected TelegramBadRequest for {user_id}: {e}")
-                    TRAFFIC_MESSAGE_IDS.pop(user_id, None) # Stop on unexpected errors
+                    TRAFFIC_MESSAGE_IDS.pop(user_id, None)
                     TRAFFIC_PREV.pop(user_id, None)
             except Exception as e:
                 logging.error(f"Traffic Monitor: Critical error updating for {user_id}: {e}")
-                TRAFFIC_MESSAGE_IDS.pop(user_id, None) # Stop on critical errors
+                TRAFFIC_MESSAGE_IDS.pop(user_id, None)
                 TRAFFIC_PREV.pop(user_id, None)
 
         await asyncio.sleep(TRAFFIC_INTERVAL)
 
 
 @dp.message(Command("selftest"))
-@dp.message(F.text == "🛠 Сведения о сервере")  # Added text handler
+@dp.message(F.text == "🛠 Сведения о сервере")
 async def selftest_handler(message: types.Message):
-    """
-    Отображает состояние сервера: CPU, RAM, Disk, сеть, аптайм, интернет и SSH-вход.
-    Работает корректно как под root, так и под пользователем tgbot.
-    """
     user_id = message.from_user.id
     chat_id = message.chat.id
     command = "selftest"
@@ -1165,16 +1150,15 @@ async def selftest_handler(message: types.Message):
         return
 
     await delete_previous_message(user_id, command, chat_id)
+    sent_message = await message.answer("🔍 Собираю сведения о сервере...")
+    LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = sent_message.message_id
 
-    # --- Сбор системной статистики (без блокировок) ---
     def get_system_stats_sync():
-        # Первый вызов инициализирует psutil snapshot
         psutil.cpu_percent(interval=None)
-        time.sleep(0.2)  # короткая задержка для корректных данных
+        time.sleep(0.2)
         cpu = psutil.cpu_percent(interval=None)
-
         mem = psutil.virtual_memory().percent
-        disk = psutil.disk_usage("/").percent
+        disk = psutil.disk_usage('/').percent
         with open("/proc/uptime") as f:
             uptime_sec = float(f.readline().split()[0])
         counters = psutil.net_io_counters()
@@ -1186,12 +1170,11 @@ async def selftest_handler(message: types.Message):
         cpu, mem, disk, uptime_sec, rx, tx = await asyncio.to_thread(get_system_stats_sync)
     except Exception as e:
         logging.error(f"Ошибка при сборе системной статистики: {e}")
-        await message.answer(f"⚠️ Ошибка при сборе системной статистики: {e}")
+        await bot.edit_message_text(f"⚠️ Ошибка при сборе системной статистики: {e}", chat_id=chat_id, message_id=sent_message.message_id)
         return
 
     uptime_str = format_uptime(uptime_sec)
 
-    # --- Проверка интернет-доступа и IP ---
     ping_cmd = "ping -c 1 -W 1 8.8.8.8"
     ping_process = await asyncio.create_subprocess_shell(
         ping_cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
@@ -1209,86 +1192,120 @@ async def selftest_handler(message: types.Message):
     ip_stdout, _ = await ip_process.communicate()
     external_ip = ip_stdout.decode().strip() or "Не удалось определить"
 
-    # --- Последний SSH-вход ---
     last_login_info = ""
     if INSTALL_MODE == "root":
         try:
-            cmd = "journalctl -u ssh --no-pager -g 'Accepted' | tail -n 1"
-            process = await asyncio.create_subprocess_shell(
-                cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
-            )
-            stdout, stderr = await process.communicate()
-            line = stdout.decode().strip()
-            err_output = stderr.decode().strip()
+            log_file = None
+            if await asyncio.to_thread(os.path.exists, "/var/log/secure"):
+                log_file = "/var/log/secure"
+            elif await asyncio.to_thread(os.path.exists, "/var/log/auth.log"):
+                log_file = "/var/log/auth.log"
 
-            if process.returncode != 0 and err_output:
-                logging.error(f"Ошибка journalctl для SSH: {err_output}")
-                last_login_info = "\n\n📄 **Последний успешный вход SSH:**\nОшибка чтения логов."
-            elif "Accepted" in line:
-                date_match = re.search(r"^(\w{3}\s+\d{1,2}\s+\d{2}:\d{2}:\d{2})", line)
-                user_match = re.search(r"for (\S+)", line)
-                ip_match = re.search(r"from (\S+)", line)
-                if date_match and user_match and ip_match:
-                    log_timestamp = datetime.strptime(date_match.group(1), "%b %d %H:%M:%S")
-                    current_year = datetime.now().year
-                    dt_object = log_timestamp.replace(year=current_year)
-                    if dt_object > datetime.now():
-                        dt_object = dt_object.replace(year=current_year - 1)
+            line = None
+            source = ""
 
-                    user = user_match.group(1)
-                    ip = ip_match.group(1)
+            if log_file:
+                source = f" (из {os.path.basename(log_file)})"
+                cmd = f"tail -n 100 {log_file}"
+                process = await asyncio.create_subprocess_shell(
+                    cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
+                )
+                stdout, stderr = await process.communicate()
+                if process.returncode != 0: raise Exception(stderr.decode())
+
+                for l in reversed(stdout.decode().strip().split('\n')):
+                    if "Accepted" in l and "sshd" in l:
+                        line = l.strip()
+                        break
+            else:
+                source = " (из journalctl)"
+                cmd = "journalctl -u ssh --no-pager -g 'Accepted' | tail -n 1"
+                process = await asyncio.create_subprocess_shell(
+                    cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
+                )
+                try:
+                    stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=5.0)
+                except asyncio.TimeoutError:
+                    raise Exception("journalctl завис (тайм-аут 5с)")
+
+                if process.returncode != 0: raise Exception(stderr.decode())
+                line = stdout.decode().strip()
+
+            if line:
+                dt_object = None
+                date_match_iso = re.search(r"(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})", line)
+                date_match_syslog = re.search(r"(\w{3}\s+\d{1,2}\s+\d{2}:\d{2}:\d{2})", line)
+
+                try:
+                    if date_match_iso:
+                        dt_object = datetime.strptime(date_match_iso.group(1), "%Y-%m-%dT%H:%M:%S")
+                    elif date_match_syslog:
+                        log_timestamp = datetime.strptime(date_match_syslog.group(1), "%b %d %H:%M:%S")
+                        current_year = datetime.now().year
+                        dt_object = log_timestamp.replace(year=current_year)
+                        if dt_object > datetime.now():
+                            dt_object = dt_object.replace(year=current_year - 1)
+                except Exception as e:
+                    logging.warning(f"Selftest: не удалось распарсить дату: {e}. Строка: {line}")
+
+                login_match = re.search(r"Accepted\s+(?:\S+)\s+for\s+(\S+)\s+from\s+(\S+)", line)
+
+                if dt_object and login_match:
+                    user = login_match.group(1)
+                    ip = login_match.group(2)
                     flag = await asyncio.to_thread(get_country_flag, ip)
+
+                    tz_label = get_server_timezone_label()
                     formatted_time = dt_object.strftime("%H:%M")
                     formatted_date = dt_object.strftime("%d.%m.%Y")
-                    last_login = (
-                        f"👤 **{user}**\n"
-                        f"🌍 IP: **{flag} {ip}**\n"
-                        f"⏰ Время: **{formatted_time}**\n"
-                        f"🗓️ Дата: **{formatted_date}**"
-                    )
-                    last_login_info = f"\n\n📄 **Последний успешный вход SSH:**\n{last_login}"
-                else:
-                    logging.warning(f"Не удалось разобрать строку SSH лога: {line}")
-                    last_login_info = "\n\n📄 **Последний успешный вход SSH:**\nНе удалось разобрать строку лога."
-            else:
-                last_login_info = "\n\n📄 **Последний успешный вход SSH:**\nНе найдено записей."
-        except Exception as e:
-            logging.error(f"Ошибка при получении SSH-входа: {e}")
-            last_login_info = f"\n\n📄 **Последний успешный вход SSH:**\nОшибка чтения логов."
-    else:
-        last_login_info = "\n\n📄 **Последний успешный вход SSH:**\n_Информация доступна только в режиме root_"
 
-    # --- Формирование ответа ---
+                    last_login_info = (
+                        f"\n\n📄 <b>Последний SSH-вход{source}:</b>\n"
+                        f"👤 <b>{user}</b>\n"
+                        f"🌍 IP: <b>{flag} {ip}</b>\n"
+                        f"⏰ Время: <b>{formatted_time}</b>{tz_label}\n"
+                        f"🗓️ Дата: <b>{formatted_date}</b>"
+                    )
+                else:
+                    logging.warning(f"Selftest: Не удалось разобрать строку SSH (login_match={login_match}, dt_object={dt_object}): {line}")
+                    last_login_info = f"\n\n📄 <b>Последний SSH-вход{source}:</b>\nНе удалось разобрать строку лога."
+            else:
+                last_login_info = f"\n\n📄 <b>Последний SSH-вход{source}:</b>\nНе найдено записей."
+
+        except Exception as e:
+            logging.warning(f"SSH log check skipped: {e}")
+            last_login_info = f"\n\n📄 <b>Последний SSH-вход:</b>\n⏳ Ошибка чтения логов: {e}"
+    else:
+        last_login_info = "\n\n📄 <b>Последний SSH-вход:</b>\n<i>Информация доступна только в режиме root</i>"
+
     response_text = (
-        f"🛠 **Состояние сервера:**\n\n"
+        f"🛠 <b>Состояние сервера:</b>\n\n"
         f"✅ Бот работает\n"
-        f"📊 Процессор: **{cpu:.1f}%**\n"
-        f"💾 ОЗУ: **{mem:.1f}%**\n"
-        f"💽 ПЗУ: **{disk:.1f}%**\n"
-        f"⏱ Время работы: **{uptime_str}**\n"
+        f"📊 Процессор: <b>{cpu:.1f}%</b>\n"
+        f"💾 ОЗУ: <b>{mem:.1f}%</b>\n"
+        f"💽 ПЗУ: <b>{disk:.1f}%</b>\n"
+        f"⏱ Время работы: <b>{uptime_str}</b>\n"
         f"{internet}\n"
-        f"⌛ Задержка (8.8.8.8): **{ping_time} мс**\n"
-        f"🌐 Внешний IP: `{external_ip}`\n"
-        f"📡 Трафик ⬇ **{format_traffic(rx)}** / ⬆ **{format_traffic(tx)}**"
+        f"⌛ Задержка (8.8.8.8): <b>{ping_time} мс</b>\n"
+        f"🌐 Внешний IP: <code>{external_ip}</code>\n"
+        f"📡 Трафик ⬇ <b>{format_traffic(rx)}</b> / ⬆ <b>{format_traffic(tx)}</b>"
     )
 
     response_text += last_login_info
 
-    sent_message = await message.answer(response_text, parse_mode="Markdown")
-    LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = sent_message.message_id
+    await bot.edit_message_text(response_text, chat_id=chat_id, message_id=sent_message.message_id, parse_mode="HTML")
 
 
 @dp.message(Command("speedtest"))
-@dp.message(F.text == "🚀 Скорость сети") # Added text handler
+@dp.message(F.text == "🚀 Скорость сети")
 async def speedtest_handler(message: types.Message):
     user_id = message.from_user.id
     chat_id = message.chat.id
     command = "speedtest"
     if not is_allowed(user_id, command):
-        # Allow text trigger only if allowed
         if isinstance(message.text, str) and message.text == "🚀 Скорость сети":
              await message.answer("⛔ У вас нет прав для выполнения этой команды.")
-        else: # Original command denial
+        else:
             await send_access_denied_message(user_id, chat_id, command)
         return
 
@@ -1300,53 +1317,50 @@ async def speedtest_handler(message: types.Message):
     process = await asyncio.create_subprocess_shell(cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
     stdout, stderr = await process.communicate()
 
-    # Delete "Running..." message *before* sending result
-    await delete_previous_message(user_id, command, chat_id) # Uses stored ID
+    await delete_previous_message(user_id, command, chat_id)
 
     if process.returncode == 0:
         output = stdout.decode('utf-8', errors='ignore')
         try:
             data = json.loads(output)
-            download_speed = data.get("download", {}).get("bandwidth", 0) / 125000 # Bytes/s to Mbps
-            upload_speed = data.get("upload", {}).get("bandwidth", 0) / 125000 # Bytes/s to Mbps
+            download_speed = data.get("download", {}).get("bandwidth", 0) / 125000
+            upload_speed = data.get("upload", {}).get("bandwidth", 0) / 125000
             ping_latency = data.get("ping", {}).get("latency", "N/A")
             server_name = data.get("server", {}).get("name", "N/A")
             server_location = data.get("server", {}).get("location", "N/A")
             result_url = data.get("result", {}).get("url", "N/A")
 
-            response_text = (f"🚀 **Speedtest Результаты:**\n\n"
-                             f"⬇️ **Скачивание:** {download_speed:.2f} Мбит/с\n"
-                             f"⬆️ **Загрузка:** {upload_speed:.2f} Мбит/с\n"
-                             f"⏱ **Пинг:** {ping_latency} мс\n\n"
-                             f"🏢 **Сервер:** {server_name} ({server_location})\n"
-                             f"🔗 **Подробнее:** {result_url}")
+            response_text = (f"🚀 <b>Speedtest Результаты:</b>\n\n"
+                             f"⬇️ <b>Скачивание:</b> {download_speed:.2f} Мбит/с\n"
+                             f"⬆️ <b>Загрузка:</b> {upload_speed:.2f} Мбит/с\n"
+                             f"⏱ <b>Пинг:</b> {ping_latency} мс\n\n"
+                             f"🏢 <b>Сервер:</b> {server_name} ({server_location})\n"
+                             f"🔗 <b>Подробнее:</b> {result_url}")
         except json.JSONDecodeError as e:
-            logging.error(f"Ошибка парсинга JSON от speedtest: {e}\nOutput: {output[:500]}") # Log output sample
-            response_text = f"❌ Ошибка при обработке результатов speedtest: Неверный формат ответа.\n<pre>{escape_html(output[:1000])}</pre>" # Show part of output
-        except Exception as e: # Catch other potential errors during processing
+            logging.error(f"Ошибка парсинга JSON от speedtest: {e}\nOutput: {output[:500]}")
+            response_text = f"❌ Ошибка при обработке результатов speedtest: Неверный формат ответа.\n<pre>{escape_html(output[:1000])}</pre>"
+        except Exception as e:
              logging.error(f"Неожиданная ошибка обработки speedtest: {e}")
              response_text = f"❌ Неожиданная ошибка при обработке результатов speedtest: {escape_html(str(e))}"
     else:
-        error_output = stderr.decode('utf-8', errors='ignore') or stdout.decode('utf-8', errors='ignore') # Show stdout if stderr is empty
+        error_output = stderr.decode('utf-8', errors='ignore') or stdout.decode('utf-8', errors='ignore')
         logging.error(f"Ошибка выполнения speedtest. Код: {process.returncode}. Вывод: {error_output}")
         response_text = f"❌ Ошибка при запуске speedtest:\n<pre>{escape_html(error_output)}</pre>"
 
-    # Send final result and store its ID
     sent_message_final = await message.answer(response_text, parse_mode="HTML", disable_web_page_preview=True)
     LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = sent_message_final.message_id
 
 
 @dp.message(Command("top"))
-@dp.message(F.text == "🔥 Топ процессов") # Added text handler
+@dp.message(F.text == "🔥 Топ процессов")
 async def top_handler(message: types.Message):
     user_id = message.from_user.id
     chat_id = message.chat.id
     command = "top"
     if not is_allowed(user_id, command):
-        # Allow text trigger only if allowed
         if isinstance(message.text, str) and message.text == "🔥 Топ процессов":
              await message.answer("⛔ У вас нет прав для выполнения этой команды.")
-        else: # Original command denial
+        else:
             await send_access_denied_message(user_id, chat_id, command)
         return
 
@@ -1356,7 +1370,7 @@ async def top_handler(message: types.Message):
     stdout, stderr = await process.communicate()
     if process.returncode == 0:
         output = escape_html(stdout.decode())
-        response_text = f"🔥 **Топ 14 процессов по загрузке CPU:**\n<pre>{output}</pre>"
+        response_text = f"🔥 <b>Топ 14 процессов по загрузке CPU:</b>\n<pre>{output}</pre>"
     else:
         error_output = escape_html(stderr.decode())
         response_text = f"❌ Ошибка при получении списка процессов:\n<pre>{error_output}</pre>"
@@ -1365,28 +1379,27 @@ async def top_handler(message: types.Message):
 
 
 @dp.message(Command("logs"))
-@dp.message(F.text == "📜 Последние события") # Added text handler
+@dp.message(F.text == "📜 Последние события")
 async def logs_handler(message: types.Message):
     user_id = message.from_user.id
     chat_id = message.chat.id
     command = "logs"
     if not is_allowed(user_id, command):
-        # Allow text trigger only if allowed
         if isinstance(message.text, str) and message.text == "📜 Последние события":
              await message.answer("⛔ У вас нет прав для выполнения этой команды.")
-        else: # Original command denial
+        else:
             await send_access_denied_message(user_id, chat_id, command)
         return
 
     await delete_previous_message(user_id, command, chat_id)
     try:
-        cmd = "journalctl -n 20 --no-pager -o short-precise" # More precise timestamps
+        cmd = "journalctl -n 20 --no-pager -o short-precise"
         process = await asyncio.create_subprocess_shell(cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
         stdout, stderr = await process.communicate()
         if process.returncode != 0:
             raise Exception(stderr.decode())
         log_output = escape_html(stdout.decode())
-        sent_message = await message.answer(f"📜 **Последние системные журналы:**\n<pre>{log_output}</pre>", parse_mode="HTML")
+        sent_message = await message.answer(f"📜 <b>Последние системные журналы:</b>\n<pre>{log_output}</pre>", parse_mode="HTML")
         LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = sent_message.message_id
     except Exception as e:
         logging.error(f"Ошибка при чтении журналов: {e}")
@@ -1395,16 +1408,15 @@ async def logs_handler(message: types.Message):
 
 
 @dp.message(Command("fall2ban"))
-@dp.message(F.text == "🔒 Fail2Ban Log") # Added text handler
+@dp.message(F.text == "🔒 Fail2Ban Log")
 async def fall2ban_handler(message: types.Message):
     user_id = message.from_user.id
     chat_id = message.chat.id
     command = "fall2ban"
     if not is_allowed(user_id, command):
-        # Allow text trigger only if allowed
         if isinstance(message.text, str) and message.text == "🔒 Fail2Ban Log":
              await message.answer("⛔ У вас нет прав для выполнения этой команды.")
-        else: # Original command denial
+        else:
             await send_access_denied_message(user_id, chat_id, command)
         return
 
@@ -1412,60 +1424,73 @@ async def fall2ban_handler(message: types.Message):
     try:
         F2B_LOG_FILE = "/var/log/fail2ban.log"
 
-        # Check file existence asynchronously
         if not await asyncio.to_thread(os.path.exists, F2B_LOG_FILE):
-             sent_message = await message.answer(f"⚠️ Файл лога Fail2Ban не найден: `{F2B_LOG_FILE}`", parse_mode="Markdown")
+             sent_message = await message.answer(f"⚠️ Файл лога Fail2Ban не найден: <code>{F2B_LOG_FILE}</code>", parse_mode="HTML")
              LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = sent_message.message_id
              return
 
-        # Run blocking file read in thread
         def read_f2b_log():
-             # Read more lines initially to increase chance of finding bans
              try:
                   with open(F2B_LOG_FILE, "r", encoding='utf-8', errors='ignore') as f:
-                       return f.readlines()[-50:] # Read last 50 lines
+                       return f.readlines()[-50:]
              except Exception as read_e:
                   logging.error(f"Error reading Fail2Ban log file: {read_e}")
-                  return None # Indicate error
+                  return None
 
         lines = await asyncio.to_thread(read_f2b_log)
 
-        if lines is None: # Check if reading failed
+        if lines is None:
              raise Exception("Не удалось прочитать файл лога.")
 
         log_entries = []
-        # Process lines to find ban entries
-        for line in reversed(lines):
-            line = line.strip() # Clean up line
-            if "Ban" in line:
-                # Use more robust regex to capture date/time and IP
-                match = re.search(r'(\d{4}-\d{2}-\d{2}\s\d{2}:\d{2}:\d{2},\d{3}).*Ban\s+(\S+)', line)
-                if match:
-                    timestamp_str, ip = match.groups()
-                    try:
-                        # Parse timestamp with milliseconds
-                        dt = datetime.strptime(timestamp_str, "%Y-%m-%d %H:%M:%S,%f")
-                        # Run potentially blocking flag lookup in thread
-                        flag = await asyncio.to_thread(get_country_flag, ip)
-                        # flag = get_country_flag(ip) # Original sync call
-                        formatted_time = dt.strftime('%H:%M:%S') # Include seconds
-                        formatted_date = dt.strftime('%d.%m.%Y')
-                        log_entries.append(f"🌍 IP: **{flag} {ip}**\n⏰ Время: **{formatted_time}**\n🗓️ Дата: **{formatted_date}**")
-                    except ValueError:
-                        logging.warning(f"Could not parse Fail2Ban timestamp: {timestamp_str}")
-                        continue # Skip entry if timestamp is wrong
-                    except Exception as parse_e:
-                         logging.error(f"Error processing Fail2Ban line: {parse_e} | Line: {line}")
-                         continue # Skip entry on other errors
+        tz_label = get_server_timezone_label()
+        regex_ban = r"(\d{4}-\d{2}-\d{2}\s\d{2}:\d{2}:\d{2},\d{3}).*fail2ban\.actions.* Ban\s+(\S+)"
+        regex_already = r"(\d{4}-\d{2}-\d{2}\s\d{2}:\d{2}:\d{2},\d{3}).*fail2ban\.actions.* (\S+)\s+already banned"
 
-                if len(log_entries) >= 10: # Limit to 10 entries
-                    break
+        for line in reversed(lines):
+            line = line.strip()
+            if "fail2ban.actions" not in line:
+                continue
+
+            match = None
+            ban_type = None
+            ip = None
+            timestamp_str = None
+
+            match_ban_found = re.search(regex_ban, line)
+            if match_ban_found:
+                match = match_ban_found
+                ban_type = "Бан"
+                timestamp_str, ip = match.groups()
+            else:
+                match_already_found = re.search(regex_already, line)
+                if match_already_found:
+                    match = match_already_found
+                    ban_type = "Уже забанен"
+                    timestamp_str, ip = match.groups()
+
+            if match and ip and timestamp_str:
+                try:
+                    dt = datetime.strptime(timestamp_str, "%Y-%m-%d %H:%M:%S,%f")
+                    flag = await asyncio.to_thread(get_country_flag, ip)
+                    formatted_time = dt.strftime('%H:%M:%S')
+                    formatted_date = dt.strftime('%d.%m.%Y')
+                    log_entries.append(f"🔒 <b>{ban_type}</b>\n🌍 IP: <b>{flag} {ip}</b>\n⏰ Время: <b>{formatted_time}</b>{tz_label}\n🗓️ Дата: <b>{formatted_date}</b>")
+                except ValueError:
+                    logging.warning(f"Could not parse Fail2Ban timestamp: {timestamp_str}")
+                    continue
+                except Exception as parse_e:
+                    logging.error(f"Error processing Fail2Ban line: {parse_e} | Line: {line}")
+                    continue
+
+            if len(log_entries) >= 10:
+                break
 
         if log_entries:
             log_output = "\n\n".join(log_entries)
-            sent_message = await message.answer(f"🔒 **Последние 10 блокировок IP (Fail2Ban):**\n\n{log_output}", parse_mode="Markdown")
+            sent_message = await message.answer(f"🔒 <b>Последние 10 блокировок IP (Fail2Ban):</b>\n\n{log_output}", parse_mode="HTML")
         else:
-            sent_message = await message.answer("🔒 Нет недавних блокировок IP в логах (проверено 50 последних строк).")
+            sent_message = await message.answer("🔒 Нет недавних блокировок IP в логах Fail2Ban (проверено 50 последних строк).")
         LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = sent_message.message_id
 
     except Exception as e:
@@ -1475,77 +1500,135 @@ async def fall2ban_handler(message: types.Message):
 
 
 @dp.message(Command("sshlog"))
-@dp.message(F.text == "📜 SSH-лог") # Added text handler
+@dp.message(F.text == "📜 SSH-лог")
 async def sshlog_handler(message: types.Message):
     user_id = message.from_user.id
     chat_id = message.chat.id
     command = "sshlog"
     if not is_allowed(user_id, command):
-        # Allow text trigger only if allowed
         if isinstance(message.text, str) and message.text == "📜 SSH-лог":
              await message.answer("⛔ У вас нет прав для выполнения этой команды.")
-        else: # Original command denial
+        else:
             await send_access_denied_message(user_id, chat_id, command)
         return
 
     await delete_previous_message(user_id, command, chat_id)
-    try:
-        # Increased limit, still check within last month for performance
-        cmd = "journalctl -u ssh -n 100 --no-pager --since '1 month ago' -o short-precise"
-        process = await asyncio.create_subprocess_shell(cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
-        stdout, stderr = await process.communicate()
-        if process.returncode != 0:
-            raise Exception(stderr.decode())
+    sent_message = await message.answer("🔍 Ищу последние 10 событий SSH (вход/провал)...")
+    LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = sent_message.message_id
 
-        lines = stdout.decode().strip().split('\n')
+    try:
+        log_file = None
+        if await asyncio.to_thread(os.path.exists, "/var/log/secure"):
+            log_file = "/var/log/secure"
+        elif await asyncio.to_thread(os.path.exists, "/var/log/auth.log"):
+            log_file = "/var/log/auth.log"
+
+        lines = []
+        source = ""
         log_entries = []
         found_count = 0
-        # Iterate through lines looking for 'Accepted'
+
+        if log_file:
+            source = f" (из {os.path.basename(log_file)})"
+            cmd = f"tail -n 200 {log_file}"
+            process = await asyncio.create_subprocess_shell(
+                cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
+            )
+            stdout, stderr = await process.communicate()
+            if process.returncode != 0: raise Exception(stderr.decode())
+            lines = stdout.decode().strip().split('\n')
+        else:
+            source = " (из journalctl, за месяц)"
+            cmd = "journalctl -u ssh -n 100 --no-pager --since '1 month ago' -o short-precise"
+            process = await asyncio.create_subprocess_shell(
+                cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
+            )
+            try:
+                stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=5.0)
+            except asyncio.TimeoutError:
+                raise Exception("journalctl завис (тайм-аут 5с)")
+            if process.returncode != 0: raise Exception(stderr.decode())
+            lines = stdout.decode().strip().split('\n')
+
+        tz_label = get_server_timezone_label()
+
         for line in reversed(lines):
+            if found_count >= 10:
+                break
+
             line = line.strip()
-            if "Accepted password for" in line or "Accepted publickey for" in line: # Check both auth methods
-                # Regex to capture precise timestamp, user, and IP
-                match = re.search(r'^(\S+\s+\S+\.\d+)\s+\S+\s+sshd\[\d+\]:\s+Accepted\s+\S+\s+for\s+(\S+)\s+from\s+(\S+)\s+port\s+\d+', line)
+            if "sshd" not in line:
+                continue
+
+            dt_object = None
+            date_match_iso = re.search(r"(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})", line)
+            date_match_syslog = re.search(r"(\w{3}\s+\d{1,2}\s+\d{2}:\d{2}:\d{2})", line)
+
+            try:
+                if date_match_iso:
+                    dt_object = datetime.strptime(date_match_iso.group(1), "%Y-%m-%dT%H:%M:%S")
+                elif date_match_syslog:
+                    log_timestamp = datetime.strptime(date_match_syslog.group(1), "%b %d %H:%M:%S")
+                    current_year = datetime.now().year
+                    dt_object = log_timestamp.replace(year=current_year)
+                    if dt_object > datetime.now():
+                        dt_object = dt_object.replace(year=current_year - 1)
+                else:
+                    continue
+            except Exception as e:
+                logging.warning(f"Sshlog: не удалось распарсить дату: {e}. Строка: {line}")
+                continue
+
+            formatted_time = dt_object.strftime('%H:%M:%S')
+            formatted_date = dt_object.strftime('%d.%m.%Y')
+
+            entry = None
+
+            match = re.search(r"Accepted\s+(?:\S+)\s+for\s+(\S+)\s+from\s+(\S+)", line)
+            if match:
+                user = match.group(1)
+                ip = match.group(2)
+                flag = await asyncio.to_thread(get_country_flag, ip)
+                entry = f"✅ <b>Успешный вход</b>\n👤 Пользователь: <b>{user}</b>\n🌍 IP: <b>{flag} {ip}</b>\n⏰ {formatted_time}{tz_label} ({formatted_date})"
+
+            if not entry:
+                match = re.search(r"Failed\s+(?:\S+)\s+for\s+invalid\s+user\s+(\S+)\s+from\s+(\S+)", line)
                 if match:
-                    timestamp_str, user, ip = match.groups()
-                    try:
-                        # Parse timestamp (assuming format like Oct 17 22:07:05.123456) - adjust if needed
-                        # This format is complex, might need refinement based on actual journalctl output
-                        # Using a simpler approach for now: find date-like part
-                        date_match = re.search(r'(\w{3}\s+\d{1,2}\s+\d{2}:\d{2}:\d{2})', timestamp_str) # Find standard date part
-                        if not date_match: continue # Skip if no standard date found
+                    user = match.group(1)
+                    ip = match.group(2)
+                    flag = await asyncio.to_thread(get_country_flag, ip)
+                    entry = f"❌ <b>Неверный юзер</b>\n👤 Попытка: <b>{user}</b>\n🌍 IP: <b>{flag} {ip}</b>\n⏰ {formatted_time}{tz_label} ({formatted_date})"
 
-                        dt_object = datetime.strptime(f"{datetime.now().year} {date_match.group(1)}", '%Y %b %d %H:%M:%S')
-                        if dt_object > datetime.now():
-                             dt_object = dt_object.replace(year=datetime.now().year - 1)
+            if not entry:
+                match = re.search(r"Failed password for (\S+) from (\S+)", line)
+                if match:
+                    user = match.group(1)
+                    ip = match.group(2)
+                    flag = await asyncio.to_thread(get_country_flag, ip)
+                    entry = f"❌ <b>Неверный пароль</b>\n👤 Пользователь: <b>{user}</b>\n🌍 IP: <b>{flag} {ip}</b>\n⏰ {formatted_time}{tz_label} ({formatted_date})"
 
-                        # Run potentially blocking flag lookup in thread
-                        flag = await asyncio.to_thread(get_country_flag, ip)
-                        
-                        formatted_time = dt_object.strftime('%H:%M:%S') # Include seconds
-                        formatted_date = dt_object.strftime('%d.%m.%Y')
-                        log_entries.append(f"👤 Пользователь: **{user}**\n🌍 IP: **{flag} {ip}**\n⏰ Время: **{formatted_time}**\n🗓️ Дата: **{formatted_date}**")
-                        found_count += 1
-                        if found_count >= 10: # Limit to 10 found entries
-                            break
-                    except (ValueError, IndexError) as e:
-                        logging.warning(f"Ошибка парсинга строки SSH лога: {e} | {line}")
-                        continue # Skip this entry
-                    except Exception as parse_e:
-                         logging.error(f"Error processing SSH log line: {parse_e} | Line: {line}")
-                         continue # Skip entry on other errors
+            if not entry:
+                match = re.search(r"authentication failure;.*rhost=(\S+)\s+user=(\S+)", line)
+                if match:
+                    ip = match.group(1)
+                    user = match.group(2)
+                    flag = await asyncio.to_thread(get_country_flag, ip)
+                    entry = f"❌ <b>Провал (PAM)</b>\n👤 Пользователь: <b>{user}</b>\n🌍 IP: <b>{flag} {ip}</b>\n⏰ {formatted_time}{tz_label} ({formatted_date})"
+
+            if entry:
+                log_entries.append(entry)
+                found_count += 1
 
         if log_entries:
             log_output = "\n\n".join(log_entries)
-            sent_message = await message.answer(f"🔐 **Последние {found_count} успешных входов SSH (за месяц):**\n\n{log_output}", parse_mode="Markdown")
+            await bot.edit_message_text(f"🔐 <b>Последние {found_count} событий SSH{source}:</b>\n\n{log_output}", chat_id=chat_id, message_id=sent_message.message_id, parse_mode="HTML")
         else:
-            sent_message = await message.answer("🔐 Не найдено успешных входов SSH в логах за последний месяц (проверено 100 последних строк).")
-        LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = sent_message.message_id
+            await bot.edit_message_text(f"🔐 Не найдено событий SSH (вход/провал){source}.", chat_id=chat_id, message_id=sent_message.message_id)
 
     except Exception as e:
         logging.error(f"Ошибка при чтении журнала SSH: {e}")
-        sent_message = await message.answer(f"⚠️ Ошибка при чтении журнала SSH: {str(e)}")
-        LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = sent_message.message_id
+        await bot.edit_message_text(f"⚠️ Ошибка при чтении журнала SSH: {str(e)}", chat_id=chat_id, message_id=sent_message.message_id)
+
 
 @dp.message(StateFilter(GenerateVlessStates.waiting_for_file), F.document)
 async def handle_vless_file(message: types.Message, state: FSMContext):
@@ -1558,36 +1641,33 @@ async def handle_vless_file(message: types.Message, state: FSMContext):
         return
     if not message.document or not message.document.file_name.endswith(".json"):
         await delete_previous_message(user_id, command, chat_id)
-        sent_message = await message.answer("❌ Пожалуйста, отправьте корректный **JSON файл**.", reply_markup=get_back_keyboard("back_generate_vless"), parse_mode="Markdown")
+        sent_message = await message.answer("❌ Пожалуйста, отправьте корректный <b>JSON файл</b>.", reply_markup=get_back_keyboard("back_generate_vless"), parse_mode="HTML")
         LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = sent_message.message_id
         return
     try:
         file_info = await bot.get_file(message.document.file_id)
-        # Use BytesIO to handle the downloaded file in memory
         file_content_stream = io.BytesIO()
         await bot.download_file(file_info.file_path, destination=file_content_stream)
-        file_content_stream.seek(0) # Go to the beginning of the stream
+        file_content_stream.seek(0)
         json_data = file_content_stream.read().decode('utf-8')
 
         try:
-            # Validate JSON structure briefly - run in thread if complex
-            # For simple load, sync might be okay, but thread is safer
             def validate_json(data):
-                 json.loads(data) # Just try parsing
+                 json.loads(data)
             await asyncio.to_thread(validate_json, json_data)
         except json.JSONDecodeError:
             raise ValueError("Содержимое файла не является корректным JSON.")
 
         await state.update_data(json_data=json_data)
         await delete_previous_message(user_id, command, chat_id)
-        sent_message = await message.answer("📝 Введите **имя** для VLESS ссылки:", reply_markup=get_back_keyboard("back_generate_vless"), parse_mode="Markdown")
+        sent_message = await message.answer("📝 Введите <b>имя</b> для VLESS ссылки:", reply_markup=get_back_keyboard("back_generate_vless"), parse_mode="HTML")
         LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = sent_message.message_id
         await state.set_state(GenerateVlessStates.waiting_for_name)
     except Exception as e:
         logging.error(f"Ошибка при обработке файла VLESS: {e}")
         await state.clear()
         await delete_previous_message(user_id, command, chat_id)
-        sent_message = await message.answer(f"⚠️ Ошибка при обработке файла: **{str(e)}**", reply_markup=get_back_keyboard("back_generate_vless"), parse_mode="Markdown")
+        sent_message = await message.answer(f"⚠️ Ошибка при обработке файла: <b>{str(e)}</b>", reply_markup=get_back_keyboard("back_generate_vless"), parse_mode="HTML")
         LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = sent_message.message_id
 
 
@@ -1595,24 +1675,21 @@ async def handle_vless_file(message: types.Message, state: FSMContext):
 async def handle_vless_file_wrong_type(message: types.Message, state: FSMContext):
     user_id = message.from_user.id
     chat_id = message.chat.id
-    command = "generate_vless" # Context command
+    command = "generate_vless"
     if not is_allowed(user_id, command):
         await send_access_denied_message(user_id, chat_id, command)
         await state.clear()
         return
-    # Delete the previous prompt message ("Send JSON file...")
     await delete_previous_message(user_id, command, chat_id)
-    # Send error and store its ID under the same command key
-    sent_message = await message.answer("❌ Ожидается отправка **JSON файла**. Попробуйте еще раз или нажмите Назад.", reply_markup=get_back_keyboard("back_generate_vless"), parse_mode="Markdown")
+    sent_message = await message.answer("❌ Ожидается отправка <b>JSON файла</b>. Попробуйте еще раз или нажмите Назад.", reply_markup=get_back_keyboard("back_generate_vless"), parse_mode="HTML")
     LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = sent_message.message_id
-    # Keep the state waiting_for_file
 
 
 @dp.message(StateFilter(GenerateVlessStates.waiting_for_name))
 async def handle_vless_name(message: types.Message, state: FSMContext):
     user_id = message.from_user.id
     chat_id = message.chat.id
-    command = "generate_vless" # Context command
+    command = "generate_vless"
     if not is_allowed(user_id, command):
         await send_access_denied_message(user_id, chat_id, command)
         await state.clear()
@@ -1620,29 +1697,25 @@ async def handle_vless_name(message: types.Message, state: FSMContext):
 
     custom_name = message.text.strip()
     if not custom_name:
-       custom_name = f"VLESS_Config_{user_id}" # Use User ID if name is empty
+       custom_name = f"VLESS_Config_{user_id}"
 
     data = await state.get_data()
     json_data = data.get("json_data")
-    await state.clear() # Clear state after getting data
+    await state.clear()
 
     if not json_data:
-        # Delete previous prompt ("Enter name...")
         await delete_previous_message(user_id, command, chat_id)
         sent_message = await message.answer("⚠️ Ошибка: JSON данные не найдены, начните сначала.", reply_markup=get_back_keyboard("back_to_menu"))
-        # Store error message ID
         LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = sent_message.message_id
         return
 
-    # Delete previous prompt ("Enter name...") before processing
     await delete_previous_message(user_id, command, chat_id)
 
     try:
-        # Run potentially CPU-intensive VLESS conversion and QR generation in thread
         def generate_vless_and_qr(data, name):
             vless_url_result = convert_json_to_vless(data, name)
-            if vless_url_result.startswith("⚠️"): # Check if conversion failed
-                raise ValueError(vless_url_result) # Raise error with message
+            if vless_url_result.startswith("⚠️"):
+                raise ValueError(vless_url_result)
 
             qr = qrcode.QRCode(version=1, error_correction=qrcode.constants.ERROR_CORRECT_H, box_size=10, border=4)
             qr.add_data(vless_url_result)
@@ -1662,22 +1735,20 @@ async def handle_vless_name(message: types.Message, state: FSMContext):
         sent_message = await message.answer_photo(photo=photo, caption=caption, parse_mode="HTML")
         LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = sent_message.message_id
 
-    except ValueError as ve: # Catch VLESS conversion errors
+    except ValueError as ve:
         logging.error(f"Ошибка при конвертации JSON в VLESS: {ve}")
         error_caption = f"⚠️ Ошибка при генерации VLESS ссылки: {escape_html(str(ve))}"
         sent_message = await message.answer(error_caption, parse_mode="HTML")
         LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = sent_message.message_id
     except Exception as e:
         logging.error(f"Ошибка при генерации QR-кода или отправке фото VLESS: {e}")
-        # Try sending URL without QR code if QR fails
         try:
-             # Attempt to generate URL again synchronously (less critical path)
              vless_url_fallback = convert_json_to_vless(json_data, custom_name)
-             if vless_url_fallback.startswith("⚠️"): raise ValueError(vless_url_fallback) # Re-check fallback
+             if vless_url_fallback.startswith("⚠️"): raise ValueError(vless_url_fallback)
 
              fallback_caption = f"🔗 <b>VLESS ссылка для «{escape_html(custom_name)}»</b>:\n\nКод:\n<code>{escape_html(vless_url_fallback)}</code>\n\n⚠️ Ошибка при генерации QR-кода: {escape_html(str(e))}"
              sent_message = await message.answer(fallback_caption, parse_mode="HTML")
-        except Exception as fallback_e: # If even URL generation fails again
+        except Exception as fallback_e:
              logging.error(f"Fallback VLESS URL generation failed: {fallback_e}")
              sent_message = await message.answer(f"⚠️ Критическая ошибка при генерации VLESS: {escape_html(str(fallback_e))}")
 
@@ -1701,11 +1772,10 @@ async def initial_restart_check():
         except Exception as e:
             logging.error(f"Ошибка при обработке флага перезапуска: {e}")
         finally:
-            # Always try to remove the flag file
             try:
                 os.remove(RESTART_FLAG_FILE)
             except OSError as e:
-                 if e.errno != 2: # Ignore "No such file or directory"
+                 if e.errno != 2:
                      logging.error(f"Error removing restart flag file: {e}")
 
 
@@ -1718,8 +1788,7 @@ async def initial_reboot_check():
                      raise ValueError("Invalid content in reboot flag file.")
                 user_id = int(user_id_str)
 
-            # Send notification and log
-            await bot.send_message(chat_id=user_id, text="✅ **Сервер успешно перезагружен! Бот снова в сети.**", parse_mode="Markdown")
+            await bot.send_message(chat_id=user_id, text="✅ <b>Сервер успешно перезагружен! Бот снова в сети.</b>", parse_mode="HTML")
             logging.info(f"Отправлено уведомление о перезагрузке пользователю ID: {user_id}")
 
         except FileNotFoundError:
@@ -1731,27 +1800,25 @@ async def initial_reboot_check():
         except Exception as e:
             logging.error(f"Ошибка при обработке флага перезагрузки: {e}")
         finally:
-             # Always try to remove the flag file
              try:
                  os.remove(REBOOT_FLAG_FILE)
              except OSError as e:
-                  if e.errno != 2: # Ignore "No such file or directory"
+                  if e.errno != 2:
                       logging.error(f"Error removing reboot flag file: {e}")
 
 
 async def main():
     try:
         logging.info(f"Бот запускается в режиме: {INSTALL_MODE.upper()}")
-        # Run blocking load_users in thread
         await asyncio.to_thread(load_users)
-        await refresh_user_names() # Keep async, uses bot API
+        await refresh_user_names()
         await initial_reboot_check()
         await initial_restart_check()
         asyncio.create_task(traffic_monitor())
         logging.info("Starting polling...")
         await dp.start_polling(bot, allowed_updates=dp.resolve_used_update_types())
     except Exception as e:
-        logging.critical(f"Критическая ошибка запуска бота: {e}", exc_info=True) # Log traceback
+        logging.critical(f"Критическая ошибка запуска бота: {e}", exc_info=True)
     finally:
         logging.info("Bot shutdown.")
 
@@ -1762,4 +1829,4 @@ if __name__ == "__main__":
     except KeyboardInterrupt:
         logging.info("Бот остановлен вручную.")
     except Exception as e:
-        logging.critical(f"Непредвиденное завершение: {e}", exc_info=True) # Log traceback
+        logging.critical(f"Непредвиденное завершение: {e}", exc_info=True)
