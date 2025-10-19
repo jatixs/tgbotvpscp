@@ -5,13 +5,12 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-1.10.9-blue?style=flat-square" alt="Version 1.10.9"/>
-  <img src="https://img.shields.io/badge/python-3.10%2B-green?style=flat-square" alt="Python 3.10+"/>
-  <img src="https://img.shields.io/badge/license-GPL--3.0-lightgrey?style=flat-square" alt="License GPL-3.0"/>
-  <img src="https://img.shields.io/badge/aiogram-3.x-orange?style=flat-square" alt="Aiogram 3.x"/>
-  <img src="https://img.shields.io/badge/platform-Ubuntu%2020.04%2B-important?style=flat-square" alt="Platform Ubuntu 20.04+"/>
+  <a href="https://github.com/jatixs/tgbotvpscp/releases/latest"><img src="https://img.shields.io/badge/version-1.10.9-blue?style=flat-square" alt="Version 1.10.9"/></a>
+  <a href="https://www.python.org/"><img src="https://img.shields.io/badge/python-3.10%2B-green?style=flat-square" alt="Python 3.10+"/></a>
+  <a href="https://choosealicense.com/licenses/gpl-3.0/"><img src="https://img.shields.io/badge/license-GPL--3.0-lightgrey?style=flat-square" alt="License GPL-3.0"/></a>
+  <a href="https://github.com/aiogram/aiogram"><img src="https://img.shields.io/badge/aiogram-3.x-orange?style=flat-square" alt="Aiogram 3.x"/></a>
+  <a href="https://releases.ubuntu.com/focal/"><img src="https://img.shields.io/badge/platform-Ubuntu%2020.04%2B-important?style=flat-square" alt="Platform Ubuntu 20.04+"/></a>
 </p>
-
 ---
 
 ## 📘 Оглавление
@@ -113,7 +112,5 @@ bash <(wget -qO- https://raw.githubusercontent.com/jatixs/tgbotvpscp/main/deploy
 | `sudo systemctl restart tg-watchdog`| Перезапустить Alert-систем                              |
 | `sudo journalctl -u tg-watchdog -f -n 50`| Смотреть логи Alert-системы                         |
 | `bash <(curl -sSL [URL_deploy.sh])` | Запустить скрипт `deploy.sh` для обновления/удаления |
-
-*(Замените `[URL_deploy.sh]` на актуальный URL из [пункта 2](#2-запуск-установки))*
 
 ---
