@@ -7,6 +7,7 @@ import urllib.parse
 import logging
 import requests
 import sys
+import signal # Needed for shutdown handler
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import Command, StateFilter
 from aiogram.exceptions import TelegramRetryAfter, TelegramBadRequest
@@ -55,7 +56,7 @@ os.makedirs(CONFIG_DIR, exist_ok=True)
 USERS_FILE = os.path.join(CONFIG_DIR, "users.json")
 REBOOT_FLAG_FILE = os.path.join(CONFIG_DIR, "reboot_flag.txt")
 RESTART_FLAG_FILE = os.path.join(CONFIG_DIR, "restart_flag.txt")
-ALERTS_CONFIG_FILE = os.path.join(CONFIG_DIR, "alerts_config.json") # Added alerts config file path
+ALERTS_CONFIG_FILE = os.path.join(CONFIG_DIR, "alerts_config.json")
 
 LOG_FILE = os.path.join(LOG_DIR, "bot.log")
 logging.basicConfig(level=logging.INFO, filename=LOG_FILE, format='%(asctime)s - %(levelname)s - %(message)s', encoding='utf-8')
@@ -65,18 +66,23 @@ console_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(
 logging.getLogger().addHandler(console_handler)
 
 TRAFFIC_INTERVAL = 5
-RESOURCE_CHECK_INTERVAL = 300 # Проверять ресурсы каждые 5 минут (300 секунд)
-CPU_THRESHOLD = 90.0         # %
-RAM_THRESHOLD = 90.0         # %
-DISK_THRESHOLD = 95.0        # %
+RESOURCE_CHECK_INTERVAL = 60 # Интервал проверки ресурсов (1 минута)
+CPU_THRESHOLD = 90.0
+RAM_THRESHOLD = 90.0
+DISK_THRESHOLD = 95.0
+
+# --- [ИНТЕГРАЦИЯ] Добавлено для повторных алертов ---
+RESOURCE_ALERT_COOLDOWN = 1800 # 30 минут (1800 сек) - как часто слать НАПОМИНАНИЯ
+LAST_RESOURCE_ALERT_TIME = {"cpu": 0, "ram": 0, "disk": 0}
+# --------------------------------------------------
 
 ALLOWED_USERS = {}
 USER_NAMES = {}
 TRAFFIC_PREV = {}
 LAST_MESSAGE_IDS = {}
 TRAFFIC_MESSAGE_IDS = {}
-ALERTS_CONFIG = {} # Словарь для хранения настроек уведомлений {user_id: {"resources": bool, "logins": bool, "bans": bool}}
-RESOURCE_ALERT_STATE = {"cpu": False, "ram": False, "disk": False} # Словарь для отслеживания состояния ресурсов
+ALERTS_CONFIG = {}
+RESOURCE_ALERT_STATE = {"cpu": False, "ram": False, "disk": False}
 
 
 bot = Bot(token=TOKEN)
@@ -90,9 +96,8 @@ class GenerateVlessStates(StatesGroup):
 class ManageUsersStates(StatesGroup):
     waiting_for_user_id = State()
     waiting_for_group = State()
-    waiting_for_change_group = State()
+    # waiting_for_change_group = State() # Это состояние не использовалось, убираем
 
-# --- Alert Config Functions ---
 def load_alerts_config():
     global ALERTS_CONFIG
     try:
@@ -117,9 +122,8 @@ def save_alerts_config():
     except Exception as e:
         logging.error(f"Ошибка сохранения alerts_config.json: {e}")
 
-load_alerts_config() # Load config on start
+load_alerts_config()
 
-# --- Helper Functions ---
 def get_country_flag(ip: str) -> str:
     if not ip or ip in ["localhost", "127.0.0.1", "::1"]:
         return "🏠"
@@ -173,7 +177,6 @@ def save_users():
         os.makedirs(os.path.dirname(USERS_FILE), exist_ok=True)
         with open(USERS_FILE, "w", encoding='utf-8') as f:
             json.dump(data, f, indent=4, ensure_ascii=False)
-        # os.chmod(USERS_FILE, 0o664) # Permissions handled by deploy.sh potentially
         logging.info(f"Успешно сохранено users.json")
     except Exception as e:
         logging.error(f"Ошибка сохранения users.json: {e}")
@@ -182,14 +185,13 @@ def is_allowed(user_id, command=None):
     if user_id not in ALLOWED_USERS:
         return False
 
-    # Allow basic commands and notifications menu for all allowed users
     user_commands = ["start", "menu", "back_to_menu", "uptime", "traffic", "selftest", "get_id", "get_id_inline", "notifications_menu", "toggle_alert_resources", "toggle_alert_logins", "toggle_alert_bans", "alert_downtime_stub"]
     if command in user_commands:
         return True
 
     is_admin_group = user_id == ADMIN_USER_ID or ALLOWED_USERS.get(user_id) == "Админы"
     if not is_admin_group:
-        return False # Rest are admin only or root only
+        return False
 
     admin_only_commands = [
         "manage_users", "generate_vless", "speedtest", "top", "updatexray", "adduser", "add_user"
@@ -203,11 +205,10 @@ def is_allowed(user_id, command=None):
     if command in root_only_commands:
         return INSTALL_MODE == "root"
 
-    # Allow callback commands related to admin actions
-    if command and any(cmd in command for cmd in ["delete_user", "set_group", "change_group", "xray_install"]):
+    # Добавил команды, которых не хватало для проверки
+    if command and any(cmd in command for cmd in ["delete_user", "set_group", "change_group", "xray_install", "back_to_manage_users", "back_to_delete_users"]):
         return True
 
-    # Default deny for unknown commands if not covered above
     return False
 
 
@@ -272,11 +273,10 @@ def get_main_reply_keyboard(user_id):
 
     buttons = [
         [KeyboardButton(text="🛠 Сведения о сервере"), KeyboardButton(text="📡 Трафик сети")],
-        [KeyboardButton(text="⏱ Аптайм"), KeyboardButton(text="🆔 Мой ID")],
-        [KeyboardButton(text="🔔 Уведомления")]
+        [KeyboardButton(text="⏱ Аптайм"), KeyboardButton(text="🔔 Уведомления")],
     ]
 
-    admin_buttons_flat = [btn.text for row in buttons for btn in row] # Existing button texts
+    admin_buttons_flat = [btn.text for row in buttons for btn in row]
 
     if is_admin:
         if INSTALL_MODE == 'secure':
@@ -285,12 +285,11 @@ def get_main_reply_keyboard(user_id):
                 [KeyboardButton(text="🚀 Скорость сети"), KeyboardButton(text="🔥 Топ процессов")],
                 [KeyboardButton(text="🩻 Обновление X-ray")],
             ]
-            # Add only new buttons
             for row in reversed(secure_admin_buttons):
                 new_row = [btn for btn in row if btn.text not in admin_buttons_flat]
                 if new_row:
                     buttons.insert(0, new_row)
-                    admin_buttons_flat.extend([btn.text for btn in new_row]) # Update flat list
+                    admin_buttons_flat.extend([btn.text for btn in new_row])
 
 
         elif INSTALL_MODE == 'root':
@@ -302,12 +301,11 @@ def get_main_reply_keyboard(user_id):
                  [KeyboardButton(text="🔄 Обновление VPS"), KeyboardButton(text="🩻 Обновление X-ray")],
                  [KeyboardButton(text="🔄 Перезагрузка сервера"), KeyboardButton(text="♻️ Перезапуск бота")]
              ]
-             # Add only new buttons
              for row in reversed(root_admin_buttons):
                  new_row = [btn for btn in row if btn.text not in admin_buttons_flat]
                  if new_row:
                      buttons.insert(0, new_row)
-                     admin_buttons_flat.extend([btn.text for btn in new_row]) # Update flat list
+                     admin_buttons_flat.extend([btn.text for btn in new_row])
 
 
     keyboard = ReplyKeyboardMarkup(keyboard=buttons, resize_keyboard=True, input_field_placeholder="Выберите опцию в меню...")
@@ -358,11 +356,11 @@ def get_change_group_keyboard():
     buttons.append([InlineKeyboardButton(text="🔙 Назад", callback_data="back_to_manage_users")])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
-def get_group_selection_keyboard(user_id):
+def get_group_selection_keyboard(user_id_to_change=None):
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
         [
-            InlineKeyboardButton(text="👑 Админы", callback_data=f"set_group_{user_id}_Админы"),
-            InlineKeyboardButton(text="👤 Пользователи", callback_data=f"set_group_{user_id}_Пользователи")
+            InlineKeyboardButton(text="👑 Админы", callback_data=f"set_group_{user_id_to_change or 'new'}_Админы"),
+            InlineKeyboardButton(text="👤 Пользователи", callback_data=f"set_group_{user_id_to_change or 'new'}_Пользователи")
         ],
         [
             InlineKeyboardButton(text="🔙 Отмена", callback_data="back_to_manage_users")
@@ -505,15 +503,6 @@ def get_server_timezone_label():
         return ""
 
 async def delete_previous_message(user_id: int, command, chat_id: int):
-    if command != "traffic" and user_id in TRAFFIC_MESSAGE_IDS:
-        if TRAFFIC_MESSAGE_IDS.get(user_id):
-            try:
-                await bot.delete_message(chat_id=user_id, message_id=TRAFFIC_MESSAGE_IDS.pop(user_id))
-            except (TelegramBadRequest, KeyError) as e:
-                 logging.warning(f"Could not delete traffic message for {user_id}: {e}")
-        else:
-             TRAFFIC_MESSAGE_IDS.pop(user_id, None)
-
     cmds_to_delete = [command] if not isinstance(command, list) else command
     for cmd in cmds_to_delete:
         try:
@@ -533,7 +522,6 @@ async def send_alert(message: str, alert_type: str):
 
     sent_count = 0
     users_to_alert = []
-    # Собираем список ID пользователей, которым нужно отправить
     for user_id, config in ALERTS_CONFIG.items():
         if config.get(alert_type, False):
            users_to_alert.append(user_id)
@@ -547,7 +535,7 @@ async def send_alert(message: str, alert_type: str):
         try:
             await bot.send_message(user_id, message, parse_mode="HTML")
             sent_count += 1
-            await asyncio.sleep(0.1) # Небольшая задержка между отправками
+            await asyncio.sleep(0.1)
         except TelegramBadRequest as e:
             if "chat not found" in str(e) or "bot was blocked by the user" in str(e):
                 logging.warning(f"Не удалось отправить алерт пользователю {user_id}: чат не найден или бот заблокирован.")
@@ -559,7 +547,192 @@ async def send_alert(message: str, alert_type: str):
     logging.info(f"Алерт типа '{alert_type}' отправлен {sent_count} пользователям.")
 
 
-# --- Command Handlers ---
+# --- [ИНТЕГРАЦИЯ] Парсеры для мониторинга логов ---
+
+async def parse_ssh_log_line(line: str) -> str | None:
+    match = re.search(r"Accepted\s+(?:\S+)\s+for\s+(\S+)\s+from\s+(\S+)", line)
+    if match:
+        try:
+            user = escape_html(match.group(1))
+            ip = escape_html(match.group(2))
+            flag = await asyncio.to_thread(get_country_flag, ip)
+            tz_label = get_server_timezone_label()
+            now_time = datetime.now().strftime('%H:%M:%S')
+            return (f"🔔 <b>Обнаружен вход SSH</b>\n\n"
+                    f"👤 Пользователь: <b>{user}</b>\n"
+                    f"🌍 IP: <b>{flag} {ip}</b>\n"
+                    f"⏰ Время: <b>{now_time}</b>{tz_label}")
+        except Exception as e:
+            logging.warning(f"parse_ssh_log_line: Ошибка парсинга: {e}")
+            return None
+    return None
+
+async def parse_f2b_log_line(line: str) -> str | None:
+    match = re.search(r"fail2ban\.actions.* Ban\s+(\S+)", line)
+    if match:
+        try:
+            ip = escape_html(match.group(1).strip(" \n\t,"))
+            flag = await asyncio.to_thread(get_country_flag, ip)
+            tz_label = get_server_timezone_label()
+            now_time = datetime.now().strftime('%H:%M:%S')
+            return (f"🛡️ <b>Fail2Ban забанил IP</b>\n\n"
+                    f"🌍 IP: <b>{flag} {ip}</b>\n"
+                    f"⏰ Время: <b>{now_time}</b>{tz_label}")
+        except Exception as e:
+            logging.warning(f"parse_f2b_log_line: Ошибка парсинга: {e}")
+            return None
+    return None
+
+# --- [ИНТЕГРАЦИЯ] Фоновый монитор логов (tail -f) (ИСПРАВЛЕННЫЙ v3) ---
+
+async def reliable_tail_log_monitor(log_file_path: str, alert_type: str, parse_function: callable):
+    process = None
+    stdout_closed = asyncio.Event()
+    stderr_closed = asyncio.Event()
+
+    async def close_pipe(pipe, name, event):
+        if pipe and not pipe.at_eof():
+            try:
+                pipe.feed_eof()
+                logging.debug(f"Монитор {alert_type}: Закрытие пайпа {name}...")
+            except Exception as e:
+                logging.warning(f"Монитор {alert_type}: Ошибка при feed_eof() для пайпа {name}: {e}")
+            finally:
+                 event.set()
+        else:
+            event.set()
+
+    try:
+        while True:
+            stdout_closed.clear()
+            stderr_closed.clear()
+
+            if not await asyncio.to_thread(os.path.exists, log_file_path):
+                 logging.warning(f"Монитор: {log_file_path} не найден. Проверка через 60с.")
+                 await asyncio.sleep(60)
+                 continue
+
+            logging.info(f"Запуск (или перезапуск) монитора {alert_type} для {log_file_path}")
+            try:
+                process = await asyncio.create_subprocess_shell(
+                    f"tail -n 0 -f {log_file_path}",
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE
+                )
+                logging.info(f"Монитор {alert_type} (PID: {process.pid}) следит за {log_file_path}")
+
+                while True:
+                    tasks = [
+                        asyncio.create_task(process.stdout.readline()),
+                        asyncio.create_task(process.stderr.readline())
+                    ]
+                    done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+
+                    for task in pending: task.cancel()
+
+                    stdout_line = None
+                    stderr_line = None
+
+                    for task in done:
+                        try:
+                            result = task.result()
+                            if task == tasks[0]: stdout_line = result
+                            else: stderr_line = result
+                        except asyncio.CancelledError: pass
+                        except Exception as e:
+                             logging.error(f"Монитор {alert_type}: Ошибка чтения из пайпа: {e}")
+                             if process.returncode is None: await asyncio.sleep(0.1)
+                             if process.returncode is not None: break
+
+                    if stdout_line:
+                        line_str = stdout_line.decode('utf-8', errors='ignore').strip()
+                        message = await parse_function(line_str)
+                        if message: await send_alert(message, alert_type)
+                    elif stdout_line is not None:
+                         logging.info(f"Монитор {alert_type}: stdout достиг EOF.")
+                         stdout_closed.set()
+
+                    if stderr_line:
+                        stderr_str = stderr_line.decode('utf-8', errors='ignore').strip()
+                        logging.warning(f"Монитор {alert_type} (tail stderr): {stderr_str}")
+                    elif stderr_line is not None:
+                         logging.info(f"Монитор {alert_type}: stderr достиг EOF.")
+                         stderr_closed.set()
+
+                    if process.returncode is not None:
+                        logging.warning(f"Процесс 'tail' для {alert_type} (PID: {process.pid if process else 'N/A'}) умер с кодом {process.returncode}. Перезапуск...")
+                        stdout_closed.set()
+                        stderr_closed.set()
+                        process = None
+                        break
+
+                    if stdout_closed.is_set() and stderr_closed.is_set() and process and process.returncode is None:
+                         logging.warning(f"Монитор {alert_type}: Оба пайпа закрыты, но процесс tail (PID: {process.pid}) еще жив. Попытка перезапуска.")
+                         break
+
+            except PermissionError:
+                 logging.warning(f"Монитор: Нет прав на чтение {log_file_path}. Проверка через 60с.")
+                 await asyncio.sleep(60)
+            except Exception as e:
+                pid_info = f"(PID: {process.pid})" if process else ""
+                logging.error(f"Критическая ошибка во внутреннем цикле reliable_tail_log_monitor ({log_file_path}) {pid_info}: {e}")
+                if process and process.returncode is None:
+                    try: process.terminate()
+                    except ProcessLookupError: pass
+                process = None
+                await asyncio.sleep(10)
+
+    except asyncio.CancelledError:
+         logging.info(f"Монитор {alert_type} отменен (штатное завершение).")
+
+    finally:
+        pid = process.pid if process else None
+        logging.info(f"Завершение работы монитора {alert_type}, попытка остановки 'tail' (PID: {pid})...")
+
+        pipe_close_tasks = []
+        if process:
+             if hasattr(process, 'stdout') and process.stdout:
+                 pipe_close_tasks.append(close_pipe(process.stdout, 'stdout', stdout_closed))
+             else: stdout_closed.set()
+             if hasattr(process, 'stderr') and process.stderr:
+                 pipe_close_tasks.append(close_pipe(process.stderr, 'stderr', stderr_closed))
+             else: stderr_closed.set()
+
+        if pipe_close_tasks:
+             try:
+                 await asyncio.wait_for(asyncio.gather(*pipe_close_tasks), timeout=1.0)
+                 logging.debug(f"Монитор {alert_type}: Попытка закрытия пайпов завершена.")
+             except asyncio.TimeoutError:
+                 logging.warning(f"Монитор {alert_type}: Таймаут при ожидании закрытия пайпов.")
+             except Exception as pipe_e:
+                  logging.error(f"Монитор {alert_type}: Ошибка при закрытии пайпов: {pipe_e}")
+
+        if process and process.returncode is None:
+            logging.info(f"Монитор {alert_type}: Остановка процесса tail (PID: {pid}).")
+            try:
+                process.terminate()
+                try:
+                    await asyncio.wait_for(process.wait(), timeout=2.0)
+                    logging.info(f"Монитор {alert_type}: 'tail' (PID: {pid}) успешно остановлен (terminate).")
+                except asyncio.TimeoutError:
+                    logging.warning(f"Монитор {alert_type}: 'tail' (PID: {pid}) не завершился за 2 сек после terminate(). Попытка kill().")
+                    try:
+                        process.kill()
+                        await asyncio.wait_for(process.wait(), timeout=1.0)
+                        logging.info(f"Монитор {alert_type}: 'tail' (PID: {pid}) успешно убит (kill).")
+                    except asyncio.TimeoutError: logging.error(f"Монитор {alert_type}: 'tail' (PID: {pid}) не завершился даже после kill().")
+                    except ProcessLookupError: pass
+                    except Exception as kill_e: logging.error(f"Монитор {alert_type}: Ошибка при kill() 'tail' (PID: {pid}): {kill_e}")
+            except ProcessLookupError: pass
+            except Exception as e: logging.error(f"Монитор {alert_type}: Неожиданная ошибка при остановке 'tail' (PID: {pid}): {e}")
+        elif process:
+             logging.info(f"Монитор {alert_type}: 'tail' (PID: {pid}) уже был завершен (код: {process.returncode}) до блока finally.")
+        else:
+            logging.info(f"Монитор {alert_type}: Процесс tail не был запущен или уже был очищен.")
+
+# --- [ КОНЕЦ БЛОКОВ ИНТЕГРАЦИИ ] ---
+
+
 @dp.message(Command("start", "menu"))
 @dp.message(F.text == "🔙 Назад в меню")
 async def start_or_menu_handler(message: types.Message, state: FSMContext):
@@ -567,11 +740,10 @@ async def start_or_menu_handler(message: types.Message, state: FSMContext):
     chat_id = message.chat.id
     command = "start" if message.text == "/start" else "menu"
     await state.clear()
-    if user_id not in ALLOWED_USERS:
+    if not is_allowed(user_id, command):
         await send_access_denied_message(user_id, chat_id, command)
         return
-    # Include potential alert menu message ID for deletion
-    await delete_previous_message(user_id, ["start", "menu", "manage_users", "reboot_confirm", "generate_vless", "adduser", "notifications_menu"], chat_id)
+    await delete_previous_message(user_id, ["start", "menu", "manage_users", "reboot_confirm", "generate_vless", "adduser", "notifications_menu", "traffic", "get_id"], chat_id)
     if str(user_id) not in USER_NAMES:
        await refresh_user_names()
     sent_message = await message.answer(
@@ -622,9 +794,1175 @@ async def generate_vless_handler(message: types.Message, state: FSMContext):
         await bot.send_message(message.chat.id, "⛔ У вас нет прав для выполнения этой команды.")
         return
     await delete_previous_message(user_id, command, message.chat.id)
-    sent_message = await message.answer("📤 <b>Отправьте файл конфигурации Xray (JSON)</b>\n\n<i>Важно: файл должен содержать рабочую конфигурацию outbound с Reality.</i>", reply_markup=get_back_keyboard("back_generate_vless"), parse_mode="HTML")
+    
+    # Клавиатура "Отменить"
+    cancel_keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="❌ Отменить", callback_data="back_to_menu")]
+    ])
+    
+    sent_message = await message.answer(
+        "📤 <b>Отправьте файл конфигурации Xray (JSON)</b>\n\n<i>Важно: файл должен содержать рабочую конфигурацию outbound с Reality.</i>", 
+        reply_markup=cancel_keyboard,
+        parse_mode="HTML"
+    )
     LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = sent_message.message_id
     await state.set_state(GenerateVlessStates.waiting_for_file)
+
+# --- Original Handlers ---
+async def fall2ban_handler(message: types.Message):
+    user_id = message.from_user.id
+    chat_id = message.chat.id
+    command = "fall2ban"
+    if not is_allowed(user_id, command):
+        await send_access_denied_message(user_id, chat_id, command)
+        return
+
+    await delete_previous_message(user_id, command, chat_id)
+    try:
+        F2B_LOG_FILE = "/var/log/fail2ban.log"
+
+        if not await asyncio.to_thread(os.path.exists, F2B_LOG_FILE):
+             sent_message = await message.answer(f"⚠️ Файл лога Fail2Ban не найден: <code>{F2B_LOG_FILE}</code>", parse_mode="HTML")
+             LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = sent_message.message_id
+             return
+
+        def read_f2b_log():
+             try:
+                  with open(F2B_LOG_FILE, "r", encoding='utf-8', errors='ignore') as f:
+                       return f.readlines()[-50:]
+             except Exception as read_e:
+                  logging.error(f"Error reading Fail2Ban log file: {read_e}")
+                  return None
+
+        lines = await asyncio.to_thread(read_f2b_log)
+
+        if lines is None:
+             raise Exception("Не удалось прочитать файл лога.")
+
+        log_entries = []
+        tz_label = get_server_timezone_label()
+        regex_ban = r"(\d{4}-\d{2}-\d{2}\s\d{2}:\d{2}:\d{2},\d{3}).*fail2ban\.actions.* Ban\s+(\S+)"
+        regex_already = r"(\d{4}-\d{2}-\d{2}\s\d{2}:\d{2}:\d{2},\d{3}).*fail2ban\.actions.* (\S+)\s+already banned"
+
+        for line in reversed(lines):
+            line = line.strip()
+            if "fail2ban.actions" not in line:
+                continue
+
+            match = None
+            ban_type = None
+            ip = None
+            timestamp_str = None
+
+            match_ban_found = re.search(regex_ban, line)
+            if match_ban_found:
+                match = match_ban_found
+                ban_type = "Бан"
+                timestamp_str, ip = match.groups()
+            else:
+                match_already_found = re.search(regex_already, line)
+                if match_already_found:
+                    match = match_already_found
+                    ban_type = "Уже забанен"
+                    timestamp_str, ip = match.groups()
+
+            if match and ip and timestamp_str:
+                try:
+                    dt = datetime.strptime(timestamp_str, "%Y-%m-%d %H:%M:%S,%f")
+                    flag = await asyncio.to_thread(get_country_flag, ip)
+                    formatted_time = dt.strftime('%H:%M:%S')
+                    formatted_date = dt.strftime('%d.%m.%Y')
+                    log_entries.append(f"🔒 <b>{ban_type}</b>\n🌍 IP: <b>{flag} {ip}</b>\n⏰ Время: <b>{formatted_time}</b>{tz_label}\n🗓️ Дата: <b>{formatted_date}</b>")
+                except ValueError:
+                    logging.warning(f"Could not parse Fail2Ban timestamp: {timestamp_str}")
+                    continue
+                except Exception as parse_e:
+                    logging.error(f"Error processing Fail2Ban line: {parse_e} | Line: {line}")
+                    continue
+
+            if len(log_entries) >= 10:
+                break
+
+        if log_entries:
+            log_output = "\n\n".join(log_entries)
+            sent_message = await message.answer(f"🔒 <b>Последние 10 блокировок IP (Fail2Ban):</b>\n\n{log_output}", parse_mode="HTML")
+        else:
+            sent_message = await message.answer("🔒 Нет недавних блокировок IP в логах Fail2Ban (проверено 50 последних строк).")
+        LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = sent_message.message_id
+
+    except Exception as e:
+        logging.error(f"Ошибка при чтении журнала Fail2Ban: {e}")
+        sent_message = await message.answer(f"⚠️ Ошибка при чтении журнала Fail2Ban: {str(e)}")
+        LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = sent_message.message_id
+
+
+async def sshlog_handler(message: types.Message):
+    user_id = message.from_user.id
+    chat_id = message.chat.id
+    command = "sshlog"
+    if not is_allowed(user_id, command):
+         await send_access_denied_message(user_id, chat_id, command)
+         return
+
+    await delete_previous_message(user_id, command, chat_id)
+    sent_message = await message.answer("🔍 Ищу последние 10 событий SSH (вход/провал)...")
+    LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = sent_message.message_id
+
+    try:
+        log_file = None
+        if await asyncio.to_thread(os.path.exists, "/var/log/secure"):
+            log_file = "/var/log/secure"
+        elif await asyncio.to_thread(os.path.exists, "/var/log/auth.log"):
+            log_file = "/var/log/auth.log"
+
+        lines = []
+        source = ""
+        log_entries = []
+        found_count = 0
+
+        if log_file:
+            source = f" (из {os.path.basename(log_file)})"
+            cmd = f"tail -n 200 {log_file}"
+            process = await asyncio.create_subprocess_shell(
+                cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
+            )
+            stdout, stderr = await process.communicate()
+            if process.returncode != 0: raise Exception(stderr.decode())
+            lines = stdout.decode().strip().split('\n')
+        else:
+            source = " (из journalctl, за месяц)"
+            cmd = "journalctl -u ssh -n 100 --no-pager --since '1 month ago' -o short-precise"
+            process = await asyncio.create_subprocess_shell(
+                cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
+            )
+            try:
+                stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=5.0)
+            except asyncio.TimeoutError:
+                raise Exception("journalctl завис (тайм-аут 5с)")
+            if process.returncode != 0: raise Exception(stderr.decode())
+            lines = stdout.decode().strip().split('\n')
+
+        tz_label = get_server_timezone_label()
+
+        for line in reversed(lines):
+            if found_count >= 10:
+                break
+
+            line = line.strip()
+            if "sshd" not in line:
+                continue
+
+            dt_object = None
+            date_match_iso = re.search(r"(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})", line)
+            date_match_syslog = re.search(r"(\w{3}\s+\d{1,2}\s+\d{2}:\d{2}:\d{2})", line)
+
+            try:
+                if date_match_iso:
+                    dt_object = datetime.strptime(date_match_iso.group(1), "%Y-%m-%dT%H:%M:%S")
+                elif date_match_syslog:
+                    log_timestamp = datetime.strptime(date_match_syslog.group(1), "%b %d %H:%M:%S")
+                    current_year = datetime.now().year
+                    dt_object = log_timestamp.replace(year=current_year)
+                    if dt_object > datetime.now():
+                        dt_object = dt_object.replace(year=current_year - 1)
+                else:
+                    continue
+            except Exception as e:
+                logging.warning(f"Sshlog: не удалось распарсить дату: {e}. Строка: {line}")
+                continue
+
+            formatted_time = dt_object.strftime('%H:%M:%S')
+            formatted_date = dt_object.strftime('%d.%m.%Y')
+
+            entry = None
+
+            match = re.search(r"Accepted\s+(?:\S+)\s+for\s+(\S+)\s+from\s+(\S+)", line)
+            if match:
+                user = match.group(1)
+                ip = match.group(2)
+                flag = await asyncio.to_thread(get_country_flag, ip)
+                entry = f"✅ <b>Успешный вход</b>\n👤 Пользователь: <b>{user}</b>\n🌍 IP: <b>{flag} {ip}</b>\n⏰ {formatted_time}{tz_label} ({formatted_date})"
+
+            if not entry:
+                match = re.search(r"Failed\s+(?:\S+)\s+for\s+invalid\s+user\s+(\S+)\s+from\s+(\S+)", line)
+                if match:
+                    user = match.group(1)
+                    ip = match.group(2)
+                    flag = await asyncio.to_thread(get_country_flag, ip)
+                    entry = f"❌ <b>Неверный юзер</b>\n👤 Попытка: <b>{user}</b>\n🌍 IP: <b>{flag} {ip}</b>\n⏰ {formatted_time}{tz_label} ({formatted_date})"
+
+            if not entry:
+                match = re.search(r"Failed password for (\S+) from (\S+)", line)
+                if match:
+                    user = match.group(1)
+                    ip = match.group(2)
+                    flag = await asyncio.to_thread(get_country_flag, ip)
+                    entry = f"❌ <b>Неверный пароль</b>\n👤 Пользователь: <b>{user}</b>\n🌍 IP: <b>{flag} {ip}</b>\n⏰ {formatted_time}{tz_label} ({formatted_date})"
+
+            if not entry:
+                match = re.search(r"authentication failure;.*rhost=(\S+)\s+user=(\S+)", line)
+                if match:
+                    ip = match.group(1)
+                    user = match.group(2)
+                    flag = await asyncio.to_thread(get_country_flag, ip)
+                    entry = f"❌ <b>Провал (PAM)</b>\n👤 Пользователь: <b>{user}</b>\n🌍 IP: <b>{flag} {ip}</b>\n⏰ {formatted_time}{tz_label} ({formatted_date})"
+
+            if entry:
+                log_entries.append(entry)
+                found_count += 1
+
+        if log_entries:
+            log_output = "\n\n".join(log_entries)
+            await bot.edit_message_text(f"🔐 <b>Последние {found_count} событий SSH{source}:</b>\n\n{log_output}", chat_id=chat_id, message_id=sent_message.message_id, parse_mode="HTML")
+        else:
+            await bot.edit_message_text(f"🔐 Не найдено событий SSH (вход/провал){source}.", chat_id=chat_id, message_id=sent_message.message_id)
+
+    except Exception as e:
+        logging.error(f"Ошибка при чтении журнала SSH: {e}")
+        await bot.edit_message_text(f"⚠️ Ошибка при чтении журнала SSH: {str(e)}", chat_id=chat_id, message_id=sent_message.message_id)
+
+
+async def logs_handler(message: types.Message):
+    user_id = message.from_user.id
+    chat_id = message.chat.id
+    command = "logs"
+    if not is_allowed(user_id, command):
+        await send_access_denied_message(user_id, chat_id, command)
+        return
+
+    await delete_previous_message(user_id, command, chat_id)
+    try:
+        cmd = "journalctl -n 20 --no-pager -o short-precise"
+        process = await asyncio.create_subprocess_shell(cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+        stdout, stderr = await process.communicate()
+        if process.returncode != 0:
+            raise Exception(stderr.decode())
+        log_output = escape_html(stdout.decode())
+        sent_message = await message.answer(f"📜 <b>Последние системные журналы:</b>\n<pre>{log_output}</pre>", parse_mode="HTML")
+        LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = sent_message.message_id
+    except Exception as e:
+        logging.error(f"Ошибка при чтении журналов: {e}")
+        sent_message = await message.answer(f"⚠️ Ошибка при чтении журналов: {str(e)}")
+        LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = sent_message.message_id
+
+
+async def restart_handler(message: types.Message):
+    user_id = message.from_user.id
+    chat_id = message.chat.id
+    command = "restart"
+    if not is_allowed(user_id, command):
+        await send_access_denied_message(user_id, chat_id, command)
+        return
+
+    await delete_previous_message(user_id, command, chat_id)
+    sent_msg = await message.answer("♻️ Бот уходит на перезапуск…")
+    try:
+        with open(RESTART_FLAG_FILE, "w") as f:
+            f.write(f"{chat_id}:{sent_msg.message_id}")
+        restart_cmd = "sudo systemctl restart tg-bot.service"
+        process = await asyncio.create_subprocess_shell(restart_cmd)
+        await process.wait()
+        logging.info("Restart command sent for tg-bot.service")
+    except Exception as e:
+        logging.error(f"Ошибка в restart_handler при отправке команды перезапуска: {e}")
+        if os.path.exists(RESTART_FLAG_FILE):
+            os.remove(RESTART_FLAG_FILE)
+        try:
+            await bot.edit_message_text(text=f"⚠️ Ошибка при попытке перезапуска сервиса: {str(e)}", chat_id=chat_id, message_id=sent_msg.message_id)
+        except Exception as edit_e:
+            logging.error(f"Failed to edit restart error message: {edit_e}")
+
+
+async def selftest_handler(message: types.Message):
+    user_id = message.from_user.id
+    chat_id = message.chat.id
+    command = "selftest"
+
+    if not is_allowed(user_id, command):
+        await send_access_denied_message(user_id, chat_id, command)
+        return
+
+    await delete_previous_message(user_id, command, chat_id)
+    sent_message = await message.answer("🔍 Собираю сведения о сервере...")
+    LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = sent_message.message_id
+
+    def get_system_stats_sync():
+        psutil.cpu_percent(interval=None)
+        time.sleep(0.2)
+        cpu = psutil.cpu_percent(interval=None)
+        mem = psutil.virtual_memory().percent
+        disk = psutil.disk_usage('/').percent
+        with open("/proc/uptime") as f:
+            uptime_sec = float(f.readline().split()[0])
+        counters = psutil.net_io_counters()
+        rx = counters.bytes_recv
+        tx = counters.bytes_sent
+        return cpu, mem, disk, uptime_sec, rx, tx
+
+    try:
+        cpu, mem, disk, uptime_sec, rx, tx = await asyncio.to_thread(get_system_stats_sync)
+    except Exception as e:
+        logging.error(f"Ошибка при сборе системной статистики: {e}")
+        await bot.edit_message_text(f"⚠️ Ошибка при сборе системной статистики: {e}", chat_id=chat_id, message_id=sent_message.message_id)
+        return
+
+    uptime_str = format_uptime(uptime_sec)
+
+    ping_cmd = "ping -c 1 -W 1 8.8.8.8"
+    ping_process = await asyncio.create_subprocess_shell(
+        ping_cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
+    )
+    ping_stdout, _ = await ping_process.communicate()
+    ping_result = ping_stdout.decode()
+    ping_match = re.search(r"time=([\d\.]+) ms", ping_result)
+    ping_time = ping_match.group(1) if ping_match else "N/A"
+    internet = "✅ Интернет доступен" if ping_match else "❌ Нет интернета"
+
+    ip_cmd = "curl -4 -s --max-time 3 ifconfig.me"
+    ip_process = await asyncio.create_subprocess_shell(
+        ip_cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
+    )
+    ip_stdout, _ = await ip_process.communicate()
+    external_ip = ip_stdout.decode().strip() or "Не удалось определить"
+
+    last_login_info = ""
+    if INSTALL_MODE == "root":
+        try:
+            log_file = None
+            if await asyncio.to_thread(os.path.exists, "/var/log/secure"):
+                log_file = "/var/log/secure"
+            elif await asyncio.to_thread(os.path.exists, "/var/log/auth.log"):
+                log_file = "/var/log/auth.log"
+
+            line = None
+            source = ""
+
+            if log_file:
+                source = f" (из {os.path.basename(log_file)})"
+                cmd = f"tail -n 100 {log_file}"
+                process = await asyncio.create_subprocess_shell(
+                    cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
+                )
+                stdout, stderr = await process.communicate()
+                if process.returncode != 0: raise Exception(stderr.decode())
+
+                for l in reversed(stdout.decode().strip().split('\n')):
+                    if "Accepted" in l and "sshd" in l:
+                        line = l.strip()
+                        break
+            else:
+                source = " (из journalctl)"
+                cmd = "journalctl -u ssh --no-pager -g 'Accepted' | tail -n 1"
+                process = await asyncio.create_subprocess_shell(
+                    cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
+                )
+                try:
+                    stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=5.0)
+                except asyncio.TimeoutError:
+                    raise Exception("journalctl завис (тайм-аут 5с)")
+
+                if process.returncode != 0: raise Exception(stderr.decode())
+                line = stdout.decode().strip()
+
+            if line:
+                dt_object = None
+                date_match_iso = re.search(r"(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})", line)
+                date_match_syslog = re.search(r"(\w{3}\s+\d{1,2}\s+\d{2}:\d{2}:\d{2})", line)
+
+                try:
+                    if date_match_iso:
+                        dt_object = datetime.strptime(date_match_iso.group(1), "%Y-%m-%dT%H:%M:%S")
+                    elif date_match_syslog:
+                        log_timestamp = datetime.strptime(date_match_syslog.group(1), "%b %d %H:%M:%S")
+                        current_year = datetime.now().year
+                        dt_object = log_timestamp.replace(year=current_year)
+                        if dt_object > datetime.now():
+                            dt_object = dt_object.replace(year=current_year - 1)
+                except Exception as e:
+                    logging.warning(f"Selftest: не удалось распарсить дату: {e}. Строка: {line}")
+
+                login_match = re.search(r"Accepted\s+(?:\S+)\s+for\s+(\S+)\s+from\s+(\S+)", line)
+
+                if dt_object and login_match:
+                    user = login_match.group(1)
+                    ip = login_match.group(2)
+                    flag = await asyncio.to_thread(get_country_flag, ip)
+
+                    tz_label = get_server_timezone_label()
+                    formatted_time = dt_object.strftime("%H:%M")
+                    formatted_date = dt_object.strftime("%d.%m.%Y")
+
+                    last_login_info = (
+                        f"\n\n📄 <b>Последний SSH-вход{source}:</b>\n"
+                        f"👤 <b>{user}</b>\n"
+                        f"🌍 IP: <b>{flag} {ip}</b>\n"
+                        f"⏰ Время: <b>{formatted_time}</b>{tz_label}\n"
+                        f"🗓️ Дата: <b>{formatted_date}</b>"
+                    )
+                else:
+                    logging.warning(f"Selftest: Не удалось разобрать строку SSH (login_match={login_match}, dt_object={dt_object}): {line}")
+                    last_login_info = f"\n\n📄 <b>Последний SSH-вход{source}:</b>\nНе удалось разобрать строку лога."
+            else:
+                last_login_info = f"\n\n📄 <b>Последний SSH-вход{source}:</b>\nНе найдено записей."
+
+        except Exception as e:
+            logging.warning(f"SSH log check skipped: {e}")
+            last_login_info = f"\n\n📄 <b>Последний SSH-вход:</b>\n⏳ Ошибка чтения логов: {e}"
+    else:
+        last_login_info = "\n\n📄 <b>Последний SSH-вход:</b>\n<i>Информация доступна только в режиме root</i>"
+
+    response_text = (
+        f"🛠 <b>Состояние сервера:</b>\n\n"
+        f"✅ Бот работает\n"
+        f"📊 Процессор: <b>{cpu:.1f}%</b>\n"
+        f"💾 ОЗУ: <b>{mem:.1f}%</b>\n"
+        f"💽 ПЗУ: <b>{disk:.1f}%</b>\n"
+        f"⏱ Время работы: <b>{uptime_str}</b>\n"
+        f"{internet}\n"
+        f"⌛ Задержка (8.8.8.8): <b>{ping_time} мс</b>\n"
+        f"🌐 Внешний IP: <code>{external_ip}</code>\n"
+        f"📡 Трафик ⬇ <b>{format_traffic(rx)}</b> / ⬆ <b>{format_traffic(tx)}</b>"
+    )
+
+    response_text += last_login_info
+
+    await bot.edit_message_text(response_text, chat_id=chat_id, message_id=sent_message.message_id, parse_mode="HTML")
+
+
+async def speedtest_handler(message: types.Message):
+    user_id = message.from_user.id
+    chat_id = message.chat.id
+    command = "speedtest"
+    if not is_allowed(user_id, command):
+        await send_access_denied_message(user_id, chat_id, command)
+        return
+
+    await delete_previous_message(user_id, command, chat_id)
+    sent_message = await message.answer("🚀 Запуск speedtest... Это может занять до минуты.")
+    LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = sent_message.message_id
+
+    cmd = "speedtest --accept-license --accept-gdpr --format=json"
+    process = await asyncio.create_subprocess_shell(cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+    stdout, stderr = await process.communicate()
+
+    await delete_previous_message(user_id, command, chat_id)
+
+    if process.returncode == 0:
+        output = stdout.decode('utf-8', errors='ignore')
+        try:
+            data = json.loads(output)
+            download_speed = data.get("download", {}).get("bandwidth", 0) / 125000
+            upload_speed = data.get("upload", {}).get("bandwidth", 0) / 125000
+            ping_latency = data.get("ping", {}).get("latency", "N/A")
+            server_name = data.get("server", {}).get("name", "N/A")
+            server_location = data.get("server", {}).get("location", "N/A")
+            result_url = data.get("result", {}).get("url", "N/A")
+
+            response_text = (f"🚀 <b>Speedtest Результаты:</b>\n\n"
+                             f"⬇️ <b>Скачивание:</b> {download_speed:.2f} Мбит/с\n"
+                             f"⬆️ <b>Загрузка:</b> {upload_speed:.2f} Мбит/с\n"
+                             f"⏱ <b>Пинг:</b> {ping_latency} мс\n\n"
+                             f"🏢 <b>Сервер:</b> {server_name} ({server_location})\n"
+                             f"🔗 <b>Подробнее:</b> {result_url}")
+        except json.JSONDecodeError as e:
+            logging.error(f"Ошибка парсинга JSON от speedtest: {e}\nOutput: {output[:500]}")
+            response_text = f"❌ Ошибка при обработке результатов speedtest: Неверный формат ответа.\n<pre>{escape_html(output[:1000])}</pre>"
+        except Exception as e:
+             logging.error(f"Неожиданная ошибка обработки speedtest: {e}")
+             response_text = f"❌ Неожиданная ошибка при обработке результатов speedtest: {escape_html(str(e))}"
+    else:
+        error_output = stderr.decode('utf-8', errors='ignore') or stdout.decode('utf-8', errors='ignore')
+        logging.error(f"Ошибка выполнения speedtest. Код: {process.returncode}. Вывод: {error_output}")
+        response_text = f"❌ Ошибка при запуске speedtest:\n<pre>{escape_html(error_output)}</pre>"
+
+    sent_message_final = await message.answer(response_text, parse_mode="HTML", disable_web_page_preview=True)
+    LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = sent_message_final.message_id
+
+
+async def top_handler(message: types.Message):
+    user_id = message.from_user.id
+    chat_id = message.chat.id
+    command = "top"
+    if not is_allowed(user_id, command):
+        await send_access_denied_message(user_id, chat_id, command)
+        return
+
+    await delete_previous_message(user_id, command, chat_id)
+    cmd = "ps aux --sort=-%cpu | head -n 15"
+    process = await asyncio.create_subprocess_shell(cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+    stdout, stderr = await process.communicate()
+    if process.returncode == 0:
+        output = escape_html(stdout.decode())
+        response_text = f"🔥 <b>Топ 14 процессов по загрузке CPU:</b>\n<pre>{output}</pre>"
+    else:
+        error_output = escape_html(stderr.decode())
+        response_text = f"❌ Ошибка при получении списка процессов:\n<pre>{error_output}</pre>"
+    sent_message = await message.answer(response_text, parse_mode="HTML")
+    LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = sent_message.message_id
+
+
+async def traffic_handler(message: types.Message):
+    user_id = message.from_user.id
+    chat_id = message.chat.id
+    command = "traffic"
+    if not is_allowed(user_id, command):
+         await send_access_denied_message(user_id, chat_id, command)
+         return
+
+    all_commands_to_delete = [
+        "start", "menu", "manage_users", "reboot_confirm", "generate_vless", 
+        "adduser", "notifications_menu", "traffic", "get_id", "fall2ban", 
+        "sshlog", "logs", "restart", "selftest", "speedtest", "top", 
+        "update", "uptime", "updatexray"
+    ]
+
+    if user_id in TRAFFIC_MESSAGE_IDS:
+        logging.info(f"Остановка мониторинга трафика для {user_id} (IF блок)")
+        try:
+            message_id = TRAFFIC_MESSAGE_IDS.pop(user_id)
+            await bot.delete_message(chat_id=chat_id, message_id=message_id)
+        except (TelegramBadRequest, KeyError) as e:
+            logging.warning(f"Не удалось удалить сообщение трафика при остановке: {e}")
+        
+        TRAFFIC_PREV.pop(user_id, None)
+        logging.debug("Остановка: Очистка предыдущих сообщений...")
+        await delete_previous_message(user_id, all_commands_to_delete, chat_id)
+        sent_message = await message.answer("✅ Мониторинг трафика остановлен.", reply_markup=get_main_reply_keyboard(user_id))
+        LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = sent_message.message_id
+        logging.debug(f"Остановка: Сообщение 'Остановлен' (ID: {sent_message.message_id}) сохранено в LAST_MESSAGE_IDS.")
+
+    else:
+        logging.info(f"Запуск мониторинга трафика для {user_id} (ELSE блок)")
+        logging.debug("Запуск: Очистка предыдущих сообщений...")
+        await delete_previous_message(user_id, all_commands_to_delete, chat_id)
+
+        def get_initial_counters():
+            return psutil.net_io_counters()
+
+        try:
+            counters = await asyncio.to_thread(get_initial_counters)
+            TRAFFIC_PREV[user_id] = (counters.bytes_recv, counters.bytes_sent)
+            msg_text = ("📡 <b>Мониторинг трафика включен</b>...\n\n<i>Обновление каждые 5 секунд. Мониторинг НЕ будет остановлен при нажатии других кнопок. Нажмите '📡 Трафик сети' еще раз, чтобы остановить.</i>")
+            sent_message = await message.answer(msg_text, parse_mode="HTML")
+            TRAFFIC_MESSAGE_IDS[user_id] = sent_message.message_id
+            logging.debug(f"Запуск: Сообщение 'Включен' (ID: {sent_message.message_id}) сохранено в TRAFFIC_MESSAGE_IDS.")
+        except Exception as e:
+            logging.error(f"Error starting traffic monitor for {user_id}: {e}")
+            await message.answer(f"⚠️ Не удалось запустить мониторинг трафика: {e}")
+
+
+async def update_handler(message: types.Message):
+    user_id = message.from_user.id
+    chat_id = message.chat.id
+    command = "update"
+    if not is_allowed(user_id, command):
+        await send_access_denied_message(user_id, chat_id, command)
+        return
+
+    await delete_previous_message(user_id, command, chat_id)
+    sent_message = await message.answer("🔄 Выполняю обновление VPS... Это может занять несколько минут.")
+    LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = sent_message.message_id
+    cmd = "sudo DEBIAN_FRONTEND=noninteractive apt update && sudo DEBIAN_FRONTEND=noninteractive apt upgrade -y && sudo apt autoremove -y"
+    process = await asyncio.create_subprocess_shell(cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+    stdout, stderr = await process.communicate()
+    output = stdout.decode('utf-8', errors='ignore')
+    error_output = stderr.decode('utf-8', errors='ignore')
+
+    await delete_previous_message(user_id, command, chat_id)
+
+    if process.returncode == 0:
+        response_text = f"✅ Обновление завершено:\n<pre>{escape_html(output[-4000:])}</pre>"
+    else:
+        response_text = f"❌ Ошибка при обновлении (Код: {process.returncode}):\n<pre>{escape_html(error_output[-4000:])}</pre>"
+
+    sent_message_final = await message.answer(response_text, parse_mode="HTML")
+    LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = sent_message_final.message_id
+
+
+async def uptime_handler(message: types.Message):
+    user_id = message.from_user.id
+    chat_id = message.chat.id
+    command = "uptime"
+    if not is_allowed(user_id, command):
+        await send_access_denied_message(user_id, chat_id, command)
+        return
+
+    await delete_previous_message(user_id, command, chat_id)
+    try:
+        def read_uptime_file():
+            with open("/proc/uptime") as f:
+                return float(f.readline().split()[0])
+
+        uptime_sec = await asyncio.to_thread(read_uptime_file)
+        uptime_str = format_uptime(uptime_sec)
+        sent_message = await message.answer(f"⏱ Время работы: <b>{uptime_str}</b>", parse_mode="HTML")
+        LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = sent_message.message_id
+    except Exception as e:
+       logging.error(f"Ошибка в uptime_handler: {e}")
+       sent_message = await message.answer(f"⚠️ Ошибка при получении аптайма: {str(e)}")
+       LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = sent_message.message_id
+
+
+async def detect_xray_client():
+    cmd = "docker ps --format '{{.Names}} {{.Image}}'"
+    process = await asyncio.create_subprocess_shell(
+        cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
+    )
+    stdout, stderr = await process.communicate()
+
+    if process.returncode != 0:
+        logging.error(f"Ошибка выполнения 'docker ps': {stderr.decode()}")
+        raise Exception(f"Не удалось выполнить 'docker ps'. Убедитесь, что Docker установлен и запущен, и у бота есть права.\n<pre>{stderr.decode()}</pre>")
+
+    containers = stdout.decode().strip().split('\n')
+    if not containers:
+        logging.warning("detect_xray_client: 'docker ps' не вернул контейнеров.")
+        return None, None
+
+    # Поиск Amnezia
+    for line in containers:
+        if not line: continue
+        try:
+            name, image = line.split(' ', 1)
+            if 'amnezia' in image.lower() and 'xray' in image.lower():
+                logging.info(f"Обнаружен Amnezia (контейнер: {name}, образ: {image})")
+                return "amnezia", name
+        except ValueError: continue
+
+    # Поиск Marzban
+    for line in containers:
+        if not line: continue
+        try:
+            name, image = line.split(' ', 1)
+            if ('marzban' in image.lower() or 'marzban' in name.lower()) and 'xray' not in name.lower():
+                logging.info(f"Обнаружен Marzban (контейнер: {name}, образ: {image})")
+                return "marzban", name
+        except ValueError: continue
+
+    logging.warning("Не удалось определить поддерживаемый Xray (Marzban, Amnezia).")
+    return None, None
+
+
+async def updatexray_handler(message: types.Message, state: FSMContext):
+    user_id = message.from_user.id
+    chat_id = message.chat.id
+    command = "updatexray"
+    if not is_allowed(user_id, command):
+        await send_access_denied_message(user_id, chat_id, command)
+        return
+
+    await delete_previous_message(user_id, command, chat_id)
+    sent_msg = await message.answer("🔍 Определяю установленный клиент Xray...")
+    LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = sent_msg.message_id
+    try:
+        client, container_name = await detect_xray_client() 
+
+        if not client:
+            await bot.edit_message_text("❌ Не удалось определить поддерживаемый клиент Xray (Marzban, Amnezia). Обновление невозможно.", chat_id=chat_id, message_id=sent_msg.message_id)
+            return
+
+        version = "неизвестной"
+        client_name_display = client.capitalize()
+
+        await bot.edit_message_text(f"✅ Обнаружен: <b>{client_name_display}</b> (контейнер: <code>{escape_html(container_name)}</code>). Начинаю обновление...", chat_id=chat_id, message_id=sent_msg.message_id, parse_mode="HTML")
+
+        update_cmd = ""
+        version_cmd = ""
+
+        if client == "amnezia":
+            update_cmd = (
+                f'docker exec {container_name} /bin/bash -c "'
+                'rm -f Xray-linux-64.zip xray geoip.dat geosite.dat && '
+                'wget -q -O Xray-linux-64.zip https://github.com/XTLS/Xray-core/releases/latest/download/Xray-linux-64.zip && '
+                'wget -q -O geoip.dat https://github.com/v2fly/geoip/releases/latest/download/geoip.dat && '
+                'wget -q -O geosite.dat https://github.com/v2fly/domain-list-community/releases/latest/download/dlc.dat && '
+                'unzip -o Xray-linux-64.zip xray && '
+                'cp xray /usr/bin/xray && '
+                'cp geoip.dat /usr/bin/geoip.dat && '
+                'cp geosite.dat /usr/bin/geosite.dat && '
+                'rm Xray-linux-64.zip xray geoip.dat geosite.dat" && '
+                f'docker restart {container_name}'
+            )
+            version_cmd = f"docker exec {container_name} /usr/bin/xray version"
+
+        elif client == "marzban":
+             check_deps_cmd = "command -v unzip >/dev/null 2>&1 || (DEBIAN_FRONTEND=noninteractive apt-get update -y && apt-get install -y unzip wget)"
+             download_unzip_cmd = (
+                "mkdir -p /var/lib/marzban/xray-core && "
+                "cd /var/lib/marzban/xray-core && "
+                "wget -q -O Xray-linux-64.zip https://github.com/XTLS/Xray-core/releases/latest/download/Xray-linux-64.zip && "
+                "wget -q -O geoip.dat https://github.com/v2fly/geoip/releases/latest/download/geoip.dat && "
+                "wget -q -O geosite.dat https://github.com/v2fly/domain-list-community/releases/latest/download/dlc.dat && "
+                "unzip -o Xray-linux-64.zip xray && "
+                "rm Xray-linux-64.zip"
+            )
+             env_file = "/opt/marzban/.env"
+             update_env_cmd = (
+                 f"if ! grep -q '^XRAY_EXECUTABLE_PATH=' {env_file}; then echo 'XRAY_EXECUTABLE_PATH=/var/lib/marzban/xray-core/xray' >> {env_file}; else sed -i 's|^XRAY_EXECUTABLE_PATH=.*|XRAY_EXECUTABLE_PATH=/var/lib/marzban/xray-core/xray|' {env_file}; fi && "
+                 f"if ! grep -q '^XRAY_ASSETS_PATH=' {env_file}; then echo 'XRAY_ASSETS_PATH=/var/lib/marzban/xray-core' >> {env_file}; else sed -i 's|^XRAY_ASSETS_PATH=.*|XRAY_ASSETS_PATH=/var/lib/marzban/xray-core|' {env_file}; fi"
+             )
+             restart_cmd = f"docker restart {container_name}"
+             update_cmd = f"{check_deps_cmd} && {download_unzip_cmd} && {update_env_cmd} && {restart_cmd}"
+             version_cmd = f'docker exec {container_name} /var/lib/marzban/xray-core/xray version'
+
+        process_update = await asyncio.create_subprocess_shell(update_cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+        stdout_update, stderr_update = await process_update.communicate()
+
+        if process_update.returncode != 0:
+            error_output = stderr_update.decode() or stdout_update.decode()
+            raise Exception(f"Процесс обновления {client_name_display} завершился с ошибкой:\n<pre>{escape_html(error_output)}</pre>")
+
+        process_version = await asyncio.create_subprocess_shell(version_cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+        stdout_version, _ = await process_version.communicate()
+        version_output = stdout_version.decode('utf-8', 'ignore')
+        version_match = re.search(r'Xray\s+([\d\.]+)', version_output)
+        if version_match:
+            version = version_match.group(1)
+
+        final_message = f"✅ Xray для <b>{client_name_display}</b> успешно обновлен до версии <b>{version}</b>"
+        await bot.edit_message_text(final_message, chat_id=chat_id, message_id=sent_msg.message_id, parse_mode="HTML")
+
+    except Exception as e:
+        logging.error(f"Ошибка в updatexray_handler: {e}")
+        error_msg = f"⚠️ <b>Ошибка обновления Xray:</b>\n\n{str(e)}"
+        try:
+             await bot.edit_message_text(error_msg , chat_id=chat_id, message_id=sent_msg.message_id, parse_mode="HTML")
+        except TelegramBadRequest as edit_e:
+             if "message to edit not found" in str(edit_e):
+                  logging.warning("UpdateXray: Failed to edit error message, likely deleted.")
+                  await message.answer(error_msg, parse_mode="HTML")
+             else:
+                  raise
+    finally:
+        await state.clear()
+
+
+# --- [БЛОК ИСПРАВЛЕНИЙ] Обработчики нажатий (callback) ---
+
+# --- [ИЗМЕНЕНИЕ] Новая логика "Назад в меню" ---
+@dp.callback_query(F.data == "back_to_menu")
+async def cq_back_to_menu(callback: types.CallbackQuery, state: FSMContext):
+    user_id = callback.from_user.id 
+    chat_id = callback.message.chat.id
+    command = "back_to_menu" 
+    try:
+        await state.clear()
+        if not is_allowed(user_id, command):
+            await callback.answer("⛔ Доступ запрещен.", show_alert=True)
+            return
+        
+        # Редактируем сообщение, удаляем клавиатуру
+        await callback.message.edit_text("Возврат в меню...", reply_markup=None)
+        
+    except TelegramBadRequest as e:
+        if "message is not modified" in str(e): pass # Уже в нужном состоянии
+        elif "message to edit not found" in str(e): pass # Сообщение уже удалено
+        else:
+            logging.error(f"Ошибка в cq_back_to_menu (edit): {e}")
+            await callback.answer("⚠️ Ошибка при возврате в меню.", show_alert=True)
+    except Exception as e:
+        logging.error(f"Ошибка в cq_back_to_menu: {e}")
+        await callback.answer("⚠️ Ошибка при возврате в меню.", show_alert=True)
+    finally:
+        await callback.answer() # Подтверждаем получение callback
+# --- [КОНЕЦ ИЗМЕНЕНИЯ] ---
+
+@dp.callback_query(F.data.startswith("toggle_alert_"))
+async def cq_toggle_alert(callback: types.CallbackQuery):
+    user_id = callback.from_user.id
+    if not is_allowed(user_id, "toggle_alert_resources"): 
+        await callback.answer("⛔ Доступ запрещен.", show_alert=True)
+        return
+    try:
+        alert_type = callback.data.split('_', 2)[-1]
+        if alert_type not in ["resources", "logins", "bans"]: raise ValueError(f"Неизвестный тип алерта: {alert_type}")
+    except Exception as e:
+        logging.error(f"Ошибка разбора callback_data в cq_toggle_alert: {e} (data: {callback.data})")
+        await callback.answer("⚠️ Внутренняя ошибка (неверный callback).", show_alert=True)
+        return
+    if user_id not in ALERTS_CONFIG: ALERTS_CONFIG[user_id] = {}
+    current_state = ALERTS_CONFIG[user_id].get(alert_type, False)
+    new_state = not current_state
+    ALERTS_CONFIG[user_id][alert_type] = new_state
+    save_alerts_config() 
+    logging.info(f"Пользователь {user_id} изменил '{alert_type}' на {new_state}")
+    new_keyboard = get_alerts_menu_keyboard(user_id)
+    try:
+        await callback.message.edit_reply_markup(reply_markup=new_keyboard)
+        if alert_type == "resources": alert_name = "Ресурсы"
+        elif alert_type == "logins": alert_name = "Входы/Выходы SSH"
+        else: alert_name = "Баны"
+        await callback.answer(f"Уведомления '{alert_name}' {'✅ ВКЛЮЧЕНЫ' if new_state else '❌ ОТКЛЮЧЕНЫ'}.")
+    except TelegramBadRequest as e:
+        if "message is not modified" in str(e): await callback.answer("Состояние уже обновлено.")
+        else:
+            logging.error(f"Ошибка обновления клавиатуры уведомлений: {e}")
+            await callback.answer("⚠️ Ошибка обновления интерфейса.", show_alert=True)
+    except Exception as e:
+        logging.error(f"Критическая ошибка в cq_toggle_alert: {e}")
+        await callback.answer("⚠️ Критическая ошибка.", show_alert=True)
+
+@dp.callback_query(F.data == "alert_downtime_stub")
+async def cq_alert_downtime_stub(callback: types.CallbackQuery):
+    await callback.answer(
+        "⏳ Функция уведомлений о даунтайме сервера находится в разработке.\n"
+        "Пока рекомендуем использовать внешние сервисы мониторинга (например, UptimeRobot).", 
+        show_alert=True
+    )
+
+# --- [ИЗМЕНЕНИЕ] Новая логика "Назад" (шаг назад через edit_text) ---
+@dp.callback_query(F.data == "get_id_inline")
+async def cq_get_id_inline(callback: types.CallbackQuery):
+    user_id = callback.from_user.id
+    command = "get_id_inline"
+    if not is_allowed(user_id, command):
+        await callback.answer("⛔ Доступ запрещен.", show_alert=True)
+        return
+    try:
+        await callback.message.edit_text(
+            f"Ваш ID: <code>{user_id}</code>",
+            parse_mode="HTML",
+            reply_markup=get_back_keyboard("back_to_manage_users")
+        )
+        await callback.answer(f"Ваш ID: {user_id}")
+    except TelegramBadRequest as e:
+        if "message is not modified" in str(e): await callback.answer("Вы уже здесь.")
+        else:
+            logging.error(f"Ошибка в cq_get_id_inline (edit): {e}")
+            await callback.answer("⚠️ Ошибка", show_alert=True)
+    except Exception as e:
+        logging.error(f"Ошибка в cq_get_id_inline: {e}")
+        await callback.answer("⚠️ Ошибка", show_alert=True)
+
+@dp.callback_query(F.data == "back_to_manage_users")
+async def cq_back_to_manage_users(callback: types.CallbackQuery, state: FSMContext):
+    user_id = callback.from_user.id
+    command = "back_to_manage_users"
+    if not is_allowed(user_id, command):
+        await callback.answer("⛔ Доступ запрещен.", show_alert=True)
+        return
+    try:
+        await state.clear() 
+        user_list = "\n".join([
+            f" • {USER_NAMES.get(str(uid), f'ID: {uid}')} (<b>{group}</b>)"
+            for uid, group in ALLOWED_USERS.items() if uid != ADMIN_USER_ID
+        ])
+        if not user_list: user_list = "Других пользователей нет."
+        await callback.message.edit_text(
+            f"👤 <b>Управление пользователями</b>:\n\n{user_list}\n\nВыберите действие:",
+            reply_markup=get_manage_users_keyboard(),
+            parse_mode="HTML"
+        )
+        await callback.answer()
+    except TelegramBadRequest as e:
+        if "message is not modified" in str(e): await callback.answer("Вы уже здесь.")
+        else:
+            logging.error(f"Ошибка в cq_back_to_manage_users (edit): {e}")
+            await callback.answer("⚠️ Ошибка", show_alert=True)
+    except Exception as e:
+        logging.error(f"Ошибка в cq_back_to_manage_users: {e}")
+        await callback.answer("⚠️ Ошибка", show_alert=True)
+# --- [ КОНЕЦ ИЗМЕНЕНИЙ КНОПОК "НАЗАД" ] ---
+
+
+# --- Логика Управления Пользователями (без изменений в этой секции) ---
+
+@dp.callback_query(F.data == "add_user")
+async def cq_add_user_start(callback: types.CallbackQuery, state: FSMContext):
+    user_id = callback.from_user.id
+    if not is_allowed(user_id, "add_user"):
+        await callback.answer("⛔ Доступ запрещен.", show_alert=True)
+        return
+    await callback.message.edit_text(
+        "➕ <b>Добавление пользователя</b>\n\nВведите Telegram ID пользователя:",
+        reply_markup=get_back_keyboard("back_to_manage_users"),
+        parse_mode="HTML"
+    )
+    await state.set_state(ManageUsersStates.waiting_for_user_id)
+    await callback.answer()
+
+@dp.message(StateFilter(ManageUsersStates.waiting_for_user_id))
+async def process_add_user_id(message: types.Message, state: FSMContext):
+    user_id = message.from_user.id
+    # Находим ID сообщения, которое нужно будет отредактировать (это сообщение с вопросом ID)
+    # Пытаемся найти его через LAST_MESSAGE_IDS или предполагаем, что оно было перед сообщением юзера
+    original_question_msg_id = None
+    if user_id in LAST_MESSAGE_IDS and "manage_users" in LAST_MESSAGE_IDS[user_id]:
+        # Если мы пришли из manage_users, то это то сообщение
+        original_question_msg_id = LAST_MESSAGE_IDS[user_id]["manage_users"] 
+    elif message.reply_to_message and message.reply_to_message.from_user.is_bot:
+         # Если пользователь ответил на сообщение бота
+         original_question_msg_id = message.reply_to_message.message_id
+    # Как запасной вариант, можно попробовать message.message_id - 1, но это менее надежно
+
+    try:
+        new_user_id = int(message.text.strip())
+        if new_user_id in ALLOWED_USERS:
+            await message.reply("⚠️ Этот пользователь уже добавлен.") # Ответ на сообщение юзера
+            # Не редактируем исходный вопрос, просто отвечаем
+            return
+            
+        await state.update_data(new_user_id=new_user_id)
+
+        # Редактируем сообщение с вопросом ID, чтобы показать выбор группы
+        if original_question_msg_id:
+            try:
+                await bot.edit_message_text(
+                    "Отлично. Теперь выберите группу для нового пользователя:",
+                    chat_id=message.chat.id,
+                    message_id=original_question_msg_id,
+                    reply_markup=get_group_selection_keyboard()
+                )
+                await message.delete() # Удаляем сообщение пользователя с ID
+            except TelegramBadRequest as edit_err:
+                 logging.warning(f"Не удалось отредактировать сообщение {original_question_msg_id} для выбора группы: {edit_err}. Отправляю новое.")
+                 await message.reply( # Отвечаем на сообщение юзера, если редактирование не удалось
+                    "Отлично. Теперь выберите группу для нового пользователя:",
+                    reply_markup=get_group_selection_keyboard()
+                 )
+        else:
+             await message.reply( # Если не нашли исходное сообщение, просто отвечаем
+                "Отлично. Теперь выберите группу для нового пользователя:",
+                reply_markup=get_group_selection_keyboard()
+             )
+
+        await state.set_state(ManageUsersStates.waiting_for_group)
+    except ValueError:
+        await message.reply("⛔ Неверный ID. Пожалуйста, введите числовой Telegram ID.")
+    except Exception as e:
+        logging.error(f"Ошибка в process_add_user_id: {e}")
+        await message.reply("⚠️ Произошла ошибка. Попробуйте еще раз.")
+
+@dp.callback_query(StateFilter(ManageUsersStates.waiting_for_group), F.data.startswith("set_group_new_"))
+async def process_add_user_group(callback: types.CallbackQuery, state: FSMContext):
+    try:
+        group = callback.data.split('_')[-1]
+        user_data = await state.get_data()
+        new_user_id = user_data.get('new_user_id')
+        
+        if not new_user_id:
+             raise ValueError("Не найден ID пользователя в состоянии FSM.")
+             
+        ALLOWED_USERS[new_user_id] = group
+        USER_NAMES[str(new_user_id)] = f"Новый_{new_user_id}"
+        save_users()
+        logging.info(f"Админ {callback.from_user.id} добавил пользователя {new_user_id} в группу '{group}'")
+        
+        asyncio.create_task(refresh_user_names()) 
+        
+        await callback.message.edit_text(f"✅ Пользователь <code>{new_user_id}</code> успешно добавлен в группу <b>{group}</b>.", parse_mode="HTML", reply_markup=get_back_keyboard("back_to_manage_users"))
+        await state.clear()
+        
+    except Exception as e:
+        logging.error(f"Ошибка в process_add_user_group: {e}")
+        await callback.message.edit_text("⚠️ Произошла ошибка при добавлении пользователя.", reply_markup=get_back_keyboard("back_to_manage_users"))
+    finally:
+        await callback.answer()
+
+
+@dp.callback_query(F.data == "delete_user")
+async def cq_delete_user_list(callback: types.CallbackQuery):
+    user_id = callback.from_user.id
+    if not is_allowed(user_id, "delete_user"):
+        await callback.answer("⛔ Доступ запрещен.", show_alert=True)
+        return
+    keyboard = get_delete_users_keyboard(user_id)
+    await callback.message.edit_text("➖ <b>Удаление пользователя</b>\n\nВыберите пользователя для удаления:", reply_markup=keyboard, parse_mode="HTML")
+    await callback.answer()
+
+@dp.callback_query(F.data.startswith("delete_user_"))
+async def cq_delete_user_confirm(callback: types.CallbackQuery):
+    admin_id = callback.from_user.id
+    if not is_allowed(admin_id, callback.data):
+        await callback.answer("⛔ Доступ запрещен.", show_alert=True)
+        return
+    try:
+        user_id_to_delete = int(callback.data.split('_')[-1])
+        if user_id_to_delete == ADMIN_USER_ID:
+            await callback.answer("⛔ Нельзя удалить Главного Админа.", show_alert=True)
+            return
+        if user_id_to_delete not in ALLOWED_USERS:
+            await callback.answer("⚠️ Пользователь не найден.", show_alert=True)
+            keyboard = get_delete_users_keyboard(admin_id)
+            await callback.message.edit_reply_markup(reply_markup=keyboard)
+            return
+            
+        deleted_user_name = USER_NAMES.get(str(user_id_to_delete), f"ID: {user_id_to_delete}")
+        deleted_group = ALLOWED_USERS.pop(user_id_to_delete, "Неизвестно")
+        USER_NAMES.pop(str(user_id_to_delete), None)
+        save_users()
+        logging.info(f"Админ {admin_id} удалил пользователя {deleted_user_name} ({user_id_to_delete}) из группы '{deleted_group}'")
+        
+        keyboard = get_delete_users_keyboard(admin_id)
+        await callback.message.edit_text(f"✅ Пользователь <b>{deleted_user_name}</b> удален.\n\nВыберите пользователя для удаления:", reply_markup=keyboard, parse_mode="HTML")
+        await callback.answer(f"Пользователь {deleted_user_name} удален.", show_alert=False)
+        
+    except Exception as e:
+        logging.error(f"Ошибка в cq_delete_user_confirm: {e}")
+        await callback.answer("⚠️ Ошибка при удалении.", show_alert=True)
+
+@dp.callback_query(F.data.startswith("request_self_delete_"))
+async def cq_request_self_delete(callback: types.CallbackQuery):
+    user_id = callback.from_user.id
+    if not is_allowed(user_id, callback.data):
+        await callback.answer("⛔ Доступ запрещен.", show_alert=True)
+        return
+    try:
+        user_id_to_delete = int(callback.data.split('_')[-1])
+        if user_id != user_id_to_delete:
+             await callback.answer("⛔ Ошибка: ID не совпадают.", show_alert=True)
+             return
+        if user_id_to_delete == ADMIN_USER_ID:
+            await callback.answer("⛔ Главный Админ не может удалить себя.", show_alert=True)
+            return
+            
+        keyboard = get_self_delete_confirmation_keyboard(user_id)
+        await callback.message.edit_text("⚠️ <b>Вы уверены, что хотите удалить себя из списка пользователей бота?</b>\nВы потеряете доступ ко всем командам.", reply_markup=keyboard, parse_mode="HTML")
+        await callback.answer()
+        
+    except Exception as e:
+        logging.error(f"Ошибка в cq_request_self_delete: {e}")
+        await callback.answer("⚠️ Ошибка", show_alert=True)
+
+@dp.callback_query(F.data.startswith("confirm_self_delete_"))
+async def cq_confirm_self_delete(callback: types.CallbackQuery):
+    user_id = callback.from_user.id
+    if not is_allowed(user_id, callback.data):
+        await callback.answer("⛔ Доступ запрещен.", show_alert=True)
+        return
+    try:
+        user_id_to_delete = int(callback.data.split('_')[-1])
+        if user_id != user_id_to_delete:
+             await callback.answer("⛔ Ошибка: ID не совпадают.", show_alert=True)
+             return
+        if user_id_to_delete == ADMIN_USER_ID:
+            await callback.answer("⛔ Главный Админ не может удалить себя.", show_alert=True)
+            return
+            
+        deleted_user_name = USER_NAMES.get(str(user_id_to_delete), f"ID: {user_id_to_delete}")
+        deleted_group = ALLOWED_USERS.pop(user_id_to_delete, "Неизвестно")
+        USER_NAMES.pop(str(user_id_to_delete), None)
+        save_users()
+        logging.info(f"Пользователь {deleted_user_name} ({user_id_to_delete}) удалил себя из группы '{deleted_group}'")
+        
+        await callback.message.delete()
+        await callback.answer("✅ Вы успешно удалены из пользователей бота.", show_alert=True)
+        
+    except Exception as e:
+        logging.error(f"Ошибка в cq_confirm_self_delete: {e}")
+        await callback.answer("⚠️ Ошибка при удалении.", show_alert=True)
+
+@dp.callback_query(F.data == "back_to_delete_users")
+async def cq_back_to_delete_users(callback: types.CallbackQuery):
+     await cq_delete_user_list(callback)
+
+
+@dp.callback_query(F.data == "change_group")
+async def cq_change_group_list(callback: types.CallbackQuery):
+    user_id = callback.from_user.id
+    if not is_allowed(user_id, "change_group"):
+        await callback.answer("⛔ Доступ запрещен.", show_alert=True)
+        return
+    keyboard = get_change_group_keyboard()
+    await callback.message.edit_text("🔄 <b>Изменение группы</b>\n\nВыберите пользователя:", reply_markup=keyboard, parse_mode="HTML")
+    await callback.answer()
+
+@dp.callback_query(F.data.startswith("select_user_change_group_"))
+async def cq_select_user_for_group_change(callback: types.CallbackQuery):
+    user_id = callback.from_user.id
+    if not is_allowed(user_id, callback.data):
+        await callback.answer("⛔ Доступ запрещен.", show_alert=True)
+        return
+    try:
+        user_id_to_change = int(callback.data.split('_')[-1])
+        if user_id_to_change not in ALLOWED_USERS or user_id_to_change == ADMIN_USER_ID:
+            await callback.answer("⚠️ Неверный пользователь или Главный Админ.", show_alert=True)
+            return
+            
+        user_name = USER_NAMES.get(str(user_id_to_change), f"ID: {user_id_to_change}")
+        current_group = ALLOWED_USERS[user_id_to_change]
+        keyboard = get_group_selection_keyboard(user_id_to_change)
+        await callback.message.edit_text(
+            f"Выбран пользователь: <b>{user_name}</b>\nТекущая группа: <b>{current_group}</b>\n\nВыберите новую группу:",
+            reply_markup=keyboard,
+            parse_mode="HTML"
+        )
+        await callback.answer()
+    except Exception as e:
+        logging.error(f"Ошибка в cq_select_user_for_group_change: {e}")
+        await callback.answer("⚠️ Ошибка", show_alert=True)
+
+
+@dp.callback_query(F.data.startswith("set_group_"))
+async def cq_set_group(callback: types.CallbackQuery, state: FSMContext):
+    current_state = await state.get_state()
+    is_adding_new_user = current_state == ManageUsersStates.waiting_for_group
+    
+    admin_id = callback.from_user.id
+    if not is_allowed(admin_id, callback.data):
+        await callback.answer("⛔ Доступ запрещен.", show_alert=True)
+        return
+        
+    if is_adding_new_user:
+        await process_add_user_group(callback, state)
+        return
+        
+    try:
+        parts = callback.data.split('_')
+        user_id_to_change = int(parts[2])
+        new_group = parts[3]
+
+        if user_id_to_change not in ALLOWED_USERS or user_id_to_change == ADMIN_USER_ID:
+            await callback.answer("⚠️ Неверный пользователь или Главный Админ.", show_alert=True)
+            return
+            
+        old_group = ALLOWED_USERS[user_id_to_change]
+        ALLOWED_USERS[user_id_to_change] = new_group
+        save_users()
+        user_name = USER_NAMES.get(str(user_id_to_change), f"ID: {user_id_to_change}")
+        logging.info(f"Админ {admin_id} изменил группу для {user_name} ({user_id_to_change}) с '{old_group}' на '{new_group}'")
+        
+        keyboard = get_change_group_keyboard()
+        await callback.message.edit_text(
+             f"✅ Группа для <b>{user_name}</b> изменена на <b>{new_group}</b>.\n\nВыберите пользователя:",
+             reply_markup=keyboard,
+             parse_mode="HTML"
+        )
+        await callback.answer(f"Группа для {user_name} изменена.")
+        
+    except (IndexError, ValueError) as e:
+         logging.error(f"Ошибка разбора callback_data в cq_set_group: {e} (data: {callback.data})")
+         await callback.answer("⚠️ Внутренняя ошибка.", show_alert=True)
+    except Exception as e:
+        logging.error(f"Ошибка в cq_set_group: {e}")
+        await callback.answer("⚠️ Ошибка при смене группы.", show_alert=True)
+
+
+# --- [ КОНЕЦ БЛОКА УПРАВЛЕНИЯ ПОЛЬЗОВАТЕЛЯМИ ] ---
+
+
+# --- Text Handlers ---
+@dp.message(F.text == "🔔 Уведомления")
+async def notifications_menu_handler(message: types.Message):
+    user_id = message.from_user.id
+    chat_id = message.chat.id
+    command = "notifications_menu"
+
+    if not is_allowed(user_id, command):
+        await send_access_denied_message(user_id, chat_id, command)
+        return
+
+    await delete_previous_message(user_id, command, chat_id)
+
+    keyboard = get_alerts_menu_keyboard(user_id)
+    sent_message = await message.answer(
+        "🔔 <b>Настройка уведомлений</b>\n\n"
+        "Выберите, какие оповещения вы хотите получать.",
+        reply_markup=keyboard,
+        parse_mode="HTML"
+    )
+    LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = sent_message.message_id
+
 
 @dp.message(F.text == "🔒 Fail2Ban Log")
 async def text_fall2ban_handler(message: types.Message):
@@ -670,470 +2008,60 @@ async def text_uptime_handler(message: types.Message):
 async def text_updatexray_handler(message: types.Message, state: FSMContext):
     await updatexray_handler(message, state)
 
+
 @dp.message(F.text == "🆔 Мой ID")
-async def get_id_handler(message: types.Message):
+async def text_get_id_handler(message: types.Message):
     user_id = message.from_user.id
+    chat_id = message.chat.id
     command = "get_id"
     if not is_allowed(user_id, command):
-        await send_access_denied_message(user_id, message.chat.id, command)
+        await send_access_denied_message(user_id, chat_id, command)
         return
+    
     await delete_previous_message(user_id, command, message.chat.id)
-    group = ALLOWED_USERS.get(user_id, 'не авторизован')
-    sent_message = await message.answer(f"🆔 Ваш ID: <code>{user_id}</code>\nГруппа: <b>{group}</b>", parse_mode="HTML")
-    LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = sent_message.message_id
-
-@dp.message(F.text == "🔔 Уведомления")
-async def notifications_handler(message: types.Message):
-    user_id = message.from_user.id
-    command = "notifications_menu"
-    if not is_allowed(user_id, command):
-        await send_access_denied_message(user_id, message.chat.id, command)
-        return
-
-    await delete_previous_message(user_id, command, message.chat.id)
-
     sent_message = await message.answer(
-        "🔔 <b>Настройка уведомлений</b>\nВыберите, какие оповещения вы хотите получать:",
-        reply_markup=get_alerts_menu_keyboard(user_id),
+        f"Ваш ID: <code>{user_id}</code>\n\n"
+        "<i>(Эта кнопка удалена из главного меню, но вы можете найти ее в меню '👤 Пользователи')</i>", 
         parse_mode="HTML"
     )
     LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = sent_message.message_id
 
 
-# --- Callback Handlers ---
-@dp.callback_query(F.data.startswith("toggle_alert_"))
-async def toggle_alert_callback(callback: types.CallbackQuery):
-    user_id = callback.from_user.id
-    if not is_allowed(user_id, callback.data): # Check permission for the specific toggle action
-        await callback.answer("⛔ У вас нет прав изменять эти настройки.", show_alert=True)
-        return
-
-    alert_type = callback.data.split("_")[2] # resources, logins, bans
-
-    user_config = ALERTS_CONFIG.setdefault(user_id, {"resources": False, "logins": False, "bans": False})
-
-    current_state = user_config.get(alert_type, False)
-    user_config[alert_type] = not current_state
-    new_state = user_config[alert_type]
-
-    save_alerts_config()
-
-    try:
-        await callback.message.edit_reply_markup(reply_markup=get_alerts_menu_keyboard(user_id))
-    except TelegramBadRequest as e:
-        if "message is not modified" not in str(e):
-            logging.error(f"Ошибка обновления клавиатуры уведомлений: {e}")
-
-    alert_name_map = {
-        "resources": "о ресурсах (CPU/RAM/Disk)",
-        "logins": "о входах/выходах SSH",
-        "bans": "о банах Fail2Ban"
-    }
-    alert_name = alert_name_map.get(alert_type, alert_type)
-    state_text = "ВКЛЮЧЕНЫ" if new_state else "ВЫКЛЮЧЕНЫ"
-    await callback.answer(f"Уведомления {alert_name} {state_text}")
-
-
-@dp.callback_query(F.data == "alert_downtime_stub")
-async def alert_downtime_stub_callback(callback: types.CallbackQuery):
-     if not is_allowed(callback.from_user.id, callback.data):
-        await callback.answer("⛔ У вас нет прав.", show_alert=True)
-        return
-     await callback.answer("🕒 Функция мониторинга даунтайма находится в разработке.\nРекомендуется использовать внешние сервисы, например, UptimeRobot.", show_alert=True)
-
-
-@dp.callback_query() # General callback handler (should be last)
-async def callback_handler(callback: types.CallbackQuery, state: FSMContext):
-    await callback.answer()
-    command = callback.data
+# --- Reboot Handler ---
+async def reboot_handler(callback: types.CallbackQuery):
     user_id = callback.from_user.id
     chat_id = callback.message.chat.id
-
-    # Handle specific back buttons or other actions not covered by prefixes
-    if command == "back_to_menu":
-        await callback.message.delete()
-        # Ensure correct handling if called from alert menu context
-        await delete_previous_message(user_id, ["notifications_menu", "menu"], chat_id)
-        sent_message = await bot.send_message(chat_id=chat_id, text="📋 Главное меню:", reply_markup=get_main_reply_keyboard(user_id))
-        LAST_MESSAGE_IDS.setdefault(user_id, {})["menu"] = sent_message.message_id
-        return
-    elif command == "back_generate_vless":
-        if await state.get_state() is not None: # Only clear state if it exists
-             await state.clear()
-        await callback.message.delete()
-        # Optionally send back to main menu or do nothing
-        return
-    elif command == "back_to_manage_users":
-        if not is_allowed(user_id, "manage_users"):
-            await callback.message.answer("⛔ У вас нет прав для этого действия.")
-            return
-        await state.clear() # Clear potential add user state
-        user_list = "\n".join([
-            f" • {USER_NAMES.get(str(uid), f'ID: {uid}')} (<b>{group}</b>)"
-            for uid, group in ALLOWED_USERS.items() if uid != ADMIN_USER_ID
-        ])
-        if not user_list: user_list = "Других пользователей нет."
+    message_id = callback.message.message_id
+    command = "reboot"
+    if not is_allowed(user_id, command):
         try:
-             await callback.message.edit_text(
-                 f"👤 <b>Управление пользователями</b>:\n\n{user_list}\n\nВыберите действие:",
-                 reply_markup=get_manage_users_keyboard(),
-                 parse_mode="HTML"
-             )
-        except TelegramBadRequest as e:
-             if "message to edit not found" not in str(e): raise e # Re-raise if other error
-             logging.warning("Failed to edit back to user management, message likely deleted.")
-        return
-
-
-    # --- Rest of the previous callback_handler logic ---
-    permission_check_command = command
-    if command.startswith(("delete_user_", "set_group_", "select_user_change_group_", "request_self_delete_", "confirm_self_delete_", "back_to_delete_users", "xray_install_")):
-       permission_check_command = "manage_users"
-
-    if not is_allowed(user_id, permission_check_command):
-        if user_id not in ALLOWED_USERS:
-            await send_access_denied_message(user_id, chat_id, command)
-        else:
-            await callback.message.answer(f"⛔ Команда '{command}' недоступна для вашей группы ({ALLOWED_USERS[user_id]}) или в текущем режиме установки.")
+             await bot.edit_message_text("⛔ Отказано. Только администраторы могут перезагрузить сервер.", chat_id=chat_id, message_id=message_id)
+        except TelegramBadRequest: pass
         return
 
     try:
-        if command == "add_user":
-            await delete_previous_message(user_id, "manage_users", chat_id)
-            sent_message = await callback.message.answer("📝 Введите ID или Alias пользователя (например, <code>@username</code>):", reply_markup=get_back_keyboard("back_to_manage_users"), parse_mode="HTML")
-            LAST_MESSAGE_IDS.setdefault(user_id, {})["add_user"] = sent_message.message_id
-            await state.set_state(ManageUsersStates.waiting_for_user_id)
-        elif command == "delete_user":
-            await callback.message.edit_text("➖ Выберите пользователя для удаления:", reply_markup=get_delete_users_keyboard(user_id))
-        elif command == "change_group":
-            await callback.message.edit_text("🔄 Выберите пользователя для изменения группы:", reply_markup=get_change_group_keyboard())
-        elif command.startswith("select_user_change_group_"):
-            target_user_id = int(command.split("_")[4])
-            if target_user_id not in ALLOWED_USERS:
-                await callback.message.edit_text(f"⚠️ Пользователь ID <code>{target_user_id}</code> не найден", reply_markup=get_back_keyboard("back_to_manage_users"), parse_mode="HTML")
-            else:
-                user_name = USER_NAMES.get(str(target_user_id), f"ID: {target_user_id}")
-                await callback.message.edit_text(f"👤 Пользователь: <b>{user_name}</b>\nТекущая группа: <b>{ALLOWED_USERS[target_user_id]}</b>\nВыберите новую группу:", reply_markup=get_group_selection_keyboard(target_user_id), parse_mode="HTML")
-        elif command.startswith("set_group_"):
-            parts = command.split("_")
-            target_user_id = int(parts[2])
-            new_group = parts[3]
-            if target_user_id == ADMIN_USER_ID:
-                await callback.message.edit_text("⚠️ Нельзя изменить группу главного администратора", reply_markup=get_back_keyboard("back_to_manage_users"))
-            elif target_user_id not in ALLOWED_USERS:
-                await callback.message.edit_text(f"⚠️ Пользователь ID <code>{target_user_id}</code> не найден", reply_markup=get_back_keyboard("back_to_manage_users"), parse_mode="HTML")
-            else:
-                user_name = USER_NAMES.get(str(target_user_id), f"ID: {target_user_id}")
-                ALLOWED_USERS[target_user_id] = new_group
-                save_users()
-                await callback.message.edit_text(f"✅ Группа пользователя <b>{user_name}</b> изменена на <b>{new_group}</b>", reply_markup=get_back_keyboard("back_to_manage_users"), parse_mode="HTML")
-                await callback.message.answer("ℹ️ Для полного применения изменений рекомендуется перезапустить бота вручную командой или кнопкой (если доступна).")
-        # back_to_manage_users handled above
-        elif command == "back_to_delete_users":
-            await callback.message.edit_text("➖ Выберите пользователя для удаления:", reply_markup=get_delete_users_keyboard(user_id))
-        elif command.startswith("request_self_delete_"):
-            target_user_id = int(command.split("_")[3])
-            if target_user_id != user_id:
-                await callback.message.edit_text("⚠️ Вы можете запросить удаление только своего ID", reply_markup=get_back_keyboard("back_to_delete_users"))
-            else:
-                await callback.message.edit_text("⚠️ Ты точно уверен, что хочешь удалить самого себя из бота? Данное действие необратимо, ты можешь потерять доступ к боту", reply_markup=get_self_delete_confirmation_keyboard(user_id))
-        elif command.startswith("confirm_self_delete_"):
-            target_user_id = int(command.split("_")[3])
-            if target_user_id != user_id:
-                await callback.message.edit_text("⚠️ Вы можете подтвердить удаление только своего ID", reply_markup=get_back_keyboard("back_to_delete_users"))
-            elif target_user_id == ADMIN_USER_ID:
-                await callback.message.edit_text("⚠️ Нельзя удалить главного администратора", reply_markup=get_back_keyboard("back_to_manage_users"))
-            else:
-                user_name = USER_NAMES.get(str(target_user_id), f"ID: {target_user_id}")
-                if target_user_id in ALLOWED_USERS:
-                    del ALLOWED_USERS[target_user_id]
-                    USER_NAMES.pop(str(target_user_id), None)
-                    save_users()
-                    await callback.message.edit_text(f"✅ Пользователь <b>{user_name}</b> удалён. Вы потеряли доступ к боту.", parse_mode="HTML")
-                    await callback.message.answer("ℹ️ Для полного применения изменений рекомендуется перезапустить бота вручную.")
-                else:
-                    await callback.message.edit_text(f"⚠️ Пользователь ID <code>{target_user_id}</code> уже был удален.", reply_markup=get_back_keyboard("back_to_manage_users"), parse_mode="HTML")
-        elif command.startswith("delete_user_"):
-            target_user_id = int(command.split("_")[2])
-            if target_user_id == ADMIN_USER_ID:
-                await callback.message.edit_text("⚠️ Нельзя удалить главного администратора", reply_markup=get_back_keyboard("back_to_manage_users"))
-            elif target_user_id in ALLOWED_USERS:
-                user_name = USER_NAMES.get(str(target_user_id), f"ID: {target_user_id}")
-                del ALLOWED_USERS[target_user_id]
-                USER_NAMES.pop(str(target_user_id), None)
-                save_users()
-                await callback.message.edit_text(f"✅ Пользователь <b>{user_name}</b> удалён", reply_markup=get_back_keyboard("back_to_manage_users"), parse_mode="HTML")
-                await callback.message.answer("ℹ️ Для полного применения изменений рекомендуется перезапустить бота вручную.")
-            else:
-                await callback.message.edit_text(f"⚠️ Пользователь ID <code>{target_user_id}</code> не найден", reply_markup=get_back_keyboard("back_to_manage_users"), parse_mode="HTML")
-        elif command == "get_id_inline":
-           await callback.message.answer(f"🆔 Ваш ID: {user_id}\nГруппа: {ALLOWED_USERS.get(user_id, 'не авторизован')}")
-        elif command == "reboot":
-           await reboot_handler(callback)
-        # back_generate_vless handled above
-        # back_to_menu handled above
-        else:
-            logging.warning(f"Неизвестный callback_data: {command}")
-            await callback.answer("Неизвестная команда.")
+        await bot.edit_message_text("✅ Подтверждено. <b>Запускаю перезагрузку VPS</b>...", chat_id=chat_id, message_id=message_id, parse_mode="HTML")
+    except TelegramBadRequest:
+        logging.warning("Не удалось отредактировать сообщение о перезагрузке (возможно, удалено).")
 
+    try:
+        with open(REBOOT_FLAG_FILE, "w") as f: f.write(str(user_id))
+    except Exception as e: logging.error(f"Не удалось записать флаг перезагрузки: {e}")
 
-    except TelegramRetryAfter as e:
-        logging.error(f"TelegramRetryAfter в callback_handler: {e.retry_after} секунд")
-        await callback.message.answer(f"⚠️ Telegram ограничивает запросы. Повторите через {e.retry_after} секунд.")
-    except TelegramBadRequest as e:
-         if "message to edit not found" in str(e) or "message can't be edited" in str(e):
-             logging.warning(f"Message edit failed in callback_handler (likely deleted): {e}")
-         else:
-             logging.warning(f"TelegramBadRequest в callback_handler: {e}")
+    try:
+        reboot_cmd = "sudo reboot"
+        process = await asyncio.create_subprocess_shell(reboot_cmd)
+        await process.wait()
+        logging.info("Reboot command sent.")
     except Exception as e:
-        logging.error(f"Ошибка в callback_handler: {e}", exc_info=True)
+        logging.error(f"Ошибка при отправке команды reboot: {e}")
         try:
-            # Send error without editing the original message if edit fails
-            await bot.send_message(chat_id, f"⚠️ Ошибка при выполнении команды: {str(e)}")
+            await bot.send_message(chat_id=chat_id, text=f"⚠️ Ошибка при отправке команды перезагрузки: {e}")
         except Exception as send_e:
-            logging.error(f"Failed to send error message: {send_e}")
+            logging.error(f"Не удалось отправить сообщение об ошибке перезагрузки: {send_e}")
 
 
-# --- State Handlers ---
-@dp.message(Command("adduser"))
-async def adduser_command_handler(message: types.Message, state: FSMContext):
-    user_id = message.from_user.id
-    chat_id = message.chat.id
-    command = "adduser"
-    if not is_allowed(user_id, command):
-        await send_access_denied_message(user_id, chat_id, command)
-        return
-    await delete_previous_message(user_id, command, chat_id)
-    sent_message = await message.answer(
-        "📝 Введите ID или Alias пользователя (например, <code>@username</code>):",
-        reply_markup=get_back_keyboard("back_to_manage_users"),
-        parse_mode="HTML"
-    )
-    LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = sent_message.message_id
-    await state.set_state(ManageUsersStates.waiting_for_user_id)
-
-@dp.message(StateFilter(ManageUsersStates.waiting_for_user_id))
-async def handle_user_id(message: types.Message, state: FSMContext):
-    user_id = message.from_user.id
-    chat_id = message.chat.id
-    command = "adduser"
-    if not is_allowed(user_id, command):
-        await send_access_denied_message(user_id, chat_id, command)
-        await state.clear()
-        return
-    input_text = message.text.strip()
-    target_user_id = None
-    user_name = "Неизвестный"
-    try:
-        if input_text.startswith("@"):
-            if not re.match(r'^@[\w_]{5,}$', input_text):
-                raise ValueError("Неверный формат никнейма.")
-            chat = await bot.get_chat(input_text)
-            target_user_id = chat.id
-            user_name = chat.first_name or chat.username or f"Неизвестный_{target_user_id}"
-        else:
-            try:
-                target_user_id = int(input_text)
-                user_name = await get_user_name(target_user_id)
-            except ValueError:
-                raise ValueError("Введите корректный ID (число) или Alias (@username).")
-        if target_user_id in ALLOWED_USERS:
-            await state.clear()
-            await delete_previous_message(user_id, command, chat_id)
-            sent_message = await message.answer(f"⚠️ Пользователь <b>{user_name}</b> (ID: <code>{target_user_id}</code>) уже в списке разрешённых.", reply_markup=get_back_keyboard("back_to_manage_users"), parse_mode="HTML")
-            LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = sent_message.message_id
-            return
-        ALLOWED_USERS[target_user_id] = "Пользователи"
-        USER_NAMES[str(target_user_id)] = user_name
-        save_users()
-        await state.update_data(target_user_id=target_user_id, user_name=user_name)
-        await delete_previous_message(user_id, command, chat_id)
-        sent_message = await message.answer(f"👤 Пользователь: <b>{user_name}</b> (ID: <code>{target_user_id}</code>)\nТекущая группа: <b>Пользователи</b>\nВыберите группу:", reply_markup=get_group_selection_keyboard(target_user_id), parse_mode="HTML")
-        LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = sent_message.message_id
-        await state.set_state(ManageUsersStates.waiting_for_group)
-    except (TelegramBadRequest, ValueError) as e:
-        error_text = str(e)
-        if "Bad Request: chat not found" in error_text or "Неверный формат" in error_text or "user not found" in error_text:
-             error_text = (f"❌ <b>Не удалось найти пользователя <code>{input_text}</code>.</b>\n\n" "Возможные причины:\n" "1. Пользователь не существует или закрыл личку.\n" "2. Пользователь должен <b>сначала написать боту команду /start</b>.\n\n" "💡 <b>Решение:</b> Добавляйте по <b>User ID</b> (число) или попросите пользователя написать /start.")
-        else:
-            error_text = f"⚠️ Произошла непредвиденная ошибка: {escape_html(str(e))}"
-        await delete_previous_message(user_id, command, chat_id)
-        sent_message = await message.answer(error_text, parse_mode="HTML", reply_markup=get_back_keyboard("back_to_manage_users"))
-        LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = sent_message.message_id
-        await state.clear()
-    except Exception as e:
-        logging.error(f"Непредвиденная ошибка при добавлении пользователя: {e}")
-        await delete_previous_message(user_id, command, chat_id)
-        sent_message = await message.answer(f"⚠️ Произошла непредвиденная ошибка: {escape_html(str(e))}", reply_markup=get_back_keyboard("back_to_manage_users"), parse_mode="HTML")
-        LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = sent_message.message_id
-        await state.clear()
-
-
-@dp.callback_query(StateFilter(ManageUsersStates.waiting_for_group))
-async def handle_group_selection_callback(callback: types.CallbackQuery, state: FSMContext):
-    await callback.answer()
-    user_id = callback.from_user.id
-    command = "adduser"
-    if not is_allowed(user_id, command):
-        await send_access_denied_message(user_id, callback.message.chat.id, command)
-        await state.clear()
-        return
-    data = await state.get_data()
-    target_user_id = data.get("target_user_id")
-    user_name = data.get("user_name")
-    if callback.data.startswith("set_group_"):
-        parts = callback.data.split("_")
-        selected_id = int(parts[2])
-        new_group = parts[3]
-        if selected_id != target_user_id:
-            await callback.message.edit_text("⚠️ Ошибка: Несоответствие ID пользователя.", reply_markup=get_back_keyboard("back_to_manage_users"))
-            await state.clear()
-            return
-        ALLOWED_USERS[target_user_id] = new_group
-        save_users()
-        await state.clear()
-        await callback.message.edit_text(f"✅ Пользователь <b>{user_name}</b> (ID: <code>{target_user_id}</code>) добавлен в группу <b>{new_group}</b>", reply_markup=get_back_keyboard("back_to_manage_users"), parse_mode="HTML")
-        await callback.message.answer("ℹ️ Для полного применения изменений рекомендуется перезапустить бота вручную.")
-    elif callback.data == "back_to_manage_users":
-        await state.clear()
-        user_list = "\n".join([
-            f" • {USER_NAMES.get(str(uid), f'ID: {uid}')} (<b>{group}</b>)"
-            for uid, group in ALLOWED_USERS.items() if uid != ADMIN_USER_ID
-        ])
-        if not user_list:
-            user_list = "Других пользователей нет."
-        await callback.message.edit_text(
-            f"👤 <b>Управление пользователями</b>:\n\n{user_list}\n\nВыберите действие:",
-            reply_markup=get_manage_users_keyboard(),
-            parse_mode="HTML"
-        )
-
-# --- Other Handlers (VLESS, etc.) ---
-@dp.message(StateFilter(GenerateVlessStates.waiting_for_file), F.document)
-async def handle_vless_file(message: types.Message, state: FSMContext):
-    user_id = message.from_user.id
-    chat_id = message.chat.id
-    command = "generate_vless"
-    if not is_allowed(user_id, command):
-        await send_access_denied_message(user_id, chat_id, command)
-        await state.clear()
-        return
-    if not message.document or not message.document.file_name.endswith(".json"):
-        await delete_previous_message(user_id, command, chat_id)
-        sent_message = await message.answer("❌ Пожалуйста, отправьте корректный <b>JSON файл</b>.", reply_markup=get_back_keyboard("back_generate_vless"), parse_mode="HTML")
-        LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = sent_message.message_id
-        return
-    try:
-        file_info = await bot.get_file(message.document.file_id)
-        file_content_stream = io.BytesIO()
-        await bot.download_file(file_info.file_path, destination=file_content_stream)
-        file_content_stream.seek(0)
-        json_data = file_content_stream.read().decode('utf-8')
-
-        try:
-            def validate_json(data):
-                 json.loads(data)
-            await asyncio.to_thread(validate_json, json_data)
-        except json.JSONDecodeError:
-            raise ValueError("Содержимое файла не является корректным JSON.")
-
-        await state.update_data(json_data=json_data)
-        await delete_previous_message(user_id, command, chat_id)
-        sent_message = await message.answer("📝 Введите <b>имя</b> для VLESS ссылки:", reply_markup=get_back_keyboard("back_generate_vless"), parse_mode="HTML")
-        LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = sent_message.message_id
-        await state.set_state(GenerateVlessStates.waiting_for_name)
-    except Exception as e:
-        logging.error(f"Ошибка при обработке файла VLESS: {e}")
-        await state.clear()
-        await delete_previous_message(user_id, command, chat_id)
-        sent_message = await message.answer(f"⚠️ Ошибка при обработке файла: <b>{str(e)}</b>", reply_markup=get_back_keyboard("back_generate_vless"), parse_mode="HTML")
-        LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = sent_message.message_id
-
-
-@dp.message(StateFilter(GenerateVlessStates.waiting_for_file))
-async def handle_vless_file_wrong_type(message: types.Message, state: FSMContext):
-    user_id = message.from_user.id
-    chat_id = message.chat.id
-    command = "generate_vless"
-    if not is_allowed(user_id, command):
-        await send_access_denied_message(user_id, chat_id, command)
-        await state.clear()
-        return
-    await delete_previous_message(user_id, command, chat_id)
-    sent_message = await message.answer("❌ Ожидается отправка <b>JSON файла</b>. Попробуйте еще раз или нажмите Назад.", reply_markup=get_back_keyboard("back_generate_vless"), parse_mode="HTML")
-    LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = sent_message.message_id
-
-
-@dp.message(StateFilter(GenerateVlessStates.waiting_for_name))
-async def handle_vless_name(message: types.Message, state: FSMContext):
-    user_id = message.from_user.id
-    chat_id = message.chat.id
-    command = "generate_vless"
-    if not is_allowed(user_id, command):
-        await send_access_denied_message(user_id, chat_id, command)
-        await state.clear()
-        return
-
-    custom_name = message.text.strip()
-    if not custom_name:
-       custom_name = f"VLESS_Config_{user_id}"
-
-    data = await state.get_data()
-    json_data = data.get("json_data")
-    await state.clear()
-
-    if not json_data:
-        await delete_previous_message(user_id, command, chat_id)
-        sent_message = await message.answer("⚠️ Ошибка: JSON данные не найдены, начните сначала.", reply_markup=get_back_keyboard("back_to_menu"))
-        LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = sent_message.message_id
-        return
-
-    await delete_previous_message(user_id, command, chat_id)
-
-    try:
-        def generate_vless_and_qr(data, name):
-            vless_url_result = convert_json_to_vless(data, name)
-            if vless_url_result.startswith("⚠️"):
-                raise ValueError(vless_url_result)
-
-            qr = qrcode.QRCode(version=1, error_correction=qrcode.constants.ERROR_CORRECT_H, box_size=10, border=4)
-            qr.add_data(vless_url_result)
-            qr.make(fit=True)
-            qr_img = qr.make_image(fill_color="black", back_color="white")
-
-            img_byte_arr = io.BytesIO()
-            qr_img.save(img_byte_arr, format='PNG')
-            img_byte_arr.seek(0)
-            return vless_url_result, img_byte_arr.getvalue()
-
-        vless_url, qr_data = await asyncio.to_thread(generate_vless_and_qr, json_data, custom_name)
-
-        photo = BufferedInputFile(qr_data, filename="vless_qr.png")
-        caption = f"🔗 <b>VLESS ссылка для «{escape_html(custom_name)}»</b>:\n\nКод:\n<code>{escape_html(vless_url)}</code>"
-
-        sent_message = await message.answer_photo(photo=photo, caption=caption, parse_mode="HTML")
-        LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = sent_message.message_id
-
-    except ValueError as ve:
-        logging.error(f"Ошибка при конвертации JSON в VLESS: {ve}")
-        error_caption = f"⚠️ Ошибка при генерации VLESS ссылки: {escape_html(str(ve))}"
-        sent_message = await message.answer(error_caption, parse_mode="HTML")
-        LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = sent_message.message_id
-    except Exception as e:
-        logging.error(f"Ошибка при генерации QR-кода или отправке фото VLESS: {e}")
-        try:
-             vless_url_fallback = convert_json_to_vless(json_data, custom_name)
-             if vless_url_fallback.startswith("⚠️"): raise ValueError(vless_url_fallback)
-
-             fallback_caption = f"🔗 <b>VLESS ссылка для «{escape_html(custom_name)}»</b>:\n\nКод:\n<code>{escape_html(vless_url_fallback)}</code>\n\n⚠️ Ошибка при генерации QR-кода: {escape_html(str(e))}"
-             sent_message = await message.answer(fallback_caption, parse_mode="HTML")
-        except Exception as fallback_e:
-             logging.error(f"Fallback VLESS URL generation failed: {fallback_e}")
-             sent_message = await message.answer(f"⚠️ Критическая ошибка при генерации VLESS: {escape_html(str(fallback_e))}")
-
-        LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = sent_message.message_id
-
-# --- Background Tasks ---
+# --- Background Tasks & Startup ---
 async def traffic_monitor():
     await asyncio.sleep(TRAFFIC_INTERVAL)
     while True:
@@ -1143,9 +2071,7 @@ async def traffic_monitor():
             continue
 
         for user_id in current_users:
-            if user_id not in TRAFFIC_MESSAGE_IDS:
-                continue
-
+            if user_id not in TRAFFIC_MESSAGE_IDS: continue
             message_id = TRAFFIC_MESSAGE_IDS.get(user_id)
             if not message_id:
                 logging.warning(f"Traffic monitor: Missing message ID for user {user_id}")
@@ -1182,8 +2108,7 @@ async def traffic_monitor():
                 logging.warning(f"Traffic Monitor: TelegramRetryAfter for {user_id}: Wait {e.retry_after}s")
                 await asyncio.sleep(e.retry_after)
             except TelegramBadRequest as e:
-                if "message is not modified" in str(e):
-                    pass
+                if "message is not modified" in str(e): pass
                 elif "message to edit not found" in str(e) or "chat not found" in str(e):
                     logging.warning(f"Traffic Monitor: Message/Chat not found for user {user_id}. Stopping monitor.")
                     TRAFFIC_MESSAGE_IDS.pop(user_id, None)
@@ -1199,9 +2124,9 @@ async def traffic_monitor():
 
         await asyncio.sleep(TRAFFIC_INTERVAL)
 
-
+# --- [ИЗМЕНЕНИЕ] Новая логика повторных алертов ---
 async def resource_monitor():
-    global RESOURCE_ALERT_STATE
+    global RESOURCE_ALERT_STATE, LAST_RESOURCE_ALERT_TIME
     logging.info("Монитор ресурсов запущен.")
     await asyncio.sleep(15)
 
@@ -1217,27 +2142,55 @@ async def resource_monitor():
             logging.debug(f"Проверка ресурсов: CPU={cpu_usage}%, RAM={ram_usage}%, Disk={disk_usage}%")
 
             alerts_to_send = []
+            current_time = time.time()
 
-            if cpu_usage >= CPU_THRESHOLD and not RESOURCE_ALERT_STATE["cpu"]:
-                alerts_to_send.append(f"⚠️ <b>Превышен порог CPU!</b>\nТекущее использование: <b>{cpu_usage:.1f}%</b> (Порог: {CPU_THRESHOLD}%)")
-                RESOURCE_ALERT_STATE["cpu"] = True
+            # Логика CPU
+            if cpu_usage >= CPU_THRESHOLD:
+                if not RESOURCE_ALERT_STATE["cpu"]:
+                    msg = f"⚠️ <b>Превышен порог CPU!</b>\nТекущее использование: <b>{cpu_usage:.1f}%</b> (Порог: {CPU_THRESHOLD}%)"
+                    alerts_to_send.append(msg)
+                    RESOURCE_ALERT_STATE["cpu"] = True
+                    LAST_RESOURCE_ALERT_TIME["cpu"] = current_time
+                elif current_time - LAST_RESOURCE_ALERT_TIME["cpu"] > RESOURCE_ALERT_COOLDOWN:
+                    msg = f"‼️ <b>CPU все еще ВЫСОКИЙ!</b>\nТекущее использование: <b>{cpu_usage:.1f}%</b> (Порог: {CPU_THRESHOLD}%)"
+                    alerts_to_send.append(msg)
+                    LAST_RESOURCE_ALERT_TIME["cpu"] = current_time
             elif cpu_usage < CPU_THRESHOLD and RESOURCE_ALERT_STATE["cpu"]:
                  alerts_to_send.append(f"✅ <b>Нагрузка CPU нормализовалась.</b>\nТекущее использование: <b>{cpu_usage:.1f}%</b>")
                  RESOURCE_ALERT_STATE["cpu"] = False
+                 LAST_RESOURCE_ALERT_TIME["cpu"] = 0
 
-            if ram_usage >= RAM_THRESHOLD and not RESOURCE_ALERT_STATE["ram"]:
-                alerts_to_send.append(f"⚠️ <b>Превышен порог RAM!</b>\nТекущее использование: <b>{ram_usage:.1f}%</b> (Порог: {RAM_THRESHOLD}%)")
-                RESOURCE_ALERT_STATE["ram"] = True
+            # Логика RAM
+            if ram_usage >= RAM_THRESHOLD:
+                if not RESOURCE_ALERT_STATE["ram"]:
+                    msg = f"⚠️ <b>Превышен порог RAM!</b>\nТекущее использование: <b>{ram_usage:.1f}%</b> (Порог: {RAM_THRESHOLD}%)"
+                    alerts_to_send.append(msg)
+                    RESOURCE_ALERT_STATE["ram"] = True
+                    LAST_RESOURCE_ALERT_TIME["ram"] = current_time
+                elif current_time - LAST_RESOURCE_ALERT_TIME["ram"] > RESOURCE_ALERT_COOLDOWN:
+                    msg = f"‼️ <b>RAM все еще ВЫСОКАЯ!</b>\nТекущее использование: <b>{ram_usage:.1f}%</b> (Порог: {RAM_THRESHOLD}%)"
+                    alerts_to_send.append(msg)
+                    LAST_RESOURCE_ALERT_TIME["ram"] = current_time
             elif ram_usage < RAM_THRESHOLD and RESOURCE_ALERT_STATE["ram"]:
                  alerts_to_send.append(f"✅ <b>Использование RAM нормализовалось.</b>\nТекущее использование: <b>{ram_usage:.1f}%</b>")
                  RESOURCE_ALERT_STATE["ram"] = False
+                 LAST_RESOURCE_ALERT_TIME["ram"] = 0
 
-            if disk_usage >= DISK_THRESHOLD and not RESOURCE_ALERT_STATE["disk"]:
-                alerts_to_send.append(f"⚠️ <b>Превышен порог Disk!</b>\nТекущее использование: <b>{disk_usage:.1f}%</b> (Порог: {DISK_THRESHOLD}%)")
-                RESOURCE_ALERT_STATE["disk"] = True
+            # Логика Disk
+            if disk_usage >= DISK_THRESHOLD:
+                if not RESOURCE_ALERT_STATE["disk"]:
+                    msg = f"⚠️ <b>Превышен порог Disk!</b>\nТекущее использование: <b>{disk_usage:.1f}%</b> (Порог: {DISK_THRESHOLD}%)"
+                    alerts_to_send.append(msg)
+                    RESOURCE_ALERT_STATE["disk"] = True
+                    LAST_RESOURCE_ALERT_TIME["disk"] = current_time
+                elif current_time - LAST_RESOURCE_ALERT_TIME["disk"] > RESOURCE_ALERT_COOLDOWN:
+                    msg = f"‼️ <b>Disk все еще ВЫСОКИЙ!</b>\nТекущее использование: <b>{disk_usage:.1f}%</b> (Порог: {DISK_THRESHOLD}%)"
+                    alerts_to_send.append(msg)
+                    LAST_RESOURCE_ALERT_TIME["disk"] = current_time
             elif disk_usage < DISK_THRESHOLD and RESOURCE_ALERT_STATE["disk"]:
                  alerts_to_send.append(f"✅ <b>Использование Disk нормализовалось.</b>\nТекущее использование: <b>{disk_usage:.1f}%</b>")
                  RESOURCE_ALERT_STATE["disk"] = False
+                 LAST_RESOURCE_ALERT_TIME["disk"] = 0
 
             if alerts_to_send:
                 full_alert_message = "\n\n".join(alerts_to_send)
@@ -1247,9 +2200,8 @@ async def resource_monitor():
             logging.error(f"Ошибка в мониторе ресурсов: {e}")
 
         await asyncio.sleep(RESOURCE_CHECK_INTERVAL)
+# --- [КОНЕЦ ИЗМЕНЕНИЯ] ---
 
-
-# --- Startup and Shutdown ---
 async def initial_restart_check():
     if os.path.exists(RESTART_FLAG_FILE):
         try:
@@ -1258,20 +2210,14 @@ async def initial_restart_check():
                 chat_id, message_id = map(int, content.split(':'))
             await bot.edit_message_text(chat_id=chat_id, message_id=message_id, text="✅ Бот успешно перезапущен.")
             logging.info(f"Изменено сообщение о перезапуске в чате ID: {chat_id}")
-        except FileNotFoundError:
-             logging.info("Restart flag file not found on startup.")
-        except ValueError:
-             logging.error("Invalid content in restart flag file.")
-        except TelegramBadRequest as e:
-             logging.warning(f"Failed to edit restart message (likely deleted or invalid): {e}")
-        except Exception as e:
-            logging.error(f"Ошибка при обработке флага перезапуска: {e}")
+        except FileNotFoundError: logging.info("Restart flag file not found on startup.")
+        except ValueError: logging.error("Invalid content in restart flag file.")
+        except TelegramBadRequest as e: logging.warning(f"Failed to edit restart message (likely deleted or invalid): {e}")
+        except Exception as e: logging.error(f"Ошибка при обработке флага перезапуска: {e}")
         finally:
-            try:
-                os.remove(RESTART_FLAG_FILE)
+            try: os.remove(RESTART_FLAG_FILE)
             except OSError as e:
-                 if e.errno != 2:
-                     logging.error(f"Error removing restart flag file: {e}")
+                 if e.errno != 2: logging.error(f"Error removing restart flag file: {e}")
 
 
 async def initial_reboot_check():
@@ -1279,51 +2225,124 @@ async def initial_reboot_check():
         try:
             with open(REBOOT_FLAG_FILE, "r") as f:
                 user_id_str = f.read().strip()
-                if not user_id_str.isdigit():
-                     raise ValueError("Invalid content in reboot flag file.")
+                if not user_id_str.isdigit(): raise ValueError("Invalid content in reboot flag file.")
                 user_id = int(user_id_str)
-
             await bot.send_message(chat_id=user_id, text="✅ <b>Сервер успешно перезагружен! Бот снова в сети.</b>", parse_mode="HTML")
             logging.info(f"Отправлено уведомление о перезагрузке пользователю ID: {user_id}")
-
-        except FileNotFoundError:
-             logging.info("Reboot flag file not found on startup.")
-        except ValueError as ve:
-             logging.error(f"Error processing reboot flag file content: {ve}")
-        except TelegramBadRequest as e:
-             logging.warning(f"Failed to send reboot notification to user {user_id_str}: {e}")
-        except Exception as e:
-            logging.error(f"Ошибка при обработке флага перезагрузки: {e}")
+        except FileNotFoundError: logging.info("Reboot flag file not found on startup.")
+        except ValueError as ve: logging.error(f"Error processing reboot flag file content: {ve}")
+        except TelegramBadRequest as e: logging.warning(f"Failed to send reboot notification to user {user_id_str}: {e}")
+        except Exception as e: logging.error(f"Ошибка при обработке флага перезагрузки: {e}")
         finally:
-             try:
-                 os.remove(REBOOT_FLAG_FILE)
+             try: os.remove(REBOOT_FLAG_FILE)
              except OSError as e:
-                  if e.errno != 2:
-                      logging.error(f"Error removing reboot flag file: {e}")
+                  if e.errno != 2: logging.error(f"Error removing reboot flag file: {e}")
 
 
+# --- [ИЗМЕНЕНИЕ] Новая логика `main` для корректного завершения (v3) ---
 async def main():
+    background_tasks = set()
+
+    async def shutdown(dispatcher: Dispatcher, bot_instance: Bot):
+        logging.info("Получен сигнал завершения. Остановка polling...")
+        try:
+            await dispatcher.stop_polling()
+            logging.info("Polling остановлен.")
+        except Exception as e:
+            logging.error(f"Ошибка при остановке polling: {e}")
+
+        logging.info("Начинаю отмену фоновых задач...")
+        for task in list(background_tasks):
+            if task and not task.done():
+                task.cancel()
+
+        logging.info("Ожидание завершения фоновых задач (с таймаутом)...")
+        results = await asyncio.gather(*background_tasks, return_exceptions=True)
+        background_tasks.clear()
+
+        for i, result in enumerate(results):
+             if isinstance(result, Exception) and not isinstance(result, asyncio.CancelledError):
+                 logging.error(f"Ошибка при завершении фоновой задачи (индекс {i}): {result}")
+        logging.info("Фоновые задачи обработаны.")
+
+        # Корректная проверка и закрытие сессии
+        session_to_close = getattr(bot_instance, 'session', None)
+        underlying_session = getattr(session_to_close, 'session', None)
+
+        if underlying_session and not underlying_session.closed:
+            logging.info("Закрытие сессии бота...")
+            await session_to_close.close()
+            logging.info("Сессия бота закрыта.")
+        elif session_to_close:
+             logging.info("Сессия бота уже была закрыта.")
+        else:
+             logging.info("Сессия бота не была инициализирована.")
+
+    loop = asyncio.get_event_loop()
+    try:
+        signals = (signal.SIGINT, signal.SIGTERM)
+        for s in signals:
+            loop.add_signal_handler(s, lambda s=s: asyncio.create_task(shutdown(dp, bot)))
+        logging.info("Обработчики сигналов SIGINT и SIGTERM установлены.")
+    except NotImplementedError:
+        logging.warning("Установка обработчиков сигналов не поддерживается на этой платформе.")
+
     try:
         logging.info(f"Бот запускается в режиме: {INSTALL_MODE.upper()}")
         await asyncio.to_thread(load_users)
-        load_alerts_config() # Make sure alert config is loaded
+        load_alerts_config()
         await refresh_user_names()
         await initial_reboot_check()
         await initial_restart_check()
-        asyncio.create_task(traffic_monitor())
-        asyncio.create_task(resource_monitor()) # Start resource monitor
+
+        # Запуск мониторов
+        ssh_log_file_to_monitor = None
+        if os.path.exists("/var/log/secure"): ssh_log_file_to_monitor = "/var/log/secure"
+        elif os.path.exists("/var/log/auth.log"): ssh_log_file_to_monitor = "/var/log/auth.log"
+        f2b_log_file_to_monitor = "/var/log/fail2ban.log"
+
+        if ssh_log_file_to_monitor:
+            task_logins = asyncio.create_task(reliable_tail_log_monitor(ssh_log_file_to_monitor, "logins", parse_ssh_log_line), name="LoginsMonitor")
+            background_tasks.add(task_logins)
+        else: logging.warning("Не найден лог SSH. Мониторинг SSH (logins) не запущен.")
+            
+        task_bans = asyncio.create_task(reliable_tail_log_monitor(f2b_log_file_to_monitor, "bans", parse_f2b_log_line), name="BansMonitor")
+        background_tasks.add(task_bans)
+        task_traffic = asyncio.create_task(traffic_monitor(), name="TrafficMonitor")
+        background_tasks.add(task_traffic)
+        task_resources = asyncio.create_task(resource_monitor(), name="ResourceMonitor")
+        background_tasks.add(task_resources)
+        
         logging.info("Starting polling...")
         await dp.start_polling(bot, allowed_updates=dp.resolve_used_update_types())
+        
+    except (KeyboardInterrupt, SystemExit):
+        logging.info("Получен KeyboardInterrupt/SystemExit в блоке try функции main.")
     except Exception as e:
-        logging.critical(f"Критическая ошибка запуска бота: {e}", exc_info=True)
+        logging.critical(f"Критическая ошибка в главном цикле бота: {e}", exc_info=True)
+        
     finally:
-        logging.info("Bot shutdown.")
+        # Упрощенная проверка в finally
+        session_to_check = getattr(bot, 'session', None)
+        underlying_session_to_check = getattr(session_to_check, 'session', None)
+        session_closed_attr = getattr(underlying_session_to_check, 'closed', True)
+
+        if not session_closed_attr:
+             logging.warning("Polling завершился неожиданно или shutdown не сработал полностью. Повторная попытка очистки...")
+             await shutdown(dp, bot)
+        
+        logging.info("Функция main бота завершена.")
+# --- [КОНЕЦ ИЗМЕНЕНИЯ] ---
 
 
 if __name__ == "__main__":
+    import signal # Убедитесь, что импорт здесь есть
     try:
+        logging.info("Запуск asyncio.run(main())...")
         asyncio.run(main())
     except KeyboardInterrupt:
-        logging.info("Бот остановлен вручную.")
+        logging.info("Бот остановлен вручную (KeyboardInterrupt в __main__).")
     except Exception as e:
-        logging.critical(f"Непредвиденное завершение: {e}", exc_info=True)
+        logging.critical(f"Непредвиденное завершение вне цикла asyncio: {e}", exc_info=True)
+    finally:
+         logging.info("Скрипт bot.py завершает работу.")
