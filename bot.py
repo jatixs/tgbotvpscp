@@ -58,94 +58,127 @@ def register_module(module, admin_only=False, root_only=False):
     try:
         # 1. Регистрация хэндлеров
         module.register_handlers(dp)
-        
+
         # 2. Определение уровня кнопки
         button_level = "user"
         if root_only:
             button_level = "root"
         elif admin_only:
             button_level = "admin"
-            
+
         # 3. Добавление кнопки в карту
         buttons_map[button_level].append(module.get_button())
-        
+
         # 4. Регистрация фоновых задач (если есть)
         if hasattr(module, 'start_background_tasks'):
             tasks = module.start_background_tasks(bot) # Ожидаем список
             for task in tasks:
                 background_tasks.add(task)
-            
+
         logging.info(f"Модуль '{module.__name__}' успешно загружен.")
-        
+
     except Exception as e:
         logging.error(f"Ошибка при загрузке модуля '{module.__name__}': {e}", exc_info=True)
 
 
-# --- Регистрация базовых хэндлеров (Start/Menu) ---
-@dp.message(Command("start", "menu"))
-@dp.message(F.text == "🔙 Назад в меню")
-async def start_or_menu_handler(message: types.Message, state: FSMContext):
-    user_id = message.from_user.id
-    chat_id = message.chat.id
-    command = "start" if message.text == "/start" else "menu"
+# --- (ИСПРАВЛЕНИЕ) Регистрация базовых хэндлеров (Start/Menu) ---
+
+async def show_main_menu(user_id: int, chat_id: int, state: FSMContext):
+    """Вспомогательная функция для отображения главного меню."""
+    command = "menu" # Предполагаем команду 'menu' при внутреннем вызове
     await state.clear()
-    
+
+    # Проверка прав доступа для пользователя, инициировавшего действие
     if not auth.is_allowed(user_id, command):
         await auth.send_access_denied_message(bot, user_id, chat_id, command)
         return
-        
-    # Сохраняем карту кнопок в объект бота, чтобы хэндлеры модулей
-    # (как traffic_handler) могли ее достать
+
+    # Убедимся, что карта кнопок доступна боту
     bot.buttons_map = buttons_map
-        
+
+    # Очищаем предыдущие сообщения, связанные с этим ПОЛЬЗОВАТЕЛЕМ
     await messaging.delete_previous_message(
-        user_id, 
-        ["start", "menu", "manage_users", "reboot_confirm", "generate_vless", 
+        user_id,
+        ["start", "menu", "manage_users", "reboot_confirm", "generate_vless",
          "adduser", "notifications_menu", "traffic", "get_id", "fall2ban",
          "sshlog", "logs", "restart", "selftest", "speedtest", "top",
-         "update", "uptime", "updatexray"], 
+         "update", "uptime", "updatexray"],
         chat_id,
         bot
     )
-    if str(user_id) not in shared_state.USER_NAMES:
-       await auth.refresh_user_names(bot)
-       
-    sent_message = await message.answer(
-        "👋 Привет! Выбери команду на клавиатуре ниже. Чтобы вызвать меню снова, используй /menu.",
-        reply_markup=keyboards.get_main_reply_keyboard(user_id, buttons_map)
-    )
-    shared_state.LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = sent_message.message_id
 
-@dp.callback_query(F.data == "back_to_menu")
-async def back_to_menu_callback(callback: types.CallbackQuery, state: FSMContext):
-    # Эта логика теперь живет здесь, в главном файле
+    # Убедимся, что имя пользователя загружено/обновлено при необходимости
+    if str(user_id) not in shared_state.USER_NAMES:
+       await auth.refresh_user_names(bot) # Передаем экземпляр bot
+
+    # Готовим текст и клавиатуру меню
+    menu_text = "👋 Привет! Выбери команду на клавиатуре ниже. Чтобы вызвать меню снова, используй /menu."
+    # Используем bot.buttons_map, который был заполнен при запуске
+    reply_markup = keyboards.get_main_reply_keyboard(user_id, bot.buttons_map)
+
+    # Отправляем НОВОЕ сообщение с меню
     try:
-        await callback.message.delete() # Просто удаляем сообщение с inline-кнопками
+        sent_message = await bot.send_message(
+            chat_id,
+            menu_text,
+            reply_markup=reply_markup
+        )
+        # Сохраняем ID нового сообщения меню
+        shared_state.LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = sent_message.message_id
+    except Exception as e:
+        logging.error(f"Не удалось отправить главное меню пользователю {user_id}: {e}")
+
+
+@dp.message(Command("start", "menu"))
+@dp.message(F.text == "🔙 Назад в меню") # Этот текст приходит от ReplyKeyboard
+async def start_or_menu_handler_message(message: types.Message, state: FSMContext):
+    """Обработчик ТОЛЬКО для прямых сообщений (/start, /menu, кнопка 'Назад в меню')."""
+    user_id = message.from_user.id
+    chat_id = message.chat.id
+    # Вызываем вспомогательную функцию
+    await show_main_menu(user_id, chat_id, state)
+
+
+@dp.callback_query(F.data == "back_to_menu") # Этот callback приходит от InlineKeyboard
+async def back_to_menu_callback(callback: types.CallbackQuery, state: FSMContext):
+    """Обработчик для инлайн-кнопки 'Назад в меню'."""
+    # Получаем ID пользователя, НАЖАВШЕГО кнопку
+    user_id = callback.from_user.id
+    chat_id = callback.message.chat.id
+
+    # Удаляем сообщение с инлайн-клавиатурой
+    try:
+        await callback.message.delete()
     except TelegramBadRequest as e:
-        if "message to delete not found" not in str(e):
+        # Игнорируем ошибку, если сообщение уже удалено
+        if "message to delete not found" not in str(e).lower():
             logging.warning(f"Не удалось удалить сообщение при back_to_menu: {e}")
-            
-    await start_or_menu_handler(callback.message, state) # и вызываем обычное меню
+
+    # Вызываем вспомогательную функцию с ПРАВИЛЬНЫМ user_id
+    await show_main_menu(user_id, chat_id, state)
+    # Отвечаем на callback-запрос, чтобы убрать "часики" на кнопке
     await callback.answer()
+
+# --- КОНЕЦ ИСПРАВЛЕНИЯ ---
 
 
 # --- [!!!] ГЛАВНАЯ ЛОГИКА ЗАГРУЗКИ МОДУЛЕЙ ---
 def load_modules():
     logging.info("Загрузка модулей...")
-    
+
     # User
     if ENABLE_SELFTEST: register_module(selftest)
     if ENABLE_TRAFFIC: register_module(traffic)
     if ENABLE_UPTIME: register_module(uptime)
     if ENABLE_NOTIFICATIONS: register_module(notifications)
-    
+
     # Admin
     if ENABLE_USERS: register_module(users, admin_only=True)
     if ENABLE_VLESS: register_module(vless, admin_only=True)
     if ENABLE_SPEEDTEST: register_module(speedtest, admin_only=True)
     if ENABLE_TOP: register_module(top, admin_only=True)
     if ENABLE_XRAY: register_module(xray, admin_only=True)
-    
+
     # Root
     if ENABLE_SSHLOG: register_module(sshlog, root_only=True)
     if ENABLE_FAIL2BAN: register_module(fail2ban, root_only=True)
@@ -153,7 +186,7 @@ def load_modules():
     if ENABLE_UPDATE: register_module(update, root_only=True)
     if ENABLE_REBOOT: register_module(reboot, root_only=True)
     if ENABLE_RESTART: register_module(restart, root_only=True)
-    
+
     logging.info("--- Карта кнопок ---")
     logging.info(f"User: {[btn.text for btn in buttons_map['user']]}")
     logging.info(f"Admin: {[btn.text for btn in buttons_map['admin']]}")
@@ -204,31 +237,31 @@ async def main():
             loop.add_signal_handler(s, lambda s=s: asyncio.create_task(shutdown(dp, bot)))
         logging.info("Обработчики сигналов SIGINT и SIGTERM установлены.")
     except NotImplementedError:
-        logging.warning("Установка обработчиков сигналов не поддерживается на этой платформе.")
+        logging.warning("Установка обработчиков сигналов не поддерживается.")
 
     try:
         logging.info(f"Бот запускается в режиме: {config.INSTALL_MODE.upper()}")
-        
+
         # Загрузка пользователей и конфигов (теперь это функции из auth/utils)
         await asyncio.to_thread(auth.load_users)
         await asyncio.to_thread(utils.load_alerts_config)
         await auth.refresh_user_names(bot)
-        
+
         # Проверки перезапуска (передаем bot)
         await utils.initial_reboot_check(bot)
         await utils.initial_restart_check(bot)
 
         # [!!!] Загружаем модули, хэндлеры, кнопки и фоновые задачи
         load_modules()
-        
+
         logging.info("Starting polling...")
         await dp.start_polling(bot, allowed_updates=dp.resolve_used_update_types())
-        
+
     except (KeyboardInterrupt, SystemExit):
         logging.info("Получен KeyboardInterrupt/SystemExit в блоке try функции main.")
     except Exception as e:
         logging.critical(f"Критическая ошибка в главном цикле бота: {e}", exc_info=True)
-        
+
     finally:
         session_to_check = getattr(bot, 'session', None)
         underlying_session_to_check = getattr(session_to_check, 'session', None)
@@ -237,7 +270,7 @@ async def main():
         if not session_closed_attr:
              logging.warning("Polling завершился неожиданно или shutdown не сработал полностью. Повторная попытка очистки...")
              await shutdown(dp, bot)
-        
+
         logging.info("Функция main бота завершена.")
 
 
