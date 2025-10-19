@@ -892,6 +892,173 @@ async def generate_vless_handler(message: types.Message, state: FSMContext):
     LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = sent_message.message_id
     await state.set_state(GenerateVlessStates.waiting_for_file)
 
+
+# --- [НАЧАЛО] НОВЫЕ ОБРАБОТЧИКИ ДЛЯ VLESS ---
+
+# 1. ОБРАБОТЧИК ДЛЯ ПОЛУЧЕНИЯ JSON-ФАЙЛА
+@dp.message(StateFilter(GenerateVlessStates.waiting_for_file), F.document)
+async def process_vless_file(message: types.Message, state: FSMContext):
+    user_id = message.from_user.id
+    command = "generate_vless" # Используем тот же ID для удаления
+    original_question_msg_id = None
+
+    if user_id in LAST_MESSAGE_IDS and command in LAST_MESSAGE_IDS[user_id]:
+        original_question_msg_id = LAST_MESSAGE_IDS[user_id].pop(command)
+        try:
+            # Удаляем предыдущее сообщение ("Отправьте файл...")
+            await bot.delete_message(chat_id=message.chat.id, message_id=original_question_msg_id)
+        except TelegramBadRequest:
+            pass # Сообщение уже удалено, не страшно
+
+    document = message.document
+    if not document.file_name or not document.file_name.lower().endswith('.json'):
+        # Клавиатура "Отменить"
+        cancel_keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="❌ Отменить", callback_data="back_to_menu")]
+        ])
+        sent_message = await message.answer(
+            "⛔ <b>Ошибка:</b> Файл должен быть формата <code>.json</code>.\n\nПопробуйте отправить файл еще раз.",
+            parse_mode="HTML",
+            reply_markup=cancel_keyboard
+        )
+        # Перезаписываем ID сообщения, чтобы его можно было удалить
+        LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = sent_message.message_id
+        return
+
+    try:
+        # Загружаем файл
+        file = await bot.get_file(document.file_id)
+        file_download_result = await bot.download_file(file.file_path)
+        
+        # --- [ИСПРАВЛЕНИЕ] ---
+        # bot.download_file возвращает BytesIO. Нужно сначала прочитать ( .read() ),
+        # а потом декодировать байты ( .decode('utf-8') ).
+        json_data = file_download_result.read().decode('utf-8')
+        # ---------------------
+
+        # Сохраняем JSON в FSM
+        await state.update_data(json_data=json_data)
+
+        # Запрашиваем имя
+        # Клавиатура "Отменить"
+        cancel_keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="❌ Отменить", callback_data="back_to_menu")]
+        ])
+        sent_message = await message.answer(
+            "✅ Файл JSON получен.\n\n"
+            "Теперь <b>введите имя</b> для этой VLESS-ссылки (например, 'My_Server_1'):",
+            parse_mode="HTML",
+            reply_markup=cancel_keyboard
+        )
+        LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = sent_message.message_id
+        await state.set_state(GenerateVlessStates.waiting_for_name)
+
+    except Exception as e:
+        logging.error(f"Ошибка при загрузке или чтении VLESS JSON: {e}")
+        await message.answer(f"⚠️ Произошла ошибка при обработке файла: {e}")
+        await state.clear()
+        
+# 2. ОБРАБОТЧИК ДЛЯ ПОЛУЧЕНИЯ ИМЕНИ И ГЕНЕРАЦИИ
+@dp.message(StateFilter(GenerateVlessStates.waiting_for_name), F.text)
+async def process_vless_name(message: types.Message, state: FSMContext):
+    user_id = message.from_user.id
+    command = "generate_vless"
+
+    # Удаляем предыдущее сообщение ("Введите имя...")
+    if user_id in LAST_MESSAGE_IDS and command in LAST_MESSAGE_IDS[user_id]:
+        try:
+            await bot.delete_message(chat_id=message.chat.id, message_id=LAST_MESSAGE_IDS[user_id].pop(command))
+        except TelegramBadRequest:
+            pass
+
+    try:
+        custom_name = message.text.strip()
+        user_data = await state.get_data()
+        json_data = user_data.get('json_data')
+
+        if not json_data:
+            await message.answer("⚠️ Ошибка: Данные JSON не найдены в сессии. Попробуйте сначала.", reply_markup=get_back_keyboard("back_to_menu"))
+            await state.clear()
+            return
+
+        # Генерируем ссылку (эта функция у вас уже есть)
+        vless_url = convert_json_to_vless(json_data, custom_name)
+
+        if vless_url.startswith("⚠️"):
+            await message.answer(vless_url, reply_markup=get_back_keyboard("back_to_menu"))
+            await state.clear()
+            return
+
+        # Генерируем QR-код (импорты у вас уже есть)
+        qr = qrcode.QRCode(
+            version=1,
+            error_correction=qrcode.constants.ERROR_CORRECT_L,
+            box_size=10,
+            border=4,
+        )
+        qr.add_data(vless_url)
+        qr.make(fit=True)
+
+        img = qr.make_image(fill_color="black", back_color="white")
+
+        # Сохраняем QR-код в буфер
+        img_buffer = io.BytesIO()
+        img.save(img_buffer, format='PNG')
+        img_buffer.seek(0)
+        
+        qr_file = BufferedInputFile(img_buffer.read(), filename="vless_qr.png")
+
+        # Отправляем QR-код и ссылку
+        await bot.send_photo(
+            chat_id=message.chat.id,
+            photo=qr_file,
+            caption=f"✅ Ваша VLESS-ссылка с именем '<b>{escape_html(custom_name)}</b>' готова:\n\n"
+                    f"<code>{escape_html(vless_url)}</code>",
+            parse_mode="HTML"
+        )
+        
+        # Отправляем новое сообщение, чтобы обновить reply_markup и вернуться в меню
+        sent_message = await message.answer("🏠 Возврат в главное меню.", reply_markup=get_main_reply_keyboard(user_id))
+        LAST_MESSAGE_IDS.setdefault(user_id, {})["menu"] = sent_message.message_id
+
+    except Exception as e:
+        logging.error(f"Ошибка при генерации VLESS или QR: {e}")
+        await message.answer(f"⚠️ Произошла критическая ошибка: {e}", reply_markup=get_back_keyboard("back_to_menu"))
+    finally:
+        await state.clear()
+
+# 3. ОБРАБОТЧИК ДЛЯ НЕПРАВИЛЬНОГО ВВОДА (не-документ)
+@dp.message(StateFilter(GenerateVlessStates.waiting_for_file))
+async def process_vless_file_invalid(message: types.Message, state: FSMContext):
+    # Клавиатура "Отменить"
+    cancel_keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="❌ Отменить", callback_data="back_to_menu")]
+    ])
+    sent_message = await message.reply(
+        "⛔ Пожалуйста, отправьте <b>документ</b> (файл), а не текст.",
+        parse_mode="HTML",
+        reply_markup=cancel_keyboard
+    )
+    # Обновляем ID сообщения, чтобы оно заменилось при следующем вводе
+    LAST_MESSAGE_IDS.setdefault(message.from_user.id, {})["generate_vless"] = sent_message.message_id
+
+# 4. ОБРАБОТЧИК ДЛЯ НЕПРАВИЛЬНОГО ВВОДА (не-текст)
+@dp.message(StateFilter(GenerateVlessStates.waiting_for_name))
+async def process_vless_name_invalid(message: types.Message, state: FSMContext):
+    # Клавиатура "Отменить"
+    cancel_keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="❌ Отменить", callback_data="back_to_menu")]
+    ])
+    sent_message = await message.reply(
+        "⛔ Пожалуйста, отправьте <b>текстовое имя</b>.",
+        parse_mode="HTML",
+        reply_markup=cancel_keyboard
+    )
+    LAST_MESSAGE_IDS.setdefault(message.from_user.id, {})["generate_vless"] = sent_message.message_id
+
+# --- [КОНЕЦ] НОВЫЕ ОБРАБОТЧИКИ ДЛЯ VLESS ---
+
+
 # --- Original Handlers ---
 async def fall2ban_handler(message: types.Message):
     user_id = message.from_user.id
@@ -1166,6 +1333,10 @@ async def selftest_handler(message: types.Message):
         await send_access_denied_message(user_id, chat_id, command)
         return
 
+    # --- [ИЗМЕНЕНИЕ] Добавлена имитация "печатает" ---
+    await bot.send_chat_action(chat_id=chat_id, action="typing")
+    # --------------------------------------------------
+
     await delete_previous_message(user_id, command, chat_id)
     sent_message = await message.answer("🔍 Собираю сведения о сервере...")
     LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = sent_message.message_id
@@ -1321,6 +1492,10 @@ async def speedtest_handler(message: types.Message):
         await send_access_denied_message(user_id, chat_id, command)
         return
 
+    # --- [ИЗМЕНЕНИЕ] Добавлена имитация "печатает" ---
+    await bot.send_chat_action(chat_id=chat_id, action="typing")
+    # --------------------------------------------------
+
     await delete_previous_message(user_id, command, chat_id)
     sent_message = await message.answer("🚀 Запуск speedtest... Это может занять до минуты.")
     LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = sent_message.message_id
@@ -1371,13 +1546,24 @@ async def top_handler(message: types.Message):
         await send_access_denied_message(user_id, chat_id, command)
         return
 
+    # --- [ИЗМЕНЕНИЕ] Добавлена имитация "печатает" ---
+    await bot.send_chat_action(chat_id=chat_id, action="typing")
+    # --------------------------------------------------
+
     await delete_previous_message(user_id, command, chat_id)
-    cmd = "ps aux --sort=-%cpu | head -n 15"
+    
+    # --- [ИЗМЕНЕНИЕ] c 15 (14+1) на 11 (10+1) ---
+    cmd = "ps aux --sort=-%cpu | head -n 11"
+    # ----------------------------------------------
+
     process = await asyncio.create_subprocess_shell(cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
     stdout, stderr = await process.communicate()
     if process.returncode == 0:
         output = escape_html(stdout.decode())
-        response_text = f"🔥 <b>Топ 14 процессов по загрузке CPU:</b>\n<pre>{output}</pre>"
+        
+        # --- [ИЗМЕНЕНИЕ] с 14 на 10 ---
+        response_text = f"🔥 <b>Топ 10 процессов по загрузке CPU:</b>\n<pre>{output}</pre>"
+        # --------------------------------
     else:
         error_output = escape_html(stderr.decode())
         response_text = f"❌ Ошибка при получении списка процессов:\n<pre>{error_output}</pre>"
@@ -1442,6 +1628,10 @@ async def update_handler(message: types.Message):
     if not is_allowed(user_id, command):
         await send_access_denied_message(user_id, chat_id, command)
         return
+
+    # --- [ИЗМЕНЕНИЕ] Добавлена имитация "печатает" ---
+    await bot.send_chat_action(chat_id=chat_id, action="typing")
+    # --------------------------------------------------
 
     await delete_previous_message(user_id, command, chat_id)
     sent_message = await message.answer("🔄 Выполняю обновление VPS... Это может занять несколько минут.")
@@ -1534,6 +1724,10 @@ async def updatexray_handler(message: types.Message, state: FSMContext):
     if not is_allowed(user_id, command):
         await send_access_denied_message(user_id, chat_id, command)
         return
+
+    # --- [ИЗМЕНЕНИЕ] Добавлена имитация "печатает" ---
+    await bot.send_chat_action(chat_id=chat_id, action="typing")
+    # --------------------------------------------------
 
     await delete_previous_message(user_id, command, chat_id)
     sent_msg = await message.answer("🔍 Определяю установленный клиент Xray...")
@@ -1645,7 +1839,11 @@ async def cq_back_to_menu(callback: types.CallbackQuery, state: FSMContext):
         logging.error(f"Ошибка в cq_back_to_menu: {e}")
         await callback.answer("⚠️ Ошибка при возврате в меню.", show_alert=True)
     finally:
+        # --- [ИЗМЕНЕНИЕ] Убрал вызов start_or_menu_handler, так как он уже есть в F.data == "back_to_menu"
+        # Вызываем функцию, которая отправляет *новое* сообщение с меню
+        await start_or_menu_handler(callback.message, state)
         await callback.answer()
+
 
 # Обработчики для toggle_alert_*, alert_downtime_stub, get_id_inline, back_to_manage_users
 @dp.callback_query(F.data.startswith("toggle_alert_"))
