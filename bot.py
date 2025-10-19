@@ -751,6 +751,31 @@ async def start_or_menu_handler(message: types.Message, state: FSMContext):
         reply_markup=get_main_reply_keyboard(user_id)
     )
     LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = sent_message.message_id
+@dp.callback_query(F.data == "back_to_menu")
+async def back_to_menu_callback(callback: types.CallbackQuery, state: FSMContext):
+    user_id = callback.from_user.id
+    chat_id = callback.message.chat.id
+    await state.clear()
+
+    if not is_allowed(user_id, "menu"):
+        await send_access_denied_message(user_id, chat_id, "menu")
+        await callback.answer()
+        return
+
+    await delete_previous_message(
+        user_id,
+        ["start", "menu", "manage_users", "reboot_confirm", "generate_vless",
+         "adduser", "notifications_menu", "traffic", "get_id"],
+        chat_id
+    )
+
+    sent_message = await bot.send_message(
+        chat_id,
+        "🏠 Главное меню:",
+        reply_markup=get_main_reply_keyboard(user_id)
+    )
+    LAST_MESSAGE_IDS.setdefault(user_id, {})["menu"] = sent_message.message_id
+    await callback.answer()
 
 @dp.message(F.text == "👤 Пользователи")
 async def manage_users_handler(message: types.Message):
