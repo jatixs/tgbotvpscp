@@ -2053,6 +2053,7 @@ async def text_get_id_handler(message: types.Message):
 
 
 # --- Reboot Handler ---
+@dp.callback_query(F.data == "reboot")
 async def reboot_handler(callback: types.CallbackQuery):
     user_id = callback.from_user.id
     chat_id = callback.message.chat.id
@@ -2074,7 +2075,7 @@ async def reboot_handler(callback: types.CallbackQuery):
     except Exception as e: logging.error(f"Не удалось записать флаг перезагрузки: {e}")
 
     try:
-        reboot_cmd = "sudo reboot"
+        reboot_cmd = "reboot"
         process = await asyncio.create_subprocess_shell(reboot_cmd)
         await process.wait()
         logging.info("Reboot command sent.")
