@@ -74,7 +74,7 @@
 Скопируйте и выполните следующую команду. Скрипт скачает и запустит установщик:
 
 ```bash
-bash <(curl -sSL [https://raw.githubusercontent.com/jatixs/tgbotvpscp/main/deploy.sh](https://raw.githubusercontent.com/jatixs/tgbotvpscp/main/deploy.sh))
+bash <(wget -qO- https://raw.githubusercontent.com/jatixs/tgbotvpscp/main/deploy.sh)
 ```
 
 Скрипт предложит выбрать:
