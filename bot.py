@@ -212,22 +212,81 @@ def is_allowed(user_id, command=None):
     return False
 
 
+# --- [ИЗМЕНЕНИЕ] Исправленная функция обновления имен ---
 async def refresh_user_names():
     needs_save = False
-    for uid in list(ALLOWED_USERS.keys()):
-        if str(uid) not in USER_NAMES or USER_NAMES.get(str(uid)) == "Главный Админ":
+    # Проходим по копии ключей, чтобы избежать проблем при возможном удалении юзера во время итерации (хотя здесь это маловероятно)
+    user_ids_to_check = list(ALLOWED_USERS.keys())
+
+    logging.info(f"Начинаю обновление имен для {len(user_ids_to_check)} пользователей...")
+
+    for uid in user_ids_to_check:
+        uid_str = str(uid)
+        current_name = USER_NAMES.get(uid_str)
+
+        # Обновляем, если:
+        # 1. ID вообще нет в словаре имен
+        # 2. Имя - это временное "Новый_..."
+        # 3. Имя - это запасное "ID: ..." (если get_chat ранее не сработал)
+        # 4. Имя - это "Главный Админ" (на случай, если админ сменил имя)
+        should_refresh = (
+            not current_name
+            or current_name.startswith("Новый_")
+            or current_name.startswith("ID: ")
+            or current_name == "Главный Админ"
+        )
+
+        if should_refresh:
             try:
+                logging.debug(f"Пытаюсь получить имя для ID: {uid}")
                 chat = await bot.get_chat(uid)
-                new_name = chat.first_name or chat.username or f"Пользователь_{uid}"
-                if USER_NAMES.get(str(uid)) != new_name:
-                    USER_NAMES[str(uid)] = new_name
+                # Выбираем лучшее доступное имя: Имя > Юзернейм > Запасной вариант
+                new_name = chat.first_name or chat.username
+                if not new_name:
+                    # Если нет ни имени, ни юзернейма, используем ID
+                    new_name = f"ID: {uid}"
+                    logging.warning(f"Не удалось получить Имя/Юзернейм для {uid}, использую '{new_name}'")
+                else:
+                    # Экранируем HTML на всякий случай, если имя содержит спецсимволы
+                    new_name = escape_html(new_name)
+
+                # Обновляем, только если имя действительно изменилось
+                if current_name != new_name:
+                    logging.info(f"Обновлено имя для {uid}: '{current_name}' -> '{new_name}'")
+                    USER_NAMES[uid_str] = new_name
                     needs_save = True
+                else:
+                    logging.debug(f"Имя для {uid} не изменилось ('{current_name}').")
+
+            except TelegramBadRequest as e:
+                # Частые ошибки: чат не найден (пользователь удалил аккаунт?) или бот заблокирован
+                if "chat not found" in str(e) or "bot was blocked by the user" in str(e):
+                     logging.warning(f"Не удалось обновить имя для {uid}: {e}. Использую 'ID: {uid}'.")
+                     # Устанавливаем запасное имя, если его еще нет
+                     if current_name != f"ID: {uid}":
+                          USER_NAMES[uid_str] = f"ID: {uid}"
+                          needs_save = True
+                else:
+                     # Другие ошибки API Telegram
+                     logging.error(f"Непредвиденная ошибка Telegram API при получении имени для {uid}: {e}")
+                     # Оставляем старое имя или устанавливаем запасное
+                     if not current_name or current_name.startswith("Новый_"):
+                          USER_NAMES[uid_str] = f"ID: {uid}"
+                          needs_save = True
             except Exception as e:
-                logging.warning(f"Не удалось обновить имя для {uid}: {e}")
-                USER_NAMES[str(uid)] = f"ID: {uid}"
+                # Любые другие непредвиденные ошибки
+                logging.error(f"Непредвиденная ошибка при обновлении имени для {uid}: {e}")
+                if not current_name or current_name.startswith("Новый_"):
+                     USER_NAMES[uid_str] = f"ID: {uid}"
+                     needs_save = True
 
     if needs_save:
+        logging.info("Обнаружены изменения в именах, сохраняю users.json...")
         save_users()
+    else:
+        logging.info("Обновление имен завершено, изменений не найдено.")
+# --- [КОНЕЦ ИЗМЕНЕНИЯ] ---
+
 
 async def get_user_name(user_id):
     try:
@@ -329,12 +388,12 @@ def get_manage_users_keyboard():
 
 def get_delete_users_keyboard(current_user_id):
     buttons = []
-    sorted_users = sorted(ALLOWED_USERS.items(), key=lambda item: USER_NAMES.get(str(item[0]), "Я"), reverse=False)
+    sorted_users = sorted(ALLOWED_USERS.items(), key=lambda item: USER_NAMES.get(str(item[0]), f"ID: {item[0]}"), reverse=False) # Fallback to ID if name missing
 
     for uid, group in sorted_users:
         if uid == ADMIN_USER_ID:
             continue
-        user_name = USER_NAMES.get(str(uid), f"ID: {uid}")
+        user_name = USER_NAMES.get(str(uid), f"ID: {uid}") # Use fallback here too
         button_text = f"{user_name} ({group})"
         callback_data = f"delete_user_{uid}"
         if uid == current_user_id:
@@ -347,7 +406,7 @@ def get_delete_users_keyboard(current_user_id):
 
 def get_change_group_keyboard():
     buttons = []
-    sorted_users = sorted(ALLOWED_USERS.items(), key=lambda item: USER_NAMES.get(str(item[0]), "Я"), reverse=False)
+    sorted_users = sorted(ALLOWED_USERS.items(), key=lambda item: USER_NAMES.get(str(item[0]), f"ID: {item[0]}"), reverse=False)
     for uid, group in sorted_users:
         if uid == ADMIN_USER_ID:
             continue
@@ -1564,24 +1623,21 @@ async def updatexray_handler(message: types.Message, state: FSMContext):
 
 # --- [БЛОК ИСПРАВЛЕНИЙ] Обработчики нажатий (callback) ---
 
-# --- [ИЗМЕНЕНИЕ] Новая логика "Назад в меню" ---
+# Отдельный обработчик для back_to_menu
 @dp.callback_query(F.data == "back_to_menu")
 async def cq_back_to_menu(callback: types.CallbackQuery, state: FSMContext):
-    user_id = callback.from_user.id 
+    user_id = callback.from_user.id
     chat_id = callback.message.chat.id
-    command = "back_to_menu" 
+    command = "back_to_menu"
     try:
         await state.clear()
         if not is_allowed(user_id, command):
             await callback.answer("⛔ Доступ запрещен.", show_alert=True)
             return
-        
-        # Редактируем сообщение, удаляем клавиатуру
         await callback.message.edit_text("Возврат в меню...", reply_markup=None)
-        
     except TelegramBadRequest as e:
-        if "message is not modified" in str(e): pass # Уже в нужном состоянии
-        elif "message to edit not found" in str(e): pass # Сообщение уже удалено
+        if "message is not modified" in str(e): pass
+        elif "message to edit not found" in str(e): pass
         else:
             logging.error(f"Ошибка в cq_back_to_menu (edit): {e}")
             await callback.answer("⚠️ Ошибка при возврате в меню.", show_alert=True)
@@ -1589,9 +1645,9 @@ async def cq_back_to_menu(callback: types.CallbackQuery, state: FSMContext):
         logging.error(f"Ошибка в cq_back_to_menu: {e}")
         await callback.answer("⚠️ Ошибка при возврате в меню.", show_alert=True)
     finally:
-        await callback.answer() # Подтверждаем получение callback
-# --- [КОНЕЦ ИЗМЕНЕНИЯ] ---
+        await callback.answer()
 
+# Обработчики для toggle_alert_*, alert_downtime_stub, get_id_inline, back_to_manage_users
 @dp.callback_query(F.data.startswith("toggle_alert_"))
 async def cq_toggle_alert(callback: types.CallbackQuery):
     user_id = callback.from_user.id
@@ -1635,7 +1691,6 @@ async def cq_alert_downtime_stub(callback: types.CallbackQuery):
         show_alert=True
     )
 
-# --- [ИЗМЕНЕНИЕ] Новая логика "Назад" (шаг назад через edit_text) ---
 @dp.callback_query(F.data == "get_id_inline")
 async def cq_get_id_inline(callback: types.CallbackQuery):
     user_id = callback.from_user.id
@@ -1687,11 +1742,8 @@ async def cq_back_to_manage_users(callback: types.CallbackQuery, state: FSMConte
     except Exception as e:
         logging.error(f"Ошибка в cq_back_to_manage_users: {e}")
         await callback.answer("⚠️ Ошибка", show_alert=True)
-# --- [ КОНЕЦ ИЗМЕНЕНИЙ КНОПОК "НАЗАД" ] ---
 
-
-# --- Логика Управления Пользователями (без изменений в этой секции) ---
-
+# --- Обработчики управления пользователями ---
 @dp.callback_query(F.data == "add_user")
 async def cq_add_user_start(callback: types.CallbackQuery, state: FSMContext):
     user_id = callback.from_user.id
@@ -1709,27 +1761,20 @@ async def cq_add_user_start(callback: types.CallbackQuery, state: FSMContext):
 @dp.message(StateFilter(ManageUsersStates.waiting_for_user_id))
 async def process_add_user_id(message: types.Message, state: FSMContext):
     user_id = message.from_user.id
-    # Находим ID сообщения, которое нужно будет отредактировать (это сообщение с вопросом ID)
-    # Пытаемся найти его через LAST_MESSAGE_IDS или предполагаем, что оно было перед сообщением юзера
     original_question_msg_id = None
     if user_id in LAST_MESSAGE_IDS and "manage_users" in LAST_MESSAGE_IDS[user_id]:
-        # Если мы пришли из manage_users, то это то сообщение
-        original_question_msg_id = LAST_MESSAGE_IDS[user_id]["manage_users"] 
+        original_question_msg_id = LAST_MESSAGE_IDS[user_id].get("manage_users") # Use get for safety
     elif message.reply_to_message and message.reply_to_message.from_user.is_bot:
-         # Если пользователь ответил на сообщение бота
          original_question_msg_id = message.reply_to_message.message_id
-    # Как запасной вариант, можно попробовать message.message_id - 1, но это менее надежно
 
     try:
         new_user_id = int(message.text.strip())
         if new_user_id in ALLOWED_USERS:
-            await message.reply("⚠️ Этот пользователь уже добавлен.") # Ответ на сообщение юзера
-            # Не редактируем исходный вопрос, просто отвечаем
+            await message.reply("⚠️ Этот пользователь уже добавлен.")
             return
-            
+
         await state.update_data(new_user_id=new_user_id)
 
-        # Редактируем сообщение с вопросом ID, чтобы показать выбор группы
         if original_question_msg_id:
             try:
                 await bot.edit_message_text(
@@ -1738,15 +1783,15 @@ async def process_add_user_id(message: types.Message, state: FSMContext):
                     message_id=original_question_msg_id,
                     reply_markup=get_group_selection_keyboard()
                 )
-                await message.delete() # Удаляем сообщение пользователя с ID
+                await message.delete()
             except TelegramBadRequest as edit_err:
                  logging.warning(f"Не удалось отредактировать сообщение {original_question_msg_id} для выбора группы: {edit_err}. Отправляю новое.")
-                 await message.reply( # Отвечаем на сообщение юзера, если редактирование не удалось
+                 await message.reply(
                     "Отлично. Теперь выберите группу для нового пользователя:",
                     reply_markup=get_group_selection_keyboard()
                  )
         else:
-             await message.reply( # Если не нашли исходное сообщение, просто отвечаем
+             await message.reply(
                 "Отлично. Теперь выберите группу для нового пользователя:",
                 reply_markup=get_group_selection_keyboard()
              )
@@ -1764,20 +1809,21 @@ async def process_add_user_group(callback: types.CallbackQuery, state: FSMContex
         group = callback.data.split('_')[-1]
         user_data = await state.get_data()
         new_user_id = user_data.get('new_user_id')
-        
+
         if not new_user_id:
              raise ValueError("Не найден ID пользователя в состоянии FSM.")
-             
+
         ALLOWED_USERS[new_user_id] = group
-        USER_NAMES[str(new_user_id)] = f"Новый_{new_user_id}"
-        save_users()
+        USER_NAMES[str(new_user_id)] = f"Новый_{new_user_id}" # Устанавливаем временное имя
+        save_users() # Сохраняем с временным именем
         logging.info(f"Админ {callback.from_user.id} добавил пользователя {new_user_id} в группу '{group}'")
-        
-        asyncio.create_task(refresh_user_names()) 
-        
+
+        # Запускаем обновление имени в фоне
+        asyncio.create_task(refresh_user_names())
+
         await callback.message.edit_text(f"✅ Пользователь <code>{new_user_id}</code> успешно добавлен в группу <b>{group}</b>.", parse_mode="HTML", reply_markup=get_back_keyboard("back_to_manage_users"))
         await state.clear()
-        
+
     except Exception as e:
         logging.error(f"Ошибка в process_add_user_group: {e}")
         await callback.message.edit_text("⚠️ Произошла ошибка при добавлении пользователя.", reply_markup=get_back_keyboard("back_to_manage_users"))
@@ -1811,17 +1857,17 @@ async def cq_delete_user_confirm(callback: types.CallbackQuery):
             keyboard = get_delete_users_keyboard(admin_id)
             await callback.message.edit_reply_markup(reply_markup=keyboard)
             return
-            
+
         deleted_user_name = USER_NAMES.get(str(user_id_to_delete), f"ID: {user_id_to_delete}")
         deleted_group = ALLOWED_USERS.pop(user_id_to_delete, "Неизвестно")
         USER_NAMES.pop(str(user_id_to_delete), None)
         save_users()
         logging.info(f"Админ {admin_id} удалил пользователя {deleted_user_name} ({user_id_to_delete}) из группы '{deleted_group}'")
-        
+
         keyboard = get_delete_users_keyboard(admin_id)
         await callback.message.edit_text(f"✅ Пользователь <b>{deleted_user_name}</b> удален.\n\nВыберите пользователя для удаления:", reply_markup=keyboard, parse_mode="HTML")
         await callback.answer(f"Пользователь {deleted_user_name} удален.", show_alert=False)
-        
+
     except Exception as e:
         logging.error(f"Ошибка в cq_delete_user_confirm: {e}")
         await callback.answer("⚠️ Ошибка при удалении.", show_alert=True)
@@ -1840,11 +1886,11 @@ async def cq_request_self_delete(callback: types.CallbackQuery):
         if user_id_to_delete == ADMIN_USER_ID:
             await callback.answer("⛔ Главный Админ не может удалить себя.", show_alert=True)
             return
-            
+
         keyboard = get_self_delete_confirmation_keyboard(user_id)
         await callback.message.edit_text("⚠️ <b>Вы уверены, что хотите удалить себя из списка пользователей бота?</b>\nВы потеряете доступ ко всем командам.", reply_markup=keyboard, parse_mode="HTML")
         await callback.answer()
-        
+
     except Exception as e:
         logging.error(f"Ошибка в cq_request_self_delete: {e}")
         await callback.answer("⚠️ Ошибка", show_alert=True)
@@ -1863,16 +1909,16 @@ async def cq_confirm_self_delete(callback: types.CallbackQuery):
         if user_id_to_delete == ADMIN_USER_ID:
             await callback.answer("⛔ Главный Админ не может удалить себя.", show_alert=True)
             return
-            
+
         deleted_user_name = USER_NAMES.get(str(user_id_to_delete), f"ID: {user_id_to_delete}")
         deleted_group = ALLOWED_USERS.pop(user_id_to_delete, "Неизвестно")
         USER_NAMES.pop(str(user_id_to_delete), None)
         save_users()
         logging.info(f"Пользователь {deleted_user_name} ({user_id_to_delete}) удалил себя из группы '{deleted_group}'")
-        
+
         await callback.message.delete()
         await callback.answer("✅ Вы успешно удалены из пользователей бота.", show_alert=True)
-        
+
     except Exception as e:
         logging.error(f"Ошибка в cq_confirm_self_delete: {e}")
         await callback.answer("⚠️ Ошибка при удалении.", show_alert=True)
@@ -1903,7 +1949,7 @@ async def cq_select_user_for_group_change(callback: types.CallbackQuery):
         if user_id_to_change not in ALLOWED_USERS or user_id_to_change == ADMIN_USER_ID:
             await callback.answer("⚠️ Неверный пользователь или Главный Админ.", show_alert=True)
             return
-            
+
         user_name = USER_NAMES.get(str(user_id_to_change), f"ID: {user_id_to_change}")
         current_group = ALLOWED_USERS[user_id_to_change]
         keyboard = get_group_selection_keyboard(user_id_to_change)
@@ -1922,16 +1968,16 @@ async def cq_select_user_for_group_change(callback: types.CallbackQuery):
 async def cq_set_group(callback: types.CallbackQuery, state: FSMContext):
     current_state = await state.get_state()
     is_adding_new_user = current_state == ManageUsersStates.waiting_for_group
-    
+
     admin_id = callback.from_user.id
     if not is_allowed(admin_id, callback.data):
         await callback.answer("⛔ Доступ запрещен.", show_alert=True)
         return
-        
+
     if is_adding_new_user:
         await process_add_user_group(callback, state)
         return
-        
+
     try:
         parts = callback.data.split('_')
         user_id_to_change = int(parts[2])
@@ -1940,13 +1986,13 @@ async def cq_set_group(callback: types.CallbackQuery, state: FSMContext):
         if user_id_to_change not in ALLOWED_USERS or user_id_to_change == ADMIN_USER_ID:
             await callback.answer("⚠️ Неверный пользователь или Главный Админ.", show_alert=True)
             return
-            
+
         old_group = ALLOWED_USERS[user_id_to_change]
         ALLOWED_USERS[user_id_to_change] = new_group
         save_users()
         user_name = USER_NAMES.get(str(user_id_to_change), f"ID: {user_id_to_change}")
         logging.info(f"Админ {admin_id} изменил группу для {user_name} ({user_id_to_change}) с '{old_group}' на '{new_group}'")
-        
+
         keyboard = get_change_group_keyboard()
         await callback.message.edit_text(
              f"✅ Группа для <b>{user_name}</b> изменена на <b>{new_group}</b>.\n\nВыберите пользователя:",
@@ -1954,7 +2000,7 @@ async def cq_set_group(callback: types.CallbackQuery, state: FSMContext):
              parse_mode="HTML"
         )
         await callback.answer(f"Группа для {user_name} изменена.")
-        
+
     except (IndexError, ValueError) as e:
          logging.error(f"Ошибка разбора callback_data в cq_set_group: {e} (data: {callback.data})")
          await callback.answer("⚠️ Внутренняя ошибка.", show_alert=True)
@@ -2058,11 +2104,13 @@ async def reboot_handler(callback: types.CallbackQuery):
     user_id = callback.from_user.id
     chat_id = callback.message.chat.id
     message_id = callback.message.message_id
-    command = "reboot"
+    command = "reboot" 
+
     if not is_allowed(user_id, command):
         try:
-             await bot.edit_message_text("⛔ Отказано. Только администраторы могут перезагрузить сервер.", chat_id=chat_id, message_id=message_id)
-        except TelegramBadRequest: pass
+             await callback.answer("⛔ Отказано в доступе (не root).", show_alert=True) 
+        except TelegramBadRequest:
+             pass
         return
 
     try:
@@ -2071,14 +2119,17 @@ async def reboot_handler(callback: types.CallbackQuery):
         logging.warning("Не удалось отредактировать сообщение о перезагрузке (возможно, удалено).")
 
     try:
-        with open(REBOOT_FLAG_FILE, "w") as f: f.write(str(user_id))
-    except Exception as e: logging.error(f"Не удалось записать флаг перезагрузки: {e}")
+        with open(REBOOT_FLAG_FILE, "w") as f:
+            f.write(str(user_id))
+    except Exception as e:
+        logging.error(f"Не удалось записать флаг перезагрузки: {e}")
 
     try:
-        reboot_cmd = "reboot"
+        # Убираем sudo, если уже root
+        reboot_cmd = "reboot" if INSTALL_MODE == "root" else "sudo reboot"
+        logging.info(f"Выполнение команды перезагрузки: {reboot_cmd}")
         process = await asyncio.create_subprocess_shell(reboot_cmd)
-        await process.wait()
-        logging.info("Reboot command sent.")
+        logging.info("Команда перезагрузки отправлена.")
     except Exception as e:
         logging.error(f"Ошибка при отправке команды reboot: {e}")
         try:
@@ -2150,7 +2201,7 @@ async def traffic_monitor():
 
         await asyncio.sleep(TRAFFIC_INTERVAL)
 
-# --- [ИЗМЕНЕНИЕ] Новая логика повторных алертов ---
+# Новая логика повторных алертов
 async def resource_monitor():
     global RESOURCE_ALERT_STATE, LAST_RESOURCE_ALERT_TIME
     logging.info("Монитор ресурсов запущен.")
@@ -2175,14 +2226,17 @@ async def resource_monitor():
                 if not RESOURCE_ALERT_STATE["cpu"]:
                     msg = f"⚠️ <b>Превышен порог CPU!</b>\nТекущее использование: <b>{cpu_usage:.1f}%</b> (Порог: {CPU_THRESHOLD}%)"
                     alerts_to_send.append(msg)
+                    logging.info("Сгенерирован алерт CPU.")
                     RESOURCE_ALERT_STATE["cpu"] = True
                     LAST_RESOURCE_ALERT_TIME["cpu"] = current_time
                 elif current_time - LAST_RESOURCE_ALERT_TIME["cpu"] > RESOURCE_ALERT_COOLDOWN:
                     msg = f"‼️ <b>CPU все еще ВЫСОКИЙ!</b>\nТекущее использование: <b>{cpu_usage:.1f}%</b> (Порог: {CPU_THRESHOLD}%)"
                     alerts_to_send.append(msg)
+                    logging.info("Сгенерирован повторный алерт CPU.")
                     LAST_RESOURCE_ALERT_TIME["cpu"] = current_time
             elif cpu_usage < CPU_THRESHOLD and RESOURCE_ALERT_STATE["cpu"]:
                  alerts_to_send.append(f"✅ <b>Нагрузка CPU нормализовалась.</b>\nТекущее использование: <b>{cpu_usage:.1f}%</b>")
+                 logging.info("Сгенерирован алерт нормализации CPU.")
                  RESOURCE_ALERT_STATE["cpu"] = False
                  LAST_RESOURCE_ALERT_TIME["cpu"] = 0
 
@@ -2191,14 +2245,17 @@ async def resource_monitor():
                 if not RESOURCE_ALERT_STATE["ram"]:
                     msg = f"⚠️ <b>Превышен порог RAM!</b>\nТекущее использование: <b>{ram_usage:.1f}%</b> (Порог: {RAM_THRESHOLD}%)"
                     alerts_to_send.append(msg)
+                    logging.info("Сгенерирован алерт RAM.")
                     RESOURCE_ALERT_STATE["ram"] = True
                     LAST_RESOURCE_ALERT_TIME["ram"] = current_time
                 elif current_time - LAST_RESOURCE_ALERT_TIME["ram"] > RESOURCE_ALERT_COOLDOWN:
                     msg = f"‼️ <b>RAM все еще ВЫСОКАЯ!</b>\nТекущее использование: <b>{ram_usage:.1f}%</b> (Порог: {RAM_THRESHOLD}%)"
                     alerts_to_send.append(msg)
+                    logging.info("Сгенерирован повторный алерт RAM.")
                     LAST_RESOURCE_ALERT_TIME["ram"] = current_time
             elif ram_usage < RAM_THRESHOLD and RESOURCE_ALERT_STATE["ram"]:
                  alerts_to_send.append(f"✅ <b>Использование RAM нормализовалось.</b>\nТекущее использование: <b>{ram_usage:.1f}%</b>")
+                 logging.info("Сгенерирован алерт нормализации RAM.")
                  RESOURCE_ALERT_STATE["ram"] = False
                  LAST_RESOURCE_ALERT_TIME["ram"] = 0
 
@@ -2207,14 +2264,17 @@ async def resource_monitor():
                 if not RESOURCE_ALERT_STATE["disk"]:
                     msg = f"⚠️ <b>Превышен порог Disk!</b>\nТекущее использование: <b>{disk_usage:.1f}%</b> (Порог: {DISK_THRESHOLD}%)"
                     alerts_to_send.append(msg)
+                    logging.info("Сгенерирован алерт Disk.")
                     RESOURCE_ALERT_STATE["disk"] = True
                     LAST_RESOURCE_ALERT_TIME["disk"] = current_time
                 elif current_time - LAST_RESOURCE_ALERT_TIME["disk"] > RESOURCE_ALERT_COOLDOWN:
                     msg = f"‼️ <b>Disk все еще ВЫСОКИЙ!</b>\nТекущее использование: <b>{disk_usage:.1f}%</b> (Порог: {DISK_THRESHOLD}%)"
                     alerts_to_send.append(msg)
+                    logging.info("Сгенерирован повторный алерт Disk.")
                     LAST_RESOURCE_ALERT_TIME["disk"] = current_time
             elif disk_usage < DISK_THRESHOLD and RESOURCE_ALERT_STATE["disk"]:
                  alerts_to_send.append(f"✅ <b>Использование Disk нормализовалось.</b>\nТекущее использование: <b>{disk_usage:.1f}%</b>")
+                 logging.info("Сгенерирован алерт нормализации Disk.")
                  RESOURCE_ALERT_STATE["disk"] = False
                  LAST_RESOURCE_ALERT_TIME["disk"] = 0
 
@@ -2226,7 +2286,7 @@ async def resource_monitor():
             logging.error(f"Ошибка в мониторе ресурсов: {e}")
 
         await asyncio.sleep(RESOURCE_CHECK_INTERVAL)
-# --- [КОНЕЦ ИЗМЕНЕНИЯ] ---
+
 
 async def initial_restart_check():
     if os.path.exists(RESTART_FLAG_FILE):
@@ -2265,7 +2325,7 @@ async def initial_reboot_check():
                   if e.errno != 2: logging.error(f"Error removing reboot flag file: {e}")
 
 
-# --- [ИЗМЕНЕНИЕ] Новая логика `main` для корректного завершения (v3) ---
+# Новая логика `main` для корректного завершения (v3)
 async def main():
     background_tasks = set()
 
@@ -2291,7 +2351,6 @@ async def main():
                  logging.error(f"Ошибка при завершении фоновой задачи (индекс {i}): {result}")
         logging.info("Фоновые задачи обработаны.")
 
-        # Корректная проверка и закрытие сессии
         session_to_close = getattr(bot_instance, 'session', None)
         underlying_session = getattr(session_to_close, 'session', None)
 
@@ -2317,7 +2376,7 @@ async def main():
         logging.info(f"Бот запускается в режиме: {INSTALL_MODE.upper()}")
         await asyncio.to_thread(load_users)
         load_alerts_config()
-        await refresh_user_names()
+        await refresh_user_names() # Обновляем имена при старте
         await initial_reboot_check()
         await initial_restart_check()
 
@@ -2348,7 +2407,6 @@ async def main():
         logging.critical(f"Критическая ошибка в главном цикле бота: {e}", exc_info=True)
         
     finally:
-        # Упрощенная проверка в finally
         session_to_check = getattr(bot, 'session', None)
         underlying_session_to_check = getattr(session_to_check, 'session', None)
         session_closed_attr = getattr(underlying_session_to_check, 'closed', True)
@@ -2358,11 +2416,10 @@ async def main():
              await shutdown(dp, bot)
         
         logging.info("Функция main бота завершена.")
-# --- [КОНЕЦ ИЗМЕНЕНИЯ] ---
 
 
 if __name__ == "__main__":
-    import signal # Убедитесь, что импорт здесь есть
+    import signal
     try:
         logging.info("Запуск asyncio.run(main())...")
         asyncio.run(main())
