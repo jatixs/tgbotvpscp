@@ -1,5 +1,5 @@
-aiogram~=3.4.1
-psutil~=5.9.8
-requests~=2.31.0
-qrcode~=7.4.2
-Pillow~=10.2.0
+aiogram
+psutil
+requests
+qrcode
+Pillow
