@@ -10,9 +10,9 @@ VENV_PATH="${BOT_INSTALL_PATH}/venv"
 
 # --- GitHub Репозиторий и Ветка ---
 GITHUB_REPO="jatixs/tgbotvpscp"
-# (ИЗМЕНЕНИЕ) Определяем тестовую ветку
+# Определяем тестовую ветку
 TEST_BRANCH_NAME="features/1.10.10-36"
-# (ИЗМЕНЕНИЕ) Используем $1 если он есть, иначе 'main'. Тестовая ветка задается через меню.
+# Используем $1 если он есть, иначе 'main'. Тестовая ветка задается через меню.
 GIT_BRANCH="${1:-main}"
 GITHUB_REPO_URL="https://github.com/${GITHUB_REPO}.git"
 
@@ -78,10 +78,16 @@ check_integrity() {
         STATUS_MESSAGE="Бот не установлен."
         return
     fi
-    INSTALL_STATUS="OK"
+    INSTALL_STATUS="OK" # Предполагаем, что все хорошо
     local errors=()
     if [ ! -d "${BOT_INSTALL_PATH}/.git" ]; then errors+=("- Отсутствует .git (обновление будет невозможно)"); INSTALL_STATUS="PARTIAL"; fi
-    if [ ! -f "${BOT_INSTALL_PATH}/bot.py" ] || [ ! -f "${BOT_INSTALL_PATH}/watchdog.py" ] || [ ! -d "${BOT_INSTALL_PATH}/core" ] || [ ! -d "${BOT_INSTALL_PATH}/modules" ]; then errors+=("- Отсутствуют основные файлы (bot.py, core/, modules/)"); INSTALL_STATUS="PARTIAL"; fi
+    if [ ! -f "${BOT_INSTALL_PATH}/bot.py" ] || \
+       [ ! -f "${BOT_INSTALL_PATH}/watchdog.py" ] || \
+       [ ! -d "${BOT_INSTALL_PATH}/core" ] || \
+       [ ! -d "${BOT_INSTALL_PATH}/modules" ]; then
+         errors+=("- Отсутствуют основные файлы (bot.py, core/, modules/)")
+         INSTALL_STATUS="PARTIAL"
+    fi
     if [ ! -f "${VENV_PATH}/bin/python" ]; then errors+=("- Отсутствует venv (${VENV_PATH}/bin/python)"); INSTALL_STATUS="PARTIAL"; fi
     if [ ! -f "${BOT_INSTALL_PATH}/.env" ]; then errors+=("- (Предупреждение) Отсутствует файл .env"); fi
     if ! systemctl list-unit-files | grep -q "${SERVICE_NAME}.service"; then errors+=("- Отсутствует файл ${SERVICE_NAME}.service"); INSTALL_STATUS="PARTIAL"; fi
@@ -166,27 +172,55 @@ install_logic() {
     local server_ip=$(curl -s 4.ipinfo.io/ip || echo "YOUR_SERVER_IP"); echo ""; echo "-----------------------------------------------------"; msg_success "Установка завершена!"; msg_info "   Не забудьте настроить внешний мониторинг (UptimeRobot)"; msg_info "   на IP: ${server_ip}"; echo "-----------------------------------------------------"
 }
 
-# (ИЗМЕНЕНИЕ) Теперь принимаем ветку как аргумент
 install_secure() { local branch=$1; echo -e "\n${C_BOLD}=== Начало безопасной установки (ветка: $branch) ===${C_RESET}"; common_install_steps; install_logic "secure" "$branch"; }
 install_root() { local branch=$1; echo -e "\n${C_BOLD}=== Начало установки от имени Root (ветка: $branch) ===${C_RESET}"; common_install_steps; install_logic "root" "$branch"; }
 
+# --- (ИСПРАВЛЕНИЕ) Разделение [Service] на строки ---
 create_and_start_service() {
     local svc_name=$1; local script_path=$2; local install_mode=$3; local description=$4
     local user="root"; local group="root"; local env_file_line=""; local desc_mode_suffix=""; local after_line="After=network.target"; local requires_line=""
-    if [ "$install_mode" == "secure" ] && [ "$svc_name" == "$SERVICE_NAME" ]; then user=${SERVICE_USER}; group=${SERVICE_USER}; env_file_line="EnvironmentFile=${BOT_INSTALL_PATH}/.env"; desc_mode_suffix="(Secure Mode)"; elif [ "$svc_name" == "$SERVICE_NAME" ]; then env_file_line="EnvironmentFile=${BOT_INSTALL_PATH}/.env"; desc_mode_suffix="(Root Mode)"; elif [ "$svc_name" == "$WATCHDOG_SERVICE_NAME" ]; then after_line="After=network.target ${SERVICE_NAME}.service"; fi
-    msg_info "Создание systemd сервиса для ${svc_name}..."; SERVICE_FILE="/etc/systemd/system/${svc_name}.service"; sudo tee ${SERVICE_FILE} > /dev/null <<EOF
+
+    if [ "$install_mode" == "secure" ] && [ "$svc_name" == "$SERVICE_NAME" ]; then
+        user=${SERVICE_USER}
+        group=${SERVICE_USER}
+        env_file_line="EnvironmentFile=${BOT_INSTALL_PATH}/.env"
+        desc_mode_suffix="(Secure Mode)"
+    elif [ "$svc_name" == "$SERVICE_NAME" ]; then # Root mode for bot
+        env_file_line="EnvironmentFile=${BOT_INSTALL_PATH}/.env"
+        desc_mode_suffix="(Root Mode)"
+    elif [ "$svc_name" == "$WATCHDOG_SERVICE_NAME" ]; then
+         after_line="After=network.target ${SERVICE_NAME}.service"
+    fi
+
+    msg_info "Создание systemd сервиса для ${svc_name}..."
+    SERVICE_FILE="/etc/systemd/system/${svc_name}.service"
+
+    # --- НАЧАЛО ИСПРАВЛЕНИЯ ---
+    sudo tee ${SERVICE_FILE} > /dev/null <<EOF
 [Unit]
 Description=${description} Service ${desc_mode_suffix}
 ${after_line}
 ${requires_line}
+
 [Service]
-Type=simple; User=${user}; Group=${group}; WorkingDirectory=${BOT_INSTALL_PATH}; ${env_file_line}; ExecStart=${VENV_PATH}/bin/python ${script_path}; Restart=always; RestartSec=10
+Type=simple
+User=${user}
+Group=${group}
+WorkingDirectory=${BOT_INSTALL_PATH}
+${env_file_line}
+ExecStart=${VENV_PATH}/bin/python ${script_path}
+Restart=always
+RestartSec=10
+
 [Install]
 WantedBy=multi-user.target
 EOF
+    # --- КОНЕЦ ИСПРАВЛЕНИЯ ---
+
     msg_info "Запуск и активация сервиса ${svc_name}..."; sudo systemctl daemon-reload; sudo systemctl enable ${svc_name}.service &> /dev/null; run_with_spinner "Запуск ${svc_name}" sudo systemctl start ${svc_name}; sleep 2
     if sudo systemctl is-active --quiet ${svc_name}.service; then msg_success "Сервис ${svc_name} успешно запущен!"; msg_info "Для проверки статуса: sudo systemctl status ${svc_name}"; else msg_error "Сервис ${svc_name} не запустился. Логи: sudo journalctl -u ${svc_name} -n 50 --no-pager"; if [ "$svc_name" == "$SERVICE_NAME" ]; then exit 1; fi; fi
 }
+# --- КОНЕЦ ИСПРАВЛЕНИЯ ---
 
 uninstall_bot() {
     echo -e "\n${C_BOLD}=== Начало удаления Telegram-бота и Watchdog ===${C_RESET}"; msg_info "1. Остановка и отключение сервисов..."
@@ -196,7 +230,6 @@ uninstall_bot() {
     msg_info "3. Удаление директории с ботом..."; sudo rm -rf "${BOT_INSTALL_PATH}"; msg_info "4. Удаление пользователя '${SERVICE_USER}' (если существует)..."; if id "${SERVICE_USER}" &>/dev/null; then sudo userdel -r "${SERVICE_USER}" &> /dev/null || msg_warning "Не удалось полностью удалить пользователя ${SERVICE_USER}."; fi; msg_success "Удаление полностью завершено."
 }
 
-# (ИЗМЕНЕНИЕ) Теперь принимаем ветку как аргумент
 update_bot() {
     local branch_to_use=$1 # Принимаем ветку как аргумент
     echo -e "\n${C_BOLD}=== Начало обновления бота (ветка: $branch_to_use) ===${C_RESET}"
@@ -218,7 +251,6 @@ main_menu() {
         echo -e "${C_BLUE}${C_BOLD}╔═══════════════════════════════════╗${C_RESET}"
         echo -e "${C_BLUE}${C_BOLD}║     VPS Manager Telegram Bot      ║${C_RESET}"
         echo -e "${C_BLUE}${C_BOLD}╚═══════════════════════════════════╝${C_RESET}"
-        # (ИЗМЕНЕНИЕ) Определяем текущую активную ветку
         local current_branch=$(cd "$BOT_INSTALL_PATH" && git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "Неизвестно")
         echo -e "  Текущая ветка: ${C_YELLOW}${current_branch}${C_RESET}"
         echo -e "  Целевая ветка (для уст./обн.): ${C_YELLOW}${GIT_BRANCH}${C_RESET}"
@@ -227,11 +259,9 @@ main_menu() {
         echo "--------------------------------------------------------"
         echo -n -e "  Статус: "; if [ "$INSTALL_STATUS" == "OK" ]; then echo -e "${C_GREEN}${STATUS_MESSAGE}${C_RESET}"; else echo -e "${C_RED}${STATUS_MESSAGE}${C_RESET}"; msg_warning "  Рекомендуется переустановка."; fi
         echo "--------------------------------------------------------"
-
         echo -e "${C_GREEN}  1)${C_RESET} ${C_BOLD}Переустановить (Secure):${C_RESET}     ${C_YELLOW}${GIT_BRANCH}${C_RESET}"
         echo -e "${C_YELLOW}  2)${C_RESET} ${C_BOLD}Переустановить (Root):${C_RESET}       ${C_YELLOW}${GIT_BRANCH}${C_RESET}"
         echo -e "${C_CYAN}  3)${C_RESET} ${C_BOLD}Обновить бота:${C_RESET}               ${C_YELLOW}${GIT_BRANCH}${C_RESET}"
-        # (ИЗМЕНЕНИЕ) Новые опции для тестовой ветки
         echo -e "${C_BLUE}────────────────── Тестовая Ветка ──────────────────${C_RESET}"
         echo -e "${C_GREEN}  T1)${C_RESET}${C_BOLD}Переустановить (Secure):${C_RESET}     ${C_CYAN}${TEST_BRANCH_NAME}${C_RESET}"
         echo -e "${C_YELLOW}  T2)${C_RESET}${C_BOLD}Переустановить (Root):${C_RESET}       ${C_CYAN}${TEST_BRANCH_NAME}${C_RESET}"
@@ -263,7 +293,6 @@ main_menu() {
 # --- Главный "Роутер" ---
 main() {
     clear
-    # (ИЗМЕНЕНИЕ) Выводим ветку, которая БУДЕТ использоваться по умолчанию, если не выбрана тестовая
     msg_info "Запуск скрипта управления ботом (Целевая ветка по умолч.: ${GIT_BRANCH})..."
     check_integrity
     
@@ -278,7 +307,6 @@ main() {
         echo "--------------------------------------------------------"
         echo -e "${C_GREEN}  1)${C_RESET} ${C_BOLD}Установить (Secure):${C_RESET}     ${C_YELLOW}${GIT_BRANCH}${C_RESET}"
         echo -e "${C_YELLOW}  2)${C_RESET} ${C_BOLD}Установить (Root):${C_RESET}       ${C_YELLOW}${GIT_BRANCH}${C_RESET}"
-        # (ИЗМЕНЕНИЕ) Опция установки из тестовой ветки
         echo -e "${C_GREEN}  T1)${C_RESET}${C_BOLD}Установить (Secure):${C_RESET}     ${C_CYAN}${TEST_BRANCH_NAME}${C_RESET}"
         echo -e "${C_YELLOW}  T2)${C_RESET}${C_BOLD}Установить (Root):${C_RESET}       ${C_CYAN}${TEST_BRANCH_NAME}${C_RESET}"
         echo -e "  3) ${C_BOLD}Выход${C_RESET}"
