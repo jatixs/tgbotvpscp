@@ -1,0 +1,41 @@
+# /opt/tg-bot/modules/uptime.py
+import logging
+import asyncio
+from aiogram import F, Dispatcher, types
+from aiogram.types import KeyboardButton
+
+from core.auth import is_allowed, send_access_denied_message
+from core.messaging import delete_previous_message
+from core.shared_state import LAST_MESSAGE_IDS
+from core.utils import format_uptime
+
+BUTTON_TEXT = "⏱ Аптайм"
+
+def get_button() -> KeyboardButton:
+    return KeyboardButton(text=BUTTON_TEXT)
+
+def register_handlers(dp: Dispatcher):
+    dp.message(F.text == BUTTON_TEXT)(uptime_handler)
+
+async def uptime_handler(message: types.Message):
+    user_id = message.from_user.id
+    chat_id = message.chat.id
+    command = "uptime"
+    if not is_allowed(user_id, command):
+        await send_access_denied_message(message.bot, user_id, chat_id, command)
+        return
+
+    await delete_previous_message(user_id, command, chat_id, message.bot)
+    try:
+        def read_uptime_file():
+            with open("/proc/uptime") as f:
+                return float(f.readline().split()[0])
+
+        uptime_sec = await asyncio.to_thread(read_uptime_file)
+        uptime_str = format_uptime(uptime_sec)
+        sent_message = await message.answer(f"⏱ Время работы: <b>{uptime_str}</b>", parse_mode="HTML")
+        LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = sent_message.message_id
+    except Exception as e:
+       logging.error(f"Ошибка в uptime_handler: {e}")
+       sent_message = await message.answer(f"⚠️ Ошибка при получении аптайма: {str(e)}")
+       LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = sent_message.message_id
