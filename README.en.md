@@ -5,7 +5,7 @@
 <h1 align="center">🤖 VPS Manager Telegram Bot</h1>
 
 <p align="center">
-  <b >v1.10.11</b> — a reliable Telegram bot for monitoring and managing your VPS or dedicated server, now with a <b>modular architecture</b> and an improved deployment process.
+  <b >v1.10.12</b> — a reliable Telegram bot for monitoring and managing your VPS or dedicated server, now with a <b>modular architecture</b> and an improved deployment process.
 </p>
 
 <p align="center">
