@@ -42,17 +42,24 @@ if not ADMIN_USERNAME:
 
 # --- Настройки порогов и интервалов ---
 TRAFFIC_INTERVAL = 5
-RESOURCE_CHECK_INTERVAL = 60 # Интервал проверки ресурсов (1 минута)
+RESOURCE_CHECK_INTERVAL = 60  # Интервал проверки ресурсов (1 минута)
 CPU_THRESHOLD = 90.0
 RAM_THRESHOLD = 90.0
 DISK_THRESHOLD = 95.0
-RESOURCE_ALERT_COOLDOWN = 1800 # 30 минут (1800 сек) - как часто слать НАПОМИНАНИЯ
+# 30 минут (1800 сек) - как часто слать НАПОМИНАНИЯ
+RESOURCE_ALERT_COOLDOWN = 1800
 
 # --- Настройка логирования ---
+
+
 def setup_logging():
-    logging.basicConfig(level=logging.INFO, filename=LOG_FILE,
-                        format='%(asctime)s - %(levelname)s - %(message)s', encoding='utf-8')
+    logging.basicConfig(
+        level=logging.INFO,
+        filename=LOG_FILE,
+        format='%(asctime)s - %(levelname)s - %(message)s',
+        encoding='utf-8')
     console_handler = logging.StreamHandler()
     console_handler.setLevel(logging.INFO)
-    console_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
+    console_handler.setFormatter(logging.Formatter(
+        '%(asctime)s - %(levelname)s - %(message)s'))
     logging.getLogger().addHandler(console_handler)

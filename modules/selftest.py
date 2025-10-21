@@ -17,11 +17,14 @@ from core.config import INSTALL_MODE
 
 BUTTON_TEXT = "🛠 Сведения о сервере"
 
+
 def get_button() -> KeyboardButton:
     return KeyboardButton(text=BUTTON_TEXT)
 
+
 def register_handlers(dp: Dispatcher):
     dp.message(F.text == BUTTON_TEXT)(selftest_handler)
+
 
 async def selftest_handler(message: types.Message):
     user_id = message.from_user.id
@@ -34,7 +37,7 @@ async def selftest_handler(message: types.Message):
 
     await message.bot.send_chat_action(chat_id=chat_id, action="typing")
     await delete_previous_message(user_id, command, chat_id, message.bot)
-    
+
     sent_message = await message.answer("🔍 Собираю сведения о сервере...")
     LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = sent_message.message_id
 
@@ -96,7 +99,8 @@ async def selftest_handler(message: types.Message):
                     cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
                 )
                 stdout, stderr = await process.communicate()
-                if process.returncode != 0: raise Exception(stderr.decode())
+                if process.returncode != 0:
+                    raise Exception(stderr.decode())
 
                 for l in reversed(stdout.decode().strip().split('\n')):
                     if "Accepted" in l and "sshd" in l:
@@ -113,27 +117,35 @@ async def selftest_handler(message: types.Message):
                 except asyncio.TimeoutError:
                     raise Exception("journalctl завис (тайм-аут 5с)")
 
-                if process.returncode != 0: raise Exception(stderr.decode())
+                if process.returncode != 0:
+                    raise Exception(stderr.decode())
                 line = stdout.decode().strip()
 
             if line:
                 dt_object = None
-                date_match_iso = re.search(r"(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})", line)
-                date_match_syslog = re.search(r"(\w{3}\s+\d{1,2}\s+\d{2}:\d{2}:\d{2})", line)
+                date_match_iso = re.search(
+                    r"(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})", line)
+                date_match_syslog = re.search(
+                    r"(\w{3}\s+\d{1,2}\s+\d{2}:\d{2}:\d{2})", line)
 
                 try:
                     if date_match_iso:
-                        dt_object = datetime.strptime(date_match_iso.group(1), "%Y-%m-%dT%H:%M:%S")
+                        dt_object = datetime.strptime(
+                            date_match_iso.group(1), "%Y-%m-%dT%H:%M:%S")
                     elif date_match_syslog:
-                        log_timestamp = datetime.strptime(date_match_syslog.group(1), "%b %d %H:%M:%S")
+                        log_timestamp = datetime.strptime(
+                            date_match_syslog.group(1), "%b %d %H:%M:%S")
                         current_year = datetime.now().year
                         dt_object = log_timestamp.replace(year=current_year)
                         if dt_object > datetime.now():
-                            dt_object = dt_object.replace(year=current_year - 1)
+                            dt_object = dt_object.replace(
+                                year=current_year - 1)
                 except Exception as e:
-                    logging.warning(f"Selftest: не удалось распарсить дату: {e}. Строка: {line}")
+                    logging.warning(
+                        f"Selftest: не удалось распарсить дату: {e}. Строка: {line}")
 
-                login_match = re.search(r"Accepted\s+(?:\S+)\s+for\s+(\S+)\s+from\s+(\S+)", line)
+                login_match = re.search(
+                    r"Accepted\s+(?:\S+)\s+for\s+(\S+)\s+from\s+(\S+)", line)
 
                 if dt_object and login_match:
                     user = login_match.group(1)
@@ -152,7 +164,8 @@ async def selftest_handler(message: types.Message):
                         f"🗓️ Дата: <b>{formatted_date}</b>"
                     )
                 else:
-                    logging.warning(f"Selftest: Не удалось разобрать строку SSH (login_match={login_match}, dt_object={dt_object}): {line}")
+                    logging.warning(
+                        f"Selftest: Не удалось разобрать строку SSH (login_match={login_match}, dt_object={dt_object}): {line}")
                     last_login_info = f"\n\n📄 <b>Последний SSH-вход{source}:</b>\nНе удалось разобрать строку лога."
             else:
                 last_login_info = f"\n\n📄 <b>Последний SSH-вход{source}:</b>\nНе найдено записей."
@@ -173,8 +186,7 @@ async def selftest_handler(message: types.Message):
         f"{internet}\n"
         f"⌛ Задержка (8.8.8.8): <b>{ping_time} мс</b>\n"
         f"🌐 Внешний IP: <code>{external_ip}</code>\n"
-        f"📡 Трафик ⬇ <b>{format_traffic(rx)}</b> / ⬆ <b>{format_traffic(tx)}</b>"
-    )
+        f"📡 Трафик ⬇ <b>{format_traffic(rx)}</b> / ⬆ <b>{format_traffic(tx)}</b>")
 
     response_text += last_login_info
 

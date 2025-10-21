@@ -11,11 +11,14 @@ from core.utils import format_uptime
 
 BUTTON_TEXT = "⏱ Аптайм"
 
+
 def get_button() -> KeyboardButton:
     return KeyboardButton(text=BUTTON_TEXT)
 
+
 def register_handlers(dp: Dispatcher):
     dp.message(F.text == BUTTON_TEXT)(uptime_handler)
+
 
 async def uptime_handler(message: types.Message):
     user_id = message.from_user.id
@@ -34,8 +37,10 @@ async def uptime_handler(message: types.Message):
         uptime_sec = await asyncio.to_thread(read_uptime_file)
         uptime_str = format_uptime(uptime_sec)
         sent_message = await message.answer(f"⏱ Время работы: <b>{uptime_str}</b>", parse_mode="HTML")
-        LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = sent_message.message_id
+        LAST_MESSAGE_IDS.setdefault(
+            user_id, {})[command] = sent_message.message_id
     except Exception as e:
-       logging.error(f"Ошибка в uptime_handler: {e}")
-       sent_message = await message.answer(f"⚠️ Ошибка при получении аптайма: {str(e)}")
-       LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = sent_message.message_id
+        logging.error(f"Ошибка в uptime_handler: {e}")
+        sent_message = await message.answer(f"⚠️ Ошибка при получении аптайма: {str(e)}")
+        LAST_MESSAGE_IDS.setdefault(
+            user_id, {})[command] = sent_message.message_id

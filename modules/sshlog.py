@@ -14,19 +14,22 @@ from core.utils import get_country_flag, get_server_timezone_label
 
 BUTTON_TEXT = "📜 SSH-лог"
 
+
 def get_button() -> KeyboardButton:
     return KeyboardButton(text=BUTTON_TEXT)
 
+
 def register_handlers(dp: Dispatcher):
     dp.message(F.text == BUTTON_TEXT)(sshlog_handler)
+
 
 async def sshlog_handler(message: types.Message):
     user_id = message.from_user.id
     chat_id = message.chat.id
     command = "sshlog"
     if not is_allowed(user_id, command):
-         await send_access_denied_message(message.bot, user_id, chat_id, command)
-         return
+        await send_access_denied_message(message.bot, user_id, chat_id, command)
+        return
 
     await delete_previous_message(user_id, command, chat_id, message.bot)
     sent_message = await message.answer("🔍 Ищу последние 10 событий SSH (вход/провал)...")
@@ -51,7 +54,8 @@ async def sshlog_handler(message: types.Message):
                 cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
             )
             stdout, stderr = await process.communicate()
-            if process.returncode != 0: raise Exception(stderr.decode())
+            if process.returncode != 0:
+                raise Exception(stderr.decode())
             lines = stdout.decode().strip().split('\n')
         else:
             source = " (из journalctl, за месяц)"
@@ -63,7 +67,8 @@ async def sshlog_handler(message: types.Message):
                 stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=5.0)
             except asyncio.TimeoutError:
                 raise Exception("journalctl завис (тайм-аут 5с)")
-            if process.returncode != 0: raise Exception(stderr.decode())
+            if process.returncode != 0:
+                raise Exception(stderr.decode())
             lines = stdout.decode().strip().split('\n')
 
         tz_label = get_server_timezone_label()
@@ -77,14 +82,18 @@ async def sshlog_handler(message: types.Message):
                 continue
 
             dt_object = None
-            date_match_iso = re.search(r"(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})", line)
-            date_match_syslog = re.search(r"(\w{3}\s+\d{1,2}\s+\d{2}:\d{2}:\d{2})", line)
+            date_match_iso = re.search(
+                r"(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})", line)
+            date_match_syslog = re.search(
+                r"(\w{3}\s+\d{1,2}\s+\d{2}:\d{2}:\d{2})", line)
 
             try:
                 if date_match_iso:
-                    dt_object = datetime.strptime(date_match_iso.group(1), "%Y-%m-%dT%H:%M:%S")
+                    dt_object = datetime.strptime(
+                        date_match_iso.group(1), "%Y-%m-%dT%H:%M:%S")
                 elif date_match_syslog:
-                    log_timestamp = datetime.strptime(date_match_syslog.group(1), "%b %d %H:%M:%S")
+                    log_timestamp = datetime.strptime(
+                        date_match_syslog.group(1), "%b %d %H:%M:%S")
                     current_year = datetime.now().year
                     dt_object = log_timestamp.replace(year=current_year)
                     if dt_object > datetime.now():
@@ -92,7 +101,8 @@ async def sshlog_handler(message: types.Message):
                 else:
                     continue
             except Exception as e:
-                logging.warning(f"Sshlog: не удалось распарсить дату: {e}. Строка: {line}")
+                logging.warning(
+                    f"Sshlog: не удалось распарсить дату: {e}. Строка: {line}")
                 continue
 
             formatted_time = dt_object.strftime('%H:%M:%S')
@@ -100,7 +110,8 @@ async def sshlog_handler(message: types.Message):
 
             entry = None
 
-            match = re.search(r"Accepted\s+(?:\S+)\s+for\s+(\S+)\s+from\s+(\S+)", line)
+            match = re.search(
+                r"Accepted\s+(?:\S+)\s+for\s+(\S+)\s+from\s+(\S+)", line)
             if match:
                 user = match.group(1)
                 ip = match.group(2)
@@ -108,7 +119,8 @@ async def sshlog_handler(message: types.Message):
                 entry = f"✅ <b>Успешный вход</b>\n👤 Пользователь: <b>{user}</b>\n🌍 IP: <b>{flag} {ip}</b>\n⏰ {formatted_time}{tz_label} ({formatted_date})"
 
             if not entry:
-                match = re.search(r"Failed\s+(?:\S+)\s+for\s+invalid\s+user\s+(\S+)\s+from\s+(\S+)", line)
+                match = re.search(
+                    r"Failed\s+(?:\S+)\s+for\s+invalid\s+user\s+(\S+)\s+from\s+(\S+)", line)
                 if match:
                     user = match.group(1)
                     ip = match.group(2)
@@ -116,7 +128,8 @@ async def sshlog_handler(message: types.Message):
                     entry = f"❌ <b>Неверный юзер</b>\n👤 Попытка: <b>{user}</b>\n🌍 IP: <b>{flag} {ip}</b>\n⏰ {formatted_time}{tz_label} ({formatted_date})"
 
             if not entry:
-                match = re.search(r"Failed password for (\S+) from (\S+)", line)
+                match = re.search(
+                    r"Failed password for (\S+) from (\S+)", line)
                 if match:
                     user = match.group(1)
                     ip = match.group(2)
@@ -124,7 +137,8 @@ async def sshlog_handler(message: types.Message):
                     entry = f"❌ <b>Неверный пароль</b>\n👤 Пользователь: <b>{user}</b>\n🌍 IP: <b>{flag} {ip}</b>\n⏰ {formatted_time}{tz_label} ({formatted_date})"
 
             if not entry:
-                match = re.search(r"authentication failure;.*rhost=(\S+)\s+user=(\S+)", line)
+                match = re.search(
+                    r"authentication failure;.*rhost=(\S+)\s+user=(\S+)", line)
                 if match:
                     ip = match.group(1)
                     user = match.group(2)
