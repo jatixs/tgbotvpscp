@@ -6,6 +6,9 @@ on:
   push:
     branches: [ main, develop ]
 
+permissions:
+  contents: write
+
 jobs:
   autofix:
     name: FIX 🎨 Автоматическое исправление (autopep8)
