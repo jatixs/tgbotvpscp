@@ -11,11 +11,14 @@ from core.utils import escape_html
 
 BUTTON_TEXT = "📜 Последние события"
 
+
 def get_button() -> KeyboardButton:
     return KeyboardButton(text=BUTTON_TEXT)
 
+
 def register_handlers(dp: Dispatcher):
     dp.message(F.text == BUTTON_TEXT)(logs_handler)
+
 
 async def logs_handler(message: types.Message):
     user_id = message.from_user.id
@@ -34,8 +37,10 @@ async def logs_handler(message: types.Message):
             raise Exception(stderr.decode())
         log_output = escape_html(stdout.decode())
         sent_message = await message.answer(f"📜 <b>Последние системные журналы:</b>\n<pre>{log_output}</pre>", parse_mode="HTML")
-        LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = sent_message.message_id
+        LAST_MESSAGE_IDS.setdefault(
+            user_id, {})[command] = sent_message.message_id
     except Exception as e:
         logging.error(f"Ошибка при чтении журналов: {e}")
         sent_message = await message.answer(f"⚠️ Ошибка при чтении журналов: {str(e)}")
-        LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = sent_message.message_id
+        LAST_MESSAGE_IDS.setdefault(
+            user_id, {})[command] = sent_message.message_id

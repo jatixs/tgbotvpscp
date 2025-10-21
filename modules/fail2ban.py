@@ -14,11 +14,14 @@ from core.utils import get_country_flag, get_server_timezone_label
 
 BUTTON_TEXT = "🔒 Fail2Ban Log"
 
+
 def get_button() -> KeyboardButton:
     return KeyboardButton(text=BUTTON_TEXT)
 
+
 def register_handlers(dp: Dispatcher):
     dp.message(F.text == BUTTON_TEXT)(fail2ban_handler)
+
 
 async def fail2ban_handler(message: types.Message):
     user_id = message.from_user.id
@@ -33,22 +36,23 @@ async def fail2ban_handler(message: types.Message):
         F2B_LOG_FILE = "/var/log/fail2ban.log"
 
         if not await asyncio.to_thread(os.path.exists, F2B_LOG_FILE):
-             sent_message = await message.answer(f"⚠️ Файл лога Fail2Ban не найден: <code>{F2B_LOG_FILE}</code>", parse_mode="HTML")
-             LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = sent_message.message_id
-             return
+            sent_message = await message.answer(f"⚠️ Файл лога Fail2Ban не найден: <code>{F2B_LOG_FILE}</code>", parse_mode="HTML")
+            LAST_MESSAGE_IDS.setdefault(
+                user_id, {})[command] = sent_message.message_id
+            return
 
         def read_f2b_log():
-             try:
-                  with open(F2B_LOG_FILE, "r", encoding='utf-8', errors='ignore') as f:
-                       return f.readlines()[-50:]
-             except Exception as read_e:
-                  logging.error(f"Error reading Fail2Ban log file: {read_e}")
-                  return None
+            try:
+                with open(F2B_LOG_FILE, "r", encoding='utf-8', errors='ignore') as f:
+                    return f.readlines()[-50:]
+            except Exception as read_e:
+                logging.error(f"Error reading Fail2Ban log file: {read_e}")
+                return None
 
         lines = await asyncio.to_thread(read_f2b_log)
 
         if lines is None:
-             raise Exception("Не удалось прочитать файл лога.")
+            raise Exception("Не удалось прочитать файл лога.")
 
         log_entries = []
         tz_label = get_server_timezone_label()
@@ -79,16 +83,20 @@ async def fail2ban_handler(message: types.Message):
 
             if match and ip and timestamp_str:
                 try:
-                    dt = datetime.strptime(timestamp_str, "%Y-%m-%d %H:%M:%S,%f")
+                    dt = datetime.strptime(
+                        timestamp_str, "%Y-%m-%d %H:%M:%S,%f")
                     flag = await asyncio.to_thread(get_country_flag, ip)
                     formatted_time = dt.strftime('%H:%M:%S')
                     formatted_date = dt.strftime('%d.%m.%Y')
-                    log_entries.append(f"🔒 <b>{ban_type}</b>\n🌍 IP: <b>{flag} {ip}</b>\n⏰ Время: <b>{formatted_time}</b>{tz_label}\n🗓️ Дата: <b>{formatted_date}</b>")
+                    log_entries.append(
+                        f"🔒 <b>{ban_type}</b>\n🌍 IP: <b>{flag} {ip}</b>\n⏰ Время: <b>{formatted_time}</b>{tz_label}\n🗓️ Дата: <b>{formatted_date}</b>")
                 except ValueError:
-                    logging.warning(f"Could not parse Fail2Ban timestamp: {timestamp_str}")
+                    logging.warning(
+                        f"Could not parse Fail2Ban timestamp: {timestamp_str}")
                     continue
                 except Exception as parse_e:
-                    logging.error(f"Error processing Fail2Ban line: {parse_e} | Line: {line}")
+                    logging.error(
+                        f"Error processing Fail2Ban line: {parse_e} | Line: {line}")
                     continue
 
             if len(log_entries) >= 10:
@@ -99,9 +107,11 @@ async def fail2ban_handler(message: types.Message):
             sent_message = await message.answer(f"🔒 <b>Последние 10 блокировок IP (Fail2Ban):</b>\n\n{log_output}", parse_mode="HTML")
         else:
             sent_message = await message.answer("🔒 Нет недавних блокировок IP в логах Fail2Ban (проверено 50 последних строк).")
-        LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = sent_message.message_id
+        LAST_MESSAGE_IDS.setdefault(
+            user_id, {})[command] = sent_message.message_id
 
     except Exception as e:
         logging.error(f"Ошибка при чтении журнала Fail2Ban: {e}")
         sent_message = await message.answer(f"⚠️ Ошибка при чтении журнала Fail2Ban: {str(e)}")
-        LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = sent_message.message_id
+        LAST_MESSAGE_IDS.setdefault(
+            user_id, {})[command] = sent_message.message_id

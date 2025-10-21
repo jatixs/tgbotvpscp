@@ -18,21 +18,33 @@ from core.keyboards import get_back_keyboard, get_main_reply_keyboard
 
 BUTTON_TEXT = "🔗 VLESS-ссылка"
 
+
 class GenerateVlessStates(StatesGroup):
     waiting_for_file = State()
     waiting_for_name = State()
 
+
 def get_button() -> KeyboardButton:
     return KeyboardButton(text=BUTTON_TEXT)
 
+
 def register_handlers(dp: Dispatcher):
     dp.message(F.text == BUTTON_TEXT)(generate_vless_handler)
-    
+
     # FSM Handlers
-    dp.message(StateFilter(GenerateVlessStates.waiting_for_file), F.document)(process_vless_file)
-    dp.message(StateFilter(GenerateVlessStates.waiting_for_name), F.text)(process_vless_name)
-    dp.message(StateFilter(GenerateVlessStates.waiting_for_file))(process_vless_file_invalid)
-    dp.message(StateFilter(GenerateVlessStates.waiting_for_name))(process_vless_name_invalid)
+    dp.message(
+        StateFilter(
+            GenerateVlessStates.waiting_for_file),
+        F.document)(process_vless_file)
+    dp.message(
+        StateFilter(
+            GenerateVlessStates.waiting_for_name),
+        F.text)(process_vless_name)
+    dp.message(StateFilter(GenerateVlessStates.waiting_for_file))(
+        process_vless_file_invalid)
+    dp.message(StateFilter(GenerateVlessStates.waiting_for_name))(
+        process_vless_name_invalid)
+
 
 async def generate_vless_handler(message: types.Message, state: FSMContext):
     user_id = message.from_user.id
@@ -41,18 +53,19 @@ async def generate_vless_handler(message: types.Message, state: FSMContext):
         await message.bot.send_message(message.chat.id, "⛔ У вас нет прав для выполнения этой команды.")
         return
     await delete_previous_message(user_id, command, message.chat.id, message.bot)
-    
+
     cancel_keyboard = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="❌ Отменить", callback_data="back_to_menu")]
     ])
-    
+
     sent_message = await message.answer(
-        "📤 <b>Отправьте файл конфигурации Xray (JSON)</b>\n\n<i>Важно: файл должен содержать рабочую конфигурацию outbound с Reality.</i>", 
+        "📤 <b>Отправьте файл конфигурации Xray (JSON)</b>\n\n<i>Важно: файл должен содержать рабочую конфигурацию outbound с Reality.</i>",
         reply_markup=cancel_keyboard,
         parse_mode="HTML"
     )
     LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = sent_message.message_id
     await state.set_state(GenerateVlessStates.waiting_for_file)
+
 
 async def process_vless_file(message: types.Message, state: FSMContext):
     user_id = message.from_user.id
@@ -76,7 +89,8 @@ async def process_vless_file(message: types.Message, state: FSMContext):
             parse_mode="HTML",
             reply_markup=cancel_keyboard
         )
-        LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = sent_message.message_id
+        LAST_MESSAGE_IDS.setdefault(
+            user_id, {})[command] = sent_message.message_id
         return
 
     try:
@@ -94,14 +108,16 @@ async def process_vless_file(message: types.Message, state: FSMContext):
             parse_mode="HTML",
             reply_markup=cancel_keyboard
         )
-        LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = sent_message.message_id
+        LAST_MESSAGE_IDS.setdefault(
+            user_id, {})[command] = sent_message.message_id
         await state.set_state(GenerateVlessStates.waiting_for_name)
 
     except Exception as e:
         logging.error(f"Ошибка при загрузке или чтении VLESS JSON: {e}")
         await message.answer(f"⚠️ Произошла ошибка при обработке файла: {e}")
         await state.clear()
-        
+
+
 async def process_vless_name(message: types.Message, state: FSMContext):
     user_id = message.from_user.id
     command = "generate_vless"
@@ -129,7 +145,11 @@ async def process_vless_name(message: types.Message, state: FSMContext):
             await state.clear()
             return
 
-        qr = qrcode.QRCode(version=1, error_correction=qrcode.constants.ERROR_CORRECT_L, box_size=10, border=4)
+        qr = qrcode.QRCode(
+            version=1,
+            error_correction=qrcode.constants.ERROR_CORRECT_L,
+            box_size=10,
+            border=4)
         qr.add_data(vless_url)
         qr.make(fit=True)
         img = qr.make_image(fill_color="black", back_color="white")
@@ -146,9 +166,10 @@ async def process_vless_name(message: types.Message, state: FSMContext):
                     f"<code>{escape_html(vless_url)}</code>",
             parse_mode="HTML"
         )
-        
+
         sent_message = await message.answer("🏠 Возврат в главное меню.", reply_markup=get_main_reply_keyboard(user_id, message.bot.buttons_map))
-        LAST_MESSAGE_IDS.setdefault(user_id, {})["menu"] = sent_message.message_id
+        LAST_MESSAGE_IDS.setdefault(
+            user_id, {})["menu"] = sent_message.message_id
 
     except Exception as e:
         logging.error(f"Ошибка при генерации VLESS или QR: {e}")
@@ -156,7 +177,10 @@ async def process_vless_name(message: types.Message, state: FSMContext):
     finally:
         await state.clear()
 
-async def process_vless_file_invalid(message: types.Message, state: FSMContext):
+
+async def process_vless_file_invalid(
+        message: types.Message,
+        state: FSMContext):
     cancel_keyboard = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="❌ Отменить", callback_data="back_to_menu")]
     ])
@@ -165,9 +189,13 @@ async def process_vless_file_invalid(message: types.Message, state: FSMContext):
         parse_mode="HTML",
         reply_markup=cancel_keyboard
     )
-    LAST_MESSAGE_IDS.setdefault(message.from_user.id, {})["generate_vless"] = sent_message.message_id
+    LAST_MESSAGE_IDS.setdefault(message.from_user.id, {})[
+        "generate_vless"] = sent_message.message_id
 
-async def process_vless_name_invalid(message: types.Message, state: FSMContext):
+
+async def process_vless_name_invalid(
+        message: types.Message,
+        state: FSMContext):
     cancel_keyboard = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="❌ Отменить", callback_data="back_to_menu")]
     ])
@@ -176,4 +204,5 @@ async def process_vless_name_invalid(message: types.Message, state: FSMContext):
         parse_mode="HTML",
         reply_markup=cancel_keyboard
     )
-    LAST_MESSAGE_IDS.setdefault(message.from_user.id, {})["generate_vless"] = sent_message.message_id
+    LAST_MESSAGE_IDS.setdefault(message.from_user.id, {})[
+        "generate_vless"] = sent_message.message_id

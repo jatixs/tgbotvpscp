@@ -12,16 +12,19 @@ from core.utils import escape_html
 
 BUTTON_TEXT = "⚡️ Оптимизация VPS/VDS"
 
+
 def get_button() -> KeyboardButton:
     return KeyboardButton(text=BUTTON_TEXT)
+
 
 def register_handlers(dp: Dispatcher):
     dp.message(F.text == BUTTON_TEXT)(optimize_handler)
 
+
 async def optimize_handler(message: types.Message):
     user_id = message.from_user.id
     chat_id = message.chat.id
-    command = "optimize" # Новое имя команды
+    command = "optimize"  # Новое имя команды
 
     if not is_allowed(user_id, command):
         await send_access_denied_message(message.bot, user_id, chat_id, command)
@@ -29,7 +32,7 @@ async def optimize_handler(message: types.Message):
 
     await message.bot.send_chat_action(chat_id=chat_id, action="typing")
     await delete_previous_message(user_id, command, chat_id, message.bot)
-    
+
     sent_message = await message.answer(
         "⏳ <b>Запускаю оптимизацию системы...</b>\n\n"
         "Это очень долгий процесс (5-15 минут).\n"
@@ -37,7 +40,7 @@ async def optimize_handler(message: types.Message):
         parse_mode="HTML"
     )
     LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = sent_message.message_id
-    
+
     # Команда выполняется от root (т.к. INSTALL_MODE=root), поэтому 'sudo' не нужен.
     # Добавлен DEBIAN_FRONTEND для apt install
     # ~/.cache заменен на /root/.cache, т.к. бот работает от root
@@ -51,14 +54,13 @@ async def optimize_handler(message: types.Message):
         "echo 'vm.swappiness=10' | tee -a /etc/sysctl.conf && "
         "echo 'vm.vfs_cache_pressure=50' | tee -a /etc/sysctl.conf && "
         "sysctl -p && systemctl restart systemd-journald && systemctl daemon-reexec"
-        "\""
-    )
-    
+        "\"")
+
     process = await asyncio.create_subprocess_shell(
         cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
     )
     stdout, stderr = await process.communicate()
-    
+
     output = stdout.decode('utf-8', errors='ignore')
     error_output = stderr.decode('utf-8', errors='ignore')
 
@@ -67,7 +69,10 @@ async def optimize_handler(message: types.Message):
     if process.returncode == 0:
         # Ищем вывод sysctl -p в stdout
         sysctl_output = ""
-        sysctl_match = re.search(r'vm\.swappiness = 10.*vm\.vfs_cache_pressure = 50', output, re.DOTALL)
+        sysctl_match = re.search(
+            r'vm\.swappiness = 10.*vm\.vfs_cache_pressure = 50',
+            output,
+            re.DOTALL)
         if sysctl_match:
             sysctl_output = sysctl_match.group(0)
 
@@ -87,4 +92,5 @@ async def optimize_handler(message: types.Message):
         )
 
     sent_message_final = await message.answer(response_text, parse_mode="HTML")
-    LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = sent_message_final.message_id
+    LAST_MESSAGE_IDS.setdefault(
+        user_id, {})[command] = sent_message_final.message_id

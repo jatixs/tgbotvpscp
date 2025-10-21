@@ -11,11 +11,14 @@ from core.utils import escape_html
 
 BUTTON_TEXT = "🔄 Обновление VPS/VDS"
 
+
 def get_button() -> KeyboardButton:
     return KeyboardButton(text=BUTTON_TEXT)
 
+
 def register_handlers(dp: Dispatcher):
     dp.message(F.text == BUTTON_TEXT)(update_handler)
+
 
 async def update_handler(message: types.Message):
     user_id = message.from_user.id
@@ -27,10 +30,10 @@ async def update_handler(message: types.Message):
 
     await message.bot.send_chat_action(chat_id=chat_id, action="typing")
     await delete_previous_message(user_id, command, chat_id, message.bot)
-    
+
     sent_message = await message.answer("🔄 Выполняю обновление VPS... Это может занять несколько минут.")
     LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = sent_message.message_id
-    
+
     cmd = "sudo DEBIAN_FRONTEND=noninteractive apt update && sudo DEBIAN_FRONTEND=noninteractive apt upgrade -y && sudo apt autoremove -y"
     process = await asyncio.create_subprocess_shell(cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
     stdout, stderr = await process.communicate()
@@ -45,4 +48,5 @@ async def update_handler(message: types.Message):
         response_text = f"❌ Ошибка при обновлении (Код: {process.returncode}):\n<pre>{escape_html(error_output[-4000:])}</pre>"
 
     sent_message_final = await message.answer(response_text, parse_mode="HTML")
-    LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = sent_message_final.message_id
+    LAST_MESSAGE_IDS.setdefault(
+        user_id, {})[command] = sent_message_final.message_id
