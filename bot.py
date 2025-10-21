@@ -26,6 +26,7 @@ ENABLE_RESTART = True   # Root
 ENABLE_REBOOT = True    # Root
 ENABLE_NOTIFICATIONS = True
 ENABLE_USERS = True     # Admin
+ENABLE_OPTIMIZE = True  # <-- ДОБАВЛЕНО
 # ------------------------------
 
 # Импорт основного ядра
@@ -34,7 +35,8 @@ from core import config, shared_state, auth, utils, keyboards, messaging
 # Импорт модулей
 from modules import (
     selftest, traffic, uptime, notifications, users, vless,
-    speedtest, top, xray, sshlog, fail2ban, logs, update, reboot, restart
+    speedtest, top, xray, sshlog, fail2ban, logs, update, reboot, restart,
+    optimize  # <-- ДОБАВЛЕНО
 )
 
 # Настройка логирования
@@ -164,6 +166,7 @@ def load_modules():
     if ENABLE_UPDATE: register_module(update, root_only=True) # Эта кнопка будет добавлена
     if ENABLE_RESTART: register_module(restart, root_only=True) # Эта кнопка будет добавлена
     if ENABLE_REBOOT: register_module(reboot, root_only=True) # Эта кнопка будет добавлена
+    if ENABLE_OPTIMIZE: register_module(optimize, root_only=True) # <-- ДОБАВЛЕНО
 
     logging.info("--- Карта кнопок ---")
     logging.info(f"User: {[btn.text for btn in buttons_map['user']]}")
