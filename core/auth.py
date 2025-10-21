@@ -1,15 +1,15 @@
 # /opt-tg-bot/core/auth.py
 import os
 import json
-import logging 
+import logging
 import urllib.parse
 from aiogram import Bot
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.exceptions import TelegramBadRequest
 
-# --- ИЗМЕНЕНО: Добавлены импорты i18n и config ---
+# --- ИЗМЕНЕНО: Исправлен путь импорта ---
 from . import config # Нужен для DEFAULT_LANGUAGE
-from .core.i18n import _
+from .i18n import _ # Убрано .core
 # -----------------------------------------------
 
 from .config import USERS_FILE, ADMIN_USER_ID, ADMIN_USERNAME, INSTALL_MODE
@@ -17,11 +17,13 @@ from .shared_state import ALLOWED_USERS, USER_NAMES, LAST_MESSAGE_IDS
 from .messaging import delete_previous_message
 from .utils import escape_html
 
+# ... (остальной код файла остается без изменений) ...
+
 def load_users():
     """Загружает ALLOWED_USERS и USER_NAMES из users.json в shared_state"""
     try:
         os.makedirs(os.path.dirname(USERS_FILE), exist_ok=True)
-        
+
         ALLOWED_USERS.clear()
         USER_NAMES.clear()
 
@@ -37,10 +39,8 @@ def load_users():
         if ADMIN_USER_ID not in ALLOWED_USERS:
             logging.info(f"Главный админ ID {ADMIN_USER_ID} не найден в users.json, добавляю.")
             ALLOWED_USERS[ADMIN_USER_ID] = "Админы"
-            # --- ИЗМЕНЕНО: Используем i18n для имени по умолчанию ---
             USER_NAMES[str(ADMIN_USER_ID)] = _("default_admin_name", config.DEFAULT_LANGUAGE)
-            # ----------------------------------------------------
-            save_users() 
+            save_users()
 
         logging.info(f"Пользователи загружены. Разрешенные ID: {list(ALLOWED_USERS.keys())}")
 
@@ -49,18 +49,14 @@ def load_users():
         ALLOWED_USERS.clear()
         USER_NAMES.clear()
         ALLOWED_USERS[ADMIN_USER_ID] = "Админы"
-        # --- ИЗМЕНЕНО: Используем i18n ---
         USER_NAMES[str(ADMIN_USER_ID)] = _("default_admin_name", config.DEFAULT_LANGUAGE)
-        # ---------------------------------
         save_users()
     except Exception as e:
         logging.error(f"Критическая ошибка загрузки users.json: {e}", exc_info=True)
         ALLOWED_USERS.clear()
         USER_NAMES.clear()
         ALLOWED_USERS[ADMIN_USER_ID] = "Админы"
-        # --- ИЗМЕНЕНО: Используем i18n ---
         USER_NAMES[str(ADMIN_USER_ID)] = _("default_admin_name", config.DEFAULT_LANGUAGE)
-        # ---------------------------------
         save_users()
 
 def save_users():
@@ -94,7 +90,7 @@ def is_allowed(user_id, command=None):
         "start", "menu", "back_to_menu", "uptime", "traffic", "selftest",
         "get_id", "get_id_inline", "notifications_menu", "toggle_alert_resources",
         "toggle_alert_logins", "toggle_alert_bans", "alert_downtime_stub",
-        "language" # <-- ДОБАВЛЕНО: Команда смены языка
+        "language" # <-- Команда смены языка
     ]
     admin_only_commands = [
         "manage_users", "generate_vless", "speedtest", "top", "updatexray",
@@ -108,7 +104,7 @@ def is_allowed(user_id, command=None):
 
     if command in user_commands:
         logging.debug(f"Команда '{command}' разрешена для всех пользователей. Доступ для {user_id} предоставлен.")
-        return True 
+        return True
 
     is_admin_group = (user_id == ADMIN_USER_ID) or (ALLOWED_USERS.get(user_id) == "Админы")
 
@@ -127,7 +123,7 @@ def is_allowed(user_id, command=None):
         elif INSTALL_MODE != "root":
             logging.warning(f"Команда '{command}' требует root-режима установки. Доступ для {user_id} запрещен (текущий режим: {INSTALL_MODE}).")
             return False
-        else: 
+        else:
             logging.warning(f"Команда '{command}' требует прав админа даже в root-режиме. Доступ для пользователя {user_id} запрещен.")
             return False
 
@@ -144,13 +140,10 @@ async def refresh_user_names(bot: Bot):
     user_ids_to_check = list(ALLOWED_USERS.keys())
     logging.info(f"Начинаю обновление имен для {len(user_ids_to_check)} пользователей...")
 
-    # --- ИЗМЕНЕНО: Получаем переводы плейсхолдеров ---
-    # Мы используем язык по умолчанию, т.к. эта функция фоновая
     lang = config.DEFAULT_LANGUAGE
-    new_user_prefix = _("default_new_user_name", lang, uid="").split('_')[0] # "Новый"
-    id_user_prefix = _("default_id_user_name", lang, uid="").split(' ')[0]   # "ID:"
+    new_user_prefix = _("default_new_user_name", lang, uid="").split('_')[0]
+    id_user_prefix = _("default_id_user_name", lang, uid="").split(' ')[0]
     admin_name_default = _("default_admin_name", lang)
-    # --------------------------------------------------
 
     for uid in user_ids_to_check:
         uid_str = str(uid)
@@ -158,21 +151,19 @@ async def refresh_user_names(bot: Bot):
 
         should_refresh = (
             not current_name
-            or current_name.startswith(new_user_prefix) # "Новый_..."
-            or current_name.startswith(id_user_prefix)  # "ID: ..."
-            or (current_name == admin_name_default and uid == ADMIN_USER_ID) # "Главный Админ"
+            or current_name.startswith(new_user_prefix)
+            or current_name.startswith(id_user_prefix)
+            or (current_name == admin_name_default and uid == ADMIN_USER_ID)
         )
 
         if should_refresh:
-            # --- ИЗМЕНЕНО: Используем i18n ---
-            new_name = _("default_id_user_name", lang, uid=uid) # Запасное имя "ID: {uid}"
-            # ----------------------------------
+            new_name = _("default_id_user_name", lang, uid=uid)
             try:
                 logging.debug(f"Пытаюсь получить информацию о чате для ID: {uid}")
                 chat = await bot.get_chat(uid)
                 fetched_name = chat.first_name or chat.username
                 if fetched_name:
-                    new_name = escape_html(fetched_name) 
+                    new_name = escape_html(fetched_name)
                 else:
                     logging.warning(f"Не удалось получить Имя/Юзернейм для {uid}, использую запасное '{new_name}'")
 
@@ -210,34 +201,32 @@ async def get_user_name(bot: Bot, user_id: int) -> str:
     """Получает имя пользователя из кеша или запрашивает его."""
     uid_str = str(user_id)
     cached_name = USER_NAMES.get(uid_str)
-    
-    # --- ИЗМЕНЕНО: Получаем язык пользователя для плейсхолдеров ---
-    lang = config.DEFAULT_LANGUAGE # По умолчанию
+
+    lang = config.DEFAULT_LANGUAGE
     try:
-        # Пытаемся получить реальный язык пользователя, если он уже задан
-        from .core.i18n import get_user_lang
+        from .i18n import get_user_lang # Исправлен импорт
         lang = get_user_lang(user_id)
     except ImportError:
-        pass # Произойдет, если i18n еще не загружен
+        pass
+    except Exception as e: # Добавлена обработка других ошибок get_user_lang
+         logging.warning(f"Ошибка получения языка для {user_id} в get_user_name: {e}. Использую язык по умолчанию.")
+
 
     new_user_prefix = _("default_new_user_name", lang, uid="").split('_')[0]
     id_user_prefix = _("default_id_user_name", lang, uid="").split(' ')[0]
-    # --------------------------------------------------------------
 
     if cached_name and not cached_name.startswith(new_user_prefix) and not cached_name.startswith(id_user_prefix):
         return cached_name
 
     logging.debug(f"Имя для {user_id} не кешировано или является плейсхолдером ('{cached_name}'). Запрашиваю...")
-    # --- ИЗМЕНЕНО: Используем i18n ---
-    new_name = _("default_id_user_name", lang, uid=user_id) # Запасной вариант "ID: {user_id}"
-    # ----------------------------------
+    new_name = _("default_id_user_name", lang, uid=user_id)
     try:
         chat = await bot.get_chat(user_id)
         fetched_name = chat.first_name or chat.username
         if fetched_name:
             new_name = escape_html(fetched_name)
-            USER_NAMES[uid_str] = new_name 
-            save_users() 
+            USER_NAMES[uid_str] = new_name
+            save_users()
             logging.info(f"Получено и кешировано имя для {user_id}: '{new_name}'")
             return new_name
         else:
@@ -257,10 +246,15 @@ async def send_access_denied_message(bot: Bot, user_id: int, chat_id: int, comma
     """Отправляет сообщение об отказе в доступе."""
     await delete_previous_message(user_id, command, chat_id, bot)
 
-    # --- ИЗМЕНЕНО: Используем i18n ---
-    # Получаем язык пользователя, чтобы кнопка и текст были на его языке
-    from .core.i18n import get_user_lang
-    lang = get_user_lang(user_id)
+    lang = config.DEFAULT_LANGUAGE # По умолчанию
+    try:
+        from .i18n import get_user_lang # Исправлен импорт
+        lang = get_user_lang(user_id)
+    except ImportError:
+         pass
+    except Exception as e:
+         logging.warning(f"Ошибка получения языка для {user_id} в send_access_denied_message: {e}. Использую язык по умолчанию.")
+
 
     text_to_send = f"my ID: {user_id}"
     admin_link = ""
@@ -273,7 +267,6 @@ async def send_access_denied_message(bot: Bot, user_id: int, chat_id: int, comma
 
     button_text = _("access_denied_button", lang)
     message_text = _("access_denied_message", lang, user_id=user_id)
-    # ----------------------------------
 
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text=button_text, url=admin_link)]

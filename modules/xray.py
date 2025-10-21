@@ -8,8 +8,8 @@ from aiogram.fsm.context import FSMContext
 from aiogram.exceptions import TelegramBadRequest
 
 # --- ИЗМЕНЕНО: Импортируем i18n и config ---
-from core.i18n import _, I18nFilter, get_user_lang
-from core import config
+from core.i18n import _, I18nFilter, get_user_lang # <-- Добавлено
+from core import config                           # <-- Добавлено
 # ----------------------------------------
 
 from core.auth import is_allowed, send_access_denied_message
@@ -17,27 +17,19 @@ from core.messaging import delete_previous_message
 from core.shared_state import LAST_MESSAGE_IDS
 from core.utils import escape_html, detect_xray_client
 
-# --- ИЗМЕНЕНО: Используем ключ ---
 BUTTON_KEY = "btn_xray"
-# --------------------------------
 
 def get_button() -> KeyboardButton:
-    # --- ИЗМЕНЕНО: Используем i18n ---
     return KeyboardButton(text=_(BUTTON_KEY, config.DEFAULT_LANGUAGE))
-    # --------------------------------
 
 def register_handlers(dp: Dispatcher):
-    # --- ИЗМЕНЕНО: Используем I18nFilter ---
     dp.message(I18nFilter(BUTTON_KEY))(updatexray_handler)
-    # --------------------------------------
 
 async def updatexray_handler(message: types.Message, state: FSMContext):
     user_id = message.from_user.id
     chat_id = message.chat.id
-    # --- ИЗМЕНЕНО: Получаем язык ---
-    lang = get_user_lang(user_id)
-    # ------------------------------
-    command = "updatexray" # Имя команды оставляем
+    lang = get_user_lang(user_id) # Теперь _ доступна
+    command = "updatexray"
     if not is_allowed(user_id, command):
         await send_access_denied_message(message.bot, user_id, chat_id, command)
         return
@@ -45,42 +37,33 @@ async def updatexray_handler(message: types.Message, state: FSMContext):
     await message.bot.send_chat_action(chat_id=chat_id, action="typing")
     await delete_previous_message(user_id, command, chat_id, message.bot)
 
-    # --- ИЗМЕНЕНО: Используем i18n ---
     sent_msg = await message.answer(_("xray_detecting", lang))
-    # --------------------------------
     LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = sent_msg.message_id
 
     try:
-        client, container_name = await detect_xray_client() # detect_xray_client уже использует i18n для ошибки
+        client, container_name = await detect_xray_client()
 
         if not client:
-            # --- ИЗМЕНЕНО: Используем i18n ---
             await message.bot.edit_message_text(
                 _("xray_detect_fail", lang),
                 chat_id=chat_id,
                 message_id=sent_msg.message_id
             )
-            # --------------------------------
             return
 
-        # --- ИЗМЕНЕНО: Используем i18n ---
         version = _("xray_version_unknown", lang)
-        # --------------------------------
-        client_name_display = client.capitalize() # Оставим как есть
+        client_name_display = client.capitalize()
 
-        # --- ИЗМЕНЕНО: Используем i18n ---
         await message.bot.edit_message_text(
             _("xray_detected_start_update", lang, client=client_name_display, container=escape_html(container_name)),
             chat_id=chat_id,
             message_id=sent_msg.message_id,
             parse_mode="HTML"
         )
-        # --------------------------------
 
         update_cmd = ""
         version_cmd = ""
 
-        # Логика команд остается прежней
         if client == "amnezia":
             update_cmd = (
                 f'docker exec {container_name} /bin/bash -c "'
@@ -122,29 +105,21 @@ async def updatexray_handler(message: types.Message, state: FSMContext):
 
         if process_update.returncode != 0:
             error_output = stderr_update.decode() or stdout_update.decode()
-            # --- ИЗМЕНЕНО: Используем i18n ---
             raise Exception(_("xray_update_error", lang, client=client_name_display, error=escape_html(error_output)))
-            # --------------------------------
 
         process_version = await asyncio.create_subprocess_shell(version_cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
         stdout_version, _ = await process_version.communicate()
         version_output = stdout_version.decode('utf-8', 'ignore')
         version_match = re.search(r'Xray\s+([\d\.]+)', version_output)
         if version_match:
-            version = version_match.group(1) # Перезаписываем 'неизвестно'
+            version = version_match.group(1)
 
-        # --- ИЗМЕНЕНО: Используем i18n ---
         final_message = _("xray_update_success", lang, client=client_name_display, version=version)
-        # --------------------------------
         await message.bot.edit_message_text(final_message, chat_id=chat_id, message_id=sent_msg.message_id, parse_mode="HTML")
 
     except Exception as e:
         logging.error(f"Ошибка в updatexray_handler: {e}")
-        # --- ИЗМЕНЕНО: Используем i18n ---
-        # Ошибка может быть уже переведена (из raise Exception выше),
-        # но на всякий случай обернем ее еще раз
         error_msg = _("xray_error_generic", lang, error=str(e))
-        # --------------------------------
         try:
              await message.bot.edit_message_text(error_msg , chat_id=chat_id, message_id=sent_msg.message_id, parse_mode="HTML")
         except TelegramBadRequest as edit_e:
@@ -154,5 +129,4 @@ async def updatexray_handler(message: types.Message, state: FSMContext):
              else:
                   raise
     finally:
-        # FSM не используется в этом модуле, но очистка не повредит
         await state.clear()
