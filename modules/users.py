@@ -8,7 +8,8 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.filters import StateFilter
 from aiogram.exceptions import TelegramBadRequest
 
-from core.auth import is_allowed, send_access_denied_message, refresh_user_names, save_users
+# ИСПРАВЛЕНИЕ: Добавляем 'get_user_name' в импорт
+from core.auth import is_allowed, send_access_denied_message, refresh_user_names, save_users, get_user_name
 from core.messaging import delete_previous_message
 from core.shared_state import LAST_MESSAGE_IDS, ALLOWED_USERS, USER_NAMES, ALERTS_CONFIG
 from core.config import ADMIN_USER_ID
@@ -215,13 +216,29 @@ async def process_add_user_group(callback: types.CallbackQuery, state: FSMContex
              raise ValueError("Не найден ID пользователя в состоянии FSM.")
 
         ALLOWED_USERS[new_user_id] = group
-        USER_NAMES[str(new_user_id)] = f"Новый_{new_user_id}"
-        save_users()
-        logging.info(f"Админ {callback.from_user.id} добавил пользователя {new_user_id} в группу '{group}'")
+        
+        # --- НАЧАЛО ИСПРАВЛЕНИЯ ---
+        
+        # 1. Удаляем старую логику
+        # USER_NAMES[str(new_user_id)] = f"Новый_{new_user_id}"
+        # save_users()
+        # asyncio.create_task(refresh_user_names(callback.bot))
 
-        asyncio.create_task(refresh_user_names(callback.bot))
+        # 2. Добавляем новую: получаем имя немедленно
+        # Эта функция (из core/auth.py) сама получит имя, обновит USER_NAMES и вызовет save_users()
+        new_user_name = await get_user_name(callback.bot, new_user_id)
+        
+        logging.info(f"Админ {callback.from_user.id} добавил пользователя {new_user_name} ({new_user_id}) в группу '{group}'")
 
-        await callback.message.edit_text(f"✅ Пользователь <code>{new_user_id}</code> успешно добавлен в группу <b>{group}</b>.", parse_mode="HTML", reply_markup=get_back_keyboard("back_to_manage_users"))
+        # 3. Обновляем текст ответа, чтобы показать полученное имя
+        await callback.message.edit_text(
+            f"✅ Пользователь <b>{new_user_name}</b> (<code>{new_user_id}</code>) успешно добавлен в группу <b>{group}</b>.", 
+            parse_mode="HTML", 
+            reply_markup=get_back_keyboard("back_to_manage_users")
+        )
+        
+        # --- КОНЕЦ ИСПРАВЛЕНИЯ ---
+        
         await state.clear()
 
     except Exception as e:
