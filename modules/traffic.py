@@ -9,7 +9,8 @@ from aiogram.exceptions import TelegramRetryAfter, TelegramBadRequest
 from core.auth import is_allowed, send_access_denied_message
 from core.messaging import delete_previous_message
 from core.shared_state import (
-    LAST_MESSAGE_IDS, TRAFFIC_MESSAGE_IDS, TRAFFIC_PREV
+    LAST_MESSAGE_IDS, TRAFFIC_MESSAGE_IDS, TRAFFIC_PREV,
+    BUTTONS_MAP  # <--- ИЗМЕНЕНИЕ: Добавлен импорт
 )
 from core.utils import format_traffic
 from core.config import TRAFFIC_INTERVAL
@@ -58,10 +59,9 @@ async def traffic_handler(message: types.Message):
         sent_message = await message.answer("✅ Мониторинг трафика остановлен.", reply_markup=ReplyKeyboardRemove())
         
         # Отправляем новое сообщение с главным меню
-        # `bot.buttons_map` был сохранен в `start_or_menu_handler`
         await message.answer(
             "🏠 Главное меню:",
-            reply_markup=get_main_reply_keyboard(user_id, message.bot.buttons_map)
+            reply_markup=get_main_reply_keyboard(user_id, BUTTONS_MAP) # <--- ИЗМЕНЕНИЕ: Используем BUTTONS_MAP
         )
         
         LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = sent_message.message_id
