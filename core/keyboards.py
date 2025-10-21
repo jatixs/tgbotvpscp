@@ -1,225 +1,262 @@
 # /opt/tg-bot/core/keyboards.py
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
-from .shared_state import ALLOWED_USERS, USER_NAMES, ALERTS_CONFIG, BUTTONS_MAP
+
+# --- ИЗМЕНЕНО: Импортируем i18n ---
+from .i18n import _, get_user_lang
+# -----------------------------------
+
+from .shared_state import ALLOWED_USERS, USER_NAMES, ALERTS_CONFIG
 from .config import ADMIN_USER_ID, INSTALL_MODE
 
-# --- НАЧАЛО ВОССТАНОВЛЕННОГО КОДА ---
+# --- НАЧАЛО ВОССТАНОВЛЕННОГО КОДА (с i18n) ---
 
-
-def get_main_reply_keyboard(
-        user_id: int,
-        buttons_map: dict) -> ReplyKeyboardMarkup:
+def get_main_reply_keyboard(user_id: int, buttons_map: dict) -> ReplyKeyboardMarkup:
     """
     Собирает главную клавиатуру из кнопок, предоставленных загруженными модулями,
     с логической группировкой по строкам (как было до подменю).
     """
-    is_admin = user_id == ADMIN_USER_ID or ALLOWED_USERS.get(
-        user_id) == "Админы"
+    is_admin = user_id == ADMIN_USER_ID or ALLOWED_USERS.get(user_id) == "Админы"
     is_root_mode = INSTALL_MODE == 'root'
 
+    # --- ИЗМЕНЕНО: Получаем язык пользователя ---
+    lang = get_user_lang(user_id)
+    # ----------------------------------------
+    
     # 1. Получаем ВСЕ кнопки, доступные этому пользователю
     available_buttons_texts = set()
-    # Словарь для быстрого доступа к объекту KeyboardButton по тексту
-    available_buttons_map = {}
+    available_buttons_map = {} 
+
+    # --- ИЗМЕНЕНО: Обновляем тексты кнопок на язык пользователя ---
+    def translate_button(btn: KeyboardButton) -> KeyboardButton:
+        """Находит ключ i18n по тексту кнопки по умолчанию и возвращает новую кнопку с переводом."""
+        # 'btn_language' - особый случай, он уже переведен
+        if btn.text == _("btn_language", 'ru') or btn.text == _("btn_language", 'en'):
+             return KeyboardButton(text=_("btn_language", lang))
+             
+        # Ищем ключ по русскому тексту (язык по умолчанию)
+        key_to_find = None
+        ru_strings = i18n.STRINGS.get('ru', {})
+        for key, text in ru_strings.items():
+            if text == btn.text:
+                key_to_find = key
+                break
+        
+        if key_to_find:
+            translated_text = _(key_to_find, lang)
+            return KeyboardButton(text=translated_text)
+        else:
+            # Если ключ не найден, возвращаем как есть (например, "Язык")
+            return btn
 
     # Пользовательские кнопки
-    for btn in buttons_map.get("user", []):  # Используем 'user'
-        available_buttons_texts.add(btn.text)
-        available_buttons_map[btn.text] = btn
+    for btn in buttons_map.get("user", []):
+        translated_btn = translate_button(btn)
+        available_buttons_texts.add(translated_btn.text)
+        available_buttons_map[translated_btn.text] = translated_btn
 
     # Админские кнопки
     if is_admin:
-        for btn in buttons_map.get("admin", []):  # Используем 'admin'
-            available_buttons_texts.add(btn.text)
-            available_buttons_map[btn.text] = btn
+        for btn in buttons_map.get("admin", []):
+            translated_btn = translate_button(btn)
+            available_buttons_texts.add(translated_btn.text)
+            available_buttons_map[translated_btn.text] = translated_btn
 
-    # Root кнопки (только если режим root И пользователь админ)
+    # Root кнопки
     if is_root_mode and is_admin:
-        for btn in buttons_map.get("root", []):  # Используем 'root'
-            available_buttons_texts.add(btn.text)
-            available_buttons_map[btn.text] = btn
+        for btn in buttons_map.get("root", []):
+            translated_btn = translate_button(btn)
+            available_buttons_texts.add(translated_btn.text)
+            available_buttons_map[translated_btn.text] = translated_btn
+    # -----------------------------------------------------------
 
-    # 2. Определяем структуру строк (группы) - возвращаем старую группировку
-    button_layout = [
+    # 2. Определяем структуру строк (группы) - теперь используем ключи i18n
+    button_layout_keys = [
         # Группа 1: Информация и Мониторинг (User+)
-        ["🛠 Сведения о сервере", "📡 Трафик сети", "⏱ Аптайм"],
+        ["btn_selftest", "btn_traffic", "btn_uptime"],
         # Группа 2: Инструменты и Тесты (Admin+)
-        ["🚀 Скорость сети", "🔥 Топ процессов", "🩻 Обновление X-ray"],
+        ["btn_speedtest", "btn_top", "btn_xray"],
         # Группа 3: Логи и Безопасность (Root Only)
-        ["📜 SSH-лог", "🔒 Fail2Ban Log", "📜 Последние события"],
+        ["btn_sshlog", "btn_fail2ban", "btn_logs"],
         # Группа 4: Управление (Admin+)
-        ["👤 Пользователи", "🔗 VLESS-ссылка"],
+        ["btn_users", "btn_vless"],
         # Группа 5: Системные Действия (Admin/Root)
-        # --- [!!!] ВОТ ИСПРАВЛЕНИЕ [!!!] ---
-        ["🔄 Обновление VPS/VDS", "⚡️ Оптимизация VPS/VDS",
-            "♻️ Перезапуск бота", "🔄 Перезагрузка VPS/VDS"],
+        ["btn_update", "btn_optimize", "btn_restart", "btn_reboot"],
         # Группа 6: Настройки Бота (User+)
-        ["🔔 Уведомления"],
+        ["btn_notifications", "btn_language"], # <-- Добавлена кнопка языка
     ]
 
     # 3. Собираем финальную клавиатуру
     final_keyboard_rows = []
-    for row_template in button_layout:
+    for row_template_keys in button_layout_keys:
         current_row = []
-        for btn_text in row_template:
-            # Добавляем кнопку в ряд, только если она доступна пользователю
+        for btn_key in row_template_keys:
+            # --- ИЗМЕНЕНО: Ищем кнопку по переведенному тексту ---
+            btn_text = _(btn_key, lang)
             if btn_text in available_buttons_texts:
                 current_row.append(available_buttons_map[btn_text])
+            # --------------------------------------------------
 
-        # Добавляем ряд в клавиатуру, только если он не пустой
         if current_row:
             final_keyboard_rows.append(current_row)
 
     return ReplyKeyboardMarkup(
         keyboard=final_keyboard_rows,
         resize_keyboard=True,
-        # Возвращаем старый плейсхолдер
-        input_field_placeholder="Выберите опцию в меню..."
+        # --- ИЗМЕНЕНО: Используем i18n для плейсхолдера ---
+        input_field_placeholder=_( "main_menu_placeholder", lang)
+        # ----------------------------------------------
     )
 
 # --- КОНЕЦ ВОССТАНОВЛЕННОГО КОДА ---
 
 
-# --- Остальные функции get_*_keyboard остаются без изменений ---
-def get_manage_users_keyboard():
+# --- Остальные функции get_*_keyboard ИЗМЕНЕНЫ для поддержки i18n ---
+
+def get_manage_users_keyboard(lang: str):
     """Клавиатура для меню управления пользователями."""
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
         [
-            InlineKeyboardButton(
-                text="➕ Добавить пользователя",
-                callback_data="add_user"),
-            InlineKeyboardButton(
-                text="➖ Удалить пользователя",
-                callback_data="delete_user")
+            InlineKeyboardButton(text=_("btn_add_user", lang), callback_data="add_user"),
+            InlineKeyboardButton(text=_("btn_delete_user", lang), callback_data="delete_user")
         ],
         [
-            InlineKeyboardButton(
-                text="🔄 Изменить группу",
-                callback_data="change_group"),
-            InlineKeyboardButton(
-                text="🆔 Мой ID",
-                callback_data="get_id_inline")
+            InlineKeyboardButton(text=_("btn_change_group", lang), callback_data="change_group"),
+            InlineKeyboardButton(text=_("btn_my_id", lang), callback_data="get_id_inline")
         ],
         [
-            InlineKeyboardButton(
-                text="🔙 Назад в меню",
-                callback_data="back_to_menu")  # Эта кнопка все еще нужна
+            InlineKeyboardButton(text=_("btn_back_to_menu", lang), callback_data="back_to_menu")
         ]
     ])
     return keyboard
 
-
-def get_delete_users_keyboard(current_user_id):
+def get_delete_users_keyboard(current_user_id: int):
     """Клавиатура для выбора пользователя для удаления."""
+    # --- ИЗМЕНЕНО: Получаем язык админа ---
+    lang = get_user_lang(current_user_id)
+    # -------------------------------------
     buttons = []
     sorted_users = sorted(
         ALLOWED_USERS.items(),
         key=lambda item: USER_NAMES.get(str(item[0]), f"ID: {item[0]}").lower()
     )
     for uid, group in sorted_users:
-        if uid == ADMIN_USER_ID:
-            continue
+        if uid == ADMIN_USER_ID: continue
         user_name = USER_NAMES.get(str(uid), f"ID: {uid}")
-        button_text = f"{user_name} ({group})"
+        
+        # --- ИЗМЕНЕНО: Используем i18n ---
+        button_text = _("delete_user_button_text", lang, user_name=user_name, group=group)
         callback_data = f"delete_user_{uid}"
         if uid == current_user_id:
-            button_text = f"❌ Удалить себя ({user_name}, {group})"
+            button_text = _("delete_self_button_text", lang, user_name=user_name, group=group)
             callback_data = f"request_self_delete_{uid}"
-        buttons.append([InlineKeyboardButton(
-            text=button_text, callback_data=callback_data)])
-    buttons.append([InlineKeyboardButton(
-        text="🔙 Назад", callback_data="back_to_manage_users")])
+        # ----------------------------------
+            
+        buttons.append([InlineKeyboardButton(text=button_text, callback_data=callback_data)])
+        
+    buttons.append([InlineKeyboardButton(text=_("btn_back", lang), callback_data="back_to_manage_users")])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
-
-def get_change_group_keyboard():
+def get_change_group_keyboard(admin_user_id: int):
     """Клавиатура для выбора пользователя для смены группы."""
+    # --- ИЗМЕНЕНО: Получаем язык админа ---
+    lang = get_user_lang(admin_user_id)
+    # -------------------------------------
     buttons = []
     sorted_users = sorted(
         ALLOWED_USERS.items(),
         key=lambda item: USER_NAMES.get(str(item[0]), f"ID: {item[0]}").lower()
     )
     for uid, group in sorted_users:
-        if uid == ADMIN_USER_ID:
-            continue
+        if uid == ADMIN_USER_ID: continue
         user_name = USER_NAMES.get(str(uid), f"ID: {uid}")
-        buttons.append([InlineKeyboardButton(
-            text=f"{user_name} ({group})", callback_data=f"select_user_change_group_{uid}")])
-    buttons.append([InlineKeyboardButton(
-        text="🔙 Назад", callback_data="back_to_manage_users")])
+        # --- ИЗМЕНЕНО: Используем i18n ---
+        button_text = _("delete_user_button_text", lang, user_name=user_name, group=group)
+        # ----------------------------------
+        buttons.append([InlineKeyboardButton(text=button_text, callback_data=f"select_user_change_group_{uid}")])
+        
+    buttons.append([InlineKeyboardButton(text=_("btn_back", lang), callback_data="back_to_manage_users")])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
-
-def get_group_selection_keyboard(user_id_to_change=None):
+def get_group_selection_keyboard(lang: str, user_id_to_change=None):
     """Клавиатура для выбора группы (Админ/Пользователь)."""
     user_identifier = user_id_to_change or 'new'
-    keyboard = InlineKeyboardMarkup(
-        inline_keyboard=[
-            [
-                InlineKeyboardButton(
-                    text="👑 Админы", callback_data=f"set_group_{user_identifier}_Админы"), InlineKeyboardButton(
-                    text="👤 Пользователи", callback_data=f"set_group_{user_identifier}_Пользователи")], [
-                        InlineKeyboardButton(
-                            text="🔙 Отмена", callback_data="back_to_manage_users")]])
-    return keyboard
-
-
-def get_self_delete_confirmation_keyboard(user_id):
-    """Клавиатура подтверждения удаления себя."""
-    keyboard = InlineKeyboardMarkup(
-        inline_keyboard=[
-            [
-                InlineKeyboardButton(
-                    text="✅ Подтвердить",
-                    callback_data=f"confirm_self_delete_{user_id}"),
-                InlineKeyboardButton(
-                    text="🔙 Отмена",
-                    callback_data="back_to_delete_users")]])
-    return keyboard
-
-
-def get_reboot_confirmation_keyboard():
-    """Клавиатура подтверждения перезагрузки сервера."""
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
         [
-            InlineKeyboardButton(
-                text="✅ Да, перезагрузить",
-                callback_data="reboot"),
-            InlineKeyboardButton(
-                text="❌ Нет, отмена",
-                callback_data="back_to_menu")  # Эта кнопка остается
+            # --- ИЗМЕНЕНО: Используем i18n ---
+            InlineKeyboardButton(text=_("btn_group_admins", lang), callback_data=f"set_group_{user_identifier}_Админы"),
+            InlineKeyboardButton(text=_("btn_group_users", lang), callback_data=f"set_group_{user_identifier}_Пользователи")
+            # ----------------------------------
+        ],
+        [ InlineKeyboardButton(text=_("btn_cancel", lang), callback_data="back_to_manage_users") ]
+    ])
+    return keyboard
+
+def get_self_delete_confirmation_keyboard(user_id: int):
+    """Клавиатура подтверждения удаления себя."""
+    # --- ИЗМЕНЕНО: Получаем язык пользователя ---
+    lang = get_user_lang(user_id)
+    # --------------------------------------
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [
+            # --- ИЗМЕНЕНО: Используем i18n ---
+            InlineKeyboardButton(text=_("btn_confirm", lang), callback_data=f"confirm_self_delete_{user_id}"),
+            InlineKeyboardButton(text=_("btn_cancel", lang), callback_data="back_to_delete_users")
+            # ----------------------------------
         ]
     ])
     return keyboard
 
-
-def get_back_keyboard(callback_data="back_to_manage_users"):
-    """Универсальная инлайн-кнопка 'Назад'."""
+def get_reboot_confirmation_keyboard(user_id: int):
+    """Клавиатура подтверждения перезагрузки сервера."""
+    # --- ИЗМЕНЕНО: Получаем язык пользователя ---
+    lang = get_user_lang(user_id)
+    # --------------------------------------
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🔙 Назад", callback_data=callback_data)]
+        [
+            # --- ИЗМЕНЕНО: Используем i18n ---
+            InlineKeyboardButton(text=_("btn_reboot_confirm", lang), callback_data="reboot"),
+            InlineKeyboardButton(text=_("btn_reboot_cancel", lang), callback_data="back_to_menu")
+            # ----------------------------------
+        ]
     ])
     return keyboard
 
+def get_back_keyboard(lang: str, callback_data="back_to_manage_users"):
+    """Универсальная инлайн-кнопка 'Назад'."""
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        # --- ИЗМЕНЕНО: Используем i18n ---
+        [ InlineKeyboardButton(text=_("btn_back", lang), callback_data=callback_data) ]
+        # ----------------------------------
+    ])
+    return keyboard
 
-def get_alerts_menu_keyboard(user_id):
+def get_alerts_menu_keyboard(user_id: int):
     """Клавиатура для меню настроек уведомлений."""
+    # --- ИЗМЕНЕНО: Получаем язык пользователя ---
+    lang = get_user_lang(user_id)
+    # --------------------------------------
+    
     user_config = ALERTS_CONFIG.get(user_id, {})
     res_enabled = user_config.get("resources", False)
     logins_enabled = user_config.get("logins", False)
     bans_enabled = user_config.get("bans", False)
-    res_text = f"{'✅' if res_enabled else '❌'} Ресурсы (CPU/RAM/Disk)"
-    logins_text = f"{'✅' if logins_enabled else '❌'} Входы SSH"
-    bans_text = f"{'✅' if bans_enabled else '❌'} Баны (Fail2Ban)"
+    
+    # --- ИЗМЕНЕНО: Используем i18n ---
+    status_yes = _("status_enabled", lang)
+    status_no = _("status_disabled", lang)
+    
+    res_text = _("alerts_menu_res", lang, status=(status_yes if res_enabled else status_no))
+    logins_text = _("alerts_menu_logins", lang, status=(status_yes if logins_enabled else status_no))
+    bans_text = _("alerts_menu_bans", lang, status=(status_yes if bans_enabled else status_no))
+    downtime_text = _("alerts_menu_downtime", lang)
+    back_text = _("btn_back_to_menu", lang)
+    # ----------------------------------
+
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text=res_text,
-                              callback_data="toggle_alert_resources")],
-        [InlineKeyboardButton(text=logins_text,
-                              callback_data="toggle_alert_logins")],
-        [InlineKeyboardButton(text=bans_text,
-                              callback_data="toggle_alert_bans")],
-        [InlineKeyboardButton(text="⏳ Даунтайм сервера (WIP)",
-                              callback_data="alert_downtime_stub")],
-        [InlineKeyboardButton(text="🔙 Назад в меню",
-                              callback_data="back_to_menu")]  # И эта остается
+        [InlineKeyboardButton(text=res_text, callback_data="toggle_alert_resources")],
+        [InlineKeyboardButton(text=logins_text, callback_data="toggle_alert_logins")],
+        [InlineKeyboardButton(text=bans_text, callback_data="toggle_alert_bans")],
+        [InlineKeyboardButton(text=downtime_text, callback_data="alert_downtime_stub")],
+        [InlineKeyboardButton(text=back_text, callback_data="back_to_menu")]
     ])
     return keyboard

@@ -14,6 +14,9 @@ USERS_FILE = os.path.join(CONFIG_DIR, "users.json")
 REBOOT_FLAG_FILE = os.path.join(CONFIG_DIR, "reboot_flag.txt")
 RESTART_FLAG_FILE = os.path.join(CONFIG_DIR, "restart_flag.txt")
 ALERTS_CONFIG_FILE = os.path.join(CONFIG_DIR, "alerts_config.json")
+# --- ДОБАВЛЕНО ---
+USER_SETTINGS_FILE = os.path.join(CONFIG_DIR, "user_settings.json")
+# -----------------
 LOG_FILE = os.path.join(LOG_DIR, "bot.log")
 
 # --- Загрузка .env ---
@@ -39,27 +42,23 @@ if not ADMIN_USERNAME:
     print("эту переменную (указав свой юзернейм без @).")
     print("-------------------------------------------------------")
 
+# --- ДОБАВЛЕНО: Настройки языка ---
+DEFAULT_LANGUAGE = "ru"
+# ---------------------------------
 
 # --- Настройки порогов и интервалов ---
 TRAFFIC_INTERVAL = 5
-RESOURCE_CHECK_INTERVAL = 60  # Интервал проверки ресурсов (1 минута)
+RESOURCE_CHECK_INTERVAL = 60 # Интервал проверки ресурсов (1 минута)
 CPU_THRESHOLD = 90.0
 RAM_THRESHOLD = 90.0
 DISK_THRESHOLD = 95.0
-# 30 минут (1800 сек) - как часто слать НАПОМИНАНИЯ
-RESOURCE_ALERT_COOLDOWN = 1800
+RESOURCE_ALERT_COOLDOWN = 1800 # 30 минут (1800 сек) - как часто слать НАПОМИНАНИЯ
 
 # --- Настройка логирования ---
-
-
 def setup_logging():
-    logging.basicConfig(
-        level=logging.INFO,
-        filename=LOG_FILE,
-        format='%(asctime)s - %(levelname)s - %(message)s',
-        encoding='utf-8')
+    logging.basicConfig(level=logging.INFO, filename=LOG_FILE,
+                        format='%(asctime)s - %(levelname)s - %(message)s', encoding='utf-8')
     console_handler = logging.StreamHandler()
     console_handler.setLevel(logging.INFO)
-    console_handler.setFormatter(logging.Formatter(
-        '%(asctime)s - %(levelname)s - %(message)s'))
+    console_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
     logging.getLogger().addHandler(console_handler)
