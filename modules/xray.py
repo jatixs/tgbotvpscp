@@ -7,9 +7,9 @@ from aiogram.types import KeyboardButton
 from aiogram.fsm.context import FSMContext
 from aiogram.exceptions import TelegramBadRequest
 
-# --- ИЗМЕНЕНО: Импортируем i18n и config ---
-from core.i18n import _, I18nFilter, get_user_lang # <-- Добавлено
-from core import config                           # <-- Добавлено
+# --- Оставляем эти импорты ---
+from core.i18n import I18nFilter, get_user_lang # Убираем _ отсюда
+from core import config
 # ----------------------------------------
 
 from core.auth import is_allowed, send_access_denied_message
@@ -20,15 +20,21 @@ from core.utils import escape_html, detect_xray_client
 BUTTON_KEY = "btn_xray"
 
 def get_button() -> KeyboardButton:
+    # --- ИЗМЕНЕНО: Импортируем _ здесь ---
+    from core.i18n import _
+    # ------------------------------------
     return KeyboardButton(text=_(BUTTON_KEY, config.DEFAULT_LANGUAGE))
 
 def register_handlers(dp: Dispatcher):
     dp.message(I18nFilter(BUTTON_KEY))(updatexray_handler)
 
 async def updatexray_handler(message: types.Message, state: FSMContext):
+    # --- ИЗМЕНЕНО: Импортируем _ здесь ---
+    from core.i18n import _
+    # ------------------------------------
     user_id = message.from_user.id
     chat_id = message.chat.id
-    lang = get_user_lang(user_id) # Теперь _ доступна
+    lang = get_user_lang(user_id)
     command = "updatexray"
     if not is_allowed(user_id, command):
         await send_access_denied_message(message.bot, user_id, chat_id, command)
@@ -64,6 +70,7 @@ async def updatexray_handler(message: types.Message, state: FSMContext):
         update_cmd = ""
         version_cmd = ""
 
+        # ... (логика команд update_cmd и version_cmd остается без изменений) ...
         if client == "amnezia":
             update_cmd = (
                 f'docker exec {container_name} /bin/bash -c "'
@@ -99,6 +106,7 @@ async def updatexray_handler(message: types.Message, state: FSMContext):
              restart_cmd = f"docker restart {container_name}"
              update_cmd = f"{check_deps_cmd} && {download_unzip_cmd} && {update_env_cmd} && {restart_cmd}"
              version_cmd = f'docker exec {container_name} /var/lib/marzban/xray-core/xray version'
+
 
         process_update = await asyncio.create_subprocess_shell(update_cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
         stdout_update, stderr_update = await process_update.communicate()

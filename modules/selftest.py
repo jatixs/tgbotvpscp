@@ -9,9 +9,9 @@ from datetime import datetime
 from aiogram import F, Dispatcher, types
 from aiogram.types import KeyboardButton
 
-# --- ИЗМЕНЕНО: Импортируем i18n и config ---
-from core.i18n import _, I18nFilter, get_user_lang # <-- Добавлено
-from core import config                           # <-- Добавлено
+# --- Оставляем эти импорты ---
+from core.i18n import I18nFilter, get_user_lang # Убираем _ отсюда
+from core import config
 # ----------------------------------------
 
 from core.auth import is_allowed, send_access_denied_message
@@ -23,15 +23,21 @@ from core.config import INSTALL_MODE
 BUTTON_KEY = "btn_selftest"
 
 def get_button() -> KeyboardButton:
+    # --- Импортируем _ здесь ---
+    from core.i18n import _
+    # ------------------------------------
     return KeyboardButton(text=_(BUTTON_KEY, config.DEFAULT_LANGUAGE))
 
 def register_handlers(dp: Dispatcher):
     dp.message(I18nFilter(BUTTON_KEY))(selftest_handler)
 
 async def selftest_handler(message: types.Message):
+    # --- Импортируем _ здесь ---
+    from core.i18n import _
+    # ------------------------------------
     user_id = message.from_user.id
     chat_id = message.chat.id
-    lang = get_user_lang(user_id) # Теперь _ доступна
+    lang = get_user_lang(user_id)
     command = "selftest"
 
     if not is_allowed(user_id, command):
@@ -74,7 +80,9 @@ async def selftest_handler(message: types.Message):
     ping_process = await asyncio.create_subprocess_shell(
         ping_cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
     )
-    ping_stdout, _ = await ping_process.communicate()
+    # --- ИЗМЕНЕНО: Переименована переменная ---
+    ping_stdout, ping_stderr = await ping_process.communicate()
+    # -----------------------------------------
     ping_result = ping_stdout.decode()
     ping_match = re.search(r"time=([\d\.]+) ms", ping_result)
     ping_time = ping_match.group(1) if ping_match else "N/A"
@@ -84,7 +92,9 @@ async def selftest_handler(message: types.Message):
     ip_process = await asyncio.create_subprocess_shell(
         ip_cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
     )
-    ip_stdout, _ = await ip_process.communicate()
+    # --- ИЗМЕНЕНО: Переименована переменная ---
+    ip_stdout, ip_stderr = await ip_process.communicate()
+    # -----------------------------------------
     external_ip = ip_stdout.decode().strip() or _("selftest_ip_fail", lang)
 
     last_login_info = ""
