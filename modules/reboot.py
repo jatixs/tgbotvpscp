@@ -12,7 +12,7 @@ from core.shared_state import LAST_MESSAGE_IDS
 from core.config import REBOOT_FLAG_FILE, INSTALL_MODE
 from core.keyboards import get_reboot_confirmation_keyboard
 
-BUTTON_TEXT = "🔄 Перезагрузка сервера"
+BUTTON_TEXT = "🔄 Перезагрузка VPS/VDS"
 
 def get_button() -> KeyboardButton:
     return KeyboardButton(text=BUTTON_TEXT)

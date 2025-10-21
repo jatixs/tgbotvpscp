@@ -1,4 +1,4 @@
-# /opt/tg-bot/bot.py
+# /opt-tg-bot/bot.py
 import asyncio
 import logging
 import signal
@@ -31,6 +31,7 @@ ENABLE_OPTIMIZE = True  # <-- ДОБАВЛЕНО
 
 # Импорт основного ядра
 from core import config, shared_state, auth, utils, keyboards, messaging
+from core.shared_state import BUTTONS_MAP # <--- ИЗМЕНЕНИЕ: Импортируем карту
 
 # Импорт модулей
 from modules import (
@@ -47,12 +48,7 @@ bot = Bot(token=config.TOKEN)
 storage = MemoryStorage()
 dp = Dispatcher(storage=storage)
 
-# Карта для кнопок главного меню (возвращаем старую структуру)
-buttons_map = {
-    "user": [],
-    "admin": [],
-    "root": []
-}
+# <--- ИЗМЕНЕНИЕ: Блок 'buttons_map = { ... }' УДАЛЕН ОТСЮДА ---
 # Набор фоновых задач
 background_tasks = set()
 
@@ -73,7 +69,7 @@ def register_module(module, admin_only=False, root_only=False):
 
         # 3. Добавление кнопки в карту (если модуль предоставляет get_button)
         if hasattr(module, 'get_button'):
-            buttons_map[button_level].append(module.get_button())
+            BUTTONS_MAP[button_level].append(module.get_button()) # <--- ИЗМЕНЕНИЕ: Используем BUTTONS_MAP
         else:
              logging.warning(f"Модуль '{module.__name__}' не имеет функции get_button() и не будет добавлен в ReplyKeyboard.")
 
@@ -102,7 +98,7 @@ async def show_main_menu(user_id: int, chat_id: int, state: FSMContext, message_
         await auth.send_access_denied_message(bot, user_id, chat_id, command)
         return
 
-    bot.buttons_map = buttons_map # Сохраняем актуальную карту
+    # <--- ИЗМЕНЕНИЕ: Строка 'bot.buttons_map = buttons_map' УДАЛЕНА ---
 
     if message_id_to_delete:
         try: await bot.delete_message(chat_id=chat_id, message_id=message_id_to_delete)
@@ -118,7 +114,7 @@ async def show_main_menu(user_id: int, chat_id: int, state: FSMContext, message_
 
     # Используем get_main_reply_keyboard с простой картой кнопок
     menu_text = "👋 Привет! Выбери команду на клавиатуре ниже. Чтобы вызвать меню снова, используй /menu."
-    reply_markup = keyboards.get_main_reply_keyboard(user_id, bot.buttons_map)
+    reply_markup = keyboards.get_main_reply_keyboard(user_id, BUTTONS_MAP) # <--- ИЗМЕНЕНИЕ: Используем BUTTONS_MAP
 
     try:
         sent_message = await bot.send_message(chat_id, menu_text, reply_markup=reply_markup)
@@ -169,9 +165,9 @@ def load_modules():
     if ENABLE_OPTIMIZE: register_module(optimize, root_only=True) # <-- ДОБАВЛЕНО
 
     logging.info("--- Карта кнопок ---")
-    logging.info(f"User: {[btn.text for btn in buttons_map['user']]}")
-    logging.info(f"Admin: {[btn.text for btn in buttons_map['admin']]}")
-    logging.info(f"Root: {[btn.text for btn in buttons_map['root']]}")
+    logging.info(f"User: {[btn.text for btn in BUTTONS_MAP['user']]}")   # <--- ИЗМЕНЕНИЕ
+    logging.info(f"Admin: {[btn.text for btn in BUTTONS_MAP['admin']]}") # <--- ИЗМЕНЕНИЕ
+    logging.info(f"Root: {[btn.text for btn in BUTTONS_MAP['root']]}")   # <--- ИЗМЕНЕНИЕ
     logging.info("---------------------")
 
 
