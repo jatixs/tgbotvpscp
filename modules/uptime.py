@@ -4,26 +4,37 @@ import asyncio
 from aiogram import F, Dispatcher, types
 from aiogram.types import KeyboardButton
 
+# --- ИЗМЕНЕНО: Импортируем i18n и config ---
+from core.i18n import _, I18nFilter, get_user_lang
+from core import config
+# ----------------------------------------
+
 from core.auth import is_allowed, send_access_denied_message
 from core.messaging import delete_previous_message
 from core.shared_state import LAST_MESSAGE_IDS
 from core.utils import format_uptime
 
-BUTTON_TEXT = "⏱ Аптайм"
-
+# --- ИЗМЕНЕНО: Используем ключ ---
+BUTTON_KEY = "btn_uptime"
+# --------------------------------
 
 def get_button() -> KeyboardButton:
-    return KeyboardButton(text=BUTTON_TEXT)
-
+    # --- ИЗМЕНЕНО: Используем i18n ---
+    return KeyboardButton(text=_(BUTTON_KEY, config.DEFAULT_LANGUAGE))
+    # --------------------------------
 
 def register_handlers(dp: Dispatcher):
-    dp.message(F.text == BUTTON_TEXT)(uptime_handler)
-
+    # --- ИЗМЕНЕНО: Используем I18nFilter ---
+    dp.message(I18nFilter(BUTTON_KEY))(uptime_handler)
+    # --------------------------------------
 
 async def uptime_handler(message: types.Message):
     user_id = message.from_user.id
     chat_id = message.chat.id
-    command = "uptime"
+    # --- ИЗМЕНЕНО: Получаем язык ---
+    lang = get_user_lang(user_id)
+    # ------------------------------
+    command = "uptime" # Имя команды оставляем
     if not is_allowed(user_id, command):
         await send_access_denied_message(message.bot, user_id, chat_id, command)
         return
@@ -35,12 +46,17 @@ async def uptime_handler(message: types.Message):
                 return float(f.readline().split()[0])
 
         uptime_sec = await asyncio.to_thread(read_uptime_file)
-        uptime_str = format_uptime(uptime_sec)
-        sent_message = await message.answer(f"⏱ Время работы: <b>{uptime_str}</b>", parse_mode="HTML")
-        LAST_MESSAGE_IDS.setdefault(
-            user_id, {})[command] = sent_message.message_id
+        uptime_str = format_uptime(uptime_sec) # format_uptime не требует перевода
+        # --- ИЗМЕНЕНО: Используем i18n ---
+        sent_message = await message.answer(
+            _("uptime_text", lang, uptime=uptime_str), 
+            parse_mode="HTML"
+        )
+        # --------------------------------
+        LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = sent_message.message_id
     except Exception as e:
-        logging.error(f"Ошибка в uptime_handler: {e}")
-        sent_message = await message.answer(f"⚠️ Ошибка при получении аптайма: {str(e)}")
-        LAST_MESSAGE_IDS.setdefault(
-            user_id, {})[command] = sent_message.message_id
+       logging.error(f"Ошибка в uptime_handler: {e}")
+       # --- ИЗМЕНЕНО: Используем i18n ---
+       sent_message = await message.answer(_("uptime_fail", lang, error=str(e)))
+       # --------------------------------
+       LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = sent_message.message_id

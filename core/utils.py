@@ -1,4 +1,4 @@
-# /opt/tg-bot/core/utils.py
+# /opt-tg-bot/core/utils.py
 import os
 import time
 import json
@@ -11,11 +11,15 @@ from datetime import datetime
 from aiogram import Bot
 from aiogram.exceptions import TelegramBadRequest
 
+# --- ИЗМЕНЕНО: Импортируем i18n и config ---
+from . import config # Нужен для DEFAULT_LANGUAGE
+from .i18n import _, get_user_lang
+# -----------------------------------------------
+
 from .config import (
     ALERTS_CONFIG_FILE, REBOOT_FLAG_FILE, RESTART_FLAG_FILE
 )
 from .shared_state import ALERTS_CONFIG
-
 
 def load_alerts_config():
     """Загружает ALERTS_CONFIG из shared_state"""
@@ -28,58 +32,41 @@ def load_alerts_config():
             logging.info("Настройки уведомлений загружены.")
         else:
             ALERTS_CONFIG = {}
-            logging.info(
-                "Файл настроек уведомлений не найден, используется пустой конфиг.")
+            logging.info("Файл настроек уведомлений не найден, используется пустой конфиг.")
     except Exception as e:
         logging.error(f"Ошибка загрузки alerts_config.json: {e}")
         ALERTS_CONFIG = {}
-
 
 def save_alerts_config():
     """Сохраняет ALERTS_CONFIG из shared_state"""
     try:
         os.makedirs(os.path.dirname(ALERTS_CONFIG_FILE), exist_ok=True)
         with open(ALERTS_CONFIG_FILE, "w", encoding='utf-8') as f:
-            json.dump({str(k): v for k, v in ALERTS_CONFIG.items()},
-                      f, indent=4, ensure_ascii=False)
+            json.dump({str(k): v for k, v in ALERTS_CONFIG.items()}, f, indent=4, ensure_ascii=False)
         logging.info("Настройки уведомлений сохранены.")
     except Exception as e:
         logging.error(f"Ошибка сохранения alerts_config.json: {e}")
-
 
 def get_country_flag(ip: str) -> str:
     if not ip or ip in ["localhost", "127.0.0.1", "::1"]:
         return "🏠"
     try:
-        response = requests.get(
-            f"http://ip-api.com/json/{ip}?fields=countryCode",
-            timeout=2)
+        response = requests.get(f"http://ip-api.com/json/{ip}?fields=countryCode", timeout=2)
         if response.status_code == 200:
             data = response.json()
             country_code = data.get("countryCode")
             if country_code:
-                flag = "".join(chr(ord(char) + 127397)
-                               for char in country_code.upper())
+                flag = "".join(chr(ord(char) + 127397) for char in country_code.upper())
                 return flag
     except requests.exceptions.RequestException as e:
         logging.warning(f"Ошибка при получении флага для IP {ip}: {e}")
         return "❓"
     return "🌍"
 
-
 def escape_html(text):
     if text is None:
         return ""
-    return text.replace(
-        '&',
-        '&amp;').replace(
-        '<',
-        '&lt;').replace(
-            '>',
-            '&gt;').replace(
-                '"',
-        '&quot;')
-
+    return text.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;').replace('"', '&quot;')
 
 def convert_json_to_vless(json_data, custom_name):
     try:
@@ -102,23 +89,24 @@ def convert_json_to_vless(json_data, custom_name):
             'encryption': user['encryption'],
             'headerType': 'none'
         }
-        vless_url = (
-            f"vless://{vless_params['id']}@{vless_params['address']}:{vless_params['port']}"
-            f"?security={vless_params['security']}"
-            f"&encryption={vless_params['encryption']}"
-            f"&pbk={urllib.parse.quote(vless_params['pbk'])}"
-            f"&host={urllib.parse.quote(vless_params['host'])}"
-            f"&headerType={vless_params['headerType']}"
-            f"&fp={vless_params['fp']}"
-            f"&type={vless_params['type']}"
-            f"&flow={vless_params['flow']}"
-            f"&sid={vless_params['sid']}"
-            f"#{urllib.parse.quote(custom_name)}")
+        vless_url = (f"vless://{vless_params['id']}@{vless_params['address']}:{vless_params['port']}"
+                     f"?security={vless_params['security']}"
+                     f"&encryption={vless_params['encryption']}"
+                     f"&pbk={urllib.parse.quote(vless_params['pbk'])}"
+                     f"&host={urllib.parse.quote(vless_params['host'])}"
+                     f"&headerType={vless_params['headerType']}"
+                     f"&fp={vless_params['fp']}"
+                     f"&type={vless_params['type']}"
+                     f"&flow={vless_params['flow']}"
+                     f"&sid={vless_params['sid']}"
+                     f"#{urllib.parse.quote(custom_name)}")
         return vless_url
     except Exception as e:
         logging.error(f"Ошибка при генерации VLESS-ссылки: {e}")
-        return f"⚠️ Ошибка при генерации VLESS-ссылки: {str(e)}"
-
+        # --- ИЗМЕНЕНО: Используем i18n ---
+        # (Используем язык по умолчанию, т.к. не знаем ID пользователя)
+        return _("utils_vless_error", config.DEFAULT_LANGUAGE, error=str(e))
+        # ---------------------------------
 
 def format_traffic(bytes_value):
     units = ["Б", "КБ", "МБ", "ГБ", "ТБ", "ПБ"]
@@ -128,7 +116,6 @@ def format_traffic(bytes_value):
         value /= 1024
         unit_index += 1
     return f"{value:.2f} {units[unit_index]}"
-
 
 def format_uptime(seconds):
     seconds = int(seconds)
@@ -150,9 +137,8 @@ def format_uptime(seconds):
     if mins > 0:
         parts.append(f"{mins}м")
     if seconds < 60 or not parts:
-        parts.append(f"{secs}с")
+       parts.append(f"{secs}с")
     return " ".join(parts) if parts else "0с"
-
 
 def get_server_timezone_label():
     try:
@@ -173,7 +159,6 @@ def get_server_timezone_label():
     except Exception:
         return ""
 
-
 async def detect_xray_client():
     cmd = "docker ps --format '{{.Names}} {{.Image}}'"
     process = await asyncio.create_subprocess_shell(
@@ -183,46 +168,39 @@ async def detect_xray_client():
 
     if process.returncode != 0:
         logging.error(f"Ошибка выполнения 'docker ps': {stderr.decode()}")
-        raise Exception(
-            f"Не удалось выполнить 'docker ps'. Убедитесь, что Docker установлен и запущен, и у бота есть права.\n<pre>{stderr.decode()}</pre>")
+        # --- ИЗМЕНЕНО: Используем i18n ---
+        # (Используем язык по умолчанию, т.к. не знаем ID пользователя)
+        error_msg = _("utils_docker_ps_error", config.DEFAULT_LANGUAGE, error=stderr.decode())
+        raise Exception(error_msg)
+        # ---------------------------------
 
     containers = stdout.decode().strip().split('\n')
     if not containers:
-        logging.warning(
-            "detect_xray_client: 'docker ps' не вернул контейнеров.")
+        logging.warning("detect_xray_client: 'docker ps' не вернул контейнеров.")
         return None, None
 
     # Поиск Amnezia
     for line in containers:
-        if not line:
-            continue
+        if not line: continue
         try:
             name, image = line.split(' ', 1)
             if 'amnezia' in image.lower() and 'xray' in image.lower():
-                logging.info(
-                    f"Обнаружен Amnezia (контейнер: {name}, образ: {image})")
+                logging.info(f"Обнаружен Amnezia (контейнер: {name}, образ: {image})")
                 return "amnezia", name
-        except ValueError:
-            continue
+        except ValueError: continue
 
     # Поиск Marzban
     for line in containers:
-        if not line:
-            continue
+        if not line: continue
         try:
             name, image = line.split(' ', 1)
-            if ('marzban' in image.lower() or 'marzban' in name.lower()
-                    ) and 'xray' not in name.lower():
-                logging.info(
-                    f"Обнаружен Marzban (контейнер: {name}, образ: {image})")
+            if ('marzban' in image.lower() or 'marzban' in name.lower()) and 'xray' not in name.lower():
+                logging.info(f"Обнаружен Marzban (контейнер: {name}, образ: {image})")
                 return "marzban", name
-        except ValueError:
-            continue
+        except ValueError: continue
 
-    logging.warning(
-        "Не удалось определить поддерживаемый Xray (Marzban, Amnezia).")
+    logging.warning("Не удалось определить поддерживаемый Xray (Marzban, Amnezia).")
     return None, None
-
 
 async def initial_restart_check(bot: Bot):
     if os.path.exists(RESTART_FLAG_FILE):
@@ -230,24 +208,23 @@ async def initial_restart_check(bot: Bot):
             with open(RESTART_FLAG_FILE, "r") as f:
                 content = f.read().strip()
                 chat_id, message_id = map(int, content.split(':'))
-            await bot.edit_message_text(chat_id=chat_id, message_id=message_id, text="✅ Бот успешно перезапущен.")
-            logging.info(
-                f"Изменено сообщение о перезапуске в чате ID: {chat_id}")
-        except FileNotFoundError:
-            logging.info("Restart flag file not found on startup.")
-        except ValueError:
-            logging.error("Invalid content in restart flag file.")
-        except TelegramBadRequest as e:
-            logging.warning(
-                f"Failed to edit restart message (likely deleted or invalid): {e}")
-        except Exception as e:
-            logging.error(f"Ошибка при обработке флага перезапуска: {e}")
+            
+            # --- ИЗМЕНЕНО: Используем i18n ---
+            # (Предполагаем, что chat_id == user_id для получения языка)
+            lang = get_user_lang(chat_id)
+            text_to_send = _("utils_bot_restarted", lang)
+            await bot.edit_message_text(chat_id=chat_id, message_id=message_id, text=text_to_send)
+            # ---------------------------------
+            
+            logging.info(f"Изменено сообщение о перезапуске в чате ID: {chat_id}")
+        except FileNotFoundError: logging.info("Restart flag file not found on startup.")
+        except ValueError: logging.error("Invalid content in restart flag file.")
+        except TelegramBadRequest as e: logging.warning(f"Failed to edit restart message (likely deleted or invalid): {e}")
+        except Exception as e: logging.error(f"Ошибка при обработке флага перезапуска: {e}")
         finally:
-            try:
-                os.remove(RESTART_FLAG_FILE)
+            try: os.remove(RESTART_FLAG_FILE)
             except OSError as e:
-                if e.errno != 2:
-                    logging.error(f"Error removing restart flag file: {e}")
+                 if e.errno != 2: logging.error(f"Error removing restart flag file: {e}")
 
 
 async def initial_reboot_check(bot: Bot):
@@ -255,24 +232,21 @@ async def initial_reboot_check(bot: Bot):
         try:
             with open(REBOOT_FLAG_FILE, "r") as f:
                 user_id_str = f.read().strip()
-                if not user_id_str.isdigit():
-                    raise ValueError("Invalid content in reboot flag file.")
+                if not user_id_str.isdigit(): raise ValueError("Invalid content in reboot flag file.")
                 user_id = int(user_id_str)
-            await bot.send_message(chat_id=user_id, text="✅ <b>Сервер успешно перезагружен! Бот снова в сети.</b>", parse_mode="HTML")
-            logging.info(
-                f"Отправлено уведомление о перезагрузке пользователю ID: {user_id}")
-        except FileNotFoundError:
-            logging.info("Reboot flag file not found on startup.")
-        except ValueError as ve:
-            logging.error(f"Error processing reboot flag file content: {ve}")
-        except TelegramBadRequest as e:
-            logging.warning(
-                f"Failed to send reboot notification to user {user_id_str}: {e}")
-        except Exception as e:
-            logging.error(f"Ошибка при обработке флага перезагрузки: {e}")
+
+            # --- ИЗМЕНЕНО: Используем i18n ---
+            lang = get_user_lang(user_id)
+            text_to_send = _("utils_server_rebooted", lang)
+            await bot.send_message(chat_id=user_id, text=text_to_send, parse_mode="HTML")
+            # ---------------------------------
+            
+            logging.info(f"Отправлено уведомление о перезагрузке пользователю ID: {user_id}")
+        except FileNotFoundError: logging.info("Reboot flag file not found on startup.")
+        except ValueError as ve: logging.error(f"Error processing reboot flag file content: {ve}")
+        except TelegramBadRequest as e: logging.warning(f"Failed to send reboot notification to user {user_id_str}: {e}")
+        except Exception as e: logging.error(f"Ошибка при обработке флага перезагрузки: {e}")
         finally:
-            try:
-                os.remove(REBOOT_FLAG_FILE)
-            except OSError as e:
-                if e.errno != 2:
-                    logging.error(f"Error removing reboot flag file: {e}")
+             try: os.remove(REBOOT_FLAG_FILE)
+             except OSError as e:
+                  if e.errno != 2: logging.error(f"Error removing reboot flag file: {e}")
