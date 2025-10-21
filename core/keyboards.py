@@ -1,6 +1,6 @@
 # /opt/tg-bot/core/keyboards.py
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
-from .shared_state import ALLOWED_USERS, USER_NAMES, ALERTS_CONFIG
+from .shared_state import ALLOWED_USERS, USER_NAMES, ALERTS_CONFIG, BUTTONS_MAP
 from .config import ADMIN_USER_ID, INSTALL_MODE
 
 # --- НАЧАЛО ВОССТАНОВЛЕННОГО КОДА ---
@@ -45,7 +45,8 @@ def get_main_reply_keyboard(user_id: int, buttons_map: dict) -> ReplyKeyboardMar
         # Группа 4: Управление (Admin+)
         ["👤 Пользователи", "🔗 VLESS-ссылка"],
         # Группа 5: Системные Действия (Admin/Root)
-        ["🔄 Обновление VPS", "⚡️ Оптимизация VPS", "♻️ Перезапуск бота", "🔄 Перезагрузка VPS"], # <-- ИЗМЕНЕНО
+        # --- [!!!] ВОТ ИСПРАВЛЕНИЕ [!!!] ---
+        ["🔄 Обновление VPS/VDS", "⚡️ Оптимизация VPS/VDS", "♻️ Перезапуск бота", "🔄 Перезагрузка VPS/VDS"],
         # Группа 6: Настройки Бота (User+)
         ["🔔 Уведомления"],
     ]

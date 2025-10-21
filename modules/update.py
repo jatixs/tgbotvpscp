@@ -9,7 +9,7 @@ from core.messaging import delete_previous_message
 from core.shared_state import LAST_MESSAGE_IDS
 from core.utils import escape_html
 
-BUTTON_TEXT = "🔄 Обновление VPS"
+BUTTON_TEXT = "🔄 Обновление VPS/VDS"
 
 def get_button() -> KeyboardButton:
     return KeyboardButton(text=BUTTON_TEXT)
