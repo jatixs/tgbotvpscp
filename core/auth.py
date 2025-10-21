@@ -104,7 +104,8 @@ def is_allowed(user_id, command=None):
         "back_to_manage_users", "back_to_delete_users" # Включаем колбэки, связанные с управлением пользователями
     ]
     root_only_commands = [
-        "reboot_confirm", "reboot", "fall2ban", "sshlog", "logs", "restart", "update"
+        "reboot_confirm", "reboot", "fall2ban", "sshlog", "logs", "restart", "update",
+        "optimize"  # <-- ДОБАВЛЕНО
     ]
 
     # Проверяем, требует ли команда какой-либо роли
