@@ -89,7 +89,7 @@ To deploy the bot on your VPS, you need **Ubuntu 20.04+** or a similar system wi
 Copy and execute the following command. It will download the **latest version** of the `deploy.sh` script from the `main` branch and run it:
 
 ```bash
-bash <(wget -qO- https://raw.githubusercontent.com/jatixs/tgbotvpscp/main/deploy.sh)
+bash <(wget -qO- https://raw.githubusercontent.com/jatixs/tgbotvpscp/main/deploy_en.sh)
 ```
 The script will **first check the integrity** of an existing installation:
 * **If the bot is not installed or corrupted:** You will be prompted to choose an installation mode (`Secure` or `Root`).
