@@ -8,27 +8,31 @@ from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.exceptions import TelegramBadRequest
 
 from .config import USERS_FILE, ADMIN_USER_ID, ADMIN_USERNAME, INSTALL_MODE
+# ИСПРАВЛЕНИЕ: Импортируем сами словари из shared_state
 from .shared_state import ALLOWED_USERS, USER_NAMES, LAST_MESSAGE_IDS
 from .messaging import delete_previous_message
 from .utils import escape_html
 
 def load_users():
     """Загружает ALLOWED_USERS и USER_NAMES из users.json в shared_state"""
-    global ALLOWED_USERS, USER_NAMES
+    # ИСПРАВЛЕНИЕ: Мы больше не используем 'global', так как импортировали словари напрямую
     try:
         os.makedirs(os.path.dirname(USERS_FILE), exist_ok=True)
+        
+        # ИСПРАВЛЕНИЕ: Очищаем словари перед загрузкой
+        ALLOWED_USERS.clear()
+        USER_NAMES.clear()
+
         if os.path.exists(USERS_FILE):
             with open(USERS_FILE, "r", encoding='utf-8') as f:
                 data = json.load(f)
-                # Убеждаемся, что ключи - целые числа после загрузки из JSON
-                ALLOWED_USERS = {int(user["id"]): user["group"] for user in data.get("allowed_users", [])}
-                # Ключи имен пользователей остаются строками, как и хранятся
-                USER_NAMES = data.get("user_names", {})
+                # ИСПРАВЛЕНИЕ: ОБНОВЛЯЕМ (мутируем) импортированные словари
+                ALLOWED_USERS.update({int(user["id"]): user["group"] for user in data.get("allowed_users", [])})
+                USER_NAMES.update(data.get("user_names", {}))
         else:
             # Если файл не существует, инициализируем пустые словари
             logging.warning(f"Файл {USERS_FILE} не найден. Инициализация пустых списков пользователей.")
-            ALLOWED_USERS = {}
-            USER_NAMES = {}
+            # (Они уже очищены выше)
 
         # Всегда убеждаемся, что главный админ присутствует
         if ADMIN_USER_ID not in ALLOWED_USERS:
@@ -41,15 +45,19 @@ def load_users():
 
     except json.JSONDecodeError as e:
         logging.error(f"Критическая ошибка загрузки users.json: Неверный JSON - {e}")
-        # Инициализируем только админом, чтобы предотвратить падение бота
-        ALLOWED_USERS = {ADMIN_USER_ID: "Админы"}
-        USER_NAMES = {str(ADMIN_USER_ID): "Главный Админ"}
+        # ИСПРАВЛЕНИЕ: Убеждаемся, что мутируем словари и здесь
+        ALLOWED_USERS.clear()
+        USER_NAMES.clear()
+        ALLOWED_USERS[ADMIN_USER_ID] = "Админы"
+        USER_NAMES[str(ADMIN_USER_ID)] = "Главный Админ"
         save_users() # Пытаемся сохранить валидную минимальную конфигурацию
     except Exception as e:
         logging.error(f"Критическая ошибка загрузки users.json: {e}", exc_info=True)
-        # Откатываемся к только админу
-        ALLOWED_USERS = {ADMIN_USER_ID: "Админы"}
-        USER_NAMES = {str(ADMIN_USER_ID): "Главный Админ"}
+        # ИСПРАВЛЕНИЕ: Откатываемся к только админу, мутируя словари
+        ALLOWED_USERS.clear()
+        USER_NAMES.clear()
+        ALLOWED_USERS[ADMIN_USER_ID] = "Админы"
+        USER_NAMES[str(ADMIN_USER_ID)] = "Главный Админ"
         save_users()
 
 def save_users():
@@ -96,7 +104,8 @@ def is_allowed(user_id, command=None):
         "back_to_manage_users", "back_to_delete_users" # Включаем колбэки, связанные с управлением пользователями
     ]
     root_only_commands = [
-        "reboot_confirm", "reboot", "fall2ban", "sshlog", "logs", "restart", "update"
+        "reboot_confirm", "reboot", "fall2ban", "sshlog", "logs", "restart", "update",
+        "optimize"  # <-- ДОБАВЛЕНО
     ]
 
     # Проверяем, требует ли команда какой-либо роли
@@ -138,7 +147,7 @@ def is_allowed(user_id, command=None):
 
 async def refresh_user_names(bot: Bot):
     """Обновляет имена пользователей, особенно новых или с плейсхолдерами."""
-    global USER_NAMES # Убеждаемся, что изменяем глобальную переменную состояния
+    # ИСПРАВЛЕНИЕ: Убираем 'global', так как USER_NAMES импортирован
     needs_save = False
     # Итерируем по копии ключей на случай, если словарь изменится во время итерации (здесь маловероятно, но хорошая практика)
     user_ids_to_check = list(ALLOWED_USERS.keys())
