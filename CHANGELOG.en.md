@@ -41,6 +41,34 @@
 </p>
 
 ---
+## [1.10.12] - 2025-10-22
+
+### What's new?
+
+#### 🚀 Added:
+* **Multilingual Support (i18n):**
+    * Added full support for Russian and English languages for all bot messages, including buttons, menus, errors, and notifications.
+    * Users can now select their preferred language using the new "🇷🇺 Язык" / "🇬🇧 Language" button in the main menu.
+    * Language settings are saved for each user in `config/user_settings.json`.
+    * Created a new module `core/i18n.py` to manage translations and language settings.
+* **Updated Documentation:** Added English versions of `README.md` and `CHANGELOG.md` with links to switch between languages.
+
+#### ✨ Improved:
+* **Code Structure:** All user-facing text strings have been moved from the modules and core code into the central translation dictionary `core/i18n.py`, simplifying the addition of new languages and text editing.
+* **Watchdog Error Handling:** Improved error handling and message output in `watchdog.py` using the i18n system (in the default language).
+* **Navigation:** Minor improvements to message deletion logic and returning to the main menu in some modules (`traffic`, `vless`).
+
+#### 🔧 Fixed:
+* **Watchdog:** Fixed potential JSON decoding error when receiving response from Telegram API. Specified exception types for network errors. Corrected `inactive`/`failed` state detection logic.
+* **i18n:** Fixed handling of non-integer `user_id` and string formatting errors. Added checks for translation key existence.
+
+---
+
+<p align="center">
+  <i>Version 1.10.12 (Build 38) — Added full support for Russian and English languages (i18n).</i>
+</p>
+
+---
 
 ## [1.10.11] - 2025-10-21
 
