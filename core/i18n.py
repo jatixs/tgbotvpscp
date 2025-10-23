@@ -195,7 +195,7 @@ STRINGS = {
         # modules/traffic.py
         "traffic_stop": "✅ Мониторинг трафика остановлен.",
         "traffic_menu_return": "🏠 Главное меню:",
-        "traffic_start": "📡 <b>Мониторинг трафика включен</b>...\n\n<i>Обновление каждые 5 секунд. Нажмите '📡 Трафик сети' еще раз, чтобы остановить.</i>",
+        "traffic_start": "📡 <b>Мониторинг трафика</b>\n\n<i>Обновление каждые {interval} секунд.</i>", # Изменено
         "traffic_start_fail": "⚠️ Не удалось запустить мониторинг трафика: {error}",
         "traffic_update_total": "📡 Общий трафик:",
         "traffic_update_speed": "⚡️ Скорость соединения:",
@@ -203,6 +203,8 @@ STRINGS = {
         "traffic_tx": "⬆️ TX: {value}",
         "traffic_speed_rx": "⬇️ RX: {speed:.2f} Мбит/с",
         "traffic_speed_tx": "⬆️ TX: {speed:.2f} Мбит/с",
+        "btn_stop_traffic": "⏹ Остановить", # Новая кнопка
+        "traffic_stopped_alert": "Мониторинг трафика остановлен.", # Новое сообщение
 
         # modules/update.py
         "update_start": "🔄 Выполняю обновление VPS... Это может занять несколько минут.",
@@ -233,9 +235,46 @@ STRINGS = {
         "xray_error_generic": "⚠️ <b>Ошибка обновления Xray:</b>\n\n{error}",
         "xray_version_unknown": "неизвестной",
 
-        # modules/users.py (Добавления)
-        "users_group_Admins": "Админы",
-        "users_group_Пользователи": "Пользователи",
+        # modules/users.py
+        "users_menu_header": "👤 <b>Управление пользователями</b>:\n\n{user_list}\n\nВыберите действие:",
+        "users_list_empty": "Других пользователей нет.",
+        "my_id_text": "Ваш ID: <code>{user_id}</code>\n\n<i>(Эта кнопка удалена из главного меню, но вы можете найти ее в меню '👤 Пользователи')</i>",
+        "my_id_inline_text": "Ваш ID: <code>{user_id}</code>",
+        "users_already_here": "Вы уже здесь.",
+        "users_add_title": "➕ <b>Добавление пользователя</b>\n\nВведите Telegram ID пользователя:",
+        "users_add_exists": "⚠️ Этот пользователь уже добавлен.",
+        "users_add_group_prompt": "Отлично. Теперь выберите группу для нового пользователя:",
+        "users_add_invalid_id": "⛔ Неверный ID. Пожалуйста, введите числовой Telegram ID.",
+        "users_add_fsm_error": "⚠️ Ошибка: Не найден ID пользователя в состоянии FSM.",
+        "users_add_success": "✅ Пользователь <b>{user_name}</b> (<code>{user_id}</code>) успешно добавлен в группу <b>{group}</b>.",
+        "users_delete_title": "➖ <b>Удаление пользователя</b>\n\nВыберите пользователя для удаления:",
+        "users_delete_cant_admin": "⛔ Нельзя удалить Главного Админа.",
+        "users_delete_not_found": "⚠️ Пользователь не найден.",
+        "users_delete_success_text": "✅ Пользователь <b>{user_name}</b> удален.\n\nВыберите пользователя для удаления:",
+        "users_delete_success_alert": "Пользователь {user_name} удален.",
+        "users_delete_self_prompt": "⚠️ <b>Вы уверены, что хотите удалить себя из списка пользователей бота?</b>\nВы потеряете доступ ко всем командам.",
+        "users_delete_self_id_mismatch": "⛔ Ошибка: ID не совпадают.",
+        "users_delete_self_success": "✅ Вы успешно удалены из пользователей бота.",
+        "users_change_group_title": "🔄 <b>Изменение группы</b>\n\nВыберите пользователя:",
+        "users_change_group_invalid": "⚠️ Неверный пользователь или Главный Админ.",
+        "users_change_group_prompt": "Выбран пользователь: <b>{user_name}</b>\nТекущая группа: <b>{group}</b>\n\nВыберите новую группу:",
+        "users_change_group_success_text": "✅ Группа для <b>{user_name}</b> изменена на <b>{group}</b>.\n\nВыберите пользователя:",
+        "users_change_group_success_alert": "Группа для {user_name} изменена.",
+        "users_group_Admins": "Админы", # Перевод ключа группы
+        "users_group_Пользователи": "Пользователи", # Перевод ключа группы
+
+        # Единицы измерения (core/utils.py)
+        "unit_bytes": "Б",
+        "unit_kb": "КБ",
+        "unit_mb": "МБ",
+        "unit_gb": "ГБ",
+        "unit_tb": "ТБ",
+        "unit_pb": "ПБ",
+        "unit_year_short": "г",
+        "unit_day_short": "д",
+        "unit_hour_short": "ч",
+        "unit_minute_short": "м",
+        "unit_second_short": "с",
     },
     'en': {
         # Общие
@@ -422,7 +461,7 @@ STRINGS = {
         # modules/traffic.py
         "traffic_stop": "✅ Traffic monitoring stopped.",
         "traffic_menu_return": "🏠 Main menu:",
-        "traffic_start": "📡 <b>Traffic monitoring enabled</b>...\n\n<i>Updates every 5 seconds. Press '📡 Network Traffic' again to stop.</i>",
+        "traffic_start": "📡 <b>Traffic Monitoring</b>\n\n<i>Updates every {interval} seconds.</i>", # Changed
         "traffic_start_fail": "⚠️ Failed to start traffic monitoring: {error}",
         "traffic_update_total": "📡 Total Traffic:",
         "traffic_update_speed": "⚡️ Connection Speed:",
@@ -430,6 +469,8 @@ STRINGS = {
         "traffic_tx": "⬆️ TX: {value}",
         "traffic_speed_rx": "⬇️ RX: {speed:.2f} Mbps",
         "traffic_speed_tx": "⬆️ TX: {speed:.2f} Mbps",
+        "btn_stop_traffic": "⏹ Stop", # New button
+        "traffic_stopped_alert": "Traffic monitoring stopped.", # New message
 
         # modules/update.py
         "update_start": "🔄 Updating VPS... This may take a few minutes.",
@@ -460,9 +501,46 @@ STRINGS = {
         "xray_error_generic": "⚠️ <b>Xray Update Error:</b>\n\n{error}",
         "xray_version_unknown": "unknown",
 
-        # modules/users.py (Добавления)
-        "users_group_Admins": "Admins",
-        "users_group_Пользователи": "Users",
+        # modules/users.py
+        "users_menu_header": "👤 <b>User Management</b>:\n\n{user_list}\n\nSelect an action:",
+        "users_list_empty": "No other users found.",
+        "my_id_text": "Your ID: <code>{user_id}</code>\n\n<i>(This button was removed from the main menu, but you can find it in the '👤 Users' menu)</i>",
+        "my_id_inline_text": "Your ID: <code>{user_id}</code>",
+        "users_already_here": "You are already here.",
+        "users_add_title": "➕ <b>Add User</b>\n\nEnter the user's Telegram ID:",
+        "users_add_exists": "⚠️ This user is already added.",
+        "users_add_group_prompt": "Great. Now select a group for the new user:",
+        "users_add_invalid_id": "⛔ Invalid ID. Please enter a numeric Telegram ID.",
+        "users_add_fsm_error": "⚠️ Error: User ID not found in FSM state.",
+        "users_add_success": "✅ User <b>{user_name}</b> (<code>{user_id}</code>) successfully added to group <b>{group}</b>.",
+        "users_delete_title": "➖ <b>Delete User</b>\n\nSelect a user to delete:",
+        "users_delete_cant_admin": "⛔ Cannot delete the Main Admin.",
+        "users_delete_not_found": "⚠️ User not found.",
+        "users_delete_success_text": "✅ User <b>{user_name}</b> deleted.\n\nSelect a user to delete:",
+        "users_delete_success_alert": "User {user_name} deleted.",
+        "users_delete_self_prompt": "⚠️ <b>Are you sure you want to remove yourself from the bot's user list?</b>\nYou will lose access to all commands.",
+        "users_delete_self_id_mismatch": "⛔ Error: IDs do not match.",
+        "users_delete_self_success": "✅ You have been successfully removed from the bot users.",
+        "users_change_group_title": "🔄 <b>Change Group</b>\n\nSelect a user:",
+        "users_change_group_invalid": "⚠️ Invalid user or Main Admin.",
+        "users_change_group_prompt": "Selected user: <b>{user_name}</b>\nCurrent group: <b>{group}</b>\n\nSelect a new group:",
+        "users_change_group_success_text": "✅ Group for <b>{user_name}</b> changed to <b>{group}</b>.\n\nSelect a user:",
+        "users_change_group_success_alert": "Group for {user_name} changed.",
+        "users_group_Admins": "Admins", # Group key translation
+        "users_group_Пользователи": "Users", # Group key translation
+
+        # Units of measurement (core/utils.py)
+        "unit_bytes": "B",
+        "unit_kb": "KB",
+        "unit_mb": "MB",
+        "unit_gb": "GB",
+        "unit_tb": "TB",
+        "unit_pb": "PB",
+        "unit_year_short": "y",
+        "unit_day_short": "d",
+        "unit_hour_short": "h",
+        "unit_minute_short": "m",
+        "unit_second_short": "s",
     }
 }
 
@@ -494,28 +572,38 @@ def save_user_settings():
     except Exception as e:
         logging.error(f"Ошибка сохранения user_settings.json: {e}")
 
-def get_user_lang(user_id: int) -> str:
-    """Получает язык пользователя. 'ru' по умолчанию."""
-    # --- ИСПРАВЛЕНИЕ: Проверяем тип user_id ---
-    if not isinstance(user_id, int):
-        try:
-            user_id = int(user_id)
-        except (ValueError, TypeError):
-            logging.warning(f"get_user_lang вызван с нечисловым user_id: {user_id}. Возвращаю язык по умолчанию.")
+# --- ИСПРАВЛЕНО: Упрощенная логика get_user_lang ---
+def get_user_lang(user_id: int | str | None) -> str:
+    """Получает язык пользователя. Defaults to 'ru'."""
+    if isinstance(user_id, int):
+        # Стандартный случай: получаем из настроек или по умолчанию
+        return shared_state.USER_SETTINGS.get(user_id, {}).get("lang", config.DEFAULT_LANGUAGE)
+    elif isinstance(user_id, str):
+        # Если передана строка, проверяем, валидный ли это код языка
+        if user_id in STRINGS:
+            # Валидный код ('ru', 'en'), возвращаем его
+            return user_id
+        else:
+            # Невалидная строка, логируем и возвращаем язык по умолчанию
+            # logging.warning(f"get_user_lang вызван с невалидным строковым user_id: {user_id}. Возвращаю язык по умолчанию.") # Убрали лог
             return config.DEFAULT_LANGUAGE
-    # ----------------------------------------
-    return shared_state.USER_SETTINGS.get(user_id, {}).get("lang", config.DEFAULT_LANGUAGE)
+    else: # Обработка None или других типов
+        if user_id is not None:
+             logging.warning(f"get_user_lang вызван с неожиданным типом user_id: {type(user_id)}. Возвращаю язык по умолчанию.")
+        return config.DEFAULT_LANGUAGE
+# ------------------------------------------------
 
-def set_user_lang(user_id: int, lang: str):
+def set_user_lang(user_id: int | str | None, lang: str): # Allow str and None
     """Устанавливает язык для пользователя и сохраняет."""
-    # --- ИСПРАВЛЕНИЕ: Проверяем тип user_id ---
+    if user_id is None:
+        logging.warning("set_user_lang вызван с user_id=None. Сохранение отменено.")
+        return
     if not isinstance(user_id, int):
         try:
             user_id = int(user_id)
         except (ValueError, TypeError):
             logging.error(f"set_user_lang вызван с нечисловым user_id: {user_id}. Сохранение отменено.")
             return
-    # ----------------------------------------
     if user_id not in shared_state.USER_SETTINGS:
         shared_state.USER_SETTINGS[user_id] = {}
     shared_state.USER_SETTINGS[user_id]["lang"] = lang
@@ -524,33 +612,34 @@ def set_user_lang(user_id: int, lang: str):
 
 # --- ГЛАВНАЯ ФУНКЦИЯ ПЕРЕВОДА ---
 
-def _(key: str, user_id_or_lang: int | str | None, **kwargs) -> str: # Добавили None
+def get_text(key: str, user_id_or_lang: int | str | None, **kwargs) -> str:
     """
     Получает переведенную строку.
-    Пример: _("main_menu_welcome", user_id)
-    Пример с форматированием: _("my_id_text", user_id, user_id=user_id)
+    Пример: get_text("main_menu_welcome", user_id)
+    Пример с форматированием: get_text("my_id_text", user_id, user_id=user_id)
     """
-    lang = user_id_or_lang
+    lang = config.DEFAULT_LANGUAGE # По умолчанию
     if isinstance(user_id_or_lang, int):
-        lang = get_user_lang(user_id_or_lang)
-    # --- ИСПРАВЛЕНИЕ: Обработка None ---
-    elif user_id_or_lang is None:
-        lang = config.DEFAULT_LANGUAGE
-    # ----------------------------------
-
-    if lang not in STRINGS:
-        lang = config.DEFAULT_LANGUAGE
+        lang = get_user_lang(user_id_or_lang) # Получаем язык пользователя по ID
+    elif isinstance(user_id_or_lang, str) and user_id_or_lang in STRINGS:
+        lang = user_id_or_lang # Используем переданный код языка
+    # В противном случае остается язык по умолчанию
 
     string_template = STRINGS.get(lang, {}).get(key,
         STRINGS.get(config.DEFAULT_LANGUAGE, {}).get(key, f"[{key}]")
     )
 
     try:
-        return string_template.format(**kwargs)
-    except (KeyError, TypeError, ValueError): # Добавили ValueError
-        # Если .format() не удался (например, нет kwargs, или неверный тип)
-        logging.warning(f"Ошибка форматирования для ключа '{key}' языка '{lang}' с параметрами {kwargs}. Шаблон: '{string_template}'")
+        if kwargs:
+            return string_template.format(**kwargs)
+        else:
+            return string_template
+    except (KeyError, TypeError, ValueError) as e:
+        logging.warning(f"Ошибка форматирования для ключа '{key}' языка '{lang}' с параметрами {kwargs}. Шаблон: '{string_template}'. Ошибка: {e}")
         return string_template # Возвращаем неформатированный шаблон
+
+# Псевдоним для удобства
+_ = get_text
 
 # --- ФИЛЬТРЫ ДЛЯ AIOGRAM ---
 
@@ -560,14 +649,13 @@ def get_all_translations(key: str) -> list[str]:
     Используется для aiogram F.text.in_([...])
     """
     translations = []
-    for lang_strings in STRINGS.values():
+    for lang_code, lang_strings in STRINGS.items():
         if key in lang_strings:
             translations.append(lang_strings[key])
-    # Уникальные значения + проверка, что список не пустой
     unique_translations = list(set(translations))
     if not unique_translations:
         logging.error(f"Ключ перевода '{key}' не найден ни в одном языке!")
-        return [f"[{key}]"] # Возвращаем ключ как запасной вариант
+        return [f"[{key}]"]
     return unique_translations
 
 def I18nFilter(key: str):
