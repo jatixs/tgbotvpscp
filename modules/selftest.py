@@ -74,7 +74,7 @@ async def selftest_handler(message: types.Message):
         )
         return
 
-    uptime_str = format_uptime(uptime_sec)
+    uptime_str = format_uptime(uptime_sec, lang)
 
     ping_cmd = "ping -c 1 -W 1 8.8.8.8"
     ping_process = await asyncio.create_subprocess_shell(
@@ -190,8 +190,8 @@ async def selftest_handler(message: types.Message):
                       inet_status=internet,
                       ping=ping_time,
                       ip=external_ip,
-                      rx=format_traffic(rx),
-                      tx=format_traffic(tx))
+                      rx=format_traffic(rx, lang),
+                      tx=format_traffic(tx, lang))
     response_text = response_header + response_body + last_login_info
 
     await message.bot.edit_message_text(response_text, chat_id=chat_id, message_id=sent_message.message_id, parse_mode="HTML")
