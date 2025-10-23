@@ -46,7 +46,7 @@ async def uptime_handler(message: types.Message):
                 return float(f.readline().split()[0])
 
         uptime_sec = await asyncio.to_thread(read_uptime_file)
-        uptime_str = format_uptime(uptime_sec) # format_uptime не требует перевода
+        uptime_str = format_uptime(uptime_sec, lang) # ИСПРАВЛЕНО: Добавлен аргумент lang
         # --- ИЗМЕНЕНО: Используем i18n ---
         sent_message = await message.answer(
             _("uptime_text", lang, uptime=uptime_str), 
