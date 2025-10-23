@@ -44,7 +44,9 @@ from modules import (
 )
 
 # Настройка логирования
-config.setup_logging()
+# --- ИСПРАВЛЕНО: Передаем аргументы в setup_logging ---
+config.setup_logging(config.BOT_LOG_DIR, "bot")
+# -----------------------------------------------------
 
 # --- Инициализация ---
 bot = Bot(token=config.TOKEN)
