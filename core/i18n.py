@@ -90,7 +90,7 @@ STRINGS = {
         "alert_sent_to_users": "Алерт типа '{alert_type}' отправлен {count} пользователям.",
 
         # watchdog.py
-        "watchdog_alert_prefix": "🚨 <b>Система оповещений (Alert):</b>",
+        "watchdog_alert_prefix": "🚨 Система оповещений (Alert):",
         "watchdog_log_read_error": "Ошибка чтения лога: {error}",
         "watchdog_log_error_found_details": "Обнаружена ОШИБКА: {details}",
         "watchdog_log_error_found_generic": "Обнаружены ошибки (ERROR/CRITICAL) в логе",
@@ -99,13 +99,19 @@ STRINGS = {
         "watchdog_status_active_error": "Сервис <b>{bot_name}</b>: Активен с ошибками 🟠\n\n<b>Детали:</b> {details}\n\nРекомендуется проверить `bot.log`.",
         "watchdog_status_active_log_fail": "Сервис <b>{bot_name}</b>: Активен 🟢 (Проверка лога не удалась)",
         "watchdog_status_activating": "Сервис <b>{bot_name}</b>: Запускается 🟡",
+        
+        # --- НОВЫЕ КЛЮЧИ ПЕРЕЗАПУСКА ---
+        "watchdog_status_restarting_bot": "Сервис <b>{bot_name}</b>: Перезапуск службы 🔵",
+        "watchdog_status_restarting_wd": "🚨 Внутренний сервис 'Система оповещений (Alert)' Перезапуск службы 🔵.\nОтслеживание: <b>{bot_name}</b>",
+        # ---------------------------------
+        
         "watchdog_status_down": "Сервис <b>{bot_name}</b>: Недоступен 🔴{reason}",
         "watchdog_status_down_reason": "Причина",
         "watchdog_status_down_failed": "Статус: failed",
         "watchdog_restart_fail": "⚠️ Alert-система НЕ СМОГЛА отправить команду перезапуска для <b>{service_name}</b>. Требуется ручная проверка.\nОшибка: {error}",
         "watchdog_systemctl_not_found": "⚠️ <code>systemctl</code> не найден. Не могу проверить статус сервиса.",
         "watchdog_check_error": "⚠️ Ошибка проверки статуса сервиса: {error}",
-        "watchdog_started": "🚨 Внутренний сервис 'Система оповещений (Alert)' запущен.\nОтслеживание: <b>{bot_name}</b>",
+        # Ключ "watchdog_started" удален/заменен на watchdog_status_restarting_wd
 
         # modules/fail2ban.py
         "f2b_log_not_found": "⚠️ Файл лога Fail2Ban не найден: <code>{path}</code>",
@@ -356,7 +362,7 @@ STRINGS = {
         "alert_sent_to_users": "Alert type '{alert_type}' sent to {count} users.",
 
         # watchdog.py
-        "watchdog_alert_prefix": "🚨 <b>Alert System:</b>",
+        "watchdog_alert_prefix": "🚨 Alert System:",
         "watchdog_log_read_error": "Log read error: {error}",
         "watchdog_log_error_found_details": "ERROR detected: {details}",
         "watchdog_log_error_found_generic": "Errors (ERROR/CRITICAL) detected in log",
@@ -365,13 +371,19 @@ STRINGS = {
         "watchdog_status_active_error": "Service <b>{bot_name}</b>: Active with errors 🟠\n\n<b>Details:</b> {details}\n\nPlease check `bot.log`.",
         "watchdog_status_active_log_fail": "Service <b>{bot_name}</b>: Active 🟢 (Log check failed)",
         "watchdog_status_activating": "Service <b>{bot_name}</b>: Activating 🟡",
+        
+        # --- НОВЫЕ КЛЮЧИ ПЕРЕЗАПУСКА ---
+        "watchdog_status_restarting_bot": "Service <b>{bot_name}</b>: Service Restart 🔵",
+        "watchdog_status_restarting_wd": "🚨 Internal 'Alert System' service Service Restart 🔵.\nTracking: <b>{bot_name}</b>",
+        # ---------------------------------
+        
         "watchdog_status_down": "Service <b>{bot_name}</b>: Unavailable 🔴{reason}",
         "watchdog_status_down_reason": "Reason",
         "watchdog_status_down_failed": "Status: failed",
         "watchdog_restart_fail": "⚠️ Alert system FAILED to send restart command for <b>{service_name}</b>. Manual check required.\nError: {error}",
         "watchdog_systemctl_not_found": "⚠️ <code>systemctl</code> not found. Cannot check service status.",
         "watchdog_check_error": "⚠️ Error checking service status: {error}",
-        "watchdog_started": "🚨 Internal 'Alert System' service started.\nTracking: <b>{bot_name}</b>",
+        # Ключ "watchdog_started" удален/заменен на watchdog_status_restarting_wd
 
         # modules/fail2ban.py
         "f2b_log_not_found": "⚠️ Fail2Ban log file not found: <code>{path}</code>",
