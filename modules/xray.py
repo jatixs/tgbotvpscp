@@ -20,7 +20,7 @@ from core.utils import escape_html, detect_xray_client
 BUTTON_KEY = "btn_xray"
 
 def get_button() -> KeyboardButton:
-    # --- ИЗМЕНЕНО: Импортируем _ здесь ---
+    # --- Импортируем _ здесь ---
     from core.i18n import _
     # ------------------------------------
     return KeyboardButton(text=_(BUTTON_KEY, config.DEFAULT_LANGUAGE))
@@ -70,7 +70,6 @@ async def updatexray_handler(message: types.Message, state: FSMContext):
         update_cmd = ""
         version_cmd = ""
 
-        # ... (логика команд update_cmd и version_cmd остается без изменений) ...
         if client == "amnezia":
             update_cmd = (
                 f'docker exec {container_name} /bin/bash -c "'
@@ -112,11 +111,11 @@ async def updatexray_handler(message: types.Message, state: FSMContext):
         stdout_update, stderr_update = await process_update.communicate()
 
         if process_update.returncode != 0:
-            error_output = stderr_update.decode() or stdout_update.decode()
+            error_output = stderr_update.decode('utf-8', 'ignore') or stdout_update.decode('utf-8', 'ignore')
             raise Exception(_("xray_update_error", lang, client=client_name_display, error=escape_html(error_output)))
 
         process_version = await asyncio.create_subprocess_shell(version_cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
-        stdout_version, _ = await process_version.communicate()
+        stdout_version, stderr_version = await process_version.communicate() # Используем другое имя
         version_output = stdout_version.decode('utf-8', 'ignore')
         version_match = re.search(r'Xray\s+([\d\.]+)', version_output)
         if version_match:
@@ -127,6 +126,7 @@ async def updatexray_handler(message: types.Message, state: FSMContext):
 
     except Exception as e:
         logging.error(f"Ошибка в updatexray_handler: {e}")
+        # Теперь _ должна быть доступна здесь
         error_msg = _("xray_error_generic", lang, error=str(e))
         try:
              await message.bot.edit_message_text(error_msg , chat_id=chat_id, message_id=sent_msg.message_id, parse_mode="HTML")
@@ -135,6 +135,6 @@ async def updatexray_handler(message: types.Message, state: FSMContext):
                   logging.warning("UpdateXray: Failed to edit error message, likely deleted.")
                   await message.answer(error_msg, parse_mode="HTML")
              else:
-                  raise
+                  raise # Перевыбрасываем другие ошибки BadRequest
     finally:
         await state.clear()

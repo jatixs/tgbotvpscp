@@ -52,7 +52,9 @@ spinner() {
 run_with_spinner() {
     local msg=$1
     shift
-    "$@" >> /tmp/${SERVICE_NAME}_install.log 2>&1 &
+    # --- CHANGE: Added parentheses to fix EOF error ---
+    ( "$@" >> /tmp/${SERVICE_NAME}_install.log 2>&1 ) &
+    # --- END CHANGE ---
     local pid=$!
     spinner "$pid" "$msg"
     wait $pid
@@ -156,7 +158,7 @@ install_logic() {
         sudo mkdir -p ${BOT_INSTALL_PATH}; sudo chown -R ${SERVICE_USER}:${SERVICE_USER} ${BOT_INSTALL_PATH}
         msg_info "3. Cloning repo (branch ${branch_to_use}) as ${SERVICE_USER}..."; run_with_spinner "Cloning repository" sudo -u ${SERVICE_USER} git clone --branch "${branch_to_use}" "${GITHUB_REPO_URL}" "${BOT_INSTALL_PATH}" || exit 1
         exec_user_cmd="sudo -u ${SERVICE_USER}"; owner="${SERVICE_USER}:${SERVICE_USER}"; owner_user=${SERVICE_USER}
-    else # Root mode - CHANGED
+    else # Root mode
         msg_info "2. Creating directory..."; sudo mkdir -p ${BOT_INSTALL_PATH}
         msg_info "3. Cloning repo (branch ${branch_to_use}) as root..."; run_with_spinner "Cloning repository" sudo git clone --branch "${branch_to_use}" "${GITHUB_REPO_URL}" "${BOT_INSTALL_PATH}" || exit 1
         exec_user_cmd=""; owner="root:root"; owner_user="root"
@@ -166,31 +168,32 @@ install_logic() {
     run_with_spinner "Installing Python dependencies" $exec_user_cmd "${VENV_PATH}/bin/pip" install -r "${BOT_INSTALL_PATH}/requirements.txt" || exit 1
     msg_info "5. Creating .gitignore, logs/, config/..."; sudo -u ${owner_user} bash -c "cat > ${BOT_INSTALL_PATH}/.gitignore" <<< $'/venv/\n/__pycache__/\n*.pyc\n/.env\n/config/\n/logs/\n*.log\n*_flag.txt'; sudo chmod 644 "${BOT_INSTALL_PATH}/.gitignore"
     sudo -u ${owner_user} mkdir -p "${BOT_INSTALL_PATH}/logs" "${BOT_INSTALL_PATH}/config"
-    # --- CHANGED QUESTIONS ---
     msg_info "6. Configuring .env..."; msg_question "Bot Token: " T; msg_question "Admin User ID: " A; msg_question "Admin Username (optional): " U; msg_question "Bot Name (optional): " N
     sudo bash -c "cat > ${BOT_INSTALL_PATH}/.env" <<< $(printf "TG_BOT_TOKEN=\"%s\"\nTG_ADMIN_ID=\"%s\"\nTG_ADMIN_USERNAME=\"%s\"\nTG_BOT_NAME=\"%s\"\nINSTALL_MODE=\"%s\"" "$T" "$A" "$U" "$N" "$mode"); sudo chown ${owner} "${BOT_INSTALL_PATH}/.env"; sudo chmod 600 "${BOT_INSTALL_PATH}/.env"
     if [ "$mode" == "root" ]; then msg_info "7. Configuring sudo (root)..."; F="/etc/sudoers.d/98-${SERVICE_NAME}-root"; sudo tee ${F} > /dev/null <<< $'root ALL=(ALL) NOPASSWD: /bin/systemctl restart tg-bot.service\nroot ALL=(ALL) NOPASSWD: /bin/systemctl restart tg-watchdog.service\nroot ALL=(ALL) NOPASSWD: /sbin/reboot'; sudo chmod 440 ${F};
     elif [ "$mode" == "secure" ]; then F="/etc/sudoers.d/99-${WATCHDOG_SERVICE_NAME}-restart"; sudo tee ${F} > /dev/null <<< $'Defaults:tgbot !requiretty\ntgbot ALL=(root) NOPASSWD: /bin/systemctl restart tg-bot.service'; sudo chmod 440 ${F}; msg_info "7. Configuring sudo (secure)..."; fi
-    # --- CHANGED DESCRIPTIONS ---
     create_and_start_service "${SERVICE_NAME}" "${BOT_INSTALL_PATH}/bot.py" "${mode}" "Telegram Bot"; create_and_start_service "${WATCHDOG_SERVICE_NAME}" "${BOT_INSTALL_PATH}/watchdog.py" "root" "Watchdog"
-    local ip=$(curl -s 4.ipinfo.io/ip || echo "YOUR_IP"); echo ""; echo "---"; msg_success "Installation complete!"; msg_info "IP: ${ip}"; echo "---" # CHANGED
+    local ip=$(curl -s 4.ipinfo.io/ip || echo "YOUR_IP"); echo ""; echo "---"; msg_success "Installation complete!"; msg_info "IP: ${ip}"; echo "---"
 }
-install_secure() { echo -e "\n${C_BOLD}=== Secure Installation (branch: ${GIT_BRANCH}) ===${C_RESET}"; common_install_steps; install_logic "secure" "${GIT_BRANCH}"; } # CHANGED
-install_root() { echo -e "\n${C_BOLD}=== Root Installation (branch: ${GIT_BRANCH}) ===${C_RESET}"; common_install_steps; install_logic "root" "${GIT_BRANCH}"; } # CHANGED
+install_secure() { echo -e "\n${C_BOLD}=== Secure Installation (branch: ${GIT_BRANCH}) ===${C_RESET}"; common_install_steps; install_logic "secure" "${GIT_BRANCH}"; }
+install_root() { echo -e "\n${C_BOLD}=== Root Installation (branch: ${GIT_BRANCH}) ===${C_RESET}"; common_install_steps; install_logic "root" "${GIT_BRANCH}"; }
 create_and_start_service() {
     local svc=$1; local script=$2; local mode=$3; local desc=$4
     local user="root"; local group="root"; local env=""; local suffix=""; local after="After=network.target"; local req=""
-    # --- CHANGED SUFFIXES ---
+
     if [ "$mode" == "secure" ] && [ "$svc" == "$SERVICE_NAME" ]; then user=${SERVICE_USER}; group=${SERVICE_USER}; suffix="(Secure)";
     elif [ "$svc" == "$SERVICE_NAME" ]; then user="root"; group="root"; suffix="(Root)";
     elif [ "$svc" == "$WATCHDOG_SERVICE_NAME" ]; then user="root"; group="root"; after="After=network.target ${SERVICE_NAME}.service"; fi
+
     env="EnvironmentFile=${BOT_INSTALL_PATH}/.env"
+
     msg_info "Creating systemd unit for ${svc}..."; FILE="/etc/systemd/system/${svc}.service"
     sudo tee ${FILE} > /dev/null <<EOF
 [Unit]
 Description=${desc} Service ${suffix}
 ${after}
 ${req}
+
 [Service]
 Type=simple
 User=${user}
@@ -200,6 +203,7 @@ ${env}
 ExecStart=${VENV_PATH}/bin/python ${script}
 Restart=always
 RestartSec=10
+
 [Install]
 WantedBy=multi-user.target
 EOF
@@ -207,7 +211,6 @@ EOF
     if sudo systemctl is-active --quiet ${svc}.service; then msg_success "${svc} started!"; msg_info "Status: sudo systemctl status ${svc}"; else msg_error "${svc} FAILED TO START. Logs: sudo journalctl -u ${svc} -n 50 --no-pager"; if [ "$svc" == "$SERVICE_NAME" ]; then exit 1; fi; fi
 }
 uninstall_bot() {
-    # --- CHANGED MESSAGES ---
     echo -e "\n${C_BOLD}=== Uninstalling Bot ===${C_RESET}"
     msg_info "1. Stopping services..."
     if systemctl list-units --full -all | grep -q "${SERVICE_NAME}.service"; then sudo systemctl stop ${SERVICE_NAME} &> /dev/null; sudo systemctl disable ${SERVICE_NAME} &> /dev/null; fi; if systemctl list-units --full -all | grep -q "${WATCHDOG_SERVICE_NAME}.service"; then sudo systemctl stop ${WATCHDOG_SERVICE_NAME} &> /dev/null; sudo systemctl disable ${WATCHDOG_SERVICE_NAME} &> /dev/null; fi
@@ -220,7 +223,6 @@ uninstall_bot() {
     msg_success "Uninstallation complete."
 }
 update_bot() {
-    # --- CHANGED MESSAGES ---
     echo -e "\n${C_BOLD}=== Updating Bot (branch: ${GIT_BRANCH}) ===${C_RESET}"
     if [ ! -d "${BOT_INSTALL_PATH}/.git" ]; then msg_error "Git repository not found. Cannot update."; return 1; fi
     local exec_user=""; if [ -f "${BOT_INSTALL_PATH}/.env" ]; then MODE=$(grep '^INSTALL_MODE=' "${BOT_INSTALL_PATH}/.env" | cut -d'=' -f2 | tr -d '"'); if [ "$MODE" == "secure" ]; then exec_user="sudo -u ${SERVICE_USER}"; fi; fi
@@ -246,33 +248,28 @@ update_bot() {
 
 # --- Management Menu ---
 main_menu() {
-    # --- [CHANGE] Get versions before loop ---
     local local_version=$(get_local_version "$README_FILE")
     local latest_version=$(get_latest_version "$GITHUB_API_URL")
-    # --- [END CHANGE] ---
 
     while true; do
         clear
         echo -e "${C_BLUE}${C_BOLD}╔═══════════════════════════════════╗${C_RESET}"
-        echo -e "${C_BLUE}${C_BOLD}║    VPS Telegram Bot Manager       ║${C_RESET}" # CHANGED
+        echo -e "${C_BLUE}${C_BOLD}║    VPS Telegram Bot Manager       ║${C_RESET}"
         echo -e "${C_BLUE}${C_BOLD}╚═══════════════════════════════════╝${C_RESET}"
         local current_branch=$(cd "$BOT_INSTALL_PATH" && git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "Not installed")
         echo -e "  Current branch (installed): ${C_YELLOW}${current_branch}${C_RESET}"
         echo -e "  Target branch (for action): ${C_YELLOW}${GIT_BRANCH}${C_RESET}"
-        # --- [CHANGE] Display versions ---
         echo -e "  Local version: ${C_GREEN}${local_version}${C_RESET}"
         echo -e "  Latest version: ${C_CYAN}${latest_version}${C_RESET}"
-        # --- [END CHANGE] ---
         if [ -z "$orig_arg1" ] && [ "$GIT_BRANCH" == "main" ]; then
-             echo -e "  ${C_YELLOW}(Hint: To act on a different branch, run:${C_RESET}" # CHANGED Hint
+             echo -e "  ${C_YELLOW}(Hint: To act on a different branch, run:${C_RESET}"
              echo -e "  ${C_YELLOW} sudo bash $0 <branch_name>)${C_RESET}"
         fi
 
         check_integrity
         echo "--------------------------------------------------------"
-        echo -n -e "  Status: "; if [ "$INSTALL_STATUS" == "OK" ]; then echo -e "${C_GREEN}${STATUS_MESSAGE}${C_RESET}"; else echo -e "${C_RED}${STATUS_MESSAGE}${C_RESET}"; msg_warning "  Reinstallation recommended."; fi # CHANGED msg
+        echo -n -e "  Status: "; if [ "$INSTALL_STATUS" == "OK" ]; then echo -e "${C_GREEN}${STATUS_MESSAGE}${C_RESET}"; else echo -e "${C_RED}${STATUS_MESSAGE}${C_RESET}"; msg_warning "  Reinstallation recommended."; fi
         echo "--------------------------------------------------------"
-        # --- CHANGED MENU OPTIONS ---
         echo -e "${C_GREEN}  1)${C_RESET} ${C_BOLD}Reinstall (Secure):${C_RESET}          ${C_YELLOW}${GIT_BRANCH}${C_RESET}"
         echo -e "${C_YELLOW}  2)${C_RESET} ${C_BOLD}Reinstall (Root):${C_RESET}           ${C_YELLOW}${GIT_BRANCH}${C_RESET}"
         echo -e "${C_CYAN}  3)${C_RESET} ${C_BOLD}Update bot:${C_RESET}                   ${C_YELLOW}${GIT_BRANCH}${C_RESET}"
@@ -282,16 +279,16 @@ main_menu() {
         read -p "$(echo -e "${C_BOLD}Enter option number [1-5]: ${C_RESET}")" choice
 
         case $choice in
-            1) rm -f /tmp/${SERVICE_NAME}_install.log; msg_question "Reinstall (secure, ${GIT_BRANCH})? (y/n): " confirm; if [[ "$confirm" =~ ^[Yy]$ ]]; then uninstall_bot; install_secure; local_version=$(get_local_version "$README_FILE"); else msg_info "Cancelled."; fi ;; # CHANGED msg
+            1) rm -f /tmp/${SERVICE_NAME}_install.log; msg_question "Reinstall (secure, ${GIT_BRANCH})? (y/n): " confirm; if [[ "$confirm" =~ ^[Yy]$ ]]; then uninstall_bot; install_secure; local_version=$(get_local_version "$README_FILE"); else msg_info "Cancelled."; fi ;;
             2) rm -f /tmp/${SERVICE_NAME}_install.log; msg_question "Reinstall (root, ${GIT_BRANCH})? (y/n): " confirm; if [[ "$confirm" =~ ^[Yy]$ ]]; then uninstall_bot; install_root; local_version=$(get_local_version "$README_FILE"); else msg_info "Cancelled."; fi ;;
             3) rm -f /tmp/${SERVICE_NAME}_install.log; update_bot && local_version=$(get_local_version "$README_FILE") ;;
-            4) msg_question "Uninstall bot COMPLETELY? (y/n): " confirm_uninstall; if [[ "$confirm_uninstall" =~ ^[Yy]$ ]]; then uninstall_bot; msg_info "Bot uninstalled. Exiting."; return; else msg_info "Uninstallation cancelled."; fi ;; # CHANGED msg
+            4) msg_question "Uninstall bot COMPLETELY? (y/n): " confirm_uninstall; if [[ "$confirm_uninstall" =~ ^[Yy]$ ]]; then uninstall_bot; msg_info "Bot uninstalled. Exiting."; return; else msg_info "Uninstallation cancelled."; fi ;;
             5) break ;;
-            *) msg_error "Invalid choice." ;; # CHANGED msg
+            *) msg_error "Invalid choice." ;;
         esac
 
         if [[ "$choice" != "4" || ! "$confirm_uninstall" =~ ^[Yy]$ ]]; then
-            echo; read -n 1 -s -r -p "Press any key to return to the menu..." # CHANGED msg
+            echo; read -n 1 -s -r -p "Press any key to return to the menu..."
         fi
     done
 }
@@ -299,23 +296,22 @@ main_menu() {
 # --- Main "Router" ---
 main() {
     clear
-    msg_info "Starting bot management script (Target branch: ${GIT_BRANCH})..." # CHANGED msg
+    msg_info "Starting bot management script (Target branch: ${GIT_BRANCH})..."
     check_integrity
     if [ "$INSTALL_STATUS" == "NOT_FOUND" ] || [ "$INSTALL_STATUS" == "PARTIAL" ]; then
-        if [ "$INSTALL_STATUS" == "PARTIAL" ]; then msg_error "Corrupted installation detected."; msg_warning "${STATUS_MESSAGE}"; msg_question "Reinstall? (y/n): " confirm_delete; if [[ "$confirm_delete" =~ ^[Yy]$ ]]; then uninstall_bot; else msg_error "Exiting."; exit 1; fi; fi # CHANGED msg
-        # --- CHANGED MENU OPTIONS ---
-        msg_info "Bot not installed. Installation Wizard..."; echo "---"; echo -e "${C_GREEN}1) Secure ${GIT_BRANCH}${C_RESET}"; echo -e "${C_YELLOW}2) Root ${GIT_BRANCH}${C_RESET}"; echo -e "3) Exit"; echo "---" # CHANGED msg
+        if [ "$INSTALL_STATUS" == "PARTIAL" ]; then msg_error "Corrupted installation detected."; msg_warning "${STATUS_MESSAGE}"; msg_question "Reinstall? (y/n): " confirm_delete; if [[ "$confirm_delete" =~ ^[Yy]$ ]]; then uninstall_bot; else msg_error "Exiting."; exit 1; fi; fi
+        msg_info "Bot not installed. Installation Wizard..."; echo "---"; echo -e "${C_GREEN}1) Secure ${GIT_BRANCH}${C_RESET}"; echo -e "${C_YELLOW}2) Root ${GIT_BRANCH}${C_RESET}"; echo -e "3) Exit"; echo "---"
         read -p "$(echo -e "${C_BOLD}Option [1-3]: ${C_RESET}")" install_choice
         local install_done=false # Internal flag
         rm -f /tmp/${SERVICE_NAME}_install.log
-        case $install_choice in 1) install_secure; install_done=true ;; 2) install_root; install_done=true ;; *) msg_info "Cancelled."; exit 0 ;; esac # CHANGED msg
-        if [ "$install_done" = true ]; then msg_info "Verifying after installation..."; check_integrity; if [ "$INSTALL_STATUS" == "OK" ]; then msg_success "Installation OK."; read -n 1 -s -r -p "Press Enter for menu..."; else msg_error "Installation NOT OK."; msg_error "Log: /tmp/${SERVICE_NAME}_install.log"; exit 1; fi; fi # CHANGED msg
+        case $install_choice in 1) install_secure; install_done=true ;; 2) install_root; install_done=true ;; *) msg_info "Cancelled."; exit 0 ;; esac
+        if [ "$install_done" = true ]; then msg_info "Verifying after installation..."; check_integrity; if [ "$INSTALL_STATUS" == "OK" ]; then msg_success "Installation OK."; read -n 1 -s -r -p "Press Enter for menu..."; else msg_error "Installation NOT OK."; msg_error "Log: /tmp/${SERVICE_NAME}_install.log"; exit 1; fi; fi
     fi
-    main_menu; echo -e "\n${C_CYAN}👋 Goodbye!${C_RESET}" # CHANGED msg
+    main_menu; echo -e "\n${C_CYAN}👋 Goodbye!${C_RESET}"
 }
 
 # --- Root Check ---
-if [ "$(id -u)" -ne 0 ]; then msg_error "Please run this script as root or with sudo."; exit 1; fi # CHANGED msg
+if [ "$(id -u)" -ne 0 ]; then msg_error "Please run this script as root or with sudo."; exit 1; fi
 
 # --- Start ---
 main
