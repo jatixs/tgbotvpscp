@@ -4,7 +4,7 @@ import time
 import subprocess
 import requests
 import logging
-import logging.handlers # Добавлен импорт
+import logging.handlers
 import re
 import json
 import sys
@@ -19,9 +19,7 @@ if CORE_DIR_WATCHDOG not in sys.path:
 try:
     from core import config
     from core.i18n import get_text
-    # --- ДОБАВЛЕНО: Импорт escape_html ---
     from core.utils import escape_html
-    # ------------------------------------
 except ImportError as e:
     print(f"FATAL: Could not import core modules: {e}")
     print("Ensure watchdog.py is run from the correct directory (/opt/tg-bot) and venv.")
@@ -31,6 +29,7 @@ except ImportError as e:
 ALERT_BOT_TOKEN = config.TOKEN
 ALERT_ADMIN_ID = config.ADMIN_USER_ID
 BOT_SERVICE_NAME = "tg-bot.service"
+WATCHDOG_SERVICE_NAME = "tg-watchdog.service"
 
 dotenv_path = os.path.join(BASE_DIR_WATCHDOG, '.env')
 env_vars = {}
@@ -55,7 +54,7 @@ WATCHDOG_LOG_DIR = config.WATCHDOG_LOG_DIR
 CHECK_INTERVAL_SECONDS = 5
 ALERT_COOLDOWN_SECONDS = 300
 
-# Настройка логирования для watchdog (теперь использует исправленную функцию)
+# Настройка логирования для watchdog
 config.setup_logging(WATCHDOG_LOG_DIR, "watchdog")
 
 last_alert_times = {}
@@ -65,7 +64,7 @@ current_reported_state = None
 WD_LANG = config.DEFAULT_LANGUAGE
 
 def send_or_edit_telegram_alert(message_key: str, alert_type: str, message_id_to_edit=None, **kwargs):
-    """Отправляет или редактирует сообщение, используя ключ i18n."""
+    """Отправляет или редактирует сообщение, используя ключ i18n и WD_LANG."""
     global last_alert_times, status_alert_message_id
 
     current_time = time.time()
@@ -74,6 +73,7 @@ def send_or_edit_telegram_alert(message_key: str, alert_type: str, message_id_to
         logging.warning(f"Активен кулдаун для '{alert_type}', пропуск уведомления.")
         return message_id_to_edit
 
+    # --- ИСПРАВЛЕНО: Используем WD_LANG для всех i18n-строк ---
     alert_prefix = get_text("watchdog_alert_prefix", WD_LANG)
     if not message_key:
         logging.error(f"send_or_edit_telegram_alert вызван с пустым message_key для alert_type '{alert_type}'")
@@ -81,6 +81,7 @@ def send_or_edit_telegram_alert(message_key: str, alert_type: str, message_id_to
     else:
         message_body = get_text(message_key, WD_LANG, **kwargs)
     text_to_send = f"{alert_prefix}\n\n{message_body}"
+    # --------------------------------------------------------
 
     message_sent_or_edited = False
     new_message_id = message_id_to_edit
@@ -153,9 +154,7 @@ def check_bot_log_for_errors():
     try:
         if not os.path.exists(current_bot_log_file):
             yesterday_str = (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d")
-            # --- ИЗМЕНЕНО: Используем правильный суффикс ---
             yesterday_log_file = os.path.join(BOT_LOG_DIR, f"bot.log.{yesterday_str}")
-            # ---------------------------------------------
             if os.path.exists(yesterday_log_file):
                 current_bot_log_file = yesterday_log_file
                 logging.info(f"Основной лог-файл {os.path.basename(current_bot_log_file)} не найден, проверяю вчерашний: {os.path.basename(yesterday_log_file)}")
@@ -197,10 +196,7 @@ def check_bot_log_for_errors():
 
 def check_bot_service():
     global bot_service_was_down_or_activating, status_alert_message_id, current_reported_state
-    # --- ОТКАТ: Удаляем planned_restart_pending ---
-    # global planned_restart_pending (УДАЛЕНО)
-    # ---------------------------------------------
-
+    
     actual_state = "unknown"
     state_to_report = None
     alert_type = None
@@ -240,11 +236,24 @@ def check_bot_service():
              current_reported_state = "check_error"; status_alert_message_id = None
         time.sleep(CHECK_INTERVAL_SECONDS); return
 
-    # --- Логика определения состояния и сообщения (ОТКАТ) ---
-    if actual_state == "active":
+    # --- ЛОГИКА ПЛАНОВОГО ПЕРЕЗАПУСКА ---
+    restart_flag_exists = os.path.exists(RESTART_FLAG_FILE)
+    logging.debug(f"Проверка флага перезапуска ({RESTART_FLAG_FILE}): {'Найден' if restart_flag_exists else 'Не найден'}")
+
+    if restart_flag_exists and actual_state != "active":
+        logging.info(f"Обнаружен плановый перезапуск. Отправка/обновление алерта о перезапуске бота...")
+        state_to_report = "restarting" 
+        alert_type = "bot_service_restarting"
+        message_key = "watchdog_status_restarting_bot" # ИСПОЛЬЗУЕМ НОВЫЙ КЛЮЧ
+        bot_service_was_down_or_activating = True
+        
+    elif restart_flag_exists and actual_state == "active":
+        logging.debug("Флаг перезапуска найден, но бот активен. Игнорирую флаг.")
+        
+    # --- ЛОГИКА АКТИВНОСТИ И СБОЕВ ---
+    elif actual_state == "active":
         logging.debug(f"Сервис бота '{BOT_SERVICE_NAME}' активен.")
         if bot_service_was_down_or_activating:
-            # --- ОТКАТ: Убрана проверка planned_restart_pending ---
             logging.info("Сервис перешел в состояние 'active'. Проверка лога через 3 секунды...")
             time.sleep(3)
             log_status_key, log_kwargs = check_bot_log_for_errors()
@@ -254,7 +263,7 @@ def check_bot_service():
                 alert_type = "bot_service_up_ok"
                 message_key = "watchdog_status_active_ok"
             elif log_status_key is not None:
-                log_details = get_text(log_status_key, WD_LANG, **log_kwargs)
+                log_details = get_text(log_status_key, WD_LANG, **log_kwargs) # Используем WD_LANG
                 logging.warning(f"Проверка лога: ОБНАРУЖЕНЫ ОШИБКИ ({log_details}).")
                 state_to_report = "active_error"
                 alert_type = "bot_service_up_error"
@@ -265,35 +274,20 @@ def check_bot_service():
                 state_to_report = "active_ok"
                 alert_type = "bot_service_up_no_log_file"
                 message_key = "watchdog_status_active_log_fail"
-            # ----------------------------------------------------
+            
             bot_service_was_down_or_activating = False
 
-    elif actual_state == "activating":
+    elif actual_state == "activating" and not restart_flag_exists:
         logging.info(f"Сервис бота '{BOT_SERVICE_NAME}' активируется...")
-        # --- ОТКАТ: Убрана проверка planned_restart_pending ---
         state_to_report = "activating"
         alert_type = "bot_service_activating"
         message_key = "watchdog_status_activating"
-        # ----------------------------------------------------
         bot_service_was_down_or_activating = True
 
-    else: # inactive, failed, unknown
+    elif actual_state in ["inactive", "failed", "unknown"] and not restart_flag_exists: # Неплановый сбой
         logging.warning(f"Сервис бота '{BOT_SERVICE_NAME}' НЕАКТИВЕН. Фактическое состояние: '{actual_state}'.")
         logging.debug(f"Вывод systemctl status:\n{status_output_full}")
-        restart_flag_exists = os.path.exists(RESTART_FLAG_FILE)
-        logging.debug(f"Проверка флага перезапуска ({RESTART_FLAG_FILE}): {'Найден' if restart_flag_exists else 'Не найден'}")
 
-        if restart_flag_exists:
-            logging.info(f"Обнаружен плановый перезапуск ({os.path.basename(RESTART_FLAG_FILE)}). Alert-система не вмешивается.")
-            # --- ОТКАТ: Возвращаем старую логику ---
-            if not bot_service_was_down_or_activating:
-                bot_service_was_down_or_activating = True
-                current_reported_state = "down" # Предполагаем, что он упал
-                logging.debug(f"Установлен current_reported_state='down' из-за флага перезапуска.")
-            return # Выходим
-            # --------------------------------------
-
-        # Если флага нет - это реальное падение
         state_to_report = "down"
         alert_type = "bot_service_down"
         message_key = "watchdog_status_down"
@@ -301,12 +295,12 @@ def check_bot_service():
               fail_reason_match = re.search(r"Failed with result '([^']*)'", status_output_full)
               if fail_reason_match:
                    reason = fail_reason_match.group(1)
-                   message_kwargs["reason"] = f" ({get_text('watchdog_status_down_reason', WD_LANG)}: {reason})"
+                   message_kwargs["reason"] = f" ({get_text('watchdog_status_down_reason', WD_LANG)}: {reason})" # Используем WD_LANG
               else:
-                   message_kwargs["reason"] = f" ({get_text('watchdog_status_down_failed', WD_LANG)})"
+                   message_kwargs["reason"] = f" ({get_text('watchdog_status_down_failed', WD_LANG)})" # Используем WD_LANG
         else:
              message_kwargs["reason"] = ""
-
+    
         if not bot_service_was_down_or_activating:
             logging.info(f"Первое обнаружение сбоя (флаг не найден). Попытка перезапуска {BOT_SERVICE_NAME}...")
             try:
@@ -320,9 +314,9 @@ def check_bot_service():
                  error_msg = escape_html(str(e))
                  logging.error(f"Неожиданная ошибка при попытке перезапуска {BOT_SERVICE_NAME}: {error_msg}")
                  send_or_edit_telegram_alert("watchdog_restart_fail", "bot_restart_fail", None, service_name=BOT_SERVICE_NAME, error=f"Unexpected error: {error_msg}")
-
+    
         bot_service_was_down_or_activating = True
-    # --- КОНЕЦ ОТКАТА ---
+
 
     # --- Отправка или Редактирование Сообщения ---
     try:
@@ -331,10 +325,9 @@ def check_bot_service():
         if state_to_report and state_to_report != current_reported_state:
             logging.info(f"Состояние изменилось: '{current_reported_state}' -> '{state_to_report}'. Отправка/редактирование сообщения (ключ: '{message_key}')...")
 
-            # --- ОТКАТ: Новое сообщение только при 'down' ---
-            message_id_for_operation = status_alert_message_id if state_to_report != "down" else None
-            # ---------------------------------------------
-
+            # Перезапуск ('restarting') и неплановый сбой ('down') всегда отправляют новое сообщение
+            message_id_for_operation = status_alert_message_id if state_to_report not in ["down", "restarting"] else None
+            
             if message_id_for_operation: logging.debug(f"Попытка редактировать сообщение ID: {message_id_for_operation}")
             else: logging.debug("Попытка отправить новое сообщение.")
 
@@ -352,9 +345,6 @@ def check_bot_service():
         elif not state_to_report and current_reported_state and current_reported_state.startswith("active"):
              logging.debug(f"Сервис продолжает работать в состоянии '{current_reported_state}'. Пропуск.")
         
-        # --- ОТКАТ: Убран сброс ID для restarting_ok ---
-        # ---------------------------------------------
-
     except Exception as e:
         logging.error(f"Ошибка при отправке/редактировании уведомления о статусе: {e}", exc_info=True)
         status_alert_message_id = None
@@ -367,7 +357,10 @@ if __name__ == "__main__":
     except ValueError: print(f"FATAL: TG_ADMIN_ID ('{ALERT_ADMIN_ID}') is not a valid integer."); sys.exit(1)
 
     logging.info(f"Система оповещений (Alert) запущена. Отслеживание сервиса: {BOT_SERVICE_NAME}")
-    send_or_edit_telegram_alert("watchdog_started", "watchdog_start", None, bot_name=BOT_NAME)
+    
+    # --- ОТПРАВКА АЛЕРТА О ЗАПУСКЕ САМОГО НАБЛЮДАТЕЛЯ (Watchdog) ---
+    send_or_edit_telegram_alert("watchdog_status_restarting_wd", "watchdog_start", None, bot_name=BOT_NAME)
+    # -----------------------------------------------------------------
 
     while True:
         check_bot_service()
