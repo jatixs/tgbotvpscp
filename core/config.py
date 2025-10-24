@@ -5,7 +5,7 @@ import logging
 # --- ДОБАВЛЕНО: Импортируем handlers для настройки логов ---
 import logging.handlers
 # --------------------------------------------------------
-from datetime import datetime # Добавляем импорт datetime
+from datetime import datetime  # Добавляем импорт datetime
 
 # --- Пути ---
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -13,13 +13,14 @@ LOG_DIR = os.path.join(BASE_DIR, "logs")
 CONFIG_DIR = os.path.join(BASE_DIR, "config")
 # --- ИЗМЕНЕНО: Создаем базовую директорию логов ---
 os.makedirs(LOG_DIR, exist_ok=True)
-os.makedirs(CONFIG_DIR, exist_ok=True) # Добавлено создание CONFIG_DIR
+os.makedirs(CONFIG_DIR, exist_ok=True)  # Добавлено создание CONFIG_DIR
 # -------------------------------------------------
 # --- ИЗМЕНЕНО: Определяем пути к поддиректориям логов ---
 BOT_LOG_DIR = os.path.join(LOG_DIR, "bot")
 WATCHDOG_LOG_DIR = os.path.join(LOG_DIR, "watchdog")
 os.makedirs(BOT_LOG_DIR, exist_ok=True)       # Создаем поддиректорию для бота
-os.makedirs(WATCHDOG_LOG_DIR, exist_ok=True) # Создаем поддиректорию для watchdog
+# Создаем поддиректорию для watchdog
+os.makedirs(WATCHDOG_LOG_DIR, exist_ok=True)
 # -------------------------------------------------------
 
 USERS_FILE = os.path.join(CONFIG_DIR, "users.json")
@@ -66,25 +67,28 @@ RESOURCE_ALERT_COOLDOWN = 1800
 
 # --- Настройка логирования ---
 # --- ИСПРАВЛЕНО: Функция setup_logging ---
+
+
 def setup_logging(log_directory, log_filename_prefix):
     """Настраивает логирование с ежедневной ротацией."""
-    log_formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
-    
+    log_formatter = logging.Formatter(
+        '%(asctime)s - %(levelname)s - %(message)s')
+
     # Создаем ПОЛНЫЙ путь к основному файлу лога
     log_file_path = os.path.join(log_directory, f"{log_filename_prefix}.log")
 
     # Настройка обработчика с ротацией по времени (каждый день в полночь)
     rotating_handler = logging.handlers.TimedRotatingFileHandler(
-        log_file_path, # ПЕРЕДАЕМ ПОЛНЫЙ ПУТЬ
+        log_file_path,  # ПЕРЕДАЕМ ПОЛНЫЙ ПУТЬ
         when="midnight",
         interval=1,
         backupCount=30,
         encoding='utf-8'
         # Убираем дублирующийся аргумент filename=
     )
-    
+
     # Суффикс для старых (ротированных) файлов
-    rotating_handler.suffix = "%Y-%m-%d" # Обработчик сам добавит это к имени файла
+    rotating_handler.suffix = "%Y-%m-%d"  # Обработчик сам добавит это к имени файла
     rotating_handler.setFormatter(log_formatter)
 
     console_handler = logging.StreamHandler()
@@ -99,5 +103,6 @@ def setup_logging(log_directory, log_filename_prefix):
     logger.addHandler(rotating_handler)
     logger.addHandler(console_handler)
 
-    logging.info(f"Logging configured. Files will be saved in {log_directory} (e.g., {log_filename_prefix}.log)")
+    logging.info(
+        f"Logging configured. Files will be saved in {log_directory} (e.g., {log_filename_prefix}.log)")
 # --- КОНЕЦ ИСПРАВЛЕНИЯ ---

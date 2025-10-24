@@ -21,15 +21,18 @@ from core.utils import escape_html, detect_xray_client
 BUTTON_KEY = "btn_xray"
 # --------------------------------
 
+
 def get_button() -> KeyboardButton:
     # --- Используем i18n ---
     return KeyboardButton(text=_(BUTTON_KEY, config.DEFAULT_LANGUAGE))
     # --------------------------------
 
+
 def register_handlers(dp: Dispatcher):
     # --- Используем I18nFilter ---
     dp.message(I18nFilter(BUTTON_KEY))(updatexray_handler)
     # --------------------------------------
+
 
 async def updatexray_handler(message: types.Message, state: FSMContext):
     user_id = message.from_user.id
@@ -83,8 +86,9 @@ async def updatexray_handler(message: types.Message, state: FSMContext):
         # --- Возвращаем логику из old_xray.py ---
         if client == "amnezia":
             update_cmd = (
-                f'docker exec {container_name} /bin/sh -c "' # Используем /bin/sh для Alpine
-                'apk add --no-cache wget unzip && ' # Добавляем установку зависимостей
+                # Используем /bin/sh для Alpine
+                f'docker exec {container_name} /bin/sh -c "'
+                'apk add --no-cache wget unzip && '  # Добавляем установку зависимостей
                 'rm -f Xray-linux-64.zip xray geoip.dat geosite.dat && '
                 'wget -q -O Xray-linux-64.zip https://github.com/XTLS/Xray-core/releases/latest/download/Xray-linux-64.zip && '
                 'wget -q -O geoip.dat https://github.com/v2fly/geoip/releases/latest/download/geoip.dat && '
@@ -94,7 +98,7 @@ async def updatexray_handler(message: types.Message, state: FSMContext):
                 'cp geoip.dat /usr/bin/geoip.dat && '
                 'cp geosite.dat /usr/bin/geosite.dat && '
                 'rm Xray-linux-64.zip xray geoip.dat geosite.dat && '
-                'apk del wget unzip' # Удаляем зависимости
+                'apk del wget unzip'  # Удаляем зависимости
                 '" && '
                 f'docker restart {container_name}'
             )
@@ -109,17 +113,16 @@ async def updatexray_handler(message: types.Message, state: FSMContext):
                 "wget -q -O geoip.dat https://github.com/v2fly/geoip/releases/latest/download/geoip.dat && "
                 "wget -q -O geosite.dat https://github.com/v2fly/domain-list-community/releases/latest/download/dlc.dat && "
                 "unzip -o Xray-linux-64.zip xray && "
-                "rm Xray-linux-64.zip"
-            )
+                "rm Xray-linux-64.zip")
             # Ищем .env в стандартном расположении Marzban
             env_file_path = "/opt/marzban/.env"
             # Проверяем наличие файла перед использованием
             update_env_cmd = f"if [ -f {env_file_path} ]; then "
             update_env_cmd += (
-                 f"if ! grep -q '^XRAY_EXECUTABLE_PATH=' {env_file_path}; then echo 'XRAY_EXECUTABLE_PATH=/var/lib/marzban/xray-core/xray' >> {env_file_path}; else sed -i 's|^XRAY_EXECUTABLE_PATH=.*|XRAY_EXECUTABLE_PATH=/var/lib/marzban/xray-core/xray|' {env_file_path}; fi && "
-                 f"if ! grep -q '^XRAY_ASSETS_PATH=' {env_file_path}; then echo 'XRAY_ASSETS_PATH=/var/lib/marzban/xray-core' >> {env_file_path}; else sed -i 's|^XRAY_ASSETS_PATH=.*|XRAY_ASSETS_PATH=/var/lib/marzban/xray-core|' {env_file_path}; fi; "
-            )
-            update_env_cmd += "else echo 'Warning: Marzban .env file not found at /opt/marzban/.env'; fi" # Добавляем предупреждение, если файл не найден
+                f"if ! grep -q '^XRAY_EXECUTABLE_PATH=' {env_file_path}; then echo 'XRAY_EXECUTABLE_PATH=/var/lib/marzban/xray-core/xray' >> {env_file_path}; else sed -i 's|^XRAY_EXECUTABLE_PATH=.*|XRAY_EXECUTABLE_PATH=/var/lib/marzban/xray-core/xray|' {env_file_path}; fi && "
+                f"if ! grep -q '^XRAY_ASSETS_PATH=' {env_file_path}; then echo 'XRAY_ASSETS_PATH=/var/lib/marzban/xray-core' >> {env_file_path}; else sed -i 's|^XRAY_ASSETS_PATH=.*|XRAY_ASSETS_PATH=/var/lib/marzban/xray-core|' {env_file_path}; fi; ")
+            # Добавляем предупреждение, если файл не найден
+            update_env_cmd += "else echo 'Warning: Marzban .env file not found at /opt/marzban/.env'; fi"
 
             restart_cmd = f"docker restart {container_name}"
             # Собираем полную команду
@@ -131,20 +134,32 @@ async def updatexray_handler(message: types.Message, state: FSMContext):
         stdout_update, stderr_update = await process_update.communicate()
 
         if process_update.returncode != 0:
-            error_output = stderr_update.decode('utf-8', 'ignore') or stdout_update.decode('utf-8', 'ignore')
+            error_output = stderr_update.decode(
+                'utf-8',
+                'ignore') or stdout_update.decode(
+                'utf-8',
+                'ignore')
             # --- Используем i18n ---
-            raise Exception(_("xray_update_error", lang, client=client_name_display, error=escape_html(error_output)))
+            raise Exception(_("xray_update_error",
+                              lang,
+                              client=client_name_display,
+                              error=escape_html(error_output)))
             # ----------------------
 
         process_version = await asyncio.create_subprocess_shell(version_cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
-        stdout_version, stderr_version = await process_version.communicate() # stderr_version не используется, но получаем его
+        # stderr_version не используется, но получаем его
+        stdout_version, stderr_version = await process_version.communicate()
         version_output = stdout_version.decode('utf-8', 'ignore')
         version_match = re.search(r'Xray\s+([\d\.]+)', version_output)
         if version_match:
             version = version_match.group(1)
 
         # --- Используем i18n ---
-        final_message = _("xray_update_success", lang, client=client_name_display, version=version)
+        final_message = _(
+            "xray_update_success",
+            lang,
+            client=client_name_display,
+            version=version)
         # ----------------------
         await message.bot.edit_message_text(final_message, chat_id=chat_id, message_id=sent_msg.message_id, parse_mode="HTML")
 
@@ -154,12 +169,13 @@ async def updatexray_handler(message: types.Message, state: FSMContext):
         error_msg = _("xray_error_generic", lang, error=str(e))
         # ----------------------
         try:
-             await message.bot.edit_message_text(error_msg , chat_id=chat_id, message_id=sent_msg.message_id, parse_mode="HTML")
+            await message.bot.edit_message_text(error_msg, chat_id=chat_id, message_id=sent_msg.message_id, parse_mode="HTML")
         except TelegramBadRequest as edit_e:
-             if "message to edit not found" in str(edit_e):
-                  logging.warning("UpdateXray: Failed to edit error message, likely deleted.")
-                  await message.answer(error_msg, parse_mode="HTML")
-             else:
-                  raise # Перевыбрасываем другие ошибки BadRequest
+            if "message to edit not found" in str(edit_e):
+                logging.warning(
+                    "UpdateXray: Failed to edit error message, likely deleted.")
+                await message.answer(error_msg, parse_mode="HTML")
+            else:
+                raise  # Перевыбрасываем другие ошибки BadRequest
     finally:
         await state.clear()
