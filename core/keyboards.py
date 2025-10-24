@@ -1,4 +1,5 @@
 # /opt-tg-bot/core/keyboards.py
+import logging # Добавим импорт logging
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
 
 # --- ИЗМЕНЕНО: Импортируем i18n ---
@@ -91,9 +92,13 @@ def get_main_reply_keyboard(user_id: int, buttons_map: dict) -> ReplyKeyboardMar
         if current_row:
             final_keyboard_rows.append(current_row)
 
-    # Добавляем кнопку "Назад в меню", если ее нет (на всякий случай)
+    # --- ИСПРАВЛЕНИЕ: Убираем `any()` ---
     back_to_menu_text = _("btn_back_to_menu", lang)
-    has_back_button = any(back_to_menu_text in [btn.text for row in final_keyboard_rows for btn in row])
+    # Генерируем список текстов кнопок один раз
+    all_button_texts = [btn.text for row in final_keyboard_rows for btn in row]
+    has_back_button = back_to_menu_text in all_button_texts
+    # --- КОНЕЦ ИСПРАВЛЕНИЯ ---
+
     if not has_back_button and _("btn_back_to_menu", DEFAULT_LANGUAGE) in [btn.text for btn in buttons_map.get("user", [])]:
          # Добавляем кнопку только если она была в исходной карте user кнопок
          # (чтобы избежать добавления там, где не нужно)
