@@ -180,10 +180,20 @@ STRINGS = {
         "selftest_results_body": "✅ Бот работает\n📊 Процессор: <b>{cpu:.1f}%</b>\n💾 ОЗУ: <b>{mem:.1f}%</b>\n💽 ПЗУ: <b>{disk:.1f}%</b>\n⏱ Время работы: <b>{uptime}</b>\n{inet_status}\n⌛ Задержка (8.8.8.8): <b>{ping} мс</b>\n🌐 Внешний IP: <code>{ip}</code>\n📡 Трафик ⬇ <b>{rx}</b> / ⬆ <b>{tx}</b>",
 
         # modules/speedtest.py
-        "speedtest_start": "🚀 Запуск speedtest (Cloudflare)... Это может занять 15-20 секунд.",
-        "speedtest_results": "🚀 <b>Speedtest Результаты (Cloudflare):</b>\n\n⬇️ <b>Скачивание:</b> {dl:.2f} Мбит/с\n⬆️ <b>Загрузка:</b> {ul:.2f} Мбит/с\n⏱ <b>Пинг:</b> {ping} мс\n\n🌍 <b>Страна:</b> {location}\n🖥️ <b>Дата-центр:</b> {colo}",
-        "speedtest_fail": "❌ Ошибка при запуске speedtest (Cloudflare):\n<pre>{error}</pre>",
-
+        "speedtest_start": "🚀 <b>Запуск iperf3...</b>\n\nИщу ближайший сервер. Это может занять до 30-40 секунд.",
+        "speedtest_results": "🚀 <b>Speedtest Результаты (iperf3):</b>\n\n⬇️ <b>Скачивание:</b> {dl:.2f} Мбит/с\n⬆️ <b>Загрузка:</b> {ul:.2f} Мбит/с\n⏱ <b>Пинг:</b> {ping:.2f} мс\n\n🌍 <b>Страна:</b> {location}\n🖥️ <b>Дата-центр:</b> {sponsor}",
+        "speedtest_fail": "❌ Ошибка при запуске iperf3:\n<pre>{error}</pre>",
+        "iperf_fetch_error": "⚠️ Не удалось загрузить список серверов iperf3.",
+        "iperf_no_servers": "⚠️ Не удалось найти ни одного доступного сервера iperf3.",
+        "iperf_not_found": "Ошибка: <b>iperf3</b> не найден.\nУстановите его: <code>sudo apt install iperf3</code>",
+        "iperf_timeout": "Ошибка: Тест iperf3 превысил таймаут (сервер {host} не отвечает).",
+        "iperf_conn_error_generic": "❌ Ошибка подключения к <b>{host}</b>. Попытка другого сервера...",
+        "speedtest_status_geo": "🌍 Определяю геолокацию VPS...",
+        "speedtest_status_fetch": "📥 Загружаю список серверов...",
+        "speedtest_status_ping": "⏱️ Ищу лучший сервер по пингу ({count} шт.)...",
+        "speedtest_status_testing": "🚀 Тестирую скорость на <b>{host}</b> ({ping} мс)...",
+        "speedtest_status_downloading": "🚀 Тестирую скорость на <b>{host}</b> ({ping} мс)... ⬇️ Скачивание...",
+        "speedtest_status_uploading": "🚀 Тестирую скорость на <b>{host}</b> ({ping} мс)... ⬆️ Загрузка...",
         # modules/sshlog.py
         "sshlog_searching": "🔍 Ищу последние 10 событий SSH (вход/провал)...",
         "sshlog_header": "🔐 <b>Последние {count} событий SSH{source}:</b>\n\n{log_output}",
@@ -454,10 +464,20 @@ STRINGS = {
         "selftest_results_body": "✅ Bot is running\n📊 CPU: <b>{cpu:.1f}%</b>\n💾 RAM: <b>{mem:.1f}%</b>\n💽 Disk: <b>{disk:.1f}%</b>\n⏱ Uptime: <b>{uptime}</b>\n{inet_status}\n⌛ Ping (8.8.8.8): <b>{ping} ms</b>\n🌐 External IP: <code>{ip}</code>\n📡 Traffic ⬇ <b>{rx}</b> / ⬆ <b>{tx}</b>",
 
         # modules/speedtest.py
-        "speedtest_start": "🚀 Starting speedtest (Cloudflare)... This may take 15-20 seconds.",
-        "speedtest_results": "🚀 <b>Speedtest Results (Cloudflare):</b>\n\n⬇️ <b>Download:</b> {dl:.2f} Mbps\n⬆️ <b>Upload:</b> {ul:.2f} Mbps\n⏱ <b>Ping:</b> {ping} ms\n\n🌍 <b>Country:</b> {location}\n🖥️ <b>Data Center:</b> {colo}",
-        "speedtest_fail": "❌ Error running speedtest (Cloudflare):\n<pre>{error}</pre>",
-
+        "speedtest_start": "🚀 <b>Starting iperf3...</b>\n\nFinding the closest server. This may take 30-40 seconds.",
+        "speedtest_results": "🚀 <b>Speedtest Results (iperf3):</b>\n\n⬇️ <b>Download:</b> {dl:.2f} Mbps\n⬆️ <b>Upload:</b> {ul:.2f} Mbps\n⏱ <b>Ping:</b> {ping:.2f} ms\n\n🌍 <b>Location:</b> {location}\n🖥️ <b>Sponsor:</b> {sponsor}",
+        "speedtest_fail": "❌ Error running iperf3:\n<pre>{error}</pre>",
+        "iperf_fetch_error": "⚠️ Failed to download the iperf3 server list.",
+        "iperf_no_servers": "⚠️ Failed to find any available iperf3 servers.",
+        "iperf_not_found": "Error: <b>iperf3</b> not found.\nInstall it via: <code>sudo apt install iperf3</code>",
+        "iperf_timeout": "Error: iperf3 test timed out (server {host} is not responding).",
+        "iperf_conn_error_generic": "❌ Ошибка подключения к <b>{host}</b>. Попытка другого сервера...",
+        "speedtest_status_geo": "🌍 Determining VPS geolocation...",
+        "speedtest_status_fetch": "📥 Downloading server list...",
+        "speedtest_status_ping": "⏱️ Finding the best server by ping ({count} servers)...",
+        "speedtest_status_testing": "🚀 Testing speed on <b>{host}</b> ({ping} ms)...",
+        "speedtest_status_downloading": "🚀 Testing speed on <b>{host}</b> ({ping} ms)... : ⬇️ Downloading...",
+        "speedtest_status_uploading": "🚀 Testing speed on <b>{host}</b> ({ping} ms)... : ⬆️ Uploading...",
         # modules/sshlog.py
         "sshlog_searching": "🔍 Searching for last 10 SSH events (login/fail)...",
         "sshlog_header": "🔐 <b>Last {count} SSH events{source}:</b>\n\n{log_output}",
