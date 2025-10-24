@@ -111,7 +111,8 @@ STRINGS = {
         "watchdog_restart_fail": "⚠️ Alert-система НЕ СМОГЛА отправить команду перезапуска для <b>{service_name}</b>. Требуется ручная проверка.\nОшибка: {error}",
         "watchdog_systemctl_not_found": "⚠️ <code>systemctl</code> не найден. Не могу проверить статус сервиса.",
         "watchdog_check_error": "⚠️ Ошибка проверки статуса сервиса: {error}",
-        # Ключ "watchdog_started" удален/заменен на watchdog_status_restarting_wd
+        # Ключ "watchdog_started" удален/заменен на
+        # watchdog_status_restarting_wd
 
         # modules/fail2ban.py
         "f2b_log_not_found": "⚠️ Файл лога Fail2Ban не найден: <code>{path}</code>",
@@ -395,7 +396,8 @@ STRINGS = {
         "watchdog_restart_fail": "⚠️ Alert system FAILED to send restart command for <b>{service_name}</b>. Manual check required.\nError: {error}",
         "watchdog_systemctl_not_found": "⚠️ <code>systemctl</code> not found. Cannot check service status.",
         "watchdog_check_error": "⚠️ Error checking service status: {error}",
-        # Ключ "watchdog_started" удален/заменен на watchdog_status_restarting_wd
+        # Ключ "watchdog_started" удален/заменен на
+        # watchdog_status_restarting_wd
 
         # modules/fail2ban.py
         "f2b_log_not_found": "⚠️ Fail2Ban log file not found: <code>{path}</code>",
@@ -582,36 +584,44 @@ STRINGS = {
 
 # --- УПРАВЛЕНИЕ НАСТРОЙКАМИ ЯЗЫКА ---
 
+
 def load_user_settings():
     """Загружает настройки пользователей (включая язык) из JSON."""
     try:
         if os.path.exists(config.USER_SETTINGS_FILE):
             with open(config.USER_SETTINGS_FILE, "r", encoding='utf-8') as f:
                 settings = json.load(f)
-                shared_state.USER_SETTINGS = {int(k): v for k, v in settings.items()}
+                shared_state.USER_SETTINGS = {
+                    int(k): v for k, v in settings.items()}
             logging.info("Настройки пользователей (языки) загружены.")
         else:
             shared_state.USER_SETTINGS = {}
-            logging.info("Файл user_settings.json не найден, используются пустые настройки.")
+            logging.info(
+                "Файл user_settings.json не найден, используются пустые настройки.")
     except Exception as e:
         logging.error(f"Ошибка загрузки user_settings.json: {e}")
         shared_state.USER_SETTINGS = {}
+
 
 def save_user_settings():
     """Сохраняет настройки пользователей (включая язык) в JSON."""
     try:
         os.makedirs(os.path.dirname(config.USER_SETTINGS_FILE), exist_ok=True)
-        settings_to_save = {str(k): v for k, v in shared_state.USER_SETTINGS.items()}
+        settings_to_save = {str(k): v for k,
+                            v in shared_state.USER_SETTINGS.items()}
         with open(config.USER_SETTINGS_FILE, "w", encoding='utf-8') as f:
             json.dump(settings_to_save, f, indent=4, ensure_ascii=False)
         logging.debug("Настройки пользователей (языки) сохранены.")
     except Exception as e:
         logging.error(f"Ошибка сохранения user_settings.json: {e}")
 
+
 def get_user_lang(user_id: int | str | None) -> str:
     """Получает язык пользователя. Defaults to 'ru'."""
     if isinstance(user_id, int):
-        return shared_state.USER_SETTINGS.get(user_id, {}).get("lang", config.DEFAULT_LANGUAGE)
+        return shared_state.USER_SETTINGS.get(
+            user_id, {}).get(
+            "lang", config.DEFAULT_LANGUAGE)
     elif isinstance(user_id, str):
         if user_id in STRINGS:
             return user_id
@@ -619,19 +629,23 @@ def get_user_lang(user_id: int | str | None) -> str:
             return config.DEFAULT_LANGUAGE
     else:
         if user_id is not None:
-             logging.warning(f"get_user_lang вызван с неожиданным типом user_id: {type(user_id)}. Возвращаю язык по умолчанию.")
+            logging.warning(
+                f"get_user_lang вызван с неожиданным типом user_id: {type(user_id)}. Возвращаю язык по умолчанию.")
         return config.DEFAULT_LANGUAGE
+
 
 def set_user_lang(user_id: int | str | None, lang: str):
     """Устанавливает язык для пользователя и сохраняет."""
     if user_id is None:
-        logging.warning("set_user_lang вызван с user_id=None. Сохранение отменено.")
+        logging.warning(
+            "set_user_lang вызван с user_id=None. Сохранение отменено.")
         return
     if not isinstance(user_id, int):
         try:
             user_id = int(user_id)
         except (ValueError, TypeError):
-            logging.error(f"set_user_lang вызван с нечисловым user_id: {user_id}. Сохранение отменено.")
+            logging.error(
+                f"set_user_lang вызван с нечисловым user_id: {user_id}. Сохранение отменено.")
             return
     if user_id not in shared_state.USER_SETTINGS:
         shared_state.USER_SETTINGS[user_id] = {}
@@ -640,6 +654,7 @@ def set_user_lang(user_id: int | str | None, lang: str):
     logging.info(f"Язык для пользователя {user_id} изменен на '{lang}'")
 
 # --- ГЛАВНАЯ ФУНКЦИЯ ПЕРЕВОДА ---
+
 
 def get_text(key: str, user_id_or_lang: int | str | None, **kwargs) -> str:
     """
@@ -653,9 +668,15 @@ def get_text(key: str, user_id_or_lang: int | str | None, **kwargs) -> str:
     elif isinstance(user_id_or_lang, str) and user_id_or_lang in STRINGS:
         lang = user_id_or_lang
 
-    string_template = STRINGS.get(lang, {}).get(key,
-        STRINGS.get(config.DEFAULT_LANGUAGE, {}).get(key, f"[{key}]")
-    )
+    string_template = STRINGS.get(
+        lang,
+        {}).get(
+        key,
+        STRINGS.get(
+            config.DEFAULT_LANGUAGE,
+            {}).get(
+                key,
+            f"[{key}]"))
 
     try:
         if kwargs:
@@ -663,13 +684,16 @@ def get_text(key: str, user_id_or_lang: int | str | None, **kwargs) -> str:
         else:
             return string_template
     except (KeyError, TypeError, ValueError) as e:
-        logging.warning(f"Ошибка форматирования для ключа '{key}' языка '{lang}' с параметрами {kwargs}. Шаблон: '{string_template}'. Ошибка: {e}")
+        logging.warning(
+            f"Ошибка форматирования для ключа '{key}' языка '{lang}' с параметрами {kwargs}. Шаблон: '{string_template}'. Ошибка: {e}")
         return string_template
+
 
 # Псевдоним для удобства
 _ = get_text
 
 # --- ФИЛЬТРЫ ДЛЯ AIOGRAM ---
+
 
 def get_all_translations(key: str) -> list[str]:
     """
@@ -686,6 +710,7 @@ def get_all_translations(key: str) -> list[str]:
         return [f"[{key}]"]
     return unique_translations
 
+
 def I18nFilter(key: str):
     """
     Создает фильтр Aiogram, который сработает, если текст сообщения
@@ -694,12 +719,17 @@ def I18nFilter(key: str):
     return F.text.in_(get_all_translations(key))
 
 # --- Клавиатура смены языка ---
+
+
 def get_language_keyboard() -> InlineKeyboardMarkup:
     """Возвращает клавиатуру для выбора языка."""
-    keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [
-            InlineKeyboardButton(text="🇷🇺 Русский", callback_data="set_lang_ru"),
-            InlineKeyboardButton(text="🇬🇧 English", callback_data="set_lang_en")
-        ]
-    ])
+    keyboard = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="🇷🇺 Русский",
+                    callback_data="set_lang_ru"),
+                InlineKeyboardButton(
+                    text="🇬🇧 English",
+                    callback_data="set_lang_en")]])
     return keyboard

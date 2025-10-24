@@ -10,7 +10,7 @@ from aiogram import F, Dispatcher, types
 from aiogram.types import KeyboardButton
 
 # --- Оставляем эти импорты ---
-from core.i18n import I18nFilter, get_user_lang # Убираем _ отсюда
+from core.i18n import I18nFilter, get_user_lang  # Убираем _ отсюда
 from core import config
 # ----------------------------------------
 
@@ -22,14 +22,17 @@ from core.config import INSTALL_MODE
 
 BUTTON_KEY = "btn_selftest"
 
+
 def get_button() -> KeyboardButton:
     # --- Импортируем _ здесь ---
     from core.i18n import _
     # ------------------------------------
     return KeyboardButton(text=_(BUTTON_KEY, config.DEFAULT_LANGUAGE))
 
+
 def register_handlers(dp: Dispatcher):
     dp.message(I18nFilter(BUTTON_KEY))(selftest_handler)
+
 
 async def selftest_handler(message: types.Message):
     # --- Импортируем _ здесь ---
@@ -86,7 +89,11 @@ async def selftest_handler(message: types.Message):
     ping_result = ping_stdout.decode()
     ping_match = re.search(r"time=([\d\.]+) ms", ping_result)
     ping_time = ping_match.group(1) if ping_match else "N/A"
-    internet = _("selftest_inet_ok", lang) if ping_match else _("selftest_inet_fail", lang)
+    internet = _(
+        "selftest_inet_ok",
+        lang) if ping_match else _(
+        "selftest_inet_fail",
+        lang)
 
     ip_cmd = "curl -4 -s --max-time 3 ifconfig.me"
     ip_process = await asyncio.create_subprocess_shell(
@@ -117,7 +124,8 @@ async def selftest_handler(message: types.Message):
                     cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
                 )
                 stdout, stderr = await process.communicate()
-                if process.returncode != 0: raise Exception(stderr.decode())
+                if process.returncode != 0:
+                    raise Exception(stderr.decode())
 
                 for l in reversed(stdout.decode().strip().split('\n')):
                     if "Accepted" in l and "sshd" in l:
@@ -134,29 +142,37 @@ async def selftest_handler(message: types.Message):
                 except asyncio.TimeoutError:
                     raise Exception("journalctl timeout")
 
-                if process.returncode != 0: raise Exception(stderr.decode())
+                if process.returncode != 0:
+                    raise Exception(stderr.decode())
                 line = stdout.decode().strip()
 
             ssh_header = _("selftest_ssh_header", lang, source=source_text)
 
             if line:
                 dt_object = None
-                date_match_iso = re.search(r"(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})", line)
-                date_match_syslog = re.search(r"(\w{3}\s+\d{1,2}\s+\d{2}:\d{2}:\d{2})", line)
+                date_match_iso = re.search(
+                    r"(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})", line)
+                date_match_syslog = re.search(
+                    r"(\w{3}\s+\d{1,2}\s+\d{2}:\d{2}:\d{2})", line)
 
                 try:
                     if date_match_iso:
-                        dt_object = datetime.strptime(date_match_iso.group(1), "%Y-%m-%dT%H:%M:%S")
+                        dt_object = datetime.strptime(
+                            date_match_iso.group(1), "%Y-%m-%dT%H:%M:%S")
                     elif date_match_syslog:
-                        log_timestamp = datetime.strptime(date_match_syslog.group(1), "%b %d %H:%M:%S")
+                        log_timestamp = datetime.strptime(
+                            date_match_syslog.group(1), "%b %d %H:%M:%S")
                         current_year = datetime.now().year
                         dt_object = log_timestamp.replace(year=current_year)
                         if dt_object > datetime.now():
-                            dt_object = dt_object.replace(year=current_year - 1)
+                            dt_object = dt_object.replace(
+                                year=current_year - 1)
                 except Exception as e:
-                    logging.warning(f"Selftest: не удалось распарсить дату: {e}. Строка: {line}")
+                    logging.warning(
+                        f"Selftest: не удалось распарсить дату: {e}. Строка: {line}")
 
-                login_match = re.search(r"Accepted\s+(?:\S+)\s+for\s+(\S+)\s+from\s+(\S+)", line)
+                login_match = re.search(
+                    r"Accepted\s+(?:\S+)\s+for\s+(\S+)\s+from\s+(\S+)", line)
 
                 if dt_object and login_match:
                     user = escape_html(login_match.group(1))
@@ -167,19 +183,31 @@ async def selftest_handler(message: types.Message):
                     formatted_time = dt_object.strftime("%H:%M")
                     formatted_date = dt_object.strftime("%d.%m.%Y")
 
-                    last_login_info = ssh_header + _("selftest_ssh_entry", lang,
-                                                     user=user, flag=flag, ip=ip,
-                                                     time=formatted_time, tz=tz_label,
-                                                     date=formatted_date)
+                    last_login_info = ssh_header + _(
+                        "selftest_ssh_entry",
+                        lang,
+                        user=user,
+                        flag=flag,
+                        ip=ip,
+                        time=formatted_time,
+                        tz=tz_label,
+                        date=formatted_date)
                 else:
-                    logging.warning(f"Selftest: Не удалось разобрать строку SSH (login_match={login_match}, dt_object={dt_object}): {line}")
-                    last_login_info = ssh_header + _("selftest_ssh_parse_fail", lang)
+                    logging.warning(
+                        f"Selftest: Не удалось разобрать строку SSH (login_match={login_match}, dt_object={dt_object}): {line}")
+                    last_login_info = ssh_header + \
+                        _("selftest_ssh_parse_fail", lang)
             else:
-                last_login_info = ssh_header + _("selftest_ssh_not_found", lang)
+                last_login_info = ssh_header + \
+                    _("selftest_ssh_not_found", lang)
 
         except Exception as e:
             logging.warning(f"SSH log check skipped: {e}")
-            last_login_info = _("selftest_ssh_header", lang, source="") + _("selftest_ssh_read_error", lang, error=escape_html(str(e)))
+            last_login_info = _("selftest_ssh_header",
+                                lang,
+                                source="") + _("selftest_ssh_read_error",
+                                               lang,
+                                               error=escape_html(str(e)))
     else:
         last_login_info = _("selftest_ssh_root_only", lang)
 
