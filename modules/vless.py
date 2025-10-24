@@ -2,7 +2,8 @@
 import logging
 import io
 import qrcode
-# from PIL import Image # Pillow импортирован в requirements, но Image не используется здесь
+# from PIL import Image # Pillow импортирован в requirements, но Image не
+# используется здесь
 from aiogram import F, Dispatcher, types
 from aiogram.types import KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton, BufferedInputFile
 from aiogram.fsm.context import FSMContext
@@ -16,7 +17,7 @@ from core import config
 # ----------------------------------------
 
 # --- ИЗМЕНЕНО: Убираем send_access_denied_message, т.к. текст специфичен ---
-from core.auth import is_allowed # , send_access_denied_message 
+from core.auth import is_allowed  # , send_access_denied_message
 # ----------------------------------------------------------------------
 from core.messaging import delete_previous_message
 from core.shared_state import LAST_MESSAGE_IDS
@@ -29,52 +30,64 @@ from core.keyboards import get_back_keyboard, get_main_reply_keyboard
 BUTTON_KEY = "btn_vless"
 # --------------------------------
 
+
 class GenerateVlessStates(StatesGroup):
     waiting_for_file = State()
     waiting_for_name = State()
+
 
 def get_button() -> KeyboardButton:
     # --- ИЗМЕНЕНО: Используем i18n ---
     return KeyboardButton(text=_(BUTTON_KEY, config.DEFAULT_LANGUAGE))
     # --------------------------------
 
+
 def register_handlers(dp: Dispatcher):
     # --- ИЗМЕНЕНО: Используем I18nFilter ---
     dp.message(I18nFilter(BUTTON_KEY))(generate_vless_handler)
     # --------------------------------------
-    
+
     # FSM Handlers (остаются как есть)
-    dp.message(StateFilter(GenerateVlessStates.waiting_for_file), F.document)(process_vless_file)
-    dp.message(StateFilter(GenerateVlessStates.waiting_for_name), F.text)(process_vless_name)
-    dp.message(StateFilter(GenerateVlessStates.waiting_for_file))(process_vless_file_invalid)
-    dp.message(StateFilter(GenerateVlessStates.waiting_for_name))(process_vless_name_invalid)
+    dp.message(
+        StateFilter(
+            GenerateVlessStates.waiting_for_file),
+        F.document)(process_vless_file)
+    dp.message(
+        StateFilter(
+            GenerateVlessStates.waiting_for_name),
+        F.text)(process_vless_name)
+    dp.message(StateFilter(GenerateVlessStates.waiting_for_file))(
+        process_vless_file_invalid)
+    dp.message(StateFilter(GenerateVlessStates.waiting_for_name))(
+        process_vless_name_invalid)
+
 
 async def generate_vless_handler(message: types.Message, state: FSMContext):
     user_id = message.from_user.id
     # --- ИЗМЕНЕНО: Получаем язык ---
     lang = get_user_lang(user_id)
     # ------------------------------
-    command = "generate_vless" # Имя команды оставляем
+    command = "generate_vless"  # Имя команды оставляем
     if not is_allowed(user_id, command):
         # --- ИЗМЕНЕНО: Используем i18n ---
         await message.bot.send_message(message.chat.id, _("access_denied_no_rights", lang))
         # --------------------------------
         return
     await delete_previous_message(user_id, command, message.chat.id, message.bot)
-    
+
     # --- ИЗМЕНЕНО: Используем i18n ---
-    cancel_keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text=_("btn_cancel", lang), callback_data="back_to_menu")]
-    ])
-    
+    cancel_keyboard = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(
+        text=_("btn_cancel", lang), callback_data="back_to_menu")]])
+
     sent_message = await message.answer(
-        _("vless_prompt_file", lang), 
+        _("vless_prompt_file", lang),
         reply_markup=cancel_keyboard,
         parse_mode="HTML"
     )
     # --------------------------------
     LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = sent_message.message_id
     await state.set_state(GenerateVlessStates.waiting_for_file)
+
 
 async def process_vless_file(message: types.Message, state: FSMContext):
     user_id = message.from_user.id
@@ -92,22 +105,24 @@ async def process_vless_file(message: types.Message, state: FSMContext):
         except TelegramBadRequest:
             pass
     # Также удаляем сообщение пользователя с файлом
-    try: await message.delete()
-    except TelegramBadRequest: pass
+    try:
+        await message.delete()
+    except TelegramBadRequest:
+        pass
 
     document = message.document
     if not document.file_name or not document.file_name.lower().endswith('.json'):
         # --- ИЗМЕНЕНО: Используем i18n ---
-        cancel_keyboard = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text=_("btn_cancel", lang), callback_data="back_to_menu")]
-        ])
+        cancel_keyboard = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(
+            text=_("btn_cancel", lang), callback_data="back_to_menu")]])
         sent_message = await message.answer(
             _("vless_error_not_json", lang),
             parse_mode="HTML",
             reply_markup=cancel_keyboard
         )
         # --------------------------------
-        LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = sent_message.message_id
+        LAST_MESSAGE_IDS.setdefault(
+            user_id, {})[command] = sent_message.message_id
         # Остаемся в состоянии waiting_for_file
         return
 
@@ -118,16 +133,16 @@ async def process_vless_file(message: types.Message, state: FSMContext):
         await state.update_data(json_data=json_data)
 
         # --- ИЗМЕНЕНО: Используем i18n ---
-        cancel_keyboard = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text=_("btn_cancel", lang), callback_data="back_to_menu")]
-        ])
+        cancel_keyboard = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(
+            text=_("btn_cancel", lang), callback_data="back_to_menu")]])
         sent_message = await message.answer(
             _("vless_prompt_name", lang),
             parse_mode="HTML",
             reply_markup=cancel_keyboard
         )
         # --------------------------------
-        LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = sent_message.message_id
+        LAST_MESSAGE_IDS.setdefault(
+            user_id, {})[command] = sent_message.message_id
         await state.set_state(GenerateVlessStates.waiting_for_name)
 
     except Exception as e:
@@ -136,7 +151,8 @@ async def process_vless_file(message: types.Message, state: FSMContext):
         await message.answer(_("vless_error_file_processing", lang, error=e))
         # --------------------------------
         await state.clear()
-        
+
+
 async def process_vless_name(message: types.Message, state: FSMContext):
     user_id = message.from_user.id
     # --- ИЗМЕНЕНО: Получаем язык ---
@@ -151,8 +167,10 @@ async def process_vless_name(message: types.Message, state: FSMContext):
         except TelegramBadRequest:
             pass
     # Также удаляем сообщение пользователя с именем
-    try: await message.delete()
-    except TelegramBadRequest: pass
+    try:
+        await message.delete()
+    except TelegramBadRequest:
+        pass
 
     try:
         custom_name = message.text.strip()
@@ -162,8 +180,9 @@ async def process_vless_name(message: types.Message, state: FSMContext):
         if not json_data:
             # --- ИЗМЕНЕНО: Используем i18n ---
             await message.answer(
-                _("vless_error_no_json_session", lang), 
-                reply_markup=get_back_keyboard(lang, "back_to_menu") # Передаем lang
+                _("vless_error_no_json_session", lang),
+                reply_markup=get_back_keyboard(
+                    lang, "back_to_menu")  # Передаем lang
             )
             # --------------------------------
             await state.clear()
@@ -172,14 +191,18 @@ async def process_vless_name(message: types.Message, state: FSMContext):
         # convert_json_to_vless уже использует i18n для сообщения об ошибке
         vless_url = convert_json_to_vless(json_data, custom_name)
 
-        if vless_url.startswith("⚠️"): # Проверяем на ошибку
-             # --- ИЗМЕНЕНО: Передаем lang ---
+        if vless_url.startswith("⚠️"):  # Проверяем на ошибку
+            # --- ИЗМЕНЕНО: Передаем lang ---
             await message.answer(vless_url, reply_markup=get_back_keyboard(lang, "back_to_menu"))
-             # --------------------------------
+            # --------------------------------
             await state.clear()
             return
 
-        qr = qrcode.QRCode(version=1, error_correction=qrcode.constants.ERROR_CORRECT_L, box_size=10, border=4)
+        qr = qrcode.QRCode(
+            version=1,
+            error_correction=qrcode.constants.ERROR_CORRECT_L,
+            box_size=10,
+            border=4)
         qr.add_data(vless_url)
         qr.make(fit=True)
         img = qr.make_image(fill_color="black", back_color="white")
@@ -196,36 +219,42 @@ async def process_vless_name(message: types.Message, state: FSMContext):
             caption=_("vless_success_caption", lang, name=escape_html(custom_name), url=escape_html(vless_url)),
             parse_mode="HTML"
         )
-        
+
         # Возвращаем в главное меню
         sent_message = await message.answer(
-            _("vless_menu_return", lang), 
-            reply_markup=get_main_reply_keyboard(user_id, message.bot.buttons_map) # Передаем ID и карту
+            _("vless_menu_return", lang),
+            reply_markup=get_main_reply_keyboard(
+                user_id, message.bot.buttons_map)  # Передаем ID и карту
         )
         # --------------------------------
-        LAST_MESSAGE_IDS.setdefault(user_id, {})["menu"] = sent_message.message_id # Сохраняем как сообщение меню
+        # Сохраняем как сообщение меню
+        LAST_MESSAGE_IDS.setdefault(
+            user_id, {})["menu"] = sent_message.message_id
 
     except Exception as e:
         logging.error(f"Ошибка при генерации VLESS или QR: {e}")
         # --- ИЗМЕНЕНО: Используем i18n ---
         await message.answer(
-            f"{_('error_unexpected', lang)}: {escape_html(str(e))}", 
-            reply_markup=get_back_keyboard(lang, "back_to_menu") # Передаем lang
+            f"{_('error_unexpected', lang)}: {escape_html(str(e))}",
+            reply_markup=get_back_keyboard(
+                lang, "back_to_menu")  # Передаем lang
         )
         # --------------------------------
     finally:
         await state.clear()
 
-async def process_vless_file_invalid(message: types.Message, state: FSMContext):
+
+async def process_vless_file_invalid(
+        message: types.Message,
+        state: FSMContext):
     user_id = message.from_user.id
     # --- ИЗМЕНЕНО: Получаем язык ---
     lang = get_user_lang(user_id)
     # ------------------------------
     command = "generate_vless"
     # --- ИЗМЕНЕНО: Используем i18n ---
-    cancel_keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text=_("btn_cancel", lang), callback_data="back_to_menu")]
-    ])
+    cancel_keyboard = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(
+        text=_("btn_cancel", lang), callback_data="back_to_menu")]])
     sent_message = await message.reply(
         _("vless_error_not_file", lang),
         parse_mode="HTML",
@@ -236,16 +265,18 @@ async def process_vless_file_invalid(message: types.Message, state: FSMContext):
     LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = sent_message.message_id
     # Остаемся в состоянии waiting_for_file
 
-async def process_vless_name_invalid(message: types.Message, state: FSMContext):
+
+async def process_vless_name_invalid(
+        message: types.Message,
+        state: FSMContext):
     user_id = message.from_user.id
     # --- ИЗМЕНЕНО: Получаем язык ---
     lang = get_user_lang(user_id)
     # ------------------------------
     command = "generate_vless"
     # --- ИЗМЕНЕНО: Используем i18n ---
-    cancel_keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text=_("btn_cancel", lang), callback_data="back_to_menu")]
-    ])
+    cancel_keyboard = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(
+        text=_("btn_cancel", lang), callback_data="back_to_menu")]])
     sent_message = await message.reply(
         _("vless_error_not_text", lang),
         parse_mode="HTML",
