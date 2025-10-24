@@ -1,4 +1,4 @@
-# /opt/tg-bot/core/i18n.py
+# /opt-tg-bot/core/i18n.py
 import json
 import logging
 import os
@@ -99,12 +99,12 @@ STRINGS = {
         "watchdog_status_active_error": "Сервис <b>{bot_name}</b>: Активен с ошибками 🟠\n\n<b>Детали:</b> {details}\n\nРекомендуется проверить `bot.log`.",
         "watchdog_status_active_log_fail": "Сервис <b>{bot_name}</b>: Активен 🟢 (Проверка лога не удалась)",
         "watchdog_status_activating": "Сервис <b>{bot_name}</b>: Запускается 🟡",
-        
+
         # --- НОВЫЕ КЛЮЧИ ПЕРЕЗАПУСКА ---
         "watchdog_status_restarting_bot": "Сервис <b>{bot_name}</b>: Перезапуск службы 🔵",
         "watchdog_status_restarting_wd": "🚨 Внутренний сервис 'Система оповещений (Alert)' Перезапуск службы 🔵.\nОтслеживание: <b>{bot_name}</b>",
         # ---------------------------------
-        
+
         "watchdog_status_down": "Сервис <b>{bot_name}</b>: Недоступен 🔴{reason}",
         "watchdog_status_down_reason": "Причина",
         "watchdog_status_down_failed": "Статус: failed",
@@ -180,11 +180,9 @@ STRINGS = {
         "selftest_results_body": "✅ Бот работает\n📊 Процессор: <b>{cpu:.1f}%</b>\n💾 ОЗУ: <b>{mem:.1f}%</b>\n💽 ПЗУ: <b>{disk:.1f}%</b>\n⏱ Время работы: <b>{uptime}</b>\n{inet_status}\n⌛ Задержка (8.8.8.8): <b>{ping} мс</b>\n🌐 Внешний IP: <code>{ip}</code>\n📡 Трафик ⬇ <b>{rx}</b> / ⬆ <b>{tx}</b>",
 
         # modules/speedtest.py
-        # --- ИСПРАВЛЕНИЕ: Тексты для Cloudflare ---
         "speedtest_start": "🚀 Запуск speedtest (Cloudflare)... Это может занять 15-20 секунд.",
         "speedtest_results": "🚀 <b>Speedtest Результаты (Cloudflare):</b>\n\n⬇️ <b>Скачивание:</b> {dl:.2f} Мбит/с\n⬆️ <b>Загрузка:</b> {ul:.2f} Мбит/с\n⏱ <b>Пинг:</b> {ping} мс\n\n🌍 <b>Страна:</b> {location}\n🖥️ <b>Дата-центр:</b> {colo}",
         "speedtest_fail": "❌ Ошибка при запуске speedtest (Cloudflare):\n<pre>{error}</pre>",
-        # --- КОНЕЦ ИСПРАВЛЕНИЯ ---
 
         # modules/sshlog.py
         "sshlog_searching": "🔍 Ищу последние 10 событий SSH (вход/провал)...",
@@ -203,7 +201,7 @@ STRINGS = {
         # modules/traffic.py
         "traffic_stop": "✅ Мониторинг трафика остановлен.",
         "traffic_menu_return": "🏠 Главное меню:",
-        "traffic_start": "📡 <b>Мониторинг трафика</b>\n\n<i>Обновление каждые {interval} секунд.</i>", # Изменено
+        "traffic_start": "📡 <b>Мониторинг трафика</b>\n\n<i>Обновление каждые {interval} секунд.</i>",
         "traffic_start_fail": "⚠️ Не удалось запустить мониторинг трафика: {error}",
         "traffic_update_total": "📡 Общий трафик:",
         "traffic_update_speed": "⚡️ Скорость соединения:",
@@ -211,8 +209,8 @@ STRINGS = {
         "traffic_tx": "⬆️ TX: {value}",
         "traffic_speed_rx": "⬇️ RX: {speed:.2f} Мбит/с",
         "traffic_speed_tx": "⬆️ TX: {speed:.2f} Мбит/с",
-        "btn_stop_traffic": "⏹ Остановить", # Новая кнопка
-        "traffic_stopped_alert": "Мониторинг трафика остановлен.", # Новое сообщение
+        "btn_stop_traffic": "⏹ Остановить",
+        "traffic_stopped_alert": "Мониторинг трафика остановлен.",
 
         # modules/update.py
         "update_start": "🔄 Выполняю обновление VPS... Это может занять несколько минут.",
@@ -268,8 +266,10 @@ STRINGS = {
         "users_change_group_prompt": "Выбран пользователь: <b>{user_name}</b>\nТекущая группа: <b>{group}</b>\n\nВыберите новую группу:",
         "users_change_group_success_text": "✅ Группа для <b>{user_name}</b> изменена на <b>{group}</b>.\n\nВыберите пользователя:",
         "users_change_group_success_alert": "Группа для {user_name} изменена.",
-        "users_group_Admins": "Админы", # Перевод ключа группы
-        "users_group_Пользователи": "Пользователи", # Перевод ключа группы
+        # --- ИСПРАВЛЕНИЕ: Удаляем ненужные ключи ---
+        # "users_group_Admins": "Админы",
+        # "users_group_Пользователи": "Пользователи",
+        # --- КОНЕЦ ИСПРАВЛЕНИЯ ---
 
         # Единицы измерения (core/utils.py)
         "unit_bytes": "Б",
@@ -373,12 +373,12 @@ STRINGS = {
         "watchdog_status_active_error": "Service <b>{bot_name}</b>: Active with errors 🟠\n\n<b>Details:</b> {details}\n\nPlease check `bot.log`.",
         "watchdog_status_active_log_fail": "Service <b>{bot_name}</b>: Active 🟢 (Log check failed)",
         "watchdog_status_activating": "Service <b>{bot_name}</b>: Activating 🟡",
-        
+
         # --- НОВЫЕ КЛЮЧИ ПЕРЕЗАПУСКА ---
         "watchdog_status_restarting_bot": "Service <b>{bot_name}</b>: Service Restart 🔵",
         "watchdog_status_restarting_wd": "🚨 Internal 'Alert System' service Service Restart 🔵.\nTracking: <b>{bot_name}</b>",
         # ---------------------------------
-        
+
         "watchdog_status_down": "Service <b>{bot_name}</b>: Unavailable 🔴{reason}",
         "watchdog_status_down_reason": "Reason",
         "watchdog_status_down_failed": "Status: failed",
@@ -454,11 +454,9 @@ STRINGS = {
         "selftest_results_body": "✅ Bot is running\n📊 CPU: <b>{cpu:.1f}%</b>\n💾 RAM: <b>{mem:.1f}%</b>\n💽 Disk: <b>{disk:.1f}%</b>\n⏱ Uptime: <b>{uptime}</b>\n{inet_status}\n⌛ Ping (8.8.8.8): <b>{ping} ms</b>\n🌐 External IP: <code>{ip}</code>\n📡 Traffic ⬇ <b>{rx}</b> / ⬆ <b>{tx}</b>",
 
         # modules/speedtest.py
-        # --- ИСПРАВЛЕНИЕ: Тексты для Cloudflare (EN) ---
         "speedtest_start": "🚀 Starting speedtest (Cloudflare)... This may take 15-20 seconds.",
         "speedtest_results": "🚀 <b>Speedtest Results (Cloudflare):</b>\n\n⬇️ <b>Download:</b> {dl:.2f} Mbps\n⬆️ <b>Upload:</b> {ul:.2f} Mbps\n⏱ <b>Ping:</b> {ping} ms\n\n🌍 <b>Country:</b> {location}\n🖥️ <b>Data Center:</b> {colo}",
         "speedtest_fail": "❌ Error running speedtest (Cloudflare):\n<pre>{error}</pre>",
-        # --- КОНЕЦ ИСПРАВЛЕНИЯ ---
 
         # modules/sshlog.py
         "sshlog_searching": "🔍 Searching for last 10 SSH events (login/fail)...",
@@ -477,7 +475,7 @@ STRINGS = {
         # modules/traffic.py
         "traffic_stop": "✅ Traffic monitoring stopped.",
         "traffic_menu_return": "🏠 Main menu:",
-        "traffic_start": "📡 <b>Traffic Monitoring</b>\n\n<i>Updates every {interval} seconds.</i>", # Changed
+        "traffic_start": "📡 <b>Traffic Monitoring</b>\n\n<i>Updates every {interval} seconds.</i>",
         "traffic_start_fail": "⚠️ Failed to start traffic monitoring: {error}",
         "traffic_update_total": "📡 Total Traffic:",
         "traffic_update_speed": "⚡️ Connection Speed:",
@@ -485,8 +483,8 @@ STRINGS = {
         "traffic_tx": "⬆️ TX: {value}",
         "traffic_speed_rx": "⬇️ RX: {speed:.2f} Mbps",
         "traffic_speed_tx": "⬆️ TX: {speed:.2f} Mbps",
-        "btn_stop_traffic": "⏹ Stop", # New button
-        "traffic_stopped_alert": "Traffic monitoring stopped.", # New message
+        "btn_stop_traffic": "⏹ Stop",
+        "traffic_stopped_alert": "Traffic monitoring stopped.",
 
         # modules/update.py
         "update_start": "🔄 Updating VPS... This may take a few minutes.",
@@ -542,8 +540,10 @@ STRINGS = {
         "users_change_group_prompt": "Selected user: <b>{user_name}</b>\nCurrent group: <b>{group}</b>\n\nSelect a new group:",
         "users_change_group_success_text": "✅ Group for <b>{user_name}</b> changed to <b>{group}</b>.\n\nSelect a user:",
         "users_change_group_success_alert": "Group for {user_name} changed.",
-        "users_group_Admins": "Admins", # Group key translation
-        "users_group_Пользователи": "Users", # Group key translation
+        # --- ИСПРАВЛЕНИЕ: Удаляем ненужные ключи ---
+        # "users_group_Admins": "Admins",
+        # "users_group_Пользователи": "Users",
+        # --- КОНЕЦ ИСПРАВЛЕНИЯ ---
 
         # Units of measurement (core/utils.py)
         "unit_bytes": "B",
@@ -588,28 +588,21 @@ def save_user_settings():
     except Exception as e:
         logging.error(f"Ошибка сохранения user_settings.json: {e}")
 
-# --- ИСПРАВЛЕНО: Упрощенная логика get_user_lang ---
 def get_user_lang(user_id: int | str | None) -> str:
     """Получает язык пользователя. Defaults to 'ru'."""
     if isinstance(user_id, int):
-        # Стандартный случай: получаем из настроек или по умолчанию
         return shared_state.USER_SETTINGS.get(user_id, {}).get("lang", config.DEFAULT_LANGUAGE)
     elif isinstance(user_id, str):
-        # Если передана строка, проверяем, валидный ли это код языка
         if user_id in STRINGS:
-            # Валидный код ('ru', 'en'), возвращаем его
             return user_id
         else:
-            # Невалидная строка, логируем и возвращаем язык по умолчанию
-            # logging.warning(f"get_user_lang вызван с невалидным строковым user_id: {user_id}. Возвращаю язык по умолчанию.") # Убрали лог
             return config.DEFAULT_LANGUAGE
-    else: # Обработка None или других типов
+    else:
         if user_id is not None:
              logging.warning(f"get_user_lang вызван с неожиданным типом user_id: {type(user_id)}. Возвращаю язык по умолчанию.")
         return config.DEFAULT_LANGUAGE
-# ------------------------------------------------
 
-def set_user_lang(user_id: int | str | None, lang: str): # Allow str and None
+def set_user_lang(user_id: int | str | None, lang: str):
     """Устанавливает язык для пользователя и сохраняет."""
     if user_id is None:
         logging.warning("set_user_lang вызван с user_id=None. Сохранение отменено.")
@@ -634,12 +627,11 @@ def get_text(key: str, user_id_or_lang: int | str | None, **kwargs) -> str:
     Пример: get_text("main_menu_welcome", user_id)
     Пример с форматированием: get_text("my_id_text", user_id, user_id=user_id)
     """
-    lang = config.DEFAULT_LANGUAGE # По умолчанию
+    lang = config.DEFAULT_LANGUAGE
     if isinstance(user_id_or_lang, int):
-        lang = get_user_lang(user_id_or_lang) # Получаем язык пользователя по ID
+        lang = get_user_lang(user_id_or_lang)
     elif isinstance(user_id_or_lang, str) and user_id_or_lang in STRINGS:
-        lang = user_id_or_lang # Используем переданный код языка
-    # В противном случае остается язык по умолчанию
+        lang = user_id_or_lang
 
     string_template = STRINGS.get(lang, {}).get(key,
         STRINGS.get(config.DEFAULT_LANGUAGE, {}).get(key, f"[{key}]")
@@ -652,7 +644,7 @@ def get_text(key: str, user_id_or_lang: int | str | None, **kwargs) -> str:
             return string_template
     except (KeyError, TypeError, ValueError) as e:
         logging.warning(f"Ошибка форматирования для ключа '{key}' языка '{lang}' с параметрами {kwargs}. Шаблон: '{string_template}'. Ошибка: {e}")
-        return string_template # Возвращаем неформатированный шаблон
+        return string_template
 
 # Псевдоним для удобства
 _ = get_text
