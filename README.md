@@ -1,12 +1,16 @@
+<p align="center">
+  <a href="README.en.md">English Version</a> | Русская Версия
+</p>
+
 <h1 align="center">🤖 VPS Manager Telegram Bot</h1>
 
 <p align="center">
-  <b >v1.10.11</b> — надёжный Telegram-бот для мониторинга и управления вашим VPS или выделенным сервером, теперь с <b>модульной архитектурой</b> и улучшенным процессом развертывания.
+  <b >v1.10.12</b> — надёжный Telegram-бот для мониторинга и управления вашим VPS или выделенным сервером, теперь с <b>модульной архитектурой</b> и улучшенным процессом развертывания.
 </p>
 
 <p align="center">
   <a href="https://github.com/jatixs/tgbotvpscp/releases/latest"><img src="https://img.shields.io/badge/version-v1.10.11-blue?style=flat-square" alt="Version 1.10.11"/></a>
-  <a href="https://github.com/jatixs/tgbotvpscp/blob/main/CHANGELOG.md"><img src="https://img.shields.io/badge/build-37-purple?style=flat-square" alt="Build 37"/></a>
+  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/build-37-purple?style=flat-square" alt="Build 37"/></a>
   <a href="https://www.python.org/"><img src="https://img.shields.io/badge/python-3.10%2B-green?style=flat-square" alt="Python 3.10+"/></a>
   <a href="https://choosealicense.com/licenses/gpl-3.0/"><img src="https://img.shields.io/badge/license-GPL--3.0-lightgrey?style=flat-square" alt="License GPL-3.0"/></a>
   <a href="https://github.com/aiogram/aiogram"><img src="https://img.shields.io/badge/aiogram-3.x-orange?style=flat-square" alt="Aiogram 3.x"/></a>
@@ -73,10 +77,7 @@
 
 1.  Получите токен вашего Telegram-бота от **[@BotFather](https://t.me/BotFather)**.
 2.  Узнайте свой числовой **User ID** в Telegram (например, через бота [@userinfobot](https://t.me/userinfobot)).
-3.  Убедитесь, что на вашем VPS установлены `curl` и `git`:
-    ```bash
-    sudo apt update && sudo apt install -y curl git
-    ```
+3.  Убедитесь, что на вашем VPS установлены `curl` и `git`.
 
 ---
 
