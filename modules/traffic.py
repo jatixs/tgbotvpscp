@@ -3,120 +3,150 @@ import asyncio
 import logging
 import psutil
 from aiogram import F, Dispatcher, types, Bot
-from aiogram.types import KeyboardButton, ReplyKeyboardRemove
+# --- ИЗМЕНЕНО: Добавляем InlineKeyboardMarkup, InlineKeyboardButton ---
+from aiogram.types import KeyboardButton, ReplyKeyboardRemove, InlineKeyboardMarkup, InlineKeyboardButton
+# --------------------------------------------------------------------
 from aiogram.exceptions import TelegramRetryAfter, TelegramBadRequest
+
+# --- Импортируем i18n и config ---
+from core.i18n import I18nFilter, get_user_lang, get_text
+from core import config
+from core.config import TRAFFIC_INTERVAL
+
+# --- Добавляем импорт shared_state ---
+from core import shared_state
+# ------------------------------------
 
 from core.auth import is_allowed, send_access_denied_message
 from core.messaging import delete_previous_message
-from core.shared_state import (
-    LAST_MESSAGE_IDS, TRAFFIC_MESSAGE_IDS, TRAFFIC_PREV,
-    BUTTONS_MAP  # <--- ИЗМЕНЕНИЕ: Добавлен импорт
-)
 from core.utils import format_traffic
-from core.config import TRAFFIC_INTERVAL
 from core.keyboards import get_main_reply_keyboard
 
-BUTTON_TEXT = "📡 Трафик сети"
 
+BUTTON_KEY = "btn_traffic"
 
 def get_button() -> KeyboardButton:
-    return KeyboardButton(text=BUTTON_TEXT)
-
+    return KeyboardButton(text=get_text(BUTTON_KEY, config.DEFAULT_LANGUAGE))
 
 def register_handlers(dp: Dispatcher):
-    dp.message(F.text == BUTTON_TEXT)(traffic_handler)
-
+    dp.message(I18nFilter(BUTTON_KEY))(traffic_handler)
+    # --- ИЗМЕНЕНО: Добавляем обработчик для кнопки "Остановить" ---
+    dp.callback_query(F.data == "stop_traffic")(stop_traffic_handler)
+    # -----------------------------------------------------------
 
 def start_background_tasks(bot: Bot) -> list[asyncio.Task]:
-    """Возвращает фоновую задачу для запуска в main()"""
     task = asyncio.create_task(traffic_monitor(bot), name="TrafficMonitor")
     return [task]
 
-
+# --- ИЗМЕНЕНО: Логика traffic_handler ---
 async def traffic_handler(message: types.Message):
+    """Запускает мониторинг трафика, если он еще не запущен."""
     user_id = message.from_user.id
     chat_id = message.chat.id
+    lang = get_user_lang(user_id)
     command = "traffic"
+
     if not is_allowed(user_id, command):
-        await send_access_denied_message(message.bot, user_id, chat_id, command)
+         await send_access_denied_message(message.bot, user_id, chat_id, command)
+         return
+
+    # Если мониторинг уже идет для этого пользователя, ничего не делаем
+    if user_id in shared_state.TRAFFIC_MESSAGE_IDS:
+        logging.debug(f"Мониторинг трафика уже активен для {user_id}. Игнорируем повторный запуск.")
+        # Можно отправить уведомление, что он уже запущен
+        # await message.reply("Мониторинг уже запущен.")
         return
 
-    # Список всех команд, чтобы очистить LAST_MESSAGE_IDS
-    all_commands_to_delete = [
-        "start", "menu", "manage_users", "reboot_confirm", "generate_vless",
-        "adduser", "notifications_menu", "traffic", "get_id", "fall2ban",
-        "sshlog", "logs", "restart", "selftest", "speedtest", "top",
-        "update", "uptime", "updatexray"
-    ]
+    logging.info(f"Запуск мониторинга трафика для {user_id}")
+    # Удаляем предыдущие сообщения (опционально, можно оставить только удаление traffic)
+    await delete_previous_message(user_id, list(shared_state.LAST_MESSAGE_IDS.get(user_id, {}).keys()), chat_id, message.bot)
 
-    if user_id in TRAFFIC_MESSAGE_IDS:
-        logging.info(f"Остановка мониторинга трафика для {user_id}")
-        try:
-            message_id = TRAFFIC_MESSAGE_IDS.pop(user_id)
-            await message.bot.delete_message(chat_id=chat_id, message_id=message_id)
-        except (TelegramBadRequest, KeyError) as e:
-            logging.warning(
-                f"Не удалось удалить сообщение трафика при остановке: {e}")
+    def get_initial_counters():
+        return psutil.net_io_counters()
 
-        TRAFFIC_PREV.pop(user_id, None)
-        await delete_previous_message(user_id, all_commands_to_delete, chat_id, message.bot)
+    try:
+        counters = await asyncio.to_thread(get_initial_counters)
+        shared_state.TRAFFIC_PREV[user_id] = (counters.bytes_recv, counters.bytes_sent)
 
-        sent_message = await message.answer("✅ Мониторинг трафика остановлен.", reply_markup=ReplyKeyboardRemove())
-
-        # Отправляем новое сообщение с главным меню
-        await message.answer(
-            "🏠 Главное меню:",
-            # <--- ИЗМЕНЕНИЕ: Используем BUTTONS_MAP
-            reply_markup=get_main_reply_keyboard(user_id, BUTTONS_MAP)
+        # Создаем инлайн-кнопку "Остановить"
+        stop_button = InlineKeyboardButton(
+            text=get_text("btn_stop_traffic", lang),
+            callback_data="stop_traffic"
         )
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[[stop_button]])
 
-        LAST_MESSAGE_IDS.setdefault(
-            user_id, {})[command] = sent_message.message_id
+        # Отправляем начальное сообщение
+        msg_text = get_text("traffic_start", lang, interval=TRAFFIC_INTERVAL)
+        sent_message = await message.answer(msg_text, reply_markup=keyboard, parse_mode="HTML")
 
-    else:
-        logging.info(f"Запуск мониторинга трафика для {user_id}")
-        await delete_previous_message(user_id, all_commands_to_delete, chat_id, message.bot)
+        # Сохраняем ID сообщения для обновлений
+        shared_state.TRAFFIC_MESSAGE_IDS[user_id] = sent_message.message_id
+        # Не сохраняем в LAST_MESSAGE_IDS, так как удаление будет через callback
 
-        def get_initial_counters():
-            return psutil.net_io_counters()
+    except Exception as e:
+        logging.error(f"Error starting traffic monitor for {user_id}: {e}")
+        await message.answer(get_text("traffic_start_fail", lang, error=e))
+# --- КОНЕЦ ИЗМЕНЕНИЙ traffic_handler ---
 
+# --- ИЗМЕНЕНО: Добавляем stop_traffic_handler ---
+async def stop_traffic_handler(callback: types.CallbackQuery):
+    """Останавливает мониторинг трафика по нажатию инлайн-кнопки."""
+    user_id = callback.from_user.id
+    chat_id = callback.message.chat.id
+    lang = get_user_lang(user_id)
+
+    logging.info(f"Остановка мониторинга трафика для {user_id} через кнопку.")
+
+    message_id_to_delete = shared_state.TRAFFIC_MESSAGE_IDS.pop(user_id, None)
+    shared_state.TRAFFIC_PREV.pop(user_id, None)
+
+    if message_id_to_delete:
         try:
-            counters = await asyncio.to_thread(get_initial_counters)
-            TRAFFIC_PREV[user_id] = (counters.bytes_recv, counters.bytes_sent)
-            msg_text = (
-                "📡 <b>Мониторинг трафика включен</b>...\n\n<i>Обновление каждые 5 секунд. Нажмите '📡 Трафик сети' еще раз, чтобы остановить.</i>")
-            sent_message = await message.answer(msg_text, parse_mode="HTML")
-            TRAFFIC_MESSAGE_IDS[user_id] = sent_message.message_id
+            await callback.bot.delete_message(chat_id=chat_id, message_id=message_id_to_delete)
+            # Отвечаем на callback, чтобы убрать "часики"
+            await callback.answer(get_text("traffic_stopped_alert", lang))
+        except TelegramBadRequest as e:
+            logging.warning(f"Не удалось удалить сообщение трафика ({message_id_to_delete}) при остановке: {e}")
+            # Отвечаем на callback, даже если не удалось удалить
+            await callback.answer(get_text("traffic_stopped_alert", lang))
         except Exception as e:
-            logging.error(f"Error starting traffic monitor for {user_id}: {e}")
-            await message.answer(f"⚠️ Не удалось запустить мониторинг трафика: {e}")
+            logging.error(f"Ошибка при остановке трафика для {user_id}: {e}")
+            await callback.answer(get_text("error_unexpected", lang), show_alert=True)
+    else:
+        # Если ID сообщения не найден (уже остановлено?)
+        logging.warning(f"Не найден ID сообщения для остановки трафика у {user_id}")
+        await callback.answer(get_text("traffic_stopped_alert", lang)) # Все равно подтверждаем остановку
+# --- КОНЕЦ ИЗМЕНЕНИЙ stop_traffic_handler ---
 
 
 async def traffic_monitor(bot: Bot):
+    """Фоновая задача для обновления сообщения с трафиком."""
     await asyncio.sleep(TRAFFIC_INTERVAL)
     while True:
-        current_users = list(TRAFFIC_MESSAGE_IDS.keys())
+        current_users = list(shared_state.TRAFFIC_MESSAGE_IDS.keys())
         if not current_users:
             await asyncio.sleep(TRAFFIC_INTERVAL)
             continue
 
         for user_id in current_users:
-            if user_id not in TRAFFIC_MESSAGE_IDS:
-                continue
-            message_id = TRAFFIC_MESSAGE_IDS.get(user_id)
+            # Проверяем, существует ли еще ID (могли остановить мониторинг)
+            if user_id not in shared_state.TRAFFIC_MESSAGE_IDS: continue
+            message_id = shared_state.TRAFFIC_MESSAGE_IDS.get(user_id)
             if not message_id:
-                logging.warning(
-                    f"Traffic monitor: Missing message ID for user {user_id}")
-                TRAFFIC_MESSAGE_IDS.pop(user_id, None)
+                # Эта ситуация не должна возникать при правильной работе stop_handler
+                logging.warning(f"Traffic monitor: Missing message ID for user {user_id} despite key existing.")
+                shared_state.TRAFFIC_MESSAGE_IDS.pop(user_id, None)
+                shared_state.TRAFFIC_PREV.pop(user_id, None)
                 continue
+
+            lang = get_user_lang(user_id)
 
             try:
                 def get_traffic_update():
                     counters_now = psutil.net_io_counters()
                     rx_now = counters_now.bytes_recv
                     tx_now = counters_now.bytes_sent
-                    prev_rx, prev_tx = TRAFFIC_PREV.get(
-                        user_id, (rx_now, tx_now))
+                    prev_rx, prev_tx = shared_state.TRAFFIC_PREV.get(user_id, (rx_now, tx_now))
                     rx_delta = max(0, rx_now - prev_rx)
                     tx_delta = max(0, tx_now - prev_tx)
                     rx_speed = rx_delta * 8 / 1024 / 1024 / TRAFFIC_INTERVAL
@@ -124,40 +154,55 @@ async def traffic_monitor(bot: Bot):
                     return rx_now, tx_now, rx_speed, tx_speed
 
                 rx, tx, rx_speed, tx_speed = await asyncio.to_thread(get_traffic_update)
-                TRAFFIC_PREV[user_id] = (rx, tx)
+                shared_state.TRAFFIC_PREV[user_id] = (rx, tx)
 
-                msg_text = (f"📡 Общий трафик:\n"
-                            f"=========================\n"
-                            f"⬇️ RX: {format_traffic(rx)}\n"
-                            f"⬆️ TX: {format_traffic(tx)}\n\n"
-                            f"⚡️ Скорость соединения:\n"
-                            f"=========================\n"
-                            f"⬇️ RX: {rx_speed:.2f} Мбит/с\n"
-                            f"⬆️ TX: {tx_speed:.2f} Мбит/с")
+                # --- ИЗМЕНЕНО: Добавляем кнопку "Остановить" к обновляемому сообщению ---
+                stop_button = InlineKeyboardButton(
+                    text=get_text("btn_stop_traffic", lang),
+                    callback_data="stop_traffic"
+                )
+                keyboard = InlineKeyboardMarkup(inline_keyboard=[[stop_button]])
+                # -----------------------------------------------------------------
 
-                await bot.edit_message_text(chat_id=user_id, message_id=message_id, text=msg_text)
+                msg_text = (f"{get_text('traffic_update_total', lang)}\n"
+                            f"=========================\n"
+                            f"{get_text('traffic_rx', lang, value=format_traffic(rx, lang))}\n"
+                            f"{get_text('traffic_tx', lang, value=format_traffic(tx, lang))}\n\n"
+                            f"{get_text('traffic_update_speed', lang)}\n"
+                            f"=========================\n"
+                            f"{get_text('traffic_speed_rx', lang, speed=rx_speed)}\n"
+                            f"{get_text('traffic_speed_tx', lang, speed=tx_speed)}")
+
+                # --- ИЗМЕНЕНО: Обновляем и текст, и клавиатуру ---
+                await bot.edit_message_text(
+                    chat_id=user_id,
+                    message_id=message_id,
+                    text=msg_text,
+                    reply_markup=keyboard # Передаем клавиатуру
+                )
+                # -----------------------------------------------
 
             except TelegramRetryAfter as e:
-                logging.warning(
-                    f"Traffic Monitor: TelegramRetryAfter for {user_id}: Wait {e.retry_after}s")
+                logging.warning(f"Traffic Monitor: TelegramRetryAfter for {user_id}: Wait {e.retry_after}s")
                 await asyncio.sleep(e.retry_after)
             except TelegramBadRequest as e:
-                if "message is not modified" in str(e):
-                    pass
-                elif "message to edit not found" in str(e) or "chat not found" in str(e):
-                    logging.warning(
-                        f"Traffic Monitor: Message/Chat not found for user {user_id}. Stopping monitor.")
-                    TRAFFIC_MESSAGE_IDS.pop(user_id, None)
-                    TRAFFIC_PREV.pop(user_id, None)
+                # Если сообщение не найдено (например, удалено вручную или через stop_handler),
+                # останавливаем мониторинг для этого пользователя
+                if "message to edit not found" in str(e) or "chat not found" in str(e):
+                    logging.warning(f"Traffic Monitor: Message/Chat not found for user {user_id}. Stopping monitor.")
+                    shared_state.TRAFFIC_MESSAGE_IDS.pop(user_id, None)
+                    shared_state.TRAFFIC_PREV.pop(user_id, None)
+                elif "message is not modified" in str(e):
+                    pass # Игнорируем, если текст не изменился
                 else:
-                    logging.error(
-                        f"Traffic Monitor: Unexpected TelegramBadRequest for {user_id}: {e}")
-                    TRAFFIC_MESSAGE_IDS.pop(user_id, None)
-                    TRAFFIC_PREV.pop(user_id, None)
+                    # Другие ошибки BadRequest - останавливаем мониторинг
+                    logging.error(f"Traffic Monitor: Unexpected TelegramBadRequest for {user_id}: {e}. Stopping monitor.")
+                    shared_state.TRAFFIC_MESSAGE_IDS.pop(user_id, None)
+                    shared_state.TRAFFIC_PREV.pop(user_id, None)
             except Exception as e:
-                logging.error(
-                    f"Traffic Monitor: Critical error updating for {user_id}: {e}")
-                TRAFFIC_MESSAGE_IDS.pop(user_id, None)
-                TRAFFIC_PREV.pop(user_id, None)
+                # Критические ошибки - останавливаем мониторинг
+                logging.error(f"Traffic Monitor: Critical error updating for {user_id}: {e}. Stopping monitor.")
+                shared_state.TRAFFIC_MESSAGE_IDS.pop(user_id, None)
+                shared_state.TRAFFIC_PREV.pop(user_id, None)
 
         await asyncio.sleep(TRAFFIC_INTERVAL)
