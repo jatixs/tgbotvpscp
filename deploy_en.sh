@@ -134,12 +134,27 @@ check_integrity() {
 install_extras() {
     local packages_to_install=()
     if ! command -v fail2ban-client &> /dev/null; then msg_question "Fail2Ban not found. Install? (y/n): " INSTALL_F2B; if [[ "$INSTALL_F2B" =~ ^[Yy]$ ]]; then packages_to_install+=("fail2ban"); else msg_info "Skipping Fail2Ban."; fi; else msg_success "Fail2Ban already installed."; fi
-    if ! command -v speedtest &> /dev/null; then msg_question "Speedtest CLI not found. Install? (y/n): " INSTALL_SPEEDTEST; if [[ "$INSTALL_SPEEDTEST" =~ ^[Yy]$ ]]; then packages_to_install+=("speedtest-cli"); else msg_info "Skipping Speedtest CLI."; fi; else msg_success "Speedtest CLI already installed."; fi
+    # Remove speedtest-cli check
+
+    # Add jq check and installation
+    if ! command -v jq &> /dev/null; then
+        msg_warning "Utility 'jq' not found (needed for Cloudflare Speedtest)."
+        msg_question "Install 'jq'? (y/n): " INSTALL_JQ
+        if [[ "$INSTALL_JQ" =~ ^[Yy]$ ]]; then
+            packages_to_install+=("jq")
+        else
+            msg_warning "Skipping 'jq' installation. Speedtest might not work."
+        fi
+    else
+        msg_success "'jq' is already installed."
+    fi
+    
     if [ ${#packages_to_install[@]} -gt 0 ]; then
         msg_info "Installing additional packages: ${packages_to_install[*]}"
         run_with_spinner "Updating package list" sudo apt-get update -y
         run_with_spinner "Installing packages" sudo DEBIAN_FRONTEND=noninteractive apt-get install -y "${packages_to_install[@]}"; if [ $? -ne 0 ]; then msg_error "Error installing additional packages."; exit 1; fi
         if [[ " ${packages_to_install[*]} " =~ " fail2ban " ]]; then sudo systemctl enable fail2ban &> /dev/null; sudo systemctl start fail2ban &> /dev/null; msg_success "Fail2Ban installed and started."; fi
+        if [[ " ${packages_to_install[*]} " =~ " jq " ]]; then msg_success "'jq' installed."; fi
         msg_success "Additional packages installed."
     fi
 }
@@ -148,7 +163,7 @@ common_install_steps() {
     msg_info "1. Updating packages and installing basic dependencies..."
     run_with_spinner "Updating package list" sudo apt-get update -y || { msg_error "Failed to update packages"; exit 1; }
     run_with_spinner "Installing dependencies (python3, pip, venv, git, curl, wget, sudo)" sudo DEBIAN_FRONTEND=noninteractive apt-get install -y python3 python3-pip python3-venv git curl wget sudo || { msg_error "Failed to install basic dependencies"; exit 1; }
-    install_extras
+    install_extras # Now install_extras will install jq instead of speedtest-cli
 }
 install_logic() {
     local mode=$1; local branch_to_use=$2
@@ -173,7 +188,12 @@ install_logic() {
     if [ "$mode" == "root" ]; then msg_info "7. Configuring sudo (root)..."; F="/etc/sudoers.d/98-${SERVICE_NAME}-root"; sudo tee ${F} > /dev/null <<< $'root ALL=(ALL) NOPASSWD: /bin/systemctl restart tg-bot.service\nroot ALL=(ALL) NOPASSWD: /bin/systemctl restart tg-watchdog.service\nroot ALL=(ALL) NOPASSWD: /sbin/reboot'; sudo chmod 440 ${F};
     elif [ "$mode" == "secure" ]; then F="/etc/sudoers.d/99-${WATCHDOG_SERVICE_NAME}-restart"; sudo tee ${F} > /dev/null <<< $'Defaults:tgbot !requiretty\ntgbot ALL=(root) NOPASSWD: /bin/systemctl restart tg-bot.service'; sudo chmod 440 ${F}; msg_info "7. Configuring sudo (secure)..."; fi
     create_and_start_service "${SERVICE_NAME}" "${BOT_INSTALL_PATH}/bot.py" "${mode}" "Telegram Bot"; create_and_start_service "${WATCHDOG_SERVICE_NAME}" "${BOT_INSTALL_PATH}/watchdog.py" "root" "Watchdog"
-    local ip=$(curl -s 4.ipinfo.io/ip || echo "YOUR_IP"); echo ""; echo "---"; msg_success "Installation complete!"; msg_info "IP: ${ip}"; echo "---"
+
+    # --- FIX: Get IP address ---
+    local ip=$(curl -s --connect-timeout 5 ipinfo.io/ip || echo "Could not determine")
+    # --- END FIX ---
+    
+    echo ""; echo "---"; msg_success "Installation complete!"; msg_info "IP: ${ip}"; echo "---"
 }
 install_secure() { echo -e "\n${C_BOLD}=== Secure Installation (branch: ${GIT_BRANCH}) ===${C_RESET}"; common_install_steps; install_logic "secure" "${GIT_BRANCH}"; }
 install_root() { echo -e "\n${C_BOLD}=== Root Installation (branch: ${GIT_BRANCH}) ===${C_RESET}"; common_install_steps; install_logic "root" "${GIT_BRANCH}"; }
