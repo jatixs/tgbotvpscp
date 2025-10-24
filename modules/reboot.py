@@ -11,7 +11,8 @@ from core.i18n import _, I18nFilter, get_user_lang
 from core import config
 # ----------------------------------------
 
-from core.auth import is_allowed, send_access_denied_message # Используем send_access_denied_message, т.к. текст там общий
+# Используем send_access_denied_message, т.к. текст там общий
+from core.auth import is_allowed, send_access_denied_message
 from core.messaging import delete_previous_message
 from core.shared_state import LAST_MESSAGE_IDS
 from core.config import REBOOT_FLAG_FILE, INSTALL_MODE
@@ -21,16 +22,19 @@ from core.keyboards import get_reboot_confirmation_keyboard
 BUTTON_KEY = "btn_reboot"
 # --------------------------------
 
+
 def get_button() -> KeyboardButton:
     # --- ИЗМЕНЕНО: Используем i18n ---
     return KeyboardButton(text=_(BUTTON_KEY, config.DEFAULT_LANGUAGE))
     # --------------------------------
+
 
 def register_handlers(dp: Dispatcher):
     # --- ИЗМЕНЕНО: Используем I18nFilter ---
     dp.message(I18nFilter(BUTTON_KEY))(reboot_confirm_handler)
     # --------------------------------------
     dp.callback_query(F.data == "reboot")(reboot_handler)
+
 
 async def reboot_confirm_handler(message: types.Message):
     user_id = message.from_user.id
@@ -54,6 +58,7 @@ async def reboot_confirm_handler(message: types.Message):
     # ----------------------------------------------
     LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = sent_message.message_id
 
+
 async def reboot_handler(callback: types.CallbackQuery):
     user_id = callback.from_user.id
     chat_id = callback.message.chat.id
@@ -65,11 +70,11 @@ async def reboot_handler(callback: types.CallbackQuery):
 
     if not is_allowed(user_id, command):
         try:
-             # --- ИЗМЕНЕНО: Используем i18n ---
-             await callback.answer(_("access_denied_not_root", lang), show_alert=True)
-             # --------------------------------
+            # --- ИЗМЕНЕНО: Используем i18n ---
+            await callback.answer(_("access_denied_not_root", lang), show_alert=True)
+            # --------------------------------
         except TelegramBadRequest:
-             pass
+            pass
         return
 
     try:
@@ -82,7 +87,8 @@ async def reboot_handler(callback: types.CallbackQuery):
         )
         # --------------------------------
     except TelegramBadRequest:
-        logging.warning("Не удалось отредактировать сообщение о перезагрузке (возможно, удалено).")
+        logging.warning(
+            "Не удалось отредактировать сообщение о перезагрузке (возможно, удалено).")
 
     try:
         with open(REBOOT_FLAG_FILE, "w") as f:
@@ -106,4 +112,5 @@ async def reboot_handler(callback: types.CallbackQuery):
             )
             # --------------------------------
         except Exception as send_e:
-            logging.error(f"Не удалось отправить сообщение об ошибке перезагрузки: {send_e}")
+            logging.error(
+                f"Не удалось отправить сообщение об ошибке перезагрузки: {send_e}")
