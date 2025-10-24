@@ -1,4 +1,4 @@
-# /opt/tg-bot/modules/xray.py
+# /opt-tg-bot/modules/xray.py
 import asyncio
 import re
 import logging
@@ -71,40 +71,38 @@ async def updatexray_handler(message: types.Message, state: FSMContext):
         version_cmd = ""
 
         if client == "amnezia":
-            update_cmd = (
-                f'docker exec {container_name} /bin/bash -c "'
-                'rm -f Xray-linux-64.zip xray geoip.dat geosite.dat && '
-                'wget -q -O Xray-linux-64.zip https://github.com/XTLS/Xray-core/releases/latest/download/Xray-linux-64.zip && '
-                'wget -q -O geoip.dat https://github.com/v2fly/geoip/releases/latest/download/geoip.dat && '
-                'wget -q -O geosite.dat https://github.com/v2fly/domain-list-community/releases/latest/download/dlc.dat && '
-                'unzip -o Xray-linux-64.zip xray && '
-                'cp xray /usr/bin/xray && '
-                'cp geoip.dat /usr/bin/geoip.dat && '
-                'cp geosite.dat /usr/bin/geosite.dat && '
-                'rm Xray-linux-64.zip xray geoip.dat geosite.dat" && '
-                f'docker restart {container_name}'
-            )
-            version_cmd = f"docker exec {container_name} /usr/bin/xray version"
+             update_cmd = (
+                 f'docker exec {container_name} /bin/sh -c "'
+                 'rm -f Xray-linux-64.zip xray && '
+                 'wget -q -O Xray-linux-64.zip https://github.com/XTLS/Xray-core/releases/latest/download/Xray-linux-64.zip && '
+                 'unzip -o Xray-linux-64.zip xray && '
+                 'cp xray /usr/bin/xray && '
+                 'rm Xray-linux-64.zip xray'
+                 '" && '
+                 f'docker restart {container_name}'
+             )
+             version_cmd = f"docker exec {container_name} /usr/bin/xray version"
 
+        # --- ИСПРАВЛЕНИЕ ЛОГИКИ MARZBAN (убраны geoip/geosite и XRAY_ASSETS_PATH) ---
         elif client == "marzban":
              check_deps_cmd = "command -v unzip >/dev/null 2>&1 || (DEBIAN_FRONTEND=noninteractive apt-get update -y && apt-get install -y unzip wget)"
              download_unzip_cmd = (
                 "mkdir -p /var/lib/marzban/xray-core && "
                 "cd /var/lib/marzban/xray-core && "
+                # Убраны wget для geoip.dat и geosite.dat
                 "wget -q -O Xray-linux-64.zip https://github.com/XTLS/Xray-core/releases/latest/download/Xray-linux-64.zip && "
-                "wget -q -O geoip.dat https://github.com/v2fly/geoip/releases/latest/download/geoip.dat && "
-                "wget -q -O geosite.dat https://github.com/v2fly/domain-list-community/releases/latest/download/dlc.dat && "
                 "unzip -o Xray-linux-64.zip xray && "
                 "rm Xray-linux-64.zip"
             )
              env_file = "/opt/marzban/.env"
+             # Убрана настройка XRAY_ASSETS_PATH
              update_env_cmd = (
-                 f"if ! grep -q '^XRAY_EXECUTABLE_PATH=' {env_file}; then echo 'XRAY_EXECUTABLE_PATH=/var/lib/marzban/xray-core/xray' >> {env_file}; else sed -i 's|^XRAY_EXECUTABLE_PATH=.*|XRAY_EXECUTABLE_PATH=/var/lib/marzban/xray-core/xray|' {env_file}; fi && "
-                 f"if ! grep -q '^XRAY_ASSETS_PATH=' {env_file}; then echo 'XRAY_ASSETS_PATH=/var/lib/marzban/xray-core' >> {env_file}; else sed -i 's|^XRAY_ASSETS_PATH=.*|XRAY_ASSETS_PATH=/var/lib/marzban/xray-core|' {env_file}; fi"
+                 f"if ! grep -q '^XRAY_EXECUTABLE_PATH=' {env_file}; then echo 'XRAY_EXECUTABLE_PATH=/var/lib/marzban/xray-core/xray' >> {env_file}; else sed -i 's|^XRAY_EXECUTABLE_PATH=.*|XRAY_EXECUTABLE_PATH=/var/lib/marzban/xray-core/xray|' {env_file}; fi"
              )
              restart_cmd = f"docker restart {container_name}"
              update_cmd = f"{check_deps_cmd} && {download_unzip_cmd} && {update_env_cmd} && {restart_cmd}"
              version_cmd = f'docker exec {container_name} /var/lib/marzban/xray-core/xray version'
+        # --- КОНЕЦ ИСПРАВЛЕНИЯ ---
 
 
         process_update = await asyncio.create_subprocess_shell(update_cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
@@ -115,7 +113,7 @@ async def updatexray_handler(message: types.Message, state: FSMContext):
             raise Exception(_("xray_update_error", lang, client=client_name_display, error=escape_html(error_output)))
 
         process_version = await asyncio.create_subprocess_shell(version_cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
-        stdout_version, stderr_version = await process_version.communicate() # Используем другое имя
+        stdout_version, stderr_version = await process_version.communicate()
         version_output = stdout_version.decode('utf-8', 'ignore')
         version_match = re.search(r'Xray\s+([\d\.]+)', version_output)
         if version_match:
@@ -126,7 +124,6 @@ async def updatexray_handler(message: types.Message, state: FSMContext):
 
     except Exception as e:
         logging.error(f"Ошибка в updatexray_handler: {e}")
-        # Теперь _ должна быть доступна здесь
         error_msg = _("xray_error_generic", lang, error=str(e))
         try:
              await message.bot.edit_message_text(error_msg , chat_id=chat_id, message_id=sent_msg.message_id, parse_mode="HTML")
@@ -135,6 +132,6 @@ async def updatexray_handler(message: types.Message, state: FSMContext):
                   logging.warning("UpdateXray: Failed to edit error message, likely deleted.")
                   await message.answer(error_msg, parse_mode="HTML")
              else:
-                  raise # Перевыбрасываем другие ошибки BadRequest
+                  raise
     finally:
         await state.clear()

@@ -180,9 +180,11 @@ STRINGS = {
         "selftest_results_body": "✅ Бот работает\n📊 Процессор: <b>{cpu:.1f}%</b>\n💾 ОЗУ: <b>{mem:.1f}%</b>\n💽 ПЗУ: <b>{disk:.1f}%</b>\n⏱ Время работы: <b>{uptime}</b>\n{inet_status}\n⌛ Задержка (8.8.8.8): <b>{ping} мс</b>\n🌐 Внешний IP: <code>{ip}</code>\n📡 Трафик ⬇ <b>{rx}</b> / ⬆ <b>{tx}</b>",
 
         # modules/speedtest.py
-        "speedtest_start": "🚀 Запуск speedtest... Это может занять до минуты.",
-        "speedtest_results": "🚀 <b>Speedtest Результаты:</b>\n\n⬇️ <b>Скачивание:</b> {dl:.2f} Мбит/с\n⬆️ <b>Загрузка:</b> {ul:.2f} Мбит/с\n⏱ <b>Пинг:</b> {ping} мс\n\n🏢 <b>Сервер:</b> {server} ({location})\n🔗 <b>Подробнее:</b> {url}",
-        "speedtest_fail": "❌ Ошибка при запуске speedtest:\n<pre>{error}</pre>",
+        # --- ИСПРАВЛЕНИЕ: Тексты для Cloudflare ---
+        "speedtest_start": "🚀 Запуск speedtest (Cloudflare)... Это может занять 15-20 секунд.",
+        "speedtest_results": "🚀 <b>Speedtest Результаты (Cloudflare):</b>\n\n⬇️ <b>Скачивание:</b> {dl:.2f} Мбит/с\n⬆️ <b>Загрузка:</b> {ul:.2f} Мбит/с\n⏱ <b>Пинг:</b> {ping} мс\n\n🌍 <b>Страна:</b> {location}\n🖥️ <b>Дата-центр:</b> {colo}",
+        "speedtest_fail": "❌ Ошибка при запуске speedtest (Cloudflare):\n<pre>{error}</pre>",
+        # --- КОНЕЦ ИСПРАВЛЕНИЯ ---
 
         # modules/sshlog.py
         "sshlog_searching": "🔍 Ищу последние 10 событий SSH (вход/провал)...",
@@ -452,9 +454,11 @@ STRINGS = {
         "selftest_results_body": "✅ Bot is running\n📊 CPU: <b>{cpu:.1f}%</b>\n💾 RAM: <b>{mem:.1f}%</b>\n💽 Disk: <b>{disk:.1f}%</b>\n⏱ Uptime: <b>{uptime}</b>\n{inet_status}\n⌛ Ping (8.8.8.8): <b>{ping} ms</b>\n🌐 External IP: <code>{ip}</code>\n📡 Traffic ⬇ <b>{rx}</b> / ⬆ <b>{tx}</b>",
 
         # modules/speedtest.py
-        "speedtest_start": "🚀 Starting speedtest... This may take up to a minute.",
-        "speedtest_results": "🚀 <b>Speedtest Results:</b>\n\n⬇️ <b>Download:</b> {dl:.2f} Mbps\n⬆️ <b>Upload:</b> {ul:.2f} Mbps\n⏱ <b>Ping:</b> {ping} ms\n\n🏢 <b>Server:</b> {server} ({location})\n🔗 <b>Details:</b> {url}",
-        "speedtest_fail": "❌ Error running speedtest:\n<pre>{error}</pre>",
+        # --- ИСПРАВЛЕНИЕ: Тексты для Cloudflare (EN) ---
+        "speedtest_start": "🚀 Starting speedtest (Cloudflare)... This may take 15-20 seconds.",
+        "speedtest_results": "🚀 <b>Speedtest Results (Cloudflare):</b>\n\n⬇️ <b>Download:</b> {dl:.2f} Mbps\n⬆️ <b>Upload:</b> {ul:.2f} Mbps\n⏱ <b>Ping:</b> {ping} ms\n\n🌍 <b>Country:</b> {location}\n🖥️ <b>Data Center:</b> {colo}",
+        "speedtest_fail": "❌ Error running speedtest (Cloudflare):\n<pre>{error}</pre>",
+        # --- КОНЕЦ ИСПРАВЛЕНИЯ ---
 
         # modules/sshlog.py
         "sshlog_searching": "🔍 Searching for last 10 SSH events (login/fail)...",

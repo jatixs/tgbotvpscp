@@ -1,4 +1,4 @@
-# /opt/tg-bot/modules/speedtest.py
+# /opt-tg-bot/modules/speedtest.py
 import asyncio
 import json
 import logging
@@ -29,13 +29,32 @@ def register_handlers(dp: Dispatcher):
     dp.message(I18nFilter(BUTTON_KEY))(speedtest_handler)
     # --------------------------------------
 
+# --- ИСПРАВЛЕНИЕ: Полная замена Ookla на Cloudflare ---
+async def run_speedtest_command(cmd: str) -> str:
+    """Вспомогательная функция для выполнения команды speedtest."""
+    process = await asyncio.create_subprocess_shell(
+        cmd,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE
+    )
+    stdout, stderr = await process.communicate()
+    
+    if process.returncode != 0:
+        error_output = stderr.decode('utf-8', errors='ignore') or stdout.decode('utf-8', errors='ignore')
+        if not error_output:
+            error_output = f"Command failed with code {process.returncode}"
+        logging.error(f"Ошибка выполнения speedtest команды '{cmd}': {error_output}")
+        raise Exception(error_output)
+        
+    return stdout.decode('utf-8', errors='ignore').strip()
+
 async def speedtest_handler(message: types.Message):
     user_id = message.from_user.id
     chat_id = message.chat.id
     # --- ИЗМЕНЕНО: Получаем язык ---
     lang = get_user_lang(user_id)
     # ------------------------------
-    command = "speedtest" # Имя команды оставляем
+    command = "speedtest"
     if not is_allowed(user_id, command):
         await send_access_denied_message(message.bot, user_id, chat_id, command)
         return
@@ -43,53 +62,68 @@ async def speedtest_handler(message: types.Message):
     await message.bot.send_chat_action(chat_id=chat_id, action="typing")
     await delete_previous_message(user_id, command, chat_id, message.bot)
     
-    # --- ИЗМЕНЕНО: Используем i18n ---
+    # --- ИЗМЕНЕНО: Используем i18n (ключ 'speedtest_start' будет обновлен) ---
     sent_message = await message.answer(_("speedtest_start", lang))
     # --------------------------------
     LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = sent_message.message_id
 
-    cmd = "speedtest --accept-license --accept-gdpr --format=json"
-    process = await asyncio.create_subprocess_shell(cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
-    stdout, stderr = await process.communicate()
+    try:
+        # 1. Получаем метаданные (Пинг и Расположение)
+        # Используем jq для парсинга, т.к. вывод curl может содержать заголовки
+        meta_cmd = "curl -s --connect-timeout 5 https://speed.cloudflare.com/meta | jq -c '{ping: .clientTcpRtt, location: .clientCountry, colo: .colo}'"
+        meta_output = await run_speedtest_command(meta_cmd)
+        meta_data = json.loads(meta_output)
+        
+        ping_latency = meta_data.get("ping", "N/A")
+        location = meta_data.get("location", "N/A")
+        colo = meta_data.get("colo", "N/A")
 
-    await delete_previous_message(user_id, command, chat_id, message.bot)
+        # 2. Тест скачивания (100MB)
+        dl_cmd = "curl -s --connect-timeout 15 -w \"%{speed_download}\" https://speed.cloudflare.com/__down?bytes=100000000 -o /dev/null"
+        dl_output = await run_speedtest_command(dl_cmd)
+        # Вывод в Байтах/сек. Переводим в Мбит/с ( * 8 / 1000 / 1000 )
+        download_speed = (float(dl_output) * 8) / 1_000_000
 
-    if process.returncode == 0:
-        output = stdout.decode('utf-8', errors='ignore')
-        try:
-            data = json.loads(output)
-            download_speed = data.get("download", {}).get("bandwidth", 0) / 125000
-            upload_speed = data.get("upload", {}).get("bandwidth", 0) / 125000
-            ping_latency = data.get("ping", {}).get("latency", "N/A")
-            server_name = data.get("server", {}).get("name", "N/A")
-            server_location = data.get("server", {}).get("location", "N/A")
-            result_url = data.get("result", {}).get("url", "N/A")
+        # 3. Тест загрузки (25MB)
+        ul_cmd = "curl -s --connect-timeout 15 -w \"%{speed_upload}\" -X POST --data-binary '@/dev/zero' 'https://speed.cloudflare.com/__up?bytes=25000000' -o /dev/null"
+        ul_output = await run_speedtest_command(ul_cmd)
+        # Вывод в Байтах/сек. Переводим в Мбит/с
+        upload_speed = (float(ul_output) * 8) / 1_000_000
 
-            # --- ИЗМЕНЕНО: Используем i18n ---
-            response_text = _("speedtest_results", lang, 
-                              dl=download_speed, 
-                              ul=upload_speed, 
-                              ping=ping_latency, 
-                              server=escape_html(server_name), 
-                              location=escape_html(server_location), 
-                              url=escape_html(result_url))
-            # --------------------------------
-        except json.JSONDecodeError as e:
-            logging.error(f"Ошибка парсинга JSON от speedtest: {e}\nOutput: {output[:500]}")
-            # --- ИЗМЕНЕНО: Используем i18n ---
-            response_text = _("error_parsing_json", lang, output=escape_html(output[:1000]))
-            # --------------------------------
-        except Exception as e:
-             logging.error(f"Неожиданная ошибка обработки speedtest: {e}")
-             # --- ИЗМЕНЕНО: Используем i18n ---
-             response_text = _("error_unexpected_json_parsing", lang, error=escape_html(str(e)))
-             # --------------------------------
-    else:
-        error_output = stderr.decode('utf-8', errors='ignore') or stdout.decode('utf-8', errors='ignore')
-        logging.error(f"Ошибка выполнения speedtest. Код: {process.returncode}. Вывод: {error_output}")
+        # --- ИЗМЕНЕНО: Используем i18n (ключ 'speedtest_results' будет обновлен) ---
+        response_text = _("speedtest_results", lang, 
+                          dl=download_speed, 
+                          ul=upload_speed, 
+                          ping=ping_latency, 
+                          location=escape_html(location), 
+                          colo=escape_html(colo))
+        # --------------------------------
+        
+    except json.JSONDecodeError as e:
+        logging.error(f"Ошибка парсинга JSON от speedtest (Cloudflare meta): {e}\nOutput: {meta_output[:500]}")
         # --- ИЗМЕНЕНО: Используем i18n ---
+        response_text = _("error_parsing_json", lang, output=escape_html(meta_output[:1000]))
+        # --------------------------------
+    except Exception as e:
+        error_output = str(e)
+        if "command not found" in error_output.lower() and "jq" in error_output.lower():
+             error_output = "Команда 'jq' не найдена. Пожалуйста, установите 'jq' на сервере (sudo apt install jq) или попросите администратора."
+        
+        logging.error(f"Ошибка выполнения speedtest (Cloudflare). Вывод: {error_output}")
+        # --- ИЗМЕНЕНО: Используем i18n (ключ 'speedtest_fail' будет обновлен) ---
         response_text = _("speedtest_fail", lang, error=escape_html(error_output))
         # --------------------------------
 
-    sent_message_final = await message.answer(response_text, parse_mode="HTML", disable_web_page_preview=True)
-    LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = sent_message_final.message_id
+    try:
+        await message.bot.edit_message_text(
+            response_text, 
+            chat_id=chat_id, 
+            message_id=sent_message.message_id, 
+            parse_mode="HTML", 
+            disable_web_page_preview=True
+        )
+    except Exception:
+        # Если не удалось отредактировать (например, сообщение удалено), отправляем новое
+        sent_message_final = await message.answer(response_text, parse_mode="HTML", disable_web_page_preview=True)
+        LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = sent_message_final.message_id
+# --- КОНЕЦ ИСПРАВЛЕНИЯ ---
