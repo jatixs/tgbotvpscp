@@ -1,103 +1,91 @@
 # /opt/tg-bot/watchdog.py
-# --- ОРИГИНАЛЬНАЯ РАБОЧАЯ ВЕРСИЯ ---
 import os
 import time
 import subprocess
 import requests
 import logging
-import re  # Добавлен re для парсинга статуса
+import logging.handlers
+import re
 import json
 import sys
+from datetime import datetime, timedelta
+
+# Добавляем путь к core
+BASE_DIR_WATCHDOG = os.path.dirname(__file__)
+CORE_DIR_WATCHDOG = os.path.join(BASE_DIR_WATCHDOG, "core")
+if CORE_DIR_WATCHDOG not in sys.path:
+    sys.path.insert(0, BASE_DIR_WATCHDOG)
+
+try:
+    from core import config
+    from core.i18n import get_text
+    from core.utils import escape_html
+except ImportError as e:
+    print(f"FATAL: Could not import core modules: {e}")
+    print("Ensure watchdog.py is run from the correct directory (/opt/tg-bot) and venv.")
+    sys.exit(1)
 
 # --- Настройки ---
-DOTENV_PATH = os.path.join(os.path.dirname(__file__), '.env')
-
-
-def load_env(dotenv_path):
-    env_vars = {}
-    try:
-        with open(dotenv_path, 'r') as f:
-            for line in f:
-                line = line.strip()
-                if line and not line.startswith('#') and '=' in line:
-                    key, value = line.split('=', 1)
-                    # Убираем кавычки, если они есть
-                    if value.startswith('"') and value.endswith('"'):
-                        value = value[1:-1]
-                    elif value.startswith("'") and value.endswith("'"):
-                        value = value[1:-1]
-                    env_vars[key.strip()] = value.strip()
-    except FileNotFoundError:
-        print(f"ERROR: .env file not found at {dotenv_path}")
-    except Exception as e:
-        print(f"ERROR: Could not read .env file: {e}")
-    return env_vars
-
-
-env_config = load_env(DOTENV_PATH)
-
-ALERT_BOT_TOKEN = env_config.get("TG_BOT_TOKEN", None)
-ALERT_ADMIN_ID = env_config.get("TG_ADMIN_ID", None)
+ALERT_BOT_TOKEN = config.TOKEN
+ALERT_ADMIN_ID = config.ADMIN_USER_ID
 BOT_SERVICE_NAME = "tg-bot.service"
-# Используем имя из .env или имя сервиса
-BOT_NAME = env_config.get("TG_BOT_NAME", BOT_SERVICE_NAME)
+WATCHDOG_SERVICE_NAME = "tg-watchdog.service"
 
-BASE_DIR = os.path.dirname(__file__)
-CONFIG_DIR = os.path.join(BASE_DIR, "config")
-RESTART_FLAG_FILE = os.path.join(CONFIG_DIR, "restart_flag.txt")
+dotenv_path = os.path.join(BASE_DIR_WATCHDOG, '.env')
+env_vars = {}
+try:
+    with open(dotenv_path, 'r', encoding='utf-8') as f:
+        for line in f:
+            line = line.strip()
+            if line and not line.startswith('#') and '=' in line:
+                key, value = line.split('=', 1)
+                if value.startswith('"') and value.endswith('"'): value = value[1:-1]
+                elif value.startswith("'") and value.endswith("'"): value = value[1:-1]
+                env_vars[key.strip()] = value.strip()
+except Exception as e:
+    print(f"WARNING: Could not read .env file for TG_BOT_NAME: {e}")
+BOT_NAME = env_vars.get("TG_BOT_NAME", BOT_SERVICE_NAME)
 
-BOT_LOG_FILE = os.path.join(BASE_DIR, "logs", "bot.log")
+CONFIG_DIR = config.CONFIG_DIR
+RESTART_FLAG_FILE = config.RESTART_FLAG_FILE
+BOT_LOG_DIR = config.BOT_LOG_DIR
+WATCHDOG_LOG_DIR = config.WATCHDOG_LOG_DIR
 
-CHECK_INTERVAL_SECONDS = 5  # Интервал проверки статуса
-# Кулдаун для *повторных* алертов о сбое рестарта и т.д.
+CHECK_INTERVAL_SECONDS = 5
 ALERT_COOLDOWN_SECONDS = 300
 
-LOG_FILE = os.path.join(os.path.dirname(__file__), "logs", "watchdog.log")
-os.makedirs(os.path.dirname(LOG_FILE), exist_ok=True)
-
-logging.basicConfig(
-    level=logging.INFO,
-    filename=LOG_FILE,
-    format='%(asctime)s - %(levelname)s - %(message)s',
-    encoding='utf-8')
-console_handler = logging.StreamHandler()
-console_handler.setLevel(logging.INFO)
-console_handler.setFormatter(logging.Formatter(
-    '%(asctime)s - %(levelname)s - %(message)s'))
-logging.getLogger().addHandler(console_handler)
+# Настройка логирования для watchdog
+config.setup_logging(WATCHDOG_LOG_DIR, "watchdog")
 
 last_alert_times = {}
-# Флаг для отслеживания предыдущего нерабочего состояния
 bot_service_was_down_or_activating = False
 status_alert_message_id = None
-# Храним последнее *отправленное* состояние ('down', 'activating',
-# 'active_ok', 'active_error')
 current_reported_state = None
+WD_LANG = config.DEFAULT_LANGUAGE
 
-
-def send_or_edit_telegram_alert(message, alert_type, message_id_to_edit=None):
+def send_or_edit_telegram_alert(message_key: str, alert_type: str, message_id_to_edit=None, **kwargs):
+    """Отправляет или редактирует сообщение, используя ключ i18n и WD_LANG."""
     global last_alert_times, status_alert_message_id
 
     current_time = time.time()
-    # Кулдаун применяется только к определенным типам (например, ошибки),
-    # но не к основным статусам Down/Activating/Active
-    apply_cooldown = alert_type in [
-        "bot_restart_fail",
-        "watchdog_config_error",
-        "watchdog_error",
-        "bot_service_error_on_start"]
-    if apply_cooldown and current_time - \
-            last_alert_times.get(alert_type, 0) < ALERT_COOLDOWN_SECONDS:
-        logging.warning(
-            f"Активен кулдаун для '{alert_type}', пропуск уведомления.")
-        return message_id_to_edit  # Возвращаем старый ID, если он был
+    apply_cooldown = alert_type in ["bot_restart_fail", "watchdog_config_error", "watchdog_error", "bot_service_error_on_start"]
+    if apply_cooldown and current_time - last_alert_times.get(alert_type, 0) < ALERT_COOLDOWN_SECONDS:
+        logging.warning(f"Активен кулдаун для '{alert_type}', пропуск уведомления.")
+        return message_id_to_edit
 
-    text_to_send = f"🚨 <b>Система оповещений (Alert):</b>\n\n{message}"
+    # --- ИСПРАВЛЕНО: Используем WD_LANG для всех i18n-строк ---
+    alert_prefix = get_text("watchdog_alert_prefix", WD_LANG)
+    if not message_key:
+        logging.error(f"send_or_edit_telegram_alert вызван с пустым message_key для alert_type '{alert_type}'")
+        message_body = get_text("error_internal", WD_LANG)
+    else:
+        message_body = get_text(message_key, WD_LANG, **kwargs)
+    text_to_send = f"{alert_prefix}\n\n{message_body}"
+    # --------------------------------------------------------
 
     message_sent_or_edited = False
-    new_message_id = message_id_to_edit  # По умолчанию сохраняем старый
+    new_message_id = message_id_to_edit
 
-    # 1. Попытка Редактирования (если есть ID)
     if message_id_to_edit:
         url = f"https://api.telegram.org/bot{ALERT_BOT_TOKEN}/editMessageText"
         payload = {
@@ -108,29 +96,32 @@ def send_or_edit_telegram_alert(message, alert_type, message_id_to_edit=None):
         }
         try:
             response = requests.post(url, data=payload, timeout=10)
+            response_data = {}
+            try:
+                response_data = response.json()
+            except json.JSONDecodeError:
+                logging.warning(f"Не удалось декодировать JSON из ответа Telegram (edit): {response.text}")
+
             if response.status_code == 200:
-                logging.info(
-                    f"Telegram-сообщение ID {message_id_to_edit} успешно отредактировано (тип '{alert_type}').")
+                logging.info(f"Telegram-сообщение ID {message_id_to_edit} успешно отредактировано (тип '{alert_type}').")
                 message_sent_or_edited = True
-                if apply_cooldown:
-                    last_alert_times[alert_type] = current_time
-            elif response.status_code == 400 and "message is not modified" in response.text:
-                logging.debug(
-                    f"Сообщение ID {message_id_to_edit} не изменено (текст совпадает).")
-                message_sent_or_edited = True  # Считаем успешным, т.к. состояние актуально
+                if apply_cooldown: last_alert_times[alert_type] = current_time
+            elif response.status_code == 400 and "message is not modified" in response_data.get("description", "").lower():
+                 logging.debug(f"Сообщение ID {message_id_to_edit} не изменено (текст совпадает).")
+                 message_sent_or_edited = True
             else:
-                logging.warning(
-                    f"Не удалось отредактировать сообщение ID {message_id_to_edit}. Статус: {response.status_code}, Ответ: {response.text}. Попытка отправить новое.")
+                logging.warning(f"Не удалось отредактировать сообщение ID {message_id_to_edit}. Статус: {response.status_code}, Ответ: {response.text}. Попытка отправить новое.")
                 status_alert_message_id = None
                 new_message_id = None
+        except requests.exceptions.RequestException as e:
+            logging.error(f"Ошибка сети при редактировании Telegram-сообщения ID {message_id_to_edit}: {e}. Попытка отправить новое.")
+            status_alert_message_id = None
+            new_message_id = None
         except Exception as e:
-            logging.error(
-                f"Исключение при редактировании Telegram-сообщения ID {message_id_to_edit}: {e}. Попытка отправить новое.")
+            logging.error(f"Неожиданное исключение при редактировании Telegram-сообщения ID {message_id_to_edit}: {e}. Попытка отправить новое.")
             status_alert_message_id = None
             new_message_id = None
 
-    # 2. Отправка Нового Сообщения (если редактирование не удалось или не
-    # требовалось)
     if not message_sent_or_edited:
         url = f"https://api.telegram.org/bot{ALERT_BOT_TOKEN}/sendMessage"
         payload = {
@@ -142,41 +133,43 @@ def send_or_edit_telegram_alert(message, alert_type, message_id_to_edit=None):
             response = requests.post(url, data=payload, timeout=10)
             if response.status_code == 200:
                 sent_message_data = response.json()
-                new_message_id = sent_message_data.get(
-                    'result', {}).get('message_id')
-                logging.info(
-                    f"Telegram-оповещение '{alert_type}' успешно отправлено (новое сообщение ID {new_message_id}).")
-                if apply_cooldown:
-                    last_alert_times[alert_type] = current_time
+                new_message_id = sent_message_data.get('result', {}).get('message_id')
+                logging.info(f"Telegram-оповещение '{alert_type}' успешно отправлено (новое сообщение ID {new_message_id}).")
+                if apply_cooldown: last_alert_times[alert_type] = current_time
             else:
-                logging.error(
-                    f"Не удалось отправить Telegram-оповещение '{alert_type}'. Статус: {response.status_code}, Ответ: {response.text}")
-                new_message_id = None  # Не удалось отправить
+                logging.error(f"Не удалось отправить Telegram-оповещение '{alert_type}'. Статус: {response.status_code}, Ответ: {response.text}")
+                new_message_id = None
+        except requests.exceptions.RequestException as e:
+            logging.error(f"Ошибка сети при отправке Telegram-оповещения '{alert_type}': {e}")
+            new_message_id = None
         except Exception as e:
-            logging.error(
-                f"Исключение при отправке Telegram-оповещения '{alert_type}': {e}")
+            logging.error(f"Неожиданное исключение при отправке Telegram-оповещения '{alert_type}': {e}")
             new_message_id = None
 
     return new_message_id
 
-
 def check_bot_log_for_errors():
-    """Читает последние 20 строк лога бота и ищет ошибки."""
+    """Читает последние 20 строк лога бота и ищет ошибки. Возвращает (key, kwargs)."""
+    current_bot_log_file = os.path.join(BOT_LOG_DIR, "bot.log")
     try:
-        if not os.path.exists(BOT_LOG_FILE):
-            logging.warning(
-                f"Лог-файл бота {BOT_LOG_FILE} не найден. Не могу проверить на ошибки.")
-            return None  # Не ошибка, просто файла нет
+        if not os.path.exists(current_bot_log_file):
+            yesterday_str = (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d")
+            yesterday_log_file = os.path.join(BOT_LOG_DIR, f"bot.log.{yesterday_str}")
+            if os.path.exists(yesterday_log_file):
+                current_bot_log_file = yesterday_log_file
+                logging.info(f"Основной лог-файл {os.path.basename(current_bot_log_file)} не найден, проверяю вчерашний: {os.path.basename(yesterday_log_file)}")
+            else:
+                logging.warning(f"Лог-файл бота {os.path.basename(current_bot_log_file)} (и вчерашний) не найден. Не могу проверить на ошибки.")
+                return None, {}
 
         result = subprocess.run(
-            ['tail', '-n', '20', BOT_LOG_FILE],
-            capture_output=True, text=True, check=False, encoding='utf-8'
+            ['tail', '-n', '20', current_bot_log_file],
+            capture_output=True, text=True, check=False, encoding='utf-8', errors='ignore'
         )
 
         if result.returncode != 0:
-            logging.error(
-                f"Не удалось прочитать {BOT_LOG_FILE} через tail: {result.stderr}")
-            return f"Ошибка чтения лога: {result.stderr}"
+            logging.error(f"Не удалось прочитать {os.path.basename(current_bot_log_file)} через tail: {result.stderr}")
+            return "watchdog_log_read_error", {"error": result.stderr or "Unknown error"}
 
         log_content = result.stdout
         log_content_lower = log_content.lower()
@@ -184,231 +177,191 @@ def check_bot_log_for_errors():
         if "critical" in log_content_lower or "error" in log_content_lower:
             last_error_line = ""
             for line in log_content.splitlines():
-                if "ERROR" in line or "CRITICAL" in line:
-                    last_error_line = line
+                 if "ERROR" in line or "CRITICAL" in line:
+                      last_error_line = line
 
             if last_error_line:
-                # Возвращаем последнюю строку с ошибкой (кратко), экранируем
-                # HTML
-                last_error_safe = last_error_line.replace(
-                    '<', '&lt;').replace('>', '&gt;')
-                return f"Обнаружена ОШИБКА: ...{last_error_safe[-150:]}"
+                 last_error_safe = escape_html(last_error_line)
+                 return "watchdog_log_error_found_details", {"details": f"...{last_error_safe[-150:]}"}
 
-            return "Обнаружены ошибки (ERROR/CRITICAL) в логе"
+            return "watchdog_log_error_found_generic", {}
 
-        return "OK"  # Ошибок не найдено
+        return "OK", {}
 
     except Exception as e:
-        logging.error(
-            f"Исключение в check_bot_log_for_errors: {e}",
-            exc_info=True)
-        return f"Исключение при чтении лога: {str(e).replace('<', '&lt;').replace('>', '&gt;')}"
+        logging.error(f"Исключение в check_bot_log_for_errors: {e}", exc_info=True)
+        error_safe = escape_html(str(e))
+        return "watchdog_log_exception", {"error": error_safe}
 
 
 def check_bot_service():
     global bot_service_was_down_or_activating, status_alert_message_id, current_reported_state
-
-    # Фактическое состояние сервиса ('active', 'activating', 'inactive',
-    # 'failed', 'unknown')
+    
     actual_state = "unknown"
-    # Состояние, которое мы хотим *отобразить* пользователю ('active_ok',
-    # 'active_error', 'activating', 'down')
     state_to_report = None
-    alert_type = None      # Тип алерта для логов/кулдауна
-    message_text = None    # Текст сообщения
+    alert_type = None
+    message_key = None
+    message_kwargs = {"bot_name": BOT_NAME}
+    status_output_full = "N/A"
 
     try:
-        status_result = subprocess.run(['systemctl',
-                                        'status',
-                                        BOT_SERVICE_NAME],
-                                       capture_output=True,
-                                       text=True,
-                                       check=False)
+        status_result = subprocess.run(
+            ['systemctl', 'status', BOT_SERVICE_NAME],
+            capture_output=True, text=True, check=True, encoding='utf-8', errors='ignore'
+        )
         status_output_full = status_result.stdout.strip()
+        if "Active: active (running)" in status_output_full: actual_state = "active"
+        elif "Active: activating" in status_output_full: actual_state = "activating"
 
-        # Определяем фактическое состояние
-        if "Active: active (running)" in status_output_full:
-            actual_state = "active"
-        elif "Active: activating" in status_output_full:
-            actual_state = "activating"
-        elif "Active: inactive (dead)" in status_output_full:
-            actual_state = "inactive"
-        elif "Active: failed" in status_output_full:
-            actual_state = "failed"
-
-        # --- Логика определения состояния для ОТПРАВКИ/РЕДАКТИРОВАНИЯ ---
-
-        # 1. Сервис работает (active)
-        if actual_state == "active":
-            logging.debug(f"Сервис бота '{BOT_SERVICE_NAME}' активен.")
-            # Если он *был* неактивен ИЛИ активировался
-            if bot_service_was_down_or_activating:
-                logging.info(
-                    "Сервис перешел в состояние 'active'. Проверка лога через 3 секунды...")
-                time.sleep(3)  # Даем боту время дописать ошибки в лог
-                log_status = check_bot_log_for_errors()
-
-                if log_status == "OK":
-                    logging.info("Проверка лога: OK.")
-                    state_to_report = "active_ok"
-                    alert_type = "bot_service_up_ok"
-                    message_text = f"Сервис <b>{BOT_NAME}</b>: Активен 🟢"
-                elif log_status is not None:
-                    logging.warning(
-                        f"Проверка лога: ОБНАРУЖЕНЫ ОШИБКИ ({log_status}).")
-                    state_to_report = "active_error"
-                    alert_type = "bot_service_up_error"
-                    message_text = f"Сервис <b>{BOT_NAME}</b>: Активен с ошибками 🟠\n\n<b>Детали:</b> {log_status}\n\nРекомендуется проверить `bot.log`."
-                else:  # Не удалось прочитать лог
-                    logging.warning("Не удалось проверить лог бота.")
-                    state_to_report = "active_ok"  # Считаем, что все ок, но добавляем пометку
-                    alert_type = "bot_service_up_no_log_check"
-                    message_text = f"Сервис <b>{BOT_NAME}</b>: Активен 🟢 (Проверка лога не удалась)"
-
-                bot_service_was_down_or_activating = False  # Сбрасываем флаг
-
-        # 2. Сервис запускается (activating)
-        elif actual_state == "activating":
-            logging.info(f"Сервис бота '{BOT_SERVICE_NAME}' активируется...")
-            state_to_report = "activating"  # Хотим показать этот статус
-            alert_type = "bot_service_activating"
-            message_text = f"Сервис <b>{BOT_NAME}</b>: Запускается 🟡"
-            bot_service_was_down_or_activating = True  # Устанавливаем флаг
-
-        # 3. Сервис НЕ работает (inactive, failed, unknown)
+    except subprocess.CalledProcessError as e:
+        status_output_full = e.stdout.strip() if e.stdout else e.stderr.strip()
+        if "inactive (dead)" in status_output_full: actual_state = "inactive"
+        elif "failed" in status_output_full: actual_state = "failed"
         else:
-            logging.warning(
-                f"Сервис бота '{BOT_SERVICE_NAME}' НЕАКТИВЕН. Фактическое состояние: '{actual_state}'.")
-            if os.path.exists(RESTART_FLAG_FILE):
-                logging.info(
-                    f"Обнаружен плановый перезапуск (restart_flag.txt). Alert-система не вмешивается.")
-                # Если было сообщение о сбое, оно будет обновлено при успешном
-                # старте бота
-                return
-
-            state_to_report = "down"  # Хотим показать этот статус
-            alert_type = "bot_service_down"
-            message_text = f"Сервис <b>{BOT_NAME}</b>: Недоступен 🔴"
-            if actual_state == "failed":
-                fail_reason_match = re.search(
-                    r"Failed with result '([^']*)'", status_output_full)
-                if fail_reason_match:
-                    message_text += f"\n(Причина: {fail_reason_match.group(1)})"
-                else:
-                    message_text += "\n(Статус: failed)"
-
-            # Перезапускаем только если он *не был* уже помечен как
-            # down/activating
-            if not bot_service_was_down_or_activating:
-                logging.info(
-                    f"Первое обнаружение сбоя. Попытка перезапуска {BOT_SERVICE_NAME}...")
-                restart_result = subprocess.run(['sudo',
-                                                 'systemctl',
-                                                 'restart',
-                                                 BOT_SERVICE_NAME],
-                                                capture_output=True,
-                                                text=True,
-                                                check=False)
-                if restart_result.returncode != 0:
-                    error_msg = restart_result.stderr.strip().replace(
-                        '<', '&lt;').replace('>', '&gt;')
-                    logging.error(
-                        f"Не удалось отправить команду перезапуска для {BOT_SERVICE_NAME}. Ошибка: {error_msg}")
-                    # Отправляем отдельное сообщение об ошибке рестарта
-                    send_or_edit_telegram_alert(
-                        f"⚠️ Alert-система НЕ СМОГЛА отправить команду перезапуска для <b>{BOT_SERVICE_NAME}</b>. Требуется ручная проверка.\nОшибка: {error_msg}",
-                        "bot_restart_fail",
-                        None)
-
-            bot_service_was_down_or_activating = True  # Устанавливаем флаг
-
-        # --- Отправка или Редактирование Сообщения ---
-        if state_to_report and state_to_report != current_reported_state:
-            logging.info(
-                f"Состояние изменилось: '{current_reported_state}' -> '{state_to_report}'. Отправка/редактирование сообщения.")
-
-            # Если переходим в down - всегда новое сообщение, чтобы не
-            # редактировать старое "активен"
-            message_id_for_operation = status_alert_message_id if state_to_report != "down" else None
-
-            new_id = send_or_edit_telegram_alert(
-                message_text, alert_type, message_id_for_operation)
-
-            # Обновляем ID и последнее отправленное состояние
-            # Если new_id = None (ошибка отправки), status_alert_message_id
-            # останется старым или станет None
-            status_alert_message_id = new_id if new_id is not None else status_alert_message_id
-            current_reported_state = state_to_report
-
-            # Если сервис стал активен (OK или с ошибками), сбрасываем ID для следующего цикла,
-            # чтобы при следующем падении создалось новое сообщение.
-            if state_to_report == "active_ok" or state_to_report == "active_error":
-                status_alert_message_id = None
-                # current_reported_state остается, чтобы не дублировать
-                # сообщение об ошибке или успехе
-
-        elif state_to_report and state_to_report == current_reported_state:
-            logging.debug(
-                f"Состояние '{state_to_report}' не изменилось с последней отправки. Пропуск.")
-        elif not state_to_report and current_reported_state and current_reported_state.startswith("active"):
-            # Если бот работал (active_ok или active_error) и продолжает работать,
-            # current_reported_state остается, state_to_report=None, ничего не
-            # делаем.
-            logging.debug(
-                f"Сервис продолжает работать в состоянии '{current_reported_state}'. Пропуск.")
+            logging.error(f"Ошибка выполнения systemctl status: {e.stderr or e.stdout}")
+            actual_state = "unknown"
+            status_output_full = e.stderr or e.stdout
 
     except FileNotFoundError:
-        logging.error(
-            "Команда systemctl не найдена. Не могу проверить статус сервиса.")
-        # Отправляем как новое сообщение, только если еще не сообщали об этой
-        # ошибке
+        logging.error("Команда systemctl не найдена. Не могу проверить статус сервиса.")
         if current_reported_state != "systemctl_error":
-            send_or_edit_telegram_alert(
-                "⚠️ <code>systemctl</code> не найден. Не могу проверить статус сервиса.",
-                "watchdog_config_error",
-                None)
-            current_reported_state = "systemctl_error"  # Запоминаем, что сообщили
-            status_alert_message_id = None  # Сбрасываем ID
-        time.sleep(CHECK_INTERVAL_SECONDS * 5)
+             send_or_edit_telegram_alert("watchdog_systemctl_not_found", "watchdog_config_error", None)
+             current_reported_state = "systemctl_error"; status_alert_message_id = None
+        time.sleep(CHECK_INTERVAL_SECONDS * 5); return
     except Exception as e:
-        logging.error(f"Ошибка при проверке сервиса бота: {e}", exc_info=True)
-        # Отправляем как новое сообщение, только если еще не сообщали об этой
-        # ошибке
+        logging.error(f"Неожиданная ошибка при вызове systemctl status: {e}", exc_info=True)
         if current_reported_state != "check_error":
-            send_or_edit_telegram_alert(
-                f"⚠️ Ошибка проверки статуса сервиса: {str(e).replace('<', '&lt;').replace('>', '&gt;')}",
-                "watchdog_error",
-                None)
-            current_reported_state = "check_error"  # Запоминаем, что сообщили
-            status_alert_message_id = None  # Сбрасываем ID
+             error_safe = escape_html(str(e))
+             send_or_edit_telegram_alert("watchdog_check_error", "watchdog_error", None, error=error_safe)
+             current_reported_state = "check_error"; status_alert_message_id = None
+        time.sleep(CHECK_INTERVAL_SECONDS); return
+
+    # --- ЛОГИКА ПЛАНОВОГО ПЕРЕЗАПУСКА ---
+    restart_flag_exists = os.path.exists(RESTART_FLAG_FILE)
+    logging.debug(f"Проверка флага перезапуска ({RESTART_FLAG_FILE}): {'Найден' if restart_flag_exists else 'Не найден'}")
+
+    if restart_flag_exists and actual_state != "active":
+        logging.info(f"Обнаружен плановый перезапуск. Отправка/обновление алерта о перезапуске бота...")
+        state_to_report = "restarting" 
+        alert_type = "bot_service_restarting"
+        message_key = "watchdog_status_restarting_bot" # ИСПОЛЬЗУЕМ НОВЫЙ КЛЮЧ
+        bot_service_was_down_or_activating = True
+        
+    elif restart_flag_exists and actual_state == "active":
+        logging.debug("Флаг перезапуска найден, но бот активен. Игнорирую флаг.")
+        
+    # --- ЛОГИКА АКТИВНОСТИ И СБОЕВ ---
+    elif actual_state == "active":
+        logging.debug(f"Сервис бота '{BOT_SERVICE_NAME}' активен.")
+        if bot_service_was_down_or_activating:
+            logging.info("Сервис перешел в состояние 'active'. Проверка лога через 3 секунды...")
+            time.sleep(3)
+            log_status_key, log_kwargs = check_bot_log_for_errors()
+            if log_status_key == "OK":
+                logging.info("Проверка лога: OK.")
+                state_to_report = "active_ok"
+                alert_type = "bot_service_up_ok"
+                message_key = "watchdog_status_active_ok"
+            elif log_status_key is not None:
+                log_details = get_text(log_status_key, WD_LANG, **log_kwargs) # Используем WD_LANG
+                logging.warning(f"Проверка лога: ОБНАРУЖЕНЫ ОШИБКИ ({log_details}).")
+                state_to_report = "active_error"
+                alert_type = "bot_service_up_error"
+                message_key = "watchdog_status_active_error"
+                message_kwargs["details"] = log_details
+            else: # log_status_key is None
+                logging.warning("Файл лога бота не найден.")
+                state_to_report = "active_ok"
+                alert_type = "bot_service_up_no_log_file"
+                message_key = "watchdog_status_active_log_fail"
+            
+            bot_service_was_down_or_activating = False
+
+    elif actual_state == "activating" and not restart_flag_exists:
+        logging.info(f"Сервис бота '{BOT_SERVICE_NAME}' активируется...")
+        state_to_report = "activating"
+        alert_type = "bot_service_activating"
+        message_key = "watchdog_status_activating"
+        bot_service_was_down_or_activating = True
+
+    elif actual_state in ["inactive", "failed", "unknown"] and not restart_flag_exists: # Неплановый сбой
+        logging.warning(f"Сервис бота '{BOT_SERVICE_NAME}' НЕАКТИВЕН. Фактическое состояние: '{actual_state}'.")
+        logging.debug(f"Вывод systemctl status:\n{status_output_full}")
+
+        state_to_report = "down"
+        alert_type = "bot_service_down"
+        message_key = "watchdog_status_down"
+        if actual_state == "failed":
+              fail_reason_match = re.search(r"Failed with result '([^']*)'", status_output_full)
+              if fail_reason_match:
+                   reason = fail_reason_match.group(1)
+                   message_kwargs["reason"] = f" ({get_text('watchdog_status_down_reason', WD_LANG)}: {reason})" # Используем WD_LANG
+              else:
+                   message_kwargs["reason"] = f" ({get_text('watchdog_status_down_failed', WD_LANG)})" # Используем WD_LANG
+        else:
+             message_kwargs["reason"] = ""
+    
+        if not bot_service_was_down_or_activating:
+            logging.info(f"Первое обнаружение сбоя (флаг не найден). Попытка перезапуска {BOT_SERVICE_NAME}...")
+            try:
+                subprocess.run(['sudo', 'systemctl', 'restart', BOT_SERVICE_NAME], capture_output=True, text=True, check=True, encoding='utf-8', errors='ignore')
+                logging.info(f"Команда перезапуска для {BOT_SERVICE_NAME} отправлена успешно.")
+            except subprocess.CalledProcessError as e:
+                 error_msg = escape_html((e.stderr or e.stdout or str(e)).strip())
+                 logging.error(f"Не удалось отправить команду перезапуска для {BOT_SERVICE_NAME}. Ошибка: {error_msg}")
+                 send_or_edit_telegram_alert("watchdog_restart_fail", "bot_restart_fail", None, service_name=BOT_SERVICE_NAME, error=error_msg)
+            except Exception as e:
+                 error_msg = escape_html(str(e))
+                 logging.error(f"Неожиданная ошибка при попытке перезапуска {BOT_SERVICE_NAME}: {error_msg}")
+                 send_or_edit_telegram_alert("watchdog_restart_fail", "bot_restart_fail", None, service_name=BOT_SERVICE_NAME, error=f"Unexpected error: {error_msg}")
+    
+        bot_service_was_down_or_activating = True
+
+
+    # --- Отправка или Редактирование Сообщения ---
+    try:
+        logging.debug(f"Перед отправкой: state_to_report='{state_to_report}', current_reported_state='{current_reported_state}', message_key='{message_key}'")
+
+        if state_to_report and state_to_report != current_reported_state:
+            logging.info(f"Состояние изменилось: '{current_reported_state}' -> '{state_to_report}'. Отправка/редактирование сообщения (ключ: '{message_key}')...")
+
+            # Перезапуск ('restarting') и неплановый сбой ('down') всегда отправляют новое сообщение
+            message_id_for_operation = status_alert_message_id if state_to_report not in ["down", "restarting"] else None
+            
+            if message_id_for_operation: logging.debug(f"Попытка редактировать сообщение ID: {message_id_for_operation}")
+            else: logging.debug("Попытка отправить новое сообщение.")
+
+            new_id = send_or_edit_telegram_alert(message_key, alert_type, message_id_for_operation, **message_kwargs)
+
+            if new_id is not None:
+                logging.debug(f"Операция с сообщением успешна. Новый ID: {new_id}. Обновляю состояние.")
+                status_alert_message_id = new_id
+                current_reported_state = state_to_report
+            else:
+                 logging.error(f"Не удалось отправить/отредактировать сообщение для состояния '{state_to_report}'. Предыдущее состояние '{current_reported_state}' сохранено.")
+
+        elif state_to_report and state_to_report == current_reported_state:
+             logging.debug(f"Состояние '{state_to_report}' не изменилось с последней отправки. Пропуск.")
+        elif not state_to_report and current_reported_state and current_reported_state.startswith("active"):
+             logging.debug(f"Сервис продолжает работать в состоянии '{current_reported_state}'. Пропуск.")
+        
+    except Exception as e:
+        logging.error(f"Ошибка при отправке/редактировании уведомления о статусе: {e}", exc_info=True)
+        status_alert_message_id = None
 
 
 if __name__ == "__main__":
-    # Проверки токена и ID админа
-    if not ALERT_BOT_TOKEN:
-        logging.error(
-            "FATAL: Telegram Bot Token (TG_BOT_TOKEN) not found or empty in .env file.")
-        sys.exit(1)
-    if not ALERT_ADMIN_ID:
-        logging.error(
-            "FATAL: Telegram Admin ID (TG_ADMIN_ID) not found or empty in .env file.")
-        sys.exit(1)
-    try:
-        int(ALERT_ADMIN_ID)
-    except ValueError:
-        logging.error(
-            f"FATAL: TG_ADMIN_ID in .env file ('{ALERT_ADMIN_ID}') is not a valid integer.")
-        sys.exit(1)
+    if not ALERT_BOT_TOKEN: print("FATAL: Telegram Bot Token (TG_BOT_TOKEN) not found or empty."); sys.exit(1)
+    if not ALERT_ADMIN_ID: print("FATAL: Telegram Admin ID (TG_ADMIN_ID) not found or empty."); sys.exit(1)
+    try: int(ALERT_ADMIN_ID)
+    except ValueError: print(f"FATAL: TG_ADMIN_ID ('{ALERT_ADMIN_ID}') is not a valid integer."); sys.exit(1)
 
-    # Стартовое сообщение
-    logging.info(
-        f"Система оповещений (Alert) запущена. Отслеживание сервиса: {BOT_SERVICE_NAME}")
-    send_or_edit_telegram_alert(
-        f"🚨 Внутренний сервис 'Система оповещений (Alert)' запущен.\nОтслеживание: <b>{BOT_NAME}</b>",
-        "watchdog_start",
-        None)
+    logging.info(f"Система оповещений (Alert) запущена. Отслеживание сервиса: {BOT_SERVICE_NAME}")
+    
+    # --- ОТПРАВКА АЛЕРТА О ЗАПУСКЕ САМОГО НАБЛЮДАТЕЛЯ (Watchdog) ---
+    send_or_edit_telegram_alert("watchdog_status_restarting_wd", "watchdog_start", None, bot_name=BOT_NAME)
+    # -----------------------------------------------------------------
 
-    # Главный цикл
     while True:
         check_bot_service()
         time.sleep(CHECK_INTERVAL_SECONDS)
