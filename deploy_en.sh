@@ -39,32 +39,75 @@ check_integrity() { if [ ! -d "${BOT_INSTALL_PATH}" ]; then INSTALL_STATUS="NOT_
 # --- Installation functions ---
 install_extras() {
     local packages_to_install=()
-    # Fail2Ban Check
-    if ! command -v fail2ban-client &> /dev/null; then msg_question "Fail2Ban not found. Install? (y/n): " INSTALL_F2B; if [[ "$INSTALL_F2B" =~ ^[Yy]$ ]]; then packages_to_install+=("fail2ban"); else msg_info "Skipping Fail2Ban."; fi; else msg_success "Fail2Ban already installed."; fi
+    local packages_to_remove=() # <--- Added: List for removal
 
-    # iperf3 Check
+    # Fail2Ban Check (no changes)
+    if ! command -v fail2ban-client &> /dev/null; then
+        msg_question "Fail2Ban not found. Install? (y/n): " INSTALL_F2B
+        if [[ "$INSTALL_F2B" =~ ^[Yy]$ ]]; then
+            packages_to_install+=("fail2ban")
+        else
+            msg_info "Skipping Fail2Ban."
+        fi
+    else
+        msg_success "Fail2Ban already installed."
+    fi
+
+    # --- iperf3 Check (Replaces Speedtest) ---
     if ! command -v iperf3 &> /dev/null; then
-        msg_question "iperf3 not found. It is required for the 'Speed Test' module (iperf3). Install? (y/n): " INSTALL_IPERF3
+        msg_question "iperf3 not found. It is required for the 'Speedtest' module. Install? (y/n): " INSTALL_IPERF3
         if [[ "$INSTALL_IPERF3" =~ ^[Yy]$ ]]; then
             packages_to_install+=("iperf3")
         else
-            msg_info "Skipping iperf3. The 'Speed Test' module (iperf3) will not work."
+            msg_info "Skipping iperf3. The 'Speedtest' module will not work."
         fi
     else
         msg_success "iperf3 is already installed."
     fi
+    # --- End iperf3 Check ---
 
+    # --- Speedtest CLI Check (Check for removal) ---
+    if command -v speedtest &> /dev/null || dpkg -s speedtest-cli &> /dev/null; then
+        msg_warning "Detected old 'speedtest-cli' package."
+        msg_question "Remove 'speedtest-cli'? (Recommended, as the bot now uses iperf3) (y/n): " REMOVE_SPEEDTEST
+        if [[ "$REMOVE_SPEEDTEST" =~ ^[Yy]$ ]]; then
+            packages_to_remove+=("speedtest-cli")
+        else
+            msg_info "Skipping removal of speedtest-cli."
+        fi
+    fi
+    # --- End Speedtest CLI Check ---
+
+    # --- Package Removal ---
+    if [ ${#packages_to_remove[@]} -gt 0 ]; then
+        msg_info "Removing packages: ${packages_to_remove[*]}"
+        run_with_spinner "Removing packages" sudo apt-get remove --purge -y "${packages_to_remove[@]}"
+        run_with_spinner "Cleaning up apt" sudo apt-get autoremove -y # Clean up dependencies after removal
+        msg_success "Specified packages removed."
+    fi
+    # --- End Package Removal ---
+
+    # --- Package Installation (logic unchanged) ---
     if [ ${#packages_to_install[@]} -gt 0 ]; then
         msg_info "Installing additional packages: ${packages_to_install[*]}"
         run_with_spinner "Updating package list" sudo apt-get update -y
-        run_with_spinner "Installing packages" sudo DEBIAN_FRONTEND=noninteractive apt-get install -y "${packages_to_install[@]}"; if [ $? -ne 0 ]; then msg_error "Error installing additional packages."; exit 1; fi
-        if [[ " ${packages_to_install[*]} " =~ " fail2ban " ]]; then sudo systemctl enable fail2ban &> /dev/null; sudo systemctl start fail2ban &> /dev/null; msg_success "Fail2Ban installed and started."; fi
-        if [[ " ${packages_to_install[*]} " =~ " iperf3 " ]]; then msg_success "iperf3 installed."; fi
+        run_with_spinner "Installing packages" sudo DEBIAN_FRONTEND=noninteractive apt-get install -y "${packages_to_install[@]}"
+        if [ $? -ne 0 ]; then msg_error "Error installing additional packages."; exit 1; fi
+
+        if [[ " ${packages_to_install[*]} " =~ " fail2ban " ]]; then
+             sudo systemctl enable fail2ban &> /dev/null
+             sudo systemctl start fail2ban &> /dev/null
+             msg_success "Fail2Ban installed and started."
+        fi
+        if [[ " ${packages_to_install[*]} " =~ " iperf3 " ]]; then
+             msg_success "iperf3 installed."
+        fi
         msg_success "Additional packages installed."
     fi
+    # --- End Package Installation ---
 }
 common_install_steps() { echo "" > /tmp/${SERVICE_NAME}_install.log; msg_info "1. Updating packages and installing basic dependencies..."; run_with_spinner "Updating package list" sudo apt-get update -y || { msg_error "Failed to update packages"; exit 1; }; run_with_spinner "Installing dependencies (python3, pip, venv, git, curl, wget, sudo)" sudo DEBIAN_FRONTEND=noninteractive apt-get install -y python3 python3-pip python3-venv git curl wget sudo || { msg_error "Failed to install basic dependencies"; exit 1; }; install_extras; }
-install_logic() { local mode=$1; local branch_to_use=$2; local exec_user_cmd=""; local owner="root:root"; local owner_user="root"; if [ "$mode" == "secure" ]; then msg_info "2. Creating user '${SERVICE_USER}'..."; if ! id "${SERVICE_USER}" &>/dev/null; then sudo useradd -r -s /bin/false -d ${BOT_INSTALL_PATH} ${SERVICE_USER} || exit 1; fi; sudo mkdir -p ${BOT_INSTALL_PATH}; sudo chown -R ${SERVICE_USER}:${SERVICE_USER} ${BOT_INSTALL_PATH}; msg_info "3. Cloning repo (branch ${branch_to_use}) as ${SERVICE_USER}..."; run_with_spinner "Cloning repository" sudo -u ${SERVICE_USER} git clone --branch "${branch_to_use}" "${GITHUB_REPO_URL}" "${BOT_INSTALL_PATH}" || exit 1; exec_user_cmd="sudo -u ${SERVICE_USER}"; owner="${SERVICE_USER}:${SERVICE_USER}"; owner_user=${SERVICE_USER}; else msg_info "2. Creating directory..."; sudo mkdir -p ${BOT_INSTALL_PATH}; msg_info "3. Cloning repo (branch ${branch_to_use}) as root..."; run_with_spinner "Cloning repository" sudo git clone --branch "${branch_to_use}" "${GITHUB_REPO_URL}" "${BOT_INSTALL_PATH}" || exit 1; exec_user_cmd=""; owner="root:root"; owner_user="root"; fi; msg_info "4. Setting up venv..."; if [ ! -d "${VENV_PATH}" ]; then run_with_spinner "Creating venv" $exec_user_cmd ${PYTHON_BIN} -m venv "${VENV_PATH}" || exit 1; fi; run_with_spinner "Updating pip" $exec_user_cmd "${VENV_PATH}/bin/pip" install --upgrade pip || msg_warning "Failed to update pip..."; run_with_spinner "Installing Python dependencies" $exec_user_cmd "${VENV_PATH}/bin/pip" install -r "${BOT_INSTALL_PATH}/requirements.txt" || exit 1; msg_info "5. Creating .gitignore, logs/, config/..."; sudo -u ${owner_user} bash -c "cat > ${BOT_INSTALL_PATH}/.gitignore" <<< $'/venv/\n/__pycache__/\n*.pyc\n/.env\n/config/\n/logs/\n*.log\n*_flag.txt'; sudo chmod 644 "${BOT_INSTALL_PATH}/.gitignore"; sudo -u ${owner_user} mkdir -p "${BOT_INSTALL_PATH}/logs" "${BOT_INSTALL_PATH}/config"; msg_info "6. Configuring .env..."; msg_question "Bot Token: " T; msg_question "Admin User ID: " A; msg_question "Admin Username (optional): " U; msg_question "Bot Name (optional): " N; sudo bash -c "cat > ${BOT_INSTALL_PATH}/.env" <<< $(printf "TG_BOT_TOKEN=\"%s\"\nTG_ADMIN_ID=\"%s\"\nTG_ADMIN_USERNAME=\"%s\"\nTG_BOT_NAME=\"%s\"\nINSTALL_MODE=\"%s\"" "$T" "$A" "$U" "$N" "$mode"); sudo chown ${owner} "${BOT_INSTALL_PATH}/.env"; sudo chmod 600 "${BOT_INSTALL_PATH}/.env"; if [ "$mode" == "root" ]; then msg_info "7. Configuring sudo (root)..."; F="/etc/sudoers.d/98-${SERVICE_NAME}-root"; sudo tee ${F} > /dev/null <<< $'root ALL=(ALL) NOPASSWD: /bin/systemctl restart tg-bot.service\nroot ALL=(ALL) NOPASSWD: /bin/systemctl restart tg-watchdog.service\nroot ALL=(ALL) NOPASSWD: /sbin/reboot'; sudo chmod 440 ${F}; elif [ "$mode" == "secure" ]; then F="/etc/sudoers.d/99-${WATCHDOG_SERVICE_NAME}-restart"; sudo tee ${F} > /dev/null <<< $'Defaults:tgbot !requiretty\ntgbot ALL=(root) NOPASSWD: /bin/systemctl restart tg-bot.service'; sudo chmod 440 ${F}; msg_info "7. Configuring sudo (secure)..."; fi; create_and_start_service "${SERVICE_NAME}" "${BOT_INSTALL_PATH}/bot.py" "${mode}" "Telegram Bot"; create_and_start_service "${WATCHDOG_SERVICE_NAME}" "${BOT_INSTALL_PATH}/watchdog.py" "root" "Watchdog"; local ip=$(curl -s --connect-timeout 5 ipinfo.io/ip || echo "Could not determine"); echo ""; echo "---"; msg_success "Installation complete!"; msg_info "IP: ${ip}"; echo "---"; }
+install_logic() { local mode=$1; local branch_to_use=$2; local exec_user_cmd=""; local owner="root:root"; local owner_user="root"; if [ "$mode" == "secure" ]; then msg_info "2. Creating user '${SERVICE_USER}'..."; if ! id "${SERVICE_USER}" &>/dev/null; then sudo useradd -r -s /bin/false -d ${BOT_INSTALL_PATH} ${SERVICE_USER} || exit 1; fi; sudo mkdir -p ${BOT_INSTALL_PATH}; sudo chown -R ${SERVICE_USER}:${SERVICE_USER} ${BOT_INSTALL_PATH}; msg_info "3. Cloning repo (branch ${branch_to_use}) as ${SERVICE_USER}..."; run_with_spinner "Cloning repository" sudo -u ${SERVICE_USER} git clone --branch "${branch_to_use}" "${GITHUB_REPO_URL}" "${BOT_INSTALL_PATH}" || exit 1; exec_user_cmd="sudo -u ${SERVICE_USER}"; owner="${SERVICE_USER}:${SERVICE_USER}"; owner_user=${SERVICE_USER}; else msg_info "2. Creating directory..."; sudo mkdir -p ${BOT_INSTALL_PATH}; msg_info "3. Cloning repo (branch ${branch_to_use}) as root..."; run_with_spinner "Cloning repository" sudo git clone --branch "${branch_to_use}" "${GITHUB_REPO_URL}" "${BOT_INSTALL_PATH}" || exit 1; exec_user_cmd=""; owner="root:root"; owner_user="root"; fi; msg_info "4. Setting up venv..."; if [ ! -d "${VENV_PATH}" ]; then run_with_spinner "Creating venv" $exec_user_cmd ${PYTHON_BIN} -m venv "${VENV_PATH}" || exit 1; fi; run_with_spinner "Updating pip" $exec_user_cmd "${VENV_PATH}/bin/pip" install --upgrade pip || msg_warning "Failed to update pip..."; run_with_spinner "Installing Python dependencies" $exec_user_cmd "${VENV_PATH}/bin/pip" install -r "${BOT_INSTALL_PATH}/requirements.txt" || exit 1; msg_info "5. Creating .gitignore, logs/, config/..."; sudo -u ${owner_user} bash -c "cat > ${BOT_INSTALL_PATH}/.gitignore" <<< $'/venv/\n/__pycache__/\n*.pyc\n/.env\n/config/\n/logs/\n*.log\n*_flag.txt'; sudo chmod 644 "${BOT_INSTALL_PATH}/.gitignore"; sudo -u ${owner_user} mkdir -p "${BOT_INSTALL_PATH}/logs/bot" "${BOT_INSTALL_PATH}/logs/watchdog" "${BOT_INSTALL_PATH}/config"; msg_info "6. Configuring .env..."; msg_question "Bot Token: " T; msg_question "Admin User ID: " A; msg_question "Admin Username (optional): " U; msg_question "Bot Name (optional): " N; sudo bash -c "cat > ${BOT_INSTALL_PATH}/.env" <<< $(printf "TG_BOT_TOKEN=\"%s\"\nTG_ADMIN_ID=\"%s\"\nTG_ADMIN_USERNAME=\"%s\"\nTG_BOT_NAME=\"%s\"\nINSTALL_MODE=\"%s\"" "$T" "$A" "$U" "$N" "$mode"); sudo chown ${owner} "${BOT_INSTALL_PATH}/.env"; sudo chmod 600 "${BOT_INSTALL_PATH}/.env"; if [ "$mode" == "root" ]; then msg_info "7. Configuring sudo (root)..."; F="/etc/sudoers.d/98-${SERVICE_NAME}-root"; sudo tee ${F} > /dev/null <<< $'root ALL=(ALL) NOPASSWD: /bin/systemctl restart tg-bot.service\nroot ALL=(ALL) NOPASSWD: /bin/systemctl restart tg-watchdog.service\nroot ALL=(ALL) NOPASSWD: /sbin/reboot'; sudo chmod 440 ${F}; elif [ "$mode" == "secure" ]; then F="/etc/sudoers.d/99-${WATCHDOG_SERVICE_NAME}-restart"; sudo tee ${F} > /dev/null <<< $'Defaults:tgbot !requiretty\ntgbot ALL=(root) NOPASSWD: /bin/systemctl restart tg-bot.service'; sudo chmod 440 ${F}; msg_info "7. Configuring sudo (secure)..."; fi; create_and_start_service "${SERVICE_NAME}" "${BOT_INSTALL_PATH}/bot.py" "${mode}" "Telegram Bot"; create_and_start_service "${WATCHDOG_SERVICE_NAME}" "${BOT_INSTALL_PATH}/watchdog.py" "root" "Watchdog"; local ip=$(curl -s --connect-timeout 5 ipinfo.io/ip || echo "Could not determine"); echo ""; echo "---"; msg_success "Installation complete!"; msg_info "IP: ${ip}"; echo "---"; }
 install_secure() { echo -e "\n${C_BOLD}=== Secure Installation (branch: ${GIT_BRANCH}) ===${C_RESET}"; common_install_steps; install_logic "secure" "${GIT_BRANCH}"; }
 install_root() { echo -e "\n${C_BOLD}=== Root Installation (branch: ${GIT_BRANCH}) ===${C_RESET}"; common_install_steps; install_logic "root" "${GIT_BRANCH}"; }
 create_and_start_service() { local svc=$1; local script=$2; local mode=$3; local desc=$4; local user="root"; local group="root"; local env=""; local suffix=""; local after="After=network.target"; local req=""; if [ "$mode" == "secure" ] && [ "$svc" == "$SERVICE_NAME" ]; then user=${SERVICE_USER}; group=${SERVICE_USER}; suffix="(Secure)"; elif [ "$svc" == "$SERVICE_NAME" ]; then user="root"; group="root"; suffix="(Root)"; elif [ "$svc" == "$WATCHDOG_SERVICE_NAME" ]; then user="root"; group="root"; after="After=network.target ${SERVICE_NAME}.service"; fi; env="EnvironmentFile=${BOT_INSTALL_PATH}/.env"; msg_info "Creating systemd unit for ${svc}..."; FILE="/etc/systemd/system/${svc}.service"; sudo tee ${FILE} > /dev/null <<EOF

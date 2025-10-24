@@ -18,6 +18,64 @@
 ### What's new?
 
 #### 🚀 Added:
+
+* **Multilingual Support (i18n):**
+    * Added full support for **Russian and English languages** for all bot messages, buttons, menus, errors, and notifications.
+    * Introduced a new `core/i18n.py` module to manage translations, including the `STRINGS` dictionary, functions for loading/saving settings (`load_user_settings`, `save_user_settings`), determining (`get_user_lang`) and setting (`set_user_lang`) user language, and the main translation function `get_text` (alias `_`).
+    * Users can now select their language via the new "🇷🇺 Язык" / "🇬🇧 Language" button in the main menu, with settings saved in `config/user_settings.json`.
+    * Added `I18nFilter` for Aiogram, allowing handlers to react to text commands regardless of language.
+    * Added an inline keyboard for language selection (`get_language_keyboard`).
+* **Documentation:** Added English versions `README.en.md` and `CHANGELOG.en.md` with switching links.
+* **Deployment Script:** Added an English version of the deployment script `deploy_en.sh`.
+* **Dependencies:** `iperf3` is now added as a dependency installed via `deploy.sh` / `deploy_en.sh`.
+
+#### ✨ Improved:
+
+* **Code Structure:** All user-facing strings have been externalized from module and core code into `core/i18n.py`.
+* **`speedtest` Module:**
+    * Completely rewritten to use `iperf3` instead of `speedtest-cli`.
+    * Implemented finding the closest `iperf3` server by ping, prioritizing based on VPS country/continent.
+    * Added message editing to display test status updates (locating, pinging, downloading, uploading).
+    * Implemented multiple connection attempts to different servers in case of errors.
+* **`traffic` Module:**
+    * Added an inline "⏹ Stop" button to the traffic monitoring message.
+    * Pressing the main button again no longer stops monitoring; the inline button must be used.
+* **Watchdog (`watchdog.py`):**
+    * All error and status messages now use the i18n system (in the default language).
+    * Improved handling of network errors (`requests.exceptions.RequestException`) and JSON decoding errors when sending/editing Telegram messages.
+    * Improved logic for detecting `inactive`/`failed` status from `systemctl` errors.
+    * Added distinct statuses/messages for planned restarts of the bot and the watchdog itself.
+* **Logging:**
+    * Implemented daily log rotation for `bot.py` and `watchdog.py` logs.
+    * Bot and watchdog logs are now saved in separate subdirectories (`logs/bot/`, `logs/watchdog/`).
+* **`users` Module:** When deleting a user, their language and notification settings are now also removed.
+* **`xray` Module:** Adjusted Xray update commands for Amnezia (added `wget`/`unzip` installation) and Marzban (added check for `.env` file existence).
+* **Utilities (`core/utils.py`):** `format_traffic` and `format_uptime` functions now support i18n for units (B, KB, y, d, etc.).
+* **Keyboards (`core/keyboards.py`):** All button texts are now translated into the user's language.
+
+#### 🔧 Fixed:
+
+* **i18n:**
+    * Fixed handling of non-integer `user_id` when setting language.
+    * Added error handling for string formatting and checks for translation key existence in `get_text`.
+* **`users` Module:** Fixed the use of string keys (`admins`/`users`) instead of localized names in `callback_data` when changing groups.
+* **Circular Imports:** Resolved potential circular import issues between `core/shared_state.py` and `core/i18n.py`.
+* **Imports:** Corrected relative imports (`from . import ...`) within the core package for proper functionality.
+* **`selftest` Module:** Moved the import of `_` inside the handler function to avoid potential i18n initialization issues.
+
+---
+
+<p align="center">
+  <i>Version 1.10.12 (Build 38) — Added full support for Russian and English languages (i18n), rewrote Speedtest module using iperf3.</i>
+</p>
+
+---
+
+## [1.10.12] - 2025-10-22
+
+### What's new?
+
+#### 🚀 Added:
 * **Multilingual Support (i18n):**
     * Added full support for Russian and English languages for all bot messages, including buttons, menus, errors, and notifications.
     * Users can now select their preferred language using the new "🇷🇺 Язык" / "🇬🇧 Language" button in the main menu.
