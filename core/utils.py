@@ -1,12 +1,12 @@
 # /opt-tg-bot/core/utils.py
 import os
-import time
 import json
 import logging
 import requests
 import re
 import asyncio
 import urllib.parse
+import time  # <--- Импорт time перенесен сюда
 from datetime import datetime
 from aiogram import Bot
 from aiogram.exceptions import TelegramBadRequest
@@ -271,13 +271,15 @@ def format_uptime(seconds, lang: str):
 def get_server_timezone_label():
     try:
         tz_env = os.environ.get('TZ')
+        # Используем time, импортированный в начале файла
+        offset_str = time.strftime("%z")
+
         if tz_env:
-            import time
-            offset_str = time.strftime("%z")
+            # Если TZ установлена, проверяем, смогли ли получить смещение
             if not offset_str or len(offset_str) != 5:
+                # Если не смогли, возвращаем имя TZ
                 return f" ({tz_env})"
-        else:
-            offset_str = time.strftime("%z")
+        # Если TZ не установлена, offset_str уже получен выше
 
         if not offset_str or len(offset_str) != 5:
             logging.debug("Не удалось определить смещение часового пояса.")
