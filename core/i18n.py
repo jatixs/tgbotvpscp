@@ -467,7 +467,7 @@ STRINGS = {
 
         # modules/speedtest.py
         "speedtest_start": "🚀 <b>Starting iperf3...</b>\n\nFinding the closest server. This may take 30-40 seconds.",
-        "speedtest_results": "🚀 <b>Speedtest Results (iperf3):</b>\n\n⬇️ <b>Download:</b> {dl:.2f} Mbps\n⬆️ <b>Upload:</b> {ul:.2f} Mbps\n⏱ <b>Ping:</b> {ping:.2f} ms\n\n🌍 <b>Location:</b> {location}\n🖥️ <b>Sponsor:</b> {sponsor}",
+        "speedtest_results": "🚀 <b>Speedtest Results (iperf3):</b>\n\n⬇️ <b>Download:</b> {dl:.2f} Mbps\n⬆️ <b>Upload:</b> {ul:.2f} Mbps\n⏱ <b>Ping:</b> {ping:.2f} ms\n\n🌍 <b>Location:</b> {location}\n🖥️ <b>Server:</b> {sponsor}",
         "speedtest_fail": "❌ Error running iperf3:\n<pre>{error}</pre>",
         "iperf_fetch_error": "⚠️ Failed to download the iperf3 server list.",
         "iperf_no_servers": "⚠️ Failed to find any available iperf3 servers.",
