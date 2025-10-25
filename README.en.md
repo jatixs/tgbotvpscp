@@ -5,11 +5,11 @@
 <h1 align="center">🤖 VPS Manager Telegram Bot</h1>
 
 <p align="center">
-  <b >v1.10.12</b> — a reliable Telegram bot for monitoring and managing your VPS or dedicated server, now with a <b>modular architecture</b> and an improved deployment process.
+  <b >v1.10.12</b> — a reliable Telegram bot for monitoring and managing your VPS or dedicated server, now with a <b>modular architecture</b>, support for <b>multiple languages</b>, and an improved deployment process.
 </p>
 
 <p align="center">
-  <a href="https://github.com/jatixs/tgbotvpscp/releases/latest"><img src="https://img.shields.io/badge/version-v1.10.12-blue?style=flat-square" alt="Version 1.10.11"/></a>
+  <a href="https://github.com/jatixs/tgbotvpscp/releases/latest"><img src="https://img.shields.io/badge/version-v1.10.12-blue?style=flat-square" alt="Version 1.10.12"/></a>
   <a href="CHANGELOG.en.md"><img src="https://img.shields.io/badge/build-38-purple?style=flat-square" alt="Build 38"/></a>
   <a href="https://www.python.org/"><img src="https://img.shields.io/badge/python-3.10%2B-green?style=flat-square" alt="Python 3.10+"/></a>
   <a href="https://choosealicense.com/licenses/gpl-3.0/"><img src="https://img.shields.io/badge/license-GPL--3.0-lightgrey?style=flat-square" alt="License GPL-3.0"/></a>
@@ -49,18 +49,19 @@ It is developed in **Python** using the **aiogram (v3)** framework and is optimi
 
 ## ⚡ Key Features
 
+* 🌐 **Multilingual (i18n):** Full support for Russian and English with user selection.
 * 🏗️ **Modular Architecture:** Easy extension and customization of functionality.
 * 💻 **Resource Monitoring:** Check CPU, RAM, Disk, Uptime.
-* 🌐 **Network Statistics:** Total traffic and real-time connection speed.
+* 📡 **Network Statistics:** Total traffic and real-time connection speed.
 * 🔔 **Flexible Notifications:** Configure alerts for resource threshold breaches, SSH logins, and Fail2Ban bans.
-* 🧭 **Administration:** Update VPS (`apt upgrade`), reboot server, restart bot service.
-* ✨ **Smart Installer/Updater (`deploy.sh`):**
+* 🧭 **Administration:** Update VPS (`apt upgrade`), optimize system, reboot server, restart bot service.
+* ✨ **Smart Installer/Updater (`deploy.sh`/`deploy_en.sh`):**
     * **Interactive Menu:** Installation, update, integrity check, and removal.
     * **Management via `git`:** Reliable code retrieval from GitHub (including `core/` and `modules/`).
     * **Integrity Check:** Automatic installation diagnosis before showing the menu.
     * **Branch Selection:** Install/update from `main` or another specified branch.
     * **Data Protection:** Automatic `.gitignore` creation to preserve `.env`, `config/`, `logs/`.
-* 🚀 **Diagnostics:** Ping check, Speedtest execution, view top processes by CPU.
+* 🚀 **Diagnostics:** Ping check, run speed test (**iperf3**), view top processes by CPU.
 * 🛡️ **Security and Logs:** View recent SSH logins and blocked IPs (Fail2Ban).
 * 🔑 **VLESS Management:** Generate links and QR codes from Xray JSON configuration (Reality).
 * ⚙️ **X-ray Update:** Automatic detection and update of X-ray Core for Marzban and Amnezia panels.
@@ -134,7 +135,8 @@ After the script finishes successfully:
 /opt/tg-bot/          # Installation directory (default)
 ├── bot.py            # Entry point, module loader
 ├── watchdog.py       # Alert system code (monitoring)
-├── deploy.sh         # Installation/management script
+├── deploy.sh         # Installation/management script (Русский)
+├── deploy_en.sh      # Installation/management script (English)
 ├── requirements.txt  # Python dependencies
 ├── .env              # Environment variables (TOKEN, ID, etc.) - DO NOT COMMIT!
 ├── .gitignore        # File to exclude .env, config/, logs/, venv/ from git
@@ -146,7 +148,7 @@ After the script finishes successfully:
 │   ├── keyboards.py  # Keyboard generation
 │   ├── messaging.py  # Sending/deleting messages, alerts
 │   ├── shared_state.py # Managing "global" variables
-│   ├── i18n.py 	  # Localizable
+│   ├── i18n.py       # Localization (translations)
 │   └── utils.py      # Helper functions
 │
 ├── modules/          # Modules with logic for specific functions
@@ -157,11 +159,14 @@ After the script finishes successfully:
 ├── config/           # Configuration files (created automatically)
 │   ├── users.json
 │   ├── alerts_config.json
+│   ├── user_settings.json # User language settings
 │   └── ..._flag.txt
 │
 └── logs/             # Log files (created automatically)
-    ├── bot.log
-    └── watchdog.log
+    ├── bot/          # Main bot logs (with rotation)
+    │   └── bot.log...
+    └── watchdog/     # Alert system logs (with rotation)
+        └── watchdog.log...
 ```
 ---
 ## 🔒 Security
