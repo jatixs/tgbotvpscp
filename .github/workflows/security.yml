@@ -1,0 +1,26 @@
+name: Security Scan (Bandit)
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  bandit:
+    name: Run Bandit Security Scanner
+    runs-on: ubuntu-latest
+    steps:
+      - name: ⬇️ Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🐍 Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10' # Убедитесь, что версия совпадает
+
+      - name: 📦 Install Bandit
+        run: pip install bandit
+
+      - name: 🛡️ Run Bandit Scan
+        run: bandit -r . -ll -iii # -r . сканирует весь проект, -ll показывает проблемы среднего уровня и выше, -iii показывает проблемы низкого уровня и выше
