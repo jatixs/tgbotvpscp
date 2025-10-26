@@ -528,20 +528,32 @@ async def run_iperf_test_async(bot: Bot,
 
         # --- 3. Форматирование УСПЕШНОГО вывода ---
         country_code = server.get('country')
-        flag = await asyncio.to_thread(get_country_flag, country_code) if country_code else "❓" # Получаем флаг
+        # Получаем флаг. Используем IP для получения флага, если country_code
+        # недоступен или неверен
+        flag = "❓"
+        if country_code and len(country_code) == 2 and country_code.isalpha():
+             flag = await asyncio.to_thread(get_country_flag, country_code)
+        elif is_ip_address(host):
+             flag = await asyncio.to_thread(get_country_flag, host)
+
         location_str = f"{server.get('country', 'N/A')} {server.get('city', 'N/A')}" # Страна + Город
         provider_name = server.get('provider', 'N/A')
-        # Возвращаем финальный текст результата
+
+        # *** ИЗМЕНЕНИЕ ЗДЕСЬ ***
+        # Возвращаем финальный текст результата с измененными ключами
         return _(
             "speedtest_results",
             lang,
             dl=results["download"],
             ul=results["upload"],
             ping=results["ping"],
-            flag=flag, # Передаем флаг
-            location=escape_html(location_str), # Передаем строку локации
-            sponsor=escape_html(provider_name) # Это теперь провайдер
+            flag=flag,
+            # Меняем 'location' на 'server'
+            server=escape_html(location_str),
+            # Меняем 'sponsor' на 'provider'
+            provider=escape_html(provider_name)
         )
+        # *** КОНЕЦ ИЗМЕНЕНИЯ ***
 
     except FileNotFoundError:
         logging.error("iperf3 не найден.")
