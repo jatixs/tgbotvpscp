@@ -27,6 +27,7 @@ STRINGS = {
         "error_parsing_json": "❌ Ошибка при обработке результатов: Неверный формат ответа.\n<pre>{output}</pre>",
         "error_unexpected_json_parsing": "❌ Неожиданная ошибка при обработке результатов: {error}",
         "throttle_message": "⏳ Пожалуйста, подождите {seconds} сек. перед следующим действием.",
+
         # bot.py (Главное меню и Язык)
         "main_menu_welcome": "👋 Привет! Выбери команду на клавиатуре ниже. Чтобы вызвать меню снова, используй /menu.",
         "language_select": "Пожалуйста, выберите ваш язык:",
@@ -176,7 +177,10 @@ STRINGS = {
 
         # modules/speedtest.py
         "speedtest_start": "🚀 <b>Запуск iperf3...</b>\n\nИщу ближайший сервер. Это может занять до 30-40 секунд.",
-        "speedtest_results": "🚀 <b>Speedtest Результаты (iperf3):</b>\n\n⬇️ <b>Скачивание:</b> {dl:.2f} Мбит/с\n⬆️ <b>Загрузка:</b> {ul:.2f} Мбит/с\n⏱️ <b>Пинг:</b> {ping:.2f} мс\n\n🌍 <b>Локация:</b> {flag} {server}\n🏢 <b>Провайдер:</b> {provider}", # <--- ИЗМЕНЕНО ЗДЕСЬ        "speedtest_fail": "❌ Ошибка при запуске iperf3:\n<pre>{error}</pre>",
+        # --- ИЗМЕНЕНО ЗДЕСЬ ---
+        "speedtest_results": "🚀 <b>Speedtest Результаты (iperf3):</b>\n\n⬇️ <b>Скачивание:</b> {dl:.2f} Мбит/с\n⬆️ <b>Загрузка:</b> {ul:.2f} Мбит/с\n⏱️ <b>Пинг:</b> {ping:.2f} мс\n\n🌍 <b>Локация:</b> {flag} {server}\n🏢 <b>Сервер:</b> {provider}", # <-- ИЗМЕНЕНО ЗДЕСЬ
+        # ---------------------
+        "speedtest_fail": "❌ Ошибка при запуске iperf3:\n<pre>{error}</pre>",
         "iperf_fetch_error": "⚠️ Не удалось загрузить список серверов iperf3.",
         "iperf_fetch_error_ru": "⚠️ Не удалось загрузить список российских серверов iperf3.",
         "iperf_parse_error_ru": "⚠️ Ошибка разбора списка российских серверов iperf3 (YAML).",
@@ -191,8 +195,8 @@ STRINGS = {
         "speedtest_status_testing": "🚀 Тестирую скорость на <b>{host}</b> ({ping} мс)...",
         "speedtest_status_downloading": "🚀 Тестирую скорость на <b>{host}</b> ({ping} мс)... ⬇️ Скачивание...",
         "speedtest_status_uploading": "🚀 Тестирую скорость на <b>{host}</b> ({ping} мс)... ⬆️ Загрузка...",
-        "error_message_edit_failed": "ОШИБКА: Не удалось обновить статусное сообщение.", # Добавлено для speedtest
-        "iperf_all_attempts_failed": "❌ Не удалось выполнить тест скорости после {attempts} попыток.", # Добавлено для speedtest
+        "error_message_edit_failed": "ОШИБКА: Не удалось обновить статусное сообщение.",
+        "iperf_all_attempts_failed": "❌ Не удалось выполнить тест скорости после {attempts} попыток.",
 
         # modules/sshlog.py
         "sshlog_searching": "🔍 Ищу последние 10 событий SSH (вход/провал)...",
@@ -291,7 +295,7 @@ STRINGS = {
         "unit_second_short": "с",
     },
     'en': {
-        # Общие
+        # General
         "btn_back": "🔙 Back",
         "btn_cancel": "❌ Cancel",
         "btn_back_to_menu": "🔙 Back to menu",
@@ -308,7 +312,7 @@ STRINGS = {
         "error_unexpected_json_parsing": "❌ Unexpected error processing results: {error}",
         "throttle_message": "⏳ Please wait {seconds} sec. before the next action.",
 
-        # bot.py (Главное меню и Язык)
+        # bot.py (Main Menu & Language)
         "main_menu_welcome": "👋 Hi! Choose a command from the keyboard below. To show this menu again, use /menu.",
         "language_select": "Please select your language:",
         "language_selected": "✅ Language successfully changed to English.",
@@ -325,7 +329,7 @@ STRINGS = {
         "default_new_user_name": "New_{uid}",
         "default_id_user_name": "ID: {uid}",
 
-        # core/keyboards.py (Кнопки меню)
+        # core/keyboards.py (Menu Buttons)
         "btn_selftest": "🛠 Server Info",
         "btn_traffic": "📡 Network Traffic",
         "btn_uptime": "⏱ Uptime",
@@ -343,7 +347,7 @@ STRINGS = {
         "btn_reboot": "🔄 Reboot Server",
         "btn_notifications": "🔔 Notifications",
 
-        # core/keyboards.py (Инлайн-кнопки)
+        # core/keyboards.py (Inline Buttons)
         "btn_add_user": "➕ Add User",
         "btn_delete_user": "➖ Delete User",
         "btn_change_group": "🔄 Change Group",
@@ -457,7 +461,10 @@ STRINGS = {
 
         # modules/speedtest.py
         "speedtest_start": "🚀 <b>Starting iperf3...</b>\n\nFinding the closest server. This may take 30-40 seconds.",
-        "speedtest_results": "🚀 <b>Speedtest Results (iperf3):</b>\n\n⬇️ <b>Download:</b> {dl:.2f} Mbps\n⬆️ <b>Upload:</b> {ul:.2f} Mbps\n⏱️ <b>Ping:</b> {ping:.2f} ms\n\n🌍 <b>Location:</b> {flag} {server}\n🏢 <b>Provider:</b> {provider}", # <--- ИЗМЕНЕНО ЗДЕСЬ        "speedtest_fail": "❌ Error running iperf3:\n<pre>{error}</pre>",
+        # --- ИЗМЕНЕНО ЗДЕСЬ ---
+        "speedtest_results": "🚀 <b>Speedtest Results (iperf3):</b>\n\n⬇️ <b>Download:</b> {dl:.2f} Mbps\n⬆️ <b>Upload:</b> {ul:.2f} Mbps\n⏱️ <b>Ping:</b> {ping:.2f} ms\n\n🌍 <b>Location:</b> {flag} {server}\n🏢 <b>Server:</b> {provider}", # <-- ИЗМЕНЕНО ЗДЕСЬ
+        # ---------------------
+        "speedtest_fail": "❌ Error running iperf3:\n<pre>{error}</pre>",
         "iperf_fetch_error": "⚠️ Failed to download the iperf3 server list.",
         "iperf_fetch_error_ru": "⚠️ Failed to download the Russian iperf3 server list.",
         "iperf_parse_error_ru": "⚠️ Error parsing the Russian iperf3 server list (YAML).",
@@ -472,8 +479,8 @@ STRINGS = {
         "speedtest_status_testing": "🚀 Testing speed on <b>{host}</b> ({ping} ms)...",
         "speedtest_status_downloading": "🚀 Testing speed on <b>{host}</b> ({ping} ms)... ⬇️ Downloading...",
         "speedtest_status_uploading": "🚀 Testing speed on <b>{host}</b> ({ping} ms)... ⬆️ Uploading...",
-        "error_message_edit_failed": "ERROR: Failed to update status message.", # Added for speedtest
-        "iperf_all_attempts_failed": "❌ Speedtest failed after {attempts} attempts.", # Added for speedtest
+        "error_message_edit_failed": "ERROR: Failed to update status message.",
+        "iperf_all_attempts_failed": "❌ Speedtest failed after {attempts} attempts.",
 
         # modules/sshlog.py
         "sshlog_searching": "🔍 Searching for last 10 SSH events (login/fail)...",
@@ -724,3 +731,20 @@ def get_language_keyboard() -> InlineKeyboardMarkup:
                     text="🇬🇧 English",
                     callback_data="set_lang_en")]])
     return keyboard
+
+# --- Функция сортировки (опционально, для удобства поддержки) ---
+# def sort_strings():
+#     """Сортирует ключи в словаре STRINGS по алфавиту."""
+#     global STRINGS
+#     sorted_strings = {}
+#     for lang, strings in STRINGS.items():
+#         sorted_strings[lang] = dict(sorted(strings.items()))
+#     STRINGS = sorted_strings
+#     # Можно добавить сохранение в файл для постоянной сортировки
+#     # with open("path/to/save/sorted_i18n.py", "w", encoding='utf-8') as f:
+#     #     f.write("# -*- coding: utf-8 -*-\n")
+#     #     f.write("STRINGS = ")
+#     #     f.write(json.dumps(STRINGS, indent=4, ensure_ascii=False, sort_keys=True)) # Или использовать pprint
+#
+# # Вызов сортировки при запуске (или вручную)
+# # sort_strings()
