@@ -26,7 +26,7 @@ STRINGS = {
         "error_with_details": "⚠️ Произошла ошибка: {error}",
         "error_parsing_json": "❌ Ошибка при обработке результатов: Неверный формат ответа.\n<pre>{output}</pre>",
         "error_unexpected_json_parsing": "❌ Неожиданная ошибка при обработке результатов: {error}",
-
+        "throttle_message": "⏳ Пожалуйста, подождите {seconds} сек. перед следующим действием.",
         # bot.py (Главное меню и Язык)
         "main_menu_welcome": "👋 Привет! Выбери команду на клавиатуре ниже. Чтобы вызвать меню снова, используй /menu.",
         "language_select": "Пожалуйста, выберите ваш язык:",
@@ -306,6 +306,7 @@ STRINGS = {
         "error_with_details": "⚠️ An error occurred: {error}",
         "error_parsing_json": "❌ Error processing results: Invalid response format.\n<pre>{output}</pre>",
         "error_unexpected_json_parsing": "❌ Unexpected error processing results: {error}",
+        "throttle_message": "⏳ Please wait {seconds} sec. before the next action.",
 
         # bot.py (Главное меню и Язык)
         "main_menu_welcome": "👋 Hi! Choose a command from the keyboard below. To show this menu again, use /menu.",
