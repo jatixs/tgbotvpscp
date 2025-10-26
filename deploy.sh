@@ -163,7 +163,7 @@ main() {
         # Красивый блок установки
         clear
         echo -e "${C_BLUE}${C_BOLD}╔═══════════════════════════════════╗${C_RESET}"
-        echo -e "${C_BLUE}${C_BOLD}║      Установка VPS Telegram Бот     ║${C_RESET}"
+        echo -e "${C_BLUE}${C_BOLD}║      Установка VPS Telegram Бот   ║${C_RESET}"
         echo -e "${C_BLUE}${C_BOLD}╚═══════════════════════════════════╝${C_RESET}"
         echo -e "  ${C_YELLOW}Бот не найден или установка повреждена.${C_RESET}"
         echo -e "  Выберите режим установки для ветки: ${C_YELLOW}${GIT_BRANCH}${C_RESET}"
