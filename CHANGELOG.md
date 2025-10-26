@@ -6,7 +6,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/version-v1.10.12-blue?style=flat-square" alt="Version 1.10.12"/>
-  <img src="https://img.shields.io/badge/build-38-purple?style=flat-square" alt="Build 38"/>
+  <img src="https://img.shields.io/badge/build-40-purple?style=flat-square" alt="Build 40"/>
   <img src="https://img.shields.io/badge/date-Октябрь%202025-green?style=flat-square" alt="Date October 2025"/>
   <img src="https://img.shields.io/badge/status-stable-success?style=flat-square" alt="Status Stable"/>
 </p>
@@ -107,7 +107,7 @@
 
 ---
 <p align="center">
-  <i>Версия 1.10.13 (Build 39) — Улучшения Speedtest (YAML, RU-серверы, локализация), защита от спама, улучшение кода и документации.</i>
+  <i>Версия 1.10.13 (Build 40) — Улучшения Speedtest (YAML, RU-серверы, локализация), защита от спама, улучшение кода и документации.</i>
 </p>
 
 ---
