@@ -55,59 +55,147 @@ def save_alerts_config():
         logging.error(f"Ошибка сохранения alerts_config.json: {e}", exc_info=True)
 
 
-def get_country_flag(ip: str) -> str:
-    """Получает флаг страны по IP, обрабатывая различные ошибки."""
-    if not ip or ip in ["localhost", "127.0.0.1", "::1"]:
+def get_country_flag(ip_or_code: str) -> str:
+    """Получает флаг страны по IP или двухбуквенному коду, обрабатывая ошибки."""
+    if not ip_or_code or ip_or_code in ["localhost", "127.0.0.1", "::1"]:
         return "🏠"
+
+    input_str = ip_or_code.strip().upper() # Приводим к верхнему регистру для сравнения кода
+
+    # --- ДОБАВЛЕНА ПРОВЕРКА НА КОД СТРАНЫ ---
+    if len(input_str) == 2 and input_str.isalpha():
+        # Если это двухбуквенный код, конвертируем напрямую
+        try:
+            # Преобразуем AA -> 🇦🇦 (Regional Indicator Symbol Letter)
+            # Кодовые точки для A-Z: 0x1F1E6 - 0x1F1FF
+            # Смещение относительно ASCII 'A' (65)
+            flag = "".join(chr(ord(char) - 65 + 0x1F1E6) for char in input_str)
+            return flag
+        except Exception as e:
+            logging.warning(f"Ошибка при прямой конвертации кода '{input_str}' во флаг: {e}")
+            return "❓" # Возвращаем вопрос при ошибке конвертации
+    # --- КОНЕЦ ДОБАВЛЕННОЙ ПРОВЕРКИ ---
+
+    # --- Если это не двухбуквенный код, используем логику с API (как было раньше) ---
     try:
+        # Используем исходный ip_or_code для запроса API
         response = requests.get(
-            f"http://ip-api.com/json/{ip}?fields=countryCode,status", # Добавил status для проверки
+            f"http://ip-api.com/json/{ip_or_code}?fields=countryCode,status",
             timeout=2)
         response.raise_for_status() # Проверяем на HTTP ошибки (4xx, 5xx)
         data = response.json()
 
         if data.get("status") != "success":
-            logging.warning(f"API ip-api.com вернул статус '{data.get('status')}' для IP {ip}")
+            logging.warning(f"API ip-api.com вернул статус '{data.get('status')}' для IP {ip_or_code}")
             return "❓"
 
         country_code = data.get("countryCode")
         if country_code:
             if len(country_code) == 2 and country_code.isalpha():
-                # Преобразуем AA -> 🇦🇦 (Regional Indicator Symbol Letter)
-                # Кодовые точки для A-Z: 0x1F1E6 - 0x1F1FF
-                # Смещение относительно ASCII 'A' (65)
                 flag = "".join(chr(ord(char.upper()) - 65 + 0x1F1E6) for char in country_code)
                 return flag
             else:
                 logging.warning(
-                    f"Некорректный countryCode '{country_code}' для IP {ip}")
+                    f"Некорректный countryCode '{country_code}' от API для IP {ip_or_code}")
                 return "❓"
         else:
-            # Этого не должно произойти, если status == 'success', но на всякий
-            # случай
             logging.debug(
-                f"Не удалось получить countryCode для IP {ip}, хотя статус success. Ответ: {data}")
+                f"Не удалось получить countryCode от API для IP {ip_or_code}, хотя статус success. Ответ: {data}")
             return "❓"
 
     except requests.exceptions.Timeout:
-        logging.warning(f"Тайм-аут при получении флага для IP {ip}")
+        logging.warning(f"Тайм-аут при получении флага для IP {ip_or_code}")
         return "⏳"
     except requests.exceptions.HTTPError as e:
-        # Логируем HTTP ошибки отдельно
-        logging.warning(f"HTTP ошибка {e.response.status_code} при запросе флага для IP {ip}: {e}")
+        logging.warning(f"HTTP ошибка {e.response.status_code} при запросе флага для IP {ip_or_code}: {e}")
         return "❓"
     except requests.exceptions.RequestException as e:
-        # Остальные ошибки сети (DNS, ConnectionError и т.д.)
-        logging.warning(f"Ошибка сети при получении флага для IP {ip}: {e}")
+        logging.warning(f"Ошибка сети при получении флага для IP {ip_or_code}: {e}")
         return "❓"
     except json.JSONDecodeError as e:
-        # Ошибка разбора JSON ответа
-        logging.warning(f"Ошибка разбора JSON ответа от ip-api.com для IP {ip}: {e}")
+        logging.warning(f"Ошибка разбора JSON ответа от ip-api.com для IP {ip_or_code}: {e}")
         return "❓"
     except Exception as e:
-        # Ловим все остальные неожиданные ошибки и логируем с трейсбеком
-        logging.exception(f"Неожиданная ошибка в get_country_flag для IP {ip}: {e}")
+        logging.exception(f"Неожиданная ошибка в get_country_flag для {ip_or_code}: {e}")
         return "❓"
+
+
+async def get_country_details(ip_or_code: str) -> tuple[str, str | None]:
+    """
+    Получает флаг и ПОЛНОЕ имя страны по IP или двухбуквенному коду.
+    Возвращает (flag, country_name | None).
+    """
+    flag = "❓"
+    country_name = None
+    input_str = ip_or_code.strip().upper() if ip_or_code else ""
+
+    # Сначала получаем флаг (из кода или IP)
+    if not input_str or input_str in ["localhost", "127.0.0.1", "::1"]:
+        return "🏠", None
+
+    country_code_known = None
+    if len(input_str) == 2 and input_str.isalpha():
+        # Если это код, сразу пытаемся сделать флаг и запоминаем код
+        country_code_known = input_str
+        try:
+            flag = "".join(chr(ord(char) - 65 + 0x1F1E6) for char in input_str)
+        except Exception as e:
+            logging.warning(f"Ошибка при прямой конвертации кода '{input_str}' во флаг: {e}")
+            flag = "❓"
+    else: # Предполагаем, что это IP, получаем код для флага
+        try:
+            # Используем blocking requests в потоке
+            response_flag = await asyncio.to_thread(
+                requests.get,
+                f"http://ip-api.com/json/{ip_or_code}?fields=countryCode,status",
+                timeout=2
+            )
+            response_flag.raise_for_status()
+            data_flag = response_flag.json()
+            if data_flag.get("status") == "success" and data_flag.get("countryCode"):
+                code = data_flag["countryCode"]
+                if len(code) == 2 and code.isalpha():
+                    country_code_known = code # Сохраняем код для запроса имени
+                    flag = "".join(chr(ord(char.upper()) - 65 + 0x1F1E6) for char in code)
+                else:
+                    logging.warning(f"Некорректный countryCode '{code}' от API для IP {ip_or_code}")
+                    flag = "❓"
+            else:
+                 logging.warning(f"Не удалось получить countryCode от API (1) для {ip_or_code}. Status: {data_flag.get('status')}")
+                 flag = "❓"
+        except requests.exceptions.Timeout:
+            logging.warning(f"Тайм-аут (1) при получении флага для {ip_or_code}")
+            return "⏳", None # Возвращаем песочные часы и None для имени
+        except Exception as e:
+            logging.warning(f"Ошибка (1) при получении флага для {ip_or_code}: {e}")
+            flag = "❓" # Ошибка при получении флага, но попробуем получить имя ниже
+
+    # Теперь получаем ПОЛНОЕ имя страны, используя IP или известный код
+    # Если известен код, используем его - это надежнее для получения имени той же страны, что и флаг
+    identifier_for_name = country_code_known if country_code_known else ip_or_code
+    try:
+        # Запрашиваем полное имя страны
+        response_name = await asyncio.to_thread(
+            requests.get,
+            f"http://ip-api.com/json/{identifier_for_name}?fields=country,status",
+            timeout=2
+        )
+        response_name.raise_for_status()
+        data_name = response_name.json()
+        if data_name.get("status") == "success" and data_name.get("country"):
+            country_name = data_name["country"]
+            logging.debug(f"Получено имя страны для '{identifier_for_name}': {country_name}")
+        else:
+            logging.warning(f"Не удалось получить country name от API для '{identifier_for_name}'. Status: {data_name.get('status')}")
+
+    except requests.exceptions.Timeout:
+        logging.warning(f"Тайм-аут (2) при получении имени страны для '{identifier_for_name}'")
+        # Флаг уже есть, возвращаем его с None для имени
+    except Exception as e:
+        logging.warning(f"Ошибка (2) при получении имени страны для '{identifier_for_name}': {e}")
+        # Флаг уже есть, возвращаем его с None для имени
+
+    return flag, country_name
 
 
 def escape_html(text):
@@ -116,7 +204,6 @@ def escape_html(text):
     text = str(text)
     # Заменяем только основные символы, необходимые для HTML в Telegram
     return text.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
-    # Убрал замену ", т.к. она обычно не нужна для Telegram HTML
 
 
 def convert_json_to_vless(json_data, custom_name):
@@ -263,7 +350,7 @@ def format_uptime(seconds, lang: str):
 
 
 def get_server_timezone_label():
-    """Возвращает метку часового пояса сервера (например, ' (GMT+3)' или ' (MSK)')."""
+    """Возвращает метку часового пояса сервера (например, ' (GMT+3)')."""
     try:
         # Пробуем получить смещение UTC
         # time.timezone дает смещение в секундах ЗАПАДНЕЕ UTC (противоположный знак)
@@ -280,16 +367,7 @@ def get_server_timezone_label():
         else:
             offset_str = f"GMT{sign}{offset_hours}:{offset_minutes:02}" # Добавляем минуты с нулем
 
-        # Пробуем получить имя зоны (может не работать на некоторых системах)
-        try:
-            zone_name = time.tzname[1 if is_dst else 0]
-            # Возвращаем имя зоны, если оно не пустое и не равно строке смещения
-            if zone_name and zone_name != offset_str:
-                 return f" ({zone_name})"
-        except Exception:
-            pass # Игнорируем ошибки получения имени зоны
-
-        # Если имя зоны недоступно или совпадает со смещением, возвращаем смещение
+        # Всегда возвращаем только смещение GMT
         return f" ({offset_str})"
 
     except Exception as e:
