@@ -176,8 +176,7 @@ STRINGS = {
 
         # modules/speedtest.py
         "speedtest_start": "🚀 <b>Запуск iperf3...</b>\n\nИщу ближайший сервер. Это может занять до 30-40 секунд.",
-        "speedtest_results": "🚀 <b>Speedtest Результаты (iperf3):</b>\n\n⬇️ <b>Скачивание:</b> {dl:.2f} Мбит/с\n⬆️ <b>Загрузка:</b> {ul:.2f} Мбит/с\n⏱️ <b>Пинг:</b> {ping:.2f} мс\n\n🌍 <b>Сервер:</b> {flag} {location}\n🏢 <b>Провайдер:</b> {sponsor}",
-        "speedtest_fail": "❌ Ошибка при запуске iperf3:\n<pre>{error}</pre>",
+        "speedtest_results": "🚀 <b>Speedtest Результаты (iperf3):</b>\n\n⬇️ <b>Скачивание:</b> {dl:.2f} Мбит/с\n⬆️ <b>Загрузка:</b> {ul:.2f} Мбит/с\n⏱️ <b>Пинг:</b> {ping:.2f} мс\n\n🌍 <b>Локация:</b> {flag} {server}\n🏢 <b>Провайдер:</b> {provider}", # <--- ИЗМЕНЕНО ЗДЕСЬ        "speedtest_fail": "❌ Ошибка при запуске iperf3:\n<pre>{error}</pre>",
         "iperf_fetch_error": "⚠️ Не удалось загрузить список серверов iperf3.",
         "iperf_fetch_error_ru": "⚠️ Не удалось загрузить список российских серверов iperf3.",
         "iperf_parse_error_ru": "⚠️ Ошибка разбора списка российских серверов iperf3 (YAML).",
@@ -457,8 +456,7 @@ STRINGS = {
 
         # modules/speedtest.py
         "speedtest_start": "🚀 <b>Starting iperf3...</b>\n\nFinding the closest server. This may take 30-40 seconds.",
-        "speedtest_results": "🚀 <b>Speedtest Results (iperf3):</b>\n\n⬇️ <b>Download:</b> {dl:.2f} Mbps\n⬆️ <b>Upload:</b> {ul:.2f} Mbps\n⏱️ <b>Ping:</b> {ping:.2f} ms\n\n🌍 <b>Server:</b> {flag} {location}\n🏢 <b>Provider:</b> {sponsor}",
-        "speedtest_fail": "❌ Error running iperf3:\n<pre>{error}</pre>",
+        "speedtest_results": "🚀 <b>Speedtest Results (iperf3):</b>\n\n⬇️ <b>Download:</b> {dl:.2f} Mbps\n⬆️ <b>Upload:</b> {ul:.2f} Mbps\n⏱️ <b>Ping:</b> {ping:.2f} ms\n\n🌍 <b>Location:</b> {flag} {server}\n🏢 <b>Provider:</b> {provider}", # <--- ИЗМЕНЕНО ЗДЕСЬ        "speedtest_fail": "❌ Error running iperf3:\n<pre>{error}</pre>",
         "iperf_fetch_error": "⚠️ Failed to download the iperf3 server list.",
         "iperf_fetch_error_ru": "⚠️ Failed to download the Russian iperf3 server list.",
         "iperf_parse_error_ru": "⚠️ Error parsing the Russian iperf3 server list (YAML).",
