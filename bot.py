@@ -1,4 +1,5 @@
 # /opt-tg-bot/bot.py
+from core.middlewares import SpamThrottleMiddleware  # <-- Добавлен импорт
 from modules import (
     selftest, traffic, uptime, notifications, users, vless,
     speedtest, top, xray, sshlog, fail2ban, logs, update, reboot, restart,
@@ -38,7 +39,6 @@ ENABLE_OPTIMIZE = True
 # ------------------------------
 
 # Импорт основного ядра
-from core.middlewares import SpamThrottleMiddleware # <-- Добавлен импорт
 # -----------------
 
 # Импорт модулей
