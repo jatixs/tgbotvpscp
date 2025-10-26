@@ -3,3 +3,4 @@ psutil
 requests
 qrcode
 Pillow
+PyYAML

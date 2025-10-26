@@ -26,6 +26,7 @@ STRINGS = {
         "error_with_details": "⚠️ Произошла ошибка: {error}",
         "error_parsing_json": "❌ Ошибка при обработке результатов: Неверный формат ответа.\n<pre>{output}</pre>",
         "error_unexpected_json_parsing": "❌ Неожиданная ошибка при обработке результатов: {error}",
+        "throttle_message": "⏳ Пожалуйста, подождите {seconds} сек. перед следующим действием.",
 
         # bot.py (Главное меню и Язык)
         "main_menu_welcome": "👋 Привет! Выбери команду на клавиатуре ниже. Чтобы вызвать меню снова, используй /menu.",
@@ -99,20 +100,14 @@ STRINGS = {
         "watchdog_status_active_error": "Сервис <b>{bot_name}</b>: Активен с ошибками 🟠\n\n<b>Детали:</b> {details}\n\nРекомендуется проверить `bot.log`.",
         "watchdog_status_active_log_fail": "Сервис <b>{bot_name}</b>: Активен 🟢 (Проверка лога не удалась)",
         "watchdog_status_activating": "Сервис <b>{bot_name}</b>: Запускается 🟡",
-
-        # --- НОВЫЕ КЛЮЧИ ПЕРЕЗАПУСКА ---
         "watchdog_status_restarting_bot": "Сервис <b>{bot_name}</b>: Перезапуск службы 🔵",
         "watchdog_status_restarting_wd": "🚨 Внутренний сервис 'Система оповещений (Alert)' Перезапуск службы 🔵.\nОтслеживание: <b>{bot_name}</b>",
-        # ---------------------------------
-
         "watchdog_status_down": "Сервис <b>{bot_name}</b>: Недоступен 🔴{reason}",
         "watchdog_status_down_reason": "Причина",
         "watchdog_status_down_failed": "Статус: failed",
         "watchdog_restart_fail": "⚠️ Alert-система НЕ СМОГЛА отправить команду перезапуска для <b>{service_name}</b>. Требуется ручная проверка.\nОшибка: {error}",
         "watchdog_systemctl_not_found": "⚠️ <code>systemctl</code> не найден. Не могу проверить статус сервиса.",
         "watchdog_check_error": "⚠️ Ошибка проверки статуса сервиса: {error}",
-        # Ключ "watchdog_started" удален/заменен на
-        # watchdog_status_restarting_wd
 
         # modules/fail2ban.py
         "f2b_log_not_found": "⚠️ Файл лога Fail2Ban не найден: <code>{path}</code>",
@@ -182,19 +177,27 @@ STRINGS = {
 
         # modules/speedtest.py
         "speedtest_start": "🚀 <b>Запуск iperf3...</b>\n\nИщу ближайший сервер. Это может занять до 30-40 секунд.",
-        "speedtest_results": "🚀 <b>Speedtest Результаты (iperf3):</b>\n\n⬇️ <b>Скачивание:</b> {dl:.2f} Мбит/с\n⬆️ <b>Загрузка:</b> {ul:.2f} Мбит/с\n⏱ <b>Пинг:</b> {ping:.2f} мс\n\n🌍 <b>Страна:</b> {location}\n🖥️ <b>Дата-центр:</b> {sponsor}",
+        # --- ИЗМЕНЕНО ЗДЕСЬ ---
+        "speedtest_results": "🚀 <b>Speedtest Результаты (iperf3):</b>\n\n⬇️ <b>Скачивание:</b> {dl:.2f} Мбит/с\n⬆️ <b>Загрузка:</b> {ul:.2f} Мбит/с\n⏱️ <b>Пинг:</b> {ping:.2f} мс\n\n🌍 <b>Локация:</b> {flag} {server}\n🏢 <b>Сервер:</b> {provider}", # <-- ИЗМЕНЕНО ЗДЕСЬ
+        # ---------------------
         "speedtest_fail": "❌ Ошибка при запуске iperf3:\n<pre>{error}</pre>",
         "iperf_fetch_error": "⚠️ Не удалось загрузить список серверов iperf3.",
+        "iperf_fetch_error_ru": "⚠️ Не удалось загрузить список российских серверов iperf3.",
+        "iperf_parse_error_ru": "⚠️ Ошибка разбора списка российских серверов iperf3 (YAML).",
         "iperf_no_servers": "⚠️ Не удалось найти ни одного доступного сервера iperf3.",
         "iperf_not_found": "Ошибка: <b>iperf3</b> не найден.\nУстановите его: <code>sudo apt install iperf3</code>",
         "iperf_timeout": "Ошибка: Тест iperf3 превысил таймаут (сервер {host} не отвечает).",
         "iperf_conn_error_generic": "❌ Ошибка подключения к <b>{host}</b>. Попытка другого сервера...",
         "speedtest_status_geo": "🌍 Определяю геолокацию VPS...",
         "speedtest_status_fetch": "📥 Загружаю список серверов...",
+        "speedtest_status_fetch_ru": "📥 Загружаю список российских серверов...",
         "speedtest_status_ping": "⏱️ Ищу лучший сервер по пингу ({count} шт.)...",
         "speedtest_status_testing": "🚀 Тестирую скорость на <b>{host}</b> ({ping} мс)...",
         "speedtest_status_downloading": "🚀 Тестирую скорость на <b>{host}</b> ({ping} мс)... ⬇️ Скачивание...",
         "speedtest_status_uploading": "🚀 Тестирую скорость на <b>{host}</b> ({ping} мс)... ⬆️ Загрузка...",
+        "error_message_edit_failed": "ОШИБКА: Не удалось обновить статусное сообщение.",
+        "iperf_all_attempts_failed": "❌ Не удалось выполнить тест скорости после {attempts} попыток.",
+
         # modules/sshlog.py
         "sshlog_searching": "🔍 Ищу последние 10 событий SSH (вход/провал)...",
         "sshlog_header": "🔐 <b>Последние {count} событий SSH{source}:</b>\n\n{log_output}",
@@ -277,10 +280,6 @@ STRINGS = {
         "users_change_group_prompt": "Выбран пользователь: <b>{user_name}</b>\nТекущая группа: <b>{group}</b>\n\nВыберите новую группу:",
         "users_change_group_success_text": "✅ Группа для <b>{user_name}</b> изменена на <b>{group}</b>.\n\nВыберите пользователя:",
         "users_change_group_success_alert": "Группа для {user_name} изменена.",
-        # --- ИСПРАВЛЕНИЕ: Удаляем ненужные ключи ---
-        # "users_group_Admins": "Админы",
-        # "users_group_Пользователи": "Пользователи",
-        # --- КОНЕЦ ИСПРАВЛЕНИЯ ---
 
         # Единицы измерения (core/utils.py)
         "unit_bytes": "Б",
@@ -296,7 +295,7 @@ STRINGS = {
         "unit_second_short": "с",
     },
     'en': {
-        # Общие
+        # General
         "btn_back": "🔙 Back",
         "btn_cancel": "❌ Cancel",
         "btn_back_to_menu": "🔙 Back to menu",
@@ -311,8 +310,9 @@ STRINGS = {
         "error_with_details": "⚠️ An error occurred: {error}",
         "error_parsing_json": "❌ Error processing results: Invalid response format.\n<pre>{output}</pre>",
         "error_unexpected_json_parsing": "❌ Unexpected error processing results: {error}",
+        "throttle_message": "⏳ Please wait {seconds} sec. before the next action.",
 
-        # bot.py (Главное меню и Язык)
+        # bot.py (Main Menu & Language)
         "main_menu_welcome": "👋 Hi! Choose a command from the keyboard below. To show this menu again, use /menu.",
         "language_select": "Please select your language:",
         "language_selected": "✅ Language successfully changed to English.",
@@ -329,7 +329,7 @@ STRINGS = {
         "default_new_user_name": "New_{uid}",
         "default_id_user_name": "ID: {uid}",
 
-        # core/keyboards.py (Кнопки меню)
+        # core/keyboards.py (Menu Buttons)
         "btn_selftest": "🛠 Server Info",
         "btn_traffic": "📡 Network Traffic",
         "btn_uptime": "⏱ Uptime",
@@ -347,7 +347,7 @@ STRINGS = {
         "btn_reboot": "🔄 Reboot Server",
         "btn_notifications": "🔔 Notifications",
 
-        # core/keyboards.py (Инлайн-кнопки)
+        # core/keyboards.py (Inline Buttons)
         "btn_add_user": "➕ Add User",
         "btn_delete_user": "➖ Delete User",
         "btn_change_group": "🔄 Change Group",
@@ -384,20 +384,14 @@ STRINGS = {
         "watchdog_status_active_error": "Service <b>{bot_name}</b>: Active with errors 🟠\n\n<b>Details:</b> {details}\n\nPlease check `bot.log`.",
         "watchdog_status_active_log_fail": "Service <b>{bot_name}</b>: Active 🟢 (Log check failed)",
         "watchdog_status_activating": "Service <b>{bot_name}</b>: Activating 🟡",
-
-        # --- НОВЫЕ КЛЮЧИ ПЕРЕЗАПУСКА ---
         "watchdog_status_restarting_bot": "Service <b>{bot_name}</b>: Service Restart 🔵",
         "watchdog_status_restarting_wd": "🚨 Internal 'Alert System' service Service Restart 🔵.\nTracking: <b>{bot_name}</b>",
-        # ---------------------------------
-
         "watchdog_status_down": "Service <b>{bot_name}</b>: Unavailable 🔴{reason}",
         "watchdog_status_down_reason": "Reason",
         "watchdog_status_down_failed": "Status: failed",
         "watchdog_restart_fail": "⚠️ Alert system FAILED to send restart command for <b>{service_name}</b>. Manual check required.\nError: {error}",
         "watchdog_systemctl_not_found": "⚠️ <code>systemctl</code> not found. Cannot check service status.",
         "watchdog_check_error": "⚠️ Error checking service status: {error}",
-        # Ключ "watchdog_started" удален/заменен на
-        # watchdog_status_restarting_wd
 
         # modules/fail2ban.py
         "f2b_log_not_found": "⚠️ Fail2Ban log file not found: <code>{path}</code>",
@@ -467,19 +461,27 @@ STRINGS = {
 
         # modules/speedtest.py
         "speedtest_start": "🚀 <b>Starting iperf3...</b>\n\nFinding the closest server. This may take 30-40 seconds.",
-        "speedtest_results": "🚀 <b>Speedtest Results (iperf3):</b>\n\n⬇️ <b>Download:</b> {dl:.2f} Mbps\n⬆️ <b>Upload:</b> {ul:.2f} Mbps\n⏱ <b>Ping:</b> {ping:.2f} ms\n\n🌍 <b>Location:</b> {location}\n🖥️ <b>Server:</b> {sponsor}",
+        # --- ИЗМЕНЕНО ЗДЕСЬ ---
+        "speedtest_results": "🚀 <b>Speedtest Results (iperf3):</b>\n\n⬇️ <b>Download:</b> {dl:.2f} Mbps\n⬆️ <b>Upload:</b> {ul:.2f} Mbps\n⏱️ <b>Ping:</b> {ping:.2f} ms\n\n🌍 <b>Location:</b> {flag} {server}\n🏢 <b>Server:</b> {provider}", # <-- ИЗМЕНЕНО ЗДЕСЬ
+        # ---------------------
         "speedtest_fail": "❌ Error running iperf3:\n<pre>{error}</pre>",
         "iperf_fetch_error": "⚠️ Failed to download the iperf3 server list.",
+        "iperf_fetch_error_ru": "⚠️ Failed to download the Russian iperf3 server list.",
+        "iperf_parse_error_ru": "⚠️ Error parsing the Russian iperf3 server list (YAML).",
         "iperf_no_servers": "⚠️ Failed to find any available iperf3 servers.",
         "iperf_not_found": "Error: <b>iperf3</b> not found.\nInstall it via: <code>sudo apt install iperf3</code>",
         "iperf_timeout": "Error: iperf3 test timed out (server {host} is not responding).",
-        "iperf_conn_error_generic": "❌ Ошибка подключения к <b>{host}</b>. Попытка другого сервера...",
+        "iperf_conn_error_generic": "❌ Connection error to <b>{host}</b>. Trying another server...",
         "speedtest_status_geo": "🌍 Determining VPS geolocation...",
         "speedtest_status_fetch": "📥 Downloading server list...",
+        "speedtest_status_fetch_ru": "📥 Downloading Russian server list...",
         "speedtest_status_ping": "⏱️ Finding the best server by ping ({count} servers)...",
         "speedtest_status_testing": "🚀 Testing speed on <b>{host}</b> ({ping} ms)...",
-        "speedtest_status_downloading": "🚀 Testing speed on <b>{host}</b> ({ping} ms)... : ⬇️ Downloading...",
-        "speedtest_status_uploading": "🚀 Testing speed on <b>{host}</b> ({ping} ms)... : ⬆️ Uploading...",
+        "speedtest_status_downloading": "🚀 Testing speed on <b>{host}</b> ({ping} ms)... ⬇️ Downloading...",
+        "speedtest_status_uploading": "🚀 Testing speed on <b>{host}</b> ({ping} ms)... ⬆️ Uploading...",
+        "error_message_edit_failed": "ERROR: Failed to update status message.",
+        "iperf_all_attempts_failed": "❌ Speedtest failed after {attempts} attempts.",
+
         # modules/sshlog.py
         "sshlog_searching": "🔍 Searching for last 10 SSH events (login/fail)...",
         "sshlog_header": "🔐 <b>Last {count} SSH events{source}:</b>\n\n{log_output}",
@@ -562,10 +564,6 @@ STRINGS = {
         "users_change_group_prompt": "Selected user: <b>{user_name}</b>\nCurrent group: <b>{group}</b>\n\nSelect a new group:",
         "users_change_group_success_text": "✅ Group for <b>{user_name}</b> changed to <b>{group}</b>.\n\nSelect a user:",
         "users_change_group_success_alert": "Group for {user_name} changed.",
-        # --- ИСПРАВЛЕНИЕ: Удаляем ненужные ключи ---
-        # "users_group_Admins": "Admins",
-        # "users_group_Пользователи": "Users",
-        # --- КОНЕЦ ИСПРАВЛЕНИЯ ---
 
         # Units of measurement (core/utils.py)
         "unit_bytes": "B",
@@ -733,3 +731,20 @@ def get_language_keyboard() -> InlineKeyboardMarkup:
                     text="🇬🇧 English",
                     callback_data="set_lang_en")]])
     return keyboard
+
+# --- Функция сортировки (опционально, для удобства поддержки) ---
+# def sort_strings():
+#     """Сортирует ключи в словаре STRINGS по алфавиту."""
+#     global STRINGS
+#     sorted_strings = {}
+#     for lang, strings in STRINGS.items():
+#         sorted_strings[lang] = dict(sorted(strings.items()))
+#     STRINGS = sorted_strings
+#     # Можно добавить сохранение в файл для постоянной сортировки
+#     # with open("path/to/save/sorted_i18n.py", "w", encoding='utf-8') as f:
+#     #     f.write("# -*- coding: utf-8 -*-\n")
+#     #     f.write("STRINGS = ")
+#     #     f.write(json.dumps(STRINGS, indent=4, ensure_ascii=False, sort_keys=True)) # Или использовать pprint
+#
+# # Вызов сортировки при запуске (или вручную)
+# # sort_strings()
