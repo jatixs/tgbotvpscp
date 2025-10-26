@@ -12,6 +12,7 @@ import concurrent.futures
 from concurrent.futures import ThreadPoolExecutor
 from typing import Optional, Dict, Any, Tuple, List
 import ipaddress
+import yaml # <-- Добавлено
 
 from aiogram import F, Dispatcher, types, Bot  # <<<--- Добавлен импорт Bot
 from aiogram.types import KeyboardButton
@@ -23,14 +24,20 @@ from core import config
 from core.auth import is_allowed, send_access_denied_message
 from core.messaging import delete_previous_message
 from core.shared_state import LAST_MESSAGE_IDS
-from core.utils import escape_html
+# --- ИЗМЕНЕНИЕ ИМПОРТА ---
+from core.utils import escape_html, get_country_details # Заменили get_country_flag
+# -------------------------
 
 # --- Ключ кнопки ---
 BUTTON_KEY = "btn_speedtest"
 
 # --- URL и кеш ---
 SERVER_LIST_URL = "https://export.iperf3serverlist.net/listed_iperf3_servers.json"
+# --- ДОБАВЛЕНО: URL для российских серверов ---
+RU_SERVER_LIST_URL = "https://raw.githubusercontent.com/itdoginfo/russian-iperf3-servers/refs/heads/main/list.yml"
+# -----------------------------------------------
 LOCAL_CACHE_FILE = os.path.join(config.CONFIG_DIR, "iperf_servers_cache.json")
+LOCAL_RU_CACHE_FILE = os.path.join(config.CONFIG_DIR, "iperf_servers_ru_cache.yml") # <-- Добавлен кеш для RU
 
 # --- Настройки iperf3 ---
 MAX_SERVERS_TO_PING = 30
@@ -59,37 +66,30 @@ async def edit_status_safe(
     """Безопасно редактирует сообщение статуса или отправляет новое."""
     if not message_id:
         logging.warning("edit_status_safe: message_id is None, cannot edit.")
-        # Optionally send a new message here if desired
-        return message_id  # Return None if we couldn't edit or send new
+        return message_id
 
     try:
         await bot.edit_message_text(text, chat_id=chat_id, message_id=message_id, parse_mode="HTML")
-        # logging.debug(f"Status updated (msg_id: {message_id}): {text}") #
-        # Раскомментировать для отладки
-        return message_id  # Return original ID on success
+        return message_id
     except TelegramBadRequest as e:
         if "message is not modified" in str(e).lower():
-            pass  # Ignore if text is the same
+            pass
         elif "message to edit not found" in str(e).lower():
             logging.warning(
                 f"edit_status_safe: Message {message_id} not found. Sending new.")
-            # Optionally send a new message here
-            return None  # Indicate that the original message is gone
+            return None
         else:
             logging.error(
                 f"edit_status_safe: Error editing message {message_id}: {e}")
-            # Optionally send a new message here
-            return None  # Indicate error / message might be gone
+            return None
     except Exception as e:
         logging.error(
             f"edit_status_safe: Unexpected error editing message {message_id}: {e}",
             exc_info=True)
-        # Optionally send a new message here
-        return None  # Indicate error / message might be gone
+        return None
 # --- [КОНЕЦ] ---
 
 # --- Вспомогательные (синхронные) функции ---
-# (get_ping_sync, get_vps_location_sync, is_ip_address, fetch_parse_and_prioritize_servers_sync, find_best_servers_sync - БЕЗ ИЗМЕНЕНИЙ)
 
 
 def get_ping_sync(host: str) -> Optional[float]:
@@ -131,7 +131,6 @@ def get_vps_location_sync() -> Tuple[Optional[str], Optional[str]]:
             ip_response = requests.get("https://ipinfo.io/ip", timeout=5)
             ip_response.raise_for_status()
             ip = ip_response.text.strip()
-        # logging.info(f"Определен IP VPS: {ip}") # Убрано для краткости лога
     except requests.RequestException as e:
         logging.warning(f"Не удалось определить IP VPS: {e}")
         return None, None
@@ -161,131 +160,192 @@ def is_ip_address(host: str) -> bool:
 
 
 def fetch_parse_and_prioritize_servers_sync(
-        vps_country_code: Optional[str]) -> List[Dict[str, Any]]:
-    servers_json_content, download_error = None, None
-    vps_continent = None
-    try:
-        # logging.info(f"Попытка загрузки списка iperf серверов с {SERVER_LIST_URL}...")
-        response = requests.get(SERVER_LIST_URL, timeout=10)
-        response.raise_for_status()
-        servers_json_content = response.text
+        vps_country_code: Optional[str],
+        lang: str) -> Tuple[List[Dict[str, Any]], Optional[str]]:
+    """
+    Загружает и парсит список серверов.
+    Если VPS в России ('RU'), пытается использовать YAML-список.
+    Возвращает (список_серверов, ключ_ошибки_i18n | None).
+    """
+    servers_list = []
+    error_key = None
+    use_ru_list = vps_country_code == 'RU'
+
+    # --- Попытка загрузить российский YAML-список, если vps_country_code == 'RU' ---
+    if use_ru_list:
+        logging.info(f"VPS находится в RU, попытка загрузки российского списка с {RU_SERVER_LIST_URL}...")
+        ru_yaml_content = None
+        ru_download_error = None
         try:
-            os.makedirs(os.path.dirname(LOCAL_CACHE_FILE), exist_ok=True)
-            with open(LOCAL_CACHE_FILE, "w", encoding='utf-8') as f:
-                f.write(servers_json_content)
-            logging.info(f"Свежий список сохранен в {LOCAL_CACHE_FILE}")
-        except Exception as e:
-            logging.error(f"Не удалось сохранить кеш: {e}", exc_info=True)
-    except requests.RequestException as e:
-        download_error = f"Ошибка сети/таймаут: {e}"
-        logging.warning(f"Ошибка загрузки: {download_error}")
-    except Exception as e:
-        download_error = f"Ошибка: {e}"
-        logging.error(f"Ошибка загрузки: {download_error}", exc_info=True)
-    if servers_json_content is None:
-        if os.path.exists(LOCAL_CACHE_FILE):
-            logging.warning(f"Чтение из кеша {LOCAL_CACHE_FILE}...")
+            response_ru = requests.get(RU_SERVER_LIST_URL, timeout=10)
+            response_ru.raise_for_status()
+            ru_yaml_content = response_ru.text
             try:
-                with open(LOCAL_CACHE_FILE, "r", encoding='utf-8') as f:
-                    servers_json_content = f.read()
-                logging.info("Успешно прочитан кеш.")
+                os.makedirs(os.path.dirname(LOCAL_RU_CACHE_FILE), exist_ok=True)
+                with open(LOCAL_RU_CACHE_FILE, "w", encoding='utf-8') as f:
+                    f.write(ru_yaml_content)
+                logging.info(f"Свежий российский список сохранен в {LOCAL_RU_CACHE_FILE}")
             except Exception as e:
-                logging.error(f"Не удалось прочитать кеш: {e}", exc_info=True)
-                return []
-        else:
-            logging.error(
-                f"Не удалось скачать ({download_error}) и кеш не найден.")
-            return []
-    try:
-        servers_data = json.loads(servers_json_content)
-        if not isinstance(servers_data, list):
-            raise ValueError("Ожидался список")
-        if vps_country_code:
-            for s in servers_data:
-                if isinstance(s, dict) and s.get(
-                        "COUNTRY") == vps_country_code:
-                    vps_continent = s.get("CONTINENT")
-                    break
-            # if vps_continent: logging.info(f"Определен континент VPS ({vps_country_code}): {vps_continent}")
-            # else: logging.warning(f"Не найден континент для
-            # {vps_country_code}.")
-        domain_same_country, domain_same_continent, domain_others = [], [], []
-        ip_same_country, ip_same_continent, ip_others = [], [], []
-        for s in servers_data:
-            if not isinstance(s, dict):
-                continue
-            host, port_str, s_country, s_continent = s.get(
-                "IP/HOST"), s.get("PORT"), s.get("COUNTRY"), s.get("CONTINENT")
-            if not host or not port_str:
-                continue
-            port = None
-            try:
-                port = int(port_str.split('-')[0].strip()) if isinstance(
-                    port_str, str) and '-' in port_str else int(port_str)
-            except ValueError:
-                continue
-            server_dict = {
-                "host": host,
-                "port": port,
-                "city": s.get(
-                    "SITE",
-                    "N/A"),
-                "country": s_country,
-                "continent": s_continent,
-                "provider": s.get(
-                    "PROVIDER",
-                    "N/A")}
-            is_ip = is_ip_address(host)
-            if vps_country_code and s_country == vps_country_code:
-                if is_ip:
-                    ip_same_country.append(server_dict)
-                else:
-                    domain_same_country.append(server_dict)
-            elif vps_continent and s_continent == vps_continent:
-                if is_ip:
-                    ip_same_continent.append(server_dict)
-                else:
-                    domain_same_continent.append(server_dict)
+                logging.error(f"Не удалось сохранить кеш RU: {e}", exc_info=True)
+        except requests.RequestException as e:
+            ru_download_error = f"Ошибка сети/таймаут RU: {e}"
+            logging.warning(f"Ошибка загрузки RU: {ru_download_error}")
+        except Exception as e:
+            ru_download_error = f"Ошибка RU: {e}"
+            logging.error(f"Ошибка загрузки RU: {ru_download_error}", exc_info=True)
+
+        if ru_yaml_content is None:
+            if os.path.exists(LOCAL_RU_CACHE_FILE):
+                logging.warning(f"Чтение RU из кеша {LOCAL_RU_CACHE_FILE}...")
+                try:
+                    with open(LOCAL_RU_CACHE_FILE, "r", encoding='utf-8') as f:
+                        ru_yaml_content = f.read()
+                    logging.info("Успешно прочитан RU кеш.")
+                except Exception as e:
+                    logging.error(f"Не удалось прочитать RU кеш: {e}", exc_info=True)
             else:
-                if is_ip:
-                    ip_others.append(server_dict)
-                else:
-                    domain_others.append(server_dict)
-        # logging.info(f"Распарсено Домены: страна={len(domain_same_country)}, континент={len(domain_same_continent)}, другие={len(domain_others)}")
-        # logging.info(f"Распарсено IP: страна={len(ip_same_country)}, континент={len(ip_same_continent)}, другие={len(ip_others)}")
-        prioritized_list = (
-            domain_same_country +
-            domain_same_continent +
-            domain_others +
-            ip_same_country +
-            ip_same_continent +
-            ip_others)
-        logging.info(
-            f"Загружено/распарсено и приоритезировано {len(prioritized_list)} серверов.")
-        return prioritized_list
-    except json.JSONDecodeError as e:
-        logging.error(f"Ошибка разбора JSON: {e}")
-        if download_error and os.path.exists(LOCAL_CACHE_FILE):
+                logging.error(f"Не удалось скачать RU список ({ru_download_error}) и кеш не найден.")
+                error_key = "iperf_fetch_error_ru"
+
+        if ru_yaml_content:
             try:
-                os.remove(LOCAL_CACHE_FILE)
-                logging.warning("Поврежденный кеш удален.")
-            except OSError as rm_e:
-                logging.error(
-                    f"Не удалось удалить поврежденный файл кеша {LOCAL_CACHE_FILE}: {rm_e}")
-        return []
-    except ValueError as e:
-        logging.error(f"Ошибка структуры JSON: {e}")
-        return []
-    except Exception as e:
-        logging.error(
-            f"Неожиданная ошибка при парсинге/приоритезации: {e}",
-            exc_info=True)
-        return []
+                ru_servers_data = yaml.safe_load(ru_yaml_content)
+                if not isinstance(ru_servers_data, list):
+                    raise ValueError("Ожидался список в YAML")
+                for s in ru_servers_data:
+                    if not isinstance(s, dict): continue
+                    host, port_str, city, name = s.get('address'), s.get('port'), s.get('City'), s.get('Name')
+                    if not host or not port_str or not city or not name: continue
+                    port = None
+                    try:
+                        port = int(str(port_str).split('-')[0].strip())
+                    except ValueError: continue
+
+                    servers_list.append({
+                        "host": host,
+                        "port": port,
+                        "city": city,
+                        "country": "RU",
+                        "continent": "EU",
+                        "provider": name
+                    })
+                logging.info(f"Успешно загружено и распарсено {len(servers_list)} российских серверов.")
+                return servers_list, None
+            except yaml.YAMLError as e:
+                logging.error(f"Ошибка разбора RU YAML: {e}")
+                error_key = "iperf_parse_error_ru"
+                if ru_download_error and os.path.exists(LOCAL_RU_CACHE_FILE):
+                     try:
+                         os.remove(LOCAL_RU_CACHE_FILE)
+                         logging.warning("Поврежденный RU кеш удален.")
+                     except OSError as rm_e:
+                         logging.error(f"Не удалось удалить поврежденный RU файл кеша {LOCAL_RU_CACHE_FILE}: {rm_e}")
+            except Exception as e:
+                logging.error(f"Неожиданная ошибка при парсинге RU YAML: {e}", exc_info=True)
+                error_key = "iperf_parse_error_ru"
+
+    # --- Если российский список не использовался или произошла ошибка, используем основной JSON ---
+    if not servers_list:
+        if use_ru_list:
+            logging.warning("Не удалось использовать российский список, переход на основной JSON...")
+
+        servers_json_content, download_error = None, None
+        vps_continent = None
+        try:
+            response = requests.get(SERVER_LIST_URL, timeout=10)
+            response.raise_for_status()
+            servers_json_content = response.text
+            try:
+                os.makedirs(os.path.dirname(LOCAL_CACHE_FILE), exist_ok=True)
+                with open(LOCAL_CACHE_FILE, "w", encoding='utf-8') as f:
+                    f.write(servers_json_content)
+                logging.info(f"Свежий JSON список сохранен в {LOCAL_CACHE_FILE}")
+            except Exception as e:
+                logging.error(f"Не удалось сохранить JSON кеш: {e}", exc_info=True)
+        except requests.RequestException as e:
+            download_error = f"Ошибка сети/таймаут JSON: {e}"
+            logging.warning(f"Ошибка загрузки JSON: {download_error}")
+        except Exception as e:
+            download_error = f"Ошибка JSON: {e}"
+            logging.error(f"Ошибка загрузки JSON: {download_error}", exc_info=True)
+
+        if servers_json_content is None:
+            if os.path.exists(LOCAL_CACHE_FILE):
+                logging.warning(f"Чтение JSON из кеша {LOCAL_CACHE_FILE}...")
+                try:
+                    with open(LOCAL_CACHE_FILE, "r", encoding='utf-8') as f:
+                        servers_json_content = f.read()
+                    logging.info("Успешно прочитан JSON кеш.")
+                except Exception as e:
+                    logging.error(f"Не удалось прочитать JSON кеш: {e}", exc_info=True)
+                    return [], error_key or "iperf_fetch_error"
+            else:
+                logging.error(f"Не удалось скачать JSON ({download_error}) и кеш не найден.")
+                return [], error_key or "iperf_fetch_error"
+
+        try:
+            servers_data = json.loads(servers_json_content)
+            if not isinstance(servers_data, list):
+                raise ValueError("Ожидался список в JSON")
+
+            if vps_country_code:
+                for s in servers_data:
+                    if isinstance(s, dict) and s.get("COUNTRY") == vps_country_code:
+                        vps_continent = s.get("CONTINENT")
+                        break
+
+            domain_same_country, domain_same_continent, domain_others = [], [], []
+            ip_same_country, ip_same_continent, ip_others = [], [], []
+            for s in servers_data:
+                if not isinstance(s, dict): continue
+                host, port_str, s_country, s_continent = s.get("IP/HOST"), s.get("PORT"), s.get("COUNTRY"), s.get("CONTINENT")
+                if not host or not port_str: continue
+                port = None
+                try:
+                    port = int(port_str.split('-')[0].strip()) if isinstance(port_str, str) and '-' in port_str else int(port_str)
+                except ValueError: continue
+
+                server_dict = {
+                    "host": host, "port": port,
+                    "city": s.get("SITE", "N/A"),
+                    "country": s_country,
+                    "continent": s_continent,
+                    "provider": s.get("PROVIDER", "N/A")
+                }
+                is_ip = is_ip_address(host)
+                if vps_country_code and s_country == vps_country_code:
+                    (ip_same_country if is_ip else domain_same_country).append(server_dict)
+                elif vps_continent and s_continent == vps_continent:
+                    (ip_same_continent if is_ip else domain_same_continent).append(server_dict)
+                else:
+                    (ip_others if is_ip else domain_others).append(server_dict)
+
+            prioritized_list = (domain_same_country + domain_same_continent + domain_others +
+                                ip_same_country + ip_same_continent + ip_others)
+            logging.info(f"Загружено/распарсено и приоритезировано {len(prioritized_list)} JSON серверов.")
+            return prioritized_list, None
+
+        except json.JSONDecodeError as e:
+            logging.error(f"Ошибка разбора JSON: {e}")
+            if download_error and os.path.exists(LOCAL_CACHE_FILE):
+                 try:
+                     os.remove(LOCAL_CACHE_FILE)
+                     logging.warning("Поврежденный JSON кеш удален.")
+                 except OSError as rm_e:
+                     logging.error(f"Не удалось удалить поврежденный JSON файл кеша {LOCAL_CACHE_FILE}: {rm_e}")
+            return [], error_key or "iperf_fetch_error"
+        except ValueError as e:
+            logging.error(f"Ошибка структуры JSON: {e}")
+            return [], error_key or "iperf_fetch_error"
+        except Exception as e:
+            logging.error(f"Неожиданная ошибка при парсинге/приоритезации JSON: {e}", exc_info=True)
+            return [], error_key or "iperf_fetch_error"
+
+    return servers_list, None
 
 
 def find_best_servers_sync(
         servers: list[Dict[str, Any]]) -> List[Tuple[float, Dict[str, Any]]]:
-    # logging.info(f"Поиск лучших iperf серверов (проверка {min(len(servers), MAX_SERVERS_TO_PING)} серверов)...")
     servers_to_check = servers[:MAX_SERVERS_TO_PING]
     results = []
     with ThreadPoolExecutor(max_workers=10) as executor:
@@ -299,8 +359,6 @@ def find_best_servers_sync(
                 ping = future.result()
                 if ping is not None:
                     results.append((ping, server))
-                    # host_type = "IP" if is_ip_address(server['host']) else "Domain"
-                    # logging.debug(f"  [PING OK] {server['host']} ({host_type}, {server.get('country')}, {server.get('city')}): {ping:.2f} мс")
             except Exception as e:
                 logging.warning(
                     f"Ошибка при получении результата пинга для {server['host']}: {e}")
@@ -314,7 +372,6 @@ def find_best_servers_sync(
     return results
 
 # --- Асинхронная функция теста iperf3 ---
-# --- [ИЗМЕНЕНО] Добавлены bot, chat_id, message_id и вызовы edit_status_safe ---
 
 
 async def run_iperf_test_async(bot: Bot,
@@ -343,26 +400,9 @@ async def run_iperf_test_async(bot: Bot,
         return _("error_message_edit_failed", lang)  # Новая строка i18n
 
     cmd_download_args = [
-        "iperf3",
-        "-c",
-        host,
-        "-p",
-        port,
-        "-J",
-        "-t",
-        duration,
-        "-R",
-        "-4"]
+        "iperf3", "-c", host, "-p", port, "-J", "-t", duration, "-R", "-4"]
     cmd_upload_args = [
-        "iperf3",
-        "-c",
-        host,
-        "-p",
-        port,
-        "-J",
-        "-t",
-        duration,
-        "-4"]
+        "iperf3", "-c", host, "-p", port, "-J", "-t", duration, "-4"]
     results = {"download": 0.0, "upload": 0.0, "ping": ping}
     try:
         # --- 1. Тест скачивания (Download) ---
@@ -379,38 +419,24 @@ async def run_iperf_test_async(bot: Bot,
         process_down = await asyncio.create_subprocess_exec(*cmd_download_args, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
         stdout_down_bytes, stderr_down_bytes = await asyncio.wait_for(process_down.communicate(), timeout=IPERF_PROCESS_TIMEOUT)
         stdout_down = stdout_down_bytes.decode('utf-8', errors='ignore')
-        stderr_down = stderr_down_bytes.decode(
-            'utf-8', errors='ignore').strip()
+        stderr_down = stderr_down_bytes.decode('utf-8', errors='ignore').strip()
         if process_down.returncode == 0 and stdout_down:
             try:
                 data_down = json.loads(stdout_down)
                 if "error" not in data_down:
-                    speed_bps = data_down.get("end", {}).get(
-                        "sum_received", {}).get("bits_per_second")
-                    if speed_bps is None:
-                        raise ValueError(
-                            "Ключ 'bits_per_second' не найден (Download)")
+                    speed_bps = data_down.get("end", {}).get("sum_received", {}).get("bits_per_second")
+                    if speed_bps is None: raise ValueError("Ключ 'bits_per_second' не найден (Download)")
                     results["download"] = speed_bps / 1_000_000
-                    logging.info(
-                        f"Скорость скачивания: {results['download']:.2f} Мбит/с")
-                else:
-                    raise Exception(
-                        f"Ошибка iperf (Download): {data_down['error']}")
+                    logging.info(f"Скорость скачивания: {results['download']:.2f} Мбит/с")
+                else: raise Exception(f"Ошибка iperf (Download): {data_down['error']}")
             except (json.JSONDecodeError, ValueError) as e:
-                logging.error(
-                    f"Ошибка JSON (Download) от {host}:{port}: {e}\nОтвет:\n{stdout_down}")
-                raise Exception(
-                    f"Некорректный/неожиданный JSON ответ (Download)")
+                logging.error(f"Ошибка JSON (Download) от {host}:{port}: {e}\nОтвет:\n{stdout_down}")
+                raise Exception(f"Некорректный/неожиданный JSON ответ (Download)")
         elif process_down.returncode == 1:
-            logging.warning(
-                f"Ошибка iperf (Download), код: 1 на {host}:{port}. stderr: '{stderr_down}'")
+            logging.warning(f"Ошибка iperf (Download), код: 1 на {host}:{port}. stderr: '{stderr_down}'")
             return "DOWNLOAD_CONNECTION_ERROR_CODE_1"
-        elif stderr_down:
-            raise Exception(
-                f"Ошибка выполнения iperf (Download): {stderr_down}")
-        else:
-            raise Exception(
-                f"Неизвестная ошибка iperf (Download), код: {process_down.returncode}")
+        elif stderr_down: raise Exception(f"Ошибка выполнения iperf (Download): {stderr_down}")
+        else: raise Exception(f"Неизвестная ошибка iperf (Download), код: {process_down.returncode}")
 
         # --- 2. Тест загрузки (Upload) ---
         status_text_ul = _(
@@ -431,46 +457,52 @@ async def run_iperf_test_async(bot: Bot,
             try:
                 data_up = json.loads(stdout_up)
                 if "error" not in data_up:
-                    speed_bps = data_up.get("end", {}).get(
-                        "sum_sent", {}).get("bits_per_second")
-                    if speed_bps is None:
-                        raise ValueError(
-                            "Ключ 'bits_per_second' не найден (Upload)")
+                    speed_bps = data_up.get("end", {}).get("sum_sent", {}).get("bits_per_second")
+                    if speed_bps is None: raise ValueError("Ключ 'bits_per_second' не найден (Upload)")
                     results["upload"] = speed_bps / 1_000_000
-                    logging.info(
-                        f"Скорость загрузки: {results['upload']:.2f} Мбит/с")
-                else:
-                    raise Exception(
-                        f"Ошибка iperf (Upload): {data_up['error']}")
+                    logging.info(f"Скорость загрузки: {results['upload']:.2f} Мбит/с")
+                else: raise Exception(f"Ошибка iperf (Upload): {data_up['error']}")
             except (json.JSONDecodeError, ValueError) as e:
-                logging.error(
-                    f"Ошибка JSON (Upload) от {host}:{port}: {e}\nОтвет:\n{stdout_up}")
-                raise Exception(
-                    f"Некорректный/неожиданный JSON ответ (Upload)")
+                logging.error(f"Ошибка JSON (Upload) от {host}:{port}: {e}\nОтвет:\n{stdout_up}")
+                raise Exception(f"Некорректный/неожиданный JSON ответ (Upload)")
         elif process_up.returncode == 1:
-            logging.warning(
-                f"Ошибка iperf (Upload), код: 1 на {host}:{port}. stderr: '{stderr_up}'")
+            logging.warning(f"Ошибка iperf (Upload), код: 1 на {host}:{port}. stderr: '{stderr_up}'")
             return "UPLOAD_CONNECTION_ERROR_CODE_1"
-        elif stderr_up:
-            raise Exception(f"Ошибка выполнения iperf (Upload): {stderr_up}")
-        else:
-            raise Exception(
-                f"Неизвестная ошибка iperf (Upload), код: {process_up.returncode}")
+        elif stderr_up: raise Exception(f"Ошибка выполнения iperf (Upload): {stderr_up}")
+        else: raise Exception(f"Неизвестная ошибка iperf (Upload), код: {process_up.returncode}")
 
         # --- 3. Форматирование УСПЕШНОГО вывода ---
-        provider_name = server.get('provider', 'N/A')
+        country_code = server.get('country') # Код страны, например 'DE'
+        city_name = server.get('city', 'N/A') # Название города, например 'Frankfurt'
+        provider_name = server.get('provider', 'N/A') # Провайдер, например 'WOBCOM'
+
+        # --- ИЗМЕНЕНИЕ: Получаем флаг и ПОЛНОЕ имя страны ---
+        identifier = country_code if country_code else host # Используем код, если он есть
+        flag, country_name_full = await get_country_details(identifier) # Получаем флаг И имя
+        logging.debug(f"get_country_details для '{identifier}' вернул: flag='{flag}', name='{country_name_full}'")
+
+        # --- ИЗМЕНЕНИЕ: Формируем строку локации ---
+        # Используем ПОЛНОЕ имя страны (если получено), иначе КОД страны, затем Город
+        if country_name_full:
+            location_str = f"{country_name_full} {city_name}" # Пример: "Germany Frankfurt"
+        elif country_code:
+             location_str = f"{country_code} {city_name}" # Пример: "DE Frankfurt"
+        else:
+             location_str = f"{city_name}" # Пример: "Frankfurt"
+        # --------------------------------------------------
+
         # Возвращаем финальный текст результата
+        # Ключи {flag}, {server}, {provider} используются в i18n.py
         return _(
             "speedtest_results",
             lang,
             dl=results["download"],
             ul=results["upload"],
             ping=results["ping"],
-            location=escape_html(
-                server.get(
-                    'city',
-                    'N/A')),
-            sponsor=escape_html(provider_name))
+            flag=flag,                      # Передаем флаг 🇩🇪
+            server=escape_html(location_str), # Передаем сюда "Germany Frankfurt"
+            provider=escape_html(provider_name) # Передаем сюда "WOBCOM"
+        )
 
     except FileNotFoundError:
         logging.error("iperf3 не найден.")
@@ -482,10 +514,9 @@ async def run_iperf_test_async(bot: Bot,
     except Exception as e:
         logging.error(
             f"Ошибка iperf3 теста ({host}:{port}): {e}",
-            exc_info=False)
+            exc_info=False) # Не логируем полный traceback для обычных ошибок теста
         error_message_safe = str(e)
         return _("speedtest_fail", lang, error=escape_html(error_message_safe))
-# --- [КОНЕЦ ИЗМЕНЕНИЙ] ---
 
 
 # --- Главный хэндлер ---
@@ -500,10 +531,8 @@ async def speedtest_handler(message: types.Message):
     await message.bot.send_chat_action(chat_id=chat_id, action="typing")
     await delete_previous_message(user_id, [command, "access_denied"], chat_id, message.bot)
 
-    # Отправляем самое первое сообщение (оно же будет редактироваться)
     status_message = await message.answer(_("speedtest_status_geo", lang), parse_mode="HTML")
     status_message_id = status_message.message_id
-    # Сохраняем ID для возможности удаления при следующем вызове команды
     LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = status_message_id
 
     final_text = ""
@@ -514,21 +543,19 @@ async def speedtest_handler(message: types.Message):
             logging.warning("Поиск без приоритезации геолокации.")
 
         # --- Этап 2: Загрузка списка ---
-        status_message_id = await edit_status_safe(message.bot, chat_id, status_message_id, _("speedtest_status_fetch", lang), lang)
-        if not status_message_id:
-            # Прерываем, если сообщение пропало
-            raise Exception("Не удалось обновить статус 'Загрузка списка'")
+        fetch_status_key = "speedtest_status_fetch_ru" if vps_country_code == 'RU' else "speedtest_status_fetch"
+        status_message_id = await edit_status_safe(message.bot, chat_id, status_message_id, _(fetch_status_key, lang), lang)
+        if not status_message_id: raise Exception("Не удалось обновить статус 'Загрузка списка'")
 
-        all_servers = await asyncio.to_thread(fetch_parse_and_prioritize_servers_sync, vps_country_code)
+        all_servers, fetch_error_key = await asyncio.to_thread(fetch_parse_and_prioritize_servers_sync, vps_country_code, lang)
 
         if not all_servers:
-            final_text = _("iperf_fetch_error", lang)
+            final_text = _(fetch_error_key or "iperf_fetch_error", lang)
         else:
             # --- Этап 3: Пинг серверов ---
             count_to_ping = min(len(all_servers), MAX_SERVERS_TO_PING)
             status_message_id = await edit_status_safe(message.bot, chat_id, status_message_id, _("speedtest_status_ping", lang, count=count_to_ping), lang)
-            if not status_message_id:
-                raise Exception("Не удалось обновить статус 'Пинг'")
+            if not status_message_id: raise Exception("Не удалось обновить статус 'Пинг'")
 
             best_servers_list = await asyncio.to_thread(find_best_servers_sync, all_servers)
 
@@ -537,121 +564,79 @@ async def speedtest_handler(message: types.Message):
             else:
                 # --- Этап 4: Тестирование (с попытками) ---
                 test_successful, last_error_text, attempts_made = False, "", 0
-                for attempt in range(
-                        min(MAX_TEST_ATTEMPTS, len(best_servers_list))):
+                for attempt in range(min(MAX_TEST_ATTEMPTS, len(best_servers_list))):
                     attempts_made += 1
                     best_ping, best_server = best_servers_list[attempt]
-                    logging.info(
-                        f"Попытка #{attempts_made} теста на сервере: {best_server['host']} ({best_ping:.2f} мс)")
+                    logging.info(f"Попытка #{attempts_made} теста на сервере: {best_server['host']} ({best_ping:.2f} мс)")
 
-                    # Передаем bot, chat_id, message_id в функцию теста для
-                    # обновления статуса
                     test_result = await run_iperf_test_async(message.bot, chat_id, status_message_id, best_server, best_ping, lang)
 
-                    # Проверяем результат
-                    # Маркеры ошибок подключения (Download или Upload)
-                    if test_result in [
-                        "DOWNLOAD_CONNECTION_ERROR_CODE_1",
-                            "UPLOAD_CONNECTION_ERROR_CODE_1"]:
+                    if test_result in ["DOWNLOAD_CONNECTION_ERROR_CODE_1", "UPLOAD_CONNECTION_ERROR_CODE_1"]:
                         error_type = "Download" if test_result == "DOWNLOAD_CONNECTION_ERROR_CODE_1" else "Upload"
-                        logging.warning(
-                            f"Попытка #{attempts_made}: Ошибка подключения при {error_type} на {best_server['host']}. Пробую следующий сервер.")
-                        # Обновляем сообщение об ошибке (но сохраняем ID для
-                        # след. попытки)
-                        error_text = _(
-                            "iperf_conn_error_generic", lang, host=escape_html(
-                                best_server['host']))
+                        logging.warning(f"Попытка #{attempts_made}: Ошибка подключения при {error_type} на {best_server['host']}. Пробую следующий сервер.")
+                        error_text = _("iperf_conn_error_generic", lang, host=escape_html(best_server['host']))
                         status_message_id = await edit_status_safe(message.bot, chat_id, status_message_id, error_text, lang)
-                        last_error_text = error_text  # Сохраняем как последнюю ошибку
-                        # Небольшая пауза перед следующей попыткой
+                        last_error_text = error_text
                         await asyncio.sleep(1)
-                        continue  # Переходим к следующему серверу
+                        continue
 
-                    # Другие ошибки iperf3
-                    elif test_result.startswith(_("speedtest_fail", lang, error="")) or \
-                            test_result == _("iperf_not_found", lang) or \
-                            test_result.startswith(_("iperf_timeout", lang, host="")) or \
-                            test_result == _("error_message_edit_failed", lang):
-                        logging.warning(
-                            f"Попытка #{attempts_made}: Ошибка теста iperf3 на {best_server['host']}: {test_result}")
-                        # Показываем ошибку
+                    is_fail = test_result.startswith(_("speedtest_fail", lang, error="").split(':')[0])
+                    is_not_found = test_result == _("iperf_not_found", lang)
+                    is_timeout = test_result.startswith(_("iperf_timeout", lang, host="").split('(')[0])
+                    is_edit_fail = test_result == _("error_message_edit_failed", lang)
+
+                    if is_fail or is_not_found or is_timeout or is_edit_fail:
+                        logging.warning(f"Попытка #{attempts_made}: Ошибка теста iperf3 на {best_server['host']}: {test_result}")
                         status_message_id = await edit_status_safe(message.bot, chat_id, status_message_id, test_result, lang)
                         last_error_text = test_result
                         await asyncio.sleep(1)
                         continue
-
-                    # Успешный тест
                     else:
                         final_text = test_result
                         test_successful = True
-                        logging.info(
-                            f"Тест успешен на попытке #{attempts_made}.")
+                        logging.info(f"Тест успешен на попытке #{attempts_made}.")
                         break
 
-                # Если ни одна попытка не удалась
                 if not test_successful:
-                    logging.error(
-                        f"Тест не удался после {attempts_made} попыток.")
-                    final_text = last_error_text if last_error_text else _(
-                        "iperf_all_attempts_failed", lang, attempts=attempts_made)
+                    logging.error(f"Тест не удался после {attempts_made} попыток.")
+                    final_text = last_error_text if last_error_text else _("iperf_all_attempts_failed", lang, attempts=attempts_made)
 
     except Exception as e:
-        logging.error(
-            f"Критическая ошибка в speedtest_handler: {e}",
-            exc_info=True)
+        logging.error(f"Критическая ошибка в speedtest_handler: {e}", exc_info=True)
         final_text = _("speedtest_fail", lang, error=escape_html(str(e)))
 
-    # Финальное редактирование сообщения (или отправка нового, если
-    # редактирование не удалось)
-    if status_message_id:  # Если ID сообщения еще актуален
+    # Финальное редактирование сообщения
+    if status_message_id:
         try:
             await message.bot.edit_message_text(final_text, chat_id=chat_id, message_id=status_message_id, parse_mode="HTML")
-            # Обновляем ID в LAST_MESSAGE_IDS на случай, если он изменился
-            # (хотя edit_status_safe должен возвращать старый)
-            LAST_MESSAGE_IDS.setdefault(
-                user_id, {})[command] = status_message_id
+            LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = status_message_id
         except TelegramBadRequest as e:
-            if "message is not modified" in str(e).lower():
-                pass  # Уже финальный текст
+            if "message is not modified" in str(e).lower(): pass
             elif "message to edit not found" in str(e).lower():
-                logging.warning(
-                    f"Speedtest: Финальное сообщение {status_message_id} не найдено. Отправляю новое.")
+                logging.warning(f"Speedtest: Финальное сообщение {status_message_id} не найдено. Отправляю новое.")
                 LAST_MESSAGE_IDS.get(user_id, {}).pop(command, None)
                 try:
                     new_msg = await message.answer(final_text, parse_mode="HTML")
-                    LAST_MESSAGE_IDS.setdefault(
-                        user_id, {})[command] = new_msg.message_id
-                except Exception as send_e:
-                    logging.error(f"Speedtest: Не отправить новое: {send_e}")
+                    LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = new_msg.message_id
+                except Exception as send_e: logging.error(f"Speedtest: Не отправить новое: {send_e}")
             else:
-                logging.error(
-                    f"Speedtest: Ошибка финального ред. ({status_message_id}): {e}. Отправляю новое.")
+                logging.error(f"Speedtest: Ошибка финального ред. ({status_message_id}): {e}. Отправляю новое.")
                 LAST_MESSAGE_IDS.get(user_id, {}).pop(command, None)
                 try:
                     new_msg = await message.answer(final_text, parse_mode="HTML")
-                    LAST_MESSAGE_IDS.setdefault(
-                        user_id, {})[command] = new_msg.message_id
-                except Exception as send_e:
-                    logging.error(f"Speedtest: Не отправить новое: {send_e}")
+                    LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = new_msg.message_id
+                except Exception as send_e: logging.error(f"Speedtest: Не отправить новое: {send_e}")
         except Exception as e:
-            logging.error(
-                f"Speedtest: Неожиданная ошибка финального ред. ({status_message_id}): {e}. Отправляю новое.")
+            logging.error(f"Speedtest: Неожиданная ошибка финального ред. ({status_message_id}): {e}. Отправляю новое.")
             LAST_MESSAGE_IDS.get(user_id, {}).pop(command, None)
             try:
                 new_msg = await message.answer(final_text, parse_mode="HTML")
-                LAST_MESSAGE_IDS.setdefault(
-                    user_id, {})[command] = new_msg.message_id
-            except Exception as send_e:
-                logging.error(f"Speedtest: Не отправить новое: {send_e}")
+                LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = new_msg.message_id
+            except Exception as send_e: logging.error(f"Speedtest: Не отправить новое: {send_e}")
     else:
-        # Если status_message_id стал None где-то в процессе (из-за ошибки
-        # редактирования)
-        logging.warning(
-            "Speedtest: Не найден ID для финального ред. Отправляю новым.")
+        logging.warning("Speedtest: Не найден ID для финального ред. Отправляю новым.")
         LAST_MESSAGE_IDS.get(user_id, {}).pop(command, None)
         try:
             new_msg = await message.answer(final_text, parse_mode="HTML")
-            LAST_MESSAGE_IDS.setdefault(
-                user_id, {})[command] = new_msg.message_id
-        except Exception as send_e:
-            logging.error(f"Speedtest: Не отправить новое (нет ID): {send_e}")
+            LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = new_msg.message_id
+        except Exception as send_e: logging.error(f"Speedtest: Не отправить новое (нет ID): {send_e}")

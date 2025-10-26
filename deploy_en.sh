@@ -10,7 +10,7 @@ WATCHDOG_SERVICE_NAME="tg-watchdog"
 SERVICE_USER="tgbot"
 PYTHON_BIN="/usr/bin/python3"
 VENV_PATH="${BOT_INSTALL_PATH}/venv"
-README_FILE="${BOT_INSTALL_PATH}/README.md"
+README_FILE="${BOT_INSTALL_PATH}/README.en.md" # <-- Changed to English README
 
 # --- GitHub Repository and Branch ---
 GITHUB_REPO="jatixs/tgbotvpscp"
@@ -39,9 +39,9 @@ check_integrity() { if [ ! -d "${BOT_INSTALL_PATH}" ]; then INSTALL_STATUS="NOT_
 # --- Installation functions ---
 install_extras() {
     local packages_to_install=()
-    local packages_to_remove=() # <--- Added: List for removal
+    local packages_to_remove=()
 
-    # Fail2Ban Check (no changes)
+    # Fail2Ban Check
     if ! command -v fail2ban-client &> /dev/null; then
         msg_question "Fail2Ban not found. Install? (y/n): " INSTALL_F2B
         if [[ "$INSTALL_F2B" =~ ^[Yy]$ ]]; then
@@ -53,7 +53,7 @@ install_extras() {
         msg_success "Fail2Ban already installed."
     fi
 
-    # --- iperf3 Check (Replaces Speedtest) ---
+    # iperf3 Check
     if ! command -v iperf3 &> /dev/null; then
         msg_question "iperf3 not found. It is required for the 'Speedtest' module. Install? (y/n): " INSTALL_IPERF3
         if [[ "$INSTALL_IPERF3" =~ ^[Yy]$ ]]; then
@@ -64,9 +64,8 @@ install_extras() {
     else
         msg_success "iperf3 is already installed."
     fi
-    # --- End iperf3 Check ---
 
-    # --- Speedtest CLI Check (Check for removal) ---
+    # Speedtest CLI Check for removal
     if command -v speedtest &> /dev/null || dpkg -s speedtest-cli &> /dev/null; then
         msg_warning "Detected old 'speedtest-cli' package."
         msg_question "Remove 'speedtest-cli'? (Recommended, as the bot now uses iperf3) (y/n): " REMOVE_SPEEDTEST
@@ -76,18 +75,16 @@ install_extras() {
             msg_info "Skipping removal of speedtest-cli."
         fi
     fi
-    # --- End Speedtest CLI Check ---
 
-    # --- Package Removal ---
+    # Package Removal
     if [ ${#packages_to_remove[@]} -gt 0 ]; then
         msg_info "Removing packages: ${packages_to_remove[*]}"
         run_with_spinner "Removing packages" sudo apt-get remove --purge -y "${packages_to_remove[@]}"
-        run_with_spinner "Cleaning up apt" sudo apt-get autoremove -y # Clean up dependencies after removal
+        run_with_spinner "Cleaning up apt" sudo apt-get autoremove -y
         msg_success "Specified packages removed."
     fi
-    # --- End Package Removal ---
 
-    # --- Package Installation (logic unchanged) ---
+    # Package Installation
     if [ ${#packages_to_install[@]} -gt 0 ]; then
         msg_info "Installing additional packages: ${packages_to_install[*]}"
         run_with_spinner "Updating package list" sudo apt-get update -y
@@ -104,9 +101,17 @@ install_extras() {
         fi
         msg_success "Additional packages installed."
     fi
-    # --- End Package Installation ---
 }
-common_install_steps() { echo "" > /tmp/${SERVICE_NAME}_install.log; msg_info "1. Updating packages and installing basic dependencies..."; run_with_spinner "Updating package list" sudo apt-get update -y || { msg_error "Failed to update packages"; exit 1; }; run_with_spinner "Installing dependencies (python3, pip, venv, git, curl, wget, sudo)" sudo DEBIAN_FRONTEND=noninteractive apt-get install -y python3 python3-pip python3-venv git curl wget sudo || { msg_error "Failed to install basic dependencies"; exit 1; }; install_extras; }
+# --- [MODIFIED] common_install_steps ---
+common_install_steps() {
+    echo "" > /tmp/${SERVICE_NAME}_install.log
+    msg_info "1. Updating packages and installing basic dependencies..."
+    run_with_spinner "Updating package list" sudo apt-get update -y || { msg_error "Failed to update packages"; exit 1; }
+    # Added python3-yaml to dependencies
+    run_with_spinner "Installing dependencies (python3, pip, venv, git, curl, wget, sudo, yaml)" sudo DEBIAN_FRONTEND=noninteractive apt-get install -y python3 python3-pip python3-venv git curl wget sudo python3-yaml || { msg_error "Failed to install basic dependencies"; exit 1; }
+    install_extras
+}
+# --- [END MODIFIED] common_install_steps ---
 install_logic() { local mode=$1; local branch_to_use=$2; local exec_user_cmd=""; local owner="root:root"; local owner_user="root"; if [ "$mode" == "secure" ]; then msg_info "2. Creating user '${SERVICE_USER}'..."; if ! id "${SERVICE_USER}" &>/dev/null; then sudo useradd -r -s /bin/false -d ${BOT_INSTALL_PATH} ${SERVICE_USER} || exit 1; fi; sudo mkdir -p ${BOT_INSTALL_PATH}; sudo chown -R ${SERVICE_USER}:${SERVICE_USER} ${BOT_INSTALL_PATH}; msg_info "3. Cloning repo (branch ${branch_to_use}) as ${SERVICE_USER}..."; run_with_spinner "Cloning repository" sudo -u ${SERVICE_USER} git clone --branch "${branch_to_use}" "${GITHUB_REPO_URL}" "${BOT_INSTALL_PATH}" || exit 1; exec_user_cmd="sudo -u ${SERVICE_USER}"; owner="${SERVICE_USER}:${SERVICE_USER}"; owner_user=${SERVICE_USER}; else msg_info "2. Creating directory..."; sudo mkdir -p ${BOT_INSTALL_PATH}; msg_info "3. Cloning repo (branch ${branch_to_use}) as root..."; run_with_spinner "Cloning repository" sudo git clone --branch "${branch_to_use}" "${GITHUB_REPO_URL}" "${BOT_INSTALL_PATH}" || exit 1; exec_user_cmd=""; owner="root:root"; owner_user="root"; fi; msg_info "4. Setting up venv..."; if [ ! -d "${VENV_PATH}" ]; then run_with_spinner "Creating venv" $exec_user_cmd ${PYTHON_BIN} -m venv "${VENV_PATH}" || exit 1; fi; run_with_spinner "Updating pip" $exec_user_cmd "${VENV_PATH}/bin/pip" install --upgrade pip || msg_warning "Failed to update pip..."; run_with_spinner "Installing Python dependencies" $exec_user_cmd "${VENV_PATH}/bin/pip" install -r "${BOT_INSTALL_PATH}/requirements.txt" || exit 1; msg_info "5. Creating .gitignore, logs/, config/..."; sudo -u ${owner_user} bash -c "cat > ${BOT_INSTALL_PATH}/.gitignore" <<< $'/venv/\n/__pycache__/\n*.pyc\n/.env\n/config/\n/logs/\n*.log\n*_flag.txt'; sudo chmod 644 "${BOT_INSTALL_PATH}/.gitignore"; sudo -u ${owner_user} mkdir -p "${BOT_INSTALL_PATH}/logs/bot" "${BOT_INSTALL_PATH}/logs/watchdog" "${BOT_INSTALL_PATH}/config"; msg_info "6. Configuring .env..."; msg_question "Bot Token: " T; msg_question "Admin User ID: " A; msg_question "Admin Username (optional): " U; msg_question "Bot Name (optional): " N; sudo bash -c "cat > ${BOT_INSTALL_PATH}/.env" <<< $(printf "TG_BOT_TOKEN=\"%s\"\nTG_ADMIN_ID=\"%s\"\nTG_ADMIN_USERNAME=\"%s\"\nTG_BOT_NAME=\"%s\"\nINSTALL_MODE=\"%s\"" "$T" "$A" "$U" "$N" "$mode"); sudo chown ${owner} "${BOT_INSTALL_PATH}/.env"; sudo chmod 600 "${BOT_INSTALL_PATH}/.env"; if [ "$mode" == "root" ]; then msg_info "7. Configuring sudo (root)..."; F="/etc/sudoers.d/98-${SERVICE_NAME}-root"; sudo tee ${F} > /dev/null <<< $'root ALL=(ALL) NOPASSWD: /bin/systemctl restart tg-bot.service\nroot ALL=(ALL) NOPASSWD: /bin/systemctl restart tg-watchdog.service\nroot ALL=(ALL) NOPASSWD: /sbin/reboot'; sudo chmod 440 ${F}; elif [ "$mode" == "secure" ]; then F="/etc/sudoers.d/99-${WATCHDOG_SERVICE_NAME}-restart"; sudo tee ${F} > /dev/null <<< $'Defaults:tgbot !requiretty\ntgbot ALL=(root) NOPASSWD: /bin/systemctl restart tg-bot.service'; sudo chmod 440 ${F}; msg_info "7. Configuring sudo (secure)..."; fi; create_and_start_service "${SERVICE_NAME}" "${BOT_INSTALL_PATH}/bot.py" "${mode}" "Telegram Bot"; create_and_start_service "${WATCHDOG_SERVICE_NAME}" "${BOT_INSTALL_PATH}/watchdog.py" "root" "Watchdog"; local ip=$(curl -s --connect-timeout 5 ipinfo.io/ip || echo "Could not determine"); echo ""; echo "---"; msg_success "Installation complete!"; msg_info "IP: ${ip}"; echo "---"; }
 install_secure() { echo -e "\n${C_BOLD}=== Secure Installation (branch: ${GIT_BRANCH}) ===${C_RESET}"; common_install_steps; install_logic "secure" "${GIT_BRANCH}"; }
 install_root() { echo -e "\n${C_BOLD}=== Root Installation (branch: ${GIT_BRANCH}) ===${C_RESET}"; common_install_steps; install_logic "root" "${GIT_BRANCH}"; }
@@ -127,7 +132,6 @@ RestartSec=10
 [Install]
 WantedBy=multi-user.target
 EOF
-# --- FIXED: Removed extra ';' ---
 msg_info "Starting ${svc}..."; sudo systemctl daemon-reload; sudo systemctl enable ${svc}.service &> /dev/null; run_with_spinner "Starting ${svc}" sudo systemctl restart ${svc}; sleep 2; if sudo systemctl is-active --quiet ${svc}.service; then msg_success "${svc} started!"; msg_info "Status: sudo systemctl status ${svc}"; else msg_error "${svc} FAILED TO START. Logs: sudo journalctl -u ${svc} -n 50 --no-pager"; if [ "$svc" == "$SERVICE_NAME" ]; then exit 1; fi; fi; }
 uninstall_bot() { echo -e "\n${C_BOLD}=== Uninstalling Bot ===${C_RESET}"; msg_info "1. Stopping services..."; if systemctl list-units --full -all | grep -q "${SERVICE_NAME}.service"; then sudo systemctl stop ${SERVICE_NAME} &> /dev/null; sudo systemctl disable ${SERVICE_NAME} &> /dev/null; fi; if systemctl list-units --full -all | grep -q "${WATCHDOG_SERVICE_NAME}.service"; then sudo systemctl stop ${WATCHDOG_SERVICE_NAME} &> /dev/null; sudo systemctl disable ${WATCHDOG_SERVICE_NAME} &> /dev/null; fi; msg_info "2. Removing system files..."; sudo rm -f "/etc/systemd/system/${SERVICE_NAME}.service"; sudo rm -f "/etc/systemd/system/${WATCHDOG_SERVICE_NAME}.service"; sudo rm -f "/etc/sudoers.d/98-${SERVICE_NAME}-root"; sudo rm -f "/etc/sudoers.d/99-${WATCHDOG_SERVICE_NAME}-restart"; sudo systemctl daemon-reload; msg_info "3. Removing bot directory..."; sudo rm -rf "${BOT_INSTALL_PATH}"; msg_info "4. Removing user '${SERVICE_USER}'..."; if id "${SERVICE_USER}" &>/dev/null; then sudo userdel -r "${SERVICE_USER}" &> /dev/null || msg_warning "Could not completely remove user ${SERVICE_USER}."; fi; msg_success "Uninstallation complete."; }
 update_bot() { echo -e "\n${C_BOLD}=== Updating Bot (branch: ${GIT_BRANCH}) ===${C_RESET}"; if [ ! -d "${BOT_INSTALL_PATH}/.git" ]; then msg_error "Git repository not found. Cannot update."; return 1; fi; local exec_user=""; if [ -f "${BOT_INSTALL_PATH}/.env" ]; then MODE=$(grep '^INSTALL_MODE=' "${BOT_INSTALL_PATH}/.env" | cut -d'=' -f2 | tr -d '"'); if [ "$MODE" == "secure" ]; then exec_user="sudo -u ${SERVICE_USER}"; fi; fi; msg_warning "Update will overwrite local changes."; msg_warning ".env, config/, logs/ will be preserved."; msg_info "1. Fetching updates (branch ${GIT_BRANCH})..."; pushd "${BOT_INSTALL_PATH}" > /dev/null; run_with_spinner "Git fetch" $exec_user git fetch origin; run_with_spinner "Git reset --hard" $exec_user git reset --hard "origin/${GIT_BRANCH}"; local st=$?; popd > /dev/null; if [ $st -ne 0 ]; then msg_error "Git update failed."; return 1; fi; msg_success "Project files updated."; msg_info "2. Updating Python dependencies..."; run_with_spinner "Pip install" $exec_user "${VENV_PATH}/bin/pip" install -r "${BOT_INSTALL_PATH}/requirements.txt" --upgrade; if [ $? -ne 0 ]; then msg_error "Pip install failed."; return 1; fi; msg_info "3. Restarting services..."; if sudo systemctl restart ${SERVICE_NAME}; then msg_success "${SERVICE_NAME} restarted."; else msg_error "Failed to restart ${SERVICE_NAME}."; return 1; fi; sleep 1; if sudo systemctl restart ${WATCHDOG_SERVICE_NAME}; then msg_success "${WATCHDOG_SERVICE_NAME} restarted."; else msg_error "Failed to restart ${WATCHDOG_SERVICE_NAME}."; fi; echo -e "\n${C_GREEN}${C_BOLD}🎉 Update complete!${C_RESET}\n"; }
