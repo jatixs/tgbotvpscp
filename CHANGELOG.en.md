@@ -4,7 +4,7 @@
 <h1 align="center">📝 Telegram VPS Management Bot — Changelog</h1>
 <p align="center">
   <img src="https://img.shields.io/badge/version-v1.10.13-blue?style=flat-square" alt="Version 1.10.13"/>
-  <img src="https://img.shields.io/badge/build-39-purple?style=flat-square" alt="Build 39"/>
+  <img src="https://img.shields.io/badge/build-40-purple?style=flat-square" alt="Build 40"/>
   <img src="https://img.shields.io/badge/date-October%202025-green?style=flat-square" alt="Date October 2025"/>
   <img src="https://img.shields.io/badge/status-stable-success?style=flat-square" alt="Status Stable"/>
 </p>
@@ -105,7 +105,7 @@
 ---
 
 <p align="center">
-  <i>Version 1.10.13 (Build 39) — Speedtest improvements (YAML, RU servers, localization), spam protection, code cleanup, and documentation updates.</i>
+  <i>Version 1.10.13 (Build 40) — Speedtest improvements (YAML, RU servers, localization), spam protection, code cleanup, and documentation updates.</i>
 </p>
 
 ---
