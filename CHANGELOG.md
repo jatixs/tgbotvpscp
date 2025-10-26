@@ -6,9 +6,108 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/version-v1.10.12-blue?style=flat-square" alt="Version 1.10.12"/>
-  <img src="https://img.shields.io/badge/build-38-purple?style=flat-square" alt="Build 38"/>
+  <img src="https://img.shields.io/badge/build-40-purple?style=flat-square" alt="Build 40"/>
   <img src="https://img.shields.io/badge/date-Октябрь%202025-green?style=flat-square" alt="Date October 2025"/>
   <img src="https://img.shields.io/badge/status-stable-success?style=flat-square" alt="Status Stable"/>
+</p>
+
+---
+## [1.10.13] - 2025-10-26
+
+### ✨ Улучшено:
+
+* **Локализация Speedtest:**
+    * В результатах теперь отображается флаг страны и город (вместо `Location`).
+    * Поле `Server` переименовано в `Провайдер` для ясности.
+* **Списки серверов Speedtest:**
+    * При определении геолокации VPS в России (`RU`), бот теперь будет пытаться использовать список российских iperf3-серверов с [GitHub](https://github.com/itdoginfo/russian-iperf3-servers) (в формате YAML).
+    * Добавлен парсинг YAML-файлов для списка российских серверов.
+    * Добавлена обработка ошибок загрузки/парсинга YAML-списка с fallback'ом на основной JSON-список.
+    * Скрипты `deploy.sh`/`deploy_en.sh` теперь устанавливают системную зависимость `python3-yaml`.
+* **Защита от спама:** Добавлен middleware-обработчик (`core/middlewares.py`), который предотвращает слишком частые нажатия кнопок (кулдаун 5 секунд).
+* **Обработка ошибок:** Улучшена обработка исключений в функции `get_country_flag` (`core/utils.py`) для более точного определения и логирования ошибок сети/API.
+* **Логирование:** Улучшено логирование неожиданных ошибок с использованием `logging.exception` для автоматического добавления трассировки стека.
+* **Структура i18n:** Ключи в словарях переводов (`core/i18n.py`) отсортированы по алфавиту для удобства навигации.
+
+### 🔧 Исправлено:
+
+* **Зависимости:** `PyYAML` добавлен в `requirements.txt`. `python3-yaml` добавлен в `deploy.sh`/`deploy_en.sh`.
+* **Форматирование:** Мелкие исправления форматирования и импортов.
+
+### 📝 Документация:
+
+* **Добавление модуля:** В `README.md` и `README.en.md` добавлен раздел с инструкцией по созданию и подключению собственных модулей.
+* Обновлены номера версии и билда.
+
+---
+
+<details>
+<summary><h2>🧩 Инструкция по добавлению модуля (Шаблон):</h2></summary>
+
+1.  **Создайте файл:** `modules/my_module.py`
+2.  **Напишите код:**
+```
+    # /opt/tg-bot/modules/my_module.py
+    from aiogram import Dispatcher, types
+    from aiogram.types import KeyboardButton
+    from core.i18n import _, I18nFilter, get_user_lang
+    from core import config
+    from core.auth import is_allowed
+    from core.messaging import delete_previous_message
+
+    # 1. Уникальный ключ для кнопки в i18n
+    BUTTON_KEY = "btn_my_command"
+
+    # 2. Функция для получения кнопки
+    def get_button() -> KeyboardButton:
+        return KeyboardButton(text=_(BUTTON_KEY, config.DEFAULT_LANGUAGE))
+
+    # 3. Функция регистрации обработчиков
+    def register_handlers(dp: Dispatcher):
+        # Регистрируем хэндлер на текст кнопки (с учетом языка)
+        dp.message(I18nFilter(BUTTON_KEY))(my_command_handler)
+        # Можно добавить другие хэндлеры (callback, state...)
+
+    # 4. Основной обработчик команды
+    async def my_command_handler(message: types.Message):
+        user_id = message.from_user.id
+        chat_id = message.chat.id
+        lang = get_user_lang(user_id)
+        command_name_for_auth = "my_command" # Имя для проверки прав
+
+        # Проверка прав доступа
+        if not is_allowed(user_id, command_name_for_auth):
+            # await send_access_denied_message(message.bot, user_id, chat_id, command_name_for_auth)
+            await message.reply(_("access_denied_generic", lang)) # Простое сообщение
+            return
+
+        # Удаляем предыдущее сообщение от этой команды (если было)
+        await delete_previous_message(user_id, command_name_for_auth, chat_id, message.bot)
+
+        # --- Ваша логика здесь ---
+        response_text = _("my_module_response", lang, data="какие-то данные")
+        # ---
+
+        # Отправляем ответ
+        sent_message = await message.answer(response_text)
+        # Опционально: сохраняем ID сообщения для будущего удаления
+        # core.shared_state.LAST_MESSAGE_IDS.setdefault(user_id, {})[command_name_for_auth] = sent_message.message_id
+
+    # Опционально: фоновые задачи
+    # def start_background_tasks(bot: Bot) -> list[asyncio.Task]:
+    #     task = asyncio.create_task(my_background_job(bot))
+    #     return [task]
+    # async def my_background_job(bot: Bot):
+    #     while True: ... await asyncio.sleep(interval)
+```
+3.  **Добавьте переводы:** В `core/i18n.py` добавьте `"btn_my_command": "Моя Команда"` в `'ru'` и `"btn_my_command": "My Command"` в `'en'`, а также `"my_module_response": "Результат: {data}"` и т.д. Не забудьте запустить `sort_strings()` в `i18n.py` или отсортировать вручную.
+4.  **Зарегистрируйте модуль:** В `bot.py` добавьте `from modules import my_module` и `register_module(my_module)`.
+5.  **Перезапустите бота:** `sudo systemctl restart tg-bot`.
+</details>
+
+---
+<p align="center">
+  <i>Версия 1.10.13 (Build 40) — Улучшения Speedtest (YAML, RU-серверы, локализация), защита от спама, улучшение кода и документации.</i>
 </p>
 
 ---
