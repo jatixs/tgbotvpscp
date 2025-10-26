@@ -1,14 +1,111 @@
 <p align="center">
   English Version | <a href="CHANGELOG.md">Русская Версия</a>
 </p>
-
 <h1 align="center">📝 Telegram VPS Management Bot — Changelog</h1>
-
 <p align="center">
-  <img src="https://img.shields.io/badge/version-v1.10.12-blue?style=flat-square" alt="Version 1.10.12"/>
-  <img src="https://img.shields.io/badge/build-38-purple?style=flat-square" alt="Build 38"/>
+  <img src="https://img.shields.io/badge/version-v1.10.13-blue?style=flat-square" alt="Version 1.10.13"/>
+  <img src="https://img.shields.io/badge/build-39-purple?style=flat-square" alt="Build 39"/>
   <img src="https://img.shields.io/badge/date-October%202025-green?style=flat-square" alt="Date October 2025"/>
   <img src="https://img.shields.io/badge/status-stable-success?style=flat-square" alt="Status Stable"/>
+</p>
+
+---
+
+## [1.10.13] - 2025-10-26
+
+### ✨ Improved:
+
+* **Speedtest Localization:**
+    * Results now display the country flag and city (instead of `Location`).
+    * The `Server` field has been renamed to `Provider` for clarity.
+* **Speedtest Server Lists:**
+    * When the VPS geolocation is determined as Russia (`RU`), the bot will now attempt to use a list of Russian iperf3 servers from [GitHub](https://github.com/itdoginfo/russian-iperf3-servers) (in YAML format).
+    * Added YAML file parsing for the Russian server list.
+    * Added error handling for YAML list download/parsing with a fallback to the main JSON list.
+    * The `deploy.sh`/`deploy_en.sh` scripts now install the `python3-yaml` system dependency.
+* **Spam Protection:** Added a middleware handler (`core/middlewares.py`) that prevents overly frequent button presses (5-second cooldown).
+* **Error Handling:** Improved exception handling in the `get_country_flag` function (`core/utils.py`) for more accurate detection and logging of network/API errors.
+* **Logging:** Enhanced logging of unexpected errors using `logging.exception` to automatically include stack traces.
+* **i18n Structure:** Keys within the translation dictionaries (`core/i18n.py`) have been sorted alphabetically for easier navigation.
+
+### 🔧 Fixed:
+
+* **Dependencies:** `PyYAML` added to `requirements.txt`. `python3-yaml` added to `deploy.sh`/`deploy_en.sh`.
+* **Formatting:** Minor fixes to formatting and imports.
+
+### 📝 Documentation:
+
+* **Adding a Module:** Added a section with instructions on how to create and integrate custom modules in `README.md` and `README.en.md`.
+* Updated version and build numbers.
+
+---
+<details>
+<summary><h2>🧩 How to Add a Custom Module (Template):</h2></summary>
+
+1.  **Create file:** `modules/my_module.py`
+2.  **Write code:**
+```
+    # /opt/tg-bot/modules/my_module.py
+    from aiogram import Dispatcher, types
+    from aiogram.types import KeyboardButton
+    from core.i18n import _, I18nFilter, get_user_lang
+    from core import config
+    from core.auth import is_allowed
+    from core.messaging import delete_previous_message
+
+    # 1. Unique key for the button in i18n
+    BUTTON_KEY = "btn_my_command"
+
+    # 2. Function to get the button
+    def get_button() -> KeyboardButton:
+        return KeyboardButton(text=_(BUTTON_KEY, config.DEFAULT_LANGUAGE))
+
+    # 3. Function to register handlers
+    def register_handlers(dp: Dispatcher):
+        # Register handler for the button text (language aware)
+        dp.message(I18nFilter(BUTTON_KEY))(my_command_handler)
+        # Add other handlers (callback, state...) if needed
+
+    # 4. Main command handler
+    async def my_command_handler(message: types.Message):
+        user_id = message.from_user.id
+        chat_id = message.chat.id
+        lang = get_user_lang(user_id)
+        command_name_for_auth = "my_command" # Name for permission check
+
+        # Check permissions
+        if not is_allowed(user_id, command_name_for_auth):
+            # await send_access_denied_message(message.bot, user_id, chat_id, command_name_for_auth)
+            await message.reply(_("access_denied_generic", lang)) # Simple message
+            return
+
+        # Delete previous message from this command (if any)
+        await delete_previous_message(user_id, command_name_for_auth, chat_id, message.bot)
+
+        # --- Your logic here ---
+        response_text = _("my_module_response", lang, data="some data")
+        # ---
+
+        # Send the response
+        sent_message = await message.answer(response_text)
+        # Optional: save message ID for future deletion
+        # core.shared_state.LAST_MESSAGE_IDS.setdefault(user_id, {})[command_name_for_auth] = sent_message.message_id
+
+    # Optional: background tasks
+    # def start_background_tasks(bot: Bot) -> list[asyncio.Task]:
+    #     task = asyncio.create_task(my_background_job(bot))
+    #     return [task]
+    # async def my_background_job(bot: Bot):
+    #     while True: ... await asyncio.sleep(interval)
+```
+3.  **Add translations:** In `core/i18n.py`, add `"btn_my_command": "My Command"` to `'en'` and `"btn_my_command": "Моя Команда"` to `'ru'`, as well as `"my_module_response": "Result: {data}"`, etc. Remember to run `sort_strings()` in `i18n.py` or sort manually.
+4.  **Register module:** In `bot.py`, add `from modules import my_module` and `register_module(my_module)`.
+5.  **Restart bot:** `sudo systemctl restart tg-bot`.
+
+---
+
+<p align="center">
+  <i>Version 1.10.13 (Build 39) — Speedtest improvements (YAML, RU servers, localization), spam protection, code cleanup, and documentation updates.</i>
 </p>
 
 ---
