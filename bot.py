@@ -1,4 +1,4 @@
-# /opt/tg-bot/bot.py
+# /opt-tg-bot/bot.py
 from modules import (
     selftest, traffic, uptime, notifications, users, vless,
     speedtest, top, xray, sshlog, fail2ban, logs, update, reboot, restart,
@@ -38,20 +38,23 @@ ENABLE_OPTIMIZE = True
 # ------------------------------
 
 # Импорт основного ядра
-# --- ДОБАВЛЕНО ---
+from core.middlewares import SpamThrottleMiddleware # <-- Добавлен импорт
 # -----------------
 
 # Импорт модулей
 
 # Настройка логирования
-# --- ИСПРАВЛЕНО: Передаем аргументы в setup_logging ---
 config.setup_logging(config.BOT_LOG_DIR, "bot")
-# -----------------------------------------------------
 
 # --- Инициализация ---
 bot = Bot(token=config.TOKEN)
 storage = MemoryStorage()
 dp = Dispatcher(storage=storage)
+
+# --- ДОБАВЛЕНО: Регистрация Middleware ---
+dp.message.middleware(SpamThrottleMiddleware())
+dp.callback_query.middleware(SpamThrottleMiddleware())
+# ------------------------------------------
 
 # Карта для кнопок главного меню (остается здесь)
 buttons_map = {
@@ -83,7 +86,6 @@ def register_module(module, admin_only=False, root_only=False):
             button_level = "admin"
 
         # 3. Добавление кнопки в карту (если модуль предоставляет get_button)
-        #    (Кнопки теперь будут использовать ключи i18n, это мы исправим в core/keyboards.py)
         if hasattr(module, 'get_button'):
             buttons_map[button_level].append(module.get_button())
         else:
@@ -116,15 +118,11 @@ async def show_main_menu(
     await state.clear()
 
     if not auth.is_allowed(user_id, command):
-        # --- ИЗМЕНЕНО: Используем i18n ---
-        # Проверяем, задан ли язык. Если нет, отправляем выбор языка.
         lang = i18n.get_user_lang(user_id)
         if lang == config.DEFAULT_LANGUAGE and user_id not in i18n.shared_state.USER_SETTINGS:
             await bot.send_message(chat_id, _("language_select", 'ru'), reply_markup=get_language_keyboard())
-            # И все равно отправляем сообщение об отказе на языке по умолчанию
             await auth.send_access_denied_message(bot, user_id, chat_id, command)
             return
-        # ----------------------------------
         await auth.send_access_denied_message(bot, user_id, chat_id, command)
         return
 
@@ -143,12 +141,8 @@ async def show_main_menu(
     if str(user_id) not in shared_state.USER_NAMES:
         await auth.refresh_user_names(bot)
 
-    # --- ИЗМЕНЕНО: Используем i18n ---
     menu_text = _("main_menu_welcome", user_id)
-    # get_main_reply_keyboard теперь тоже должна поддерживать i18n (обновим ее
-    # позже)
     reply_markup = keyboards.get_main_reply_keyboard(user_id, bot.buttons_map)
-    # ----------------------------------
 
     try:
         sent_message = await bot.send_message(chat_id, menu_text, reply_markup=reply_markup)
@@ -160,9 +154,7 @@ async def show_main_menu(
 
 
 @dp.message(Command("start", "menu"))
-# --- ИЗМЕНЕНО: Используем I18nFilter ---
 @dp.message(I18nFilter("btn_back_to_menu"))
-# --------------------------------------
 async def start_or_menu_handler_message(
         message: types.Message,
         state: FSMContext):
@@ -222,7 +214,6 @@ def load_modules():
     logging.info("Загрузка модулей и регистрация обработчиков...")
 
     # --- ДОБАВЛЕНО: Кнопка Языка ---
-    # Добавляем кнопку языка как "user" кнопку
     buttons_map["user"].append(
         KeyboardButton(
             text=_(
@@ -329,11 +320,9 @@ async def main():
     try:
         logging.info(
             f"Бот запускается в режиме: {config.INSTALL_MODE.upper()}")
-        # --- ИЗМЕНЕНО: Загружаем настройки языка ---
         await asyncio.to_thread(auth.load_users)
         await asyncio.to_thread(utils.load_alerts_config)
-        await asyncio.to_thread(i18n.load_user_settings)  # <-- ДОБАВЛЕНО
-        # --------------------------------------------
+        await asyncio.to_thread(i18n.load_user_settings)
         await auth.refresh_user_names(bot)
         await utils.initial_reboot_check(bot)
         await utils.initial_restart_check(bot)

@@ -39,9 +39,9 @@ check_integrity() { if [ ! -d "${BOT_INSTALL_PATH}" ]; then INSTALL_STATUS="NOT_
 # --- Функции установки ---
 install_extras() {
     local packages_to_install=()
-    local packages_to_remove=() # <--- Добавлено: Список для удаления
+    local packages_to_remove=()
 
-    # Fail2Ban Check (без изменений)
+    # Fail2Ban Check
     if ! command -v fail2ban-client &> /dev/null; then
         msg_question "Fail2Ban не найден. Установить? (y/n): " INSTALL_F2B
         if [[ "$INSTALL_F2B" =~ ^[Yy]$ ]]; then
@@ -53,7 +53,7 @@ install_extras() {
         msg_success "Fail2Ban уже установлен."
     fi
 
-    # --- iperf3 Check (Замена Speedtest) ---
+    # iperf3 Check
     if ! command -v iperf3 &> /dev/null; then
         msg_question "iperf3 не найден. Он необходим для модуля 'Скорость сети'. Установить? (y/n): " INSTALL_IPERF3
         if [[ "$INSTALL_IPERF3" =~ ^[Yy]$ ]]; then
@@ -64,9 +64,8 @@ install_extras() {
     else
         msg_success "iperf3 уже установлен."
     fi
-    # --- Конец iperf3 Check ---
 
-    # --- Speedtest CLI Check (Проверка для удаления) ---
+    # Speedtest CLI Check for removal
     if command -v speedtest &> /dev/null || dpkg -s speedtest-cli &> /dev/null; then
         msg_warning "Обнаружен старый пакет 'speedtest-cli'."
         msg_question "Удалить 'speedtest-cli'? (Рекомендуется, т.к. бот теперь использует iperf3) (y/n): " REMOVE_SPEEDTEST
@@ -76,18 +75,16 @@ install_extras() {
             msg_info "Пропуск удаления speedtest-cli."
         fi
     fi
-    # --- Конец Speedtest CLI Check ---
 
-    # --- Удаление пакетов ---
+    # Package Removal
     if [ ${#packages_to_remove[@]} -gt 0 ]; then
         msg_info "Удаление пакетов: ${packages_to_remove[*]}"
         run_with_spinner "Удаление пакетов" sudo apt-get remove --purge -y "${packages_to_remove[@]}"
-        run_with_spinner "Очистка apt" sudo apt-get autoremove -y # Очистка зависимостей после удаления
+        run_with_spinner "Очистка apt" sudo apt-get autoremove -y
         msg_success "Указанные пакеты удалены."
     fi
-    # --- Конец Удаление пакетов ---
 
-    # --- Установка пакетов (логика без изменений) ---
+    # Package Installation
     if [ ${#packages_to_install[@]} -gt 0 ]; then
         msg_info "Установка дополнительных пакетов: ${packages_to_install[*]}"
         run_with_spinner "Обновление списка пакетов" sudo apt-get update -y
@@ -104,9 +101,17 @@ install_extras() {
         fi
         msg_success "Дополнительные пакеты установлены."
     fi
-    # --- Конец Установка пакетов ---
 }
-common_install_steps() { echo "" > /tmp/${SERVICE_NAME}_install.log; msg_info "1. Обновление пакетов и установка базовых зависимостей..."; run_with_spinner "Обновление списка пакетов" sudo apt-get update -y || { msg_error "Не удалось обновить пакеты"; exit 1; }; run_with_spinner "Установка зависимостей (python3, pip, venv, git, curl, wget, sudo)" sudo DEBIAN_FRONTEND=noninteractive apt-get install -y python3 python3-pip python3-venv git curl wget sudo || { msg_error "Не удалось установить базовые зависимости"; exit 1; }; install_extras; }
+# --- [ИЗМЕНЕНО] common_install_steps ---
+common_install_steps() {
+    echo "" > /tmp/${SERVICE_NAME}_install.log
+    msg_info "1. Обновление пакетов и установка базовых зависимостей..."
+    run_with_spinner "Обновление списка пакетов" sudo apt-get update -y || { msg_error "Не удалось обновить пакеты"; exit 1; }
+    # Добавляем python3-yaml к основным зависимостям
+    run_with_spinner "Установка зависимостей (python3, pip, venv, git, curl, wget, sudo, yaml)" sudo DEBIAN_FRONTEND=noninteractive apt-get install -y python3 python3-pip python3-venv git curl wget sudo python3-yaml || { msg_error "Не удалось установить базовые зависимости"; exit 1; }
+    install_extras
+}
+# --- [КОНЕЦ ИЗМЕНЕНИЙ] common_install_steps ---
 install_logic() { local mode=$1; local branch_to_use=$2; local exec_user_cmd=""; local owner="root:root"; local owner_user="root"; if [ "$mode" == "secure" ]; then msg_info "2. Создание пользователя '${SERVICE_USER}'..."; if ! id "${SERVICE_USER}" &>/dev/null; then sudo useradd -r -s /bin/false -d ${BOT_INSTALL_PATH} ${SERVICE_USER} || exit 1; fi; sudo mkdir -p ${BOT_INSTALL_PATH}; sudo chown -R ${SERVICE_USER}:${SERVICE_USER} ${BOT_INSTALL_PATH}; msg_info "3. Клонирование репо (ветка ${branch_to_use}) от ${SERVICE_USER}..."; run_with_spinner "Клонирование репозитория" sudo -u ${SERVICE_USER} git clone --branch "${branch_to_use}" "${GITHUB_REPO_URL}" "${BOT_INSTALL_PATH}" || exit 1; exec_user_cmd="sudo -u ${SERVICE_USER}"; owner="${SERVICE_USER}:${SERVICE_USER}"; owner_user=${SERVICE_USER}; else msg_info "2. Создание директории..."; sudo mkdir -p ${BOT_INSTALL_PATH}; msg_info "3. Клонирование репо (ветка ${branch_to_use}) от root..."; run_with_spinner "Клонирование репозитория" sudo git clone --branch "${branch_to_use}" "${GITHUB_REPO_URL}" "${BOT_INSTALL_PATH}" || exit 1; exec_user_cmd=""; owner="root:root"; owner_user="root"; fi; msg_info "4. Настройка venv..."; if [ ! -d "${VENV_PATH}" ]; then run_with_spinner "Создание venv" $exec_user_cmd ${PYTHON_BIN} -m venv "${VENV_PATH}" || exit 1; fi; run_with_spinner "Обновление pip" $exec_user_cmd "${VENV_PATH}/bin/pip" install --upgrade pip || msg_warning "Не удалось обновить pip..."; run_with_spinner "Установка зависимостей Python" $exec_user_cmd "${VENV_PATH}/bin/pip" install -r "${BOT_INSTALL_PATH}/requirements.txt" || exit 1; msg_info "5. Создание .gitignore, logs/, config/..."; sudo -u ${owner_user} bash -c "cat > ${BOT_INSTALL_PATH}/.gitignore" <<< $'/venv/\n/__pycache__/\n*.pyc\n/.env\n/config/\n/logs/\n*.log\n*_flag.txt'; sudo chmod 644 "${BOT_INSTALL_PATH}/.gitignore"; sudo -u ${owner_user} mkdir -p "${BOT_INSTALL_PATH}/logs/bot" "${BOT_INSTALL_PATH}/logs/watchdog" "${BOT_INSTALL_PATH}/config"; msg_info "6. Настройка .env..."; msg_question "Токен: " T; msg_question "ID Администратора: " A; msg_question "Имя (Username) Админа (опц): " U; msg_question "Имя Бота (опц): " N; sudo bash -c "cat > ${BOT_INSTALL_PATH}/.env" <<< $(printf "TG_BOT_TOKEN=\"%s\"\nTG_ADMIN_ID=\"%s\"\nTG_ADMIN_USERNAME=\"%s\"\nTG_BOT_NAME=\"%s\"\nINSTALL_MODE=\"%s\"" "$T" "$A" "$U" "$N" "$mode"); sudo chown ${owner} "${BOT_INSTALL_PATH}/.env"; sudo chmod 600 "${BOT_INSTALL_PATH}/.env"; if [ "$mode" == "root" ]; then msg_info "7. Настройка sudo (root)..."; F="/etc/sudoers.d/98-${SERVICE_NAME}-root"; sudo tee ${F} > /dev/null <<< $'root ALL=(ALL) NOPASSWD: /bin/systemctl restart tg-bot.service\nroot ALL=(ALL) NOPASSWD: /bin/systemctl restart tg-watchdog.service\nroot ALL=(ALL) NOPASSWD: /sbin/reboot'; sudo chmod 440 ${F}; elif [ "$mode" == "secure" ]; then F="/etc/sudoers.d/99-${WATCHDOG_SERVICE_NAME}-restart"; sudo tee ${F} > /dev/null <<< $'Defaults:tgbot !requiretty\ntgbot ALL=(root) NOPASSWD: /bin/systemctl restart tg-bot.service'; sudo chmod 440 ${F}; msg_info "7. Настройка sudo (secure)..."; fi; create_and_start_service "${SERVICE_NAME}" "${BOT_INSTALL_PATH}/bot.py" "${mode}" "Telegram Бот"; create_and_start_service "${WATCHDOG_SERVICE_NAME}" "${BOT_INSTALL_PATH}/watchdog.py" "root" "Наблюдатель"; local ip=$(curl -s --connect-timeout 5 ipinfo.io/ip || echo "Не удалось определить"); echo ""; echo "---"; msg_success "Установка завершена!"; msg_info "IP: ${ip}"; echo "---"; }
 install_secure() { echo -e "\n${C_BOLD}=== Безопасная Установка (ветка: ${GIT_BRANCH}) ===${C_RESET}"; common_install_steps; install_logic "secure" "${GIT_BRANCH}"; }
 install_root() { echo -e "\n${C_BOLD}=== Установка от Root (ветка: ${GIT_BRANCH}) ===${C_RESET}"; common_install_steps; install_logic "root" "${GIT_BRANCH}"; }
@@ -127,7 +132,6 @@ RestartSec=10
 [Install]
 WantedBy=multi-user.target
 EOF
-# --- ИСПРАВЛЕНО: Удален лишний ';' ---
 msg_info "Запуск ${svc}..."; sudo systemctl daemon-reload; sudo systemctl enable ${svc}.service &> /dev/null; run_with_spinner "Запуск ${svc}" sudo systemctl restart ${svc}; sleep 2; if sudo systemctl is-active --quiet ${svc}.service; then msg_success "${svc} запущен!"; msg_info "Статус: sudo systemctl status ${svc}"; else msg_error "${svc} НЕ ЗАПУСТИЛСЯ. Логи: sudo journalctl -u ${svc} -n 50 --no-pager"; if [ "$svc" == "$SERVICE_NAME" ]; then exit 1; fi; fi; }
 uninstall_bot() { echo -e "\n${C_BOLD}=== Удаление Бота ===${C_RESET}"; msg_info "1. Остановка служб..."; if systemctl list-units --full -all | grep -q "${SERVICE_NAME}.service"; then sudo systemctl stop ${SERVICE_NAME} &> /dev/null; sudo systemctl disable ${SERVICE_NAME} &> /dev/null; fi; if systemctl list-units --full -all | grep -q "${WATCHDOG_SERVICE_NAME}.service"; then sudo systemctl stop ${WATCHDOG_SERVICE_NAME} &> /dev/null; sudo systemctl disable ${WATCHDOG_SERVICE_NAME} &> /dev/null; fi; msg_info "2. Удаление системных файлов..."; sudo rm -f "/etc/systemd/system/${SERVICE_NAME}.service"; sudo rm -f "/etc/systemd/system/${WATCHDOG_SERVICE_NAME}.service"; sudo rm -f "/etc/sudoers.d/98-${SERVICE_NAME}-root"; sudo rm -f "/etc/sudoers.d/99-${WATCHDOG_SERVICE_NAME}-restart"; sudo systemctl daemon-reload; msg_info "3. Удаление директории бота..."; sudo rm -rf "${BOT_INSTALL_PATH}"; msg_info "4. Удаление пользователя '${SERVICE_USER}'..."; if id "${SERVICE_USER}" &>/dev/null; then sudo userdel -r "${SERVICE_USER}" &> /dev/null || msg_warning "Не удалось полностью удалить пользователя ${SERVICE_USER}."; fi; msg_success "Удаление завершено."; }
 update_bot() { echo -e "\n${C_BOLD}=== Обновление Бота (ветка: ${GIT_BRANCH}) ===${C_RESET}"; if [ ! -d "${BOT_INSTALL_PATH}/.git" ]; then msg_error "Репозиторий Git не найден. Невозможно обновить."; return 1; fi; local exec_user=""; if [ -f "${BOT_INSTALL_PATH}/.env" ]; then MODE=$(grep '^INSTALL_MODE=' "${BOT_INSTALL_PATH}/.env" | cut -d'=' -f2 | tr -d '"'); if [ "$MODE" == "secure" ]; then exec_user="sudo -u ${SERVICE_USER}"; fi; fi; msg_warning "Обновление перезапишет локальные изменения."; msg_warning ".env, config/, logs/ будут сохранены."; msg_info "1. Получение обновлений (ветка ${GIT_BRANCH})..."; pushd "${BOT_INSTALL_PATH}" > /dev/null; run_with_spinner "Git fetch (загрузка)" $exec_user git fetch origin; run_with_spinner "Git reset --hard (сброс)" $exec_user git reset --hard "origin/${GIT_BRANCH}"; local st=$?; popd > /dev/null; if [ $st -ne 0 ]; then msg_error "Обновление Git не удалось."; return 1; fi; msg_success "Файлы проекта обновлены."; msg_info "2. Обновление зависимостей Python..."; run_with_spinner "Установка Pip" $exec_user "${VENV_PATH}/bin/pip" install -r "${BOT_INSTALL_PATH}/requirements.txt" --upgrade; if [ $? -ne 0 ]; then msg_error "Установка Pip не удалась."; return 1; fi; msg_info "3. Перезапуск служб..."; if sudo systemctl restart ${SERVICE_NAME}; then msg_success "${SERVICE_NAME} перезапущен."; else msg_error "Не удалось перезапустить ${SERVICE_NAME}."; return 1; fi; sleep 1; if sudo systemctl restart ${WATCHDOG_SERVICE_NAME}; then msg_success "${WATCHDOG_SERVICE_NAME} перезапущен."; else msg_error "Не удалось перезапустить ${WATCHDOG_SERVICE_NAME}."; fi; echo -e "\n${C_GREEN}${C_BOLD}🎉 Обновление завершено!${C_RESET}\n"; }

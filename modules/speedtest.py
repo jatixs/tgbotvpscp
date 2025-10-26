@@ -12,6 +12,7 @@ import concurrent.futures
 from concurrent.futures import ThreadPoolExecutor
 from typing import Optional, Dict, Any, Tuple, List
 import ipaddress
+import yaml # <-- Добавлено
 
 from aiogram import F, Dispatcher, types, Bot  # <<<--- Добавлен импорт Bot
 from aiogram.types import KeyboardButton
@@ -23,14 +24,18 @@ from core import config
 from core.auth import is_allowed, send_access_denied_message
 from core.messaging import delete_previous_message
 from core.shared_state import LAST_MESSAGE_IDS
-from core.utils import escape_html
+from core.utils import escape_html, get_country_flag # <-- Добавлен get_country_flag
 
 # --- Ключ кнопки ---
 BUTTON_KEY = "btn_speedtest"
 
 # --- URL и кеш ---
 SERVER_LIST_URL = "https://export.iperf3serverlist.net/listed_iperf3_servers.json"
+# --- ДОБАВЛЕНО: URL для российских серверов ---
+RU_SERVER_LIST_URL = "https://raw.githubusercontent.com/itdoginfo/russian-iperf3-servers/refs/heads/main/list.yml"
+# -----------------------------------------------
 LOCAL_CACHE_FILE = os.path.join(config.CONFIG_DIR, "iperf_servers_cache.json")
+LOCAL_RU_CACHE_FILE = os.path.join(config.CONFIG_DIR, "iperf_servers_ru_cache.yml") # <-- Добавлен кеш для RU
 
 # --- Настройки iperf3 ---
 MAX_SERVERS_TO_PING = 30
@@ -89,7 +94,6 @@ async def edit_status_safe(
 # --- [КОНЕЦ] ---
 
 # --- Вспомогательные (синхронные) функции ---
-# (get_ping_sync, get_vps_location_sync, is_ip_address, fetch_parse_and_prioritize_servers_sync, find_best_servers_sync - БЕЗ ИЗМЕНЕНИЙ)
 
 
 def get_ping_sync(host: str) -> Optional[float]:
@@ -161,126 +165,192 @@ def is_ip_address(host: str) -> bool:
 
 
 def fetch_parse_and_prioritize_servers_sync(
-        vps_country_code: Optional[str]) -> List[Dict[str, Any]]:
-    servers_json_content, download_error = None, None
-    vps_continent = None
-    try:
-        # logging.info(f"Попытка загрузки списка iperf серверов с {SERVER_LIST_URL}...")
-        response = requests.get(SERVER_LIST_URL, timeout=10)
-        response.raise_for_status()
-        servers_json_content = response.text
+        vps_country_code: Optional[str],
+        lang: str) -> Tuple[List[Dict[str, Any]], Optional[str]]:
+    """
+    Загружает и парсит список серверов.
+    Если VPS в России ('RU'), пытается использовать YAML-список.
+    Возвращает (список_серверов, ключ_ошибки_i18n | None).
+    """
+    servers_list = []
+    error_key = None
+    use_ru_list = vps_country_code == 'RU'
+
+    # --- Попытка загрузить российский YAML-список, если vps_country_code == 'RU' ---
+    if use_ru_list:
+        logging.info(f"VPS находится в RU, попытка загрузки российского списка с {RU_SERVER_LIST_URL}...")
+        ru_yaml_content = None
+        ru_download_error = None
         try:
-            os.makedirs(os.path.dirname(LOCAL_CACHE_FILE), exist_ok=True)
-            with open(LOCAL_CACHE_FILE, "w", encoding='utf-8') as f:
-                f.write(servers_json_content)
-            logging.info(f"Свежий список сохранен в {LOCAL_CACHE_FILE}")
-        except Exception as e:
-            logging.error(f"Не удалось сохранить кеш: {e}", exc_info=True)
-    except requests.RequestException as e:
-        download_error = f"Ошибка сети/таймаут: {e}"
-        logging.warning(f"Ошибка загрузки: {download_error}")
-    except Exception as e:
-        download_error = f"Ошибка: {e}"
-        logging.error(f"Ошибка загрузки: {download_error}", exc_info=True)
-    if servers_json_content is None:
-        if os.path.exists(LOCAL_CACHE_FILE):
-            logging.warning(f"Чтение из кеша {LOCAL_CACHE_FILE}...")
+            response_ru = requests.get(RU_SERVER_LIST_URL, timeout=10)
+            response_ru.raise_for_status()
+            ru_yaml_content = response_ru.text
             try:
-                with open(LOCAL_CACHE_FILE, "r", encoding='utf-8') as f:
-                    servers_json_content = f.read()
-                logging.info("Успешно прочитан кеш.")
+                os.makedirs(os.path.dirname(LOCAL_RU_CACHE_FILE), exist_ok=True)
+                with open(LOCAL_RU_CACHE_FILE, "w", encoding='utf-8') as f:
+                    f.write(ru_yaml_content)
+                logging.info(f"Свежий российский список сохранен в {LOCAL_RU_CACHE_FILE}")
             except Exception as e:
-                logging.error(f"Не удалось прочитать кеш: {e}", exc_info=True)
-                return []
-        else:
-            logging.error(
-                f"Не удалось скачать ({download_error}) и кеш не найден.")
-            return []
-    try:
-        servers_data = json.loads(servers_json_content)
-        if not isinstance(servers_data, list):
-            raise ValueError("Ожидался список")
-        if vps_country_code:
-            for s in servers_data:
-                if isinstance(s, dict) and s.get(
-                        "COUNTRY") == vps_country_code:
-                    vps_continent = s.get("CONTINENT")
-                    break
-            # if vps_continent: logging.info(f"Определен континент VPS ({vps_country_code}): {vps_continent}")
-            # else: logging.warning(f"Не найден континент для
-            # {vps_country_code}.")
-        domain_same_country, domain_same_continent, domain_others = [], [], []
-        ip_same_country, ip_same_continent, ip_others = [], [], []
-        for s in servers_data:
-            if not isinstance(s, dict):
-                continue
-            host, port_str, s_country, s_continent = s.get(
-                "IP/HOST"), s.get("PORT"), s.get("COUNTRY"), s.get("CONTINENT")
-            if not host or not port_str:
-                continue
-            port = None
-            try:
-                port = int(port_str.split('-')[0].strip()) if isinstance(
-                    port_str, str) and '-' in port_str else int(port_str)
-            except ValueError:
-                continue
-            server_dict = {
-                "host": host,
-                "port": port,
-                "city": s.get(
-                    "SITE",
-                    "N/A"),
-                "country": s_country,
-                "continent": s_continent,
-                "provider": s.get(
-                    "PROVIDER",
-                    "N/A")}
-            is_ip = is_ip_address(host)
-            if vps_country_code and s_country == vps_country_code:
-                if is_ip:
-                    ip_same_country.append(server_dict)
-                else:
-                    domain_same_country.append(server_dict)
-            elif vps_continent and s_continent == vps_continent:
-                if is_ip:
-                    ip_same_continent.append(server_dict)
-                else:
-                    domain_same_continent.append(server_dict)
+                logging.error(f"Не удалось сохранить кеш RU: {e}", exc_info=True)
+        except requests.RequestException as e:
+            ru_download_error = f"Ошибка сети/таймаут RU: {e}"
+            logging.warning(f"Ошибка загрузки RU: {ru_download_error}")
+        except Exception as e:
+            ru_download_error = f"Ошибка RU: {e}"
+            logging.error(f"Ошибка загрузки RU: {ru_download_error}", exc_info=True)
+
+        if ru_yaml_content is None:
+            if os.path.exists(LOCAL_RU_CACHE_FILE):
+                logging.warning(f"Чтение RU из кеша {LOCAL_RU_CACHE_FILE}...")
+                try:
+                    with open(LOCAL_RU_CACHE_FILE, "r", encoding='utf-8') as f:
+                        ru_yaml_content = f.read()
+                    logging.info("Успешно прочитан RU кеш.")
+                except Exception as e:
+                    logging.error(f"Не удалось прочитать RU кеш: {e}", exc_info=True)
+                    # Не устанавливаем error_key, попробуем основной список
             else:
-                if is_ip:
-                    ip_others.append(server_dict)
-                else:
-                    domain_others.append(server_dict)
-        # logging.info(f"Распарсено Домены: страна={len(domain_same_country)}, континент={len(domain_same_continent)}, другие={len(domain_others)}")
-        # logging.info(f"Распарсено IP: страна={len(ip_same_country)}, континент={len(ip_same_continent)}, другие={len(ip_others)}")
-        prioritized_list = (
-            domain_same_country +
-            domain_same_continent +
-            domain_others +
-            ip_same_country +
-            ip_same_continent +
-            ip_others)
-        logging.info(
-            f"Загружено/распарсено и приоритезировано {len(prioritized_list)} серверов.")
-        return prioritized_list
-    except json.JSONDecodeError as e:
-        logging.error(f"Ошибка разбора JSON: {e}")
-        if download_error and os.path.exists(LOCAL_CACHE_FILE):
+                logging.error(f"Не удалось скачать RU список ({ru_download_error}) и кеш не найден.")
+                error_key = "iperf_fetch_error_ru" # Ключ ошибки
+
+        if ru_yaml_content:
             try:
-                os.remove(LOCAL_CACHE_FILE)
-                logging.warning("Поврежденный кеш удален.")
-            except OSError as rm_e:
-                logging.error(
-                    f"Не удалось удалить поврежденный файл кеша {LOCAL_CACHE_FILE}: {rm_e}")
-        return []
-    except ValueError as e:
-        logging.error(f"Ошибка структуры JSON: {e}")
-        return []
-    except Exception as e:
-        logging.error(
-            f"Неожиданная ошибка при парсинге/приоритезации: {e}",
-            exc_info=True)
-        return []
+                ru_servers_data = yaml.safe_load(ru_yaml_content)
+                if not isinstance(ru_servers_data, list):
+                    raise ValueError("Ожидался список в YAML")
+                for s in ru_servers_data:
+                    if not isinstance(s, dict): continue
+                    host, port_str, city, name = s.get('address'), s.get('port'), s.get('City'), s.get('Name')
+                    if not host or not port_str or not city or not name: continue
+                    port = None
+                    try:
+                        port = int(str(port_str).split('-')[0].strip()) # Обрабатываем диапазоны "5201-5209"
+                    except ValueError: continue
+
+                    servers_list.append({
+                        "host": host,
+                        "port": port,
+                        "city": city,
+                        "country": "RU", # Фиксированная страна
+                        "continent": "EU", # Приблизительно
+                        "provider": name # Используем Name как provider
+                    })
+                logging.info(f"Успешно загружено и распарсено {len(servers_list)} российских серверов.")
+                return servers_list, None # Успешно, возвращаем российский список
+            except yaml.YAMLError as e:
+                logging.error(f"Ошибка разбора RU YAML: {e}")
+                error_key = "iperf_parse_error_ru" # Ключ ошибки
+                # Удаляем поврежденный кеш
+                if ru_download_error and os.path.exists(LOCAL_RU_CACHE_FILE):
+                     try:
+                         os.remove(LOCAL_RU_CACHE_FILE)
+                         logging.warning("Поврежденный RU кеш удален.")
+                     except OSError as rm_e:
+                         logging.error(f"Не удалось удалить поврежденный RU файл кеша {LOCAL_RU_CACHE_FILE}: {rm_e}")
+            except Exception as e:
+                logging.error(f"Неожиданная ошибка при парсинге RU YAML: {e}", exc_info=True)
+                error_key = "iperf_parse_error_ru"
+
+    # --- Если российский список не использовался или произошла ошибка, используем основной JSON ---
+    if not servers_list:
+        if use_ru_list:
+            logging.warning("Не удалось использовать российский список, переход на основной JSON...")
+            # error_key уже установлен, если была ошибка загрузки/парсинга RU
+
+        servers_json_content, download_error = None, None
+        vps_continent = None
+        try:
+            response = requests.get(SERVER_LIST_URL, timeout=10)
+            response.raise_for_status()
+            servers_json_content = response.text
+            try:
+                os.makedirs(os.path.dirname(LOCAL_CACHE_FILE), exist_ok=True)
+                with open(LOCAL_CACHE_FILE, "w", encoding='utf-8') as f:
+                    f.write(servers_json_content)
+                logging.info(f"Свежий JSON список сохранен в {LOCAL_CACHE_FILE}")
+            except Exception as e:
+                logging.error(f"Не удалось сохранить JSON кеш: {e}", exc_info=True)
+        except requests.RequestException as e:
+            download_error = f"Ошибка сети/таймаут JSON: {e}"
+            logging.warning(f"Ошибка загрузки JSON: {download_error}")
+        except Exception as e:
+            download_error = f"Ошибка JSON: {e}"
+            logging.error(f"Ошибка загрузки JSON: {download_error}", exc_info=True)
+
+        if servers_json_content is None:
+            if os.path.exists(LOCAL_CACHE_FILE):
+                logging.warning(f"Чтение JSON из кеша {LOCAL_CACHE_FILE}...")
+                try:
+                    with open(LOCAL_CACHE_FILE, "r", encoding='utf-8') as f:
+                        servers_json_content = f.read()
+                    logging.info("Успешно прочитан JSON кеш.")
+                except Exception as e:
+                    logging.error(f"Не удалось прочитать JSON кеш: {e}", exc_info=True)
+                    return [], error_key or "iperf_fetch_error" # Возвращаем ошибку RU или общую
+            else:
+                logging.error(f"Не удалось скачать JSON ({download_error}) и кеш не найден.")
+                return [], error_key or "iperf_fetch_error"
+
+        try:
+            servers_data = json.loads(servers_json_content)
+            if not isinstance(servers_data, list):
+                raise ValueError("Ожидался список в JSON")
+
+            if vps_country_code:
+                for s in servers_data:
+                    if isinstance(s, dict) and s.get("COUNTRY") == vps_country_code:
+                        vps_continent = s.get("CONTINENT")
+                        break
+
+            domain_same_country, domain_same_continent, domain_others = [], [], []
+            ip_same_country, ip_same_continent, ip_others = [], [], []
+            for s in servers_data:
+                if not isinstance(s, dict): continue
+                host, port_str, s_country, s_continent = s.get("IP/HOST"), s.get("PORT"), s.get("COUNTRY"), s.get("CONTINENT")
+                if not host or not port_str: continue
+                port = None
+                try:
+                    port = int(port_str.split('-')[0].strip()) if isinstance(port_str, str) and '-' in port_str else int(port_str)
+                except ValueError: continue
+
+                server_dict = {
+                    "host": host, "port": port,
+                    "city": s.get("SITE", "N/A"),
+                    "country": s_country,
+                    "continent": s_continent,
+                    "provider": s.get("PROVIDER", "N/A")
+                }
+                is_ip = is_ip_address(host)
+                if vps_country_code and s_country == vps_country_code:
+                    (ip_same_country if is_ip else domain_same_country).append(server_dict)
+                elif vps_continent and s_continent == vps_continent:
+                    (ip_same_continent if is_ip else domain_same_continent).append(server_dict)
+                else:
+                    (ip_others if is_ip else domain_others).append(server_dict)
+
+            prioritized_list = (domain_same_country + domain_same_continent + domain_others +
+                                ip_same_country + ip_same_continent + ip_others)
+            logging.info(f"Загружено/распарсено и приоритезировано {len(prioritized_list)} JSON серверов.")
+            return prioritized_list, None # Ошибки RU уже обработаны выше или их не было
+
+        except json.JSONDecodeError as e:
+            logging.error(f"Ошибка разбора JSON: {e}")
+            if download_error and os.path.exists(LOCAL_CACHE_FILE):
+                 try:
+                     os.remove(LOCAL_CACHE_FILE)
+                     logging.warning("Поврежденный JSON кеш удален.")
+                 except OSError as rm_e:
+                     logging.error(f"Не удалось удалить поврежденный JSON файл кеша {LOCAL_CACHE_FILE}: {rm_e}")
+            return [], error_key or "iperf_fetch_error"
+        except ValueError as e:
+            logging.error(f"Ошибка структуры JSON: {e}")
+            return [], error_key or "iperf_fetch_error"
+        except Exception as e:
+            logging.error(f"Неожиданная ошибка при парсинге/приоритезации JSON: {e}", exc_info=True)
+            return [], error_key or "iperf_fetch_error"
+
+    # Если дошли сюда, значит servers_list уже содержит российский список
+    return servers_list, None
 
 
 def find_best_servers_sync(
@@ -314,7 +384,6 @@ def find_best_servers_sync(
     return results
 
 # --- Асинхронная функция теста iperf3 ---
-# --- [ИЗМЕНЕНО] Добавлены bot, chat_id, message_id и вызовы edit_status_safe ---
 
 
 async def run_iperf_test_async(bot: Bot,
@@ -458,6 +527,9 @@ async def run_iperf_test_async(bot: Bot,
                 f"Неизвестная ошибка iperf (Upload), код: {process_up.returncode}")
 
         # --- 3. Форматирование УСПЕШНОГО вывода ---
+        country_code = server.get('country')
+        flag = await asyncio.to_thread(get_country_flag, country_code) if country_code else "❓" # Получаем флаг
+        location_str = f"{server.get('country', 'N/A')} {server.get('city', 'N/A')}" # Страна + Город
         provider_name = server.get('provider', 'N/A')
         # Возвращаем финальный текст результата
         return _(
@@ -466,11 +538,10 @@ async def run_iperf_test_async(bot: Bot,
             dl=results["download"],
             ul=results["upload"],
             ping=results["ping"],
-            location=escape_html(
-                server.get(
-                    'city',
-                    'N/A')),
-            sponsor=escape_html(provider_name))
+            flag=flag, # Передаем флаг
+            location=escape_html(location_str), # Передаем строку локации
+            sponsor=escape_html(provider_name) # Это теперь провайдер
+        )
 
     except FileNotFoundError:
         logging.error("iperf3 не найден.")
@@ -485,7 +556,6 @@ async def run_iperf_test_async(bot: Bot,
             exc_info=False)
         error_message_safe = str(e)
         return _("speedtest_fail", lang, error=escape_html(error_message_safe))
-# --- [КОНЕЦ ИЗМЕНЕНИЙ] ---
 
 
 # --- Главный хэндлер ---
@@ -514,15 +584,17 @@ async def speedtest_handler(message: types.Message):
             logging.warning("Поиск без приоритезации геолокации.")
 
         # --- Этап 2: Загрузка списка ---
-        status_message_id = await edit_status_safe(message.bot, chat_id, status_message_id, _("speedtest_status_fetch", lang), lang)
+        fetch_status_key = "speedtest_status_fetch_ru" if vps_country_code == 'RU' else "speedtest_status_fetch"
+        status_message_id = await edit_status_safe(message.bot, chat_id, status_message_id, _(fetch_status_key, lang), lang)
         if not status_message_id:
             # Прерываем, если сообщение пропало
             raise Exception("Не удалось обновить статус 'Загрузка списка'")
 
-        all_servers = await asyncio.to_thread(fetch_parse_and_prioritize_servers_sync, vps_country_code)
+        all_servers, fetch_error_key = await asyncio.to_thread(fetch_parse_and_prioritize_servers_sync, vps_country_code, lang) # Передаем lang
 
         if not all_servers:
-            final_text = _("iperf_fetch_error", lang)
+            # Используем ключ ошибки, который вернула функция fetch_parse
+            final_text = _(fetch_error_key or "iperf_fetch_error", lang) # Используем общую ошибку, если ключ не был возвращен
         else:
             # --- Этап 3: Пинг серверов ---
             count_to_ping = min(len(all_servers), MAX_SERVERS_TO_PING)
@@ -567,11 +639,14 @@ async def speedtest_handler(message: types.Message):
                         await asyncio.sleep(1)
                         continue  # Переходим к следующему серверу
 
-                    # Другие ошибки iperf3
-                    elif test_result.startswith(_("speedtest_fail", lang, error="")) or \
-                            test_result == _("iperf_not_found", lang) or \
-                            test_result.startswith(_("iperf_timeout", lang, host="")) or \
-                            test_result == _("error_message_edit_failed", lang):
+                    # --- ИЗМЕНЕНО: Проверка ключей ошибок i18n ---
+                    is_fail = test_result.startswith(_("speedtest_fail", lang, error="").split(':')[0]) # Проверяем начало строки до ':'
+                    is_not_found = test_result == _("iperf_not_found", lang)
+                    is_timeout = test_result.startswith(_("iperf_timeout", lang, host="").split('(')[0]) # Проверяем начало строки до '('
+                    is_edit_fail = test_result == _("error_message_edit_failed", lang)
+
+                    if is_fail or is_not_found or is_timeout or is_edit_fail:
+                    # ---------------------------------------------
                         logging.warning(
                             f"Попытка #{attempts_made}: Ошибка теста iperf3 на {best_server['host']}: {test_result}")
                         # Показываем ошибку
