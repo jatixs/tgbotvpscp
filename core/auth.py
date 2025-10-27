@@ -49,7 +49,7 @@ def load_users():
             # --- КОНЕЦ ИСПРАВЛЕНИЯ ---
             USER_NAMES[str(ADMIN_USER_ID)] = _(
                 "default_admin_name", config.DEFAULT_LANGUAGE)
-            save_users() # Сохраняем сразу после добавления главного админа
+            save_users()  # Сохраняем сразу после добавления главного админа
 
         logging.info(
             f"Пользователи загружены. Разрешенные ID: {list(ALLOWED_USERS.keys())}")
@@ -64,7 +64,7 @@ def load_users():
         # --- КОНЕЦ ИСПРАВЛЕНИЯ ---
         USER_NAMES[str(ADMIN_USER_ID)] = _(
             "default_admin_name", config.DEFAULT_LANGUAGE)
-        save_users() # Сохраняем базовую конфигурацию
+        save_users()  # Сохраняем базовую конфигурацию
     except Exception as e:
         logging.error(
             f"Критическая ошибка загрузки users.json: {e}",
@@ -76,7 +76,7 @@ def load_users():
         # --- КОНЕЦ ИСПРАВЛЕНИЯ ---
         USER_NAMES[str(ADMIN_USER_ID)] = _(
             "default_admin_name", config.DEFAULT_LANGUAGE)
-        save_users() # Сохраняем базовую конфигурацию
+        save_users()  # Сохраняем базовую конфигурацию
 
 
 def save_users():
@@ -118,17 +118,27 @@ def is_allowed(user_id, command=None):
     # Определяем, является ли пользователь админом (Главный админ ИЛИ группа 'admins')
     # Эта проверка теперь надежна, т.к. использует ключ 'admins'
     is_admin_group = (user_id == ADMIN_USER_ID) or (user_group_key == "admins")
-    logging.debug(f"User {user_id}: group_key='{user_group_key}', is_admin_group={is_admin_group}")
+    logging.debug(
+        f"User {user_id}: group_key='{user_group_key}', is_admin_group={is_admin_group}")
 
     # --- КОНЕЦ ИСПРАВЛЕНИЯ ---
 
     # Определяем группы команд
     user_commands = [
-        "start", "menu", "back_to_menu", "uptime", "traffic", "selftest",
-        "get_id", "get_id_inline", "notifications_menu", "toggle_alert_resources",
-        "toggle_alert_logins", "toggle_alert_bans", "alert_downtime_stub",
-        "language"
-    ]
+        "start",
+        "menu",
+        "back_to_menu",
+        "uptime",
+        "traffic",
+        "selftest",
+        "get_id",
+        "get_id_inline",
+        "notifications_menu",
+        "toggle_alert_resources",
+        "toggle_alert_logins",
+        "toggle_alert_bans",
+        "alert_downtime_stub",
+        "language"]
     admin_only_commands = [
         "manage_users", "generate_vless", "speedtest", "top", "updatexray",
         "adduser", "add_user", "delete_user", "set_group", "change_group",
@@ -137,7 +147,7 @@ def is_allowed(user_id, command=None):
     root_only_commands = [
         "reboot_confirm",
         "reboot",
-        "fall2ban", # Убедитесь, что здесь правильное имя, возможно "fail2ban"?
+        "fall2ban",  # Убедитесь, что здесь правильное имя, возможно "fail2ban"?
         "sshlog",
         "logs",
         "restart",
@@ -163,7 +173,7 @@ def is_allowed(user_id, command=None):
     if command in root_only_commands:
         # --- ИСПРАВЛЕНИЕ: Убеждаемся, что оба условия проверяются правильно ---
         if INSTALL_MODE == "root" and is_admin_group:
-             # Важно: Оба условия должны быть True
+            # Важно: Оба условия должны быть True
             logging.debug(
                 f"Команда '{command}' разрешена для админов в root-режиме. Доступ для админа {user_id} предоставлен.")
             return True
@@ -171,13 +181,14 @@ def is_allowed(user_id, command=None):
             logging.warning(
                 f"Команда '{command}' требует root-режима установки. Доступ для {user_id} запрещен (текущий режим: {INSTALL_MODE}).")
             return False
-        elif not is_admin_group: # Добавлено явное условие
+        elif not is_admin_group:  # Добавлено явное условие
             logging.warning(
                 f"Команда '{command}' требует прав админа (даже в root-режиме). Доступ для пользователя {user_id} (группа: {user_group_key}) запрещен.")
             return False
-        else: # Непредвиденный случай
-             logging.error(f"Непредвиденная комбинация для root команды '{command}': режим={INSTALL_MODE}, админ={is_admin_group}. Доступ запрещен.")
-             return False
+        else:  # Непредвиденный случай
+            logging.error(
+                f"Непредвиденная комбинация для root команды '{command}': режим={INSTALL_MODE}, админ={is_admin_group}. Доступ запрещен.")
+            return False
         # --- КОНЕЦ ИСПРАВЛЕНИЯ ---
 
     # --- Обработка динамических callback_data ---
@@ -186,7 +197,12 @@ def is_allowed(user_id, command=None):
         parts = command.split('_')
         base_command = parts[0]
         # Проверяем команды управления пользователями, требующие прав админа
-        if base_command in ["delete", "request", "confirm", "select", "set"] and len(parts) > 1:
+        if base_command in [
+            "delete",
+            "request",
+            "confirm",
+            "select",
+                "set"] and len(parts) > 1:
             if is_admin_group:
                 logging.debug(
                     f"Динамическая команда '{command}' разрешена для админа {user_id}.")
@@ -303,7 +319,7 @@ async def get_user_name(bot: Bot, user_id: int) -> str:
 
     lang = config.DEFAULT_LANGUAGE
     try:
-        from .i18n import get_user_lang # Импорт здесь для избежания цикла
+        from .i18n import get_user_lang  # Импорт здесь для избежания цикла
         lang = get_user_lang(user_id)
     except Exception as e:
         logging.warning(
@@ -313,30 +329,36 @@ async def get_user_name(bot: Bot, user_id: int) -> str:
     id_user_prefix = _("default_id_user_name", lang, uid="").split(' ')[0]
 
     # Если имя есть в кеше и оно не является плейсхолдером, возвращаем его
-    if cached_name and not cached_name.startswith(new_user_prefix) and not cached_name.startswith(id_user_prefix):
+    if cached_name and not cached_name.startswith(
+            new_user_prefix) and not cached_name.startswith(id_user_prefix):
         return cached_name
 
-    logging.debug(f"Имя для {user_id} не кешировано или является плейсхолдером ('{cached_name}'). Запрашиваю...")
-    new_name = _("default_id_user_name", lang, uid=user_id) # Имя по умолчанию
+    logging.debug(
+        f"Имя для {user_id} не кешировано или является плейсхолдером ('{cached_name}'). Запрашиваю...")
+    new_name = _("default_id_user_name", lang, uid=user_id)  # Имя по умолчанию
     try:
         chat = await bot.get_chat(user_id)
-        fetched_name = chat.first_name or chat.username # Приоритет first_name
+        fetched_name = chat.first_name or chat.username  # Приоритет first_name
         if fetched_name:
             new_name = escape_html(fetched_name)
             USER_NAMES[uid_str] = new_name
-            save_users() # Сохраняем сразу
-            logging.info(f"Получено и кешировано имя для {user_id}: '{new_name}'")
+            save_users()  # Сохраняем сразу
+            logging.info(
+                f"Получено и кешировано имя для {user_id}: '{new_name}'")
             return new_name
         else:
-            logging.warning(f"Получен чат для {user_id}, но имя/юзернейм не найдены. Использую запасное.")
-            # Сохраняем имя по умолчанию, если оно отличается от кешированного (или не было кеша)
+            logging.warning(
+                f"Получен чат для {user_id}, но имя/юзернейм не найдены. Использую запасное.")
+            # Сохраняем имя по умолчанию, если оно отличается от кешированного
+            # (или не было кеша)
             if cached_name != new_name:
                 USER_NAMES[uid_str] = new_name
                 save_users()
             return new_name
     except Exception as e:
         logging.error(f"Ошибка получения имени для ID {user_id}: {e}")
-        # Сохраняем имя по умолчанию, если оно отличается от кешированного (или не было кеша)
+        # Сохраняем имя по умолчанию, если оно отличается от кешированного (или
+        # не было кеша)
         if cached_name != new_name:
             USER_NAMES[uid_str] = new_name
             save_users()
@@ -355,10 +377,9 @@ async def send_access_denied_message(
     # Также удаляем предыдущее сообщение об ошибке доступа, если оно было
     await delete_previous_message(user_id, 'access_denied', chat_id, bot)
 
-
     lang = config.DEFAULT_LANGUAGE  # По умолчанию
     try:
-        from .i18n import get_user_lang # Импорт здесь для избежания цикла
+        from .i18n import get_user_lang  # Импорт здесь для избежания цикла
         lang = get_user_lang(user_id)
     except Exception as e:
         logging.warning(
@@ -381,34 +402,37 @@ async def send_access_denied_message(
     user_group_key = ALLOWED_USERS.get(user_id)
     is_admin_group = (user_id == ADMIN_USER_ID) or (user_group_key == "admins")
 
-    root_only_commands = [ # Повторное определение для проверки
+    root_only_commands = [  # Повторное определение для проверки
         "reboot_confirm", "reboot", "fall2ban", "sshlog", "logs", "restart", "update", "optimize"]
-    admin_only_commands = [ # Повторное определение для проверки
+    admin_only_commands = [  # Повторное определение для проверки
         "manage_users", "generate_vless", "speedtest", "top", "updatexray",
         "adduser", "add_user", "delete_user", "set_group", "change_group",
         "back_to_manage_users", "back_to_delete_users"
     ]
 
-    message_key = "access_denied_message" # Сообщение по умолчанию (нет в списке разрешенных)
-    if user_id in ALLOWED_USERS: # Если пользователь есть, но прав не хватило
+    # Сообщение по умолчанию (нет в списке разрешенных)
+    message_key = "access_denied_message"
+    if user_id in ALLOWED_USERS:  # Если пользователь есть, но прав не хватило
         if command in root_only_commands and INSTALL_MODE != "root":
-            message_key = "access_denied_not_root" # Требуется режим Root
+            message_key = "access_denied_not_root"  # Требуется режим Root
         elif command in root_only_commands and not is_admin_group:
-             message_key = "access_denied_no_rights" # Требуются права админа для Root-команды
+            # Требуются права админа для Root-команды
+            message_key = "access_denied_no_rights"
         # --- ИСПРАВЛЕНИЕ: Добавляем проверку для admin_only_commands ---
         elif command in admin_only_commands and not is_admin_group:
-             message_key = "access_denied_no_rights" # Требуются права админа для Админ-команды
+            # Требуются права админа для Админ-команды
+            message_key = "access_denied_no_rights"
         # --- КОНЕЦ ИСПРАВЛЕНИЯ ---
-        elif command not in root_only_commands and command not in admin_only_commands: # Для команд пользователя или неизвестных
-             message_key = "access_denied_no_rights" # Общее сообщение об отсутствии прав
-        else: # Другие случаи (например, админ пытается выполнить команду пользователя - должно быть разрешено раньше)
-            message_key = "access_denied_generic" # Общее сообщение, если логика не сработала
-
+        # Для команд пользователя или неизвестных
+        elif command not in root_only_commands and command not in admin_only_commands:
+            message_key = "access_denied_no_rights"  # Общее сообщение об отсутствии прав
+        else:  # Другие случаи (например, админ пытается выполнить команду пользователя - должно быть разрешено раньше)
+            # Общее сообщение, если логика не сработала
+            message_key = "access_denied_generic"
 
     # Используем соответствующий ключ i18n
     message_text = _(message_key, lang, user_id=user_id)
     # --- КОНЕЦ ИСПРАВЛЕНИЯ ---
-
 
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text=button_text, url=admin_link)]
@@ -421,7 +445,8 @@ async def send_access_denied_message(
             parse_mode="HTML"
         )
         # Сохраняем ID сообщения об ошибке доступа под ключ 'access_denied'
-        LAST_MESSAGE_IDS.setdefault(user_id, {})['access_denied'] = sent_message.message_id
+        LAST_MESSAGE_IDS.setdefault(
+            user_id, {})['access_denied'] = sent_message.message_id
     except Exception as e:
         logging.error(
             f"Не удалось отправить сообщение об отказе в доступе пользователю {user_id}: {e}")
