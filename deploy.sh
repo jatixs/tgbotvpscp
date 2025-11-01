@@ -218,8 +218,8 @@ setup_repo_and_dirs() {
     run_with_spinner "Клонирование репозитория" sudo git clone --branch "${GIT_BRANCH}" "${GITHUB_REPO_URL}" "${BOT_INSTALL_PATH}" || exit 1
     
     msg_info "Создание .gitignore, logs/, config/..."
-    # Добавляем docker-compose.yml в .gitignore
-    sudo -u ${owner_user} bash -c "cat > ${BOT_INSTALL_PATH}/.gitignore" <<< $'/venv/\n/__pycache__/\n*.pyc\n/.env\n/config/\n/logs/\n*.log\n*_flag.txt\n/docker-compose.yml'
+    # [ИСПРАВЛЕНИЕ] Убираем docker-compose.yml из .gitignore
+    sudo -u ${owner_user} bash -c "cat > ${BOT_INSTALL_PATH}/.gitignore" <<< $'/venv/\n/__pycache__/\n*.pyc\n/.env\n/config/\n/logs/\n*.log\n*_flag.txt'
     sudo chmod 644 "${BOT_INSTALL_PATH}/.gitignore"
     sudo -u ${owner_user} mkdir -p "${BOT_INSTALL_PATH}/logs/bot" "${BOT_INSTALL_PATH}/logs/watchdog" "${BOT_INSTALL_PATH}/config"
     
@@ -276,19 +276,21 @@ check_docker_deps() {
                 fi
                 
                 local LATEST_COMPOSE_URL="https://github.com/docker/compose/releases/download/${DOCKER_COMPOSE_VERSION}/docker-compose-$(uname -s)-$(uname -m)"
-                local DOCKER_CONFIG_DIR="/usr/libexec/docker/cli-plugins"
+                # [ИСПРАВЛЕНИЕ] Используем /usr/local/bin (стандартный) или /usr/libexec/docker/cli-plugins
+                local DOCKER_CLI_PLUGIN_DIR="/usr/libexec/docker/cli-plugins"
+                local DOCKER_COMPOSE_PATH="${DOCKER_CLI_PLUGIN_DIR}/docker-compose"
+
+                sudo mkdir -p ${DOCKER_CLI_PLUGIN_DIR}
                 
-                sudo mkdir -p ${DOCKER_CONFIG_DIR}
-                
-                msg_info "Загрузка Docker Compose ${DOCKER_COMPOSE_VERSION}..."
-                run_with_spinner "Загрузка docker-compose" sudo curl -SLf "${LATEST_COMPOSE_URL}" -o "${DOCKER_CONFIG_DIR}/docker-compose"
+                msg_info "Загрузка Docker Compose ${DOCKER_COMPOSE_VERSION} в ${DOCKER_COMPOSE_PATH}..."
+                run_with_spinner "Загрузка docker-compose" sudo curl -SLf "${LATEST_COMPOSE_URL}" -o "${DOCKER_COMPOSE_PATH}"
                 if [ $? -ne 0 ]; then
                     msg_error "Не удалось скачать Docker Compose с ${LATEST_COMPOSE_URL}."
                     msg_error "Пожалуйста, установите Docker Compose (v1 или v2) вручную."
                     exit 1;
                 fi
                 
-                sudo chmod +x "${DOCKER_CONFIG_DIR}/docker-compose"
+                sudo chmod +x "${DOCKER_COMPOSE_PATH}"
                 
                 # Проверяем еще раз
                 if docker compose version &> /dev/null; then
@@ -355,14 +357,160 @@ install_systemd_logic() {
 install_systemd_secure() { echo -e "\n${C_BOLD}=== Установка Systemd (Secure) (ветка: ${GIT_BRANCH}) ===${C_RESET}"; install_systemd_logic "secure" "${GIT_BRANCH}"; }
 install_systemd_root() { echo -e "\n${C_BOLD}=== Установка Systemd (Root) (ветка: ${GIT_BRANCH}) ===${C_RESET}"; install_systemd_logic "root" "${GIT_BRANCH}"; }
 
-# --- НОВЫЕ ФУНКЦИИ УСТАНОВКИ (Docker) ---
+
+# --- [ИСПРАВЛЕНО] НОВЫЕ ФУНКЦИИ УСТАНОВКИ (Docker) ---
+create_dockerfile() {
+    msg_info "Создание Dockerfile..."
+    sudo tee "${BOT_INSTALL_PATH}/Dockerfile" > /dev/null <<'EOF'
+# /opt/tg-bot/Dockerfile
+
+# 1. Базовый образ
+FROM python:3.10-slim-bookworm
+
+LABEL maintainer="Jatixs"
+LABEL description="Telegram VPS Bot"
+
+# 2. Установка системных зависимостей
+# Нужны для модулей бота (iperf3, yaml, ps, ping) и для сборки
+RUN apt-get update && apt-get install -y \
+    python3-yaml \
+    iperf3 \
+    git \
+    curl \
+    wget \
+    sudo \
+    procps \
+    iputils-ping \
+    net-tools \
+    gnupg \
+    && rm -rf /var/lib/apt/lists/*
+
+# 3. Установка Python-библиотеки Docker (для watchdog)
+RUN pip install --no-cache-dir docker
+
+# 4. Создание пользователя 'tgbot' (для режима secure)
+# UID/GID 1001.
+RUN groupadd -g 1001 tgbot && \
+    useradd -u 1001 -g 1001 -m -s /bin/bash tgbot && \
+    # Даем пользователю tgbot права sudo внутри контейнера (для режима secure)
+    echo "tgbot ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
+
+# 5. Настройка рабочей директории
+WORKDIR /opt/tg-bot
+
+# 6. Установка зависимостей Python
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# 7. Копирование всего кода приложения
+COPY . .
+
+# 8. Создание и выдача прав на директории config и logs
+# (Они будут переопределены volumes, но это гарантирует правильные права)
+RUN mkdir -p /opt/tg-bot/config /opt/tg-bot/logs/bot /opt/tg-bot/logs/watchdog && \
+    chown -R tgbot:tgbot /opt/tg-bot
+
+# 9. Установка пользователя 'tgbot' по умолчанию
+# (docker-compose переопределит это на 'root' для root-режима)
+USER tgbot
+
+# 10. Команда по умолчанию
+CMD ["python", "bot.py"]
+EOF
+    sudo chown ${OWNER_USER}:${OWNER_USER} "${BOT_INSTALL_PATH}/Dockerfile"
+    sudo chmod 644 "${BOT_INSTALL_PATH}/Dockerfile"
+}
+
+create_docker_compose_yml() {
+    msg_info "Создание docker-compose.yml..."
+    sudo tee "${BOT_INSTALL_PATH}/docker-compose.yml" > /dev/null <<'EOF'
+# /opt/tg-bot/docker-compose.yml
+version: '3.8'
+
+services:
+  # --- БАЗОВАЯ КОНФИГУРАЦИЯ БОТА ---
+  # (Используется для обоих режимов)
+  bot-base: &bot-base
+    build: .
+    image: tg-vps-bot:latest
+    restart: always
+    env_file: .env # Подтягивает .env файл
+
+  # --- РЕЖИМ SECURE (Docker) ---
+  bot-secure:
+    <<: *bot-base # Наследует 'bot-base'
+    container_name: tg-bot-secure
+    profiles: ["secure"] # Запускается командой: docker-compose --profile secure up
+    user: "tgbot" # Запуск от пользователя 'tgbot' (UID 1001 из Dockerfile)
+    environment:
+      - INSTALL_MODE=secure # Сообщает боту, что он в secure режиме
+      - DEPLOY_MODE=docker
+      - TG_BOT_CONTAINER_NAME=tg-bot-secure # Имя для watchdog
+    volumes:
+      - ./config:/opt/tg-bot/config
+      - ./logs/bot:/opt/tg-bot/logs/bot
+      # --- Минимальный доступ к хосту ---
+      - /var/run/docker.sock:/var/run/docker.sock:ro # Для модулей (xray)
+      - /proc/uptime:/proc/uptime:ro                 # Для uptime
+      - /proc/stat:/proc/stat:ro                     # Для selftest (cpu)
+      - /proc/meminfo:/proc/meminfo:ro               # Для selftest (ram)
+      - /proc/net/dev:/proc/net/dev:ro               # Для traffic
+    cap_drop: [ALL]   # Сбрасываем все привилегии
+    cap_add: [NET_RAW] # Добавляем только 'ping'
+
+  # --- РЕЖИМ ROOT (Docker) ---
+  bot-root:
+    <<: *bot-base # Наследует 'bot-base'
+    container_name: tg-bot-root
+    profiles: ["root"] # Запускается командой: docker-compose --profile root up
+    user: "root"
+    environment:
+      - INSTALL_MODE=root # Сообщает боту, что он в root режиме
+      - DEPLOY_MODE=docker
+      - TG_BOT_CONTAINER_NAME=tg-bot-root # Имя для watchdog
+    # --- Полный доступ к хосту ---
+    privileged: true     # Включает --privileged
+    pid: "host"          # Доступ к процессам хоста (для 'top')
+    network_mode: "host" # Использует сеть хоста
+    ipc: "host"          # Использует IPC хоста
+    volumes:
+      # Монтируем config и logs
+      - ./config:/opt/tg-bot/config
+      - ./logs/bot:/opt/tg-bot/logs/bot
+      # Монтируем всю ФС хоста, чтобы команды 'apt update', 'reboot'
+      # и чтение логов работали без изменения путей в модулях
+      - /:/host
+
+  # --- НАБЛЮДАТЕЛЬ (WATCHDOG) ---
+  watchdog:
+    <<: *bot-base # Наследует 'bot-base'
+    container_name: tg-watchdog
+    # Не имеет профиля, запускается всегда (когда запущен docker-compose)
+    command: python watchdog.py
+    user: "root" # Нужен root для доступа к docker.sock
+    restart: always
+    volumes:
+      - ./config:/opt/tg-bot/config # Для чтения RESTART_FLAG
+      - ./logs/watchdog:/opt/tg-bot/logs/watchdog
+      - /var/run/docker.sock:/var/run/docker.sock:ro # Доступ к Docker API
+EOF
+    sudo chown ${OWNER_USER}:${OWNER_USER} "${BOT_INSTALL_PATH}/docker-compose.yml"
+    sudo chmod 644 "${BOT_INSTALL_PATH}/docker-compose.yml"
+}
+
+
 install_docker_logic() {
     local mode=$1 # "secure" или "root"
     local branch_to_use=$2
     local container_name="tg-bot-${mode}"
     
     check_docker_deps # Проверяет/ставит docker и compose
-    setup_repo_and_dirs "$mode" # Клонирует репо и создает пользователя/папки
+    setup_repo_and_dirs "$mode" # Клонирует репо и создает пользователя/папки (OWNER_USER экспортируется)
+    
+    # --- [ИСПРАВЛЕНИЕ] Создаем файлы ДО сборки ---
+    create_dockerfile
+    create_docker_compose_yml
+    # ----------------------------------------
     
     ask_env_details # Запрашивает T, A, U, N
     write_env_file "docker" "$mode" "$container_name" # Пишет .env
@@ -464,6 +612,10 @@ update_bot() {
     msg_success "Файлы проекта обновлены.";
 
     if [ "$DEPLOY_MODE_FROM_ENV" == "docker" ]; then
+        # [ИСПРАВЛЕНИЕ] Создаем файлы, если их вдруг нет (например, после старой установки)
+        if [ ! -f "${BOT_INSTALL_PATH}/Dockerfile" ]; then create_dockerfile; fi
+        if [ ! -f "${BOT_INSTALL_PATH}/docker-compose.yml" ]; then create_docker_compose_yml; fi
+    
         msg_info "2. [Docker] Пересборка образа...";
         (cd ${BOT_INSTALL_PATH} && run_with_spinner "Сборка Docker образа" sudo docker-compose build) || { msg_error "Сборка Docker не удалась."; return 1; }
         msg_info "3. [Docker] Перезапуск контейнеров (Профиль: ${INSTALL_MODE_FROM_ENV})...";
