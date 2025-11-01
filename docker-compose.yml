@@ -1,0 +1,69 @@
+# /opt/tg-bot/docker-compose.yml
+version: '3.8'
+
+services:
+  # --- БАЗОВАЯ КОНФИГУРАЦИЯ БОТА ---
+  # (Используется для обоих режимов)
+  bot-base: &bot-base
+    build: .
+    image: tg-vps-bot:latest
+    restart: always
+    env_file: .env # Подтягивает .env файл
+
+  # --- РЕЖИМ SECURE (Docker) ---
+  bot-secure:
+    <<: *bot-base # Наследует 'bot-base'
+    container_name: tg-bot-secure
+    profiles: ["secure"] # Запускается командой: docker-compose --profile secure up
+    user: "tgbot" # Запуск от пользователя 'tgbot' (UID 1001 из Dockerfile)
+    environment:
+      - INSTALL_MODE=secure # Сообщает боту, что он в secure режиме
+      - DEPLOY_MODE=docker
+      - TG_BOT_CONTAINER_NAME=tg-bot-secure # Имя для watchdog
+    volumes:
+      - ./config:/opt/tg-bot/config
+      - ./logs/bot:/opt/tg-bot/logs/bot
+      # --- Минимальный доступ к хосту ---
+      - /var/run/docker.sock:/var/run/docker.sock:ro # Для модулей (xray)
+      - /proc/uptime:/proc/uptime:ro                 # Для uptime
+      - /proc/stat:/proc/stat:ro                     # Для selftest (cpu)
+      - /proc/meminfo:/proc/meminfo:ro               # Для selftest (ram)
+      - /proc/net/dev:/proc/net/dev:ro               # Для traffic
+    cap_drop: [ALL]   # Сбрасываем все привилегии
+    cap_add: [NET_RAW] # Добавляем только 'ping'
+
+  # --- РЕЖИМ ROOT (Docker) ---
+  bot-root:
+    <<: *bot-base # Наследует 'bot-base'
+    container_name: tg-bot-root
+    profiles: ["root"] # Запускается командой: docker-compose --profile root up
+    user: "root"
+    environment:
+      - INSTALL_MODE=root # Сообщает боту, что он в root режиме
+      - DEPLOY_MODE=docker
+      - TG_BOT_CONTAINER_NAME=tg-bot-root # Имя для watchdog
+    # --- Полный доступ к хосту ---
+    privileged: true     # Включает --privileged
+    pid: "host"          # Доступ к процессам хоста (для 'top')
+    network_mode: "host" # Использует сеть хоста
+    ipc: "host"          # Использует IPC хоста
+    volumes:
+      # Монтируем config и logs
+      - ./config:/opt/tg-bot/config
+      - ./logs/bot:/opt/tg-bot/logs/bot
+      # Монтируем всю ФС хоста, чтобы команды 'apt update', 'reboot'
+      # и чтение логов работали без изменения путей в модулях
+      - /:/host
+
+  # --- НАБЛЮДАТЕЛЬ (WATCHDOG) ---
+  watchdog:
+    <<: *bot-base # Наследует 'bot-base'
+    container_name: tg-watchdog
+    # Не имеет профиля, запускается всегда (когда запущен docker-compose)
+    command: python watchdog.py
+    user: "root" # Нужен root для доступа к docker.sock
+    restart: always
+    volumes:
+      - ./config:/opt/tg-bot/config # Для чтения RESTART_FLAG
+      - ./logs/watchdog:/opt/tg-bot/logs/watchdog
+      - /var/run/docker.sock:/var/run/docker.sock:ro # Доступ к Docker API
