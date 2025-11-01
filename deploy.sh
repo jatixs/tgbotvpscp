@@ -516,18 +516,29 @@ install_docker_logic() {
     write_env_file "docker" "$mode" "$container_name" # Пишет .env
     sudo chown ${OWNER_USER}:${OWNER_USER} "${ENV_FILE}" # Устанавливает владельца .env
 
+    # --- [ИСПРАВЛЕНИЕ] Определяем команду compose ---
+    local COMPOSE_CMD=""
+    if command -v docker-compose &> /dev/null; then
+        COMPOSE_CMD="sudo docker-compose"
+    elif docker compose version &> /dev/null; then
+        COMPOSE_CMD="sudo docker compose"
+    else
+        msg_error "[Install] Не найдена команда docker-compose. Установка Docker прервана."
+        exit 1
+    fi
+    
     msg_info "Сборка Docker образа..."
-    (cd ${BOT_INSTALL_PATH} && run_with_spinner "Сборка образа tg-vps-bot:latest" sudo docker-compose build) || { msg_error "Сборка Docker не удалась."; exit 1; }
+    (cd ${BOT_INSTALL_PATH} && run_with_spinner "Сборка образа tg-vps-bot:latest" $COMPOSE_CMD build) || { msg_error "Сборка Docker не удалась."; exit 1; }
     
     msg_info "Запуск Docker Compose (Профиль: ${mode})..."
-    (cd ${BOT_INSTALL_PATH} && run_with_spinner "Запуск контейнеров" sudo docker-compose --profile "${mode}" up -d) || { msg_error "Запуск Docker Compose не удался."; exit 1; }
+    (cd ${BOT_INSTALL_PATH} && run_with_spinner "Запуск контейнеров" $COMPOSE_CMD --profile "${mode}" up -d) || { msg_error "Запуск Docker Compose не удался."; exit 1; }
     
     sleep 2
     msg_success "Установка (Docker) завершена!"
     msg_info "Контейнеры:"
-    (cd ${BOT_INSTALL_PATH} && sudo docker-compose ps)
-    msg_info "Логи бота: docker-compose logs -f ${container_name}"
-    msg_info "Логи наблюдателя: docker-compose logs -f tg-watchdog"
+    (cd ${BOT_INSTALL_PATH} && $COMPOSE_CMD ps)
+    msg_info "Логи бота: $COMPOSE_CMD logs -f ${container_name}"
+    msg_info "Логи наблюдателя: $COMPOSE_CMD logs -f tg-watchdog"
 }
 
 install_docker_secure() { echo -e "\n${C_BOLD}=== Установка Docker (Secure) (ветка: ${GIT_BRANCH}) ===${C_RESET}"; install_docker_logic "secure" "${GIT_BRANCH}"; }
@@ -552,7 +563,19 @@ uninstall_bot() {
     # 2. Остановка Docker
     if [ -f "${DOCKER_COMPOSE_FILE}" ]; then
         msg_info "2. Остановка контейнеров Docker (если есть)...";
-        (cd ${BOT_INSTALL_PATH} && sudo docker-compose down -v --remove-orphans &> /tmp/${SERVICE_NAME}_install.log)
+        # [ИСПРАВЛЕНИЕ] Определяем команду compose
+        local COMPOSE_CMD=""
+        if command -v docker-compose &> /dev/null; then
+            COMPOSE_CMD="sudo docker-compose"
+        elif docker compose version &> /dev/null; then
+            COMPOSE_CMD="sudo docker compose"
+        fi
+        
+        if [ -n "$COMPOSE_CMD" ]; then
+            (cd ${BOT_INSTALL_PATH} && $COMPOSE_CMD down -v --remove-orphans &> /tmp/${SERVICE_NAME}_install.log)
+        else
+            msg_warning "Не удалось найти команду docker-compose/docker compose для остановки контейнеров."
+        fi
     fi
     
     # 3. Удаление файлов Systemd
@@ -612,14 +635,25 @@ update_bot() {
     msg_success "Файлы проекта обновлены.";
 
     if [ "$DEPLOY_MODE_FROM_ENV" == "docker" ]; then
+        # [ИСПРАВЛЕНИЕ] Определяем команду compose
+        local COMPOSE_CMD=""
+        if command -v docker-compose &> /dev/null; then
+            COMPOSE_CMD="sudo docker-compose"
+        elif docker compose version &> /dev/null; then
+            COMPOSE_CMD="sudo docker compose"
+        else
+            msg_error "[Update] Не найдена команда docker-compose. Обновление Docker прервано."
+            return 1
+        fi
+        
         # [ИСПРАВЛЕНИЕ] Создаем файлы, если их вдруг нет (например, после старой установки)
         if [ ! -f "${BOT_INSTALL_PATH}/Dockerfile" ]; then create_dockerfile; fi
         if [ ! -f "${BOT_INSTALL_PATH}/docker-compose.yml" ]; then create_docker_compose_yml; fi
     
         msg_info "2. [Docker] Пересборка образа...";
-        (cd ${BOT_INSTALL_PATH} && run_with_spinner "Сборка Docker образа" sudo docker-compose build) || { msg_error "Сборка Docker не удалась."; return 1; }
+        (cd ${BOT_INSTALL_PATH} && run_with_spinner "Сборка Docker образа" $COMPOSE_CMD build) || { msg_error "Сборка Docker не удалась."; return 1; }
         msg_info "3. [Docker] Перезапуск контейнеров (Профиль: ${INSTALL_MODE_FROM_ENV})...";
-        (cd ${BOT_INSTALL_PATH} && run_with_spinner "Перезапуск Docker Compose" sudo docker-compose --profile "${INSTALL_MODE_FROM_ENV}" up -d) || { msg_error "Перезапуск Docker Compose не удался."; return 1; }
+        (cd ${BOT_INSTALL_PATH} && run_with_spinner "Перезапуск Docker Compose" $COMPOSE_CMD --profile "${INSTALL_MODE_FROM_ENV}" up -d) || { msg_error "Перезапуск Docker Compose не удался."; return 1; }
     
     else # Systemd
         msg_info "2. [Systemd] Обновление зависимостей Python...";
