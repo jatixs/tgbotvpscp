@@ -1,4 +1,4 @@
-# /opt/tg-bot/core/config.py
+# /opt-tg-bot/core/config.py
 import os
 import sys
 import logging
@@ -33,6 +33,9 @@ USER_SETTINGS_FILE = os.path.join(CONFIG_DIR, "user_settings.json")
 # --- Загрузка .env ---
 TOKEN = os.environ.get("TG_BOT_TOKEN")
 INSTALL_MODE = os.environ.get("INSTALL_MODE", "secure")
+# --- ДОБАВЛЕНО: Чтение DEPLOY_MODE ---
+DEPLOY_MODE = os.environ.get("DEPLOY_MODE", "systemd")
+# ------------------------------------
 ADMIN_USERNAME = os.environ.get("TG_ADMIN_USERNAME")
 
 try:
