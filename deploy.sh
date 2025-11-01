@@ -48,8 +48,11 @@ check_integrity() {
 
     if [ "$DEPLOY_MODE_FROM_ENV" == "docker" ]; then
         INSTALL_TYPE="DOCKER ($INSTALL_MODE_FROM_ENV)"
-        if ! command -v docker &> /dev/null || ! command -v docker-compose &> /dev/null; then
-            STATUS_MESSAGE="${C_RED}Установка Docker повреждена (Docker/Compose не найдены).${C_RESET}"; return;
+        if ! command -v docker &> /dev/null; then
+            STATUS_MESSAGE="${C_RED}Установка Docker повреждена (Docker не найден).${C_RESET}"; return;
+        fi
+        if ! (command -v docker-compose &> /dev/null || docker compose version &> /dev/null); then
+            STATUS_MESSAGE="${C_RED}Установка Docker повреждена (Docker Compose не найден).${C_RESET}"; return;
         fi
         if [ ! -f "${DOCKER_COMPOSE_FILE}" ]; then
             STATUS_MESSAGE="${C_RED}Установка Docker повреждена (Нет docker-compose.yml).${C_RESET}"; return;
@@ -228,30 +231,77 @@ setup_repo_and_dirs() {
     export OWNER_USER=${owner_user}
 }
 
-# --- НОВАЯ ФУНКЦИЯ: Проверка Docker ---
+# --- [ИСПРАВЛЕНО] НОВАЯ ФУНКЦИЯ: Проверка Docker ---
 check_docker_deps() {
     msg_info "Проверка зависимостей Docker..."
     if ! command -v docker &> /dev/null; then
         msg_warning "Docker не найден. Попытка установки..."
-        run_with_spinner "Установка Docker" sudo apt-get install -y docker.io || { msg_error "Не удалось установить docker.io."; exit 1; }
+        run_with_spinner "Установка Docker (docker.io)" sudo apt-get install -y docker.io || { msg_error "Не удалось установить docker.io."; exit 1; }
         sudo systemctl start docker
         sudo systemctl enable docker
     else
         msg_success "Docker найден."
     fi
     
-    if ! command -v docker-compose &> /dev/null; then
-        msg_warning "Docker Compose v1 не найден. Попытка установки v2 (docker compose plugin)..."
-        # Установка v2
-        run_with_spinner "Установка Docker Compose" sudo apt-get install -y docker-compose-plugin || { msg_error "Не удалось установить docker-compose-plugin."; exit 1; }
-        # Создаем симлинк для обратной совместимости
-        if [ ! -f /usr/bin/docker-compose ]; then
-            sudo ln -s /usr/libexec/docker/cli-plugins/docker-compose /usr/bin/docker-compose || true
-        fi
+    # Проверяем и v2 (docker compose) и v1 (docker-compose)
+    if command -v docker-compose &> /dev/null; then
+        msg_success "Docker Compose v1 (docker-compose) найден."
+    elif docker compose version &> /dev/null; then
+        msg_success "Docker Compose v2 (docker compose) найден."
     else
-        msg_success "Docker Compose найден."
+        msg_warning "Docker Compose не найден. Попытка установки..."
+        
+        # Попытка №1: Установить v2 плагин через apt (как было)
+        msg_info "Попытка 1: Установка 'docker-compose-plugin' через apt..."
+        sudo apt-get install -y docker-compose-plugin &> /tmp/${SERVICE_NAME}_install.log
+        
+        if docker compose version &> /dev/null; then
+            msg_success "Успешно установлен 'docker-compose-plugin' (v2) через apt."
+            # v2 не нуждается в симлинке /usr/bin/docker-compose
+        else
+            msg_warning "Не удалось установить v2 через apt. Попытка 2: Установка v1 ('docker-compose') через apt..."
+            # Попытка №2: Установить v1 через apt
+            sudo apt-get install -y docker-compose &> /tmp/${SERVICE_NAME}_install.log
+            
+            if command -v docker-compose &> /dev/null; then
+                 msg_success "Успешно установлен 'docker-compose' (v1) через apt."
+            else
+                msg_warning "Не удалось установить v1 через apt. Попытка 3: Загрузка бинарного файла v2..."
+                # Попытка №3: Скачать бинарный файл v2 (самый надежный способ)
+                local DOCKER_COMPOSE_VERSION=$(curl -s https://api.github.com/repos/docker/compose/releases/latest | grep 'tag_name' | cut -d\" -f4)
+                if [ -z "$DOCKER_COMPOSE_VERSION" ] || [[ "$DOCKER_COMPOSE_VERSION" == *"API rate limit"* ]]; then
+                    msg_error "Не удалось определить последнюю версию Docker Compose с GitHub (возможно, лимит API)."
+                    msg_error "Пожалуйста, установите Docker Compose (v1 или v2) вручную."
+                    exit 1;
+                fi
+                
+                local LATEST_COMPOSE_URL="https://github.com/docker/compose/releases/download/${DOCKER_COMPOSE_VERSION}/docker-compose-$(uname -s)-$(uname -m)"
+                local DOCKER_CONFIG_DIR="/usr/libexec/docker/cli-plugins"
+                
+                sudo mkdir -p ${DOCKER_CONFIG_DIR}
+                
+                msg_info "Загрузка Docker Compose ${DOCKER_COMPOSE_VERSION}..."
+                run_with_spinner "Загрузка docker-compose" sudo curl -SLf "${LATEST_COMPOSE_URL}" -o "${DOCKER_CONFIG_DIR}/docker-compose"
+                if [ $? -ne 0 ]; then
+                    msg_error "Не удалось скачать Docker Compose с ${LATEST_COMPOSE_URL}."
+                    msg_error "Пожалуйста, установите Docker Compose (v1 или v2) вручную."
+                    exit 1;
+                fi
+                
+                sudo chmod +x "${DOCKER_CONFIG_DIR}/docker-compose"
+                
+                # Проверяем еще раз
+                if docker compose version &> /dev/null; then
+                    msg_success "Успешно установлен Docker Compose v2 (бинарный файл)."
+                else
+                    msg_error "Не удалось установить Docker Compose. Пожалуйста, установите его вручную."
+                    exit 1;
+                fi
+            fi
+        fi
     fi
 }
+
 
 # --- Старые функции установки (Systemd) ---
 create_and_start_service() { local svc=$1; local script=$2; local mode=$3; local desc=$4; local user="root"; local group="root"; local env=""; local suffix=""; local after="After=network.target"; local req=""; if [ "$mode" == "secure" ] && [ "$svc" == "$SERVICE_NAME" ]; then user=${SERVICE_USER}; group=${SERVICE_USER}; suffix="(Безопасно)"; elif [ "$svc" == "$SERVICE_NAME" ]; then user="root"; group="root"; suffix="(Root)"; elif [ "$svc" == "$WATCHDOG_SERVICE_NAME" ]; then user="root"; group="root"; after="After=network.target ${SERVICE_NAME}.service"; fi; env="EnvironmentFile=${BOT_INSTALL_PATH}/.env"; msg_info "Создание systemd для ${svc}..."; FILE="/etc/systemd/system/${svc}.service"; sudo tee ${FILE} > /dev/null <<EOF
