@@ -1,4 +1,4 @@
-# /opt/tg-bot/modules/logs.py
+# /opt-tg-bot/modules/logs.py
 import asyncio
 import logging
 import os
@@ -9,8 +9,8 @@ from aiogram.types import KeyboardButton
 from core.config import INSTALL_MODE, DEPLOY_MODE, DEFAULT_LANGUAGE
 from core.keyboards import get_main_reply_keyboard
 from core.i18n import I18nFilter, get_text as _
+from core.utils import escape_html  # <-- (ВАЖНО) ДОБАВЛЕН ИМПОРТ
 
-# --- [ИСПРАВЛЕНИЕ: Добавлены get_button и register_handlers] ---
 BUTTON_KEY = "btn_logs"
 
 def get_button() -> KeyboardButton:
@@ -19,13 +19,11 @@ def get_button() -> KeyboardButton:
 
 def register_handlers(dp: Dispatcher):
     """Регистрирует хэндлеры этого модуля в главном диспетчере."""
-    # Включаем роутер, который содержит все хэндлеры
     dp.include_router(router)
-# --- [КОНЕЦ ИСПРАВЛЕНИЯ] ---
 
-router = Router() # Роутер остается
+router = Router()
 
-@router.message(I18nFilter(BUTTON_KEY)) # Используем BUTTON_KEY
+@router.message(I18nFilter(BUTTON_KEY))
 async def logs_handler(message: types.Message, state: FSMContext):
     user_id = message.from_user.id
     await state.clear()
@@ -44,10 +42,11 @@ async def logs_handler(message: types.Message, state: FSMContext):
 
     cmd = []
     if DEPLOY_MODE == "docker" and INSTALL_MODE == "root":
+        # Docker-Root (с chroot)
         if os.path.exists("/host/usr/bin/journalctl"):
-            cmd = ["/host/usr/bin/journalctl", "-n", "20", "--no-pager"]
+            cmd = ["chroot", "/host", "/usr/bin/journalctl", "-n", "20", "--no-pager"]
         elif os.path.exists("/host/bin/journalctl"):
-            cmd = ["/host/bin/journalctl", "-n", "20", "--no-pager"]
+            cmd = ["chroot", "/host", "/bin/journalctl", "-n", "20", "--no-pager"]
         else:
             await message.answer(
                 _("logs_journalctl_not_found_in_host", user_id),
@@ -55,6 +54,7 @@ async def logs_handler(message: types.Message, state: FSMContext):
             )
             return
     else:
+        # Systemd
         cmd = ["journalctl", "-n", "20", "--no-pager"]
 
     try:
@@ -66,20 +66,25 @@ async def logs_handler(message: types.Message, state: FSMContext):
         stdout, stderr = await process.communicate()
 
         if process.returncode == 0:
-            log_output = stdout.decode().strip()
+            # --- [ИСПРАВЛЕНО] Экранируем вывод ---
+            log_output = escape_html(stdout.decode().strip())
+            # -------------------------------------
             response_text = _("logs_header", user_id, log_output=log_output)
         else:
-            error_message = stderr.decode().strip()
+            # --- [ИСПРАВЛЕНО] Экранируем ошибку ---
+            error_message = escape_html(stderr.decode().strip())
+            # ---------------------------------------
             logging.error(f"Ошибка при чтении журналов: {error_message}")
             response_text = _("logs_read_error", user_id, error=error_message)
 
         await message.answer(
             response_text,
-            reply_markup=main_keyboard
+            reply_markup=main_keyboard,
+            parse_mode="HTML"  # Убедимся, что parse_mode включен
         )
 
     except FileNotFoundError:
-        logging.error("Команда journalctl не найдена.")
+        logging.error(f"Команда '{cmd[0]}' не найдена.")
         await message.answer(
             _("logs_journalctl_not_found", user_id),
             reply_markup=main_keyboard
