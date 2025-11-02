@@ -1,15 +1,15 @@
-# /opt/tg-bot/docker-compose.yml
+# /opt-tg-bot/docker-compose.yml
 version: '3.8'
 
-services:
-  # --- БАЗОВАЯ КОНФИГУРАЦИЯ БОТА ---
-  # (Используется для обоих режимов)
-  bot-base: &bot-base
-    build: .
-    image: tg-vps-bot:latest
-    restart: always
-    env_file: .env # Подтягивает .env файл
+# --- БАЗОВАЯ КОНФИГУРАЦИЯ БОТА (КАК ЯКОРЬ) ---
+# Мы вынесли это из 'services' и добавили 'x-'
+x-bot-base: &bot-base
+  build: .
+  image: tg-vps-bot:latest
+  restart: always
+  env_file: .env # Подтягивает .env файл
 
+services:
   # --- РЕЖИМ SECURE (Docker) ---
   bot-secure:
     <<: *bot-base # Наследует 'bot-base'
@@ -54,6 +54,8 @@ services:
       # Монтируем всю ФС хоста, чтобы команды 'apt update', 'reboot'
       # и чтение логов работали без изменения путей в модулях
       - /:/host
+      # Добавляем docker.sock и сюда
+      - /var/run/docker.sock:/var/run/docker.sock:ro
 
   # --- НАБЛЮДАТЕЛЬ (WATCHDOG) ---
   watchdog:
