@@ -757,7 +757,7 @@ main_menu() {
             
             # --- [ИСПРАВЛЕНИЕ СИНТАКСИСА] ---
             5) rm -f /tmp/${SERVICE_NAME}_install.log; msg_question "Переустановить (Docker - Secure, ${GIT_BRANCH})? (y/n): " confirm;
-               if [[ "$confirm" =~ ^[YYy]$ ]]; then uninstall_bot; install_docker_secure; local_version=$(get_local_version "$README_FILE"); else msg_info "Отменено."; fi ;;
+               if [[ "$confirm" =~ ^[Yy]$ ]]; then uninstall_bot; install_docker_secure; local_version=$(get_local_version "$README_FILE"); else msg_info "Отменено."; fi ;;
             # --- [КОНЕЦ ИСПРАВЛЕНИЯ] ---
             
             6) rm -f /tmp/${SERVICE_NAME}_install.log; msg_question "Переустановить (Docker - Root, ${GIT_BRANCH})? (y/n): " confirm;
