@@ -1,4 +1,4 @@
-# /opt-tg-bot/docker-compose.yml
+# /opt/tg-bot/docker-compose.yml
 version: '3.8'
 
 # --- БАЗОВАЯ КОНФИГУРАЦИЯ БОТА (КАК ЯКОРЬ) ---
