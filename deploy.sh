@@ -531,7 +531,8 @@ install_docker_logic() {
     (cd ${BOT_INSTALL_PATH} && run_with_spinner "Сборка образа tg-vps-bot:latest" $COMPOSE_CMD build) || { msg_error "Сборка Docker не удалась."; exit 1; }
     
     msg_info "Запуск Docker Compose (Профиль: ${mode})..."
-    (cd ${BOT_INSTALL_PATH} && run_with_spinner "Запуск контейнеров" $COMPOSE_CMD --profile "${mode}" up -d) || { msg_error "Запуск Docker Compose не удался."; exit 1; }
+    # --- [ИСПРАВЛЕНИЕ] Добавлен флаг --remove-orphans ---
+    (cd ${BOT_INSTALL_PATH} && run_with_spinner "Запуск контейнеров" $COMPOSE_CMD --profile "${mode}" up -d --remove-orphans) || { msg_error "Запуск Docker Compose не удался."; exit 1; }
     
     sleep 2
     msg_success "Установка (Docker) завершена!"
@@ -653,7 +654,8 @@ update_bot() {
         msg_info "2. [Docker] Пересборка образа...";
         (cd ${BOT_INSTALL_PATH} && run_with_spinner "Сборка Docker образа" $COMPOSE_CMD build) || { msg_error "Сборка Docker не удалась."; return 1; }
         msg_info "3. [Docker] Перезапуск контейнеров (Профиль: ${INSTALL_MODE_FROM_ENV})...";
-        (cd ${BOT_INSTALL_PATH} && run_with_spinner "Перезапуск Docker Compose" $COMPOSE_CMD --profile "${INSTALL_MODE_FROM_ENV}" up -d) || { msg_error "Перезапуск Docker Compose не удался."; return 1; }
+        # --- [ИСПРАВЛЕНИЕ] Добавлен флаг --remove-orphans ---
+        (cd ${BOT_INSTALL_PATH} && run_with_spinner "Перезапуск Docker Compose" $COMPOSE_CMD --profile "${INSTALL_MODE_FROM_ENV}" up -d --remove-orphans) || { msg_error "Перезапуск Docker Compose не удался."; return 1; }
     
     else # Systemd
         msg_info "2. [Systemd] Обновление зависимостей Python...";
@@ -817,4 +819,3 @@ if [ "$(id -u)" -ne 0 ]; then msg_error "Запустите скрипт от и
 
 # --- Запуск ---
 main
-
