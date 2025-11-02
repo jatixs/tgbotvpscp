@@ -54,8 +54,8 @@ services:
       # Монтируем всю ФС хоста, чтобы команды 'apt update', 'reboot'
       # и чтение логов работали без изменения путей в модулях
       - /:/host
-      # Добавляем docker.sock и сюда
-      - /var/run/docker.sock:/var/run/docker.sock:ro
+      # Добавляем /var/run/docker.sock и для root
+      - /var/run/docker.sock:/var/run/docker.sock:ro 
 
   # --- НАБЛЮДАТЕЛЬ (WATCHDOG) ---
   watchdog:
