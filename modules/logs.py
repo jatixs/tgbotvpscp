@@ -1,44 +1,49 @@
-# /opt-tg-bot/modules/logs.py
+# /opt/tg-bot/modules/logs.py
 import asyncio
 import logging
-import os  # <-- Добавлен import os
-from aiogram import F, types, Router
+import os
+from aiogram import F, types, Router, Dispatcher
 from aiogram.fsm.context import FSMContext
+from aiogram.types import KeyboardButton
 
-from core.config import INSTALL_MODE, DEPLOY_MODE  # <-- Импортируем режимы
-# --- [ИСПРАВЛЕНО] ---
-from core.keyboards import get_main_reply_keyboard  # <-- Правильное имя функции
+from core.config import INSTALL_MODE, DEPLOY_MODE, DEFAULT_LANGUAGE
+from core.keyboards import get_main_reply_keyboard
 from core.i18n import I18nFilter, get_text as _
+
+# --- [ИСПРАВЛЕНИЕ: Добавлены get_button и register_handlers] ---
+BUTTON_KEY = "btn_logs"
+
+def get_button() -> KeyboardButton:
+    """Возвращает кнопку для главного меню."""
+    return KeyboardButton(text=_(BUTTON_KEY, DEFAULT_LANGUAGE))
+
+def register_handlers(dp: Dispatcher):
+    """Регистрирует хэндлеры этого модуля в главном диспетчере."""
+    # Включаем роутер, который содержит все хэндлеры
+    dp.include_router(router)
 # --- [КОНЕЦ ИСПРАВЛЕНИЯ] ---
 
-router = Router()
+router = Router() # Роутер остается
 
-
-@router.message(I18nFilter("btn_logs"))
+@router.message(I18nFilter(BUTTON_KEY)) # Используем BUTTON_KEY
 async def logs_handler(message: types.Message, state: FSMContext):
     user_id = message.from_user.id
     await state.clear()
 
-    # --- [ИСПРАВЛЕНО] Получаем карту кнопок и создаем клавиатуру ОДИН РАЗ ---
     buttons_map = getattr(
         message.bot, 'buttons_map', {
             "user": [], "admin": [], "root": []})
     main_keyboard = get_main_reply_keyboard(user_id, buttons_map)
-    # --- [КОНЕЦ ИСПРАВЛЕНИЯ] ---
 
-    # --- [ИСПРАВЛЕНИЕ] ---
     if DEPLOY_MODE == "docker" and INSTALL_MODE == "secure":
-        # В Docker Secure нет доступа к journalctl
         await message.answer(
             _("logs_docker_secure_not_available", user_id),
-            reply_markup=main_keyboard  # <-- Используем исправленную клавиатуру
+            reply_markup=main_keyboard
         )
         return
 
-    # Определяем команду в зависимости от режима
     cmd = []
     if DEPLOY_MODE == "docker" and INSTALL_MODE == "root":
-        # В Docker Root ищем journalctl на хосте
         if os.path.exists("/host/usr/bin/journalctl"):
             cmd = ["/host/usr/bin/journalctl", "-n", "20", "--no-pager"]
         elif os.path.exists("/host/bin/journalctl"):
@@ -46,13 +51,11 @@ async def logs_handler(message: types.Message, state: FSMContext):
         else:
             await message.answer(
                 _("logs_journalctl_not_found_in_host", user_id),
-                reply_markup=main_keyboard  # <-- Используем исправленную клавиатуру
+                reply_markup=main_keyboard
             )
             return
     else:
-        # Стандартный режим (Systemd)
         cmd = ["journalctl", "-n", "20", "--no-pager"]
-    # --- [КОНЕЦ ИСПРАВЛЕНИЯ] ---
 
     try:
         process = await asyncio.create_subprocess_exec(
@@ -72,18 +75,18 @@ async def logs_handler(message: types.Message, state: FSMContext):
 
         await message.answer(
             response_text,
-            reply_markup=main_keyboard  # <-- Используем исправленную клавиатуру
+            reply_markup=main_keyboard
         )
 
     except FileNotFoundError:
         logging.error("Команда journalctl не найдена.")
         await message.answer(
             _("logs_journalctl_not_found", user_id),
-            reply_markup=main_keyboard  # <-- Используем исправленную клавиатуру
+            reply_markup=main_keyboard
         )
     except Exception as e:
         logging.error(f"Ошибка при выполнении logs_handler: {e}")
         await message.answer(
             _("error_unexpected", user_id),
-            reply_markup=main_keyboard  # <-- Используем исправленную клавиатуру
+            reply_markup=main_keyboard
         )
