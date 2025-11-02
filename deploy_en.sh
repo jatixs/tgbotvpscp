@@ -48,8 +48,12 @@ check_integrity() {
 
     if [ "$DEPLOY_MODE_FROM_ENV" == "docker" ]; then
         INSTALL_TYPE="DOCKER ($INSTALL_MODE_FROM_ENV)"
-        if ! command -v docker &> /dev/null || ! command -v docker-compose &> /dev/null; then
-            STATUS_MESSAGE="${C_RED}Docker installation corrupted (Docker/Compose not found).${C_RESET}"; return;
+        # --- [FIXED] Check both docker-compose and docker compose ---
+        if ! command -v docker &> /dev/null; then
+            STATUS_MESSAGE="${C_RED}Docker installation corrupted (Docker not found).${C_RESET}"; return;
+        fi
+        if ! (command -v docker-compose &> /dev/null || docker compose version &> /dev/null); then
+            STATUS_MESSAGE="${C_RED}Docker installation corrupted (Docker Compose not found).${C_RESET}"; return;
         fi
         if [ ! -f "${DOCKER_COMPOSE_FILE}" ]; then
             STATUS_MESSAGE="${C_RED}Docker installation corrupted (Missing docker-compose.yml).${C_RESET}"; return;
@@ -160,7 +164,7 @@ common_install_steps() {
     run_with_spinner "Updating package list" sudo apt-get update -y || { msg_error "Failed to update packages"; exit 1; }
     # Added python3-yaml to dependencies
     run_with_spinner "Installing dependencies (python3, pip, venv, git, curl, wget, sudo, yaml)" sudo DEBIAN_FRONTEND=noninteractive apt-get install -y python3 python3-pip python3-venv git curl wget sudo python3-yaml || { msg_error "Failed to install basic dependencies"; exit 1; }
-    install_extras
+    # --- [FIXED] install_extras is no longer called here ---
 }
 # --- [END MODIFIED] common_install_steps ---
 
@@ -215,8 +219,8 @@ setup_repo_and_dirs() {
     run_with_spinner "Cloning repository" sudo git clone --branch "${GIT_BRANCH}" "${GITHUB_REPO_URL}" "${BOT_INSTALL_PATH}" || exit 1
     
     msg_info "Creating .gitignore, logs/, config/..."
-    # Add docker-compose.yml to .gitignore
-    sudo -u ${owner_user} bash -c "cat > ${BOT_INSTALL_PATH}/.gitignore" <<< $'/venv/\n/__pycache__/\n*.pyc\n/.env\n/config/\n/logs/\n*.log\n*_flag.txt\n/docker-compose.yml'
+    # [FIXED] Do not ignore docker-compose.yml
+    sudo -u ${owner_user} bash -c "cat > ${BOT_INSTALL_PATH}/.gitignore" <<< $'/venv/\n/__pycache__/\n*.pyc\n/.env\n/config/\n/logs/\n*.log\n*_flag.txt'
     sudo chmod 644 "${BOT_INSTALL_PATH}/.gitignore"
     sudo -u ${owner_user} mkdir -p "${BOT_INSTALL_PATH}/logs/bot" "${BOT_INSTALL_PATH}/logs/watchdog" "${BOT_INSTALL_PATH}/config"
     
@@ -228,30 +232,77 @@ setup_repo_and_dirs() {
     export OWNER_USER=${owner_user}
 }
 
-# --- NEW FUNCTION: Check Docker ---
+# --- [FIXED] NEW FUNCTION: Check Docker ---
 check_docker_deps() {
     msg_info "Checking Docker dependencies..."
     if ! command -v docker &> /dev/null; then
         msg_warning "Docker not found. Attempting installation..."
-        run_with_spinner "Installing Docker" sudo apt-get install -y docker.io || { msg_error "Failed to install docker.io."; exit 1; }
+        run_with_spinner "Installing Docker (docker.io)" sudo apt-get install -y docker.io || { msg_error "Failed to install docker.io."; exit 1; }
         sudo systemctl start docker
         sudo systemctl enable docker
     else
         msg_success "Docker found."
     fi
     
-    if ! command -v docker-compose &> /dev/null; then
-        msg_warning "Docker Compose v1 not found. Attempting installation of v2 (docker compose plugin)..."
-        # Install v2
-        run_with_spinner "Installing Docker Compose" sudo apt-get install -y docker-compose-plugin || { msg_error "Failed to install docker-compose-plugin."; exit 1; }
-        # Create symlink for backward compatibility
-        if [ ! -f /usr/bin/docker-compose ]; then
-            sudo ln -s /usr/libexec/docker/cli-plugins/docker-compose /usr/bin/docker-compose || true
-        fi
+    # Check for v2 (docker compose) and v1 (docker-compose)
+    if command -v docker-compose &> /dev/null; then
+        msg_success "Docker Compose v1 (docker-compose) found."
+    elif docker compose version &> /dev/null; then
+        msg_success "Docker Compose v2 (docker compose) found."
     else
-        msg_success "Docker Compose found."
+        msg_warning "Docker Compose not found. Attempting installation..."
+        
+        # Try 1: Install v2 plugin via apt
+        msg_info "Attempt 1: Installing 'docker-compose-plugin' via apt..."
+        sudo apt-get install -y docker-compose-plugin &> /tmp/${SERVICE_NAME}_install.log
+        
+        if docker compose version &> /dev/null; then
+            msg_success "Successfully installed 'docker-compose-plugin' (v2) via apt."
+        else
+            msg_warning "Failed to install v2 via apt. Attempt 2: Installing v1 ('docker-compose') via apt..."
+            # Try 2: Install v1 via apt
+            sudo apt-get install -y docker-compose &> /tmp/${SERVICE_NAME}_install.log
+            
+            if command -v docker-compose &> /dev/null; then
+                 msg_success "Successfully installed 'docker-compose' (v1) via apt."
+            else
+                msg_warning "Failed to install v1 via apt. Attempt 3: Downloading v2 binary..."
+                # Try 3: Download v2 binary (most reliable)
+                local DOCKER_COMPOSE_VERSION=$(curl -s https://api.github.com/repos/docker/compose/releases/latest | grep 'tag_name' | cut -d\" -f4)
+                if [ -z "$DOCKER_COMPOSE_VERSION" ] || [[ "$DOCKER_COMPOSE_VERSION" == *"API rate limit"* ]]; then
+                    msg_error "Could not determine latest Docker Compose version from GitHub (API rate limit?)."
+                    msg_error "Please install Docker Compose (v1 or v2) manually."
+                    exit 1;
+                fi
+                
+                local LATEST_COMPOSE_URL="https://github.com/docker/compose/releases/download/${DOCKER_COMPOSE_VERSION}/docker-compose-$(uname -s)-$(uname -m)"
+                local DOCKER_CLI_PLUGIN_DIR="/usr/libexec/docker/cli-plugins"
+                local DOCKER_COMPOSE_PATH="${DOCKER_CLI_PLUGIN_DIR}/docker-compose"
+
+                sudo mkdir -p ${DOCKER_CLI_PLUGIN_DIR}
+                
+                msg_info "Downloading Docker Compose ${DOCKER_COMPOSE_VERSION} to ${DOCKER_COMPOSE_PATH}..."
+                run_with_spinner "Downloading docker-compose" sudo curl -SLf "${LATEST_COMPOSE_URL}" -o "${DOCKER_COMPOSE_PATH}"
+                if [ $? -ne 0 ]; then
+                    msg_error "Failed to download Docker Compose from ${LATEST_COMPOSE_URL}."
+                    msg_error "Please install Docker Compose (v1 or v2) manually."
+                    exit 1;
+                fi
+                
+                sudo chmod +x "${DOCKER_COMPOSE_PATH}"
+                
+                # Check again
+                if docker compose version &> /dev/null; then
+                    msg_success "Successfully installed Docker Compose v2 (binary)."
+                else
+                    msg_error "Failed to install Docker Compose. Please install it manually."
+                    exit 1;
+                fi
+            fi
+        fi
     fi
 }
+
 
 # --- Old installation functions (Systemd) ---
 create_and_start_service() { local svc=$1; local script=$2; local mode=$3; local desc=$4; local user="root"; local group="root"; local env=""; local suffix=""; local after="After=network.target"; local req=""; if [ "$mode" == "secure" ] && [ "$svc" == "$SERVICE_NAME" ]; then user=${SERVICE_USER}; group=${SERVICE_USER}; suffix="(Secure)"; elif [ "$svc" == "$SERVICE_NAME" ]; then user="root"; group="root"; suffix="(Root)"; elif [ "$svc" == "$WATCHDOG_SERVICE_NAME" ]; then user="root"; group="root"; after="After=network.target ${SERVICE_NAME}.service"; fi; env="EnvironmentFile=${BOT_INSTALL_PATH}/.env"; msg_info "Creating systemd unit for ${svc}..."; FILE="/etc/systemd/system/${svc}.service"; sudo tee ${FILE} > /dev/null <<EOF
@@ -278,6 +329,9 @@ install_systemd_logic() {
     local branch_to_use=$2
     
     common_install_steps
+    # --- [FIXED] Call install_extras here for Systemd ---
+    install_extras
+    # -----------------------------------------------
     setup_repo_and_dirs "$mode" # Clones repo and creates user/dirs
     
     local exec_user_cmd=""
@@ -305,31 +359,152 @@ install_systemd_logic() {
 install_systemd_secure() { echo -e "\n${C_BOLD}=== Install Systemd (Secure) (branch: ${GIT_BRANCH}) ===${C_RESET}"; install_systemd_logic "secure" "${GIT_BRANCH}"; }
 install_systemd_root() { echo -e "\n${C_BOLD}=== Install Systemd (Root) (branch: ${GIT_BRANCH}) ===${C_RESET}"; install_systemd_logic "root" "${GIT_BRANCH}"; }
 
-# --- NEW Installation functions (Docker) ---
+# --- [FIXED] NEW Installation functions (Docker) ---
+create_dockerfile() {
+    msg_info "Creating Dockerfile..."
+    sudo tee "${BOT_INSTALL_PATH}/Dockerfile" > /dev/null <<'EOF'
+# /opt/tg-bot/Dockerfile
+FROM python:3.10-slim-bookworm
+LABEL maintainer="Jatixs"
+LABEL description="Telegram VPS Bot"
+RUN apt-get update && apt-get install -y \
+    python3-yaml \
+    iperf3 \
+    git \
+    curl \
+    wget \
+    sudo \
+    procps \
+    iputils-ping \
+    net-tools \
+    gnupg \
+    docker.io \
+    && rm -rf /var/lib/apt/lists/*
+RUN pip install --no-cache-dir docker
+RUN groupadd -g 1001 tgbot && \
+    useradd -u 1001 -g 1001 -m -s /bin/bash tgbot && \
+    echo "tgbot ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
+WORKDIR /opt/tg-bot
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+COPY . .
+RUN mkdir -p /opt/tg-bot/config /opt/tg-bot/logs/bot /opt/tg-bot/logs/watchdog && \
+    chown -R tgbot:tgbot /opt/tg-bot
+USER tgbot
+CMD ["python", "bot.py"]
+EOF
+    sudo chown ${OWNER_USER}:${OWNER_USER} "${BOT_INSTALL_PATH}/Dockerfile"
+    sudo chmod 644 "${BOT_INSTALL_PATH}/Dockerfile"
+}
+
+create_docker_compose_yml() {
+    msg_info "Creating docker-compose.yml..."
+    sudo tee "${BOT_INSTALL_PATH}/docker-compose.yml" > /dev/null <<'EOF'
+# /opt/tg-bot/docker-compose.yml
+version: '3.8'
+services:
+  bot-base: &bot-base
+    build: .
+    image: tg-vps-bot:latest
+    restart: always
+    env_file: .env
+  bot-secure:
+    <<: *bot-base
+    container_name: tg-bot-secure
+    profiles: ["secure"]
+    user: "tgbot"
+    environment:
+      - INSTALL_MODE=secure
+      - DEPLOY_MODE=docker
+      - TG_BOT_CONTAINER_NAME=tg-bot-secure
+    volumes:
+      - ./config:/opt/tg-bot/config
+      - ./logs/bot:/opt/tg-bot/logs/bot
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /proc/uptime:/proc/uptime:ro
+      - /proc/stat:/proc/stat:ro
+      - /proc/meminfo:/proc/meminfo:ro
+      - /proc/net/dev:/proc/net/dev:ro
+    cap_drop: [ALL]
+    cap_add: [NET_RAW]
+  bot-root:
+    <<: *bot-base
+    container_name: tg-bot-root
+    profiles: ["root"]
+    user: "root"
+    environment:
+      - INSTALL_MODE=root
+      - DEPLOY_MODE=docker
+      - TG_BOT_CONTAINER_NAME=tg-bot-root
+    privileged: true
+    pid: "host"
+    network_mode: "host"
+    ipc: "host"
+    volumes:
+      - ./config:/opt/tg-bot/config
+      - ./logs/bot:/opt/tg-bot/logs/bot
+      - /:/host
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+  watchdog:
+    <<: *bot-base
+    container_name: tg-watchdog
+    command: python watchdog.py
+    user: "root"
+    restart: always
+    volumes:
+      - ./config:/opt/tg-bot/config
+      - ./logs/watchdog:/opt/tg-bot/logs/watchdog
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+EOF
+    sudo chown ${OWNER_USER}:${OWNER_USER} "${BOT_INSTALL_PATH}/docker-compose.yml"
+    sudo chmod 644 "${BOT_INSTALL_PATH}/docker-compose.yml"
+}
+
+
 install_docker_logic() {
     local mode=$1 # "secure" or "root"
     local branch_to_use=$2
     local container_name="tg-bot-${mode}"
     
     check_docker_deps # Checks/installs docker and compose
+    # --- [FIXED] Call install_extras for Docker ---
+    install_extras
+    # -------------------------------------------
     setup_repo_and_dirs "$mode" # Clones repo and creates user/dirs
     
+    # --- [FIXED] Create files BEFORE build ---
+    create_dockerfile
+    create_docker_compose_yml
+    # ----------------------------------------
+
     ask_env_details # Asks for T, A, U, N
     write_env_file "docker" "$mode" "$container_name" # Writes .env
     sudo chown ${OWNER_USER}:${OWNER_USER} "${ENV_FILE}" # Sets .env owner
 
+    # --- [FIXED] Determine compose command ---
+    local COMPOSE_CMD=""
+    if command -v docker-compose &> /dev/null; then
+        COMPOSE_CMD="sudo docker-compose"
+    elif docker compose version &> /dev/null; then
+        COMPOSE_CMD="sudo docker compose"
+    else
+        msg_error "[Install] docker-compose command not found. Docker installation aborted."
+        exit 1
+    fi
+
     msg_info "Building Docker image..."
-    (cd ${BOT_INSTALL_PATH} && run_with_spinner "Building image tg-vps-bot:latest" sudo docker-compose build) || { msg_error "Docker build failed."; exit 1; }
+    (cd ${BOT_INSTALL_PATH} && run_with_spinner "Building image tg-vps-bot:latest" $COMPOSE_CMD build) || { msg_error "Docker build failed."; exit 1; }
     
     msg_info "Starting Docker Compose (Profile: ${mode})..."
-    (cd ${BOT_INSTALL_PATH} && run_with_spinner "Starting containers" sudo docker-compose --profile "${mode}" up -d) || { msg_error "Docker Compose failed to start."; exit 1; }
+    # --- [FIXED] Added --remove-orphans ---
+    (cd ${BOT_INSTALL_PATH} && run_with_spinner "Starting containers" $COMPOSE_CMD --profile "${mode}" up -d --remove-orphans) || { msg_error "Docker Compose failed to start."; exit 1; }
     
     sleep 2
     msg_success "Installation (Docker) complete!"
     msg_info "Containers:"
-    (cd ${BOT_INSTALL_PATH} && sudo docker-compose ps)
-    msg_info "Bot logs: docker-compose logs -f ${container_name}"
-    msg_info "Watchdog logs: docker-compose logs -f tg-watchdog"
+    (cd ${BOT_INSTALL_PATH} && $COMPOSE_CMD ps)
+    msg_info "Bot logs: $COMPOSE_CMD logs -f ${container_name}"
+    msg_info "Watchdog logs: $COMPOSE_CMD logs -f tg-watchdog"
 }
 
 install_docker_secure() { echo -e "\n${C_BOLD}=== Install Docker (Secure) (branch: ${GIT_BRANCH}) ===${C_RESET}"; install_docker_logic "secure" "${GIT_BRANCH}"; }
@@ -354,7 +529,19 @@ uninstall_bot() {
     # 2. Stop Docker
     if [ -f "${DOCKER_COMPOSE_FILE}" ]; then
         msg_info "2. Stopping Docker containers (if any)...";
-        (cd ${BOT_INSTALL_PATH} && sudo docker-compose down -v --remove-orphans &> /tmp/${SERVICE_NAME}_install.log)
+        # --- [FIXED] Determine compose command ---
+        local COMPOSE_CMD=""
+        if command -v docker-compose &> /dev/null; then
+            COMPOSE_CMD="sudo docker-compose"
+        elif docker compose version &> /dev/null; then
+            COMPOSE_CMD="sudo docker compose"
+        fi
+        
+        if [ -n "$COMPOSE_CMD" ]; then
+            (cd ${BOT_INSTALL_PATH} && $COMPOSE_CMD down -v --remove-orphans &> /tmp/${SERVICE_NAME}_install.log)
+        else
+            msg_warning "Could not find docker-compose/docker compose command to stop containers."
+        fi
     fi
     
     # 3. Remove Systemd files
@@ -414,10 +601,26 @@ update_bot() {
     msg_success "Project files updated.";
 
     if [ "$DEPLOY_MODE_FROM_ENV" == "docker" ]; then
+        # --- [FIXED] Determine compose command ---
+        local COMPOSE_CMD=""
+        if command -v docker-compose &> /dev/null; then
+            COMPOSE_CMD="sudo docker-compose"
+        elif docker compose version &> /dev/null; then
+            COMPOSE_CMD="sudo docker compose"
+        else
+            msg_error "[Update] docker-compose command not found. Docker update aborted."
+            return 1
+        fi
+        
+        # --- [FIXED] Create files if missing ---
+        if [ ! -f "${BOT_INSTALL_PATH}/Dockerfile" ]; then create_dockerfile; fi
+        if [ ! -f "${BOT_INSTALL_PATH}/docker-compose.yml" ]; then create_docker_compose_yml; fi
+
         msg_info "2. [Docker] Rebuilding image...";
-        (cd ${BOT_INSTALL_PATH} && run_with_spinner "Building Docker image" sudo docker-compose build) || { msg_error "Docker build failed."; return 1; }
+        (cd ${BOT_INSTALL_PATH} && run_with_spinner "Building Docker image" $COMPOSE_CMD build) || { msg_error "Docker build failed."; return 1; }
         msg_info "3. [Docker] Restarting containers (Profile: ${INSTALL_MODE_FROM_ENV})...";
-        (cd ${BOT_INSTALL_PATH} && run_with_spinner "Restarting Docker Compose" sudo docker-compose --profile "${INSTALL_MODE_FROM_ENV}" up -d) || { msg_error "Docker Compose restart failed."; return 1; }
+        # --- [FIXED] Added --remove-orphans ---
+        (cd ${BOT_INSTALL_PATH} && run_with_spinner "Restarting Docker Compose" $COMPOSE_CMD --profile "${INSTALL_MODE_FROM_ENV}" up -d --remove-orphans) || { msg_error "Docker Compose restart failed."; return 1; }
     
     else # Systemd
         msg_info "2. [Systemd] Updating Python dependencies...";
@@ -487,7 +690,7 @@ main_menu() {
                if [[ "$confirm" =~ ^[Yy]$ ]]; then uninstall_bot; install_systemd_secure; local_version=$(get_local_version "$README_FILE"); else msg_info "Cancelled."; fi ;;
             4) rm -f /tmp/${SERVICE_NAME}_install.log; msg_question "Reinstall (Systemd - Root, ${GIT_BRANCH})? (y/n): " confirm;
                if [[ "$confirm" =~ ^[Yy]$ ]]; then uninstall_bot; install_systemd_root; local_version=$(get_local_version "$README_FILE"); else msg_info "Cancelled."; fi ;;
-            5.0) rm -f /tmp/${SERVICE_NAME}_install.log; msg_question "Reinstall (Docker - Secure, ${GIT_BRANCH})? (y/n): " confirm;
+            5) rm -f /tmp/${SERVICE_NAME}_install.log; msg_question "Reinstall (Docker - Secure, ${GIT_BRANCH})? (y/n): " confirm;
                if [[ "$confirm" =~ ^[Yy]$ ]]; then uninstall_bot; install_docker_secure; local_version=$(get_local_version "$README_FILE"); else msg_info "Cancelled."; fi ;;
             6) rm -f /tmp/${SERVICE_NAME}_install.log; msg_question "Reinstall (Docker - Root, ${GIT_BRANCH})? (y/n): " confirm;
                if [[ "$confirm" =~ ^[Yy]$ ]]; then uninstall_bot; install_docker_root; local_version=$(get_local_version "$README_FILE"); else msg_info "Cancelled."; fi ;;
@@ -542,14 +745,17 @@ main() {
 
         local install_done=false
         rm -f /tmp/${SERVICE_NAME}_install.log
+        
+        # --- [FIXED] Added uninstall_bot; before each install ---
         case $install_choice in
-            1) install_systemd_secure; install_done=true ;;
-            2) install_systemd_root; install_done=true ;;
-            3.0) install_docker_secure; install_done=true ;;
-            4) install_docker_root; install_done=true ;;
+            1) uninstall_bot; install_systemd_secure; install_done=true ;;
+            2) uninstall_bot; install_systemd_root; install_done=true ;;
+            3) uninstall_bot; install_docker_secure; install_done=true ;;
+            4) uninstall_bot; install_docker_root; install_done=true ;;
             5) msg_info "Installation cancelled."; exit 0 ;;
             *) msg_error "Invalid choice."; exit 1 ;;
         esac
+        # --- [END FIXED] ---
 
         # Check after installation
         if [ "$install_done" = true ]; then
