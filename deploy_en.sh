@@ -379,6 +379,7 @@ RUN apt-get update && apt-get install -y \
     net-tools \
     gnupg \
     docker.io \
+    coreutils \
     && rm -rf /var/lib/apt/lists/*
 RUN pip install --no-cache-dir docker
 RUN groupadd -g 1001 tgbot && \
@@ -402,12 +403,14 @@ create_docker_compose_yml() {
     sudo tee "${BOT_INSTALL_PATH}/docker-compose.yml" > /dev/null <<'EOF'
 # /opt/tg-bot/docker-compose.yml
 version: '3.8'
+
+x-bot-base: &bot-base
+  build: .
+  image: tg-vps-bot:latest
+  restart: always
+  env_file: .env
+
 services:
-  bot-base: &bot-base
-    build: .
-    image: tg-vps-bot:latest
-    restart: always
-    env_file: .env
   bot-secure:
     <<: *bot-base
     container_name: tg-bot-secure
@@ -543,6 +546,23 @@ uninstall_bot() {
             msg_warning "Could not find docker-compose/docker compose command to stop containers."
         fi
     fi
+
+    # --- [NEW BLOCK] Force stop "zombie" and known containers ---
+    msg_info "2a. Force stopping known Docker containers (in case of 'zombies')...";
+    local containers_to_kill=("tg-bot-root" "tg-bot-secure" "tg-watchdog" "tg-bot_bot-base_1")
+    for container_name in "${containers_to_kill[@]}"; do
+        # Check if running (docker ps -q)
+        if [ "$(sudo docker ps -q -f name=^/${container_name}$)" ]; then
+            msg_warning "  Found running, force stopping: ${container_name}"
+            sudo docker stop "${container_name}" >> /tmp/${SERVICE_NAME}_install.log 2>&1
+            sudo docker rm "${container_name}" >> /tmp/${SERVICE_NAME}_install.log 2>&1
+        # Check if exists stopped (docker ps -a -q)
+        elif [ "$(sudo docker ps -a -q -f name=^/${container_name}$)" ]; then
+             msg_warning "  Found stopped, force removing: ${container_name}"
+             sudo docker rm "${container_name}" >> /tmp/${SERVICE_NAME}_install.log 2>&1
+        fi
+    done
+    # --- [END NEW BLOCK] ---
     
     # 3. Remove Systemd files
     msg_info "3. Removing system files (systemd, sudoers)...";
@@ -690,8 +710,12 @@ main_menu() {
                if [[ "$confirm" =~ ^[Yy]$ ]]; then uninstall_bot; install_systemd_secure; local_version=$(get_local_version "$README_FILE"); else msg_info "Cancelled."; fi ;;
             4) rm -f /tmp/${SERVICE_NAME}_install.log; msg_question "Reinstall (Systemd - Root, ${GIT_BRANCH})? (y/n): " confirm;
                if [[ "$confirm" =~ ^[Yy]$ ]]; then uninstall_bot; install_systemd_root; local_version=$(get_local_version "$README_FILE"); else msg_info "Cancelled."; fi ;;
+            
+            # --- [SYNTAX FIX] ---
             5) rm -f /tmp/${SERVICE_NAME}_install.log; msg_question "Reinstall (Docker - Secure, ${GIT_BRANCH})? (y/n): " confirm;
                if [[ "$confirm" =~ ^[Yy]$ ]]; then uninstall_bot; install_docker_secure; local_version=$(get_local_version "$README_FILE"); else msg_info "Cancelled."; fi ;;
+            # --- [END SYNTAX FIX] ---
+            
             6) rm -f /tmp/${SERVICE_NAME}_install.log; msg_question "Reinstall (Docker - Root, ${GIT_BRANCH})? (y/n): " confirm;
                if [[ "$confirm" =~ ^[Yy]$ ]]; then uninstall_bot; install_docker_root; local_version=$(get_local_version "$README_FILE"); else msg_info "Cancelled."; fi ;;
 
@@ -781,6 +805,20 @@ main() {
         echo -e "\n${C_CYAN}👋 Goodbye!${C_RESET}"
     fi
 }
+
+# --- [NEW PROTECTION] ---
+# --- Check execution from install directory ---
+CURRENT_DIR_PATH=$(pwd)
+if [ "$CURRENT_DIR_PATH" == "$BOT_INSTALL_PATH" ]; then
+    # msg_error functions are already defined
+    msg_error "ERROR: Do not run this script from the target directory!"
+    msg_error "You are in '${CURRENT_DIR_PATH}', which will be deleted during installation."
+    msg_warning "Change to another directory (e.g., 'cd ~' or 'cd /root')"
+    msg_warning "and run the script from there using the full path (e.g., sudo bash ${CURRENT_DIR_PATH}/deploy_en.sh)"
+    exit 1
+fi
+# --- [END PROTECTION] ---
+
 
 # --- Root Check ---
 if [ "$(id -u)" -ne 0 ]; then msg_error "Please run this script as root or with sudo."; exit 1; fi
