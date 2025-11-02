@@ -163,7 +163,7 @@ common_install_steps() {
     run_with_spinner "Обновление списка пакетов" sudo apt-get update -y || { msg_error "Не удалось обновить пакеты"; exit 1; }
     # Добавляем python3-yaml к основным зависимостям
     run_with_spinner "Установка зависимостей (python3, pip, venv, git, curl, wget, sudo, yaml)" sudo DEBIAN_FRONTEND=noninteractive apt-get install -y python3 python3-pip python3-venv git curl wget sudo python3-yaml || { msg_error "Не удалось установить базовые зависимости"; exit 1; }
-    install_extras
+    # --- [ИСПРАВЛЕНИЕ] install_extras больше не вызывается здесь ---
 }
 # --- [КОНЕЦ ИЗМЕНЕНИЙ] common_install_steps ---
 
@@ -330,6 +330,9 @@ install_systemd_logic() {
     local branch_to_use=$2
     
     common_install_steps
+    # --- [ИСПРАВЛЕНИЕ] Вызываем install_extras здесь для Systemd ---
+    install_extras
+    # --------------------------------------------------------
     setup_repo_and_dirs "$mode" # Клонирует репо и создает пользователя/папки
     
     local exec_user_cmd=""
@@ -383,6 +386,7 @@ RUN apt-get update && apt-get install -y \
     iputils-ping \
     net-tools \
     gnupg \
+    docker.io \
     && rm -rf /var/lib/apt/lists/*
 
 # 3. Установка Python-библиотеки Docker (для watchdog)
@@ -480,6 +484,9 @@ services:
       # Монтируем всю ФС хоста, чтобы команды 'apt update', 'reboot'
       # и чтение логов работали без изменения путей в модулях
       - /:/host
+      # --- [ИСПРАВЛЕНИЕ] Добавляем /var/run/docker.sock и для root ---
+      # Это нужно, чтобы docker_ps работал единообразно
+      - /var/run/docker.sock:/var/run/docker.sock:ro 
 
   # --- НАБЛЮДАТЕЛЬ (WATCHDOG) ---
   watchdog:
@@ -505,6 +512,9 @@ install_docker_logic() {
     local container_name="tg-bot-${mode}"
     
     check_docker_deps # Проверяет/ставит docker и compose
+    # --- [ИСПРАВЛЕНИЕ] Вызываем install_extras для Docker ---
+    install_extras
+    # ---------------------------------------------------
     setup_repo_and_dirs "$mode" # Клонирует репо и создает пользователя/папки (OWNER_USER экспортируется)
     
     # --- [ИСПРАВЛЕНИЕ] Создаем файлы ДО сборки ---
@@ -780,14 +790,17 @@ main() {
 
         local install_done=false
         rm -f /tmp/${SERVICE_NAME}_install.log
+        
+        # --- [ИСПРАВЛЕНИЕ] Добавлен uninstall_bot; перед каждой установкой ---
         case $install_choice in
-            1) install_systemd_secure; install_done=true ;;
-            2) install_systemd_root; install_done=true ;;
-            3) install_docker_secure; install_done=true ;;
-            4) install_docker_root; install_done=true ;;
+            1) uninstall_bot; install_systemd_secure; install_done=true ;;
+            2) uninstall_bot; install_systemd_root; install_done=true ;;
+            3) uninstall_bot; install_docker_secure; install_done=true ;;
+            4) uninstall_bot; install_docker_root; install_done=true ;;
             5) msg_info "Установка отменена."; exit 0 ;;
             *) msg_error "Неверный выбор."; exit 1 ;;
         esac
+        # --- [КОНЕЦ ИСПРАВЛЕНИЯ] ---
 
         # Проверка после установки
         if [ "$install_done" = true ]; then

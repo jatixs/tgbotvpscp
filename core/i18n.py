@@ -122,6 +122,9 @@ STRINGS = {
         # modules/logs.py
         "logs_header": "📜 <b>Последние системные журналы:</b>\n<pre>{log_output}</pre>",
         "logs_read_error": "⚠️ Ошибка при чтении журналов: {error}",
+        "logs_docker_secure_not_available": "⛔ Чтение системных логов (journalctl) недоступно в режиме Docker (Secure) из соображений безопасности.",
+        "logs_journalctl_not_found": "⚠️ Команда <code>journalctl</code> не найдена. Модуль 'Последние события' не может работать.",
+        "logs_journalctl_not_found_in_host": "⚠️ Не удалось найти <code>journalctl</code> на хосте (/host/usr/bin/journalctl или /host/bin/journalctl).",
 
         # modules/notifications.py
         "notifications_menu_title": "🔔 <b>Настройка уведомлений</b>\n\nВыберите, какие оповещения вы хотите получать.",
@@ -407,6 +410,9 @@ STRINGS = {
         # modules/logs.py
         "logs_header": "📜 <b>Recent system logs:</b>\n<pre>{output}</pre>",
         "logs_read_error": "⚠️ Error reading logs: {error}",
+        "logs_docker_secure_not_available": "⛔ Reading system logs (journalctl) is not available in Docker (Secure) mode for security reasons.",
+        "logs_journalctl_not_found": "⚠️ Command <code>journalctl</code> not found. The 'Recent Events' module cannot work.",
+        "logs_journalctl_not_found_in_host": "⚠️ Could not find <code>journalctl</code> on the host machine (/host/usr/bin/journalctl or /host/bin/journalctl).",
 
         # modules/notifications.py
         "notifications_menu_title": "🔔 <b>Notification Settings</b>\n\nChoose which alerts you want to receive.",
