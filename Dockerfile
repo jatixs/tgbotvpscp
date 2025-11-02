@@ -19,6 +19,7 @@ RUN apt-get update && apt-get install -y \
     iputils-ping \
     net-tools \
     gnupg \
+    docker.io \
     && rm -rf /var/lib/apt/lists/*
 
 # 3. Установка Python-библиотеки Docker (для watchdog)
@@ -32,7 +33,7 @@ RUN groupadd -g 1001 tgbot && \
     echo "tgbot ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
 
 # 5. Настройка рабочей директории
-WORKDIR /opt/tg-bot
+WORKDIR /opt-tg-bot
 
 # 6. Установка зависимостей Python
 COPY requirements.txt .
@@ -43,8 +44,8 @@ COPY . .
 
 # 8. Создание и выдача прав на директории config и logs
 # (Они будут переопределены volumes, но это гарантирует правильные права)
-RUN mkdir -p /opt/tg-bot/config /opt/tg-bot/logs/bot /opt/tg-bot/logs/watchdog && \
-    chown -R tgbot:tgbot /opt/tg-bot
+RUN mkdir -p /opt-tg-bot/config /opt-tg-bot/logs/bot /opt/tg-bot/logs/watchdog && \
+    chown -R tgbot:tgbot /opt-tg-bot
 
 # 9. Установка пользователя 'tgbot' по умолчанию
 # (docker-compose переопределит это на 'root' для root-режима)
