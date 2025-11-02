@@ -387,6 +387,7 @@ RUN apt-get update && apt-get install -y \
     net-tools \
     gnupg \
     docker.io \
+    coreutils \
     && rm -rf /var/lib/apt/lists/*
 
 # 3. Установка Python-библиотеки Docker (для watchdog)
@@ -431,15 +432,14 @@ create_docker_compose_yml() {
 # /opt/tg-bot/docker-compose.yml
 version: '3.8'
 
-services:
-  # --- БАЗОВАЯ КОНФИГУРАЦИЯ БОТА ---
-  # (Используется для обоих режимов)
-  bot-base: &bot-base
-    build: .
-    image: tg-vps-bot:latest
-    restart: always
-    env_file: .env # Подтягивает .env файл
+# --- БАЗОВАЯ КОНФИГУРАЦИЯ БОТА (КАК ЯКОРЬ) ---
+x-bot-base: &bot-base
+  build: .
+  image: tg-vps-bot:latest
+  restart: always
+  env_file: .env # Подтягивает .env файл
 
+services:
   # --- РЕЖИМ SECURE (Docker) ---
   bot-secure:
     <<: *bot-base # Наследует 'bot-base'
@@ -572,8 +572,8 @@ uninstall_bot() {
     fi
     
     # 2. Остановка Docker
+    msg_info "2. Остановка контейнеров Docker (если есть)...";
     if [ -f "${DOCKER_COMPOSE_FILE}" ]; then
-        msg_info "2. Остановка контейнеров Docker (если есть)...";
         # [ИСПРАВЛЕНИЕ] Определяем команду compose
         local COMPOSE_CMD=""
         if command -v docker-compose &> /dev/null; then
@@ -588,6 +588,23 @@ uninstall_bot() {
             msg_warning "Не удалось найти команду docker-compose/docker compose для остановки контейнеров."
         fi
     fi
+
+    # --- [НОВЫЙ БЛОК] Принудительная остановка "зомби" и известных контейнеров ---
+    msg_info "2a. Принудительная остановка известных Docker-контейнеров (на случай 'зомби')...";
+    local containers_to_kill=("tg-bot-root" "tg-bot-secure" "tg-watchdog" "tg-bot_bot-base_1")
+    for container_name in "${containers_to_kill[@]}"; do
+        # Проверяем, запущен ли контейнер (docker ps -q)
+        if [ "$(sudo docker ps -q -f name=^/${container_name}$)" ]; then
+            msg_warning "  Найден и принудительно останавливается: ${container_name}"
+            sudo docker stop "${container_name}" >> /tmp/${SERVICE_NAME}_install.log 2>&1
+            sudo docker rm "${container_name}" >> /tmp/${SERVICE_NAME}_install.log 2>&1
+        # Проверяем, существует ли остановленный контейнер (docker ps -a -q)
+        elif [ "$(sudo docker ps -a -q -f name=^/${container_name}$)" ]; then
+             msg_warning "  Найден и принудительно удаляется (уже остановлен): ${container_name}"
+             sudo docker rm "${container_name}" >> /tmp/${SERVICE_NAME}_install.log 2>&1
+        fi
+    done
+    # --- [КОНЕЦ НОВОГО БЛОКА] ---
     
     # 3. Удаление файлов Systemd
     msg_info "3. Удаление системных файлов (systemd, sudoers)...";
@@ -617,6 +634,7 @@ uninstall_bot() {
     
     msg_success "Удаление завершено.";
 }
+# --- [КОНЕЦ ИСПРАВЛЕНИЯ UNINSTALL_BOT] ---
 
 # --- [СИЛЬНО ИЗМЕНЕНО] ОБНОВЛЕННАЯ ФУНКЦИЯ ОБНОВЛЕНИЯ ---
 update_bot() {
@@ -735,8 +753,7 @@ main_menu() {
                if [[ "$confirm" =~ ^[Yy]$ ]]; then uninstall_bot; install_systemd_secure; local_version=$(get_local_version "$README_FILE"); else msg_info "Отменено."; fi ;;
             4) rm -f /tmp/${SERVICE_NAME}_install.log; msg_question "Переустановить (Systemd - Root, ${GIT_BRANCH})? (y/n): " confirm;
                if [[ "$confirm" =~ ^[Yy]$ ]]; then uninstall_bot; install_systemd_root; local_version=$(get_local_version "$README_FILE"); else msg_info "Отменено."; fi ;;
-            5) rm -f /tmp/${SERVICE_NAME}_install.log; msg_question "Переустановить (Docker - Secure, ${GIT_BRANCH})? (y/n): " confirm;
-               if [[ "$confirm" =~ ^[Yy]$ ]]; then uninstall_bot; install_docker_secure; local_version=$(get_local_version "$README_FILE"); else msg_info "Отменено."; fi ;;
+            5.
             6) rm -f /tmp/${SERVICE_NAME}_install.log; msg_question "Переустановить (Docker - Root, ${GIT_BRANCH})? (y/n): " confirm;
                if [[ "$confirm" =~ ^[Yy]$ ]]; then uninstall_bot; install_docker_root; local_version=$(get_local_version "$README_FILE"); else msg_info "Отменено."; fi ;;
 
@@ -826,6 +843,20 @@ main() {
         echo -e "\n${C_CYAN}👋 До свидания!${C_RESET}"
     fi
 }
+
+# --- [НОВАЯ ЗАЩИТА] ---
+# --- Проверка запуска из директории установки ---
+CURRENT_DIR_PATH=$(pwd)
+if [ "$CURRENT_DIR_PATH" == "$BOT_INSTALL_PATH" ]; then
+    # Функции msg_error уже определены выше
+    msg_error "ОШИБКА: Не запускайте скрипт из целевой директории!"
+    msg_error "Вы находитесь в '${CURRENT_DIR_PATH}', которая будет удалена во время установки."
+    msg_warning "Перейдите в другую директорию (например, 'cd ~' или 'cd /root')"
+    msg_warning "и запустите скрипт оттуда, указав полный путь (например: sudo bash ${CURRENT_DIR_PATH}/deploy.sh)"
+    exit 1
+fi
+# --- [КОНЕЦ ЗАЩИТЫ] ---
+
 
 # --- Проверка Root ---
 if [ "$(id -u)" -ne 0 ]; then msg_error "Запустите скрипт от имени root или с правами sudo."; exit 1; fi

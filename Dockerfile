@@ -1,4 +1,4 @@
-# /opt/tg-bot/Dockerfile
+# /opt-tg-bot/Dockerfile
 
 # 1. Базовый образ
 FROM python:3.10-slim-bookworm
@@ -7,7 +7,6 @@ LABEL maintainer="Jatixs"
 LABEL description="Telegram VPS Bot"
 
 # 2. Установка системных зависимостей
-# Нужны для модулей бота (iperf3, yaml, ps, ping) и для сборки
 RUN apt-get update && apt-get install -y \
     python3-yaml \
     iperf3 \
@@ -20,6 +19,7 @@ RUN apt-get update && apt-get install -y \
     net-tools \
     gnupg \
     docker.io \
+    coreutils \
     && rm -rf /var/lib/apt/lists/*
 
 # 3. Установка Python-библиотеки Docker (для watchdog)
@@ -44,8 +44,8 @@ COPY . .
 
 # 8. Создание и выдача прав на директории config и logs
 # (Они будут переопределены volumes, но это гарантирует правильные права)
-RUN mkdir -p /opt-tg-bot/config /opt-tg-bot/logs/bot /opt/tg-bot/logs/watchdog && \
-    chown -R tgbot:tgbot /opt-tg-bot
+RUN mkdir -p /opt/tg-bot/config /opt/tg-bot/logs/bot /opt/tg-bot/logs/watchdog && \
+    chown -R tgbot:tgbot /opt/tg-bot
 
 # 9. Установка пользователя 'tgbot' по умолчанию
 # (docker-compose переопределит это на 'root' для root-режима)
