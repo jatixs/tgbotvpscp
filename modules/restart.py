@@ -23,7 +23,7 @@ from core.config import REBOOT_FLAG_FILE, INSTALL_MODE, DEPLOY_MODE
 from core.keyboards import get_reboot_confirmation_keyboard
 
 # --- ИЗМЕНЕНО: Используем ключ ---
-BUTTON_KEY = "btn_reboot"
+BUTTON_KEY = "btn_restart"
 # --------------------------------
 
 
