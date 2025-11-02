@@ -7,6 +7,12 @@ import logging.handlers
 # --------------------------------------------------------
 from datetime import datetime  # Добавляем импорт datetime
 
+# --- [ИСПРАВЛЕНИЕ] ---
+# Мы больше не импортируем i18n здесь, чтобы избежать циклического импорта.
+# i18n будет импортировать config.
+# ---------------------
+
+
 # --- Пути ---
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 LOG_DIR = os.path.join(BASE_DIR, "logs")
@@ -108,4 +114,3 @@ def setup_logging(log_directory, log_filename_prefix):
 
     logging.info(
         f"Logging configured. Files will be saved in {log_directory} (e.g., {log_filename_prefix}.log)")
-# --- КОНЕЦ ИСПРАВЛЕНИЯ ---

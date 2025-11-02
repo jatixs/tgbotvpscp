@@ -4,9 +4,9 @@ import logging
 import os
 from aiogram import F
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-
-from . import config
+from . import config as core_config 
 from . import shared_state
+# ---------------------
 
 # --- СЛОВАРЬ ПЕРЕВОДОВ ---
 STRINGS = {
@@ -178,7 +178,7 @@ STRINGS = {
         # modules/speedtest.py
         "speedtest_start": "🚀 <b>Запуск iperf3...</b>\n\nИщу ближайший сервер. Это может занять до 30-40 секунд.",
         # --- ИЗМЕНЕНО ЗДЕСЬ ---
-        # <-- ИЗМЕНЕНО ЗДЕСЬ
+
         "speedtest_results": "🚀 <b>Speedtest Результаты (iperf3):</b>\n\n⬇️ <b>Скачивание:</b> {dl:.2f} Мбит/с\n⬆️ <b>Загрузка:</b> {ul:.2f} Мбит/с\n⏱️ <b>Пинг:</b> {ping:.2f} мс\n\n🌍 <b>Локация:</b> {flag} {server}\n🏢 <b>Сервер:</b> {provider}",
         # ---------------------
         "speedtest_fail": "❌ Ошибка при запуске iperf3:\n<pre>{error}</pre>",
@@ -405,7 +405,7 @@ STRINGS = {
         "f2b_ban_entry": "🔒 <b>{ban_type}</b>\n🌍 IP: <b>{flag} {ip}</b>\n⏰ Time: <b>{time}</b>{tz}\n🗓️ Date: <b>{date}</b>",
 
         # modules/logs.py
-        "logs_header": "📜 <b>Recent system logs:</b>\n<pre>{log_output}</pre>",
+        "logs_header": "📜 <b>Recent system logs:</b>\n<pre>{output}</pre>",
         "logs_read_error": "⚠️ Error reading logs: {error}",
 
         # modules/notifications.py
@@ -462,10 +462,7 @@ STRINGS = {
 
         # modules/speedtest.py
         "speedtest_start": "🚀 <b>Starting iperf3...</b>\n\nFinding the closest server. This may take 30-40 seconds.",
-        # --- ИЗМЕНЕНО ЗДЕСЬ ---
-        # <-- ИЗМЕНЕНО ЗДЕСЬ
         "speedtest_results": "🚀 <b>Speedtest Results (iperf3):</b>\n\n⬇️ <b>Download:</b> {dl:.2f} Mbps\n⬆️ <b>Upload:</b> {ul:.2f} Mbps\n⏱️ <b>Ping:</b> {ping:.2f} ms\n\n🌍 <b>Location:</b> {flag} {server}\n🏢 <b>Server:</b> {provider}",
-        # ---------------------
         "speedtest_fail": "❌ Error running iperf3:\n<pre>{error}</pre>",
         "iperf_fetch_error": "⚠️ Failed to download the iperf3 server list.",
         "iperf_fetch_error_ru": "⚠️ Failed to download the Russian iperf3 server list.",
@@ -588,8 +585,11 @@ STRINGS = {
 def load_user_settings():
     """Загружает настройки пользователей (включая язык) из JSON."""
     try:
-        if os.path.exists(config.USER_SETTINGS_FILE):
-            with open(config.USER_SETTINGS_FILE, "r", encoding='utf-8') as f:
+
+        # Используем core_config для доступа к переменным из config.py
+        if os.path.exists(core_config.USER_SETTINGS_FILE):
+            with open(core_config.USER_SETTINGS_FILE, "r", encoding='utf-8') as f:
+        # ---------------------
                 settings = json.load(f)
                 shared_state.USER_SETTINGS = {
                     int(k): v for k, v in settings.items()}
@@ -606,10 +606,12 @@ def load_user_settings():
 def save_user_settings():
     """Сохраняет настройки пользователей (включая язык) в JSON."""
     try:
-        os.makedirs(os.path.dirname(config.USER_SETTINGS_FILE), exist_ok=True)
+        os.makedirs(os.path.dirname(core_config.USER_SETTINGS_FILE), exist_ok=True)
+        # ---------------------
         settings_to_save = {str(k): v for k,
                             v in shared_state.USER_SETTINGS.items()}
-        with open(config.USER_SETTINGS_FILE, "w", encoding='utf-8') as f:
+        with open(core_config.USER_SETTINGS_FILE, "w", encoding='utf-8') as f:
+        # ---------------------
             json.dump(settings_to_save, f, indent=4, ensure_ascii=False)
         logging.debug("Настройки пользователей (языки) сохранены.")
     except Exception as e:
@@ -621,18 +623,23 @@ def get_user_lang(user_id: int | str | None) -> str:
     if isinstance(user_id, int):
         return shared_state.USER_SETTINGS.get(
             user_id, {}).get(
-            "lang", config.DEFAULT_LANGUAGE)
+
+            "lang", core_config.DEFAULT_LANGUAGE)
+            # ---------------------
     elif isinstance(user_id, str):
         if user_id in STRINGS:
             return user_id
         else:
-            return config.DEFAULT_LANGUAGE
+
+            return core_config.DEFAULT_LANGUAGE
+            # ---------------------
     else:
         if user_id is not None:
             logging.warning(
                 f"get_user_lang вызван с неожиданным типом user_id: {type(user_id)}. Возвращаю язык по умолчанию.")
-        return config.DEFAULT_LANGUAGE
 
+        return core_config.DEFAULT_LANGUAGE
+        # ---------------------
 
 def set_user_lang(user_id: int | str | None, lang: str):
     """Устанавливает язык для пользователя и сохраняет."""
@@ -647,14 +654,19 @@ def set_user_lang(user_id: int | str | None, lang: str):
             logging.error(
                 f"set_user_lang вызван с нечисловым user_id: {user_id}. Сохранение отменено.")
             return
+            
+    # Обновляем кэш в shared_state
     if user_id not in shared_state.USER_SETTINGS:
         shared_state.USER_SETTINGS[user_id] = {}
     shared_state.USER_SETTINGS[user_id]["lang"] = lang
+    
+    # Сохраняем на диск
     save_user_settings()
-    logging.info(f"Язык для пользователя {user_id} изменен на '{lang}'")
+    logging.info(f"Язык для пользователя {user_id} изменен на '{lang}' и сохранен.")
+# ---------------------
+
 
 # --- ГЛАВНАЯ ФУНКЦИЯ ПЕРЕВОДА ---
-
 
 def get_text(key: str, user_id_or_lang: int | str | None, **kwargs) -> str:
     """
@@ -662,7 +674,8 @@ def get_text(key: str, user_id_or_lang: int | str | None, **kwargs) -> str:
     Пример: get_text("main_menu_welcome", user_id)
     Пример с форматированием: get_text("my_id_text", user_id, user_id=user_id)
     """
-    lang = config.DEFAULT_LANGUAGE
+    lang = core_config.DEFAULT_LANGUAGE
+
     if isinstance(user_id_or_lang, int):
         lang = get_user_lang(user_id_or_lang)
     elif isinstance(user_id_or_lang, str) and user_id_or_lang in STRINGS:
@@ -673,7 +686,9 @@ def get_text(key: str, user_id_or_lang: int | str | None, **kwargs) -> str:
         {}).get(
         key,
         STRINGS.get(
-            config.DEFAULT_LANGUAGE,
+
+            core_config.DEFAULT_LANGUAGE,
+            # ---------------------
             {}).get(
                 key,
             f"[{key}]"))
@@ -688,8 +703,6 @@ def get_text(key: str, user_id_or_lang: int | str | None, **kwargs) -> str:
             f"Ошибка форматирования для ключа '{key}' языка '{lang}' с параметрами {kwargs}. Шаблон: '{string_template}'. Ошибка: {e}")
         return string_template
 
-
-# Псевдоним для удобства
 _ = get_text
 
 # --- ФИЛЬТРЫ ДЛЯ AIOGRAM ---
@@ -733,20 +746,3 @@ def get_language_keyboard() -> InlineKeyboardMarkup:
                     text="🇬🇧 English",
                     callback_data="set_lang_en")]])
     return keyboard
-
-# --- Функция сортировки (опционально, для удобства поддержки) ---
-# def sort_strings():
-#     """Сортирует ключи в словаре STRINGS по алфавиту."""
-#     global STRINGS
-#     sorted_strings = {}
-#     for lang, strings in STRINGS.items():
-#         sorted_strings[lang] = dict(sorted(strings.items()))
-#     STRINGS = sorted_strings
-#     # Можно добавить сохранение в файл для постоянной сортировки
-#     # with open("path/to/save/sorted_i18n.py", "w", encoding='utf-8') as f:
-#     #     f.write("# -*- coding: utf-8 -*-\n")
-#     #     f.write("STRINGS = ")
-#     #     f.write(json.dumps(STRINGS, indent=4, ensure_ascii=False, sort_keys=True)) # Или использовать pprint
-#
-# # Вызов сортировки при запуске (или вручную)
-# # sort_strings()
