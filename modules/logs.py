@@ -6,8 +6,10 @@ from aiogram import F, types, Router
 from aiogram.fsm.context import FSMContext
 
 from core.config import INSTALL_MODE, DEPLOY_MODE  # <-- Импортируем режимы
-from core.keyboards import get_main_keyboard
+# --- [ИСПРАВЛЕНО] ---
+from core.keyboards import get_main_reply_keyboard  # <-- Правильное имя функции
 from core.i18n import I18nFilter, get_text as _
+# --- [КОНЕЦ ИСПРАВЛЕНИЯ] ---
 
 router = Router()
 
@@ -17,12 +19,19 @@ async def logs_handler(message: types.Message, state: FSMContext):
     user_id = message.from_user.id
     await state.clear()
 
+    # --- [ИСПРАВЛЕНО] Получаем карту кнопок и создаем клавиатуру ОДИН РАЗ ---
+    buttons_map = getattr(
+        message.bot, 'buttons_map', {
+            "user": [], "admin": [], "root": []})
+    main_keyboard = get_main_reply_keyboard(user_id, buttons_map)
+    # --- [КОНЕЦ ИСПРАВЛЕНИЯ] ---
+
     # --- [ИСПРАВЛЕНИЕ] ---
     if DEPLOY_MODE == "docker" and INSTALL_MODE == "secure":
         # В Docker Secure нет доступа к journalctl
         await message.answer(
             _("logs_docker_secure_not_available", user_id),
-            reply_markup=get_main_keyboard(user_id)
+            reply_markup=main_keyboard  # <-- Используем исправленную клавиатуру
         )
         return
 
@@ -37,7 +46,7 @@ async def logs_handler(message: types.Message, state: FSMContext):
         else:
             await message.answer(
                 _("logs_journalctl_not_found_in_host", user_id),
-                reply_markup=get_main_keyboard(user_id)
+                reply_markup=main_keyboard  # <-- Используем исправленную клавиатуру
             )
             return
     else:
@@ -63,18 +72,18 @@ async def logs_handler(message: types.Message, state: FSMContext):
 
         await message.answer(
             response_text,
-            reply_markup=get_main_keyboard(user_id)
+            reply_markup=main_keyboard  # <-- Используем исправленную клавиатуру
         )
 
     except FileNotFoundError:
         logging.error("Команда journalctl не найдена.")
         await message.answer(
             _("logs_journalctl_not_found", user_id),
-            reply_markup=get_main_keyboard(user_id)
+            reply_markup=main_keyboard  # <-- Используем исправленную клавиатуру
         )
     except Exception as e:
         logging.error(f"Ошибка при выполнении logs_handler: {e}")
         await message.answer(
             _("error_unexpected", user_id),
-            reply_markup=get_main_keyboard(user_id)
+            reply_markup=main_keyboard  # <-- Используем исправленную клавиатуру
         )
