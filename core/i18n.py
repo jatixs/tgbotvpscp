@@ -408,7 +408,9 @@ STRINGS = {
         "f2b_ban_entry": "🔒 <b>{ban_type}</b>\n🌍 IP: <b>{flag} {ip}</b>\n⏰ Time: <b>{time}</b>{tz}\n🗓️ Date: <b>{date}</b>",
 
         # modules/logs.py
-        "logs_header": "📜 <b>Recent system logs:</b>\n<pre>{output}</pre>",
+        # --- [ИСПРАВЛЕНИЕ ЗДЕСЬ] ---
+        "logs_header": "📜 <b>Recent system logs:</b>\n<pre>{log_output}</pre>",
+        # --- [КОНЕЦ ИСПРАВЛЕНИЯ] ---
         "logs_read_error": "⚠️ Error reading logs: {error}",
         "logs_docker_secure_not_available": "⛔ Reading system logs (journalctl) is not available in Docker (Secure) mode for security reasons.",
         "logs_journalctl_not_found": "⚠️ Command <code>journalctl</code> not found. The 'Recent Events' module cannot work.",
