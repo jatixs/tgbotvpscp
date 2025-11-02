@@ -1,24 +1,29 @@
-# /opt-tg-bot/modules/restart.py
+# /opt-tg-bot/modules/reboot.py
 import asyncio
 import logging
 import os
 from aiogram import F, Dispatcher, types
 from aiogram.types import KeyboardButton
-from aiogram.exceptions import TelegramBadRequest  # Добавим импорт
+from aiogram.exceptions import TelegramBadRequest
 
 # --- ИЗМЕНЕНО: Импортируем i18n и config ---
 from core.i18n import _, I18nFilter, get_user_lang
 from core import config
 # ----------------------------------------
 
+# Используем send_access_denied_message, т.к. текст там общий
 from core.auth import is_allowed, send_access_denied_message
 from core.messaging import delete_previous_message
-# --- [ИСПРАВЛЕНИЕ] Импортируем DEPLOY_MODE ---
-from core.config import RESTART_FLAG_FILE, DEPLOY_MODE
-# ------------------------------------------
+from core.shared_state import LAST_MESSAGE_IDS
+
+# --- [ИСПРАВЛЕНИЕ] Добавляем DEPLOY_MODE и INSTALL_MODE ---
+from core.config import REBOOT_FLAG_FILE, INSTALL_MODE, DEPLOY_MODE
+# --- [КОНЕЦ ИСПРАВЛЕНИЯ] ---
+
+from core.keyboards import get_reboot_confirmation_keyboard
 
 # --- ИЗМЕНЕНО: Используем ключ ---
-BUTTON_KEY = "btn_restart"
+BUTTON_KEY = "btn_reboot"
 # --------------------------------
 
 
@@ -30,85 +35,100 @@ def get_button() -> KeyboardButton:
 
 def register_handlers(dp: Dispatcher):
     # --- ИЗМЕНЕНО: Используем I18nFilter ---
-    dp.message(I18nFilter(BUTTON_KEY))(restart_handler)
+    dp.message(I18nFilter(BUTTON_KEY))(reboot_confirm_handler)
     # --------------------------------------
+    dp.callback_query(F.data == "reboot")(reboot_handler)
 
 
-async def restart_handler(message: types.Message):
+async def reboot_confirm_handler(message: types.Message):
     user_id = message.from_user.id
-    chat_id = message.chat.id
     # --- ИЗМЕНЕНО: Получаем язык ---
     lang = get_user_lang(user_id)
     # ------------------------------
-    command = "restart"  # Имя команды оставляем
+    command = "reboot_confirm"
     if not is_allowed(user_id, command):
-        await send_access_denied_message(message.bot, user_id, chat_id, command)
+        # --- ИЗМЕНЕНО: Используем i18n ---
+        await message.bot.send_message(message.chat.id, _("access_denied_not_root", lang))
+        # --------------------------------
         return
 
-    await delete_previous_message(user_id, command, chat_id, message.bot)
-    # --- ИЗМЕНЕНО: Используем i18n ---
-    sent_msg = await message.answer(_("restart_start", lang))
-    # --------------------------------
+    await delete_previous_message(user_id, command, message.chat.id, message.bot)
+    # --- ИЗМЕНЕНО: Используем i18n и передаем ID ---
+    sent_message = await message.answer(
+        _("reboot_confirm_prompt", lang),
+        reply_markup=get_reboot_confirmation_keyboard(user_id),
+        parse_mode="HTML"
+    )
+    # ----------------------------------------------
+    LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = sent_message.message_id
+
+
+async def reboot_handler(callback: types.CallbackQuery):
+    user_id = callback.from_user.id
+    chat_id = callback.message.chat.id
+    message_id = callback.message.message_id
+    # --- ИЗМЕНЕНО: Получаем язык ---
+    lang = get_user_lang(user_id)
+    # ------------------------------
+    command = "reboot"
+
+    if not is_allowed(user_id, command):
+        try:
+            # --- ИЗМЕНЕНО: Используем i18n ---
+            await callback.answer(_("access_denied_not_root", lang), show_alert=True)
+            # --------------------------------
+        except TelegramBadRequest:
+            pass
+        return
+
+    try:
+        # --- ИЗМЕНЕНО: Используем i18n ---
+        await callback.bot.edit_message_text(
+            _("reboot_confirmed", lang),
+            chat_id=chat_id,
+            message_id=message_id,
+            parse_mode="HTML"
+        )
+        # --------------------------------
+    except TelegramBadRequest:
+        logging.warning(
+            "Не удалось отредактировать сообщение о перезагрузке (возможно, удалено).")
 
     try:
         # Убедимся, что директория существует
-        os.makedirs(os.path.dirname(RESTART_FLAG_FILE), exist_ok=True)
-        # Записываем флаг. Watchdog (внутренний или внешний)
-        # должен увидеть его и изменить сообщение.
-        with open(RESTART_FLAG_FILE, "w") as f:
-            f.write(f"{chat_id}:{sent_msg.message_id}")
+        os.makedirs(os.path.dirname(REBOOT_FLAG_FILE), exist_ok=True)
+        with open(REBOOT_FLAG_FILE, "w") as f:
+            f.write(str(user_id))
+    except Exception as e:
+        logging.error(f"Не удалось записать флаг перезагрузки: {e}")
 
-        # --- [ИСПРАВЛЕНИЕ] Выбираем команду в зависимости от DEPLOY_MODE ---
-        restart_cmd = ""
-        if DEPLOY_MODE == "docker":
-            # В режиме Docker мы должны использовать 'docker restart'
-            # Имя контейнера берем из .env
-            container_name = os.environ.get("TG_BOT_CONTAINER_NAME")
-            if not container_name:
-                raise Exception("TG_BOT_CONTAINER_NAME не установлен в .env")
-            
-            # Бот находится *внутри* контейнера, но у него есть
-            # доступ к docker CLI (из Dockerfile) и docker.sock (из compose)
-            restart_cmd = f"docker restart {container_name}"
-            logging.info(f"Выполнение Docker-рестарта: {restart_cmd}")
-            
+    try:
+        # --- [ИСПРАВЛЕНИЕ] Выбираем команду в зависимости от режима ---
+        reboot_cmd = ""
+        if DEPLOY_MODE == "docker" and INSTALL_MODE == "root":
+            # В Docker Root используем chroot, чтобы выполнить команду хоста
+            # Используем полный путь /sbin/reboot для надежности
+            reboot_cmd = "chroot /host /sbin/reboot"
         else:
-            # В режиме Systemd (по умолчанию)
-            restart_cmd = "sudo systemctl restart tg-bot.service"
-            logging.info(f"Выполнение Systemd-рестарта: {restart_cmd}")
+            # В Systemd (или Docker Secure, где это все равно не сработает)
+            # используем стандартную команду
+            reboot_cmd = "reboot"
         # --- [КОНЕЦ ИСПРАВЛЕНИЯ] ---
 
-        process = await asyncio.create_subprocess_shell(restart_cmd)
+        logging.info(f"Выполнение команды перезагрузки: {reboot_cmd}")
+        process = await asyncio.create_subprocess_shell(reboot_cmd)
         await process.wait()
+        logging.info("Команда перезагрузки отправлена.")
         
-        # В режиме systemd лог ниже выполнится.
-        # В режиме docker контейнер будет убит до 'await'
-        logging.info(f"Команда перезапуска ({DEPLOY_MODE}) отправлена.")
-
     except Exception as e:
-        logging.error(
-            f"Ошибка в restart_handler при отправке команды перезапуска: {e}")
-        # Если команда не удалась, удаляем флаг
-        if os.path.exists(RESTART_FLAG_FILE):
-            try:
-                os.remove(RESTART_FLAG_FILE)
-            except OSError:
-                pass
+        logging.error(f"Ошибка при отправке команды reboot: {e}")
         try:
             # --- ИЗМЕНЕНО: Используем i18n ---
-            await message.bot.edit_message_text(
-                text=_("restart_error", lang, error=str(e)),
+            await callback.bot.send_message(
                 chat_id=chat_id,
-                message_id=sent_msg.message_id
+                text=_("reboot_error", lang, error=e)
             )
             # --------------------------------
-        except TelegramBadRequest as edit_e:  # Используем импортированный класс
-            if "message to edit not found" in str(edit_e):
-                logging.warning(
-                    f"Не удалось изменить сообщение об ошибке перезапуска (возможно, удалено): {edit_e}")
-            else:
-                logging.error(
-                    f"Не удалось изменить сообщение об ошибке перезапуска: {edit_e}")
-        except Exception as edit_e:
+        except Exception as send_e:
             logging.error(
-                f"Не удалось изменить сообщение об ошибке перезапуска: {edit_e}")
+                f"Не удалось отправить сообщение об ошибке перезагрузки: {send_e}")
