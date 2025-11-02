@@ -1,4 +1,4 @@
-# /opt/tg-bot/modules/reboot.py
+# /opt-tg-bot/modules/reboot.py
 import asyncio
 import logging
 import os
@@ -15,7 +15,11 @@ from core import config
 from core.auth import is_allowed, send_access_denied_message
 from core.messaging import delete_previous_message
 from core.shared_state import LAST_MESSAGE_IDS
-from core.config import REBOOT_FLAG_FILE, INSTALL_MODE
+
+# --- [ИСПРАВЛЕНИЕ] Добавляем DEPLOY_MODE и INSTALL_MODE ---
+from core.config import REBOOT_FLAG_FILE, INSTALL_MODE, DEPLOY_MODE
+# --- [КОНЕЦ ИСПРАВЛЕНИЯ] ---
+
 from core.keyboards import get_reboot_confirmation_keyboard
 
 # --- ИЗМЕНЕНО: Используем ключ ---
@@ -91,17 +95,31 @@ async def reboot_handler(callback: types.CallbackQuery):
             "Не удалось отредактировать сообщение о перезагрузке (возможно, удалено).")
 
     try:
+        # Убедимся, что директория существует
+        os.makedirs(os.path.dirname(REBOOT_FLAG_FILE), exist_ok=True)
         with open(REBOOT_FLAG_FILE, "w") as f:
             f.write(str(user_id))
     except Exception as e:
         logging.error(f"Не удалось записать флаг перезагрузки: {e}")
 
     try:
-        reboot_cmd = "reboot"
+        # --- [ИСПРАВЛЕНИЕ] Выбираем команду в зависимости от режима ---
+        reboot_cmd = ""
+        if DEPLOY_MODE == "docker" and INSTALL_MODE == "root":
+            # В Docker Root используем chroot, чтобы выполнить команду хоста
+            # Используем полный путь /sbin/reboot для надежности
+            reboot_cmd = "chroot /host /sbin/reboot"
+        else:
+            # В Systemd (или Docker Secure, где это все равно не сработает)
+            # используем стандартную команду
+            reboot_cmd = "reboot"
+        # --- [КОНЕЦ ИСПРАВЛЕНИЯ] ---
+
         logging.info(f"Выполнение команды перезагрузки: {reboot_cmd}")
         process = await asyncio.create_subprocess_shell(reboot_cmd)
         await process.wait()
         logging.info("Команда перезагрузки отправлена.")
+        
     except Exception as e:
         logging.error(f"Ошибка при отправке команды reboot: {e}")
         try:
