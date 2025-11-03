@@ -1,4 +1,4 @@
-# /opt/tg-bot/modules/notifications.py
+# /opt-tg-bot/modules/notifications.py
 import asyncio
 import logging
 import psutil
@@ -26,7 +26,8 @@ from core.utils import (
     save_alerts_config,
     get_country_flag,
     get_server_timezone_label,
-    escape_html)
+    escape_html,
+    get_host_path) # <-- Добавлено
 from core.keyboards import get_alerts_menu_keyboard
 from core.config import (
     RESOURCE_CHECK_INTERVAL, CPU_THRESHOLD, RAM_THRESHOLD, DISK_THRESHOLD,
@@ -62,11 +63,16 @@ def start_background_tasks(bot: Bot) -> list[asyncio.Task]:
         resource_monitor(bot), name="ResourceMonitor")
 
     # 2. Монитор SSH
+    # --- ИЗМЕНЕНО: Используем get_host_path ---
     ssh_log_file_to_monitor = None
-    if os.path.exists("/var/log/secure"):
-        ssh_log_file_to_monitor = "/var/log/secure"
-    elif os.path.exists("/var/log/auth.log"):
-        ssh_log_file_to_monitor = "/var/log/auth.log"
+    secure_path = get_host_path("/var/log/secure")
+    auth_path = get_host_path("/var/log/auth.log")
+
+    if os.path.exists(secure_path):
+        ssh_log_file_to_monitor = secure_path
+    elif os.path.exists(auth_path):
+        ssh_log_file_to_monitor = auth_path
+    # --- КОНЕЦ ИЗМЕНЕНИЯ ---
 
     task_logins = None
     if ssh_log_file_to_monitor:
@@ -82,7 +88,9 @@ def start_background_tasks(bot: Bot) -> list[asyncio.Task]:
             "Не найден лог SSH. Мониторинг SSH (logins) не запущен.")
 
     # 3. Монитор F2B
-    f2b_log_file_to_monitor = "/var/log/fail2ban.log"
+    # --- ИЗМЕНЕНО: Используем get_host_path ---
+    f2b_log_file_to_monitor = get_host_path("/var/log/fail2ban.log")
+    # --- КОНЕЦ ИЗМЕНЕНИЯ ---
     task_bans = asyncio.create_task(
         reliable_tail_log_monitor(
             bot,
@@ -273,7 +281,9 @@ async def resource_monitor(bot: Bot):
             def check_resources_sync():
                 cpu = psutil.cpu_percent(interval=1)
                 ram = psutil.virtual_memory().percent
-                disk = psutil.disk_usage('/').percent
+                # --- ИЗМЕНЕНО: Используем get_host_path ---
+                disk = psutil.disk_usage(get_host_path('/')).percent
+                # -----------------------------------------
                 return cpu, ram, disk
 
             cpu_usage, ram_usage, disk_usage = await asyncio.to_thread(check_resources_sync)
@@ -567,3 +577,4 @@ async def reliable_tail_log_monitor(
             logging.info(
                 f"Монитор {alert_type}: Процесс tail не был запущен или уже был очищен.")
 # --- [КОНЕЦ ИСПРАВЛЕНИЯ] ---
+
