@@ -412,7 +412,7 @@ COPY . .
 
 # 8. Создание и выдача прав на директории config и logs
 # (Они будут переопределены volumes, но это гарантирует правильные права)
-RUN mkdir -p /opt/tg-bot/config /opt/tg-bot/logs/bot /opt/tg-bot/logs/watchdog && \
+RUN mkdir -p /opt/tg-bot/config /opt-tg-bot/logs/bot /opt-tg-bot/logs/watchdog && \
     chown -R tgbot:tgbot /opt/tg-bot
 
 # 9. Установка пользователя 'tgbot' по умолчанию
@@ -433,6 +433,7 @@ create_docker_compose_yml() {
 version: '3.8'
 
 # --- БАЗОВАЯ КОНФИГУРАЦИЯ БОТА (КАК ЯКОРЬ) ---
+# Мы вынесли это из 'services' и добавили 'x-'
 x-bot-base: &bot-base
   build: .
   image: tg-vps-bot:latest

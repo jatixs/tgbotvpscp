@@ -389,7 +389,7 @@ WORKDIR /opt/tg-bot
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
-RUN mkdir -p /opt/tg-bot/config /opt/tg-bot/logs/bot /opt/tg-bot/logs/watchdog && \
+RUN mkdir -p /opt/tg-bot/config /opt-tg-bot/logs/bot /opt-tg-bot/logs/watchdog && \
     chown -R tgbot:tgbot /opt/tg-bot
 USER tgbot
 CMD ["python", "bot.py"]
@@ -401,7 +401,7 @@ EOF
 create_docker_compose_yml() {
     msg_info "Creating docker-compose.yml..."
     sudo tee "${BOT_INSTALL_PATH}/docker-compose.yml" > /dev/null <<'EOF'
-# /opt/tg-bot/docker-compose.yml
+# /opt-tg-bot/docker-compose.yml
 version: '3.8'
 
 x-bot-base: &bot-base
