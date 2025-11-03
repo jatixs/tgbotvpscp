@@ -57,7 +57,8 @@ async def send_support_message(bot: Bot, user_id: int, lang: str):
             parse_mode="HTML"  # Важно для ссылки в тексте
         )
     except Exception as e:
-        logging.error(f"Не удалось отправить сообщение о поддержке пользователю {user_id}: {e}")
+        logging.error(
+            f"Не удалось отправить сообщение о поддержке пользователю {user_id}: {e}")
 # --- КОНЕЦ НОВОЙ ФУНКЦИИ ---
 
 
