@@ -1,4 +1,3 @@
-# /opt-tg-bot/core/i18n.py
 import json
 import logging
 import os
@@ -6,12 +5,9 @@ from aiogram import F
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from . import config as core_config 
 from . import shared_state
-# ---------------------
 
-# --- СЛОВАРЬ ПЕРЕВОДОВ ---
 STRINGS = {
     'ru': {
-        # Общие
         "btn_back": "🔙 Назад",
         "btn_cancel": "❌ Отмена",
         "btn_back_to_menu": "🔙 Назад в меню",
@@ -27,15 +23,11 @@ STRINGS = {
         "error_parsing_json": "❌ Ошибка при обработке результатов: Неверный формат ответа.\n<pre>{output}</pre>",
         "error_unexpected_json_parsing": "❌ Неожиданная ошибка при обработке результатов: {error}",
         "throttle_message": "⏳ Пожалуйста, подождите {seconds} сек. перед следующим действием.",
-
-        # bot.py (Главное меню и Язык)
         "main_menu_welcome": "👋 Привет! Выбери команду на клавиатуре ниже. Чтобы вызвать меню снова, используй /menu.",
         "language_select": "Пожалуйста, выберите ваш язык:",
         "language_selected": "✅ Язык успешно изменен на Русский.",
         "btn_language": "🇷🇺 Язык",
         "main_menu_placeholder": "Выберите опцию в меню...",
-
-        # core/auth.py
         "access_denied_message": "⛔ Вы не являетесь пользователем бота. Ваш ID: <code>{user_id}</code>.\nК командам нет доступа, обратитесь к администратору.",
         "access_denied_button": "📤 Отправить свой ID администратору",
         "access_denied_generic": "⛔ Доступ запрещен.",
@@ -44,8 +36,6 @@ STRINGS = {
         "default_admin_name": "Главный Админ",
         "default_new_user_name": "Новый_{uid}",
         "default_id_user_name": "ID: {uid}",
-
-        # core/keyboards.py (Кнопки меню)
         "btn_selftest": "🛠 Сведения о сервере",
         "btn_traffic": "📡 Трафик сети",
         "btn_uptime": "⏱ Аптайм",
@@ -62,8 +52,6 @@ STRINGS = {
         "btn_restart": "♻️ Перезапуск бота",
         "btn_reboot": "🔄 Перезагрузка сервера",
         "btn_notifications": "🔔 Уведомления",
-
-        # core/keyboards.py (Инлайн-кнопки)
         "btn_add_user": "➕ Добавить пользователя",
         "btn_delete_user": "➖ Удалить пользователя",
         "btn_change_group": "🔄 Изменить группу",
@@ -78,19 +66,13 @@ STRINGS = {
         "alerts_menu_logins": "{status} Входы SSH",
         "alerts_menu_bans": "{status} Баны (Fail2Ban)",
         "alerts_menu_downtime": "⏳ Даунтайм сервера (WIP)",
-
-        # core/utils.py
         "utils_vless_error": "⚠️ Ошибка при генерации VLESS-ссылки: {error}",
         "utils_docker_ps_error": "Не удалось выполнить 'docker ps'. Убедитесь, что Docker установлен и запущен, и у бота есть права.\n<pre>{error}</pre>",
         "utils_bot_restarted": "✅ Бот успешно перезапущен.",
         "utils_server_rebooted": "✅ <b>Сервер успешно перезагружен! Бот снова в сети.</b>",
-
-        # core/messaging.py
         "alert_no_users_for_type": "Нет пользователей с включенными уведомлениями типа '{alert_type}'.",
         "alert_sending_to_users": "Отправка алерта типа '{alert_type}' {count} пользователям...",
         "alert_sent_to_users": "Алерт типа '{alert_type}' отправлен {count} пользователям.",
-
-        # watchdog.py
         "watchdog_alert_prefix": "🚨 Система оповещений (Alert):",
         "watchdog_log_read_error": "Ошибка чтения лога: {error}",
         "watchdog_log_error_found_details": "Обнаружена ОШИБКА: {details}",
@@ -108,8 +90,6 @@ STRINGS = {
         "watchdog_restart_fail": "⚠️ Alert-система НЕ СМОГЛА отправить команду перезапуска для <b>{service_name}</b>. Требуется ручная проверка.\nОшибка: {error}",
         "watchdog_systemctl_not_found": "⚠️ <code>systemctl</code> не найден. Не могу проверить статус сервиса.",
         "watchdog_check_error": "⚠️ Ошибка проверки статуса сервиса: {error}",
-
-        # modules/fail2ban.py
         "f2b_log_not_found": "⚠️ Файл лога Fail2Ban не найден: <code>{path}</code>",
         "f2b_log_read_error": "Не удалось прочитать файл лога.",
         "f2b_banned": "Бан",
@@ -118,15 +98,11 @@ STRINGS = {
         "f2b_no_bans": "🔒 Нет недавних блокировок IP в логах Fail2Ban (проверено 50 последних строк).",
         "f2b_read_error_generic": "⚠️ Ошибка при чтении журнала Fail2Ban: {error}",
         "f2b_ban_entry": "🔒 <b>{ban_type}</b>\n🌍 IP: <b>{flag} {ip}</b>\n⏰ Время: <b>{time}</b>{tz}\n🗓️ Дата: <b>{date}</b>",
-
-        # modules/logs.py
         "logs_header": "📜 <b>Последние системные журналы:</b>\n<pre>{log_output}</pre>",
         "logs_read_error": "⚠️ Ошибка при чтении журналов: {error}",
         "logs_docker_secure_not_available": "⛔ Чтение системных логов (journalctl) недоступно в режиме Docker (Secure) из соображений безопасности.",
         "logs_journalctl_not_found": "⚠️ Команда <code>journalctl</code> не найдена. Модуль 'Последние события' не может работать.",
         "logs_journalctl_not_found_in_host": "⚠️ Не удалось найти <code>journalctl</code> на хосте (/host/usr/bin/journalctl или /host/bin/journalctl).",
-
-        # modules/notifications.py
         "notifications_menu_title": "🔔 <b>Настройка уведомлений</b>\n\nВыберите, какие оповещения вы хотите получать.",
         "notifications_toggle_alert": "Уведомления '{alert_name}' {status}",
         "notifications_status_on": "✅ ВКЛЮЧЕНЫ",
@@ -146,22 +122,14 @@ STRINGS = {
         "alert_disk_high": "⚠️ <b>Превышен порог Disk!</b>\nТекущее использование: <b>{usage:.1f}%</b> (Порог: {threshold}%)",
         "alert_disk_high_repeat": "‼️ <b>Disk все еще ВЫСОКИЙ!</b>\nТекущее использование: <b>{usage:.1f}%</b> (Порог: {threshold}%)",
         "alert_disk_normal": "✅ <b>Использование Disk нормализовалось.</b>\nТекущее использование: <b>{usage:.1f}%</b>",
-
-        # modules/optimize.py
         "optimize_start": "⏳ <b>Запускаю оптимизацию системы...</b>\n\nЭто очень долгий процесс (5-15 минут).\nПожалуйста, не перезапускайте бота и не вызывайте другие команды.",
         "optimize_success": "✅ <b>Оптимизация завершена успешно!</b>\n\n<b>Последние 1000 символов вывода (включая sysctl):</b>\n<pre>{output}</pre>",
         "optimize_fail": "❌ <b>Ошибка во время оптимизации!</b>\n\n<b>Код возврата:</b> {code}\n<b>Вывод STDOUT (последние 1000):</b>\n<pre>{stdout}</pre>\n<b>Вывод STDERR (последние 2000):</b>\n<pre>{stderr}</pre>",
-
-        # modules/reboot.py
         "reboot_confirm_prompt": "⚠️ Вы уверены, что хотите <b>перезагрузить сервер</b>? Все активные соединения будут разорваны.",
         "reboot_confirmed": "✅ Подтверждено. <b>Запускаю перезагрузку VPS</b>...",
         "reboot_error": "⚠️ Ошибка при отправке команды перезагрузки: {error}",
-
-        # modules/restart.py
         "restart_start": "♻️ Бот уходит на перезапуск…",
         "restart_error": "⚠️ Ошибка при попытке перезапуска сервиса: {error}",
-
-        # modules/selftest.py
         "selftest_gathering_info": "🔍 Собираю сведения о сервере...",
         "selftest_error": "⚠️ Ошибка при сборе системной статистики: {error}",
         "selftest_inet_ok": "✅ Интернет доступен",
@@ -177,13 +145,8 @@ STRINGS = {
         "selftest_ssh_root_only": "\n\n📄 <b>Последний SSH-вход:</b>\n<i>Информация доступна только в режиме root</i>",
         "selftest_results_header": "🛠 <b>Состояние сервера:</b>\n\n",
         "selftest_results_body": "✅ Бот работает\n📊 Процессор: <b>{cpu:.1f}%</b>\n💾 ОЗУ: <b>{mem:.1f}%</b>\n💽 ПЗУ: <b>{disk:.1f}%</b>\n⏱ Время работы: <b>{uptime}</b>\n{inet_status}\n⌛ Задержка (8.8.8.8): <b>{ping} мс</b>\n🌐 Внешний IP: <code>{ip}</code>\n📡 Трафик ⬇ <b>{rx}</b> / ⬆ <b>{tx}</b>",
-
-        # modules/speedtest.py
         "speedtest_start": "🚀 <b>Запуск iperf3...</b>\n\nИщу ближайший сервер. Это может занять до 30-40 секунд.",
-        # --- ИЗМЕНЕНО ЗДЕСЬ ---
-
         "speedtest_results": "🚀 <b>Speedtest Результаты (iperf3):</b>\n\n⬇️ <b>Скачивание:</b> {dl:.2f} Мбит/с\n⬆️ <b>Загрузка:</b> {ul:.2f} Мбит/с\n⏱️ <b>Пинг:</b> {ping:.2f} мс\n\n🌍 <b>Локация:</b> {flag} {server}\n🏢 <b>Сервер:</b> {provider}",
-        # ---------------------
         "speedtest_fail": "❌ Ошибка при запуске iperf3:\n<pre>{error}</pre>",
         "iperf_fetch_error": "⚠️ Не удалось загрузить список серверов iperf3.",
         "iperf_fetch_error_ru": "⚠️ Не удалось загрузить список российских серверов iperf3.",
@@ -201,8 +164,6 @@ STRINGS = {
         "speedtest_status_uploading": "🚀 Тестирую скорость на <b>{host}</b> ({ping} мс)... ⬆️ Загрузка...",
         "error_message_edit_failed": "ОШИБКА: Не удалось обновить статусное сообщение.",
         "iperf_all_attempts_failed": "❌ Не удалось выполнить тест скорости после {attempts} попыток.",
-
-        # modules/sshlog.py
         "sshlog_searching": "🔍 Ищу последние 10 событий SSH (вход/провал)...",
         "sshlog_header": "🔐 <b>Последние {count} событий SSH{source}:</b>\n\n{log_output}",
         "sshlog_not_found": "🔐 Не найдено событий SSH (вход/провал){source}.",
@@ -211,12 +172,8 @@ STRINGS = {
         "sshlog_entry_invalid_user": "❌ <b>Неверный юзер</b>\n👤 Попытка: <b>{user}</b>\n🌍 IP: <b>{flag} {ip}</b>\n⏰ {time}{tz} ({date})",
         "sshlog_entry_wrong_pass": "❌ <b>Неверный пароль</b>\n👤 Пользователь: <b>{user}</b>\n🌍 IP: <b>{flag} {ip}</b>\n⏰ {time}{tz} ({date})",
         "sshlog_entry_fail_pam": "❌ <b>Провал (PAM)</b>\n👤 Пользователь: <b>{user}</b>\n🌍 IP: <b>{flag} {ip}</b>\n⏰ {time}{tz} ({date})",
-
-        # modules/top.py
         "top_header": "🔥 <b>Топ 10 процессов по загрузке CPU:</b>\n<pre>{output}</pre>",
         "top_fail": "❌ Ошибка при получении списка процессов:\n<pre>{error}</pre>",
-
-        # modules/traffic.py
         "traffic_stop": "✅ Мониторинг трафика остановлен.",
         "traffic_menu_return": "🏠 Главное меню:",
         "traffic_start": "📡 <b>Мониторинг трафика</b>\n\n<i>Обновление каждые {interval} секунд.</i>",
@@ -229,17 +186,11 @@ STRINGS = {
         "traffic_speed_tx": "⬆️ TX: {speed:.2f} Мбит/с",
         "btn_stop_traffic": "⏹ Остановить",
         "traffic_stopped_alert": "Мониторинг трафика остановлен.",
-
-        # modules/update.py
         "update_start": "🔄 Выполняю обновление VPS... Это может занять несколько минут.",
         "update_success": "✅ Обновление завершено:\n<pre>{output}</pre>",
         "update_fail": "❌ Ошибка при обновлении (Код: {code}):\n<pre>{error}</pre>",
-
-        # modules/uptime.py
         "uptime_text": "⏱ Время работы: <b>{uptime}</b>",
         "uptime_fail": "⚠️ Ошибка при получении аптайма: {error}",
-
-        # modules/vless.py
         "vless_prompt_file": "📤 <b>Отправьте файл конфигурации Xray (JSON)</b>\n\n<i>Важно: файл должен содержать рабочую конфигурацию outbound с Reality.</i>",
         "vless_error_not_json": "⛔ <b>Ошибка:</b> Файл должен быть формата <code>.json</code>.\n\nПопробуйте отправить файл еще раз.",
         "vless_prompt_name": "✅ Файл JSON получен.\n\nТеперь <b>введите имя</b> для этой VLESS-ссылки (например, 'My_Server_1'):",
@@ -249,8 +200,6 @@ STRINGS = {
         "vless_menu_return": "🏠 Возврат в главное меню.",
         "vless_error_not_file": "⛔ Пожалуйста, отправьте <b>документ</b> (файл), а не текст.",
         "vless_error_not_text": "⛔ Пожалуйста, отправьте <b>текстовое имя</b>.",
-
-        # modules/xray.py
         "xray_detecting": "🔍 Определяю установленный клиент Xray...",
         "xray_detect_fail": "❌ Не удалось определить поддерживаемый клиент Xray (Marzban, Amnezia). Обновление невозможно.",
         "xray_detected_start_update": "✅ Обнаружен: <b>{client}</b> (контейнер: <code>{container}</code>). Начинаю обновление...",
@@ -258,8 +207,6 @@ STRINGS = {
         "xray_update_success": "✅ Xray для <b>{client}</b> успешно обновлен до версии <b>{version}</b>",
         "xray_error_generic": "⚠️ <b>Ошибка обновления Xray:</b>\n\n{error}",
         "xray_version_unknown": "неизвестной",
-
-        # modules/users.py
         "users_menu_header": "👤 <b>Управление пользователями</b>:\n\n{user_list}\n\nВыберите действие:",
         "users_list_empty": "Других пользователей нет.",
         "my_id_text": "Ваш ID: <code>{user_id}</code>\n\n<i>(Эта кнопка удалена из главного меню, но вы можете найти ее в меню '👤 Пользователи')</i>",
@@ -284,8 +231,6 @@ STRINGS = {
         "users_change_group_prompt": "Выбран пользователь: <b>{user_name}</b>\nТекущая группа: <b>{group}</b>\n\nВыберите новую группу:",
         "users_change_group_success_text": "✅ Группа для <b>{user_name}</b> изменена на <b>{group}</b>.\n\nВыберите пользователя:",
         "users_change_group_success_alert": "Группа для {user_name} изменена.",
-
-        # Единицы измерения (core/utils.py)
         "unit_bytes": "Б",
         "unit_kb": "КБ",
         "unit_mb": "МБ",
@@ -299,7 +244,6 @@ STRINGS = {
         "unit_second_short": "с",
     },
     'en': {
-        # General
         "btn_back": "🔙 Back",
         "btn_cancel": "❌ Cancel",
         "btn_back_to_menu": "🔙 Back to menu",
@@ -315,15 +259,11 @@ STRINGS = {
         "error_parsing_json": "❌ Error processing results: Invalid response format.\n<pre>{output}</pre>",
         "error_unexpected_json_parsing": "❌ Unexpected error processing results: {error}",
         "throttle_message": "⏳ Please wait {seconds} sec. before the next action.",
-
-        # bot.py (Main Menu & Language)
         "main_menu_welcome": "👋 Hi! Choose a command from the keyboard below. To show this menu again, use /menu.",
         "language_select": "Please select your language:",
         "language_selected": "✅ Language successfully changed to English.",
         "btn_language": "🇬🇧 Language",
         "main_menu_placeholder": "Select an option from the menu...",
-
-        # core/auth.py
         "access_denied_message": "⛔ You are not an authorized user of this bot. Your ID: <code>{user_id}</code>.\nAccess to commands is denied. Please contact the administrator.",
         "access_denied_button": "📤 Send your ID to the administrator",
         "access_denied_generic": "⛔ Access denied.",
@@ -332,8 +272,6 @@ STRINGS = {
         "default_admin_name": "Main Admin",
         "default_new_user_name": "New_{uid}",
         "default_id_user_name": "ID: {uid}",
-
-        # core/keyboards.py (Menu Buttons)
         "btn_selftest": "🛠 Server Info",
         "btn_traffic": "📡 Network Traffic",
         "btn_uptime": "⏱ Uptime",
@@ -350,8 +288,6 @@ STRINGS = {
         "btn_restart": "♻️ Restart Bot",
         "btn_reboot": "🔄 Reboot Server",
         "btn_notifications": "🔔 Notifications",
-
-        # core/keyboards.py (Inline Buttons)
         "btn_add_user": "➕ Add User",
         "btn_delete_user": "➖ Delete User",
         "btn_change_group": "🔄 Change Group",
@@ -366,19 +302,13 @@ STRINGS = {
         "alerts_menu_logins": "{status} SSH Logins",
         "alerts_menu_bans": "{status} Bans (Fail2Ban)",
         "alerts_menu_downtime": "⏳ Server Downtime (WIP)",
-
-        # core/utils.py
         "utils_vless_error": "⚠️ Error generating VLESS link: {error}",
         "utils_docker_ps_error": "Failed to execute 'docker ps'. Ensure Docker is installed, running, and the bot has permissions.\n<pre>{error}</pre>",
         "utils_bot_restarted": "✅ Bot restarted successfully.",
         "utils_server_rebooted": "✅ <b>Server rebooted successfully! The bot is back online.</b>",
-
-        # core/messaging.py
         "alert_no_users_for_type": "No users with notifications enabled for type '{alert_type}'.",
         "alert_sending_to_users": "Sending alert type '{alert_type}' to {count} users...",
         "alert_sent_to_users": "Alert type '{alert_type}' sent to {count} users.",
-
-        # watchdog.py
         "watchdog_alert_prefix": "🚨 Alert System:",
         "watchdog_log_read_error": "Log read error: {error}",
         "watchdog_log_error_found_details": "ERROR detected: {details}",
@@ -396,8 +326,6 @@ STRINGS = {
         "watchdog_restart_fail": "⚠️ Alert system FAILED to send restart command for <b>{service_name}</b>. Manual check required.\nError: {error}",
         "watchdog_systemctl_not_found": "⚠️ <code>systemctl</code> not found. Cannot check service status.",
         "watchdog_check_error": "⚠️ Error checking service status: {error}",
-
-        # modules/fail2ban.py
         "f2b_log_not_found": "⚠️ Fail2Ban log file not found: <code>{path}</code>",
         "f2b_log_read_error": "Could not read log file.",
         "f2b_banned": "Banned",
@@ -406,17 +334,11 @@ STRINGS = {
         "f2b_no_bans": "🔒 No recent IP bans found in Fail2Ban logs (checked last 50 lines).",
         "f2b_read_error_generic": "⚠️ Error reading Fail2Ban log: {error}",
         "f2b_ban_entry": "🔒 <b>{ban_type}</b>\n🌍 IP: <b>{flag} {ip}</b>\n⏰ Time: <b>{time}</b>{tz}\n🗓️ Date: <b>{date}</b>",
-
-        # modules/logs.py
-        # --- [ИСПРАВЛЕНИЕ ЗДЕСЬ] ---
         "logs_header": "📜 <b>Recent system logs:</b>\n<pre>{log_output}</pre>",
-        # --- [КОНЕЦ ИСПРАВЛЕНИЯ] ---
         "logs_read_error": "⚠️ Error reading logs: {error}",
         "logs_docker_secure_not_available": "⛔ Reading system logs (journalctl) is not available in Docker (Secure) mode for security reasons.",
         "logs_journalctl_not_found": "⚠️ Command <code>journalctl</code> not found. The 'Recent Events' module cannot work.",
         "logs_journalctl_not_found_in_host": "⚠️ Could not find <code>journalctl</code> on the host machine (/host/usr/bin/journalctl or /host/bin/journalctl).",
-
-        # modules/notifications.py
         "notifications_menu_title": "🔔 <b>Notification Settings</b>\n\nChoose which alerts you want to receive.",
         "notifications_toggle_alert": "Notifications '{alert_name}' {status}",
         "notifications_status_on": "✅ ENABLED",
@@ -436,22 +358,14 @@ STRINGS = {
         "alert_disk_high": "⚠️ <b>Disk Threshold Exceeded!</b>\nCurrent usage: <b>{usage:.1f}%</b> (Threshold: {threshold}%)",
         "alert_disk_high_repeat": "‼️ <b>Disk Still HIGH!</b>\nCurrent usage: <b>{usage:.1f}%</b> (Threshold: {threshold}%)",
         "alert_disk_normal": "✅ <b>Disk usage normalized.</b>\nCurrent usage: <b>{usage:.1f}%</b>",
-
-        # modules/optimize.py
         "optimize_start": "⏳ <b>Starting system optimization...</b>\n\nThis is a very long process (5-15 minutes).\nPlease do not restart the bot or run other commands.",
         "optimize_success": "✅ <b>Optimization completed successfully!</b>\n\n<b>Last 1000 characters of output (including sysctl):</b>\n<pre>{output}</pre>",
         "optimize_fail": "❌ <b>Error during optimization!</b>\n\n<b>Return Code:</b> {code}\n<b>STDOUT (last 1000):</b>\n<pre>{stdout}</pre>\n<b>STDERR (last 2000):</b>\n<pre>{stderr}</pre>",
-
-        # modules/reboot.py
         "reboot_confirm_prompt": "⚠️ Are you sure you want to <b>reboot the server</b>? All active connections will be lost.",
         "reboot_confirmed": "✅ Confirmed. <b>Issuing VPS reboot</b>...",
         "reboot_error": "⚠️ Error sending reboot command: {error}",
-
-        # modules/restart.py
         "restart_start": "♻️ Bot is restarting…",
         "restart_error": "⚠️ Error trying to restart service: {error}",
-
-        # modules/selftest.py
         "selftest_gathering_info": "🔍 Gathering server info...",
         "selftest_error": "⚠️ Error gathering system stats: {error}",
         "selftest_inet_ok": "✅ Internet available",
@@ -467,8 +381,6 @@ STRINGS = {
         "selftest_ssh_root_only": "\n\n📄 <b>Last SSH login:</b>\n<i>Info available in root mode only</i>",
         "selftest_results_header": "🛠 <b>Server Status:</b>\n\n",
         "selftest_results_body": "✅ Bot is running\n📊 CPU: <b>{cpu:.1f}%</b>\n💾 RAM: <b>{mem:.1f}%</b>\n💽 Disk: <b>{disk:.1f}%</b>\n⏱ Uptime: <b>{uptime}</b>\n{inet_status}\n⌛ Ping (8.8.8.8): <b>{ping} ms</b>\n🌐 External IP: <code>{ip}</code>\n📡 Traffic ⬇ <b>{rx}</b> / ⬆ <b>{tx}</b>",
-
-        # modules/speedtest.py
         "speedtest_start": "🚀 <b>Starting iperf3...</b>\n\nFinding the closest server. This may take 30-40 seconds.",
         "speedtest_results": "🚀 <b>Speedtest Results (iperf3):</b>\n\n⬇️ <b>Download:</b> {dl:.2f} Mbps\n⬆️ <b>Upload:</b> {ul:.2f} Mbps\n⏱️ <b>Ping:</b> {ping:.2f} ms\n\n🌍 <b>Location:</b> {flag} {server}\n🏢 <b>Server:</b> {provider}",
         "speedtest_fail": "❌ Error running iperf3:\n<pre>{error}</pre>",
@@ -488,8 +400,6 @@ STRINGS = {
         "speedtest_status_uploading": "🚀 Testing speed on <b>{host}</b> ({ping} ms)... ⬆️ Uploading...",
         "error_message_edit_failed": "ERROR: Failed to update status message.",
         "iperf_all_attempts_failed": "❌ Speedtest failed after {attempts} attempts.",
-
-        # modules/sshlog.py
         "sshlog_searching": "🔍 Searching for last 10 SSH events (login/fail)...",
         "sshlog_header": "🔐 <b>Last {count} SSH events{source}:</b>\n\n{log_output}",
         "sshlog_not_found": "🔐 No SSH events (login/fail) found{source}.",
@@ -498,12 +408,8 @@ STRINGS = {
         "sshlog_entry_invalid_user": "❌ <b>Invalid user</b>\n👤 Attempt: <b>{user}</b>\n🌍 IP: <b>{flag} {ip}</b>\n⏰ {time}{tz} ({date})",
         "sshlog_entry_wrong_pass": "❌ <b>Failed password</b>\n👤 User: <b>{user}</b>\n🌍 IP: <b>{flag} {ip}</b>\n⏰ {time}{tz} ({date})",
         "sshlog_entry_fail_pam": "❌ <b>Failure (PAM)</b>\n👤 User: <b>{user}</b>\n🌍 IP: <b>{flag} {ip}</b>\n⏰ {time}{tz} ({date})",
-
-        # modules/top.py
         "top_header": "🔥 <b>Top 10 processes by CPU load:</b>\n<pre>{output}</pre>",
         "top_fail": "❌ Error getting process list:\n<pre>{error}</pre>",
-
-        # modules/traffic.py
         "traffic_stop": "✅ Traffic monitoring stopped.",
         "traffic_menu_return": "🏠 Main menu:",
         "traffic_start": "📡 <b>Traffic Monitoring</b>\n\n<i>Updates every {interval} seconds.</i>",
@@ -516,17 +422,11 @@ STRINGS = {
         "traffic_speed_tx": "⬆️ TX: {speed:.2f} Mbps",
         "btn_stop_traffic": "⏹ Stop",
         "traffic_stopped_alert": "Traffic monitoring stopped.",
-
-        # modules/update.py
         "update_start": "🔄 Updating VPS... This may take a few minutes.",
         "update_success": "✅ Update complete:\n<pre>{output}</pre>",
         "update_fail": "❌ Error during update (Code: {code}):\n<pre>{error}</pre>",
-
-        # modules/uptime.py
         "uptime_text": "⏱ Uptime: <b>{uptime}</b>",
         "uptime_fail": "⚠️ Error getting uptime: {error}",
-
-        # modules/vless.py
         "vless_prompt_file": "📤 <b>Send your Xray configuration file (JSON)</b>\n\n<i>Important: The file must contain a working outbound configuration with Reality.</i>",
         "vless_error_not_json": "⛔ <b>Error:</b> File must be in <code>.json</code> format.\n\nPlease try sending the file again.",
         "vless_prompt_name": "✅ JSON file received.\n\nNow, <b>enter a name</b> for this VLESS link (e.g., 'My_Server_1'):",
@@ -536,8 +436,6 @@ STRINGS = {
         "vless_menu_return": "🏠 Returning to main menu.",
         "vless_error_not_file": "⛔ Please send a <b>document</b> (file), not text.",
         "vless_error_not_text": "⛔ Please send a <b>text name</b>.",
-
-        # modules/xray.py
         "xray_detecting": "🔍 Detecting installed Xray client...",
         "xray_detect_fail": "❌ Could not detect a supported Xray client (Marzban, Amnezia). Update aborted.",
         "xray_detected_start_update": "✅ Detected: <b>{client}</b> (container: <code>{container}</code>). Starting update...",
@@ -545,8 +443,6 @@ STRINGS = {
         "xray_update_success": "✅ Xray for <b>{client}</b> successfully updated to version <b>{version}</b>",
         "xray_error_generic": "⚠️ <b>Xray Update Error:</b>\n\n{error}",
         "xray_version_unknown": "unknown",
-
-        # modules/users.py
         "users_menu_header": "👤 <b>User Management</b>:\n\n{user_list}\n\nSelect an action:",
         "users_list_empty": "No other users found.",
         "my_id_text": "Your ID: <code>{user_id}</code>\n\n<i>(This button was removed from the main menu, but you can find it in the '👤 Users' menu)</i>",
@@ -571,8 +467,6 @@ STRINGS = {
         "users_change_group_prompt": "Selected user: <b>{user_name}</b>\nCurrent group: <b>{group}</b>\n\nSelect a new group:",
         "users_change_group_success_text": "✅ Group for <b>{user_name}</b> changed to <b>{group}</b>.\n\nSelect a user:",
         "users_change_group_success_alert": "Group for {user_name} changed.",
-
-        # Units of measurement (core/utils.py)
         "unit_bytes": "B",
         "unit_kb": "KB",
         "unit_mb": "MB",
@@ -587,39 +481,34 @@ STRINGS = {
     }
 }
 
-# --- УПРАВЛЕНИЕ НАСТРОЙКАМИ ЯЗЫКА ---
-
 
 def load_user_settings():
     """Загружает настройки пользователей (включая язык) из JSON."""
     try:
-
-        # Используем core_config для доступа к переменным из config.py
         if os.path.exists(core_config.USER_SETTINGS_FILE):
             with open(core_config.USER_SETTINGS_FILE, "r", encoding='utf-8') as f:
-        # ---------------------
                 settings = json.load(f)
-                shared_state.USER_SETTINGS = {
+                loaded_data_int_keys = {
                     int(k): v for k, v in settings.items()}
+                shared_state.USER_SETTINGS.clear()
+                shared_state.USER_SETTINGS.update(loaded_data_int_keys)
             logging.info("Настройки пользователей (языки) загружены.")
         else:
-            shared_state.USER_SETTINGS = {}
+            shared_state.USER_SETTINGS.clear()
             logging.info(
                 "Файл user_settings.json не найден, используются пустые настройки.")
     except Exception as e:
         logging.error(f"Ошибка загрузки user_settings.json: {e}")
-        shared_state.USER_SETTINGS = {}
+        shared_state.USER_SETTINGS.clear()
 
 
 def save_user_settings():
     """Сохраняет настройки пользователей (включая язык) в JSON."""
     try:
         os.makedirs(os.path.dirname(core_config.USER_SETTINGS_FILE), exist_ok=True)
-        # ---------------------
         settings_to_save = {str(k): v for k,
                             v in shared_state.USER_SETTINGS.items()}
         with open(core_config.USER_SETTINGS_FILE, "w", encoding='utf-8') as f:
-        # ---------------------
             json.dump(settings_to_save, f, indent=4, ensure_ascii=False)
         logging.debug("Настройки пользователей (языки) сохранены.")
     except Exception as e:
@@ -631,23 +520,17 @@ def get_user_lang(user_id: int | str | None) -> str:
     if isinstance(user_id, int):
         return shared_state.USER_SETTINGS.get(
             user_id, {}).get(
-
             "lang", core_config.DEFAULT_LANGUAGE)
-            # ---------------------
     elif isinstance(user_id, str):
         if user_id in STRINGS:
             return user_id
         else:
-
             return core_config.DEFAULT_LANGUAGE
-            # ---------------------
     else:
         if user_id is not None:
             logging.warning(
                 f"get_user_lang вызван с неожиданным типом user_id: {type(user_id)}. Возвращаю язык по умолчанию.")
-
         return core_config.DEFAULT_LANGUAGE
-        # ---------------------
 
 def set_user_lang(user_id: int | str | None, lang: str):
     """Устанавливает язык для пользователя и сохраняет."""
@@ -663,18 +546,13 @@ def set_user_lang(user_id: int | str | None, lang: str):
                 f"set_user_lang вызван с нечисловым user_id: {user_id}. Сохранение отменено.")
             return
             
-    # Обновляем кэш в shared_state
     if user_id not in shared_state.USER_SETTINGS:
         shared_state.USER_SETTINGS[user_id] = {}
     shared_state.USER_SETTINGS[user_id]["lang"] = lang
     
-    # Сохраняем на диск
     save_user_settings()
     logging.info(f"Язык для пользователя {user_id} изменен на '{lang}' и сохранен.")
-# ---------------------
 
-
-# --- ГЛАВНАЯ ФУНКЦИЯ ПЕРЕВОДА ---
 
 def get_text(key: str, user_id_or_lang: int | str | None, **kwargs) -> str:
     """
@@ -694,9 +572,7 @@ def get_text(key: str, user_id_or_lang: int | str | None, **kwargs) -> str:
         {}).get(
         key,
         STRINGS.get(
-
             core_config.DEFAULT_LANGUAGE,
-            # ---------------------
             {}).get(
                 key,
             f"[{key}]"))
@@ -712,8 +588,6 @@ def get_text(key: str, user_id_or_lang: int | str | None, **kwargs) -> str:
         return string_template
 
 _ = get_text
-
-# --- ФИЛЬТРЫ ДЛЯ AIOGRAM ---
 
 
 def get_all_translations(key: str) -> list[str]:
@@ -738,8 +612,6 @@ def I18nFilter(key: str):
     совпадает с ЛЮБЫМ переводом указанного ключа.
     """
     return F.text.in_(get_all_translations(key))
-
-# --- Клавиатура смены языка ---
 
 
 def get_language_keyboard() -> InlineKeyboardMarkup:
