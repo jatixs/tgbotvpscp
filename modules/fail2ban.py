@@ -15,7 +15,8 @@ from core import config
 from core.auth import is_allowed, send_access_denied_message
 from core.messaging import delete_previous_message
 from core.shared_state import LAST_MESSAGE_IDS
-from core.utils import get_country_flag, get_server_timezone_label, get_host_path # <-- Добавлен get_host_path
+# <-- Добавлен get_host_path
+from core.utils import get_country_flag, get_server_timezone_label, get_host_path
 
 # --- ИЗМЕНЕНО: Используем ключ ---
 BUTTON_KEY = "btn_fail2ban"

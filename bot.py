@@ -113,14 +113,15 @@ async def show_main_menu(
         chat_id: int,
         state: FSMContext,
         message_id_to_delete: int = None,
-        is_start_command: bool = False): # <-- 1. ДОБАВЛЕН АРГУМЕНТ
+        is_start_command: bool = False):  # <-- 1. ДОБАВЛЕН АРГУМЕНТ
     """Вспомогательная функция для отображения главного меню."""
     command = "menu"
     await state.clear()
 
     # --- 2. ДОБАВЛЕНА ЛОГИКА ПРОВЕРКИ ПЕРВОГО ЗАПУСКА ---
     lang = i18n.get_user_lang(user_id)  # Получаем язык
-    # Проверяем, что это /start и пользователя еще нет в настройках (т.е. первый запуск)
+    # Проверяем, что это /start и пользователя еще нет в настройках (т.е.
+    # первый запуск)
     is_first_start = (
         is_start_command and
         user_id not in i18n.shared_state.USER_SETTINGS
@@ -129,7 +130,7 @@ async def show_main_menu(
 
     if not auth.is_allowed(user_id, command):
         # --- НЕАВТОРИЗОВАННЫЙ ПОЛЬЗОВАТЕЛЬ ---
-        
+
         # --- 3. ОТПРАВКА SUPPORT-СООБЩЕНИЯ (для неавторизованных) ---
         if is_first_start:
             await messaging.send_support_message(bot, user_id, lang)
@@ -139,7 +140,7 @@ async def show_main_menu(
             await bot.send_message(chat_id, _("language_select", 'ru'), reply_markup=get_language_keyboard())
             await auth.send_access_denied_message(bot, user_id, chat_id, command)
             return
-            
+
         await auth.send_access_denied_message(bot, user_id, chat_id, command)
         return
 
@@ -155,7 +156,7 @@ async def show_main_menu(
     await messaging.delete_previous_message(
         user_id, list(shared_state.LAST_MESSAGE_IDS.get(user_id, {}).keys()), chat_id, bot
     )
-    
+
     # --- 4. ОТПРАВКА SUPPORT-СООБЩЕНИЯ (для авторизованных) ---
     if is_first_start:
         await messaging.send_support_message(bot, user_id, lang)
@@ -184,14 +185,14 @@ async def start_or_menu_handler_message(
         message: types.Message,
         state: FSMContext):
     """Обработчик для /start, /menu и текстовой кнопки 'Назад в меню'."""
-    
+
     # --- 5. ОПРЕДЕЛЯЕМ, БЫЛА ЛИ ЭТО КОМАНДА /start ---
     is_start_command = message.text == "/start"
     await show_main_menu(
-        message.from_user.id, 
-        message.chat.id, 
+        message.from_user.id,
+        message.chat.id,
         state,
-        is_start_command=is_start_command # Передаем флаг
+        is_start_command=is_start_command  # Передаем флаг
     )
     # -------------------------------------------------
 
@@ -201,14 +202,14 @@ async def back_to_menu_callback(
         callback: types.CallbackQuery,
         state: FSMContext):
     """Обработчик для инлайн-кнопки 'Назад в главное меню'."""
-    
+
     # --- 6. ЭТО НЕ /start, ПЕРЕДАЕМ FALSE ---
     await show_main_menu(
-        callback.from_user.id, 
-        callback.message.chat.id, 
-        state, 
+        callback.from_user.id,
+        callback.message.chat.id,
+        state,
         callback.message.message_id,
-        is_start_command=False # Это не /start
+        is_start_command=False  # Это не /start
     )
     # ------------------------------------------
     await callback.answer()

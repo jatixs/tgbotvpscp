@@ -13,15 +13,19 @@ from core.utils import escape_html  # <-- (ВАЖНО) ДОБАВЛЕН ИМПО
 
 BUTTON_KEY = "btn_logs"
 
+
 def get_button() -> KeyboardButton:
     """Возвращает кнопку для главного меню."""
     return KeyboardButton(text=_(BUTTON_KEY, DEFAULT_LANGUAGE))
+
 
 def register_handlers(dp: Dispatcher):
     """Регистрирует хэндлеры этого модуля в главном диспетчере."""
     dp.include_router(router)
 
+
 router = Router()
+
 
 @router.message(I18nFilter(BUTTON_KEY))
 async def logs_handler(message: types.Message, state: FSMContext):
@@ -44,9 +48,21 @@ async def logs_handler(message: types.Message, state: FSMContext):
     if DEPLOY_MODE == "docker" and INSTALL_MODE == "root":
         # Docker-Root (с chroot)
         if os.path.exists("/host/usr/bin/journalctl"):
-            cmd = ["chroot", "/host", "/usr/bin/journalctl", "-n", "20", "--no-pager"]
+            cmd = [
+                "chroot",
+                "/host",
+                "/usr/bin/journalctl",
+                "-n",
+                "20",
+                "--no-pager"]
         elif os.path.exists("/host/bin/journalctl"):
-            cmd = ["chroot", "/host", "/bin/journalctl", "-n", "20", "--no-pager"]
+            cmd = [
+                "chroot",
+                "/host",
+                "/bin/journalctl",
+                "-n",
+                "20",
+                "--no-pager"]
         else:
             await message.answer(
                 _("logs_journalctl_not_found_in_host", user_id),

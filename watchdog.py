@@ -9,7 +9,7 @@ import re
 import json
 import sys
 from datetime import datetime, timedelta
-from typing import Optional, Callable # <-- Добавлено
+from typing import Optional, Callable  # <-- Добавлено
 
 # --- ДОБАВЛЕНЫ ИМПОРТЫ DOCKER ---
 try:
@@ -64,11 +64,11 @@ BOT_NAME = env_vars.get("TG_BOT_NAME", "VPS Bot")
 # --- ИЗМЕНЕНО: Определение имени службы/контейнера ---
 if DEPLOY_MODE == "docker":
     BOT_SERVICE_NAME = env_vars.get("TG_BOT_CONTAINER_NAME", "tg-bot-root")
-else: # systemd
+else:  # systemd
     BOT_SERVICE_NAME = "tg-bot.service"
 # ----------------------------------------------------
-    
-WATCHDOG_SERVICE_NAME = "tg-watchdog.service" # Используется только в systemd
+
+WATCHDOG_SERVICE_NAME = "tg-watchdog.service"  # Используется только в systemd
 
 
 CONFIG_DIR = config.CONFIG_DIR
@@ -97,13 +97,16 @@ if DEPLOY_MODE == "docker":
             docker_client.ping()
             logging.info("Успешное подключение к Docker API.")
         except docker.errors.DockerException:
-            logging.critical("Не удалось подключиться к Docker socket. Убедитесь, что /var/run/docker.sock смонтирован.")
+            logging.critical(
+                "Не удалось подключиться к Docker socket. Убедитесь, что /var/run/docker.sock смонтирован.")
             docker_client = None
         except Exception as e:
-            logging.critical(f"Неожиданная ошибка при инициализации Docker клиента: {e}")
+            logging.critical(
+                f"Неожиданная ошибка при инициализации Docker клиента: {e}")
             docker_client = None
     else:
-        logging.critical("Режим Docker, но библиотека 'docker' не установлена! Watchdog не сможет работать.")
+        logging.critical(
+            "Режим Docker, но библиотека 'docker' не установлена! Watchdog не сможет работать.")
 # --------------------------------------------
 
 
@@ -316,7 +319,7 @@ def check_bot_service_systemd():
             current_reported_state = "systemctl_error"
             status_alert_message_id = None
         time.sleep(CHECK_INTERVAL_SECONDS * 5)
-        return # Возвращаем, т.к. process_service_state вызовет ошибку
+        return  # Возвращаем, т.к. process_service_state вызовет ошибку
     except Exception as e:
         logging.error(
             f"Неожиданная ошибка при вызове systemctl status: {e}",
@@ -331,7 +334,7 @@ def check_bot_service_systemd():
             current_reported_state = "check_error"
             status_alert_message_id = None
         time.sleep(CHECK_INTERVAL_SECONDS)
-        return # Возвращаем
+        return  # Возвращаем
 
     # --- Функция перезапуска для systemd ---
     def restart_service_systemd():
@@ -393,7 +396,8 @@ def check_bot_service_docker():
     try:
         # 1. Получаем контейнер по имени
         container = docker_client.containers.get(BOT_SERVICE_NAME)
-        container_status = container.status  # 'running', 'restarting', 'exited', 'paused'
+        # 'running', 'restarting', 'exited', 'paused'
+        container_status = container.status
         logging.debug(
             f"Контейнер {BOT_SERVICE_NAME} найден. Статус: {container_status}")
 
@@ -480,7 +484,7 @@ def check_bot_service_docker():
 def process_service_state(
         actual_state: str,
         status_output_full: str,
-        restart_function: Callable[[], None]): # Принимает функцию перезапуска
+        restart_function: Callable[[], None]):  # Принимает функцию перезапуска
     """
     Общая логика обработки состояния, не зависящая от systemd или docker.
     """
@@ -554,18 +558,20 @@ def process_service_state(
         state_to_report = "down"
         alert_type = "bot_service_down"
         message_key = "watchdog_status_down"
-        
+
         # --- Логика определения причины (остается полезной) ---
         if actual_state == "failed":
             fail_reason_match = re.search(
-                r"Failed with result '([^']*)'", status_output_full) # Для systemd
+                r"Failed with result '([^']*)'",
+                status_output_full)  # Для systemd
             if fail_reason_match:
                 reason = fail_reason_match.group(1)
                 message_kwargs["reason"] = f" ({get_text('watchdog_status_down_reason', WD_LANG)}: {reason})"
             else:
                 message_kwargs["reason"] = f" ({get_text('watchdog_status_down_failed', WD_LANG)})"
         elif DEPLOY_MODE == "docker":
-             message_kwargs["reason"] = f" (Status: {status_output_full})" # Для Docker просто показываем статус
+            # Для Docker просто показываем статус
+            message_kwargs["reason"] = f" (Status: {status_output_full})"
         else:
             message_kwargs["reason"] = ""
         # --------------------------------------------------------
@@ -573,7 +579,7 @@ def process_service_state(
         if not bot_service_was_down_or_activating:
             logging.info(
                 f"Первое обнаружение сбоя (флаг не найден). Вызов функции перезапуска...")
-            restart_function() # Вызываем переданную функцию (systemd или docker)
+            restart_function()  # Вызываем переданную функцию (systemd или docker)
 
         bot_service_was_down_or_activating = True
 
@@ -652,15 +658,19 @@ if __name__ == "__main__":
             if DOCKER_AVAILABLE and docker_client:
                 check_bot_service_docker()
             else:
-                logging.critical("Режим Docker, но клиент не инициализирован или недоступен. Watchdog не может работать.")
+                logging.critical(
+                    "Режим Docker, но клиент не инициализирован или недоступен. Watchdog не может работать.")
                 # Отправляем алерт, если еще не отправляли
                 if current_reported_state != "docker_lib_error":
-                    send_or_edit_telegram_alert("watchdog_check_error", "watchdog_error", None, error="Docker client not available or not installed")
+                    send_or_edit_telegram_alert(
+                        "watchdog_check_error",
+                        "watchdog_error",
+                        None,
+                        error="Docker client not available or not installed")
                     current_reported_state = "docker_lib_error"
-                time.sleep(60) # Спим долго
+                time.sleep(60)  # Спим долго
         else:
             # По умолчанию используем systemd
             check_bot_service_systemd()
-        
-        time.sleep(CHECK_INTERVAL_SECONDS)
 
+        time.sleep(CHECK_INTERVAL_SECONDS)
