@@ -1,4 +1,4 @@
-# /opt/tg-bot/modules/fail2ban.py
+# /opt-tg-bot/modules/fail2ban.py
 import asyncio
 import os
 import re
@@ -15,7 +15,7 @@ from core import config
 from core.auth import is_allowed, send_access_denied_message
 from core.messaging import delete_previous_message
 from core.shared_state import LAST_MESSAGE_IDS
-from core.utils import get_country_flag, get_server_timezone_label
+from core.utils import get_country_flag, get_server_timezone_label, get_host_path # <-- Добавлен get_host_path
 
 # --- ИЗМЕНЕНО: Используем ключ ---
 BUTTON_KEY = "btn_fail2ban"
@@ -47,7 +47,9 @@ async def fail2ban_handler(message: types.Message):
 
     await delete_previous_message(user_id, command, chat_id, message.bot)
     try:
-        F2B_LOG_FILE = "/var/log/fail2ban.log"
+        # --- ИЗМЕНЕНО: Используем get_host_path ---
+        F2B_LOG_FILE = get_host_path("/var/log/fail2ban.log")
+        # -----------------------------------------
 
         if not await asyncio.to_thread(os.path.exists, F2B_LOG_FILE):
             # --- ИЗМЕНЕНО: Используем i18n ---

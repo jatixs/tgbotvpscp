@@ -1,4 +1,4 @@
-# /opt/tg-bot/modules/selftest.py
+# /opt-tg-bot/modules/selftest.py
 import asyncio
 import psutil
 import time
@@ -17,7 +17,7 @@ from core import config
 from core.auth import is_allowed, send_access_denied_message
 from core.messaging import delete_previous_message
 from core.shared_state import LAST_MESSAGE_IDS
-from core.utils import format_uptime, format_traffic, get_country_flag, get_server_timezone_label, escape_html
+from core.utils import format_uptime, format_traffic, get_country_flag, get_server_timezone_label, escape_html, get_host_path # <-- Добавлен get_host_path
 from core.config import INSTALL_MODE
 
 BUTTON_KEY = "btn_selftest"
@@ -58,8 +58,10 @@ async def selftest_handler(message: types.Message):
         time.sleep(0.2)
         cpu = psutil.cpu_percent(interval=None)
         mem = psutil.virtual_memory().percent
-        disk = psutil.disk_usage('/').percent
-        with open("/proc/uptime") as f:
+        # --- ИЗМЕНЕНО: Используем get_host_path ---
+        disk = psutil.disk_usage(get_host_path('/')).percent
+        with open(get_host_path("/proc/uptime")) as f:
+        # -----------------------------------------
             uptime_sec = float(f.readline().split()[0])
         counters = psutil.net_io_counters()
         rx = counters.bytes_recv
@@ -108,10 +110,14 @@ async def selftest_handler(message: types.Message):
     if INSTALL_MODE == "root":
         try:
             log_file = None
-            if await asyncio.to_thread(os.path.exists, "/var/log/secure"):
-                log_file = "/var/log/secure"
-            elif await asyncio.to_thread(os.path.exists, "/var/log/auth.log"):
-                log_file = "/var/log/auth.log"
+            # --- ИЗМЕНЕНО: Используем get_host_path ---
+            secure_path = get_host_path("/var/log/secure")
+            auth_path = get_host_path("/var/log/auth.log")
+            if await asyncio.to_thread(os.path.exists, secure_path):
+                log_file = secure_path
+            elif await asyncio.to_thread(os.path.exists, auth_path):
+                log_file = auth_path
+            # -----------------------------------------
 
             line = None
             source_text = ""
@@ -133,7 +139,9 @@ async def selftest_handler(message: types.Message):
                         break
             else:
                 source_text = _("selftest_ssh_source_journal", lang)
+                # --- ИЗМЕНЕНО: journalctl должен работать в docker-root из-за pid:host ---
                 cmd = "journalctl -u ssh --no-pager -g 'Accepted' | tail -n 1"
+                # ---------------------------------------------------------------------
                 process = await asyncio.create_subprocess_shell(
                     cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
                 )

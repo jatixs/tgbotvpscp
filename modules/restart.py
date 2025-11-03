@@ -1,4 +1,4 @@
-# /opt/tg-bot/modules/restart.py
+# /opt-tg-bot/modules/restart.py
 import asyncio
 import logging
 import os
@@ -13,7 +13,9 @@ from core import config
 
 from core.auth import is_allowed, send_access_denied_message
 from core.messaging import delete_previous_message
-from core.config import RESTART_FLAG_FILE
+# --- [ИСПРАВЛЕНИЕ] Импортируем DEPLOY_MODE ---
+from core.config import RESTART_FLAG_FILE, DEPLOY_MODE
+# ------------------------------------------
 
 # --- ИЗМЕНЕНО: Используем ключ ---
 BUTTON_KEY = "btn_restart"
@@ -51,17 +53,42 @@ async def restart_handler(message: types.Message):
     try:
         # Убедимся, что директория существует
         os.makedirs(os.path.dirname(RESTART_FLAG_FILE), exist_ok=True)
+        # Записываем флаг. Watchdog (внутренний или внешний)
+        # должен увидеть его и изменить сообщение.
         with open(RESTART_FLAG_FILE, "w") as f:
             f.write(f"{chat_id}:{sent_msg.message_id}")
 
-        restart_cmd = "sudo systemctl restart tg-bot.service"
+        # --- [ИСПРАВЛЕНИЕ] Выбираем команду в зависимости от DEPLOY_MODE ---
+        restart_cmd = ""
+        if DEPLOY_MODE == "docker":
+            # В режиме Docker мы должны использовать 'docker restart'
+            # Имя контейнера берем из .env
+            container_name = os.environ.get("TG_BOT_CONTAINER_NAME")
+            if not container_name:
+                raise Exception("TG_BOT_CONTAINER_NAME не установлен в .env")
+            
+            # Бот находится *внутри* контейнера, но у него есть
+            # доступ к docker CLI (из Dockerfile) и docker.sock (из compose)
+            restart_cmd = f"docker restart {container_name}"
+            logging.info(f"Выполнение Docker-рестарта: {restart_cmd}")
+            
+        else:
+            # В режиме Systemd (по умолчанию)
+            restart_cmd = "sudo systemctl restart tg-bot.service"
+            logging.info(f"Выполнение Systemd-рестарта: {restart_cmd}")
+        # --- [КОНЕЦ ИСПРАВЛЕНИЯ] ---
+
         process = await asyncio.create_subprocess_shell(restart_cmd)
         await process.wait()
-        logging.info("Restart command sent for tg-bot.service")
+        
+        # В режиме systemd лог ниже выполнится.
+        # В режиме docker контейнер будет убит до 'await'
+        logging.info(f"Команда перезапуска ({DEPLOY_MODE}) отправлена.")
 
     except Exception as e:
         logging.error(
             f"Ошибка в restart_handler при отправке команды перезапуска: {e}")
+        # Если команда не удалась, удаляем флаг
         if os.path.exists(RESTART_FLAG_FILE):
             try:
                 os.remove(RESTART_FLAG_FILE)
