@@ -42,11 +42,11 @@ def load_users():
         if ADMIN_USER_ID not in ALLOWED_USERS:
             logging.info(
                 f"Главный админ ID {ADMIN_USER_ID} не найден в users.json, добавляю.")
-            
+
             # --- [ИСПРАВЛЕНИЕ] Используем ключ "admins" вместо "Админы" ---
             ALLOWED_USERS[ADMIN_USER_ID] = "admins"
             # -------------------------------------------------------------
-            
+
             USER_NAMES[str(ADMIN_USER_ID)] = _(
                 "default_admin_name", config.DEFAULT_LANGUAGE)
             save_users()
@@ -59,11 +59,11 @@ def load_users():
             f"Критическая ошибка загрузки users.json: Неверный JSON - {e}")
         ALLOWED_USERS.clear()
         USER_NAMES.clear()
-        
+
         # --- [ИСПРАВЛЕНИЕ] Используем ключ "admins" вместо "Админы" ---
         ALLOWED_USERS[ADMIN_USER_ID] = "admins"
         # -------------------------------------------------------------
-        
+
         USER_NAMES[str(ADMIN_USER_ID)] = _(
             "default_admin_name", config.DEFAULT_LANGUAGE)
         save_users()
@@ -73,11 +73,11 @@ def load_users():
             exc_info=True)
         ALLOWED_USERS.clear()
         USER_NAMES.clear()
-        
+
         # --- [ИСПРАВЛЕНИЕ] Используем ключ "admins" вместо "Админы" ---
         ALLOWED_USERS[ADMIN_USER_ID] = "admins"
         # -------------------------------------------------------------
-        
+
         USER_NAMES[str(ADMIN_USER_ID)] = _(
             "default_admin_name", config.DEFAULT_LANGUAGE)
         save_users()
@@ -171,16 +171,16 @@ def is_allowed(user_id, command=None):
             return False
 
     # --- [ИСПРАВЛЕНИЕ] Добавлена проверка callback_data (которая может содержать ID) ---
-    if command and (command.startswith("delete_user_") or \
-                    command.startswith("request_self_delete_") or \
-                    command.startswith("confirm_self_delete_") or \
-                    command.startswith("select_user_change_group_") or \
+    if command and (command.startswith("delete_user_") or
+                    command.startswith("request_self_delete_") or
+                    command.startswith("confirm_self_delete_") or
+                    command.startswith("select_user_change_group_") or
                     command.startswith("set_group_")):
         if is_admin_group:
             logging.debug(f"Callback '{command}' разрешен админу {user_id}.")
             return True
         # (Проверка self-delete обрабатывается в самом хэндлере)
-        
+
     # --- [ИСПРАВЛЕНИЕ] Удалена небезопасная логика "разрешать админу всё"
     #                 и добавлена более строгая проверка.
     if command:
@@ -192,7 +192,7 @@ def is_allowed(user_id, command=None):
         logging.debug(
             f"Проверка 'is_allowed' без команды для {user_id}: Доступ разрешен (в списке).")
         return True
-        
+
     return False
     # --- [КОНЕЦ ИСПРАВЛЕНИЙ] ---
 

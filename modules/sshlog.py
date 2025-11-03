@@ -16,7 +16,8 @@ from core.auth import is_allowed, send_access_denied_message
 from core.messaging import delete_previous_message
 from core.shared_state import LAST_MESSAGE_IDS
 # Добавлен escape_html
-from core.utils import get_country_flag, get_server_timezone_label, escape_html, get_host_path # <-- Добавлен get_host_path
+# <-- Добавлен get_host_path
+from core.utils import get_country_flag, get_server_timezone_label, escape_html, get_host_path
 
 # --- ИЗМЕНЕНО: Используем ключ ---
 BUTTON_KEY = "btn_sshlog"

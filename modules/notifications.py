@@ -27,7 +27,7 @@ from core.utils import (
     get_country_flag,
     get_server_timezone_label,
     escape_html,
-    get_host_path) # <-- Добавлено
+    get_host_path)  # <-- Добавлено
 from core.keyboards import get_alerts_menu_keyboard
 from core.config import (
     RESOURCE_CHECK_INTERVAL, CPU_THRESHOLD, RAM_THRESHOLD, DISK_THRESHOLD,
@@ -577,4 +577,3 @@ async def reliable_tail_log_monitor(
             logging.info(
                 f"Монитор {alert_type}: Процесс tail не был запущен или уже был очищен.")
 # --- [КОНЕЦ ИСПРАВЛЕНИЯ] ---
-

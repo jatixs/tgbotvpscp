@@ -17,7 +17,8 @@ from core import config
 from core.auth import is_allowed, send_access_denied_message
 from core.messaging import delete_previous_message
 from core.shared_state import LAST_MESSAGE_IDS
-from core.utils import format_uptime, format_traffic, get_country_flag, get_server_timezone_label, escape_html, get_host_path # <-- Добавлен get_host_path
+# <-- Добавлен get_host_path
+from core.utils import format_uptime, format_traffic, get_country_flag, get_server_timezone_label, escape_html, get_host_path
 from core.config import INSTALL_MODE
 
 BUTTON_KEY = "btn_selftest"
@@ -61,7 +62,7 @@ async def selftest_handler(message: types.Message):
         # --- ИЗМЕНЕНО: Используем get_host_path ---
         disk = psutil.disk_usage(get_host_path('/')).percent
         with open(get_host_path("/proc/uptime")) as f:
-        # -----------------------------------------
+            # -----------------------------------------
             uptime_sec = float(f.readline().split()[0])
         counters = psutil.net_io_counters()
         rx = counters.bytes_recv

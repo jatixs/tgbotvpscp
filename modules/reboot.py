@@ -119,7 +119,7 @@ async def reboot_handler(callback: types.CallbackQuery):
         process = await asyncio.create_subprocess_shell(reboot_cmd)
         await process.wait()
         logging.info("Команда перезагрузки отправлена.")
-        
+
     except Exception as e:
         logging.error(f"Ошибка при отправке команды reboot: {e}")
         try:
