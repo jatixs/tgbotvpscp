@@ -1,5 +1,5 @@
 # /opt-tg-bot/docker-compose.yml
-version: '3.8'
+№version: '3.8' old version ignored (старая версия\игнорируется)
 
 # --- БАЗОВАЯ КОНФИГУРАЦИЯ БОТА (КАК ЯКОРЬ) ---
 # Мы вынесли это из 'services' и добавили 'x-'
