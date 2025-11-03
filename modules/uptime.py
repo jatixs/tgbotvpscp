@@ -1,4 +1,4 @@
-# /opt/tg-bot/modules/uptime.py
+# /opt-tg-bot/modules/uptime.py
 import logging
 import asyncio
 from aiogram import F, Dispatcher, types
@@ -12,7 +12,7 @@ from core import config
 from core.auth import is_allowed, send_access_denied_message
 from core.messaging import delete_previous_message
 from core.shared_state import LAST_MESSAGE_IDS
-from core.utils import format_uptime
+from core.utils import format_uptime, get_host_path # <-- Добавлен get_host_path
 
 # --- ИЗМЕНЕНО: Используем ключ ---
 BUTTON_KEY = "btn_uptime"
@@ -45,7 +45,10 @@ async def uptime_handler(message: types.Message):
     await delete_previous_message(user_id, command, chat_id, message.bot)
     try:
         def read_uptime_file():
-            with open("/proc/uptime") as f:
+            # --- ИЗМЕНЕНО: Используем get_host_path ---
+            path = get_host_path("/proc/uptime")
+            with open(path) as f:
+            # -----------------------------------------
                 return float(f.readline().split()[0])
 
         uptime_sec = await asyncio.to_thread(read_uptime_file)

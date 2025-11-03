@@ -42,7 +42,11 @@ def load_users():
         if ADMIN_USER_ID not in ALLOWED_USERS:
             logging.info(
                 f"Главный админ ID {ADMIN_USER_ID} не найден в users.json, добавляю.")
-            ALLOWED_USERS[ADMIN_USER_ID] = "Админы"
+            
+            # --- [ИСПРАВЛЕНИЕ] Используем ключ "admins" вместо "Админы" ---
+            ALLOWED_USERS[ADMIN_USER_ID] = "admins"
+            # -------------------------------------------------------------
+            
             USER_NAMES[str(ADMIN_USER_ID)] = _(
                 "default_admin_name", config.DEFAULT_LANGUAGE)
             save_users()
@@ -55,7 +59,11 @@ def load_users():
             f"Критическая ошибка загрузки users.json: Неверный JSON - {e}")
         ALLOWED_USERS.clear()
         USER_NAMES.clear()
-        ALLOWED_USERS[ADMIN_USER_ID] = "Админы"
+        
+        # --- [ИСПРАВЛЕНИЕ] Используем ключ "admins" вместо "Админы" ---
+        ALLOWED_USERS[ADMIN_USER_ID] = "admins"
+        # -------------------------------------------------------------
+        
         USER_NAMES[str(ADMIN_USER_ID)] = _(
             "default_admin_name", config.DEFAULT_LANGUAGE)
         save_users()
@@ -65,7 +73,11 @@ def load_users():
             exc_info=True)
         ALLOWED_USERS.clear()
         USER_NAMES.clear()
-        ALLOWED_USERS[ADMIN_USER_ID] = "Админы"
+        
+        # --- [ИСПРАВЛЕНИЕ] Используем ключ "admins" вместо "Админы" ---
+        ALLOWED_USERS[ADMIN_USER_ID] = "admins"
+        # -------------------------------------------------------------
+        
         USER_NAMES[str(ADMIN_USER_ID)] = _(
             "default_admin_name", config.DEFAULT_LANGUAGE)
         save_users()
@@ -128,9 +140,11 @@ def is_allowed(user_id, command=None):
             f"Команда '{command}' разрешена для всех пользователей. Доступ для {user_id} предоставлен.")
         return True
 
+    # --- [ИСПРАВЛЕНИЕ] Проверяем ключ "admins" вместо "Админы" ---
     is_admin_group = (
         user_id == ADMIN_USER_ID) or (
-        ALLOWED_USERS.get(user_id) == "Админы")
+        ALLOWED_USERS.get(user_id) == "admins")
+    # -------------------------------------------------------------
 
     if command in admin_only_commands:
         if is_admin_group:
@@ -156,14 +170,31 @@ def is_allowed(user_id, command=None):
                 f"Команда '{command}' требует прав админа даже в root-режиме. Доступ для пользователя {user_id} запрещен.")
             return False
 
-    if is_admin_group:
+    # --- [ИСПРАВЛЕНИЕ] Добавлена проверка callback_data (которая может содержать ID) ---
+    if command and (command.startswith("delete_user_") or \
+                    command.startswith("request_self_delete_") or \
+                    command.startswith("confirm_self_delete_") or \
+                    command.startswith("select_user_change_group_") or \
+                    command.startswith("set_group_")):
+        if is_admin_group:
+            logging.debug(f"Callback '{command}' разрешен админу {user_id}.")
+            return True
+        # (Проверка self-delete обрабатывается в самом хэндлере)
+        
+    # --- [ИСПРАВЛЕНИЕ] Удалена небезопасная логика "разрешать админу всё"
+    #                 и добавлена более строгая проверка.
+    if command:
         logging.warning(
-            f"Команда '{command}' не перечислена явно, но разрешаю админу {user_id} по умолчанию.")
-        return True
+            f"Команда '{command}' не найдена в списках доступа (user, admin, root). Доступ для {user_id} запрещен.")
     else:
-        logging.warning(
-            f"Команда '{command}' не перечислена явно. Доступ для не-админа {user_id} запрещен.")
-        return False
+        # Случай, когда is_allowed(user_id) вызывается без команды (просто
+        # проверка на наличие в списке)
+        logging.debug(
+            f"Проверка 'is_allowed' без команды для {user_id}: Доступ разрешен (в списке).")
+        return True
+        
+    return False
+    # --- [КОНЕЦ ИСПРАВЛЕНИЙ] ---
 
 
 async def refresh_user_names(bot: Bot):
