@@ -27,16 +27,16 @@ def get_host_path(path: str) -> str:
     if DEPLOY_MODE == "docker" and INSTALL_MODE == "root":
         if not path.startswith('/'):
             path = '/' + path
-        
+
         host_path = f"/host{path}"
-        
+
         if os.path.exists(host_path):
             return host_path
         elif os.path.exists(path):
             return path
         else:
             return host_path
-    
+
     return path
 
 
@@ -46,7 +46,8 @@ def load_alerts_config():
         if os.path.exists(ALERTS_CONFIG_FILE):
             with open(ALERTS_CONFIG_FILE, "r", encoding='utf-8') as f:
                 loaded_data = json.load(f)
-                loaded_data_int_keys = {int(k): v for k, v in loaded_data.items()}
+                loaded_data_int_keys = {
+                    int(k): v for k, v in loaded_data.items()}
                 shared_state.ALERTS_CONFIG.clear()
                 shared_state.ALERTS_CONFIG.update(loaded_data_int_keys)
             logging.info("Настройки уведомлений загружены.")
@@ -68,7 +69,9 @@ def save_alerts_config():
     """Сохраняет ALERTS_CONFIG из shared_state"""
     try:
         os.makedirs(os.path.dirname(ALERTS_CONFIG_FILE), exist_ok=True)
-        config_to_save = {str(k): v for k, v in shared_state.ALERTS_CONFIG.items()}
+        config_to_save = {
+            str(k): v for k,
+            v in shared_state.ALERTS_CONFIG.items()}
         with open(ALERTS_CONFIG_FILE, "w", encoding='utf-8') as f:
             json.dump(config_to_save, f, indent=4, ensure_ascii=False)
         logging.info("Настройки уведомлений сохранены.")

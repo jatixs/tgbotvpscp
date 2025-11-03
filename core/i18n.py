@@ -3,7 +3,7 @@ import logging
 import os
 from aiogram import F
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-from . import config as core_config 
+from . import config as core_config
 from . import shared_state
 
 STRINGS = {
@@ -513,7 +513,10 @@ def load_user_settings():
 def save_user_settings():
     """Сохраняет настройки пользователей (включая язык) в JSON."""
     try:
-        os.makedirs(os.path.dirname(core_config.USER_SETTINGS_FILE), exist_ok=True)
+        os.makedirs(
+            os.path.dirname(
+                core_config.USER_SETTINGS_FILE),
+            exist_ok=True)
         settings_to_save = {str(k): v for k,
                             v in shared_state.USER_SETTINGS.items()}
         with open(core_config.USER_SETTINGS_FILE, "w", encoding='utf-8') as f:
@@ -540,6 +543,7 @@ def get_user_lang(user_id: int | str | None) -> str:
                 f"get_user_lang вызван с неожиданным типом user_id: {type(user_id)}. Возвращаю язык по умолчанию.")
         return core_config.DEFAULT_LANGUAGE
 
+
 def set_user_lang(user_id: int | str | None, lang: str):
     """Устанавливает язык для пользователя и сохраняет."""
     if user_id is None:
@@ -553,13 +557,14 @@ def set_user_lang(user_id: int | str | None, lang: str):
             logging.error(
                 f"set_user_lang вызван с нечисловым user_id: {user_id}. Сохранение отменено.")
             return
-            
+
     if user_id not in shared_state.USER_SETTINGS:
         shared_state.USER_SETTINGS[user_id] = {}
     shared_state.USER_SETTINGS[user_id]["lang"] = lang
-    
+
     save_user_settings()
-    logging.info(f"Язык для пользователя {user_id} изменен на '{lang}' и сохранен.")
+    logging.info(
+        f"Язык для пользователя {user_id} изменен на '{lang}' и сохранен.")
 
 
 def get_text(key: str, user_id_or_lang: int | str | None, **kwargs) -> str:
@@ -594,6 +599,7 @@ def get_text(key: str, user_id_or_lang: int | str | None, **kwargs) -> str:
         logging.warning(
             f"Ошибка форматирования для ключа '{key}' языка '{lang}' с параметрами {kwargs}. Шаблон: '{string_template}'. Ошибка: {e}")
         return string_template
+
 
 _ = get_text
 

@@ -66,12 +66,12 @@ async def restart_handler(message: types.Message):
             container_name = os.environ.get("TG_BOT_CONTAINER_NAME")
             if not container_name:
                 raise Exception("TG_BOT_CONTAINER_NAME не установлен в .env")
-            
+
             # Бот находится *внутри* контейнера, но у него есть
             # доступ к docker CLI (из Dockerfile) и docker.sock (из compose)
             restart_cmd = f"docker restart {container_name}"
             logging.info(f"Выполнение Docker-рестарта: {restart_cmd}")
-            
+
         else:
             # В режиме Systemd (по умолчанию)
             restart_cmd = "sudo systemctl restart tg-bot.service"
@@ -80,7 +80,7 @@ async def restart_handler(message: types.Message):
 
         process = await asyncio.create_subprocess_shell(restart_cmd)
         await process.wait()
-        
+
         # В режиме systemd лог ниже выполнится.
         # В режиме docker контейнер будет убит до 'await'
         logging.info(f"Команда перезапуска ({DEPLOY_MODE}) отправлена.")
