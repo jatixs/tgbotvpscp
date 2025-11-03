@@ -242,6 +242,10 @@ STRINGS = {
         "unit_hour_short": "ч",
         "unit_minute_short": "м",
         "unit_second_short": "с",
+        # --- ДОБАВЛЕНО ДЛЯ SUPPORT-СООБЩЕНИЯ ---
+        "start_support_message": "Это open-source проект, автор проекта <a href=\"https://t.me/faridshykhaliev\">@faridshykhaliev</a>. При желании вы можете поддержать автора. Это мотивирует автора продолжать развивать проект.",
+        "start_support_button": "Поддержать разработчика",
+        # ------------------------------------------
     },
     'en': {
         "btn_back": "🔙 Back",
@@ -478,6 +482,10 @@ STRINGS = {
         "unit_hour_short": "h",
         "unit_minute_short": "m",
         "unit_second_short": "s",
+        # --- ДОБАВЛЕНО ДЛЯ SUPPORT-СООБЩЕНИЯ ---
+        "start_support_message": "This is an open-source project, the author is <a href=\"https://t.me/faridshykhaliev\">@faridshykhaliev</a>. If you wish, you can support the author. This motivates the author to continue developing the project.",
+        "start_support_button": "Support the developer",
+        # ------------------------------------------
     }
 }
 
