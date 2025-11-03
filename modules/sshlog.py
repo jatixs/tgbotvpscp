@@ -16,7 +16,7 @@ from core.auth import is_allowed, send_access_denied_message
 from core.messaging import delete_previous_message
 from core.shared_state import LAST_MESSAGE_IDS
 # Добавлен escape_html
-from core.utils import get_country_flag, get_server_timezone_label, escape_html
+from core.utils import get_country_flag, get_server_timezone_label, escape_html, get_host_path # <-- Добавлен get_host_path
 
 # --- ИЗМЕНЕНО: Используем ключ ---
 BUTTON_KEY = "btn_sshlog"
@@ -54,10 +54,14 @@ async def sshlog_handler(message: types.Message):
 
     try:
         log_file = None
-        if await asyncio.to_thread(os.path.exists, "/var/log/secure"):
-            log_file = "/var/log/secure"
-        elif await asyncio.to_thread(os.path.exists, "/var/log/auth.log"):
-            log_file = "/var/log/auth.log"
+        # --- ИЗМЕНЕНО: Используем get_host_path ---
+        secure_path = get_host_path("/var/log/secure")
+        auth_path = get_host_path("/var/log/auth.log")
+        if await asyncio.to_thread(os.path.exists, secure_path):
+            log_file = secure_path
+        elif await asyncio.to_thread(os.path.exists, auth_path):
+            log_file = auth_path
+        # -----------------------------------------
 
         lines = []
         source_text = ""
@@ -84,7 +88,9 @@ async def sshlog_handler(message: types.Message):
                 "selftest_ssh_source_journal",
                 lang)  # Используем ключ из selftest
             # --------------------------------
+            # --- ИЗМЕНЕНО: journalctl должен работать в docker-root из-за pid:host ---
             cmd = "journalctl -u ssh -n 100 --no-pager --since '1 month ago' -o short-precise"
+            # ---------------------------------------------------------------------
             process = await asyncio.create_subprocess_shell(
                 cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
             )

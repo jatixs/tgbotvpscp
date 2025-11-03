@@ -2,7 +2,10 @@
 import logging
 import asyncio
 from aiogram import Bot
+# --- ИЗМЕНЕНО: Добавлены импорты ---
 from aiogram.exceptions import TelegramBadRequest, TelegramRetryAfter
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+# ---------------------------------
 
 # --- ИЗМЕНЕНО: Импортируем i18n и config ---
 from .i18n import _, get_user_lang
@@ -31,6 +34,31 @@ async def delete_previous_message(
         except Exception as e:
             logging.error(
                 f"Ошибка при удалении предыдущего сообщения для {user_id}/{cmd}: {e}")
+
+
+# --- НОВАЯ ФУНКЦИЯ ---
+async def send_support_message(bot: Bot, user_id: int, lang: str):
+    """
+    Отправляет сообщение о поддержке проекта при первом старте.
+    """
+    try:
+        text = _("start_support_message", lang)
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(
+                text=_("start_support_button", lang),
+                url="https://yoomoney.ru/to/410011639584793"
+            )]
+        ])
+
+        await bot.send_message(
+            chat_id=user_id,
+            text=text,
+            reply_markup=keyboard,
+            parse_mode="HTML"  # Важно для ссылки в тексте
+        )
+    except Exception as e:
+        logging.error(f"Не удалось отправить сообщение о поддержке пользователю {user_id}: {e}")
+# --- КОНЕЦ НОВОЙ ФУНКЦИИ ---
 
 
 async def send_alert(bot: Bot, message: str, alert_type: str):
