@@ -237,25 +237,49 @@ check_docker_deps() {
     
     # 1. Удаление старых версий (docker.io, docker-compose v1)
     if command -v docker-compose &> /dev/null; then
-        msg_warning "Обнаружен docker-compose v1 (вероятно, ${DOCKER_COMPOSE_V1_PATH}). Удаление..."
+        msg_warning "Обнаружен docker-compose v1. Удаление..."
         sudo rm -f $(which docker-compose)
     fi
     
     msg_info "Удаление старых версий Docker из apt (если есть)..."
     # Не используем run_with_spinner, т.к. команда может упасть, если пакетов нет, и это нормально.
-    (sudo apt-get purge -y docker.io docker-compose docker-compose-plugin docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin &> /tmp/${SERVICE_NAME}_install.log)
+    (sudo apt-get purge -y docker.io docker-compose docker-compose-plugin docker-ce docker-ce-cli containerd.io docker-buildx-plugin &> /tmp/${SERVICE_NAME}_install.log)
     (sudo apt-get autoremove -y &> /tmp/${SERVICE_NAME}_install.log)
     (sudo rm -rf /var/lib/docker /etc/docker)
     (sudo rm -f /etc/apt/sources.list.d/docker.list)
     (sudo apt-get update -y &> /tmp/${SERVICE_NAME}_install.log)
+    
+    # [!!!] ФИКС ДЛЯ CGROUPS (из-за Marzban/Debian 12) [!!!]
+    msg_info "Применение фикса Cgroup (systemd) для /etc/docker/daemon.json..."
+    sudo mkdir -p /etc/docker
+    sudo bash -c 'echo -e "{\n  \"exec-opts\": [\"native.cgroupdriver=systemd\"]\n}" > /etc/docker/daemon.json'
+    # [!!!] КОНЕЦ ФИКСА [!!!]
 
     # 2. Установка/Обновление Docker Engine (get.docker.com)
     msg_info "Установка/Обновление Docker Engine (через get.docker.com)..."
-    run_with_spinner "Установка Docker Engine" sudo bash -c "curl -sSL https://get.docker.com | sh"
-    if [ $? -ne 0 ]; then msg_error "Не удалось установить Docker Engine."; exit 1; fi
-    sudo systemctl start docker
-    sudo systemctl enable docker
-    msg_success "Docker Engine (docker-ce) установлен/обновлен."
+    
+    # Загружаем скрипт, но не выполняем
+    curl -sSL https://get.docker.com -o /tmp/get-docker.sh
+    if [ $? -ne 0 ]; then msg_error "Не удалось скачать скрипт get.docker.com."; exit 1; fi
+    
+    # Выполняем скрипт с run_with_spinner
+    run_with_spinner "Установка Docker Engine" sudo sh /tmp/get-docker.sh
+    if [ $? -ne 0 ]; then msg_error "Не удалось установить Docker Engine (скрипт завершился с ошибкой)."; exit 1; fi
+    
+    # [!!!] КЛЮЧЕВОЙ ФИКС [!!!]
+    # Явно пытаемся запустить и проверить
+    sudo systemctl enable docker &> /tmp/${SERVICE_NAME}_install.log
+    run_with_spinner "Запуск службы Docker" sudo systemctl restart docker # Используем restart для применения daemon.json
+    
+    # Проверяем, активен ли он
+    if ! sudo systemctl is-active --quiet docker; then
+        msg_error "Служба Docker (docker.service) НЕ СМОГЛА запуститься после установки!"
+        msg_error "Пожалуйста, проверьте логи: journalctl -xeu docker.service"
+        msg_error "Это часто вызвано конфликтом cgroups (мы пытались это исправить, но, видимо, не помогло)."
+        exit 1;
+    fi
+    
+    msg_success "Docker Engine (docker-ce) установлен и активен."
     
     # 3. Установка/Обновление Docker Compose v2 (плагин)
     msg_info "Установка/Обновление Docker Compose (v2 плагин)..."
