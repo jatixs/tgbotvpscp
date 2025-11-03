@@ -5,11 +5,11 @@
 <h1 align="center">🤖 VPS Manager Telegram Bot</h1>
 
 <p align="center">
-  <b >v1.10.14beta</b> — a reliable Telegram bot for monitoring and managing your VPS or dedicated server, now with a <b>modular architecture</b>, support for <b>multiple languages</b>, and <b>Docker</b> deployment.
+  <b >v1.10.14</b> — a reliable Telegram bot for monitoring and managing your VPS or dedicated server, now with a <b>modular architecture</b>, support for <b>multiple languages</b>, and <b>Docker</b> deployment.
 </p>
 
 <p align="center">
-  <a href="https://github.com/jatixs/tgbotvpscp/releases/latest"><img src="https://img.shields.io/badge/version-v1.10.14beta-blue?style=flat-square" alt="Version 1.10.14beta"/></a>
+  <a href="https://github.com/jatixs/tgbotvpscp/releases/latest"><img src="https://img.shields.io/badge/version-v1.10.14-blue?style=flat-square" alt="Version 1.10.14"/></a>
   <a href="CHANGELOG.en.md"><img src="https://img.shields.io/badge/build-41-purple?style=flat-square" alt="Build 41"/></a>
   <a href="https://www.python.org/"><img src="https://img.shields.io/badge/python-3.10%2B-green?style=flat-square" alt="Python 3.10+"/></a>
   <a href="https://choosealicense.com/licenses/gpl-3.0/"><img src="https://img.shields.io/badge/license-GPL--3.0-lightgrey?style=flat-square" alt="License GPL-3.0"/></a>
