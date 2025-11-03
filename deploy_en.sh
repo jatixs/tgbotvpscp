@@ -232,76 +232,72 @@ setup_repo_and_dirs() {
     export OWNER_USER=${owner_user}
 }
 
-# --- [FIXED] NEW FUNCTION: Check Docker ---
+# --- [!!! FIXED] NEW FUNCTION: Install/Update Docker ---
 check_docker_deps() {
-    msg_info "Checking Docker dependencies..."
-    if ! command -v docker &> /dev/null; then
-        msg_warning "Docker not found. Attempting installation..."
-        run_with_spinner "Installing Docker (docker.io)" sudo apt-get install -y docker.io || { msg_error "Failed to install docker.io."; exit 1; }
-        sudo systemctl start docker
-        sudo systemctl enable docker
-    else
-        msg_success "Docker found."
+    msg_info "Checking and updating Docker and Docker Compose to latest versions..."
+    
+    # 1. Remove old versions (docker.io, docker-compose v1)
+    if command -v docker-compose &> /dev/null; then
+        msg_warning "Detected docker-compose v1. Removing..."
+        sudo rm -f $(which docker-compose)
     fi
     
-    # Check for v2 (docker compose) and v1 (docker-compose)
-    if command -v docker-compose &> /dev/null; then
-        msg_success "Docker Compose v1 (docker-compose) found."
-    elif docker compose version &> /dev/null; then
-        msg_success "Docker Compose v2 (docker compose) found."
-    else
-        msg_warning "Docker Compose not found. Attempting installation..."
-        
-        # Try 1: Install v2 plugin via apt
-        msg_info "Attempt 1: Installing 'docker-compose-plugin' via apt..."
-        sudo apt-get install -y docker-compose-plugin &> /tmp/${SERVICE_NAME}_install.log
-        
-        if docker compose version &> /dev/null; then
-            msg_success "Successfully installed 'docker-compose-plugin' (v2) via apt."
-        else
-            msg_warning "Failed to install v2 via apt. Attempt 2: Installing v1 ('docker-compose') via apt..."
-            # Try 2: Install v1 via apt
-            sudo apt-get install -y docker-compose &> /tmp/${SERVICE_NAME}_install.log
-            
-            if command -v docker-compose &> /dev/null; then
-                 msg_success "Successfully installed 'docker-compose' (v1) via apt."
-            else
-                msg_warning "Failed to install v1 via apt. Attempt 3: Downloading v2 binary..."
-                # Try 3: Download v2 binary (most reliable)
-                local DOCKER_COMPOSE_VERSION=$(curl -s https://api.github.com/repos/docker/compose/releases/latest | grep 'tag_name' | cut -d\" -f4)
-                if [ -z "$DOCKER_COMPOSE_VERSION" ] || [[ "$DOCKER_COMPOSE_VERSION" == *"API rate limit"* ]]; then
-                    msg_error "Could not determine latest Docker Compose version from GitHub (API rate limit?)."
-                    msg_error "Please install Docker Compose (v1 or v2) manually."
-                    exit 1;
-                fi
-                
-                local LATEST_COMPOSE_URL="https://github.com/docker/compose/releases/download/${DOCKER_COMPOSE_VERSION}/docker-compose-$(uname -s)-$(uname -m)"
-                local DOCKER_CLI_PLUGIN_DIR="/usr/libexec/docker/cli-plugins"
-                local DOCKER_COMPOSE_PATH="${DOCKER_CLI_PLUGIN_DIR}/docker-compose"
+    msg_info "Removing old Docker versions from apt (if any)..."
+    # Do not use run_with_spinner, as command can fail if packages are not present, which is fine.
+    (sudo apt-get purge -y docker.io docker-compose docker-compose-plugin docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin &> /tmp/${SERVICE_NAME}_install.log)
+    (sudo apt-get autoremove -y &> /tmp/${SERVICE_NAME}_install.log)
+    (sudo rm -rf /var/lib/docker /etc/docker)
+    (sudo rm -f /etc/apt/sources.list.d/docker.list)
+    (sudo apt-get update -y &> /tmp/${SERVICE_NAME}_install.log)
 
-                sudo mkdir -p ${DOCKER_CLI_PLUGIN_DIR}
-                
-                msg_info "Downloading Docker Compose ${DOCKER_COMPOSE_VERSION} to ${DOCKER_COMPOSE_PATH}..."
-                run_with_spinner "Downloading docker-compose" sudo curl -SLf "${LATEST_COMPOSE_URL}" -o "${DOCKER_COMPOSE_PATH}"
-                if [ $? -ne 0 ]; then
-                    msg_error "Failed to download Docker Compose from ${LATEST_COMPOSE_URL}."
-                    msg_error "Please install Docker Compose (v1 or v2) manually."
-                    exit 1;
-                fi
-                
-                sudo chmod +x "${DOCKER_COMPOSE_PATH}"
-                
-                # Check again
-                if docker compose version &> /dev/null; then
-                    msg_success "Successfully installed Docker Compose v2 (binary)."
-                else
-                    msg_error "Failed to install Docker Compose. Please install it manually."
-                    exit 1;
-                fi
-            fi
-        fi
+    # 2. Install/Update Docker Engine (get.docker.com)
+    msg_info "Installing/Updating Docker Engine (via get.docker.com)..."
+    run_with_spinner "Installing Docker Engine" sudo bash -c "curl -sSL https://get.docker.com | sh"
+    if [ $? -ne 0 ]; then msg_error "Failed to install Docker Engine."; exit 1; fi
+    sudo systemctl start docker
+    sudo systemctl enable docker
+    msg_success "Docker Engine (docker-ce) installed/updated."
+    
+    # 3. Install/Update Docker Compose v2 (plugin)
+    msg_info "Installing/Updating Docker Compose (v2 plugin)..."
+    
+    # Standard plugin directory
+    local DOCKER_CLI_PLUGIN_DIR="/usr/libexec/docker/cli-plugins"
+    if [ ! -d "$DOCKER_CLI_PLUGIN_DIR" ]; then
+        DOCKER_CLI_PLUGIN_DIR="/usr/local/lib/docker/cli-plugins" # Fallback path
+    fi
+    local DOCKER_COMPOSE_PATH="${DOCKER_CLI_PLUGIN_DIR}/docker-compose"
+    
+    sudo mkdir -p ${DOCKER_CLI_PLUGIN_DIR}
+    
+    # Determine latest version
+    local DOCKER_COMPOSE_VERSION=$(curl -s https://api.github.com/repos/docker/compose/releases/latest | grep 'tag_name' | cut -d\" -f4)
+    if [ -z "$DOCKER_COMPOSE_VERSION" ] || [[ "$DOCKER_COMPOSE_VERSION" == *"API rate limit"* ]]; then
+        msg_error "Could not determine latest Docker Compose version from GitHub (API rate limit?)."
+        msg_error "Please try again later or install the Docker Compose v2 plugin manually."
+        exit 1;
+    fi
+    
+    local LATEST_COMPOSE_URL="https://github.com/docker/compose/releases/download/${DOCKER_COMPOSE_VERSION}/docker-compose-$(uname -s)-$(uname -m)"
+    
+    msg_info "Downloading Docker Compose ${DOCKER_COMPOSE_VERSION} to ${DOCKER_COMPOSE_PATH}..."
+    run_with_spinner "Downloading docker-compose ${DOCKER_COMPOSE_VERSION}" sudo curl -SLf "${LATEST_COMPOSE_URL}" -o "${DOCKER_COMPOSE_PATH}"
+    if [ $? -ne 0 ]; then
+        msg_error "Failed to download Docker Compose from ${LATEST_COMPOSE_URL}."
+        exit 1;
+    fi
+    
+    sudo chmod +x "${DOCKER_COMPOSE_PATH}"
+    
+    # 4. Verification
+    if docker compose version &> /dev/null; then
+        msg_success "Docker Engine and Docker Compose v2 successfully installed/updated."
+    else
+        msg_error "Failed to verify 'docker compose version' after installation."
+        exit 1;
     fi
 }
+# --- [!!! END OF FIX] ---
 
 
 # --- Old installation functions (Systemd) ---
@@ -389,7 +385,7 @@ WORKDIR /opt/tg-bot
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
-RUN mkdir -p /opt/tg-bot/config /opt-tg-bot/logs/bot /opt-tg-bot/logs/watchdog && \
+RUN mkdir -p /opt/tg-bot/config /opt/tg-bot/logs/bot /opt/tg-bot/logs/watchdog && \
     chown -R tgbot:tgbot /opt/tg-bot
 USER tgbot
 CMD ["python", "bot.py"]
@@ -401,7 +397,7 @@ EOF
 create_docker_compose_yml() {
     msg_info "Creating docker-compose.yml..."
     sudo tee "${BOT_INSTALL_PATH}/docker-compose.yml" > /dev/null <<'EOF'
-# /opt-tg-bot/docker-compose.yml
+# /opt/tg-bot/docker-compose.yml
 version: '3.8'
 
 x-bot-base: &bot-base
@@ -636,11 +632,16 @@ update_bot() {
         if [ ! -f "${BOT_INSTALL_PATH}/Dockerfile" ]; then create_dockerfile; fi
         if [ ! -f "${BOT_INSTALL_PATH}/docker-compose.yml" ]; then create_docker_compose_yml; fi
 
-        msg_info "2. [Docker] Rebuilding image...";
+        # --- [!!!] FIX FOR 1.29.2 BUG [!!!] ---
+        msg_info "2. [Docker] Rebuilding image (Step 1/3)...";
         (cd ${BOT_INSTALL_PATH} && run_with_spinner "Building Docker image" $COMPOSE_CMD build) || { msg_error "Docker build failed."; return 1; }
-        msg_info "3. [Docker] Restarting containers (Profile: ${INSTALL_MODE_FROM_ENV})...";
-        # --- [FIXED] Added --remove-orphans ---
-        (cd ${BOT_INSTALL_PATH} && run_with_spinner "Restarting Docker Compose" $COMPOSE_CMD --profile "${INSTALL_MODE_FROM_ENV}" up -d --remove-orphans) || { msg_error "Docker Compose restart failed."; return 1; }
+        
+        msg_info "3. [Docker] Stopping and removing old containers (Step 2/3)...";
+        (cd ${BOT_INSTALL_PATH} && run_with_spinner "Stopping old containers" $COMPOSE_CMD down --remove-orphans) || { msg_error "Docker down failed."; return 1; }
+
+        msg_info "4. [Docker] Starting new containers (Step 3/3, Profile: ${INSTALL_MODE_FROM_ENV})...";
+        (cd ${BOT_INSTALL_PATH} && run_with_spinner "Starting Docker Compose" $COMPOSE_CMD --profile "${INSTALL_MODE_FROM_ENV}" up -d) || { msg_error "Docker Compose restart failed."; return 1; }
+        # --- [!!!] END OF FIX [!!!] ---
     
     else # Systemd
         msg_info "2. [Systemd] Updating Python dependencies...";
@@ -814,7 +815,7 @@ if [ "$CURRENT_DIR_PATH" == "$BOT_INSTALL_PATH" ]; then
     msg_error "ERROR: Do not run this script from the target directory!"
     msg_error "You are in '${CURRENT_DIR_PATH}', which will be deleted during installation."
     msg_warning "Change to another directory (e.g., 'cd ~' or 'cd /root')"
-    msg_warning "and run the script from there using the full path (e.g., sudo bash ${CURRENT_DIR_PATH}/deploy_en.sh)"
+    msg_warning "and run the script from there using the full path (e.g., sudo bash ${CURRENT_DIR_PATH}/deploy.sh)"
     exit 1
 fi
 # --- [END PROTECTION] ---

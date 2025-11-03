@@ -231,78 +231,72 @@ setup_repo_and_dirs() {
     export OWNER_USER=${owner_user}
 }
 
-# --- [ИСПРАВЛЕНО] НОВАЯ ФУНКЦИЯ: Проверка Docker ---
+# --- [!!! ИСПРАВЛЕНО] НОВАЯ ФУНКЦИЯ: Установка/Обновление Docker ---
 check_docker_deps() {
-    msg_info "Проверка зависимостей Docker..."
-    if ! command -v docker &> /dev/null; then
-        msg_warning "Docker не найден. Попытка установки..."
-        run_with_spinner "Установка Docker (docker.io)" sudo apt-get install -y docker.io || { msg_error "Не удалось установить docker.io."; exit 1; }
-        sudo systemctl start docker
-        sudo systemctl enable docker
-    else
-        msg_success "Docker найден."
+    msg_info "Проверка и обновление Docker и Docker Compose до последних версий..."
+    
+    # 1. Удаление старых версий (docker.io, docker-compose v1)
+    if command -v docker-compose &> /dev/null; then
+        msg_warning "Обнаружен docker-compose v1 (вероятно, ${DOCKER_COMPOSE_V1_PATH}). Удаление..."
+        sudo rm -f $(which docker-compose)
     fi
     
-    # Проверяем и v2 (docker compose) и v1 (docker-compose)
-    if command -v docker-compose &> /dev/null; then
-        msg_success "Docker Compose v1 (docker-compose) найден."
-    elif docker compose version &> /dev/null; then
-        msg_success "Docker Compose v2 (docker compose) найден."
-    else
-        msg_warning "Docker Compose не найден. Попытка установки..."
-        
-        # Попытка №1: Установить v2 плагин через apt (как было)
-        msg_info "Попытка 1: Установка 'docker-compose-plugin' через apt..."
-        sudo apt-get install -y docker-compose-plugin &> /tmp/${SERVICE_NAME}_install.log
-        
-        if docker compose version &> /dev/null; then
-            msg_success "Успешно установлен 'docker-compose-plugin' (v2) через apt."
-            # v2 не нуждается в симлинке /usr/bin/docker-compose
-        else
-            msg_warning "Не удалось установить v2 через apt. Попытка 2: Установка v1 ('docker-compose') через apt..."
-            # Попытка №2: Установить v1 через apt
-            sudo apt-get install -y docker-compose &> /tmp/${SERVICE_NAME}_install.log
-            
-            if command -v docker-compose &> /dev/null; then
-                 msg_success "Успешно установлен 'docker-compose' (v1) через apt."
-            else
-                msg_warning "Не удалось установить v1 через apt. Попытка 3: Загрузка бинарного файла v2..."
-                # Попытка №3: Скачать бинарный файл v2 (самый надежный способ)
-                local DOCKER_COMPOSE_VERSION=$(curl -s https://api.github.com/repos/docker/compose/releases/latest | grep 'tag_name' | cut -d\" -f4)
-                if [ -z "$DOCKER_COMPOSE_VERSION" ] || [[ "$DOCKER_COMPOSE_VERSION" == *"API rate limit"* ]]; then
-                    msg_error "Не удалось определить последнюю версию Docker Compose с GitHub (возможно, лимит API)."
-                    msg_error "Пожалуйста, установите Docker Compose (v1 или v2) вручную."
-                    exit 1;
-                fi
-                
-                local LATEST_COMPOSE_URL="https://github.com/docker/compose/releases/download/${DOCKER_COMPOSE_VERSION}/docker-compose-$(uname -s)-$(uname -m)"
-                # [ИСПРАВЛЕНИЕ] Используем /usr/local/bin (стандартный) или /usr/libexec/docker/cli-plugins
-                local DOCKER_CLI_PLUGIN_DIR="/usr/libexec/docker/cli-plugins"
-                local DOCKER_COMPOSE_PATH="${DOCKER_CLI_PLUGIN_DIR}/docker-compose"
+    msg_info "Удаление старых версий Docker из apt (если есть)..."
+    # Не используем run_with_spinner, т.к. команда может упасть, если пакетов нет, и это нормально.
+    (sudo apt-get purge -y docker.io docker-compose docker-compose-plugin docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin &> /tmp/${SERVICE_NAME}_install.log)
+    (sudo apt-get autoremove -y &> /tmp/${SERVICE_NAME}_install.log)
+    (sudo rm -rf /var/lib/docker /etc/docker)
+    (sudo rm -f /etc/apt/sources.list.d/docker.list)
+    (sudo apt-get update -y &> /tmp/${SERVICE_NAME}_install.log)
 
-                sudo mkdir -p ${DOCKER_CLI_PLUGIN_DIR}
-                
-                msg_info "Загрузка Docker Compose ${DOCKER_COMPOSE_VERSION} в ${DOCKER_COMPOSE_PATH}..."
-                run_with_spinner "Загрузка docker-compose" sudo curl -SLf "${LATEST_COMPOSE_URL}" -o "${DOCKER_COMPOSE_PATH}"
-                if [ $? -ne 0 ]; then
-                    msg_error "Не удалось скачать Docker Compose с ${LATEST_COMPOSE_URL}."
-                    msg_error "Пожалуйста, установите Docker Compose (v1 или v2) вручную."
-                    exit 1;
-                fi
-                
-                sudo chmod +x "${DOCKER_COMPOSE_PATH}"
-                
-                # Проверяем еще раз
-                if docker compose version &> /dev/null; then
-                    msg_success "Успешно установлен Docker Compose v2 (бинарный файл)."
-                else
-                    msg_error "Не удалось установить Docker Compose. Пожалуйста, установите его вручную."
-                    exit 1;
-                fi
-            fi
-        fi
+    # 2. Установка/Обновление Docker Engine (get.docker.com)
+    msg_info "Установка/Обновление Docker Engine (через get.docker.com)..."
+    run_with_spinner "Установка Docker Engine" sudo bash -c "curl -sSL https://get.docker.com | sh"
+    if [ $? -ne 0 ]; then msg_error "Не удалось установить Docker Engine."; exit 1; fi
+    sudo systemctl start docker
+    sudo systemctl enable docker
+    msg_success "Docker Engine (docker-ce) установлен/обновлен."
+    
+    # 3. Установка/Обновление Docker Compose v2 (плагин)
+    msg_info "Установка/Обновление Docker Compose (v2 плагин)..."
+    
+    # Стандартная директория для плагинов
+    local DOCKER_CLI_PLUGIN_DIR="/usr/libexec/docker/cli-plugins"
+    if [ ! -d "$DOCKER_CLI_PLUGIN_DIR" ]; then
+        DOCKER_CLI_PLUGIN_DIR="/usr/local/lib/docker/cli-plugins" # Запасной путь
+    fi
+    local DOCKER_COMPOSE_PATH="${DOCKER_CLI_PLUGIN_DIR}/docker-compose"
+    
+    sudo mkdir -p ${DOCKER_CLI_PLUGIN_DIR}
+    
+    # Определяем последнюю версию
+    local DOCKER_COMPOSE_VERSION=$(curl -s https://api.github.com/repos/docker/compose/releases/latest | grep 'tag_name' | cut -d\" -f4)
+    if [ -z "$DOCKER_COMPOSE_VERSION" ] || [[ "$DOCKER_COMPOSE_VERSION" == *"API rate limit"* ]]; then
+        msg_error "Не удалось определить последнюю версию Docker Compose с GitHub (возможно, лимит API)."
+        msg_error "Пожалуйста, попробуйте позже или установите плагин Docker Compose v2 вручную."
+        exit 1;
+    fi
+    
+    local LATEST_COMPOSE_URL="https://github.com/docker/compose/releases/download/${DOCKER_COMPOSE_VERSION}/docker-compose-$(uname -s)-$(uname -m)"
+    
+    msg_info "Загрузка Docker Compose ${DOCKER_COMPOSE_VERSION} в ${DOCKER_COMPOSE_PATH}..."
+    run_with_spinner "Загрузка docker-compose ${DOCKER_COMPOSE_VERSION}" sudo curl -SLf "${LATEST_COMPOSE_URL}" -o "${DOCKER_COMPOSE_PATH}"
+    if [ $? -ne 0 ]; then
+        msg_error "Не удалось скачать Docker Compose с ${LATEST_COMPOSE_URL}."
+        exit 1;
+    fi
+    
+    sudo chmod +x "${DOCKER_COMPOSE_PATH}"
+    
+    # 4. Проверка
+    if docker compose version &> /dev/null; then
+        msg_success "Docker Engine и Docker Compose v2 успешно установлены/обновлены."
+    else
+        msg_error "Не удалось верифицировать 'docker compose version' после установки."
+        exit 1;
     fi
 }
+# --- [!!! КОНЕЦ ИЗМЕНЕНИЙ] ---
 
 
 # --- Старые функции установки (Systemd) ---
@@ -412,7 +406,7 @@ COPY . .
 
 # 8. Создание и выдача прав на директории config и logs
 # (Они будут переопределены volumes, но это гарантирует правильные права)
-RUN mkdir -p /opt/tg-bot/config /opt-tg-bot/logs/bot /opt-tg-bot/logs/watchdog && \
+RUN mkdir -p /opt/tg-bot/config /opt/tg-bot/logs/bot /opt/tg-bot/logs/watchdog && \
     chown -R tgbot:tgbot /opt/tg-bot
 
 # 9. Установка пользователя 'tgbot' по умолчанию
@@ -433,7 +427,6 @@ create_docker_compose_yml() {
 version: '3.8'
 
 # --- БАЗОВАЯ КОНФИГУРАЦИЯ БОТА (КАК ЯКОРЬ) ---
-# Мы вынесли это из 'services' и добавили 'x-'
 x-bot-base: &bot-base
   build: .
   image: tg-vps-bot:latest
@@ -681,11 +674,16 @@ update_bot() {
         if [ ! -f "${BOT_INSTALL_PATH}/Dockerfile" ]; then create_dockerfile; fi
         if [ ! -f "${BOT_INSTALL_PATH}/docker-compose.yml" ]; then create_docker_compose_yml; fi
     
-        msg_info "2. [Docker] Пересборка образа...";
+        # --- [!!!] ФИКС ОШИБКИ 1.29.2 [!!!] ---
+        msg_info "2. [Docker] Пересборка образа (Шаг 1/3)...";
         (cd ${BOT_INSTALL_PATH} && run_with_spinner "Сборка Docker образа" $COMPOSE_CMD build) || { msg_error "Сборка Docker не удалась."; return 1; }
-        msg_info "3. [Docker] Перезапуск контейнеров (Профиль: ${INSTALL_MODE_FROM_ENV})...";
-        # --- [ИСПРАВЛЕНИЕ] Добавлен флаг --remove-orphans ---
-        (cd ${BOT_INSTALL_PATH} && run_with_spinner "Перезапуск Docker Compose" $COMPOSE_CMD --profile "${INSTALL_MODE_FROM_ENV}" up -d --remove-orphans) || { msg_error "Перезапуск Docker Compose не удался."; return 1; }
+        
+        msg_info "3. [Docker] Остановка и удаление старых контейнеров (Шаг 2/3)...";
+        (cd ${BOT_INSTALL_PATH} && run_with_spinner "Остановка старых контейнеров" $COMPOSE_CMD down --remove-orphans) || { msg_error "Docker down не удался."; return 1; }
+
+        msg_info "4. [Docker] Запуск новых контейнеров (Шаг 3/3, Профиль: ${INSTALL_MODE_FROM_ENV})...";
+        (cd ${BOT_INSTALL_PATH} && run_with_spinner "Запуск Docker Compose" $COMPOSE_CMD --profile "${INSTALL_MODE_FROM_ENV}" up -d) || { msg_error "Запуск Docker Compose не удался."; return 1; }
+        # --- [!!!] КОНЕЦ ФИКСА [!!!] ---
     
     else # Systemd
         msg_info "2. [Systemd] Обновление зависимостей Python...";
