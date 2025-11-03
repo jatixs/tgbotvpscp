@@ -12,7 +12,7 @@
 </p>
 
 ---
-## [1.10.14beta] - 2025-11-03
+## [1.10.14] - 2025-11-03
 
 ### 🚀 Added:
 
@@ -130,6 +130,7 @@
 3.  **Add translations:** In `core/i18n.py`, add `"btn_my_command": "My Command"` to `'en'` and `"btn_my_command": "Моя Команда"` to `'ru'`, as well as `"my_module_response": "Result: {data}"`, etc. Remember to run `sort_strings()` in `i18n.py` or sort manually.
 4.  **Register module:** In `bot.py`, add `from modules import my_module` and `register_module(my_module)`.
 5.  **Restart bot:** `sudo systemctl restart tg-bot`.
+</details>
 
 ---
 
