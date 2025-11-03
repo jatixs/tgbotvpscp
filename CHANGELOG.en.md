@@ -1,13 +1,42 @@
 <p align="center">
   English Version | <a href="CHANGELOG.md">Русская Версия</a>
 </p>
+
 <h1 align="center">📝 Telegram VPS Management Bot — Changelog</h1>
+
 <p align="center">
-  <img src="https://img.shields.io/badge/version-v1.10.13-blue?style=flat-square" alt="Version 1.10.13"/>
-  <img src="https://img.shields.io/badge/build-40-purple?style=flat-square" alt="Build 40"/>
-  <img src="https://img.shields.io/badge/date-October%202025-green?style=flat-square" alt="Date October 2025"/>
-  <img src="https://img.shields.io/badge/status-stable-success?style=flat-square" alt="Status Stable"/>
+  <img src="https://img.shields.io/badge/version-v1.10.14beta-blue?style=flat-square" alt="Version 1.10.14beta"/>
+  <img src="https://img.shields.io/badge/build-41-purple?style=flat-square" alt="Build 41"/>
+  <img src="https://img.shields.io/badge/date-November%202025-green?style=flat-square" alt="Date November 2025"/>
+  <img src="https://img.shields.io/badge/status-beta-yellow?style=flat-square" alt="Status Beta"/>
 </p>
+
+---
+## [1.10.14beta] - 2025-11-03
+
+### 🚀 Added:
+
+* **Full Docker Support:** Added the ability to install and run the bot in Docker containers (`root` and `secure` modes).
+* **Docker Deployment Scripts:** `deploy.sh` and `deploy_en.sh` have been completely refactored to support selection between `Systemd (Classic)` and `Docker (Isolated)` installations.
+* **Docker Dependency:** The `docker` Python library has been added to `requirements.txt` for the watchdog to interact with the Docker API.
+* **Docker Configuration:** New environment variables (`DEPLOY_MODE`, `TG_BOT_NAME`, `TG_BOT_CONTAINER_NAME`) added to `.env.example` for Docker deployment.
+* **`get_host_path` Utility:** Added a function to `core/utils.py` to correctly resolve paths to host system files (e.g., `/proc/`, `/var/log/`) when running in `docker-root` mode.
+
+### ✨ Improved:
+
+* **Watchdog (`watchdog.py`):** Completely rewritten to support `DEPLOY_MODE`. It can now monitor the status of both `systemd` services and Docker containers using the Docker SDK.
+* **Module Docker Compatibility:** Modules `selftest`, `uptime`, `fail2ban`, `logs`, `notifications`, and `sshlog` updated to use `get_host_path()` for host file access, ensuring functionality in `docker-root` mode.
+* **Server Management from Docker:**
+    * The `reboot.py` module now correctly executes a host reboot (`chroot /host /sbin/reboot`) from `docker-root` mode.
+    * The `restart.py` module now executes `docker restart <container_name>` if the bot is running in Docker.
+* **Docker Install Reliability:** Applied a `cgroups` fix (creating `daemon.json`) in `deploy.sh` for stable Docker startup on modern OSes (e.g., Debian 12) and improved `docker-compose` installation logic.
+* **Deployment Scripts (`deploy.sh`, `deploy_en.sh`):** Functions `update_bot`, `uninstall_bot`, and `check_integrity` now correctly detect and manage both Systemd and Docker installations.
+
+### 🔧 Fixed:
+
+* **Authentication (`core/auth.py`):** Fixed a critical bug in `load_users` and `is_allowed` where admin rights were checked using the localized string ("Админы") from the `main` branch instead of the "admins" key.
+* **Permissions (`core/auth.py`):** Clarified the logic for `root_only_commands` to always require administrator privileges (`is_admin_group`) in addition to `INSTALL_MODE="root"`.
+* **Security (`modules/logs.py`):** Fixed an XSS (HTML-injection) vulnerability in the "Recent Events" module by adding `escape_html` to the `journalctl` output (escaping was missing in `main`).
 
 ---
 
