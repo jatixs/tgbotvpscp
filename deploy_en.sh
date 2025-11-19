@@ -21,11 +21,11 @@ GITHUB_API_URL="https://api.github.com/repos/${GITHUB_REPO}/releases/latest"
 
 C_RESET='\033[0m'; C_RED='\033[0;31m'; C_GREEN='\033[0;32m'; C_YELLOW='\033[0;33m'; C_BLUE='\033[0;34m'; C_CYAN='\033[0;36m'; C_BOLD='\033[1m'
 msg_info() { echo -e "${C_CYAN}🔵 $1${C_RESET}"; }; msg_success() { echo -e "${C_GREEN}✅ $1${C_RESET}"; }; msg_warning() { echo -e "${C_YELLOW}⚠️  $1${C_RESET}"; }; msg_error() { echo -e "${C_RED}❌ $1${C_RESET}"; }; msg_question() { read -p "$(echo -e "${C_YELLOW}❓ $1${C_RESET}")" $2; }
-spinner() { local pid=$1; local msg=$2; local spin='|/-\'; local i=0; while kill -0 $pid 2>/dev/null; do i=$(( (i+1) %4 )); printf "\r${C_BLUE}⏳ ${spin:$i:1} ${msg}...${C_RESET}"; sleep .1; done; printf "\r"; }
+spinner() { local pid=$1; local msg=$2; local spin='|/-\'; local i=0; while kill -0 $pid 2>/dev/null; do i=$(( (i+1) % 4 )); printf "\r${C_BLUE}⏳ ${spin:$i:1} ${msg}...${C_RESET}"; sleep .1; done; printf "\r"; }
 run_with_spinner() { 
     local msg=$1
     shift
-    # [FIX] Removed cd / to allow context-dependent commands like git
+    # [FIX] Removed cd / for git commands
     ( "$@" >> /tmp/${SERVICE_NAME}_install.log 2>&1 ) & 
     local pid=$!
     spinner "$pid" "$msg"
@@ -121,6 +121,7 @@ common_install_steps() {
 
 setup_repo_and_dirs() {
     local owner_user=$1; if [ -z "$owner_user" ]; then owner_user="root"; fi
+    # [FIX] Go to root safely
     cd /
     sudo mkdir -p ${BOT_INSTALL_PATH}
     msg_info "Cloning repo (branch ${GIT_BRANCH})..."
@@ -290,9 +291,9 @@ install_systemd_logic() {
     fi
     ask_env_details
     write_env_file "systemd" "$mode" ""
-    create_and_start_service "${SERVICE_NAME}" "${BOT_INSTALL_PATH}/bot.py" "$mode" "Telegram Бот"
-    create_and_start_service "${WATCHDOG_SERVICE_NAME}" "${BOT_INSTALL_PATH}/watchdog.py" "root" "Наблюдатель"
-    local ip=$(curl -s ipinfo.io/ip); echo ""; msg_success "Установка завершена! Агент доступен на IP: ${ip}:${WEB_PORT}";
+    create_and_start_service "${SERVICE_NAME}" "${BOT_INSTALL_PATH}/bot.py" "$mode" "Telegram Bot"
+    create_and_start_service "${WATCHDOG_SERVICE_NAME}" "${BOT_INSTALL_PATH}/watchdog.py" "root" "Watchdog"
+    msg_success "Systemd Install Complete!"
 }
 
 install_docker_logic() {
@@ -316,7 +317,7 @@ install_node_logic() {
     common_install_steps
     
     # [FIX] Install iperf3 for node
-    run_with_spinner "Installing iperf3" sudo apt-get install -y iperf3
+    run_with_spinner "Installing iperf3" sudo DEBIAN_FRONTEND=noninteractive apt-get install -y iperf3
     
     setup_repo_and_dirs "root"
     
