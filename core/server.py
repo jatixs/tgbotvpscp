@@ -4,15 +4,17 @@ from aiohttp import web
 from .nodes_db import get_node_by_token, update_node_heartbeat
 from .config import WEB_SERVER_HOST, WEB_SERVER_PORT, NODE_OFFLINE_TIMEOUT
 from .shared_state import NODES
+from .i18n import STRINGS
+from .config import DEFAULT_LANGUAGE
 
-# Исправлено экранирование CSS (двойные фигурные скобки)
+# HTML-шаблон с экранированием CSS скобок и плейсхолдерами для локализации
 HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>VPS Bot Agent</title>
+    <title>{web_title}</title>
     <style>
         body {{ font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #1e1e1e; color: #e0e0e0; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }}
         .container {{ text-align: center; background-color: #2d2d2d; padding: 40px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.5); width: 80%; max-width: 600px; }}
@@ -29,23 +31,23 @@ HTML_TEMPLATE = """
 </head>
 <body>
     <div class="container">
-        <h1><span class="status-indicator"></span> Agent Running</h1>
-        <p>VPS Management Bot Agent is active and listening.</p>
+        <h1><span class="status-indicator"></span> {web_agent_running}</h1>
+        <p>{web_agent_active}</p>
         
         <div class="stats">
             <div class="stat-box">
                 <span class="stat-number">{nodes_count}</span>
-                <span class="stat-label">Total Nodes</span>
+                <span class="stat-label">{web_stats_total}</span>
             </div>
             <div class="stat-box">
                 <span class="stat-number">{active_nodes}</span>
-                <span class="stat-label">Active Nodes</span>
+                <span class="stat-label">{web_stats_active}</span>
             </div>
         </div>
 
         <div class="footer">
-            <p>Endpoint: <code>/api/heartbeat</code> (POST)</p>
-            <p>Powered by <a href="https://github.com/jatixs/tgbotvpscp" target="_blank">VPS Manager Bot</a></p>
+            <p>{web_footer_endpoint}: <code>/api/heartbeat</code> (POST)</p>
+            <p>{web_footer_powered} <a href="https://github.com/jatixs/tgbotvpscp" target="_blank">VPS Manager Bot</a></p>
         </div>
     </div>
 </body>
@@ -53,17 +55,42 @@ HTML_TEMPLATE = """
 """
 
 async def handle_index(request):
-    """Отдает HTML страницу со статусом."""
+    """Отдает HTML страницу со статусом (локализованную)."""
+    
+    # 1. Определение языка из заголовка Accept-Language
+    accept_header = request.headers.get('Accept-Language', '')
+    lang = DEFAULT_LANGUAGE
+    if 'ru' in accept_header.lower():
+        lang = 'ru'
+    elif 'en' in accept_header.lower():
+        lang = 'en'
+    
+    # 2. Получение строк для выбранного языка
+    # Если языка нет в STRINGS, используем дефолтный
+    s = STRINGS.get(lang, STRINGS.get('en', {})) 
+    
+    # 3. Расчет статистики
     now = time.time()
     active_count = 0
     for node in NODES.values():
         if now - node.get("last_seen", 0) < NODE_OFFLINE_TIMEOUT:
             active_count += 1
 
-    html = HTML_TEMPLATE.format(
-        nodes_count=len(NODES),
-        active_nodes=active_count
-    )
+    # 4. Подготовка данных для шаблона (объединяем строки перевода и статистику)
+    data = s.copy() # Копируем словарь переводов, чтобы не менять оригинал
+    data.update({
+        'nodes_count': len(NODES),
+        'active_nodes': active_count
+    })
+    
+    # 5. Рендеринг
+    try:
+        html = HTML_TEMPLATE.format(**data)
+    except KeyError as e:
+        # Фолбек на случай, если в переводах не хватает ключей
+        logging.error(f"Template rendering error (missing key): {e}")
+        html = f"<h1>Agent Running</h1><p>Nodes: {len(NODES)}</p>"
+
     return web.Response(text=html, content_type='text/html')
 
 async def handle_heartbeat(request):
