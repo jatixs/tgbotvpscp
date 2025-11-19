@@ -75,7 +75,7 @@ check_integrity() {
     DEPLOY_MODE_FROM_ENV=$(grep '^DEPLOY_MODE=' "${ENV_FILE}" | cut -d'=' -f2 | tr -d '"' || echo "systemd")
     if [ "$DEPLOY_MODE_FROM_ENV" == "docker" ]; then
         INSTALL_TYPE="AGENT (Docker)"
-        if docker ps | grep -q "tg-bot"; then STATUS_MESSAGE="${C_GREEN}Docker OK${C_RESET}"; else STATUS_MESSAGE="${C_RED}Docker Stop${C_RESET}"; fi
+        if command -v docker &> /dev/null && docker ps | grep -q "tg-bot"; then STATUS_MESSAGE="${C_GREEN}Docker OK${C_RESET}"; else STATUS_MESSAGE="${C_RED}Docker Stop${C_RESET}"; fi
     else
         INSTALL_TYPE="AGENT (Systemd)"
         if systemctl is-active --quiet ${SERVICE_NAME}.service; then STATUS_MESSAGE="${C_GREEN}Systemd OK${C_RESET}"; else STATUS_MESSAGE="${C_RED}Systemd Stop${C_RESET}"; fi
@@ -162,7 +162,11 @@ EOF
 }
 
 check_docker_deps() {
-    if ! command -v docker &> /dev/null; then curl -sSL https://get.docker.com | sudo sh; fi
+    if ! command -v docker &> /dev/null; then 
+        curl -sSL https://get.docker.com -o /tmp/get-docker.sh
+        run_with_spinner "Installing Docker" sudo sh /tmp/get-docker.sh
+    fi
+    if command -v docker-compose &> /dev/null; then sudo rm -f $(which docker-compose); fi
 }
 
 create_dockerfile() {
@@ -180,7 +184,6 @@ USER tgbot
 CMD ["python", "bot.py"]
 EOF
 }
-
 create_docker_compose_yml() {
     sudo tee "${BOT_INSTALL_PATH}/docker-compose.yml" > /dev/null <<EOF
 version: '3.8'
@@ -368,7 +371,7 @@ update_bot() {
         return
     fi
 
-    if [ ! -d "${BOT_INSTALL_PATH}/.git" ]; then msg_error "Git not found."; return 1; fi
+    if [ ! -d "${BOT_INSTALL_PATH}/.git" ]; then msg_error "Git not found. Reinstall."; return 1; fi
     local exec_user=""; if [ -f "${ENV_FILE}" ] && grep -q "INSTALL_MODE=secure" "${ENV_FILE}"; then exec_user="sudo -u ${SERVICE_USER}"; fi
     
     cd "${BOT_INSTALL_PATH}"
@@ -378,7 +381,20 @@ update_bot() {
     cleanup_agent_files
 
     if [ -f "docker-compose.yml" ]; then
-        sudo docker compose up -d --build
+        local dc_cmd=""
+        if sudo docker compose version &>/dev/null; then
+            dc_cmd="docker compose"
+        elif command -v docker-compose &>/dev/null; then
+            dc_cmd="docker-compose"
+        else
+            msg_error "Docker Compose not found. Please reinstall (option 3-6)."
+            return 1
+        fi
+
+        if ! run_with_spinner "Docker Up (Rebuild)" sudo $dc_cmd up -d --build; then
+            msg_error "Error updating containers."
+            return 1
+        fi
     else
         run_with_spinner "Pip install" $exec_user "${VENV_PATH}/bin/pip" install -r "${BOT_INSTALL_PATH}/requirements.txt" --upgrade
         if systemctl list-unit-files | grep -q "^${SERVICE_NAME}.service"; then sudo systemctl restart ${SERVICE_NAME}; fi

@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# --- Запоминаем исходный аргумент ---
+# --- Запоминаем исходный аргумент (ветка) ---
 orig_arg1="$1"
 
 # --- Глобальные настройки для подавления интерактивности ---
@@ -420,7 +420,22 @@ update_bot() {
     cleanup_agent_files
 
     if [ -f "docker-compose.yml" ]; then
-        sudo docker compose up -d --build
+        # Определяем правильную команду
+        local dc_cmd=""
+        if sudo docker compose version &>/dev/null; then
+            dc_cmd="docker compose"
+        elif command -v docker-compose &>/dev/null; then
+            dc_cmd="docker-compose"
+        else
+            msg_error "Docker Compose не найден. Пожалуйста, переустановите бота (режим 3-6)."
+            return 1
+        fi
+
+        # Запускаем с отловом ошибок
+        if ! run_with_spinner "Docker Up (Rebuild)" sudo $dc_cmd up -d --build; then
+            msg_error "Ошибка при сборке/запуске контейнеров."
+            return 1
+        fi
     else
         run_with_spinner "Pip install" $exec_user "${VENV_PATH}/bin/pip" install -r "${BOT_INSTALL_PATH}/requirements.txt" --upgrade
         if systemctl list-unit-files | grep -q "^${SERVICE_NAME}.service"; then sudo systemctl restart ${SERVICE_NAME}; fi
