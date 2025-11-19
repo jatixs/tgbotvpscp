@@ -247,7 +247,7 @@ STRINGS = {
         "start_support_button": " ❤️ Поддержать разработчика",
         
         # --- НОВЫЕ СТРОКИ ДЛЯ NODES ---
-        "nodes_menu_header": "🖥 <b>Список ваших серверов (Нод):</b>\n\nВыберите сервер для просмотра деталей или управления:",
+        "nodes_menu_header": "🖥 <b>Список ваших серверов (Нод):</b>\n\nВыберите сервер для просмотра деталей или управления, либо используйте кнопки ниже:",
         "node_status_active": "Активен 🟢",
         "node_status_offline": "Не в сети 🔴",
         "node_status_restarting": "Перезагружается 🔵",
@@ -256,9 +256,11 @@ STRINGS = {
         "node_restarting_alert": "🔵 Сервер '{name}' перезагружается. Пожалуйста, подождите 1-2 минуты.",
         "node_management_menu": "🟢 <b>Управление сервером: {name}</b>\nIP: {ip}\nUptime: {uptime}\n\nВыберите действие:",
         "node_cmd_sent": "✅ Команда '{cmd}' отправлена на сервер '{name}'. Ожидайте выполнения.",
-        "node_btn_add": "➕ Добавить Ноду (Токен)",
+        "node_btn_add": "➕ Добавить Ноду",
+        "node_btn_delete": "➖ Удалить Ноду",
         "node_add_success_token": "✅ <b>Нода создана!</b>\n\nИмя: <b>{name}</b>\nТокен: <code>{token}</code>\n\nСохраните этот токен и укажите его в .env на сервере-ноде (AGENT_TOKEN).",
-        "node_btn_delete": "🗑 Удалить"
+        "node_delete_select": "🗑 <b>Удаление ноды</b>\n\nВыберите сервер, который хотите удалить:",
+        "node_deleted": "✅ Нода '{name}' успешно удалена."
         # -----------------------------
     },
     'en': {
@@ -501,7 +503,7 @@ STRINGS = {
         "start_support_button": " ❤️ Support the developer",
 
         # --- NEW STRINGS FOR NODES ---
-        "nodes_menu_header": "🖥 <b>Your Server List (Nodes):</b>\n\nSelect a server to view details or manage:",
+        "nodes_menu_header": "🖥 <b>Your Server List (Nodes):</b>\n\nSelect a server to view details or manage, or use the buttons below:",
         "node_status_active": "Active 🟢",
         "node_status_offline": "Offline 🔴",
         "node_status_restarting": "Restarting 🔵",
@@ -510,12 +512,15 @@ STRINGS = {
         "node_restarting_alert": "🔵 Server '{name}' is restarting. Please wait 1-2 minutes.",
         "node_management_menu": "🟢 <b>Managing Server: {name}</b>\nIP: {ip}\nUptime: {uptime}\n\nSelect an action:",
         "node_cmd_sent": "✅ Command '{cmd}' sent to server '{name}'. Pending execution.",
-        "node_btn_add": "➕ Add Node (Generate Token)",
+        "node_btn_add": "➕ Add Node",
+        "node_btn_delete": "➖ Delete Node",
         "node_add_success_token": "✅ <b>Node Created!</b>\n\nName: <b>{name}</b>\nToken: <code>{token}</code>\n\nSave this token and put it in .env on the node server (AGENT_TOKEN).",
-        "node_btn_delete": "🗑 Delete"
+        "node_delete_select": "🗑 <b>Delete Node</b>\n\nSelect a server you want to delete:",
+        "node_deleted": "✅ Node '{name}' successfully deleted."
         # -----------------------------
     }
 }
+
 
 def load_user_settings():
     try:
@@ -535,6 +540,7 @@ def load_user_settings():
         logging.error(f"Ошибка загрузки user_settings.json: {e}")
         shared_state.USER_SETTINGS.clear()
 
+
 def save_user_settings():
     try:
         os.makedirs(
@@ -548,6 +554,7 @@ def save_user_settings():
         logging.debug("Настройки пользователей (языки) сохранены.")
     except Exception as e:
         logging.error(f"Ошибка сохранения user_settings.json: {e}")
+
 
 def get_user_lang(user_id: int | str | None) -> str:
     if isinstance(user_id, int):
@@ -564,6 +571,7 @@ def get_user_lang(user_id: int | str | None) -> str:
             logging.warning(
                 f"get_user_lang вызван с неожиданным типом user_id: {type(user_id)}. Возвращаю язык по умолчанию.")
         return core_config.DEFAULT_LANGUAGE
+
 
 def set_user_lang(user_id: int | str | None, lang: str):
     if user_id is None:
@@ -585,6 +593,7 @@ def set_user_lang(user_id: int | str | None, lang: str):
     save_user_settings()
     logging.info(
         f"Язык для пользователя {user_id} изменен на '{lang}' и сохранен.")
+
 
 def get_text(key: str, user_id_or_lang: int | str | None, **kwargs) -> str:
     lang = core_config.DEFAULT_LANGUAGE
@@ -614,7 +623,9 @@ def get_text(key: str, user_id_or_lang: int | str | None, **kwargs) -> str:
             f"Ошибка форматирования для ключа '{key}' языка '{lang}' с параметрами {kwargs}. Шаблон: '{string_template}'. Ошибка: {e}")
         return string_template
 
+
 _ = get_text
+
 
 def get_all_translations(key: str) -> list[str]:
     translations = []
@@ -627,8 +638,10 @@ def get_all_translations(key: str) -> list[str]:
         return [f"[{key}]"]
     return unique_translations
 
+
 def I18nFilter(key: str):
     return F.text.in_(get_all_translations(key))
+
 
 def get_language_keyboard() -> InlineKeyboardMarkup:
     keyboard = InlineKeyboardMarkup(

@@ -4,6 +4,7 @@ from .i18n import _, get_user_lang, STRINGS as I18N_STRINGS
 from .shared_state import ALLOWED_USERS, USER_NAMES, ALERTS_CONFIG
 from .config import ADMIN_USER_ID, INSTALL_MODE, DEFAULT_LANGUAGE
 
+
 def get_main_reply_keyboard(
         user_id: int,
         buttons_map: dict) -> ReplyKeyboardMarkup:
@@ -53,7 +54,7 @@ def get_main_reply_keyboard(
         ["btn_selftest", "btn_traffic", "btn_uptime"],
         ["btn_speedtest", "btn_top", "btn_xray"],
         ["btn_sshlog", "btn_fail2ban", "btn_logs"],
-        ["btn_nodes", "btn_users", "btn_vless"], # Added btn_nodes here
+        ["btn_nodes", "btn_users", "btn_vless"],
         ["btn_update", "btn_optimize", "btn_restart", "btn_reboot"],
         ["btn_notifications", "btn_language"],
     ]
@@ -77,6 +78,7 @@ def get_main_reply_keyboard(
         input_field_placeholder=_("main_menu_placeholder", lang)
     )
 
+
 def get_manage_users_keyboard(lang: str):
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
         [
@@ -92,6 +94,7 @@ def get_manage_users_keyboard(lang: str):
         ]
     ])
     return keyboard
+
 
 def get_delete_users_keyboard(current_user_id: int):
     lang = get_user_lang(current_user_id)
@@ -131,6 +134,7 @@ def get_delete_users_keyboard(current_user_id: int):
         text=_("btn_back", lang), callback_data="back_to_manage_users")])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
+
 def get_change_group_keyboard(admin_user_id: int):
     lang = get_user_lang(admin_user_id)
     buttons = []
@@ -159,6 +163,7 @@ def get_change_group_keyboard(admin_user_id: int):
         text=_("btn_back", lang), callback_data="back_to_manage_users")])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
+
 def get_group_selection_keyboard(lang: str, user_id_to_change=None):
     user_identifier = user_id_to_change or 'new'
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
@@ -169,6 +174,7 @@ def get_group_selection_keyboard(lang: str, user_id_to_change=None):
         [InlineKeyboardButton(text=_("btn_cancel", lang), callback_data="back_to_manage_users")]
     ])
     return keyboard
+
 
 def get_self_delete_confirmation_keyboard(user_id: int):
     lang = get_user_lang(user_id)
@@ -187,6 +193,7 @@ def get_self_delete_confirmation_keyboard(user_id: int):
                     callback_data="back_to_delete_users")]])
     return keyboard
 
+
 def get_reboot_confirmation_keyboard(user_id: int):
     lang = get_user_lang(user_id)
     keyboard = InlineKeyboardMarkup(
@@ -204,10 +211,12 @@ def get_reboot_confirmation_keyboard(user_id: int):
                     callback_data="back_to_menu")]])
     return keyboard
 
+
 def get_back_keyboard(lang: str, callback_data="back_to_manage_users"):
     keyboard = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(
         text=_("btn_back", lang), callback_data=callback_data)]])
     return keyboard
+
 
 def get_alerts_menu_keyboard(user_id: int):
     lang = get_user_lang(user_id)
@@ -238,14 +247,16 @@ def get_alerts_menu_keyboard(user_id: int):
     ])
     return keyboard
 
+
 # --- НОВЫЕ ФУНКЦИИ ДЛЯ NODES ---
 
 def get_nodes_list_keyboard(nodes_dict: dict, lang: str) -> InlineKeyboardMarkup:
     """
-    Формирует клавиатуру со списком нод и их статусами.
-    nodes_dict: { token: { name, status_icon, ... } } (подготовленные данные)
+    Формирует клавиатуру со списком нод и кнопками Добавить/Удалить.
     """
     buttons = []
+    
+    # Список нод
     for token, node_data in nodes_dict.items():
         name = node_data.get('name', 'Unknown')
         icon = node_data.get('status_icon', '❓')
@@ -254,35 +265,52 @@ def get_nodes_list_keyboard(nodes_dict: dict, lang: str) -> InlineKeyboardMarkup
         callback_data = f"node_select_{token}"
         buttons.append([InlineKeyboardButton(text=btn_text, callback_data=callback_data)])
     
-    # Кнопка добавления ноды
-    buttons.append([InlineKeyboardButton(text=_("node_btn_add", lang), callback_data="node_add_new")])
+    # Кнопки управления списком (Добавить / Удалить)
+    buttons.append([
+        InlineKeyboardButton(text=_("node_btn_add", lang), callback_data="node_add_new"),
+        InlineKeyboardButton(text=_("node_btn_delete", lang), callback_data="node_delete_menu")
+    ])
     
     # Назад
     buttons.append([InlineKeyboardButton(text=_("btn_back_to_menu", lang), callback_data="back_to_menu")])
     
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
+
+def get_nodes_delete_keyboard(nodes_dict: dict, lang: str) -> InlineKeyboardMarkup:
+    """
+    Формирует клавиатуру для выбора ноды для удаления.
+    """
+    buttons = []
+    for token, node_data in nodes_dict.items():
+        name = node_data.get('name', 'Unknown')
+        # Используем крестик для обозначения удаления
+        btn_text = f"🗑 {name}"
+        callback_data = f"node_delete_confirm_{token}"
+        buttons.append([InlineKeyboardButton(text=btn_text, callback_data=callback_data)])
+        
+    # Назад к списку нод
+    buttons.append([InlineKeyboardButton(text=_("btn_back", lang), callback_data="nodes_list_refresh")])
+    
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
 def get_node_management_keyboard(token: str, lang: str) -> InlineKeyboardMarkup:
     """
-    Меню управления активной нодой (аналог главного меню, но inline).
+    Меню управления активной нодой.
     """
-    # Основные команды управления
     layout = [
         [
             InlineKeyboardButton(text=_("btn_selftest", lang), callback_data=f"node_cmd_{token}_selftest"),
             InlineKeyboardButton(text=_("btn_uptime", lang), callback_data=f"node_cmd_{token}_uptime")
         ],
         [
-            InlineKeyboardButton(text=_("btn_traffic", lang), callback_data=f"node_cmd_{token}_traffic"), # Traffic might need special handling
+            InlineKeyboardButton(text=_("btn_traffic", lang), callback_data=f"node_cmd_{token}_traffic"),
             InlineKeyboardButton(text=_("btn_top", lang), callback_data=f"node_cmd_{token}_top")
         ],
          [
             InlineKeyboardButton(text=_("btn_speedtest", lang), callback_data=f"node_cmd_{token}_speedtest"),
              InlineKeyboardButton(text=_("btn_reboot", lang), callback_data=f"node_cmd_{token}_reboot")
-        ],
-        # Кнопка удаления
-        [
-            InlineKeyboardButton(text=_("node_btn_delete", lang), callback_data=f"node_delete_{token}")
         ],
         # Назад к списку
         [
