@@ -50,7 +50,9 @@ CPU_THRESHOLD = 90.0
 RAM_THRESHOLD = 90.0
 DISK_THRESHOLD = 95.0
 RESOURCE_ALERT_COOLDOWN = 1800
-NODE_OFFLINE_TIMEOUT = 120 
+# --- ИЗМЕНЕНО: Таймаут уменьшен до 20 сек (4 хартбита по 5 сек) ---
+NODE_OFFLINE_TIMEOUT = 20
+# ------------------------------------------------------------------
 
 def setup_logging(log_directory, log_filename_prefix):
     log_formatter = logging.Formatter(

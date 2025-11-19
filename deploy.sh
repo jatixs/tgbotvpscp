@@ -108,17 +108,10 @@ setup_repo_and_dirs() {
     sudo chown -R ${owner_user}:${owner_user} ${BOT_INSTALL_PATH}
 }
 
-# --- Функции установки АГЕНТА (Server) ---
-# (Они остаются такими же, как были, но сокращены здесь для фокуса на интеграцию)
-# В полной версии здесь должны быть функции:
-# install_extras, ask_env_details, write_env_file, check_docker_deps, 
-# create_dockerfile, create_docker_compose_yml, create_and_start_service,
-# install_systemd_logic, install_docker_logic...
-# Я включу их полные версии.
+# --- Функции установки АГЕНТА ---
 
 install_extras() {
     local packages_to_install=()
-    # Проверки fail2ban, iperf3...
     if ! command -v fail2ban-client &> /dev/null; then
         msg_question "Fail2Ban не найден. Установить? (y/n): " INSTALL_F2B
         if [[ "$INSTALL_F2B" =~ ^[Yy]$ ]]; then packages_to_install+=("fail2ban"); fi
@@ -297,7 +290,7 @@ install_docker_logic() {
     local mode=$1
     common_install_steps
     install_extras
-    setup_repo_and_dirs "root" # Docker runs as root context initially
+    setup_repo_and_dirs "root" 
     check_docker_deps
     ask_env_details
     create_dockerfile
@@ -330,7 +323,7 @@ install_node_logic() {
 MODE=node
 AGENT_BASE_URL="${AGENT_URL}"
 AGENT_TOKEN="${NODE_TOKEN}"
-NODE_UPDATE_INTERVAL=10
+NODE_UPDATE_INTERVAL=5
 EOF
     sudo chmod 600 "${ENV_FILE}"
 
@@ -401,7 +394,7 @@ main_menu() {
         read -p "Выбор: " choice
         
         case $choice in
-            1) # Update logic (simplified for brevity)
+            1) # Update logic
                cd ${BOT_INSTALL_PATH} && git pull
                msg_success "Обновлено. Перезапустите сервисы."
                read -p "Enter..." ;;
@@ -421,11 +414,9 @@ main_menu() {
 # Проверка root
 if [ "$(id -u)" -ne 0 ]; then msg_error "Нужен root."; exit 1; fi
 
-# Если аргументов нет и не установлен - меню установки
 check_integrity
 if [ "$INSTALL_TYPE" == "NONE" ]; then
     main_menu
 else
-    # Если уже установлен - тоже меню
     main_menu
 fi

@@ -8,10 +8,11 @@ import requests
 import psutil
 from logging.handlers import RotatingFileHandler
 
-# --- Настройки (загружаются из переменных окружения) ---
+# --- ИЗМЕНЕНО: Default interval 5s ---
 AGENT_BASE_URL = os.environ.get("AGENT_BASE_URL", "http://localhost:8080")
 AGENT_TOKEN = os.environ.get("AGENT_TOKEN", "")
-NODE_UPDATE_INTERVAL = int(os.environ.get("NODE_UPDATE_INTERVAL", 10))
+NODE_UPDATE_INTERVAL = int(os.environ.get("NODE_UPDATE_INTERVAL", 5))
+# -------------------------------------
 
 # --- Настройка путей ---
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -63,10 +64,7 @@ def perform_task(task):
     
     if cmd == "reboot":
         logging.warning("Выполняется перезагрузка по команде Агента...")
-        # Даем время на отправку ответа, если нужно, или просто ребутаем
-        # Запуск в фоне, чтобы успеть ответить серверу (в реальном сценарии лучше через очередь)
         os.system("(sleep 2 && /sbin/reboot) &")
-    # Здесь можно добавить другие команды (selftest и т.д. - если перенести логику сюда)
 
 def send_heartbeat():
     """Отправляет данные на Агент."""
@@ -79,9 +77,9 @@ def send_heartbeat():
     }
     
     try:
-        response = requests.post(url, json=payload, timeout=5)
+        response = requests.post(url, json=payload, timeout=3) # Timeout меньше интервала
         if response.status_code == 200:
-            logging.info(f"Heartbeat OK. Stats: CPU {stats.get('cpu')}%")
+            logging.info(f"Heartbeat OK. CPU: {stats.get('cpu')}%")
             data = response.json()
             
             # Проверка задач

@@ -11,7 +11,7 @@ NODE_SERVICE_NAME="tg-node"
 # ------------------------------
 SERVICE_USER="tgbot"
 PYTHON_BIN="/usr/bin/python3"
-VENV_PATH="${BOT_INSTALL_PATH}/venv"
+VEND_PATH="${BOT_INSTALL_PATH}/venv"
 README_FILE="${BOT_INSTALL_PATH}/README.md"
 DOCKER_COMPOSE_FILE="${BOT_INSTALL_PATH}/docker-compose.yml"
 ENV_FILE="${BOT_INSTALL_PATH}/.env"
@@ -312,12 +312,14 @@ install_node_logic() {
     msg_question "Node Token (received from bot): " NODE_TOKEN
     
     msg_info "Creating .env..."
+    # --- CHANGED: NODE_UPDATE_INTERVAL=5 ---
     sudo bash -c "cat > ${ENV_FILE}" <<EOF
 MODE=node
 AGENT_BASE_URL="${AGENT_URL}"
 AGENT_TOKEN="${NODE_TOKEN}"
-NODE_UPDATE_INTERVAL=10
+NODE_UPDATE_INTERVAL=5
 EOF
+    # ---------------------------------------
     sudo chmod 600 "${ENV_FILE}"
 
     msg_info "Creating service ${NODE_SERVICE_NAME}..."
