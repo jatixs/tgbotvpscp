@@ -71,7 +71,7 @@ check_integrity() {
         if docker ps -f "name=${bot_container_name}" --format '{{.Names}}' | grep -q "${bot_container_name}"; then bot_status="${C_GREEN}Активен${C_RESET}"; else bot_status="${C_RED}Неактивен${C_RESET}"; fi
         if docker ps -f "name=${watchdog_container_name}" --format '{{.Names}}' | grep -q "${watchdog_container_name}"; then watchdog_status="${C_GREEN}Активен${C_RESET}"; else watchdog_status="${C_RED}Неактивен${C_RESET}"; fi
         
-        STATUS_MESSAGE="Docker: OK (Бот: ${bot_status} | Наблюдатель: ${watchdog_status})"
+        STATUS_MESSAGE="Бот: ${bot_status} | Наблюдатель: ${watchdog_status}"
 
     else # Systemd
         INSTALL_TYPE="АГЕНТ (Systemd - $INSTALL_MODE_FROM_ENV)"
@@ -80,7 +80,7 @@ check_integrity() {
         local bot_status; local watchdog_status;
         if systemctl is-active --quiet ${SERVICE_NAME}.service; then bot_status="${C_GREEN}Активен${C_RESET}"; else bot_status="${C_RED}Неактивен${C_RESET}"; fi;
         if systemctl is-active --quiet ${WATCHDOG_SERVICE_NAME}.service; then watchdog_status="${C_GREEN}Активен${C_RESET}"; else watchdog_status="${C_RED}Неактивен${C_RESET}"; fi;
-        STATUS_MESSAGE="Systemd: OK (Бот: ${bot_status} | Наблюдатель: ${watchdog_status})"
+        STATUS_MESSAGE="Бот: ${bot_status} | Наблюдатель: ${watchdog_status}"
     fi
 }
 
@@ -323,14 +323,13 @@ RestartSec=10
 WantedBy=multi-user.target
 EOF
     sudo systemctl daemon-reload; sudo systemctl enable ${svc} &> /dev/null; sudo systemctl restart ${svc}
-    if sudo systemctl is-active --quiet ${svc}; then msg_success "${svc} запущен!"; else msg_error "${svc} НЕ ЗАПУСТИЛСЯ."; fi
+    if sudo systemctl is-active --quiet ${svc}; then msg_success "Запущен!"; else msg_error "Не запустился."; fi
 }
 
 install_systemd_logic() {
     local mode=$1
     common_install_steps
     install_extras
-    
     if [ "$mode" == "secure" ]; then
         if ! id "${SERVICE_USER}" &>/dev/null; then sudo useradd -r -s /bin/false -d ${BOT_INSTALL_PATH} ${SERVICE_USER}; fi
         setup_repo_and_dirs "${SERVICE_USER}"
@@ -341,12 +340,11 @@ install_systemd_logic() {
         ${PYTHON_BIN} -m venv "${VENV_PATH}"
         "${VENV_PATH}/bin/pip" install -r "${BOT_INSTALL_PATH}/requirements.txt"
     fi
-    
     ask_env_details
     write_env_file "systemd" "$mode" ""
     create_and_start_service "${SERVICE_NAME}" "${BOT_INSTALL_PATH}/bot.py" "$mode" "Telegram Бот"
     create_and_start_service "${WATCHDOG_SERVICE_NAME}" "${BOT_INSTALL_PATH}/watchdog.py" "root" "Наблюдатель"
-    local ip=$(curl -s ipinfo.io/ip); echo ""; msg_success "Установка завершена! Агент доступен на IP: ${ip}:${WEB_PORT}";
+    local ip=$(curl -s ipinfo.io/ip); echo ""; msg_success "Установка завершена! Агент: http://${ip}:${WEB_PORT}";
 }
 
 install_docker_logic() {
@@ -359,14 +357,12 @@ install_docker_logic() {
     create_dockerfile
     create_docker_compose_yml
     write_env_file "docker" "$mode" "tg-bot-${mode}"
-    
     cd ${BOT_INSTALL_PATH}
     sudo docker-compose build
     sudo docker-compose --profile "${mode}" up -d --remove-orphans
     msg_success "Установка Docker завершена!"
 }
 
-# --- НОВАЯ ЛОГИКА: УСТАНОВКА НОДЫ ---
 install_node_logic() {
     echo -e "\n${C_BOLD}=== Установка НОДЫ (Клиент) ===${C_RESET}"
     common_install_steps
@@ -376,8 +372,7 @@ install_node_logic() {
     if [ ! -d "${VENV_PATH}" ]; then run_with_spinner "Создание venv" ${PYTHON_BIN} -m venv "${VENV_PATH}"; fi
     run_with_spinner "Установка deps" "${VENV_PATH}/bin/pip" install psutil requests
     
-    echo ""
-    msg_info "Подключение к Агенту:"
+    echo ""; msg_info "Подключение к Агенту:"
     msg_question "URL Агента (http://IP:PORT): " AGENT_URL
     msg_question "Токен Ноды: " NODE_TOKEN
     
@@ -390,7 +385,7 @@ NODE_UPDATE_INTERVAL=5
 EOF
     sudo chmod 600 "${ENV_FILE}"
 
-    msg_info "Создание сервиса ${NODE_SERVICE_NAME}..."
+    msg_info "Создание ${NODE_SERVICE_NAME}.service..."
     sudo tee "/etc/systemd/system/${NODE_SERVICE_NAME}.service" > /dev/null <<EOF
 [Unit]
 Description=Telegram Bot Node Client
@@ -406,9 +401,7 @@ RestartSec=10
 [Install]
 WantedBy=multi-user.target
 EOF
-    
-    sudo systemctl daemon-reload
-    sudo systemctl enable ${NODE_SERVICE_NAME}
+    sudo systemctl daemon-reload; sudo systemctl enable ${NODE_SERVICE_NAME}
     run_with_spinner "Запуск Ноды" sudo systemctl restart ${NODE_SERVICE_NAME}
     msg_success "Нода установлена! Логи: sudo journalctl -u ${NODE_SERVICE_NAME} -f"
 }
@@ -433,60 +426,95 @@ uninstall_bot() {
 
 main_menu() {
     local local_version=$(get_local_version "$README_FILE")
+    local latest_version=$(get_latest_version "$GITHUB_API_URL")
+    
     while true; do
         clear
-        echo -e "${C_BLUE}${C_BOLD}   VPS Bot Manager${C_RESET}"
+        echo -e "${C_BLUE}${C_BOLD}╔═══════════════════════════════════╗${C_RESET}"
+        echo -e "${C_BLUE}${C_BOLD}║    Менеджер VPS Telegram Бот      ║${C_RESET}"
+        echo -e "${C_BLUE}${C_BOLD}╚═══════════════════════════════════╝${C_RESET}"
+        
+        local current_branch=$(cd "$BOT_INSTALL_PATH" && git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "Не установлено")
+        echo -e "  Текущая ветка (установлена): ${C_YELLOW}${current_branch}${C_RESET}"
+        echo -e "  Целевая ветка (для действия): ${C_YELLOW}${GIT_BRANCH}${C_RESET}"
+        echo -e "  Локальная версия: ${C_GREEN}${local_version}${C_RESET}"
+        echo -e "  Последняя версия: ${C_CYAN}${latest_version}${C_RESET}"
+        if [ -z "$orig_arg1" ] && [ "$GIT_BRANCH" == "main" ]; then
+            echo -e "  ${C_YELLOW}(Подсказка: Для действия с другой веткой, запустите:${C_RESET}";
+            echo -e "  ${C_YELLOW} sudo bash $0 <имя_ветки>)${C_RESET}";
+        fi
+        
         check_integrity
-        echo -e "   Тип: ${INSTALL_TYPE} | Статус: ${STATUS_MESSAGE}"
-        echo "---------------------------------"
-        echo "1) Обновить (git pull)"
-        echo "2) Удалить полностью"
-        echo "---------------------------------"
-        echo "3) Установить АГЕНТА (Systemd - Secure)"
-        echo "4) Установить АГЕНТА (Systemd - Root)"
-        echo "5) Установить АГЕНТА (Docker - Secure)"
-        echo "6) Установить АГЕНТА (Docker - Root)"
-        echo "---------------------------------"
-        echo -e "${C_GREEN}8) Установить НОДУ (Клиент)${C_RESET}"
-        echo "---------------------------------"
-        echo "0) Выход"
-        read -p "Выбор: " choice
+        echo "--------------------------------------------------------"
+        echo -n -e "  Тип установки: ${C_GREEN}${INSTALL_TYPE}${C_RESET}\n"
+        echo -n -e "  Статус: "
+        echo -e "${STATUS_MESSAGE}"
+        echo "--------------------------------------------------------"
+        echo -e "  ${C_BOLD}УПРАВЛЕНИЕ:${C_RESET}"
+        echo -e "  1) ${C_CYAN}${C_BOLD}Обновить бота:${C_RESET}               ${C_YELLOW}${GIT_BRANCH}${C_RESET}"
+        echo -e "  2) ${C_RED}${C_BOLD}Удалить бота${C_RESET}"
+        echo -e "\n  ${C_BOLD}ПЕРЕУСТАНОВКА (Ветка: ${C_YELLOW}${GIT_BRANCH}${C_RESET}):"
+        echo -e "  3) ${C_GREEN}Установка АГЕНТА (Systemd - Secure)${C_RESET}"
+        echo -e "  4) ${C_YELLOW}Установка АГЕНТА (Systemd - Root)${C_RESET}"
+        echo -e "  5) ${C_BLUE}Установка АГЕНТА (Docker - Secure)${C_RESET}"
+        echo -e "  6) ${C_BLUE}Установка АГЕНТА (Docker - Root)${C_RESET}"
+        echo -e "\n  ${C_BOLD}НОДА (ВТОРОЙ СЕРВЕР):${C_RESET}"
+        echo -e "  8) ${C_GREEN}Установить НОДУ (Клиент)${C_RESET}"
+        echo -e "\n  0) ${C_BOLD}Выход${C_RESET}"
+        echo "--------------------------------------------------------"
+        read -p "$(echo -e "${C_BOLD}Введите номер опции [0-8]: ${C_RESET}")" choice
         
         case $choice in
-            1) cd ${BOT_INSTALL_PATH} && git pull; msg_success "Обновлено. Перезапустите сервисы."; read -p "Enter..." ;;
-            2) msg_question "Удалить? (y/n): " c; if [[ "$c" =~ ^[Yy]$ ]]; then uninstall_bot; return; fi ;;
-            3) uninstall_bot; install_systemd_secure; read -p "Enter..." ;;
-            4) uninstall_bot; install_systemd_root; read -p "Enter..." ;;
-            5) uninstall_bot; install_docker_secure; read -p "Enter..." ;;
-            6) uninstall_bot; install_docker_root; read -p "Enter..." ;;
-            8) uninstall_bot; install_node_logic; read -p "Enter..." ;;
-            0) exit 0 ;;
+            1) rm -f /tmp/${SERVICE_NAME}_install.log; update_bot && local_version=$(get_local_version "$README_FILE") ;;
+            2) msg_question "Удалить бота ПОЛНОСТЬЮ? (y/n): " confirm_uninstall;
+               if [[ "$confirm_uninstall" =~ ^[Yy]$ ]]; then uninstall_bot; msg_info "Бот удален. Выход."; return; else msg_info "Удаление отменено."; fi ;;
+            3) rm -f /tmp/${SERVICE_NAME}_install.log; msg_question "Переустановить (Systemd - Secure)? (y/n): " confirm; if [[ "$confirm" =~ ^[Yy]$ ]]; then uninstall_bot; install_systemd_secure; local_version=$(get_local_version "$README_FILE"); fi ;;
+            4) rm -f /tmp/${SERVICE_NAME}_install.log; msg_question "Переустановить (Systemd - Root)? (y/n): " confirm; if [[ "$confirm" =~ ^[Yy]$ ]]; then uninstall_bot; install_systemd_root; local_version=$(get_local_version "$README_FILE"); fi ;;
+            5) rm -f /tmp/${SERVICE_NAME}_install.log; msg_question "Переустановить (Docker - Secure)? (y/n): " confirm; if [[ "$confirm" =~ ^[Yy]$ ]]; then uninstall_bot; install_docker_secure; local_version=$(get_local_version "$README_FILE"); fi ;;
+            6) rm -f /tmp/${SERVICE_NAME}_install.log; msg_question "Переустановить (Docker - Root)? (y/n): " confirm; if [[ "$confirm" =~ ^[Yy]$ ]]; then uninstall_bot; install_docker_root; local_version=$(get_local_version "$README_FILE"); fi ;;
+            8) rm -f /tmp/${SERVICE_NAME}_install.log; msg_question "Установить НОДУ (Клиент)? (y/n): " confirm; if [[ "$confirm" =~ ^[Yy]$ ]]; then uninstall_bot; install_node_logic; local_version=$(get_local_version "$README_FILE"); fi ;;
+            0) break ;;
+            *) msg_error "Неверный выбор." ;;
         esac
+        if [[ "$choice" != "2" || ! "$confirm_uninstall" =~ ^[Yy]$ ]]; then
+            echo; read -n 1 -s -r -p "Нажмите любую клавишу для возврата в меню...";
+        fi
     done
 }
 
-if [ "$(id -u)" -ne 0 ]; then msg_error "Нужен root."; exit 1; fi
+main() {
+    clear
+    msg_info "Запуск скрипта управления ботом..."
+    check_integrity
+    if [ "$INSTALL_TYPE" == "НЕТ" ] || [[ "$STATUS_MESSAGE" == *"повреждена"* ]]; then
+        echo -e "${C_BLUE}${C_BOLD}╔═══════════════════════════════════╗${C_RESET}"
+        echo -e "${C_BLUE}${C_BOLD}║      Установка VPS Telegram Бот   ║${C_RESET}"
+        echo -e "${C_BLUE}${C_BOLD}╚═══════════════════════════════════╝${C_RESET}"
+        echo -e "  ${C_YELLOW}Бот не найден или установка повреждена.${C_RESET}"
+        echo "--------------------------------------------------------"
+        echo "  1) АГЕНТ (Systemd - Secure)"
+        echo "  2) АГЕНТ (Systemd - Root)"
+        echo "  3) АГЕНТ (Docker - Secure)"
+        echo "  4) АГЕНТ (Docker - Root)"
+        echo "  -------------------------"
+        echo "  8) НОДА (Клиент)"
+        echo "  0) Выход"
+        echo "--------------------------------------------------------"
+        read -p "$(echo -e "${C_BOLD}Ваш выбор: ${C_RESET}")" install_choice
+        rm -f /tmp/${SERVICE_NAME}_install.log
+        case $install_choice in
+            1) uninstall_bot; install_systemd_secure; main_menu ;;
+            2) uninstall_bot; install_systemd_root; main_menu ;;
+            3) uninstall_bot; install_docker_secure; main_menu ;;
+            4) uninstall_bot; install_docker_root; main_menu ;;
+            8) uninstall_bot; install_node_logic; main_menu ;;
+            0) exit 0 ;;
+            *) msg_error "Неверный выбор."; exit 1 ;;
+        esac
+    else
+        main_menu
+    fi
+}
 
-check_integrity
-if [ "$INSTALL_TYPE" == "НЕТ" ] || [[ "$STATUS_MESSAGE" == *"повреждена"* ]]; then
-    echo -e "${C_BLUE}${C_BOLD}   VPS Bot Manager (Установка)${C_RESET}"
-    echo "1) АГЕНТ (Systemd - Secure)"
-    echo "2) АГЕНТ (Systemd - Root)"
-    echo "3) АГЕНТ (Docker - Secure)"
-    echo "4) АГЕНТ (Docker - Root)"
-    echo -e "${C_GREEN}8) НОДА (Клиент)${C_RESET}"
-    echo "0) Выход"
-    read -p "Выбор: " ch
-    case $ch in
-        1) uninstall_bot; install_systemd_secure ;;
-        2) uninstall_bot; install_systemd_root ;;
-        3) uninstall_bot; install_docker_secure ;;
-        4) uninstall_bot; install_docker_root ;;
-        8) uninstall_bot; install_node_logic ;;
-        0) exit 0 ;;
-    esac
-    read -p "Нажмите Enter для меню..."
-    main_menu
-else
-    main_menu
-fi
+if [ "$(id -u)" -ne 0 ]; then msg_error "Запустите скрипт от имени root или с правами sudo."; exit 1; fi
+main

@@ -14,11 +14,13 @@ README_FILE="${BOT_INSTALL_PATH}/README.md"
 DOCKER_COMPOSE_FILE="${BOT_INSTALL_PATH}/docker-compose.yml"
 ENV_FILE="${BOT_INSTALL_PATH}/.env"
 
+# --- GitHub Repo ---
 GITHUB_REPO="jatixs/tgbotvpscp"
 GIT_BRANCH="${orig_arg1:-main}"
 GITHUB_REPO_URL="https://github.com/${GITHUB_REPO}.git"
 GITHUB_API_URL="https://api.github.com/repos/${GITHUB_REPO}/releases/latest"
 
+# --- Colors ---
 C_RESET='\033[0m'; C_RED='\033[0;31m'; C_GREEN='\033[0;32m'; C_YELLOW='\033[0;33m'; C_BLUE='\033[0;34m'; C_CYAN='\033[0;36m'; C_BOLD='\033[1m'
 msg_info() { echo -e "${C_CYAN}🔵 $1${C_RESET}"; }; msg_success() { echo -e "${C_GREEN}✅ $1${C_RESET}"; }; msg_warning() { echo -e "${C_YELLOW}⚠️  $1${C_RESET}"; }; msg_error() { echo -e "${C_RED}❌ $1${C_RESET}"; }; msg_question() { read -p "$(echo -e "${C_YELLOW}❓ $1${C_RESET}")" $2; }
 spinner() { local pid=$1; local msg=$2; local spin='|/-\'; local i=0; while kill -0 $pid 2>/dev/null; do i=$(( (i+1) %4 )); printf "\r${C_BLUE}⏳ ${spin:$i:1} ${msg}...${C_RESET}"; sleep .1; done; printf "\r"; }
@@ -34,7 +36,7 @@ get_latest_version() { local api_url="$1"; local latest_tag=$($DOWNLOADER_PIPE "
 INSTALL_TYPE="NONE"; STATUS_MESSAGE="Check not performed."
 check_integrity() {
     if [ ! -d "${BOT_INSTALL_PATH}" ] || [ ! -f "${ENV_FILE}" ]; then
-        INSTALL_TYPE="NONE"; STATUS_MESSAGE="Not installed."; return;
+        INSTALL_TYPE="NONE"; STATUS_MESSAGE="Bot not installed."; return;
     fi
 
     if grep -q "MODE=node" "${ENV_FILE}"; then
@@ -59,37 +61,45 @@ check_integrity() {
         local bot_status; local watchdog_status;
         if docker ps -f "name=${bot_container_name}" --format '{{.Names}}' | grep -q "${bot_container_name}"; then bot_status="${C_GREEN}Active${C_RESET}"; else bot_status="${C_RED}Inactive${C_RESET}"; fi
         if docker ps -f "name=${watchdog_container_name}" --format '{{.Names}}' | grep -q "${watchdog_container_name}"; then watchdog_status="${C_GREEN}Active${C_RESET}"; else watchdog_status="${C_RED}Inactive${C_RESET}"; fi
-        STATUS_MESSAGE="Docker OK (Bot: ${bot_status} | Watchdog: ${watchdog_status})"
-    else
+        
+        STATUS_MESSAGE="Docker: OK (Bot: ${bot_status} | Watchdog: ${watchdog_status})"
+
+    else # Systemd
         INSTALL_TYPE="AGENT (Systemd - $INSTALL_MODE_FROM_ENV)"
         if [ ! -f "${BOT_INSTALL_PATH}/bot.py" ]; then STATUS_MESSAGE="${C_RED}Files corrupted.${C_RESET}"; return; fi;
+        
         local bot_status; local watchdog_status;
         if systemctl is-active --quiet ${SERVICE_NAME}.service; then bot_status="${C_GREEN}Active${C_RESET}"; else bot_status="${C_RED}Inactive${C_RESET}"; fi;
         if systemctl is-active --quiet ${WATCHDOG_SERVICE_NAME}.service; then watchdog_status="${C_GREEN}Active${C_RESET}"; else watchdog_status="${C_RED}Inactive${C_RESET}"; fi;
-        STATUS_MESSAGE="Systemd OK (Bot: ${bot_status} | Watchdog: ${watchdog_status})"
+        STATUS_MESSAGE="Systemd: OK (Bot: ${bot_status} | Watchdog: ${watchdog_status})"
     fi
 }
 
 install_extras() {
     local packages_to_install=()
     local packages_to_remove=()
+
     if ! command -v fail2ban-client &> /dev/null; then
         msg_question "Fail2Ban not found. Install? (y/n): " INSTALL_F2B
         if [[ "$INSTALL_F2B" =~ ^[Yy]$ ]]; then packages_to_install+=("fail2ban"); else msg_info "Skipping Fail2Ban."; fi
     else msg_success "Fail2Ban installed."; fi
+
     if ! command -v iperf3 &> /dev/null; then
         msg_question "iperf3 not found. Install? (y/n): " INSTALL_IPERF3
         if [[ "$INSTALL_IPERF3" =~ ^[Yy]$ ]]; then packages_to_install+=("iperf3"); else msg_info "Skipping iperf3."; fi
     else msg_success "iperf3 installed."; fi
+
     if command -v speedtest &> /dev/null || dpkg -s speedtest-cli &> /dev/null; then
         msg_warning "Old 'speedtest-cli' detected."
         msg_question "Remove 'speedtest-cli'? (y/n): " REMOVE_SPEEDTEST
         if [[ "$REMOVE_SPEEDTEST" =~ ^[Yy]$ ]]; then packages_to_remove+=("speedtest-cli"); else msg_info "Skipping removal."; fi
     fi
+
     if [ ${#packages_to_remove[@]} -gt 0 ]; then
         run_with_spinner "Removing packages" sudo apt-get remove --purge -y "${packages_to_remove[@]}"
         run_with_spinner "Cleaning apt" sudo apt-get autoremove -y
     fi
+
     if [ ${#packages_to_install[@]} -gt 0 ]; then
         run_with_spinner "Updating apt" sudo apt-get update -y
         run_with_spinner "Installing packages" sudo DEBIAN_FRONTEND=noninteractive apt-get install -y "${packages_to_install[@]}"
@@ -148,7 +158,21 @@ check_docker_deps() {
         curl -sSL https://get.docker.com -o /tmp/get-docker.sh
         run_with_spinner "Installing Docker" sudo sh /tmp/get-docker.sh
     fi
-    # ...compose install simplified...
+    if command -v docker-compose &> /dev/null; then sudo rm -f $(which docker-compose); fi
+    (sudo apt-get purge -y docker.io docker-compose docker-compose-plugin docker-ce docker-ce-cli containerd.io docker-buildx-plugin &> /tmp/${SERVICE_NAME}_install.log)
+    (sudo apt-get autoremove -y &> /tmp/${SERVICE_NAME}_install.log)
+    sudo systemctl enable docker &> /tmp/${SERVICE_NAME}_install.log
+    run_with_spinner "Starting Docker" sudo systemctl restart docker
+    
+    msg_info "Installing Docker Compose v2..."
+    local DOCKER_CLI_PLUGIN_DIR="/usr/libexec/docker/cli-plugins"
+    if [ ! -d "$DOCKER_CLI_PLUGIN_DIR" ]; then DOCKER_CLI_PLUGIN_DIR="/usr/local/lib/docker/cli-plugins"; fi
+    local DOCKER_COMPOSE_PATH="${DOCKER_CLI_PLUGIN_DIR}/docker-compose"
+    sudo mkdir -p ${DOCKER_CLI_PLUGIN_DIR}
+    local DOCKER_COMPOSE_VERSION=$(curl -s https://api.github.com/repos/docker/compose/releases/latest | grep 'tag_name' | cut -d\" -f4)
+    local LATEST_COMPOSE_URL="https://github.com/docker/compose/releases/download/${DOCKER_COMPOSE_VERSION}/docker-compose-$(uname -s)-$(uname -m)"
+    run_with_spinner "Downloading compose" sudo curl -SLf "${LATEST_COMPOSE_URL}" -o "${DOCKER_COMPOSE_PATH}"
+    sudo chmod +x "${DOCKER_COMPOSE_PATH}"
 }
 
 create_dockerfile() {
@@ -356,33 +380,36 @@ uninstall_bot() {
 }
 
 main_menu() {
+    local local_version=$(get_local_version "$README_FILE")
     while true; do
         clear
-        echo -e "${C_BLUE}${C_BOLD}   VPS Bot Manager${C_RESET}"
+        echo -e "${C_BLUE}${C_BOLD}╔═══════════════════════════════════╗${C_RESET}"
+        echo -e "${C_BLUE}${C_BOLD}║    VPS Telegram Bot Manager       ║${C_RESET}"
+        echo -e "${C_BLUE}${C_BOLD}╚═══════════════════════════════════╝${C_RESET}"
         check_integrity
-        echo -e "   Type: ${INSTALL_TYPE} | Status: ${STATUS_MESSAGE}"
-        echo "---------------------------------"
-        echo "1) Update"
-        echo "2) Uninstall"
-        echo "---------------------------------"
-        echo "3) Install AGENT (Systemd - Secure)"
-        echo "4) Install AGENT (Systemd - Root)"
-        echo "5) Install AGENT (Docker - Secure)"
-        echo "6) Install AGENT (Docker - Root)"
-        echo "---------------------------------"
-        echo -e "${C_GREEN}8) Install NODE (Client)${C_RESET}"
-        echo "---------------------------------"
-        echo "0) Exit"
-        read -p "Choice: " choice
+        echo -e "  Branch: ${GIT_BRANCH} | Version: ${local_version}"
+        echo -e "  Type: ${INSTALL_TYPE} | Status: ${STATUS_MESSAGE}"
+        echo "--------------------------------------------------------"
+        echo "  1) Update Bot"
+        echo "  2) Uninstall Bot"
+        echo "  3) Reinstall (Systemd - Secure)"
+        echo "  4) Reinstall (Systemd - Root)"
+        echo "  5) Reinstall (Docker - Secure)"
+        echo "  6) Reinstall (Docker - Root)"
+        echo -e "${C_GREEN}  8) Install NODE (Client)${C_RESET}"
+        echo "  0) Exit"
+        echo "--------------------------------------------------------"
+        read -p "Your choice: " choice
         case $choice in
-            1) cd ${BOT_INSTALL_PATH} && git pull; msg_success "Updated."; read -p "Enter..." ;;
-            2) msg_question "Uninstall? (y/n): " c; if [[ "$c" =~ ^[Yy]$ ]]; then uninstall_bot; return; fi ;;
+            1) update_bot; read -p "Enter..." ;;
+            2) msg_question "Uninstall completely? (y/n): " c; if [[ "$c" =~ ^[Yy]$ ]]; then uninstall_bot; return; fi ;;
             3) uninstall_bot; install_systemd_secure; read -p "Enter..." ;;
             4) uninstall_bot; install_systemd_root; read -p "Enter..." ;;
             5) uninstall_bot; install_docker_secure; read -p "Enter..." ;;
             6) uninstall_bot; install_docker_root; read -p "Enter..." ;;
             8) uninstall_bot; install_node_logic; read -p "Enter..." ;;
             0) break ;;
+            *) ;;
         esac
     done
 }
@@ -390,25 +417,30 @@ main_menu() {
 if [ "$(id -u)" -ne 0 ]; then msg_error "Root required."; exit 1; fi
 
 check_integrity
-if [ "$INSTALL_TYPE" == "NONE" ]; then
-    echo -e "${C_BLUE}${C_BOLD}   VPS Bot Manager (Install)${C_RESET}"
-    echo "1) AGENT (Systemd - Secure)"
-    echo "2) AGENT (Systemd - Root)"
-    echo "3) AGENT (Docker - Secure)"
-    echo "4) AGENT (Docker - Root)"
-    echo -e "${C_GREEN}8) NODE (Client)${C_RESET}"
-    echo "0) Exit"
-    read -p "Choice: " ch
-    case $ch in
-        1) uninstall_bot; install_systemd_secure ;;
-        2) uninstall_bot; install_systemd_root ;;
-        3) uninstall_bot; install_docker_secure ;;
-        4) uninstall_bot; install_docker_root ;;
-        8) uninstall_bot; install_node_logic ;;
+if [ "$INSTALL_TYPE" == "NONE" ] || [[ "$STATUS_MESSAGE" == *"corrupted"* ]]; then
+    echo -e "${C_BLUE}${C_BOLD}╔═══════════════════════════════════╗${C_RESET}"
+    echo -e "${C_BLUE}${C_BOLD}║      Install VPS Telegram Bot     ║${C_RESET}"
+    echo -e "${C_BLUE}${C_BOLD}╚═══════════════════════════════════╝${C_RESET}"
+    echo -e "  ${C_YELLOW}Bot not found or corrupted.${C_RESET}"
+    echo "--------------------------------------------------------"
+    echo "  1) AGENT (Systemd - Secure)"
+    echo "  2) AGENT (Systemd - Root)"
+    echo "  3) AGENT (Docker - Secure)"
+    echo "  4) AGENT (Docker - Root)"
+    echo -e "${C_GREEN}  8) NODE (Client)${C_RESET}"
+    echo "  0) Exit"
+    echo "--------------------------------------------------------"
+    read -p "$(echo -e "${C_BOLD}Choice: ${C_RESET}")" install_choice
+    rm -f /tmp/${SERVICE_NAME}_install.log
+    case $install_choice in
+        1) uninstall_bot; install_systemd_secure; main_menu ;;
+        2) uninstall_bot; install_systemd_root; main_menu ;;
+        3) uninstall_bot; install_docker_secure; main_menu ;;
+        4) uninstall_bot; install_docker_root; main_menu ;;
+        8) uninstall_bot; install_node_logic; main_menu ;;
         0) exit 0 ;;
+        *) msg_error "Invalid choice."; exit 1 ;;
     esac
-    read -p "Enter to continue..."
-    main_menu
 else
     main_menu
 fi
