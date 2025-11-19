@@ -24,8 +24,36 @@ GITHUB_API_URL="https://api.github.com/repos/${GITHUB_REPO}/releases/latest"
 # --- Цвета и функции вывода ---
 C_RESET='\033[0m'; C_RED='\033[0;31m'; C_GREEN='\033[0;32m'; C_YELLOW='\033[0;33m'; C_BLUE='\033[0;34m'; C_CYAN='\033[0;36m'; C_BOLD='\033[1m'
 msg_info() { echo -e "${C_CYAN}🔵 $1${C_RESET}"; }; msg_success() { echo -e "${C_GREEN}✅ $1${C_RESET}"; }; msg_warning() { echo -e "${C_YELLOW}⚠️  $1${C_RESET}"; }; msg_error() { echo -e "${C_RED}❌ $1${C_RESET}"; }; msg_question() { read -p "$(echo -e "${C_YELLOW}❓ $1${C_RESET}")" $2; }
-spinner() { local pid=$1; local msg=$2; local spin='|/-\'; local i=0; while kill -0 $pid 2>/dev/null; do i=$(( (i+1) %4 )); printf "\r${C_BLUE}⏳ ${spin:$i:1} ${msg}...${C_RESET}"; sleep .1; done; printf "\r"; }
-run_with_spinner() { local msg=$1; shift; ( "$@" >> /tmp/${SERVICE_NAME}_install.log 2>&1 ) & local pid=$!; spinner "$pid" "$msg"; wait $pid; local exit_code=$?; echo -ne "\033[2K\r"; if [ $exit_code -ne 0 ]; then msg_error "Ошибка во время '$msg'. Код: $exit_code"; msg_error "Лог: /tmp/${SERVICE_NAME}_install.log"; fi; return $exit_code; }
+
+spinner() { 
+    local pid=$1
+    local msg=$2
+    local spin='|/-\'
+    local i=0
+    while kill -0 $pid 2>/dev/null; do 
+        i=$(( (i+1) %4 ))
+        printf "\r${C_BLUE}⏳ ${spin:$i:1} ${msg}...${C_RESET}"
+        sleep .1
+    done
+    printf "\r"
+}
+
+run_with_spinner() { 
+    local msg=$1
+    shift
+    # [FIX] Переходим в корень перед запуском, чтобы избежать ошибок при переустановке
+    ( cd / && "$@" >> /tmp/${SERVICE_NAME}_install.log 2>&1 ) & 
+    local pid=$!
+    spinner "$pid" "$msg"
+    wait $pid
+    local exit_code=$?
+    echo -ne "\033[2K\r"
+    if [ $exit_code -ne 0 ]; then 
+        msg_error "Ошибка во время '$msg'. Код: $exit_code"
+        msg_error "Лог: /tmp/${SERVICE_NAME}_install.log"
+    fi
+    return $exit_code 
+}
 
 # --- Проверка загрузчика ---
 if command -v wget &> /dev/null; then DOWNLOADER="wget -qO-"; elif command -v curl &> /dev/null; then DOWNLOADER="curl -sSLf"; else msg_error "Ни wget, ни curl не найдены."; exit 1; fi
@@ -95,10 +123,8 @@ common_install_steps() {
 setup_repo_and_dirs() {
     local owner_user=$1
     if [ -z "$owner_user" ]; then owner_user="root"; fi
-
-    # [FIX] Переходим в корень, чтобы избежать ошибки "Unable to read current working directory" если папка была пересоздана
+    
     cd /
-
     sudo mkdir -p ${BOT_INSTALL_PATH}
     msg_info "Клонирование репозитория (ветка ${GIT_BRANCH})..."
     run_with_spinner "Клонирование репозитория" sudo git clone --branch "${GIT_BRANCH}" "${GITHUB_REPO_URL}" "${BOT_INSTALL_PATH}" || exit 1
@@ -347,7 +373,7 @@ install_systemd_logic() {
     write_env_file "systemd" "$mode" ""
     create_and_start_service "${SERVICE_NAME}" "${BOT_INSTALL_PATH}/bot.py" "$mode" "Telegram Бот"
     create_and_start_service "${WATCHDOG_SERVICE_NAME}" "${BOT_INSTALL_PATH}/watchdog.py" "root" "Наблюдатель"
-    local ip=$(curl -s ipinfo.io/ip); echo ""; msg_success "Установка завершена! Агент: http://${ip}:${WEB_PORT}";
+    local ip=$(curl -s ipinfo.io/ip); echo ""; msg_success "Установка завершена! Агент доступен на IP: ${ip}:${WEB_PORT}";
 }
 
 install_docker_logic() {
@@ -416,9 +442,7 @@ install_docker_root() { echo -e "\n${C_BOLD}=== Установка Docker (Root)
 
 uninstall_bot() {
     echo -e "\n${C_BOLD}=== Удаление ===${C_RESET}"
-    # [FIX] Переходим в корень, чтобы не удалять папку из под себя
-    cd / 
-    
+    cd /
     sudo systemctl stop ${SERVICE_NAME} ${WATCHDOG_SERVICE_NAME} ${NODE_SERVICE_NAME} &> /dev/null
     sudo systemctl disable ${SERVICE_NAME} ${WATCHDOG_SERVICE_NAME} ${NODE_SERVICE_NAME} &> /dev/null
     sudo rm -f /etc/systemd/system/${SERVICE_NAME}.service /etc/systemd/system/${WATCHDOG_SERVICE_NAME}.service /etc/systemd/system/${NODE_SERVICE_NAME}.service
@@ -477,7 +501,16 @@ update_bot() {
         run_with_spinner "Pip install" $exec_user "${VENV_PATH}/bin/pip" install -r "${BOT_INSTALL_PATH}/requirements.txt" --upgrade
         
         msg_info "3. Перезапуск служб..."
-        sudo systemctl restart ${SERVICE_NAME} ${WATCHDOG_SERVICE_NAME} ${NODE_SERVICE_NAME}
+        # Перезапускаем только те службы, которые установлены
+        if systemctl list-unit-files | grep -q "^${SERVICE_NAME}.service"; then
+            sudo systemctl restart ${SERVICE_NAME}
+        fi
+        if systemctl list-unit-files | grep -q "^${WATCHDOG_SERVICE_NAME}.service"; then
+            sudo systemctl restart ${WATCHDOG_SERVICE_NAME}
+        fi
+        if systemctl list-unit-files | grep -q "^${NODE_SERVICE_NAME}.service"; then
+            sudo systemctl restart ${NODE_SERVICE_NAME}
+        fi
         msg_success "Службы перезапущены."
     fi
 }
@@ -523,21 +556,29 @@ if [ "$(id -u)" -ne 0 ]; then msg_error "Нужен root."; exit 1; fi
 
 check_integrity
 if [ "$INSTALL_TYPE" == "НЕТ" ] || [[ "$STATUS_MESSAGE" == *"повреждена"* ]]; then
-    echo -e "${C_BLUE}${C_BOLD}   VPS Bot Manager (Установка)${C_RESET}"
-    echo "1) АГЕНТ (Systemd - Secure)"
-    echo "2) АГЕНТ (Systemd - Root)"
-    echo "3) АГЕНТ (Docker - Secure)"
-    echo "4) АГЕНТ (Docker - Root)"
-    echo -e "${C_GREEN}8) НОДА (Клиент)${C_RESET}"
-    echo "0) Выход"
-    read -p "Выбор: " ch
-    case $ch in
+    echo -e "${C_BLUE}${C_BOLD}╔═══════════════════════════════════╗${C_RESET}"
+    echo -e "${C_BLUE}${C_BOLD}║      Установка VPS Telegram Бот   ║${C_RESET}"
+    echo -e "${C_BLUE}${C_BOLD}╚═══════════════════════════════════╝${C_RESET}"
+    echo -e "  ${C_YELLOW}Бот не найден или установка повреждена.${C_RESET}"
+    echo "--------------------------------------------------------"
+    echo "  1) АГЕНТ (Systemd - Secure)"
+    echo "  2) АГЕНТ (Systemd - Root)"
+    echo "  3) АГЕНТ (Docker - Secure)"
+    echo "  4) АГЕНТ (Docker - Root)"
+    echo "  -------------------------"
+    echo -e "${C_GREEN}  8) НОДА (Клиент)${C_RESET}"
+    echo "  0) Выход"
+    echo "--------------------------------------------------------"
+    read -p "$(echo -e "${C_BOLD}Ваш выбор: ${C_RESET}")" install_choice
+    rm -f /tmp/${SERVICE_NAME}_install.log
+    case $install_choice in
         1) uninstall_bot; install_systemd_secure; main_menu ;;
         2) uninstall_bot; install_systemd_root; main_menu ;;
         3) uninstall_bot; install_docker_secure; main_menu ;;
         4) uninstall_bot; install_docker_root; main_menu ;;
         8) uninstall_bot; install_node_logic; main_menu ;;
         0) exit 0 ;;
+        *) msg_error "Неверный выбор."; exit 1 ;;
     esac
 else
     main_menu

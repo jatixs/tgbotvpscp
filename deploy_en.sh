@@ -22,7 +22,22 @@ GITHUB_API_URL="https://api.github.com/repos/${GITHUB_REPO}/releases/latest"
 C_RESET='\033[0m'; C_RED='\033[0;31m'; C_GREEN='\033[0;32m'; C_YELLOW='\033[0;33m'; C_BLUE='\033[0;34m'; C_CYAN='\033[0;36m'; C_BOLD='\033[1m'
 msg_info() { echo -e "${C_CYAN}🔵 $1${C_RESET}"; }; msg_success() { echo -e "${C_GREEN}✅ $1${C_RESET}"; }; msg_warning() { echo -e "${C_YELLOW}⚠️  $1${C_RESET}"; }; msg_error() { echo -e "${C_RED}❌ $1${C_RESET}"; }; msg_question() { read -p "$(echo -e "${C_YELLOW}❓ $1${C_RESET}")" $2; }
 spinner() { local pid=$1; local msg=$2; local spin='|/-\'; local i=0; while kill -0 $pid 2>/dev/null; do i=$(( (i+1) %4 )); printf "\r${C_BLUE}⏳ ${spin:$i:1} ${msg}...${C_RESET}"; sleep .1; done; printf "\r"; }
-run_with_spinner() { local msg=$1; shift; ( "$@" >> /tmp/${SERVICE_NAME}_install.log 2>&1 ) & local pid=$!; spinner "$pid" "$msg"; wait $pid; local exit_code=$?; echo -ne "\033[2K\r"; if [ $exit_code -ne 0 ]; then msg_error "Error during '$msg'. Code: $exit_code"; msg_error "Log: /tmp/${SERVICE_NAME}_install.log"; fi; return $exit_code; }
+run_with_spinner() { 
+    local msg=$1
+    shift
+    # [FIX] Force cd / in subshell
+    ( cd / && "$@" >> /tmp/${SERVICE_NAME}_install.log 2>&1 ) & 
+    local pid=$!
+    spinner "$pid" "$msg"
+    wait $pid
+    local exit_code=$?
+    echo -ne "\033[2K\r"
+    if [ $exit_code -ne 0 ]; then 
+        msg_error "Error during '$msg'. Code: $exit_code"
+        msg_error "Log: /tmp/${SERVICE_NAME}_install.log"
+    fi
+    return $exit_code 
+}
 
 if command -v wget &> /dev/null; then DOWNLOADER="wget -qO-"; elif command -v curl &> /dev/null; then DOWNLOADER="curl -sSLf"; else msg_error "Neither wget nor curl found."; exit 1; fi
 if command -v curl &> /dev/null; then DOWNLOADER_PIPE="curl -s"; else DOWNLOADER_PIPE="wget -qO-"; fi
@@ -106,7 +121,6 @@ common_install_steps() {
 
 setup_repo_and_dirs() {
     local owner_user=$1; if [ -z "$owner_user" ]; then owner_user="root"; fi
-    # [FIX] Switch directory to root to avoid removal errors
     cd /
     sudo mkdir -p ${BOT_INSTALL_PATH}
     msg_info "Cloning repo (branch ${GIT_BRANCH})..."
@@ -346,7 +360,6 @@ install_docker_root() { echo -e "\n${C_BOLD}=== Install Docker (Root) ===${C_RES
 
 uninstall_bot() {
     echo -e "\n${C_BOLD}=== Uninstalling ===${C_RESET}"
-    # [FIX] Go to root to safely delete folder
     cd /
     sudo systemctl stop ${SERVICE_NAME} ${WATCHDOG_SERVICE_NAME} ${NODE_SERVICE_NAME} &> /dev/null
     sudo systemctl disable ${SERVICE_NAME} ${WATCHDOG_SERVICE_NAME} ${NODE_SERVICE_NAME} &> /dev/null
@@ -406,7 +419,15 @@ update_bot() {
         run_with_spinner "Pip install" $exec_user "${VENV_PATH}/bin/pip" install -r "${BOT_INSTALL_PATH}/requirements.txt" --upgrade
         
         msg_info "3. Restarting services..."
-        sudo systemctl restart ${SERVICE_NAME} ${WATCHDOG_SERVICE_NAME} ${NODE_SERVICE_NAME}
+        if systemctl list-unit-files | grep -q "^${SERVICE_NAME}.service"; then
+            sudo systemctl restart ${SERVICE_NAME}
+        fi
+        if systemctl list-unit-files | grep -q "^${WATCHDOG_SERVICE_NAME}.service"; then
+            sudo systemctl restart ${WATCHDOG_SERVICE_NAME}
+        fi
+        if systemctl list-unit-files | grep -q "^${NODE_SERVICE_NAME}.service"; then
+            sudo systemctl restart ${NODE_SERVICE_NAME}
+        fi
         msg_success "Services restarted."
     fi
 }
@@ -459,6 +480,7 @@ if [ "$INSTALL_TYPE" == "NONE" ] || [[ "$STATUS_MESSAGE" == *"corrupted"* ]]; th
     echo "  2) AGENT (Systemd - Root)"
     echo "  3) AGENT (Docker - Secure)"
     echo "  4) AGENT (Docker - Root)"
+    echo "  -------------------------"
     echo -e "${C_GREEN}  8) NODE (Client)${C_RESET}"
     echo "  0) Exit"
     echo "--------------------------------------------------------"
