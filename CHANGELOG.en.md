@@ -5,11 +5,35 @@
 <h1 align="center">📝 Telegram VPS Management Bot — Changelog</h1>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-v1.10.14-blue?style=flat-square" alt="Version 1.10.14"/>
-  <img src="https://img.shields.io/badge/build-41-purple?style=flat-square" alt="Build 41"/>
-  <img src="https://img.shields.io/badge/date-Ноябрь%202025-green?style=flat-square" alt="Date November 2025"/>
-  <img src="https://img.shields.io/badge/status-stabile-green?style=flat-square" alt="Status Stabile"/>
+  <img src="https://img.shields.io/badge/version-v1.11.0-blue?style=flat-square" alt="Version 1.11.0"/>
+  <img src="https://img.shields.io/badge/build-42-purple?style=flat-square" alt="Build 42"/>
+  <img src="https://img.shields.io/badge/date-November%202025-green?style=flat-square" alt="Date November 2025"/>
+  <img src="https://img.shields.io/badge/status-stable-green?style=flat-square" alt="Status Stable"/>
 </p>
+
+---
+## [1.11.0] - 2025-11-20
+
+### 🚀 Added:
+
+* **Node Management (Multi-server):** Implemented "Agent-Server" architecture. The main bot can now manage multiple remote servers (nodes) via a single interface.
+    * New module **"🖥 Nodes"** (`btn_nodes`) to view the list of connected servers, their status, and execute commands.
+    * Remote command support: `Traffic`, `Top`, `Speedtest`, `Uptime`, `Reboot`.
+* **Agent (`tg-node`):** Lightweight client script (`node/node.py`) for installation on subordinate servers. Runs as a systemd service and sends statistics to the main bot.
+* **Built-in Web Server:** Integrated an asynchronous `aiohttp` server (port 8080) into the bot core to receive heartbeats from nodes and serve the Web-UI.
+* **Web Interface:** Accessing the bot's IP in a browser now displays a stylish HTML Status Page showing agent status and the active node count.
+* **`deploy.sh` Update:** Added menu option **"8) Install NODE (Client)"** for quick setup of remote servers with automatic service generation.
+
+### ✨ Improved:
+
+* **API Stability (Throttling):** Implemented a "smart" message editing throttling mechanism in `traffic` and `speedtest` modules. This prevents `TelegramRetryAfter` (Flood Wait) errors during frequent status updates.
+* **Notification System:** Added a new alert type — **"Node Downtime"**. The bot will notify the admin if a remote server stops sending heartbeats (20-second timeout) and when connectivity is restored.
+* **Database:** Added `core/nodes_db.py` module for storing node configuration and state in JSON format.
+
+### 🔧 Fixed:
+
+* **Dependencies:** Added `aiohttp` library to `requirements.txt`, required for the API server.
+* **Logging:** Optimized log structure for Node client mode.
 
 ---
 ## [1.10.14] - 2025-11-03
