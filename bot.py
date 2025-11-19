@@ -242,6 +242,7 @@ def load_modules():
     if ENABLE_OPTIMIZE:
         register_module(optimize, root_only=True)
 
+    # Регистрируем модуль Nodes
     register_module(nodes, admin_only=True)
 
     logging.info("All modules loaded.")
@@ -283,6 +284,7 @@ async def main():
     try:
         logging.info(f"Bot starting in mode: {config.INSTALL_MODE.upper()}")
         
+        # Загрузка данных
         await asyncio.to_thread(auth.load_users)
         await asyncio.to_thread(utils.load_alerts_config)
         await asyncio.to_thread(i18n.load_user_settings)
@@ -294,8 +296,9 @@ async def main():
         
         load_modules()
 
+        # Запуск веб-сервера (передаем бота для отправки ответов пользователю)
         logging.info("Starting Agent Web Server...")
-        web_runner = await server.start_web_server()
+        web_runner = await server.start_web_server(bot)
         if not web_runner:
             logging.warning("Web Server NOT started (error). Bot will run without receiving reports.")
 

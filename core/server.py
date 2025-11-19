@@ -1,12 +1,15 @@
 import logging
 import time
 from aiohttp import web
+from aiogram import Bot
 from .nodes_db import get_node_by_token, update_node_heartbeat
 from .config import WEB_SERVER_HOST, WEB_SERVER_PORT, NODE_OFFLINE_TIMEOUT
 from .shared_state import NODES
 from .i18n import STRINGS
 from .config import DEFAULT_LANGUAGE
 
+# HTML-шаблон с экранированием CSS скобок и плейсхолдерами для локализации
+# Используем Tailwind CDN для стилизации
 HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html lang="en">
@@ -85,6 +88,9 @@ HTML_TEMPLATE = """
 """
 
 async def handle_index(request):
+    """Отдает HTML страницу со статусом (локализованную)."""
+    
+    # 1. Определение языка из заголовка Accept-Language
     accept_header = request.headers.get('Accept-Language', '')
     lang = DEFAULT_LANGUAGE
     if 'ru' in accept_header.lower():
@@ -92,20 +98,24 @@ async def handle_index(request):
     elif 'en' in accept_header.lower():
         lang = 'en'
     
+    # 2. Получение строк для выбранного языка
     s = STRINGS.get(lang, STRINGS.get('en', {})) 
     
+    # 3. Расчет статистики
     now = time.time()
     active_count = 0
     for node in NODES.values():
         if now - node.get("last_seen", 0) < NODE_OFFLINE_TIMEOUT:
             active_count += 1
 
+    # 4. Подготовка данных для шаблона
     data = s.copy()
     data.update({
         'nodes_count': len(NODES),
         'active_nodes': active_count
     })
     
+    # 5. Рендеринг
     try:
         html = HTML_TEMPLATE.format(**data)
     except KeyError as e:
@@ -115,6 +125,7 @@ async def handle_index(request):
     return web.Response(text=html, content_type='text/html')
 
 async def handle_heartbeat(request):
+    """Принимает данные от ноды и отправляет результаты команд пользователю."""
     try:
         data = await request.json()
     except Exception:
@@ -122,6 +133,7 @@ async def handle_heartbeat(request):
 
     token = data.get("token")
     stats = data.get("stats", {})
+    results = data.get("results", []) # Получаем ответы на команды
 
     if not token:
         return web.json_response({"error": "Token required"}, status=401)
@@ -137,6 +149,26 @@ async def handle_heartbeat(request):
     ip = peername[0] if peername else "Unknown"
 
     update_node_heartbeat(token, ip, stats)
+    
+    # --- ОБРАБОТКА РЕЗУЛЬТАТОВ ОТ НОДЫ ---
+    # Берем инстанс бота из app, куда мы его положили в start_web_server
+    bot: Bot = request.app.get('bot') 
+    if bot and results:
+        for res in results:
+            user_id = res.get("user_id")
+            text = res.get("result")
+            cmd = res.get("command")
+            
+            if user_id and text:
+                try:
+                    node_name = node.get("name", "Node")
+                    # Формируем сообщение ответа для админа
+                    full_text = f"🖥 <b>Ответ от {node_name}:</b>\n\n{text}"
+                    await bot.send_message(chat_id=user_id, text=full_text, parse_mode="HTML")
+                    logging.info(f"Отправлен ответ команды '{cmd}' пользователю {user_id}")
+                except Exception as e:
+                    logging.error(f"Не удалось отправить ответ пользователю {user_id}: {e}")
+    # -------------------------------------
 
     tasks = node.get("tasks", [])
     response_data = {"status": "ok"}
@@ -147,8 +179,11 @@ async def handle_heartbeat(request):
 
     return web.json_response(response_data)
 
-async def start_web_server():
+async def start_web_server(bot_instance: Bot):
+    """Запускает веб-сервер и сохраняет ссылку на бота для отправки уведомлений."""
     app = web.Application()
+    app['bot'] = bot_instance # Сохраняем бота в контексте приложения
+    
     app.router.add_get('/', handle_index)
     app.router.add_post('/api/heartbeat', handle_heartbeat)
 
