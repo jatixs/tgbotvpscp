@@ -2,12 +2,12 @@ import os
 import time
 import json
 import logging
-import platform
-import asyncio
 import requests
 import psutil
 import subprocess
+import threading
 from logging.handlers import RotatingFileHandler
+from queue import Queue, Empty
 
 # --- Настройки ---
 AGENT_BASE_URL = os.environ.get("AGENT_BASE_URL", "http://localhost:8080")
@@ -29,8 +29,44 @@ logging.basicConfig(
     ]
 )
 
-# Очередь результатов для отправки: [{ "user_id": 123, "command": "selftest", "result": "..." }]
+# Очередь для результатов, которые нужно отправить Агенту
 RESULTS_QUEUE = []
+RESULTS_LOCK = threading.Lock()
+
+# Словарь для отслеживания времени последнего обновления по каждой задаче (для троттлинга)
+# Key: (user_id, command), Value: timestamp
+LAST_UPDATE_TIME = {}
+UPDATE_THROTTLE_SEC = 2.0
+
+def add_result(user_id, command, result, is_final=False):
+    """Добавляет результат в очередь с учетом троттлинга."""
+    key = (user_id, command)
+    now = time.time()
+    last = LAST_UPDATE_TIME.get(key, 0)
+
+    # Если это не финальный результат и прошло мало времени, пропускаем (кроме самого первого)
+    if not is_final and (now - last < UPDATE_THROTTLE_SEC) and last != 0:
+        return
+
+    with RESULTS_LOCK:
+        # Удаляем предыдущие промежуточные статусы этой же команды для этого юзера, чтобы не спамить
+        # Оставляем только если это разные команды
+        # Но проще просто добавить, а сервер разберется. 
+        # Для оптимизации трафика можно заменять последний элемент, если он для того же юзера/команды.
+        RESULTS_QUEUE.append({
+            "user_id": user_id,
+            "command": command,
+            "result": result,
+            "is_final": is_final
+        })
+    
+    LAST_UPDATE_TIME[key] = now
+    
+    # Если финальный, удаляем из трекера времени
+    if is_final:
+        LAST_UPDATE_TIME.pop(key, None)
+        # Форсируем отправку хартбита
+        # (В простой реализации ждем следующего цикла, чтобы не усложнять)
 
 def get_uptime_str():
     uptime_seconds = time.time() - psutil.boot_time()
@@ -39,75 +75,143 @@ def get_uptime_str():
     minutes = int((uptime_seconds % 3600) // 60)
     return f"{days}d {hours}h {minutes}m"
 
-def cmd_selftest():
+def format_bytes(size):
+    power = 2**10
+    n = 0
+    power_labels = {0 : '', 1: 'K', 2: 'M', 3: 'G', 4: 'T'}
+    while size > power:
+        size /= power
+        n += 1
+    return f"{size:.2f} {power_labels[n]}B"
+
+# --- Команды (выполняются в потоках) ---
+
+def run_selftest(user_id):
+    add_result(user_id, "selftest", "🔍 <b>Collecting info...</b>")
+    
     cpu = psutil.cpu_percent(interval=1)
     mem = psutil.virtual_memory().percent
     disk = psutil.disk_usage('/').percent
     uptime = get_uptime_str()
-    
-    # Пробуем получить внешний IP
     try:
         ip = requests.get("https://api.ipify.org", timeout=2).text
     except:
         ip = "Unknown"
 
-    return (
+    res = (
         f"🛠 <b>Node System Status:</b>\n\n"
-        f"📊 CPU: <b>{cpu}%</b>\n"
-        f"💾 RAM: <b>{mem}%</b>\n"
-        f"💽 Disk: <b>{disk}%</b>\n"
+        f"📊 CPU: <b>{cpu:.1f}%</b>\n"
+        f"💾 RAM: <b>{mem:.1f}%</b>\n"
+        f"💽 Disk: <b>{disk:.1f}%</b>\n"
         f"⏱ Uptime: <b>{uptime}</b>\n"
         f"🌐 IP: <code>{ip}</code>"
     )
+    add_result(user_id, "selftest", res, is_final=True)
 
-def cmd_top():
+def run_top(user_id):
     try:
-        # ps aux, сортировка по CPU, топ 10
         cmd = "ps aux --sort=-%cpu | head -n 11"
         result = subprocess.check_output(cmd, shell=True).decode('utf-8')
-        return f"🔥 <b>Top Processes:</b>\n<pre>{result}</pre>"
+        if len(result) > 3000: result = result[:3000] + "\n..."
+        res = f"🔥 <b>Top Processes:</b>\n<pre>{result}</pre>"
     except Exception as e:
-        return f"Error running top: {e}"
+        res = f"Error running top: {e}"
+    add_result(user_id, "top", res, is_final=True)
 
-def perform_task(task):
-    """Выполняет команду и сохраняет результат в очередь."""
+def run_traffic(user_id):
+    add_result(user_id, "traffic", "📡 <b>Measuring traffic (1s)...</b>")
+    try:
+        c1 = psutil.net_io_counters()
+        time.sleep(1)
+        c2 = psutil.net_io_counters()
+        
+        rx_speed = c2.bytes_recv - c1.bytes_recv
+        tx_speed = c2.bytes_sent - c1.bytes_sent
+        
+        res = (
+            f"📡 <b>Network Traffic:</b>\n"
+            f"⬇️ Total RX: {format_bytes(c2.bytes_recv)}\n"
+            f"⬆️ Total TX: {format_bytes(c2.bytes_sent)}\n\n"
+            f"⚡️ <b>Speed (1 sec):</b>\n"
+            f"⬇️ {format_bytes(rx_speed)}/s\n"
+            f"⬆️ {format_bytes(tx_speed)}/s"
+        )
+    except Exception as e:
+        res = f"Error: {e}"
+    add_result(user_id, "traffic", res, is_final=True)
+
+def run_speedtest(user_id):
+    # Этапы обновления, чтобы пользователь не скучал
+    server = "ping.online.net" 
+    port = "5209"
+    
+    try:
+        add_result(user_id, "speedtest", f"🚀 <b>Speedtest:</b> Connecting to {server}...")
+        
+        # 1. Download
+        add_result(user_id, "speedtest", f"🚀 <b>Speedtest:</b> ⬇️ Downloading...")
+        cmd_dl = f"iperf3 -c {server} -p {port} -t 5 -R -4 --json"
+        res_dl = subprocess.run(cmd_dl, shell=True, capture_output=True, text=True)
+        
+        dl_speed_str = "Error"
+        if res_dl.returncode == 0:
+            try:
+                json_dl = json.loads(res_dl.stdout)
+                val = json_dl['end']['sum_received']['bits_per_second'] / 1_000_000
+                dl_speed_str = f"{val:.2f} Mbps"
+            except: pass
+        
+        # 2. Upload
+        add_result(user_id, "speedtest", f"🚀 <b>Speedtest:</b> ⬇️ DL: {dl_speed_str} | ⬆️ Uploading...")
+        cmd_ul = f"iperf3 -c {server} -p {port} -t 5 -4 --json"
+        res_ul = subprocess.run(cmd_ul, shell=True, capture_output=True, text=True)
+        
+        ul_speed_str = "Error"
+        if res_ul.returncode == 0:
+            try:
+                json_ul = json.loads(res_ul.stdout)
+                val = json_ul['end']['sum_sent']['bits_per_second'] / 1_000_000
+                ul_speed_str = f"{val:.2f} Mbps"
+            except: pass
+            
+        final_res = (
+            f"🚀 <b>Speedtest Results ({server}):</b>\n\n"
+            f"⬇️ <b>Download:</b> {dl_speed_str}\n"
+            f"⬆️ <b>Upload:</b> {ul_speed_str}"
+        )
+        add_result(user_id, "speedtest", final_res, is_final=True)
+
+    except FileNotFoundError:
+        add_result(user_id, "speedtest", "⚠️ <b>iperf3</b> not found. Install it: <code>apt install iperf3</code>", is_final=True)
+    except Exception as e:
+        add_result(user_id, "speedtest", f"⚠️ Speedtest failed: {e}", is_final=True)
+
+def run_reboot(user_id):
+    add_result(user_id, "reboot", "🔄 <b>Node is rebooting...</b> connection will be lost.", is_final=True)
+    # Форсируем отправку в главном потоке (через хартбит), но здесь просто ждем немного
+    time.sleep(2) 
+    logging.warning("REBOOTING SYSTEM...")
+    os.system("sbin/reboot")
+
+def start_task_thread(task):
     cmd = task.get("command")
     user_id = task.get("user_id")
-    logging.info(f"Выполнение команды: {cmd} для {user_id}")
-    
-    output = ""
     
     if cmd == "selftest":
-        output = cmd_selftest()
-    elif cmd == "uptime":
-        output = f"⏱ <b>Uptime:</b> {get_uptime_str()}"
+        threading.Thread(target=run_selftest, args=(user_id,), daemon=True).start()
     elif cmd == "top":
-        output = cmd_top()
+        threading.Thread(target=run_top, args=(user_id,), daemon=True).start()
+    elif cmd == "traffic":
+        threading.Thread(target=run_traffic, args=(user_id,), daemon=True).start()
+    elif cmd == "speedtest":
+        threading.Thread(target=run_speedtest, args=(user_id,), daemon=True).start()
     elif cmd == "reboot":
-        output = "🔄 <b>Node is rebooting...</b> connection will be lost."
-        # Добавляем результат СРАЗУ, чтобы успеть отправить до ребута
-        RESULTS_QUEUE.append({
-            "user_id": user_id,
-            "command": cmd,
-            "result": output
-        })
-        # Форсируем отправку перед смертью
-        send_heartbeat()
-        logging.warning("REBOOTING SYSTEM...")
-        os.system("(sleep 3 && /sbin/reboot) &")
-        return # Уже отправили
+        # Reboot запускаем в отдельном потоке, но с задержкой
+        threading.Thread(target=run_reboot, args=(user_id,), daemon=True).start()
     else:
-        output = f"⚠️ Unknown command: {cmd}"
-
-    if output:
-        RESULTS_QUEUE.append({
-            "user_id": user_id,
-            "command": cmd,
-            "result": output
-        })
+        add_result(user_id, cmd, f"⚠️ Unknown command: {cmd}", is_final=True)
 
 def get_stats_short():
-    """Легкая статистика для хартбита."""
     return {
         "cpu": psutil.cpu_percent(interval=None),
         "ram": psutil.virtual_memory().percent,
@@ -116,47 +220,55 @@ def get_stats_short():
     }
 
 def send_heartbeat():
-    """Отправляет данные и результаты выполнения команд на Агент."""
     global RESULTS_QUEUE
-    
     url = f"{AGENT_BASE_URL}/api/heartbeat"
     stats = get_stats_short()
+    
+    # Забираем результаты из очереди атомарно
+    results_to_send = []
+    with RESULTS_LOCK:
+        if RESULTS_QUEUE:
+            results_to_send = list(RESULTS_QUEUE)
+            RESULTS_QUEUE.clear()
     
     payload = {
         "token": AGENT_TOKEN,
         "stats": stats,
-        "results": RESULTS_QUEUE # Отправляем накопленные ответы
+        "results": results_to_send
     }
     
     try:
-        response = requests.post(url, json=payload, timeout=5)
+        response = requests.post(url, json=payload, timeout=10)
         if response.status_code == 200:
-            # Если успешно отправили - очищаем очередь результатов
-            if RESULTS_QUEUE:
-                logging.info(f"Sent {len(RESULTS_QUEUE)} command results.")
-                RESULTS_QUEUE = []
-            
             data = response.json()
-            # Выполняем новые задачи
             tasks = data.get("tasks", [])
             for task in tasks:
-                perform_task(task)
+                logging.info(f"Received task: {task['command']}")
+                start_task_thread(task)
         else:
-            logging.error(f"Server returned {response.status_code}: {response.text}")
-            
+            logging.error(f"Agent error: {response.status_code} - {response.text}")
+            # Если ошибка, возвращаем результаты в очередь (в начало), чтобы не потерять
+            if results_to_send:
+                with RESULTS_LOCK:
+                    RESULTS_QUEUE[0:0] = results_to_send
+
     except requests.exceptions.ConnectionError:
-        logging.error(f"Connection failed to {AGENT_BASE_URL}")
+        logging.error(f"Cannot connect to Agent at {AGENT_BASE_URL}")
+        if results_to_send:
+            with RESULTS_LOCK:
+                RESULTS_QUEUE[0:0] = results_to_send
     except Exception as e:
         logging.error(f"Heartbeat error: {e}")
+        if results_to_send:
+            with RESULTS_LOCK:
+                RESULTS_QUEUE[0:0] = results_to_send
 
 def main():
     if not AGENT_TOKEN:
-        logging.critical("AGENT_TOKEN is missing in .env!")
+        logging.critical("AGENT_TOKEN missing in .env")
         return
 
-    logging.info(f"Node started. Target: {AGENT_BASE_URL}")
-    
-    # Первый прогон для инициализации psutil
+    logging.info(f"Node started. Agent: {AGENT_BASE_URL}")
     psutil.cpu_percent(interval=None)
 
     while True:

@@ -25,8 +25,8 @@ spinner() { local pid=$1; local msg=$2; local spin='|/-\'; local i=0; while kill
 run_with_spinner() { 
     local msg=$1
     shift
-    # [FIX] Force cd / in subshell
-    ( cd / && "$@" >> /tmp/${SERVICE_NAME}_install.log 2>&1 ) & 
+    # [FIX] Removed cd / to allow context-dependent commands like git
+    ( "$@" >> /tmp/${SERVICE_NAME}_install.log 2>&1 ) & 
     local pid=$!
     spinner "$pid" "$msg"
     wait $pid
@@ -254,7 +254,8 @@ EOF
 create_and_start_service() { 
     local svc=$1; local script=$2; local mode=$3; local desc=$4
     local user="root"; if [ "$mode" == "secure" ] && [ "$svc" == "$SERVICE_NAME" ]; then user=${SERVICE_USER}; fi
-    msg_info "Creating ${svc}.service..."; sudo tee "/etc/systemd/system/${svc}.service" > /dev/null <<EOF
+    msg_info "Creating ${svc}.service..."
+    sudo tee "/etc/systemd/system/${svc}.service" > /dev/null <<EOF
 [Unit]
 Description=${desc}
 After=network.target
@@ -289,9 +290,9 @@ install_systemd_logic() {
     fi
     ask_env_details
     write_env_file "systemd" "$mode" ""
-    create_and_start_service "${SERVICE_NAME}" "${BOT_INSTALL_PATH}/bot.py" "$mode" "Telegram Bot"
-    create_and_start_service "${WATCHDOG_SERVICE_NAME}" "${BOT_INSTALL_PATH}/watchdog.py" "root" "Watchdog"
-    msg_success "Systemd Install Complete!"
+    create_and_start_service "${SERVICE_NAME}" "${BOT_INSTALL_PATH}/bot.py" "$mode" "Telegram Бот"
+    create_and_start_service "${WATCHDOG_SERVICE_NAME}" "${BOT_INSTALL_PATH}/watchdog.py" "root" "Наблюдатель"
+    local ip=$(curl -s ipinfo.io/ip); echo ""; msg_success "Установка завершена! Агент доступен на IP: ${ip}:${WEB_PORT}";
 }
 
 install_docker_logic() {
@@ -313,6 +314,10 @@ install_docker_logic() {
 install_node_logic() {
     echo -e "\n${C_BOLD}=== Installing NODE (Client) ===${C_RESET}"
     common_install_steps
+    
+    # [FIX] Install iperf3 for node
+    run_with_spinner "Installing iperf3" sudo apt-get install -y iperf3
+    
     setup_repo_and_dirs "root"
     
     msg_info "Setting up venv..."
@@ -360,7 +365,6 @@ install_docker_root() { echo -e "\n${C_BOLD}=== Install Docker (Root) ===${C_RES
 
 uninstall_bot() {
     echo -e "\n${C_BOLD}=== Uninstalling ===${C_RESET}"
-    # [FIX] Go to root to safely delete folder
     cd /
     sudo systemctl stop ${SERVICE_NAME} ${WATCHDOG_SERVICE_NAME} ${NODE_SERVICE_NAME} &> /dev/null
     sudo systemctl disable ${SERVICE_NAME} ${WATCHDOG_SERVICE_NAME} ${NODE_SERVICE_NAME} &> /dev/null
@@ -421,7 +425,7 @@ update_bot() {
         run_with_spinner "Pip install" $exec_user "${VENV_PATH}/bin/pip" install -r "${BOT_INSTALL_PATH}/requirements.txt" --upgrade
         
         msg_info "3. Restarting services..."
-        # [FIX] Restart only installed services
+        # [FIX] Restart only active services
         if systemctl list-unit-files | grep -q "^${SERVICE_NAME}.service"; then
             sudo systemctl restart ${SERVICE_NAME}
         fi
@@ -440,7 +444,7 @@ main_menu() {
     while true; do
         clear
         echo -e "${C_BLUE}${C_BOLD}╔═══════════════════════════════════╗${C_RESET}"
-        echo -e "${C_BLUE}${C_BOLD}║    VPS Telegram Bot Manager       ║${C_RESET}"
+        echo -e "${C_BLUE}${C_BOLD}║    Менеджер VPS Telegram Бот      ║${C_RESET}"
         echo -e "${C_BLUE}${C_BOLD}╚═══════════════════════════════════╝${C_RESET}"
         check_integrity
         echo -e "  Branch: ${GIT_BRANCH} | Version: ${local_version}"

@@ -41,7 +41,7 @@ spinner() {
 run_with_spinner() { 
     local msg=$1
     shift
-    # [FIX] Убран cd / для поддержки команд, зависимых от контекста (git)
+    # [FIX] Убран cd / для команд, зависящих от контекста
     ( "$@" >> /tmp/${SERVICE_NAME}_install.log 2>&1 ) & 
     local pid=$!
     spinner "$pid" "$msg"
@@ -70,7 +70,6 @@ check_integrity() {
         INSTALL_TYPE="НЕТ"; STATUS_MESSAGE="Бот не установлен."; return;
     fi
 
-    # --- ПРОВЕРКА РЕЖИМА НОДЫ ---
     if grep -q "MODE=node" "${ENV_FILE}"; then
         INSTALL_TYPE="НОДА (Клиент)"
         if systemctl is-active --quiet ${NODE_SERVICE_NAME}.service; then
@@ -81,7 +80,6 @@ check_integrity() {
         return
     fi
 
-    # Определяем тип установки АГЕНТА (Docker или Systemd)
     DEPLOY_MODE_FROM_ENV=$(grep '^DEPLOY_MODE=' "${ENV_FILE}" | cut -d'=' -f2 | tr -d '"' || echo "systemd")
     INSTALL_MODE_FROM_ENV=$(grep '^INSTALL_MODE=' "${ENV_FILE}" | cut -d'=' -f2 | tr -d '"' || echo "unknown")
 
@@ -100,8 +98,7 @@ check_integrity() {
         if docker ps -f "name=${watchdog_container_name}" --format '{{.Names}}' | grep -q "${watchdog_container_name}"; then watchdog_status="${C_GREEN}Активен${C_RESET}"; else watchdog_status="${C_RED}Неактивен${C_RESET}"; fi
         
         STATUS_MESSAGE="Docker: OK (Бот: ${bot_status} | Наблюдатель: ${watchdog_status})"
-
-    else # Systemd
+    else 
         INSTALL_TYPE="АГЕНТ (Systemd - $INSTALL_MODE_FROM_ENV)"
         if [ ! -f "${BOT_INSTALL_PATH}/bot.py" ]; then STATUS_MESSAGE="${C_RED}Файлы повреждены.${C_RESET}"; return; fi;
         
@@ -112,19 +109,18 @@ check_integrity() {
     fi
 }
 
-# --- Общие шаги установки ---
 common_install_steps() {
     echo "" > /tmp/${SERVICE_NAME}_install.log
     msg_info "1. Обновление пакетов и установка базовых зависимостей..."
     run_with_spinner "Обновление списка пакетов" sudo apt-get update -y || { msg_error "Не удалось обновить пакеты"; exit 1; }
-    run_with_spinner "Установка зависимостей (python3, pip, venv, git, curl, wget, sudo, yaml)" sudo DEBIAN_FRONTEND=noninteractive apt-get install -y python3 python3-pip python3-venv git curl wget sudo python3-yaml || { msg_error "Не удалось установить базовые зависимости"; exit 1; }
+    run_with_spinner "Установка зависимостей" sudo DEBIAN_FRONTEND=noninteractive apt-get install -y python3 python3-pip python3-venv git curl wget sudo python3-yaml || { msg_error "Не удалось установить базовые зависимости"; exit 1; }
 }
 
 setup_repo_and_dirs() {
     local owner_user=$1
     if [ -z "$owner_user" ]; then owner_user="root"; fi
     
-    # [FIX] Безопасный переход в корень перед операциями с папкой
+    # [FIX] Переходим в корень для безопасности
     cd /
     sudo mkdir -p ${BOT_INSTALL_PATH}
     msg_info "Клонирование репозитория (ветка ${GIT_BRANCH})..."
@@ -133,48 +129,38 @@ setup_repo_and_dirs() {
     msg_info "Создание структуры папок..."
     sudo mkdir -p "${BOT_INSTALL_PATH}/logs/bot" "${BOT_INSTALL_PATH}/logs/watchdog" "${BOT_INSTALL_PATH}/logs/node" "${BOT_INSTALL_PATH}/config"
     
-    # Установка владельца
     sudo chown -R ${owner_user}:${owner_user} ${BOT_INSTALL_PATH}
 }
-
-# --- Функции установки АГЕНТА ---
 
 install_extras() {
     local packages_to_install=()
     local packages_to_remove=()
 
-    # Fail2Ban
     if ! command -v fail2ban-client &> /dev/null; then
         msg_question "Fail2Ban не найден. Установить? (y/n): " INSTALL_F2B
         if [[ "$INSTALL_F2B" =~ ^[Yy]$ ]]; then packages_to_install+=("fail2ban"); else msg_info "Пропуск Fail2Ban."; fi
     else msg_success "Fail2Ban уже установлен."; fi
 
-    # iperf3
     if ! command -v iperf3 &> /dev/null; then
         msg_question "iperf3 не найден. Установить? (y/n): " INSTALL_IPERF3
         if [[ "$INSTALL_IPERF3" =~ ^[Yy]$ ]]; then packages_to_install+=("iperf3"); else msg_info "Пропуск iperf3."; fi
     else msg_success "iperf3 уже установлен."; fi
 
-    # Speedtest CLI removal
     if command -v speedtest &> /dev/null || dpkg -s speedtest-cli &> /dev/null; then
         msg_warning "Обнаружен старый 'speedtest-cli'."
         msg_question "Удалить 'speedtest-cli'? (y/n): " REMOVE_SPEEDTEST
         if [[ "$REMOVE_SPEEDTEST" =~ ^[Yy]$ ]]; then packages_to_remove+=("speedtest-cli"); else msg_info "Пропуск удаления."; fi
     fi
 
-    # Exec removal
     if [ ${#packages_to_remove[@]} -gt 0 ]; then
         run_with_spinner "Удаление пакетов" sudo apt-get remove --purge -y "${packages_to_remove[@]}"
         run_with_spinner "Очистка apt" sudo apt-get autoremove -y
-        msg_success "Пакеты удалены."
     fi
 
-    # Exec install
     if [ ${#packages_to_install[@]} -gt 0 ]; then
         run_with_spinner "Обновление apt" sudo apt-get update -y
         run_with_spinner "Установка пакетов" sudo DEBIAN_FRONTEND=noninteractive apt-get install -y "${packages_to_install[@]}"
         if [[ " ${packages_to_install[*]} " =~ " fail2ban " ]]; then sudo systemctl enable fail2ban &> /dev/null; sudo systemctl start fail2ban &> /dev/null; fi
-        msg_success "Пакеты установлены."
     fi
 }
 
@@ -201,52 +187,36 @@ TG_BOT_TOKEN="${T}"
 TG_ADMIN_ID="${A}"
 TG_ADMIN_USERNAME="${U}"
 TG_BOT_NAME="${N}"
-
 WEB_SERVER_HOST="0.0.0.0"
 WEB_SERVER_PORT="${WEB_PORT}"
-
 INSTALL_MODE="${install_mode}"
 DEPLOY_MODE="${deploy_mode}"
 TG_BOT_CONTAINER_NAME="${container_name}"
 EOF
     sudo chmod 600 "${ENV_FILE}"
-    msg_success ".env файл создан."
 }
 
 check_docker_deps() {
     msg_info "Проверка Docker..."
-    if command -v docker-compose &> /dev/null; then msg_warning "Удаление старого docker-compose..."; sudo rm -f $(which docker-compose); fi
-    
-    # Удаление старых версий
+    if ! command -v docker &> /dev/null; then
+        curl -sSL https://get.docker.com -o /tmp/get-docker.sh
+        run_with_spinner "Installing Docker" sudo sh /tmp/get-docker.sh
+    fi
+    if command -v docker-compose &> /dev/null; then sudo rm -f $(which docker-compose); fi
     (sudo apt-get purge -y docker.io docker-compose docker-compose-plugin docker-ce docker-ce-cli containerd.io docker-buildx-plugin &> /tmp/${SERVICE_NAME}_install.log)
     (sudo apt-get autoremove -y &> /tmp/${SERVICE_NAME}_install.log)
-    
-    msg_info "Фикс cgroups..."
-    sudo mkdir -p /etc/docker
-    sudo bash -c 'echo -e "{\n  \"exec-opts\": [\"native.cgroupdriver=systemd\"]\n}" > /etc/docker/daemon.json'
-
-    msg_info "Установка Docker Engine..."
-    curl -sSL https://get.docker.com -o /tmp/get-docker.sh
-    run_with_spinner "Установка Docker" sudo sh /tmp/get-docker.sh
-    
     sudo systemctl enable docker &> /tmp/${SERVICE_NAME}_install.log
     run_with_spinner "Запуск Docker" sudo systemctl restart docker
-    if ! sudo systemctl is-active --quiet docker; then msg_error "Docker не запустился! Проверьте логи."; exit 1; fi
-    msg_success "Docker установлен."
     
     msg_info "Установка Docker Compose v2..."
     local DOCKER_CLI_PLUGIN_DIR="/usr/libexec/docker/cli-plugins"
     if [ ! -d "$DOCKER_CLI_PLUGIN_DIR" ]; then DOCKER_CLI_PLUGIN_DIR="/usr/local/lib/docker/cli-plugins"; fi
     local DOCKER_COMPOSE_PATH="${DOCKER_CLI_PLUGIN_DIR}/docker-compose"
     sudo mkdir -p ${DOCKER_CLI_PLUGIN_DIR}
-    
     local DOCKER_COMPOSE_VERSION=$(curl -s https://api.github.com/repos/docker/compose/releases/latest | grep 'tag_name' | cut -d\" -f4)
     local LATEST_COMPOSE_URL="https://github.com/docker/compose/releases/download/${DOCKER_COMPOSE_VERSION}/docker-compose-$(uname -s)-$(uname -m)"
-    
     run_with_spinner "Скачивание compose" sudo curl -SLf "${LATEST_COMPOSE_URL}" -o "${DOCKER_COMPOSE_PATH}"
     sudo chmod +x "${DOCKER_COMPOSE_PATH}"
-    
-    if docker compose version &> /dev/null; then msg_success "Docker Compose установлен."; else msg_error "Ошибка проверки Docker Compose."; exit 1; fi
 }
 
 create_dockerfile() {
@@ -390,23 +360,25 @@ install_docker_logic() {
     cd ${BOT_INSTALL_PATH}
     sudo docker-compose build
     sudo docker-compose --profile "${mode}" up -d --remove-orphans
-    msg_success "Установка Docker завершена!"
+    msg_success "Docker Install Complete!"
 }
 
 install_node_logic() {
     echo -e "\n${C_BOLD}=== Установка НОДЫ (Клиент) ===${C_RESET}"
     common_install_steps
+    run_with_spinner "Установка iperf3" sudo apt-get install -y iperf3
+    
     setup_repo_and_dirs "root"
     
     msg_info "Настройка venv..."
     if [ ! -d "${VENV_PATH}" ]; then run_with_spinner "Создание venv" ${PYTHON_BIN} -m venv "${VENV_PATH}"; fi
     run_with_spinner "Установка deps" "${VENV_PATH}/bin/pip" install psutil requests
     
-    echo ""; msg_info "Подключение к Агенту:"
-    msg_question "URL Агента (http://IP:PORT): " AGENT_URL
-    msg_question "Токен Ноды: " NODE_TOKEN
+    echo ""; msg_info "Agent Setup:"
+    msg_question "Agent URL (http://IP:PORT): " AGENT_URL
+    msg_question "Node Token: " NODE_TOKEN
     
-    msg_info "Создание .env..."
+    msg_info "Creating .env..."
     sudo bash -c "cat > ${ENV_FILE}" <<EOF
 MODE=node
 AGENT_BASE_URL="${AGENT_URL}"
@@ -415,7 +387,7 @@ NODE_UPDATE_INTERVAL=5
 EOF
     sudo chmod 600 "${ENV_FILE}"
 
-    msg_info "Создание ${NODE_SERVICE_NAME}.service..."
+    msg_info "Creating ${NODE_SERVICE_NAME}.service..."
     sudo tee "/etc/systemd/system/${NODE_SERVICE_NAME}.service" > /dev/null <<EOF
 [Unit]
 Description=Telegram Bot Node Client
@@ -443,7 +415,6 @@ install_docker_root() { echo -e "\n${C_BOLD}=== Установка Docker (Root)
 
 uninstall_bot() {
     echo -e "\n${C_BOLD}=== Удаление ===${C_RESET}"
-    # [FIX] Переходим в корень перед удалением
     cd /
     sudo systemctl stop ${SERVICE_NAME} ${WATCHDOG_SERVICE_NAME} ${NODE_SERVICE_NAME} &> /dev/null
     sudo systemctl disable ${SERVICE_NAME} ${WATCHDOG_SERVICE_NAME} ${NODE_SERVICE_NAME} &> /dev/null
@@ -458,10 +429,10 @@ uninstall_bot() {
 
 update_bot() {
     echo -e "\n${C_BOLD}=== Обновление (ветка: ${GIT_BRANCH}) ===${C_RESET}";
-    if [ ! -d "${BOT_INSTALL_PATH}/.git" ]; then msg_error "Репозиторий Git не найден. Невозможно обновить."; return 1; fi
+    if [ ! -d "${BOT_INSTALL_PATH}/.git" ]; then msg_error "Git repo not found. Cannot update."; return 1; fi
     
     local exec_user="";
-    if [ ! -f "${ENV_FILE}" ]; then msg_error "Файл .env не найден. Не могу определить режим обновления."; return 1; fi
+    if [ ! -f "${ENV_FILE}" ]; then msg_error ".env not found. Cannot determine update mode."; return 1; fi
     
     # Read vars
     local DEPLOY_MODE_FROM_ENV=$(grep '^DEPLOY_MODE=' "${ENV_FILE}" | cut -d'=' -f2 | tr -d '"')
@@ -474,16 +445,15 @@ update_bot() {
         exec_user="sudo -u ${SERVICE_USER}"
     fi
 
-    msg_warning "Обновление перезапишет локальные изменения."
-    msg_warning ".env, config/, logs/ будут сохранены."
+    msg_warning "Update overwrites local changes."
+    msg_warning ".env, config/, logs/ preserved."
     
-    msg_info "1. Получение обновлений..."
+    msg_info "1. Fetching updates..."
     pushd "${BOT_INSTALL_PATH}" > /dev/null
-    # [FIX] Проверка на ошибки git
     if ! run_with_spinner "Git fetch" $exec_user git fetch origin; then popd > /dev/null; return 1; fi
     if ! run_with_spinner "Git reset" $exec_user git reset --hard "origin/${GIT_BRANCH}"; then popd > /dev/null; return 1; fi
     popd > /dev/null
-    msg_success "Файлы обновлены."
+    msg_success "Files updated."
 
     if [ "$DEPLOY_MODE_FROM_ENV" == "docker" ]; then
         # Docker update logic
@@ -494,17 +464,17 @@ update_bot() {
         if [ ! -f "${BOT_INSTALL_PATH}/Dockerfile" ]; then create_dockerfile; fi
         create_docker_compose_yml 
 
-        msg_info "2. Пересборка и перезапуск контейнеров..."
+        msg_info "2. Rebuilding and restarting containers..."
         (cd ${BOT_INSTALL_PATH} && run_with_spinner "Build" $COMPOSE_CMD build)
         (cd ${BOT_INSTALL_PATH} && run_with_spinner "Up" $COMPOSE_CMD --profile "${INSTALL_MODE_FROM_ENV}" up -d --remove-orphans)
-        msg_success "Docker обновлен."
+        msg_success "Docker updated."
     else
         # Systemd update logic
-        msg_info "2. Обновление зависимостей..."
+        msg_info "2. Updating dependencies..."
         run_with_spinner "Pip install" $exec_user "${VENV_PATH}/bin/pip" install -r "${BOT_INSTALL_PATH}/requirements.txt" --upgrade
         
-        msg_info "3. Перезапуск служб..."
-        # [FIX] Проверяем и перезапускаем только активные службы
+        msg_info "3. Restarting services..."
+        # [FIX] Restart only active services
         if systemctl list-unit-files | grep -q "^${SERVICE_NAME}.service"; then
             sudo systemctl restart ${SERVICE_NAME}
         fi
@@ -514,7 +484,7 @@ update_bot() {
         if systemctl list-unit-files | grep -q "^${NODE_SERVICE_NAME}.service"; then
             sudo systemctl restart ${NODE_SERVICE_NAME}
         fi
-        msg_success "Службы перезапущены."
+        msg_success "Services restarted."
     fi
 }
 
@@ -538,19 +508,18 @@ main_menu() {
         echo -e "${C_GREEN}  8) Установить НОДУ (Клиент)${C_RESET}"
         echo "  0) Выход"
         echo "--------------------------------------------------------"
-        read -p "$(echo -e "${C_BOLD}Ваш выбор: ${C_RESET}")" choice
-        
+        read -p "Your choice: " choice
         case $choice in
             1) update_bot; read -p "Нажмите Enter..." ;;
             2) msg_question "Удалить бота ПОЛНОСТЬЮ? (y/n): " confirm_uninstall;
                if [[ "$confirm_uninstall" =~ ^[Yy]$ ]]; then uninstall_bot; msg_info "Бот удален. Выход."; return; else msg_info "Удаление отменено."; fi ;;
-            3) rm -f /tmp/${SERVICE_NAME}_install.log; msg_question "Переустановить (Systemd - Secure)? (y/n): " confirm; if [[ "$confirm" =~ ^[Yy]$ ]]; then uninstall_bot; install_systemd_secure; local_version=$(get_local_version "$README_FILE"); fi; read -p "Нажмите Enter..." ;;
-            4) rm -f /tmp/${SERVICE_NAME}_install.log; msg_question "Переустановить (Systemd - Root)? (y/n): " confirm; if [[ "$confirm" =~ ^[Yy]$ ]]; then uninstall_bot; install_systemd_root; local_version=$(get_local_version "$README_FILE"); fi; read -p "Нажмите Enter..." ;;
-            5) rm -f /tmp/${SERVICE_NAME}_install.log; msg_question "Переустановить (Docker - Secure)? (y/n): " confirm; if [[ "$confirm" =~ ^[Yy]$ ]]; then uninstall_bot; install_docker_secure; local_version=$(get_local_version "$README_FILE"); fi; read -p "Нажмите Enter..." ;;
-            6) rm -f /tmp/${SERVICE_NAME}_install.log; msg_question "Переустановить (Docker - Root)? (y/n): " confirm; if [[ "$confirm" =~ ^[Yy]$ ]]; then uninstall_bot; install_docker_root; local_version=$(get_local_version "$README_FILE"); fi; read -p "Нажмите Enter..." ;;
-            8) rm -f /tmp/${SERVICE_NAME}_install.log; msg_question "Установить НОДУ (Клиент)? (y/n): " confirm; if [[ "$confirm" =~ ^[Yy]$ ]]; then uninstall_bot; install_node_logic; local_version=$(get_local_version "$README_FILE"); fi; read -p "Нажмите Enter..." ;;
+            3) uninstall_bot; install_systemd_secure; read -p "Нажмите Enter..." ;;
+            4) uninstall_bot; install_systemd_root; read -p "Нажмите Enter..." ;;
+            5) uninstall_bot; install_docker_secure; read -p "Нажмите Enter..." ;;
+            6) uninstall_bot; install_docker_root; read -p "Нажмите Enter..." ;;
+            8) uninstall_bot; install_node_logic; read -p "Нажмите Enter..." ;;
             0) break ;;
-            *) msg_error "Неверный выбор." ;;
+            *) ;;
         esac
     done
 }
@@ -572,7 +541,7 @@ if [ "$INSTALL_TYPE" == "НЕТ" ] || [[ "$STATUS_MESSAGE" == *"поврежде
     echo -e "${C_GREEN}  8) НОДА (Клиент)${C_RESET}"
     echo "  0) Выход"
     echo "--------------------------------------------------------"
-    read -p "$(echo -e "${C_BOLD}Ваш выбор: ${C_RESET}")" install_choice
+    read -p "$(echo -e "${C_BOLD}Choice: ${C_RESET}")" install_choice
     rm -f /tmp/${SERVICE_NAME}_install.log
     case $install_choice in
         1) uninstall_bot; install_systemd_secure; main_menu ;;
@@ -581,7 +550,7 @@ if [ "$INSTALL_TYPE" == "НЕТ" ] || [[ "$STATUS_MESSAGE" == *"поврежде
         4) uninstall_bot; install_docker_root; main_menu ;;
         8) uninstall_bot; install_node_logic; main_menu ;;
         0) exit 0 ;;
-        *) msg_error "Неверный выбор."; exit 1 ;;
+        *) msg_error "Invalid choice."; exit 1 ;;
     esac
 else
     main_menu
