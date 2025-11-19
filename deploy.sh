@@ -31,7 +31,7 @@ spinner() {
     local spin='|/-\'
     local i=0
     while kill -0 $pid 2>/dev/null; do 
-        i=$(( (i+1) %4 ))
+        i=$(( (i+1) % 4 ))
         printf "\r${C_BLUE}⏳ ${spin:$i:1} ${msg}...${C_RESET}"
         sleep .1
     done
@@ -41,8 +41,8 @@ spinner() {
 run_with_spinner() { 
     local msg=$1
     shift
-    # [FIX] Переходим в корень перед запуском, чтобы избежать ошибок при переустановке
-    ( cd / && "$@" >> /tmp/${SERVICE_NAME}_install.log 2>&1 ) & 
+    # [FIX] Убран cd / для поддержки команд, зависимых от контекста (git)
+    ( "$@" >> /tmp/${SERVICE_NAME}_install.log 2>&1 ) & 
     local pid=$!
     spinner "$pid" "$msg"
     wait $pid
@@ -124,6 +124,7 @@ setup_repo_and_dirs() {
     local owner_user=$1
     if [ -z "$owner_user" ]; then owner_user="root"; fi
     
+    # [FIX] Безопасный переход в корень перед операциями с папкой
     cd /
     sudo mkdir -p ${BOT_INSTALL_PATH}
     msg_info "Клонирование репозитория (ветка ${GIT_BRANCH})..."
@@ -373,7 +374,7 @@ install_systemd_logic() {
     write_env_file "systemd" "$mode" ""
     create_and_start_service "${SERVICE_NAME}" "${BOT_INSTALL_PATH}/bot.py" "$mode" "Telegram Бот"
     create_and_start_service "${WATCHDOG_SERVICE_NAME}" "${BOT_INSTALL_PATH}/watchdog.py" "root" "Наблюдатель"
-    local ip=$(curl -s ipinfo.io/ip); echo ""; msg_success "Установка завершена! Агент доступен на IP: ${ip}:${WEB_PORT}";
+    local ip=$(curl -s ipinfo.io/ip); echo ""; msg_success "Установка завершена! Агент: http://${ip}:${WEB_PORT}";
 }
 
 install_docker_logic() {
@@ -442,6 +443,7 @@ install_docker_root() { echo -e "\n${C_BOLD}=== Установка Docker (Root)
 
 uninstall_bot() {
     echo -e "\n${C_BOLD}=== Удаление ===${C_RESET}"
+    # [FIX] Переходим в корень перед удалением
     cd /
     sudo systemctl stop ${SERVICE_NAME} ${WATCHDOG_SERVICE_NAME} ${NODE_SERVICE_NAME} &> /dev/null
     sudo systemctl disable ${SERVICE_NAME} ${WATCHDOG_SERVICE_NAME} ${NODE_SERVICE_NAME} &> /dev/null
@@ -477,8 +479,9 @@ update_bot() {
     
     msg_info "1. Получение обновлений..."
     pushd "${BOT_INSTALL_PATH}" > /dev/null
-    run_with_spinner "Git fetch" $exec_user git fetch origin
-    run_with_spinner "Git reset" $exec_user git reset --hard "origin/${GIT_BRANCH}"
+    # [FIX] Проверка на ошибки git
+    if ! run_with_spinner "Git fetch" $exec_user git fetch origin; then popd > /dev/null; return 1; fi
+    if ! run_with_spinner "Git reset" $exec_user git reset --hard "origin/${GIT_BRANCH}"; then popd > /dev/null; return 1; fi
     popd > /dev/null
     msg_success "Файлы обновлены."
 
@@ -501,7 +504,7 @@ update_bot() {
         run_with_spinner "Pip install" $exec_user "${VENV_PATH}/bin/pip" install -r "${BOT_INSTALL_PATH}/requirements.txt" --upgrade
         
         msg_info "3. Перезапуск служб..."
-        # Перезапускаем только те службы, которые установлены
+        # [FIX] Проверяем и перезапускаем только активные службы
         if systemctl list-unit-files | grep -q "^${SERVICE_NAME}.service"; then
             sudo systemctl restart ${SERVICE_NAME}
         fi

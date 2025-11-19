@@ -360,6 +360,7 @@ install_docker_root() { echo -e "\n${C_BOLD}=== Install Docker (Root) ===${C_RES
 
 uninstall_bot() {
     echo -e "\n${C_BOLD}=== Uninstalling ===${C_RESET}"
+    # [FIX] Go to root to safely delete folder
     cd /
     sudo systemctl stop ${SERVICE_NAME} ${WATCHDOG_SERVICE_NAME} ${NODE_SERVICE_NAME} &> /dev/null
     sudo systemctl disable ${SERVICE_NAME} ${WATCHDOG_SERVICE_NAME} ${NODE_SERVICE_NAME} &> /dev/null
@@ -395,8 +396,9 @@ update_bot() {
     
     msg_info "1. Fetching updates..."
     pushd "${BOT_INSTALL_PATH}" > /dev/null
-    run_with_spinner "Git fetch" $exec_user git fetch origin
-    run_with_spinner "Git reset" $exec_user git reset --hard "origin/${GIT_BRANCH}"
+    # [FIX] Check git errors
+    if ! run_with_spinner "Git fetch" $exec_user git fetch origin; then popd > /dev/null; return 1; fi
+    if ! run_with_spinner "Git reset" $exec_user git reset --hard "origin/${GIT_BRANCH}"; then popd > /dev/null; return 1; fi
     popd > /dev/null
     msg_success "Files updated."
 
@@ -419,6 +421,7 @@ update_bot() {
         run_with_spinner "Pip install" $exec_user "${VENV_PATH}/bin/pip" install -r "${BOT_INSTALL_PATH}/requirements.txt" --upgrade
         
         msg_info "3. Restarting services..."
+        # [FIX] Restart only installed services
         if systemctl list-unit-files | grep -q "^${SERVICE_NAME}.service"; then
             sudo systemctl restart ${SERVICE_NAME}
         fi
