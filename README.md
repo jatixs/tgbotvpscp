@@ -97,7 +97,7 @@ bash <(wget -qO- https://raw.githubusercontent.com/jatixs/tgbotvpscp/main/deploy
 2.  **На удаленном сервере (Node):**
       * Запустите тот же скрипт установки:
         ```bash
-        bash <(wget -qO- [https://raw.githubusercontent.com/jatixs/tgbotvpscp/main/deploy.sh](https://raw.githubusercontent.com/jatixs/tgbotvpscp/main/deploy.sh))
+        bash <(wget -qO- https://raw.githubusercontent.com/jatixs/tgbotvpscp/main/deploy.sh)
         ```
       * В меню выберите пункт **8) Установить НОДУ (Клиент)**.
       * Скрипт запросит:
