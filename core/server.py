@@ -3,9 +3,9 @@ import time
 from aiohttp import web
 from .nodes_db import get_node_by_token, update_node_heartbeat
 from .config import WEB_SERVER_HOST, WEB_SERVER_PORT, NODE_OFFLINE_TIMEOUT
-# Импортируем NODES для статистики на дашборде
 from .shared_state import NODES
 
+# Исправлено экранирование CSS (двойные фигурные скобки)
 HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html lang="en">
@@ -14,17 +14,17 @@ HTML_TEMPLATE = """
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>VPS Bot Agent</title>
     <style>
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #1e1e1e; color: #e0e0e0; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
-        .container { text-align: center; background-color: #2d2d2d; padding: 40px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.5); width: 80%; max-width: 600px; }
-        h1 { color: #4caf50; margin-bottom: 10px; }
-        p { font-size: 1.1em; color: #b0b0b0; }
-        .stats { margin-top: 30px; display: flex; justify-content: space-around; }
-        .stat-box { background-color: #3d3d3d; padding: 15px; border-radius: 8px; width: 45%; }
-        .stat-number { font-size: 2.5em; font-weight: bold; color: #ffffff; display: block; }
-        .stat-label { font-size: 0.9em; color: #888; text-transform: uppercase; letter-spacing: 1px; }
-        .status-indicator { display: inline-block; width: 10px; height: 10px; background-color: #4caf50; border-radius: 50%; margin-right: 5px; box-shadow: 0 0 8px #4caf50; }
-        .footer { margin-top: 40px; font-size: 0.8em; color: #666; }
-        a { color: #4caf50; text-decoration: none; }
+        body {{ font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #1e1e1e; color: #e0e0e0; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }}
+        .container {{ text-align: center; background-color: #2d2d2d; padding: 40px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.5); width: 80%; max-width: 600px; }}
+        h1 {{ color: #4caf50; margin-bottom: 10px; }}
+        p {{ font-size: 1.1em; color: #b0b0b0; }}
+        .stats {{ margin-top: 30px; display: flex; justify-content: space-around; }}
+        .stat-box {{ background-color: #3d3d3d; padding: 15px; border-radius: 8px; width: 45%; }}
+        .stat-number {{ font-size: 2.5em; font-weight: bold; color: #ffffff; display: block; }}
+        .stat-label {{ font-size: 0.9em; color: #888; text-transform: uppercase; letter-spacing: 1px; }}
+        .status-indicator {{ display: inline-block; width: 10px; height: 10px; background-color: #4caf50; border-radius: 50%; margin-right: 5px; box-shadow: 0 0 8px #4caf50; }}
+        .footer {{ margin-top: 40px; font-size: 0.8em; color: #666; }}
+        a {{ color: #4caf50; text-decoration: none; }}
     </style>
 </head>
 <body>
@@ -102,8 +102,8 @@ async def handle_heartbeat(request):
 
 async def start_web_server():
     app = web.Application()
-    app.router.add_get('/', handle_index) # Главная страница
-    app.router.add_post('/api/heartbeat', handle_heartbeat) # API
+    app.router.add_get('/', handle_index)
+    app.router.add_post('/api/heartbeat', handle_heartbeat)
 
     runner = web.AppRunner(app)
     await runner.setup()
