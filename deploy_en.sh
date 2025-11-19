@@ -180,6 +180,7 @@ USER tgbot
 CMD ["python", "bot.py"]
 EOF
 }
+
 create_docker_compose_yml() {
     sudo tee "${BOT_INSTALL_PATH}/docker-compose.yml" > /dev/null <<EOF
 version: '3.8'
@@ -387,24 +388,34 @@ update_bot() {
 }
 
 main_menu() {
+    local local_version=$(get_local_version "$README_FILE")
     while true; do
         clear
+        echo -e "${C_BLUE}${C_BOLD}╔═══════════════════════════════════╗${C_RESET}"
+        echo -e "${C_BLUE}${C_BOLD}║     VPS Bot Manager               ║${C_RESET}"
+        echo -e "${C_BLUE}${C_BOLD}╚═══════════════════════════════════╝${C_RESET}"
         check_integrity
-        echo -e "${C_BLUE}VPS Bot Manager${C_RESET} | Status: ${STATUS_MESSAGE}"
-        echo "1) Update"
-        echo "2) Uninstall"
-        echo "3-6) Reinstall Agent"
-        echo "8) Install/Reinstall Node"
-        echo "0) Exit"
-        read -p "Choice: " ch
-        case $ch in
-            1) update_bot; read -p "Enter..." ;;
-            2) uninstall_bot; return ;;
-            3) uninstall_bot; install_systemd_logic "secure"; read -p "Enter..." ;;
-            4) uninstall_bot; install_systemd_logic "root"; read -p "Enter..." ;;
-            5) uninstall_bot; install_docker_logic "secure"; read -p "Enter..." ;;
-            6) uninstall_bot; install_docker_logic "root"; read -p "Enter..." ;;
-            8) uninstall_bot; install_node_logic; read -p "Enter..." ;;
+        echo -e "  Branch: ${GIT_BRANCH} | Version: ${local_version}"
+        echo -e "  Type: ${INSTALL_TYPE} | Status: ${STATUS_MESSAGE}"
+        echo "--------------------------------------------------------"
+        echo "  1) Update Bot"
+        echo "  2) Uninstall Bot"
+        echo "  3) Reinstall (Systemd - Secure)"
+        echo "  4) Reinstall (Systemd - Root)"
+        echo "  5) Reinstall (Docker - Secure)"
+        echo "  6) Reinstall (Docker - Root)"
+        echo -e "${C_GREEN}  8) Install NODE (Client)${C_RESET}"
+        echo "  0) Exit"
+        echo "--------------------------------------------------------"
+        read -p "$(echo -e "${C_BOLD}Choice: ${C_RESET}")" choice
+        case $choice in
+            1) update_bot; read -p "Press Enter..." ;;
+            2) msg_question "Uninstall? (y/n): " c; if [[ "$c" =~ ^[Yy]$ ]]; then uninstall_bot; return; fi ;;
+            3) uninstall_bot; install_systemd_logic "secure"; read -p "Press Enter..." ;;
+            4) uninstall_bot; install_systemd_logic "root"; read -p "Press Enter..." ;;
+            5) uninstall_bot; install_docker_logic "secure"; read -p "Press Enter..." ;;
+            6) uninstall_bot; install_docker_logic "root"; read -p "Press Enter..." ;;
+            8) uninstall_bot; install_node_logic; read -p "Press Enter..." ;;
             0) break ;;
         esac
     done
@@ -414,14 +425,28 @@ if [ "$(id -u)" -ne 0 ]; then msg_error "Root required."; exit 1; fi
 
 check_integrity
 if [ "$INSTALL_TYPE" == "NONE" ]; then
-    echo "1-4) Install Agent, 8) Install Node"
-    read -p "> " ch
+    clear
+    echo -e "${C_BLUE}${C_BOLD}╔═══════════════════════════════════╗${C_RESET}"
+    echo -e "${C_BLUE}${C_BOLD}║      VPS Manager Bot Install      ║${C_RESET}"
+    echo -e "${C_BLUE}${C_BOLD}╚═══════════════════════════════════╝${C_RESET}"
+    echo -e "  Select installation mode:"
+    echo "--------------------------------------------------------"
+    echo "  1) AGENT (Systemd - Secure)  [Recommended]"
+    echo "  2) AGENT (Systemd - Root)    [Full Access]"
+    echo "  3) AGENT (Docker - Secure)   [Isolated]"
+    echo "  4) AGENT (Docker - Root)     [Docker + Host]"
+    echo -e "${C_GREEN}  8) NODE (Client)${C_RESET}"
+    echo "  0) Exit"
+    echo "--------------------------------------------------------"
+    read -p "$(echo -e "${C_BOLD}Choice: ${C_RESET}")" ch
     case $ch in
-        1) uninstall_bot; install_systemd_logic "secure" ;;
-        2) uninstall_bot; install_systemd_logic "root" ;;
-        3) uninstall_bot; install_docker_logic "secure" ;;
-        4) uninstall_bot; install_docker_logic "root" ;;
-        8) uninstall_bot; install_node_logic ;;
+        1) uninstall_bot; install_systemd_logic "secure"; read -p "Press Enter..." ;;
+        2) uninstall_bot; install_systemd_logic "root"; read -p "Press Enter..." ;;
+        3) uninstall_bot; install_docker_logic "secure"; read -p "Press Enter..." ;;
+        4) uninstall_bot; install_docker_logic "root"; read -p "Press Enter..." ;;
+        8) uninstall_bot; install_node_logic; read -p "Press Enter..." ;;
+        0) exit 0 ;;
+        *) msg_error "Invalid choice."; sleep 2 ;;
     esac
     main_menu
 else

@@ -467,23 +467,29 @@ if [ "$(id -u)" -ne 0 ]; then msg_error "Нужен root."; exit 1; fi
 
 check_integrity
 if [ "$INSTALL_TYPE" == "НЕТ" ]; then
-    echo -e "${C_BLUE}${C_BOLD}=== Установка ===${C_RESET}"
-    echo "1) АГЕНТ (Systemd - Secure)"
-    echo "2) АГЕНТ (Systemd - Root)"
-    echo "3) АГЕНТ (Docker - Secure)"
-    echo "4) АГЕНТ (Docker - Root)"
-    echo -e "${C_GREEN}8) НОДА (Клиент)${C_RESET}"
-    echo "0) Выход"
-    read -p "Выбор: " ch
+    clear
+    echo -e "${C_BLUE}${C_BOLD}╔═══════════════════════════════════╗${C_RESET}"
+    echo -e "${C_BLUE}${C_BOLD}║      Установка VPS Manager Bot    ║${C_RESET}"
+    echo -e "${C_BLUE}${C_BOLD}╚═══════════════════════════════════╝${C_RESET}"
+    echo -e "  Выберите режим установки:"
+    echo "--------------------------------------------------------"
+    echo "  1) АГЕНТ (Systemd - Secure)  [Рекомендуется]"
+    echo "  2) АГЕНТ (Systemd - Root)    [Полный доступ]"
+    echo "  3) АГЕНТ (Docker - Secure)   [Изоляция]"
+    echo "  4) АГЕНТ (Docker - Root)     [Docker + Host]"
+    echo -e "${C_GREEN}  8) НОДА (Клиент)${C_RESET}"
+    echo "  0) Выход"
+    echo "--------------------------------------------------------"
+    read -p "$(echo -e "${C_BOLD}Ваш выбор: ${C_RESET}")" ch
     case $ch in
-        1) uninstall_bot; install_systemd_logic "secure" ;;
-        2) uninstall_bot; install_systemd_logic "root" ;;
-        3) uninstall_bot; install_docker_logic "secure" ;;
-        4) uninstall_bot; install_docker_logic "root" ;;
-        8) uninstall_bot; install_node_logic ;;
+        1) uninstall_bot; install_systemd_logic "secure"; read -p "Нажмите Enter..." ;;
+        2) uninstall_bot; install_systemd_logic "root"; read -p "Нажмите Enter..." ;;
+        3) uninstall_bot; install_docker_logic "secure"; read -p "Нажмите Enter..." ;;
+        4) uninstall_bot; install_docker_logic "root"; read -p "Нажмите Enter..." ;;
+        8) uninstall_bot; install_node_logic; read -p "Нажмите Enter..." ;;
         0) exit 0 ;;
+        *) msg_error "Неверный выбор."; sleep 2 ;;
     esac
-    read -p "Enter..."
     main_menu
 else
     main_menu
