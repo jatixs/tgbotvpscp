@@ -184,6 +184,7 @@ USER tgbot
 CMD ["python", "bot.py"]
 EOF
 }
+
 create_docker_compose_yml() {
     sudo tee "${BOT_INSTALL_PATH}/docker-compose.yml" > /dev/null <<EOF
 version: '3.8'
@@ -276,11 +277,11 @@ install_systemd_logic() {
         if ! id "${SERVICE_USER}" &>/dev/null; then sudo useradd -r -s /bin/false -d ${BOT_INSTALL_PATH} ${SERVICE_USER}; fi
         setup_repo_and_dirs "${SERVICE_USER}"
         sudo -u ${SERVICE_USER} ${PYTHON_BIN} -m venv "${VENV_PATH}"
-        sudo -u ${SERVICE_USER} "${VENV_PATH}/bin/pip" install -r "${BOT_INSTALL_PATH}/requirements.txt"
+        run_with_spinner "Installing Python deps" sudo -u ${SERVICE_USER} "${VENV_PATH}/bin/pip" install -r "${BOT_INSTALL_PATH}/requirements.txt"
     else
         setup_repo_and_dirs "root"
         ${PYTHON_BIN} -m venv "${VENV_PATH}"
-        "${VENV_PATH}/bin/pip" install -r "${BOT_INSTALL_PATH}/requirements.txt"
+        run_with_spinner "Installing Python deps" "${VENV_PATH}/bin/pip" install -r "${BOT_INSTALL_PATH}/requirements.txt"
     fi
     ask_env_details
     write_env_file "systemd" "$mode" ""
@@ -302,8 +303,20 @@ install_docker_logic() {
     write_env_file "docker" "$mode" "tg-bot-${mode}"
     cleanup_agent_files
     cd ${BOT_INSTALL_PATH}
-    sudo docker-compose build
-    sudo docker-compose --profile "${mode}" up -d --remove-orphans
+    
+    # Docker command detection
+    local dc_cmd=""
+    if sudo docker compose version &>/dev/null; then
+        dc_cmd="docker compose"
+    elif command -v docker-compose &>/dev/null; then
+        dc_cmd="docker-compose"
+    else
+        msg_error "Docker Compose not found. Containers cannot be built."
+        return 1
+    fi
+
+    run_with_spinner "Building Docker images" sudo $dc_cmd build
+    run_with_spinner "Starting containers" sudo $dc_cmd --profile "${mode}" up -d --remove-orphans
     msg_success "Docker Install Complete!"
 }
 
@@ -380,23 +393,32 @@ update_bot() {
     
     cleanup_agent_files
 
-    if [ -f "docker-compose.yml" ]; then
-        local dc_cmd=""
-        if sudo docker compose version &>/dev/null; then
-            dc_cmd="docker compose"
-        elif command -v docker-compose &>/dev/null; then
-            dc_cmd="docker-compose"
-        else
-            msg_error "Docker Compose not found. Please reinstall (option 3-6)."
-            return 1
-        fi
+    # Check DEPLOY_MODE in .env
+    if [ -f "${ENV_FILE}" ] && grep -q "DEPLOY_MODE=docker" "${ENV_FILE}"; then
+        if [ -f "docker-compose.yml" ]; then
+            # Correct command detection
+            local dc_cmd=""
+            if sudo docker compose version &>/dev/null; then
+                dc_cmd="docker compose"
+            elif command -v docker-compose &>/dev/null; then
+                dc_cmd="docker-compose"
+            else
+                msg_error "Docker Compose not found. Please reinstall (option 3-6)."
+                return 1
+            fi
 
-        if ! run_with_spinner "Docker Up (Rebuild)" sudo $dc_cmd up -d --build; then
-            msg_error "Error updating containers."
-            return 1
+            # Run with error catching
+            if ! run_with_spinner "Docker Up (Rebuild)" sudo $dc_cmd up -d --build; then
+                msg_error "Error updating containers."
+                return 1
+            fi
+        else 
+             msg_error "File docker-compose.yml not found, but Docker mode is active."
+             return 1
         fi
     else
-        run_with_spinner "Pip install" $exec_user "${VENV_PATH}/bin/pip" install -r "${BOT_INSTALL_PATH}/requirements.txt" --upgrade
+        # Systemd mode
+        run_with_spinner "Updating deps (pip)" $exec_user "${VENV_PATH}/bin/pip" install -r "${BOT_INSTALL_PATH}/requirements.txt" --upgrade
         if systemctl list-unit-files | grep -q "^${SERVICE_NAME}.service"; then sudo systemctl restart ${SERVICE_NAME}; fi
         if systemctl list-unit-files | grep -q "^${WATCHDOG_SERVICE_NAME}.service"; then sudo systemctl restart ${WATCHDOG_SERVICE_NAME}; fi
     fi

@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# --- Запоминаем исходный аргумент (ветка) ---
+# --- Запоминаем исходный аргумент ---
 orig_arg1="$1"
 
 # --- Глобальные настройки для подавления интерактивности ---
@@ -55,7 +55,7 @@ spinner() {
 run_with_spinner() { 
     local msg=$1
     shift
-    # Запускаем в фоне
+    # Запускаем в фоне с перенаправлением вывода в лог
     ( "$@" >> /tmp/${SERVICE_NAME}_install.log 2>&1 ) & 
     local pid=$!
     spinner "$pid" "$msg"
@@ -64,7 +64,7 @@ run_with_spinner() {
     echo -ne "\033[2K\r"
     if [ $exit_code -ne 0 ]; then 
         msg_error "Ошибка во время '$msg'. Код: $exit_code"
-        msg_error "Лог: /tmp/${SERVICE_NAME}_install.log"
+        msg_error "Подробности в логе: /tmp/${SERVICE_NAME}_install.log"
     fi
     return $exit_code 
 }
@@ -118,13 +118,13 @@ common_install_steps() {
     echo "" > /tmp/${SERVICE_NAME}_install.log
     msg_info "1. Обновление системы..."
     run_with_spinner "Apt update" sudo apt-get update -y -q
-    run_with_spinner "Зависимости" sudo apt-get install -y -q -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" python3 python3-pip python3-venv git curl wget sudo python3-yaml
+    run_with_spinner "Установка системных пакетов" sudo apt-get install -y -q -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" python3 python3-pip python3-venv git curl wget sudo python3-yaml
 }
 
 setup_repo_and_dirs() {
     local owner_user=$1; if [ -z "$owner_user" ]; then owner_user="root"; fi
     
-    # Важно: переходим в корень, чтобы не блокировать удаление папки, если мы в ней
+    # Важно: переходим в корень
     cd /
     
     msg_info "Подготовка файлов..."
@@ -136,7 +136,7 @@ setup_repo_and_dirs() {
     fi
     sudo mkdir -p ${BOT_INSTALL_PATH}
 
-    run_with_spinner "Git clone" sudo git clone --branch "${GIT_BRANCH}" "${GITHUB_REPO_URL}" "${BOT_INSTALL_PATH}" || exit 1
+    run_with_spinner "Клонирование репозитория" sudo git clone --branch "${GIT_BRANCH}" "${GITHUB_REPO_URL}" "${BOT_INSTALL_PATH}" || exit 1
     
     if [ -f "/tmp/tgbot_env.bak" ]; then sudo mv /tmp/tgbot_env.bak "${ENV_FILE}"; fi
     if [ -d "/tmp/tgbot_venv.bak" ]; then 
@@ -152,7 +152,6 @@ cleanup_node_files() {
     msg_info "Очистка лишних файлов (режим Ноды)..."
     cd ${BOT_INSTALL_PATH}
     sudo rm -rf core modules bot.py watchdog.py Dockerfile docker-compose.yml .git .github config/users.json config/alerts_config.json deploy.sh deploy_en.sh requirements.txt README* LICENSE CHANGELOG* .gitignore
-    # Создаем node.py если вдруг нет (хотя должен быть из гита)
     if [ ! -f "node/node.py" ]; then
        msg_warning "node.py не найден! Проверьте репозиторий."
     fi
@@ -167,10 +166,10 @@ cleanup_agent_files() {
 
 install_extras() {
     if ! command -v fail2ban-client &> /dev/null; then
-        msg_question "Fail2Ban не найден. Установить? (y/n): " I; if [[ "$I" =~ ^[Yy]$ ]]; then run_with_spinner "Install Fail2ban" sudo apt-get install -y -q -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" fail2ban; fi
+        msg_question "Fail2Ban не найден. Установить? (y/n): " I; if [[ "$I" =~ ^[Yy]$ ]]; then run_with_spinner "Установка Fail2ban" sudo apt-get install -y -q -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" fail2ban; fi
     fi
     if ! command -v iperf3 &> /dev/null; then
-        msg_question "iperf3 не найден. Установить? (y/n): " I; if [[ "$I" =~ ^[Yy]$ ]]; then run_with_spinner "Install iperf3" sudo apt-get install -y -q -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" iperf3; fi
+        msg_question "iperf3 не найден. Установить? (y/n): " I; if [[ "$I" =~ ^[Yy]$ ]]; then run_with_spinner "Установка iperf3" sudo apt-get install -y -q -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" iperf3; fi
     fi
 }
 
@@ -200,7 +199,7 @@ EOF
 check_docker_deps() {
     if ! command -v docker &> /dev/null; then 
         curl -sSL https://get.docker.com -o /tmp/get-docker.sh
-        run_with_spinner "Installing Docker" sudo sh /tmp/get-docker.sh
+        run_with_spinner "Установка Docker" sudo sh /tmp/get-docker.sh
     fi
     if command -v docker-compose &> /dev/null; then sudo rm -f $(which docker-compose); fi
 }
@@ -313,11 +312,11 @@ install_systemd_logic() {
         if ! id "${SERVICE_USER}" &>/dev/null; then sudo useradd -r -s /bin/false -d ${BOT_INSTALL_PATH} ${SERVICE_USER}; fi
         setup_repo_and_dirs "${SERVICE_USER}"
         sudo -u ${SERVICE_USER} ${PYTHON_BIN} -m venv "${VENV_PATH}"
-        sudo -u ${SERVICE_USER} "${VENV_PATH}/bin/pip" install -r "${BOT_INSTALL_PATH}/requirements.txt"
+        run_with_spinner "Установка Python зависимостей" sudo -u ${SERVICE_USER} "${VENV_PATH}/bin/pip" install -r "${BOT_INSTALL_PATH}/requirements.txt"
     else
         setup_repo_and_dirs "root"
         ${PYTHON_BIN} -m venv "${VENV_PATH}"
-        "${VENV_PATH}/bin/pip" install -r "${BOT_INSTALL_PATH}/requirements.txt"
+        run_with_spinner "Установка Python зависимостей" "${VENV_PATH}/bin/pip" install -r "${BOT_INSTALL_PATH}/requirements.txt"
     fi
     ask_env_details
     write_env_file "systemd" "$mode" ""
@@ -339,9 +338,21 @@ install_docker_logic() {
     write_env_file "docker" "$mode" "tg-bot-${mode}"
     cleanup_agent_files
     cd ${BOT_INSTALL_PATH}
-    sudo docker-compose build
-    sudo docker-compose --profile "${mode}" up -d --remove-orphans
-    msg_success "Docker Install Complete!"
+    
+    # Определяем правильную команду для Docker
+    local dc_cmd=""
+    if sudo docker compose version &>/dev/null; then
+        dc_cmd="docker compose"
+    elif command -v docker-compose &>/dev/null; then
+        dc_cmd="docker-compose"
+    else
+        msg_error "Docker Compose не найден. Невозможно собрать контейнеры."
+        return 1
+    fi
+
+    run_with_spinner "Сборка Docker образов" sudo $dc_cmd build
+    run_with_spinner "Запуск контейнеров" sudo $dc_cmd --profile "${mode}" up -d --remove-orphans
+    msg_success "Установка Docker завершена!"
 }
 
 install_node_logic() {
@@ -354,7 +365,7 @@ install_node_logic() {
     
     msg_info "Настройка venv..."
     if [ ! -d "${VENV_PATH}" ]; then run_with_spinner "Создание venv" ${PYTHON_BIN} -m venv "${VENV_PATH}"; fi
-    run_with_spinner "Установка deps" "${VENV_PATH}/bin/pip" install psutil requests
+    run_with_spinner "Установка зависимостей" "${VENV_PATH}/bin/pip" install psutil requests
     
     echo ""; msg_info "Подключение:"
     msg_question "Agent URL (http://IP:8080): " AGENT_URL
@@ -419,25 +430,32 @@ update_bot() {
     
     cleanup_agent_files
 
-    if [ -f "docker-compose.yml" ]; then
-        # Определяем правильную команду
-        local dc_cmd=""
-        if sudo docker compose version &>/dev/null; then
-            dc_cmd="docker compose"
-        elif command -v docker-compose &>/dev/null; then
-            dc_cmd="docker-compose"
-        else
-            msg_error "Docker Compose не найден. Пожалуйста, переустановите бота (режим 3-6)."
-            return 1
-        fi
+    # Проверка режима установки из .env
+    if [ -f "${ENV_FILE}" ] && grep -q "DEPLOY_MODE=docker" "${ENV_FILE}"; then
+        if [ -f "docker-compose.yml" ]; then
+            # Определяем правильную команду
+            local dc_cmd=""
+            if sudo docker compose version &>/dev/null; then
+                dc_cmd="docker compose"
+            elif command -v docker-compose &>/dev/null; then
+                dc_cmd="docker-compose"
+            else
+                msg_error "Docker Compose не найден. Пожалуйста, переустановите бота (режим 3-6)."
+                return 1
+            fi
 
-        # Запускаем с отловом ошибок
-        if ! run_with_spinner "Docker Up (Rebuild)" sudo $dc_cmd up -d --build; then
-            msg_error "Ошибка при сборке/запуске контейнеров."
-            return 1
+            # Запускаем с отловом ошибок
+            if ! run_with_spinner "Docker Up (Пересборка)" sudo $dc_cmd up -d --build; then
+                msg_error "Ошибка при сборке/запуске контейнеров."
+                return 1
+            fi
+        else 
+             msg_error "Файл docker-compose.yml не найден, хотя режим Docker активирован."
+             return 1
         fi
     else
-        run_with_spinner "Pip install" $exec_user "${VENV_PATH}/bin/pip" install -r "${BOT_INSTALL_PATH}/requirements.txt" --upgrade
+        # Для systemd режима
+        run_with_spinner "Обновление зависимостей (pip)" $exec_user "${VENV_PATH}/bin/pip" install -r "${BOT_INSTALL_PATH}/requirements.txt" --upgrade
         if systemctl list-unit-files | grep -q "^${SERVICE_NAME}.service"; then sudo systemctl restart ${SERVICE_NAME}; fi
         if systemctl list-unit-files | grep -q "^${WATCHDOG_SERVICE_NAME}.service"; then sudo systemctl restart ${WATCHDOG_SERVICE_NAME}; fi
     fi
@@ -453,6 +471,7 @@ main_menu() {
         echo -e "${C_BLUE}${C_BOLD}╚═══════════════════════════════════╝${C_RESET}"
         check_integrity
         echo -e "  Ветка: ${GIT_BRANCH} | Версия: ${local_version}"
+        # Исправлено: echo -e чтобы цвета работали
         echo -e "  Тип: ${INSTALL_TYPE} | Статус: ${STATUS_MESSAGE}"
         echo "--------------------------------------------------------"
         echo "  1) Обновить бота"
