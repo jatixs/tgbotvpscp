@@ -14,13 +14,11 @@ README_FILE="${BOT_INSTALL_PATH}/README.md"
 DOCKER_COMPOSE_FILE="${BOT_INSTALL_PATH}/docker-compose.yml"
 ENV_FILE="${BOT_INSTALL_PATH}/.env"
 
-# --- GitHub Repo ---
 GITHUB_REPO="jatixs/tgbotvpscp"
 GIT_BRANCH="${orig_arg1:-main}"
 GITHUB_REPO_URL="https://github.com/${GITHUB_REPO}.git"
 GITHUB_API_URL="https://api.github.com/repos/${GITHUB_REPO}/releases/latest"
 
-# --- Colors ---
 C_RESET='\033[0m'; C_RED='\033[0;31m'; C_GREEN='\033[0;32m'; C_YELLOW='\033[0;33m'; C_BLUE='\033[0;34m'; C_CYAN='\033[0;36m'; C_BOLD='\033[1m'
 msg_info() { echo -e "${C_CYAN}🔵 $1${C_RESET}"; }; msg_success() { echo -e "${C_GREEN}✅ $1${C_RESET}"; }; msg_warning() { echo -e "${C_YELLOW}⚠️  $1${C_RESET}"; }; msg_error() { echo -e "${C_RED}❌ $1${C_RESET}"; }; msg_question() { read -p "$(echo -e "${C_YELLOW}❓ $1${C_RESET}")" $2; }
 spinner() { local pid=$1; local msg=$2; local spin='|/-\'; local i=0; while kill -0 $pid 2>/dev/null; do i=$(( (i+1) %4 )); printf "\r${C_BLUE}⏳ ${spin:$i:1} ${msg}...${C_RESET}"; sleep .1; done; printf "\r"; }
@@ -36,7 +34,7 @@ get_latest_version() { local api_url="$1"; local latest_tag=$($DOWNLOADER_PIPE "
 INSTALL_TYPE="NONE"; STATUS_MESSAGE="Check not performed."
 check_integrity() {
     if [ ! -d "${BOT_INSTALL_PATH}" ] || [ ! -f "${ENV_FILE}" ]; then
-        INSTALL_TYPE="NONE"; STATUS_MESSAGE="Bot not installed."; return;
+        INSTALL_TYPE="NONE"; STATUS_MESSAGE="Not installed."; return;
     fi
 
     if grep -q "MODE=node" "${ENV_FILE}"; then
@@ -61,13 +59,10 @@ check_integrity() {
         local bot_status; local watchdog_status;
         if docker ps -f "name=${bot_container_name}" --format '{{.Names}}' | grep -q "${bot_container_name}"; then bot_status="${C_GREEN}Active${C_RESET}"; else bot_status="${C_RED}Inactive${C_RESET}"; fi
         if docker ps -f "name=${watchdog_container_name}" --format '{{.Names}}' | grep -q "${watchdog_container_name}"; then watchdog_status="${C_GREEN}Active${C_RESET}"; else watchdog_status="${C_RED}Inactive${C_RESET}"; fi
-        
         STATUS_MESSAGE="Docker: OK (Bot: ${bot_status} | Watchdog: ${watchdog_status})"
-
-    else # Systemd
+    else
         INSTALL_TYPE="AGENT (Systemd - $INSTALL_MODE_FROM_ENV)"
         if [ ! -f "${BOT_INSTALL_PATH}/bot.py" ]; then STATUS_MESSAGE="${C_RED}Files corrupted.${C_RESET}"; return; fi;
-        
         local bot_status; local watchdog_status;
         if systemctl is-active --quiet ${SERVICE_NAME}.service; then bot_status="${C_GREEN}Active${C_RESET}"; else bot_status="${C_RED}Inactive${C_RESET}"; fi;
         if systemctl is-active --quiet ${WATCHDOG_SERVICE_NAME}.service; then watchdog_status="${C_GREEN}Active${C_RESET}"; else watchdog_status="${C_RED}Inactive${C_RESET}"; fi;
@@ -78,28 +73,23 @@ check_integrity() {
 install_extras() {
     local packages_to_install=()
     local packages_to_remove=()
-
     if ! command -v fail2ban-client &> /dev/null; then
         msg_question "Fail2Ban not found. Install? (y/n): " INSTALL_F2B
         if [[ "$INSTALL_F2B" =~ ^[Yy]$ ]]; then packages_to_install+=("fail2ban"); else msg_info "Skipping Fail2Ban."; fi
     else msg_success "Fail2Ban installed."; fi
-
     if ! command -v iperf3 &> /dev/null; then
         msg_question "iperf3 not found. Install? (y/n): " INSTALL_IPERF3
         if [[ "$INSTALL_IPERF3" =~ ^[Yy]$ ]]; then packages_to_install+=("iperf3"); else msg_info "Skipping iperf3."; fi
     else msg_success "iperf3 installed."; fi
-
     if command -v speedtest &> /dev/null || dpkg -s speedtest-cli &> /dev/null; then
         msg_warning "Old 'speedtest-cli' detected."
         msg_question "Remove 'speedtest-cli'? (y/n): " REMOVE_SPEEDTEST
         if [[ "$REMOVE_SPEEDTEST" =~ ^[Yy]$ ]]; then packages_to_remove+=("speedtest-cli"); else msg_info "Skipping removal."; fi
     fi
-
     if [ ${#packages_to_remove[@]} -gt 0 ]; then
         run_with_spinner "Removing packages" sudo apt-get remove --purge -y "${packages_to_remove[@]}"
         run_with_spinner "Cleaning apt" sudo apt-get autoremove -y
     fi
-
     if [ ${#packages_to_install[@]} -gt 0 ]; then
         run_with_spinner "Updating apt" sudo apt-get update -y
         run_with_spinner "Installing packages" sudo DEBIAN_FRONTEND=noninteractive apt-get install -y "${packages_to_install[@]}"
@@ -377,6 +367,58 @@ uninstall_bot() {
     if id "${SERVICE_USER}" &>/dev/null; then sudo userdel -r "${SERVICE_USER}" &> /dev/null; fi
     if command -v docker &> /dev/null; then sudo docker rmi tg-vps-bot:latest &> /dev/null; fi
     msg_success "Uninstall complete."
+}
+
+update_bot() {
+    echo -e "\n${C_BOLD}=== Updating (branch: ${GIT_BRANCH}) ===${C_RESET}";
+    if [ ! -d "${BOT_INSTALL_PATH}/.git" ]; then msg_error "Git repo not found. Cannot update."; return 1; fi
+    
+    local exec_user="";
+    if [ ! -f "${ENV_FILE}" ]; then msg_error ".env not found. Cannot determine update mode."; return 1; fi
+    
+    # Read vars
+    local DEPLOY_MODE_FROM_ENV=$(grep '^DEPLOY_MODE=' "${ENV_FILE}" | cut -d'=' -f2 | tr -d '"')
+    local INSTALL_MODE_FROM_ENV=$(grep '^INSTALL_MODE=' "${ENV_FILE}" | cut -d'=' -f2 | tr -d '"')
+    local WEB_PORT=$(grep '^WEB_SERVER_PORT=' "${ENV_FILE}" | cut -d'=' -f2 | tr -d '"')
+    if [ -z "$WEB_PORT" ]; then WEB_PORT="8080"; fi
+    export WEB_PORT
+
+    if [ "$INSTALL_MODE_FROM_ENV" == "secure" ]; then
+        exec_user="sudo -u ${SERVICE_USER}"
+    fi
+
+    msg_warning "Update overwrites local changes."
+    msg_warning ".env, config/, logs/ preserved."
+    
+    msg_info "1. Fetching updates..."
+    pushd "${BOT_INSTALL_PATH}" > /dev/null
+    run_with_spinner "Git fetch" $exec_user git fetch origin
+    run_with_spinner "Git reset" $exec_user git reset --hard "origin/${GIT_BRANCH}"
+    popd > /dev/null
+    msg_success "Files updated."
+
+    if [ "$DEPLOY_MODE_FROM_ENV" == "docker" ]; then
+        # Docker update logic
+        local COMPOSE_CMD="sudo docker compose"
+        if ! docker compose version &> /dev/null; then COMPOSE_CMD="sudo docker-compose"; fi
+
+        # Re-create files in case they changed (e.g. port)
+        if [ ! -f "${BOT_INSTALL_PATH}/Dockerfile" ]; then create_dockerfile; fi
+        create_docker_compose_yml 
+
+        msg_info "2. Rebuilding and restarting containers..."
+        (cd ${BOT_INSTALL_PATH} && run_with_spinner "Build" $COMPOSE_CMD build)
+        (cd ${BOT_INSTALL_PATH} && run_with_spinner "Up" $COMPOSE_CMD --profile "${INSTALL_MODE_FROM_ENV}" up -d --remove-orphans)
+        msg_success "Docker updated."
+    else
+        # Systemd update logic
+        msg_info "2. Updating dependencies..."
+        run_with_spinner "Pip install" $exec_user "${VENV_PATH}/bin/pip" install -r "${BOT_INSTALL_PATH}/requirements.txt" --upgrade
+        
+        msg_info "3. Restarting services..."
+        sudo systemctl restart ${SERVICE_NAME} ${WATCHDOG_SERVICE_NAME} ${NODE_SERVICE_NAME}
+        msg_success "Services restarted."
+    fi
 }
 
 main_menu() {
