@@ -3,6 +3,10 @@
 # --- Запоминаем исходный аргумент ---
 orig_arg1="$1"
 
+# --- Глобальные настройки для подавления интерактивности ---
+export DEBIAN_FRONTEND=noninteractive
+# -----------------------------------------------------------
+
 # --- Конфигурация ---
 BOT_INSTALL_PATH="/opt/tg-bot"
 SERVICE_NAME="tg-bot"
@@ -26,18 +30,27 @@ C_RESET='\033[0m'; C_RED='\033[0;31m'; C_GREEN='\033[0;32m'; C_YELLOW='\033[0;33
 msg_info() { echo -e "${C_CYAN}🔵 $1${C_RESET}"; }; msg_success() { echo -e "${C_GREEN}✅ $1${C_RESET}"; }; msg_warning() { echo -e "${C_YELLOW}⚠️  $1${C_RESET}"; }; msg_error() { echo -e "${C_RED}❌ $1${C_RESET}"; }; msg_question() { read -p "$(echo -e "${C_YELLOW}❓ $1${C_RESET}")" $2; }
 
 spinner() { 
-    local pid=$1; local msg=$2; local spin='|/-\'; local i=0
+    local pid=$1
+    local msg=$2
+    local spin='|/-\'
+    local i=0
     while kill -0 $pid 2>/dev/null; do 
-        i=$(( (i+1) % 4 )); printf "\r${C_BLUE}⏳ ${spin:$i:1} ${msg}...${C_RESET}"; sleep .1
+        i=$(( (i+1) % 4 ))
+        printf "\r${C_BLUE}⏳ ${spin:$i:1} ${msg}...${C_RESET}"
+        sleep .1
     done
     printf "\r"
 }
 
 run_with_spinner() { 
-    local msg=$1; shift
-    # [FIX] Переходим в корень перед выполнением, чтобы не потерять контекст при удалении папки
+    local msg=$1
+    shift
+    # [FIX] Переходим в корень и подавляем вывод
     ( cd / && "$@" >> /tmp/${SERVICE_NAME}_install.log 2>&1 ) & 
-    local pid=$!; spinner "$pid" "$msg"; wait $pid; local exit_code=$?
+    local pid=$!
+    spinner "$pid" "$msg"
+    wait $pid
+    local exit_code=$?
     echo -ne "\033[2K\r"
     if [ $exit_code -ne 0 ]; then 
         msg_error "Ошибка во время '$msg'. Код: $exit_code"
@@ -77,8 +90,8 @@ check_integrity() {
 common_install_steps() {
     echo "" > /tmp/${SERVICE_NAME}_install.log
     msg_info "1. Обновление системы..."
-    run_with_spinner "Обновление списка пакетов" sudo apt-get update -y
-    run_with_spinner "Установка зависимостей" sudo DEBIAN_FRONTEND=noninteractive apt-get install -y python3 python3-pip python3-venv git curl wget sudo python3-yaml
+    run_with_spinner "Обновление списка пакетов" sudo apt-get update -y -q
+    run_with_spinner "Установка зависимостей" sudo apt-get install -y -q -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" python3 python3-pip python3-venv git curl wget sudo python3-yaml
 }
 
 # --- [FIX] Умная переустановка репо с сохранением данных ---
@@ -125,27 +138,27 @@ cleanup_agent_files() {
     sudo rm -rf node
 }
 
-# --- Генерация скрипта Ноды (гарантия наличия) ---
+# --- Генерация скрипта Ноды (если нет в репо) ---
 create_node_script() {
-    # Эта функция теперь не обязательна, если файл есть в репо, 
-    # но оставим её пустой для совместимости структуры
+    mkdir -p "${BOT_INSTALL_PATH}/node"
+    # Скрипт уже должен быть склонирован из репо, но если что - здесь можно восстановить
     :
 }
 
 # --- Функции установки ---
 install_extras() {
     if ! command -v fail2ban-client &> /dev/null; then
-        msg_question "Fail2Ban не найден. Установить? (y/n): " I; if [[ "$I" =~ ^[Yy]$ ]]; then run_with_spinner "Установка Fail2ban" sudo apt-get install -y fail2ban; fi
+        msg_question "Fail2Ban не найден. Установить? (y/n): " I; if [[ "$I" =~ ^[Yy]$ ]]; then run_with_spinner "Установка Fail2ban" sudo apt-get install -y -q -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" fail2ban; fi
     fi
     if ! command -v iperf3 &> /dev/null; then
-        msg_question "iperf3 не найден. Установить? (y/n): " I; if [[ "$I" =~ ^[Yy]$ ]]; then run_with_spinner "Установка iperf3" sudo apt-get install -y iperf3; fi
+        msg_question "iperf3 не найден. Установить? (y/n): " I; if [[ "$I" =~ ^[Yy]$ ]]; then run_with_spinner "Установка iperf3" sudo apt-get install -y -q -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" iperf3; fi
     fi
 }
 
 ask_env_details() {
     msg_info "Ввод данных .env..."
-    msg_question "Токен Бота: " T; msg_question "ID Админа: " A; msg_question "Username Админа (опц): " U; msg_question "Имя Бота (опц): " N
-    msg_question "Порт веб-сервера [8080]: " P; if [ -z "$P" ]; then WEB_PORT="8080"; else WEB_PORT="$P"; fi
+    msg_question "Токен: " T; msg_question "ID Админа: " A; msg_question "Username (opt): " U; msg_question "Bot Name (opt): " N
+    msg_question "Web Port [8080]: " P; if [ -z "$P" ]; then WEB_PORT="8080"; else WEB_PORT="$P"; fi
     export T A U N WEB_PORT
 }
 
@@ -171,13 +184,12 @@ check_docker_deps() {
         run_with_spinner "Установка Docker" sudo sh /tmp/get-docker.sh
     fi
     if command -v docker-compose &> /dev/null; then sudo rm -f $(which docker-compose); fi
-    # ... (здесь можно добавить очистку старых пакетов, как было раньше, если нужно)
 }
 
 create_dockerfile() {
     sudo tee "${BOT_INSTALL_PATH}/Dockerfile" > /dev/null <<'EOF'
 FROM python:3.10-slim-bookworm
-RUN apt-get update && apt-get install -y python3-yaml iperf3 git curl wget sudo procps iputils-ping net-tools gnupg docker.io coreutils && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y -q python3-yaml iperf3 git curl wget sudo procps iputils-ping net-tools gnupg docker.io coreutils && rm -rf /var/lib/apt/lists/*
 RUN pip install --no-cache-dir docker aiohttp
 RUN groupadd -g 1001 tgbot && useradd -u 1001 -g 1001 -m -s /bin/bash tgbot && echo "tgbot ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
 WORKDIR /opt/tg-bot
@@ -292,7 +304,7 @@ install_systemd_logic() {
     create_and_start_service "${SERVICE_NAME}" "${BOT_INSTALL_PATH}/bot.py" "$mode" "Telegram Бот"
     create_and_start_service "${WATCHDOG_SERVICE_NAME}" "${BOT_INSTALL_PATH}/watchdog.py" "root" "Наблюдатель"
     cleanup_agent_files
-    local ip=$(curl -s ipinfo.io/ip); echo ""; msg_success "Установка завершена! Агент доступен: http://${ip}:${WEB_PORT}"
+    local ip=$(curl -s ipinfo.io/ip); echo ""; msg_success "Установка завершена! Агент: http://${ip}:${WEB_PORT}"
 }
 
 install_docker_logic() {
@@ -309,15 +321,15 @@ install_docker_logic() {
     cd ${BOT_INSTALL_PATH}
     sudo docker-compose build
     sudo docker-compose --profile "${mode}" up -d --remove-orphans
-    msg_success "Установка Docker завершена!"
+    msg_success "Docker установлен!"
 }
 
 install_node_logic() {
     echo -e "\n${C_BOLD}=== Установка НОДЫ (Клиент) ===${C_RESET}"
     common_install_steps
     
-    # [FIX] Установка iperf3 в неинтерактивном режиме для предотвращения зависания
-    run_with_spinner "Установка iperf3" sudo DEBIAN_FRONTEND=noninteractive apt-get install -y iperf3
+    # [FIX] Silent install iperf3
+    run_with_spinner "Установка iperf3" sudo apt-get install -y -q -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" iperf3
     
     setup_repo_and_dirs "root"
     create_node_script
@@ -370,6 +382,7 @@ uninstall_bot() {
     if [ -f "${DOCKER_COMPOSE_FILE}" ]; then cd ${BOT_INSTALL_PATH} && sudo docker-compose down -v --remove-orphans &> /dev/null; fi
     sudo rm -rf "${BOT_INSTALL_PATH}"
     if id "${SERVICE_USER}" &>/dev/null; then sudo userdel -r "${SERVICE_USER}" &> /dev/null; fi
+    if command -v docker &> /dev/null; then sudo docker rmi tg-vps-bot:latest &> /dev/null; fi
     msg_success "Удалено."
 }
 
@@ -377,16 +390,16 @@ update_bot() {
     echo -e "\n${C_BOLD}=== Обновление ===${C_RESET}"
     if [ -f "${ENV_FILE}" ] && grep -q "MODE=node" "${ENV_FILE}"; then
         msg_info "Обновление Ноды..."
-        install_node_logic
+        install_node_logic # Переустановка поверх с сохранением env (в setup_repo_and_dirs)
         return
     fi
 
-    if [ ! -d "${BOT_INSTALL_PATH}/.git" ]; then msg_error "Git не найден."; return 1; fi
+    if [ ! -d "${BOT_INSTALL_PATH}/.git" ]; then msg_error "Git не найден. Переустановите."; return 1; fi
     local exec_user=""; if [ -f "${ENV_FILE}" ] && grep -q "INSTALL_MODE=secure" "${ENV_FILE}"; then exec_user="sudo -u ${SERVICE_USER}"; fi
     
     cd "${BOT_INSTALL_PATH}"
-    if ! run_with_spinner "Получение изменений (fetch)" $exec_user git fetch origin; then return 1; fi
-    if ! run_with_spinner "Применение изменений (reset)" $exec_user git reset --hard "origin/${GIT_BRANCH}"; then return 1; fi
+    if ! run_with_spinner "Получение изменений" $exec_user git fetch origin; then return 1; fi
+    if ! run_with_spinner "Применение изменений" $exec_user git reset --hard "origin/${GIT_BRANCH}"; then return 1; fi
     
     cleanup_agent_files
 
@@ -394,7 +407,6 @@ update_bot() {
         sudo docker compose up -d --build
     else
         run_with_spinner "Обновление Python-пакетов" $exec_user "${VENV_PATH}/bin/pip" install -r "${BOT_INSTALL_PATH}/requirements.txt" --upgrade
-        msg_info "Перезапуск служб..."
         if systemctl list-unit-files | grep -q "^${SERVICE_NAME}.service"; then sudo systemctl restart ${SERVICE_NAME}; fi
         if systemctl list-unit-files | grep -q "^${WATCHDOG_SERVICE_NAME}.service"; then sudo systemctl restart ${WATCHDOG_SERVICE_NAME}; fi
     fi
