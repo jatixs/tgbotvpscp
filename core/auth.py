@@ -1,4 +1,3 @@
-# /opt-tg-bot/core/auth.py
 import os
 import json
 import logging
@@ -7,17 +6,12 @@ from aiogram import Bot
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.exceptions import TelegramBadRequest
 
-# --- ИЗМЕНЕНО: Исправлен путь импорта ---
-from . import config  # Нужен для DEFAULT_LANGUAGE
-from .i18n import _  # Убрано .core
-# -----------------------------------------------
-
+from . import config
+from .i18n import _
 from .config import USERS_FILE, ADMIN_USER_ID, ADMIN_USERNAME, INSTALL_MODE
 from .shared_state import ALLOWED_USERS, USER_NAMES, LAST_MESSAGE_IDS
 from .messaging import delete_previous_message
 from .utils import escape_html
-
-# ... (остальной код файла остается без изменений) ...
 
 
 def load_users():
@@ -42,11 +36,7 @@ def load_users():
         if ADMIN_USER_ID not in ALLOWED_USERS:
             logging.info(
                 f"Главный админ ID {ADMIN_USER_ID} не найден в users.json, добавляю.")
-
-            # --- [ИСПРАВЛЕНИЕ] Используем ключ "admins" вместо "Админы" ---
             ALLOWED_USERS[ADMIN_USER_ID] = "admins"
-            # -------------------------------------------------------------
-
             USER_NAMES[str(ADMIN_USER_ID)] = _(
                 "default_admin_name", config.DEFAULT_LANGUAGE)
             save_users()
@@ -59,11 +49,7 @@ def load_users():
             f"Критическая ошибка загрузки users.json: Неверный JSON - {e}")
         ALLOWED_USERS.clear()
         USER_NAMES.clear()
-
-        # --- [ИСПРАВЛЕНИЕ] Используем ключ "admins" вместо "Админы" ---
         ALLOWED_USERS[ADMIN_USER_ID] = "admins"
-        # -------------------------------------------------------------
-
         USER_NAMES[str(ADMIN_USER_ID)] = _(
             "default_admin_name", config.DEFAULT_LANGUAGE)
         save_users()
@@ -73,11 +59,7 @@ def load_users():
             exc_info=True)
         ALLOWED_USERS.clear()
         USER_NAMES.clear()
-
-        # --- [ИСПРАВЛЕНИЕ] Используем ключ "admins" вместо "Админы" ---
         ALLOWED_USERS[ADMIN_USER_ID] = "admins"
-        # -------------------------------------------------------------
-
         USER_NAMES[str(ADMIN_USER_ID)] = _(
             "default_admin_name", config.DEFAULT_LANGUAGE)
         save_users()
@@ -97,6 +79,8 @@ def save_users():
         os.makedirs(os.path.dirname(USERS_FILE), exist_ok=True)
         with open(USERS_FILE, "w", encoding='utf-8') as f:
             json.dump(data, f, indent=4, ensure_ascii=False)
+            f.flush() 
+            os.fsync(f.fileno())
         logging.info(f"Успешно сохранено users.json")
     except Exception as e:
         logging.error(f"Ошибка сохранения users.json: {e}", exc_info=True)
@@ -104,9 +88,7 @@ def save_users():
 
 def is_allowed(user_id, command=None):
     """Проверяет, имеет ли пользователь доступ к команде."""
-    logging.info(
-        f"Проверка is_allowed для user_id: {user_id}, command: '{command}'")
-    logging.debug(f"Текущие ключи ALLOWED_USERS: {list(ALLOWED_USERS.keys())}")
+    # logging.debug(f"Проверка is_allowed для user_id: {user_id}, command: '{command}'")
 
     if user_id not in ALLOWED_USERS:
         logging.warning(
@@ -118,12 +100,15 @@ def is_allowed(user_id, command=None):
         "start", "menu", "back_to_menu", "uptime", "traffic", "selftest",
         "get_id", "get_id_inline", "notifications_menu", "toggle_alert_resources",
         "toggle_alert_logins", "toggle_alert_bans", "alert_downtime_stub",
-        "language"  # <-- Команда смены языка
+        "language"
     ]
     admin_only_commands = [
         "manage_users", "generate_vless", "speedtest", "top", "updatexray",
         "adduser", "add_user", "delete_user", "set_group", "change_group",
-        "back_to_manage_users", "back_to_delete_users"
+        "back_to_manage_users", "back_to_delete_users",
+        # --- ДОБАВЛЕНО: Команды модуля Nodes ---
+        "nodes", "node_add_new", "nodes_list_refresh" 
+        # ---------------------------------------
     ]
     root_only_commands = [
         "reboot_confirm",
@@ -133,23 +118,18 @@ def is_allowed(user_id, command=None):
         "logs",
         "restart",
         "update",
-        "optimize"]
+        "optimize"
+    ]
 
     if command in user_commands:
-        logging.debug(
-            f"Команда '{command}' разрешена для всех пользователей. Доступ для {user_id} предоставлен.")
         return True
 
-    # --- [ИСПРАВЛЕНИЕ] Проверяем ключ "admins" вместо "Админы" ---
     is_admin_group = (
         user_id == ADMIN_USER_ID) or (
         ALLOWED_USERS.get(user_id) == "admins")
-    # -------------------------------------------------------------
 
     if command in admin_only_commands:
         if is_admin_group:
-            logging.debug(
-                f"Команда '{command}' разрешена для админов. Доступ для админа {user_id} предоставлен.")
             return True
         else:
             logging.warning(
@@ -158,8 +138,6 @@ def is_allowed(user_id, command=None):
 
     if command in root_only_commands:
         if INSTALL_MODE == "root" and is_admin_group:
-            logging.debug(
-                f"Команда '{command}' разрешена для админов в root-режиме. Доступ для админа {user_id} предоставлен.")
             return True
         elif INSTALL_MODE != "root":
             logging.warning(
@@ -170,39 +148,33 @@ def is_allowed(user_id, command=None):
                 f"Команда '{command}' требует прав админа даже в root-режиме. Доступ для пользователя {user_id} запрещен.")
             return False
 
-    # --- [ИСПРАВЛЕНИЕ] Добавлена проверка callback_data (которая может содержать ID) ---
+    # Проверка динамических callback_data (содержащих ID)
     if command and (command.startswith("delete_user_") or
                     command.startswith("request_self_delete_") or
                     command.startswith("confirm_self_delete_") or
                     command.startswith("select_user_change_group_") or
-                    command.startswith("set_group_")):
+                    command.startswith("set_group_") or
+                    # --- ДОБАВЛЕНО: Callbacks для Nodes ---
+                    command.startswith("node_select_") or
+                    command.startswith("node_delete_") or
+                    command.startswith("node_cmd_")):
+                    # --------------------------------------
         if is_admin_group:
-            logging.debug(f"Callback '{command}' разрешен админу {user_id}.")
             return True
-        # (Проверка self-delete обрабатывается в самом хэндлере)
 
-    # --- [ИСПРАВЛЕНИЕ] Удалена небезопасная логика "разрешать админу всё"
-    #                 и добавлена более строгая проверка.
     if command:
         logging.warning(
             f"Команда '{command}' не найдена в списках доступа (user, admin, root). Доступ для {user_id} запрещен.")
     else:
-        # Случай, когда is_allowed(user_id) вызывается без команды (просто
-        # проверка на наличие в списке)
-        logging.debug(
-            f"Проверка 'is_allowed' без команды для {user_id}: Доступ разрешен (в списке).")
         return True
 
     return False
-    # --- [КОНЕЦ ИСПРАВЛЕНИЙ] ---
 
 
 async def refresh_user_names(bot: Bot):
     """Обновляет имена пользователей, особенно новых или с плейсхолдерами."""
     needs_save = False
     user_ids_to_check = list(ALLOWED_USERS.keys())
-    logging.info(
-        f"Начинаю обновление имен для {len(user_ids_to_check)} пользователей...")
 
     lang = config.DEFAULT_LANGUAGE
     new_user_prefix = _("default_new_user_name", lang, uid="").split('_')[0]
@@ -223,54 +195,28 @@ async def refresh_user_names(bot: Bot):
         if should_refresh:
             new_name = _("default_id_user_name", lang, uid=uid)
             try:
-                logging.debug(
-                    f"Пытаюсь получить информацию о чате для ID: {uid}")
                 chat = await bot.get_chat(uid)
                 fetched_name = chat.first_name or chat.username
                 if fetched_name:
                     new_name = escape_html(fetched_name)
-                else:
-                    logging.warning(
-                        f"Не удалось получить Имя/Юзернейм для {uid}, использую запасное '{new_name}'")
 
                 if current_name != new_name:
-                    logging.info(
-                        f"Имя обновлено для {uid}: '{current_name}' -> '{new_name}'")
                     USER_NAMES[uid_str] = new_name
                     needs_save = True
-                else:
-                    logging.debug(
-                        f"Имя для {uid} не изменилось ('{current_name}').")
 
             except TelegramBadRequest as e:
                 if "chat not found" in str(e).lower(
                 ) or "bot was blocked by the user" in str(e).lower():
-                    logging.warning(
-                        f"Не удалось обновить имя для {uid}: {e}. Использую запасное '{new_name}'.")
                     if current_name != new_name:
                         USER_NAMES[uid_str] = new_name
                         needs_save = True
                 else:
-                    logging.error(
-                        f"Неожиданная ошибка Telegram API при получении имени для {uid}: {e}")
-                    if not current_name or current_name.startswith(
-                            new_user_prefix):
-                        USER_NAMES[uid_str] = new_name
-                        needs_save = True
+                    logging.error(f"Ошибка Telegram API при обновлении имени для {uid}: {e}")
             except Exception as e:
-                logging.error(
-                    f"Неожиданная ошибка при обновлении имени для {uid}: {e}",
-                    exc_info=True)
-                if not current_name or current_name.startswith(
-                        new_user_prefix):
-                    USER_NAMES[uid_str] = new_name
-                    needs_save = True
+                logging.error(f"Ошибка при обновлении имени для {uid}: {e}")
 
     if needs_save:
-        logging.info("Обнаружены изменения в именах, сохраняю users.json...")
         save_users()
-    else:
-        logging.info("Обновление имен завершено, изменений не найдено.")
 
 
 async def get_user_name(bot: Bot, user_id: int) -> str:
@@ -280,13 +226,12 @@ async def get_user_name(bot: Bot, user_id: int) -> str:
 
     lang = config.DEFAULT_LANGUAGE
     try:
-        from .i18n import get_user_lang  # Исправлен импорт
+        from .i18n import get_user_lang
         lang = get_user_lang(user_id)
     except ImportError:
         pass
-    except Exception as e:  # Добавлена обработка других ошибок get_user_lang
-        logging.warning(
-            f"Ошибка получения языка для {user_id} в get_user_name: {e}. Использую язык по умолчанию.")
+    except Exception:
+        pass
 
     new_user_prefix = _("default_new_user_name", lang, uid="").split('_')[0]
     id_user_prefix = _("default_id_user_name", lang, uid="").split(' ')[0]
@@ -295,8 +240,6 @@ async def get_user_name(bot: Bot, user_id: int) -> str:
             new_user_prefix) and not cached_name.startswith(id_user_prefix):
         return cached_name
 
-    logging.debug(
-        f"Имя для {user_id} не кешировано или является плейсхолдером ('{cached_name}'). Запрашиваю...")
     new_name = _("default_id_user_name", lang, uid=user_id)
     try:
         chat = await bot.get_chat(user_id)
@@ -305,12 +248,8 @@ async def get_user_name(bot: Bot, user_id: int) -> str:
             new_name = escape_html(fetched_name)
             USER_NAMES[uid_str] = new_name
             save_users()
-            logging.info(
-                f"Получено и кешировано имя для {user_id}: '{new_name}'")
             return new_name
         else:
-            logging.warning(
-                f"Получен чат для {user_id}, но имя/юзернейм не найдены. Использую запасное.")
             if cached_name != new_name:
                 USER_NAMES[uid_str] = new_name
                 save_users()
@@ -331,15 +270,12 @@ async def send_access_denied_message(
     """Отправляет сообщение об отказе в доступе."""
     await delete_previous_message(user_id, command, chat_id, bot)
 
-    lang = config.DEFAULT_LANGUAGE  # По умолчанию
+    lang = config.DEFAULT_LANGUAGE
     try:
-        from .i18n import get_user_lang  # Исправлен импорт
+        from .i18n import get_user_lang
         lang = get_user_lang(user_id)
-    except ImportError:
+    except Exception:
         pass
-    except Exception as e:
-        logging.warning(
-            f"Ошибка получения языка для {user_id} в send_access_denied_message: {e}. Использую язык по умолчанию.")
 
     text_to_send = f"my ID: {user_id}"
     admin_link = ""
@@ -348,8 +284,6 @@ async def send_access_denied_message(
         admin_link = f"https://t.me/{ADMIN_USERNAME}?text={urllib.parse.quote(text_to_send)}"
     else:
         admin_link = f"tg://user?id={ADMIN_USER_ID}"
-        logging.warning(
-            "Переменная TG_ADMIN_USERNAME не установлена. Используется ссылка по ID (открывает профиль).")
 
     button_text = _("access_denied_button", lang)
     message_text = _("access_denied_message", lang, user_id=user_id)
