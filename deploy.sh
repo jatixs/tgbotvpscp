@@ -1,11 +1,10 @@
 #!/bin/bash
 
-# --- Запоминаем исходный аргумент ---
+# --- Запоминаем исходный аргумент (ветку) ---
 orig_arg1="$1"
 
-# --- Глобальные настройки для подавления интерактивности ---
+# --- Глобальные настройки для подавления интерактивности apt ---
 export DEBIAN_FRONTEND=noninteractive
-# -----------------------------------------------------------
 
 # --- Конфигурация ---
 BOT_INSTALL_PATH="/opt/tg-bot"
@@ -25,7 +24,7 @@ GIT_BRANCH="${orig_arg1:-main}"
 GITHUB_REPO_URL="https://github.com/${GITHUB_REPO}.git"
 GITHUB_API_URL="https://api.github.com/repos/${GITHUB_REPO}/releases/latest"
 
-# --- Цвета ---
+# --- Цвета и функции вывода ---
 C_RESET='\033[0m'; C_RED='\033[0;31m'; C_GREEN='\033[0;32m'; C_YELLOW='\033[0;33m'; C_BLUE='\033[0;34m'; C_CYAN='\033[0;36m'; C_BOLD='\033[1m'
 msg_info() { echo -e "${C_CYAN}🔵 $1${C_RESET}"; }; msg_success() { echo -e "${C_GREEN}✅ $1${C_RESET}"; }; msg_warning() { echo -e "${C_YELLOW}⚠️  $1${C_RESET}"; }; msg_error() { echo -e "${C_RED}❌ $1${C_RESET}"; }; msg_question() { read -p "$(echo -e "${C_YELLOW}❓ $1${C_RESET}")" $2; }
 
@@ -45,13 +44,13 @@ spinner() {
 run_with_spinner() { 
     local msg=$1
     shift
-    # [FIX] Переходим в корень и подавляем вывод
-    ( cd / && "$@" >> /tmp/${SERVICE_NAME}_install.log 2>&1 ) & 
+    # Запускаем команду в фоне, перенаправляя вывод
+    ( "$@" >> /tmp/${SERVICE_NAME}_install.log 2>&1 ) & 
     local pid=$!
     spinner "$pid" "$msg"
     wait $pid
     local exit_code=$?
-    echo -ne "\033[2K\r"
+    echo -ne "\033[2K\r" # Очистка строки
     if [ $exit_code -ne 0 ]; then 
         msg_error "Ошибка во время '$msg'. Код: $exit_code"
         msg_error "Лог: /tmp/${SERVICE_NAME}_install.log"
@@ -59,7 +58,7 @@ run_with_spinner() {
     return $exit_code 
 }
 
-# --- Проверка ---
+# --- Проверка утилит ---
 if command -v wget &> /dev/null; then DOWNLOADER="wget -qO-"; elif command -v curl &> /dev/null; then DOWNLOADER="curl -sSLf"; else msg_error "Нет wget/curl."; exit 1; fi
 get_local_version() { if [ -f "$README_FILE" ]; then grep -oP 'img\.shields\.io/badge/version-v\K[\d\.]+' "$README_FILE" || echo "Не найдена"; else echo "Не установлен"; fi; }
 
@@ -79,10 +78,10 @@ check_integrity() {
     DEPLOY_MODE_FROM_ENV=$(grep '^DEPLOY_MODE=' "${ENV_FILE}" | cut -d'=' -f2 | tr -d '"' || echo "systemd")
     if [ "$DEPLOY_MODE_FROM_ENV" == "docker" ]; then
         INSTALL_TYPE="АГЕНТ (Docker)"
-        if docker ps | grep -q "tg-bot"; then STATUS_MESSAGE="${C_GREEN}Активен${C_RESET}"; else STATUS_MESSAGE="${C_RED}Остановлен${C_RESET}"; fi
+        if docker ps | grep -q "tg-bot"; then STATUS_MESSAGE="${C_GREEN}Docker OK${C_RESET}"; else STATUS_MESSAGE="${C_RED}Docker Stop${C_RESET}"; fi
     else
         INSTALL_TYPE="АГЕНТ (Systemd)"
-        if systemctl is-active --quiet ${SERVICE_NAME}.service; then STATUS_MESSAGE="${C_GREEN}Активен${C_RESET}"; else STATUS_MESSAGE="${C_RED}Остановлен${C_RESET}"; fi
+        if systemctl is-active --quiet ${SERVICE_NAME}.service; then STATUS_MESSAGE="${C_GREEN}Systemd OK${C_RESET}"; else STATUS_MESSAGE="${C_RED}Systemd Stop${C_RESET}"; fi
     fi
 }
 
@@ -94,17 +93,19 @@ common_install_steps() {
     run_with_spinner "Установка зависимостей" sudo apt-get install -y -q -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" python3 python3-pip python3-venv git curl wget sudo python3-yaml
 }
 
-# --- [FIX] Умная переустановка репо с сохранением данных ---
+# --- Умная переустановка репо ---
 setup_repo_and_dirs() {
     local owner_user=$1; if [ -z "$owner_user" ]; then owner_user="root"; fi
-    cd / # Уходим из папки, чтобы не блокировать удаление
+    
+    # [FIX] Уходим в корень, чтобы можно было безопасно удалить папку бота
+    cd /
     
     msg_info "Подготовка файлов..."
     # Бэкап
     if [ -f "${ENV_FILE}" ]; then cp "${ENV_FILE}" /tmp/tgbot_env.bak; fi
     if [ -d "${VENV_PATH}" ]; then sudo mv "${VENV_PATH}" /tmp/tgbot_venv.bak; fi
 
-    # Полная очистка папки перед клонированием
+    # Удаление старого
     if [ -d "${BOT_INSTALL_PATH}" ]; then
         run_with_spinner "Удаление старых файлов" sudo rm -rf "${BOT_INSTALL_PATH}"
     fi
@@ -120,7 +121,6 @@ setup_repo_and_dirs() {
         sudo mv /tmp/tgbot_venv.bak "${VENV_PATH}"
     fi
     
-    # Создание папок логов
     sudo mkdir -p "${BOT_INSTALL_PATH}/logs/bot" "${BOT_INSTALL_PATH}/logs/watchdog" "${BOT_INSTALL_PATH}/logs/node" "${BOT_INSTALL_PATH}/config"
     sudo chown -R ${owner_user}:${owner_user} ${BOT_INSTALL_PATH}
 }
@@ -138,13 +138,6 @@ cleanup_agent_files() {
     sudo rm -rf node
 }
 
-# --- Генерация скрипта Ноды (если нет в репо) ---
-create_node_script() {
-    mkdir -p "${BOT_INSTALL_PATH}/node"
-    # Скрипт уже должен быть склонирован из репо, но если что - здесь можно восстановить
-    :
-}
-
 # --- Функции установки ---
 install_extras() {
     if ! command -v fail2ban-client &> /dev/null; then
@@ -157,8 +150,8 @@ install_extras() {
 
 ask_env_details() {
     msg_info "Ввод данных .env..."
-    msg_question "Токен: " T; msg_question "ID Админа: " A; msg_question "Username (opt): " U; msg_question "Bot Name (opt): " N
-    msg_question "Web Port [8080]: " P; if [ -z "$P" ]; then WEB_PORT="8080"; else WEB_PORT="$P"; fi
+    msg_question "Токен Бота: " T; msg_question "ID Админа: " A; msg_question "Username Админа (опц): " U; msg_question "Имя Бота (опц): " N
+    msg_question "Веб-порт Агента [8080]: " P; if [ -z "$P" ]; then WEB_PORT="8080"; else WEB_PORT="$P"; fi
     export T A U N WEB_PORT
 }
 
@@ -183,13 +176,12 @@ check_docker_deps() {
         curl -sSL https://get.docker.com -o /tmp/get-docker.sh
         run_with_spinner "Установка Docker" sudo sh /tmp/get-docker.sh
     fi
-    if command -v docker-compose &> /dev/null; then sudo rm -f $(which docker-compose); fi
 }
 
 create_dockerfile() {
     sudo tee "${BOT_INSTALL_PATH}/Dockerfile" > /dev/null <<'EOF'
 FROM python:3.10-slim-bookworm
-RUN apt-get update && apt-get install -y -q python3-yaml iperf3 git curl wget sudo procps iputils-ping net-tools gnupg docker.io coreutils && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y python3-yaml iperf3 git curl wget sudo procps iputils-ping net-tools gnupg docker.io coreutils && rm -rf /var/lib/apt/lists/*
 RUN pip install --no-cache-dir docker aiohttp
 RUN groupadd -g 1001 tgbot && useradd -u 1001 -g 1001 -m -s /bin/bash tgbot && echo "tgbot ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
 WORKDIR /opt/tg-bot
@@ -332,7 +324,6 @@ install_node_logic() {
     run_with_spinner "Установка iperf3" sudo apt-get install -y -q -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" iperf3
     
     setup_repo_and_dirs "root"
-    create_node_script
     
     msg_info "Настройка venv..."
     if [ ! -d "${VENV_PATH}" ]; then run_with_spinner "Создание venv" ${PYTHON_BIN} -m venv "${VENV_PATH}"; fi
@@ -382,15 +373,15 @@ uninstall_bot() {
     if [ -f "${DOCKER_COMPOSE_FILE}" ]; then cd ${BOT_INSTALL_PATH} && sudo docker-compose down -v --remove-orphans &> /dev/null; fi
     sudo rm -rf "${BOT_INSTALL_PATH}"
     if id "${SERVICE_USER}" &>/dev/null; then sudo userdel -r "${SERVICE_USER}" &> /dev/null; fi
-    if command -v docker &> /dev/null; then sudo docker rmi tg-vps-bot:latest &> /dev/null; fi
     msg_success "Удалено."
 }
 
+# --- [FIX] Функция update_bot определена до использования ---
 update_bot() {
     echo -e "\n${C_BOLD}=== Обновление ===${C_RESET}"
     if [ -f "${ENV_FILE}" ] && grep -q "MODE=node" "${ENV_FILE}"; then
         msg_info "Обновление Ноды..."
-        install_node_logic # Переустановка поверх с сохранением env (в setup_repo_and_dirs)
+        install_node_logic # Переустановка поверх с сохранением env
         return
     fi
 
@@ -398,8 +389,8 @@ update_bot() {
     local exec_user=""; if [ -f "${ENV_FILE}" ] && grep -q "INSTALL_MODE=secure" "${ENV_FILE}"; then exec_user="sudo -u ${SERVICE_USER}"; fi
     
     cd "${BOT_INSTALL_PATH}"
-    if ! run_with_spinner "Получение изменений" $exec_user git fetch origin; then return 1; fi
-    if ! run_with_spinner "Применение изменений" $exec_user git reset --hard "origin/${GIT_BRANCH}"; then return 1; fi
+    if ! run_with_spinner "Получение изменений (fetch)" $exec_user git fetch origin; then return 1; fi
+    if ! run_with_spinner "Применение изменений (reset)" $exec_user git reset --hard "origin/${GIT_BRANCH}"; then return 1; fi
     
     cleanup_agent_files
 
@@ -407,6 +398,8 @@ update_bot() {
         sudo docker compose up -d --build
     else
         run_with_spinner "Обновление Python-пакетов" $exec_user "${VENV_PATH}/bin/pip" install -r "${BOT_INSTALL_PATH}/requirements.txt" --upgrade
+        # [FIX] Перезапуск только активных служб
+        msg_info "Перезапуск служб..."
         if systemctl list-unit-files | grep -q "^${SERVICE_NAME}.service"; then sudo systemctl restart ${SERVICE_NAME}; fi
         if systemctl list-unit-files | grep -q "^${WATCHDOG_SERVICE_NAME}.service"; then sudo systemctl restart ${WATCHDOG_SERVICE_NAME}; fi
     fi
@@ -414,6 +407,7 @@ update_bot() {
 }
 
 main_menu() {
+    local local_version=$(get_local_version "$README_FILE")
     while true; do
         clear
         check_integrity
