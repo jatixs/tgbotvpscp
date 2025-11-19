@@ -52,6 +52,7 @@ STRINGS = {
         "btn_restart": "♻️ Перезапуск бота",
         "btn_reboot": "🔄 Перезагрузка сервера",
         "btn_notifications": "🔔 Уведомления",
+        "btn_nodes": "🖥 Ноды", 
         "btn_add_user": "➕ Добавить пользователя",
         "btn_delete_user": "➖ Удалить пользователя",
         "btn_change_group": "🔄 Изменить группу",
@@ -242,10 +243,23 @@ STRINGS = {
         "unit_hour_short": "ч",
         "unit_minute_short": "м",
         "unit_second_short": "с",
-        # --- ДОБАВЛЕНО ДЛЯ SUPPORT-СООБЩЕНИЯ ---
         "start_support_message": "Это open-source проект, автор проекта <a href=\"https://t.me/faridshykhaliev\">@faridshykhaliev</a>. При желании вы можете поддержать автора. Это мотивирует автора продолжать развивать проект.",
         "start_support_button": " ❤️ Поддержать разработчика",
-        # ------------------------------------------
+        
+        # --- НОВЫЕ СТРОКИ ДЛЯ NODES ---
+        "nodes_menu_header": "🖥 <b>Список ваших серверов (Нод):</b>\n\nВыберите сервер для просмотра деталей или управления:",
+        "node_status_active": "Активен 🟢",
+        "node_status_offline": "Не в сети 🔴",
+        "node_status_restarting": "Перезагружается 🔵",
+        "node_last_seen": "Активность: {time}",
+        "node_details_offline": "🔴 <b>Сервер: {name}</b>\nСтатус: <b>Не в сети</b>\nПоследний отклик: <b>{last_seen}</b>\nIP: {ip}\n\n📊 <b>Последние известные данные:</b>\nCPU: {cpu}%\nRAM: {ram}%\nDisk: {disk}%",
+        "node_restarting_alert": "🔵 Сервер '{name}' перезагружается. Пожалуйста, подождите 1-2 минуты.",
+        "node_management_menu": "🟢 <b>Управление сервером: {name}</b>\nIP: {ip}\nUptime: {uptime}\n\nВыберите действие:",
+        "node_cmd_sent": "✅ Команда '{cmd}' отправлена на сервер '{name}'. Ожидайте выполнения.",
+        "node_btn_add": "➕ Добавить Ноду (Токен)",
+        "node_add_success_token": "✅ <b>Нода создана!</b>\n\nИмя: <b>{name}</b>\nТокен: <code>{token}</code>\n\nСохраните этот токен и укажите его в .env на сервере-ноде (AGENT_TOKEN).",
+        "node_btn_delete": "🗑 Удалить"
+        # -----------------------------
     },
     'en': {
         "btn_back": "🔙 Back",
@@ -292,6 +306,7 @@ STRINGS = {
         "btn_restart": "♻️ Restart Bot",
         "btn_reboot": "🔄 Reboot Server",
         "btn_notifications": "🔔 Notifications",
+        "btn_nodes": "🖥 Nodes",
         "btn_add_user": "➕ Add User",
         "btn_delete_user": "➖ Delete User",
         "btn_change_group": "🔄 Change Group",
@@ -482,16 +497,27 @@ STRINGS = {
         "unit_hour_short": "h",
         "unit_minute_short": "m",
         "unit_second_short": "s",
-        # --- ДОБАВЛЕНО ДЛЯ SUPPORT-СООБЩЕНИЯ ---
         "start_support_message": "This is an open-source project, the author is <a href=\"https://t.me/faridshykhaliev\">@faridshykhaliev</a>. If you wish, you can support the author. This motivates the author to continue developing the project.",
         "start_support_button": " ❤️ Support the developer",
-        # ------------------------------------------
+
+        # --- NEW STRINGS FOR NODES ---
+        "nodes_menu_header": "🖥 <b>Your Server List (Nodes):</b>\n\nSelect a server to view details or manage:",
+        "node_status_active": "Active 🟢",
+        "node_status_offline": "Offline 🔴",
+        "node_status_restarting": "Restarting 🔵",
+        "node_last_seen": "Last active: {time}",
+        "node_details_offline": "🔴 <b>Server: {name}</b>\nStatus: <b>Offline</b>\nLast Seen: <b>{last_seen}</b>\nIP: {ip}\n\n📊 <b>Last Known Stats:</b>\nCPU: {cpu}%\nRAM: {ram}%\nDisk: {disk}%",
+        "node_restarting_alert": "🔵 Server '{name}' is restarting. Please wait 1-2 minutes.",
+        "node_management_menu": "🟢 <b>Managing Server: {name}</b>\nIP: {ip}\nUptime: {uptime}\n\nSelect an action:",
+        "node_cmd_sent": "✅ Command '{cmd}' sent to server '{name}'. Pending execution.",
+        "node_btn_add": "➕ Add Node (Generate Token)",
+        "node_add_success_token": "✅ <b>Node Created!</b>\n\nName: <b>{name}</b>\nToken: <code>{token}</code>\n\nSave this token and put it in .env on the node server (AGENT_TOKEN).",
+        "node_btn_delete": "🗑 Delete"
+        # -----------------------------
     }
 }
 
-
 def load_user_settings():
-    """Загружает настройки пользователей (включая язык) из JSON."""
     try:
         if os.path.exists(core_config.USER_SETTINGS_FILE):
             with open(core_config.USER_SETTINGS_FILE, "r", encoding='utf-8') as f:
@@ -509,9 +535,7 @@ def load_user_settings():
         logging.error(f"Ошибка загрузки user_settings.json: {e}")
         shared_state.USER_SETTINGS.clear()
 
-
 def save_user_settings():
-    """Сохраняет настройки пользователей (включая язык) в JSON."""
     try:
         os.makedirs(
             os.path.dirname(
@@ -525,9 +549,7 @@ def save_user_settings():
     except Exception as e:
         logging.error(f"Ошибка сохранения user_settings.json: {e}")
 
-
 def get_user_lang(user_id: int | str | None) -> str:
-    """Получает язык пользователя. Defaults to 'ru'."""
     if isinstance(user_id, int):
         return shared_state.USER_SETTINGS.get(
             user_id, {}).get(
@@ -543,9 +565,7 @@ def get_user_lang(user_id: int | str | None) -> str:
                 f"get_user_lang вызван с неожиданным типом user_id: {type(user_id)}. Возвращаю язык по умолчанию.")
         return core_config.DEFAULT_LANGUAGE
 
-
 def set_user_lang(user_id: int | str | None, lang: str):
-    """Устанавливает язык для пользователя и сохраняет."""
     if user_id is None:
         logging.warning(
             "set_user_lang вызван с user_id=None. Сохранение отменено.")
@@ -566,13 +586,7 @@ def set_user_lang(user_id: int | str | None, lang: str):
     logging.info(
         f"Язык для пользователя {user_id} изменен на '{lang}' и сохранен.")
 
-
 def get_text(key: str, user_id_or_lang: int | str | None, **kwargs) -> str:
-    """
-    Получает переведенную строку.
-    Пример: get_text("main_menu_welcome", user_id)
-    Пример с форматированием: get_text("my_id_text", user_id, user_id=user_id)
-    """
     lang = core_config.DEFAULT_LANGUAGE
 
     if isinstance(user_id_or_lang, int):
@@ -600,15 +614,9 @@ def get_text(key: str, user_id_or_lang: int | str | None, **kwargs) -> str:
             f"Ошибка форматирования для ключа '{key}' языка '{lang}' с параметрами {kwargs}. Шаблон: '{string_template}'. Ошибка: {e}")
         return string_template
 
-
 _ = get_text
 
-
 def get_all_translations(key: str) -> list[str]:
-    """
-    Возвращает список всех переводов для одного ключа.
-    Используется для aiogram F.text.in_([...])
-    """
     translations = []
     for lang_code, lang_strings in STRINGS.items():
         if key in lang_strings:
@@ -619,17 +627,10 @@ def get_all_translations(key: str) -> list[str]:
         return [f"[{key}]"]
     return unique_translations
 
-
 def I18nFilter(key: str):
-    """
-    Создает фильтр Aiogram, который сработает, если текст сообщения
-    совпадает с ЛЮБЫМ переводом указанного ключа.
-    """
     return F.text.in_(get_all_translations(key))
 
-
 def get_language_keyboard() -> InlineKeyboardMarkup:
-    """Возвращает клавиатуру для выбора языка."""
     keyboard = InlineKeyboardMarkup(
         inline_keyboard=[
             [
