@@ -96,6 +96,9 @@ setup_repo_and_dirs() {
     local owner_user=$1
     if [ -z "$owner_user" ]; then owner_user="root"; fi
 
+    # [FIX] Переходим в корень, чтобы избежать ошибки "Unable to read current working directory" если папка была пересоздана
+    cd /
+
     sudo mkdir -p ${BOT_INSTALL_PATH}
     msg_info "Клонирование репозитория (ветка ${GIT_BRANCH})..."
     run_with_spinner "Клонирование репозитория" sudo git clone --branch "${GIT_BRANCH}" "${GITHUB_REPO_URL}" "${BOT_INSTALL_PATH}" || exit 1
@@ -344,7 +347,7 @@ install_systemd_logic() {
     write_env_file "systemd" "$mode" ""
     create_and_start_service "${SERVICE_NAME}" "${BOT_INSTALL_PATH}/bot.py" "$mode" "Telegram Бот"
     create_and_start_service "${WATCHDOG_SERVICE_NAME}" "${BOT_INSTALL_PATH}/watchdog.py" "root" "Наблюдатель"
-    local ip=$(curl -s ipinfo.io/ip); echo ""; msg_success "Установка завершена! Агент доступен на IP: ${ip}:${WEB_PORT}";
+    local ip=$(curl -s ipinfo.io/ip); echo ""; msg_success "Установка завершена! Агент: http://${ip}:${WEB_PORT}";
 }
 
 install_docker_logic() {
@@ -413,6 +416,9 @@ install_docker_root() { echo -e "\n${C_BOLD}=== Установка Docker (Root)
 
 uninstall_bot() {
     echo -e "\n${C_BOLD}=== Удаление ===${C_RESET}"
+    # [FIX] Переходим в корень, чтобы не удалять папку из под себя
+    cd / 
+    
     sudo systemctl stop ${SERVICE_NAME} ${WATCHDOG_SERVICE_NAME} ${NODE_SERVICE_NAME} &> /dev/null
     sudo systemctl disable ${SERVICE_NAME} ${WATCHDOG_SERVICE_NAME} ${NODE_SERVICE_NAME} &> /dev/null
     sudo rm -f /etc/systemd/system/${SERVICE_NAME}.service /etc/systemd/system/${WATCHDOG_SERVICE_NAME}.service /etc/systemd/system/${NODE_SERVICE_NAME}.service
@@ -499,7 +505,7 @@ main_menu() {
         read -p "$(echo -e "${C_BOLD}Ваш выбор: ${C_RESET}")" choice
         
         case $choice in
-            1) rm -f /tmp/${SERVICE_NAME}_install.log; update_bot && local_version=$(get_local_version "$README_FILE"); read -p "Нажмите Enter..." ;;
+            1) update_bot; read -p "Нажмите Enter..." ;;
             2) msg_question "Удалить бота ПОЛНОСТЬЮ? (y/n): " confirm_uninstall;
                if [[ "$confirm_uninstall" =~ ^[Yy]$ ]]; then uninstall_bot; msg_info "Бот удален. Выход."; return; else msg_info "Удаление отменено."; fi ;;
             3) rm -f /tmp/${SERVICE_NAME}_install.log; msg_question "Переустановить (Systemd - Secure)? (y/n): " confirm; if [[ "$confirm" =~ ^[Yy]$ ]]; then uninstall_bot; install_systemd_secure; local_version=$(get_local_version "$README_FILE"); fi; read -p "Нажмите Enter..." ;;
@@ -526,15 +532,13 @@ if [ "$INSTALL_TYPE" == "НЕТ" ] || [[ "$STATUS_MESSAGE" == *"поврежде
     echo "0) Выход"
     read -p "Выбор: " ch
     case $ch in
-        1) uninstall_bot; install_systemd_secure ;;
-        2) uninstall_bot; install_systemd_root ;;
-        3) uninstall_bot; install_docker_secure ;;
-        4) uninstall_bot; install_docker_root ;;
-        8) uninstall_bot; install_node_logic ;;
+        1) uninstall_bot; install_systemd_secure; main_menu ;;
+        2) uninstall_bot; install_systemd_root; main_menu ;;
+        3) uninstall_bot; install_docker_secure; main_menu ;;
+        4) uninstall_bot; install_docker_root; main_menu ;;
+        8) uninstall_bot; install_node_logic; main_menu ;;
         0) exit 0 ;;
     esac
-    read -p "Нажмите Enter для меню..."
-    main_menu
 else
     main_menu
 fi
