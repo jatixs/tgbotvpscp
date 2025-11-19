@@ -148,36 +148,60 @@ async def cq_node_command(callback: types.CallbackQuery):
 
 # --- МОНИТОР ДАУНТАЙМА ---
 async def nodes_monitor(bot: Bot):
-    """Следит за статусом нод и шлет алерты."""
+    """Следит за статусом нод и шлет алерты, если включено уведомление 'downtime'."""
     logging.info("Nodes Monitor started.")
-    await asyncio.sleep(10)
+    await asyncio.sleep(10) # Даем время на инициализацию
     
     while True:
-        now = time.time()
-        # Копируем, чтобы избежать ошибок при изменении словаря
-        for token, node in list(NODES.items()):
-            name = node.get("name", "Unknown")
-            last_seen = node.get("last_seen", 0)
-            
-            # Определяем текущий статус
-            is_dead = (now - last_seen >= NODE_OFFLINE_TIMEOUT) and (last_seen > 0)
-            
-            # Проверяем, изменился ли статус
-            was_dead = node.get("is_offline_alert_sent", False)
-            
-            if is_dead and not was_dead and not node.get("is_restarting"):
-                # Нода упала
-                msg = lambda lang: f"🚨 <b>ALERT: Node '{name}' is DOWN!</b>\nLast seen: {datetime.fromtimestamp(last_seen).strftime('%H:%M:%S')}"
-                # Можно добавить локализацию через ключи
-                await send_alert(bot, msg, "resources") # Используем канал resources или создайте новый 'downtime'
-                node["is_offline_alert_sent"] = True
-                logging.warning(f"Node {name} is DOWN.")
+        try:
+            now = time.time()
+            # Копируем, чтобы избежать ошибок изменения размера словаря во время итерации
+            for token, node in list(NODES.items()):
+                name = node.get("name", "Unknown")
+                last_seen = node.get("last_seen", 0)
+                is_restarting = node.get("is_restarting", False)
                 
-            elif not is_dead and was_dead:
-                # Нода поднялась
-                msg = lambda lang: f"✅ <b>Node '{name}' recovered.</b>\nOnline now."
-                await send_alert(bot, msg, "resources")
-                node["is_offline_alert_sent"] = False
-                logging.info(f"Node {name} recovered.")
+                # Определяем текущий статус "мертва ли нода"
+                # Нода мертва, если таймаут вышел И она вообще хоть раз выходила на связь (last_seen > 0)
+                is_dead = (now - last_seen >= NODE_OFFLINE_TIMEOUT) and (last_seen > 0)
+                
+                # Проверяем, отправляли ли мы уже алерт о падении
+                was_dead = node.get("is_offline_alert_sent", False)
+                
+                # СЦЕНАРИЙ 1: Нода упала (и это не перезагрузка, и алерт еще не слали)
+                if is_dead and not was_dead and not is_restarting:
+                    
+                    # Формируем функцию генерации сообщения (для i18n)
+                    def msg_down_gen(lang):
+                        fmt_time = datetime.fromtimestamp(last_seen).strftime('%H:%M:%S')
+                        return _("alert_node_down", lang, name=name, last_seen=fmt_time)
+                    
+                    # Отправляем алерт с типом 'downtime'
+                    await send_alert(bot, msg_down_gen, "downtime")
+                    
+                    # Ставим флаг, что алерт отправлен
+                    node["is_offline_alert_sent"] = True
+                    logging.warning(f"Node {name} is DOWN. Alert sent.")
+                    
+                # СЦЕНАРИЙ 2: Нода ожила (была мертва, теперь alive)
+                elif not is_dead and was_dead:
+                    
+                    # Формируем функцию для сообщения о восстановлении
+                    def msg_up_gen(lang):
+                        return _("alert_node_up", lang, name=name)
+                        
+                    await send_alert(bot, msg_up_gen, "downtime")
+                    
+                    # Сбрасываем флаг
+                    node["is_offline_alert_sent"] = False
+                    logging.info(f"Node {name} recovered. Alert sent.")
+                    
+                # СЦЕНАРИЙ 3: Если нода была помечена как перезагружающаяся, но вышла на связь
+                if not is_dead and is_restarting:
+                     # Снимаем флаг перезагрузки тихо (или можно тоже алерт отправить, если хочется)
+                     node["is_restarting"] = False
+
+        except Exception as e:
+            logging.error(f"Error in nodes_monitor: {e}", exc_info=True)
         
-        await asyncio.sleep(20)
+        await asyncio.sleep(20) # Проверка каждые 20 секунд

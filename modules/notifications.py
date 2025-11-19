@@ -38,7 +38,7 @@ def get_button() -> KeyboardButton:
 def register_handlers(dp: Dispatcher):
     dp.message(I18nFilter(BUTTON_KEY))(notifications_menu_handler)
     dp.callback_query(F.data.startswith("toggle_alert_"))(cq_toggle_alert)
-    dp.callback_query(F.data == "alert_downtime_stub")(cq_alert_downtime_stub)
+    # dp.callback_query(F.data == "alert_downtime_stub")(cq_alert_downtime_stub) <-- УДАЛЕНО
 
 def start_background_tasks(bot: Bot) -> list[asyncio.Task]:
     """Запускает фоновые задачи мониторинга (ресурсы, SSH логи, Fail2Ban логи)."""
@@ -120,7 +120,8 @@ async def cq_toggle_alert(callback: types.CallbackQuery):
     try:
         # Извлекаем тип алерта из callback_data (toggle_alert_resources -> resources)
         alert_type = callback.data.split('_', 2)[-1]
-        if alert_type not in ["resources", "logins", "bans"]:
+        # ДОБАВЛЕН "downtime" В СПИСОК
+        if alert_type not in ["resources", "logins", "bans", "downtime"]:
             raise ValueError(f"Неизвестный тип алерта: {alert_type}")
     except Exception as e:
         logging.error(
@@ -150,7 +151,8 @@ async def cq_toggle_alert(callback: types.CallbackQuery):
         alert_name_map = {
             "resources": "notifications_alert_name_res",
             "logins": "notifications_alert_name_logins",
-            "bans": "notifications_alert_name_bans"
+            "bans": "notifications_alert_name_bans",
+            "downtime": "notifications_alert_name_downtime"  # <-- ДОБАВЛЕНО
         }
         alert_name = _(alert_name_map.get(alert_type, "error_internal"), lang)
         status_text = _(
@@ -170,13 +172,7 @@ async def cq_toggle_alert(callback: types.CallbackQuery):
         logging.error(f"Критическая ошибка в cq_toggle_alert: {e}")
         await callback.answer(_("error_unexpected", lang), show_alert=True)
 
-async def cq_alert_downtime_stub(callback: types.CallbackQuery):
-    """Заглушка для функции даунтайма."""
-    lang = get_user_lang(callback.from_user.id)
-    await callback.answer(
-        _("notifications_downtime_stub", lang),
-        show_alert=True
-    )
+# Функция cq_alert_downtime_stub УДАЛЕНА
 
 # --- Парсеры логов (Возвращают словарь с данными, а не готовый текст) ---
 

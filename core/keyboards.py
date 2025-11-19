@@ -225,6 +225,8 @@ def get_alerts_menu_keyboard(user_id: int):
     res_enabled = user_config.get("resources", False)
     logins_enabled = user_config.get("logins", False)
     bans_enabled = user_config.get("bans", False)
+    # Получаем настройку downtime
+    downtime_enabled = user_config.get("downtime", False)
 
     status_yes = _("status_enabled", lang)
     status_no = _("status_disabled", lang)
@@ -235,14 +237,19 @@ def get_alerts_menu_keyboard(user_id: int):
         status_yes if logins_enabled else status_no))
     bans_text = _("alerts_menu_bans", lang, status=(
         status_yes if bans_enabled else status_no))
-    downtime_text = _("alerts_menu_downtime", lang)
+    
+    # Формируем текст кнопки с галочкой/крестиком
+    downtime_text = _("alerts_menu_downtime", lang, status=(
+        status_yes if downtime_enabled else status_no))
+
     back_text = _("btn_back_to_menu", lang)
 
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text=res_text, callback_data="toggle_alert_resources")],
         [InlineKeyboardButton(text=logins_text, callback_data="toggle_alert_logins")],
         [InlineKeyboardButton(text=bans_text, callback_data="toggle_alert_bans")],
-        [InlineKeyboardButton(text=downtime_text, callback_data="alert_downtime_stub")],
+        # Изменили callback_data с alert_downtime_stub на toggle_alert_downtime
+        [InlineKeyboardButton(text=downtime_text, callback_data="toggle_alert_downtime")],
         [InlineKeyboardButton(text=back_text, callback_data="back_to_menu")]
     ])
     return keyboard

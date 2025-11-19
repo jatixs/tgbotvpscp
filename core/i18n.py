@@ -66,7 +66,11 @@ STRINGS = {
         "alerts_menu_res": "{status} Ресурсы (CPU/RAM/Disk)",
         "alerts_menu_logins": "{status} Входы SSH",
         "alerts_menu_bans": "{status} Баны (Fail2Ban)",
-        "alerts_menu_downtime": "⏳ Даунтайм сервера (WIP)",
+        "alerts_menu_downtime": "{status} Даунтайм Нод (Offline)",
+        "notifications_alert_name_downtime": "Даунтайм Нод",
+        "alert_node_down": "🚨 <b>АЛЕРТ: Нода '{name}' НЕДОСТУПНА (Down)!</b>\n⏱ Последний отклик: {last_seen}",
+        "alert_node_up": "✅ <b>Нода '{name}' восстановилась (Up).</b>\n🟢 Снова в сети.",
+        "alert_node_restarting": "🔵 <b>Нода '{name}' перезагружается...</b>",
         "utils_vless_error": "⚠️ Ошибка при генерации VLESS-ссылки: {error}",
         "utils_docker_ps_error": "Не удалось выполнить 'docker ps'. Убедитесь, что Docker установлен и запущен, и у бота есть права.\n<pre>{error}</pre>",
         "utils_bot_restarted": "✅ Бот успешно перезапущен.",
@@ -328,7 +332,11 @@ STRINGS = {
         "alerts_menu_res": "{status} Resources (CPU/RAM/Disk)",
         "alerts_menu_logins": "{status} SSH Logins",
         "alerts_menu_bans": "{status} Bans (Fail2Ban)",
-        "alerts_menu_downtime": "⏳ Server Downtime (WIP)",
+        "alerts_menu_downtime": "{status} Node Downtime (Offline)",
+        "notifications_alert_name_downtime": "Node Downtime",
+        "alert_node_down": "🚨 <b>ALERT: Node '{name}' is DOWN!</b>\n⏱ Last seen: {last_seen}",
+        "alert_node_up": "✅ <b>Node '{name}' recovered (Up).</b>\n🟢 Online now.",
+        "alert_node_restarting": "🔵 <b>Node '{name}' is restarting...</b>",
         "utils_vless_error": "⚠️ Error generating VLESS link: {error}",
         "utils_docker_ps_error": "Failed to execute 'docker ps'. Ensure Docker is installed, running, and the bot has permissions.\n<pre>{error}</pre>",
         "utils_bot_restarted": "✅ Bot restarted successfully.",
@@ -507,8 +515,6 @@ STRINGS = {
         "unit_second_short": "s",
         "start_support_message": "This is an open-source project, the author is <a href=\"https://t.me/faridshykhaliev\">@faridshykhaliev</a>. If you wish, you can support the author. This motivates the author to continue developing the project.",
         "start_support_button": " ❤️ Support the developer",
-
-        # --- NEW STRINGS FOR NODES ---
         "nodes_menu_header": "🖥 <b>Your Server List (Nodes):</b>\n\nSelect a server to view details or manage, or use the buttons below:",
         "node_status_active": "Active 🟢",
         "node_status_offline": "Offline 🔴",
@@ -523,7 +529,7 @@ STRINGS = {
         "node_add_success_token": "✅ <b>Node Created!</b>\n\nName: <b>{name}</b>\nToken: <code>{token}</code>\n\nSave this token and put it in .env on the node server (AGENT_TOKEN).",
         "node_delete_select": "🗑 <b>Delete Node</b>\n\nSelect a server you want to delete:",
         "node_deleted": "✅ Node '{name}' successfully deleted.",
-
+        
         # --- WEB INTERFACE ---
         "web_title": "VPS Bot Agent",
         "web_agent_running": "Agent Running",
