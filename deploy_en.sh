@@ -417,10 +417,10 @@ if [ "$INSTALL_TYPE" == "NONE" ]; then
     echo "1-4) Install Agent, 8) Install Node"
     read -p "> " ch
     case $ch in
-        1) uninstall_bot; install_systemd_secure ;;
-        2) uninstall_bot; install_systemd_root ;;
-        3) uninstall_bot; install_docker_secure ;;
-        4) uninstall_bot; install_docker_root ;;
+        1) uninstall_bot; install_systemd_logic "secure" ;;
+        2) uninstall_bot; install_systemd_logic "root" ;;
+        3) uninstall_bot; install_docker_logic "secure" ;;
+        4) uninstall_bot; install_docker_logic "root" ;;
         8) uninstall_bot; install_node_logic ;;
     esac
     main_menu

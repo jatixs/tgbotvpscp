@@ -438,7 +438,6 @@ main_menu() {
         echo -e "${C_BLUE}${C_BOLD}╚═══════════════════════════════════╝${C_RESET}"
         check_integrity
         echo -e "  Ветка: ${GIT_BRANCH} | Версия: ${local_version}"
-        # Исправлено: echo -e чтобы цвета работали
         echo -e "  Тип: ${INSTALL_TYPE} | Статус: ${STATUS_MESSAGE}"
         echo "--------------------------------------------------------"
         echo "  1) Обновить бота"
@@ -454,10 +453,10 @@ main_menu() {
         case $choice in
             1) update_bot; read -p "Нажмите Enter..." ;;
             2) msg_question "Удалить? (y/n): " c; if [[ "$c" =~ ^[Yy]$ ]]; then uninstall_bot; return; fi ;;
-            3) uninstall_bot; install_systemd_secure; read -p "Нажмите Enter..." ;;
-            4) uninstall_bot; install_systemd_root; read -p "Нажмите Enter..." ;;
-            5) uninstall_bot; install_docker_secure; read -p "Нажмите Enter..." ;;
-            6) uninstall_bot; install_docker_root; read -p "Нажмите Enter..." ;;
+            3) uninstall_bot; install_systemd_logic "secure"; read -p "Нажмите Enter..." ;;
+            4) uninstall_bot; install_systemd_logic "root"; read -p "Нажмите Enter..." ;;
+            5) uninstall_bot; install_docker_logic "secure"; read -p "Нажмите Enter..." ;;
+            6) uninstall_bot; install_docker_logic "root"; read -p "Нажмите Enter..." ;;
             8) uninstall_bot; install_node_logic; read -p "Нажмите Enter..." ;;
             0) break ;;
         esac
@@ -477,10 +476,10 @@ if [ "$INSTALL_TYPE" == "НЕТ" ]; then
     echo "0) Выход"
     read -p "Выбор: " ch
     case $ch in
-        1) uninstall_bot; install_systemd_secure ;;
-        2) uninstall_bot; install_systemd_root ;;
-        3) uninstall_bot; install_docker_secure ;;
-        4) uninstall_bot; install_docker_root ;;
+        1) uninstall_bot; install_systemd_logic "secure" ;;
+        2) uninstall_bot; install_systemd_logic "root" ;;
+        3) uninstall_bot; install_docker_logic "secure" ;;
+        4) uninstall_bot; install_docker_logic "root" ;;
         8) uninstall_bot; install_node_logic ;;
         0) exit 0 ;;
     esac
