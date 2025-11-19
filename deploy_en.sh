@@ -2,6 +2,9 @@
 
 orig_arg1="$1"
 
+# --- Suppress interactive prompts ---
+export DEBIAN_FRONTEND=noninteractive
+
 # --- Configuration ---
 BOT_INSTALL_PATH="/opt/tg-bot"
 SERVICE_NAME="tg-bot"
@@ -21,11 +24,28 @@ GITHUB_API_URL="https://api.github.com/repos/${GITHUB_REPO}/releases/latest"
 
 C_RESET='\033[0m'; C_RED='\033[0;31m'; C_GREEN='\033[0;32m'; C_YELLOW='\033[0;33m'; C_BLUE='\033[0;34m'; C_CYAN='\033[0;36m'; C_BOLD='\033[1m'
 msg_info() { echo -e "${C_CYAN}🔵 $1${C_RESET}"; }; msg_success() { echo -e "${C_GREEN}✅ $1${C_RESET}"; }; msg_warning() { echo -e "${C_YELLOW}⚠️  $1${C_RESET}"; }; msg_error() { echo -e "${C_RED}❌ $1${C_RESET}"; }; msg_question() { read -p "$(echo -e "${C_YELLOW}❓ $1${C_RESET}")" $2; }
-spinner() { local pid=$1; local msg=$2; local spin='|/-\'; local i=0; while kill -0 $pid 2>/dev/null; do i=$(( (i+1) % 4 )); printf "\r${C_BLUE}⏳ ${spin:$i:1} ${msg}...${C_RESET}"; sleep .1; done; printf "\r"; }
+
+spinner() { 
+    local pid=$1
+    local msg=$2
+    local spin='|/-\'
+    local i=0
+    while kill -0 $pid 2>/dev/null; do 
+        i=$(( (i+1) % 4 ))
+        printf "\r${C_BLUE}⏳ ${spin:$i:1} ${msg}...${C_RESET}"
+        sleep .1
+    done
+    printf "\r"
+}
+
 run_with_spinner() { 
-    local msg=$1; shift
+    local msg=$1
+    shift
     ( "$@" >> /tmp/${SERVICE_NAME}_install.log 2>&1 ) & 
-    local pid=$!; spinner "$pid" "$msg"; wait $pid; local exit_code=$?
+    local pid=$!
+    spinner "$pid" "$msg"
+    wait $pid
+    local exit_code=$?
     echo -ne "\033[2K\r"
     if [ $exit_code -ne 0 ]; then 
         msg_error "Error during '$msg'. Code: $exit_code"
@@ -37,52 +57,54 @@ run_with_spinner() {
 if command -v wget &> /dev/null; then DOWNLOADER="wget -qO-"; elif command -v curl &> /dev/null; then DOWNLOADER="curl -sSLf"; else msg_error "Neither wget nor curl found."; exit 1; fi
 if command -v curl &> /dev/null; then DOWNLOADER_PIPE="curl -s"; else DOWNLOADER_PIPE="wget -qO-"; fi
 
-get_local_version() { local readme_path="$1"; local version="Not found"; if [ -f "$readme_path" ]; then version=$(grep -oP 'img\.shields\.io/badge/version-v\K[\d\.]+' "$readme_path" || true); if [ -z "$version" ]; then version=$(grep -oP '<b\s*>v\K[\d\.]+(?=</b>)' "$readme_path" || true); fi; if [ -z "$version" ]; then version="Not found"; else version="v$version"; fi; else version="Not installed"; fi; echo "$version"; }
-get_latest_version() { local api_url="$1"; local latest_tag=$($DOWNLOADER_PIPE "$api_url" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/' || echo "API Error"); if [[ "$latest_tag" == *"API rate limit exceeded"* ]]; then latest_tag="API Limit"; elif [[ "$latest_tag" == "API Error" ]] || [ -z "$latest_tag" ]; then latest_tag="Unknown"; fi; echo "$latest_tag"; }
+get_local_version() { if [ -f "$README_FILE" ]; then grep -oP 'img\.shields\.io/badge/version-v\K[\d\.]+' "$README_FILE" || echo "Not found"; else echo "Not installed"; fi; }
 
+# --- Integrity Check ---
 INSTALL_TYPE="NONE"; STATUS_MESSAGE="Check not performed."
 check_integrity() {
-    if [ ! -d "${BOT_INSTALL_PATH}" ] || [ ! -f "${ENV_FILE}" ]; then INSTALL_TYPE="NONE"; STATUS_MESSAGE="Not installed."; return; fi
+    if [ ! -d "${BOT_INSTALL_PATH}" ] || [ ! -f "${ENV_FILE}" ]; then
+        INSTALL_TYPE="NONE"; STATUS_MESSAGE="Not installed."; return;
+    fi
+
     if grep -q "MODE=node" "${ENV_FILE}"; then
         INSTALL_TYPE="NODE (Client)"
         if systemctl is-active --quiet ${NODE_SERVICE_NAME}.service; then STATUS_MESSAGE="${C_GREEN}Active${C_RESET}"; else STATUS_MESSAGE="${C_RED}Inactive${C_RESET}"; fi
         return
     fi
+
     DEPLOY_MODE_FROM_ENV=$(grep '^DEPLOY_MODE=' "${ENV_FILE}" | cut -d'=' -f2 | tr -d '"' || echo "systemd")
     if [ "$DEPLOY_MODE_FROM_ENV" == "docker" ]; then
         INSTALL_TYPE="AGENT (Docker)"
-        STATUS_MESSAGE="Docker: OK"
+        if docker ps | grep -q "tg-bot"; then STATUS_MESSAGE="${C_GREEN}Docker OK${C_RESET}"; else STATUS_MESSAGE="${C_RED}Docker Stop${C_RESET}"; fi
     else
         INSTALL_TYPE="AGENT (Systemd)"
-        if systemctl is-active --quiet ${SERVICE_NAME}.service; then STATUS_MESSAGE="Systemd: OK"; else STATUS_MESSAGE="Systemd: Stopped"; fi
+        if systemctl is-active --quiet ${SERVICE_NAME}.service; then STATUS_MESSAGE="${C_GREEN}Systemd OK${C_RESET}"; else STATUS_MESSAGE="${C_RED}Systemd Stop${C_RESET}"; fi
     fi
 }
 
+# --- Install ---
 common_install_steps() {
     echo "" > /tmp/${SERVICE_NAME}_install.log
-    msg_info "1. Updating packages..."
-    run_with_spinner "Apt update" sudo apt-get update -y
-    run_with_spinner "Dependencies" sudo DEBIAN_FRONTEND=noninteractive apt-get install -y python3 python3-pip python3-venv git curl wget sudo python3-yaml
+    msg_info "1. Updating system..."
+    run_with_spinner "Apt update" sudo apt-get update -y -q
+    run_with_spinner "Dependencies" sudo apt-get install -y -q -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" python3 python3-pip python3-venv git curl wget sudo python3-yaml
 }
 
-# --- [FIX] Smart Repo Reinstall ---
 setup_repo_and_dirs() {
     local owner_user=$1; if [ -z "$owner_user" ]; then owner_user="root"; fi
     cd /
     
     msg_info "Preparing files..."
-    # Backup
     if [ -f "${ENV_FILE}" ]; then cp "${ENV_FILE}" /tmp/tgbot_env.bak; fi
     if [ -d "${VENV_PATH}" ]; then sudo mv "${VENV_PATH}" /tmp/tgbot_venv.bak; fi
 
-    # Wipe
-    if [ -d "${BOT_INSTALL_PATH}" ]; then run_with_spinner "Removing old files" sudo rm -rf "${BOT_INSTALL_PATH}"; fi
+    if [ -d "${BOT_INSTALL_PATH}" ]; then
+        run_with_spinner "Removing old files" sudo rm -rf "${BOT_INSTALL_PATH}"
+    fi
     sudo mkdir -p ${BOT_INSTALL_PATH}
 
-    # Clone
-    run_with_spinner "Git clone (${GIT_BRANCH})" sudo git clone --branch "${GIT_BRANCH}" "${GITHUB_REPO_URL}" "${BOT_INSTALL_PATH}" || exit 1
+    run_with_spinner "Git clone" sudo git clone --branch "${GIT_BRANCH}" "${GITHUB_REPO_URL}" "${BOT_INSTALL_PATH}" || exit 1
     
-    # Restore
     if [ -f "/tmp/tgbot_env.bak" ]; then sudo mv /tmp/tgbot_env.bak "${ENV_FILE}"; fi
     if [ -d "/tmp/tgbot_venv.bak" ]; then 
         if [ -d "${VENV_PATH}" ]; then sudo rm -rf "${VENV_PATH}"; fi
@@ -94,24 +116,25 @@ setup_repo_and_dirs() {
 }
 
 cleanup_node_files() {
-    msg_info "Cleaning up for Node mode..."
+    msg_info "Cleaning up (Node mode)..."
     cd ${BOT_INSTALL_PATH}
     sudo rm -rf core modules bot.py watchdog.py Dockerfile docker-compose.yml .git .github config/users.json config/alerts_config.json deploy.sh deploy_en.sh requirements.txt README* LICENSE CHANGELOG* .gitignore
-    msg_success "Cleanup complete."
+    if [ ! -f "node/node.py" ]; then msg_warning "node.py missing!"; fi
+    msg_success "Node optimized."
 }
 
 cleanup_agent_files() {
-    msg_info "Cleaning up for Agent mode..."
+    msg_info "Cleaning up (Agent mode)..."
     cd ${BOT_INSTALL_PATH}
     sudo rm -rf node
 }
 
 install_extras() {
     if ! command -v fail2ban-client &> /dev/null; then
-        msg_question "Fail2Ban not found. Install? (y/n): " I; if [[ "$I" =~ ^[Yy]$ ]]; then run_with_spinner "Install Fail2ban" sudo apt-get install -y fail2ban; fi
+        msg_question "Fail2Ban not found. Install? (y/n): " I; if [[ "$I" =~ ^[Yy]$ ]]; then run_with_spinner "Install Fail2ban" sudo apt-get install -y -q -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" fail2ban; fi
     fi
     if ! command -v iperf3 &> /dev/null; then
-        msg_question "iperf3 not found. Install? (y/n): " I; if [[ "$I" =~ ^[Yy]$ ]]; then run_with_spinner "Install iperf3" sudo apt-get install -y iperf3; fi
+        msg_question "iperf3 not found. Install? (y/n): " I; if [[ "$I" =~ ^[Yy]$ ]]; then run_with_spinner "Install iperf3" sudo apt-get install -y -q -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" iperf3; fi
     fi
 }
 
@@ -260,7 +283,7 @@ install_systemd_logic() {
     create_and_start_service "${SERVICE_NAME}" "${BOT_INSTALL_PATH}/bot.py" "$mode" "Telegram Bot"
     create_and_start_service "${WATCHDOG_SERVICE_NAME}" "${BOT_INSTALL_PATH}/watchdog.py" "root" "Watchdog"
     cleanup_agent_files
-    msg_success "Systemd Install Complete!"
+    local ip=$(curl -s ipinfo.io/ip); echo ""; msg_success "Installation complete! Agent: http://${ip}:${WEB_PORT}"
 }
 
 install_docker_logic() {
@@ -283,16 +306,16 @@ install_docker_logic() {
 install_node_logic() {
     echo -e "\n${C_BOLD}=== Installing NODE (Client) ===${C_RESET}"
     common_install_steps
-    run_with_spinner "Installing iperf3" sudo DEBIAN_FRONTEND=noninteractive apt-get install -y iperf3
+    run_with_spinner "Installing iperf3" sudo apt-get install -y -q -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" iperf3
     setup_repo_and_dirs "root"
     
     msg_info "Setting up venv..."
     if [ ! -d "${VENV_PATH}" ]; then run_with_spinner "Creating venv" ${PYTHON_BIN} -m venv "${VENV_PATH}"; fi
     run_with_spinner "Installing deps" "${VENV_PATH}/bin/pip" install psutil requests
     
-    echo ""; msg_info "Agent Setup:"
+    echo ""; msg_info "Connection Setup:"
     msg_question "Agent URL (http://IP:8080): " AGENT_URL
-    msg_question "Node Token: " NODE_TOKEN
+    msg_question "Token: " NODE_TOKEN
     
     sudo bash -c "cat > ${ENV_FILE}" <<EOF
 MODE=node
