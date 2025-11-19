@@ -152,8 +152,10 @@ check_docker_deps() {
 }
 
 create_dockerfile() {
+    msg_info "Creating Dockerfile..."
     sudo tee "${BOT_INSTALL_PATH}/Dockerfile" > /dev/null <<'EOF'
 FROM python:3.10-slim-bookworm
+LABEL maintainer="Jatixs"
 RUN apt-get update && apt-get install -y python3-yaml iperf3 git curl wget sudo procps iputils-ping net-tools gnupg docker.io coreutils && rm -rf /var/lib/apt/lists/*
 RUN pip install --no-cache-dir docker aiohttp
 RUN groupadd -g 1001 tgbot && useradd -u 1001 -g 1001 -m -s /bin/bash tgbot && echo "tgbot ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
@@ -165,9 +167,11 @@ RUN mkdir -p /opt/tg-bot/config /opt/tg-bot/logs/bot /opt/tg-bot/logs/watchdog &
 USER tgbot
 CMD ["python", "bot.py"]
 EOF
+    sudo chown ${OWNER_USER}:${OWNER_USER} "${BOT_INSTALL_PATH}/Dockerfile"
 }
 
 create_docker_compose_yml() {
+    msg_info "Creating docker-compose.yml..."
     sudo tee "${BOT_INSTALL_PATH}/docker-compose.yml" > /dev/null <<EOF
 version: '3.8'
 x-bot-base: &bot-base
@@ -228,6 +232,7 @@ services:
       - ./logs/watchdog:/opt/tg-bot/logs/watchdog
       - /var/run/docker.sock:/var/run/docker.sock:ro
 EOF
+    sudo chown ${OWNER_USER}:${OWNER_USER} "${BOT_INSTALL_PATH}/docker-compose.yml"
 }
 
 create_and_start_service() { 
@@ -355,7 +360,7 @@ main_menu() {
         clear
         echo -e "${C_BLUE}${C_BOLD}   VPS Bot Manager${C_RESET}"
         check_integrity
-        echo "   Type: ${INSTALL_TYPE} | Status: ${STATUS_MESSAGE}"
+        echo -e "   Type: ${INSTALL_TYPE} | Status: ${STATUS_MESSAGE}"
         echo "---------------------------------"
         echo "1) Update"
         echo "2) Uninstall"
@@ -383,4 +388,27 @@ main_menu() {
 }
 
 if [ "$(id -u)" -ne 0 ]; then msg_error "Root required."; exit 1; fi
-main_menu
+
+check_integrity
+if [ "$INSTALL_TYPE" == "NONE" ]; then
+    echo -e "${C_BLUE}${C_BOLD}   VPS Bot Manager (Install)${C_RESET}"
+    echo "1) AGENT (Systemd - Secure)"
+    echo "2) AGENT (Systemd - Root)"
+    echo "3) AGENT (Docker - Secure)"
+    echo "4) AGENT (Docker - Root)"
+    echo -e "${C_GREEN}8) NODE (Client)${C_RESET}"
+    echo "0) Exit"
+    read -p "Choice: " ch
+    case $ch in
+        1) uninstall_bot; install_systemd_secure ;;
+        2) uninstall_bot; install_systemd_root ;;
+        3) uninstall_bot; install_docker_secure ;;
+        4) uninstall_bot; install_docker_root ;;
+        8) uninstall_bot; install_node_logic ;;
+        0) exit 0 ;;
+    esac
+    read -p "Enter to continue..."
+    main_menu
+else
+    main_menu
+fi
