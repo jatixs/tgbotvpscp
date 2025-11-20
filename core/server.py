@@ -58,7 +58,7 @@ async def process_node_result_background(bot, user_id, cmd, text, token, node_na
                 ])
                 try:
                     await bot.edit_message_text(text=text, chat_id=user_id, message_id=msg_id, reply_markup=stop_kb, parse_mode="HTML")
-                except Exception: pass # Игнорируем ошибки редактирования (не изменилось и т.д.)
+                except Exception: pass 
                 return
 
         # Логика для остальных команд (новое сообщение)
@@ -162,13 +162,16 @@ async def handle_dashboard(request):
         nodes_html += f"""<div class="bg-black/20 hover:bg-black/30 transition rounded-xl p-4 border border-white/5 {cursor}" onclick="openNodeDetails('{token}')"><div class="flex justify-between items-start"><div><div class="font-bold text-gray-200">{node.get('name','Unknown')}</div><div class="text-[10px] font-mono text-gray-500 mt-1">{token[:8]}...</div></div><div class="px-2 py-1 rounded text-[10px] font-bold {status_color} {bg_class}">{status_text}</div></div>{details_block}</div>"""
     
     admin_controls = ""
+    role_badge = ""
+    
     if is_admin:
+        role_badge = '<span class="bg-green-500/20 text-green-400 text-[10px] px-2 py-0.5 rounded border border-green-500/30">ADMIN</span>'
         admin_controls = """<div class="mt-8 p-6 rounded-2xl bg-gradient-to-r from-purple-900/20 to-blue-900/20 border border-white/5"><h3 class="text-lg font-bold text-white mb-2">Панель администратора</h3><p class="text-sm text-gray-400 mb-4">Доступны расширенные функции.</p><div class="flex gap-3"><button class="px-4 py-2 bg-white/10 rounded-lg text-sm text-gray-400 cursor-not-allowed" disabled>Логи</button></div></div>"""
+    else:
+        role_badge = '<span class="bg-gray-500/20 text-gray-300 text-[10px] px-2 py-0.5 rounded border border-gray-500/30">USER</span>'
     
-    # --- ИСПРАВЛЕНИЕ: Используем .replace вместо .format ---
     data = s.copy()
-    data.update({'nodes_count': len(NODES), 'active_nodes': active_count, 'nodes_list_html': nodes_html, 'user_photo': user.get('photo_url'), 'user_name': user.get('first_name'), 'role_badge': '<span class="bg-green-500/20 text-green-400 text-[10px] px-2 py-0.5 rounded border border-green-500/30">ADMIN</span>' if is_admin else '<span class="bg-gray-500/20 text-gray-300 text-[10px] px-2 py-0.5 rounded border border-gray-500/30">USER</span>', 'user_group_display': 'Администратор' if is_admin else 'Пользователь', 'admin_controls_html': admin_controls})
-    
+    data.update({'nodes_count': len(NODES), 'active_nodes': active_count, 'nodes_list_html': nodes_html, 'user_photo': user.get('photo_url'), 'user_name': user.get('first_name'), 'role_badge': role_badge, 'user_group_display': 'Администратор' if is_admin else 'Пользователь', 'admin_controls_html': admin_controls})
     html = load_template("dashboard.html")
     for k, v in data.items(): 
         html = html.replace(f"{{{k}}}", str(v))
@@ -178,26 +181,38 @@ async def handle_dashboard(request):
 async def handle_heartbeat(request):
     try: data = await request.json()
     except: return web.json_response({"error": "Invalid JSON"}, status=400)
-    token = data.get("token")
-    if not token or not get_node_by_token(token): return web.json_response({"error": "Auth fail"}, status=401)
-    node = get_node_by_token(token)
     
+    token = data.get("token")
+    # Валидация токена
+    if not token or not get_node_by_token(token): 
+        return web.json_response({"error": "Auth fail"}, status=401)
+    
+    node = get_node_by_token(token)
     stats = data.get("stats", {})
     results = data.get("results", [])
     bot = request.app.get('bot')
 
-    # Обработка результатов (в фоне!)
+    # Обработка результатов в фоне (asyncio task)
     if bot and results:
         for res in results:
             user_id = res.get("user_id")
             text = res.get("result")
             cmd = res.get("command")
-            # Запускаем отправку в фоне, чтобы не блочить ответ ноде
             asyncio.create_task(process_node_result_background(bot, user_id, cmd, text, token, node.get("name", "Node")))
 
     node["is_restarting"] = False 
     update_node_heartbeat(token, request.transport.get_extra_info('peername')[0], stats)
-    return web.json_response({"status": "ok", "tasks": node.get("tasks", [])})
+    
+    # --- ИСПРАВЛЕНИЕ БЕСКОНЕЧНОГО ПОВТОРА ---
+    # Копируем задачи для отправки ноде
+    tasks_to_send = list(node.get("tasks", []))
+    
+    # Очищаем задачи в базе, так как они сейчас будут отправлены
+    if tasks_to_send:
+        node["tasks"] = []
+    # ----------------------------------------
+
+    return web.json_response({"status": "ok", "tasks": tasks_to_send})
 
 async def start_web_server(bot_instance: Bot):
     app = web.Application()
