@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{web_title}</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @keyframes float { 0% { transform: translateY(0px); } 50% { transform: translateY(-20px); } 100% { transform: translateY(0px); } }
+        .animate-float { animation: float 6s ease-in-out infinite; }
+    </style>
+</head>
+<body class="bg-gray-900 min-h-screen text-gray-100 font-sans selection:bg-green-500/30 pb-10">
+    
+    <div class="fixed top-[-10%] left-[-10%] w-96 h-96 bg-purple-600/10 rounded-full mix-blend-screen filter blur-3xl animate-float pointer-events-none"></div>
+    <div class="fixed bottom-[-10%] right-[-10%] w-96 h-96 bg-blue-600/10 rounded-full mix-blend-screen filter blur-3xl animate-float pointer-events-none" style="animation-delay: 2s"></div>
+
+    <nav class="backdrop-blur-md bg-black/20 border-b border-white/5 sticky top-0 z-50">
+        <div class="max-w-6xl mx-auto px-4 py-3 flex justify-between items-center">
+            <div class="flex items-center space-x-2">
+                <span class="relative flex h-3 w-3">
+                  <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                  <span class="relative inline-flex rounded-full h-3 w-3 bg-green-500"></span>
+                </span>
+                <span class="font-bold text-lg tracking-tight">{web_agent_running}</span>
+                {role_badge}
+            </div>
+            
+            <div class="flex items-center gap-4">
+                <div class="flex items-center gap-3 bg-white/5 px-3 py-1.5 rounded-full border border-white/5">
+                    <img src="{user_photo}" alt="ava" class="w-6 h-6 rounded-full">
+                    <span class="text-xs font-medium text-gray-300">{user_name}</span>
+                </div>
+                <form action="/logout" method="POST" class="flex">
+                    <button type="submit" class="text-gray-500 hover:text-red-400 transition-colors">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                        </svg>
+                    </button>
+                </form>
+            </div>
+        </div>
+    </nav>
+
+    <main class="max-w-6xl mx-auto px-4 mt-8 relative z-10">
+        
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+            <div class="bg-white/5 border border-white/10 rounded-2xl p-5">
+                <div class="text-gray-400 text-xs uppercase font-bold mb-1">Всего Нод</div>
+                <div class="text-3xl font-bold text-white">{nodes_count}</div>
+            </div>
+            <div class="bg-white/5 border border-white/10 rounded-2xl p-5">
+                <div class="text-gray-400 text-xs uppercase font-bold mb-1">Активные</div>
+                <div class="text-3xl font-bold text-green-400">{active_nodes}</div>
+            </div>
+            <div class="bg-white/5 border border-white/10 rounded-2xl p-5">
+                <div class="text-gray-400 text-xs uppercase font-bold mb-1">Ваш статус</div>
+                <div class="text-lg font-medium text-gray-200">{user_group_display}</div>
+            </div>
+        </div>
+
+        <h2 class="text-xl font-bold text-white mb-4 flex items-center gap-2">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+            </svg>
+            Управление Нодами
+        </h2>
+        
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            {nodes_list_html}
+        </div>
+        
+        {admin_controls_html}
+
+    </main>
+</body>
+</html>
