@@ -460,6 +460,39 @@ update_bot() {
         if systemctl list-unit-files | grep -q "^${WATCHDOG_SERVICE_NAME}.service"; then sudo systemctl restart ${WATCHDOG_SERVICE_NAME}; fi
     fi
     msg_success "Обновлено."
+
+    # --- Проверка Web-интерфейса ---
+    local web_port="8080"
+    if [ -f "${ENV_FILE}" ]; then
+        local env_port=$(grep '^WEB_SERVER_PORT=' "${ENV_FILE}" | cut -d'=' -f2 | tr -d '"')
+        if [ -n "$env_port" ]; then web_port="$env_port"; fi
+    fi
+
+    msg_info "Проверка доступности веб-интерфейса (порт ${web_port})..."
+    sleep 5 # Небольшая пауза после рестарта
+
+    if curl -s -f -o /dev/null "http://127.0.0.1:${web_port}"; then
+        msg_success "Веб-интерфейс активен."
+    else
+        msg_warning "Веб-интерфейс не отвечает."
+        msg_question "Служба может быть не запущена. Попробовать запустить принудительно? (y/n): " START_WEB
+        if [[ "$START_WEB" =~ ^[Yy]$ ]]; then
+             if [ -f "${ENV_FILE}" ] && grep -q "DEPLOY_MODE=docker" "${ENV_FILE}"; then
+                  local dc_cmd=""
+                  if sudo docker compose version &>/dev/null; then dc_cmd="docker compose"; else dc_cmd="docker-compose"; fi
+                  run_with_spinner "Запуск (Docker)" sudo $dc_cmd -f "${BOT_INSTALL_PATH}/docker-compose.yml" up -d
+             else
+                  run_with_spinner "Запуск (Systemd)" sudo systemctl start ${SERVICE_NAME}
+             fi
+             
+             sleep 5
+             if curl -s -f -o /dev/null "http://127.0.0.1:${web_port}"; then
+                 msg_success "Веб-интерфейс успешно запущен!"
+             else
+                 msg_error "Не удалось запустить веб-интерфейс. Проверьте логи (пункт меню 2 или docker logs)."
+             fi
+        fi
+    fi
 }
 
 main_menu() {
