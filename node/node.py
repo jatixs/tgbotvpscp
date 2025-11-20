@@ -11,12 +11,10 @@ import threading
 import random
 from logging.handlers import RotatingFileHandler
 
-# --- Настройки ---
 AGENT_BASE_URL = os.environ.get("AGENT_BASE_URL", "http://localhost:8080")
 AGENT_TOKEN = os.environ.get("AGENT_TOKEN", "")
 NODE_UPDATE_INTERVAL = int(os.environ.get("NODE_UPDATE_INTERVAL", 5))
 
-# --- Пути и Логи ---
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 LOG_DIR = os.path.join(BASE_DIR, "logs", "node")
 os.makedirs(LOG_DIR, exist_ok=True)
@@ -35,7 +33,6 @@ RESULTS_QUEUE = []
 RESULTS_LOCK = threading.Lock()
 
 def escape_html(text):
-    """Экранирует символы для HTML-разметки Telegram."""
     if text is None:
         return ""
     return str(text).replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
@@ -55,8 +52,6 @@ def format_bytes(size):
         size /= power
         n += 1
     return f"{size:.2f} {power_labels[n]}B"
-
-# --- Команды ---
 
 def cmd_selftest():
     cpu = psutil.cpu_percent(interval=1)
@@ -79,11 +74,9 @@ def cmd_selftest():
 
 def cmd_top():
     try:
-        # ps aux, сортировка по CPU, топ 10
         cmd = "ps aux --sort=-%cpu | head -n 11"
         result = subprocess.check_output(cmd, shell=True).decode('utf-8')
         if len(result) > 3000: result = result[:3000] + "\n..."
-        # [FIX] Экранируем вывод, чтобы не сломать HTML
         safe_result = escape_html(result)
         return f"🔥 <b>Top Processes:</b>\n<pre>{safe_result}</pre>"
     except Exception as e:
@@ -110,13 +103,10 @@ def cmd_traffic():
         return f"Error measuring traffic: {escape_html(str(e))}"
 
 def run_iperf_cmd(server, port, direction="dl"):
-    """Запускает iperf3 и возвращает скорость или текст ошибки."""
     try:
-        # Основные флаги: -c (клиент), -p (порт), -t (время), -4 (IPv4), --json
         base_cmd = f"iperf3 -c {server} -p {port} -t 5 -4 --json"
         
         if direction == "dl":
-            # -R для reverse mode (скачивание)
             cmd = f"{base_cmd} -R"
         else:
             cmd = base_cmd
@@ -126,23 +116,20 @@ def run_iperf_cmd(server, port, direction="dl"):
         if res.returncode == 0:
             try:
                 json_data = json.loads(res.stdout)
-                # Ключи для DL и UL отличаются в JSON
                 key = 'sum_received' if direction == 'dl' else 'sum_sent'
-                # Иногда iperf выдает sum_sent для обоих в зависимости от версии, проверим end
                 if 'end' in json_data:
                     end_data = json_data['end']
                     if key in end_data:
                         bps = end_data[key]['bits_per_second']
-                    elif 'sum_sent' in end_data: # Фолбек
+                    elif 'sum_sent' in end_data:
                          bps = end_data['sum_sent']['bits_per_second']
                     else:
                         return None, "JSON Key Error"
                     
-                    return bps / 1_000_000, None # Успех: (значение, None)
+                    return bps / 1_000_000, None
             except json.JSONDecodeError:
                 return None, "JSON Decode Error"
         else:
-            # Возвращаем ошибку из stderr (обрезаем лишнее)
             err_msg = res.stderr.strip().split('\n')[-1] if res.stderr else "Unknown Error"
             return None, err_msg
 
@@ -152,7 +139,6 @@ def run_iperf_cmd(server, port, direction="dl"):
     return None, "Unknown"
 
 def cmd_speedtest():
-    """Пробует несколько серверов iperf3."""
     servers = [
         ("ping.online.net", "5209"),
         ("bouygues.testdebit.info", "5209"),
@@ -167,20 +153,17 @@ def cmd_speedtest():
     for server, port in servers:
         report.append(f"🔄 Trying <b>{server}</b>...")
         
-        # DL
         dl_val, dl_err = run_iperf_cmd(server, port, "dl")
         if dl_val is None:
             report.append(f"   ⬇️ DL Fail: {escape_html(dl_err)}")
-            continue # Пробуем следующий сервер
+            continue
             
-        # UL
         ul_val, ul_err = run_iperf_cmd(server, port, "ul")
         if ul_val is None:
             report.append(f"   ⬇️ DL: {dl_val:.2f} Mbps")
             report.append(f"   ⬆️ UL Fail: {escape_html(ul_err)}")
             continue
             
-        # Если оба успешны
         return (
             f"🚀 <b>Speedtest Results:</b>\n"
             f"Server: {server}\n\n"
@@ -188,7 +171,6 @@ def cmd_speedtest():
             f"⬆️ <b>Upload:</b> {ul_val:.2f} Mbps"
         )
 
-    # Если ни один не сработал
     final_report = "\n".join(report)
     return f"⚠️ <b>Speedtest Failed on all servers:</b>\n<pre>{final_report}</pre>"
 
@@ -217,11 +199,14 @@ def run_command_thread(cmd, user_id):
             RESULTS_QUEUE.append({"user_id": user_id, "command": cmd, "result": res})
 
 def get_stats_short():
+    net = psutil.net_io_counters()
     return {
         "cpu": psutil.cpu_percent(interval=None),
         "ram": psutil.virtual_memory().percent,
         "disk": psutil.disk_usage('/').percent,
-        "uptime": get_uptime_str()
+        "uptime": get_uptime_str(),
+        "net_rx": net.bytes_recv,
+        "net_tx": net.bytes_sent
     }
 
 def send_heartbeat():
