@@ -5,6 +5,7 @@ import json
 import secrets
 import hashlib
 import asyncio
+import requests
 from aiohttp import web
 from aiogram import Bot
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
@@ -15,6 +16,7 @@ from .config import WEB_SERVER_HOST, WEB_SERVER_PORT, NODE_OFFLINE_TIMEOUT, BASE
 from .shared_state import NODES, NODE_TRAFFIC_MONITORS, ALLOWED_USERS, USER_NAMES, AUTH_TOKENS
 from .i18n import STRINGS
 from .config import DEFAULT_LANGUAGE
+from .utils import get_country_flag
 
 # --- КОНФИГУРАЦИЯ ---
 COOKIE_NAME = "vps_agent_session"
@@ -22,6 +24,9 @@ LOGIN_TOKEN_TTL = 300
 WEB_PASSWORD = os.environ.get("WEB_PASSWORD", "admin")
 TEMPLATE_DIR = os.path.join(BASE_DIR, "core", "templates")
 STATIC_DIR = os.path.join(BASE_DIR, "core", "static")
+
+# Флаг агента (будет обновлен при старте)
+AGENT_FLAG = "🏳️"
 
 def load_template(name):
     path = os.path.join(TEMPLATE_DIR, name)
@@ -43,6 +48,7 @@ def get_current_user(request):
         return user_data
     except: return None
 
+# --- ВСПОМОГАТЕЛЬНАЯ ФУНКЦИЯ ОТПРАВКИ ---
 async def process_node_result_background(bot, user_id, cmd, text, token, node_name):
     if not user_id or not text: return
     try:
@@ -71,16 +77,13 @@ async def handle_get_logs(request):
         return web.json_response({"error": "Unauthorized"}, status=403)
     
     log_path = os.path.join(BASE_DIR, "logs", "bot", "bot.log")
-    
     if not os.path.exists(log_path):
         return web.json_response({"logs": ["Файл логов не найден."]})
         
     try:
         with open(log_path, "r", encoding="utf-8", errors="ignore") as f:
-            # Читаем файл и берем последние 300 строк
             lines = f.readlines()
-            if len(lines) > 300:
-                lines = lines[-300:]
+            if len(lines) > 300: lines = lines[-300:]
         return web.json_response({"logs": lines})
     except Exception as e:
         return web.json_response({"error": str(e)}, status=500)
@@ -120,7 +123,14 @@ async def handle_login_request(request):
 async def handle_login_password(request):
     data = await request.post()
     if data.get("password") == WEB_PASSWORD:
-        session = {"id": 0, "first_name": "Admin", "role": "admins", "type": "password"}
+        session = {
+            "id": 0, 
+            "first_name": "Administrator", 
+            "username": "admin", 
+            "photo_url": AGENT_FLAG, 
+            "role": "admins", 
+            "type": "password"
+        }
         resp = web.HTTPFound('/')
         resp.set_cookie(COOKIE_NAME, json.dumps(session), max_age=604800)
         return resp
@@ -137,7 +147,15 @@ async def handle_magic_login(request):
     if time.time() - td["created_at"] > LOGIN_TOKEN_TTL: return web.Response(text="Expired", status=403)
     uid = td["user_id"]
     if uid not in ALLOWED_USERS: return web.Response(text="Denied", status=403)
-    session = {"id": uid, "first_name": USER_NAMES.get(str(uid), f"ID:{uid}"), "role": ALLOWED_USERS[uid], "type": "telegram"}
+    
+    # Добавляем фото по умолчанию для Telegram-входа
+    session = {
+        "id": uid, 
+        "first_name": USER_NAMES.get(str(uid), f"ID:{uid}"), 
+        "photo_url": "https://cdn-icons-png.flaticon.com/512/149/149071.png",
+        "role": ALLOWED_USERS[uid], 
+        "type": "telegram"
+    }
     resp = web.HTTPFound('/')
     resp.set_cookie(COOKIE_NAME, json.dumps(session), max_age=2592000)
     return resp
@@ -152,7 +170,13 @@ async def handle_node_details(request):
     token = request.query.get("token")
     if not token or token not in NODES: return web.json_response({"error": "Node not found"}, status=404)
     node = NODES[token]
-    return web.json_response({"name": node.get("name"), "ip": node.get("ip"), "stats": node.get("stats"), "history": node.get("history", [])})
+    return web.json_response({
+        "name": node.get("name"), 
+        "ip": node.get("ip"), 
+        "stats": node.get("stats"), 
+        "history": node.get("history", []),
+        "token": token 
+    })
 
 async def handle_dashboard(request):
     user = get_current_user(request)
@@ -183,7 +207,6 @@ async def handle_dashboard(request):
     
     if is_admin:
         role_badge = '<span class="bg-green-500/20 text-green-400 text-[10px] px-2 py-0.5 rounded border border-green-500/30">ADMIN</span>'
-        # --- АКТИВИРОВАНА КНОПКА ЛОГОВ ---
         admin_controls = """
         <div class="mt-8 p-6 rounded-2xl bg-gradient-to-r from-purple-900/20 to-blue-900/20 border border-white/5">
             <h3 class="text-lg font-bold text-white mb-2">Панель администратора</h3>
@@ -200,10 +223,30 @@ async def handle_dashboard(request):
     else:
         role_badge = '<span class="bg-gray-500/20 text-gray-300 text-[10px] px-2 py-0.5 rounded border border-gray-500/30">USER</span>'
     
+    raw_photo = user.get('photo_url', '')
+    if raw_photo.startswith('http'):
+        user_avatar = f'<img src="{raw_photo}" alt="ava" class="w-6 h-6 rounded-full flex-shrink-0">'
+    else:
+        user_avatar = f'<span class="text-lg leading-none select-none">{raw_photo}</span>'
+
     data = s.copy()
-    data.update({'nodes_count': len(NODES), 'active_nodes': active_count, 'nodes_list_html': nodes_html, 'user_photo': user.get('photo_url'), 'user_name': user.get('first_name'), 'role_badge': role_badge, 'user_group_display': 'Администратор' if is_admin else 'Пользователь', 'admin_controls_html': admin_controls})
+    data.update({
+        'nodes_count': len(NODES), 
+        'active_nodes': active_count, 
+        'nodes_list_html': nodes_html, 
+        'user_avatar': user_avatar, 
+        'user_name': user.get('first_name'), 
+        'role_badge': role_badge, 
+        'user_group_display': 'Администратор' if is_admin else 'Пользователь', 
+        'admin_controls_html': admin_controls
+    })
+    
+    # --- ИСПРАВЛЕНИЕ: Используем .replace() вместо .format() ---
+    # Это предотвращает краш при наличии CSS стилей в шаблоне
     html = load_template("dashboard.html")
-    for k, v in data.items(): html = html.replace(f"{{{k}}}", str(v))
+    for k, v in data.items(): 
+        html = html.replace(f"{{{k}}}", str(v))
+    
     return web.Response(text=html, content_type='text/html')
 
 async def handle_heartbeat(request):
@@ -225,20 +268,16 @@ async def handle_heartbeat(request):
 
     node["is_restarting"] = False 
     update_node_heartbeat(token, request.transport.get_extra_info('peername')[0], stats)
-    
     tasks_to_send = list(node.get("tasks", []))
     if tasks_to_send: node["tasks"] = []
-
     return web.json_response({"status": "ok", "tasks": tasks_to_send})
 
 async def start_web_server(bot_instance: Bot):
+    global AGENT_FLAG
     app = web.Application()
     app['bot'] = bot_instance
-    
-    if os.path.exists(STATIC_DIR):
-        app.router.add_static('/static', STATIC_DIR)
-    else:
-        logging.warning(f"Static dir not found: {STATIC_DIR}")
+    if os.path.exists(STATIC_DIR): app.router.add_static('/static', STATIC_DIR)
+    else: logging.warning(f"Static dir not found: {STATIC_DIR}")
 
     app.router.add_get('/', handle_dashboard)
     app.router.add_get('/login', handle_login_page)
@@ -248,8 +287,19 @@ async def start_web_server(bot_instance: Bot):
     app.router.add_post('/logout', handle_logout)
     app.router.add_post('/api/heartbeat', handle_heartbeat)
     app.router.add_get('/api/node/details', handle_node_details)
-    # Новый маршрут для логов
     app.router.add_get('/api/logs', handle_get_logs)
+
+    try:
+        def fetch_flag():
+            try:
+                ip = requests.get("https://api.ipify.org", timeout=2).text
+                return get_country_flag(ip)
+            except: return "🏳️"
+        
+        AGENT_FLAG = await asyncio.to_thread(fetch_flag)
+        logging.info(f"Web Server: Agent flag detected: {AGENT_FLAG}")
+    except Exception as e:
+        logging.error(f"Failed to detect agent flag: {e}")
 
     runner = web.AppRunner(app)
     await runner.setup()
