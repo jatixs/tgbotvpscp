@@ -11,7 +11,9 @@ from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
 # Импорты
 from .nodes_db import get_node_by_token, update_node_heartbeat, create_node, delete_node
-from .config import WEB_SERVER_HOST, WEB_SERVER_PORT, NODE_OFFLINE_TIMEOUT, BASE_DIR
+# --- ИЗМЕНЕНО: Добавлен ADMIN_USER_ID в импорт ---
+from .config import WEB_SERVER_HOST, WEB_SERVER_PORT, NODE_OFFLINE_TIMEOUT, BASE_DIR, ADMIN_USER_ID
+# -------------------------------------------------
 from .shared_state import NODES, NODE_TRAFFIC_MONITORS, ALLOWED_USERS, USER_NAMES, AUTH_TOKENS, ALERTS_CONFIG
 from .i18n import STRINGS, get_user_lang, set_user_lang
 from .config import DEFAULT_LANGUAGE
@@ -108,6 +110,10 @@ async def handle_settings_page(request):
     if is_admin:
         users_list = []
         for uid, role in ALLOWED_USERS.items():
+            # --- ИЗМЕНЕНО: Скрываем Главного Админа (Создателя) ---
+            if uid == ADMIN_USER_ID:
+                continue
+            # ------------------------------------------------------
             name = USER_NAMES.get(str(uid), f"ID: {uid}")
             users_list.append({"id": uid, "name": name, "role": role})
         users_json = json.dumps(users_list)
@@ -156,6 +162,11 @@ async def handle_user_action(request):
         target_id = int(data.get('id', 0))
         
         if not target_id: return web.json_response({"error": "Invalid ID"}, status=400)
+        
+        # --- ДОП. ЗАЩИТА: Нельзя удалить главного админа через API ---
+        if target_id == ADMIN_USER_ID:
+            return web.json_response({"error": "Cannot affect Main Admin"}, status=400)
+        # -------------------------------------------------------------
 
         if action == 'delete':
             if target_id in ALLOWED_USERS:
@@ -216,7 +227,6 @@ async def handle_login_request(request):
     try: user_id = int(data.get("user_id", 0))
     except: user_id = 0
     if user_id not in ALLOWED_USERS:
-        # ... (код ошибки)
         return web.Response(text="User not found", status=403)
     
     token = secrets.token_urlsafe(32)
