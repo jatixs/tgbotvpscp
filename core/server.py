@@ -410,7 +410,7 @@ async def start_web_server(bot_instance: Bot):
         AGENT_FLAG = await asyncio.to_thread(fetch_flag)
     except: pass
 
-    runner = web.AppRunner(app)
+    runner = web.AppRunner(app, access_log=None)
     await runner.setup()
     site = web.TCPSite(runner, WEB_SERVER_HOST, WEB_SERVER_PORT)
     try:
