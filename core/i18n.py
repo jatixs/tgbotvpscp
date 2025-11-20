@@ -257,16 +257,13 @@ STRINGS = {
         "node_details_offline": "🔴 <b>Сервер: {name}</b>\nСтатус: <b>Не в сети</b>\nПоследний отклик: <b>{last_seen}</b>\nIP: {ip}\n\n📊 <b>Последние известные данные:</b>\nCPU: {cpu}%\nRAM: {ram}%\nDisk: {disk}%",
         "node_restarting_alert": "🔵 Сервер '{name}' перезагружается. Пожалуйста, подождите 1-2 минуты.",
         "node_management_menu": "🟢 <b>Управление сервером: {name}</b>\nIP: {ip}\nUptime: {uptime}\n\nВыберите действие:",
-        
-        # --- ИЗМЕНЕНО: Текст уведомления об отправке команды ---
         "node_cmd_sent": "Команда '{cmd}' отправлена на сервер '{name}'.",
-        # -----------------------------------------------------
-        
         "node_btn_add": "➕ Добавить Ноду",
         "node_btn_delete": "➖ Удалить Ноду",
         "node_add_success_token": "✅ <b>Нода создана!</b>\n\nИмя: <b>{name}</b>\nТокен: <code>{token}</code>\n\nСохраните этот токен и укажите его в .env на сервере-ноде (AGENT_TOKEN).",
         "node_delete_select": "🗑 <b>Удаление ноды</b>\n\nВыберите сервер, который хотите удалить:",
         "node_deleted": "✅ Нода '{name}' успешно удалена.",
+        "node_traffic_stopped_alert": "✅ Мониторинг трафика на ноде '{name}' остановлен.", # NEW
         
         # --- WEB INTERFACE ---
         "web_title": "Агент VPS Бота",
@@ -533,6 +530,7 @@ STRINGS = {
         "node_add_success_token": "✅ <b>Node Created!</b>\n\nName: <b>{name}</b>\nToken: <code>{token}</code>\n\nSave this token and put it in .env on the node server (AGENT_TOKEN).",
         "node_delete_select": "🗑 <b>Delete Node</b>\n\nSelect a server you want to delete:",
         "node_deleted": "✅ Node '{name}' successfully deleted.",
+        "node_traffic_stopped_alert": "✅ Traffic monitoring for node '{name}' stopped.", # NEW
         
         # --- WEB INTERFACE ---
         "web_title": "VPS Bot Agent",

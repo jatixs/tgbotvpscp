@@ -204,25 +204,30 @@ async def cq_node_stop_traffic(callback: types.CallbackQuery):
     user_id = callback.from_user.id
     lang = get_user_lang(user_id)
     
+    # Получаем токен и имя ноды для уведомления
+    token = callback.data.replace("node_stop_traffic_", "")
+    node = NODES.get(token)
+    node_name = node.get("name", "Unknown") if node else "Unknown"
+    
+    # Текст уведомления с именем ноды
+    alert_text = _("node_traffic_stopped_alert", lang, name=node_name)
+
     if user_id in NODE_TRAFFIC_MONITORS:
         del NODE_TRAFFIC_MONITORS[user_id]
         try:
             await callback.message.delete()
             # Возвращаем меню управления этой нодой, если токен есть в callback
-            token = callback.data.replace("node_stop_traffic_", "")
-            node = NODES.get(token)
             if node:
                 stats = node.get("stats", {})
                 text = _("node_management_menu", lang, name=node.get("name"), ip=node.get("ip", "?"), uptime=stats.get("uptime", "?"))
                 keyboard = get_node_management_keyboard(token, lang)
                 await callback.message.answer(text, reply_markup=keyboard, parse_mode="HTML")
-            else:
-                 await callback.message.answer(_("traffic_stopped_alert", lang))
 
         except TelegramBadRequest:
-            await callback.message.answer(_("traffic_stopped_alert", lang))
+            pass
     
-    await callback.answer(_("traffic_stopped_alert", lang))
+    # Отправляем "тостер" уведомление (show_alert=False)
+    await callback.answer(alert_text, show_alert=False)
 
 async def node_traffic_scheduler(bot: Bot):
     """Периодически отправляет команды трафика на ноды для активных мониторов."""
