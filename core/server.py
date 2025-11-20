@@ -268,12 +268,11 @@ async def handle_dashboard(request):
         'web_stats_active': s.get('web_stats_active', 'Active')
     })
     
-    html_template = load_template("dashboard.html")
-    try:
-        html = html_template.format(**data)
-    except KeyError as e:
-        logging.error(f"Template key missing: {e}")
-        html = html_template.replace("{", "{{").replace("}", "}}")
+    # ИСПРАВЛЕНИЕ: Использование .replace вместо .format
+    html = load_template("dashboard.html")
+    for key, value in data.items():
+        # Заменяем {key} на значение, игнорируя CSS-скобки
+        html = html.replace(f"{{{key}}}", str(value))
 
     return web.Response(text=html, content_type='text/html')
 
@@ -351,7 +350,7 @@ async def start_web_server(bot_instance: Bot):
     app.router.add_get('/login', handle_login_page)
     app.router.add_post('/api/login/request', handle_login_request)
     app.router.add_get('/api/login/magic', handle_magic_login)
-    app.router.add_post('/api/login/password', handle_login_password) # NEW
+    app.router.add_post('/api/login/password', handle_login_password)
     app.router.add_post('/logout', handle_logout)
     app.router.add_post('/api/heartbeat', handle_heartbeat)
 
