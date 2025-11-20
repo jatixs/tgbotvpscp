@@ -30,7 +30,6 @@ def load_template(name):
     except FileNotFoundError:
         return "<h1>Template not found</h1>"
 
-# ... (остальные функции get_current_user, handle_login_* и др. без изменений) ...
 def get_current_user(request):
     cookie = request.cookies.get(COOKIE_NAME)
     if not cookie: return None
@@ -135,11 +134,18 @@ async def handle_dashboard(request):
         nodes_html += f"""<div class="bg-black/20 hover:bg-black/30 transition rounded-xl p-4 border border-white/5 {cursor}" onclick="openNodeDetails('{token}')"><div class="flex justify-between items-start"><div><div class="font-bold text-gray-200">{node.get('name','Unknown')}</div><div class="text-[10px] font-mono text-gray-500 mt-1">{token[:8]}...</div></div><div class="px-2 py-1 rounded text-[10px] font-bold {status_color} {bg_class}">{status_text}</div></div>{details_block}</div>"""
     
     admin_controls = ""
+    role_badge = ""
+    
     if is_admin:
+        # --- ИЗМЕНЕНО: Возвращен зеленый цвет для бейджа ADMIN ---
+        role_badge = '<span class="bg-green-500/20 text-green-400 text-[10px] px-2 py-0.5 rounded border border-green-500/30">ADMIN</span>'
+        # ---------------------------------------------------------
         admin_controls = """<div class="mt-8 p-6 rounded-2xl bg-gradient-to-r from-purple-900/20 to-blue-900/20 border border-white/5"><h3 class="text-lg font-bold text-white mb-2">Панель администратора</h3><p class="text-sm text-gray-400 mb-4">Доступны расширенные функции.</p><div class="flex gap-3"><button class="px-4 py-2 bg-white/10 rounded-lg text-sm text-gray-400 cursor-not-allowed" disabled>Логи</button></div></div>"""
+    else:
+        role_badge = '<span class="bg-gray-500/20 text-gray-300 text-[10px] px-2 py-0.5 rounded border border-gray-500/30">USER</span>'
     
     data = s.copy()
-    data.update({'nodes_count': len(NODES), 'active_nodes': active_count, 'nodes_list_html': nodes_html, 'user_photo': user.get('photo_url'), 'user_name': user.get('first_name'), 'role_badge': 'ADMIN' if is_admin else 'USER', 'user_group_display': 'Администратор' if is_admin else 'Пользователь', 'admin_controls_html': admin_controls})
+    data.update({'nodes_count': len(NODES), 'active_nodes': active_count, 'nodes_list_html': nodes_html, 'user_photo': user.get('photo_url'), 'user_name': user.get('first_name'), 'role_badge': role_badge, 'user_group_display': 'Администратор' if is_admin else 'Пользователь', 'admin_controls_html': admin_controls})
     html = load_template("dashboard.html")
     for k, v in data.items(): html = html.replace(f"{{{k}}}", str(v))
     return web.Response(text=html, content_type='text/html')
@@ -150,15 +156,47 @@ async def handle_heartbeat(request):
     token = data.get("token")
     if not token or not get_node_by_token(token): return web.json_response({"error": "Auth fail"}, status=401)
     node = get_node_by_token(token)
-    # ... (логика traffic/reboot из прошлого примера) ...
-    update_node_heartbeat(token, request.transport.get_extra_info('peername')[0], data.get("stats", {}))
+    
+    stats = data.get("stats", {})
+    results = data.get("results", [])
+    
+    bot = request.app.get('bot')
+    
+    # Обработка результатов команд (трафик и т.д.)
+    if bot and results:
+        for res in results:
+            user_id = res.get("user_id")
+            text = res.get("result")
+            cmd = res.get("command")
+            if user_id and text:
+                try:
+                    # Если трафик и мониторинг активен - обновляем сообщение
+                    if cmd == "traffic" and user_id in NODE_TRAFFIC_MONITORS:
+                        monitor = NODE_TRAFFIC_MONITORS[user_id]
+                        if monitor.get("token") == token:
+                            msg_id = monitor.get("message_id")
+                            stop_kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="⏹ Stop", callback_data=f"node_stop_traffic_{token}")]])
+                            try:
+                                await bot.edit_message_text(text=text, chat_id=user_id, message_id=msg_id, reply_markup=stop_kb, parse_mode="HTML")
+                            except Exception: pass
+                            continue
+                    
+                    # Иначе шлем новое
+                    node_name = node.get("name", "Node")
+                    await bot.send_message(chat_id=user_id, text=f"🖥 <b>Ответ от {node_name}:</b>\n\n{text}", parse_mode="HTML")
+                except Exception as e:
+                    logging.error(f"Error sending msg: {e}")
+
+    # Сброс флага перезагрузки если нода ответила
+    node["is_restarting"] = False 
+    
+    update_node_heartbeat(token, request.transport.get_extra_info('peername')[0], stats)
     return web.json_response({"status": "ok", "tasks": node.get("tasks", [])})
 
 async def start_web_server(bot_instance: Bot):
     app = web.Application()
     app['bot'] = bot_instance
     
-    # Раздача статики
     if os.path.exists(STATIC_DIR):
         app.router.add_static('/static', STATIC_DIR)
     else:
