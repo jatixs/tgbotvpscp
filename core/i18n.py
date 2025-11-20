@@ -257,7 +257,11 @@ STRINGS = {
         "node_details_offline": "🔴 <b>Сервер: {name}</b>\nСтатус: <b>Не в сети</b>\nПоследний отклик: <b>{last_seen}</b>\nIP: {ip}\n\n📊 <b>Последние известные данные:</b>\nCPU: {cpu}%\nRAM: {ram}%\nDisk: {disk}%",
         "node_restarting_alert": "🔵 Сервер '{name}' перезагружается. Пожалуйста, подождите 1-2 минуты.",
         "node_management_menu": "🟢 <b>Управление сервером: {name}</b>\nIP: {ip}\nUptime: {uptime}\n\nВыберите действие:",
-        "node_cmd_sent": "✅ Команда '{cmd}' отправлена на сервер '{name}'. Ожидайте выполнения.",
+        
+        # --- ИЗМЕНЕНО: Текст уведомления об отправке команды ---
+        "node_cmd_sent": "Команда '{cmd}' отправлена на сервер '{name}'.",
+        # -----------------------------------------------------
+        
         "node_btn_add": "➕ Добавить Ноду",
         "node_btn_delete": "➖ Удалить Ноду",
         "node_add_success_token": "✅ <b>Нода создана!</b>\n\nИмя: <b>{name}</b>\nТокен: <code>{token}</code>\n\nСохраните этот токен и укажите его в .env на сервере-ноде (AGENT_TOKEN).",
@@ -523,7 +527,7 @@ STRINGS = {
         "node_details_offline": "🔴 <b>Server: {name}</b>\nStatus: <b>Offline</b>\nLast Seen: <b>{last_seen}</b>\nIP: {ip}\n\n📊 <b>Last Known Stats:</b>\nCPU: {cpu}%\nRAM: {ram}%\nDisk: {disk}%",
         "node_restarting_alert": "🔵 Server '{name}' is restarting. Please wait 1-2 minutes.",
         "node_management_menu": "🟢 <b>Managing Server: {name}</b>\nIP: {ip}\nUptime: {uptime}\n\nSelect an action:",
-        "node_cmd_sent": "✅ Command '{cmd}' sent to server '{name}'. Pending execution.",
+        "node_cmd_sent": "Command '{cmd}' sent to server '{name}'.",
         "node_btn_add": "➕ Add Node",
         "node_btn_delete": "➖ Delete Node",
         "node_add_success_token": "✅ <b>Node Created!</b>\n\nName: <b>{name}</b>\nToken: <code>{token}</code>\n\nSave this token and put it in .env on the node server (AGENT_TOKEN).",

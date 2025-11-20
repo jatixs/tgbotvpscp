@@ -4,19 +4,20 @@ import asyncio
 import logging
 from datetime import datetime
 from aiogram import F, Dispatcher, types, Bot
-from aiogram.types import KeyboardButton
+from aiogram.types import KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.filters import StateFilter
+from aiogram.exceptions import TelegramBadRequest
 
 from core.i18n import _, I18nFilter, get_user_lang
 from core import config
 from core.auth import is_allowed, send_access_denied_message
 from core.messaging import delete_previous_message, send_alert
-from core.shared_state import LAST_MESSAGE_IDS, NODES
+from core.shared_state import LAST_MESSAGE_IDS, NODES, NODE_TRAFFIC_MONITORS
 from core.nodes_db import create_node, delete_node
 from core.keyboards import get_nodes_list_keyboard, get_node_management_keyboard, get_nodes_delete_keyboard, get_back_keyboard
-from core.config import NODE_OFFLINE_TIMEOUT
+from core.config import NODE_OFFLINE_TIMEOUT, TRAFFIC_INTERVAL
 
 BUTTON_KEY = "btn_nodes"
 
@@ -34,13 +35,16 @@ def register_handlers(dp: Dispatcher):
     dp.callback_query(F.data == "node_delete_menu")(cq_node_delete_menu)
     dp.callback_query(F.data.startswith("node_delete_confirm_"))(cq_node_delete_confirm)
     dp.callback_query(F.data.startswith("node_select_"))(cq_node_select)
+    
+    # Обработчик для остановки трафика
+    dp.callback_query(F.data.startswith("node_stop_traffic_"))(cq_node_stop_traffic)
+    
     dp.callback_query(F.data.startswith("node_cmd_"))(cq_node_command)
 
-# --- НОВОЕ: Фоновая задача для мониторинга статуса нод ---
 def start_background_tasks(bot: Bot) -> list[asyncio.Task]:
-    task = asyncio.create_task(nodes_monitor(bot), name="NodesMonitor")
-    return [task]
-# ---------------------------------------------------------
+    task_monitor = asyncio.create_task(nodes_monitor(bot), name="NodesMonitor")
+    task_traffic = asyncio.create_task(node_traffic_scheduler(bot), name="NodesTrafficScheduler")
+    return [task_monitor, task_traffic]
 
 async def nodes_handler(message: types.Message):
     user_id = message.from_user.id
@@ -142,66 +146,148 @@ async def cq_node_command(callback: types.CallbackQuery):
     node = NODES.get(token)
     if not node: await callback.answer("Error", show_alert=True); return
     if cmd == "reboot": node["is_restarting"] = True
+    
+    # --- ЛОГИКА ТРАФИКА ---
+    if cmd == "traffic":
+        # Если это трафик - запускаем режим мониторинга
+        # 1. Отправляем сообщение-заглушку с кнопкой "Стоп"
+        stop_kb = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text=_("btn_stop_traffic", lang), callback_data=f"node_stop_traffic_{token}")]
+        ])
+        
+        # Проверяем, не запущен ли уже монитор
+        if user_id in NODE_TRAFFIC_MONITORS:
+            # Если запущен для этой же ноды - просто обновим сообщение
+            if NODE_TRAFFIC_MONITORS[user_id]["token"] == token:
+                 pass # Уже работает
+            else:
+                 # Если для другой - остановим старый
+                 del NODE_TRAFFIC_MONITORS[user_id]
+
+        sent_msg = await callback.message.answer(
+            _("traffic_start", lang, interval=config.TRAFFIC_INTERVAL), 
+            reply_markup=stop_kb, 
+            parse_mode="HTML"
+        )
+        
+        # Сохраняем состояние
+        NODE_TRAFFIC_MONITORS[user_id] = {
+            "token": token,
+            "message_id": sent_msg.message_id,
+            "last_update": 0
+        }
+        
+        # Отправляем первую команду немедленно
+        if "tasks" not in node: node["tasks"] = []
+        node["tasks"].append({"command": cmd, "user_id": user_id})
+        
+        await callback.answer()
+        return
+    # ----------------------
+
     if "tasks" not in node: node["tasks"] = []
     node["tasks"].append({"command": cmd, "user_id": user_id})
-    await callback.answer(_("node_cmd_sent", lang, cmd=cmd, name=node.get("name")), show_alert=True)
+    
+    cmd_map = {
+        "selftest": "btn_selftest",
+        "uptime": "btn_uptime",
+        "traffic": "btn_traffic",
+        "top": "btn_top",
+        "speedtest": "btn_speedtest",
+        "reboot": "btn_reboot"
+    }
+    btn_key = cmd_map.get(cmd)
+    cmd_name = _(btn_key, lang) if btn_key else cmd
+    await callback.answer(_("node_cmd_sent", lang, cmd=cmd_name, name=node.get("name")), show_alert=False)
 
-# --- МОНИТОР ДАУНТАЙМА ---
+async def cq_node_stop_traffic(callback: types.CallbackQuery):
+    user_id = callback.from_user.id
+    lang = get_user_lang(user_id)
+    
+    if user_id in NODE_TRAFFIC_MONITORS:
+        del NODE_TRAFFIC_MONITORS[user_id]
+        try:
+            await callback.message.delete()
+            # Возвращаем меню управления этой нодой, если токен есть в callback
+            token = callback.data.replace("node_stop_traffic_", "")
+            node = NODES.get(token)
+            if node:
+                stats = node.get("stats", {})
+                text = _("node_management_menu", lang, name=node.get("name"), ip=node.get("ip", "?"), uptime=stats.get("uptime", "?"))
+                keyboard = get_node_management_keyboard(token, lang)
+                await callback.message.answer(text, reply_markup=keyboard, parse_mode="HTML")
+            else:
+                 await callback.message.answer(_("traffic_stopped_alert", lang))
+
+        except TelegramBadRequest:
+            await callback.message.answer(_("traffic_stopped_alert", lang))
+    
+    await callback.answer(_("traffic_stopped_alert", lang))
+
+async def node_traffic_scheduler(bot: Bot):
+    """Периодически отправляет команды трафика на ноды для активных мониторов."""
+    while True:
+        try:
+            await asyncio.sleep(config.TRAFFIC_INTERVAL)
+            
+            if not NODE_TRAFFIC_MONITORS:
+                continue
+
+            # Копируем, чтобы не сломать итерацию при удалении
+            for user_id, monitor_data in list(NODE_TRAFFIC_MONITORS.items()):
+                token = monitor_data.get("token")
+                node = NODES.get(token)
+                
+                # Если нода удалена или не существует - убираем монитор
+                if not node:
+                    try:
+                        del NODE_TRAFFIC_MONITORS[user_id]
+                    except KeyError: pass
+                    continue
+                
+                # Добавляем задачу в очередь ноды
+                if "tasks" not in node: node["tasks"] = []
+                node["tasks"].append({"command": "traffic", "user_id": user_id})
+                
+        except Exception as e:
+            logging.error(f"Error in node_traffic_scheduler: {e}")
+            await asyncio.sleep(5)
+
 async def nodes_monitor(bot: Bot):
     """Следит за статусом нод и шлет алерты, если включено уведомление 'downtime'."""
     logging.info("Nodes Monitor started.")
-    await asyncio.sleep(10) # Даем время на инициализацию
+    await asyncio.sleep(10) 
     
     while True:
         try:
             now = time.time()
-            # Копируем, чтобы избежать ошибок изменения размера словаря во время итерации
             for token, node in list(NODES.items()):
                 name = node.get("name", "Unknown")
                 last_seen = node.get("last_seen", 0)
                 is_restarting = node.get("is_restarting", False)
                 
-                # Определяем текущий статус "мертва ли нода"
-                # Нода мертва, если таймаут вышел И она вообще хоть раз выходила на связь (last_seen > 0)
                 is_dead = (now - last_seen >= NODE_OFFLINE_TIMEOUT) and (last_seen > 0)
-                
-                # Проверяем, отправляли ли мы уже алерт о падении
                 was_dead = node.get("is_offline_alert_sent", False)
                 
-                # СЦЕНАРИЙ 1: Нода упала (и это не перезагрузка, и алерт еще не слали)
                 if is_dead and not was_dead and not is_restarting:
-                    
-                    # Формируем функцию генерации сообщения (для i18n)
                     def msg_down_gen(lang):
                         fmt_time = datetime.fromtimestamp(last_seen).strftime('%H:%M:%S')
                         return _("alert_node_down", lang, name=name, last_seen=fmt_time)
-                    
-                    # Отправляем алерт с типом 'downtime'
                     await send_alert(bot, msg_down_gen, "downtime")
-                    
-                    # Ставим флаг, что алерт отправлен
                     node["is_offline_alert_sent"] = True
                     logging.warning(f"Node {name} is DOWN. Alert sent.")
                     
-                # СЦЕНАРИЙ 2: Нода ожила (была мертва, теперь alive)
                 elif not is_dead and was_dead:
-                    
-                    # Формируем функцию для сообщения о восстановлении
                     def msg_up_gen(lang):
                         return _("alert_node_up", lang, name=name)
-                        
                     await send_alert(bot, msg_up_gen, "downtime")
-                    
-                    # Сбрасываем флаг
                     node["is_offline_alert_sent"] = False
                     logging.info(f"Node {name} recovered. Alert sent.")
                     
-                # СЦЕНАРИЙ 3: Если нода была помечена как перезагружающаяся, но вышла на связь
                 if not is_dead and is_restarting:
-                     # Снимаем флаг перезагрузки тихо (или можно тоже алерт отправить, если хочется)
                      node["is_restarting"] = False
 
         except Exception as e:
             logging.error(f"Error in nodes_monitor: {e}", exc_info=True)
         
-        await asyncio.sleep(20) # Проверка каждые 20 секунд
+        await asyncio.sleep(20)

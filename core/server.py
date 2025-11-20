@@ -2,10 +2,13 @@ import logging
 import time
 from aiohttp import web
 from aiogram import Bot
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.exceptions import TelegramBadRequest
+
 from .nodes_db import get_node_by_token, update_node_heartbeat
 from .config import WEB_SERVER_HOST, WEB_SERVER_PORT, NODE_OFFLINE_TIMEOUT
-from .shared_state import NODES
-from .i18n import STRINGS
+from .shared_state import NODES, NODE_TRAFFIC_MONITORS
+from .i18n import STRINGS, get_text, get_user_lang
 from .config import DEFAULT_LANGUAGE
 
 HTML_TEMPLATE = """
@@ -152,16 +155,36 @@ async def handle_heartbeat(request):
             user_id = res.get("user_id")
             text = res.get("result")
             cmd = res.get("command")
-            is_final = res.get("is_final", False)
             
             if user_id and text:
                 try:
+                    lang = get_user_lang(user_id)
+                    
+                    # --- ОБРАБОТКА ТРАФИКА ---
+                    # Если это ответ на traffic и у юзера активен монитор - редактируем сообщение
+                    if cmd == "traffic" and user_id in NODE_TRAFFIC_MONITORS:
+                        monitor = NODE_TRAFFIC_MONITORS[user_id]
+                        if monitor.get("token") == token:
+                            msg_id = monitor.get("message_id")
+                            stop_kb = InlineKeyboardMarkup(inline_keyboard=[
+                                [InlineKeyboardButton(text=get_text("btn_stop_traffic", lang), callback_data=f"node_stop_traffic_{token}")]
+                            ])
+                            try:
+                                await bot.edit_message_text(
+                                    text=text, 
+                                    chat_id=user_id, 
+                                    message_id=msg_id, 
+                                    reply_markup=stop_kb,
+                                    parse_mode="HTML"
+                                )
+                            except TelegramBadRequest:
+                                # Если сообщение удалено пользователем или не изменилось - игнорируем
+                                pass
+                            continue
+                    # -------------------------
+
                     node_name = node.get("name", "Node")
                     full_text = f"🖥 <b>Ответ от {node_name}:</b>\n\n{text}"
-                    
-                    # Простая логика отправки без маппинга для надежности, 
-                    # или используйте COMMAND_MESSAGE_MAP из предыдущих шагов, если он был добавлен.
-                    # Здесь базовая безопасная версия:
                     await bot.send_message(chat_id=user_id, text=full_text, parse_mode="HTML")
                     logging.info(f"Отправлен ответ команды '{cmd}' пользователю {user_id}")
                 except Exception as e:
