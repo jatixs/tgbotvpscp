@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0">
+    <title>{web_title}</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body class="bg-gray-900 min-h-screen text-gray-100 font-sans selection:bg-green-500/30 pb-10">
+    
+    <div class="fixed top-[-10%] left-[-10%] w-96 h-96 bg-purple-600/10 rounded-full mix-blend-screen filter blur-3xl animate-float pointer-events-none"></div>
+
+    <nav class="backdrop-blur-md bg-black/20 border-b border-white/5 sticky top-0 z-40">
+        <div class="max-w-6xl mx-auto px-4 py-3 flex flex-wrap justify-between items-center gap-3">
+            <div class="flex items-center space-x-2">
+                <a href="/" class="text-gray-400 hover:text-white transition flex items-center gap-2 text-sm font-medium">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" /></svg>
+                    Назад
+                </a>
+                <span class="font-bold text-lg ml-2">Настройки</span>
+            </div>
+            
+            <div class="flex items-center gap-3 sm:gap-4">
+                <div class="flex items-center gap-2 bg-white/5 px-2 sm:px-3 py-1.5 rounded-full border border-white/5 max-w-[140px] sm:max-w-none">
+                    {user_avatar}
+                    <span class="text-xs font-medium text-gray-300 truncate">{user_name}</span>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <main class="max-w-4xl mx-auto px-4 mt-6 sm:mt-8 relative z-10">
+
+        <div class="bg-white/5 border border-white/10 rounded-2xl p-6 mb-6">
+            <h2 class="text-xl font-bold text-white mb-4 flex items-center gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-yellow-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" /></svg>
+                Уведомления
+            </h2>
+            
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <label class="flex items-center justify-between bg-black/20 p-4 rounded-xl cursor-pointer hover:bg-black/30 transition">
+                    <span class="text-sm font-medium">Ресурсы (CPU/RAM/Disk)</span>
+                    <input type="checkbox" id="alert_resources" class="w-5 h-5 rounded bg-gray-700 border-gray-600 text-green-500 focus:ring-green-500" {check_resources}>
+                </label>
+                <label class="flex items-center justify-between bg-black/20 p-4 rounded-xl cursor-pointer hover:bg-black/30 transition">
+                    <span class="text-sm font-medium">Входы SSH</span>
+                    <input type="checkbox" id="alert_logins" class="w-5 h-5 rounded bg-gray-700 border-gray-600 text-green-500 focus:ring-green-500" {check_logins}>
+                </label>
+                <label class="flex items-center justify-between bg-black/20 p-4 rounded-xl cursor-pointer hover:bg-black/30 transition">
+                    <span class="text-sm font-medium">Баны Fail2Ban</span>
+                    <input type="checkbox" id="alert_bans" class="w-5 h-5 rounded bg-gray-700 border-gray-600 text-green-500 focus:ring-green-500" {check_bans}>
+                </label>
+                <label class="flex items-center justify-between bg-black/20 p-4 rounded-xl cursor-pointer hover:bg-black/30 transition">
+                    <span class="text-sm font-medium">Даунтайм Нод (Offline)</span>
+                    <input type="checkbox" id="alert_downtime" class="w-5 h-5 rounded bg-gray-700 border-gray-600 text-green-500 focus:ring-green-500" {check_downtime}>
+                </label>
+            </div>
+            <div class="mt-4 flex justify-end">
+                <button onclick="saveNotifications()" id="saveNotifBtn" class="px-6 py-2 bg-green-600 hover:bg-green-500 rounded-lg font-bold text-white transition shadow-lg shadow-green-900/20">Сохранить</button>
+            </div>
+        </div>
+
+        <div id="usersSection" class="bg-white/5 border border-white/10 rounded-2xl p-6 mb-6 hidden">
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-xl font-bold text-white flex items-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" /></svg>
+                    Пользователи
+                </h2>
+                <button onclick="openAddUserModal()" class="bg-white/10 hover:bg-white/20 p-2 rounded-lg text-green-400 transition">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" /></svg>
+                </button>
+            </div>
+            
+            <div class="overflow-x-auto">
+                <table class="w-full text-sm text-left text-gray-400">
+                    <thead class="text-xs text-gray-500 uppercase bg-black/20">
+                        <tr>
+                            <th class="px-4 py-3 rounded-l-lg">ID</th>
+                            <th class="px-4 py-3">Имя</th>
+                            <th class="px-4 py-3">Роль</th>
+                            <th class="px-4 py-3 rounded-r-lg text-right">Действие</th>
+                        </tr>
+                    </thead>
+                    <tbody id="usersTableBody">
+                        </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="bg-white/5 border border-white/10 rounded-2xl p-6">
+            <h2 class="text-xl font-bold text-white mb-4 flex items-center gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" /></svg>
+                Добавить Ноду
+            </h2>
+            <div class="flex gap-2">
+                <input type="text" id="newNodeName" placeholder="Имя сервера" class="flex-1 bg-black/20 border border-white/10 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-blue-500">
+                <button onclick="addNode()" class="px-4 py-2 bg-purple-600 hover:bg-purple-500 rounded-lg font-bold text-white transition">Создать</button>
+            </div>
+            <div id="nodeResult" class="mt-4 hidden">
+                <div class="bg-black/30 p-3 rounded-lg border border-white/10">
+                    <div class="text-xs text-gray-500 mb-1">Токен (сохраните его):</div>
+                    <div class="font-mono text-green-400 break-all select-all" id="newNodeToken"></div>
+                    <div class="text-xs text-gray-500 mt-3 mb-1">Команда установки:</div>
+                    <div class="font-mono text-xs text-blue-300 break-all bg-black/50 p-2 rounded select-all" id="newNodeCmd"></div>
+                </div>
+            </div>
+        </div>
+
+    </main>
+
+    <script>
+        const USERS_DATA = {users_data_json}; 
+    </script>
+    <script src="/static/js/settings.js"></script>
+</body>
+</html>

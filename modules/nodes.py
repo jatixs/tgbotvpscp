@@ -17,7 +17,9 @@ from core.messaging import delete_previous_message, send_alert
 from core.shared_state import LAST_MESSAGE_IDS, NODES, NODE_TRAFFIC_MONITORS
 from core.nodes_db import create_node, delete_node
 from core.keyboards import get_nodes_list_keyboard, get_node_management_keyboard, get_nodes_delete_keyboard, get_back_keyboard
-from core.config import NODE_OFFLINE_TIMEOUT, TRAFFIC_INTERVAL
+# --- ИЗМЕНЕНО: Добавлены пороги ресурсов ---
+from core.config import NODE_OFFLINE_TIMEOUT, TRAFFIC_INTERVAL, CPU_THRESHOLD, RAM_THRESHOLD, DISK_THRESHOLD, RESOURCE_ALERT_COOLDOWN
+# -------------------------------------------
 
 BUTTON_KEY = "btn_nodes"
 
@@ -259,7 +261,11 @@ async def node_traffic_scheduler(bot: Bot):
             await asyncio.sleep(5)
 
 async def nodes_monitor(bot: Bot):
-    """Следит за статусом нод и шлет алерты, если включено уведомление 'downtime'."""
+    """
+    Следит за статусом нод:
+    1. Даунтайм (Offline) -> алерт 'downtime'
+    2. Ресурсы (CPU/RAM/Disk) -> алерт 'resources'
+    """
     logging.info("Nodes Monitor started.")
     await asyncio.sleep(10) 
     
@@ -271,6 +277,7 @@ async def nodes_monitor(bot: Bot):
                 last_seen = node.get("last_seen", 0)
                 is_restarting = node.get("is_restarting", False)
                 
+                # --- ПРОВЕРКА ДАУНТАЙМА ---
                 is_dead = (now - last_seen >= NODE_OFFLINE_TIMEOUT) and (last_seen > 0)
                 was_dead = node.get("is_offline_alert_sent", False)
                 
@@ -278,6 +285,7 @@ async def nodes_monitor(bot: Bot):
                     def msg_down_gen(lang):
                         fmt_time = datetime.fromtimestamp(last_seen).strftime('%H:%M:%S')
                         return _("alert_node_down", lang, name=name, last_seen=fmt_time)
+                    # Отправляем подписчикам 'downtime'
                     await send_alert(bot, msg_down_gen, "downtime")
                     node["is_offline_alert_sent"] = True
                     logging.warning(f"Node {name} is DOWN. Alert sent.")
@@ -291,6 +299,55 @@ async def nodes_monitor(bot: Bot):
                     
                 if not is_dead and is_restarting:
                      node["is_restarting"] = False
+
+                # --- ПРОВЕРКА РЕСУРСОВ (только если нода онлайн) ---
+                if not is_dead and last_seen > 0:
+                    stats = node.get("stats", {})
+                    # Инициализируем состояние алертов, если его нет
+                    if "alerts" not in node: 
+                        node["alerts"] = {
+                            "cpu": {"active": False, "last_time": 0},
+                            "ram": {"active": False, "last_time": 0},
+                            "disk": {"active": False, "last_time": 0}
+                        }
+
+                    # Функция для обработки конкретного ресурса
+                    async def check_resource(metric_name, current_val, threshold, alert_key_high, alert_key_normal):
+                        state = node["alerts"].get(metric_name, {"active": False, "last_time": 0})
+                        
+                        # Если превышение
+                        if current_val >= threshold:
+                            # Шлем, если не активен ИЛИ прошел кулдаун
+                            if not state["active"] or (now - state["last_time"] > RESOURCE_ALERT_COOLDOWN):
+                                def msg_high_gen(lang):
+                                    return _(alert_key_high, lang, name=name, usage=current_val, threshold=threshold)
+                                
+                                # Используем тип 'resources' (как у основного бота)
+                                await send_alert(bot, msg_high_gen, "resources")
+                                state["active"] = True
+                                state["last_time"] = now
+                                logging.warning(f"Node {name} high {metric_name}: {current_val}%")
+                                
+                        # Если нормализация
+                        elif current_val < threshold and state["active"]:
+                            def msg_norm_gen(lang):
+                                return _(alert_key_normal, lang, name=name, usage=current_val)
+                            
+                            await send_alert(bot, msg_norm_gen, "resources")
+                            state["active"] = False
+                            state["last_time"] = 0
+                            logging.info(f"Node {name} {metric_name} normalized.")
+                        
+                        node["alerts"][metric_name] = state
+
+                    # Проверяем каждый ресурс
+                    cpu_val = stats.get("cpu", 0)
+                    ram_val = stats.get("ram", 0)
+                    disk_val = stats.get("disk", 0)
+
+                    await check_resource("cpu", cpu_val, CPU_THRESHOLD, "alert_node_cpu_high", "alert_node_cpu_normal")
+                    await check_resource("ram", ram_val, RAM_THRESHOLD, "alert_node_ram_high", "alert_node_ram_normal")
+                    await check_resource("disk", disk_val, DISK_THRESHOLD, "alert_node_disk_high", "alert_node_disk_normal")
 
         except Exception as e:
             logging.error(f"Error in nodes_monitor: {e}", exc_info=True)

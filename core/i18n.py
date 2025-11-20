@@ -71,6 +71,16 @@ STRINGS = {
         "alert_node_down": "🚨 <b>АЛЕРТ: Нода '{name}' НЕДОСТУПНА (Down)!</b>\n⏱ Последний отклик: {last_seen}",
         "alert_node_up": "✅ <b>Нода '{name}' восстановилась (Up).</b>\n🟢 Снова в сети.",
         "alert_node_restarting": "🔵 <b>Нода '{name}' перезагружается...</b>",
+        
+        # --- НОВЫЕ АЛЕРТЫ РЕСУРСОВ ДЛЯ НОД ---
+        "alert_node_cpu_high": "⚠️ <b>Нода '{name}': Высокий CPU!</b>\nНагрузка: <b>{usage}%</b> (Порог: {threshold}%)",
+        "alert_node_cpu_normal": "✅ <b>Нода '{name}': CPU в норме.</b>\nНагрузка: <b>{usage}%</b>",
+        "alert_node_ram_high": "⚠️ <b>Нода '{name}': Высокая RAM!</b>\nЗанято: <b>{usage}%</b> (Порог: {threshold}%)",
+        "alert_node_ram_normal": "✅ <b>Нода '{name}': RAM в норме.</b>\nЗанято: <b>{usage}%</b>",
+        "alert_node_disk_high": "⚠️ <b>Нода '{name}': Мало места (Disk)!</b>\nЗанято: <b>{usage}%</b> (Порог: {threshold}%)",
+        "alert_node_disk_normal": "✅ <b>Нода '{name}': Место на диске в норме.</b>\nЗанято: <b>{usage}%</b>",
+        # -------------------------------------
+
         "utils_vless_error": "⚠️ Ошибка при генерации VLESS-ссылки: {error}",
         "utils_docker_ps_error": "Не удалось выполнить 'docker ps'. Убедитесь, что Docker установлен и запущен, и у бота есть права.\n<pre>{error}</pre>",
         "utils_bot_restarted": "✅ Бот успешно перезапущен.",
@@ -263,7 +273,7 @@ STRINGS = {
         "node_add_success_token": "✅ <b>Нода создана!</b>\n\nИмя: <b>{name}</b>\nТокен: <code>{token}</code>\n\nСохраните этот токен и укажите его в .env на сервере-ноде (AGENT_TOKEN).",
         "node_delete_select": "🗑 <b>Удаление ноды</b>\n\nВыберите сервер, который хотите удалить:",
         "node_deleted": "✅ Нода '{name}' успешно удалена.",
-        "node_traffic_stopped_alert": "✅ Мониторинг трафика на ноде '{name}' остановлен.", # NEW
+        "node_traffic_stopped_alert": "✅ Мониторинг трафика на ноде '{name}' остановлен.", 
         
         # --- WEB INTERFACE ---
         "web_title": "Агент VPS Бота",
@@ -338,6 +348,16 @@ STRINGS = {
         "alert_node_down": "🚨 <b>ALERT: Node '{name}' is DOWN!</b>\n⏱ Last seen: {last_seen}",
         "alert_node_up": "✅ <b>Node '{name}' recovered (Up).</b>\n🟢 Online now.",
         "alert_node_restarting": "🔵 <b>Node '{name}' is restarting...</b>",
+
+        # --- NEW NODE RESOURCE ALERTS ---
+        "alert_node_cpu_high": "⚠️ <b>Node '{name}': High CPU!</b>\nUsage: <b>{usage}%</b> (Threshold: {threshold}%)",
+        "alert_node_cpu_normal": "✅ <b>Node '{name}': CPU normal.</b>\nUsage: <b>{usage}%</b>",
+        "alert_node_ram_high": "⚠️ <b>Node '{name}': High RAM!</b>\nUsage: <b>{usage}%</b> (Threshold: {threshold}%)",
+        "alert_node_ram_normal": "✅ <b>Node '{name}': RAM normal.</b>\nUsage: <b>{usage}%</b>",
+        "alert_node_disk_high": "⚠️ <b>Node '{name}': High Disk!</b>\nUsage: <b>{usage}%</b> (Threshold: {threshold}%)",
+        "alert_node_disk_normal": "✅ <b>Node '{name}': Disk usage normal.</b>\nUsage: <b>{usage}%</b>",
+        # --------------------------------
+
         "utils_vless_error": "⚠️ Error generating VLESS link: {error}",
         "utils_docker_ps_error": "Failed to execute 'docker ps'. Ensure Docker is installed, running, and the bot has permissions.\n<pre>{error}</pre>",
         "utils_bot_restarted": "✅ Bot restarted successfully.",
@@ -530,7 +550,7 @@ STRINGS = {
         "node_add_success_token": "✅ <b>Node Created!</b>\n\nName: <b>{name}</b>\nToken: <code>{token}</code>\n\nSave this token and put it in .env on the node server (AGENT_TOKEN).",
         "node_delete_select": "🗑 <b>Delete Node</b>\n\nSelect a server you want to delete:",
         "node_deleted": "✅ Node '{name}' successfully deleted.",
-        "node_traffic_stopped_alert": "✅ Traffic monitoring for node '{name}' stopped.", # NEW
+        "node_traffic_stopped_alert": "✅ Traffic monitoring for node '{name}' stopped.", 
         
         # --- WEB INTERFACE ---
         "web_title": "VPS Bot Agent",
