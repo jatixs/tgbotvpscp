@@ -43,12 +43,9 @@ def get_current_user(request):
         return user_data
     except: return None
 
-# --- ВСПОМОГАТЕЛЬНАЯ ФУНКЦИЯ ОТПРАВКИ (Async Fire-and-Forget) ---
 async def process_node_result_background(bot, user_id, cmd, text, token, node_name):
-    """Отправляет сообщение пользователю в фоне, чтобы не задерживать ответ ноде."""
     if not user_id or not text: return
     try:
-        # Логика для Трафика (обновление сообщения)
         if cmd == "traffic" and user_id in NODE_TRAFFIC_MONITORS:
             monitor = NODE_TRAFFIC_MONITORS[user_id]
             if monitor.get("token") == token:
@@ -61,12 +58,32 @@ async def process_node_result_background(bot, user_id, cmd, text, token, node_na
                 except Exception: pass 
                 return
 
-        # Логика для остальных команд (новое сообщение)
         full_text = f"🖥 <b>Ответ от {node_name}:</b>\n\n{text}"
         await bot.send_message(chat_id=user_id, text=full_text, parse_mode="HTML")
     
     except Exception as e:
         logging.error(f"Background message send error (User: {user_id}): {e}")
+
+# --- API ДЛЯ ЛОГОВ ---
+async def handle_get_logs(request):
+    user = get_current_user(request)
+    if not user or user['role'] != 'admins':
+        return web.json_response({"error": "Unauthorized"}, status=403)
+    
+    log_path = os.path.join(BASE_DIR, "logs", "bot", "bot.log")
+    
+    if not os.path.exists(log_path):
+        return web.json_response({"logs": ["Файл логов не найден."]})
+        
+    try:
+        with open(log_path, "r", encoding="utf-8", errors="ignore") as f:
+            # Читаем файл и берем последние 300 строк
+            lines = f.readlines()
+            if len(lines) > 300:
+                lines = lines[-300:]
+        return web.json_response({"logs": lines})
+    except Exception as e:
+        return web.json_response({"error": str(e)}, status=500)
 
 # --- ROUTES ---
 
@@ -90,7 +107,7 @@ async def handle_login_request(request):
     AUTH_TOKENS[token] = {"user_id": user_id, "created_at": time.time()}
     host = request.headers.get('Host', f'{WEB_SERVER_HOST}:{WEB_SERVER_PORT}')
     proto = "https" if request.headers.get('X-Forwarded-Proto') == "https" else "http"
-    magic_link = f"{proto}://{host}/api/login/magic?token={token}"
+    magic_link = f"{protocol}://{host}/api/login/magic?token={token}"
     bot = request.app.get('bot')
     if bot:
         try:
@@ -166,33 +183,39 @@ async def handle_dashboard(request):
     
     if is_admin:
         role_badge = '<span class="bg-green-500/20 text-green-400 text-[10px] px-2 py-0.5 rounded border border-green-500/30">ADMIN</span>'
-        admin_controls = """<div class="mt-8 p-6 rounded-2xl bg-gradient-to-r from-purple-900/20 to-blue-900/20 border border-white/5"><h3 class="text-lg font-bold text-white mb-2">Панель администратора</h3><p class="text-sm text-gray-400 mb-4">Доступны расширенные функции.</p><div class="flex gap-3"><button class="px-4 py-2 bg-white/10 rounded-lg text-sm text-gray-400 cursor-not-allowed" disabled>Логи</button></div></div>"""
+        # --- АКТИВИРОВАНА КНОПКА ЛОГОВ ---
+        admin_controls = """
+        <div class="mt-8 p-6 rounded-2xl bg-gradient-to-r from-purple-900/20 to-blue-900/20 border border-white/5">
+            <h3 class="text-lg font-bold text-white mb-2">Панель администратора</h3>
+            <p class="text-sm text-gray-400 mb-4">Доступны расширенные функции управления сетью.</p>
+            <div class="flex gap-3">
+                <button onclick="openLogsModal()" class="px-4 py-2 bg-white/10 hover:bg-white/20 rounded-lg text-sm text-white transition flex items-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+                    Логи системы
+                </button>
+                <button class="px-4 py-2 bg-white/10 hover:bg-white/20 rounded-lg text-sm transition text-gray-400 cursor-not-allowed" disabled>Настройки</button>
+            </div>
+        </div>
+        """
     else:
         role_badge = '<span class="bg-gray-500/20 text-gray-300 text-[10px] px-2 py-0.5 rounded border border-gray-500/30">USER</span>'
     
     data = s.copy()
     data.update({'nodes_count': len(NODES), 'active_nodes': active_count, 'nodes_list_html': nodes_html, 'user_photo': user.get('photo_url'), 'user_name': user.get('first_name'), 'role_badge': role_badge, 'user_group_display': 'Администратор' if is_admin else 'Пользователь', 'admin_controls_html': admin_controls})
     html = load_template("dashboard.html")
-    for k, v in data.items(): 
-        html = html.replace(f"{{{k}}}", str(v))
-    
+    for k, v in data.items(): html = html.replace(f"{{{k}}}", str(v))
     return web.Response(text=html, content_type='text/html')
 
 async def handle_heartbeat(request):
     try: data = await request.json()
     except: return web.json_response({"error": "Invalid JSON"}, status=400)
-    
     token = data.get("token")
-    # Валидация токена
-    if not token or not get_node_by_token(token): 
-        return web.json_response({"error": "Auth fail"}, status=401)
-    
+    if not token or not get_node_by_token(token): return web.json_response({"error": "Auth fail"}, status=401)
     node = get_node_by_token(token)
     stats = data.get("stats", {})
     results = data.get("results", [])
     bot = request.app.get('bot')
 
-    # Обработка результатов в фоне (asyncio task)
     if bot and results:
         for res in results:
             user_id = res.get("user_id")
@@ -203,14 +226,8 @@ async def handle_heartbeat(request):
     node["is_restarting"] = False 
     update_node_heartbeat(token, request.transport.get_extra_info('peername')[0], stats)
     
-    # --- ИСПРАВЛЕНИЕ БЕСКОНЕЧНОГО ПОВТОРА ---
-    # Копируем задачи для отправки ноде
     tasks_to_send = list(node.get("tasks", []))
-    
-    # Очищаем задачи в базе, так как они сейчас будут отправлены
-    if tasks_to_send:
-        node["tasks"] = []
-    # ----------------------------------------
+    if tasks_to_send: node["tasks"] = []
 
     return web.json_response({"status": "ok", "tasks": tasks_to_send})
 
@@ -231,6 +248,8 @@ async def start_web_server(bot_instance: Bot):
     app.router.add_post('/logout', handle_logout)
     app.router.add_post('/api/heartbeat', handle_heartbeat)
     app.router.add_get('/api/node/details', handle_node_details)
+    # Новый маршрут для логов
+    app.router.add_get('/api/logs', handle_get_logs)
 
     runner = web.AppRunner(app)
     await runner.setup()
