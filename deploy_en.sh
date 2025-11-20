@@ -103,7 +103,7 @@ setup_repo_and_dirs() {
     fi
     sudo mkdir -p ${BOT_INSTALL_PATH}
 
-    run_with_spinner "Git clone" sudo git clone --branch "${GIT_BRANCH}" "${GITHUB_REPO_URL}" "${BOT_INSTALL_PATH}" || exit 1
+    run_with_spinner "Git clone" sudo git clone --branch "${GIT_BRANCH}" "${GITHUB_REPO_URL}" "${BOT_INSTALL_PATH}"
     
     if [ -f "/tmp/tgbot_env.bak" ]; then sudo mv /tmp/tgbot_env.bak "${ENV_FILE}"; fi
     if [ -d "/tmp/tgbot_venv.bak" ]; then 
@@ -423,6 +423,39 @@ update_bot() {
         if systemctl list-unit-files | grep -q "^${WATCHDOG_SERVICE_NAME}.service"; then sudo systemctl restart ${WATCHDOG_SERVICE_NAME}; fi
     fi
     msg_success "Updated."
+
+    # --- Web Interface Check ---
+    local web_port="8080"
+    if [ -f "${ENV_FILE}" ]; then
+        local env_port=$(grep '^WEB_SERVER_PORT=' "${ENV_FILE}" | cut -d'=' -f2 | tr -d '"')
+        if [ -n "$env_port" ]; then web_port="$env_port"; fi
+    fi
+
+    msg_info "Checking web interface availability (port ${web_port})..."
+    sleep 5 # Short pause after restart
+
+    if curl -s -f -o /dev/null "http://127.0.0.1:${web_port}"; then
+        msg_success "Web interface is active."
+    else
+        msg_warning "Web interface is not responding."
+        msg_question "Service might not be running. Try to force start? (y/n): " START_WEB
+        if [[ "$START_WEB" =~ ^[Yy]$ ]]; then
+             if [ -f "${ENV_FILE}" ] && grep -q "DEPLOY_MODE=docker" "${ENV_FILE}"; then
+                  local dc_cmd=""
+                  if sudo docker compose version &>/dev/null; then dc_cmd="docker compose"; else dc_cmd="docker-compose"; fi
+                  run_with_spinner "Starting (Docker)" sudo $dc_cmd -f "${BOT_INSTALL_PATH}/docker-compose.yml" up -d
+             else
+                  run_with_spinner "Starting (Systemd)" sudo systemctl start ${SERVICE_NAME}
+             fi
+             
+             sleep 5
+             if curl -s -f -o /dev/null "http://127.0.0.1:${web_port}"; then
+                 msg_success "Web interface started successfully!"
+             else
+                 msg_error "Failed to start web interface. Check logs (menu option 2 or docker logs)."
+             fi
+        fi
+    fi
 }
 
 main_menu() {
