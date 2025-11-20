@@ -106,7 +106,7 @@ async def handle_settings_page(request):
     user_alerts = ALERTS_CONFIG.get(user_id, {})
     
     # Список пользователей (только для админа)
-    users_json = "[]"
+    users_json = "null" # Инициализируем как null, чтобы JS знал, что это не админ
     if is_admin:
         users_list = []
         for uid, role in ALLOWED_USERS.items():

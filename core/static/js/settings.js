@@ -46,18 +46,13 @@ function renderUsers() {
     const tbody = document.getElementById('usersTableBody');
     const section = document.getElementById('usersSection');
     
-    // Если данных нет (не админ), скрываем секцию
-    if(!USERS_DATA || USERS_DATA.length === 0) {
-        // Проверка на пустой массив - может быть и просто нет юзеров, 
-        // но в данном случае сервер передает [] если не админ.
-        // Лучше проверить роль через куки или отдельный флаг, 
-        // но пока так: если USERS_DATA пуст, считаем, что доступа нет или юзеров нет.
-        // Если массив пуст но админ - покажем пустую таблицу.
-        // Для простоты: если переменная определена и массив, показываем.
-    }
+    // Если USERS_DATA == null, значит пользователь не админ (скрываем секцию)
+    if (USERS_DATA === null) return;
+
+    // Иначе (если админ), показываем секцию, даже если массив пуст
+    section.classList.remove('hidden');
     
-    if(USERS_DATA && Array.isArray(USERS_DATA) && USERS_DATA.length > 0) {
-        section.classList.remove('hidden');
+    if (USERS_DATA.length > 0) {
         tbody.innerHTML = USERS_DATA.map(u => `
             <tr class="border-b border-white/5 hover:bg-white/5 transition">
                 <td class="px-4 py-3 font-mono text-xs">${u.id}</td>
@@ -74,6 +69,8 @@ function renderUsers() {
                 </td>
             </tr>
         `).join('');
+    } else {
+        tbody.innerHTML = '<tr><td colspan="4" class="px-4 py-3 text-center text-gray-500 text-xs">Нет дополнительных пользователей</td></tr>';
     }
 }
 
