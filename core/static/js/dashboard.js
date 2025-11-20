@@ -31,9 +31,9 @@ async function fetchAndRender(token) {
             return;
         }
 
-        // --- ИСПРАВЛЕНО: Заполнение данных в модальном окне ---
         document.getElementById('modalTitle').innerText = data.name || 'Unknown';
         
+        // Заполняем статистику
         const stats = data.stats || {};
         document.getElementById('modalCpu').innerText = (stats.cpu !== undefined ? stats.cpu : 0) + '%';
         document.getElementById('modalRam').innerText = (stats.ram !== undefined ? stats.ram : 0) + '%';
@@ -41,8 +41,9 @@ async function fetchAndRender(token) {
         
         // Обновляем токен для копирования
         const tokenEl = document.getElementById('modalToken');
-        if(tokenEl) tokenEl.innerText = data.token || token; 
-        // -----------------------------------------------------
+        if(tokenEl) {
+            tokenEl.innerText = data.token || token;
+        }
 
         renderCharts(data.history);
         
@@ -63,23 +64,59 @@ function closeModal() {
     }
 }
 
-// --- ДОБАВЛЕНО: Функция копирования токена ---
+// --- ФУНКЦИЯ КОПИРОВАНИЯ (С FALLBACK ДЛЯ HTTP) ---
 function copyToken(element) {
-    const tokenText = document.getElementById('modalToken').innerText;
+    const tokenEl = document.getElementById('modalToken');
+    const tokenText = tokenEl.innerText;
+    
     if (!tokenText || tokenText === '...') return;
 
-    navigator.clipboard.writeText(tokenText).then(() => {
+    // Функция показа уведомления "Скопировано"
+    const showToast = () => {
         const toast = document.getElementById('copyToast');
-        // Показываем тост (убираем класс скрытия трансформации)
-        toast.classList.remove('translate-y-full');
-        
-        // Скрываем через 2 секунды
-        setTimeout(() => {
-            toast.classList.add('translate-y-full');
-        }, 2000);
-    }).catch(err => console.error('Copy failed', err));
+        if (toast) {
+            toast.classList.remove('translate-y-full');
+            setTimeout(() => {
+                toast.classList.add('translate-y-full');
+            }, 2000);
+        }
+    };
+
+    // Попытка копирования через Clipboard API (требует HTTPS или localhost)
+    if (navigator.clipboard && window.isSecureContext) {
+        navigator.clipboard.writeText(tokenText).then(showToast).catch(err => {
+            console.warn('Clipboard API failed, trying fallback...', err);
+            fallbackCopyTextToClipboard(tokenText, showToast);
+        });
+    } else {
+        // Fallback для HTTP
+        fallbackCopyTextToClipboard(tokenText, showToast);
+    }
 }
-// ---------------------------------------------
+
+function fallbackCopyTextToClipboard(text, onSuccess) {
+    const textArea = document.createElement("textarea");
+    textArea.value = text;
+    
+    // Стили, чтобы элемент не был виден пользователю, но был в DOM
+    textArea.style.top = "0";
+    textArea.style.left = "0";
+    textArea.style.position = "fixed";
+    
+    document.body.appendChild(textArea);
+    textArea.focus();
+    textArea.select();
+    
+    try {
+        const successful = document.execCommand('copy');
+        if (successful && onSuccess) onSuccess();
+    } catch (err) {
+        console.error('Fallback: Oops, unable to copy', err);
+    }
+    
+    document.body.removeChild(textArea);
+}
+// -----------------------------------------------------
 
 function renderCharts(history) {
     if (!history || history.length < 2) return; 
