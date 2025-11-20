@@ -74,6 +74,8 @@ async def handle_login_request(request):
         html = load_template("login.html")
         error_msg = '<div class="p-3 bg-red-500/20 border border-red-500/50 rounded-lg text-red-200 text-xs text-center mt-4">Ошибка: ID не найден в списке пользователей бота.</div>'
         html = html.replace("{error_block}", error_msg)
+        html = html.replace('id="password-form" class="hidden"', 'id="password-form" class="hidden"') # Сохраняем состояние форм
+        html = html.replace('id="magic-form"', 'id="magic-form"')
         return web.Response(text=html, content_type='text/html')
 
     # Генерируем токен
@@ -276,7 +278,6 @@ async def handle_dashboard(request):
     return web.Response(text=html, content_type='text/html')
 
 async def handle_heartbeat(request):
-    # Логика для нод (без изменений)
     try:
         data = await request.json()
     except Exception:
