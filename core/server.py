@@ -4,9 +4,11 @@ import os
 import json
 import secrets
 import hashlib
+import asyncio
 from aiohttp import web
 from aiogram import Bot
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.exceptions import TelegramBadRequest
 
 from .nodes_db import get_node_by_token, update_node_heartbeat
 from .config import WEB_SERVER_HOST, WEB_SERVER_PORT, NODE_OFFLINE_TIMEOUT, BASE_DIR
@@ -19,7 +21,6 @@ COOKIE_NAME = "vps_agent_session"
 LOGIN_TOKEN_TTL = 300 
 WEB_PASSWORD = os.environ.get("WEB_PASSWORD", "admin")
 TEMPLATE_DIR = os.path.join(BASE_DIR, "core", "templates")
-# Добавляем путь к статике
 STATIC_DIR = os.path.join(BASE_DIR, "core", "static")
 
 def load_template(name):
@@ -41,6 +42,33 @@ def get_current_user(request):
         user_data['role'] = ALLOWED_USERS[uid]
         return user_data
     except: return None
+
+# --- ВСПОМОГАТЕЛЬНАЯ ФУНКЦИЯ ОТПРАВКИ (Async Fire-and-Forget) ---
+async def process_node_result_background(bot, user_id, cmd, text, token, node_name):
+    """Отправляет сообщение пользователю в фоне, чтобы не задерживать ответ ноде."""
+    if not user_id or not text: return
+    try:
+        # Логика для Трафика (обновление сообщения)
+        if cmd == "traffic" and user_id in NODE_TRAFFIC_MONITORS:
+            monitor = NODE_TRAFFIC_MONITORS[user_id]
+            if monitor.get("token") == token:
+                msg_id = monitor.get("message_id")
+                stop_kb = InlineKeyboardMarkup(inline_keyboard=[
+                    [InlineKeyboardButton(text="⏹ Stop", callback_data=f"node_stop_traffic_{token}")]
+                ])
+                try:
+                    await bot.edit_message_text(text=text, chat_id=user_id, message_id=msg_id, reply_markup=stop_kb, parse_mode="HTML")
+                except Exception: pass # Игнорируем ошибки редактирования (не изменилось и т.д.)
+                return
+
+        # Логика для остальных команд (новое сообщение)
+        full_text = f"🖥 <b>Ответ от {node_name}:</b>\n\n{text}"
+        await bot.send_message(chat_id=user_id, text=full_text, parse_mode="HTML")
+    
+    except Exception as e:
+        logging.error(f"Background message send error (User: {user_id}): {e}")
+
+# --- ROUTES ---
 
 async def handle_login_page(request):
     if get_current_user(request): raise web.HTTPFound('/')
@@ -134,20 +162,17 @@ async def handle_dashboard(request):
         nodes_html += f"""<div class="bg-black/20 hover:bg-black/30 transition rounded-xl p-4 border border-white/5 {cursor}" onclick="openNodeDetails('{token}')"><div class="flex justify-between items-start"><div><div class="font-bold text-gray-200">{node.get('name','Unknown')}</div><div class="text-[10px] font-mono text-gray-500 mt-1">{token[:8]}...</div></div><div class="px-2 py-1 rounded text-[10px] font-bold {status_color} {bg_class}">{status_text}</div></div>{details_block}</div>"""
     
     admin_controls = ""
-    role_badge = ""
-    
     if is_admin:
-        # --- ИЗМЕНЕНО: Возвращен зеленый цвет для бейджа ADMIN ---
-        role_badge = '<span class="bg-green-500/20 text-green-400 text-[10px] px-2 py-0.5 rounded border border-green-500/30">ADMIN</span>'
-        # ---------------------------------------------------------
         admin_controls = """<div class="mt-8 p-6 rounded-2xl bg-gradient-to-r from-purple-900/20 to-blue-900/20 border border-white/5"><h3 class="text-lg font-bold text-white mb-2">Панель администратора</h3><p class="text-sm text-gray-400 mb-4">Доступны расширенные функции.</p><div class="flex gap-3"><button class="px-4 py-2 bg-white/10 rounded-lg text-sm text-gray-400 cursor-not-allowed" disabled>Логи</button></div></div>"""
-    else:
-        role_badge = '<span class="bg-gray-500/20 text-gray-300 text-[10px] px-2 py-0.5 rounded border border-gray-500/30">USER</span>'
     
+    # --- ИСПРАВЛЕНИЕ: Используем .replace вместо .format ---
     data = s.copy()
-    data.update({'nodes_count': len(NODES), 'active_nodes': active_count, 'nodes_list_html': nodes_html, 'user_photo': user.get('photo_url'), 'user_name': user.get('first_name'), 'role_badge': role_badge, 'user_group_display': 'Администратор' if is_admin else 'Пользователь', 'admin_controls_html': admin_controls})
+    data.update({'nodes_count': len(NODES), 'active_nodes': active_count, 'nodes_list_html': nodes_html, 'user_photo': user.get('photo_url'), 'user_name': user.get('first_name'), 'role_badge': '<span class="bg-green-500/20 text-green-400 text-[10px] px-2 py-0.5 rounded border border-green-500/30">ADMIN</span>' if is_admin else '<span class="bg-gray-500/20 text-gray-300 text-[10px] px-2 py-0.5 rounded border border-gray-500/30">USER</span>', 'user_group_display': 'Администратор' if is_admin else 'Пользователь', 'admin_controls_html': admin_controls})
+    
     html = load_template("dashboard.html")
-    for k, v in data.items(): html = html.replace(f"{{{k}}}", str(v))
+    for k, v in data.items(): 
+        html = html.replace(f"{{{k}}}", str(v))
+    
     return web.Response(text=html, content_type='text/html')
 
 async def handle_heartbeat(request):
@@ -159,37 +184,18 @@ async def handle_heartbeat(request):
     
     stats = data.get("stats", {})
     results = data.get("results", [])
-    
     bot = request.app.get('bot')
-    
-    # Обработка результатов команд (трафик и т.д.)
+
+    # Обработка результатов (в фоне!)
     if bot and results:
         for res in results:
             user_id = res.get("user_id")
             text = res.get("result")
             cmd = res.get("command")
-            if user_id and text:
-                try:
-                    # Если трафик и мониторинг активен - обновляем сообщение
-                    if cmd == "traffic" and user_id in NODE_TRAFFIC_MONITORS:
-                        monitor = NODE_TRAFFIC_MONITORS[user_id]
-                        if monitor.get("token") == token:
-                            msg_id = monitor.get("message_id")
-                            stop_kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="⏹ Stop", callback_data=f"node_stop_traffic_{token}")]])
-                            try:
-                                await bot.edit_message_text(text=text, chat_id=user_id, message_id=msg_id, reply_markup=stop_kb, parse_mode="HTML")
-                            except Exception: pass
-                            continue
-                    
-                    # Иначе шлем новое
-                    node_name = node.get("name", "Node")
-                    await bot.send_message(chat_id=user_id, text=f"🖥 <b>Ответ от {node_name}:</b>\n\n{text}", parse_mode="HTML")
-                except Exception as e:
-                    logging.error(f"Error sending msg: {e}")
+            # Запускаем отправку в фоне, чтобы не блочить ответ ноде
+            asyncio.create_task(process_node_result_background(bot, user_id, cmd, text, token, node.get("name", "Node")))
 
-    # Сброс флага перезагрузки если нода ответила
     node["is_restarting"] = False 
-    
     update_node_heartbeat(token, request.transport.get_extra_info('peername')[0], stats)
     return web.json_response({"status": "ok", "tasks": node.get("tasks", [])})
 
