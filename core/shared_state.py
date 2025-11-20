@@ -10,10 +10,13 @@ USER_SETTINGS = {}
 
 NODES = {}
 
-# --- НОВОЕ: Словарь для мониторов трафика нод ---
-# Структура: {user_id: {"token": node_token, "message_id": msg_id, "last_update": timestamp}}
+# Словарь для мониторов трафика нод
 NODE_TRAFFIC_MONITORS = {}
-# ------------------------------------------------
+
+# --- НОВОЕ: Временные токены для Magic Link авторизации ---
+# Структура: {token: {"user_id": int, "created_at": float}}
+AUTH_TOKENS = {}
+# ----------------------------------------------------------
 
 RESOURCE_ALERT_STATE = {"cpu": False, "ram": False, "disk": False}
 LAST_RESOURCE_ALERT_TIME = {"cpu": 0, "ram": 0, "disk": 0}
