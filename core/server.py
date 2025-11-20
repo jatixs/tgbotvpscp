@@ -110,7 +110,7 @@ async def handle_login_request(request):
     AUTH_TOKENS[token] = {"user_id": user_id, "created_at": time.time()}
     host = request.headers.get('Host', f'{WEB_SERVER_HOST}:{WEB_SERVER_PORT}')
     proto = "https" if request.headers.get('X-Forwarded-Proto') == "https" else "http"
-    magic_link = f"{protocol}://{host}/api/login/magic?token={token}"
+    magic_link = f"{proto}://{host}/api/login/magic?token={token}"
     bot = request.app.get('bot')
     if bot:
         try:
@@ -198,7 +198,23 @@ async def handle_dashboard(request):
         details_block = ""
         if is_admin:
             stats = node.get("stats", {})
-            details_block = f"""<div class="mt-3 pt-3 border-t border-white/5 grid grid-cols-3 gap-2 text-xs text-gray-400"><div class="text-center"><span class="block text-white font-bold">{stats.get('cpu',0)}%</span>CPU</div><div class="text-center"><span class="block text-white font-bold">{stats.get('ram',0)}%</span>RAM</div><div class="text-center"><span class="block text-white font-bold truncate">{node.get('ip','N/A')}</span>IP</div></div>"""
+            # --- ИЗМЕНЕНО: Стиль деталей ноды (в блоках) ---
+            details_block = f"""
+            <div class="mt-4 pt-4 border-t border-white/5 grid grid-cols-3 gap-2">
+                <div class="bg-white/5 rounded-lg p-2 text-center border border-white/5">
+                    <div class="text-[10px] text-gray-400 uppercase font-bold">CPU</div>
+                    <div class="text-sm font-bold text-white">{stats.get('cpu', 0)}%</div>
+                </div>
+                <div class="bg-white/5 rounded-lg p-2 text-center border border-white/5">
+                    <div class="text-[10px] text-gray-400 uppercase font-bold">RAM</div>
+                    <div class="text-sm font-bold text-white">{stats.get('ram', 0)}%</div>
+                </div>
+                <div class="bg-white/5 rounded-lg p-2 text-center border border-white/5">
+                    <div class="text-[10px] text-gray-400 uppercase font-bold">IP</div>
+                    <div class="text-xs font-bold text-white truncate" title="{node.get('ip', 'N/A')}">{node.get('ip', 'N/A')}</div>
+                </div>
+            </div>"""
+            # ---------------------------------------------------
         else: details_block = '<div class="mt-3 pt-3 border-t border-white/5 text-xs text-gray-500 text-center">Детали скрыты</div>'
         nodes_html += f"""<div class="bg-black/20 hover:bg-black/30 transition rounded-xl p-4 border border-white/5 {cursor}" onclick="openNodeDetails('{token}')"><div class="flex justify-between items-start"><div><div class="font-bold text-gray-200">{node.get('name','Unknown')}</div><div class="text-[10px] font-mono text-gray-500 mt-1">{token[:8]}...</div></div><div class="px-2 py-1 rounded text-[10px] font-bold {status_color} {bg_class}">{status_text}</div></div>{details_block}</div>"""
     
@@ -241,8 +257,6 @@ async def handle_dashboard(request):
         'admin_controls_html': admin_controls
     })
     
-    # --- ИСПРАВЛЕНИЕ: Используем .replace() вместо .format() ---
-    # Это предотвращает краш при наличии CSS стилей в шаблоне
     html = load_template("dashboard.html")
     for k, v in data.items(): 
         html = html.replace(f"{{{k}}}", str(v))

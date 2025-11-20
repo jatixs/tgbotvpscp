@@ -31,7 +31,19 @@ async function fetchAndRender(token) {
             return;
         }
 
+        // --- ИСПРАВЛЕНО: Заполнение данных в модальном окне ---
         document.getElementById('modalTitle').innerText = data.name || 'Unknown';
+        
+        const stats = data.stats || {};
+        document.getElementById('modalCpu').innerText = (stats.cpu !== undefined ? stats.cpu : 0) + '%';
+        document.getElementById('modalRam').innerText = (stats.ram !== undefined ? stats.ram : 0) + '%';
+        document.getElementById('modalIp').innerText = data.ip || 'Unknown';
+        
+        // Обновляем токен для копирования
+        const tokenEl = document.getElementById('modalToken');
+        if(tokenEl) tokenEl.innerText = data.token || token; 
+        // -----------------------------------------------------
+
         renderCharts(data.history);
         
     } catch (e) {
@@ -50,6 +62,24 @@ function closeModal() {
         pollInterval = null;
     }
 }
+
+// --- ДОБАВЛЕНО: Функция копирования токена ---
+function copyToken(element) {
+    const tokenText = document.getElementById('modalToken').innerText;
+    if (!tokenText || tokenText === '...') return;
+
+    navigator.clipboard.writeText(tokenText).then(() => {
+        const toast = document.getElementById('copyToast');
+        // Показываем тост (убираем класс скрытия трансформации)
+        toast.classList.remove('translate-y-full');
+        
+        // Скрываем через 2 секунды
+        setTimeout(() => {
+            toast.classList.add('translate-y-full');
+        }, 2000);
+    }).catch(err => console.error('Copy failed', err));
+}
+// ---------------------------------------------
 
 function renderCharts(history) {
     if (!history || history.length < 2) return; 
