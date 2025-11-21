@@ -7,15 +7,19 @@ let pollInterval = null;
 let chartAgent = null;
 let agentPollInterval = null;
 
-// Функция форматирования скорости
+// Функция форматирования скорости (динамические единицы)
 function formatSpeed(valueInKbps) {
-    if (valueInKbps >= 1024 * 1024) {
-        return (valueInKbps / (1024 * 1024)).toFixed(2) + ' Gbit/s';
+    // Проверка на валидность
+    let val = parseFloat(valueInKbps);
+    if (isNaN(val)) return '0 Kbit/s';
+
+    if (val >= 1024 * 1024) { // > 1 Gbps
+        return (val / (1024 * 1024)).toFixed(2) + ' Gbit/s';
     }
-    if (valueInKbps >= 1024) {
-        return (valueInKbps / 1024).toFixed(2) + ' Mbit/s';
+    if (val >= 1024) { // > 1 Mbps
+        return (val / 1024).toFixed(2) + ' Mbit/s';
     }
-    return valueInKbps.toFixed(2) + ' Kbit/s';
+    return val.toFixed(2) + ' Kbit/s';
 }
 
 // Запуск мониторинга агента при загрузке страницы
@@ -54,6 +58,7 @@ function renderAgentChart(history) {
     const totalPoints = history.length;
     for(let i=0; i<totalPoints; i++) {
         const secondsAgo = (totalPoints - 1 - i) * 2; 
+        // Показываем метку каждые 10 точек
         if (secondsAgo % 20 === 0 || i === totalPoints-1) {
              labels.push(`-${secondsAgo}s`);
         } else {
@@ -83,23 +88,23 @@ function renderAgentChart(history) {
         maintainAspectRatio: false,
         animation: false,
         layout: {
-            padding: { top: 10, bottom: 5, left: 0, right: 10 } // Красивые отступы
+            padding: { top: 10, bottom: 5, left: 0, right: 10 } // Отступы
         },
         elements: { point: { radius: 0, hitRadius: 10 } },
         scales: { 
             x: { 
-                display: true,
+                display: true, 
                 grid: { display: false, drawBorder: false },
                 ticks: { color: '#6b7280', font: {size: 9}, maxRotation: 0, autoSkip: false }
             }, 
             y: { 
-                display: true, // Включаем вертикальную шкалу
-                position: 'right', // Шкала справа
+                display: true, 
+                position: 'right',
                 grid: { color: 'rgba(255,255,255,0.05)', drawBorder: false },
                 ticks: { 
                     color: '#6b7280', 
-                    font: {size: 9}, 
-                    callback: function(value) { return formatSpeed(value); } // Динамическая мера
+                    font: {size: 9},
+                    callback: function(value) { return formatSpeed(value); }
                 }
             } 
         },
@@ -118,9 +123,14 @@ function renderAgentChart(history) {
                 borderColor: 'rgba(255,255,255,0.1)',
                 borderWidth: 1,
                 callbacks: {
-                    title: () => '', 
+                    title: () => '', // Скрываем заголовок
                     label: function(context) {
-                        return context.dataset.label + ': ' + formatSpeed(context.parsed.y);
+                        let label = context.dataset.label || '';
+                        if (label) label += ': ';
+                        if (context.parsed.y !== null) {
+                            label += formatSpeed(context.parsed.y);
+                        }
+                        return label;
                     }
                 }
             } 
@@ -138,8 +148,8 @@ function renderAgentChart(history) {
             data: {
                 labels: labelsSl,
                 datasets: [
-                    { label: 'RX', data: netRx, borderColor: '#22c55e', borderWidth: 1.5, fill: false, tension: 0.3 },
-                    { label: 'TX', data: netTx, borderColor: '#3b82f6', borderWidth: 1.5, fill: false, tension: 0.3 }
+                    { label: 'RX (In)', data: netRx, borderColor: '#22c55e', borderWidth: 1.5, fill: false, tension: 0.3 },
+                    { label: 'TX (Out)', data: netTx, borderColor: '#3b82f6', borderWidth: 1.5, fill: false, tension: 0.3 }
                 ]
             },
             options: opts
@@ -171,11 +181,13 @@ function updateModalDot(colorClass) {
     const dot = document.getElementById('modalStatusDot');
     if (dot) {
         if(colorClass) {
-             // Удаляем все фоновые классы и ставим новый
+             // Удаляем старые цвета bg-*
              dot.className = dot.className.replace(/bg-\w+-500/g, "");
-             dot.classList.add(colorClass.replace("bg-", "").trim() ? colorClass : "bg-gray-500");
-             // Добавляем базовые если слетели
-             dot.classList.add("h-3", "w-3", "rounded-full", "animate-pulse", "bg-" + colorClass.split("-")[1] + "-500");
+             // Добавляем базовые классы + новый цвет
+             // Очищаем от пробелов и добавляем новый цвет
+             const newColor = colorClass.replace("bg-", "").trim() ? colorClass : "bg-gray-500";
+             dot.classList.add("h-3", "w-3", "rounded-full", "animate-pulse");
+             dot.classList.add(newColor);
         }
     }
 }
@@ -193,7 +205,7 @@ async function fetchAndRender(token) {
 
         document.getElementById('modalTitle').innerText = data.name || 'Unknown';
         
-        // Обновляем статусную точку динамически
+        // Обновляем точку
         const now = Date.now() / 1000;
         const lastSeen = data.last_seen || 0;
         const isRestarting = data.is_restarting;
@@ -203,18 +215,14 @@ async function fetchAndRender(token) {
         if (isRestarting) newColor = "bg-yellow-500"; 
         else if (isOnline) newColor = "bg-green-500"; 
 
-        const dot = document.getElementById('modalStatusDot');
-        if(dot) {
-             dot.className = `h-3 w-3 rounded-full animate-pulse ${newColor}`;
-        }
+        updateModalDot(newColor);
 
-        // Заполняем статистику
+        // Статистика
         const stats = data.stats || {};
         document.getElementById('modalCpu').innerText = (stats.cpu !== undefined ? stats.cpu : 0) + '%';
         document.getElementById('modalRam').innerText = (stats.ram !== undefined ? stats.ram : 0) + '%';
         document.getElementById('modalIp').innerText = data.ip || 'Unknown';
         
-        // Обновляем токен для копирования
         const tokenEl = document.getElementById('modalToken');
         if(tokenEl) {
             tokenEl.innerText = data.token || token;
@@ -239,7 +247,6 @@ function closeModal() {
     }
 }
 
-// --- ФУНКЦИЯ КОПИРОВАНИЯ (С FALLBACK ДЛЯ HTTP) ---
 function copyToken(element) {
     const tokenEl = document.getElementById('modalToken');
     const tokenText = tokenEl.innerText;
@@ -269,25 +276,20 @@ function copyToken(element) {
 function fallbackCopyTextToClipboard(text, onSuccess) {
     const textArea = document.createElement("textarea");
     textArea.value = text;
-    
     textArea.style.top = "0";
     textArea.style.left = "0";
     textArea.style.position = "fixed";
-    
     document.body.appendChild(textArea);
     textArea.focus();
     textArea.select();
-    
     try {
         const successful = document.execCommand('copy');
         if (successful && onSuccess) onSuccess();
     } catch (err) {
-        console.error('Fallback: Oops, unable to copy', err);
+        console.error('Fallback error', err);
     }
-    
     document.body.removeChild(textArea);
 }
-// -----------------------------------------------------
 
 function renderCharts(history) {
     if (!history || history.length < 2) return; 
@@ -302,8 +304,7 @@ function renderCharts(history) {
         const dt = history[i].t - history[i-1].t || 1; 
         const dx = Math.max(0, history[i].rx - history[i-1].rx);
         const dy = Math.max(0, history[i].tx - history[i-1].tx);
-        
-        // Переводим в Kbps
+        // Переводим в Kbit/s
         netRxSpeed.push((dx * 8 / dt / 1024)); 
         netTxSpeed.push((dy * 8 / dt / 1024)); 
     }
@@ -350,13 +351,24 @@ function renderCharts(history) {
 
     const ctxNet = document.getElementById('chartNetwork').getContext('2d');
     
-    // Клонируем общие опции и добавляем специфичные для сети (форматирование)
+    // Опции для графика сети с форматированием
     const netOptions = JSON.parse(JSON.stringify(commonOptions));
+    // Безопасное создание вложенных объектов, если их нет
+    if (!netOptions.scales) netOptions.scales = {};
+    if (!netOptions.scales.y) netOptions.scales.y = {};
+    if (!netOptions.scales.y.ticks) netOptions.scales.y.ticks = {};
+    if (!netOptions.plugins) netOptions.plugins = {};
+    if (!netOptions.plugins.tooltip) netOptions.plugins.tooltip = {};
+    if (!netOptions.plugins.tooltip.callbacks) netOptions.plugins.tooltip.callbacks = {};
+
     netOptions.scales.y.ticks.callback = function(value) { return formatSpeed(value); };
-    netOptions.plugins.tooltip.callbacks = {
-        label: function(context) {
-            return context.dataset.label + ': ' + formatSpeed(context.parsed.y);
+    netOptions.plugins.tooltip.callbacks.label = function(context) {
+        let label = context.dataset.label || '';
+        if (label) label += ': ';
+        if (context.parsed.y !== null) {
+            label += formatSpeed(context.parsed.y);
         }
+        return label;
     };
 
     if (chartNet) {
@@ -384,7 +396,6 @@ function openLogsModal() {
     modal.classList.remove('hidden');
     modal.classList.add('flex');
     document.body.style.overflow = 'hidden';
-    
     fetchLogs();
 }
 
@@ -398,16 +409,13 @@ function closeLogsModal() {
 async function fetchLogs() {
     const contentDiv = document.getElementById('logsContent');
     contentDiv.innerHTML = '<div class="flex items-center justify-center h-full text-gray-500"><span class="animate-pulse">Загрузка логов...</span></div>';
-    
     try {
         const response = await fetch('/api/logs');
         if (response.status === 403) {
             contentDiv.innerHTML = '<div class="text-red-400 text-center">Доступ запрещен</div>';
             return;
         }
-        
         const data = await response.json();
-        
         if (data.error) {
             contentDiv.innerHTML = `<div class="text-red-400">Ошибка: ${data.error}</div>`;
         } else {
@@ -416,13 +424,10 @@ async function fetchLogs() {
                 if (line.includes("INFO")) cls = "text-blue-300";
                 if (line.includes("WARNING")) cls = "text-yellow-300";
                 if (line.includes("ERROR") || line.includes("CRITICAL") || line.includes("Traceback")) cls = "text-red-400 font-bold";
-                
                 const safeLine = line.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
                 return `<div class="${cls} hover:bg-white/5 px-1 rounded">${safeLine}</div>`;
             }).join('');
-            
             contentDiv.innerHTML = coloredLogs || '<div class="text-gray-600 text-center">Лог пуст</div>';
-            
             contentDiv.scrollTop = contentDiv.scrollHeight;
         }
     } catch (e) {
