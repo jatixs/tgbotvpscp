@@ -21,7 +21,7 @@
                   <span class="relative inline-flex rounded-full h-3 w-3 bg-green-500"></span>
                 </span>
                 <span class="font-bold text-lg tracking-tight truncate max-w-[150px] sm:max-w-none">{web_agent_running}</span>
-                <div class="hidden sm:block">{role_badge}</div>
+                <div class="ml-2">{role_badge}</div>
             </div>
             
             <div class="flex items-center gap-3 sm:gap-4">
@@ -53,10 +53,7 @@
             </div>
             <div class="bg-white/5 border border-white/10 rounded-2xl p-4 sm:p-5 col-span-2 md:col-span-1 text-center">
                 <div class="text-gray-400 text-[10px] sm:text-xs uppercase font-bold mb-1">Ваш статус</div>
-                <div class="text-lg sm:text-lg font-medium text-gray-200 flex items-center justify-center gap-2">
-                    {user_group_display}
-                    <div class="sm:hidden scale-90 origin-left">{role_badge}</div>
-                </div>
+                <div class="text-xl font-bold text-white truncate">{user_group_display}</div>
             </div>
         </div>
 
@@ -79,7 +76,7 @@
         <div class="bg-gray-900 border border-white/10 rounded-2xl shadow-2xl w-full max-w-4xl relative flex flex-col max-h-[90vh]">
             <div class="p-6 border-b border-white/5 flex justify-between items-center bg-gray-900 rounded-t-2xl z-10">
                 <div class="flex items-center gap-3">
-                    <div class="h-3 w-3 rounded-full bg-green-500 animate-pulse"></div>
+                    <div id="modalStatusDot" class="h-3 w-3 rounded-full bg-gray-500 animate-pulse"></div>
                     <h3 id="modalTitle" class="text-xl sm:text-2xl font-bold text-white truncate max-w-[200px] sm:max-w-md">Node Details</h3>
                 </div>
                 <button onclick="closeModal()" class="text-gray-400 hover:text-white transition p-2 -mr-2">
