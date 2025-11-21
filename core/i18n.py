@@ -277,6 +277,8 @@ STRINGS = {
         
         # --- WEB INTERFACE ---
         "web_title": "Агент VPS Бота",
+        "web_dashboard_title": "Панель управления",
+        "web_agent_stats_title": "Сеть Агента (KB/s, 2 мин)",
         "web_agent_running": "Агент Запущен",
         "web_agent_active": "Агент управления VPS активен и ожидает подключений.",
         "web_stats_total": "Всего Нод",
@@ -554,7 +556,9 @@ STRINGS = {
         
         # --- WEB INTERFACE ---
         "web_title": "VPS Bot Agent",
+        "web_dashboard_title": "Dashboard",
         "web_agent_running": "Agent Running",
+        "web_agent_stats_title": "Agent Network (KB/s, 2 min)", 
         "web_agent_active": "VPS Management Bot Agent is active and listening.",
         "web_stats_total": "Total Nodes",
         "web_stats_active": "Active Nodes",
