@@ -1,16 +1,18 @@
-// Глобальные переменные для графиков и интервала
 let chartRes = null;
 let chartNet = null;
 let pollInterval = null;
 
-// --- УПРАВЛЕНИЕ НОДАМИ ---
-
-async function openNodeDetails(token) {
+async function openNodeDetails(token, dotColorClass) {
     const modal = document.getElementById('nodeModal');
     modal.classList.remove('hidden');
     modal.classList.add('flex');
     document.body.style.overflow = 'hidden';
     
+    const dot = document.getElementById('modalStatusDot');
+    if (dot) {
+        dot.className = `h-3 w-3 rounded-full animate-pulse ${dotColorClass || 'bg-gray-500'}`;
+    }
+
     if (chartRes) { chartRes.destroy(); chartRes = null; }
     if (chartNet) { chartNet.destroy(); chartNet = null; }
 
@@ -33,13 +35,11 @@ async function fetchAndRender(token) {
 
         document.getElementById('modalTitle').innerText = data.name || 'Unknown';
         
-        // Заполняем статистику
         const stats = data.stats || {};
         document.getElementById('modalCpu').innerText = (stats.cpu !== undefined ? stats.cpu : 0) + '%';
         document.getElementById('modalRam').innerText = (stats.ram !== undefined ? stats.ram : 0) + '%';
         document.getElementById('modalIp').innerText = data.ip || 'Unknown';
         
-        // Обновляем токен для копирования
         const tokenEl = document.getElementById('modalToken');
         if(tokenEl) {
             tokenEl.innerText = data.token || token;
@@ -64,14 +64,12 @@ function closeModal() {
     }
 }
 
-// --- ФУНКЦИЯ КОПИРОВАНИЯ (С FALLBACK ДЛЯ HTTP) ---
 function copyToken(element) {
     const tokenEl = document.getElementById('modalToken');
     const tokenText = tokenEl.innerText;
     
     if (!tokenText || tokenText === '...') return;
 
-    // Функция показа уведомления "Скопировано"
     const showToast = () => {
         const toast = document.getElementById('copyToast');
         if (toast) {
@@ -82,14 +80,12 @@ function copyToken(element) {
         }
     };
 
-    // Попытка копирования через Clipboard API (требует HTTPS или localhost)
     if (navigator.clipboard && window.isSecureContext) {
         navigator.clipboard.writeText(tokenText).then(showToast).catch(err => {
             console.warn('Clipboard API failed, trying fallback...', err);
             fallbackCopyTextToClipboard(tokenText, showToast);
         });
     } else {
-        // Fallback для HTTP
         fallbackCopyTextToClipboard(tokenText, showToast);
     }
 }
@@ -98,7 +94,6 @@ function fallbackCopyTextToClipboard(text, onSuccess) {
     const textArea = document.createElement("textarea");
     textArea.value = text;
     
-    // Стили, чтобы элемент не был виден пользователю, но был в DOM
     textArea.style.top = "0";
     textArea.style.left = "0";
     textArea.style.position = "fixed";
@@ -116,7 +111,6 @@ function fallbackCopyTextToClipboard(text, onSuccess) {
     
     document.body.removeChild(textArea);
 }
-// -----------------------------------------------------
 
 function renderCharts(history) {
     if (!history || history.length < 2) return; 
@@ -196,8 +190,6 @@ function renderCharts(history) {
     }
 }
 
-// --- УПРАВЛЕНИЕ ЛОГАМИ ---
-
 function openLogsModal() {
     const modal = document.getElementById('logsModal');
     modal.classList.remove('hidden');
@@ -230,21 +222,18 @@ async function fetchLogs() {
         if (data.error) {
             contentDiv.innerHTML = `<div class="text-red-400">Ошибка: ${data.error}</div>`;
         } else {
-            // Форматирование логов цветом
             const coloredLogs = data.logs.map(line => {
                 let cls = "text-gray-400";
                 if (line.includes("INFO")) cls = "text-blue-300";
                 if (line.includes("WARNING")) cls = "text-yellow-300";
                 if (line.includes("ERROR") || line.includes("CRITICAL") || line.includes("Traceback")) cls = "text-red-400 font-bold";
                 
-                // Экранирование HTML
                 const safeLine = line.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
                 return `<div class="${cls} hover:bg-white/5 px-1 rounded">${safeLine}</div>`;
             }).join('');
             
             contentDiv.innerHTML = coloredLogs || '<div class="text-gray-600 text-center">Лог пуст</div>';
             
-            // Автоскролл вниз
             contentDiv.scrollTop = contentDiv.scrollHeight;
         }
     } catch (e) {
