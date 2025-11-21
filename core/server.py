@@ -5,13 +5,15 @@ import json
 import secrets
 import asyncio
 import requests
+import psutil  # Нужен для мониторинга агента
 from aiohttp import web
 from aiogram import Bot
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
 from .nodes_db import get_node_by_token, update_node_heartbeat, create_node, delete_node
 from .config import WEB_SERVER_HOST, WEB_SERVER_PORT, NODE_OFFLINE_TIMEOUT, BASE_DIR, ADMIN_USER_ID
-from .shared_state import NODES, NODE_TRAFFIC_MONITORS, ALLOWED_USERS, USER_NAMES, AUTH_TOKENS, ALERTS_CONFIG
+# Добавили AGENT_HISTORY
+from .shared_state import NODES, NODE_TRAFFIC_MONITORS, ALLOWED_USERS, USER_NAMES, AUTH_TOKENS, ALERTS_CONFIG, AGENT_HISTORY
 from .i18n import STRINGS, get_user_lang, set_user_lang
 from .config import DEFAULT_LANGUAGE
 from .utils import get_country_flag, save_alerts_config
@@ -24,6 +26,7 @@ TEMPLATE_DIR = os.path.join(BASE_DIR, "core", "templates")
 STATIC_DIR = os.path.join(BASE_DIR, "core", "static")
 
 AGENT_FLAG = "🏳️"
+AGENT_IP_CACHE = "Loading..."
 
 def load_template(name):
     path = os.path.join(TEMPLATE_DIR, name)
@@ -44,6 +47,42 @@ def get_current_user(request):
         user_data['role'] = ALLOWED_USERS[uid]
         return user_data
     except: return None
+
+# --- ФОНОВАЯ ЗАДАЧА МОНИТОРИНГА АГЕНТА ---
+async def agent_monitor():
+    """Собирает статистику локального сервера (Агента) для графиков WebUI."""
+    global AGENT_IP_CACHE
+    
+    # Пытаемся определить внешний IP один раз при старте (или периодически)
+    try:
+        AGENT_IP_CACHE = await asyncio.to_thread(requests.get, "https://api.ipify.org", timeout=2)
+        AGENT_IP_CACHE = AGENT_IP_CACHE.text
+    except:
+        AGENT_IP_CACHE = "Unknown"
+
+    while True:
+        try:
+            cpu = psutil.cpu_percent(interval=None)
+            ram = psutil.virtual_memory().percent
+            disk = psutil.disk_usage('/').percent
+            net = psutil.net_io_counters()
+            
+            point = {
+                "t": int(time.time()),
+                "c": cpu,
+                "r": ram,
+                "rx": net.bytes_recv,
+                "tx": net.bytes_sent
+            }
+            
+            AGENT_HISTORY.append(point)
+            if len(AGENT_HISTORY) > 60:  # Храним последние 60 точек (например, 3 минуты при интервале 3с)
+                AGENT_HISTORY.pop(0)
+                
+        except Exception as e:
+            logging.error(f"Agent monitor error: {e}")
+            
+        await asyncio.sleep(3)
 
 async def process_node_result_background(bot, user_id, cmd, text, token, node_name):
     if not user_id or not text: return
@@ -247,12 +286,41 @@ async def handle_logout(request):
     resp.del_cookie(COOKIE_NAME)
     return resp
 
+# --- API ДЛЯ АГЕНТА (Local Stats) ---
+async def handle_agent_stats(request):
+    if not get_current_user(request): return web.json_response({"error": "Unauthorized"}, status=401)
+    
+    # Получаем последние данные
+    current_stats = {}
+    if AGENT_HISTORY:
+        latest = AGENT_HISTORY[-1]
+        current_stats = {
+            "cpu": latest["c"],
+            "ram": latest["r"],
+            "disk": psutil.disk_usage('/').percent, # Можно брать из кэша, но диск меняется редко
+            "ip": AGENT_IP_CACHE
+        }
+    
+    return web.json_response({
+        "stats": current_stats,
+        "history": AGENT_HISTORY
+    })
+
 async def handle_node_details(request):
     if not get_current_user(request): return web.json_response({"error": "Unauthorized"}, status=401)
     token = request.query.get("token")
     if not token or token not in NODES: return web.json_response({"error": "Node not found"}, status=404)
     node = NODES[token]
-    return web.json_response({"name": node.get("name"), "ip": node.get("ip"), "stats": node.get("stats"), "history": node.get("history", []), "token": token})
+    # Добавляем last_seen и is_restarting для цветовой индикации
+    return web.json_response({
+        "name": node.get("name"),
+        "ip": node.get("ip"),
+        "stats": node.get("stats"),
+        "history": node.get("history", []),
+        "token": token,
+        "last_seen": node.get("last_seen", 0),
+        "is_restarting": node.get("is_restarting", False)
+    })
 
 async def handle_dashboard(request):
     user = get_current_user(request)
@@ -271,16 +339,17 @@ async def handle_dashboard(request):
         is_online = (now - last_seen < NODE_OFFLINE_TIMEOUT)
         if is_online: active_count += 1
         
+        # Логика цветов для списка
         status_color = "text-green-400"
         status_text = "ONLINE"
         bg_class = "bg-green-500/10 border-green-500/30"
-        dot_color = "bg-green-500"
+        dot_color = "bg-green-500" # Цвет для модалки (передается в JS)
 
         if is_restarting:
-            status_color = "text-blue-400"
+            status_color = "text-yellow-400" # Исправлено на желтый (как просили)
             status_text = "RESTARTING"
-            bg_class = "bg-blue-500/10 border-blue-500/30"
-            dot_color = "bg-blue-500"
+            bg_class = "bg-yellow-500/10 border-yellow-500/30"
+            dot_color = "bg-yellow-500"
         elif not is_online:
             status_color = "text-red-400"
             status_text = "OFFLINE"
@@ -339,7 +408,8 @@ async def handle_dashboard(request):
     html = html.replace("{role_badge}", role_badge)
     html = html.replace("{nodes_count}", str(len(NODES)))
     html = html.replace("{active_nodes}", str(active_count))
-    html = html.replace("{user_group_display}", "Администратор" if is_admin else "Пользователь")
+    # user_group_display больше не используется в старом контексте, но можно оставить плейсхолдер пустым
+    html = html.replace("{user_group_display}", "") 
     html = html.replace("{nodes_list_html}", nodes_html)
     html = html.replace("{admin_controls_html}", admin_controls)
     
@@ -386,6 +456,8 @@ async def start_web_server(bot_instance: Bot):
     
     app.router.add_post('/api/heartbeat', handle_heartbeat)
     app.router.add_get('/api/node/details', handle_node_details)
+    # Новый эндпоинт для статистики агента
+    app.router.add_get('/api/agent/stats', handle_agent_stats)
     app.router.add_get('/api/logs', handle_get_logs)
     app.router.add_post('/api/settings/save', handle_save_notifications)
     app.router.add_post('/api/users/action', handle_user_action)
@@ -399,6 +471,9 @@ async def start_web_server(bot_instance: Bot):
             except: return "🏳️"
         AGENT_FLAG = await asyncio.to_thread(fetch_flag)
     except: pass
+
+    # ЗАПУСК МОНИТОРИНГА АГЕНТА
+    asyncio.create_task(agent_monitor())
 
     runner = web.AppRunner(app, access_log=None)
     await runner.setup()
