@@ -212,6 +212,7 @@ async def main():
         except NotImplementedError: pass
 
         logging.info("Starting polling...")
+        await bot.delete_webhook(drop_pending_updates=True)
         await dp.start_polling(bot, allowed_updates=dp.resolve_used_update_types())
     except (KeyboardInterrupt, SystemExit):
         logging.info("Exit main.")
