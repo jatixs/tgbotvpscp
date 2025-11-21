@@ -15,7 +15,7 @@ from .config import WEB_SERVER_HOST, WEB_SERVER_PORT, NODE_OFFLINE_TIMEOUT, BASE
 from .shared_state import NODES, NODE_TRAFFIC_MONITORS, ALLOWED_USERS, USER_NAMES, AUTH_TOKENS, ALERTS_CONFIG, AGENT_HISTORY
 from .i18n import STRINGS, get_user_lang, set_user_lang
 from .config import DEFAULT_LANGUAGE
-from .utils import get_country_flag, save_alerts_config, get_host_path # Добавлен get_host_path
+from .utils import get_country_flag, save_alerts_config, get_host_path
 from .auth import save_users, get_user_name
 
 COOKIE_NAME = "vps_agent_session"
@@ -52,10 +52,8 @@ async def agent_monitor():
     """Собирает статистику локального сервера (Агента)."""
     global AGENT_IP_CACHE
     
-    # Инициализация: даем psutil "прогреться" для CPU
     psutil.cpu_percent(interval=None)
 
-    # Пытаемся определить IP (фоновая задача)
     try:
         def get_ip():
             try: return requests.get("https://api.ipify.org", timeout=3).text
@@ -65,12 +63,9 @@ async def agent_monitor():
 
     while True:
         try:
-            # Собираем метрики
-            # Используем interval=None, так как мы спим сами. Это не блокирует поток.
             cpu = psutil.cpu_percent(interval=None)
             ram = psutil.virtual_memory().percent
             
-            # Для диска используем путь хоста (важно для Docker)
             disk_path = get_host_path('/')
             try:
                 disk = psutil.disk_usage(disk_path).percent
@@ -88,14 +83,13 @@ async def agent_monitor():
             }
             
             AGENT_HISTORY.append(point)
-            # Храним историю (например, 60 точек по 2 сек = 2 минуты)
             if len(AGENT_HISTORY) > 60:
                 AGENT_HISTORY.pop(0)
                 
         except Exception as e:
             logging.error(f"Agent monitor error: {e}")
             
-        await asyncio.sleep(2) # Интервал обновления 2 секунды
+        await asyncio.sleep(2)
 
 async def process_node_result_background(bot, user_id, cmd, text, token, node_name):
     if not user_id or not text: return
@@ -299,9 +293,7 @@ async def handle_logout(request):
     resp.del_cookie(COOKIE_NAME)
     return resp
 
-# --- API: АГЕНТ ---
 async def handle_agent_stats(request):
-    """Возвращает статистику самого агента (хоста)."""
     if not get_current_user(request): return web.json_response({"error": "Unauthorized"}, status=401)
     
     current_stats = {
@@ -312,7 +304,6 @@ async def handle_agent_stats(request):
         latest = AGENT_HISTORY[-1]
         current_stats["cpu"] = latest["c"]
         current_stats["ram"] = latest["r"]
-        # Диск берем актуальный, т.к. он медленно меняется
         try:
             current_stats["disk"] = psutil.disk_usage(get_host_path('/')).percent
         except: pass
@@ -322,7 +313,6 @@ async def handle_agent_stats(request):
         "history": AGENT_HISTORY
     })
 
-# --- API: НОДЫ ---
 async def handle_node_details(request):
     if not get_current_user(request): return web.json_response({"error": "Unauthorized"}, status=401)
     token = request.query.get("token")
@@ -337,6 +327,28 @@ async def handle_node_details(request):
         "last_seen": node.get("last_seen", 0),
         "is_restarting": node.get("is_restarting", False)
     })
+
+# --- ВОССТАНОВЛЕНА ФУНКЦИЯ handle_heartbeat ---
+async def handle_heartbeat(request):
+    try: data = await request.json()
+    except: return web.json_response({"error": "Invalid JSON"}, status=400)
+    token = data.get("token")
+    if not token or not get_node_by_token(token): return web.json_response({"error": "Auth fail"}, status=401)
+    node = get_node_by_token(token)
+    stats = data.get("stats", {})
+    results = data.get("results", [])
+    bot = request.app.get('bot')
+
+    if bot and results:
+        for res in results:
+            asyncio.create_task(process_node_result_background(bot, res.get("user_id"), res.get("command"), res.get("result"), token, node.get("name", "Node")))
+
+    node["is_restarting"] = False 
+    update_node_heartbeat(token, request.transport.get_extra_info('peername')[0], stats)
+    tasks_to_send = list(node.get("tasks", []))
+    if tasks_to_send: node["tasks"] = []
+    return web.json_response({"status": "ok", "tasks": tasks_to_send})
+# ----------------------------------------------
 
 async def handle_dashboard(request):
     user = get_current_user(request)
@@ -423,7 +435,6 @@ async def handle_dashboard(request):
     html = html.replace("{role_badge}", role_badge)
     html = html.replace("{nodes_count}", str(len(NODES)))
     html = html.replace("{active_nodes}", str(active_count))
-    # Очищаем старый плейсхолдер статуса, так как теперь у нас новый блок
     html = html.replace("{user_group_display}", "") 
     html = html.replace("{nodes_list_html}", nodes_html)
     html = html.replace("{admin_controls_html}", admin_controls)
@@ -451,7 +462,7 @@ async def start_web_server(bot_instance: Bot):
     
     app.router.add_post('/api/heartbeat', handle_heartbeat)
     app.router.add_get('/api/node/details', handle_node_details)
-    app.router.add_get('/api/agent/stats', handle_agent_stats) # Новый эндпоинт
+    app.router.add_get('/api/agent/stats', handle_agent_stats)
     app.router.add_get('/api/logs', handle_get_logs)
     app.router.add_post('/api/settings/save', handle_save_notifications)
     app.router.add_post('/api/users/action', handle_user_action)
@@ -466,7 +477,6 @@ async def start_web_server(bot_instance: Bot):
         AGENT_FLAG = await asyncio.to_thread(fetch_flag)
     except: pass
 
-    # ЗАПУСКАЕМ МОНИТОР АГЕНТА
     asyncio.create_task(agent_monitor())
 
     runner = web.AppRunner(app, access_log=None)
