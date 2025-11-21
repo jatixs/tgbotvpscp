@@ -1,6 +1,92 @@
+// Глобальные переменные
 let chartRes = null;
 let chartNet = null;
 let pollInterval = null;
+
+// Для агента
+let chartAgent = null;
+let agentPollInterval = null;
+
+// Запуск мониторинга агента при загрузке страницы
+document.addEventListener("DOMContentLoaded", () => {
+    if(document.getElementById('chartAgent')) {
+        fetchAgentStats();
+        agentPollInterval = setInterval(fetchAgentStats, 3000);
+    }
+});
+
+// --- УПРАВЛЕНИЕ АГЕНТОМ (Dashboard Header) ---
+async function fetchAgentStats() {
+    try {
+        const response = await fetch('/api/agent/stats');
+        const data = await response.json();
+        
+        if(data.stats) {
+            document.getElementById('agentCpu').innerText = Math.round(data.stats.cpu) + "%";
+            document.getElementById('agentRam').innerText = Math.round(data.stats.ram) + "%";
+            document.getElementById('agentDisk').innerText = Math.round(data.stats.disk) + "%";
+            document.getElementById('agentIp').innerText = data.stats.ip || "Unknown";
+        }
+        
+        renderAgentChart(data.history);
+        
+    } catch (e) {
+        console.error("Ошибка получения данных агента:", e);
+    }
+}
+
+function renderAgentChart(history) {
+    if (!history || history.length < 2) return;
+    
+    // Рисуем график сети (сумма RX+TX или просто RX)
+    // Для компактности покажем RX (in) и TX (out)
+    const labels = history.map(h => ""); // Пустые метки для чистоты
+    
+    const netRx = [];
+    const netTx = [];
+    for(let i=1; i<history.length; i++) {
+        const dt = history[i].t - history[i-1].t || 1; 
+        const dx = Math.max(0, history[i].rx - history[i-1].rx);
+        const dy = Math.max(0, history[i].tx - history[i-1].tx);
+        netRx.push((dx / dt / 1024)); // KB/s
+        netTx.push((dy / dt / 1024)); 
+    }
+    // Убираем первую точку у лейблов тоже, чтобы длины совпадали
+    const labelsSl = labels.slice(1);
+
+    const ctx = document.getElementById('chartAgent').getContext('2d');
+    
+    const opts = {
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: false,
+        elements: { point: { radius: 0 } },
+        scales: { x: { display: false }, y: { display: false } },
+        plugins: { legend: { display: false }, tooltip: { enabled: false } } // Минимализм
+    };
+
+    if (chartAgent) {
+        chartAgent.data.labels = labelsSl;
+        chartAgent.data.datasets[0].data = netRx;
+        chartAgent.data.datasets[1].data = netTx;
+        chartAgent.update();
+    } else {
+        chartAgent = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: labelsSl,
+                datasets: [
+                    { label: 'RX', data: netRx, borderColor: '#22c55e', borderWidth: 1.5, fill: false, tension: 0.3 },
+                    { label: 'TX', data: netTx, borderColor: '#3b82f6', borderWidth: 1.5, fill: false, tension: 0.3 }
+                ]
+            },
+            options: opts
+        });
+    }
+}
+
+
+// --- УПРАВЛЕНИЕ НОДАМИ ---
 
 async function openNodeDetails(token, dotColorClass) {
     const modal = document.getElementById('nodeModal');
@@ -8,10 +94,8 @@ async function openNodeDetails(token, dotColorClass) {
     modal.classList.add('flex');
     document.body.style.overflow = 'hidden';
     
-    const dot = document.getElementById('modalStatusDot');
-    if (dot) {
-        dot.className = `h-3 w-3 rounded-full animate-pulse ${dotColorClass || 'bg-gray-500'}`;
-    }
+    // Инициализация точки (первичная, переданная из HTML)
+    updateModalDot(dotColorClass);
 
     if (chartRes) { chartRes.destroy(); chartRes = null; }
     if (chartNet) { chartNet.destroy(); chartNet = null; }
@@ -20,6 +104,16 @@ async function openNodeDetails(token, dotColorClass) {
 
     if (pollInterval) clearInterval(pollInterval);
     pollInterval = setInterval(() => fetchAndRender(token), 3000);
+}
+
+function updateModalDot(colorClass) {
+    const dot = document.getElementById('modalStatusDot');
+    if (dot) {
+        // Если цвет не передан, не меняем (или ставим дефолт)
+        if(colorClass) {
+             dot.className = `h-3 w-3 rounded-full animate-pulse ${colorClass}`;
+        }
+    }
 }
 
 async function fetchAndRender(token) {
@@ -35,11 +129,25 @@ async function fetchAndRender(token) {
 
         document.getElementById('modalTitle').innerText = data.name || 'Unknown';
         
+        // Обновляем статусную точку динамически
+        const now = Date.now() / 1000;
+        const lastSeen = data.last_seen || 0;
+        const isRestarting = data.is_restarting;
+        const isOnline = (now - lastSeen < 25); // 20-25 сек таймаут
+
+        let newColor = "bg-red-500"; // Offline
+        if (isRestarting) newColor = "bg-yellow-500"; // Restarting (Yellow)
+        else if (isOnline) newColor = "bg-green-500"; // Active
+
+        updateModalDot(newColor);
+
+        // Заполняем статистику
         const stats = data.stats || {};
         document.getElementById('modalCpu').innerText = (stats.cpu !== undefined ? stats.cpu : 0) + '%';
         document.getElementById('modalRam').innerText = (stats.ram !== undefined ? stats.ram : 0) + '%';
         document.getElementById('modalIp').innerText = data.ip || 'Unknown';
         
+        // Обновляем токен для копирования
         const tokenEl = document.getElementById('modalToken');
         if(tokenEl) {
             tokenEl.innerText = data.token || token;
@@ -64,12 +172,14 @@ function closeModal() {
     }
 }
 
+// --- ФУНКЦИЯ КОПИРОВАНИЯ (С FALLBACK ДЛЯ HTTP) ---
 function copyToken(element) {
     const tokenEl = document.getElementById('modalToken');
     const tokenText = tokenEl.innerText;
     
     if (!tokenText || tokenText === '...') return;
 
+    // Функция показа уведомления "Скопировано"
     const showToast = () => {
         const toast = document.getElementById('copyToast');
         if (toast) {
@@ -80,12 +190,14 @@ function copyToken(element) {
         }
     };
 
+    // Попытка копирования через Clipboard API (требует HTTPS или localhost)
     if (navigator.clipboard && window.isSecureContext) {
         navigator.clipboard.writeText(tokenText).then(showToast).catch(err => {
             console.warn('Clipboard API failed, trying fallback...', err);
             fallbackCopyTextToClipboard(tokenText, showToast);
         });
     } else {
+        // Fallback для HTTP
         fallbackCopyTextToClipboard(tokenText, showToast);
     }
 }
@@ -94,6 +206,7 @@ function fallbackCopyTextToClipboard(text, onSuccess) {
     const textArea = document.createElement("textarea");
     textArea.value = text;
     
+    // Стили, чтобы элемент не был виден пользователю, но был в DOM
     textArea.style.top = "0";
     textArea.style.left = "0";
     textArea.style.position = "fixed";
@@ -111,6 +224,7 @@ function fallbackCopyTextToClipboard(text, onSuccess) {
     
     document.body.removeChild(textArea);
 }
+// -----------------------------------------------------
 
 function renderCharts(history) {
     if (!history || history.length < 2) return; 
@@ -190,6 +304,8 @@ function renderCharts(history) {
     }
 }
 
+// --- УПРАВЛЕНИЕ ЛОГАМИ ---
+
 function openLogsModal() {
     const modal = document.getElementById('logsModal');
     modal.classList.remove('hidden');
@@ -222,18 +338,21 @@ async function fetchLogs() {
         if (data.error) {
             contentDiv.innerHTML = `<div class="text-red-400">Ошибка: ${data.error}</div>`;
         } else {
+            // Форматирование логов цветом
             const coloredLogs = data.logs.map(line => {
                 let cls = "text-gray-400";
                 if (line.includes("INFO")) cls = "text-blue-300";
                 if (line.includes("WARNING")) cls = "text-yellow-300";
                 if (line.includes("ERROR") || line.includes("CRITICAL") || line.includes("Traceback")) cls = "text-red-400 font-bold";
                 
+                // Экранирование HTML
                 const safeLine = line.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
                 return `<div class="${cls} hover:bg-white/5 px-1 rounded">${safeLine}</div>`;
             }).join('');
             
             contentDiv.innerHTML = coloredLogs || '<div class="text-gray-600 text-center">Лог пуст</div>';
             
+            // Автоскролл вниз
             contentDiv.scrollTop = contentDiv.scrollHeight;
         }
     } catch (e) {
