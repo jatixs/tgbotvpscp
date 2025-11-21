@@ -38,7 +38,20 @@ async function fetchAgentStats() {
 function renderAgentChart(history) {
     if (!history || history.length < 2) return;
     
-    const labels = history.map(h => ""); // Пустые метки для чистоты
+    // Формируем метки времени (секунды назад)
+    const labels = [];
+    const totalPoints = history.length;
+    for(let i=0; i<totalPoints; i++) {
+        // Интервал обновления сервера ~2 сек.
+        // Точка i - это (totalPoints - 1 - i) шагов назад.
+        const secondsAgo = (totalPoints - 1 - i) * 2; 
+        // Показываем метку каждые 10 точек, чтобы не захламлять
+        if (secondsAgo % 20 === 0 || i === totalPoints-1) {
+             labels.push(`-${secondsAgo}s`);
+        } else {
+             labels.push("");
+        }
+    }
     
     const netRx = [];
     const netTx = [];
@@ -49,6 +62,7 @@ function renderAgentChart(history) {
         netRx.push((dx / dt / 1024)); // KB/s
         netTx.push((dy / dt / 1024)); 
     }
+    
     const labelsSl = labels.slice(1);
 
     const ctx = document.getElementById('chartAgent').getContext('2d');
@@ -57,9 +71,46 @@ function renderAgentChart(history) {
         responsive: true,
         maintainAspectRatio: false,
         animation: false,
-        elements: { point: { radius: 0 } },
-        scales: { x: { display: false }, y: { display: false } },
-        plugins: { legend: { display: false }, tooltip: { enabled: false } } 
+        elements: { point: { radius: 0, hitRadius: 10 } }, // hitRadius для удобства наведения
+        scales: { 
+            x: { 
+                display: true, // Показываем ось X
+                grid: { display: false },
+                ticks: { color: '#6b7280', font: {size: 9}, maxRotation: 0, autoSkip: false }
+            }, 
+            y: { 
+                display: false 
+            } 
+        },
+        plugins: { 
+            legend: { 
+                display: true, // Показываем легенду
+                labels: { color: '#9ca3af', font: {size: 10}, boxWidth: 8, usePointStyle: true }
+            }, 
+            tooltip: { 
+                enabled: true,
+                mode: 'index',
+                intersect: false,
+                backgroundColor: 'rgba(17, 24, 39, 0.9)',
+                titleColor: '#fff',
+                bodyColor: '#ccc',
+                borderColor: 'rgba(255,255,255,0.1)',
+                borderWidth: 1,
+                callbacks: {
+                    title: () => '', // Скрываем заголовок тултипа (время)
+                    label: function(context) {
+                        let label = context.dataset.label || '';
+                        if (label) {
+                            label += ': ';
+                        }
+                        if (context.parsed.y !== null) {
+                            label += context.parsed.y.toFixed(1) + ' KB/s';
+                        }
+                        return label;
+                    }
+                }
+            } 
+        } 
     };
 
     if (chartAgent) {
@@ -73,8 +124,8 @@ function renderAgentChart(history) {
             data: {
                 labels: labelsSl,
                 datasets: [
-                    { label: 'RX', data: netRx, borderColor: '#22c55e', borderWidth: 1.5, fill: false, tension: 0.3 },
-                    { label: 'TX', data: netTx, borderColor: '#3b82f6', borderWidth: 1.5, fill: false, tension: 0.3 }
+                    { label: 'RX (In)', data: netRx, borderColor: '#22c55e', borderWidth: 1.5, fill: false, tension: 0.3 },
+                    { label: 'TX (Out)', data: netTx, borderColor: '#3b82f6', borderWidth: 1.5, fill: false, tension: 0.3 }
                 ]
             },
             options: opts
