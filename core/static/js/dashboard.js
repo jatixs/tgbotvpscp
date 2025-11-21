@@ -9,20 +9,18 @@ let agentPollInterval = null;
 
 // Функция форматирования скорости (динамические единицы)
 function formatSpeed(valueInKbps) {
-    // Проверка на валидность
     let val = parseFloat(valueInKbps);
     if (isNaN(val)) return '0 Kbit/s';
 
-    if (val >= 1024 * 1024) { // > 1 Gbps
+    if (val >= 1024 * 1024) { 
         return (val / (1024 * 1024)).toFixed(2) + ' Gbit/s';
     }
-    if (val >= 1024) { // > 1 Mbps
+    if (val >= 1024) { 
         return (val / 1024).toFixed(2) + ' Mbit/s';
     }
     return val.toFixed(2) + ' Kbit/s';
 }
 
-// Запуск мониторинга агента при загрузке страницы
 document.addEventListener("DOMContentLoaded", () => {
     if(document.getElementById('chartAgent')) {
         fetchAgentStats();
@@ -53,12 +51,10 @@ async function fetchAgentStats() {
 function renderAgentChart(history) {
     if (!history || history.length < 2) return;
     
-    // Формируем метки времени (секунды назад)
     const labels = [];
     const totalPoints = history.length;
     for(let i=0; i<totalPoints; i++) {
         const secondsAgo = (totalPoints - 1 - i) * 2; 
-        // Показываем метку каждые 10 точек
         if (secondsAgo % 20 === 0 || i === totalPoints-1) {
              labels.push(`-${secondsAgo}s`);
         } else {
@@ -74,7 +70,6 @@ function renderAgentChart(history) {
         const dy = Math.max(0, history[i].tx - history[i-1].tx);
         
         // Переводим Байты -> Биты, делим на 1024 -> Кбиты
-        // (bytes * 8) / 1024 = Kbps
         netRx.push((dx * 8 / dt / 1024)); 
         netTx.push((dy * 8 / dt / 1024)); 
     }
@@ -88,19 +83,31 @@ function renderAgentChart(history) {
         maintainAspectRatio: false,
         animation: false,
         layout: {
-            padding: { top: 10, bottom: 5, left: 0, right: 10 } // Отступы
+            padding: { top: 5, bottom: 0, left: 0, right: 5 } // Отступы
         },
         elements: { point: { radius: 0, hitRadius: 10 } },
         scales: { 
             x: { 
                 display: true, 
-                grid: { display: false, drawBorder: false },
+                grid: { 
+                    display: true, 
+                    color: 'rgba(255, 255, 255, 0.03)', 
+                    borderDash: [4, 4],
+                    drawBorder: true,
+                    borderColor: 'rgba(255, 255, 255, 0.1)'
+                },
                 ticks: { color: '#6b7280', font: {size: 9}, maxRotation: 0, autoSkip: false }
             }, 
             y: { 
                 display: true, 
                 position: 'right',
-                grid: { color: 'rgba(255,255,255,0.05)', drawBorder: false },
+                grid: { 
+                    display: true, 
+                    color: 'rgba(255, 255, 255, 0.03)', 
+                    borderDash: [4, 4],
+                    drawBorder: true,
+                    borderColor: 'rgba(255, 255, 255, 0.1)'
+                },
                 ticks: { 
                     color: '#6b7280', 
                     font: {size: 9},
@@ -117,13 +124,13 @@ function renderAgentChart(history) {
                 enabled: true,
                 mode: 'index',
                 intersect: false,
-                backgroundColor: 'rgba(17, 24, 39, 0.9)',
+                backgroundColor: 'rgba(17, 24, 39, 0.95)',
                 titleColor: '#fff',
                 bodyColor: '#ccc',
                 borderColor: 'rgba(255,255,255,0.1)',
                 borderWidth: 1,
                 callbacks: {
-                    title: () => '', // Скрываем заголовок
+                    title: () => '', 
                     label: function(context) {
                         let label = context.dataset.label || '';
                         if (label) label += ': ';
@@ -148,8 +155,24 @@ function renderAgentChart(history) {
             data: {
                 labels: labelsSl,
                 datasets: [
-                    { label: 'RX (In)', data: netRx, borderColor: '#22c55e', borderWidth: 1.5, fill: false, tension: 0.3 },
-                    { label: 'TX (Out)', data: netTx, borderColor: '#3b82f6', borderWidth: 1.5, fill: false, tension: 0.3 }
+                    { 
+                        label: 'RX (In)', 
+                        data: netRx, 
+                        borderColor: '#22c55e', 
+                        borderWidth: 1.5, 
+                        fill: true, 
+                        backgroundColor: 'rgba(34, 197, 94, 0.1)', // Заливка
+                        tension: 0.3 
+                    },
+                    { 
+                        label: 'TX (Out)', 
+                        data: netTx, 
+                        borderColor: '#3b82f6', 
+                        borderWidth: 1.5, 
+                        fill: true, 
+                        backgroundColor: 'rgba(59, 130, 246, 0.1)', // Заливка
+                        tension: 0.3 
+                    }
                 ]
             },
             options: opts
@@ -181,10 +204,7 @@ function updateModalDot(colorClass) {
     const dot = document.getElementById('modalStatusDot');
     if (dot) {
         if(colorClass) {
-             // Удаляем старые цвета bg-*
              dot.className = dot.className.replace(/bg-\w+-500/g, "");
-             // Добавляем базовые классы + новый цвет
-             // Очищаем от пробелов и добавляем новый цвет
              const newColor = colorClass.replace("bg-", "").trim() ? colorClass : "bg-gray-500";
              dot.classList.add("h-3", "w-3", "rounded-full", "animate-pulse");
              dot.classList.add(newColor);
@@ -205,7 +225,6 @@ async function fetchAndRender(token) {
 
         document.getElementById('modalTitle').innerText = data.name || 'Unknown';
         
-        // Обновляем точку
         const now = Date.now() / 1000;
         const lastSeen = data.last_seen || 0;
         const isRestarting = data.is_restarting;
@@ -217,7 +236,6 @@ async function fetchAndRender(token) {
 
         updateModalDot(newColor);
 
-        // Статистика
         const stats = data.stats || {};
         document.getElementById('modalCpu').innerText = (stats.cpu !== undefined ? stats.cpu : 0) + '%';
         document.getElementById('modalRam').innerText = (stats.ram !== undefined ? stats.ram : 0) + '%';
@@ -304,7 +322,7 @@ function renderCharts(history) {
         const dt = history[i].t - history[i-1].t || 1; 
         const dx = Math.max(0, history[i].rx - history[i-1].rx);
         const dy = Math.max(0, history[i].tx - history[i-1].tx);
-        // Переводим в Kbit/s
+        // Перевод в Кбит/с
         netRxSpeed.push((dx * 8 / dt / 1024)); 
         netTxSpeed.push((dy * 8 / dt / 1024)); 
     }
@@ -351,9 +369,7 @@ function renderCharts(history) {
 
     const ctxNet = document.getElementById('chartNetwork').getContext('2d');
     
-    // Опции для графика сети с форматированием
     const netOptions = JSON.parse(JSON.stringify(commonOptions));
-    // Безопасное создание вложенных объектов, если их нет
     if (!netOptions.scales) netOptions.scales = {};
     if (!netOptions.scales.y) netOptions.scales.y = {};
     if (!netOptions.scales.y.ticks) netOptions.scales.y.ticks = {};
@@ -396,6 +412,7 @@ function openLogsModal() {
     modal.classList.remove('hidden');
     modal.classList.add('flex');
     document.body.style.overflow = 'hidden';
+    
     fetchLogs();
 }
 
@@ -409,13 +426,16 @@ function closeLogsModal() {
 async function fetchLogs() {
     const contentDiv = document.getElementById('logsContent');
     contentDiv.innerHTML = '<div class="flex items-center justify-center h-full text-gray-500"><span class="animate-pulse">Загрузка логов...</span></div>';
+    
     try {
         const response = await fetch('/api/logs');
         if (response.status === 403) {
             contentDiv.innerHTML = '<div class="text-red-400 text-center">Доступ запрещен</div>';
             return;
         }
+        
         const data = await response.json();
+        
         if (data.error) {
             contentDiv.innerHTML = `<div class="text-red-400">Ошибка: ${data.error}</div>`;
         } else {
@@ -424,10 +444,13 @@ async function fetchLogs() {
                 if (line.includes("INFO")) cls = "text-blue-300";
                 if (line.includes("WARNING")) cls = "text-yellow-300";
                 if (line.includes("ERROR") || line.includes("CRITICAL") || line.includes("Traceback")) cls = "text-red-400 font-bold";
+                
                 const safeLine = line.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
                 return `<div class="${cls} hover:bg-white/5 px-1 rounded">${safeLine}</div>`;
             }).join('');
+            
             contentDiv.innerHTML = coloredLogs || '<div class="text-gray-600 text-center">Лог пуст</div>';
+            
             contentDiv.scrollTop = contentDiv.scrollHeight;
         }
     } catch (e) {
