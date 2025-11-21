@@ -39,19 +39,19 @@
             </h2>
             
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <label class="flex items-center justify-between bg-black/20 p-4 rounded-xl cursor-pointer hover:bg-black/30 transition">
+                <label class="flex items-center justify-between bg-black/20 p-4 rounded-xl cursor-pointer hover:bg-black/30 active:scale-[0.98] active:bg-white/10 transition transform duration-100">
                     <span class="text-sm font-medium">Ресурсы (CPU/RAM/Disk)</span>
                     <input type="checkbox" id="alert_resources" class="w-5 h-5 rounded bg-gray-700 border-gray-600 text-green-500 focus:ring-green-500" {check_resources}>
                 </label>
-                <label class="flex items-center justify-between bg-black/20 p-4 rounded-xl cursor-pointer hover:bg-black/30 transition">
+                <label class="flex items-center justify-between bg-black/20 p-4 rounded-xl cursor-pointer hover:bg-black/30 active:scale-[0.98] active:bg-white/10 transition transform duration-100">
                     <span class="text-sm font-medium">Входы SSH</span>
                     <input type="checkbox" id="alert_logins" class="w-5 h-5 rounded bg-gray-700 border-gray-600 text-green-500 focus:ring-green-500" {check_logins}>
                 </label>
-                <label class="flex items-center justify-between bg-black/20 p-4 rounded-xl cursor-pointer hover:bg-black/30 transition">
+                <label class="flex items-center justify-between bg-black/20 p-4 rounded-xl cursor-pointer hover:bg-black/30 active:scale-[0.98] active:bg-white/10 transition transform duration-100">
                     <span class="text-sm font-medium">Баны Fail2Ban</span>
                     <input type="checkbox" id="alert_bans" class="w-5 h-5 rounded bg-gray-700 border-gray-600 text-green-500 focus:ring-green-500" {check_bans}>
                 </label>
-                <label class="flex items-center justify-between bg-black/20 p-4 rounded-xl cursor-pointer hover:bg-black/30 transition">
+                <label class="flex items-center justify-between bg-black/20 p-4 rounded-xl cursor-pointer hover:bg-black/30 active:scale-[0.98] active:bg-white/10 transition transform duration-100">
                     <span class="text-sm font-medium">Даунтайм Нод (Offline)</span>
                     <input type="checkbox" id="alert_downtime" class="w-5 h-5 rounded bg-gray-700 border-gray-600 text-green-500 focus:ring-green-500" {check_downtime}>
                 </label>
@@ -93,9 +93,9 @@
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" /></svg>
                 Добавить Ноду
             </h2>
-            <div class="flex gap-2">
-                <input type="text" id="newNodeName" placeholder="Имя сервера" class="flex-1 bg-black/20 border border-white/10 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-blue-500">
-                <button onclick="addNode()" class="px-4 py-2 bg-purple-600 hover:bg-purple-500 rounded-lg font-bold text-white transition">Создать</button>
+            <div class="flex flex-wrap sm:flex-nowrap gap-2">
+                <input type="text" id="newNodeName" placeholder="Имя сервера" class="w-full flex-1 bg-black/20 border border-white/10 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-blue-500">
+                <button onclick="addNode()" class="w-full sm:w-auto px-6 py-2 bg-purple-600 hover:bg-purple-500 active:scale-95 rounded-lg font-bold text-white transition transform duration-100 flex-shrink-0">Создать</button>
             </div>
             <div id="nodeResult" class="mt-4 hidden">
                 <div class="bg-black/30 p-3 rounded-lg border border-white/10">
