@@ -7,6 +7,17 @@ let pollInterval = null;
 let chartAgent = null;
 let agentPollInterval = null;
 
+// Функция форматирования скорости
+function formatSpeed(valueInKbps) {
+    if (valueInKbps >= 1024 * 1024) {
+        return (valueInKbps / (1024 * 1024)).toFixed(2) + ' Gbit/s';
+    }
+    if (valueInKbps >= 1024) {
+        return (valueInKbps / 1024).toFixed(2) + ' Mbit/s';
+    }
+    return valueInKbps.toFixed(2) + ' Kbit/s';
+}
+
 // Запуск мониторинга агента при загрузке страницы
 document.addEventListener("DOMContentLoaded", () => {
     if(document.getElementById('chartAgent')) {
@@ -42,10 +53,7 @@ function renderAgentChart(history) {
     const labels = [];
     const totalPoints = history.length;
     for(let i=0; i<totalPoints; i++) {
-        // Интервал обновления сервера ~2 сек.
-        // Точка i - это (totalPoints - 1 - i) шагов назад.
         const secondsAgo = (totalPoints - 1 - i) * 2; 
-        // Показываем метку каждые 10 точек, чтобы не захламлять
         if (secondsAgo % 20 === 0 || i === totalPoints-1) {
              labels.push(`-${secondsAgo}s`);
         } else {
@@ -59,8 +67,11 @@ function renderAgentChart(history) {
         const dt = history[i].t - history[i-1].t || 1; 
         const dx = Math.max(0, history[i].rx - history[i-1].rx);
         const dy = Math.max(0, history[i].tx - history[i-1].tx);
-        netRx.push((dx / dt / 1024)); // KB/s
-        netTx.push((dy / dt / 1024)); 
+        
+        // Переводим Байты -> Биты, делим на 1024 -> Кбиты
+        // (bytes * 8) / 1024 = Kbps
+        netRx.push((dx * 8 / dt / 1024)); 
+        netTx.push((dy * 8 / dt / 1024)); 
     }
     
     const labelsSl = labels.slice(1);
@@ -71,20 +82,30 @@ function renderAgentChart(history) {
         responsive: true,
         maintainAspectRatio: false,
         animation: false,
-        elements: { point: { radius: 0, hitRadius: 10 } }, // hitRadius для удобства наведения
+        layout: {
+            padding: { top: 10, bottom: 5, left: 0, right: 10 } // Красивые отступы
+        },
+        elements: { point: { radius: 0, hitRadius: 10 } },
         scales: { 
             x: { 
-                display: true, // Показываем ось X
-                grid: { display: false },
+                display: true,
+                grid: { display: false, drawBorder: false },
                 ticks: { color: '#6b7280', font: {size: 9}, maxRotation: 0, autoSkip: false }
             }, 
             y: { 
-                display: false 
+                display: true, // Включаем вертикальную шкалу
+                position: 'right', // Шкала справа
+                grid: { color: 'rgba(255,255,255,0.05)', drawBorder: false },
+                ticks: { 
+                    color: '#6b7280', 
+                    font: {size: 9}, 
+                    callback: function(value) { return formatSpeed(value); } // Динамическая мера
+                }
             } 
         },
         plugins: { 
             legend: { 
-                display: true, // Показываем легенду
+                display: true, 
                 labels: { color: '#9ca3af', font: {size: 10}, boxWidth: 8, usePointStyle: true }
             }, 
             tooltip: { 
@@ -97,16 +118,9 @@ function renderAgentChart(history) {
                 borderColor: 'rgba(255,255,255,0.1)',
                 borderWidth: 1,
                 callbacks: {
-                    title: () => '', // Скрываем заголовок тултипа (время)
+                    title: () => '', 
                     label: function(context) {
-                        let label = context.dataset.label || '';
-                        if (label) {
-                            label += ': ';
-                        }
-                        if (context.parsed.y !== null) {
-                            label += context.parsed.y.toFixed(1) + ' KB/s';
-                        }
-                        return label;
+                        return context.dataset.label + ': ' + formatSpeed(context.parsed.y);
                     }
                 }
             } 
@@ -124,8 +138,8 @@ function renderAgentChart(history) {
             data: {
                 labels: labelsSl,
                 datasets: [
-                    { label: 'RX (In)', data: netRx, borderColor: '#22c55e', borderWidth: 1.5, fill: false, tension: 0.3 },
-                    { label: 'TX (Out)', data: netTx, borderColor: '#3b82f6', borderWidth: 1.5, fill: false, tension: 0.3 }
+                    { label: 'RX', data: netRx, borderColor: '#22c55e', borderWidth: 1.5, fill: false, tension: 0.3 },
+                    { label: 'TX', data: netTx, borderColor: '#3b82f6', borderWidth: 1.5, fill: false, tension: 0.3 }
                 ]
             },
             options: opts
@@ -142,7 +156,6 @@ async function openNodeDetails(token, dotColorClass) {
     modal.classList.add('flex');
     document.body.style.overflow = 'hidden';
     
-    // Инициализация точки (первичная, переданная из HTML)
     updateModalDot(dotColorClass);
 
     if (chartRes) { chartRes.destroy(); chartRes = null; }
@@ -289,8 +302,10 @@ function renderCharts(history) {
         const dt = history[i].t - history[i-1].t || 1; 
         const dx = Math.max(0, history[i].rx - history[i-1].rx);
         const dy = Math.max(0, history[i].tx - history[i-1].tx);
-        netRxSpeed.push((dx / dt / 1024).toFixed(2)); 
-        netTxSpeed.push((dy / dt / 1024).toFixed(2)); 
+        
+        // Переводим в Kbps
+        netRxSpeed.push((dx * 8 / dt / 1024)); 
+        netTxSpeed.push((dy * 8 / dt / 1024)); 
     }
     const netLabels = labels.slice(1);
 
@@ -334,6 +349,16 @@ function renderCharts(history) {
     }
 
     const ctxNet = document.getElementById('chartNetwork').getContext('2d');
+    
+    // Клонируем общие опции и добавляем специфичные для сети (форматирование)
+    const netOptions = JSON.parse(JSON.stringify(commonOptions));
+    netOptions.scales.y.ticks.callback = function(value) { return formatSpeed(value); };
+    netOptions.plugins.tooltip.callbacks = {
+        label: function(context) {
+            return context.dataset.label + ': ' + formatSpeed(context.parsed.y);
+        }
+    };
+
     if (chartNet) {
         chartNet.data.labels = netLabels;
         chartNet.data.datasets[0].data = netRxSpeed;
@@ -349,7 +374,7 @@ function renderCharts(history) {
                     { label: 'TX (Out)', data: netTxSpeed, borderColor: '#ef4444', tension: 0.3, borderWidth: 2, pointRadius: 0 }
                 ]
             },
-            options: commonOptions
+            options: netOptions
         });
     }
 }
