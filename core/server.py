@@ -13,12 +13,11 @@ from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from .nodes_db import get_node_by_token, update_node_heartbeat, create_node, delete_node
 from .config import WEB_SERVER_HOST, WEB_SERVER_PORT, NODE_OFFLINE_TIMEOUT, BASE_DIR, ADMIN_USER_ID
 from .shared_state import NODES, NODE_TRAFFIC_MONITORS, ALLOWED_USERS, USER_NAMES, AUTH_TOKENS, ALERTS_CONFIG, AGENT_HISTORY
-from .i18n import STRINGS, get_user_lang, set_user_lang, get_text as _ # Добавили get_text как _
+from .i18n import STRINGS, get_user_lang, set_user_lang, get_text as _
 from .config import DEFAULT_LANGUAGE
 from .utils import get_country_flag, save_alerts_config, get_host_path
 from .auth import save_users, get_user_name
 
-# ... (весь код до handle_dashboard остается без изменений) ...
 COOKIE_NAME = "vps_agent_session"
 LOGIN_TOKEN_TTL = 300 
 WEB_PASSWORD = os.environ.get("WEB_PASSWORD", "admin")
@@ -48,9 +47,13 @@ def get_current_user(request):
         return user_data
     except: return None
 
+# --- ФОНОВАЯ ЗАДАЧА МОНИТОРИНГА АГЕНТА ---
 async def agent_monitor():
+    """Собирает статистику локального сервера (Агента)."""
     global AGENT_IP_CACHE
+    
     psutil.cpu_percent(interval=None)
+
     try:
         def get_ip():
             try: return requests.get("https://api.ipify.org", timeout=3).text
@@ -62,12 +65,15 @@ async def agent_monitor():
         try:
             cpu = psutil.cpu_percent(interval=None)
             ram = psutil.virtual_memory().percent
+            
             disk_path = get_host_path('/')
             try:
                 disk = psutil.disk_usage(disk_path).percent
             except:
                 disk = 0
+
             net = psutil.net_io_counters()
+            
             point = {
                 "t": int(time.time()),
                 "c": cpu,
@@ -75,11 +81,14 @@ async def agent_monitor():
                 "rx": net.bytes_recv,
                 "tx": net.bytes_sent
             }
+            
             AGENT_HISTORY.append(point)
             if len(AGENT_HISTORY) > 60:
                 AGENT_HISTORY.pop(0)
+                
         except Exception as e:
             logging.error(f"Agent monitor error: {e}")
+            
         await asyncio.sleep(2)
 
 async def process_node_result_background(bot, user_id, cmd, text, token, node_name):
@@ -96,6 +105,7 @@ async def process_node_result_background(bot, user_id, cmd, text, token, node_na
                     await bot.edit_message_text(text=text, chat_id=user_id, message_id=msg_id, reply_markup=stop_kb, parse_mode="HTML")
                 except Exception: pass 
                 return
+
         full_text = f"🖥 <b>Ответ от {node_name}:</b>\n\n{text}"
         await bot.send_message(chat_id=user_id, text=full_text, parse_mode="HTML")
     except Exception as e:
@@ -105,9 +115,11 @@ async def handle_get_logs(request):
     user = get_current_user(request)
     if not user or user['role'] != 'admins':
         return web.json_response({"error": "Unauthorized"}, status=403)
+    
     log_path = os.path.join(BASE_DIR, "logs", "bot", "bot.log")
     if not os.path.exists(log_path):
         return web.json_response({"logs": ["Файл логов не найден."]})
+        
     try:
         with open(log_path, "r", encoding="utf-8", errors="ignore") as f:
             lines = f.readlines()
@@ -119,10 +131,14 @@ async def handle_get_logs(request):
 async def handle_settings_page(request):
     user = get_current_user(request)
     if not user: raise web.HTTPFound('/login')
+    
     html = load_template("settings.html")
+    
     user_id = user['id']
     is_admin = user['role'] == 'admins'
+    
     user_alerts = ALERTS_CONFIG.get(user_id, {})
+    
     users_json = "null"
     if is_admin:
         users_list = []
@@ -132,25 +148,32 @@ async def handle_settings_page(request):
             name = USER_NAMES.get(str(uid), f"ID: {uid}")
             users_list.append({"id": uid, "name": name, "role": role})
         users_json = json.dumps(users_list)
+
     html = html.replace("{web_title}", "Настройки - VPS Bot")
     html = html.replace("{user_name}", user.get('first_name', 'User'))
     html = html.replace("{user_avatar}", _get_avatar_html(user))
     html = html.replace("{users_data_json}", users_json)
+    
     for alert in ['resources', 'logins', 'bans', 'downtime']:
         checked = "checked" if user_alerts.get(alert, False) else ""
         html = html.replace(f"{{check_{alert}}}", checked)
+
     return web.Response(text=html, content_type='text/html')
 
 async def handle_save_notifications(request):
     user = get_current_user(request)
     if not user: return web.json_response({"error": "Auth required"}, status=401)
+    
     try:
         data = await request.json()
         user_id = user['id']
+        
         if user_id not in ALERTS_CONFIG: ALERTS_CONFIG[user_id] = {}
+        
         for key in ['resources', 'logins', 'bans', 'downtime']:
             if key in data:
                 ALERTS_CONFIG[user_id][key] = bool(data[key])
+        
         save_alerts_config()
         return web.json_response({"status": "ok"})
     except Exception as e:
@@ -160,13 +183,17 @@ async def handle_user_action(request):
     user = get_current_user(request)
     if not user or user['role'] != 'admins': 
         return web.json_response({"error": "Admin required"}, status=403)
+
     try:
         data = await request.json()
         action = data.get('action')
         target_id = int(data.get('id', 0))
+        
         if not target_id: return web.json_response({"error": "Invalid ID"}, status=400)
+        
         if target_id == ADMIN_USER_ID:
             return web.json_response({"error": "Cannot affect Main Admin"}, status=400)
+
         if action == 'delete':
             if target_id in ALLOWED_USERS:
                 del ALLOWED_USERS[target_id]
@@ -175,6 +202,7 @@ async def handle_user_action(request):
                 save_users()
                 save_alerts_config()
                 return web.json_response({"status": "ok"})
+            
         elif action == 'add':
             if target_id in ALLOWED_USERS:
                 return web.json_response({"error": "User exists"}, status=400)
@@ -186,21 +214,26 @@ async def handle_user_action(request):
                 USER_NAMES[str(target_id)] = f"User {target_id}"
             save_users()
             return web.json_response({"status": "ok", "name": USER_NAMES.get(str(target_id))})
+
     except Exception as e:
         return web.json_response({"error": str(e)}, status=500)
+    
     return web.json_response({"error": "Unknown action"}, status=400)
 
 async def handle_node_add(request):
     user = get_current_user(request)
     if not user or user['role'] != 'admins': return web.json_response({"error": "Admin required"}, status=403)
+    
     try:
         data = await request.json()
         name = data.get("name")
         if not name: return web.json_response({"error": "Name required"}, status=400)
+        
         token = create_node(name)
         host = request.headers.get('Host', f'{WEB_SERVER_HOST}:{WEB_SERVER_PORT}')
         proto = "https" if request.headers.get('X-Forwarded-Proto') == "https" else "http"
         cmd = f"bash <(wget -qO- https://raw.githubusercontent.com/jatixs/tgbotvpscp/main/deploy.sh) # Select 8, Url: {proto}://{host}, Token: {token}"
+        
         return web.json_response({"status": "ok", "token": token, "command": cmd})
     except Exception as e:
         return web.json_response({"error": str(e)}, status=500)
@@ -217,11 +250,13 @@ async def handle_login_request(request):
     except: user_id = 0
     if user_id not in ALLOWED_USERS:
         return web.Response(text="User not found", status=403)
+    
     token = secrets.token_urlsafe(32)
     AUTH_TOKENS[token] = {"user_id": user_id, "created_at": time.time()}
     host = request.headers.get('Host', f'{WEB_SERVER_HOST}:{WEB_SERVER_PORT}')
     proto = "https" if request.headers.get('X-Forwarded-Proto') == "https" else "http"
     magic_link = f"{proto}://{host}/api/login/magic?token={token}"
+    
     bot = request.app.get('bot')
     if bot:
         try:
@@ -247,6 +282,7 @@ async def handle_magic_login(request):
     if time.time() - td["created_at"] > LOGIN_TOKEN_TTL: return web.Response(text="Expired", status=403)
     uid = td["user_id"]
     if uid not in ALLOWED_USERS: return web.Response(text="Denied", status=403)
+    
     session = {"id": uid, "first_name": USER_NAMES.get(str(uid), f"ID:{uid}"), "photo_url": "https://cdn-icons-png.flaticon.com/512/149/149071.png", "role": ALLOWED_USERS[uid], "type": "telegram"}
     resp = web.HTTPFound('/')
     resp.set_cookie(COOKIE_NAME, json.dumps(session), max_age=2592000)
@@ -259,7 +295,11 @@ async def handle_logout(request):
 
 async def handle_agent_stats(request):
     if not get_current_user(request): return web.json_response({"error": "Unauthorized"}, status=401)
-    current_stats = {"cpu": 0, "ram": 0, "disk": 0, "ip": AGENT_IP_CACHE}
+    
+    current_stats = {
+        "cpu": 0, "ram": 0, "disk": 0, "ip": AGENT_IP_CACHE
+    }
+    
     if AGENT_HISTORY:
         latest = AGENT_HISTORY[-1]
         current_stats["cpu"] = latest["c"]
@@ -267,7 +307,11 @@ async def handle_agent_stats(request):
         try:
             current_stats["disk"] = psutil.disk_usage(get_host_path('/')).percent
         except: pass
-    return web.json_response({"stats": current_stats, "history": AGENT_HISTORY})
+
+    return web.json_response({
+        "stats": current_stats,
+        "history": AGENT_HISTORY
+    })
 
 async def handle_node_details(request):
     if not get_current_user(request): return web.json_response({"error": "Unauthorized"}, status=401)
@@ -293,9 +337,11 @@ async def handle_heartbeat(request):
     stats = data.get("stats", {})
     results = data.get("results", [])
     bot = request.app.get('bot')
+
     if bot and results:
         for res in results:
             asyncio.create_task(process_node_result_background(bot, res.get("user_id"), res.get("command"), res.get("result"), token, node.get("name", "Node")))
+
     node["is_restarting"] = False 
     update_node_heartbeat(token, request.transport.get_extra_info('peername')[0], stats)
     tasks_to_send = list(node.get("tasks", []))
@@ -306,7 +352,7 @@ async def handle_dashboard(request):
     user = get_current_user(request)
     if not user: raise web.HTTPFound('/login')
     is_admin = user['role'] == 'admins'
-    lang = get_user_lang(user['id']) # Получаем язык пользователя
+    lang = get_user_lang(user['id']) # Получаем язык
 
     now = time.time()
     active_count = 0
@@ -316,6 +362,7 @@ async def handle_dashboard(request):
     for token, node in NODES.items():
         last_seen = node.get("last_seen", 0)
         is_restarting = node.get("is_restarting", False)
+        
         is_online = (now - last_seen < NODE_OFFLINE_TIMEOUT)
         if is_online: active_count += 1
         
@@ -387,7 +434,7 @@ async def handle_dashboard(request):
     web_agent_stats_title = _("web_agent_stats_title", lang)
     
     html = html.replace("{web_agent_running}", web_dashboard_title)
-    html = html.replace("{web_agent_stats_title}", web_agent_stats_title) # Замена плейсхолдера
+    html = html.replace("{web_agent_stats_title}", web_agent_stats_title)
     
     html = html.replace("{user_avatar}", _get_avatar_html(user))
     html = html.replace("{user_name}", user.get('first_name', 'User'))
