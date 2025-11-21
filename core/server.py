@@ -9,18 +9,14 @@ from aiohttp import web
 from aiogram import Bot
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
-# Импорты
 from .nodes_db import get_node_by_token, update_node_heartbeat, create_node, delete_node
-# --- ИЗМЕНЕНО: Добавлен ADMIN_USER_ID в импорт ---
 from .config import WEB_SERVER_HOST, WEB_SERVER_PORT, NODE_OFFLINE_TIMEOUT, BASE_DIR, ADMIN_USER_ID
-# -------------------------------------------------
 from .shared_state import NODES, NODE_TRAFFIC_MONITORS, ALLOWED_USERS, USER_NAMES, AUTH_TOKENS, ALERTS_CONFIG
 from .i18n import STRINGS, get_user_lang, set_user_lang
 from .config import DEFAULT_LANGUAGE
 from .utils import get_country_flag, save_alerts_config
 from .auth import save_users, get_user_name
 
-# --- КОНФИГУРАЦИЯ ---
 COOKIE_NAME = "vps_agent_session"
 LOGIN_TOKEN_TTL = 300 
 WEB_PASSWORD = os.environ.get("WEB_PASSWORD", "admin")
@@ -49,7 +45,6 @@ def get_current_user(request):
         return user_data
     except: return None
 
-# --- ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ---
 async def process_node_result_background(bot, user_id, cmd, text, token, node_name):
     if not user_id or not text: return
     try:
@@ -70,8 +65,6 @@ async def process_node_result_background(bot, user_id, cmd, text, token, node_na
     except Exception as e:
         logging.error(f"Background message send error (User: {user_id}): {e}")
 
-# --- API ROUTES ---
-
 async def handle_get_logs(request):
     user = get_current_user(request)
     if not user or user['role'] != 'admins':
@@ -89,42 +82,32 @@ async def handle_get_logs(request):
     except Exception as e:
         return web.json_response({"error": str(e)}, status=500)
 
-# --- НОВЫЕ ROUTE ДЛЯ НАСТРОЕК ---
-
 async def handle_settings_page(request):
     user = get_current_user(request)
     if not user: raise web.HTTPFound('/login')
     
-    # Загружаем шаблон
     html = load_template("settings.html")
     
-    # Данные пользователя
     user_id = user['id']
     is_admin = user['role'] == 'admins'
     
-    # Настройки уведомлений
     user_alerts = ALERTS_CONFIG.get(user_id, {})
     
-    # Список пользователей (только для админа)
-    users_json = "null" # Инициализируем как null, чтобы JS знал, что это не админ
+    users_json = "null"
     if is_admin:
         users_list = []
         for uid, role in ALLOWED_USERS.items():
-            # --- ИЗМЕНЕНО: Скрываем Главного Админа (Создателя) ---
             if uid == ADMIN_USER_ID:
                 continue
-            # ------------------------------------------------------
             name = USER_NAMES.get(str(uid), f"ID: {uid}")
             users_list.append({"id": uid, "name": name, "role": role})
         users_json = json.dumps(users_list)
 
-    # Заменяем плейсхолдеры
     html = html.replace("{web_title}", "Настройки - VPS Bot")
     html = html.replace("{user_name}", user.get('first_name', 'User'))
     html = html.replace("{user_avatar}", _get_avatar_html(user))
     html = html.replace("{users_data_json}", users_json)
     
-    # Чекбоксы уведомлений
     for alert in ['resources', 'logins', 'bans', 'downtime']:
         checked = "checked" if user_alerts.get(alert, False) else ""
         html = html.replace(f"{{check_{alert}}}", checked)
@@ -141,7 +124,6 @@ async def handle_save_notifications(request):
         
         if user_id not in ALERTS_CONFIG: ALERTS_CONFIG[user_id] = {}
         
-        # Обновляем настройки
         for key in ['resources', 'logins', 'bans', 'downtime']:
             if key in data:
                 ALERTS_CONFIG[user_id][key] = bool(data[key])
@@ -163,10 +145,8 @@ async def handle_user_action(request):
         
         if not target_id: return web.json_response({"error": "Invalid ID"}, status=400)
         
-        # --- ДОП. ЗАЩИТА: Нельзя удалить главного админа через API ---
         if target_id == ADMIN_USER_ID:
             return web.json_response({"error": "Cannot affect Main Admin"}, status=400)
-        # -------------------------------------------------------------
 
         if action == 'delete':
             if target_id in ALLOWED_USERS:
@@ -181,7 +161,6 @@ async def handle_user_action(request):
             if target_id in ALLOWED_USERS:
                 return web.json_response({"error": "User exists"}, status=400)
             ALLOWED_USERS[target_id] = data.get('role', 'users')
-            # Пытаемся получить имя через бота
             bot = request.app.get('bot')
             if bot:
                 await get_user_name(bot, target_id)
@@ -205,7 +184,6 @@ async def handle_node_add(request):
         if not name: return web.json_response({"error": "Name required"}, status=400)
         
         token = create_node(name)
-        # Генерируем команду для установки
         host = request.headers.get('Host', f'{WEB_SERVER_HOST}:{WEB_SERVER_PORT}')
         proto = "https" if request.headers.get('X-Forwarded-Proto') == "https" else "http"
         cmd = f"bash <(wget -qO- https://raw.githubusercontent.com/jatixs/tgbotvpscp/main/deploy.sh) # Select 8, Url: {proto}://{host}, Token: {token}"
@@ -213,8 +191,6 @@ async def handle_node_add(request):
         return web.json_response({"status": "ok", "token": token, "command": cmd})
     except Exception as e:
         return web.json_response({"error": str(e)}, status=500)
-
-# --- СТАНДАРТНЫЕ ROUTE (Login, Dashboard) ---
 
 async def handle_login_page(request):
     if get_current_user(request): raise web.HTTPFound('/')
@@ -290,11 +266,26 @@ async def handle_dashboard(request):
     
     for token, node in NODES.items():
         last_seen = node.get("last_seen", 0)
+        is_restarting = node.get("is_restarting", False)
+        
         is_online = (now - last_seen < NODE_OFFLINE_TIMEOUT)
         if is_online: active_count += 1
-        status_color = "text-green-400" if is_online else "text-red-400"
-        status_text = "ONLINE" if is_online else "OFFLINE"
-        bg_class = "bg-green-500/10 border-green-500/30" if is_online else "bg-red-500/10 border-red-500/30"
+        
+        status_color = "text-green-400"
+        status_text = "ONLINE"
+        bg_class = "bg-green-500/10 border-green-500/30"
+        dot_color = "bg-green-500"
+
+        if is_restarting:
+            status_color = "text-blue-400"
+            status_text = "RESTARTING"
+            bg_class = "bg-blue-500/10 border-blue-500/30"
+            dot_color = "bg-blue-500"
+        elif not is_online:
+            status_color = "text-red-400"
+            status_text = "OFFLINE"
+            bg_class = "bg-red-500/10 border-red-500/30"
+            dot_color = "bg-red-500"
         
         stats = node.get("stats", {})
         details_block = ""
@@ -317,7 +308,7 @@ async def handle_dashboard(request):
         else:
             details_block = '<div class="mt-3 pt-3 border-t border-white/5 text-xs text-gray-500 text-center">Детали скрыты</div>'
             
-        nodes_html += f"""<div class="bg-black/20 hover:bg-black/30 transition rounded-xl p-4 border border-white/5 cursor-pointer hover:scale-[1.01]" onclick="openNodeDetails('{token}')"><div class="flex justify-between items-start"><div><div class="font-bold text-gray-200">{node.get('name','Unknown')}</div><div class="text-[10px] font-mono text-gray-500 mt-1">{token[:8]}...</div></div><div class="px-2 py-1 rounded text-[10px] font-bold {status_color} {bg_class}">{status_text}</div></div>{details_block}</div>"""
+        nodes_html += f"""<div class="bg-black/20 hover:bg-black/30 active:scale-[0.98] transition duration-200 rounded-xl p-4 border border-white/5 cursor-pointer" onclick="openNodeDetails('{token}', '{dot_color}')"><div class="flex justify-between items-start"><div><div class="font-bold text-gray-200">{node.get('name','Unknown')}</div><div class="text-[10px] font-mono text-gray-500 mt-1">{token[:8]}...</div></div><div class="px-2 py-1 rounded text-[10px] font-bold {status_color} {bg_class}">{status_text}</div></div>{details_block}</div>"""
 
     role_badge = '<span class="bg-green-500/20 text-green-400 text-[10px] px-2 py-0.5 rounded border border-green-500/30">ADMIN</span>' if is_admin else '<span class="bg-gray-500/20 text-gray-300 text-[10px] px-2 py-0.5 rounded border border-gray-500/30">USER</span>'
     
@@ -386,14 +377,13 @@ async def start_web_server(bot_instance: Bot):
     if os.path.exists(STATIC_DIR): app.router.add_static('/static', STATIC_DIR)
     
     app.router.add_get('/', handle_dashboard)
-    app.router.add_get('/settings', handle_settings_page) # New page
+    app.router.add_get('/settings', handle_settings_page)
     app.router.add_get('/login', handle_login_page)
     app.router.add_post('/api/login/request', handle_login_request)
     app.router.add_get('/api/login/magic', handle_magic_login)
     app.router.add_post('/api/login/password', handle_login_password)
     app.router.add_post('/logout', handle_logout)
     
-    # API
     app.router.add_post('/api/heartbeat', handle_heartbeat)
     app.router.add_get('/api/node/details', handle_node_details)
     app.router.add_get('/api/logs', handle_get_logs)
