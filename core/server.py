@@ -67,9 +67,7 @@ def get_current_user(request):
     if not cookie: return None
     try:
         user_data = json.loads(cookie)
-        # Если это вход по паролю, доверяем ему как админу
         if user_data.get('type') == 'password': return user_data
-        
         uid = int(user_data.get('id'))
         if uid not in ALLOWED_USERS: return None
         user_data['role'] = ALLOWED_USERS[uid]
@@ -243,7 +241,6 @@ async def handle_settings_page(request):
     html = html.replace("{user_avatar}", _get_avatar_html(user))
     html = html.replace("{users_data_json}", users_json)
     
-    # I18n replacements (omitted for brevity, assume all keys are replaced)
     for key in ["web_settings_page_title", "web_back", "web_notif_section", "notifications_alert_name_res", 
                 "notifications_alert_name_logins", "notifications_alert_name_bans", "notifications_alert_name_downtime",
                 "web_save_btn", "web_users_section", "web_add_user_btn", "web_user_id", "web_user_name", 
@@ -441,24 +438,24 @@ async def handle_reset_request(request):
         try: user_id = int(data.get("user_id", 0))
         except: user_id = 0
         
-        # 1. Проверка: Пользователь должен быть админом, чтобы сбросить пароль
-        if user_id not in ALLOWED_USERS or ALLOWED_USERS[user_id] != 'admins':
+        # Проверка: Пользователь должен быть в списке разрешенных
+        if user_id not in ALLOWED_USERS:
             admin_url = f"https://t.me/{ADMIN_USERNAME}" if ADMIN_USERNAME else f"tg://user?id={ADMIN_USER_ID}"
             return web.json_response({
                 "error": "not_found", 
                 "admin_url": admin_url
             }, status=404)
 
-        # 2. Генерация токена
+        # Генерация токена
         token = secrets.token_urlsafe(32)
         RESET_TOKENS[token] = time.time()
         
-        # 3. Ссылка
+        # Ссылка
         host = request.headers.get('Host', f'{WEB_SERVER_HOST}:{WEB_SERVER_PORT}')
         proto = "https" if request.headers.get('X-Forwarded-Proto') == "https" else "http"
         reset_link = f"{proto}://{host}/reset_password?token={token}"
         
-        # 4. Отправка через бота
+        # Отправка через бота
         bot = request.app.get('bot')
         if bot:
             try:
@@ -564,7 +561,6 @@ async def handle_login_password(request):
     password = data.get("password")
     
     if check_web_password(password):
-        # Вход по паролю дает права ID 0 (System Admin)
         session = {"id": 0, "first_name": "Administrator", "username": "admin", "photo_url": AGENT_FLAG, "role": "admins", "type": "password"}
         resp = web.HTTPFound('/')
         resp.set_cookie(COOKIE_NAME, json.dumps(session), max_age=604800)
