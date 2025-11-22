@@ -302,6 +302,10 @@ STRINGS = {
         "web_access_denied": "Доступ запрещен",
         "web_error": "Ошибка: {error}",
         "web_conn_error": "Ошибка соединения: {error}"
+        "web_rx": "↓ Принято",
+        "web_footer_endpoint": "Эндпоинт",
+        "web_footer_powered": "Работает на",
+        "web_tx": "↑ Отдано",
     },
     'en': {
         "btn_back": "🔙 Back",
@@ -600,6 +604,11 @@ STRINGS = {
         "web_access_denied": "Access denied",
         "web_error": "Error: {error}",
         "web_conn_error": "Connection error: {error}"
+        "web_footer_endpoint": "Endpoint",
+        "web_footer_powered": "Powered by",
+        "web_rx": "↓ RX",
+        "web_tx": "↑ TX",
+        
     }
 }
 
