@@ -1,4 +1,3 @@
-# /opt-tg-bot/modules/nodes.py
 import time
 import asyncio
 import logging
@@ -17,9 +16,6 @@ from core.messaging import delete_previous_message, send_alert
 from core.shared_state import LAST_MESSAGE_IDS, NODES, NODE_TRAFFIC_MONITORS
 from core.nodes_db import create_node, delete_node
 from core.keyboards import get_nodes_list_keyboard, get_node_management_keyboard, get_nodes_delete_keyboard, get_back_keyboard
-# --- ИЗМЕНЕНО: Добавлены пороги ресурсов ---
-from core.config import NODE_OFFLINE_TIMEOUT, TRAFFIC_INTERVAL, CPU_THRESHOLD, RAM_THRESHOLD, DISK_THRESHOLD, RESOURCE_ALERT_COOLDOWN
-# -------------------------------------------
 
 BUTTON_KEY = "btn_nodes"
 
@@ -37,10 +33,7 @@ def register_handlers(dp: Dispatcher):
     dp.callback_query(F.data == "node_delete_menu")(cq_node_delete_menu)
     dp.callback_query(F.data.startswith("node_delete_confirm_"))(cq_node_delete_confirm)
     dp.callback_query(F.data.startswith("node_select_"))(cq_node_select)
-    
-    # Обработчик для остановки трафика
     dp.callback_query(F.data.startswith("node_stop_traffic_"))(cq_node_stop_traffic)
-    
     dp.callback_query(F.data.startswith("node_cmd_"))(cq_node_command)
 
 def start_background_tasks(bot: Bot) -> list[asyncio.Task]:
@@ -80,7 +73,7 @@ def _prepare_nodes_data():
         last_seen = node.get("last_seen", 0)
         is_restarting = node.get("is_restarting", False)
         if is_restarting: icon = "🔵"
-        elif now - last_seen < NODE_OFFLINE_TIMEOUT: icon = "🟢"
+        elif now - last_seen < config.NODE_OFFLINE_TIMEOUT: icon = "🟢"
         else: icon = "🔴"
         result[token] = {"name": node.get("name", "Unknown"), "status_icon": icon}
     return result
@@ -99,7 +92,7 @@ async def cq_node_select(callback: types.CallbackQuery):
     if is_restarting:
         await callback.answer(_("node_restarting_alert", lang, name=node.get("name")), show_alert=True)
         return
-    if now - last_seen >= NODE_OFFLINE_TIMEOUT:
+    if now - last_seen >= config.NODE_OFFLINE_TIMEOUT:
         stats = node.get("stats", {})
         fmt_time = datetime.fromtimestamp(last_seen).strftime('%Y-%m-%d %H:%M:%S') if last_seen > 0 else "Never"
         text = _("node_details_offline", lang, name=node.get("name"), last_seen=fmt_time, ip=node.get("ip", "?"), cpu=stats.get("cpu", "?"), ram=stats.get("ram", "?"), disk=stats.get("disk", "?"))
@@ -141,30 +134,22 @@ async def cq_node_delete_confirm(callback: types.CallbackQuery):
 async def cq_node_command(callback: types.CallbackQuery):
     user_id = callback.from_user.id
     lang = get_user_lang(user_id)
-    data = callback.data[9:] # remove node_cmd_
+    data = callback.data[9:]
     token = data[:32]
-    cmd = data[33:] # _command
+    cmd = data[33:]
     
     node = NODES.get(token)
     if not node: await callback.answer("Error", show_alert=True); return
     if cmd == "reboot": node["is_restarting"] = True
     
-    # --- ЛОГИКА ТРАФИКА ---
     if cmd == "traffic":
-        # Если это трафик - запускаем режим мониторинга
-        # 1. Отправляем сообщение-заглушку с кнопкой "Стоп"
         stop_kb = InlineKeyboardMarkup(inline_keyboard=[
             [InlineKeyboardButton(text=_("btn_stop_traffic", lang), callback_data=f"node_stop_traffic_{token}")]
         ])
         
-        # Проверяем, не запущен ли уже монитор
         if user_id in NODE_TRAFFIC_MONITORS:
-            # Если запущен для этой же ноды - просто обновим сообщение
-            if NODE_TRAFFIC_MONITORS[user_id]["token"] == token:
-                 pass # Уже работает
-            else:
-                 # Если для другой - остановим старый
-                 del NODE_TRAFFIC_MONITORS[user_id]
+            if NODE_TRAFFIC_MONITORS[user_id]["token"] == token: pass
+            else: del NODE_TRAFFIC_MONITORS[user_id]
 
         sent_msg = await callback.message.answer(
             _("traffic_start", lang, interval=config.TRAFFIC_INTERVAL), 
@@ -172,20 +157,17 @@ async def cq_node_command(callback: types.CallbackQuery):
             parse_mode="HTML"
         )
         
-        # Сохраняем состояние
         NODE_TRAFFIC_MONITORS[user_id] = {
             "token": token,
             "message_id": sent_msg.message_id,
             "last_update": 0
         }
         
-        # Отправляем первую команду немедленно
         if "tasks" not in node: node["tasks"] = []
         node["tasks"].append({"command": cmd, "user_id": user_id})
         
         await callback.answer()
         return
-    # ----------------------
 
     if "tasks" not in node: node["tasks"] = []
     node["tasks"].append({"command": cmd, "user_id": user_id})
@@ -206,69 +188,47 @@ async def cq_node_stop_traffic(callback: types.CallbackQuery):
     user_id = callback.from_user.id
     lang = get_user_lang(user_id)
     
-    # Получаем токен и имя ноды для уведомления
     token = callback.data.replace("node_stop_traffic_", "")
     node = NODES.get(token)
     node_name = node.get("name", "Unknown") if node else "Unknown"
     
-    # Текст уведомления с именем ноды
     alert_text = _("node_traffic_stopped_alert", lang, name=node_name)
 
     if user_id in NODE_TRAFFIC_MONITORS:
         del NODE_TRAFFIC_MONITORS[user_id]
         try:
             await callback.message.delete()
-            # Возвращаем меню управления этой нодой, если токен есть в callback
             if node:
                 stats = node.get("stats", {})
                 text = _("node_management_menu", lang, name=node.get("name"), ip=node.get("ip", "?"), uptime=stats.get("uptime", "?"))
                 keyboard = get_node_management_keyboard(token, lang)
                 await callback.message.answer(text, reply_markup=keyboard, parse_mode="HTML")
-
         except TelegramBadRequest:
             pass
     
-    # Отправляем "тостер" уведомление (show_alert=False)
     await callback.answer(alert_text, show_alert=False)
 
 async def node_traffic_scheduler(bot: Bot):
-    """Периодически отправляет команды трафика на ноды для активных мониторов."""
     while True:
         try:
             await asyncio.sleep(config.TRAFFIC_INTERVAL)
-            
-            if not NODE_TRAFFIC_MONITORS:
-                continue
-
-            # Копируем, чтобы не сломать итерацию при удалении
+            if not NODE_TRAFFIC_MONITORS: continue
             for user_id, monitor_data in list(NODE_TRAFFIC_MONITORS.items()):
                 token = monitor_data.get("token")
                 node = NODES.get(token)
-                
-                # Если нода удалена или не существует - убираем монитор
                 if not node:
-                    try:
-                        del NODE_TRAFFIC_MONITORS[user_id]
+                    try: del NODE_TRAFFIC_MONITORS[user_id]
                     except KeyError: pass
                     continue
-                
-                # Добавляем задачу в очередь ноды
                 if "tasks" not in node: node["tasks"] = []
                 node["tasks"].append({"command": "traffic", "user_id": user_id})
-                
         except Exception as e:
             logging.error(f"Error in node_traffic_scheduler: {e}")
             await asyncio.sleep(5)
 
 async def nodes_monitor(bot: Bot):
-    """
-    Следит за статусом нод:
-    1. Даунтайм (Offline) -> алерт 'downtime'
-    2. Ресурсы (CPU/RAM/Disk) -> алерт 'resources'
-    """
     logging.info("Nodes Monitor started.")
     await asyncio.sleep(10) 
-    
     while True:
         try:
             now = time.time()
@@ -277,15 +237,13 @@ async def nodes_monitor(bot: Bot):
                 last_seen = node.get("last_seen", 0)
                 is_restarting = node.get("is_restarting", False)
                 
-                # --- ПРОВЕРКА ДАУНТАЙМА ---
-                is_dead = (now - last_seen >= NODE_OFFLINE_TIMEOUT) and (last_seen > 0)
+                is_dead = (now - last_seen >= config.NODE_OFFLINE_TIMEOUT) and (last_seen > 0)
                 was_dead = node.get("is_offline_alert_sent", False)
                 
                 if is_dead and not was_dead and not is_restarting:
                     def msg_down_gen(lang):
                         fmt_time = datetime.fromtimestamp(last_seen).strftime('%H:%M:%S')
                         return _("alert_node_down", lang, name=name, last_seen=fmt_time)
-                    # Отправляем подписчикам 'downtime'
                     await send_alert(bot, msg_down_gen, "downtime")
                     node["is_offline_alert_sent"] = True
                     logging.warning(f"Node {name} is DOWN. Alert sent.")
@@ -297,13 +255,10 @@ async def nodes_monitor(bot: Bot):
                     node["is_offline_alert_sent"] = False
                     logging.info(f"Node {name} recovered. Alert sent.")
                     
-                if not is_dead and is_restarting:
-                     node["is_restarting"] = False
+                if not is_dead and is_restarting: node["is_restarting"] = False
 
-                # --- ПРОВЕРКА РЕСУРСОВ (только если нода онлайн) ---
                 if not is_dead and last_seen > 0:
                     stats = node.get("stats", {})
-                    # Инициализируем состояние алертов, если его нет
                     if "alerts" not in node: 
                         node["alerts"] = {
                             "cpu": {"active": False, "last_time": 0},
@@ -311,45 +266,32 @@ async def nodes_monitor(bot: Bot):
                             "disk": {"active": False, "last_time": 0}
                         }
 
-                    # Функция для обработки конкретного ресурса
                     async def check_resource(metric_name, current_val, threshold, alert_key_high, alert_key_normal):
                         state = node["alerts"].get(metric_name, {"active": False, "last_time": 0})
-                        
-                        # Если превышение
                         if current_val >= threshold:
-                            # Шлем, если не активен ИЛИ прошел кулдаун
-                            if not state["active"] or (now - state["last_time"] > RESOURCE_ALERT_COOLDOWN):
+                            if not state["active"] or (now - state["last_time"] > config.RESOURCE_ALERT_COOLDOWN):
                                 def msg_high_gen(lang):
                                     return _(alert_key_high, lang, name=name, usage=current_val, threshold=threshold)
-                                
-                                # Используем тип 'resources' (как у основного бота)
                                 await send_alert(bot, msg_high_gen, "resources")
                                 state["active"] = True
                                 state["last_time"] = now
                                 logging.warning(f"Node {name} high {metric_name}: {current_val}%")
-                                
-                        # Если нормализация
                         elif current_val < threshold and state["active"]:
                             def msg_norm_gen(lang):
                                 return _(alert_key_normal, lang, name=name, usage=current_val)
-                            
                             await send_alert(bot, msg_norm_gen, "resources")
                             state["active"] = False
                             state["last_time"] = 0
                             logging.info(f"Node {name} {metric_name} normalized.")
-                        
                         node["alerts"][metric_name] = state
 
-                    # Проверяем каждый ресурс
                     cpu_val = stats.get("cpu", 0)
                     ram_val = stats.get("ram", 0)
                     disk_val = stats.get("disk", 0)
 
-                    await check_resource("cpu", cpu_val, CPU_THRESHOLD, "alert_node_cpu_high", "alert_node_cpu_normal")
-                    await check_resource("ram", ram_val, RAM_THRESHOLD, "alert_node_ram_high", "alert_node_ram_normal")
-                    await check_resource("disk", disk_val, DISK_THRESHOLD, "alert_node_disk_high", "alert_node_disk_normal")
-
+                    await check_resource("cpu", cpu_val, config.CPU_THRESHOLD, "alert_node_cpu_high", "alert_node_cpu_normal")
+                    await check_resource("ram", ram_val, config.RAM_THRESHOLD, "alert_node_ram_high", "alert_node_ram_normal")
+                    await check_resource("disk", disk_val, config.DISK_THRESHOLD, "alert_node_disk_high", "alert_node_disk_normal")
         except Exception as e:
             logging.error(f"Error in nodes_monitor: {e}", exc_info=True)
-        
         await asyncio.sleep(20)

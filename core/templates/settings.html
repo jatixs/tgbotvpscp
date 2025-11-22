@@ -60,28 +60,110 @@
     <main class="max-w-4xl mx-auto px-4 mt-6 sm:mt-8 relative z-10">
 
         <div class="bg-white/60 dark:bg-white/5 backdrop-blur-md border border-white/40 dark:border-white/10 rounded-2xl p-6 mb-6 shadow-lg dark:shadow-none">
+            <h2 class="text-xl font-bold text-gray-900 dark:text-white mb-6 flex items-center gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-blue-500 dark:text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+                {web_sys_settings_section}
+            </h2>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-8 mb-6">
+                <div>
+                    <h3 class="text-sm font-bold text-gray-500 dark:text-gray-400 uppercase mb-4 tracking-wider">{web_thresholds_title}</h3>
+                    
+                    <div class="space-y-5">
+                        <div>
+                            <div class="flex justify-between text-sm mb-1">
+                                <span class="text-gray-700 dark:text-gray-300">{web_cpu_threshold}</span>
+                                <span class="font-mono text-blue-600 dark:text-blue-400 font-bold" id="val_cpu_display">{val_cpu}%</span>
+                            </div>
+                            <input type="range" id="conf_cpu" min="50" max="99" value="{val_cpu}" class="w-full h-2 bg-gray-200 dark:bg-gray-700 rounded-lg appearance-none cursor-pointer accent-blue-500" oninput="document.getElementById('val_cpu_display').innerText = this.value + '%'">
+                        </div>
+                        
+                        <div>
+                            <div class="flex justify-between text-sm mb-1">
+                                <span class="text-gray-700 dark:text-gray-300">{web_ram_threshold}</span>
+                                <span class="font-mono text-purple-600 dark:text-purple-400 font-bold" id="val_ram_display">{val_ram}%</span>
+                            </div>
+                            <input type="range" id="conf_ram" min="50" max="99" value="{val_ram}" class="w-full h-2 bg-gray-200 dark:bg-gray-700 rounded-lg appearance-none cursor-pointer accent-purple-500" oninput="document.getElementById('val_ram_display').innerText = this.value + '%'">
+                        </div>
+
+                        <div>
+                            <div class="flex justify-between text-sm mb-1">
+                                <span class="text-gray-700 dark:text-gray-300">{web_disk_threshold}</span>
+                                <span class="font-mono text-green-600 dark:text-green-400 font-bold" id="val_disk_display">{val_disk}%</span>
+                            </div>
+                            <input type="range" id="conf_disk" min="50" max="99" value="{val_disk}" class="w-full h-2 bg-gray-200 dark:bg-gray-700 rounded-lg appearance-none cursor-pointer accent-green-500" oninput="document.getElementById('val_disk_display').innerText = this.value + '%'">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="flex flex-col justify-between">
+                    <div>
+                        <h3 class="text-sm font-bold text-gray-500 dark:text-gray-400 uppercase mb-4 tracking-wider">{web_intervals_title}</h3>
+                        <div class="space-y-3">
+                            <div>
+                                <label class="block text-xs text-gray-600 dark:text-gray-400 mb-1">{web_traffic_interval}</label>
+                                <input type="number" id="conf_traffic" value="{val_traffic}" class="w-full bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 text-gray-900 dark:text-white">
+                            </div>
+                            <div>
+                                <label class="block text-xs text-gray-600 dark:text-gray-400 mb-1">{web_node_timeout}</label>
+                                <input type="number" id="conf_timeout" value="{val_timeout}" class="w-full bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 text-gray-900 dark:text-white">
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="mt-6 pt-6 border-t border-gray-200 dark:border-white/5">
+                         <h3 class="text-sm font-bold text-gray-500 dark:text-gray-400 uppercase mb-3 tracking-wider">{web_logs_mgmt_title}</h3>
+                         <button onclick="clearLogs()" id="clearLogsBtn" class="w-full px-4 py-2 bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 text-red-600 dark:text-red-400 rounded-lg text-sm transition flex items-center justify-center gap-2">
+                             <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                             {web_clear_logs_btn}
+                         </button>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="flex justify-end">
+                <button onclick="saveSystemConfig()" id="saveSysBtn" class="px-6 py-2 bg-blue-600 hover:bg-blue-500 rounded-lg font-bold text-white transition shadow-lg shadow-blue-900/20 transform active:scale-95">{web_save_btn}</button>
+            </div>
+        </div>
+
+        <div class="bg-white/60 dark:bg-white/5 backdrop-blur-md border border-white/40 dark:border-white/10 rounded-2xl p-6 mb-6 shadow-lg dark:shadow-none">
             <h2 class="text-xl font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-yellow-500 dark:text-yellow-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" /></svg>
                 {web_notif_section}
             </h2>
             
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <label class="flex items-center justify-between bg-gray-50 dark:bg-black/20 p-4 rounded-xl cursor-pointer hover:bg-gray-100 dark:hover:bg-black/30 active:scale-[0.98] active:bg-gray-200 dark:active:bg-white/10 transition transform duration-100 border border-gray-200 dark:border-white/5">
-                    <span class="text-sm font-medium">{notifications_alert_name_res}</span>
-                    <input type="checkbox" id="alert_resources" class="w-5 h-5 rounded bg-gray-200 dark:bg-gray-700 border-gray-300 dark:border-gray-600 text-green-500 focus:ring-green-500" {check_resources}>
-                </label>
-                <label class="flex items-center justify-between bg-gray-50 dark:bg-black/20 p-4 rounded-xl cursor-pointer hover:bg-gray-100 dark:hover:bg-black/30 active:scale-[0.98] active:bg-gray-200 dark:active:bg-white/10 transition transform duration-100 border border-gray-200 dark:border-white/5">
-                    <span class="text-sm font-medium">{notifications_alert_name_logins}</span>
-                    <input type="checkbox" id="alert_logins" class="w-5 h-5 rounded bg-gray-200 dark:bg-gray-700 border-gray-300 dark:border-gray-600 text-green-500 focus:ring-green-500" {check_logins}>
-                </label>
-                <label class="flex items-center justify-between bg-gray-50 dark:bg-black/20 p-4 rounded-xl cursor-pointer hover:bg-gray-100 dark:hover:bg-black/30 active:scale-[0.98] active:bg-gray-200 dark:active:bg-white/10 transition transform duration-100 border border-gray-200 dark:border-white/5">
-                    <span class="text-sm font-medium">{notifications_alert_name_bans}</span>
-                    <input type="checkbox" id="alert_bans" class="w-5 h-5 rounded bg-gray-200 dark:bg-gray-700 border-gray-300 dark:border-gray-600 text-green-500 focus:ring-green-500" {check_bans}>
-                </label>
-                <label class="flex items-center justify-between bg-gray-50 dark:bg-black/20 p-4 rounded-xl cursor-pointer hover:bg-gray-100 dark:hover:bg-black/30 active:scale-[0.98] active:bg-gray-200 dark:active:bg-white/10 transition transform duration-100 border border-gray-200 dark:border-white/5">
-                    <span class="text-sm font-medium">{notifications_alert_name_downtime}</span>
-                    <input type="checkbox" id="alert_downtime" class="w-5 h-5 rounded bg-gray-200 dark:bg-gray-700 border-gray-300 dark:border-gray-600 text-green-500 focus:ring-green-500" {check_downtime}>
-                </label>
+                <div class="flex items-center justify-between bg-gray-50 dark:bg-black/20 p-4 rounded-xl hover:bg-gray-100 dark:hover:bg-black/30 transition border border-gray-200 dark:border-white/5">
+                    <span class="text-sm font-medium text-gray-900 dark:text-white">{notifications_alert_name_res}</span>
+                    <label class="relative inline-flex items-center cursor-pointer">
+                        <input type="checkbox" id="alert_resources" class="sr-only peer" {check_resources}>
+                        <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-green-300 dark:peer-focus:ring-green-800 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-green-500"></div>
+                    </label>
+                </div>
+                
+                <div class="flex items-center justify-between bg-gray-50 dark:bg-black/20 p-4 rounded-xl hover:bg-gray-100 dark:hover:bg-black/30 transition border border-gray-200 dark:border-white/5">
+                    <span class="text-sm font-medium text-gray-900 dark:text-white">{notifications_alert_name_logins}</span>
+                    <label class="relative inline-flex items-center cursor-pointer">
+                        <input type="checkbox" id="alert_logins" class="sr-only peer" {check_logins}>
+                        <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-green-300 dark:peer-focus:ring-green-800 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-green-500"></div>
+                    </label>
+                </div>
+
+                <div class="flex items-center justify-between bg-gray-50 dark:bg-black/20 p-4 rounded-xl hover:bg-gray-100 dark:hover:bg-black/30 transition border border-gray-200 dark:border-white/5">
+                    <span class="text-sm font-medium text-gray-900 dark:text-white">{notifications_alert_name_bans}</span>
+                    <label class="relative inline-flex items-center cursor-pointer">
+                        <input type="checkbox" id="alert_bans" class="sr-only peer" {check_bans}>
+                        <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-green-300 dark:peer-focus:ring-green-800 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-green-500"></div>
+                    </label>
+                </div>
+
+                <div class="flex items-center justify-between bg-gray-50 dark:bg-black/20 p-4 rounded-xl hover:bg-gray-100 dark:hover:bg-black/30 transition border border-gray-200 dark:border-white/5">
+                    <span class="text-sm font-medium text-gray-900 dark:text-white">{notifications_alert_name_downtime}</span>
+                    <label class="relative inline-flex items-center cursor-pointer">
+                        <input type="checkbox" id="alert_downtime" class="sr-only peer" {check_downtime}>
+                        <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-green-300 dark:peer-focus:ring-green-800 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-green-500"></div>
+                    </label>
+                </div>
             </div>
             <div class="mt-4 flex justify-end">
                 <button onclick="saveNotifications()" id="saveNotifBtn" class="px-6 py-2 bg-green-600 hover:bg-green-500 rounded-lg font-bold text-white transition shadow-lg shadow-green-900/20 transform active:scale-95">{web_save_btn}</button>

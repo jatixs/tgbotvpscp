@@ -325,6 +325,18 @@ STRINGS = {
         "web_node_name_placeholder": "Имя сервера",
         "web_node_token": "Токен (сохраните его):",
         "web_node_cmd": "Команда установки:",
+        "web_sys_settings_section": "Системные настройки",
+        "web_thresholds_title": "Пороги уведомлений (%)",
+        "web_intervals_title": "Интервалы (сек)",
+        "web_logs_mgmt_title": "Управление логами",
+        "web_cpu_threshold": "Лимит CPU",
+        "web_ram_threshold": "Лимит RAM",
+        "web_disk_threshold": "Лимит Disk",
+        "web_traffic_interval": "Обновление Трафика",
+        "web_node_timeout": "Таймаут Ноды (Offline)",
+        "web_clear_logs_btn": "🗑 Очистить логи",
+        "web_clear_logs_confirm": "Вы уверены? Это удалит все файлы логов бота и watchdog.",
+        "web_logs_cleared": "Логи успешно очищены.",
         "web_no_users": "Нет дополнительных пользователей"
     },
     'en': {
@@ -647,6 +659,18 @@ STRINGS = {
         "web_node_name_placeholder": "Server Name",
         "web_node_token": "Token (save it):",
         "web_node_cmd": "Install command:",
+        "web_sys_settings_section": "System Settings",
+        "web_thresholds_title": "Alert Thresholds (%)",
+        "web_intervals_title": "Intervals (sec)",
+        "web_logs_mgmt_title": "Log Management",
+        "web_cpu_threshold": "CPU Limit",
+        "web_ram_threshold": "RAM Limit",
+        "web_disk_threshold": "Disk Limit",
+        "web_traffic_interval": "Traffic Update",
+        "web_node_timeout": "Node Timeout (Offline)",
+        "web_clear_logs_btn": "🗑 Clear Logs",
+        "web_clear_logs_confirm": "Are you sure? This will delete all bot and watchdog logs.",
+        "web_logs_cleared": "Logs cleared successfully.",
         "web_no_users": "No additional users"
     }
 }
