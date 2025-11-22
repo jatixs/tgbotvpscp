@@ -19,11 +19,14 @@ from core.keyboards import get_nodes_list_keyboard, get_node_management_keyboard
 
 BUTTON_KEY = "btn_nodes"
 
+
 class AddNodeStates(StatesGroup):
     waiting_for_name = State()
 
+
 def get_button() -> KeyboardButton:
     return KeyboardButton(text=_(BUTTON_KEY, config.DEFAULT_LANGUAGE))
+
 
 def register_handlers(dp: Dispatcher):
     dp.message(I18nFilter(BUTTON_KEY))(nodes_handler)
@@ -31,15 +34,21 @@ def register_handlers(dp: Dispatcher):
     dp.callback_query(F.data == "node_add_new")(cq_add_node_start)
     dp.message(StateFilter(AddNodeStates.waiting_for_name))(process_node_name)
     dp.callback_query(F.data == "node_delete_menu")(cq_node_delete_menu)
-    dp.callback_query(F.data.startswith("node_delete_confirm_"))(cq_node_delete_confirm)
+    dp.callback_query(F.data.startswith("node_delete_confirm_"))(
+        cq_node_delete_confirm)
     dp.callback_query(F.data.startswith("node_select_"))(cq_node_select)
-    dp.callback_query(F.data.startswith("node_stop_traffic_"))(cq_node_stop_traffic)
+    dp.callback_query(F.data.startswith(
+        "node_stop_traffic_"))(cq_node_stop_traffic)
     dp.callback_query(F.data.startswith("node_cmd_"))(cq_node_command)
+
 
 def start_background_tasks(bot: Bot) -> list[asyncio.Task]:
     task_monitor = asyncio.create_task(nodes_monitor(bot), name="NodesMonitor")
-    task_traffic = asyncio.create_task(node_traffic_scheduler(bot), name="NodesTrafficScheduler")
+    task_traffic = asyncio.create_task(
+        node_traffic_scheduler(bot),
+        name="NodesTrafficScheduler")
     return [task_monitor, task_traffic]
+
 
 async def nodes_handler(message: types.Message):
     user_id = message.from_user.id
@@ -56,6 +65,7 @@ async def nodes_handler(message: types.Message):
     sent_message = await message.answer(_("nodes_menu_header", lang), reply_markup=keyboard, parse_mode="HTML")
     LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = sent_message.message_id
 
+
 async def cq_nodes_list_refresh(callback: types.CallbackQuery):
     user_id = callback.from_user.id
     lang = get_user_lang(user_id)
@@ -63,8 +73,10 @@ async def cq_nodes_list_refresh(callback: types.CallbackQuery):
     keyboard = get_nodes_list_keyboard(prepared_nodes, lang)
     try:
         await callback.message.edit_text(_("nodes_menu_header", lang), reply_markup=keyboard, parse_mode="HTML")
-    except Exception: pass
+    except Exception:
+        pass
     await callback.answer()
+
 
 def _prepare_nodes_data():
     result = {}
@@ -72,18 +84,28 @@ def _prepare_nodes_data():
     for token, node in NODES.items():
         last_seen = node.get("last_seen", 0)
         is_restarting = node.get("is_restarting", False)
-        if is_restarting: icon = "🔵"
-        elif now - last_seen < config.NODE_OFFLINE_TIMEOUT: icon = "🟢"
-        else: icon = "🔴"
-        result[token] = {"name": node.get("name", "Unknown"), "status_icon": icon}
+        if is_restarting:
+            icon = "🔵"
+        elif now - last_seen < config.NODE_OFFLINE_TIMEOUT:
+            icon = "🟢"
+        else:
+            icon = "🔴"
+        result[token] = {
+            "name": node.get(
+                "name",
+                "Unknown"),
+            "status_icon": icon}
     return result
+
 
 async def cq_node_select(callback: types.CallbackQuery):
     user_id = callback.from_user.id
     lang = get_user_lang(user_id)
     token = callback.data.split("_", 2)[2]
     node = NODES.get(token)
-    if not node: await callback.answer("Node not found", show_alert=True); return
+    if not node:
+        await callback.answer("Node not found", show_alert=True)
+        return
 
     now = time.time()
     last_seen = node.get("last_seen", 0)
@@ -94,21 +116,38 @@ async def cq_node_select(callback: types.CallbackQuery):
         return
     if now - last_seen >= config.NODE_OFFLINE_TIMEOUT:
         stats = node.get("stats", {})
-        fmt_time = datetime.fromtimestamp(last_seen).strftime('%Y-%m-%d %H:%M:%S') if last_seen > 0 else "Never"
-        text = _("node_details_offline", lang, name=node.get("name"), last_seen=fmt_time, ip=node.get("ip", "?"), cpu=stats.get("cpu", "?"), ram=stats.get("ram", "?"), disk=stats.get("disk", "?"))
+        fmt_time = datetime.fromtimestamp(last_seen).strftime(
+            '%Y-%m-%d %H:%M:%S') if last_seen > 0 else "Never"
+        text = _(
+            "node_details_offline", lang, name=node.get("name"), last_seen=fmt_time, ip=node.get(
+                "ip", "?"), cpu=stats.get(
+                "cpu", "?"), ram=stats.get(
+                "ram", "?"), disk=stats.get(
+                    "disk", "?"))
         await callback.message.edit_text(text, reply_markup=get_back_keyboard(lang, "nodes_list_refresh"), parse_mode="HTML")
         return
 
     stats = node.get("stats", {})
-    text = _("node_management_menu", lang, name=node.get("name"), ip=node.get("ip", "?"), uptime=stats.get("uptime", "?"))
+    text = _(
+        "node_management_menu",
+        lang,
+        name=node.get("name"),
+        ip=node.get(
+            "ip",
+            "?"),
+        uptime=stats.get(
+            "uptime",
+            "?"))
     keyboard = get_node_management_keyboard(token, lang)
     await callback.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
+
 
 async def cq_add_node_start(callback: types.CallbackQuery, state: FSMContext):
     lang = get_user_lang(callback.from_user.id)
     await callback.message.edit_text("Введите имя новой ноды:", reply_markup=get_back_keyboard(lang, "nodes_list_refresh"))
     await state.set_state(AddNodeStates.waiting_for_name)
     await callback.answer()
+
 
 async def process_node_name(message: types.Message, state: FSMContext):
     lang = get_user_lang(message.from_user.id)
@@ -117,11 +156,13 @@ async def process_node_name(message: types.Message, state: FSMContext):
     await message.answer(_("node_add_success_token", lang, name=name, token=token), parse_mode="HTML")
     await state.clear()
 
+
 async def cq_node_delete_menu(callback: types.CallbackQuery):
     lang = get_user_lang(callback.from_user.id)
     keyboard = get_nodes_delete_keyboard(_prepare_nodes_data(), lang)
     await callback.message.edit_text(_("node_delete_select", lang), reply_markup=keyboard, parse_mode="HTML")
     await callback.answer()
+
 
 async def cq_node_delete_confirm(callback: types.CallbackQuery):
     lang = get_user_lang(callback.from_user.id)
@@ -131,47 +172,54 @@ async def cq_node_delete_confirm(callback: types.CallbackQuery):
         await callback.answer(_("node_deleted", lang, name="Node"), show_alert=False)
     await cq_node_delete_menu(callback)
 
+
 async def cq_node_command(callback: types.CallbackQuery):
     user_id = callback.from_user.id
     lang = get_user_lang(user_id)
     data = callback.data[9:]
     token = data[:32]
     cmd = data[33:]
-    
+
     node = NODES.get(token)
-    if not node: await callback.answer("Error", show_alert=True); return
-    if cmd == "reboot": node["is_restarting"] = True
-    
+    if not node:
+        await callback.answer("Error", show_alert=True)
+        return
+    if cmd == "reboot":
+        node["is_restarting"] = True
+
     if cmd == "traffic":
-        stop_kb = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text=_("btn_stop_traffic", lang), callback_data=f"node_stop_traffic_{token}")]
-        ])
-        
+        stop_kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text=_(
+            "btn_stop_traffic", lang), callback_data=f"node_stop_traffic_{token}")]])
+
         if user_id in NODE_TRAFFIC_MONITORS:
-            if NODE_TRAFFIC_MONITORS[user_id]["token"] == token: pass
-            else: del NODE_TRAFFIC_MONITORS[user_id]
+            if NODE_TRAFFIC_MONITORS[user_id]["token"] == token:
+                pass
+            else:
+                del NODE_TRAFFIC_MONITORS[user_id]
 
         sent_msg = await callback.message.answer(
-            _("traffic_start", lang, interval=config.TRAFFIC_INTERVAL), 
-            reply_markup=stop_kb, 
+            _("traffic_start", lang, interval=config.TRAFFIC_INTERVAL),
+            reply_markup=stop_kb,
             parse_mode="HTML"
         )
-        
+
         NODE_TRAFFIC_MONITORS[user_id] = {
             "token": token,
             "message_id": sent_msg.message_id,
             "last_update": 0
         }
-        
-        if "tasks" not in node: node["tasks"] = []
+
+        if "tasks" not in node:
+            node["tasks"] = []
         node["tasks"].append({"command": cmd, "user_id": user_id})
-        
+
         await callback.answer()
         return
 
-    if "tasks" not in node: node["tasks"] = []
+    if "tasks" not in node:
+        node["tasks"] = []
     node["tasks"].append({"command": cmd, "user_id": user_id})
-    
+
     cmd_map = {
         "selftest": "btn_selftest",
         "uptime": "btn_uptime",
@@ -184,14 +232,15 @@ async def cq_node_command(callback: types.CallbackQuery):
     cmd_name = _(btn_key, lang) if btn_key else cmd
     await callback.answer(_("node_cmd_sent", lang, cmd=cmd_name, name=node.get("name")), show_alert=False)
 
+
 async def cq_node_stop_traffic(callback: types.CallbackQuery):
     user_id = callback.from_user.id
     lang = get_user_lang(user_id)
-    
+
     token = callback.data.replace("node_stop_traffic_", "")
     node = NODES.get(token)
     node_name = node.get("name", "Unknown") if node else "Unknown"
-    
+
     alert_text = _("node_traffic_stopped_alert", lang, name=node_name)
 
     if user_id in NODE_TRAFFIC_MONITORS:
@@ -200,35 +249,45 @@ async def cq_node_stop_traffic(callback: types.CallbackQuery):
             await callback.message.delete()
             if node:
                 stats = node.get("stats", {})
-                text = _("node_management_menu", lang, name=node.get("name"), ip=node.get("ip", "?"), uptime=stats.get("uptime", "?"))
+                text = _(
+                    "node_management_menu", lang, name=node.get("name"), ip=node.get(
+                        "ip", "?"), uptime=stats.get(
+                        "uptime", "?"))
                 keyboard = get_node_management_keyboard(token, lang)
                 await callback.message.answer(text, reply_markup=keyboard, parse_mode="HTML")
         except TelegramBadRequest:
             pass
-    
+
     await callback.answer(alert_text, show_alert=False)
+
 
 async def node_traffic_scheduler(bot: Bot):
     while True:
         try:
             await asyncio.sleep(config.TRAFFIC_INTERVAL)
-            if not NODE_TRAFFIC_MONITORS: continue
+            if not NODE_TRAFFIC_MONITORS:
+                continue
             for user_id, monitor_data in list(NODE_TRAFFIC_MONITORS.items()):
                 token = monitor_data.get("token")
                 node = NODES.get(token)
                 if not node:
-                    try: del NODE_TRAFFIC_MONITORS[user_id]
-                    except KeyError: pass
+                    try:
+                        del NODE_TRAFFIC_MONITORS[user_id]
+                    except KeyError:
+                        pass
                     continue
-                if "tasks" not in node: node["tasks"] = []
-                node["tasks"].append({"command": "traffic", "user_id": user_id})
+                if "tasks" not in node:
+                    node["tasks"] = []
+                node["tasks"].append(
+                    {"command": "traffic", "user_id": user_id})
         except Exception as e:
             logging.error(f"Error in node_traffic_scheduler: {e}")
             await asyncio.sleep(5)
 
+
 async def nodes_monitor(bot: Bot):
     logging.info("Nodes Monitor started.")
-    await asyncio.sleep(10) 
+    await asyncio.sleep(10)
     while True:
         try:
             now = time.time()
@@ -236,53 +295,77 @@ async def nodes_monitor(bot: Bot):
                 name = node.get("name", "Unknown")
                 last_seen = node.get("last_seen", 0)
                 is_restarting = node.get("is_restarting", False)
-                
-                is_dead = (now - last_seen >= config.NODE_OFFLINE_TIMEOUT) and (last_seen > 0)
+
+                is_dead = (
+                    now -
+                    last_seen >= config.NODE_OFFLINE_TIMEOUT) and (
+                    last_seen > 0)
                 was_dead = node.get("is_offline_alert_sent", False)
-                
+
                 if is_dead and not was_dead and not is_restarting:
                     def msg_down_gen(lang):
-                        fmt_time = datetime.fromtimestamp(last_seen).strftime('%H:%M:%S')
-                        return _("alert_node_down", lang, name=name, last_seen=fmt_time)
+                        fmt_time = datetime.fromtimestamp(
+                            last_seen).strftime('%H:%M:%S')
+                        return _(
+                            "alert_node_down",
+                            lang,
+                            name=name,
+                            last_seen=fmt_time)
                     await send_alert(bot, msg_down_gen, "downtime")
                     node["is_offline_alert_sent"] = True
                     logging.warning(f"Node {name} is DOWN. Alert sent.")
-                    
+
                 elif not is_dead and was_dead:
                     def msg_up_gen(lang):
                         return _("alert_node_up", lang, name=name)
                     await send_alert(bot, msg_up_gen, "downtime")
                     node["is_offline_alert_sent"] = False
                     logging.info(f"Node {name} recovered. Alert sent.")
-                    
-                if not is_dead and is_restarting: node["is_restarting"] = False
+
+                if not is_dead and is_restarting:
+                    node["is_restarting"] = False
 
                 if not is_dead and last_seen > 0:
                     stats = node.get("stats", {})
-                    if "alerts" not in node: 
+                    if "alerts" not in node:
                         node["alerts"] = {
                             "cpu": {"active": False, "last_time": 0},
                             "ram": {"active": False, "last_time": 0},
                             "disk": {"active": False, "last_time": 0}
                         }
 
-                    async def check_resource(metric_name, current_val, threshold, alert_key_high, alert_key_normal):
-                        state = node["alerts"].get(metric_name, {"active": False, "last_time": 0})
+                    async def check_resource(
+                            metric_name,
+                            current_val,
+                            threshold,
+                            alert_key_high,
+                            alert_key_normal):
+                        state = node["alerts"].get(
+                            metric_name, {"active": False, "last_time": 0})
                         if current_val >= threshold:
-                            if not state["active"] or (now - state["last_time"] > config.RESOURCE_ALERT_COOLDOWN):
+                            if not state["active"] or (
+                                    now - state["last_time"] > config.RESOURCE_ALERT_COOLDOWN):
                                 def msg_high_gen(lang):
-                                    return _(alert_key_high, lang, name=name, usage=current_val, threshold=threshold)
+                                    return _(
+                                        alert_key_high,
+                                        lang,
+                                        name=name,
+                                        usage=current_val,
+                                        threshold=threshold)
                                 await send_alert(bot, msg_high_gen, "resources")
                                 state["active"] = True
                                 state["last_time"] = now
-                                logging.warning(f"Node {name} high {metric_name}: {current_val}%")
+                                logging.warning(
+                                    f"Node {name} high {metric_name}: {current_val}%")
                         elif current_val < threshold and state["active"]:
                             def msg_norm_gen(lang):
-                                return _(alert_key_normal, lang, name=name, usage=current_val)
+                                return _(
+                                    alert_key_normal, lang, name=name, usage=current_val)
                             await send_alert(bot, msg_norm_gen, "resources")
                             state["active"] = False
                             state["last_time"] = 0
-                            logging.info(f"Node {name} {metric_name} normalized.")
+                            logging.info(
+                                f"Node {name} {metric_name} normalized.")
                         node["alerts"][metric_name] = state
 
                     cpu_val = stats.get("cpu", 0)

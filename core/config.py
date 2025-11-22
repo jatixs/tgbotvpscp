@@ -24,7 +24,7 @@ RESTART_FLAG_FILE = os.path.join(CONFIG_DIR, "restart_flag.txt")
 ALERTS_CONFIG_FILE = os.path.join(CONFIG_DIR, "alerts_config.json")
 USER_SETTINGS_FILE = os.path.join(CONFIG_DIR, "user_settings.json")
 SYSTEM_CONFIG_FILE = os.path.join(CONFIG_DIR, "system_config.json")
-WEB_AUTH_FILE = os.path.join(CONFIG_DIR, "web_auth.txt") # <-- Добавлено
+WEB_AUTH_FILE = os.path.join(CONFIG_DIR, "web_auth.txt")  # <-- Добавлено
 
 TOKEN = os.environ.get("TG_BOT_TOKEN")
 INSTALL_MODE = os.environ.get("INSTALL_MODE", "secure")
@@ -68,37 +68,54 @@ DISK_THRESHOLD = DEFAULT_CONFIG["DISK_THRESHOLD"]
 RESOURCE_ALERT_COOLDOWN = DEFAULT_CONFIG["RESOURCE_ALERT_COOLDOWN"]
 NODE_OFFLINE_TIMEOUT = DEFAULT_CONFIG["NODE_OFFLINE_TIMEOUT"]
 
+
 def load_system_config():
     """Загружает настройки из JSON и обновляет глобальные переменные."""
     global TRAFFIC_INTERVAL, RESOURCE_CHECK_INTERVAL, CPU_THRESHOLD, RAM_THRESHOLD, DISK_THRESHOLD, RESOURCE_ALERT_COOLDOWN, NODE_OFFLINE_TIMEOUT
-    
+
     try:
         if os.path.exists(SYSTEM_CONFIG_FILE):
             with open(SYSTEM_CONFIG_FILE, "r", encoding="utf-8") as f:
                 data = json.load(f)
-                TRAFFIC_INTERVAL = data.get("TRAFFIC_INTERVAL", DEFAULT_CONFIG["TRAFFIC_INTERVAL"])
-                RESOURCE_CHECK_INTERVAL = data.get("RESOURCE_CHECK_INTERVAL", DEFAULT_CONFIG["RESOURCE_CHECK_INTERVAL"])
-                CPU_THRESHOLD = data.get("CPU_THRESHOLD", DEFAULT_CONFIG["CPU_THRESHOLD"])
-                RAM_THRESHOLD = data.get("RAM_THRESHOLD", DEFAULT_CONFIG["RAM_THRESHOLD"])
-                DISK_THRESHOLD = data.get("DISK_THRESHOLD", DEFAULT_CONFIG["DISK_THRESHOLD"])
-                RESOURCE_ALERT_COOLDOWN = data.get("RESOURCE_ALERT_COOLDOWN", DEFAULT_CONFIG["RESOURCE_ALERT_COOLDOWN"])
-                NODE_OFFLINE_TIMEOUT = data.get("NODE_OFFLINE_TIMEOUT", DEFAULT_CONFIG["NODE_OFFLINE_TIMEOUT"])
+                TRAFFIC_INTERVAL = data.get(
+                    "TRAFFIC_INTERVAL", DEFAULT_CONFIG["TRAFFIC_INTERVAL"])
+                RESOURCE_CHECK_INTERVAL = data.get(
+                    "RESOURCE_CHECK_INTERVAL",
+                    DEFAULT_CONFIG["RESOURCE_CHECK_INTERVAL"])
+                CPU_THRESHOLD = data.get(
+                    "CPU_THRESHOLD", DEFAULT_CONFIG["CPU_THRESHOLD"])
+                RAM_THRESHOLD = data.get(
+                    "RAM_THRESHOLD", DEFAULT_CONFIG["RAM_THRESHOLD"])
+                DISK_THRESHOLD = data.get(
+                    "DISK_THRESHOLD", DEFAULT_CONFIG["DISK_THRESHOLD"])
+                RESOURCE_ALERT_COOLDOWN = data.get(
+                    "RESOURCE_ALERT_COOLDOWN",
+                    DEFAULT_CONFIG["RESOURCE_ALERT_COOLDOWN"])
+                NODE_OFFLINE_TIMEOUT = data.get(
+                    "NODE_OFFLINE_TIMEOUT",
+                    DEFAULT_CONFIG["NODE_OFFLINE_TIMEOUT"])
                 logging.info("System config loaded successfully.")
     except Exception as e:
         logging.error(f"Error loading system config: {e}")
 
+
 def save_system_config(new_config: dict):
     """Сохраняет настройки в JSON и обновляет текущие переменные."""
     global TRAFFIC_INTERVAL, RESOURCE_CHECK_INTERVAL, CPU_THRESHOLD, RAM_THRESHOLD, DISK_THRESHOLD, RESOURCE_ALERT_COOLDOWN, NODE_OFFLINE_TIMEOUT
-    
+
     try:
         # Обновляем переменные
-        if "TRAFFIC_INTERVAL" in new_config: TRAFFIC_INTERVAL = int(new_config["TRAFFIC_INTERVAL"])
-        if "NODE_OFFLINE_TIMEOUT" in new_config: NODE_OFFLINE_TIMEOUT = int(new_config["NODE_OFFLINE_TIMEOUT"])
-        if "CPU_THRESHOLD" in new_config: CPU_THRESHOLD = float(new_config["CPU_THRESHOLD"])
-        if "RAM_THRESHOLD" in new_config: RAM_THRESHOLD = float(new_config["RAM_THRESHOLD"])
-        if "DISK_THRESHOLD" in new_config: DISK_THRESHOLD = float(new_config["DISK_THRESHOLD"])
-        
+        if "TRAFFIC_INTERVAL" in new_config:
+            TRAFFIC_INTERVAL = int(new_config["TRAFFIC_INTERVAL"])
+        if "NODE_OFFLINE_TIMEOUT" in new_config:
+            NODE_OFFLINE_TIMEOUT = int(new_config["NODE_OFFLINE_TIMEOUT"])
+        if "CPU_THRESHOLD" in new_config:
+            CPU_THRESHOLD = float(new_config["CPU_THRESHOLD"])
+        if "RAM_THRESHOLD" in new_config:
+            RAM_THRESHOLD = float(new_config["RAM_THRESHOLD"])
+        if "DISK_THRESHOLD" in new_config:
+            DISK_THRESHOLD = float(new_config["DISK_THRESHOLD"])
+
         # Собираем полный конфиг для сохранения
         config_to_save = {
             "TRAFFIC_INTERVAL": TRAFFIC_INTERVAL,
@@ -109,15 +126,17 @@ def save_system_config(new_config: dict):
             "RESOURCE_ALERT_COOLDOWN": RESOURCE_ALERT_COOLDOWN,
             "NODE_OFFLINE_TIMEOUT": NODE_OFFLINE_TIMEOUT
         }
-        
+
         with open(SYSTEM_CONFIG_FILE, "w", encoding="utf-8") as f:
             json.dump(config_to_save, f, indent=4)
         logging.info("System config saved.")
     except Exception as e:
         logging.error(f"Error saving system config: {e}")
 
+
 # Загружаем конфиг при старте
 load_system_config()
+
 
 def setup_logging(log_directory, log_filename_prefix):
     log_formatter = logging.Formatter(

@@ -52,7 +52,7 @@ STRINGS = {
         "btn_restart": "♻️ Перезапуск бота",
         "btn_reboot": "🔄 Перезагрузка сервера",
         "btn_notifications": "🔔 Уведомления",
-        "btn_nodes": "🖥 Ноды", 
+        "btn_nodes": "🖥 Ноды",
         "btn_add_user": "➕ Добавить пользователя",
         "btn_delete_user": "➖ Удалить пользователя",
         "btn_change_group": "🔄 Изменить группу",
@@ -269,8 +269,8 @@ STRINGS = {
         "node_add_success_token": "✅ <b>Нода создана!</b>\n\nИмя: <b>{name}</b>\nТокен: <code>{token}</code>\n\nСохраните этот токен и укажите его в .env на сервере-ноде (AGENT_TOKEN).",
         "node_delete_select": "🗑 <b>Удаление ноды</b>\n\nВыберите сервер, который хотите удалить:",
         "node_deleted": "✅ Нода '{name}' успешно удалена.",
-        "node_traffic_stopped_alert": "✅ Мониторинг трафика на ноде '{name}' остановлен.", 
-        
+        "node_traffic_stopped_alert": "✅ Мониторинг трафика на ноде '{name}' остановлен.",
+
         # --- WEB INTERFACE ---
         "web_title": "Web-агент Бота",
         "web_dashboard_title": "Панель управления",
@@ -354,7 +354,7 @@ STRINGS = {
         "web_logs_cleared_alert": "Очищено!",
         "web_pass_wrong_current": "Неверный текущий пароль",
         "web_default_pass_alert": "⚠️ Внимание! Используется стандартный пароль ('admin'). Рекомендуется сменить его в настройках.",
-        
+
         # --- FORGOT PASSWORD ---
         "login_forgot_pass": "Забыли пароль?",
         "login_reset_title": "Сброс пароля",
@@ -634,8 +634,8 @@ STRINGS = {
         "node_add_success_token": "✅ <b>Node Created!</b>\n\nName: <b>{name}</b>\nToken: <code>{token}</code>\n\nSave this token and put it in .env on the node server (AGENT_TOKEN).",
         "node_delete_select": "🗑 <b>Delete Node</b>\n\nSelect a server you want to delete:",
         "node_deleted": "✅ Node '{name}' successfully deleted.",
-        "node_traffic_stopped_alert": "✅ Traffic monitoring for node '{name}' stopped.", 
-        
+        "node_traffic_stopped_alert": "✅ Traffic monitoring for node '{name}' stopped.",
+
         # --- WEB INTERFACE ---
         "web_title": "Bot Web-agent",
         "web_dashboard_title": "Dashboard",
@@ -735,6 +735,7 @@ STRINGS = {
     }
 }
 
+
 def load_user_settings():
     try:
         if os.path.exists(core_config.USER_SETTINGS_FILE):
@@ -753,6 +754,7 @@ def load_user_settings():
         logging.error(f"Ошибка загрузки user_settings.json: {e}")
         shared_state.USER_SETTINGS.clear()
 
+
 def save_user_settings():
     try:
         os.makedirs(
@@ -766,6 +768,7 @@ def save_user_settings():
         logging.debug("Настройки пользователей (языки) сохранены.")
     except Exception as e:
         logging.error(f"Ошибка сохранения user_settings.json: {e}")
+
 
 def get_user_lang(user_id: int | str | None) -> str:
     if isinstance(user_id, int):
@@ -782,6 +785,7 @@ def get_user_lang(user_id: int | str | None) -> str:
             logging.warning(
                 f"get_user_lang вызван с неожиданным типом user_id: {type(user_id)}. Возвращаю язык по умолчанию.")
         return core_config.DEFAULT_LANGUAGE
+
 
 def set_user_lang(user_id: int | str | None, lang: str):
     if user_id is None:
@@ -803,6 +807,7 @@ def set_user_lang(user_id: int | str | None, lang: str):
     save_user_settings()
     logging.info(
         f"Язык для пользователя {user_id} изменен на '{lang}' и сохранен.")
+
 
 def get_text(key: str, user_id_or_lang: int | str | None, **kwargs) -> str:
     lang = core_config.DEFAULT_LANGUAGE
@@ -832,7 +837,9 @@ def get_text(key: str, user_id_or_lang: int | str | None, **kwargs) -> str:
             f"Ошибка форматирования для ключа '{key}' языка '{lang}' с параметрами {kwargs}. Шаблон: '{string_template}'. Ошибка: {e}")
         return string_template
 
+
 _ = get_text
+
 
 def get_all_translations(key: str) -> list[str]:
     translations = []
@@ -845,8 +852,10 @@ def get_all_translations(key: str) -> list[str]:
         return [f"[{key}]"]
     return unique_translations
 
+
 def I18nFilter(key: str):
     return F.text.in_(get_all_translations(key))
+
 
 def get_language_keyboard() -> InlineKeyboardMarkup:
     keyboard = InlineKeyboardMarkup(

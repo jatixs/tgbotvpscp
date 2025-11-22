@@ -52,12 +52,14 @@ buttons_map = {
 }
 background_tasks = set()
 
+
 def register_module(module, admin_only=False, root_only=False):
     try:
         if hasattr(module, 'register_handlers'):
             module.register_handlers(dp)
         else:
-            logging.warning(f"Module '{module.__name__}' has no register_handlers().")
+            logging.warning(
+                f"Module '{module.__name__}' has no register_handlers().")
 
         button_level = "user"
         if root_only:
@@ -78,13 +80,22 @@ def register_module(module, admin_only=False, root_only=False):
         logging.info(f"Module '{module.__name__}' successfully registered.")
 
     except Exception as e:
-        logging.error(f"Error registering module '{module.__name__}': {e}", exc_info=True)
+        logging.error(
+            f"Error registering module '{module.__name__}': {e}",
+            exc_info=True)
 
-async def show_main_menu(user_id: int, chat_id: int, state: FSMContext, message_id_to_delete: int = None, is_start_command: bool = False):
+
+async def show_main_menu(
+        user_id: int,
+        chat_id: int,
+        state: FSMContext,
+        message_id_to_delete: int = None,
+        is_start_command: bool = False):
     command = "menu"
     await state.clear()
     lang = i18n.get_user_lang(user_id)
-    is_first_start = (is_start_command and user_id not in i18n.shared_state.USER_SETTINGS)
+    is_first_start = (
+        is_start_command and user_id not in i18n.shared_state.USER_SETTINGS)
 
     if not auth.is_allowed(user_id, command):
         if is_first_start:
@@ -117,20 +128,28 @@ async def show_main_menu(user_id: int, chat_id: int, state: FSMContext, message_
 
     try:
         sent_message = await bot.send_message(chat_id, menu_text, reply_markup=reply_markup)
-        shared_state.LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = sent_message.message_id
+        shared_state.LAST_MESSAGE_IDS.setdefault(
+            user_id, {})[command] = sent_message.message_id
     except Exception as e:
         logging.error(f"Failed to send main menu to user {user_id}: {e}")
 
+
 @dp.message(Command("start", "menu"))
 @dp.message(I18nFilter("btn_back_to_menu"))
-async def start_or_menu_handler_message(message: types.Message, state: FSMContext):
+async def start_or_menu_handler_message(
+        message: types.Message,
+        state: FSMContext):
     is_start_command = message.text == "/start"
     await show_main_menu(message.from_user.id, message.chat.id, state, is_start_command=is_start_command)
 
+
 @dp.callback_query(F.data == "back_to_menu")
-async def back_to_menu_callback(callback: types.CallbackQuery, state: FSMContext):
+async def back_to_menu_callback(
+        callback: types.CallbackQuery,
+        state: FSMContext):
     await show_main_menu(callback.from_user.id, callback.message.chat.id, state, callback.message.message_id, is_start_command=False)
     await callback.answer()
+
 
 @dp.message(I18nFilter("btn_language"))
 async def language_handler(message: types.Message):
@@ -140,52 +159,85 @@ async def language_handler(message: types.Message):
         return
     await message.answer(_("language_select", user_id), reply_markup=get_language_keyboard())
 
+
 @dp.callback_query(F.data.startswith("set_lang_"))
-async def set_language_callback(callback: types.CallbackQuery, state: FSMContext):
+async def set_language_callback(
+        callback: types.CallbackQuery,
+        state: FSMContext):
     user_id = callback.from_user.id
     lang = callback.data.split('_')[-1]
-    if lang not in i18n.STRINGS: lang = config.DEFAULT_LANGUAGE
+    if lang not in i18n.STRINGS:
+        lang = config.DEFAULT_LANGUAGE
     i18n.set_user_lang(user_id, lang)
     await callback.answer(_("language_selected", lang))
     await show_main_menu(user_id, callback.message.chat.id, state, callback.message.message_id)
 
+
 def load_modules():
     logging.info("Loading modules...")
-    buttons_map["user"].append(KeyboardButton(text=_("btn_language", config.DEFAULT_LANGUAGE)))
+    buttons_map["user"].append(
+        KeyboardButton(
+            text=_(
+                "btn_language",
+                config.DEFAULT_LANGUAGE)))
 
-    if ENABLE_SELFTEST: register_module(selftest)
-    if ENABLE_UPTIME: register_module(uptime)
-    if ENABLE_TRAFFIC: register_module(traffic)
-    if ENABLE_NOTIFICATIONS: register_module(notifications)
-    if ENABLE_USERS: register_module(users, admin_only=True)
-    if ENABLE_SPEEDTEST: register_module(speedtest, admin_only=True)
-    if ENABLE_TOP: register_module(top, admin_only=True)
-    if ENABLE_VLESS: register_module(vless, admin_only=True)
-    if ENABLE_XRAY: register_module(xray, admin_only=True)
-    if ENABLE_SSHLOG: register_module(sshlog, root_only=True)
-    if ENABLE_FAIL2BAN: register_module(fail2ban, root_only=True)
-    if ENABLE_LOGS: register_module(logs, root_only=True)
-    if ENABLE_UPDATE: register_module(update, root_only=True)
-    if ENABLE_RESTART: register_module(restart, root_only=True)
-    if ENABLE_REBOOT: register_module(reboot, root_only=True)
-    if ENABLE_OPTIMIZE: register_module(optimize, root_only=True)
-    
+    if ENABLE_SELFTEST:
+        register_module(selftest)
+    if ENABLE_UPTIME:
+        register_module(uptime)
+    if ENABLE_TRAFFIC:
+        register_module(traffic)
+    if ENABLE_NOTIFICATIONS:
+        register_module(notifications)
+    if ENABLE_USERS:
+        register_module(users, admin_only=True)
+    if ENABLE_SPEEDTEST:
+        register_module(speedtest, admin_only=True)
+    if ENABLE_TOP:
+        register_module(top, admin_only=True)
+    if ENABLE_VLESS:
+        register_module(vless, admin_only=True)
+    if ENABLE_XRAY:
+        register_module(xray, admin_only=True)
+    if ENABLE_SSHLOG:
+        register_module(sshlog, root_only=True)
+    if ENABLE_FAIL2BAN:
+        register_module(fail2ban, root_only=True)
+    if ENABLE_LOGS:
+        register_module(logs, root_only=True)
+    if ENABLE_UPDATE:
+        register_module(update, root_only=True)
+    if ENABLE_RESTART:
+        register_module(restart, root_only=True)
+    if ENABLE_REBOOT:
+        register_module(reboot, root_only=True)
+    if ENABLE_OPTIMIZE:
+        register_module(optimize, root_only=True)
+
     register_module(nodes, admin_only=True)
     logging.info("All modules loaded.")
 
+
 async def shutdown(dispatcher: Dispatcher, bot_instance: Bot, web_runner=None):
     logging.info("Shutdown signal received.")
-    if web_runner: await web_runner.cleanup()
-    try: await dispatcher.stop_polling()
-    except Exception: pass
+    if web_runner:
+        await web_runner.cleanup()
+    try:
+        await dispatcher.stop_polling()
+    except Exception:
+        pass
     cancelled_tasks = []
     for task in list(background_tasks):
         if task and not task.done():
-            task.cancel(); cancelled_tasks.append(task)
-    if cancelled_tasks: await asyncio.gather(*cancelled_tasks, return_exceptions=True)
-    if getattr(bot_instance, 'session', None): await bot_instance.session.close()
+            task.cancel()
+            cancelled_tasks.append(task)
+    if cancelled_tasks:
+        await asyncio.gather(*cancelled_tasks, return_exceptions=True)
+    if getattr(bot_instance, 'session', None):
+        await bot_instance.session.close()
     nodes_db.save_nodes()
     logging.info("Bot stopped.")
+
 
 async def main():
     loop = asyncio.get_event_loop()
@@ -199,17 +251,22 @@ async def main():
         await auth.refresh_user_names(bot)
         await utils.initial_reboot_check(bot)
         await utils.initial_restart_check(bot)
-        
+
         load_modules()
-        
+
         logging.info("Starting Agent Web Server...")
         web_runner = await server.start_web_server(bot)
-        if not web_runner: logging.warning("Web Server NOT started.")
+        if not web_runner:
+            logging.warning("Web Server NOT started.")
 
         try:
             for s in (signal.SIGINT, signal.SIGTERM):
-                loop.add_signal_handler(s, lambda s=s: asyncio.create_task(shutdown(dp, bot, web_runner)))
-        except NotImplementedError: pass
+                loop.add_signal_handler(
+                    s, lambda s=s: asyncio.create_task(
+                        shutdown(
+                            dp, bot, web_runner)))
+        except NotImplementedError:
+            pass
 
         logging.info("Starting polling...")
         await bot.delete_webhook(drop_pending_updates=True)
@@ -219,9 +276,12 @@ async def main():
     except Exception as e:
         logging.critical(f"Critical error: {e}", exc_info=True)
     finally:
-        if web_runner: await web_runner.cleanup()
+        if web_runner:
+            await web_runner.cleanup()
         await shutdown(dp, bot, web_runner)
 
 if __name__ == "__main__":
-    try: asyncio.run(main())
-    except KeyboardInterrupt: pass
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        pass
