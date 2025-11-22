@@ -25,8 +25,9 @@
 1. [Project Description](#-project-description)
 2. [Key Features](#-key-features)
 3. [Deployment (Quick Start)](#-deployment-quick-start)
-   - [Installing the Agent (Main Bot)](#1-installing-the-agent-main-bot)
-   - [Connecting Nodes (Clients)](#2-connecting-nodes-clients)
+   - [Preparation](#1-preparation)
+   - [Installing the Agent (Main Bot)](#2-installing-the-agent-main-bot)
+   - [Connecting Nodes (Clients)](#3-connecting-nodes-clients)
    - [Useful Commands](#-useful-commands)
 4. [Project Structure](#️-project-structure)
 5. [Security](#-security)
@@ -69,24 +70,33 @@ The project has a modular structure and supports two modes of operation:
 
 ## 🚀 Deployment (Quick Start)
 
-Deployment requires **Ubuntu 20.04+** (or Debian 11+) with `sudo` access.
+To deploy the bot on your VPS, you need **Ubuntu 20.04+** or a similar system with `sudo` access.
 
-### 1. Installing the Agent (Main Bot)
+### 1. Preparation
+
+1.  Get your Telegram bot token from **[@BotFather](https://t.me/BotFather)**.
+2.  Find your numeric **User ID** in Telegram (e.g., using the [@userinfobot](https://t.me/userinfobot) bot).
+3.  Ensure `curl` and `git` are installed on your VPS.
+
+---
+
+### 2. Installing the Agent (Main Bot)
 
 Run this command on the server that will be the "control center" (**Agent**):
 
 ```bash
-bash <(wget -qO- https://raw.githubusercontent.com/jatixs/tgbotvpscp/main/deploy.sh)
+bash <(wget -qO- https://raw.githubusercontent.com/jatixs/tgbotvpscp/main/deploy_en.sh)
 ````
 
 1.  The script will check the system. If the bot is not installed, select the installation mode:
-      * **1-4) AGENT ...** (Systemd or Docker)
+      * **Docker - Secure** (Recommended)
+      * **Systemd - Secure** (Classic)
 2.  Enter your **Bot Token** and your **Telegram ID**.
 3.  After installation, the Agent will start the API web server on port `8080` (ensure the port is open in your firewall).
 
 -----
 
-### 2. Connecting Nodes (Clients)
+### 3. Connecting Nodes (Clients)
 
 This step is performed on remote servers you want to manage.
 
@@ -96,7 +106,7 @@ This step is performed on remote servers you want to manage.
 2.  **On the Remote Server:**
       * Run the same installation script:
         ```bash
-        bash <(wget -qO- https://raw.githubusercontent.com/jatixs/tgbotvpscp/main/deploy.sh)
+        bash <(wget -qO- https://raw.githubusercontent.com/jatixs/tgbotvpscp/main/deploy_en.sh)
         ```
       * In the menu, select option **8) Install NODE (Client)**.
       * The script will ask for:
