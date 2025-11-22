@@ -131,6 +131,29 @@
         </div>
 
         <div class="bg-white/60 dark:bg-white/5 backdrop-blur-md border border-white/40 dark:border-white/10 rounded-2xl p-6 mb-6 shadow-lg dark:shadow-none">
+            <h2 class="text-xl font-bold text-gray-900 dark:text-white mb-6 flex items-center gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-red-500 dark:text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                </svg>
+                {web_security_section}
+            </h2>
+            
+            <div class="max-w-md">
+                <h3 class="text-sm font-bold text-gray-500 dark:text-gray-400 uppercase mb-4 tracking-wider">{web_change_password_title}</h3>
+                <div class="space-y-4">
+                    <div>
+                        <input type="password" id="pass_current" placeholder="{web_current_password}" class="w-full bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-red-500 text-gray-900 dark:text-white">
+                    </div>
+                    <div class="grid grid-cols-2 gap-2">
+                        <input type="password" id="pass_new" placeholder="{web_new_password}" class="w-full bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-red-500 text-gray-900 dark:text-white">
+                        <input type="password" id="pass_confirm" placeholder="{web_confirm_password}" class="w-full bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-red-500 text-gray-900 dark:text-white">
+                    </div>
+                    <button onclick="changePassword()" id="btnChangePass" class="w-full px-4 py-2 bg-red-500 hover:bg-red-600 text-white rounded-lg font-bold transition shadow-lg shadow-red-500/20">{web_change_btn}</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="bg-white/60 dark:bg-white/5 backdrop-blur-md border border-white/40 dark:border-white/10 rounded-2xl p-6 mb-6 shadow-lg dark:shadow-none">
             <div class="flex justify-between items-center mb-4">
                 <h2 class="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-yellow-500 dark:text-yellow-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" /></svg>

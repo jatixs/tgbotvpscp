@@ -23,7 +23,8 @@ REBOOT_FLAG_FILE = os.path.join(CONFIG_DIR, "reboot_flag.txt")
 RESTART_FLAG_FILE = os.path.join(CONFIG_DIR, "restart_flag.txt")
 ALERTS_CONFIG_FILE = os.path.join(CONFIG_DIR, "alerts_config.json")
 USER_SETTINGS_FILE = os.path.join(CONFIG_DIR, "user_settings.json")
-SYSTEM_CONFIG_FILE = os.path.join(CONFIG_DIR, "system_config.json") # Новый файл
+SYSTEM_CONFIG_FILE = os.path.join(CONFIG_DIR, "system_config.json")
+WEB_AUTH_FILE = os.path.join(CONFIG_DIR, "web_auth.txt") # <-- Добавлено
 
 TOKEN = os.environ.get("TG_BOT_TOKEN")
 INSTALL_MODE = os.environ.get("INSTALL_MODE", "secure")

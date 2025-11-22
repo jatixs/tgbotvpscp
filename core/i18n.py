@@ -341,6 +341,16 @@ STRINGS = {
         "error_traffic_interval_low": "Интервал обновления трафика в боте не может быть меньше 5 секунд.",
         "error_traffic_interval_high": "Интервал обновления трафика не может быть больше 100 секунд.",
         "web_logs_clearing": "Очистка...",
+        "web_security_section": "Безопасность",
+        "web_change_password_title": "Смена пароля Web-панели",
+        "web_current_password": "Текущий пароль",
+        "web_new_password": "Новый пароль",
+        "web_confirm_password": "Подтвердите пароль",
+        "web_change_btn": "Сменить пароль",
+        "web_pass_changed": "Пароль успешно изменен!",
+        "web_pass_mismatch": "Пароли не совпадают",
+        "web_pass_wrong_current": "Неверный текущий пароль",
+        "web_default_pass_alert": "⚠️ Внимание! Используется стандартный пароль ('admin'). Рекомендуется сменить его в настройках.",
         "web_logs_cleared_alert": "Очищено!"
     },
     'en': {
@@ -679,6 +689,15 @@ STRINGS = {
         "error_traffic_interval_low": "Bot traffic update interval cannot be less than 5 seconds.",
         "error_traffic_interval_high": "Traffic update interval cannot be more than 100 seconds.",
         "web_logs_clearing": "Clearing...",
+        "web_change_password_title": "Change Web Panel Password",
+        "web_current_password": "Current Password",
+        "web_new_password": "New Password",
+        "web_confirm_password": "Confirm Password",
+        "web_change_btn": "Change Password",
+        "web_pass_changed": "Password changed successfully!",
+        "web_pass_mismatch": "Passwords do not match",
+        "web_pass_wrong_current": "Invalid current password",
+        "web_default_pass_alert": "⚠️ Warning! Default password ('admin') is in use. Please change it in settings.",
         "web_logs_cleared_alert": "Cleared!"
     }
 }

@@ -318,3 +318,48 @@ async function addNode() {
         alert(I18N.web_conn_error.replace('{error}', e));
     }
 }
+
+// --- СМЕНА ПАРОЛЯ ---
+async function changePassword() {
+    const current = document.getElementById('pass_current').value;
+    const newPass = document.getElementById('pass_new').value;
+    const confirm = document.getElementById('pass_confirm').value;
+    const btn = document.getElementById('btnChangePass');
+    
+    if(!current || !newPass || !confirm) return;
+    if(newPass !== confirm) {
+        alert(I18N.web_pass_mismatch);
+        return;
+    }
+    
+    const origText = btn.innerText;
+    btn.disabled = true;
+    btn.innerText = "...";
+    
+    try {
+        const res = await fetch('/api/settings/password', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                current_password: current,
+                new_password: newPass
+            })
+        });
+        
+        const data = await res.json();
+        
+        if(res.ok) {
+            alert(I18N.web_pass_changed);
+            document.getElementById('pass_current').value = "";
+            document.getElementById('pass_new').value = "";
+            document.getElementById('pass_confirm').value = "";
+        } else {
+            alert(I18N.web_error.replace('{error}', data.error));
+        }
+    } catch(e) {
+        alert(I18N.web_conn_error.replace('{error}', e));
+    }
+    
+    btn.disabled = false;
+    btn.innerText = origText;
+}

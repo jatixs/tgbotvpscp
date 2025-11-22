@@ -6,6 +6,7 @@ import secrets
 import asyncio
 import requests
 import psutil
+import hashlib # <-- Добавлено
 from aiohttp import web
 from aiogram import Bot
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
@@ -13,7 +14,7 @@ from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from .nodes_db import get_node_by_token, update_node_heartbeat, create_node, delete_node
 from .config import (
     WEB_SERVER_HOST, WEB_SERVER_PORT, NODE_OFFLINE_TIMEOUT, BASE_DIR, ADMIN_USER_ID, ENABLE_WEB_UI,
-    save_system_config, BOT_LOG_DIR, WATCHDOG_LOG_DIR
+    save_system_config, BOT_LOG_DIR, WATCHDOG_LOG_DIR, WEB_AUTH_FILE # <-- Импорт WEB_AUTH_FILE
 )
 # Импортируем конфиг целиком для чтения актуальных значений
 from . import config as current_config
@@ -32,6 +33,28 @@ STATIC_DIR = os.path.join(BASE_DIR, "core", "static")
 
 AGENT_FLAG = "🏳️"
 AGENT_IP_CACHE = "Loading..."
+
+# --- PASSWORD UTILS ---
+def get_stored_password_hash():
+    if os.path.exists(WEB_AUTH_FILE):
+        try:
+            with open(WEB_AUTH_FILE, "r") as f:
+                return f.read().strip()
+        except: pass
+    return None
+
+def check_web_password(input_pass):
+    stored_hash = get_stored_password_hash()
+    if stored_hash:
+        # Если есть файл, сравниваем хеш
+        return hashlib.sha256(input_pass.encode()).hexdigest() == stored_hash
+    else:
+        # Иначе сравниваем с ENV (plain text)
+        return input_pass == WEB_PASSWORD
+
+def is_default_password():
+    # Считаем пароль дефолтным, если нет файла хеша И переменная окружения == 'admin'
+    return (get_stored_password_hash() is None) and (WEB_PASSWORD == "admin")
 
 def load_template(name):
     path = os.path.join(TEMPLATE_DIR, name)
@@ -210,7 +233,6 @@ async def handle_settings_page(request):
     is_admin = user['role'] == 'admins'
     lang = get_user_lang(user_id)
     
-    # Получаем настройки алертов конкретного пользователя
     user_alerts = ALERTS_CONFIG.get(user_id, {})
     
     users_json = "null"
@@ -248,7 +270,7 @@ async def handle_settings_page(request):
     html = html.replace("{web_node_token}", _("web_node_token", lang))
     html = html.replace("{web_node_cmd}", _("web_node_cmd", lang))
     
-    # Системные настройки (Переводы)
+    # Системные настройки
     html = html.replace("{web_sys_settings_section}", _("web_sys_settings_section", lang))
     html = html.replace("{web_thresholds_title}", _("web_thresholds_title", lang))
     html = html.replace("{web_intervals_title}", _("web_intervals_title", lang))
@@ -259,15 +281,22 @@ async def handle_settings_page(request):
     html = html.replace("{web_traffic_interval}", _("web_traffic_interval", lang))
     html = html.replace("{web_node_timeout}", _("web_node_timeout", lang))
     html = html.replace("{web_clear_logs_btn}", _("web_clear_logs_btn", lang))
+
+    # Password section
+    html = html.replace("{web_security_section}", _("web_security_section", lang))
+    html = html.replace("{web_change_password_title}", _("web_change_password_title", lang))
+    html = html.replace("{web_current_password}", _("web_current_password", lang))
+    html = html.replace("{web_new_password}", _("web_new_password", lang))
+    html = html.replace("{web_confirm_password}", _("web_confirm_password", lang))
+    html = html.replace("{web_change_btn}", _("web_change_btn", lang))
     
-    # Вставка значений системных настроек
+    # Values
     html = html.replace("{val_cpu}", str(current_config.CPU_THRESHOLD))
     html = html.replace("{val_ram}", str(current_config.RAM_THRESHOLD))
     html = html.replace("{val_disk}", str(current_config.DISK_THRESHOLD))
     html = html.replace("{val_traffic}", str(current_config.TRAFFIC_INTERVAL))
     html = html.replace("{val_timeout}", str(current_config.NODE_OFFLINE_TIMEOUT))
     
-    # Состояние чекбоксов уведомлений
     for alert in ['resources', 'logins', 'bans', 'downtime']:
         checked = "checked" if user_alerts.get(alert, False) else ""
         html = html.replace(f"{{check_{alert}}}", checked)
@@ -276,6 +305,7 @@ async def handle_settings_page(request):
         "web_saving_btn": _("web_saving_btn", lang),
         "web_saved_btn": _("web_saved_btn", lang),
         "web_save_btn": _("web_save_btn", lang),
+        "web_change_btn": _("web_change_btn", lang),
         "web_error": _("web_error", lang, error=""),
         "web_conn_error": _("web_conn_error", lang, error=""),
         "web_confirm_delete_user": _("web_confirm_delete_user", lang),
@@ -285,7 +315,9 @@ async def handle_settings_page(request):
         "error_traffic_interval_low": _("error_traffic_interval_low", lang),
         "error_traffic_interval_high": _("error_traffic_interval_high", lang),
         "web_logs_clearing": _("web_logs_clearing", lang),
-        "web_logs_cleared_alert": _("web_logs_cleared_alert", lang)
+        "web_logs_cleared_alert": _("web_logs_cleared_alert", lang),
+        "web_pass_changed": _("web_pass_changed", lang),
+        "web_pass_mismatch": _("web_pass_mismatch", lang)
     }
     html = html.replace("{i18n_json}", json.dumps(i18n_data))
 
@@ -297,12 +329,9 @@ async def handle_save_notifications(request):
     try:
         data = await request.json()
         user_id = user['id']
-        
         if user_id not in ALERTS_CONFIG: ALERTS_CONFIG[user_id] = {}
-        
         for key in ['resources', 'logins', 'bans', 'downtime']:
             if key in data: ALERTS_CONFIG[user_id][key] = bool(data[key])
-            
         save_alerts_config()
         return web.json_response({"status": "ok"})
     except Exception as e:
@@ -313,21 +342,40 @@ async def handle_save_system_config(request):
     if not user or user['role'] != 'admins': return web.json_response({"error": "Admin required"}, status=403)
     try:
         data = await request.json()
-        
-        try:
-            traffic_interval = int(data.get("TRAFFIC_INTERVAL", 0))
-        except ValueError:
-            traffic_interval = 0
-            
+        traffic_interval = int(data.get("TRAFFIC_INTERVAL", 0))
         lang = get_user_lang(user['id'])
-        
         if traffic_interval < 5:
             return web.json_response({"error": _("error_traffic_interval_low", lang)}, status=400)
-        
         if traffic_interval > 100:
             return web.json_response({"error": _("error_traffic_interval_high", lang)}, status=400)
-
         save_system_config(data)
+        return web.json_response({"status": "ok"})
+    except Exception as e:
+        return web.json_response({"error": str(e)}, status=500)
+
+async def handle_change_password(request):
+    user = get_current_user(request)
+    # Разрешаем смену пароля только Админу (ID 0), который вошел по паролю
+    if not user or user.get('type') != 'password' or user['id'] != 0:
+        return web.json_response({"error": "Unauthorized"}, status=403)
+    
+    try:
+        data = await request.json()
+        current_pass = data.get("current_password")
+        new_pass = data.get("new_password")
+        
+        if not check_web_password(current_pass):
+            lang = get_user_lang(0)
+            return web.json_response({"error": _("web_pass_wrong_current", lang)}, status=400)
+        
+        if not new_pass or len(new_pass) < 4:
+             return web.json_response({"error": "Password too short"}, status=400)
+
+        # Сохраняем хеш
+        new_hash = hashlib.sha256(new_pass.encode()).hexdigest()
+        with open(WEB_AUTH_FILE, "w") as f:
+            f.write(new_hash)
+            
         return web.json_response({"status": "ok"})
     except Exception as e:
         return web.json_response({"error": str(e)}, status=500)
@@ -341,9 +389,7 @@ async def handle_clear_logs(request):
                 for f in os.listdir(d):
                     fp = os.path.join(d, f)
                     if os.path.isfile(fp): 
-                        # Очищаем содержимое файла, не удаляя его
-                        with open(fp, 'w') as file:
-                            pass 
+                        with open(fp, 'w') as file: pass 
         return web.json_response({"status": "ok"})
     except Exception as e:
         return web.json_response({"error": str(e)}, status=500)
@@ -427,6 +473,23 @@ async def handle_set_language(request):
 async def handle_login_page(request):
     if get_current_user(request): raise web.HTTPFound('/')
     html = load_template("login.html")
+    
+    # Инъекция предупреждения о дефолтном пароле
+    alert_block = ""
+    if is_default_password():
+        lang = DEFAULT_LANGUAGE
+        # Пытаемся определить язык из куки, если есть (для логина маловероятно, но все же)
+        alert_msg = _("web_default_pass_alert", lang)
+        alert_block = f"""
+        <div class="mb-4 p-3 bg-yellow-500/20 border border-yellow-500/50 rounded-xl flex items-start gap-3">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-yellow-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+            <span class="text-xs text-yellow-200 font-medium">{alert_msg}</span>
+        </div>
+        """
+    
+    html = html.replace("{default_pass_alert}", alert_block)
     html = html.replace("{error_block}", "")
     return web.Response(text=html, content_type='text/html')
 
@@ -451,7 +514,9 @@ async def handle_login_request(request):
 
 async def handle_login_password(request):
     data = await request.post()
-    if data.get("password") == WEB_PASSWORD:
+    password = data.get("password")
+    
+    if check_web_password(password):
         session = {"id": 0, "first_name": "Administrator", "username": "admin", "photo_url": AGENT_FLAG, "role": "admins", "type": "password"}
         resp = web.HTTPFound('/')
         resp.set_cookie(COOKIE_NAME, json.dumps(session), max_age=604800)
@@ -550,6 +615,7 @@ async def start_web_server(bot_instance: Bot):
         app.router.add_post('/api/settings/save', handle_save_notifications)
         app.router.add_post('/api/settings/language', handle_set_language)
         app.router.add_post('/api/settings/system', handle_save_system_config)
+        app.router.add_post('/api/settings/password', handle_change_password) # <-- Добавлено
         app.router.add_post('/api/logs/clear', handle_clear_logs)
         app.router.add_post('/api/users/action', handle_user_action)
         app.router.add_post('/api/nodes/add', handle_node_add)
