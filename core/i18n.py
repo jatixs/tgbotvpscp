@@ -339,7 +339,9 @@ STRINGS = {
         "web_logs_cleared": "Логи успешно очищены.",
         "web_no_users": "Нет дополнительных пользователей",
         "error_traffic_interval_low": "Интервал обновления трафика в боте не может быть меньше 5 секунд.",
-        "error_traffic_interval_high": "Интервал обновления трафика не может быть больше 100 секунд."
+        "error_traffic_interval_high": "Интервал обновления трафика не может быть больше 100 секунд.",
+        "web_logs_clearing": "Очистка...",
+        "web_logs_cleared_alert": "Очищено!"
     },
     'en': {
         "btn_back": "🔙 Back",
@@ -675,7 +677,9 @@ STRINGS = {
         "web_logs_cleared": "Logs cleared successfully.",
         "web_no_users": "No additional users",
         "error_traffic_interval_low": "Bot traffic update interval cannot be less than 5 seconds.",
-        "error_traffic_interval_high": "Traffic update interval cannot be more than 100 seconds."
+        "error_traffic_interval_high": "Traffic update interval cannot be more than 100 seconds.",
+        "web_logs_clearing": "Clearing...",
+        "web_logs_cleared_alert": "Cleared!"
     }
 }
 

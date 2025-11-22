@@ -118,7 +118,14 @@ async function fetchAgentStats() {
             if (document.getElementById('trafficRxTotal')) {
                 document.getElementById('trafficRxTotal').innerText = formatBytes(data.stats.net_recv);
                 document.getElementById('trafficTxTotal').innerText = formatBytes(data.stats.net_sent);
-                document.getElementById('agentUptime').innerText = formatUptime(data.stats.boot_time);
+                
+                // Uptime для десктопа и мобильной версии
+                const uptimeStr = formatUptime(data.stats.boot_time);
+                const uptimeEl = document.getElementById('agentUptime');
+                const uptimeMobileEl = document.getElementById('agentUptimeMobile');
+                
+                if(uptimeEl) uptimeEl.innerText = uptimeStr;
+                if(uptimeMobileEl) uptimeMobileEl.innerText = uptimeStr;
             }
         }
         renderAgentChart(data.history);

@@ -143,19 +143,19 @@ async function clearLogs() {
     const btn = document.getElementById('clearLogsBtn');
     const originalHTML = btn.innerHTML;
     btn.disabled = true;
-    btn.innerText = "Clearing...";
+    btn.innerText = I18N.web_logs_clearing;
     
     try {
         const res = await fetch('/api/logs/clear', { method: 'POST' });
         if(res.ok) {
-            btn.innerText = "Cleared!";
-            btn.classList.remove('text-red-600', 'dark:text-red-400', 'bg-red-500/10', 'border-red-500/30');
-            btn.classList.add('text-green-600', 'dark:text-green-400', 'bg-green-500/10', 'border-green-500/30');
+            btn.innerText = I18N.web_logs_cleared_alert;
+            
+            // Удаляем ВСЕ возможные классы
+            btn.className = "w-full px-4 py-2 rounded-lg text-sm transition flex items-center justify-center gap-2 bg-green-500/10 border border-green-500/30 text-green-600 dark:text-green-400";
             
             setTimeout(() => {
                 btn.innerHTML = originalHTML;
-                btn.classList.remove('text-green-600', 'dark:text-green-400', 'bg-green-500/10', 'border-green-500/30');
-                btn.classList.add('text-red-600', 'dark:text-red-400', 'bg-red-500/10', 'border-red-500/30');
+                btn.className = "w-full px-4 py-2 rounded-lg text-sm transition flex items-center justify-center gap-2 bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 text-red-600 dark:text-red-400";
                 btn.disabled = false;
             }, 2000);
         } else {
