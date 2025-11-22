@@ -4,6 +4,87 @@ let pollInterval = null;
 
 let chartAgent = null;
 let agentPollInterval = null;
+let nodesPollInterval = null;
+
+// --- ЛОГИКА ТЕМЫ ---
+const themes = ['dark', 'light', 'system'];
+let currentTheme = localStorage.getItem('theme') || 'system';
+
+function initTheme() {
+    applyTheme(currentTheme);
+}
+
+function toggleTheme() {
+    const idx = themes.indexOf(currentTheme);
+    const nextIdx = (idx + 1) % themes.length;
+    currentTheme = themes[nextIdx];
+    localStorage.setItem('theme', currentTheme);
+    applyTheme(currentTheme);
+}
+
+function applyTheme(theme) {
+    const html = document.documentElement;
+    const iconMoon = document.getElementById('iconMoon');
+    const iconSun = document.getElementById('iconSun');
+    const iconSystem = document.getElementById('iconSystem');
+    
+    // Сброс иконок
+    [iconMoon, iconSun, iconSystem].forEach(el => el.classList.add('hidden'));
+
+    if (theme === 'dark') {
+        html.classList.add('dark');
+        iconMoon.classList.remove('hidden');
+    } else if (theme === 'light') {
+        html.classList.remove('dark');
+        iconSun.classList.remove('hidden');
+    } else {
+        // System
+        if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
+            html.classList.add('dark');
+        } else {
+            html.classList.remove('dark');
+        }
+        iconSystem.classList.remove('hidden');
+    }
+    
+    updateChartsColors();
+}
+
+function updateChartsColors() {
+    const isDark = document.documentElement.classList.contains('dark');
+    const gridColor = isDark ? 'rgba(255, 255, 255, 0.03)' : 'rgba(0, 0, 0, 0.05)';
+    const tickColor = isDark ? '#6b7280' : '#9ca3af';
+    
+    [chartAgent, chartRes, chartNet].forEach(chart => {
+        if (chart) {
+            if (chart.options.scales.x) {
+                chart.options.scales.x.grid.color = gridColor;
+                chart.options.scales.x.ticks.color = tickColor;
+            }
+            if (chart.options.scales.y) {
+                chart.options.scales.y.grid.color = gridColor;
+                chart.options.scales.y.ticks.color = tickColor;
+            }
+            chart.update();
+        }
+    });
+}
+
+// --- ЛОГИКА ЯЗЫКА ---
+async function setLanguage(lang) {
+    try {
+        const res = await fetch('/api/settings/language', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({lang: lang})
+        });
+        if (res.ok) {
+            window.location.reload();
+        }
+    } catch (e) {
+        console.error("Lang switch failed", e);
+    }
+}
 
 function formatSpeed(valueInKbps) {
     let val = parseFloat(valueInKbps);
@@ -41,11 +122,95 @@ function formatUptime(bootTime) {
 }
 
 document.addEventListener("DOMContentLoaded", () => {
+    initTheme();
+    
     if(document.getElementById('chartAgent')) {
         fetchAgentStats();
         agentPollInterval = setInterval(fetchAgentStats, 3000);
     }
+    
+    if (document.getElementById('nodesGrid')) {
+        fetchNodesList();
+        nodesPollInterval = setInterval(fetchNodesList, 3000);
+    }
 });
+
+async function fetchNodesList() {
+    try {
+        const response = await fetch('/api/nodes/list');
+        const data = await response.json();
+        renderNodesGrid(data.nodes);
+        
+        const activeCount = data.nodes.filter(n => n.status === 'online').length;
+        if (document.getElementById('statTotalNodes')) 
+            document.getElementById('statTotalNodes').innerText = data.nodes.length;
+        if (document.getElementById('statActiveNodes')) 
+            document.getElementById('statActiveNodes').innerText = activeCount;
+            
+    } catch (e) {
+        console.error("Ошибка обновления списка нод:", e);
+    }
+}
+
+function renderNodesGrid(nodes) {
+    const container = document.getElementById('nodesGrid');
+    if (!container) return;
+    
+    if (nodes.length === 0) {
+        container.innerHTML = '<div class="col-span-full text-center text-gray-500 py-10">Нет подключенных нод</div>';
+        return;
+    }
+
+    const html = nodes.map(node => {
+        let statusColor = "text-green-500";
+        let statusText = "ONLINE";
+        let bgClass = "bg-green-500/10 border-green-500/30";
+        let dotColor = "bg-green-500";
+
+        if (node.status === 'restarting') {
+            statusColor = "text-yellow-500";
+            statusText = "RESTARTING";
+            bgClass = "bg-yellow-500/10 border-yellow-500/30";
+            dotColor = "bg-yellow-500";
+        } else if (node.status === 'offline') {
+            statusColor = "text-red-500";
+            statusText = "OFFLINE";
+            bgClass = "bg-red-500/10 border-red-500/30";
+            dotColor = "bg-red-500";
+        }
+
+        return `
+        <div class="bg-white dark:bg-black/20 hover:shadow-md dark:hover:bg-black/30 transition duration-200 rounded-xl p-4 border border-gray-200 dark:border-white/5 cursor-pointer shadow-sm" onclick="openNodeDetails('${node.token}', '${dotColor}')">
+            <div class="flex justify-between items-start">
+                <div>
+                    <div class="font-bold text-gray-800 dark:text-gray-200">${node.name}</div>
+                    <div class="text-[10px] font-mono text-gray-500 mt-1">${node.token.substring(0, 8)}...</div>
+                </div>
+                <div class="px-2 py-1 rounded text-[10px] font-bold ${statusColor} ${bgClass}">${statusText}</div>
+            </div>
+            
+            <div class="mt-4 pt-4 border-t border-gray-100 dark:border-white/5 grid grid-cols-3 gap-2">
+                <div class="bg-gray-50 dark:bg-white/5 rounded-lg p-2 text-center border border-gray-100 dark:border-white/5">
+                    <div class="text-[10px] text-gray-500 uppercase font-bold">CPU</div>
+                    <div class="text-sm font-bold text-gray-900 dark:text-white">${Math.round(node.cpu)}%</div>
+                </div>
+                <div class="bg-gray-50 dark:bg-white/5 rounded-lg p-2 text-center border border-gray-100 dark:border-white/5">
+                    <div class="text-[10px] text-gray-500 uppercase font-bold">RAM</div>
+                    <div class="text-sm font-bold text-gray-900 dark:text-white">${Math.round(node.ram)}%</div>
+                </div>
+                <div class="bg-gray-50 dark:bg-white/5 rounded-lg p-2 text-center border border-gray-100 dark:border-white/5">
+                    <div class="text-[10px] text-gray-500 uppercase font-bold">IP</div>
+                    <div class="text-xs font-bold text-gray-900 dark:text-white truncate" title="${node.ip}">${node.ip}</div>
+                </div>
+            </div>
+        </div>
+        `;
+    }).join('');
+
+    if (container.innerHTML !== html) {
+        container.innerHTML = html;
+    }
+}
 
 async function fetchAgentStats() {
     try {
@@ -101,6 +266,10 @@ function renderAgentChart(history) {
 
     const ctx = document.getElementById('chartAgent').getContext('2d');
     
+    const isDark = document.documentElement.classList.contains('dark');
+    const gridColor = isDark ? 'rgba(255, 255, 255, 0.03)' : 'rgba(0, 0, 0, 0.05)';
+    const tickColor = isDark ? '#6b7280' : '#9ca3af';
+
     const opts = {
         responsive: true,
         maintainAspectRatio: false,
@@ -114,25 +283,25 @@ function renderAgentChart(history) {
                 display: true, 
                 grid: { 
                     display: true, 
-                    color: 'rgba(255, 255, 255, 0.03)', 
+                    color: gridColor, 
                     borderDash: [4, 4],
                     drawBorder: true,
-                    borderColor: 'rgba(255, 255, 255, 0.1)'
+                    borderColor: gridColor
                 },
-                ticks: { color: '#6b7280', font: {size: 9}, maxRotation: 0, autoSkip: false }
+                ticks: { color: tickColor, font: {size: 9}, maxRotation: 0, autoSkip: false }
             }, 
             y: { 
                 display: true, 
                 position: 'right',
                 grid: { 
                     display: true, 
-                    color: 'rgba(255, 255, 255, 0.03)', 
+                    color: gridColor, 
                     borderDash: [4, 4],
                     drawBorder: true,
-                    borderColor: 'rgba(255, 255, 255, 0.1)'
+                    borderColor: gridColor
                 },
                 ticks: { 
-                    color: '#6b7280', 
+                    color: tickColor, 
                     font: {size: 9},
                     callback: function(value) { return formatSpeed(value); }
                 }
@@ -141,16 +310,16 @@ function renderAgentChart(history) {
         plugins: { 
             legend: { 
                 display: true, 
-                labels: { color: '#9ca3af', font: {size: 10}, boxWidth: 8, usePointStyle: true }
+                labels: { color: tickColor, font: {size: 10}, boxWidth: 8, usePointStyle: true }
             }, 
             tooltip: { 
                 enabled: true,
                 mode: 'index',
                 intersect: false,
-                backgroundColor: 'rgba(17, 24, 39, 0.95)',
-                titleColor: '#fff',
-                bodyColor: '#ccc',
-                borderColor: 'rgba(255,255,255,0.1)',
+                backgroundColor: isDark ? 'rgba(17, 24, 39, 0.95)' : 'rgba(255, 255, 255, 0.95)',
+                titleColor: isDark ? '#fff' : '#111827',
+                bodyColor: isDark ? '#ccc' : '#4b5563',
+                borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)',
                 borderWidth: 1,
                 callbacks: {
                     title: () => '', 
@@ -171,6 +340,17 @@ function renderAgentChart(history) {
         chartAgent.data.labels = labelsSl;
         chartAgent.data.datasets[0].data = netRx;
         chartAgent.data.datasets[1].data = netTx;
+        
+        // Update colors dynamically
+        if (chartAgent.options.scales.x) {
+            chartAgent.options.scales.x.grid.color = gridColor;
+            chartAgent.options.scales.x.ticks.color = tickColor;
+        }
+        if (chartAgent.options.scales.y) {
+            chartAgent.options.scales.y.grid.color = gridColor;
+            chartAgent.options.scales.y.ticks.color = tickColor;
+        }
+        
         chartAgent.update();
     } else {
         chartAgent = new Chart(ctx, {
@@ -347,6 +527,10 @@ function renderCharts(history) {
     }
     const netLabels = labels.slice(1);
 
+    const isDark = document.documentElement.classList.contains('dark');
+    const gridColor = isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.05)';
+    const tickColor = isDark ? '#6b7280' : '#9ca3af';
+
     const commonOptions = {
         responsive: true,
         maintainAspectRatio: false,
@@ -355,14 +539,20 @@ function renderCharts(history) {
         scales: { 
             y: { 
                 beginAtZero: true, 
-                grid: { color: 'rgba(255,255,255,0.05)' }, 
-                ticks: { color: '#6b7280', font: {size: 10} } 
+                grid: { color: gridColor }, 
+                ticks: { color: tickColor, font: {size: 10} } 
             }, 
             x: { display: false } 
         },
         plugins: { 
-            legend: { labels: { color: '#9ca3af', font: {size: 11}, boxWidth: 10 } },
-            tooltip: { backgroundColor: 'rgba(17, 24, 39, 0.9)', titleColor: '#fff', bodyColor: '#ccc', borderColor: 'rgba(255,255,255,0.1)', borderWidth: 1 }
+            legend: { labels: { color: tickColor, font: {size: 11}, boxWidth: 10 } },
+            tooltip: { 
+                backgroundColor: isDark ? 'rgba(17, 24, 39, 0.9)' : 'rgba(255, 255, 255, 0.9)',
+                titleColor: isDark ? '#fff' : '#111827',
+                bodyColor: isDark ? '#ccc' : '#4b5563',
+                borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)',
+                borderWidth: 1 
+            }
         }
     };
 
@@ -371,6 +561,12 @@ function renderCharts(history) {
         chartRes.data.labels = labels;
         chartRes.data.datasets[0].data = cpuData;
         chartRes.data.datasets[1].data = ramData;
+        
+        // Update colors
+        chartRes.options.scales.y.grid.color = gridColor;
+        chartRes.options.scales.y.ticks.color = tickColor;
+        chartRes.options.plugins.legend.labels.color = tickColor;
+        
         chartRes.update();
     } else {
         chartRes = new Chart(ctxRes, {
@@ -389,27 +585,27 @@ function renderCharts(history) {
     const ctxNet = document.getElementById('chartNetwork').getContext('2d');
     
     const netOptions = JSON.parse(JSON.stringify(commonOptions));
+    // Re-apply functions lost in JSON parse
     if (!netOptions.scales) netOptions.scales = {};
     if (!netOptions.scales.y) netOptions.scales.y = {};
     if (!netOptions.scales.y.ticks) netOptions.scales.y.ticks = {};
-    if (!netOptions.plugins) netOptions.plugins = {};
-    if (!netOptions.plugins.tooltip) netOptions.plugins.tooltip = {};
-    if (!netOptions.plugins.tooltip.callbacks) netOptions.plugins.tooltip.callbacks = {};
+    
+    netOptions.scales.y.grid.color = gridColor;
+    netOptions.scales.y.ticks.color = tickColor;
+    netOptions.plugins.legend.labels.color = tickColor;
 
     netOptions.scales.y.ticks.callback = function(value) { return formatSpeed(value); };
-    netOptions.plugins.tooltip.callbacks.label = function(context) {
-        let label = context.dataset.label || '';
-        if (label) label += ': ';
-        if (context.parsed.y !== null) {
-            label += formatSpeed(context.parsed.y);
-        }
-        return label;
-    };
-
+    
     if (chartNet) {
         chartNet.data.labels = netLabels;
         chartNet.data.datasets[0].data = netRxSpeed;
         chartNet.data.datasets[1].data = netTxSpeed;
+        
+        // Update colors
+        chartNet.options.scales.y.grid.color = gridColor;
+        chartNet.options.scales.y.ticks.color = tickColor;
+        chartNet.options.plugins.legend.labels.color = tickColor;
+
         chartNet.update();
     } else {
         chartNet = new Chart(ctxNet, {
@@ -455,12 +651,12 @@ async function fetchLogs() {
             contentDiv.innerHTML = `<div class="text-red-400">Ошибка: ${data.error}</div>`;
         } else {
             const coloredLogs = data.logs.map(line => {
-                let cls = "text-gray-400";
-                if (line.includes("INFO")) cls = "text-blue-300";
-                if (line.includes("WARNING")) cls = "text-yellow-300";
-                if (line.includes("ERROR") || line.includes("CRITICAL") || line.includes("Traceback")) cls = "text-red-400 font-bold";
+                let cls = "text-gray-500 dark:text-gray-400";
+                if (line.includes("INFO")) cls = "text-blue-600 dark:text-blue-300";
+                if (line.includes("WARNING")) cls = "text-yellow-600 dark:text-yellow-300";
+                if (line.includes("ERROR") || line.includes("CRITICAL") || line.includes("Traceback")) cls = "text-red-600 dark:text-red-400 font-bold";
                 const safeLine = line.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-                return `<div class="${cls} hover:bg-white/5 px-1 rounded">${safeLine}</div>`;
+                return `<div class="${cls} hover:bg-gray-100 dark:hover:bg-white/5 px-1 rounded">${safeLine}</div>`;
             }).join('');
             contentDiv.innerHTML = coloredLogs || '<div class="text-gray-600 text-center">Лог пуст</div>';
             contentDiv.scrollTop = contentDiv.scrollHeight;

@@ -238,6 +238,52 @@ async def handle_node_add(request):
     except Exception as e:
         return web.json_response({"error": str(e)}, status=500)
 
+async def handle_nodes_list_json(request):
+    """Возвращает JSON со списком нод и их статусом для AJAX обновлений."""
+    user = get_current_user(request)
+    if not user: return web.json_response({"error": "Unauthorized"}, status=401)
+    
+    nodes_data = []
+    now = time.time()
+    
+    for token, node in NODES.items():
+        last_seen = node.get("last_seen", 0)
+        is_restarting = node.get("is_restarting", False)
+        
+        # Логика статуса
+        status = "offline"
+        if is_restarting: status = "restarting"
+        elif now - last_seen < NODE_OFFLINE_TIMEOUT: status = "online"
+        
+        stats = node.get("stats", {})
+        
+        nodes_data.append({
+            "token": token,
+            "name": node.get("name", "Unknown"),
+            "ip": node.get("ip", "Unknown"),
+            "status": status,
+            "cpu": stats.get("cpu", 0),
+            "ram": stats.get("ram", 0),
+            "disk": stats.get("disk", 0)
+        })
+        
+    return web.json_response({"nodes": nodes_data})
+
+async def handle_set_language(request):
+    """Устанавливает язык пользователя."""
+    user = get_current_user(request)
+    if not user: return web.json_response({"error": "Unauthorized"}, status=401)
+    
+    try:
+        data = await request.json()
+        lang = data.get("lang")
+        if lang in ["ru", "en"]:
+            set_user_lang(user['id'], lang)
+            return web.json_response({"status": "ok"})
+        return web.json_response({"error": "Invalid language"}, status=400)
+    except Exception as e:
+        return web.json_response({"error": str(e)}, status=500)
+
 async def handle_login_page(request):
     if get_current_user(request): raise web.HTTPFound('/')
     html = load_template("login.html")
@@ -364,70 +410,28 @@ async def handle_dashboard(request):
 
     now = time.time()
     active_count = 0
-    nodes_html = ""
-    if not NODES: nodes_html = '<div class="col-span-full text-center text-gray-500 py-10">Нет подключенных нод</div>'
     
+    # Логика для первичного рендеринга (статического), чтобы не было пустого экрана до загрузки JS
+    nodes_count = len(NODES)
     for token, node in NODES.items():
         last_seen = node.get("last_seen", 0)
-        is_restarting = node.get("is_restarting", False)
-        
-        is_online = (now - last_seen < NODE_OFFLINE_TIMEOUT)
-        if is_online: active_count += 1
-        
-        status_color = "text-green-400"
-        status_text = "ONLINE"
-        bg_class = "bg-green-500/10 border-green-500/30"
-        dot_color = "bg-green-500"
-
-        if is_restarting:
-            status_color = "text-yellow-400"
-            status_text = "RESTARTING"
-            bg_class = "bg-yellow-500/10 border-yellow-500/30"
-            dot_color = "bg-yellow-500"
-        elif not is_online:
-            status_color = "text-red-400"
-            status_text = "OFFLINE"
-            bg_class = "bg-red-500/10 border-red-500/30"
-            dot_color = "bg-red-500"
-        
-        stats = node.get("stats", {})
-        details_block = ""
-        if is_admin:
-            details_block = f"""
-            <div class="mt-4 pt-4 border-t border-white/5 grid grid-cols-3 gap-2">
-                <div class="bg-white/5 rounded-lg p-2 text-center border border-white/5">
-                    <div class="text-[10px] text-gray-400 uppercase font-bold">CPU</div>
-                    <div class="text-sm font-bold text-white">{stats.get('cpu', 0)}%</div>
-                </div>
-                <div class="bg-white/5 rounded-lg p-2 text-center border border-white/5">
-                    <div class="text-[10px] text-gray-400 uppercase font-bold">RAM</div>
-                    <div class="text-sm font-bold text-white">{stats.get('ram', 0)}%</div>
-                </div>
-                <div class="bg-white/5 rounded-lg p-2 text-center border border-white/5">
-                    <div class="text-[10px] text-gray-400 uppercase font-bold">IP</div>
-                    <div class="text-xs font-bold text-white truncate" title="{node.get('ip', 'N/A')}">{node.get('ip', 'N/A')}</div>
-                </div>
-            </div>"""
-        else:
-            details_block = '<div class="mt-3 pt-3 border-t border-white/5 text-xs text-gray-500 text-center">Детали скрыты</div>'
-            
-        nodes_html += f"""<div class="bg-black/20 hover:bg-black/30 active:scale-[0.98] transition duration-200 rounded-xl p-4 border border-white/5 cursor-pointer" onclick="openNodeDetails('{token}', '{dot_color}')"><div class="flex justify-between items-start"><div><div class="font-bold text-gray-200">{node.get('name','Unknown')}</div><div class="text-[10px] font-mono text-gray-500 mt-1">{token[:8]}...</div></div><div class="px-2 py-1 rounded text-[10px] font-bold {status_color} {bg_class}">{status_text}</div></div>{details_block}</div>"""
+        if now - last_seen < NODE_OFFLINE_TIMEOUT: active_count += 1
 
     role_badge = '<span class="bg-green-500/20 text-green-400 text-[10px] px-2 py-0.5 rounded border border-green-500/30">ADMIN</span>' if is_admin else '<span class="bg-gray-500/20 text-gray-300 text-[10px] px-2 py-0.5 rounded border border-gray-500/30">USER</span>'
     
     admin_controls = ""
     if is_admin:
         admin_controls = """
-        <div class="mt-8 p-6 rounded-2xl bg-gradient-to-r from-purple-900/20 to-blue-900/20 border border-white/5">
-            <h3 class="text-lg font-bold text-white mb-2">Панель администратора</h3>
-            <p class="text-sm text-gray-400 mb-4">Доступны расширенные функции управления сетью.</p>
+        <div class="mt-8 p-6 rounded-2xl bg-gradient-to-r from-purple-900/20 to-blue-900/20 border border-gray-200 dark:border-white/5">
+            <h3 class="text-lg font-bold text-gray-900 dark:text-white mb-2">Панель администратора</h3>
+            <p class="text-sm text-gray-500 dark:text-gray-400 mb-4">Доступны расширенные функции управления сетью.</p>
             <div class="flex gap-3">
-                <button onclick="openLogsModal()" class="px-4 py-2 bg-white/10 hover:bg-white/20 rounded-lg text-sm text-white transition flex items-center gap-2">
+                <button onclick="openLogsModal()" class="px-4 py-2 bg-gray-100 dark:bg-white/10 hover:bg-gray-200 dark:hover:bg-white/20 rounded-lg text-sm text-gray-900 dark:text-white transition flex items-center gap-2">
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
                     Логи системы
                 </button>
                 <a href="/settings" class="px-4 py-2 bg-blue-600 hover:bg-blue-500 rounded-lg text-sm text-white transition flex items-center gap-2">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" /></svg>
                     Настройки
                 </a>
             </div>
@@ -464,10 +468,9 @@ async def handle_dashboard(request):
     html = html.replace("{user_avatar}", _get_avatar_html(user))
     html = html.replace("{user_name}", user.get('first_name', 'User'))
     html = html.replace("{role_badge}", role_badge)
-    html = html.replace("{nodes_count}", str(len(NODES)))
+    html = html.replace("{nodes_count}", str(nodes_count))
     html = html.replace("{active_nodes}", str(active_count))
     html = html.replace("{user_group_display}", "") 
-    html = html.replace("{nodes_list_html}", nodes_html)
     html = html.replace("{admin_controls_html}", admin_controls)
     
     return web.Response(text=html, content_type='text/html')
@@ -494,8 +497,10 @@ async def start_web_server(bot_instance: Bot):
     app.router.add_post('/api/heartbeat', handle_heartbeat)
     app.router.add_get('/api/node/details', handle_node_details)
     app.router.add_get('/api/agent/stats', handle_agent_stats)
+    app.router.add_get('/api/nodes/list', handle_nodes_list_json) # Новый роут
     app.router.add_get('/api/logs', handle_get_logs)
     app.router.add_post('/api/settings/save', handle_save_notifications)
+    app.router.add_post('/api/settings/language', handle_set_language) # Новый роут
     app.router.add_post('/api/users/action', handle_user_action)
     app.router.add_post('/api/nodes/add', handle_node_add)
 
