@@ -37,7 +37,7 @@ RESET_TOKENS = {} # {token: {"ts": timestamp, "user_id": user_id}}
 
 # --- PASSWORD UTILS ---
 def get_stored_password_hash():
-    """Возвращает хеш из файла (legacy для обратной совместимости)"""
+    """Возвращает хеш из файла (для Главного Админа)"""
     if os.path.exists(WEB_AUTH_FILE):
         try:
             with open(WEB_AUTH_FILE, "r") as f:
@@ -45,47 +45,32 @@ def get_stored_password_hash():
         except: pass
     return None
 
-def check_web_password(input_pass):
-    """Legacy проверка (глобальный пароль)"""
+def check_admin_password(input_pass):
+    """Проверяет пароль ТОЛЬКО для Главного Админа"""
     stored_hash = get_stored_password_hash()
+    
+    # Если хеш есть в файле
     if stored_hash:
         return hashlib.sha256(input_pass.encode()).hexdigest() == stored_hash
-    else:
-        return input_pass == WEB_PASSWORD
-
-def check_user_password(user_id, input_pass):
-    """Проверяет пароль для КОНКРЕТНОГО пользователя"""
-    if user_id not in ALLOWED_USERS:
-        return False
     
-    user_data = ALLOWED_USERS[user_id]
-    # Если формат старый (строка), пароля нет
-    if isinstance(user_data, str):
-        return False
-        
-    stored_hash = user_data.get("password_hash")
-    
-    if not stored_hash:
-        # Дефолтный "admin" только для Главного Админа, если хеш не задан
-        if user_id == ADMIN_USER_ID and input_pass == "admin":
-            return True
-        return False
+    # Иначе fallback на переменную окружения (plain text)
+    return input_pass == WEB_PASSWORD
 
-    return hashlib.sha256(input_pass.encode()).hexdigest() == stored_hash
-
-def is_default_password_active(user_id):
+def is_default_password_active():
     """Проверяет, используется ли дефолтный пароль для админа"""
-    if user_id != ADMIN_USER_ID: return False
-    if user_id not in ALLOWED_USERS: return False
-    user_data = ALLOWED_USERS[user_id]
-    
     # Хеш от "admin"
     default_hash = "8c6976e5b5410415bde908bd4dee15dfb167a9c873fc4bb8a81f6f2ab448a918"
+    stored_hash = get_stored_password_hash()
     
-    if isinstance(user_data, dict):
-        p_hash = user_data.get("password_hash")
-        return p_hash == default_hash or p_hash is None
-    return True 
+    # Если файла нет и ENV="admin" -> True
+    if not stored_hash and WEB_PASSWORD == "admin":
+        return True
+        
+    # Если файл есть и хеш совпадает с хешом "admin" -> True
+    if stored_hash and stored_hash == default_hash:
+        return True
+        
+    return False
 
 # --- HELPERS ---
 
@@ -264,19 +249,15 @@ async def handle_settings_page(request):
     user_id = user['id']
     is_admin = user['role'] == 'admins'
     lang = get_user_lang(user_id)
-    
     user_alerts = ALERTS_CONFIG.get(user_id, {})
     
     users_json = "null"
     if is_admin:
         users_list = []
         for uid, role in ALLOWED_USERS.items():
-            # uid - ключ словаря
-            # роль берем из ALLOWED_USERS[uid], который теперь словарь или строка
+            if uid == ADMIN_USER_ID: continue
             user_info = ALLOWED_USERS[uid]
             user_role = user_info.get("group", "users") if isinstance(user_info, dict) else user_info
-            
-            if uid == ADMIN_USER_ID: continue
             name = USER_NAMES.get(str(uid), f"ID: {uid}")
             users_list.append({"id": uid, "name": name, "role": user_role})
         users_json = json.dumps(users_list)
@@ -286,7 +267,6 @@ async def handle_settings_page(request):
     html = html.replace("{user_avatar}", _get_avatar_html(user))
     html = html.replace("{users_data_json}", users_json)
     
-    # I18n replacements
     for key in ["web_settings_page_title", "web_back", "web_notif_section", "notifications_alert_name_res", 
                 "notifications_alert_name_logins", "notifications_alert_name_bans", "notifications_alert_name_downtime",
                 "web_save_btn", "web_users_section", "web_add_user_btn", "web_user_id", "web_user_name", 
@@ -308,6 +288,13 @@ async def handle_settings_page(request):
         checked = "checked" if user_alerts.get(alert, False) else ""
         html = html.replace(f"{{check_{alert}}}", checked)
         
+    # Скрываем секцию смены пароля для НЕ главных админов
+    if user_id != ADMIN_USER_ID:
+        html = html.replace('<div class="bg-white/60 dark:bg-white/5 backdrop-blur-md border border-white/40 dark:border-white/10 rounded-2xl p-6 mb-6 shadow-lg dark:shadow-none" id="securitySection">', '<div class="hidden">')
+        # Альтернатива: можно через CSS скрыть по ID, если добавить ID в шаблон. 
+        # Но тут проще вообще не рендерить, если не админ.
+        # В данном случае я просто оставлю как есть, но API не даст сменить пароль.
+
     i18n_data = {
         "web_saving_btn": _("web_saving_btn", lang),
         "web_saved_btn": _("web_saved_btn", lang),
@@ -360,10 +347,17 @@ async def handle_save_system_config(request):
         return web.json_response({"error": str(e)}, status=500)
 
 async def handle_change_password(request):
+    """Смена пароля ТОЛЬКО для главного админа"""
     user = get_current_user(request)
+    
+    # 1. Только авторизованный
     if not user: return web.json_response({"error": "Unauthorized"}, status=401)
     
     user_id = user['id']
+    
+    # 2. ТОЛЬКО ГЛАВНЫЙ АДМИН
+    if user_id != ADMIN_USER_ID:
+         return web.json_response({"error": "Only Main Admin can change password"}, status=403)
     
     try:
         data = await request.json()
@@ -371,7 +365,7 @@ async def handle_change_password(request):
         new_pass = data.get("new_password")
         
         # Проверяем старый пароль
-        if not check_user_password(user_id, current_pass):
+        if not check_admin_password(current_pass):
             lang = get_user_lang(user_id)
             return web.json_response({"error": _("web_pass_wrong_current", lang)}, status=400)
         
@@ -380,13 +374,11 @@ async def handle_change_password(request):
 
         new_hash = hashlib.sha256(new_pass.encode()).hexdigest()
         
-        # Обновляем хеш в структуре пользователя
-        if isinstance(ALLOWED_USERS[user_id], str):
-             ALLOWED_USERS[user_id] = {"group": ALLOWED_USERS[user_id], "password_hash": new_hash}
-        else:
-             ALLOWED_USERS[user_id]["password_hash"] = new_hash
-             
-        save_users()
+        # Обновляем хеш в файле WEB_AUTH_FILE (глобальный для админа)
+        # Мы больше не храним хеш в users.json для совместимости с текущей архитектурой
+        # где пароль админа лежит в отдельном файле.
+        with open(WEB_AUTH_FILE, "w") as f:
+            f.write(new_hash)
             
         return web.json_response({"status": "ok"})
     except Exception as e:
@@ -426,7 +418,7 @@ async def handle_user_action(request):
                 return web.json_response({"status": "ok"})
         elif action == 'add':
             if target_id in ALLOWED_USERS: return web.json_response({"error": "User exists"}, status=400)
-            # При добавлении создаем структуру с пустым паролем
+            # При добавлении создаем структуру (пароль None, так как вход по паролю запрещен для других)
             ALLOWED_USERS[target_id] = {"group": data.get('role', 'users'), "password_hash": None}
             bot = request.app.get('bot')
             if bot: await get_user_name(bot, target_id)
@@ -486,15 +478,16 @@ async def handle_set_language(request):
 # --- FORGOT PASSWORD HANDLERS ---
 
 async def handle_reset_request(request):
-    """Запрос сброса пароля: проверяет ID и отправляет ссылку в Telegram"""
+    """Запрос сброса пароля: ТОЛЬКО для Главного Админа"""
     try:
         data = await request.json()
         try: user_id = int(data.get("user_id", 0))
         except: user_id = 0
         
-        # Проверка: Пользователь должен быть в списке разрешенных
-        if user_id not in ALLOWED_USERS:
+        # СТРОГАЯ ПРОВЕРКА: ТОЛЬКО АДМИН
+        if user_id != ADMIN_USER_ID:
             admin_url = f"https://t.me/{ADMIN_USERNAME}" if ADMIN_USERNAME else f"tg://user?id={ADMIN_USER_ID}"
+            # Возвращаем ошибку not_found, чтобы фронтенд показал кнопку "Написать админу"
             return web.json_response({
                 "error": "not_found", 
                 "admin_url": admin_url
@@ -502,7 +495,6 @@ async def handle_reset_request(request):
 
         # Генерация токена
         token = secrets.token_urlsafe(32)
-        # Сохраняем ID пользователя вместе с токеном!
         RESET_TOKENS[token] = {"ts": time.time(), "user_id": user_id}
         
         host = request.headers.get('Host', f'{WEB_SERVER_HOST}:{WEB_SERVER_PORT}')
@@ -525,7 +517,6 @@ async def handle_reset_request(request):
         return web.json_response({"error": str(e)}, status=500)
 
 async def handle_reset_page_render(request):
-    """Рендер страницы сброса (используем login.html с флагом)"""
     token = request.query.get("token")
     
     if not token or token not in RESET_TOKENS:
@@ -540,7 +531,7 @@ async def handle_reset_page_render(request):
     return web.Response(text=html, content_type='text/html')
 
 async def handle_reset_confirm(request):
-    """Сброс пароля через токен (установка нового для конкретного пользователя)"""
+    """Установка нового пароля (ТОЛЬКО для Админа)"""
     try:
         data = await request.json()
         token = data.get("token")
@@ -549,20 +540,21 @@ async def handle_reset_confirm(request):
         if not token or token not in RESET_TOKENS:
              return web.json_response({"error": "Token expired"}, status=403)
         
-        user_id = RESET_TOKENS[token]["user_id"] # ID из токена
+        user_id = RESET_TOKENS[token]["user_id"]
         
+        # Дополнительная защита: проверяем еще раз, что это Админ
+        if user_id != ADMIN_USER_ID:
+             del RESET_TOKENS[token]
+             return web.json_response({"error": "Access denied"}, status=403)
+
         if not new_pass or len(new_pass) < 4:
              return web.json_response({"error": "Password too short"}, status=400)
 
         new_hash = hashlib.sha256(new_pass.encode()).hexdigest()
         
-        # Обновляем конкретного пользователя
-        if user_id in ALLOWED_USERS:
-            if isinstance(ALLOWED_USERS[user_id], str):
-                ALLOWED_USERS[user_id] = {"group": ALLOWED_USERS[user_id], "password_hash": new_hash}
-            else:
-                ALLOWED_USERS[user_id]["password_hash"] = new_hash
-            save_users()
+        # Пишем в файл WEB_AUTH_FILE
+        with open(WEB_AUTH_FILE, "w") as f:
+            f.write(new_hash)
         
         del RESET_TOKENS[token]
         
@@ -575,12 +567,49 @@ async def handle_reset_confirm(request):
 async def handle_login_page(request):
     if get_current_user(request): raise web.HTTPFound('/')
     html = load_template("login.html")
-    html = html.replace("{default_pass_alert}", "") 
+    
+    alert_block = ""
+    if is_default_password_active():
+        lang = DEFAULT_LANGUAGE
+        alert_msg = _("web_default_pass_alert", lang)
+        alert_block = f"""
+        <div class="mb-4 p-3 bg-yellow-500/20 border border-yellow-500/50 rounded-xl flex items-start gap-3">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-yellow-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+            <span class="text-xs text-yellow-200 font-medium">{alert_msg}</span>
+        </div>
+        """
+    
+    html = html.replace("{default_pass_alert}", alert_block)
     html = html.replace("{error_block}", "")
     return web.Response(text=html, content_type='text/html')
 
+async def handle_login_request(request):
+    """Вход по Magic Link (для всех)"""
+    data = await request.post()
+    try: user_id = int(data.get("user_id", 0))
+    except: user_id = 0
+    
+    if user_id not in ALLOWED_USERS: return web.Response(text="User not found", status=403)
+    
+    token = secrets.token_urlsafe(32)
+    AUTH_TOKENS[token] = {"user_id": user_id, "created_at": time.time()}
+    host = request.headers.get('Host', f'{WEB_SERVER_HOST}:{WEB_SERVER_PORT}')
+    proto = "https" if request.headers.get('X-Forwarded-Proto') == "https" else "http"
+    magic_link = f"{proto}://{host}/api/login/magic?token={token}"
+    
+    bot = request.app.get('bot')
+    if bot:
+        try:
+            kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="🔓 Войти в панель", url=magic_link)]])
+            await bot.send_message(user_id, "<b>🔐 Вход в Web-панель</b>", reply_markup=kb, parse_mode="HTML")
+            return web.HTTPFound('/login?sent=true')
+        except: pass
+    return web.Response(text="Bot Error", status=500)
+
 async def handle_login_password(request):
-    """Вход по ID и Паролю"""
+    """Вход по паролю: ТОЛЬКО для Главного Админа"""
     data = await request.post()
     try:
         user_id = int(data.get("user_id", 0))
@@ -589,7 +618,14 @@ async def handle_login_password(request):
         
     password = data.get("password")
     
-    if check_user_password(user_id, password):
+    # 1. Проверка ID: Только главный админ имеет право входить по паролю
+    if user_id != ADMIN_USER_ID:
+         # Можно вернуть 403, но для безопасности лучше сказать "Неверный пароль" или редиректнуть
+         # Но пользователь просил "ТОЛЬКО для главного админа", так что можно явно отказать.
+         return web.Response(text="Password login available for Main Admin only.", status=403)
+
+    # 2. Проверка пароля
+    if check_admin_password(password):
         u_data = ALLOWED_USERS[user_id]
         role = u_data.get("group", "users") if isinstance(u_data, dict) else u_data
         name = USER_NAMES.get(str(user_id), f"ID: {user_id}")
@@ -606,7 +642,7 @@ async def handle_login_password(request):
         resp.set_cookie(COOKIE_NAME, json.dumps(session), max_age=604800)
         return resp
         
-    return web.Response(text="Invalid ID or password", status=403)
+    return web.Response(text="Invalid password", status=403)
 
 async def handle_magic_login(request):
     token = request.query.get("token")
@@ -616,7 +652,6 @@ async def handle_magic_login(request):
     uid = td["user_id"]
     if uid not in ALLOWED_USERS: return web.Response(text="Denied", status=403)
     
-    # Получаем роль (учитывая новую структуру)
     u_data = ALLOWED_USERS[uid]
     role = u_data.get("group", "users") if isinstance(u_data, dict) else u_data
     
@@ -630,24 +665,56 @@ async def handle_logout(request):
     resp.del_cookie(COOKIE_NAME)
     return resp
 
-async def handle_login_request(request):
-    data = await request.post()
-    try: user_id = int(data.get("user_id", 0))
-    except: user_id = 0
-    if user_id not in ALLOWED_USERS: return web.Response(text="User not found", status=403)
-    token = secrets.token_urlsafe(32)
-    AUTH_TOKENS[token] = {"user_id": user_id, "created_at": time.time()}
-    host = request.headers.get('Host', f'{WEB_SERVER_HOST}:{WEB_SERVER_PORT}')
-    proto = "https" if request.headers.get('X-Forwarded-Proto') == "https" else "http"
-    magic_link = f"{proto}://{host}/api/login/magic?token={token}"
-    bot = request.app.get('bot')
-    if bot:
-        try:
-            kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="🔓 Войти в панель", url=magic_link)]])
-            await bot.send_message(user_id, "<b>🔐 Вход в Web-панель</b>", reply_markup=kb, parse_mode="HTML")
-            return web.HTTPFound('/login?sent=true')
+async def handle_agent_stats(request):
+    if not get_current_user(request): return web.json_response({"error": "Unauthorized"}, status=401)
+    current_stats = {"cpu": 0, "ram": 0, "disk": 0, "ip": AGENT_IP_CACHE, "net_sent": 0, "net_recv": 0, "boot_time": 0}
+    try:
+        net_io = psutil.net_io_counters()
+        current_stats["net_sent"] = net_io.bytes_sent; current_stats["net_recv"] = net_io.bytes_recv; current_stats["boot_time"] = psutil.boot_time()
+    except: pass
+    if AGENT_HISTORY:
+        latest = AGENT_HISTORY[-1]
+        current_stats["cpu"] = latest["c"]; current_stats["ram"] = latest["r"]
+        try: current_stats["disk"] = psutil.disk_usage(get_host_path('/')).percent
         except: pass
-    return web.Response(text="Bot Error", status=500)
+    return web.json_response({"stats": current_stats, "history": AGENT_HISTORY})
+
+async def handle_node_details(request):
+    if not get_current_user(request): return web.json_response({"error": "Unauthorized"}, status=401)
+    token = request.query.get("token")
+    if not token or token not in NODES: return web.json_response({"error": "Node not found"}, status=404)
+    node = NODES[token]
+    return web.json_response({
+        "name": node.get("name"), "ip": node.get("ip"), "stats": node.get("stats"),
+        "history": node.get("history", []), "token": token, "last_seen": node.get("last_seen", 0),
+        "is_restarting": node.get("is_restarting", False)
+    })
+
+async def handle_heartbeat(request):
+    try: data = await request.json()
+    except: return web.json_response({"error": "Invalid JSON"}, status=400)
+    token = data.get("token")
+    if not token or not get_node_by_token(token): return web.json_response({"error": "Auth fail"}, status=401)
+    node = get_node_by_token(token)
+    stats = data.get("stats", {})
+    results = data.get("results", [])
+    bot = request.app.get('bot')
+    if bot and results:
+        for res in results:
+            asyncio.create_task(process_node_result_background(bot, res.get("user_id"), res.get("command"), res.get("result"), token, node.get("name", "Node")))
+    node["is_restarting"] = False 
+    update_node_heartbeat(token, request.transport.get_extra_info('peername')[0], stats)
+    tasks_to_send = list(node.get("tasks", []))
+    if tasks_to_send: node["tasks"] = []
+    return web.json_response({"status": "ok", "tasks": tasks_to_send})
+
+def _get_avatar_html(user):
+    raw = user.get('photo_url', '')
+    if raw.startswith('http'): return f'<img src="{raw}" alt="ava" class="w-6 h-6 rounded-full flex-shrink-0">'
+    return f'<span class="text-lg leading-none select-none">{raw}</span>'
+
+async def handle_api_root(request):
+    return web.Response(text="VPS Bot API Server is running.")
 
 async def start_web_server(bot_instance: Bot):
     global AGENT_FLAG
