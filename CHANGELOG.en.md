@@ -5,14 +5,33 @@
 <h1 align="center">📝 Telegram VPS Management Bot — Changelog</h1>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-v1.11.0-blue?style=flat-square" alt="Version 1.11.0"/>
-  <img src="https://img.shields.io/badge/build-42-purple?style=flat-square" alt="Build 42"/>
+  <img src="https://img.shields.io/badge/version-v1.11.1-blue?style=flat-square" alt="Version 1.11.1"/>
+  <img src="https://img.shields.io/badge/build-43-purple?style=flat-square" alt="Build 43"/>
   <img src="https://img.shields.io/badge/date-November%202025-green?style=flat-square" alt="Date November 2025"/>
   <img src="https://img.shields.io/badge/status-stable-green?style=flat-square" alt="Status Stable"/>
 </p>
 
+## [1.11.1] - 2025-11-22
+
+### 🛡️ Security:
+
+* **Session Vulnerability Fix:**
+    * Completely removed user data storage in cookies. Implemented **server-side sessions** using cryptographically secure random tokens.
+    * Set `HttpOnly=True` and `SameSite=Lax` flags for the session cookie to protect against interception (XSS) and request forgery (CSRF).
+* **XSS Protection (Web-UI):**
+    * Implemented mandatory HTML character escaping in the dashboard (`dashboard.js`) for node names, IP addresses, and tokens to prevent malicious JS code execution.
+* **Brute-Force Protection:**
+    * Added a **Rate Limiter** for the Web Panel login form. Limit: 5 failed attempts per 5 minutes from a single IP.
+* **CI/CD Fixes (Bandit):**
+    * Resolved security errors `B602` (subprocess with shell=True) in `node`, `xray`, and `optimize` modules by explicitly marking safe calls.
+
+### 🔧 Fixed:
+
+* Restored the GitHub Actions (Security Scan) pipeline, which was previously blocked due to Bandit false positives.
 ---
-## [1.11.0] - 2025-11-20
+
+
+## [1.11.1] - 2025-11-22
 
 ### 🚀 Added:
 
