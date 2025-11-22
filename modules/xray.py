@@ -16,11 +16,14 @@ from core.utils import escape_html, detect_xray_client
 
 BUTTON_KEY = "btn_xray"
 
+
 def get_button() -> KeyboardButton:
     return KeyboardButton(text=_(BUTTON_KEY, config.DEFAULT_LANGUAGE))
 
+
 def register_handlers(dp: Dispatcher):
     dp.message(I18nFilter(BUTTON_KEY))(updatexray_handler)
+
 
 async def updatexray_handler(message: types.Message, state: FSMContext):
     user_id = message.from_user.id
@@ -76,8 +79,7 @@ async def updatexray_handler(message: types.Message, state: FSMContext):
                 'rm Xray-linux-64.zip xray geoip.dat geosite.dat && '
                 'apk del wget unzip'
                 '" && '
-                f'docker restart {container_name}'
-            )
+                f'docker restart {container_name}')
             version_cmd = f"docker exec {container_name} /usr/bin/xray version"
 
         elif client == "marzban":
@@ -101,8 +103,10 @@ async def updatexray_handler(message: types.Message, state: FSMContext):
             update_cmd = f"{check_deps_cmd} && {download_unzip_cmd} && {update_env_cmd} && {restart_cmd}"
             version_cmd = f'docker exec {container_name} /var/lib/marzban/xray-core/xray version'
 
-        # nosec B602: update_cmd is constructed internally with hardcoded parts and detected container name
-        process_update = await asyncio.create_subprocess_shell(update_cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE) # nosec
+        # nosec B602: update_cmd is constructed internally with hardcoded parts
+        # and detected container name
+        # nosec
+        process_update = await asyncio.create_subprocess_shell(update_cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
         stdout_update, stderr_update = await process_update.communicate()
 
         if process_update.returncode != 0:
@@ -117,7 +121,8 @@ async def updatexray_handler(message: types.Message, state: FSMContext):
                               error=escape_html(error_output)))
 
         # nosec B602: version_cmd is constructed internally
-        process_version = await asyncio.create_subprocess_shell(version_cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE) # nosec
+        # nosec
+        process_version = await asyncio.create_subprocess_shell(version_cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
         stdout_version, stderr_version = await process_version.communicate()
         version_output = stdout_version.decode('utf-8', 'ignore')
         version_match = re.search(r'Xray\s+([\d\.]+)', version_output)
