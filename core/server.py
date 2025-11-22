@@ -427,7 +427,9 @@ async def handle_dashboard(request):
                 {_("web_logs_button", lang)}
             </button>
             <a href="/settings" class="px-4 py-2 bg-blue-600 hover:bg-blue-500 rounded-lg text-sm text-white transition flex items-center gap-2">
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" /></svg>
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
+                </svg>
                 {_("web_settings_button", lang)}
             </a>
         </div>
@@ -468,6 +470,9 @@ async def handle_dashboard(request):
     html = html.replace("{active_nodes}", str(active_count))
     html = html.replace("{user_group_display}", "") 
     html = html.replace("{admin_controls_html}", admin_controls)
+    
+    # Добавляем заголовок управления нодами
+    html = html.replace("{web_node_mgmt_title}", _("web_node_mgmt_title", lang))
     
     # Подготовка JSON для JS переводов
     i18n_data = {

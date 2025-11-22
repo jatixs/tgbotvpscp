@@ -1,5 +1,6 @@
 <!DOCTYPE html>
-<html lang="ru" class="dark"> <head>
+<html lang="ru" class="dark">
+<head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0">
     <title>{web_title}</title>
@@ -19,26 +20,24 @@
                 }
             }
         }
-        // Инъекция переводов с сервера
         const I18N = {i18n_json};
     </script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <link rel="stylesheet" href="/static/css/style.css">
     <style>
-        /* Плавный переход цветов темы */
-        body, div, nav, main {
-            transition-property: background-color, border-color, color, fill, stroke;
+        body, div, nav, main, button {
+            transition-property: background-color, border-color, color, fill, stroke, opacity, box-shadow;
             transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
             transition-duration: 300ms;
         }
     </style>
 </head>
-<body class="bg-gray-50 text-gray-900 dark:bg-gray-900 dark:text-gray-100 font-sans selection:bg-green-500/30 pb-10">
+<body class="bg-gray-100 text-gray-900 dark:bg-gray-900 dark:text-gray-100 font-sans selection:bg-green-500/30 pb-10 overflow-x-hidden">
     
-    <div class="fixed top-[-10%] left-[-10%] w-96 h-96 bg-purple-600/10 rounded-full mix-blend-screen filter blur-3xl animate-float pointer-events-none dark:block hidden"></div>
-    <div class="fixed bottom-[-10%] right-[-10%] w-96 h-96 bg-blue-600/10 rounded-full mix-blend-screen filter blur-3xl animate-float pointer-events-none dark:block hidden" style="animation-delay: 2s"></div>
+    <div class="fixed top-[-10%] left-[-10%] w-96 h-96 rounded-full mix-blend-multiply filter blur-3xl animate-float pointer-events-none opacity-70 dark:opacity-20 bg-cyan-300 dark:bg-purple-600/10"></div>
+    <div class="fixed bottom-[-10%] right-[-10%] w-96 h-96 rounded-full mix-blend-multiply filter blur-3xl animate-float pointer-events-none opacity-70 dark:opacity-20 bg-rose-300 dark:bg-blue-600/10" style="animation-delay: 2s"></div>
 
-    <nav class="bg-white/80 dark:bg-black/20 backdrop-blur-md border-b border-gray-200 dark:border-white/5 sticky top-0 z-40">
+    <nav class="bg-white/70 dark:bg-black/40 backdrop-blur-xl border-b border-white/20 dark:border-white/5 sticky top-0 z-40 shadow-sm dark:shadow-none">
         <div class="max-w-6xl mx-auto px-3 sm:px-4 py-3 flex flex-wrap justify-between items-center gap-2">
             
             <div class="flex items-center space-x-2 min-w-0">
@@ -53,28 +52,28 @@
             <div class="flex items-center gap-2 sm:gap-4 flex-shrink-0">
                 
                 <div class="relative group">
-                    <button class="flex items-center justify-center w-8 h-8 rounded-lg hover:bg-gray-200 dark:hover:bg-white/10 transition text-lg" id="langBtn">
+                    <button class="flex items-center justify-center w-8 h-8 rounded-lg hover:bg-black/5 dark:hover:bg-white/10 transition text-lg" id="langBtn">
                         🌍
                     </button>
                     <div class="absolute right-0 top-full pt-2 w-32 hidden group-hover:block z-50">
-                        <div class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-white/10 rounded-xl shadow-lg overflow-hidden">
-                            <button onclick="setLanguage('ru')" class="w-full text-left px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-white/5 flex items-center gap-2">
+                        <div class="bg-white/90 dark:bg-gray-800 border border-gray-200 dark:border-white/10 rounded-xl shadow-xl backdrop-blur-sm overflow-hidden">
+                            <button onclick="setLanguage('ru')" class="w-full text-left px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-white/5 flex items-center gap-2 text-gray-800 dark:text-gray-200">
                                 <span>🇷🇺</span> Русский
                             </button>
-                            <button onclick="setLanguage('en')" class="w-full text-left px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-white/5 flex items-center gap-2">
+                            <button onclick="setLanguage('en')" class="w-full text-left px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-white/5 flex items-center gap-2 text-gray-800 dark:text-gray-200">
                                 <span>🇬🇧</span> English
                             </button>
                         </div>
                     </div>
                 </div>
 
-                <button onclick="toggleTheme()" class="flex items-center justify-center w-8 h-8 rounded-lg hover:bg-gray-200 dark:hover:bg-white/10 transition text-gray-600 dark:text-gray-400" id="themeBtn" title="Сменить тему">
+                <button onclick="toggleTheme()" class="flex items-center justify-center w-8 h-8 rounded-lg hover:bg-black/5 dark:hover:bg-white/10 transition text-gray-600 dark:text-gray-400" id="themeBtn">
                     <svg id="iconMoon" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" /></svg>
                     <svg id="iconSun" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" /></svg>
                     <svg id="iconSystem" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>
                 </button>
 
-                <div class="hidden sm:flex items-center gap-2 bg-gray-100 dark:bg-white/5 px-2 sm:px-3 py-1.5 rounded-full border border-gray-200 dark:border-white/5 max-w-[100px] sm:max-w-xs">
+                <div class="hidden sm:flex items-center gap-2 bg-white/60 dark:bg-white/5 px-3 py-1.5 rounded-full border border-white/40 dark:border-white/5 shadow-sm dark:shadow-none max-w-[140px]">
                     {user_avatar}
                     <span class="text-xs font-medium text-gray-700 dark:text-gray-300 truncate">{user_name}</span>
                 </div>
@@ -95,67 +94,67 @@
         <div class="grid grid-cols-1 lg:grid-cols-4 gap-4 mb-8">
             
             <div class="col-span-1 flex flex-col gap-4">
-                <div class="bg-white dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-2xl p-5 relative overflow-hidden group flex-1 flex flex-col justify-center transition shadow-sm hover:shadow-md dark:shadow-none">
+                <div class="bg-white/60 dark:bg-white/5 backdrop-blur-md border border-white/40 dark:border-white/10 rounded-2xl p-5 relative overflow-hidden group flex-1 flex flex-col justify-center transition shadow-lg hover:shadow-xl dark:shadow-none">
                     <div class="absolute right-[-10px] top-[-10px] p-4 bg-purple-100 dark:bg-purple-500/10 rounded-full group-hover:scale-110 transition">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 text-purple-500 dark:text-purple-500/20" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" /></svg>
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 text-purple-500 dark:text-purple-500/50" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" /></svg>
                     </div>
                     <div>
                         <div class="text-gray-500 dark:text-gray-400 text-[10px] uppercase font-bold mb-2 tracking-wider">{web_stats_total}</div>
                         <div class="flex items-end gap-2">
-                            <span class="text-3xl font-bold text-gray-900 dark:text-white" id="statTotalNodes">{nodes_count}</span>
+                            <span class="text-3xl font-bold text-gray-800 dark:text-white" id="statTotalNodes">{nodes_count}</span>
                         </div>
                     </div>
                 </div>
 
-                <div class="bg-white dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-2xl p-5 relative overflow-hidden group flex-1 flex flex-col justify-center transition shadow-sm hover:shadow-md dark:shadow-none">
+                <div class="bg-white/60 dark:bg-white/5 backdrop-blur-md border border-white/40 dark:border-white/10 rounded-2xl p-5 relative overflow-hidden group flex-1 flex flex-col justify-center transition shadow-lg hover:shadow-xl dark:shadow-none">
                     <div class="absolute right-[-10px] top-[-10px] p-4 bg-green-100 dark:bg-green-500/10 rounded-full group-hover:scale-110 transition">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 text-green-500 dark:text-green-500/20" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 text-green-500 dark:text-green-500/50" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
                     </div>
                     <div>
                         <div class="text-gray-500 dark:text-gray-400 text-[10px] uppercase font-bold mb-2 tracking-wider">{web_stats_active}</div>
                         <div class="flex items-center gap-3">
-                            <span class="text-3xl font-bold text-gray-900 dark:text-white" id="statActiveNodes">{active_nodes}</span>
+                            <span class="text-3xl font-bold text-gray-800 dark:text-white" id="statActiveNodes">{active_nodes}</span>
                             <div class="w-2.5 h-2.5 rounded-full bg-green-500 animate-pulse mt-2 shadow-[0_0_8px_rgba(34,197,94,0.6)]"></div>
                         </div>
                     </div>
                 </div>
             </div>
 
-            <div class="col-span-1 lg:col-span-3 bg-white dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-2xl p-5 relative overflow-hidden flex flex-col justify-between shadow-sm">
+            <div class="col-span-1 lg:col-span-3 bg-white/60 dark:bg-white/5 backdrop-blur-md border border-white/40 dark:border-white/10 rounded-2xl p-5 relative overflow-hidden flex flex-col justify-between shadow-lg dark:shadow-none">
                 <div class="flex justify-between items-start mb-4">
                     <div class="flex items-center gap-2">
                         <div class="h-2 w-2 rounded-full bg-green-500 animate-pulse"></div>
                         <div class="text-gray-700 dark:text-gray-200 text-sm font-bold uppercase tracking-wide">{web_agent_stats_title}</div>
                     </div>
                     <div class="flex items-center gap-3">
-                         <div class="flex items-center gap-1 text-[10px] text-gray-500 bg-gray-100 dark:bg-black/20 px-2 py-1 rounded border border-gray-200 dark:border-white/5">
+                         <div class="flex items-center gap-1 text-[10px] text-gray-500 bg-white/50 dark:bg-black/20 px-2 py-1 rounded border border-gray-200 dark:border-white/5">
                             <span>{web_uptime}:</span>
                             <span id="agentUptime" class="font-mono text-blue-600 dark:text-blue-300 font-bold">...</span>
                         </div>
-                        <div id="agentIp" class="text-[10px] font-mono text-gray-500 bg-gray-100 dark:bg-black/20 px-2 py-1 rounded border border-gray-200 dark:border-white/5">...</div>
+                        <div id="agentIp" class="text-[10px] font-mono text-gray-500 bg-white/50 dark:bg-black/20 px-2 py-1 rounded border border-gray-200 dark:border-white/5">...</div>
                     </div>
                 </div>
                 
                 <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3 mb-4">
-                    <div class="bg-gray-50 dark:bg-black/20 rounded p-2 text-center border border-gray-200 dark:border-white/5">
+                    <div class="bg-white/50 dark:bg-black/20 rounded p-2 text-center border border-white/20 dark:border-white/5 backdrop-blur-sm">
                         <span class="block text-[9px] text-gray-500 uppercase">{web_cpu}</span>
-                        <span id="agentCpu" class="font-bold text-gray-900 dark:text-white text-sm">0%</span>
+                        <span id="agentCpu" class="font-bold text-gray-800 dark:text-white text-sm">0%</span>
                     </div>
-                    <div class="bg-gray-50 dark:bg-black/20 rounded p-2 text-center border border-gray-200 dark:border-white/5">
+                    <div class="bg-white/50 dark:bg-black/20 rounded p-2 text-center border border-white/20 dark:border-white/5 backdrop-blur-sm">
                         <span class="block text-[9px] text-gray-500 uppercase">{web_ram}</span>
-                        <span id="agentRam" class="font-bold text-gray-900 dark:text-white text-sm">0%</span>
+                        <span id="agentRam" class="font-bold text-gray-800 dark:text-white text-sm">0%</span>
                     </div>
-                    <div class="bg-gray-50 dark:bg-black/20 rounded p-2 text-center border border-gray-200 dark:border-white/5">
+                    <div class="bg-white/50 dark:bg-black/20 rounded p-2 text-center border border-white/20 dark:border-white/5 backdrop-blur-sm">
                         <span class="block text-[9px] text-gray-500 uppercase">{web_disk}</span>
-                        <span id="agentDisk" class="font-bold text-gray-900 dark:text-white text-sm">0%</span>
+                        <span id="agentDisk" class="font-bold text-gray-800 dark:text-white text-sm">0%</span>
                     </div>
-                    <div class="bg-gray-50 dark:bg-black/20 rounded p-2 text-center border border-gray-200 dark:border-white/5 border-l-2 border-l-blue-500/50">
+                    <div class="bg-white/50 dark:bg-black/20 rounded p-2 text-center border border-white/20 dark:border-white/5 border-l-2 border-l-blue-500/50 backdrop-blur-sm">
                         <span class="block text-[9px] text-gray-500 uppercase truncate">{web_traffic_total} ↓</span>
-                        <span id="trafficRxTotal" class="font-bold text-gray-900 dark:text-white text-xs sm:text-sm">0 B</span>
+                        <span id="trafficRxTotal" class="font-bold text-gray-800 dark:text-white text-xs sm:text-sm">0 B</span>
                     </div>
-                    <div class="bg-gray-50 dark:bg-black/20 rounded p-2 text-center border border-gray-200 dark:border-white/5 border-l-2 border-l-purple-500/50">
+                    <div class="bg-white/50 dark:bg-black/20 rounded p-2 text-center border border-white/20 dark:border-white/5 border-l-2 border-l-purple-500/50 backdrop-blur-sm">
                         <span class="block text-[9px] text-gray-500 uppercase truncate">{web_traffic_total} ↑</span>
-                        <span id="trafficTxTotal" class="font-bold text-gray-900 dark:text-white text-xs sm:text-sm">0 B</span>
+                        <span id="trafficTxTotal" class="font-bold text-gray-800 dark:text-white text-xs sm:text-sm">0 B</span>
                     </div>
                 </div>
                 
@@ -165,11 +164,11 @@
             </div>
         </div>
 
-        <h2 class="text-lg sm:text-xl font-bold text-gray-800 dark:text-white mb-4 flex items-center gap-2">
+        <h2 class="text-lg sm:text-xl font-bold text-gray-800 dark:text-white mb-4 flex items-center gap-2 pl-1">
             <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-blue-500 dark:text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
             </svg>
-            Управление Нодами
+            {web_node_mgmt_title}
         </h2>
         
         <div id="nodesGrid" class="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -180,8 +179,8 @@
 
     </main>
 
-    <div id="nodeModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/50 dark:bg-black/80 backdrop-blur-sm p-4">
-        <div class="bg-white dark:bg-gray-900 border border-gray-200 dark:border-white/10 rounded-2xl shadow-2xl w-full max-w-4xl relative flex flex-col max-h-[90vh]">
+    <div id="nodeModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/30 dark:bg-black/80 backdrop-blur-sm p-4">
+        <div class="bg-white/90 dark:bg-gray-900 border border-white/20 dark:border-white/10 rounded-2xl shadow-2xl w-full max-w-4xl relative flex flex-col max-h-[90vh] backdrop-blur-xl">
             <div class="p-6 border-b border-gray-200 dark:border-white/5 flex justify-between items-center rounded-t-2xl z-10">
                 <div class="flex items-center gap-3">
                     <div id="modalStatusDot" class="h-3 w-3 rounded-full bg-gray-500 animate-pulse"></div>
@@ -193,22 +192,22 @@
             </div>
             <div class="p-6 overflow-y-auto no-scrollbar">
                 <div class="grid grid-cols-3 gap-4 mb-6">
-                    <div class="bg-gray-50 dark:bg-white/5 p-3 rounded-xl border border-gray-200 dark:border-white/10 text-center">
+                    <div class="bg-gray-100/50 dark:bg-white/5 p-3 rounded-xl border border-gray-200 dark:border-white/10 text-center">
                         <div class="text-[10px] text-gray-500 uppercase font-bold tracking-wider mb-1">{web_cpu}</div>
                         <div id="modalCpu" class="text-xl font-bold text-gray-900 dark:text-white">0%</div>
                     </div>
-                    <div class="bg-gray-50 dark:bg-white/5 p-3 rounded-xl border border-gray-200 dark:border-white/10 text-center">
+                    <div class="bg-gray-100/50 dark:bg-white/5 p-3 rounded-xl border border-gray-200 dark:border-white/10 text-center">
                         <div class="text-[10px] text-gray-500 uppercase font-bold tracking-wider mb-1">{web_ram}</div>
                         <div id="modalRam" class="text-xl font-bold text-gray-900 dark:text-white">0%</div>
                     </div>
-                    <div class="bg-gray-50 dark:bg-white/5 p-3 rounded-xl border border-gray-200 dark:border-white/10 text-center">
+                    <div class="bg-gray-100/50 dark:bg-white/5 p-3 rounded-xl border border-gray-200 dark:border-white/10 text-center">
                         <div class="text-[10px] text-gray-500 uppercase font-bold tracking-wider mb-1">IP</div>
                         <div id="modalIp" class="text-sm font-bold text-gray-900 dark:text-white truncate px-1">Unknown</div>
                     </div>
                 </div>
 
                 <div class="mb-6">
-                    <div onclick="copyToken(this)" class="group bg-gray-50 dark:bg-white/5 hover:bg-gray-100 dark:hover:bg-white/10 transition-colors border border-gray-200 dark:border-white/10 rounded-xl p-3 flex items-center justify-between cursor-pointer relative overflow-hidden">
+                    <div onclick="copyToken(this)" class="group bg-gray-100/50 dark:bg-white/5 hover:bg-gray-200 dark:hover:bg-white/10 transition-colors border border-gray-200 dark:border-white/10 rounded-xl p-3 flex items-center justify-between cursor-pointer relative overflow-hidden">
                         <div class="flex items-center gap-3 overflow-hidden">
                             <div class="bg-green-500/20 p-2 rounded-lg text-green-600 dark:text-green-400">
                                 <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11.542 16.49a1 1 0 01-.17.21l-.414.415a2 2 0 00-.586 1.414V22h-3v-2.764a1 1 0 00-.293-.707l-5.964-5.964A6 6 0 1121 9z" /></svg>
@@ -226,13 +225,13 @@
                 </div>
 
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div class="bg-gray-50 dark:bg-white/5 p-4 rounded-xl border border-gray-200 dark:border-white/5">
+                    <div class="bg-gray-100/50 dark:bg-white/5 p-4 rounded-xl border border-gray-200 dark:border-white/5">
                         <h4 class="text-sm font-bold text-gray-500 dark:text-gray-400 mb-4">{web_resources_chart}</h4>
                         <div class="relative h-48 sm:h-64 w-full">
                             <canvas id="chartResources"></canvas>
                         </div>
                     </div>
-                    <div class="bg-gray-50 dark:bg-white/5 p-4 rounded-xl border border-gray-200 dark:border-white/5">
+                    <div class="bg-gray-100/50 dark:bg-white/5 p-4 rounded-xl border border-gray-200 dark:border-white/5">
                         <h4 class="text-sm font-bold text-gray-500 dark:text-gray-400 mb-4">{web_network_chart}</h4>
                         <div class="relative h-48 sm:h-64 w-full">
                             <canvas id="chartNetwork"></canvas>
@@ -243,8 +242,8 @@
         </div>
     </div>
 
-    <div id="logsModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/50 dark:bg-black/80 backdrop-blur-sm p-4">
-        <div class="bg-white dark:bg-gray-900 border border-gray-200 dark:border-white/10 rounded-2xl shadow-2xl w-full max-w-5xl relative flex flex-col h-[80vh]">
+    <div id="logsModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/30 dark:bg-black/80 backdrop-blur-sm p-4">
+        <div class="bg-white/90 dark:bg-gray-900 border border-gray-200 dark:border-white/10 rounded-2xl shadow-2xl w-full max-w-5xl relative flex flex-col h-[80vh] backdrop-blur-xl">
             <div class="p-4 sm:p-6 border-b border-gray-200 dark:border-white/5 flex justify-between items-center rounded-t-2xl z-10">
                 <div class="flex items-center gap-3">
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-blue-500 dark:text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
@@ -259,7 +258,7 @@
                     </button>
                 </div>
             </div>
-            <div class="flex-1 p-0 relative bg-gray-50 dark:bg-black/30">
+            <div class="flex-1 p-0 relative bg-gray-50/50 dark:bg-black/30">
                  <div id="logsContent" class="absolute inset-0 overflow-y-auto p-4 sm:p-6 font-mono text-xs sm:text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap break-words leading-relaxed">
                     <div class="flex items-center justify-center h-full text-gray-500">{web_loading}</div>
                  </div>
