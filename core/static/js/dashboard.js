@@ -12,6 +12,9 @@ window.addEventListener('themeChanged', () => {
 });
 
 document.addEventListener("DOMContentLoaded", () => {
+    // Парсим эмодзи при загрузке
+    if (window.parsePageEmojis) window.parsePageEmojis();
+
     if(document.getElementById('chartAgent')) {
         fetchAgentStats();
         agentPollInterval = setInterval(fetchAgentStats, 3000);
@@ -30,12 +33,31 @@ async function fetchNodesList() {
         const data = await response.json();
         renderNodesGrid(data.nodes);
         
+        const total = data.nodes.length;
         const activeCount = data.nodes.filter(n => n.status === 'online').length;
+        
+        // Обновляем цифры
         const totalEl = document.getElementById('statTotalNodes');
         const activeEl = document.getElementById('statActiveNodes');
-        
-        if (totalEl) totalEl.innerText = data.nodes.length;
+        if (totalEl) totalEl.innerText = total;
         if (activeEl) activeEl.innerText = activeCount;
+
+        // Обновляем прогресс-бар и проценты
+        const barEl = document.getElementById('statProgressBar');
+        const percentEl = document.getElementById('statOnlinePercent');
+        
+        if (barEl && percentEl) {
+            let percent = 0;
+            if (total > 0) {
+                percent = Math.round((activeCount / total) * 100);
+            }
+            
+            barEl.style.width = `${percent}%`;
+            percentEl.innerText = `${percent}%`;
+            
+            // Меняем цвет бара
+            barEl.className = `h-1.5 rounded-full transition-all duration-1000 ease-out ${percent === 100 ? 'bg-gradient-to-r from-green-400 to-emerald-500' : (percent > 50 ? 'bg-gradient-to-r from-yellow-400 to-orange-500' : 'bg-gradient-to-r from-red-500 to-red-600')}`;
+        }
             
     } catch (e) {
         console.error("Ошибка обновления списка нод:", e);
@@ -69,7 +91,6 @@ function renderNodesGrid(nodes) {
             dotColor = "bg-red-500";
         }
 
-        // Используем те же классы для карточек, что и в основном шаблоне
         return `
         <div class="bg-white/60 dark:bg-white/5 hover:shadow-md dark:hover:bg-white/10 transition duration-200 rounded-xl p-4 border border-white/40 dark:border-white/10 cursor-pointer shadow-sm backdrop-blur-md" onclick="openNodeDetails('${node.token}', '${dotColor}')">
             <div class="flex justify-between items-start">
@@ -100,7 +121,7 @@ function renderNodesGrid(nodes) {
 
     if (container.innerHTML !== html) {
         container.innerHTML = html;
-        // Вызываем парсинг эмодзи после обновления HTML
+        // Парсим эмодзи после обновления HTML
         if (window.parsePageEmojis) window.parsePageEmojis();
     }
 }
@@ -121,7 +142,6 @@ async function fetchAgentStats() {
                 document.getElementById('trafficRxTotal').innerText = formatBytes(data.stats.net_recv);
                 document.getElementById('trafficTxTotal').innerText = formatBytes(data.stats.net_sent);
                 
-                // Uptime для десктопа и мобильной версии
                 const uptimeStr = formatUptime(data.stats.boot_time);
                 const uptimeEl = document.getElementById('agentUptime');
                 const uptimeMobileEl = document.getElementById('agentUptimeMobile');
@@ -140,7 +160,7 @@ async function fetchAgentStats() {
 function updateChartsColors() {
     const isDark = document.documentElement.classList.contains('dark');
     const gridColor = isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.05)';
-    const tickColor = isDark ? '#9ca3af' : '#6b7280'; // gray-400 : gray-500
+    const tickColor = isDark ? '#9ca3af' : '#6b7280'; 
     
     [chartAgent, chartRes, chartNet].forEach(chart => {
         if (chart) {
@@ -226,7 +246,6 @@ function renderAgentChart(history) {
         chartAgent.data.datasets[0].data = netRx;
         chartAgent.data.datasets[1].data = netTx;
         
-        // Sync colors
         chartAgent.options.scales.x.grid.color = gridColor;
         chartAgent.options.scales.x.ticks.color = tickColor;
         chartAgent.options.scales.y.grid.color = gridColor;
@@ -277,7 +296,6 @@ function formatUptime(bootTime) {
     return `${hours}h ${minutes}m`;
 }
 
-// Функции для модальных окон и графиков нод (chartRes, chartNet)
 async function openNodeDetails(token, dotColorClass) {
     const modal = document.getElementById('nodeModal');
     modal.classList.remove('hidden');
@@ -311,7 +329,6 @@ async function fetchAndRender(token) {
             return;
         }
         document.getElementById('modalTitle').innerText = data.name || 'Unknown';
-        // ... обновление статуса и текстов
         const stats = data.stats || {};
         document.getElementById('modalCpu').innerText = (stats.cpu !== undefined ? stats.cpu : 0) + '%';
         document.getElementById('modalRam').innerText = (stats.ram !== undefined ? stats.ram : 0) + '%';
@@ -401,7 +418,6 @@ function renderCharts(history) {
 
     const ctxNet = document.getElementById('chartNetwork').getContext('2d');
     const netOptions = JSON.parse(JSON.stringify(commonOptions));
-    // Restore lost functions
     if (!netOptions.scales) netOptions.scales = {};
     if (!netOptions.scales.y) netOptions.scales.y = {};
     if (!netOptions.scales.y.ticks) netOptions.scales.y.ticks = {};
@@ -470,7 +486,7 @@ async function fetchLogs() {
             }).join('');
             contentDiv.innerHTML = coloredLogs || `<div class="text-gray-600 text-center">${I18N.web_log_empty}</div>`;
             
-            // Парсим эмодзи в логах, так как они загрузились динамически
+            // Парсим эмодзи после загрузки логов
             if (window.parsePageEmojis) window.parsePageEmojis();
             
             contentDiv.scrollTop = contentDiv.scrollHeight;

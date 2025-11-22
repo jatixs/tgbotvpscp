@@ -8,17 +8,28 @@ img.emoji {
 }
 
 /* --- AUTOFILL FIX (Исправление белой полосы в полях ввода) --- */
-/* Заменяем белый фон автозаполнения на темный через внутреннюю тень */
 input:-webkit-autofill,
 input:-webkit-autofill:hover, 
 input:-webkit-autofill:focus, 
 input:-webkit-autofill:active {
-    /* Используем цвет, близкий к вашему bg-black/20 на темном фоне (#1f2937 - это gray-800) */
     -webkit-box-shadow: 0 0 0 30px #1f2937 inset !important;
     -webkit-text-fill-color: white !important;
     caret-color: white !important;
-    transition: background-color 5000s ease-in-out 0s; /* Задержка переключения цвета фона */
-    border-radius: 0.75rem; /* rounded-xl */
+    transition: background-color 5000s ease-in-out 0s;
+    border-radius: 0.75rem;
+}
+
+/* --- NUMBER INPUT FIX (Убираем стрелочки в input type="number") --- */
+/* Chrome, Safari, Edge, Opera */
+input::-webkit-outer-spin-button,
+input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+/* Firefox */
+input[type=number] {
+  -moz-appearance: textfield;
 }
 
 /* --- Базовые стили (анти-блик при перезагрузке) --- */
@@ -31,7 +42,6 @@ body {
     min-height: 100%;
 }
 
-/* Принудительный темный фон для html с классом dark */
 html.dark {
     background-color: #111827; /* gray-900 */
 }
