@@ -1,3 +1,18 @@
+/* --- Базовые стили (анти-блик) --- */
+html {
+    background-color: #f3f4f6; /* gray-100 */
+}
+
+html.dark {
+    background-color: #111827; /* gray-900 */
+}
+
+html.dark body {
+    background-color: #111827;
+    color: #f3f4f6;
+}
+
+/* --- Анимации --- */
 @keyframes float {
     0% { transform: translateY(0px); }
     50% { transform: translateY(-20px); }
