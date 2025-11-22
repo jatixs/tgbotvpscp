@@ -32,19 +32,16 @@
                             class="w-full px-4 py-3 bg-black/20 border border-white/10 rounded-xl text-gray-100 text-base focus:outline-none focus:border-green-500/50 focus:ring-1 focus:ring-green-500/50 transition-all placeholder-gray-600 text-center"
                             placeholder="123456789" required inputmode="numeric">
                     </div>
-                    
                     <button type="submit" 
                         class="w-full py-3 px-4 bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-400 hover:to-indigo-500 rounded-xl font-bold text-white shadow-lg shadow-blue-500/20 transition-all duration-200 transform hover:scale-[1.02] active:scale-[0.98]">
                         Войти через Telegram
                     </button>
                 </form>
-
                 <div class="relative flex py-5 items-center">
                     <div class="flex-grow border-t border-white/10"></div>
                     <span class="flex-shrink-0 mx-4 text-gray-500 text-[10px] uppercase tracking-widest">или</span>
                     <div class="flex-grow border-t border-white/10"></div>
                 </div>
-
                 <button onclick="toggleForms('password')" 
                     class="w-full py-3 px-4 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl text-gray-300 text-sm font-medium transition-all">
                     Войти по паролю
@@ -54,11 +51,16 @@
             <div id="password-form" class="hidden">
                 <form action="/api/login/password" method="POST" class="space-y-4">
                     <div>
-                        <label class="block text-gray-400 text-xs font-bold mb-2 uppercase tracking-wider">Системный пароль</label>
+                        <label class="block text-gray-400 text-xs font-bold mb-2 uppercase tracking-wider">Telegram ID</label>
+                        <input type="number" name="user_id" 
+                            class="w-full px-4 py-3 bg-black/20 border border-white/10 rounded-xl text-gray-100 text-base focus:outline-none focus:border-green-500/50 focus:ring-1 focus:ring-green-500/50 transition-all placeholder-gray-600 text-center"
+                            placeholder="123456789" required inputmode="numeric">
+                    </div>
+                    <div>
+                        <label class="block text-gray-400 text-xs font-bold mb-2 uppercase tracking-wider">Пароль</label>
                         <input type="password" name="password" 
                             class="w-full px-4 py-3 bg-black/20 border border-white/10 rounded-xl text-gray-100 text-base focus:outline-none focus:border-green-500/50 focus:ring-1 focus:ring-green-500/50 transition-all placeholder-gray-600"
                             placeholder="••••••••" required>
-                        
                         <div class="text-right mt-2">
                             <button type="button" onclick="toggleForms('reset')" class="text-xs text-blue-400 hover:text-blue-300 transition-colors">
                                 Забыли пароль?
@@ -71,10 +73,9 @@
                         Войти
                     </button>
                 </form>
-
                 <button onclick="toggleForms('magic')" class="mt-6 text-gray-500 hover:text-gray-300 text-xs w-full text-center transition-colors flex justify-center items-center gap-1 py-2">
                     <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path></svg>
-                    Назад к Telegram ID
+                    Назад к Magic Link
                 </button>
             </div>
 
@@ -83,7 +84,6 @@
                     <h3 class="text-lg font-bold text-white mb-2">Сброс пароля</h3>
                     <p class="text-xs text-gray-400">Введите ваш Telegram ID. Мы отправим ссылку для сброса в личные сообщения.</p>
                 </div>
-                
                 <div class="space-y-4">
                     <div>
                         <label class="block text-gray-400 text-xs font-bold mb-2 uppercase tracking-wider">Ваш Telegram ID</label>
@@ -91,56 +91,37 @@
                             class="w-full px-4 py-3 bg-black/20 border border-white/10 rounded-xl text-gray-100 text-base focus:outline-none focus:border-yellow-500/50 focus:ring-1 focus:ring-yellow-500/50 transition-all placeholder-gray-600 text-center"
                             placeholder="123456789" required inputmode="numeric">
                     </div>
-                    
                     <button onclick="requestPasswordReset()" id="btn-reset-send"
                         class="w-full py-3 px-4 bg-gradient-to-r from-yellow-600 to-orange-600 hover:from-yellow-500 hover:to-orange-500 rounded-xl font-bold text-white shadow-lg shadow-yellow-500/20 transition-all duration-200 transform hover:scale-[1.02] active:scale-[0.98]">
                         Отправить ссылку
                     </button>
                 </div>
-
                 <div id="reset-error-block" class="hidden mt-4 p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-center">
-                    <p class="text-sm text-red-400 mb-3">Пользователь не найден в системе.</p>
-                    <a href="#" id="admin-link-btn" target="_blank" class="inline-flex items-center gap-2 px-4 py-2 bg-white/5 hover:bg-white/10 rounded-lg text-xs font-bold text-white transition border border-white/10">
-                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"></path></svg>
-                        Написать Админу
-                    </a>
+                    <p class="text-sm text-red-400 mb-3">Пользователь не найден.</p>
+                    <a href="#" id="admin-link-btn" target="_blank" class="inline-flex items-center gap-2 px-4 py-2 bg-white/5 hover:bg-white/10 rounded-lg text-xs font-bold text-white transition border border-white/10">Написать Админу</a>
                 </div>
-
-                <button onclick="toggleForms('password')" class="mt-6 text-gray-500 hover:text-gray-300 text-xs w-full text-center transition-colors flex justify-center items-center gap-1 py-2">
-                    <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path></svg>
-                    Назад к входу
-                </button>
+                <button onclick="toggleForms('password')" class="mt-6 text-gray-500 hover:text-gray-300 text-xs w-full text-center transition-colors flex justify-center items-center gap-1 py-2">Назад</button>
             </div>
 
             <div id="set-password-form" class="hidden">
                 <div class="text-center mb-6">
                     <h3 class="text-lg font-bold text-white mb-2">Новый пароль</h3>
-                    <p class="text-xs text-gray-400">Придумайте надежный пароль для входа.</p>
                 </div>
                 <div class="space-y-4">
                     <div>
-                        <label class="block text-gray-400 text-xs font-bold mb-2 uppercase tracking-wider">Новый пароль</label>
-                        <input type="password" id="new_pass" 
-                            class="w-full px-4 py-3 bg-black/20 border border-white/10 rounded-xl text-gray-100 text-base focus:outline-none focus:border-green-500/50 focus:ring-1 focus:ring-green-500/50 transition-all placeholder-gray-600"
-                            placeholder="••••••••" required>
+                        <label class="block text-gray-400 text-xs font-bold mb-2 uppercase tracking-wider">Пароль</label>
+                        <input type="password" id="new_pass" class="w-full px-4 py-3 bg-black/20 border border-white/10 rounded-xl text-gray-100 text-base focus:outline-none focus:border-green-500/50 focus:ring-1 focus:ring-green-500/50 transition-all placeholder-gray-600" required>
                     </div>
                     <div>
-                        <label class="block text-gray-400 text-xs font-bold mb-2 uppercase tracking-wider">Подтверждение</label>
-                        <input type="password" id="confirm_pass" 
-                            class="w-full px-4 py-3 bg-black/20 border border-white/10 rounded-xl text-gray-100 text-base focus:outline-none focus:border-green-500/50 focus:ring-1 focus:ring-green-500/50 transition-all placeholder-gray-600"
-                            placeholder="••••••••" required>
+                        <label class="block text-gray-400 text-xs font-bold mb-2 uppercase tracking-wider">Повтор</label>
+                        <input type="password" id="confirm_pass" class="w-full px-4 py-3 bg-black/20 border border-white/10 rounded-xl text-gray-100 text-base focus:outline-none focus:border-green-500/50 focus:ring-1 focus:ring-green-500/50 transition-all placeholder-gray-600" required>
                     </div>
-                    <button onclick="submitNewPassword()" id="btn-save-pass"
-                        class="w-full py-3 px-4 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-400 hover:to-emerald-500 rounded-xl font-bold text-white shadow-lg shadow-green-500/20 transition-all duration-200 transform hover:scale-[1.02] active:scale-[0.98]">
-                        Сохранить пароль
-                    </button>
+                    <button onclick="submitNewPassword()" id="btn-save-pass" class="w-full py-3 px-4 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-400 hover:to-emerald-500 rounded-xl font-bold text-white shadow-lg shadow-green-500/20 transition-all duration-200 transform hover:scale-[1.02] active:scale-[0.98]">Сохранить</button>
                 </div>
             </div>
         </div>
-        
         {error_block}
     </div>
-
     <script src="/static/js/login.js"></script>
 </body>
 </html>
