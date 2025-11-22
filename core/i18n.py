@@ -351,7 +351,24 @@ STRINGS = {
         "web_pass_mismatch": "Пароли не совпадают",
         "web_pass_wrong_current": "Неверный текущий пароль",
         "web_default_pass_alert": "⚠️ Внимание! Используется стандартный пароль ('admin'). Рекомендуется сменить его в настройках.",
-        "web_logs_cleared_alert": "Очищено!"
+        "web_logs_cleared_alert": "Очищено!",
+        "web_pass_wrong_current": "Неверный текущий пароль",
+        "web_default_pass_alert": "⚠️ Внимание! Используется стандартный пароль ('admin'). Рекомендуется сменить его в настройках.",
+        
+        # --- FORGOT PASSWORD ---
+        "login_forgot_pass": "Забыли пароль?",
+        "login_reset_title": "Сброс пароля",
+        "login_reset_desc": "Введите ваш Telegram ID. Мы отправим ссылку для сброса вам в личные сообщения.",
+        "login_btn_send_link": "Отправить ссылку",
+        "login_btn_contact_admin": "Написать Админу",
+        "login_error_user_not_found": "Пользователь не найден в системе.",
+        "login_link_sent_title": "Ссылка отправлена!",
+        "login_link_sent_desc": "Проверьте сообщения от бота в Telegram.",
+        "reset_page_title": "Установка нового пароля",
+        "reset_btn_set": "Установить пароль",
+        "reset_success_title": "Пароль изменен!",
+        "reset_success_desc": "Теперь вы можете войти с новым паролем.",
+        "reset_token_expired": "Ссылка устарела или недействительна."
     },
     'en': {
         "btn_back": "🔙 Back",
@@ -698,7 +715,23 @@ STRINGS = {
         "web_pass_mismatch": "Passwords do not match",
         "web_pass_wrong_current": "Invalid current password",
         "web_default_pass_alert": "⚠️ Warning! Default password ('admin') is in use. Please change it in settings.",
-        "web_logs_cleared_alert": "Cleared!"
+        "web_logs_cleared_alert": "Cleared!",
+        "web_pass_wrong_current": "Invalid current password",
+        "web_default_pass_alert": "⚠️ Warning! Default password ('admin') is in use. Please change it in settings.",
+        # --- FORGOT PASSWORD ---
+        "login_forgot_pass": "Forgot password?",
+        "login_reset_title": "Reset Password",
+        "login_reset_desc": "Enter your Telegram ID. We will send a reset link to your private messages.",
+        "login_btn_send_link": "Send Link",
+        "login_btn_contact_admin": "Contact Admin",
+        "login_error_user_not_found": "User not found in system.",
+        "login_link_sent_title": "Link Sent!",
+        "login_link_sent_desc": "Check messages from the bot in Telegram.",
+        "reset_page_title": "Set New Password",
+        "reset_btn_set": "Set Password",
+        "reset_success_title": "Password Changed!",
+        "reset_success_desc": "You can now login with your new password.",
+        "reset_token_expired": "Link expired or invalid."
     }
 }
 

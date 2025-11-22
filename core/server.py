@@ -6,7 +6,7 @@ import secrets
 import asyncio
 import requests
 import psutil
-import hashlib # <-- Добавлено
+import hashlib
 from aiohttp import web
 from aiogram import Bot
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
@@ -14,7 +14,7 @@ from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from .nodes_db import get_node_by_token, update_node_heartbeat, create_node, delete_node
 from .config import (
     WEB_SERVER_HOST, WEB_SERVER_PORT, NODE_OFFLINE_TIMEOUT, BASE_DIR, ADMIN_USER_ID, ENABLE_WEB_UI,
-    save_system_config, BOT_LOG_DIR, WATCHDOG_LOG_DIR, WEB_AUTH_FILE # <-- Импорт WEB_AUTH_FILE
+    save_system_config, BOT_LOG_DIR, WATCHDOG_LOG_DIR, WEB_AUTH_FILE, ADMIN_USERNAME
 )
 # Импортируем конфиг целиком для чтения актуальных значений
 from . import config as current_config
@@ -33,6 +33,9 @@ STATIC_DIR = os.path.join(BASE_DIR, "core", "static")
 
 AGENT_FLAG = "🏳️"
 AGENT_IP_CACHE = "Loading..."
+
+# Хранилище токенов сброса пароля: {token: timestamp}
+RESET_TOKENS = {}
 
 # --- PASSWORD UTILS ---
 def get_stored_password_hash():
@@ -355,7 +358,6 @@ async def handle_save_system_config(request):
 
 async def handle_change_password(request):
     user = get_current_user(request)
-    # Разрешаем смену пароля только Админу (ID 0), который вошел по паролю
     if not user or user.get('type') != 'password' or user['id'] != 0:
         return web.json_response({"error": "Unauthorized"}, status=403)
     
@@ -371,7 +373,6 @@ async def handle_change_password(request):
         if not new_pass or len(new_pass) < 4:
              return web.json_response({"error": "Password too short"}, status=400)
 
-        # Сохраняем хеш
         new_hash = hashlib.sha256(new_pass.encode()).hexdigest()
         with open(WEB_AUTH_FILE, "w") as f:
             f.write(new_hash)
@@ -470,15 +471,85 @@ async def handle_set_language(request):
     except Exception as e:
         return web.json_response({"error": str(e)}, status=500)
 
+# --- FORGOT PASSWORD HANDLERS ---
+
+async def handle_reset_request(request):
+    try:
+        data = await request.json()
+        try: user_id = int(data.get("user_id", 0))
+        except: user_id = 0
+        
+        if user_id not in ALLOWED_USERS:
+            admin_url = f"https://t.me/{ADMIN_USERNAME}" if ADMIN_USERNAME else f"tg://user?id={ADMIN_USER_ID}"
+            return web.json_response({
+                "error": "not_found", 
+                "admin_url": admin_url
+            }, status=404)
+
+        token = secrets.token_urlsafe(32)
+        RESET_TOKENS[token] = time.time()
+        
+        host = request.headers.get('Host', f'{WEB_SERVER_HOST}:{WEB_SERVER_PORT}')
+        proto = "https" if request.headers.get('X-Forwarded-Proto') == "https" else "http"
+        reset_link = f"{proto}://{host}/reset_password?token={token}"
+        
+        bot = request.app.get('bot')
+        if bot:
+            try:
+                kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="🔐 Сбросить пароль", url=reset_link)]])
+                await bot.send_message(user_id, "<b>🆘 Запрос на сброс пароля Web-панели</b>\n\nНажмите кнопку ниже, чтобы задать новый пароль.", reply_markup=kb, parse_mode="HTML")
+                return web.json_response({"status": "ok"})
+            except Exception as e:
+                logging.error(f"Failed to send reset link: {e}")
+                return web.json_response({"error": "bot_send_error"}, status=500)
+        
+        return web.json_response({"error": "bot_not_ready"}, status=500)
+
+    except Exception as e:
+        return web.json_response({"error": str(e)}, status=500)
+
+async def handle_reset_page_render(request):
+    token = request.query.get("token")
+    if not token or token not in RESET_TOKENS:
+        return web.Response(text=STRINGS[DEFAULT_LANGUAGE]["reset_token_expired"], status=403)
+    if time.time() - RESET_TOKENS[token] > 600:
+        del RESET_TOKENS[token]
+        return web.Response(text=STRINGS[DEFAULT_LANGUAGE]["reset_token_expired"], status=403)
+
+    html = load_template("reset_password.html")
+    return web.Response(text=html, content_type='text/html')
+
+async def handle_reset_confirm(request):
+    try:
+        data = await request.json()
+        token = data.get("token")
+        new_pass = data.get("password")
+        
+        if not token or token not in RESET_TOKENS:
+             return web.json_response({"error": "Token expired"}, status=403)
+        
+        if not new_pass or len(new_pass) < 4:
+             return web.json_response({"error": "Password too short"}, status=400)
+
+        new_hash = hashlib.sha256(new_pass.encode()).hexdigest()
+        with open(WEB_AUTH_FILE, "w") as f:
+            f.write(new_hash)
+        
+        del RESET_TOKENS[token]
+        
+        return web.json_response({"status": "ok"})
+    except Exception as e:
+        return web.json_response({"error": str(e)}, status=500)
+
+# --- LOGIN PAGE ---
+
 async def handle_login_page(request):
     if get_current_user(request): raise web.HTTPFound('/')
     html = load_template("login.html")
     
-    # Инъекция предупреждения о дефолтном пароле
     alert_block = ""
     if is_default_password():
         lang = DEFAULT_LANGUAGE
-        # Пытаемся определить язык из куки, если есть (для логина маловероятно, но все же)
         alert_msg = _("web_default_pass_alert", lang)
         alert_block = f"""
         <div class="mb-4 p-3 bg-yellow-500/20 border border-yellow-500/50 rounded-xl flex items-start gap-3">
@@ -607,6 +678,9 @@ async def start_web_server(bot_instance: Bot):
         app.router.add_post('/api/login/request', handle_login_request)
         app.router.add_get('/api/login/magic', handle_magic_login)
         app.router.add_post('/api/login/password', handle_login_password)
+        app.router.add_post('/api/login/reset', handle_reset_request) # NEW
+        app.router.add_get('/reset_password', handle_reset_page_render) # NEW
+        app.router.add_post('/api/reset/confirm', handle_reset_confirm) # NEW
         app.router.add_post('/logout', handle_logout)
         app.router.add_get('/api/node/details', handle_node_details)
         app.router.add_get('/api/agent/stats', handle_agent_stats)
@@ -615,7 +689,7 @@ async def start_web_server(bot_instance: Bot):
         app.router.add_post('/api/settings/save', handle_save_notifications)
         app.router.add_post('/api/settings/language', handle_set_language)
         app.router.add_post('/api/settings/system', handle_save_system_config)
-        app.router.add_post('/api/settings/password', handle_change_password) # <-- Добавлено
+        app.router.add_post('/api/settings/password', handle_change_password)
         app.router.add_post('/api/logs/clear', handle_clear_logs)
         app.router.add_post('/api/users/action', handle_user_action)
         app.router.add_post('/api/nodes/add', handle_node_add)
