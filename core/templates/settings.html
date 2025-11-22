@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0">
+    <title>{web_title}</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="/static/js/theme_init.js"></script>
+    <script>
+        const I18N = {i18n_json};
+    </script>
+    <script src="https://unpkg.com/twemoji@latest/dist/twemoji.min.js" crossorigin="anonymous"></script>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body class="bg-gray-100 text-gray-900 dark:bg-gray-900 dark:text-gray-100 font-sans selection:bg-green-500/30 pb-10 overflow-x-hidden">
+    
+    <div class="fixed top-[-10%] left-[-10%] w-96 h-96 rounded-full mix-blend-multiply dark:mix-blend-screen filter blur-3xl animate-float pointer-events-none opacity-70 dark:opacity-100 bg-cyan-300 dark:bg-purple-600/20"></div>
+    <div class="fixed bottom-[-10%] right-[-10%] w-96 h-96 rounded-full mix-blend-multiply dark:mix-blend-screen filter blur-3xl animate-float delay-2000 pointer-events-none opacity-70 dark:opacity-100 bg-rose-300 dark:bg-blue-600/20"></div>
+
+    <nav class="bg-white/70 dark:bg-black/40 backdrop-blur-xl border-b border-white/20 dark:border-white/5 sticky top-0 z-40 shadow-sm dark:shadow-none">
+        <div class="max-w-6xl mx-auto px-4 py-3 flex flex-wrap justify-between items-center gap-3">
+            <div class="flex items-center space-x-2">
+                <a href="/" class="text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white transition flex items-center gap-2 text-sm font-medium">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" /></svg>
+                    {web_back}
+                </a>
+                <span class="font-bold text-lg ml-2">{web_settings_page_title}</span>
+            </div>
+            
+            <div class="flex items-center gap-3 sm:gap-4">
+                <div class="relative group">
+                    <button class="flex items-center justify-center w-8 h-8 rounded-lg hover:bg-black/5 dark:hover:bg-white/10 transition text-gray-600 dark:text-gray-400" id="langBtn">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M3 5h12M9 3v2m1.048 9.5A18.022 18.022 0 016.412 9m6.088 9h7M11 21l5-10 5 10M12.751 5C11.783 10.77 8.07 15.61 3 18.129" />
+                        </svg>
+                    </button>
+                    <div class="absolute right-0 top-full pt-2 w-32 hidden group-hover:block z-50">
+                        <div class="bg-white/90 dark:bg-gray-800 border border-gray-200 dark:border-white/10 rounded-xl shadow-xl backdrop-blur-sm overflow-hidden">
+                            <button onclick="setLanguage('ru')" class="w-full text-left px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-white/5 flex items-center gap-2 text-gray-800 dark:text-gray-200">
+                                <span>🇷🇺</span> Русский
+                            </button>
+                            <button onclick="setLanguage('en')" class="w-full text-left px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-white/5 flex items-center gap-2 text-gray-800 dark:text-gray-200">
+                                <span>🇬🇧</span> English
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <button onclick="toggleTheme()" class="flex items-center justify-center w-8 h-8 rounded-lg hover:bg-black/5 dark:hover:bg-white/10 transition text-gray-600 dark:text-gray-400" id="themeBtn">
+                    <svg id="iconMoon" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" /></svg>
+                    <svg id="iconSun" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" /></svg>
+                    <svg id="iconSystem" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>
+                </button>
+
+                <div class="hidden sm:flex items-center gap-2 bg-white/60 dark:bg-white/5 px-3 py-1.5 rounded-full border border-white/40 dark:border-white/5 shadow-sm dark:shadow-none max-w-[140px] sm:max-w-none">
+                    {user_avatar}
+                    <span class="text-xs font-medium text-gray-700 dark:text-gray-300 truncate">{user_name}</span>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <main class="max-w-4xl mx-auto px-4 mt-6 sm:mt-8 relative z-10">
+
+        <div class="bg-white/60 dark:bg-white/5 backdrop-blur-md border border-white/40 dark:border-white/10 rounded-2xl p-6 mb-6 shadow-lg dark:shadow-none">
+            <h2 class="text-xl font-bold text-gray-900 dark:text-white mb-6 flex items-center gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-blue-500 dark:text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
+                </svg>
+                {web_sys_settings_section}
+            </h2>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-8 mb-6">
+                <div>
+                    <h3 class="text-sm font-bold text-gray-500 dark:text-gray-400 uppercase mb-4 tracking-wider">{web_thresholds_title}</h3>
+                    
+                    <div class="space-y-5">
+                        <div>
+                            <div class="flex justify-between text-sm mb-1">
+                                <span class="text-gray-700 dark:text-gray-300">{web_cpu_threshold}</span>
+                                <span class="font-mono text-blue-600 dark:text-blue-400 font-bold" id="val_cpu_display">{val_cpu}%</span>
+                            </div>
+                            <input type="range" id="conf_cpu" min="50" max="99" value="{val_cpu}" class="w-full h-2 bg-gray-200 dark:bg-gray-700 rounded-lg appearance-none cursor-pointer accent-blue-500" oninput="document.getElementById('val_cpu_display').innerText = this.value + '%'">
+                        </div>
+                        
+                        <div>
+                            <div class="flex justify-between text-sm mb-1">
+                                <span class="text-gray-700 dark:text-gray-300">{web_ram_threshold}</span>
+                                <span class="font-mono text-purple-600 dark:text-purple-400 font-bold" id="val_ram_display">{val_ram}%</span>
+                            </div>
+                            <input type="range" id="conf_ram" min="50" max="99" value="{val_ram}" class="w-full h-2 bg-gray-200 dark:bg-gray-700 rounded-lg appearance-none cursor-pointer accent-purple-500" oninput="document.getElementById('val_ram_display').innerText = this.value + '%'">
+                        </div>
+
+                        <div>
+                            <div class="flex justify-between text-sm mb-1">
+                                <span class="text-gray-700 dark:text-gray-300">{web_disk_threshold}</span>
+                                <span class="font-mono text-green-600 dark:text-green-400 font-bold" id="val_disk_display">{val_disk}%</span>
+                            </div>
+                            <input type="range" id="conf_disk" min="50" max="99" value="{val_disk}" class="w-full h-2 bg-gray-200 dark:bg-gray-700 rounded-lg appearance-none cursor-pointer accent-green-500" oninput="document.getElementById('val_disk_display').innerText = this.value + '%'">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="flex flex-col justify-between">
+                    <div>
+                        <h3 class="text-sm font-bold text-gray-500 dark:text-gray-400 uppercase mb-4 tracking-wider">{web_intervals_title}</h3>
+                        <div class="space-y-3">
+                            <div>
+                                <div class="flex items-center gap-1 mb-1">
+                                    <label class="block text-xs text-gray-600 dark:text-gray-400">{web_traffic_interval}</label>
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 text-gray-400 cursor-help" fill="none" viewBox="0 0 24 24" stroke="currentColor" title="Частота обновления графиков трафика (5-100 сек)">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                    </svg>
+                                </div>
+                                <input type="number" id="conf_traffic" value="{val_traffic}" class="w-full bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 text-gray-900 dark:text-white">
+                                <div class="text-red-500 text-xs mt-1 hidden" id="error_conf_traffic"></div>
+                            </div>
+                            <div>
+                                <div class="flex items-center gap-1 mb-1">
+                                    <label class="block text-xs text-gray-600 dark:text-gray-400">{web_node_timeout}</label>
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 text-gray-400 cursor-help" fill="none" viewBox="0 0 24 24" stroke="currentColor" title="Время без ответа, после которого нода считается оффлайн">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                    </svg>
+                                </div>
+                                <input type="number" id="conf_timeout" value="{val_timeout}" class="w-full bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 text-gray-900 dark:text-white">
+                                <div class="text-red-500 text-xs mt-1 hidden" id="error_conf_timeout"></div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="mt-6 pt-6 border-t border-gray-200 dark:border-white/5">
+                         <h3 class="text-sm font-bold text-gray-500 dark:text-gray-400 uppercase mb-3 tracking-wider">{web_logs_mgmt_title}</h3>
+                         <button onclick="clearLogs()" id="clearLogsBtn" class="w-full px-4 py-2 bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 text-red-600 dark:text-red-400 rounded-lg text-sm transition flex items-center justify-center gap-2">
+                             <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                             {web_clear_logs_btn}
+                         </button>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="flex justify-end">
+                <button onclick="saveSystemConfig()" id="saveSysBtn" disabled class="px-6 py-2 bg-gray-200 dark:bg-gray-700 text-gray-400 dark:text-gray-500 rounded-lg font-bold transition transform cursor-not-allowed">{web_save_btn}</button>
+            </div>
+        </div>
+
+        <div class="bg-white/60 dark:bg-white/5 backdrop-blur-md border border-white/40 dark:border-white/10 rounded-2xl p-6 mb-6 shadow-lg dark:shadow-none" id="securitySection">
+            <h2 class="text-xl font-bold text-gray-900 dark:text-white mb-6 flex items-center gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-red-500 dark:text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                </svg>
+                {web_security_section}
+            </h2>
+            
+            <div class="w-full">
+                <h3 class="text-sm font-bold text-gray-500 dark:text-gray-400 uppercase mb-4 tracking-wider">{web_change_password_title}</h3>
+                <div class="space-y-4">
+                    <div>
+                        <input type="password" id="pass_current" placeholder="{web_current_password}" class="w-full bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-red-500 text-gray-900 dark:text-white">
+                    </div>
+                    <div class="grid grid-cols-2 gap-2">
+                        <input type="password" id="pass_new" placeholder="{web_new_password}" class="w-full bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-red-500 text-gray-900 dark:text-white">
+                        <input type="password" id="pass_confirm" placeholder="{web_confirm_password}" class="w-full bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-red-500 text-gray-900 dark:text-white">
+                    </div>
+                    <button onclick="changePassword()" id="btnChangePass" class="w-full px-4 py-2 bg-red-500 hover:bg-red-600 text-white rounded-lg font-bold transition shadow-lg shadow-red-500/20">{web_change_btn}</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="bg-white/60 dark:bg-white/5 backdrop-blur-md border border-white/40 dark:border-white/10 rounded-2xl p-6 mb-6 shadow-lg dark:shadow-none">
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-yellow-500 dark:text-yellow-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" /></svg>
+                    {web_notif_section}
+                </h2>
+                <span id="notifStatus" class="text-xs font-medium text-gray-500 dark:text-gray-400 transition-opacity opacity-0"></span>
+            </div>
+            
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                
+                <div class="flex items-center justify-between bg-gray-50 dark:bg-black/20 p-4 rounded-xl hover:bg-gray-100 dark:hover:bg-black/30 transition border border-gray-200 dark:border-white/5 cursor-pointer" onclick="document.getElementById('alert_resources').click(); triggerAutoSave();">
+                    <span class="text-sm font-medium text-gray-900 dark:text-white">{notifications_alert_name_res}</span>
+                    <label class="relative inline-flex items-center cursor-pointer" onclick="event.stopPropagation(); triggerAutoSave();">
+                        <input type="checkbox" id="alert_resources" class="sr-only peer" {check_resources}>
+                        <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-green-500"></div>
+                    </label>
+                </div>
+                
+                <div class="flex items-center justify-between bg-gray-50 dark:bg-black/20 p-4 rounded-xl hover:bg-gray-100 dark:hover:bg-black/30 transition border border-gray-200 dark:border-white/5 cursor-pointer" onclick="document.getElementById('alert_logins').click(); triggerAutoSave();">
+                    <span class="text-sm font-medium text-gray-900 dark:text-white">{notifications_alert_name_logins}</span>
+                    <label class="relative inline-flex items-center cursor-pointer" onclick="event.stopPropagation(); triggerAutoSave();">
+                        <input type="checkbox" id="alert_logins" class="sr-only peer" {check_logins}>
+                        <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-green-500"></div>
+                    </label>
+                </div>
+
+                <div class="flex items-center justify-between bg-gray-50 dark:bg-black/20 p-4 rounded-xl hover:bg-gray-100 dark:hover:bg-black/30 transition border border-gray-200 dark:border-white/5 cursor-pointer" onclick="document.getElementById('alert_bans').click(); triggerAutoSave();">
+                    <span class="text-sm font-medium text-gray-900 dark:text-white">{notifications_alert_name_bans}</span>
+                    <label class="relative inline-flex items-center cursor-pointer" onclick="event.stopPropagation(); triggerAutoSave();">
+                        <input type="checkbox" id="alert_bans" class="sr-only peer" {check_bans}>
+                        <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-green-500"></div>
+                    </label>
+                </div>
+
+                <div class="flex items-center justify-between bg-gray-50 dark:bg-black/20 p-4 rounded-xl hover:bg-gray-100 dark:hover:bg-black/30 transition border border-gray-200 dark:border-white/5 cursor-pointer" onclick="document.getElementById('alert_downtime').click(); triggerAutoSave();">
+                    <span class="text-sm font-medium text-gray-900 dark:text-white">{notifications_alert_name_downtime}</span>
+                    <label class="relative inline-flex items-center cursor-pointer" onclick="event.stopPropagation(); triggerAutoSave();">
+                        <input type="checkbox" id="alert_downtime" class="sr-only peer" {check_downtime}>
+                        <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-green-500"></div>
+                    </label>
+                </div>
+            </div>
+        </div>
+
+        <div id="usersSection" class="bg-white/60 dark:bg-white/5 backdrop-blur-md border border-white/40 dark:border-white/10 rounded-2xl p-6 mb-6 hidden shadow-lg dark:shadow-none">
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-blue-500 dark:text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" /></svg>
+                    {web_users_section}
+                </h2>
+                <button onclick="openAddUserModal()" class="bg-gray-100 dark:bg-white/10 hover:bg-gray-200 dark:hover:bg-white/20 p-2 rounded-lg text-green-600 dark:text-green-400 transition border border-gray-200 dark:border-white/5" title="{web_add_user_btn}">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" /></svg>
+                </button>
+            </div>
+            
+            <div class="overflow-x-auto rounded-lg border border-gray-200 dark:border-white/5">
+                <table class="w-full text-sm text-left text-gray-600 dark:text-gray-400">
+                    <thead class="text-xs text-gray-500 dark:text-gray-500 uppercase bg-gray-50 dark:bg-black/20 border-b border-gray-200 dark:border-white/5">
+                        <tr>
+                            <th class="px-4 py-3">{web_user_id}</th>
+                            <th class="px-4 py-3">{web_user_name}</th>
+                            <th class="px-4 py-3">{web_user_role}</th>
+                            <th class="px-4 py-3 text-right">{web_user_action}</th>
+                        </tr>
+                    </thead>
+                    <tbody id="usersTableBody" class="bg-white/50 dark:bg-transparent">
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="bg-white/60 dark:bg-white/5 backdrop-blur-md border border-white/40 dark:border-white/10 rounded-2xl p-6 shadow-lg dark:shadow-none">
+            <h2 class="text-xl font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-purple-500 dark:text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" /></svg>
+                {web_add_node_section}
+            </h2>
+            <div class="flex flex-wrap sm:flex-nowrap gap-2">
+                <input type="text" id="newNodeName" placeholder="{web_node_name_placeholder}" class="w-full flex-1 bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-lg px-4 py-2 text-gray-900 dark:text-white focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 placeholder-gray-400 dark:placeholder-gray-600">
+                <button onclick="addNode()" class="w-full sm:w-auto px-6 py-2 bg-purple-600 hover:bg-purple-500 active:scale-95 rounded-lg font-bold text-white transition transform duration-100 flex-shrink-0">{web_create_btn}</button>
+            </div>
+            <div id="nodeResult" class="mt-4 hidden">
+                <div class="bg-gray-50 dark:bg-black/30 p-4 rounded-lg border border-gray-200 dark:border-white/10">
+                    <div class="text-xs text-gray-500 mb-1 font-medium">{web_node_token}</div>
+                    <div class="font-mono text-green-600 dark:text-green-400 break-all select-all text-sm bg-white dark:bg-black/20 p-2 rounded border border-gray-100 dark:border-white/5" id="newNodeToken"></div>
+                    <div class="text-xs text-gray-500 mt-3 mb-1 font-medium">{web_node_cmd}</div>
+                    <div class="font-mono text-xs text-blue-600 dark:text-blue-300 break-all bg-white dark:bg-black/50 p-2 rounded select-all border border-gray-100 dark:border-white/5" id="newNodeCmd"></div>
+                </div>
+            </div>
+        </div>
+
+    </main>
+
+    <script>
+        const USERS_DATA = {users_data_json}; 
+    </script>
+    <script src="/static/js/common.js"></script>
+    <script src="/static/js/settings.js"></script>
+</body>
+</html>
