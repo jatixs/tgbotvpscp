@@ -71,16 +71,12 @@ STRINGS = {
         "alert_node_down": "🚨 <b>АЛЕРТ: Нода '{name}' НЕДОСТУПНА (Down)!</b>\n⏱ Последний отклик: {last_seen}",
         "alert_node_up": "✅ <b>Нода '{name}' восстановилась (Up).</b>\n🟢 Снова в сети.",
         "alert_node_restarting": "🔵 <b>Нода '{name}' перезагружается...</b>",
-        
-        # --- НОВЫЕ АЛЕРТЫ РЕСУРСОВ ДЛЯ НОД ---
         "alert_node_cpu_high": "⚠️ <b>Нода '{name}': Высокий CPU!</b>\nНагрузка: <b>{usage}%</b> (Порог: {threshold}%)",
         "alert_node_cpu_normal": "✅ <b>Нода '{name}': CPU в норме.</b>\nНагрузка: <b>{usage}%</b>",
         "alert_node_ram_high": "⚠️ <b>Нода '{name}': Высокая RAM!</b>\nЗанято: <b>{usage}%</b> (Порог: {threshold}%)",
         "alert_node_ram_normal": "✅ <b>Нода '{name}': RAM в норме.</b>\nЗанято: <b>{usage}%</b>",
         "alert_node_disk_high": "⚠️ <b>Нода '{name}': Мало места (Disk)!</b>\nЗанято: <b>{usage}%</b> (Порог: {threshold}%)",
         "alert_node_disk_normal": "✅ <b>Нода '{name}': Место на диске в норме.</b>\nЗанято: <b>{usage}%</b>",
-        # -------------------------------------
-
         "utils_vless_error": "⚠️ Ошибка при генерации VLESS-ссылки: {error}",
         "utils_docker_ps_error": "Не удалось выполнить 'docker ps'. Убедитесь, что Docker установлен и запущен, и у бота есть права.\n<pre>{error}</pre>",
         "utils_bot_restarted": "✅ Бот успешно перезапущен.",
@@ -279,12 +275,17 @@ STRINGS = {
         "web_title": "Агент VPS Бота",
         "web_dashboard_title": "Панель управления",
         "web_agent_stats_title": "Статистика",
-        "web_agent_running": "Агент Запущен",
-        "web_agent_active": "Агент управления VPS активен и ожидает подключений.",
         "web_stats_total": "Всего Нод",
         "web_stats_active": "Активные Ноды",
         "web_footer_endpoint": "Эндпоинт",
-        "web_footer_powered": "Работает на"
+        "web_footer_powered": "Работает на",
+        "web_traffic_total": "Расход трафика (Total)",
+        "web_uptime": "Uptime",
+        "web_cpu": "CPU",
+        "web_ram": "RAM",
+        "web_disk": "Диск",
+        "web_rx": "↓ Принято",
+        "web_tx": "↑ Отдано"
     },
     'en': {
         "btn_back": "🔙 Back",
@@ -351,14 +352,12 @@ STRINGS = {
         "alert_node_up": "✅ <b>Node '{name}' recovered (Up).</b>\n🟢 Online now.",
         "alert_node_restarting": "🔵 <b>Node '{name}' is restarting...</b>",
 
-        # --- NEW NODE RESOURCE ALERTS ---
         "alert_node_cpu_high": "⚠️ <b>Node '{name}': High CPU!</b>\nUsage: <b>{usage}%</b> (Threshold: {threshold}%)",
         "alert_node_cpu_normal": "✅ <b>Node '{name}': CPU normal.</b>\nUsage: <b>{usage}%</b>",
         "alert_node_ram_high": "⚠️ <b>Node '{name}': High RAM!</b>\nUsage: <b>{usage}%</b> (Threshold: {threshold}%)",
         "alert_node_ram_normal": "✅ <b>Node '{name}': RAM normal.</b>\nUsage: <b>{usage}%</b>",
         "alert_node_disk_high": "⚠️ <b>Node '{name}': High Disk!</b>\nUsage: <b>{usage}%</b> (Threshold: {threshold}%)",
         "alert_node_disk_normal": "✅ <b>Node '{name}': Disk usage normal.</b>\nUsage: <b>{usage}%</b>",
-        # --------------------------------
 
         "utils_vless_error": "⚠️ Error generating VLESS link: {error}",
         "utils_docker_ps_error": "Failed to execute 'docker ps'. Ensure Docker is installed, running, and the bot has permissions.\n<pre>{error}</pre>",
@@ -557,13 +556,18 @@ STRINGS = {
         # --- WEB INTERFACE ---
         "web_title": "VPS Bot Agent",
         "web_dashboard_title": "Dashboard",
-        "web_agent_running": "Agent Running",
         "web_agent_stats_title": "Statistics",
-        "web_agent_active": "VPS Management Bot Agent is active and listening.",
         "web_stats_total": "Total Nodes",
         "web_stats_active": "Active Nodes",
         "web_footer_endpoint": "Endpoint",
-        "web_footer_powered": "Powered by"
+        "web_footer_powered": "Powered by",
+        "web_traffic_total": "Total Traffic",
+        "web_uptime": "Uptime",
+        "web_cpu": "CPU",
+        "web_ram": "RAM",
+        "web_disk": "Disk",
+        "web_rx": "↓ RX",
+        "web_tx": "↑ TX"
     }
 }
 

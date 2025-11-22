@@ -47,7 +47,9 @@ def get_current_user(request):
         return user_data
     except: return None
 
+# --- ФОНОВАЯ ЗАДАЧА МОНИТОРИНГА АГЕНТА ---
 async def agent_monitor():
+    """Собирает статистику локального сервера (Агента)."""
     global AGENT_IP_CACHE
     
     psutil.cpu_percent(interval=None)
@@ -425,7 +427,7 @@ async def handle_dashboard(request):
                     Логи системы
                 </button>
                 <a href="/settings" class="px-4 py-2 bg-blue-600 hover:bg-blue-500 rounded-lg text-sm text-white transition flex items-center gap-2">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
                     Настройки
                 </a>
             </div>
@@ -439,11 +441,25 @@ async def handle_dashboard(request):
     web_agent_stats_title = _("web_agent_stats_title", lang)
     web_stats_total = _("web_stats_total", lang)
     web_stats_active = _("web_stats_active", lang)
+    web_traffic_total = _("web_traffic_total", lang)
+    web_uptime = _("web_uptime", lang)
+    web_cpu = _("web_cpu", lang)
+    web_ram = _("web_ram", lang)
+    web_disk = _("web_disk", lang)
+    web_rx = _("web_rx", lang)
+    web_tx = _("web_tx", lang)
     
     html = html.replace("{web_dashboard_title}", web_dashboard_title)
     html = html.replace("{web_agent_stats_title}", web_agent_stats_title)
     html = html.replace("{web_stats_total}", web_stats_total)
     html = html.replace("{web_stats_active}", web_stats_active)
+    html = html.replace("{web_traffic_total}", web_traffic_total)
+    html = html.replace("{web_uptime}", web_uptime)
+    html = html.replace("{web_cpu}", web_cpu)
+    html = html.replace("{web_ram}", web_ram)
+    html = html.replace("{web_disk}", web_disk)
+    html = html.replace("{web_rx}", web_rx)
+    html = html.replace("{web_tx}", web_tx)
     
     html = html.replace("{user_avatar}", _get_avatar_html(user))
     html = html.replace("{user_name}", user.get('first_name', 'User'))
