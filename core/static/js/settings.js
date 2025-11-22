@@ -2,6 +2,88 @@ document.addEventListener("DOMContentLoaded", () => {
     renderUsers();
 });
 
+// --- СИСТЕМНЫЕ НАСТРОЙКИ (AJAX) ---
+async function saveSystemConfig() {
+    const btn = document.getElementById('saveSysBtn');
+    const originalText = btn.innerText;
+    btn.innerText = I18N.web_saving_btn;
+    btn.disabled = true;
+
+    const data = {
+        CPU_THRESHOLD: document.getElementById('conf_cpu').value,
+        RAM_THRESHOLD: document.getElementById('conf_ram').value,
+        DISK_THRESHOLD: document.getElementById('conf_disk').value,
+        TRAFFIC_INTERVAL: document.getElementById('conf_traffic').value,
+        NODE_OFFLINE_TIMEOUT: document.getElementById('conf_timeout').value
+    };
+
+    try {
+        const res = await fetch('/api/settings/system', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(data)
+        });
+        
+        if(res.ok) {
+            // Анимация успеха
+            btn.innerText = I18N.web_saved_btn;
+            btn.classList.remove('bg-blue-600', 'hover:bg-blue-500');
+            btn.classList.add('bg-green-600', 'hover:bg-green-500');
+            
+            setTimeout(() => {
+                btn.innerText = originalText;
+                btn.classList.remove('bg-green-600', 'hover:bg-green-500');
+                btn.classList.add('bg-blue-600', 'hover:bg-blue-500');
+                btn.disabled = false;
+            }, 2000);
+        } else {
+            const json = await res.json();
+            alert(I18N.web_error.replace('{error}', json.error || 'Save failed'));
+            btn.disabled = false;
+            btn.innerText = originalText;
+        }
+    } catch(e) {
+        console.error(e);
+        alert(I18N.web_conn_error.replace('{error}', e));
+        btn.disabled = false;
+        btn.innerText = originalText;
+    }
+}
+
+async function clearLogs() {
+    if(!confirm(I18N.web_clear_logs_confirm)) return;
+    
+    const btn = document.getElementById('clearLogsBtn');
+    const originalHTML = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerText = "Clearing...";
+    
+    try {
+        const res = await fetch('/api/logs/clear', { method: 'POST' });
+        if(res.ok) {
+            // Анимация успеха
+            btn.innerText = "Cleared!";
+            btn.classList.remove('text-red-600', 'dark:text-red-400', 'bg-red-500/10', 'border-red-500/30');
+            btn.classList.add('text-green-600', 'dark:text-green-400', 'bg-green-500/10', 'border-green-500/30');
+            
+            setTimeout(() => {
+                btn.innerHTML = originalHTML;
+                btn.classList.remove('text-green-600', 'dark:text-green-400', 'bg-green-500/10', 'border-green-500/30');
+                btn.classList.add('text-red-600', 'dark:text-red-400', 'bg-red-500/10', 'border-red-500/30');
+                btn.disabled = false;
+            }, 2000);
+        } else {
+            alert("Failed");
+            btn.disabled = false;
+            btn.innerHTML = originalHTML;
+        }
+    } catch(e) {
+        alert(I18N.web_conn_error.replace('{error}', e));
+        btn.disabled = false;
+        btn.innerHTML = originalHTML;
+    }
+}
+
 // --- УВЕДОМЛЕНИЯ (AJAX) ---
 async function saveNotifications() {
     const btn = document.getElementById('saveNotifBtn');
@@ -24,24 +106,29 @@ async function saveNotifications() {
         });
         if(res.ok) {
             btn.innerText = I18N.web_saved_btn;
-            btn.classList.replace('bg-green-600', 'bg-blue-600');
+            btn.classList.remove('bg-green-600', 'hover:bg-green-500');
+            btn.classList.add('bg-blue-600', 'hover:bg-blue-500');
+            
             setTimeout(() => {
                 btn.innerText = originalText;
-                btn.classList.replace('bg-blue-600', 'bg-green-600');
+                btn.classList.remove('bg-blue-600', 'hover:bg-blue-500');
+                btn.classList.add('bg-green-600', 'hover:bg-green-500');
                 btn.disabled = false;
             }, 2000);
         } else {
             alert(I18N.web_error.replace('{error}', 'Save failed'));
             btn.disabled = false;
+            btn.innerText = originalText;
         }
     } catch(e) {
         console.error(e);
         alert(I18N.web_conn_error.replace('{error}', e));
         btn.disabled = false;
+        btn.innerText = originalText;
     }
 }
 
-// --- ПОЛЬЗОВАТЕЛИ (DOM + AJAX) ---
+// --- ПОЛЬЗОВАТЕЛИ ---
 function renderUsers() {
     const tbody = document.getElementById('usersTableBody');
     const section = document.getElementById('usersSection');
@@ -117,7 +204,6 @@ async function openAddUserModal() {
     }
 }
 
-// --- НОДЫ (AJAX) ---
 async function addNode() {
     const nameInput = document.getElementById('newNodeName');
     const name = nameInput.value.trim();

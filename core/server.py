@@ -15,6 +15,9 @@ from .config import (
     WEB_SERVER_HOST, WEB_SERVER_PORT, NODE_OFFLINE_TIMEOUT, BASE_DIR, ADMIN_USER_ID, ENABLE_WEB_UI,
     save_system_config, BOT_LOG_DIR, WATCHDOG_LOG_DIR
 )
+# Импортируем конфиг целиком для чтения актуальных значений
+from . import config as current_config
+
 from .shared_state import NODES, NODE_TRAFFIC_MONITORS, ALLOWED_USERS, USER_NAMES, AUTH_TOKENS, ALERTS_CONFIG, AGENT_HISTORY
 from .i18n import STRINGS, get_user_lang, set_user_lang, get_text as _
 from .config import DEFAULT_LANGUAGE
@@ -52,11 +55,8 @@ def get_current_user(request):
 
 # --- ФОНОВАЯ ЗАДАЧА МОНИТОРИНГА АГЕНТА ---
 async def agent_monitor():
-    """Собирает статистику локального сервера (Агента)."""
     global AGENT_IP_CACHE
-    
     psutil.cpu_percent(interval=None)
-
     try:
         def get_ip():
             try: return requests.get("https://api.ipify.org", timeout=3).text
@@ -68,30 +68,18 @@ async def agent_monitor():
         try:
             cpu = psutil.cpu_percent(interval=None)
             ram = psutil.virtual_memory().percent
-            
             disk_path = get_host_path('/')
-            try:
-                disk = psutil.disk_usage(disk_path).percent
-            except:
-                disk = 0
-
+            try: disk = psutil.disk_usage(disk_path).percent
+            except: disk = 0
             net = psutil.net_io_counters()
-            
             point = {
                 "t": int(time.time()),
-                "c": cpu,
-                "r": ram,
-                "rx": net.bytes_recv,
-                "tx": net.bytes_sent
+                "c": cpu, "r": ram, "rx": net.bytes_recv, "tx": net.bytes_sent
             }
-            
             AGENT_HISTORY.append(point)
-            if len(AGENT_HISTORY) > 60:
-                AGENT_HISTORY.pop(0)
-                
+            if len(AGENT_HISTORY) > 60: AGENT_HISTORY.pop(0)
         except Exception as e:
             logging.error(f"Agent monitor error: {e}")
-            
         await asyncio.sleep(2)
 
 async def process_node_result_background(bot, user_id, cmd, text, token, node_name):
@@ -108,7 +96,6 @@ async def process_node_result_background(bot, user_id, cmd, text, token, node_na
                     await bot.edit_message_text(text=text, chat_id=user_id, message_id=msg_id, reply_markup=stop_kb, parse_mode="HTML")
                 except Exception: pass 
                 return
-
         full_text = f"🖥 <b>Ответ от {node_name}:</b>\n\n{text}"
         await bot.send_message(chat_id=user_id, text=full_text, parse_mode="HTML")
     except Exception as e:
@@ -116,13 +103,9 @@ async def process_node_result_background(bot, user_id, cmd, text, token, node_na
 
 async def handle_get_logs(request):
     user = get_current_user(request)
-    if not user or user['role'] != 'admins':
-        return web.json_response({"error": "Unauthorized"}, status=403)
-    
+    if not user or user['role'] != 'admins': return web.json_response({"error": "Unauthorized"}, status=403)
     log_path = os.path.join(BASE_DIR, "logs", "bot", "bot.log")
-    if not os.path.exists(log_path):
-        return web.json_response({"logs": ["Файл логов не найден."]})
-        
+    if not os.path.exists(log_path): return web.json_response({"logs": ["Файл логов не найден."]})
     try:
         with open(log_path, "r", encoding="utf-8", errors="ignore") as f:
             lines = f.readlines()
@@ -141,14 +124,14 @@ async def handle_settings_page(request):
     is_admin = user['role'] == 'admins'
     lang = get_user_lang(user_id)
     
+    # Получаем настройки алертов конкретного пользователя
     user_alerts = ALERTS_CONFIG.get(user_id, {})
     
     users_json = "null"
     if is_admin:
         users_list = []
         for uid, role in ALLOWED_USERS.items():
-            if uid == ADMIN_USER_ID:
-                continue
+            if uid == ADMIN_USER_ID: continue
             name = USER_NAMES.get(str(uid), f"ID: {uid}")
             users_list.append({"id": uid, "name": name, "role": role})
         users_json = json.dumps(users_list)
@@ -179,7 +162,7 @@ async def handle_settings_page(request):
     html = html.replace("{web_node_token}", _("web_node_token", lang))
     html = html.replace("{web_node_cmd}", _("web_node_cmd", lang))
     
-    # Новые переводы для системных настроек
+    # Системные настройки (Переводы)
     html = html.replace("{web_sys_settings_section}", _("web_sys_settings_section", lang))
     html = html.replace("{web_thresholds_title}", _("web_thresholds_title", lang))
     html = html.replace("{web_intervals_title}", _("web_intervals_title", lang))
@@ -191,15 +174,15 @@ async def handle_settings_page(request):
     html = html.replace("{web_node_timeout}", _("web_node_timeout", lang))
     html = html.replace("{web_clear_logs_btn}", _("web_clear_logs_btn", lang))
     
-    # Динамическая подстановка значений из конфига
-    from . import config as current_config
+    # Вставка значений системных настроек
     html = html.replace("{val_cpu}", str(current_config.CPU_THRESHOLD))
     html = html.replace("{val_ram}", str(current_config.RAM_THRESHOLD))
     html = html.replace("{val_disk}", str(current_config.DISK_THRESHOLD))
     html = html.replace("{val_traffic}", str(current_config.TRAFFIC_INTERVAL))
     html = html.replace("{val_timeout}", str(current_config.NODE_OFFLINE_TIMEOUT))
     
-    # Статус чекбоксов
+    # Состояние чекбоксов уведомлений
+    # Важно: если ключа нет, get возвращает False
     for alert in ['resources', 'logins', 'bans', 'downtime']:
         checked = "checked" if user_alerts.get(alert, False) else ""
         html = html.replace(f"{{check_{alert}}}", checked)
@@ -225,9 +208,14 @@ async def handle_save_notifications(request):
     try:
         data = await request.json()
         user_id = user['id']
+        
+        # Убедимся, что словарь существует
         if user_id not in ALERTS_CONFIG: ALERTS_CONFIG[user_id] = {}
+        
+        # Обновляем настройки
         for key in ['resources', 'logins', 'bans', 'downtime']:
             if key in data: ALERTS_CONFIG[user_id][key] = bool(data[key])
+            
         save_alerts_config()
         return web.json_response({"status": "ok"})
     except Exception as e:
@@ -251,7 +239,10 @@ async def handle_clear_logs(request):
             if os.path.exists(d):
                 for f in os.listdir(d):
                     fp = os.path.join(d, f)
-                    if os.path.isfile(fp): open(fp, 'w').close()
+                    if os.path.isfile(fp): 
+                        # Очищаем содержимое файла, не удаляя его (чтобы tail -f не ломался)
+                        with open(fp, 'w') as file:
+                            pass 
         return web.json_response({"status": "ok"})
     except Exception as e:
         return web.json_response({"error": str(e)}, status=500)
@@ -433,105 +424,6 @@ def _get_avatar_html(user):
 
 async def handle_api_root(request):
     return web.Response(text="VPS Bot API Server is running.")
-
-async def handle_dashboard(request):
-    user = get_current_user(request)
-    if not user: raise web.HTTPFound('/login')
-    is_admin = user['role'] == 'admins'
-    lang = get_user_lang(user['id'])
-
-    now = time.time()
-    active_count = 0
-    
-    nodes_count = len(NODES)
-    for token, node in NODES.items():
-        last_seen = node.get("last_seen", 0)
-        if now - last_seen < NODE_OFFLINE_TIMEOUT: active_count += 1
-
-    role_badge = '<span class="bg-green-500/20 text-green-400 text-[10px] px-2 py-0.5 rounded border border-green-500/30">ADMIN</span>' if is_admin else '<span class="bg-gray-500/20 text-gray-300 text-[10px] px-2 py-0.5 rounded border border-gray-500/30">USER</span>'
-    
-    admin_controls = f"""
-    <div class="mt-8 p-6 rounded-2xl bg-gradient-to-r from-purple-900/20 to-blue-900/20 border border-gray-200 dark:border-white/5">
-        <h3 class="text-lg font-bold text-gray-900 dark:text-white mb-2">{_("web_admin_panel", lang)}</h3>
-        <p class="text-sm text-gray-500 dark:text-gray-400 mb-4">{_("web_admin_desc", lang)}</p>
-        <div class="flex gap-3">
-            <button onclick="openLogsModal()" class="px-4 py-2 bg-gray-100 dark:bg-white/10 hover:bg-gray-200 dark:hover:bg-white/20 rounded-lg text-sm text-gray-900 dark:text-white transition flex items-center gap-2">
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
-                {_("web_logs_button", lang)}
-            </button>
-            <a href="/settings" class="px-4 py-2 bg-blue-600 hover:bg-blue-500 rounded-lg text-sm text-white transition flex items-center gap-2">
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
-                </svg>
-                {_("web_settings_button", lang)}
-            </a>
-        </div>
-    </div>
-    """ if is_admin else ""
-
-    html = load_template("dashboard.html")
-    html = html.replace("{web_title}", f"{_('web_dashboard_title', lang)} - Web Bot")
-    
-    web_dashboard_title = _("web_dashboard_title", lang)
-    web_agent_stats_title = _("web_agent_stats_title", lang)
-    web_stats_total = _("web_stats_total", lang)
-    web_stats_active = _("web_stats_active", lang)
-    web_traffic_total = _("web_traffic_total", lang)
-    web_uptime = _("web_uptime", lang)
-    web_cpu = _("web_cpu", lang)
-    web_ram = _("web_ram", lang)
-    web_disk = _("web_disk", lang)
-    web_rx = _("web_rx", lang)
-    web_tx = _("web_tx", lang)
-    
-    html = html.replace("{web_dashboard_title}", web_dashboard_title)
-    html = html.replace("{web_agent_stats_title}", web_agent_stats_title)
-    html = html.replace("{web_stats_total}", web_stats_total)
-    html = html.replace("{web_stats_active}", web_stats_active)
-    html = html.replace("{web_traffic_total}", web_traffic_total)
-    html = html.replace("{web_uptime}", web_uptime)
-    html = html.replace("{web_cpu}", web_cpu)
-    html = html.replace("{web_ram}", web_ram)
-    html = html.replace("{web_disk}", web_disk)
-    html = html.replace("{web_rx}", web_rx)
-    html = html.replace("{web_tx}", web_tx)
-    
-    html = html.replace("{user_avatar}", _get_avatar_html(user))
-    html = html.replace("{user_name}", user.get('first_name', 'User'))
-    html = html.replace("{role_badge}", role_badge)
-    html = html.replace("{nodes_count}", str(nodes_count))
-    html = html.replace("{active_nodes}", str(active_count))
-    html = html.replace("{user_group_display}", "") 
-    html = html.replace("{admin_controls_html}", admin_controls)
-    
-    html = html.replace("{web_node_mgmt_title}", _("web_node_mgmt_title", lang))
-    
-    i18n_data = {
-        "web_nodes_loading": _("web_nodes_loading", lang),
-        "web_no_nodes": _("web_no_nodes", lang),
-        "web_cpu": _("web_cpu", lang),
-        "web_ram": _("web_ram", lang),
-        "web_details_hidden": _("web_details_hidden", lang),
-        "web_loading": _("web_loading", lang),
-        "web_access_denied": _("web_access_denied", lang),
-        "web_error": _("web_error", lang, error=""),
-        "web_log_empty": _("web_log_empty", lang),
-        "web_conn_error": _("web_conn_error", lang, error=""),
-        "web_copied": _("web_copied", lang)
-    }
-    html = html.replace("{i18n_json}", json.dumps(i18n_data))
-    
-    html = html.replace("{web_node_details_title}", _("web_node_details_title", lang))
-    html = html.replace("{web_token_label}", _("web_token_label", lang))
-    html = html.replace("{web_copied}", _("web_copied", lang))
-    html = html.replace("{web_resources_chart}", _("web_resources_chart", lang))
-    html = html.replace("{web_network_chart}", _("web_network_chart", lang))
-    html = html.replace("{web_logs_title}", _("web_logs_title", lang))
-    html = html.replace("{web_refresh}", _("web_refresh", lang))
-    html = html.replace("{web_loading}", _("web_loading", lang))
-    html = html.replace("{web_logs_footer}", _("web_logs_footer", lang))
-    
-    return web.Response(text=html, content_type='text/html')
 
 async def start_web_server(bot_instance: Bot):
     global AGENT_FLAG
