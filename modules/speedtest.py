@@ -1,4 +1,3 @@
-# /opt-tg-bot/modules/speedtest.py
 import asyncio
 import re
 import logging
@@ -9,39 +8,31 @@ import requests
 import os
 import subprocess
 import concurrent.futures
+import time
 from concurrent.futures import ThreadPoolExecutor
 from typing import Optional, Dict, Any, Tuple, List
 import ipaddress
-import yaml  # <-- Добавлено
+import yaml
 
-from aiogram import F, Dispatcher, types, Bot  # <<<--- Добавлен импорт Bot
+from aiogram import F, Dispatcher, types, Bot
 from aiogram.types import KeyboardButton
 from aiogram.exceptions import TelegramBadRequest
 
-# --- Импорты ядра ---
 from core.i18n import _, I18nFilter, get_user_lang
 from core import config
 from core.auth import is_allowed, send_access_denied_message
 from core.messaging import delete_previous_message
 from core.shared_state import LAST_MESSAGE_IDS
-# --- ИЗМЕНЕНИЕ ИМПОРТА ---
-from core.utils import escape_html, get_country_details  # Заменили get_country_flag
-# -------------------------
+from core.utils import escape_html, get_country_details
 
-# --- Ключ кнопки ---
 BUTTON_KEY = "btn_speedtest"
-
-# --- URL и кеш ---
 SERVER_LIST_URL = "https://export.iperf3serverlist.net/listed_iperf3_servers.json"
-# --- ДОБАВЛЕНО: URL для российских серверов ---
 RU_SERVER_LIST_URL = "https://raw.githubusercontent.com/itdoginfo/russian-iperf3-servers/refs/heads/main/list.yml"
-# -----------------------------------------------
 LOCAL_CACHE_FILE = os.path.join(config.CONFIG_DIR, "iperf_servers_cache.json")
 LOCAL_RU_CACHE_FILE = os.path.join(
     config.CONFIG_DIR,
-    "iperf_servers_ru_cache.yml")  # <-- Добавлен кеш для RU
+    "iperf_servers_ru_cache.yml")
 
-# --- Настройки iperf3 ---
 MAX_SERVERS_TO_PING = 30
 PING_COUNT = 3
 PING_TIMEOUT_SEC = 2
@@ -49,29 +40,44 @@ IPERF_TEST_DURATION = 8
 IPERF_PROCESS_TIMEOUT = 30.0
 MAX_TEST_ATTEMPTS = 3
 
+# Словарь для хранения времени последнего обновления сообщения (чтобы не спамить API)
+MESSAGE_EDIT_THROTTLE = {}
+# Минимальный интервал обновления сообщения "на лету" (сек)
+MIN_UPDATE_INTERVAL = 1.5
 
 def get_button() -> KeyboardButton:
     return KeyboardButton(text=_(BUTTON_KEY, config.DEFAULT_LANGUAGE))
 
-
 def register_handlers(dp: Dispatcher):
     dp.message(I18nFilter(BUTTON_KEY))(speedtest_handler)
 
-
-# --- [НОВАЯ] Вспомогательная функция для редактирования статуса ---
 async def edit_status_safe(
         bot: Bot,
         chat_id: int,
         message_id: Optional[int],
         text: str,
-        lang: str):
-    """Безопасно редактирует сообщение статуса или отправляет новое."""
+        lang: str,
+        force: bool = False):
+    """
+    Безопасно редактирует сообщение статуса с учетом троттлинга.
+    
+    :param force: Если True, сообщение будет обновлено немедленно (для финальных статусов или ошибок).
+                  Если False, сообщение обновится только если прошло достаточно времени.
+    """
     if not message_id:
         logging.warning("edit_status_safe: message_id is None, cannot edit.")
         return message_id
 
+    now = time.time()
+    last_update = MESSAGE_EDIT_THROTTLE.get(message_id, 0)
+
+    # Если не форсировано и прошло мало времени - пропускаем обновление
+    if not force and (now - last_update < MIN_UPDATE_INTERVAL):
+        return message_id
+
     try:
         await bot.edit_message_text(text, chat_id=chat_id, message_id=message_id, parse_mode="HTML")
+        MESSAGE_EDIT_THROTTLE[message_id] = now # Обновляем метку времени
         return message_id
     except TelegramBadRequest as e:
         if "message is not modified" in str(e).lower():
@@ -89,10 +95,6 @@ async def edit_status_safe(
             f"edit_status_safe: Unexpected error editing message {message_id}: {e}",
             exc_info=True)
         return None
-# --- [КОНЕЦ] ---
-
-# --- Вспомогательные (синхронные) функции ---
-
 
 def get_ping_sync(host: str) -> Optional[float]:
     os_type = platform.system().lower()
@@ -120,7 +122,6 @@ def get_ping_sync(host: str) -> Optional[float]:
     except Exception as e:
         logging.error(f"Ошибка пинга {host}: {e}", exc_info=True)
     return None
-
 
 def get_vps_location_sync() -> Tuple[Optional[str], Optional[str]]:
     ip, country_code = None, None
@@ -152,7 +153,6 @@ def get_vps_location_sync() -> Tuple[Optional[str], Optional[str]]:
             logging.warning(f"Ошибка при запросе геолокации для IP {ip}: {e}")
     return ip, country_code
 
-
 def is_ip_address(host: str) -> bool:
     try:
         ipaddress.ip_address(host)
@@ -160,20 +160,13 @@ def is_ip_address(host: str) -> bool:
     except ValueError:
         return False
 
-
 def fetch_parse_and_prioritize_servers_sync(
         vps_country_code: Optional[str],
         lang: str) -> Tuple[List[Dict[str, Any]], Optional[str]]:
-    """
-    Загружает и парсит список серверов.
-    Если VPS в России ('RU'), пытается использовать YAML-список.
-    Возвращает (список_серверов, ключ_ошибки_i18n | None).
-    """
     servers_list = []
     error_key = None
     use_ru_list = vps_country_code == 'RU'
 
-    # --- Попытка загрузить российский YAML-список, если vps_country_code == 'RU' ---
     if use_ru_list:
         logging.info(
             f"VPS находится в RU, попытка загрузки российского списка с {RU_SERVER_LIST_URL}...")
@@ -265,7 +258,6 @@ def fetch_parse_and_prioritize_servers_sync(
                     exc_info=True)
                 error_key = "iperf_parse_error_ru"
 
-    # --- Если российский список не использовался или произошла ошибка, используем основной JSON ---
     if not servers_list:
         if use_ru_list:
             logging.warning(
@@ -390,7 +382,6 @@ def fetch_parse_and_prioritize_servers_sync(
 
     return servers_list, None
 
-
 def find_best_servers_sync(
         servers: list[Dict[str, Any]]) -> List[Tuple[float, Dict[str, Any]]]:
     servers_to_check = servers[:MAX_SERVERS_TO_PING]
@@ -418,9 +409,6 @@ def find_best_servers_sync(
         f"Найдено {len(results)} доступных серверов по пингу. Лучший: {results[0][1]['host']} ({results[0][0]:.2f} мс)")
     return results
 
-# --- Асинхронная функция теста iperf3 ---
-
-
 async def run_iperf_test_async(bot: Bot,
                                chat_id: int,
                                message_id: Optional[int],
@@ -431,12 +419,13 @@ async def run_iperf_test_async(bot: Bot,
     """
     Асинхронно запускает тест iperf3, обновляя статус в Telegram.
     Возвращает строку результата или маркер ошибки.
+    Использует edit_status_safe с force=False для промежуточных этапов.
     """
     host = server["host"]
     port = str(server["port"])
     duration = str(IPERF_TEST_DURATION)
     logging.info(f"Запуск iperf3 теста на {host}:{port}...")
-    # Обновляем статус перед началом теста
+
     status_text_start = _(
         "speedtest_status_testing",
         lang,
@@ -444,7 +433,7 @@ async def run_iperf_test_async(bot: Bot,
         ping=f"{ping:.2f}")
     message_id = await edit_status_safe(bot, chat_id, message_id, status_text_start, lang)
     if not message_id:
-        return _("error_message_edit_failed", lang)  # Новая строка i18n
+        return _("error_message_edit_failed", lang)
 
     cmd_download_args = [
         "iperf3", "-c", host, "-p", port, "-J", "-t", duration, "-R", "-4"]
@@ -452,13 +441,13 @@ async def run_iperf_test_async(bot: Bot,
         "iperf3", "-c", host, "-p", port, "-J", "-t", duration, "-4"]
     results = {"download": 0.0, "upload": 0.0, "ping": ping}
     try:
-        # --- 1. Тест скачивания (Download) ---
         status_text_dl = _(
             "speedtest_status_downloading",
             lang,
             host=escape_html(host),
             ping=f"{ping:.2f}")
-        message_id = await edit_status_safe(bot, chat_id, message_id, status_text_dl, lang)
+        # force=False, так как это промежуточное сообщение
+        message_id = await edit_status_safe(bot, chat_id, message_id, status_text_dl, lang, force=False)
         if not message_id:
             return _("error_message_edit_failed", lang)
 
@@ -499,13 +488,13 @@ async def run_iperf_test_async(bot: Bot,
             raise Exception(
                 f"Неизвестная ошибка iperf (Download), код: {process_down.returncode}")
 
-        # --- 2. Тест загрузки (Upload) ---
         status_text_ul = _(
             "speedtest_status_uploading",
             lang,
             host=escape_html(host),
             ping=f"{ping:.2f}")
-        message_id = await edit_status_safe(bot, chat_id, message_id, status_text_ul, lang)
+        # force=False, так как это промежуточное сообщение
+        message_id = await edit_status_safe(bot, chat_id, message_id, status_text_ul, lang, force=False)
         if not message_id:
             return _("error_message_edit_failed", lang)
 
@@ -544,45 +533,31 @@ async def run_iperf_test_async(bot: Bot,
             raise Exception(
                 f"Неизвестная ошибка iperf (Upload), код: {process_up.returncode}")
 
-        # --- 3. Форматирование УСПЕШНОГО вывода ---
-        country_code = server.get('country')  # Код страны, например 'DE'
-        # Название города, например 'Frankfurt'
+        country_code = server.get('country')
         city_name = server.get('city', 'N/A')
-        # Провайдер, например 'WOBCOM'
         provider_name = server.get('provider', 'N/A')
 
-        # --- ИЗМЕНЕНИЕ: Получаем флаг и ПОЛНОЕ имя страны ---
-        identifier = country_code if country_code else host  # Используем код, если он есть
-        # Получаем флаг И имя
+        identifier = country_code if country_code else host
         flag, country_name_full = await get_country_details(identifier)
         logging.debug(
             f"get_country_details для '{identifier}' вернул: flag='{flag}', name='{country_name_full}'")
 
-        # --- ИЗМЕНЕНИЕ: Формируем строку локации ---
-        # Используем ПОЛНОЕ имя страны (если получено), иначе КОД страны, затем
-        # Город
         if country_name_full:
-            # Пример: "Germany Frankfurt"
             location_str = f"{country_name_full} {city_name}"
         elif country_code:
-            # Пример: "DE Frankfurt"
             location_str = f"{country_code} {city_name}"
         else:
-            location_str = f"{city_name}"  # Пример: "Frankfurt"
-        # --------------------------------------------------
+            location_str = f"{city_name}"
 
-        # Возвращаем финальный текст результата
-        # Ключи {flag}, {server}, {provider} используются в i18n.py
         return _(
             "speedtest_results",
             lang,
             dl=results["download"],
             ul=results["upload"],
             ping=results["ping"],
-            flag=flag,                      # Передаем флаг 🇩🇪
-            # Передаем сюда "Germany Frankfurt"
+            flag=flag,
             server=escape_html(location_str),
-            provider=escape_html(provider_name)  # Передаем сюда "WOBCOM"
+            provider=escape_html(provider_name)
         )
 
     except FileNotFoundError:
@@ -593,15 +568,12 @@ async def run_iperf_test_async(bot: Bot,
             f"iperf3 тест таймаут ({IPERF_PROCESS_TIMEOUT}с) для {host}")
         return _("iperf_timeout", lang, host=escape_html(host))
     except Exception as e:
-        # Не логируем полный traceback для обычных ошибок теста
         logging.error(
             f"Ошибка iperf3 теста ({host}:{port}): {e}",
             exc_info=False)
         error_message_safe = str(e)
         return _("speedtest_fail", lang, error=escape_html(error_message_safe))
 
-
-# --- Главный хэндлер ---
 async def speedtest_handler(message: types.Message):
     user_id = message.from_user.id
     chat_id = message.chat.id
@@ -619,12 +591,10 @@ async def speedtest_handler(message: types.Message):
 
     final_text = ""
     try:
-        # --- Этап 1: Геолокация ---
         vps_ip, vps_country_code = await asyncio.to_thread(get_vps_location_sync)
         if not vps_ip or not vps_country_code:
             logging.warning("Поиск без приоритезации геолокации.")
 
-        # --- Этап 2: Загрузка списка ---
         fetch_status_key = "speedtest_status_fetch_ru" if vps_country_code == 'RU' else "speedtest_status_fetch"
         status_message_id = await edit_status_safe(message.bot, chat_id, status_message_id, _(fetch_status_key, lang), lang)
         if not status_message_id:
@@ -635,7 +605,6 @@ async def speedtest_handler(message: types.Message):
         if not all_servers:
             final_text = _(fetch_error_key or "iperf_fetch_error", lang)
         else:
-            # --- Этап 3: Пинг серверов ---
             count_to_ping = min(len(all_servers), MAX_SERVERS_TO_PING)
             status_message_id = await edit_status_safe(message.bot, chat_id, status_message_id, _("speedtest_status_ping", lang, count=count_to_ping), lang)
             if not status_message_id:
@@ -646,7 +615,6 @@ async def speedtest_handler(message: types.Message):
             if not best_servers_list:
                 final_text = _("iperf_no_servers", lang)
             else:
-                # --- Этап 4: Тестирование (с попытками) ---
                 test_successful, last_error_text, attempts_made = False, "", 0
                 for attempt in range(
                         min(MAX_TEST_ATTEMPTS, len(best_servers_list))):
@@ -666,7 +634,8 @@ async def speedtest_handler(message: types.Message):
                         error_text = _(
                             "iperf_conn_error_generic", lang, host=escape_html(
                                 best_server['host']))
-                        status_message_id = await edit_status_safe(message.bot, chat_id, status_message_id, error_text, lang)
+                        # При ошибке используем force=True, чтобы пользователь сразу увидел
+                        status_message_id = await edit_status_safe(message.bot, chat_id, status_message_id, error_text, lang, force=True)
                         last_error_text = error_text
                         await asyncio.sleep(1)
                         continue
@@ -682,7 +651,7 @@ async def speedtest_handler(message: types.Message):
                     if is_fail or is_not_found or is_timeout or is_edit_fail:
                         logging.warning(
                             f"Попытка #{attempts_made}: Ошибка теста iperf3 на {best_server['host']}: {test_result}")
-                        status_message_id = await edit_status_safe(message.bot, chat_id, status_message_id, test_result, lang)
+                        status_message_id = await edit_status_safe(message.bot, chat_id, status_message_id, test_result, lang, force=True)
                         last_error_text = test_result
                         await asyncio.sleep(1)
                         continue
@@ -705,9 +674,9 @@ async def speedtest_handler(message: types.Message):
             exc_info=True)
         final_text = _("speedtest_fail", lang, error=escape_html(str(e)))
 
-    # Финальное редактирование сообщения
     if status_message_id:
         try:
+            # Финальное редактирование всегда без проверок троттлинга (напрямую)
             await message.bot.edit_message_text(final_text, chat_id=chat_id, message_id=status_message_id, parse_mode="HTML")
             LAST_MESSAGE_IDS.setdefault(
                 user_id, {})[command] = status_message_id
