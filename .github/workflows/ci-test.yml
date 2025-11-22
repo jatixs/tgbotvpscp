@@ -11,7 +11,7 @@ permissions:
 
 jobs:
   autofix:
-    name: FIX 🎨 Автоматическое исправление (autopep8)
+    name: FIX 🎨 Autopep8
     runs-on: ubuntu-latest
 
     steps:
