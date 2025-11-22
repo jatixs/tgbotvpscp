@@ -26,6 +26,16 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 });
 
+function escapeHtml(text) {
+    if (!text) return text;
+    return text
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+}
+
 // --- AJAX: СПИСОК НОД ---
 async function fetchNodesList() {
     try {
@@ -92,11 +102,11 @@ function renderNodesGrid(nodes) {
         }
 
         return `
-        <div class="bg-white/60 dark:bg-white/5 hover:shadow-md dark:hover:bg-white/10 transition duration-200 rounded-xl p-4 border border-white/40 dark:border-white/10 cursor-pointer shadow-sm backdrop-blur-md" onclick="openNodeDetails('${node.token}', '${dotColor}')">
+        <div class="bg-white/60 dark:bg-white/5 hover:shadow-md dark:hover:bg-white/10 transition duration-200 rounded-xl p-4 border border-white/40 dark:border-white/10 cursor-pointer shadow-sm backdrop-blur-md" onclick="openNodeDetails('${escapeHtml(node.token)}', '${dotColor}')">
             <div class="flex justify-between items-start">
                 <div>
-                    <div class="font-bold text-gray-800 dark:text-gray-200">${node.name}</div>
-                    <div class="text-[10px] font-mono text-gray-500 mt-1">${node.token.substring(0, 8)}...</div>
+                    <div class="font-bold text-gray-800 dark:text-gray-200">${escapeHtml(node.name)}</div>
+                    <div class="text-[10px] font-mono text-gray-500 mt-1">${escapeHtml(node.token.substring(0, 8))}...</div>
                 </div>
                 <div class="px-2 py-1 rounded text-[10px] font-bold ${statusColor} ${bgClass}">${statusText}</div>
             </div>
@@ -112,7 +122,7 @@ function renderNodesGrid(nodes) {
                 </div>
                 <div class="bg-gray-100/50 dark:bg-white/5 rounded-lg p-2 text-center border border-gray-200 dark:border-white/5">
                     <div class="text-[10px] text-gray-500 uppercase font-bold">IP</div>
-                    <div class="text-xs font-bold text-gray-900 dark:text-white truncate" title="${node.ip}">${node.ip}</div>
+                    <div class="text-xs font-bold text-gray-900 dark:text-white truncate" title="${escapeHtml(node.ip)}">${escapeHtml(node.ip)}</div>
                 </div>
             </div>
         </div>
