@@ -272,15 +272,15 @@ STRINGS = {
         "node_traffic_stopped_alert": "✅ Мониторинг трафика на ноде '{name}' остановлен.", 
         
         # --- WEB INTERFACE ---
-        "web_title": "Агент VPS Бота",
+        "web_title": "Web-агент Бота",
         "web_dashboard_title": "Панель управления",
-        "web_agent_stats_title": "Статистика",
+        "web_agent_stats_title": "Мониторинг (Агент)",
         "web_stats_total": "Всего Нод",
         "web_stats_active": "Активные Ноды",
         "web_footer_endpoint": "Эндпоинт",
         "web_footer_powered": "Работает на",
-        "web_traffic_total": "Расход трафика (Total)",
-        "web_uptime": "Uptime",
+        "web_traffic_total": "Общий трафик",
+        "web_uptime": "Аптайм",
         "web_cpu": "CPU",
         "web_ram": "RAM",
         "web_disk": "Диск",
@@ -554,9 +554,9 @@ STRINGS = {
         "node_traffic_stopped_alert": "✅ Traffic monitoring for node '{name}' stopped.", 
         
         # --- WEB INTERFACE ---
-        "web_title": "VPS Bot Agent",
+        "web_title": "Bot Web-agent",
         "web_dashboard_title": "Dashboard",
-        "web_agent_stats_title": "Statistics",
+        "web_agent_stats_title": "Monitoring (Agent)",
         "web_stats_total": "Total Nodes",
         "web_stats_active": "Active Nodes",
         "web_footer_endpoint": "Endpoint",
