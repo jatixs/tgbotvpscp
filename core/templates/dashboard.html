@@ -10,6 +10,7 @@
         const I18N = {i18n_json};
     </script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://unpkg.com/twemoji@latest/dist/twemoji.min.js" crossorigin="anonymous"></script>
     <link rel="stylesheet" href="/static/css/style.css">
 </head>
 <body class="bg-gray-100 text-gray-900 dark:bg-gray-900 dark:text-gray-100 font-sans selection:bg-green-500/30 pb-10 overflow-x-hidden">
@@ -32,8 +33,10 @@
             <div class="flex items-center gap-2 sm:gap-4 flex-shrink-0">
                 
                 <div class="relative group">
-                    <button class="flex items-center justify-center w-8 h-8 rounded-lg hover:bg-black/5 dark:hover:bg-white/10 transition text-lg" id="langBtn">
-                        🌍
+                    <button class="flex items-center justify-center w-8 h-8 rounded-lg hover:bg-black/5 dark:hover:bg-white/10 transition text-gray-600 dark:text-gray-400" id="langBtn">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M3 5h12M9 3v2m1.048 9.5A18.022 18.022 0 016.412 9m6.088 9h7M11 21l5-10 5 10M12.751 5C11.783 10.77 8.07 15.61 3 18.129" />
+                        </svg>
                     </button>
                     <div class="absolute right-0 top-full pt-2 w-32 hidden group-hover:block z-50">
                         <div class="bg-white/90 dark:bg-gray-800 border border-gray-200 dark:border-white/10 rounded-xl shadow-xl backdrop-blur-sm overflow-hidden">
@@ -73,8 +76,8 @@
         
         <div class="grid grid-cols-1 lg:grid-cols-4 gap-4 mb-8">
             
-            <div class="col-span-1 flex flex-col gap-4">
-                <div class="bg-white/60 dark:bg-white/5 backdrop-blur-md border border-white/40 dark:border-white/10 rounded-2xl p-5 relative overflow-hidden group flex-1 flex flex-col justify-center transition shadow-lg hover:shadow-xl dark:shadow-none">
+            <div class="col-span-1 grid grid-cols-2 lg:flex lg:flex-col gap-4">
+                <div class="bg-white/60 dark:bg-white/5 backdrop-blur-md border border-white/40 dark:border-white/10 rounded-2xl p-5 relative overflow-hidden group flex flex-col justify-center transition shadow-lg hover:shadow-xl dark:shadow-none h-full">
                     <div class="absolute right-[-10px] top-[-10px] p-4 bg-purple-100 dark:bg-purple-500/10 rounded-full group-hover:scale-110 transition">
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 text-purple-500 dark:text-purple-500/50" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" /></svg>
                     </div>
@@ -86,7 +89,7 @@
                     </div>
                 </div>
 
-                <div class="bg-white/60 dark:bg-white/5 backdrop-blur-md border border-white/40 dark:border-white/10 rounded-2xl p-5 relative overflow-hidden group flex-1 flex flex-col justify-center transition shadow-lg hover:shadow-xl dark:shadow-none">
+                <div class="bg-white/60 dark:bg-white/5 backdrop-blur-md border border-white/40 dark:border-white/10 rounded-2xl p-5 relative overflow-hidden group flex flex-col justify-center transition shadow-lg hover:shadow-xl dark:shadow-none h-full">
                     <div class="absolute right-[-10px] top-[-10px] p-4 bg-green-100 dark:bg-green-500/10 rounded-full group-hover:scale-110 transition">
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 text-green-500 dark:text-green-500/50" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
                     </div>
@@ -117,15 +120,30 @@
                 
                 <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3 mb-4">
                     <div class="bg-white/50 dark:bg-black/20 rounded p-2 text-center border border-white/20 dark:border-white/5 backdrop-blur-sm">
-                        <span class="block text-[9px] text-gray-500 uppercase">{web_cpu}</span>
+                        <div class="flex justify-center items-center gap-1 mb-1">
+                            <span class="text-[9px] text-gray-500 uppercase">{web_cpu}</span>
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 text-gray-400 cursor-help" fill="none" viewBox="0 0 24 24" stroke="currentColor" title="Текущая загрузка процессора">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                        </div>
                         <span id="agentCpu" class="font-bold text-gray-800 dark:text-white text-sm">0%</span>
                     </div>
                     <div class="bg-white/50 dark:bg-black/20 rounded p-2 text-center border border-white/20 dark:border-white/5 backdrop-blur-sm">
-                        <span class="block text-[9px] text-gray-500 uppercase">{web_ram}</span>
+                        <div class="flex justify-center items-center gap-1 mb-1">
+                            <span class="text-[9px] text-gray-500 uppercase">{web_ram}</span>
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 text-gray-400 cursor-help" fill="none" viewBox="0 0 24 24" stroke="currentColor" title="Использование оперативной памяти">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                        </div>
                         <span id="agentRam" class="font-bold text-gray-800 dark:text-white text-sm">0%</span>
                     </div>
                     <div class="bg-white/50 dark:bg-black/20 rounded p-2 text-center border border-white/20 dark:border-white/5 backdrop-blur-sm">
-                        <span class="block text-[9px] text-gray-500 uppercase">{web_disk}</span>
+                        <div class="flex justify-center items-center gap-1 mb-1">
+                            <span class="text-[9px] text-gray-500 uppercase">{web_disk}</span>
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 text-gray-400 cursor-help" fill="none" viewBox="0 0 24 24" stroke="currentColor" title="Занятое место на диске">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                        </div>
                         <span id="agentDisk" class="font-bold text-gray-800 dark:text-white text-sm">0%</span>
                     </div>
                     <div class="block sm:hidden bg-white/50 dark:bg-black/20 rounded p-2 text-center border border-white/20 dark:border-white/5 backdrop-blur-sm">
@@ -133,11 +151,21 @@
                         <span id="agentUptimeMobile" class="font-bold text-blue-600 dark:text-blue-400 text-sm">...</span>
                     </div>
                     <div class="bg-white/50 dark:bg-black/20 rounded p-2 text-center border border-white/20 dark:border-white/5 border-l-2 border-l-blue-500/50 backdrop-blur-sm">
-                        <span class="block text-[9px] text-gray-500 uppercase truncate">{web_traffic_total} ↓</span>
+                        <div class="flex justify-center items-center gap-1 mb-1">
+                            <span class="text-[9px] text-gray-500 uppercase truncate">{web_traffic_total} ↓</span>
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 text-gray-400 cursor-help" fill="none" viewBox="0 0 24 24" stroke="currentColor" title="Всего входящего трафика">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                        </div>
                         <span id="trafficRxTotal" class="font-bold text-gray-800 dark:text-white text-xs sm:text-sm">0 B</span>
                     </div>
                     <div class="bg-white/50 dark:bg-black/20 rounded p-2 text-center border border-white/20 dark:border-white/5 border-l-2 border-l-purple-500/50 backdrop-blur-sm">
-                        <span class="block text-[9px] text-gray-500 uppercase truncate">{web_traffic_total} ↑</span>
+                        <div class="flex justify-center items-center gap-1 mb-1">
+                            <span class="text-[9px] text-gray-500 uppercase truncate">{web_traffic_total} ↑</span>
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 text-gray-400 cursor-help" fill="none" viewBox="0 0 24 24" stroke="currentColor" title="Всего исходящего трафика">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                        </div>
                         <span id="trafficTxTotal" class="font-bold text-gray-800 dark:text-white text-xs sm:text-sm">0 B</span>
                     </div>
                 </div>

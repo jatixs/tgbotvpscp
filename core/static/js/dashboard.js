@@ -100,6 +100,8 @@ function renderNodesGrid(nodes) {
 
     if (container.innerHTML !== html) {
         container.innerHTML = html;
+        // Вызываем парсинг эмодзи после обновления HTML
+        if (window.parsePageEmojis) window.parsePageEmojis();
     }
 }
 
@@ -246,8 +248,6 @@ function renderAgentChart(history) {
         });
     }
 }
-
-// ... (Функции openNodeDetails, closeModal, fetchAndRender, renderCharts, openLogsModal, fetchLogs, formatSpeed, formatBytes, formatUptime остаются без изменений, но используют общую логику цветов)
 
 function formatSpeed(valueInKbps) {
     let val = parseFloat(valueInKbps);
@@ -469,6 +469,10 @@ async function fetchLogs() {
                 return `<div class="${cls} hover:bg-gray-100 dark:hover:bg-white/5 px-1 rounded">${safeLine}</div>`;
             }).join('');
             contentDiv.innerHTML = coloredLogs || `<div class="text-gray-600 text-center">${I18N.web_log_empty}</div>`;
+            
+            // Парсим эмодзи в логах, так как они загрузились динамически
+            if (window.parsePageEmojis) window.parsePageEmojis();
+            
             contentDiv.scrollTop = contentDiv.scrollHeight;
         }
     } catch (e) {

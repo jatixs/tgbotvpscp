@@ -243,6 +243,10 @@ function renderUsers() {
                 </td>
             </tr>
         `).join('');
+        
+        // Парсим эмодзи в таблице пользователей
+        if (window.parsePageEmojis) window.parsePageEmojis();
+        
     } else {
         tbody.innerHTML = `<tr><td colspan="4" class="px-4 py-3 text-center text-gray-500 text-xs">${I18N.web_no_users}</td></tr>`;
     }

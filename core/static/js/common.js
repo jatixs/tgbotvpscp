@@ -7,7 +7,18 @@ let currentTheme = localStorage.getItem('theme') || 'system';
 // Инициализация (запуск после загрузки, чтобы подхватить иконки)
 document.addEventListener("DOMContentLoaded", () => {
     applyThemeUI(currentTheme);
+    parsePageEmojis(); // Парсим эмодзи при первой загрузке
 });
+
+// Функция для замены эмодзи на картинки Twemoji
+function parsePageEmojis() {
+    if (window.twemoji) {
+        window.twemoji.parse(document.body, {
+            folder: 'svg',
+            ext: '.svg'
+        });
+    }
+}
 
 function toggleTheme() {
     const idx = themes.indexOf(currentTheme);
