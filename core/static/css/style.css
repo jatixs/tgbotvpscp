@@ -7,11 +7,31 @@ img.emoji {
     display: inline-block;
 }
 
-/* --- Базовые стили (анти-блик) --- */
-html {
-    background-color: #f3f4f6; /* gray-100 */
+/* --- AUTOFILL FIX (Исправление белой полосы в полях ввода) --- */
+/* Заменяем белый фон автозаполнения на темный через внутреннюю тень */
+input:-webkit-autofill,
+input:-webkit-autofill:hover, 
+input:-webkit-autofill:focus, 
+input:-webkit-autofill:active {
+    /* Используем цвет, близкий к вашему bg-black/20 на темном фоне (#1f2937 - это gray-800) */
+    -webkit-box-shadow: 0 0 0 30px #1f2937 inset !important;
+    -webkit-text-fill-color: white !important;
+    caret-color: white !important;
+    transition: background-color 5000s ease-in-out 0s; /* Задержка переключения цвета фона */
+    border-radius: 0.75rem; /* rounded-xl */
 }
 
+/* --- Базовые стили (анти-блик при перезагрузке) --- */
+html {
+    background-color: #f3f4f6; /* gray-100 */
+    height: 100%;
+}
+
+body {
+    min-height: 100%;
+}
+
+/* Принудительный темный фон для html с классом dark */
 html.dark {
     background-color: #111827; /* gray-900 */
 }
