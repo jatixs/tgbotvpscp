@@ -1,17 +1,14 @@
 #!/bin/bash
 
 # --- Запоминаем аргументы ---
-# Поддержка флагов для авто-установки ноды
 GIT_BRANCH="main"
 AUTO_AGENT_URL=""
 AUTO_NODE_TOKEN=""
 AUTO_MODE=false
 
+# Парсинг аргументов (флаги имеют приоритет)
 for arg in "$@"; do
     case $arg in
-        main|develop)
-            GIT_BRANCH="$arg"
-            ;;
         --agent=*)
             AUTO_AGENT_URL="${arg#*=}"
             AUTO_MODE=true
@@ -19,6 +16,12 @@ for arg in "$@"; do
         --token=*)
             AUTO_NODE_TOKEN="${arg#*=}"
             AUTO_MODE=true
+            ;;
+        --branch=*)
+            GIT_BRANCH="${arg#*=}"
+            ;;
+        main|develop) # Поддержка старого позиционного аргумента
+            GIT_BRANCH="$arg"
             ;;
     esac
 done
@@ -46,7 +49,6 @@ GITHUB_REPO_URL="https://github.com/${GITHUB_REPO}.git"
 C_RESET='\033[0m'; C_RED='\033[0;31m'; C_GREEN='\033[0;32m'; C_YELLOW='\033[0;33m'; C_BLUE='\033[0;34m'; C_CYAN='\033[0;36m'; C_BOLD='\033[1m'
 msg_info() { echo -e "${C_CYAN}🔵 $1${C_RESET}"; }; msg_success() { echo -e "${C_GREEN}✅ $1${C_RESET}"; }; msg_warning() { echo -e "${C_YELLOW}⚠️  $1${C_RESET}"; }; msg_error() { echo -e "${C_RED}❌ $1${C_RESET}"; }; 
 
-# Модифицированная функция вопроса: не спрашивает, если переменная уже задана
 msg_question() { 
     local prompt="$1"
     local var_name="$2"
@@ -120,7 +122,7 @@ common_install_steps() {
 setup_repo_and_dirs() {
     local owner_user=$1; if [ -z "$owner_user" ]; then owner_user="root"; fi
     cd /
-    msg_info "Подготовка файлов..."
+    msg_info "Подготовка файлов (Ветка: ${GIT_BRANCH})..."
     if [ -f "${ENV_FILE}" ]; then cp "${ENV_FILE}" /tmp/tgbot_env.bak; fi
     if [ -d "${BOT_INSTALL_PATH}" ]; then run_with_spinner "Удаление старых файлов" sudo rm -rf "${BOT_INSTALL_PATH}"; fi
     sudo mkdir -p ${BOT_INSTALL_PATH}
@@ -134,7 +136,14 @@ cleanup_node_files() {
     msg_info "Очистка лишних файлов (режим Ноды)..."
     cd ${BOT_INSTALL_PATH}
     sudo rm -rf core modules bot.py watchdog.py Dockerfile docker-compose.yml .git .github config/users.json config/alerts_config.json deploy.sh deploy_en.sh requirements.txt README* LICENSE CHANGELOG* .gitignore
-    if [ ! -f "node/node.py" ]; then msg_warning "node.py не найден! Проверьте репозиторий."; fi
+    
+    # ЖЕСТКАЯ ПРОВЕРКА: Если файла ноды нет, значит скачали не ту ветку
+    if [ ! -f "node/node.py" ]; then
+       msg_error "Файл node/node.py не найден!"
+       msg_error "Вероятно, в ветке '${GIT_BRANCH}' нет кода Ноды."
+       msg_warning "Попробуйте указать ветку: bash <(...) --branch=develop"
+       exit 1
+    fi
 }
 
 cleanup_agent_files() {
@@ -367,7 +376,10 @@ RestartSec=10
 WantedBy=multi-user.target
 EOF
     sudo systemctl daemon-reload; sudo systemctl enable ${NODE_SERVICE_NAME}
+    
+    # Очистка и проверка файлов
     cleanup_node_files
+    
     run_with_spinner "Запуск Ноды" sudo systemctl restart ${NODE_SERVICE_NAME}
     msg_success "Нода установлена!"
 }
@@ -444,7 +456,6 @@ main_menu() {
 if [ "$(id -u)" -ne 0 ]; then msg_error "Нужен root."; exit 1; fi
 
 # --- ЛОГИКА ЗАПУСКА ---
-# Если включен авто-режим установки ноды, пропускаем меню и проверки
 if [ "$AUTO_MODE" = true ] && [ -n "$AUTO_AGENT_URL" ] && [ -n "$AUTO_NODE_TOKEN" ]; then
     install_node_logic
     exit 0
