@@ -571,13 +571,12 @@ async def handle_reset_confirm(request):
 
         new_hash = hashlib.sha256(new_pass.encode()).hexdigest()
         
-        # Обновляем пароль в структуре
-        if user_id in ALLOWED_USERS:
-            if isinstance(ALLOWED_USERS[user_id], str):
-                ALLOWED_USERS[user_id] = {"group": ALLOWED_USERS[user_id], "password_hash": new_hash}
-            else:
-                ALLOWED_USERS[user_id]["password_hash"] = new_hash
-            save_users()
+        if isinstance(ALLOWED_USERS[user_id], str):
+             ALLOWED_USERS[user_id] = {"group": ALLOWED_USERS[user_id], "password_hash": new_hash}
+        else:
+             ALLOWED_USERS[user_id]["password_hash"] = new_hash
+             
+        save_users()
         
         del RESET_TOKENS[token]
         
@@ -639,6 +638,9 @@ async def handle_login_password(request):
         
     password = data.get("password")
     
+    if user_id != ADMIN_USER_ID:
+         return web.Response(text="Password login available for Main Admin only.", status=403)
+
     if check_user_password(user_id, password):
         u_data = ALLOWED_USERS[user_id]
         role = u_data.get("group", "users") if isinstance(u_data, dict) else u_data
@@ -656,7 +658,7 @@ async def handle_login_password(request):
         resp.set_cookie(COOKIE_NAME, json.dumps(session), max_age=604800)
         return resp
         
-    return web.Response(text="Invalid ID or password", status=403)
+    return web.Response(text="Invalid password", status=403)
 
 async def handle_magic_login(request):
     token = request.query.get("token")
@@ -678,6 +680,31 @@ async def handle_logout(request):
     resp = web.HTTPFound('/login')
     resp.del_cookie(COOKIE_NAME)
     return resp
+
+async def handle_agent_stats(request):
+    if not get_current_user(request): return web.json_response({"error": "Unauthorized"}, status=401)
+    current_stats = {"cpu": 0, "ram": 0, "disk": 0, "ip": AGENT_IP_CACHE, "net_sent": 0, "net_recv": 0, "boot_time": 0}
+    try:
+        net_io = psutil.net_io_counters()
+        current_stats["net_sent"] = net_io.bytes_sent; current_stats["net_recv"] = net_io.bytes_recv; current_stats["boot_time"] = psutil.boot_time()
+    except: pass
+    if AGENT_HISTORY:
+        latest = AGENT_HISTORY[-1]
+        current_stats["cpu"] = latest["c"]; current_stats["ram"] = latest["r"]
+        try: current_stats["disk"] = psutil.disk_usage(get_host_path('/')).percent
+        except: pass
+    return web.json_response({"stats": current_stats, "history": AGENT_HISTORY})
+
+async def handle_node_details(request):
+    if not get_current_user(request): return web.json_response({"error": "Unauthorized"}, status=401)
+    token = request.query.get("token")
+    if not token or token not in NODES: return web.json_response({"error": "Node not found"}, status=404)
+    node = NODES[token]
+    return web.json_response({
+        "name": node.get("name"), "ip": node.get("ip"), "stats": node.get("stats"),
+        "history": node.get("history", []), "token": token, "last_seen": node.get("last_seen", 0),
+        "is_restarting": node.get("is_restarting", False)
+    })
 
 async def handle_heartbeat(request):
     try: data = await request.json()
