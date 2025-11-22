@@ -1,0 +1,38 @@
+name: "Trivy Container Scan"
+
+on:
+  push:
+    branches: [ "main", "develop" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  build-and-scan:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # Сборка образа для сканирования (без пуша)
+      - name: Build Docker image
+        run: docker build -t tg-vps-bot:${{ github.sha }} .
+
+      # Запуск сканирования Trivy
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: 'tg-vps-bot:${{ github.sha }}'
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+          severity: 'CRITICAL,HIGH' # Ищем только критические и высокие угрозы
+          ignore-unfixed: true      # Игнорировать уязвимости, для которых нет патчей
+
+      # Загрузка результатов в GitHub Security
+      - name: Upload Trivy scan results to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: 'trivy-results.sarif'

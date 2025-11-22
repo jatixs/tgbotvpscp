@@ -1,0 +1,45 @@
+name: "CodeQL Advanced Security"
+
+on:
+  push:
+    branches: [ "main", "develop" ]
+  pull_request:
+    branches: [ "main" ]
+  schedule:
+    - cron: '30 1 * * 0' # Еженедельное сканирование
+
+jobs:
+  analyze:
+    name: Analyze
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [ 'python' ] # Указываем язык проекта
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    # Инициализация CodeQL
+    - name: Initialize CodeQL
+      uses: github/codeql-action/init@v3
+      with:
+        languages: ${{ matrix.language }}
+        # 'security-extended' включает больше проверок, чем стандартный набор
+        queries: security-extended,security-and-quality
+
+    # Автоматическая сборка (для Python не требуется компиляция, но шаг нужен)
+    - name: Autobuild
+      uses: github/codeql-action/autobuild@v3
+
+    # Анализ и отправка отчета в Security Tab
+    - name: Perform CodeQL Analysis
+      uses: github/codeql-action/analyze@v3
+      with:
+        category: "/language:${{matrix.language}}"
