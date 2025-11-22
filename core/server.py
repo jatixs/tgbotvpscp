@@ -370,7 +370,6 @@ async def handle_change_password(request):
     if not user: return web.json_response({"error": "Unauthorized"}, status=401)
     
     user_id = user['id']
-    # Только главный админ может менять пароль в текущей реализации
     if user_id != ADMIN_USER_ID:
          return web.json_response({"error": "Only Main Admin can change password"}, status=403)
     
@@ -388,7 +387,6 @@ async def handle_change_password(request):
 
         new_hash = hashlib.sha256(new_pass.encode()).hexdigest()
         
-        # Обновляем пароль главного админа в users.json
         if isinstance(ALLOWED_USERS[user_id], str):
              ALLOWED_USERS[user_id] = {"group": ALLOWED_USERS[user_id], "password_hash": new_hash}
         else:
@@ -456,12 +454,10 @@ async def handle_node_add(request):
         host = request.headers.get('Host', f'{WEB_SERVER_HOST}:{WEB_SERVER_PORT}')
         proto = "https" if request.headers.get('X-Forwarded-Proto') == "https" else "http"
         
-        # Выбор скрипта по языку пользователя
         user_id = user['id']
         lang = get_user_lang(user_id)
         script_name = "deploy_en.sh" if lang == "en" else "deploy.sh"
 
-        # Команда с аргументами
         cmd = f"bash <(wget -qO- https://raw.githubusercontent.com/jatixs/tgbotvpscp/main/{script_name}) --agent={proto}://{host} --token={token}"
         
         return web.json_response({"status": "ok", "token": token, "command": cmd})
@@ -633,7 +629,6 @@ async def handle_login_password(request):
         
     password = data.get("password")
     
-    # Строгая проверка: Только главный админ может войти по паролю
     if user_id != ADMIN_USER_ID:
          return web.Response(text="Password login available for Main Admin only.", status=403)
 
