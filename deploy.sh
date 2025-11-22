@@ -1,9 +1,29 @@
 #!/bin/bash
 
-# --- Запоминаем исходный аргумент ---
-orig_arg1="$1"
+# --- Запоминаем аргументы ---
+# Поддержка флагов для авто-установки ноды
+GIT_BRANCH="main"
+AUTO_AGENT_URL=""
+AUTO_NODE_TOKEN=""
+AUTO_MODE=false
 
-# --- Глобальные настройки для подавления интерактивности ---
+for arg in "$@"; do
+    case $arg in
+        main|develop)
+            GIT_BRANCH="$arg"
+            ;;
+        --agent=*)
+            AUTO_AGENT_URL="${arg#*=}"
+            AUTO_MODE=true
+            ;;
+        --token=*)
+            AUTO_NODE_TOKEN="${arg#*=}"
+            AUTO_MODE=true
+            ;;
+    esac
+done
+
+# --- Глобальные настройки ---
 export DEBIAN_FRONTEND=noninteractive
 
 # --- Конфигурация ---
@@ -20,24 +40,20 @@ ENV_FILE="${BOT_INSTALL_PATH}/.env"
 
 # --- GitHub ---
 GITHUB_REPO="jatixs/tgbotvpscp"
-GIT_BRANCH="${orig_arg1:-main}"
 GITHUB_REPO_URL="https://github.com/${GITHUB_REPO}.git"
-GITHUB_API_URL="https://api.github.com/repos/${GITHUB_REPO}/releases/latest"
 
 # --- Цвета ---
-C_RESET='\033[0m'
-C_RED='\033[0;31m'
-C_GREEN='\033[0;32m'
-C_YELLOW='\033[0;33m'
-C_BLUE='\033[0;34m'
-C_CYAN='\033[0;36m'
-C_BOLD='\033[1m'
+C_RESET='\033[0m'; C_RED='\033[0;31m'; C_GREEN='\033[0;32m'; C_YELLOW='\033[0;33m'; C_BLUE='\033[0;34m'; C_CYAN='\033[0;36m'; C_BOLD='\033[1m'
+msg_info() { echo -e "${C_CYAN}🔵 $1${C_RESET}"; }; msg_success() { echo -e "${C_GREEN}✅ $1${C_RESET}"; }; msg_warning() { echo -e "${C_YELLOW}⚠️  $1${C_RESET}"; }; msg_error() { echo -e "${C_RED}❌ $1${C_RESET}"; }; 
 
-msg_info() { echo -e "${C_CYAN}🔵 $1${C_RESET}"; }
-msg_success() { echo -e "${C_GREEN}✅ $1${C_RESET}"; }
-msg_warning() { echo -e "${C_YELLOW}⚠️  $1${C_RESET}"; }
-msg_error() { echo -e "${C_RED}❌ $1${C_RESET}"; }
-msg_question() { read -p "$(echo -e "${C_YELLOW}❓ $1${C_RESET}")" $2; }
+# Модифицированная функция вопроса: не спрашивает, если переменная уже задана
+msg_question() { 
+    local prompt="$1"
+    local var_name="$2"
+    if [ -z "${!var_name}" ]; then
+        read -p "$(echo -e "${C_YELLOW}❓ $prompt${C_RESET}")" $var_name
+    fi
+}
 
 spinner() { 
     local pid=$1
@@ -55,7 +71,6 @@ spinner() {
 run_with_spinner() { 
     local msg=$1
     shift
-    # Запускаем в фоне с перенаправлением вывода в лог
     ( "$@" >> /tmp/${SERVICE_NAME}_install.log 2>&1 ) & 
     local pid=$!
     spinner "$pid" "$msg"
@@ -69,51 +84,32 @@ run_with_spinner() {
     return $exit_code 
 }
 
-# --- Утилиты ---
 if command -v wget &> /dev/null; then DOWNLOADER="wget -qO-"; elif command -v curl &> /dev/null; then DOWNLOADER="curl -sSLf"; else msg_error "Нет wget/curl."; exit 1; fi
 
 get_local_version() { if [ -f "$README_FILE" ]; then grep -oP 'img\.shields\.io/badge/version-v\K[\d\.]+' "$README_FILE" || echo "Не найдена"; else echo "Не установлен"; fi; }
 
 # --- Проверка целостности ---
 INSTALL_TYPE="НЕТ"; STATUS_MESSAGE="Проверка не проводилась."
-
 check_integrity() {
     if [ ! -d "${BOT_INSTALL_PATH}" ] || [ ! -f "${ENV_FILE}" ]; then
         INSTALL_TYPE="НЕТ"; STATUS_MESSAGE="Бот не установлен."; return;
     fi
-
-    # Режим НОДЫ
     if grep -q "MODE=node" "${ENV_FILE}"; then
         INSTALL_TYPE="НОДА (Клиент)"
-        if systemctl is-active --quiet ${NODE_SERVICE_NAME}.service; then 
-            STATUS_MESSAGE="${C_GREEN}Активен${C_RESET}"
-        else 
-            STATUS_MESSAGE="${C_RED}Неактивен${C_RESET}"
-        fi
+        if systemctl is-active --quiet ${NODE_SERVICE_NAME}.service; then STATUS_MESSAGE="${C_GREEN}Активен${C_RESET}"; else STATUS_MESSAGE="${C_RED}Неактивен${C_RESET}"; fi
         return
     fi
-
-    # Режим АГЕНТА
     DEPLOY_MODE_FROM_ENV=$(grep '^DEPLOY_MODE=' "${ENV_FILE}" | cut -d'=' -f2 | tr -d '"' || echo "systemd")
-    
     if [ "$DEPLOY_MODE_FROM_ENV" == "docker" ]; then
         INSTALL_TYPE="АГЕНТ (Docker)"
-        if command -v docker &> /dev/null && docker ps | grep -q "tg-bot"; then 
-            STATUS_MESSAGE="${C_GREEN}Docker OK${C_RESET}"
-        else 
-            STATUS_MESSAGE="${C_RED}Docker Stop${C_RESET}"
-        fi
+        if command -v docker &> /dev/null && docker ps | grep -q "tg-bot"; then STATUS_MESSAGE="${C_GREEN}Docker OK${C_RESET}"; else STATUS_MESSAGE="${C_RED}Docker Stop${C_RESET}"; fi
     else
         INSTALL_TYPE="АГЕНТ (Systemd)"
-        if systemctl is-active --quiet ${SERVICE_NAME}.service; then 
-            STATUS_MESSAGE="${C_GREEN}Systemd OK${C_RESET}"
-        else 
-            STATUS_MESSAGE="${C_RED}Systemd Stop${C_RESET}"
-        fi
+        if systemctl is-active --quiet ${SERVICE_NAME}.service; then STATUS_MESSAGE="${C_GREEN}Systemd OK${C_RESET}"; else STATUS_MESSAGE="${C_RED}Systemd Stop${C_RESET}"; fi
     fi
 }
 
-# --- Установка ---
+# --- ФУНКЦИИ УСТАНОВКИ ---
 common_install_steps() {
     echo "" > /tmp/${SERVICE_NAME}_install.log
     msg_info "1. Обновление системы..."
@@ -123,27 +119,13 @@ common_install_steps() {
 
 setup_repo_and_dirs() {
     local owner_user=$1; if [ -z "$owner_user" ]; then owner_user="root"; fi
-    
-    # Важно: переходим в корень
     cd /
-    
     msg_info "Подготовка файлов..."
     if [ -f "${ENV_FILE}" ]; then cp "${ENV_FILE}" /tmp/tgbot_env.bak; fi
-    if [ -d "${VENV_PATH}" ]; then sudo mv "${VENV_PATH}" /tmp/tgbot_venv.bak; fi
-
-    if [ -d "${BOT_INSTALL_PATH}" ]; then
-        run_with_spinner "Удаление старых файлов" sudo rm -rf "${BOT_INSTALL_PATH}"
-    fi
+    if [ -d "${BOT_INSTALL_PATH}" ]; then run_with_spinner "Удаление старых файлов" sudo rm -rf "${BOT_INSTALL_PATH}"; fi
     sudo mkdir -p ${BOT_INSTALL_PATH}
-
     run_with_spinner "Клонирование репозитория" sudo git clone --branch "${GIT_BRANCH}" "${GITHUB_REPO_URL}" "${BOT_INSTALL_PATH}" || exit 1
-    
     if [ -f "/tmp/tgbot_env.bak" ]; then sudo mv /tmp/tgbot_env.bak "${ENV_FILE}"; fi
-    if [ -d "/tmp/tgbot_venv.bak" ]; then 
-        if [ -d "${VENV_PATH}" ]; then sudo rm -rf "${VENV_PATH}"; fi
-        sudo mv /tmp/tgbot_venv.bak "${VENV_PATH}"
-    fi
-    
     sudo mkdir -p "${BOT_INSTALL_PATH}/logs/bot" "${BOT_INSTALL_PATH}/logs/watchdog" "${BOT_INSTALL_PATH}/logs/node" "${BOT_INSTALL_PATH}/config"
     sudo chown -R ${owner_user}:${owner_user} ${BOT_INSTALL_PATH}
 }
@@ -152,10 +134,7 @@ cleanup_node_files() {
     msg_info "Очистка лишних файлов (режим Ноды)..."
     cd ${BOT_INSTALL_PATH}
     sudo rm -rf core modules bot.py watchdog.py Dockerfile docker-compose.yml .git .github config/users.json config/alerts_config.json deploy.sh deploy_en.sh requirements.txt README* LICENSE CHANGELOG* .gitignore
-    if [ ! -f "node/node.py" ]; then
-       msg_warning "node.py не найден! Проверьте репозиторий."
-    fi
-    msg_success "Нода оптимизирована."
+    if [ ! -f "node/node.py" ]; then msg_warning "node.py не найден! Проверьте репозиторий."; fi
 }
 
 cleanup_agent_files() {
@@ -177,10 +156,7 @@ ask_env_details() {
     msg_info "Ввод данных .env..."
     msg_question "Токен: " T; msg_question "ID Админа: " A; msg_question "Username (opt): " U; msg_question "Bot Name (opt): " N
     msg_question "Web Port [8080]: " P; if [ -z "$P" ]; then WEB_PORT="8080"; else WEB_PORT="$P"; fi
-    
-    msg_question "Включить Web-UI (Дашборд)? (y/n) [y]: " W
-    if [[ "$W" =~ ^[Nn]$ ]]; then ENABLE_WEB="false"; else ENABLE_WEB="true"; fi
-    
+    msg_question "Включить Web-UI (Дашборд)? (y/n) [y]: " W; if [[ "$W" =~ ^[Nn]$ ]]; then ENABLE_WEB="false"; else ENABLE_WEB="true"; fi
     export T A U N WEB_PORT ENABLE_WEB
 }
 
@@ -202,10 +178,7 @@ EOF
 }
 
 check_docker_deps() {
-    if ! command -v docker &> /dev/null; then 
-        curl -sSL https://get.docker.com -o /tmp/get-docker.sh
-        run_with_spinner "Установка Docker" sudo sh /tmp/get-docker.sh
-    fi
+    if ! command -v docker &> /dev/null; then curl -sSL https://get.docker.com -o /tmp/get-docker.sh; run_with_spinner "Установка Docker" sudo sh /tmp/get-docker.sh; fi
     if command -v docker-compose &> /dev/null; then sudo rm -f $(which docker-compose); fi
 }
 
@@ -343,18 +316,8 @@ install_docker_logic() {
     write_env_file "docker" "$mode" "tg-bot-${mode}"
     cleanup_agent_files
     cd ${BOT_INSTALL_PATH}
-    
-    # Определяем правильную команду для Docker
     local dc_cmd=""
-    if sudo docker compose version &>/dev/null; then
-        dc_cmd="docker compose"
-    elif command -v docker-compose &>/dev/null; then
-        dc_cmd="docker-compose"
-    else
-        msg_error "Docker Compose не найден. Невозможно собрать контейнеры."
-        return 1
-    fi
-
+    if sudo docker compose version &>/dev/null; then dc_cmd="docker compose"; elif command -v docker-compose &>/dev/null; then dc_cmd="docker-compose"; else msg_error "Docker Compose не найден."; return 1; fi
     run_with_spinner "Сборка Docker образов" sudo $dc_cmd build
     run_with_spinner "Запуск контейнеров" sudo $dc_cmd --profile "${mode}" up -d --remove-orphans
     msg_success "Установка Docker завершена!"
@@ -362,10 +325,13 @@ install_docker_logic() {
 
 install_node_logic() {
     echo -e "\n${C_BOLD}=== Установка НОДЫ (Клиент) ===${C_RESET}"
+    
+    # Если переменные переданы аргументами, используем их
+    if [ -n "$AUTO_AGENT_URL" ]; then AGENT_URL="$AUTO_AGENT_URL"; fi
+    if [ -n "$AUTO_NODE_TOKEN" ]; then NODE_TOKEN="$AUTO_NODE_TOKEN"; fi
+
     common_install_steps
-    
     run_with_spinner "Установка iperf3" sudo apt-get install -y -q -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" iperf3
-    
     setup_repo_and_dirs "root"
     
     msg_info "Настройка venv..."
@@ -373,6 +339,7 @@ install_node_logic() {
     run_with_spinner "Установка зависимостей" "${VENV_PATH}/bin/pip" install psutil requests
     
     echo ""; msg_info "Подключение:"
+    # Запрашиваем только если переменные пусты
     msg_question "Agent URL (http://IP:8080): " AGENT_URL
     msg_question "Token: " NODE_TOKEN
     
@@ -420,89 +387,24 @@ uninstall_bot() {
 
 update_bot() {
     echo -e "\n${C_BOLD}=== Обновление ===${C_RESET}"
-    if [ -f "${ENV_FILE}" ] && grep -q "MODE=node" "${ENV_FILE}"; then
-        msg_info "Обновление Ноды..."
-        install_node_logic
-        return
-    fi
-
+    if [ -f "${ENV_FILE}" ] && grep -q "MODE=node" "${ENV_FILE}"; then msg_info "Обновление Ноды..."; install_node_logic; return; fi
     if [ ! -d "${BOT_INSTALL_PATH}/.git" ]; then msg_error "Git не найден. Переустановите."; return 1; fi
     local exec_user=""; if [ -f "${ENV_FILE}" ] && grep -q "INSTALL_MODE=secure" "${ENV_FILE}"; then exec_user="sudo -u ${SERVICE_USER}"; fi
-    
     cd "${BOT_INSTALL_PATH}"
     if ! run_with_spinner "Git fetch" $exec_user git fetch origin; then return 1; fi
     if ! run_with_spinner "Git reset" $exec_user git reset --hard "origin/${GIT_BRANCH}"; then return 1; fi
-    
     cleanup_agent_files
-
-    # Проверка режима установки из .env
     if [ -f "${ENV_FILE}" ] && grep -q "DEPLOY_MODE=docker" "${ENV_FILE}"; then
         if [ -f "docker-compose.yml" ]; then
-            # Определяем правильную команду
-            local dc_cmd=""
-            if sudo docker compose version &>/dev/null; then
-                dc_cmd="docker compose"
-            elif command -v docker-compose &>/dev/null; then
-                dc_cmd="docker-compose"
-            else
-                msg_error "Docker Compose не найден. Пожалуйста, переустановите бота (режим 3-6)."
-                return 1
-            fi
-
-            # Запускаем с отловом ошибок
-            if ! run_with_spinner "Docker Up (Пересборка)" sudo $dc_cmd up -d --build; then
-                msg_error "Ошибка при сборке/запуске контейнеров."
-                return 1
-            fi
-        else 
-             msg_error "Файл docker-compose.yml не найден, хотя режим Docker активирован."
-             return 1
-        fi
+            local dc_cmd=""; if sudo docker compose version &>/dev/null; then dc_cmd="docker compose"; else dc_cmd="docker-compose"; fi
+            if ! run_with_spinner "Docker Up" sudo $dc_cmd up -d --build; then msg_error "Ошибка Docker."; return 1; fi
+        else msg_error "Нет docker-compose.yml"; return 1; fi
     else
-        # Для systemd режима
-        run_with_spinner "Обновление зависимостей (pip)" $exec_user "${VENV_PATH}/bin/pip" install -r "${BOT_INSTALL_PATH}/requirements.txt" --upgrade
+        run_with_spinner "Обновление pip" $exec_user "${VENV_PATH}/bin/pip" install -r "${BOT_INSTALL_PATH}/requirements.txt" --upgrade
         if systemctl list-unit-files | grep -q "^${SERVICE_NAME}.service"; then sudo systemctl restart ${SERVICE_NAME}; fi
         if systemctl list-unit-files | grep -q "^${WATCHDOG_SERVICE_NAME}.service"; then sudo systemctl restart ${WATCHDOG_SERVICE_NAME}; fi
     fi
     msg_success "Обновлено."
-
-    # --- Проверка Web-интерфейса ---
-    local web_port="8080"
-    local web_host="127.0.0.1"
-    
-    if [ -f "${ENV_FILE}" ]; then
-        local env_port=$(grep '^WEB_SERVER_PORT=' "${ENV_FILE}" | cut -d'=' -f2 | tr -d '"\r')
-        local env_host=$(grep '^WEB_SERVER_HOST=' "${ENV_FILE}" | cut -d'=' -f2 | tr -d '"\r')
-        
-        if [ -n "$env_port" ]; then web_port="$env_port"; fi
-        if [ -n "$env_host" ] && [ "$env_host" != "0.0.0.0" ]; then web_host="$env_host"; fi
-    fi
-
-    msg_info "Проверка доступности веб-интерфейса (http://${web_host}:${web_port})..."
-    sleep 5 # Небольшая пауза после рестарта
-
-    if curl -s -f -o /dev/null "http://${web_host}:${web_port}"; then
-        msg_success "Веб-интерфейс активен."
-    else
-        msg_warning "Веб-интерфейс не отвечает."
-        msg_question "Служба может быть не запущена. Попробовать запустить принудительно? (y/n): " START_WEB
-        if [[ "$START_WEB" =~ ^[Yy]$ ]]; then
-             if [ -f "${ENV_FILE}" ] && grep -q "DEPLOY_MODE=docker" "${ENV_FILE}"; then
-                  local dc_cmd=""
-                  if sudo docker compose version &>/dev/null; then dc_cmd="docker compose"; else dc_cmd="docker-compose"; fi
-                  run_with_spinner "Запуск (Docker)" sudo $dc_cmd -f "${BOT_INSTALL_PATH}/docker-compose.yml" up -d
-             else
-                  run_with_spinner "Запуск (Systemd)" sudo systemctl start ${SERVICE_NAME}
-             fi
-             
-             sleep 5
-             if curl -s -f -o /dev/null "http://${web_host}:${web_port}"; then
-                 msg_success "Веб-интерфейс успешно запущен!"
-             else
-                 msg_error "Не удалось запустить веб-интерфейс. Проверьте логи (пункт меню 2 или docker logs)."
-             fi
-        fi
-    fi
 }
 
 main_menu() {
@@ -514,7 +416,6 @@ main_menu() {
         echo -e "${C_BLUE}${C_BOLD}╚═══════════════════════════════════╝${C_RESET}"
         check_integrity
         echo -e "  Ветка: ${GIT_BRANCH} | Версия: ${local_version}"
-        # Исправлено: echo -e чтобы цвета работали
         echo -e "  Тип: ${INSTALL_TYPE} | Статус: ${STATUS_MESSAGE}"
         echo "--------------------------------------------------------"
         echo "  1) Обновить бота"
@@ -541,6 +442,13 @@ main_menu() {
 }
 
 if [ "$(id -u)" -ne 0 ]; then msg_error "Нужен root."; exit 1; fi
+
+# --- ЛОГИКА ЗАПУСКА ---
+# Если включен авто-режим установки ноды, пропускаем меню и проверки
+if [ "$AUTO_MODE" = true ] && [ -n "$AUTO_AGENT_URL" ] && [ -n "$AUTO_NODE_TOKEN" ]; then
+    install_node_logic
+    exit 0
+fi
 
 check_integrity
 if [ "$INSTALL_TYPE" == "НЕТ" ]; then

@@ -36,22 +36,6 @@ AGENT_IP_CACHE = "Loading..."
 RESET_TOKENS = {} # {token: {"ts": timestamp, "user_id": user_id}}
 
 # --- PASSWORD UTILS ---
-def get_stored_password_hash():
-    """Возвращает хеш из файла (legacy для обратной совместимости)"""
-    if os.path.exists(WEB_AUTH_FILE):
-        try:
-            with open(WEB_AUTH_FILE, "r") as f:
-                return f.read().strip()
-        except: pass
-    return None
-
-def check_web_password(input_pass):
-    """Legacy проверка (глобальный пароль)"""
-    stored_hash = get_stored_password_hash()
-    if stored_hash:
-        return hashlib.sha256(input_pass.encode()).hexdigest() == stored_hash
-    else:
-        return input_pass == WEB_PASSWORD
 
 def check_user_password(user_id, input_pass):
     """Проверяет пароль для КОНКРЕТНОГО пользователя"""
@@ -386,6 +370,7 @@ async def handle_change_password(request):
     if not user: return web.json_response({"error": "Unauthorized"}, status=401)
     
     user_id = user['id']
+    # Только главный админ может менять пароль в текущей реализации
     if user_id != ADMIN_USER_ID:
          return web.json_response({"error": "Only Main Admin can change password"}, status=403)
     
@@ -403,6 +388,7 @@ async def handle_change_password(request):
 
         new_hash = hashlib.sha256(new_pass.encode()).hexdigest()
         
+        # Обновляем пароль главного админа в users.json
         if isinstance(ALLOWED_USERS[user_id], str):
              ALLOWED_USERS[user_id] = {"group": ALLOWED_USERS[user_id], "password_hash": new_hash}
         else:
@@ -448,6 +434,7 @@ async def handle_user_action(request):
                 return web.json_response({"status": "ok"})
         elif action == 'add':
             if target_id in ALLOWED_USERS: return web.json_response({"error": "User exists"}, status=400)
+            # Новые пользователи без пароля
             ALLOWED_USERS[target_id] = {"group": data.get('role', 'users'), "password_hash": None}
             bot = request.app.get('bot')
             if bot: await get_user_name(bot, target_id)
@@ -468,7 +455,15 @@ async def handle_node_add(request):
         token = create_node(name)
         host = request.headers.get('Host', f'{WEB_SERVER_HOST}:{WEB_SERVER_PORT}')
         proto = "https" if request.headers.get('X-Forwarded-Proto') == "https" else "http"
-        cmd = f"bash <(wget -qO- https://raw.githubusercontent.com/jatixs/tgbotvpscp/main/deploy.sh) # Select 8, Url: {proto}://{host}, Token: {token}"
+        
+        # Выбор скрипта по языку пользователя
+        user_id = user['id']
+        lang = get_user_lang(user_id)
+        script_name = "deploy_en.sh" if lang == "en" else "deploy.sh"
+
+        # Команда с аргументами
+        cmd = f"bash <(wget -qO- https://raw.githubusercontent.com/jatixs/tgbotvpscp/main/{script_name}) --agent={proto}://{host} --token={token}"
+        
         return web.json_response({"status": "ok", "token": token, "command": cmd})
     except Exception as e:
         return web.json_response({"error": str(e)}, status=500)
@@ -638,6 +633,7 @@ async def handle_login_password(request):
         
     password = data.get("password")
     
+    # Строгая проверка: Только главный админ может войти по паролю
     if user_id != ADMIN_USER_ID:
          return web.Response(text="Password login available for Main Admin only.", status=403)
 
@@ -681,31 +677,6 @@ async def handle_logout(request):
     resp.del_cookie(COOKIE_NAME)
     return resp
 
-async def handle_agent_stats(request):
-    if not get_current_user(request): return web.json_response({"error": "Unauthorized"}, status=401)
-    current_stats = {"cpu": 0, "ram": 0, "disk": 0, "ip": AGENT_IP_CACHE, "net_sent": 0, "net_recv": 0, "boot_time": 0}
-    try:
-        net_io = psutil.net_io_counters()
-        current_stats["net_sent"] = net_io.bytes_sent; current_stats["net_recv"] = net_io.bytes_recv; current_stats["boot_time"] = psutil.boot_time()
-    except: pass
-    if AGENT_HISTORY:
-        latest = AGENT_HISTORY[-1]
-        current_stats["cpu"] = latest["c"]; current_stats["ram"] = latest["r"]
-        try: current_stats["disk"] = psutil.disk_usage(get_host_path('/')).percent
-        except: pass
-    return web.json_response({"stats": current_stats, "history": AGENT_HISTORY})
-
-async def handle_node_details(request):
-    if not get_current_user(request): return web.json_response({"error": "Unauthorized"}, status=401)
-    token = request.query.get("token")
-    if not token or token not in NODES: return web.json_response({"error": "Node not found"}, status=404)
-    node = NODES[token]
-    return web.json_response({
-        "name": node.get("name"), "ip": node.get("ip"), "stats": node.get("stats"),
-        "history": node.get("history", []), "token": token, "last_seen": node.get("last_seen", 0),
-        "is_restarting": node.get("is_restarting", False)
-    })
-
 async def handle_heartbeat(request):
     try: data = await request.json()
     except: return web.json_response({"error": "Invalid JSON"}, status=400)
@@ -723,6 +694,31 @@ async def handle_heartbeat(request):
     tasks_to_send = list(node.get("tasks", []))
     if tasks_to_send: node["tasks"] = []
     return web.json_response({"status": "ok", "tasks": tasks_to_send})
+
+async def handle_node_details(request):
+    if not get_current_user(request): return web.json_response({"error": "Unauthorized"}, status=401)
+    token = request.query.get("token")
+    if not token or token not in NODES: return web.json_response({"error": "Node not found"}, status=404)
+    node = NODES[token]
+    return web.json_response({
+        "name": node.get("name"), "ip": node.get("ip"), "stats": node.get("stats"),
+        "history": node.get("history", []), "token": token, "last_seen": node.get("last_seen", 0),
+        "is_restarting": node.get("is_restarting", False)
+    })
+
+async def handle_agent_stats(request):
+    if not get_current_user(request): return web.json_response({"error": "Unauthorized"}, status=401)
+    current_stats = {"cpu": 0, "ram": 0, "disk": 0, "ip": AGENT_IP_CACHE, "net_sent": 0, "net_recv": 0, "boot_time": 0}
+    try:
+        net_io = psutil.net_io_counters()
+        current_stats["net_sent"] = net_io.bytes_sent; current_stats["net_recv"] = net_io.bytes_recv; current_stats["boot_time"] = psutil.boot_time()
+    except: pass
+    if AGENT_HISTORY:
+        latest = AGENT_HISTORY[-1]
+        current_stats["cpu"] = latest["c"]; current_stats["ram"] = latest["r"]
+        try: current_stats["disk"] = psutil.disk_usage(get_host_path('/')).percent
+        except: pass
+    return web.json_response({"stats": current_stats, "history": AGENT_HISTORY})
 
 async def handle_api_root(request):
     return web.Response(text="VPS Bot API Server is running.")
