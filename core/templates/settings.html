@@ -1,30 +1,77 @@
 <!DOCTYPE html>
-<html lang="ru">
+<html lang="ru" class="dark">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0">
     <title>{web_title}</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        gray: {
+                            850: '#1f2937',
+                            900: '#111827',
+                            950: '#0b0f19',
+                        }
+                    }
+                }
+            }
+        }
+        const I18N = {i18n_json};
+    </script>
     <link rel="stylesheet" href="/static/css/style.css">
+    <style>
+        body, div, nav, main, button {
+            transition-property: background-color, border-color, color, fill, stroke, opacity, box-shadow;
+            transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+            transition-duration: 300ms;
+        }
+    </style>
 </head>
-<body class="bg-gray-900 min-h-screen text-gray-100 font-sans selection:bg-green-500/30 pb-10">
+<body class="bg-gray-100 text-gray-900 dark:bg-gray-900 dark:text-gray-100 font-sans selection:bg-green-500/30 pb-10 overflow-x-hidden">
     
-    <div class="fixed top-[-10%] left-[-10%] w-96 h-96 bg-purple-600/10 rounded-full mix-blend-screen filter blur-3xl animate-float pointer-events-none"></div>
+    <div class="fixed top-[-10%] left-[-10%] w-96 h-96 rounded-full mix-blend-multiply filter blur-3xl animate-float pointer-events-none opacity-70 dark:opacity-20 bg-cyan-300 dark:bg-purple-600/10"></div>
+    <div class="fixed bottom-[-10%] right-[-10%] w-96 h-96 rounded-full mix-blend-multiply filter blur-3xl animate-float pointer-events-none opacity-70 dark:opacity-20 bg-rose-300 dark:bg-blue-600/10" style="animation-delay: 2s"></div>
 
-    <nav class="backdrop-blur-md bg-black/20 border-b border-white/5 sticky top-0 z-40">
+    <nav class="bg-white/70 dark:bg-black/40 backdrop-blur-xl border-b border-white/20 dark:border-white/5 sticky top-0 z-40 shadow-sm dark:shadow-none">
         <div class="max-w-6xl mx-auto px-4 py-3 flex flex-wrap justify-between items-center gap-3">
             <div class="flex items-center space-x-2">
-                <a href="/" class="text-gray-400 hover:text-white transition flex items-center gap-2 text-sm font-medium">
+                <a href="/" class="text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white transition flex items-center gap-2 text-sm font-medium">
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" /></svg>
-                    Назад
+                    {web_back}
                 </a>
-                <span class="font-bold text-lg ml-2">Настройки</span>
+                <span class="font-bold text-lg ml-2">{web_settings_page_title}</span>
             </div>
             
             <div class="flex items-center gap-3 sm:gap-4">
-                <div class="flex items-center gap-2 bg-white/5 px-2 sm:px-3 py-1.5 rounded-full border border-white/5 max-w-[140px] sm:max-w-none">
+                <div class="relative group">
+                    <button class="flex items-center justify-center w-8 h-8 rounded-lg hover:bg-black/5 dark:hover:bg-white/10 transition text-lg" id="langBtn">
+                        🌍
+                    </button>
+                    <div class="absolute right-0 top-full pt-2 w-32 hidden group-hover:block z-50">
+                        <div class="bg-white/90 dark:bg-gray-800 border border-gray-200 dark:border-white/10 rounded-xl shadow-xl backdrop-blur-sm overflow-hidden">
+                            <button onclick="setLanguage('ru')" class="w-full text-left px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-white/5 flex items-center gap-2 text-gray-800 dark:text-gray-200">
+                                <span>🇷🇺</span> Русский
+                            </button>
+                            <button onclick="setLanguage('en')" class="w-full text-left px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-white/5 flex items-center gap-2 text-gray-800 dark:text-gray-200">
+                                <span>🇬🇧</span> English
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <button onclick="toggleTheme()" class="flex items-center justify-center w-8 h-8 rounded-lg hover:bg-black/5 dark:hover:bg-white/10 transition text-gray-600 dark:text-gray-400" id="themeBtn">
+                    <svg id="iconMoon" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" /></svg>
+                    <svg id="iconSun" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" /></svg>
+                    <svg id="iconSystem" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>
+                </button>
+
+                <div class="hidden sm:flex items-center gap-2 bg-white/60 dark:bg-white/5 px-3 py-1.5 rounded-full border border-white/40 dark:border-white/5 shadow-sm dark:shadow-none max-w-[140px] sm:max-w-none">
                     {user_avatar}
-                    <span class="text-xs font-medium text-gray-300 truncate">{user_name}</span>
+                    <span class="text-xs font-medium text-gray-700 dark:text-gray-300 truncate">{user_name}</span>
                 </div>
             </div>
         </div>
@@ -32,77 +79,77 @@
 
     <main class="max-w-4xl mx-auto px-4 mt-6 sm:mt-8 relative z-10">
 
-        <div class="bg-white/5 border border-white/10 rounded-2xl p-6 mb-6">
-            <h2 class="text-xl font-bold text-white mb-4 flex items-center gap-2">
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-yellow-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" /></svg>
-                Уведомления
+        <div class="bg-white/60 dark:bg-white/5 backdrop-blur-md border border-white/40 dark:border-white/10 rounded-2xl p-6 mb-6 shadow-lg dark:shadow-none">
+            <h2 class="text-xl font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-yellow-500 dark:text-yellow-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" /></svg>
+                {web_notif_section}
             </h2>
             
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <label class="flex items-center justify-between bg-black/20 p-4 rounded-xl cursor-pointer hover:bg-black/30 active:scale-[0.98] active:bg-white/10 transition transform duration-100">
-                    <span class="text-sm font-medium">Ресурсы (CPU/RAM/Disk)</span>
-                    <input type="checkbox" id="alert_resources" class="w-5 h-5 rounded bg-gray-700 border-gray-600 text-green-500 focus:ring-green-500" {check_resources}>
+                <label class="flex items-center justify-between bg-gray-50 dark:bg-black/20 p-4 rounded-xl cursor-pointer hover:bg-gray-100 dark:hover:bg-black/30 active:scale-[0.98] active:bg-gray-200 dark:active:bg-white/10 transition transform duration-100 border border-gray-200 dark:border-white/5">
+                    <span class="text-sm font-medium">{notifications_alert_name_res}</span>
+                    <input type="checkbox" id="alert_resources" class="w-5 h-5 rounded bg-gray-200 dark:bg-gray-700 border-gray-300 dark:border-gray-600 text-green-500 focus:ring-green-500" {check_resources}>
                 </label>
-                <label class="flex items-center justify-between bg-black/20 p-4 rounded-xl cursor-pointer hover:bg-black/30 active:scale-[0.98] active:bg-white/10 transition transform duration-100">
-                    <span class="text-sm font-medium">Входы SSH</span>
-                    <input type="checkbox" id="alert_logins" class="w-5 h-5 rounded bg-gray-700 border-gray-600 text-green-500 focus:ring-green-500" {check_logins}>
+                <label class="flex items-center justify-between bg-gray-50 dark:bg-black/20 p-4 rounded-xl cursor-pointer hover:bg-gray-100 dark:hover:bg-black/30 active:scale-[0.98] active:bg-gray-200 dark:active:bg-white/10 transition transform duration-100 border border-gray-200 dark:border-white/5">
+                    <span class="text-sm font-medium">{notifications_alert_name_logins}</span>
+                    <input type="checkbox" id="alert_logins" class="w-5 h-5 rounded bg-gray-200 dark:bg-gray-700 border-gray-300 dark:border-gray-600 text-green-500 focus:ring-green-500" {check_logins}>
                 </label>
-                <label class="flex items-center justify-between bg-black/20 p-4 rounded-xl cursor-pointer hover:bg-black/30 active:scale-[0.98] active:bg-white/10 transition transform duration-100">
-                    <span class="text-sm font-medium">Баны Fail2Ban</span>
-                    <input type="checkbox" id="alert_bans" class="w-5 h-5 rounded bg-gray-700 border-gray-600 text-green-500 focus:ring-green-500" {check_bans}>
+                <label class="flex items-center justify-between bg-gray-50 dark:bg-black/20 p-4 rounded-xl cursor-pointer hover:bg-gray-100 dark:hover:bg-black/30 active:scale-[0.98] active:bg-gray-200 dark:active:bg-white/10 transition transform duration-100 border border-gray-200 dark:border-white/5">
+                    <span class="text-sm font-medium">{notifications_alert_name_bans}</span>
+                    <input type="checkbox" id="alert_bans" class="w-5 h-5 rounded bg-gray-200 dark:bg-gray-700 border-gray-300 dark:border-gray-600 text-green-500 focus:ring-green-500" {check_bans}>
                 </label>
-                <label class="flex items-center justify-between bg-black/20 p-4 rounded-xl cursor-pointer hover:bg-black/30 active:scale-[0.98] active:bg-white/10 transition transform duration-100">
-                    <span class="text-sm font-medium">Даунтайм Нод (Offline)</span>
-                    <input type="checkbox" id="alert_downtime" class="w-5 h-5 rounded bg-gray-700 border-gray-600 text-green-500 focus:ring-green-500" {check_downtime}>
+                <label class="flex items-center justify-between bg-gray-50 dark:bg-black/20 p-4 rounded-xl cursor-pointer hover:bg-gray-100 dark:hover:bg-black/30 active:scale-[0.98] active:bg-gray-200 dark:active:bg-white/10 transition transform duration-100 border border-gray-200 dark:border-white/5">
+                    <span class="text-sm font-medium">{notifications_alert_name_downtime}</span>
+                    <input type="checkbox" id="alert_downtime" class="w-5 h-5 rounded bg-gray-200 dark:bg-gray-700 border-gray-300 dark:border-gray-600 text-green-500 focus:ring-green-500" {check_downtime}>
                 </label>
             </div>
             <div class="mt-4 flex justify-end">
-                <button onclick="saveNotifications()" id="saveNotifBtn" class="px-6 py-2 bg-green-600 hover:bg-green-500 rounded-lg font-bold text-white transition shadow-lg shadow-green-900/20">Сохранить</button>
+                <button onclick="saveNotifications()" id="saveNotifBtn" class="px-6 py-2 bg-green-600 hover:bg-green-500 rounded-lg font-bold text-white transition shadow-lg shadow-green-900/20 transform active:scale-95">{web_save_btn}</button>
             </div>
         </div>
 
-        <div id="usersSection" class="bg-white/5 border border-white/10 rounded-2xl p-6 mb-6 hidden">
+        <div id="usersSection" class="bg-white/60 dark:bg-white/5 backdrop-blur-md border border-white/40 dark:border-white/10 rounded-2xl p-6 mb-6 hidden shadow-lg dark:shadow-none">
             <div class="flex justify-between items-center mb-4">
-                <h2 class="text-xl font-bold text-white flex items-center gap-2">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" /></svg>
-                    Пользователи
+                <h2 class="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-blue-500 dark:text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" /></svg>
+                    {web_users_section}
                 </h2>
-                <button onclick="openAddUserModal()" class="bg-white/10 hover:bg-white/20 p-2 rounded-lg text-green-400 transition">
+                <button onclick="openAddUserModal()" class="bg-gray-100 dark:bg-white/10 hover:bg-gray-200 dark:hover:bg-white/20 p-2 rounded-lg text-green-600 dark:text-green-400 transition border border-gray-200 dark:border-white/5" title="{web_add_user_btn}">
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" /></svg>
                 </button>
             </div>
             
-            <div class="overflow-x-auto">
-                <table class="w-full text-sm text-left text-gray-400">
-                    <thead class="text-xs text-gray-500 uppercase bg-black/20">
+            <div class="overflow-x-auto rounded-lg border border-gray-200 dark:border-white/5">
+                <table class="w-full text-sm text-left text-gray-600 dark:text-gray-400">
+                    <thead class="text-xs text-gray-500 dark:text-gray-500 uppercase bg-gray-50 dark:bg-black/20 border-b border-gray-200 dark:border-white/5">
                         <tr>
-                            <th class="px-4 py-3 rounded-l-lg">ID</th>
-                            <th class="px-4 py-3">Имя</th>
-                            <th class="px-4 py-3">Роль</th>
-                            <th class="px-4 py-3 rounded-r-lg text-right">Действие</th>
+                            <th class="px-4 py-3">{web_user_id}</th>
+                            <th class="px-4 py-3">{web_user_name}</th>
+                            <th class="px-4 py-3">{web_user_role}</th>
+                            <th class="px-4 py-3 text-right">{web_user_action}</th>
                         </tr>
                     </thead>
-                    <tbody id="usersTableBody">
+                    <tbody id="usersTableBody" class="bg-white/50 dark:bg-transparent">
                         </tbody>
                 </table>
             </div>
         </div>
 
-        <div class="bg-white/5 border border-white/10 rounded-2xl p-6">
-            <h2 class="text-xl font-bold text-white mb-4 flex items-center gap-2">
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" /></svg>
-                Добавить Ноду
+        <div class="bg-white/60 dark:bg-white/5 backdrop-blur-md border border-white/40 dark:border-white/10 rounded-2xl p-6 shadow-lg dark:shadow-none">
+            <h2 class="text-xl font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-purple-500 dark:text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" /></svg>
+                {web_add_node_section}
             </h2>
             <div class="flex flex-wrap sm:flex-nowrap gap-2">
-                <input type="text" id="newNodeName" placeholder="Имя сервера" class="w-full flex-1 bg-black/20 border border-white/10 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-blue-500">
-                <button onclick="addNode()" class="w-full sm:w-auto px-6 py-2 bg-purple-600 hover:bg-purple-500 active:scale-95 rounded-lg font-bold text-white transition transform duration-100 flex-shrink-0">Создать</button>
+                <input type="text" id="newNodeName" placeholder="{web_node_name_placeholder}" class="w-full flex-1 bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-lg px-4 py-2 text-gray-900 dark:text-white focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 placeholder-gray-400 dark:placeholder-gray-600">
+                <button onclick="addNode()" class="w-full sm:w-auto px-6 py-2 bg-purple-600 hover:bg-purple-500 active:scale-95 rounded-lg font-bold text-white transition transform duration-100 flex-shrink-0">{web_create_btn}</button>
             </div>
             <div id="nodeResult" class="mt-4 hidden">
-                <div class="bg-black/30 p-3 rounded-lg border border-white/10">
-                    <div class="text-xs text-gray-500 mb-1">Токен (сохраните его):</div>
-                    <div class="font-mono text-green-400 break-all select-all" id="newNodeToken"></div>
-                    <div class="text-xs text-gray-500 mt-3 mb-1">Команда установки:</div>
-                    <div class="font-mono text-xs text-blue-300 break-all bg-black/50 p-2 rounded select-all" id="newNodeCmd"></div>
+                <div class="bg-gray-50 dark:bg-black/30 p-4 rounded-lg border border-gray-200 dark:border-white/10">
+                    <div class="text-xs text-gray-500 mb-1 font-medium">{web_node_token}</div>
+                    <div class="font-mono text-green-600 dark:text-green-400 break-all select-all text-sm bg-white dark:bg-black/20 p-2 rounded border border-gray-100 dark:border-white/5" id="newNodeToken"></div>
+                    <div class="text-xs text-gray-500 mt-3 mb-1 font-medium">{web_node_cmd}</div>
+                    <div class="font-mono text-xs text-blue-600 dark:text-blue-300 break-all bg-white dark:bg-black/50 p-2 rounded select-all border border-gray-100 dark:border-white/5" id="newNodeCmd"></div>
                 </div>
             </div>
         </div>

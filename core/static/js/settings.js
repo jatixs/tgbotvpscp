@@ -1,12 +1,71 @@
 document.addEventListener("DOMContentLoaded", () => {
+    initTheme(); // Инициализация темы при загрузке
     renderUsers();
 });
+
+// --- ЛОГИКА ТЕМЫ ---
+const themes = ['dark', 'light', 'system'];
+let currentTheme = localStorage.getItem('theme') || 'system';
+
+function initTheme() {
+    applyTheme(currentTheme);
+}
+
+function toggleTheme() {
+    const idx = themes.indexOf(currentTheme);
+    const nextIdx = (idx + 1) % themes.length;
+    currentTheme = themes[nextIdx];
+    localStorage.setItem('theme', currentTheme);
+    applyTheme(currentTheme);
+}
+
+function applyTheme(theme) {
+    const html = document.documentElement;
+    const iconMoon = document.getElementById('iconMoon');
+    const iconSun = document.getElementById('iconSun');
+    const iconSystem = document.getElementById('iconSystem');
+    
+    // Сброс
+    [iconMoon, iconSun, iconSystem].forEach(el => el.classList.add('hidden'));
+
+    if (theme === 'dark') {
+        html.classList.add('dark');
+        iconMoon.classList.remove('hidden');
+    } else if (theme === 'light') {
+        html.classList.remove('dark');
+        iconSun.classList.remove('hidden');
+    } else {
+        // System
+        if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
+            html.classList.add('dark');
+        } else {
+            html.classList.remove('dark');
+        }
+        iconSystem.classList.remove('hidden');
+    }
+}
+
+// --- ЛОГИКА ЯЗЫКА ---
+async function setLanguage(lang) {
+    try {
+        const res = await fetch('/api/settings/language', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({lang: lang})
+        });
+        if (res.ok) {
+            window.location.reload();
+        }
+    } catch (e) {
+        console.error("Lang switch failed", e);
+    }
+}
 
 // --- УВЕДОМЛЕНИЯ ---
 async function saveNotifications() {
     const btn = document.getElementById('saveNotifBtn');
     const originalText = btn.innerText;
-    btn.innerText = "Сохранение...";
+    btn.innerText = I18N.web_saving_btn;
     btn.disabled = true;
 
     const data = {
@@ -23,7 +82,7 @@ async function saveNotifications() {
             body: JSON.stringify(data)
         });
         if(res.ok) {
-            btn.innerText = "Сохранено!";
+            btn.innerText = I18N.web_saved_btn;
             btn.classList.replace('bg-green-600', 'bg-blue-600');
             setTimeout(() => {
                 btn.innerText = originalText;
@@ -31,12 +90,12 @@ async function saveNotifications() {
                 btn.disabled = false;
             }, 2000);
         } else {
-            alert("Ошибка сохранения");
+            alert(I18N.web_error.replace('{error}', 'Save failed'));
             btn.disabled = false;
         }
     } catch(e) {
         console.error(e);
-        alert("Ошибка сети");
+        alert(I18N.web_conn_error.replace('{error}', e));
         btn.disabled = false;
     }
 }
@@ -46,36 +105,34 @@ function renderUsers() {
     const tbody = document.getElementById('usersTableBody');
     const section = document.getElementById('usersSection');
     
-    // Если USERS_DATA == null, значит пользователь не админ (скрываем секцию)
-    if (USERS_DATA === null) return;
+    if (USERS_DATA === null) return; // Not admin
 
-    // Иначе (если админ), показываем секцию, даже если массив пуст
     section.classList.remove('hidden');
     
     if (USERS_DATA.length > 0) {
         tbody.innerHTML = USERS_DATA.map(u => `
-            <tr class="border-b border-white/5 hover:bg-white/5 transition">
-                <td class="px-4 py-3 font-mono text-xs">${u.id}</td>
-                <td class="px-4 py-3 font-medium text-white">${u.name}</td>
+            <tr class="border-b border-gray-100 dark:border-white/5 hover:bg-gray-50 dark:hover:bg-white/5 transition">
+                <td class="px-4 py-3 font-mono text-xs text-gray-500 dark:text-gray-400">${u.id}</td>
+                <td class="px-4 py-3 font-medium text-gray-900 dark:text-white">${u.name}</td>
                 <td class="px-4 py-3">
-                    <span class="px-2 py-0.5 rounded text-[10px] border ${u.role === 'admins' ? 'border-green-500/30 bg-green-500/20 text-green-400' : 'border-gray-500/30 bg-gray-500/20 text-gray-300'}">
+                    <span class="px-2 py-0.5 rounded text-[10px] border ${u.role === 'admins' ? 'border-green-500/30 bg-green-100 dark:bg-green-500/20 text-green-600 dark:text-green-400' : 'border-gray-300 dark:border-gray-500/30 bg-gray-100 dark:bg-gray-500/20 text-gray-600 dark:text-gray-300'}">
                         ${u.role}
                     </span>
                 </td>
                 <td class="px-4 py-3 text-right">
-                    <button onclick="deleteUser(${u.id})" class="text-red-400 hover:text-red-300 transition p-1">
+                    <button onclick="deleteUser(${u.id})" class="text-red-500 hover:text-red-700 dark:hover:text-red-300 transition p-1" title="${I18N.web_delete_user}">
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
                     </button>
                 </td>
             </tr>
         `).join('');
     } else {
-        tbody.innerHTML = '<tr><td colspan="4" class="px-4 py-3 text-center text-gray-500 text-xs">Нет дополнительных пользователей</td></tr>';
+        tbody.innerHTML = `<tr><td colspan="4" class="px-4 py-3 text-center text-gray-500 text-xs">${I18N.web_no_users}</td></tr>`;
     }
 }
 
 async function deleteUser(id) {
-    if(!confirm(`Удалить пользователя ${id}?`)) return;
+    if(!confirm(I18N.web_confirm_delete_user.replace('{id}', id))) return;
     
     try {
         const res = await fetch('/api/users/action', {
@@ -85,20 +142,19 @@ async function deleteUser(id) {
         });
         
         if(res.ok) {
-            // Удаляем из локального массива и перерисовываем
             const idx = USERS_DATA.findIndex(u => u.id == id);
             if(idx > -1) USERS_DATA.splice(idx, 1);
             renderUsers();
         } else {
-            alert("Ошибка удаления");
+            alert(I18N.web_error.replace('{error}', 'Delete failed'));
         }
     } catch(e) {
-        alert("Ошибка сети");
+        alert(I18N.web_conn_error.replace('{error}', e));
     }
 }
 
 async function openAddUserModal() {
-    const id = prompt("Введите Telegram ID пользователя:");
+    const id = prompt("ID:"); // Simplified for now, ideally replace with modal
     if(!id) return;
     
     try {
@@ -113,10 +169,10 @@ async function openAddUserModal() {
             USERS_DATA.push({id: id, name: data.name || `ID: ${id}`, role: 'users'});
             renderUsers();
         } else {
-            alert("Ошибка: " + (data.error || "Unknown"));
+            alert(I18N.web_error.replace('{error}', data.error || "Unknown"));
         }
     } catch(e) {
-        alert("Ошибка сети");
+        alert(I18N.web_conn_error.replace('{error}', e));
     }
 }
 
@@ -124,7 +180,7 @@ async function openAddUserModal() {
 async function addNode() {
     const nameInput = document.getElementById('newNodeName');
     const name = nameInput.value.trim();
-    if(!name) return alert("Введите имя");
+    if(!name) return alert("Name required");
     
     try {
         const res = await fetch('/api/nodes/add', {
@@ -140,9 +196,9 @@ async function addNode() {
             document.getElementById('newNodeCmd').innerText = data.command;
             nameInput.value = "";
         } else {
-            alert("Ошибка: " + data.error);
+            alert(I18N.web_error.replace('{error}', data.error));
         }
     } catch(e) {
-        alert("Ошибка сети");
+        alert(I18N.web_conn_error.replace('{error}', e));
     }
 }

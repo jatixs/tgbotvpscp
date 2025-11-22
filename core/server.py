@@ -136,6 +136,7 @@ async def handle_settings_page(request):
     
     user_id = user['id']
     is_admin = user['role'] == 'admins'
+    lang = get_user_lang(user_id) # Получаем язык
     
     user_alerts = ALERTS_CONFIG.get(user_id, {})
     
@@ -149,14 +150,47 @@ async def handle_settings_page(request):
             users_list.append({"id": uid, "name": name, "role": role})
         users_json = json.dumps(users_list)
 
-    html = html.replace("{web_title}", "Настройки - VPS Bot")
+    html = html.replace("{web_title}", f"{_('web_settings_page_title', lang)} - VPS Bot")
     html = html.replace("{user_name}", user.get('first_name', 'User'))
     html = html.replace("{user_avatar}", _get_avatar_html(user))
     html = html.replace("{users_data_json}", users_json)
     
+    # Замена переводов
+    html = html.replace("{web_settings_page_title}", _("web_settings_page_title", lang))
+    html = html.replace("{web_back}", _("web_back", lang))
+    html = html.replace("{web_notif_section}", _("web_notif_section", lang))
+    html = html.replace("{notifications_alert_name_res}", _("notifications_alert_name_res", lang))
+    html = html.replace("{notifications_alert_name_logins}", _("notifications_alert_name_logins", lang))
+    html = html.replace("{notifications_alert_name_bans}", _("notifications_alert_name_bans", lang))
+    html = html.replace("{notifications_alert_name_downtime}", _("notifications_alert_name_downtime", lang))
+    html = html.replace("{web_save_btn}", _("web_save_btn", lang))
+    html = html.replace("{web_users_section}", _("web_users_section", lang))
+    html = html.replace("{web_add_user_btn}", _("web_add_user_btn", lang))
+    html = html.replace("{web_user_id}", _("web_user_id", lang))
+    html = html.replace("{web_user_name}", _("web_user_name", lang))
+    html = html.replace("{web_user_role}", _("web_user_role", lang))
+    html = html.replace("{web_user_action}", _("web_user_action", lang))
+    html = html.replace("{web_add_node_section}", _("web_add_node_section", lang))
+    html = html.replace("{web_node_name_placeholder}", _("web_node_name_placeholder", lang))
+    html = html.replace("{web_create_btn}", _("web_create_btn", lang))
+    html = html.replace("{web_node_token}", _("web_node_token", lang))
+    html = html.replace("{web_node_cmd}", _("web_node_cmd", lang))
+    
     for alert in ['resources', 'logins', 'bans', 'downtime']:
         checked = "checked" if user_alerts.get(alert, False) else ""
         html = html.replace(f"{{check_{alert}}}", checked)
+        
+    # Передача JSON переводов для JS
+    i18n_data = {
+        "web_saving_btn": _("web_saving_btn", lang),
+        "web_saved_btn": _("web_saved_btn", lang),
+        "web_save_btn": _("web_save_btn", lang),
+        "web_error": _("web_error", lang, error=""),
+        "web_conn_error": _("web_conn_error", lang, error=""),
+        "web_confirm_delete_user": _("web_confirm_delete_user", lang),
+        "web_no_users": _("web_no_users", lang)
+    }
+    html = html.replace("{i18n_json}", json.dumps(i18n_data))
 
     return web.Response(text=html, content_type='text/html')
 
@@ -471,10 +505,8 @@ async def handle_dashboard(request):
     html = html.replace("{user_group_display}", "") 
     html = html.replace("{admin_controls_html}", admin_controls)
     
-    # Добавляем заголовок управления нодами
     html = html.replace("{web_node_mgmt_title}", _("web_node_mgmt_title", lang))
     
-    # Подготовка JSON для JS переводов
     i18n_data = {
         "web_nodes_loading": _("web_nodes_loading", lang),
         "web_no_nodes": _("web_no_nodes", lang),
@@ -490,7 +522,6 @@ async def handle_dashboard(request):
     }
     html = html.replace("{i18n_json}", json.dumps(i18n_data))
     
-    # Замена плейсхолдеров в модальных окнах
     html = html.replace("{web_node_details_title}", _("web_node_details_title", lang))
     html = html.replace("{web_token_label}", _("web_token_label", lang))
     html = html.replace("{web_copied}", _("web_copied", lang))
