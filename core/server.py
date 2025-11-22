@@ -114,7 +114,6 @@ async def handle_get_logs(request):
     except Exception as e:
         return web.json_response({"error": str(e)}, status=500)
 
-# --- ДОБАВЛЕНА НЕДОСТАЮЩАЯ ФУНКЦИЯ ---
 async def handle_dashboard(request):
     user = get_current_user(request)
     if not user: raise web.HTTPFound('/login')
@@ -200,7 +199,6 @@ async def handle_dashboard(request):
     html = html.replace("{i18n_json}", json.dumps(i18n_data))
 
     return web.Response(text=html, content_type='text/html')
-# -------------------------------------
 
 async def handle_settings_page(request):
     user = get_current_user(request)
@@ -283,7 +281,9 @@ async def handle_settings_page(request):
         "web_confirm_delete_user": _("web_confirm_delete_user", lang),
         "web_no_users": _("web_no_users", lang),
         "web_clear_logs_confirm": _("web_clear_logs_confirm", lang),
-        "web_logs_cleared": _("web_logs_cleared", lang)
+        "web_logs_cleared": _("web_logs_cleared", lang),
+        "error_traffic_interval_low": _("error_traffic_interval_low", lang),
+        "error_traffic_interval_high": _("error_traffic_interval_high", lang)
     }
     html = html.replace("{i18n_json}", json.dumps(i18n_data))
 
@@ -312,17 +312,18 @@ async def handle_save_system_config(request):
     try:
         data = await request.json()
         
-        # --- ДОБАВЛЕНО: Валидация интервала трафика ---
         try:
             traffic_interval = int(data.get("TRAFFIC_INTERVAL", 0))
         except ValueError:
             traffic_interval = 0
             
+        lang = get_user_lang(user['id'])
+        
         if traffic_interval < 5:
-            lang = get_user_lang(user['id'])
-            # Возвращаем ошибку с пояснением, что это трафик в боте
             return web.json_response({"error": _("error_traffic_interval_low", lang)}, status=400)
-        # ----------------------------------------------
+        
+        if traffic_interval > 100:
+            return web.json_response({"error": _("error_traffic_interval_high", lang)}, status=400)
 
         save_system_config(data)
         return web.json_response({"status": "ok"})

@@ -23,6 +23,14 @@ function initSystemSettingsTracking() {
     });
 }
 
+function showError(fieldId, message) {
+    const errorEl = document.getElementById('error_' + fieldId);
+    if (errorEl) {
+        errorEl.innerText = message;
+        errorEl.classList.remove('hidden');
+    }
+}
+
 function checkForChanges() {
     const inputs = ['conf_cpu', 'conf_ram', 'conf_disk', 'conf_traffic', 'conf_timeout'];
     let hasChanges = false;
@@ -62,6 +70,23 @@ async function saveSystemConfig() {
     const originalText = I18N.web_save_btn; // Берем из перевода, так как текст может быть изменен
     btn.innerText = I18N.web_saving_btn;
     btn.disabled = true;
+
+    // Сброс ошибок
+    document.querySelectorAll('[id^="error_"]').forEach(el => el.classList.add('hidden'));
+
+    const trafficVal = parseInt(document.getElementById('conf_traffic').value);
+    if (trafficVal < 5) {
+        showError('conf_traffic', I18N.error_traffic_interval_low);
+        btn.innerText = originalText;
+        toggleSystemSaveButton(true);
+        return;
+    }
+    if (trafficVal > 100) {
+        showError('conf_traffic', I18N.error_traffic_interval_high);
+        btn.innerText = originalText;
+        toggleSystemSaveButton(true);
+        return;
+    }
 
     const data = {
         CPU_THRESHOLD: document.getElementById('conf_cpu').value,
