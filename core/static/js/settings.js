@@ -1,67 +1,8 @@
 document.addEventListener("DOMContentLoaded", () => {
-    initTheme(); // Инициализация темы при загрузке
     renderUsers();
 });
 
-// --- ЛОГИКА ТЕМЫ ---
-const themes = ['dark', 'light', 'system'];
-let currentTheme = localStorage.getItem('theme') || 'system';
-
-function initTheme() {
-    applyTheme(currentTheme);
-}
-
-function toggleTheme() {
-    const idx = themes.indexOf(currentTheme);
-    const nextIdx = (idx + 1) % themes.length;
-    currentTheme = themes[nextIdx];
-    localStorage.setItem('theme', currentTheme);
-    applyTheme(currentTheme);
-}
-
-function applyTheme(theme) {
-    const html = document.documentElement;
-    const iconMoon = document.getElementById('iconMoon');
-    const iconSun = document.getElementById('iconSun');
-    const iconSystem = document.getElementById('iconSystem');
-    
-    // Сброс
-    [iconMoon, iconSun, iconSystem].forEach(el => el.classList.add('hidden'));
-
-    if (theme === 'dark') {
-        html.classList.add('dark');
-        iconMoon.classList.remove('hidden');
-    } else if (theme === 'light') {
-        html.classList.remove('dark');
-        iconSun.classList.remove('hidden');
-    } else {
-        // System
-        if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
-            html.classList.add('dark');
-        } else {
-            html.classList.remove('dark');
-        }
-        iconSystem.classList.remove('hidden');
-    }
-}
-
-// --- ЛОГИКА ЯЗЫКА ---
-async function setLanguage(lang) {
-    try {
-        const res = await fetch('/api/settings/language', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({lang: lang})
-        });
-        if (res.ok) {
-            window.location.reload();
-        }
-    } catch (e) {
-        console.error("Lang switch failed", e);
-    }
-}
-
-// --- УВЕДОМЛЕНИЯ ---
+// --- УВЕДОМЛЕНИЯ (AJAX) ---
 async function saveNotifications() {
     const btn = document.getElementById('saveNotifBtn');
     const originalText = btn.innerText;
@@ -100,7 +41,7 @@ async function saveNotifications() {
     }
 }
 
-// --- ПОЛЬЗОВАТЕЛИ ---
+// --- ПОЛЬЗОВАТЕЛИ (DOM + AJAX) ---
 function renderUsers() {
     const tbody = document.getElementById('usersTableBody');
     const section = document.getElementById('usersSection');
@@ -120,7 +61,7 @@ function renderUsers() {
                     </span>
                 </td>
                 <td class="px-4 py-3 text-right">
-                    <button onclick="deleteUser(${u.id})" class="text-red-500 hover:text-red-700 dark:hover:text-red-300 transition p-1" title="${I18N.web_delete_user}">
+                    <button onclick="deleteUser(${u.id})" class="text-red-500 hover:text-red-700 dark:hover:text-red-300 transition p-1" title="Delete">
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
                     </button>
                 </td>
@@ -154,7 +95,7 @@ async function deleteUser(id) {
 }
 
 async function openAddUserModal() {
-    const id = prompt("ID:"); // Simplified for now, ideally replace with modal
+    const id = prompt("Telegram ID:"); 
     if(!id) return;
     
     try {
@@ -176,7 +117,7 @@ async function openAddUserModal() {
     }
 }
 
-// --- НОДЫ ---
+// --- НОДЫ (AJAX) ---
 async function addNode() {
     const nameInput = document.getElementById('newNodeName');
     const name = nameInput.value.trim();

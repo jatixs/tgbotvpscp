@@ -1,35 +1,15 @@
 <!DOCTYPE html>
-<html lang="ru" class="dark">
+<html lang="ru">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0">
     <title>{web_title}</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="/static/js/theme_init.js"></script>
     <script>
-        tailwind.config = {
-            darkMode: 'class',
-            theme: {
-                extend: {
-                    colors: {
-                        gray: {
-                            850: '#1f2937',
-                            900: '#111827',
-                            950: '#0b0f19',
-                        }
-                    }
-                }
-            }
-        }
         const I18N = {i18n_json};
     </script>
     <link rel="stylesheet" href="/static/css/style.css">
-    <style>
-        body, div, nav, main, button {
-            transition-property: background-color, border-color, color, fill, stroke, opacity, box-shadow;
-            transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
-            transition-duration: 300ms;
-        }
-    </style>
 </head>
 <body class="bg-gray-100 text-gray-900 dark:bg-gray-900 dark:text-gray-100 font-sans selection:bg-green-500/30 pb-10 overflow-x-hidden">
     
@@ -130,7 +110,7 @@
                         </tr>
                     </thead>
                     <tbody id="usersTableBody" class="bg-white/50 dark:bg-transparent">
-                        </tbody>
+                    </tbody>
                 </table>
             </div>
         </div>
@@ -159,6 +139,7 @@
     <script>
         const USERS_DATA = {users_data_json}; 
     </script>
+    <script src="/static/js/common.js"></script>
     <script src="/static/js/settings.js"></script>
 </body>
 </html>
