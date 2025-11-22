@@ -18,16 +18,20 @@ BUTTON_KEY = "btn_traffic"
 MESSAGE_EDIT_THROTTLE = {}
 MIN_UPDATE_INTERVAL = 2.0
 
+
 def get_button() -> KeyboardButton:
     return KeyboardButton(text=get_text(BUTTON_KEY, config.DEFAULT_LANGUAGE))
+
 
 def register_handlers(dp: Dispatcher):
     dp.message(I18nFilter(BUTTON_KEY))(traffic_handler)
     dp.callback_query(F.data == "stop_traffic")(stop_traffic_handler)
 
+
 def start_background_tasks(bot: Bot) -> list[asyncio.Task]:
     task = asyncio.create_task(traffic_monitor(bot), name="TrafficMonitor")
     return [task]
+
 
 async def traffic_handler(message: types.Message):
     user_id = message.from_user.id
@@ -43,19 +47,29 @@ async def traffic_handler(message: types.Message):
         msg_id = shared_state.TRAFFIC_MESSAGE_IDS.pop(user_id, None)
         shared_state.TRAFFIC_PREV.pop(user_id, None)
         if msg_id:
-            try: await message.bot.delete_message(chat_id=chat_id, message_id=msg_id)
-            except Exception: pass
+            try:
+                await message.bot.delete_message(chat_id=chat_id, message_id=msg_id)
+            except Exception:
+                pass
 
     await delete_previous_message(user_id, list(shared_state.LAST_MESSAGE_IDS.get(user_id, {}).keys()), chat_id, message.bot)
 
     try:
         counters = await asyncio.to_thread(psutil.net_io_counters)
-        shared_state.TRAFFIC_PREV[user_id] = (counters.bytes_recv, counters.bytes_sent)
+        shared_state.TRAFFIC_PREV[user_id] = (
+            counters.bytes_recv, counters.bytes_sent)
 
-        stop_button = InlineKeyboardButton(text=get_text("btn_stop_traffic", lang), callback_data="stop_traffic")
+        stop_button = InlineKeyboardButton(
+            text=get_text(
+                "btn_stop_traffic",
+                lang),
+            callback_data="stop_traffic")
         keyboard = InlineKeyboardMarkup(inline_keyboard=[[stop_button]])
 
-        msg_text = get_text("traffic_start", lang, interval=config.TRAFFIC_INTERVAL)
+        msg_text = get_text(
+            "traffic_start",
+            lang,
+            interval=config.TRAFFIC_INTERVAL)
         sent_message = await message.answer(msg_text, reply_markup=keyboard, parse_mode="HTML")
 
         shared_state.TRAFFIC_MESSAGE_IDS[user_id] = sent_message.message_id
@@ -64,6 +78,7 @@ async def traffic_handler(message: types.Message):
     except Exception as e:
         logging.error(f"Error starting traffic monitor for {user_id}: {e}")
         await message.answer(get_text("traffic_start_fail", lang, error=e))
+
 
 async def stop_traffic_handler(callback: types.CallbackQuery):
     user_id = callback.from_user.id
@@ -78,16 +93,20 @@ async def stop_traffic_handler(callback: types.CallbackQuery):
         try:
             await bot.delete_message(chat_id=chat_id, message_id=message_id_to_delete)
             await callback.answer(get_text("traffic_stopped_alert", lang))
-            
-            buttons_map = getattr(bot, 'buttons_map', {"user": [], "admin": [], "root": []})
+
+            buttons_map = getattr(
+                bot, 'buttons_map', {
+                    "user": [], "admin": [], "root": []})
             reply_markup = get_main_reply_keyboard(user_id, buttons_map)
             sent_menu_message = await callback.message.answer(get_text("traffic_menu_return", lang), reply_markup=reply_markup)
-            shared_state.LAST_MESSAGE_IDS.setdefault(user_id, {})["menu"] = sent_menu_message.message_id
-            
+            shared_state.LAST_MESSAGE_IDS.setdefault(
+                user_id, {})["menu"] = sent_menu_message.message_id
+
         except Exception:
             await callback.answer(get_text("traffic_stopped_alert", lang))
     else:
         await callback.answer(get_text("traffic_stopped_alert", lang))
+
 
 async def traffic_monitor(bot: Bot):
     await asyncio.sleep(config.TRAFFIC_INTERVAL)
@@ -98,15 +117,20 @@ async def traffic_monitor(bot: Bot):
             continue
 
         for user_id in current_users:
-            if user_id not in shared_state.TRAFFIC_MESSAGE_IDS: continue
+            if user_id not in shared_state.TRAFFIC_MESSAGE_IDS:
+                continue
             message_id = shared_state.TRAFFIC_MESSAGE_IDS.get(user_id)
-            if not message_id: continue
-            
+            if not message_id:
+                continue
+
             now = time.time()
             last_update = MESSAGE_EDIT_THROTTLE.get(message_id, 0)
-            effective_interval = max(config.TRAFFIC_INTERVAL, MIN_UPDATE_INTERVAL)
+            effective_interval = max(
+                config.TRAFFIC_INTERVAL,
+                MIN_UPDATE_INTERVAL)
 
-            if (now - last_update) < effective_interval: continue
+            if (now - last_update) < effective_interval:
+                continue
 
             lang = get_user_lang(user_id)
 
@@ -115,7 +139,8 @@ async def traffic_monitor(bot: Bot):
                     counters_now = psutil.net_io_counters()
                     rx_now = counters_now.bytes_recv
                     tx_now = counters_now.bytes_sent
-                    prev_rx, prev_tx = shared_state.TRAFFIC_PREV.get(user_id, (rx_now, tx_now))
+                    prev_rx, prev_tx = shared_state.TRAFFIC_PREV.get(
+                        user_id, (rx_now, tx_now))
                     rx_delta = rx_now - prev_rx if rx_now >= prev_rx else rx_now
                     tx_delta = tx_now - prev_tx if tx_now >= prev_tx else tx_now
                     interval = max(effective_interval, 1)
@@ -126,8 +151,13 @@ async def traffic_monitor(bot: Bot):
                 rx, tx, rx_speed, tx_speed = await asyncio.to_thread(get_traffic_update)
                 shared_state.TRAFFIC_PREV[user_id] = (rx, tx)
 
-                stop_button = InlineKeyboardButton(text=get_text("btn_stop_traffic", lang), callback_data="stop_traffic")
-                keyboard = InlineKeyboardMarkup(inline_keyboard=[[stop_button]])
+                stop_button = InlineKeyboardButton(
+                    text=get_text(
+                        "btn_stop_traffic",
+                        lang),
+                    callback_data="stop_traffic")
+                keyboard = InlineKeyboardMarkup(
+                    inline_keyboard=[[stop_button]])
 
                 msg_text = (
                     f"{get_text('traffic_update_total', lang)}\n"

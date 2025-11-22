@@ -40,16 +40,20 @@ IPERF_TEST_DURATION = 8
 IPERF_PROCESS_TIMEOUT = 30.0
 MAX_TEST_ATTEMPTS = 3
 
-# Словарь для хранения времени последнего обновления сообщения (чтобы не спамить API)
+# Словарь для хранения времени последнего обновления сообщения (чтобы не
+# спамить API)
 MESSAGE_EDIT_THROTTLE = {}
 # Минимальный интервал обновления сообщения "на лету" (сек)
 MIN_UPDATE_INTERVAL = 1.5
 
+
 def get_button() -> KeyboardButton:
     return KeyboardButton(text=_(BUTTON_KEY, config.DEFAULT_LANGUAGE))
 
+
 def register_handlers(dp: Dispatcher):
     dp.message(I18nFilter(BUTTON_KEY))(speedtest_handler)
+
 
 async def edit_status_safe(
         bot: Bot,
@@ -60,7 +64,7 @@ async def edit_status_safe(
         force: bool = False):
     """
     Безопасно редактирует сообщение статуса с учетом троттлинга.
-    
+
     :param force: Если True, сообщение будет обновлено немедленно (для финальных статусов или ошибок).
                   Если False, сообщение обновится только если прошло достаточно времени.
     """
@@ -77,7 +81,7 @@ async def edit_status_safe(
 
     try:
         await bot.edit_message_text(text, chat_id=chat_id, message_id=message_id, parse_mode="HTML")
-        MESSAGE_EDIT_THROTTLE[message_id] = now # Обновляем метку времени
+        MESSAGE_EDIT_THROTTLE[message_id] = now  # Обновляем метку времени
         return message_id
     except TelegramBadRequest as e:
         if "message is not modified" in str(e).lower():
@@ -95,6 +99,7 @@ async def edit_status_safe(
             f"edit_status_safe: Unexpected error editing message {message_id}: {e}",
             exc_info=True)
         return None
+
 
 def get_ping_sync(host: str) -> Optional[float]:
     os_type = platform.system().lower()
@@ -122,6 +127,7 @@ def get_ping_sync(host: str) -> Optional[float]:
     except Exception as e:
         logging.error(f"Ошибка пинга {host}: {e}", exc_info=True)
     return None
+
 
 def get_vps_location_sync() -> Tuple[Optional[str], Optional[str]]:
     ip, country_code = None, None
@@ -153,12 +159,14 @@ def get_vps_location_sync() -> Tuple[Optional[str], Optional[str]]:
             logging.warning(f"Ошибка при запросе геолокации для IP {ip}: {e}")
     return ip, country_code
 
+
 def is_ip_address(host: str) -> bool:
     try:
         ipaddress.ip_address(host)
         return True
     except ValueError:
         return False
+
 
 def fetch_parse_and_prioritize_servers_sync(
         vps_country_code: Optional[str],
@@ -382,6 +390,7 @@ def fetch_parse_and_prioritize_servers_sync(
 
     return servers_list, None
 
+
 def find_best_servers_sync(
         servers: list[Dict[str, Any]]) -> List[Tuple[float, Dict[str, Any]]]:
     servers_to_check = servers[:MAX_SERVERS_TO_PING]
@@ -408,6 +417,7 @@ def find_best_servers_sync(
     logging.info(
         f"Найдено {len(results)} доступных серверов по пингу. Лучший: {results[0][1]['host']} ({results[0][0]:.2f} мс)")
     return results
+
 
 async def run_iperf_test_async(bot: Bot,
                                chat_id: int,
@@ -574,6 +584,7 @@ async def run_iperf_test_async(bot: Bot,
         error_message_safe = str(e)
         return _("speedtest_fail", lang, error=escape_html(error_message_safe))
 
+
 async def speedtest_handler(message: types.Message):
     user_id = message.from_user.id
     chat_id = message.chat.id
@@ -634,7 +645,8 @@ async def speedtest_handler(message: types.Message):
                         error_text = _(
                             "iperf_conn_error_generic", lang, host=escape_html(
                                 best_server['host']))
-                        # При ошибке используем force=True, чтобы пользователь сразу увидел
+                        # При ошибке используем force=True, чтобы пользователь
+                        # сразу увидел
                         status_message_id = await edit_status_safe(message.bot, chat_id, status_message_id, error_text, lang, force=True)
                         last_error_text = error_text
                         await asyncio.sleep(1)
@@ -676,7 +688,8 @@ async def speedtest_handler(message: types.Message):
 
     if status_message_id:
         try:
-            # Финальное редактирование всегда без проверок троттлинга (напрямую)
+            # Финальное редактирование всегда без проверок троттлинга
+            # (напрямую)
             await message.bot.edit_message_text(final_text, chat_id=chat_id, message_id=status_message_id, parse_mode="HTML")
             LAST_MESSAGE_IDS.setdefault(
                 user_id, {})[command] = status_message_id

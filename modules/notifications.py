@@ -28,12 +28,15 @@ from core.keyboards import get_alerts_menu_keyboard
 
 BUTTON_KEY = "btn_notifications"
 
+
 def get_button() -> KeyboardButton:
     return KeyboardButton(text=_(BUTTON_KEY, config.DEFAULT_LANGUAGE))
+
 
 def register_handlers(dp: Dispatcher):
     dp.message(I18nFilter(BUTTON_KEY))(notifications_menu_handler)
     dp.callback_query(F.data.startswith("toggle_alert_"))(cq_toggle_alert)
+
 
 def start_background_tasks(bot: Bot) -> list[asyncio.Task]:
     task_resources = asyncio.create_task(
@@ -55,10 +58,11 @@ def start_background_tasks(bot: Bot) -> list[asyncio.Task]:
                 bot,
                 ssh_log_file_to_monitor,
                 "logins",
-                parse_ssh_log_line), 
+                parse_ssh_log_line),
             name="LoginsMonitor")
     else:
-        logging.warning("Не найден лог SSH. Мониторинг SSH (logins) не запущен.")
+        logging.warning(
+            "Не найден лог SSH. Мониторинг SSH (logins) не запущен.")
 
     f2b_log_file_to_monitor = get_host_path("/var/log/fail2ban.log")
     task_bans = asyncio.create_task(
@@ -74,6 +78,7 @@ def start_background_tasks(bot: Bot) -> list[asyncio.Task]:
         tasks.append(task_logins)
 
     return tasks
+
 
 async def notifications_menu_handler(message: types.Message):
     user_id = message.from_user.id
@@ -93,6 +98,7 @@ async def notifications_menu_handler(message: types.Message):
     )
     LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = sent_message.message_id
 
+
 async def cq_toggle_alert(callback: types.CallbackQuery):
     user_id = callback.from_user.id
     lang = get_user_lang(user_id)
@@ -109,12 +115,14 @@ async def cq_toggle_alert(callback: types.CallbackQuery):
         await callback.answer(_("error_internal", lang), show_alert=True)
         return
 
-    if user_id not in ALERTS_CONFIG: ALERTS_CONFIG[user_id] = {}
+    if user_id not in ALERTS_CONFIG:
+        ALERTS_CONFIG[user_id] = {}
     new_state = not ALERTS_CONFIG[user_id].get(alert_type, False)
     ALERTS_CONFIG[user_id][alert_type] = new_state
     save_alerts_config()
 
-    logging.info(f"Пользователь {user_id} изменил '{alert_type}' на {new_state}")
+    logging.info(
+        f"Пользователь {user_id} изменил '{alert_type}' на {new_state}")
     new_keyboard = get_alerts_menu_keyboard(user_id)
 
     try:
@@ -126,10 +134,15 @@ async def cq_toggle_alert(callback: types.CallbackQuery):
             "downtime": "notifications_alert_name_downtime"
         }
         alert_name = _(alert_name_map.get(alert_type, "error_internal"), lang)
-        status_text = _("notifications_status_on", lang) if new_state else _("notifications_status_off", lang)
+        status_text = _(
+            "notifications_status_on",
+            lang) if new_state else _(
+            "notifications_status_off",
+            lang)
         await callback.answer(_("notifications_toggle_alert", lang, alert_name=alert_name, status=status_text))
     except Exception:
         await callback.answer()
+
 
 async def parse_ssh_log_line(line: str) -> dict | None:
     match = re.search(r"Accepted\s+(?:\S+)\s+for\s+(\S+)\s+from\s+(\S+)", line)
@@ -142,10 +155,16 @@ async def parse_ssh_log_line(line: str) -> dict | None:
             now_time = datetime.now().strftime('%H:%M:%S')
             return {
                 "key": "alert_ssh_login_detected",
-                "params": {"user": user, "flag": flag, "ip": ip, "time": now_time, "tz": tz_label}
-            }
-        except Exception: return None
+                "params": {
+                    "user": user,
+                    "flag": flag,
+                    "ip": ip,
+                    "time": now_time,
+                    "tz": tz_label}}
+        except Exception:
+            return None
     return None
+
 
 async def parse_f2b_log_line(line: str) -> dict | None:
     match = re.search(r"fail2ban\.actions.* Ban\s+(\S+)", line)
@@ -157,10 +176,15 @@ async def parse_f2b_log_line(line: str) -> dict | None:
             now_time = datetime.now().strftime('%H:%M:%S')
             return {
                 "key": "alert_f2b_ban_detected",
-                "params": {"flag": flag, "ip": ip, "time": now_time, "tz": tz_label}
-            }
-        except Exception: return None
+                "params": {
+                    "flag": flag,
+                    "ip": ip,
+                    "time": now_time,
+                    "tz": tz_label}}
+        except Exception:
+            return None
     return None
+
 
 async def resource_monitor(bot: Bot):
     global RESOURCE_ALERT_STATE, LAST_RESOURCE_ALERT_TIME
@@ -181,11 +205,15 @@ async def resource_monitor(bot: Bot):
 
             if cpu_usage >= config.CPU_THRESHOLD:
                 if not RESOURCE_ALERT_STATE["cpu"]:
-                    alerts_data.append(("alert_cpu_high", {"usage": cpu_usage, "threshold": config.CPU_THRESHOLD}))
+                    alerts_data.append(
+                        ("alert_cpu_high", {
+                            "usage": cpu_usage, "threshold": config.CPU_THRESHOLD}))
                     RESOURCE_ALERT_STATE["cpu"] = True
                     LAST_RESOURCE_ALERT_TIME["cpu"] = current_time
                 elif current_time - LAST_RESOURCE_ALERT_TIME["cpu"] > config.RESOURCE_ALERT_COOLDOWN:
-                    alerts_data.append(("alert_cpu_high_repeat", {"usage": cpu_usage, "threshold": config.CPU_THRESHOLD}))
+                    alerts_data.append(
+                        ("alert_cpu_high_repeat", {
+                            "usage": cpu_usage, "threshold": config.CPU_THRESHOLD}))
                     LAST_RESOURCE_ALERT_TIME["cpu"] = current_time
             elif cpu_usage < config.CPU_THRESHOLD and RESOURCE_ALERT_STATE["cpu"]:
                 alerts_data.append(("alert_cpu_normal", {"usage": cpu_usage}))
@@ -194,11 +222,15 @@ async def resource_monitor(bot: Bot):
 
             if ram_usage >= config.RAM_THRESHOLD:
                 if not RESOURCE_ALERT_STATE["ram"]:
-                    alerts_data.append(("alert_ram_high", {"usage": ram_usage, "threshold": config.RAM_THRESHOLD}))
+                    alerts_data.append(
+                        ("alert_ram_high", {
+                            "usage": ram_usage, "threshold": config.RAM_THRESHOLD}))
                     RESOURCE_ALERT_STATE["ram"] = True
                     LAST_RESOURCE_ALERT_TIME["ram"] = current_time
                 elif current_time - LAST_RESOURCE_ALERT_TIME["ram"] > config.RESOURCE_ALERT_COOLDOWN:
-                    alerts_data.append(("alert_ram_high_repeat", {"usage": ram_usage, "threshold": config.RAM_THRESHOLD}))
+                    alerts_data.append(
+                        ("alert_ram_high_repeat", {
+                            "usage": ram_usage, "threshold": config.RAM_THRESHOLD}))
                     LAST_RESOURCE_ALERT_TIME["ram"] = current_time
             elif ram_usage < config.RAM_THRESHOLD and RESOURCE_ALERT_STATE["ram"]:
                 alerts_data.append(("alert_ram_normal", {"usage": ram_usage}))
@@ -207,31 +239,41 @@ async def resource_monitor(bot: Bot):
 
             if disk_usage >= config.DISK_THRESHOLD:
                 if not RESOURCE_ALERT_STATE["disk"]:
-                    alerts_data.append(("alert_disk_high", {"usage": disk_usage, "threshold": config.DISK_THRESHOLD}))
+                    alerts_data.append(
+                        ("alert_disk_high", {
+                            "usage": disk_usage, "threshold": config.DISK_THRESHOLD}))
                     RESOURCE_ALERT_STATE["disk"] = True
                     LAST_RESOURCE_ALERT_TIME["disk"] = current_time
                 elif current_time - LAST_RESOURCE_ALERT_TIME["disk"] > config.RESOURCE_ALERT_COOLDOWN:
-                    alerts_data.append(("alert_disk_high_repeat", {"usage": disk_usage, "threshold": config.DISK_THRESHOLD}))
+                    alerts_data.append(
+                        ("alert_disk_high_repeat", {
+                            "usage": disk_usage, "threshold": config.DISK_THRESHOLD}))
                     LAST_RESOURCE_ALERT_TIME["disk"] = current_time
             elif disk_usage < config.DISK_THRESHOLD and RESOURCE_ALERT_STATE["disk"]:
-                alerts_data.append(("alert_disk_normal", {"usage": disk_usage}))
+                alerts_data.append(
+                    ("alert_disk_normal", {
+                        "usage": disk_usage}))
                 RESOURCE_ALERT_STATE["disk"] = False
                 LAST_RESOURCE_ALERT_TIME["disk"] = 0
 
             if alerts_data:
                 def alert_text_generator(lang):
-                    return "\n\n".join([_(key, lang, **params) for key, params in alerts_data])
+                    return "\n\n".join([_(key, lang, **params)
+                                       for key, params in alerts_data])
                 await send_alert(bot, alert_text_generator, "resources")
 
         except Exception as e:
             logging.error(f"Ошибка в мониторе ресурсов: {e}")
         await asyncio.sleep(config.RESOURCE_CHECK_INTERVAL)
 
+
 def prepare_log_alert_func(alert_data_dict):
-    if not alert_data_dict: return None
+    if not alert_data_dict:
+        return None
     key = alert_data_dict.get("key")
     params = alert_data_dict.get("params", {})
     return lambda lang: _(key, lang, **params)
+
 
 async def _read_stdout(process, alert_type, parse_function, close_event):
     try:
@@ -242,17 +284,29 @@ async def _read_stdout(process, alert_type, parse_function, close_event):
                     alert_data = await parse_function(line_str)
                     if alert_data:
                         await send_alert(process.bot_ref, prepare_log_alert_func(alert_data), alert_type)
-            except Exception: pass
-    except Exception: pass
-    finally: close_event.set()
+            except Exception:
+                pass
+    except Exception:
+        pass
+    finally:
+        close_event.set()
+
 
 async def _read_stderr(process, alert_type, close_event):
     try:
-        async for line in process.stderr: pass
-    except Exception: pass
-    finally: close_event.set()
+        async for line in process.stderr:
+            pass
+    except Exception:
+        pass
+    finally:
+        close_event.set()
 
-async def reliable_tail_log_monitor(bot: Bot, log_file_path: str, alert_type: str, parse_function: callable):
+
+async def reliable_tail_log_monitor(
+        bot: Bot,
+        log_file_path: str,
+        alert_type: str,
+        parse_function: callable):
     process = None
     stdout_closed = asyncio.Event()
     stderr_closed = asyncio.Event()
@@ -261,11 +315,15 @@ async def reliable_tail_log_monitor(bot: Bot, log_file_path: str, alert_type: st
 
     try:
         while True:
-            stdout_closed.clear(); stderr_closed.clear()
-            process = None; stdout_task = None; stderr_task = None
+            stdout_closed.clear()
+            stderr_closed.clear()
+            process = None
+            stdout_task = None
+            stderr_task = None
 
             if not await asyncio.to_thread(os.path.exists, log_file_path):
-                await asyncio.sleep(60); continue
+                await asyncio.sleep(60)
+                continue
 
             try:
                 process = await asyncio.create_subprocess_shell(
@@ -274,19 +332,33 @@ async def reliable_tail_log_monitor(bot: Bot, log_file_path: str, alert_type: st
                     stderr=asyncio.subprocess.PIPE
                 )
                 process.bot_ref = bot
-                stdout_task = asyncio.create_task(_read_stdout(process, alert_type, parse_function, stdout_closed))
-                stderr_task = asyncio.create_task(_read_stderr(process, alert_type, stderr_closed))
+                stdout_task = asyncio.create_task(
+                    _read_stdout(
+                        process,
+                        alert_type,
+                        parse_function,
+                        stdout_closed))
+                stderr_task = asyncio.create_task(
+                    _read_stderr(process, alert_type, stderr_closed))
 
                 await process.wait()
-                try: await asyncio.wait_for(asyncio.gather(stdout_closed.wait(), stderr_closed.wait()), timeout=2.0)
-                except asyncio.TimeoutError: pass
+                try:
+                    await asyncio.wait_for(asyncio.gather(stdout_closed.wait(), stderr_closed.wait()), timeout=2.0)
+                except asyncio.TimeoutError:
+                    pass
 
-            except Exception: await asyncio.sleep(60)
+            except Exception:
+                await asyncio.sleep(60)
             finally:
-                if stdout_task: stdout_task.cancel()
-                if stderr_task: stderr_task.cancel()
+                if stdout_task:
+                    stdout_task.cancel()
+                if stderr_task:
+                    stderr_task.cancel()
                 if process and process.returncode is None:
-                    try: process.terminate()
-                    except: pass
+                    try:
+                        process.terminate()
+                    except BaseException:
+                        pass
                 await asyncio.sleep(5)
-    except asyncio.CancelledError: pass
+    except asyncio.CancelledError:
+        pass
