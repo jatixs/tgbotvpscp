@@ -142,7 +142,11 @@ ask_env_details() {
     msg_info "Enter .env details..."
     msg_question "Bot Token: " T; msg_question "Admin ID: " A; msg_question "Username (opt): " U; msg_question "Bot Name (opt): " N
     msg_question "Web Port [8080]: " P; if [ -z "$P" ]; then WEB_PORT="8080"; else WEB_PORT="$P"; fi
-    export T A U N WEB_PORT
+    
+    msg_question "Enable Web-UI (Dashboard)? (y/n) [y]: " W
+    if [[ "$W" =~ ^[Nn]$ ]]; then ENABLE_WEB="false"; else ENABLE_WEB="true"; fi
+    
+    export T A U N WEB_PORT ENABLE_WEB
 }
 
 write_env_file() {
@@ -157,6 +161,7 @@ WEB_SERVER_PORT="${WEB_PORT}"
 INSTALL_MODE="${im}"
 DEPLOY_MODE="${dm}"
 TG_BOT_CONTAINER_NAME="${cn}"
+ENABLE_WEB_UI="${ENABLE_WEB}"
 EOF
     sudo chmod 600 "${ENV_FILE}"
 }
@@ -426,15 +431,20 @@ update_bot() {
 
     # --- Web Interface Check ---
     local web_port="8080"
+    local web_host="127.0.0.1"
+    
     if [ -f "${ENV_FILE}" ]; then
-        local env_port=$(grep '^WEB_SERVER_PORT=' "${ENV_FILE}" | cut -d'=' -f2 | tr -d '"')
+        local env_port=$(grep '^WEB_SERVER_PORT=' "${ENV_FILE}" | cut -d'=' -f2 | tr -d '"\r')
+        local env_host=$(grep '^WEB_SERVER_HOST=' "${ENV_FILE}" | cut -d'=' -f2 | tr -d '"\r')
+        
         if [ -n "$env_port" ]; then web_port="$env_port"; fi
+        if [ -n "$env_host" ] && [ "$env_host" != "0.0.0.0" ]; then web_host="$env_host"; fi
     fi
 
-    msg_info "Checking web interface availability (port ${web_port})..."
+    msg_info "Checking web interface availability (http://${web_host}:${web_port})..."
     sleep 5 # Short pause after restart
 
-    if curl -s -f -o /dev/null "http://127.0.0.1:${web_port}"; then
+    if curl -s -f -o /dev/null "http://${web_host}:${web_port}"; then
         msg_success "Web interface is active."
     else
         msg_warning "Web interface is not responding."
@@ -449,7 +459,7 @@ update_bot() {
              fi
              
              sleep 5
-             if curl -s -f -o /dev/null "http://127.0.0.1:${web_port}"; then
+             if curl -s -f -o /dev/null "http://${web_host}:${web_port}"; then
                  msg_success "Web interface started successfully!"
              else
                  msg_error "Failed to start web interface. Check logs (menu option 2 or docker logs)."

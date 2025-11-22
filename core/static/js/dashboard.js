@@ -157,7 +157,7 @@ function renderNodesGrid(nodes) {
     if (!container) return;
     
     if (nodes.length === 0) {
-        container.innerHTML = '<div class="col-span-full text-center text-gray-500 py-10">Нет подключенных нод</div>';
+        container.innerHTML = `<div class="col-span-full text-center text-gray-500 py-10">${I18N.web_no_nodes}</div>`;
         return;
     }
 
@@ -191,11 +191,11 @@ function renderNodesGrid(nodes) {
             
             <div class="mt-4 pt-4 border-t border-gray-100 dark:border-white/5 grid grid-cols-3 gap-2">
                 <div class="bg-gray-50 dark:bg-white/5 rounded-lg p-2 text-center border border-gray-100 dark:border-white/5">
-                    <div class="text-[10px] text-gray-500 uppercase font-bold">CPU</div>
+                    <div class="text-[10px] text-gray-500 uppercase font-bold">${I18N.web_cpu}</div>
                     <div class="text-sm font-bold text-gray-900 dark:text-white">${Math.round(node.cpu)}%</div>
                 </div>
                 <div class="bg-gray-50 dark:bg-white/5 rounded-lg p-2 text-center border border-gray-100 dark:border-white/5">
-                    <div class="text-[10px] text-gray-500 uppercase font-bold">RAM</div>
+                    <div class="text-[10px] text-gray-500 uppercase font-bold">${I18N.web_ram}</div>
                     <div class="text-sm font-bold text-gray-900 dark:text-white">${Math.round(node.ram)}%</div>
                 </div>
                 <div class="bg-gray-50 dark:bg-white/5 rounded-lg p-2 text-center border border-gray-100 dark:border-white/5">
@@ -595,6 +595,16 @@ function renderCharts(history) {
     netOptions.plugins.legend.labels.color = tickColor;
 
     netOptions.scales.y.ticks.callback = function(value) { return formatSpeed(value); };
+    netOptions.plugins.tooltip.callbacks = {
+        label: function(context) {
+            let label = context.dataset.label || '';
+            if (label) label += ': ';
+            if (context.parsed.y !== null) {
+                label += formatSpeed(context.parsed.y);
+            }
+            return label;
+        }
+    };
     
     if (chartNet) {
         chartNet.data.labels = netLabels;
@@ -639,16 +649,16 @@ function closeLogsModal() {
 
 async function fetchLogs() {
     const contentDiv = document.getElementById('logsContent');
-    contentDiv.innerHTML = '<div class="flex items-center justify-center h-full text-gray-500"><span class="animate-pulse">Загрузка логов...</span></div>';
+    contentDiv.innerHTML = `<div class="flex items-center justify-center h-full text-gray-500"><span class="animate-pulse">${I18N.web_loading}</span></div>`;
     try {
         const response = await fetch('/api/logs');
         if (response.status === 403) {
-            contentDiv.innerHTML = '<div class="text-red-400 text-center">Доступ запрещен</div>';
+            contentDiv.innerHTML = `<div class="text-red-400 text-center">${I18N.web_access_denied}</div>`;
             return;
         }
         const data = await response.json();
         if (data.error) {
-            contentDiv.innerHTML = `<div class="text-red-400">Ошибка: ${data.error}</div>`;
+            contentDiv.innerHTML = `<div class="text-red-400">${I18N.web_error.replace('{error}', data.error)}</div>`;
         } else {
             const coloredLogs = data.logs.map(line => {
                 let cls = "text-gray-500 dark:text-gray-400";
@@ -658,10 +668,10 @@ async function fetchLogs() {
                 const safeLine = line.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
                 return `<div class="${cls} hover:bg-gray-100 dark:hover:bg-white/5 px-1 rounded">${safeLine}</div>`;
             }).join('');
-            contentDiv.innerHTML = coloredLogs || '<div class="text-gray-600 text-center">Лог пуст</div>';
+            contentDiv.innerHTML = coloredLogs || `<div class="text-gray-600 text-center">${I18N.web_log_empty}</div>`;
             contentDiv.scrollTop = contentDiv.scrollHeight;
         }
     } catch (e) {
-        contentDiv.innerHTML = `<div class="text-red-400">Ошибка соединения: ${e}</div>`;
+        contentDiv.innerHTML = `<div class="text-red-400">${I18N.web_conn_error.replace('{error}', e)}</div>`;
     }
 }

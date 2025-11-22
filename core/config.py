@@ -31,6 +31,7 @@ TG_BOT_NAME = os.environ.get("TG_BOT_NAME", "VPS Bot")
 
 WEB_SERVER_HOST = os.environ.get("WEB_SERVER_HOST", "0.0.0.0")
 WEB_SERVER_PORT = int(os.environ.get("WEB_SERVER_PORT", 8080))
+ENABLE_WEB_UI = os.environ.get("ENABLE_WEB_UI", "true").lower() == "true"
 
 try:
     ADMIN_USER_ID = int(os.environ.get("TG_ADMIN_ID"))
@@ -50,9 +51,7 @@ CPU_THRESHOLD = 90.0
 RAM_THRESHOLD = 90.0
 DISK_THRESHOLD = 95.0
 RESOURCE_ALERT_COOLDOWN = 1800
-# --- ИЗМЕНЕНО: Таймаут уменьшен до 20 сек (4 хартбита по 5 сек) ---
 NODE_OFFLINE_TIMEOUT = 20
-# ------------------------------------------------------------------
 
 def setup_logging(log_directory, log_filename_prefix):
     log_formatter = logging.Formatter(

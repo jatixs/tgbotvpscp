@@ -11,7 +11,7 @@ from aiogram import Bot
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
 from .nodes_db import get_node_by_token, update_node_heartbeat, create_node, delete_node
-from .config import WEB_SERVER_HOST, WEB_SERVER_PORT, NODE_OFFLINE_TIMEOUT, BASE_DIR, ADMIN_USER_ID
+from .config import WEB_SERVER_HOST, WEB_SERVER_PORT, NODE_OFFLINE_TIMEOUT, BASE_DIR, ADMIN_USER_ID, ENABLE_WEB_UI
 from .shared_state import NODES, NODE_TRAFFIC_MONITORS, ALLOWED_USERS, USER_NAMES, AUTH_TOKENS, ALERTS_CONFIG, AGENT_HISTORY
 from .i18n import STRINGS, get_user_lang, set_user_lang, get_text as _
 from .config import DEFAULT_LANGUAGE
@@ -250,7 +250,6 @@ async def handle_nodes_list_json(request):
         last_seen = node.get("last_seen", 0)
         is_restarting = node.get("is_restarting", False)
         
-        # Логика статуса
         status = "offline"
         if is_restarting: status = "restarting"
         elif now - last_seen < NODE_OFFLINE_TIMEOUT: status = "online"
@@ -411,7 +410,6 @@ async def handle_dashboard(request):
     now = time.time()
     active_count = 0
     
-    # Логика для первичного рендеринга (статического), чтобы не было пустого экрана до загрузки JS
     nodes_count = len(NODES)
     for token, node in NODES.items():
         last_seen = node.get("last_seen", 0)
@@ -419,24 +417,22 @@ async def handle_dashboard(request):
 
     role_badge = '<span class="bg-green-500/20 text-green-400 text-[10px] px-2 py-0.5 rounded border border-green-500/30">ADMIN</span>' if is_admin else '<span class="bg-gray-500/20 text-gray-300 text-[10px] px-2 py-0.5 rounded border border-gray-500/30">USER</span>'
     
-    admin_controls = ""
-    if is_admin:
-        admin_controls = """
-        <div class="mt-8 p-6 rounded-2xl bg-gradient-to-r from-purple-900/20 to-blue-900/20 border border-gray-200 dark:border-white/5">
-            <h3 class="text-lg font-bold text-gray-900 dark:text-white mb-2">Панель администратора</h3>
-            <p class="text-sm text-gray-500 dark:text-gray-400 mb-4">Доступны расширенные функции управления сетью.</p>
-            <div class="flex gap-3">
-                <button onclick="openLogsModal()" class="px-4 py-2 bg-gray-100 dark:bg-white/10 hover:bg-gray-200 dark:hover:bg-white/20 rounded-lg text-sm text-gray-900 dark:text-white transition flex items-center gap-2">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
-                    Логи системы
-                </button>
-                <a href="/settings" class="px-4 py-2 bg-blue-600 hover:bg-blue-500 rounded-lg text-sm text-white transition flex items-center gap-2">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" /></svg>
-                    Настройки
-                </a>
-            </div>
+    admin_controls = f"""
+    <div class="mt-8 p-6 rounded-2xl bg-gradient-to-r from-purple-900/20 to-blue-900/20 border border-gray-200 dark:border-white/5">
+        <h3 class="text-lg font-bold text-gray-900 dark:text-white mb-2">{_("web_admin_panel", lang)}</h3>
+        <p class="text-sm text-gray-500 dark:text-gray-400 mb-4">{_("web_admin_desc", lang)}</p>
+        <div class="flex gap-3">
+            <button onclick="openLogsModal()" class="px-4 py-2 bg-gray-100 dark:bg-white/10 hover:bg-gray-200 dark:hover:bg-white/20 rounded-lg text-sm text-gray-900 dark:text-white transition flex items-center gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+                {_("web_logs_button", lang)}
+            </button>
+            <a href="/settings" class="px-4 py-2 bg-blue-600 hover:bg-blue-500 rounded-lg text-sm text-white transition flex items-center gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" /></svg>
+                {_("web_settings_button", lang)}
+            </a>
         </div>
-        """
+    </div>
+    """ if is_admin else ""
 
     html = load_template("dashboard.html")
     html = html.replace("{web_title}", "VPS Bot Dashboard")
@@ -473,6 +469,33 @@ async def handle_dashboard(request):
     html = html.replace("{user_group_display}", "") 
     html = html.replace("{admin_controls_html}", admin_controls)
     
+    # Подготовка JSON для JS переводов
+    i18n_data = {
+        "web_nodes_loading": _("web_nodes_loading", lang),
+        "web_no_nodes": _("web_no_nodes", lang),
+        "web_cpu": _("web_cpu", lang),
+        "web_ram": _("web_ram", lang),
+        "web_details_hidden": _("web_details_hidden", lang),
+        "web_loading": _("web_loading", lang),
+        "web_access_denied": _("web_access_denied", lang),
+        "web_error": _("web_error", lang, error=""),
+        "web_log_empty": _("web_log_empty", lang),
+        "web_conn_error": _("web_conn_error", lang, error=""),
+        "web_copied": _("web_copied", lang)
+    }
+    html = html.replace("{i18n_json}", json.dumps(i18n_data))
+    
+    # Замена плейсхолдеров в модальных окнах
+    html = html.replace("{web_node_details_title}", _("web_node_details_title", lang))
+    html = html.replace("{web_token_label}", _("web_token_label", lang))
+    html = html.replace("{web_copied}", _("web_copied", lang))
+    html = html.replace("{web_resources_chart}", _("web_resources_chart", lang))
+    html = html.replace("{web_network_chart}", _("web_network_chart", lang))
+    html = html.replace("{web_logs_title}", _("web_logs_title", lang))
+    html = html.replace("{web_refresh}", _("web_refresh", lang))
+    html = html.replace("{web_loading}", _("web_loading", lang))
+    html = html.replace("{web_logs_footer}", _("web_logs_footer", lang))
+    
     return web.Response(text=html, content_type='text/html')
 
 def _get_avatar_html(user):
@@ -480,29 +503,41 @@ def _get_avatar_html(user):
     if raw.startswith('http'): return f'<img src="{raw}" alt="ava" class="w-6 h-6 rounded-full flex-shrink-0">'
     return f'<span class="text-lg leading-none select-none">{raw}</span>'
 
+async def handle_api_root(request):
+    return web.Response(text="VPS Bot API Server is running.")
+
 async def start_web_server(bot_instance: Bot):
     global AGENT_FLAG
     app = web.Application()
     app['bot'] = bot_instance
-    if os.path.exists(STATIC_DIR): app.router.add_static('/static', STATIC_DIR)
     
-    app.router.add_get('/', handle_dashboard)
-    app.router.add_get('/settings', handle_settings_page)
-    app.router.add_get('/login', handle_login_page)
-    app.router.add_post('/api/login/request', handle_login_request)
-    app.router.add_get('/api/login/magic', handle_magic_login)
-    app.router.add_post('/api/login/password', handle_login_password)
-    app.router.add_post('/logout', handle_logout)
-    
+    # Всегда активен для работы нод
     app.router.add_post('/api/heartbeat', handle_heartbeat)
-    app.router.add_get('/api/node/details', handle_node_details)
-    app.router.add_get('/api/agent/stats', handle_agent_stats)
-    app.router.add_get('/api/nodes/list', handle_nodes_list_json) # Новый роут
-    app.router.add_get('/api/logs', handle_get_logs)
-    app.router.add_post('/api/settings/save', handle_save_notifications)
-    app.router.add_post('/api/settings/language', handle_set_language) # Новый роут
-    app.router.add_post('/api/users/action', handle_user_action)
-    app.router.add_post('/api/nodes/add', handle_node_add)
+
+    if ENABLE_WEB_UI:
+        logging.info("Web UI is ENABLED. Registering UI routes...")
+        if os.path.exists(STATIC_DIR): app.router.add_static('/static', STATIC_DIR)
+        
+        app.router.add_get('/', handle_dashboard)
+        app.router.add_get('/settings', handle_settings_page)
+        app.router.add_get('/login', handle_login_page)
+        app.router.add_post('/api/login/request', handle_login_request)
+        app.router.add_get('/api/login/magic', handle_magic_login)
+        app.router.add_post('/api/login/password', handle_login_password)
+        app.router.add_post('/logout', handle_logout)
+        
+        app.router.add_get('/api/node/details', handle_node_details)
+        app.router.add_get('/api/agent/stats', handle_agent_stats)
+        app.router.add_get('/api/nodes/list', handle_nodes_list_json)
+        app.router.add_get('/api/logs', handle_get_logs)
+        
+        app.router.add_post('/api/settings/save', handle_save_notifications)
+        app.router.add_post('/api/settings/language', handle_set_language)
+        app.router.add_post('/api/users/action', handle_user_action)
+        app.router.add_post('/api/nodes/add', handle_node_add)
+    else:
+        logging.info("Web UI is DISABLED. Only API is active.")
+        app.router.add_get('/', handle_api_root)
 
     try:
         def fetch_flag():

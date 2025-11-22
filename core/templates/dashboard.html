@@ -19,6 +19,8 @@
                 }
             }
         }
+        // Инъекция переводов с сервера
+        const I18N = {i18n_json};
     </script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <link rel="stylesheet" href="/static/css/style.css">
@@ -54,13 +56,15 @@
                     <button class="flex items-center justify-center w-8 h-8 rounded-lg hover:bg-gray-200 dark:hover:bg-white/10 transition text-lg" id="langBtn">
                         🌍
                     </button>
-                    <div class="absolute right-0 mt-2 w-32 bg-white dark:bg-gray-800 border border-gray-200 dark:border-white/10 rounded-xl shadow-lg overflow-hidden hidden group-hover:block z-50">
-                        <button onclick="setLanguage('ru')" class="w-full text-left px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-white/5 flex items-center gap-2">
-                            <span>🇷🇺</span> Русский
-                        </button>
-                        <button onclick="setLanguage('en')" class="w-full text-left px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-white/5 flex items-center gap-2">
-                            <span>🇬🇧</span> English
-                        </button>
+                    <div class="absolute right-0 top-full pt-2 w-32 hidden group-hover:block z-50">
+                        <div class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-white/10 rounded-xl shadow-lg overflow-hidden">
+                            <button onclick="setLanguage('ru')" class="w-full text-left px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-white/5 flex items-center gap-2">
+                                <span>🇷🇺</span> Русский
+                            </button>
+                            <button onclick="setLanguage('en')" class="w-full text-left px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-white/5 flex items-center gap-2">
+                                <span>🇬🇧</span> English
+                            </button>
+                        </div>
                     </div>
                 </div>
 
@@ -125,7 +129,7 @@
                     </div>
                     <div class="flex items-center gap-3">
                          <div class="flex items-center gap-1 text-[10px] text-gray-500 bg-gray-100 dark:bg-black/20 px-2 py-1 rounded border border-gray-200 dark:border-white/5">
-                            <span>Uptime:</span>
+                            <span>{web_uptime}:</span>
                             <span id="agentUptime" class="font-mono text-blue-600 dark:text-blue-300 font-bold">...</span>
                         </div>
                         <div id="agentIp" class="text-[10px] font-mono text-gray-500 bg-gray-100 dark:bg-black/20 px-2 py-1 rounded border border-gray-200 dark:border-white/5">...</div>
@@ -169,7 +173,7 @@
         </h2>
         
         <div id="nodesGrid" class="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <div class="col-span-full text-center py-10 text-gray-500 animate-pulse">Загрузка данных о нодах...</div>
+            <div class="col-span-full text-center py-10 text-gray-500 animate-pulse">{web_nodes_loading}</div>
         </div>
         
         {admin_controls_html}
@@ -181,7 +185,7 @@
             <div class="p-6 border-b border-gray-200 dark:border-white/5 flex justify-between items-center rounded-t-2xl z-10">
                 <div class="flex items-center gap-3">
                     <div id="modalStatusDot" class="h-3 w-3 rounded-full bg-gray-500 animate-pulse"></div>
-                    <h3 id="modalTitle" class="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white truncate max-w-[200px] sm:max-w-md">Node Details</h3>
+                    <h3 id="modalTitle" class="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white truncate max-w-[200px] sm:max-w-md">{web_node_details_title}</h3>
                 </div>
                 <button onclick="closeModal()" class="text-gray-400 hover:text-gray-600 dark:hover:text-white transition p-2 -mr-2">
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
@@ -190,11 +194,11 @@
             <div class="p-6 overflow-y-auto no-scrollbar">
                 <div class="grid grid-cols-3 gap-4 mb-6">
                     <div class="bg-gray-50 dark:bg-white/5 p-3 rounded-xl border border-gray-200 dark:border-white/10 text-center">
-                        <div class="text-[10px] text-gray-500 uppercase font-bold tracking-wider mb-1">CPU</div>
+                        <div class="text-[10px] text-gray-500 uppercase font-bold tracking-wider mb-1">{web_cpu}</div>
                         <div id="modalCpu" class="text-xl font-bold text-gray-900 dark:text-white">0%</div>
                     </div>
                     <div class="bg-gray-50 dark:bg-white/5 p-3 rounded-xl border border-gray-200 dark:border-white/10 text-center">
-                        <div class="text-[10px] text-gray-500 uppercase font-bold tracking-wider mb-1">RAM</div>
+                        <div class="text-[10px] text-gray-500 uppercase font-bold tracking-wider mb-1">{web_ram}</div>
                         <div id="modalRam" class="text-xl font-bold text-gray-900 dark:text-white">0%</div>
                     </div>
                     <div class="bg-gray-50 dark:bg-white/5 p-3 rounded-xl border border-gray-200 dark:border-white/10 text-center">
@@ -210,26 +214,26 @@
                                 <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11.542 16.49a1 1 0 01-.17.21l-.414.415a2 2 0 00-.586 1.414V22h-3v-2.764a1 1 0 00-.293-.707l-5.964-5.964A6 6 0 1121 9z" /></svg>
                             </div>
                             <div class="flex flex-col overflow-hidden">
-                                <span class="text-[10px] text-gray-500 uppercase font-bold tracking-wider">Токен Ноды</span>
+                                <span class="text-[10px] text-gray-500 uppercase font-bold tracking-wider">{web_token_label}</span>
                                 <span id="modalToken" class="text-xs font-mono text-green-600/80 dark:text-green-400/80 blur-sm group-hover:text-green-600 dark:group-hover:text-green-400 transition duration-300 select-all truncate">...</span>
                             </div>
                         </div>
                         <div class="text-gray-400 group-hover:text-gray-600 dark:group-hover:text-white transition">
                             <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
                         </div>
-                        <div class="absolute inset-0 bg-green-600 flex items-center justify-center text-white font-bold text-sm transition-transform translate-y-full group-active:translate-y-0 pointer-events-none" id="copyToast">Скопировано!</div>
+                        <div class="absolute inset-0 bg-green-600 flex items-center justify-center text-white font-bold text-sm transition-transform translate-y-full group-active:translate-y-0 pointer-events-none" id="copyToast">{web_copied}</div>
                     </div>
                 </div>
 
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div class="bg-gray-50 dark:bg-white/5 p-4 rounded-xl border border-gray-200 dark:border-white/5">
-                        <h4 class="text-sm font-bold text-gray-500 dark:text-gray-400 mb-4">Ресурсы (%)</h4>
+                        <h4 class="text-sm font-bold text-gray-500 dark:text-gray-400 mb-4">{web_resources_chart}</h4>
                         <div class="relative h-48 sm:h-64 w-full">
                             <canvas id="chartResources"></canvas>
                         </div>
                     </div>
                     <div class="bg-gray-50 dark:bg-white/5 p-4 rounded-xl border border-gray-200 dark:border-white/5">
-                        <h4 class="text-sm font-bold text-gray-500 dark:text-gray-400 mb-4">Сеть (KB/s)</h4>
+                        <h4 class="text-sm font-bold text-gray-500 dark:text-gray-400 mb-4">{web_network_chart}</h4>
                         <div class="relative h-48 sm:h-64 w-full">
                             <canvas id="chartNetwork"></canvas>
                         </div>
@@ -244,10 +248,10 @@
             <div class="p-4 sm:p-6 border-b border-gray-200 dark:border-white/5 flex justify-between items-center rounded-t-2xl z-10">
                 <div class="flex items-center gap-3">
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-blue-500 dark:text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
-                    <h3 class="text-lg sm:text-xl font-bold text-gray-900 dark:text-white">Системные Логи</h3>
+                    <h3 class="text-lg sm:text-xl font-bold text-gray-900 dark:text-white">{web_logs_title}</h3>
                 </div>
                 <div class="flex items-center gap-2">
-                     <button onclick="fetchLogs()" class="text-gray-400 hover:text-green-500 transition p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-white/5" title="Обновить">
+                     <button onclick="fetchLogs()" class="text-gray-400 hover:text-green-500 transition p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-white/5" title="{web_refresh}">
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
                     </button>
                     <button onclick="closeLogsModal()" class="text-gray-400 hover:text-gray-600 dark:hover:text-white transition p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-white/5">
@@ -257,11 +261,11 @@
             </div>
             <div class="flex-1 p-0 relative bg-gray-50 dark:bg-black/30">
                  <div id="logsContent" class="absolute inset-0 overflow-y-auto p-4 sm:p-6 font-mono text-xs sm:text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap break-words leading-relaxed">
-                    <div class="flex items-center justify-center h-full text-gray-500">Загрузка...</div>
+                    <div class="flex items-center justify-center h-full text-gray-500">{web_loading}</div>
                  </div>
             </div>
              <div class="p-3 border-t border-gray-200 dark:border-white/5 rounded-b-2xl text-[10px] text-gray-500 dark:text-gray-600 flex justify-between">
-                <span>Показаны последние 300 строк</span>
+                <span>{web_logs_footer}</span>
                 <span>bot.log</span>
             </div>
         </div>
