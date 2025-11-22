@@ -52,6 +52,7 @@ STRINGS = {
         "btn_restart": "♻️ Перезапуск бота",
         "btn_reboot": "🔄 Перезагрузка сервера",
         "btn_notifications": "🔔 Уведомления",
+        "btn_nodes": "🖥 Ноды", 
         "btn_add_user": "➕ Добавить пользователя",
         "btn_delete_user": "➖ Удалить пользователя",
         "btn_change_group": "🔄 Изменить группу",
@@ -65,7 +66,17 @@ STRINGS = {
         "alerts_menu_res": "{status} Ресурсы (CPU/RAM/Disk)",
         "alerts_menu_logins": "{status} Входы SSH",
         "alerts_menu_bans": "{status} Баны (Fail2Ban)",
-        "alerts_menu_downtime": "⏳ Даунтайм сервера (WIP)",
+        "alerts_menu_downtime": "{status} Даунтайм Нод (Offline)",
+        "notifications_alert_name_downtime": "Даунтайм Нод",
+        "alert_node_down": "🚨 <b>АЛЕРТ: Нода '{name}' НЕДОСТУПНА (Down)!</b>\n⏱ Последний отклик: {last_seen}",
+        "alert_node_up": "✅ <b>Нода '{name}' восстановилась (Up).</b>\n🟢 Снова в сети.",
+        "alert_node_restarting": "🔵 <b>Нода '{name}' перезагружается...</b>",
+        "alert_node_cpu_high": "⚠️ <b>Нода '{name}': Высокий CPU!</b>\nНагрузка: <b>{usage}%</b> (Порог: {threshold}%)",
+        "alert_node_cpu_normal": "✅ <b>Нода '{name}': CPU в норме.</b>\nНагрузка: <b>{usage}%</b>",
+        "alert_node_ram_high": "⚠️ <b>Нода '{name}': Высокая RAM!</b>\nЗанято: <b>{usage}%</b> (Порог: {threshold}%)",
+        "alert_node_ram_normal": "✅ <b>Нода '{name}': RAM в норме.</b>\nЗанято: <b>{usage}%</b>",
+        "alert_node_disk_high": "⚠️ <b>Нода '{name}': Мало места (Disk)!</b>\nЗанято: <b>{usage}%</b> (Порог: {threshold}%)",
+        "alert_node_disk_normal": "✅ <b>Нода '{name}': Место на диске в норме.</b>\nЗанято: <b>{usage}%</b>",
         "utils_vless_error": "⚠️ Ошибка при генерации VLESS-ссылки: {error}",
         "utils_docker_ps_error": "Не удалось выполнить 'docker ps'. Убедитесь, что Docker установлен и запущен, и у бота есть права.\n<pre>{error}</pre>",
         "utils_bot_restarted": "✅ Бот успешно перезапущен.",
@@ -242,10 +253,122 @@ STRINGS = {
         "unit_hour_short": "ч",
         "unit_minute_short": "м",
         "unit_second_short": "с",
-        # --- ДОБАВЛЕНО ДЛЯ SUPPORT-СООБЩЕНИЯ ---
         "start_support_message": "Это open-source проект, автор проекта <a href=\"https://t.me/faridshykhaliev\">@faridshykhaliev</a>. При желании вы можете поддержать автора. Это мотивирует автора продолжать развивать проект.",
         "start_support_button": " ❤️ Поддержать разработчика",
-        # ------------------------------------------
+        "nodes_menu_header": "🖥 <b>Список ваших серверов (Нод):</b>\n\nВыберите сервер для просмотра деталей или управления, либо используйте кнопки ниже:",
+        "node_status_active": "Активен 🟢",
+        "node_status_offline": "Не в сети 🔴",
+        "node_status_restarting": "Перезагружается 🔵",
+        "node_last_seen": "Активность: {time}",
+        "node_details_offline": "🔴 <b>Сервер: {name}</b>\nСтатус: <b>Не в сети</b>\nПоследний отклик: <b>{last_seen}</b>\nIP: {ip}\n\n📊 <b>Последние известные данные:</b>\nCPU: {cpu}%\nRAM: {ram}%\nDisk: {disk}%",
+        "node_restarting_alert": "🔵 Сервер '{name}' перезагружается. Пожалуйста, подождите 1-2 минуты.",
+        "node_management_menu": "🟢 <b>Управление сервером: {name}</b>\nIP: {ip}\nUptime: {uptime}\n\nВыберите действие:",
+        "node_cmd_sent": "Команда '{cmd}' отправлена на сервер '{name}'.",
+        "node_btn_add": "➕ Добавить Ноду",
+        "node_btn_delete": "➖ Удалить Ноду",
+        "node_add_success_token": "✅ <b>Нода создана!</b>\n\nИмя: <b>{name}</b>\nТокен: <code>{token}</code>\n\nСохраните этот токен и укажите его в .env на сервере-ноде (AGENT_TOKEN).",
+        "node_delete_select": "🗑 <b>Удаление ноды</b>\n\nВыберите сервер, который хотите удалить:",
+        "node_deleted": "✅ Нода '{name}' успешно удалена.",
+        "node_traffic_stopped_alert": "✅ Мониторинг трафика на ноде '{name}' остановлен.", 
+        
+        # --- WEB INTERFACE ---
+        "web_title": "Web-агент Бота",
+        "web_dashboard_title": "Панель управления",
+        "web_agent_stats_title": "Мониторинг (Агент)",
+        "web_stats_total": "Всего Нод",
+        "web_stats_active": "Активные Ноды",
+        "web_footer_endpoint": "Эндпоинт",
+        "web_footer_powered": "Работает на",
+        "web_traffic_total": "Общий трафик",
+        "web_uptime": "Аптайм",
+        "web_cpu": "CPU",
+        "web_ram": "RAM",
+        "web_disk": "Диск",
+        "web_rx": "↓ Принято",
+        "web_tx": "↑ Отдано",
+        "web_admin_panel": "Панель администратора",
+        "web_admin_desc": "Доступны расширенные функции управления сетью.",
+        "web_logs_button": "Логи системы",
+        "web_settings_button": "Настройки",
+        "web_node_mgmt_title": "Управление Нодами",
+        "web_node_details_title": "Детали Ноды",
+        "web_token_label": "Токен Ноды",
+        "web_copied": "Скопировано!",
+        "web_resources_chart": "Ресурсы (%)",
+        "web_network_chart": "Сеть (KB/s)",
+        "web_logs_title": "Системные Логи",
+        "web_refresh": "Обновить",
+        "web_loading": "Загрузка...",
+        "web_logs_footer": "Показаны последние 300 строк",
+        "web_nodes_loading": "Загрузка данных о нодах...",
+        "web_no_nodes": "Нет подключенных нод",
+        "web_details_hidden": "Детали скрыты",
+        "web_log_empty": "Лог пуст",
+        "web_access_denied": "Доступ запрещен",
+        "web_error": "Ошибка: {error}",
+        "web_conn_error": "Ошибка соединения: {error}",
+        "web_settings_page_title": "Настройки",
+        "web_back": "Назад",
+        "web_notif_section": "Уведомления",
+        "web_users_section": "Пользователи",
+        "web_add_user_btn": "Добавить",
+        "web_add_node_section": "Добавить Ноду",
+        "web_save_btn": "Сохранить",
+        "web_saved_btn": "Сохранено!",
+        "web_saving_btn": "Сохранение...",
+        "web_create_btn": "Создать",
+        "web_user_id": "ID",
+        "web_user_name": "Имя",
+        "web_user_role": "Роль",
+        "web_user_action": "Действие",
+        "web_confirm_delete_user": "Удалить пользователя {id}?",
+        "web_node_name_placeholder": "Имя сервера",
+        "web_node_token": "Токен (сохраните его):",
+        "web_node_cmd": "Команда установки:",
+        "web_sys_settings_section": "Системные настройки",
+        "web_thresholds_title": "Пороги уведомлений (%)",
+        "web_intervals_title": "Интервалы (сек)",
+        "web_logs_mgmt_title": "Управление логами",
+        "web_cpu_threshold": "Лимит CPU",
+        "web_ram_threshold": "Лимит RAM",
+        "web_disk_threshold": "Лимит Disk",
+        "web_traffic_interval": "Обновление Трафика",
+        "web_node_timeout": "Таймаут Ноды (Offline)",
+        "web_clear_logs_btn": "Очистить логи",
+        "web_clear_logs_confirm": "Вы уверены? Это удалит все файлы логов бота и watchdog.",
+        "web_logs_cleared": "Логи успешно очищены.",
+        "web_no_users": "Нет дополнительных пользователей",
+        "error_traffic_interval_low": "Интервал обновления трафика в боте не может быть меньше 5 секунд.",
+        "error_traffic_interval_high": "Интервал обновления трафика не может быть больше 100 секунд.",
+        "web_logs_clearing": "Очистка...",
+        "web_security_section": "Безопасность",
+        "web_change_password_title": "Смена пароля Web-панели",
+        "web_current_password": "Текущий пароль",
+        "web_new_password": "Новый пароль",
+        "web_confirm_password": "Подтвердите пароль",
+        "web_change_btn": "Сменить пароль",
+        "web_pass_changed": "Пароль успешно изменен!",
+        "web_pass_mismatch": "Пароли не совпадают",
+        "web_pass_wrong_current": "Неверный текущий пароль",
+        "web_default_pass_alert": "⚠️ Внимание! Используется стандартный пароль ('admin'). Рекомендуется сменить его в настройках.",
+        "web_logs_cleared_alert": "Очищено!",
+        "web_pass_wrong_current": "Неверный текущий пароль",
+        "web_default_pass_alert": "⚠️ Внимание! Используется стандартный пароль ('admin'). Рекомендуется сменить его в настройках.",
+        
+        # --- FORGOT PASSWORD ---
+        "login_forgot_pass": "Забыли пароль?",
+        "login_reset_title": "Сброс пароля",
+        "login_reset_desc": "Введите ваш Telegram ID. Мы отправим ссылку для сброса вам в личные сообщения.",
+        "login_btn_send_link": "Отправить ссылку",
+        "login_btn_contact_admin": "Написать Админу",
+        "login_error_user_not_found": "Пользователь не найден в системе.",
+        "login_link_sent_title": "Ссылка отправлена!",
+        "login_link_sent_desc": "Проверьте сообщения от бота в Telegram.",
+        "reset_page_title": "Установка нового пароля",
+        "reset_btn_set": "Установить пароль",
+        "reset_success_title": "Пароль изменен!",
+        "reset_success_desc": "Теперь вы можете войти с новым паролем.",
+        "reset_token_expired": "Ссылка устарела или недействительна."
     },
     'en': {
         "btn_back": "🔙 Back",
@@ -292,6 +415,7 @@ STRINGS = {
         "btn_restart": "♻️ Restart Bot",
         "btn_reboot": "🔄 Reboot Server",
         "btn_notifications": "🔔 Notifications",
+        "btn_nodes": "🖥 Nodes",
         "btn_add_user": "➕ Add User",
         "btn_delete_user": "➖ Delete User",
         "btn_change_group": "🔄 Change Group",
@@ -305,7 +429,19 @@ STRINGS = {
         "alerts_menu_res": "{status} Resources (CPU/RAM/Disk)",
         "alerts_menu_logins": "{status} SSH Logins",
         "alerts_menu_bans": "{status} Bans (Fail2Ban)",
-        "alerts_menu_downtime": "⏳ Server Downtime (WIP)",
+        "alerts_menu_downtime": "{status} Node Downtime (Offline)",
+        "notifications_alert_name_downtime": "Node Downtime",
+        "alert_node_down": "🚨 <b>ALERT: Node '{name}' is DOWN!</b>\n⏱ Last seen: {last_seen}",
+        "alert_node_up": "✅ <b>Node '{name}' recovered (Up).</b>\n🟢 Online now.",
+        "alert_node_restarting": "🔵 <b>Node '{name}' is restarting...</b>",
+
+        "alert_node_cpu_high": "⚠️ <b>Node '{name}': High CPU!</b>\nUsage: <b>{usage}%</b> (Threshold: {threshold}%)",
+        "alert_node_cpu_normal": "✅ <b>Node '{name}': CPU normal.</b>\nUsage: <b>{usage}%</b>",
+        "alert_node_ram_high": "⚠️ <b>Node '{name}': High RAM!</b>\nUsage: <b>{usage}%</b> (Threshold: {threshold}%)",
+        "alert_node_ram_normal": "✅ <b>Node '{name}': RAM normal.</b>\nUsage: <b>{usage}%</b>",
+        "alert_node_disk_high": "⚠️ <b>Node '{name}': High Disk!</b>\nUsage: <b>{usage}%</b> (Threshold: {threshold}%)",
+        "alert_node_disk_normal": "✅ <b>Node '{name}': Disk usage normal.</b>\nUsage: <b>{usage}%</b>",
+
         "utils_vless_error": "⚠️ Error generating VLESS link: {error}",
         "utils_docker_ps_error": "Failed to execute 'docker ps'. Ensure Docker is installed, running, and the bot has permissions.\n<pre>{error}</pre>",
         "utils_bot_restarted": "✅ Bot restarted successfully.",
@@ -482,16 +618,124 @@ STRINGS = {
         "unit_hour_short": "h",
         "unit_minute_short": "m",
         "unit_second_short": "s",
-        # --- ДОБАВЛЕНО ДЛЯ SUPPORT-СООБЩЕНИЯ ---
         "start_support_message": "This is an open-source project, the author is <a href=\"https://t.me/faridshykhaliev\">@faridshykhaliev</a>. If you wish, you can support the author. This motivates the author to continue developing the project.",
         "start_support_button": " ❤️ Support the developer",
-        # ------------------------------------------
+        "nodes_menu_header": "🖥 <b>Your Server List (Nodes):</b>\n\nSelect a server to view details or manage, or use the buttons below:",
+        "node_status_active": "Active 🟢",
+        "node_status_offline": "Offline 🔴",
+        "node_status_restarting": "Restarting 🔵",
+        "node_last_seen": "Last active: {time}",
+        "node_details_offline": "🔴 <b>Server: {name}</b>\nStatus: <b>Offline</b>\nLast Seen: <b>{last_seen}</b>\nIP: {ip}\n\n📊 <b>Last Known Stats:</b>\nCPU: {cpu}%\nRAM: {ram}%\nDisk: {disk}%",
+        "node_restarting_alert": "🔵 Server '{name}' is restarting. Please wait 1-2 minutes.",
+        "node_management_menu": "🟢 <b>Managing Server: {name}</b>\nIP: {ip}\nUptime: {uptime}\n\nSelect an action:",
+        "node_cmd_sent": "Command '{cmd}' sent to server '{name}'.",
+        "node_btn_add": "➕ Add Node",
+        "node_btn_delete": "➖ Delete Node",
+        "node_add_success_token": "✅ <b>Node Created!</b>\n\nName: <b>{name}</b>\nToken: <code>{token}</code>\n\nSave this token and put it in .env on the node server (AGENT_TOKEN).",
+        "node_delete_select": "🗑 <b>Delete Node</b>\n\nSelect a server you want to delete:",
+        "node_deleted": "✅ Node '{name}' successfully deleted.",
+        "node_traffic_stopped_alert": "✅ Traffic monitoring for node '{name}' stopped.", 
+        
+        # --- WEB INTERFACE ---
+        "web_title": "Bot Web-agent",
+        "web_dashboard_title": "Dashboard",
+        "web_agent_stats_title": "Monitoring (Agent)",
+        "web_stats_total": "Total Nodes",
+        "web_stats_active": "Active Nodes",
+        "web_footer_endpoint": "Endpoint",
+        "web_footer_powered": "Powered by",
+        "web_traffic_total": "Total Traffic",
+        "web_uptime": "Uptime",
+        "web_cpu": "CPU",
+        "web_ram": "RAM",
+        "web_disk": "Disk",
+        "web_rx": "↓ RX",
+        "web_tx": "↑ TX",
+        "web_admin_panel": "Admin Panel",
+        "web_admin_desc": "Advanced network management functions available.",
+        "web_logs_button": "System Logs",
+        "web_settings_button": "Settings",
+        "web_node_mgmt_title": "Node Management",
+        "web_node_details_title": "Node Details",
+        "web_token_label": "Node Token",
+        "web_copied": "Copied!",
+        "web_resources_chart": "Resources (%)",
+        "web_network_chart": "Network (KB/s)",
+        "web_logs_title": "System Logs",
+        "web_refresh": "Refresh",
+        "web_loading": "Loading...",
+        "web_logs_footer": "Last 300 lines shown",
+        "web_nodes_loading": "Loading nodes data...",
+        "web_no_nodes": "No nodes connected",
+        "web_details_hidden": "Details hidden",
+        "web_log_empty": "Log is empty",
+        "web_access_denied": "Access denied",
+        "web_error": "Error: {error}",
+        "web_conn_error": "Connection error: {error}",
+        "web_settings_page_title": "Settings",
+        "web_back": "Back",
+        "web_notif_section": "Notifications",
+        "web_users_section": "Users",
+        "web_add_user_btn": "Add",
+        "web_add_node_section": "Add Node",
+        "web_save_btn": "Save",
+        "web_saved_btn": "Saved!",
+        "web_saving_btn": "Saving...",
+        "web_create_btn": "Create",
+        "web_user_id": "ID",
+        "web_user_name": "Name",
+        "web_user_role": "Role",
+        "web_user_action": "Action",
+        "web_confirm_delete_user": "Delete user {id}?",
+        "web_node_name_placeholder": "Server Name",
+        "web_node_token": "Token (save it):",
+        "web_node_cmd": "Install command:",
+        "web_sys_settings_section": "System Settings",
+        "web_thresholds_title": "Alert Thresholds (%)",
+        "web_intervals_title": "Intervals (sec)",
+        "web_logs_mgmt_title": "Log Management",
+        "web_cpu_threshold": "CPU Limit",
+        "web_ram_threshold": "RAM Limit",
+        "web_disk_threshold": "Disk Limit",
+        "web_traffic_interval": "Traffic Update",
+        "web_node_timeout": "Node Timeout (Offline)",
+        "web_clear_logs_btn": "Clear Logs",
+        "web_clear_logs_confirm": "Are you sure? This will delete all bot and watchdog logs.",
+        "web_logs_cleared": "Logs cleared successfully.",
+        "web_no_users": "No additional users",
+        "error_traffic_interval_low": "Bot traffic update interval cannot be less than 5 seconds.",
+        "error_traffic_interval_high": "Traffic update interval cannot be more than 100 seconds.",
+        "web_logs_clearing": "Clearing...",
+        "web_change_password_title": "Change Web Panel Password",
+        "web_current_password": "Current Password",
+        "web_new_password": "New Password",
+        "web_confirm_password": "Confirm Password",
+        "web_change_btn": "Change Password",
+        "web_pass_changed": "Password changed successfully!",
+        "web_pass_mismatch": "Passwords do not match",
+        "web_pass_wrong_current": "Invalid current password",
+        "web_default_pass_alert": "⚠️ Warning! Default password ('admin') is in use. Please change it in settings.",
+        "web_logs_cleared_alert": "Cleared!",
+        "web_pass_wrong_current": "Invalid current password",
+        "web_default_pass_alert": "⚠️ Warning! Default password ('admin') is in use. Please change it in settings.",
+        # --- FORGOT PASSWORD ---
+        "login_forgot_pass": "Forgot password?",
+        "login_reset_title": "Reset Password",
+        "login_reset_desc": "Enter your Telegram ID. We will send a reset link to your private messages.",
+        "login_btn_send_link": "Send Link",
+        "login_btn_contact_admin": "Contact Admin",
+        "login_error_user_not_found": "User not found in system.",
+        "login_link_sent_title": "Link Sent!",
+        "login_link_sent_desc": "Check messages from the bot in Telegram.",
+        "reset_page_title": "Set New Password",
+        "reset_btn_set": "Set Password",
+        "reset_success_title": "Password Changed!",
+        "reset_success_desc": "You can now login with your new password.",
+        "reset_token_expired": "Link expired or invalid."
     }
 }
 
-
 def load_user_settings():
-    """Загружает настройки пользователей (включая язык) из JSON."""
     try:
         if os.path.exists(core_config.USER_SETTINGS_FILE):
             with open(core_config.USER_SETTINGS_FILE, "r", encoding='utf-8') as f:
@@ -509,9 +753,7 @@ def load_user_settings():
         logging.error(f"Ошибка загрузки user_settings.json: {e}")
         shared_state.USER_SETTINGS.clear()
 
-
 def save_user_settings():
-    """Сохраняет настройки пользователей (включая язык) в JSON."""
     try:
         os.makedirs(
             os.path.dirname(
@@ -525,9 +767,7 @@ def save_user_settings():
     except Exception as e:
         logging.error(f"Ошибка сохранения user_settings.json: {e}")
 
-
 def get_user_lang(user_id: int | str | None) -> str:
-    """Получает язык пользователя. Defaults to 'ru'."""
     if isinstance(user_id, int):
         return shared_state.USER_SETTINGS.get(
             user_id, {}).get(
@@ -543,9 +783,7 @@ def get_user_lang(user_id: int | str | None) -> str:
                 f"get_user_lang вызван с неожиданным типом user_id: {type(user_id)}. Возвращаю язык по умолчанию.")
         return core_config.DEFAULT_LANGUAGE
 
-
 def set_user_lang(user_id: int | str | None, lang: str):
-    """Устанавливает язык для пользователя и сохраняет."""
     if user_id is None:
         logging.warning(
             "set_user_lang вызван с user_id=None. Сохранение отменено.")
@@ -566,13 +804,7 @@ def set_user_lang(user_id: int | str | None, lang: str):
     logging.info(
         f"Язык для пользователя {user_id} изменен на '{lang}' и сохранен.")
 
-
 def get_text(key: str, user_id_or_lang: int | str | None, **kwargs) -> str:
-    """
-    Получает переведенную строку.
-    Пример: get_text("main_menu_welcome", user_id)
-    Пример с форматированием: get_text("my_id_text", user_id, user_id=user_id)
-    """
     lang = core_config.DEFAULT_LANGUAGE
 
     if isinstance(user_id_or_lang, int):
@@ -600,15 +832,9 @@ def get_text(key: str, user_id_or_lang: int | str | None, **kwargs) -> str:
             f"Ошибка форматирования для ключа '{key}' языка '{lang}' с параметрами {kwargs}. Шаблон: '{string_template}'. Ошибка: {e}")
         return string_template
 
-
 _ = get_text
 
-
 def get_all_translations(key: str) -> list[str]:
-    """
-    Возвращает список всех переводов для одного ключа.
-    Используется для aiogram F.text.in_([...])
-    """
     translations = []
     for lang_code, lang_strings in STRINGS.items():
         if key in lang_strings:
@@ -619,17 +845,10 @@ def get_all_translations(key: str) -> list[str]:
         return [f"[{key}]"]
     return unique_translations
 
-
 def I18nFilter(key: str):
-    """
-    Создает фильтр Aiogram, который сработает, если текст сообщения
-    совпадает с ЛЮБЫМ переводом указанного ключа.
-    """
     return F.text.in_(get_all_translations(key))
 
-
 def get_language_keyboard() -> InlineKeyboardMarkup:
-    """Возвращает клавиатуру для выбора языка."""
     keyboard = InlineKeyboardMarkup(
         inline_keyboard=[
             [

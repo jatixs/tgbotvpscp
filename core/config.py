@@ -1,103 +1,139 @@
-# /opt-tg-bot/core/config.py
 import os
 import sys
+import json
 import logging
-# --- ДОБАВЛЕНО: Импортируем handlers для настройки логов ---
 import logging.handlers
-# --------------------------------------------------------
-from datetime import datetime  # Добавляем импорт datetime
+from datetime import datetime
 
-# --- [ИСПРАВЛЕНИЕ] ---
-# Мы больше не импортируем i18n здесь, чтобы избежать циклического импорта.
-# i18n будет импортировать config.
-# ---------------------
-
-
-# --- Пути ---
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 LOG_DIR = os.path.join(BASE_DIR, "logs")
 CONFIG_DIR = os.path.join(BASE_DIR, "config")
-# --- ИЗМЕНЕНО: Создаем базовую директорию логов ---
+
 os.makedirs(LOG_DIR, exist_ok=True)
-os.makedirs(CONFIG_DIR, exist_ok=True)  # Добавлено создание CONFIG_DIR
-# -------------------------------------------------
-# --- ИЗМЕНЕНО: Определяем пути к поддиректориям логов ---
+os.makedirs(CONFIG_DIR, exist_ok=True)
+
 BOT_LOG_DIR = os.path.join(LOG_DIR, "bot")
 WATCHDOG_LOG_DIR = os.path.join(LOG_DIR, "watchdog")
-os.makedirs(BOT_LOG_DIR, exist_ok=True)       # Создаем поддиректорию для бота
-# Создаем поддиректорию для watchdog
+os.makedirs(BOT_LOG_DIR, exist_ok=True)
 os.makedirs(WATCHDOG_LOG_DIR, exist_ok=True)
-# -------------------------------------------------------
 
 USERS_FILE = os.path.join(CONFIG_DIR, "users.json")
+NODES_FILE = os.path.join(CONFIG_DIR, "nodes.json")
 REBOOT_FLAG_FILE = os.path.join(CONFIG_DIR, "reboot_flag.txt")
 RESTART_FLAG_FILE = os.path.join(CONFIG_DIR, "restart_flag.txt")
 ALERTS_CONFIG_FILE = os.path.join(CONFIG_DIR, "alerts_config.json")
 USER_SETTINGS_FILE = os.path.join(CONFIG_DIR, "user_settings.json")
-# --- LOG_FILE удален ---
+SYSTEM_CONFIG_FILE = os.path.join(CONFIG_DIR, "system_config.json")
+WEB_AUTH_FILE = os.path.join(CONFIG_DIR, "web_auth.txt") # <-- Добавлено
 
-# --- Загрузка .env ---
 TOKEN = os.environ.get("TG_BOT_TOKEN")
 INSTALL_MODE = os.environ.get("INSTALL_MODE", "secure")
-# --- ДОБАВЛЕНО: Чтение DEPLOY_MODE ---
 DEPLOY_MODE = os.environ.get("DEPLOY_MODE", "systemd")
-# ------------------------------------
 ADMIN_USERNAME = os.environ.get("TG_ADMIN_USERNAME")
+TG_BOT_NAME = os.environ.get("TG_BOT_NAME", "VPS Bot")
+
+WEB_SERVER_HOST = os.environ.get("WEB_SERVER_HOST", "0.0.0.0")
+WEB_SERVER_PORT = int(os.environ.get("WEB_SERVER_PORT", 8080))
+ENABLE_WEB_UI = os.environ.get("ENABLE_WEB_UI", "true").lower() == "true"
 
 try:
     ADMIN_USER_ID = int(os.environ.get("TG_ADMIN_ID"))
 except (ValueError, TypeError):
-    # Используем print, т.к. логгер еще не настроен
-    print("Ошибка: Переменная окружения TG_ADMIN_ID должна быть установлена и быть числом.")
+    print("Error: TG_ADMIN_ID env var must be set and be an integer.")
     sys.exit(1)
 
 if not TOKEN:
-    print("Ошибка: Переменная окружения TG_BOT_TOKEN не установлена.")
+    print("Error: TG_BOT_TOKEN env var is not set.")
     sys.exit(1)
-
-if not ADMIN_USERNAME:
-    print("-------------------------------------------------------")
-    print("ВНИМАНИЕ: Переменная TG_ADMIN_USERNAME не установлена.")
-    print("Кнопка 'Отправить ID' будет открывать ПРОФИЛЬ админа,")
-    print("а не личный чат. Для открытия прямого чата, установите")
-    print("эту переменную (указав свой юзернейм без @).")
-    print("-------------------------------------------------------")
-
 
 DEFAULT_LANGUAGE = "ru"
 
-# --- Настройки порогов и интервалов ---
-TRAFFIC_INTERVAL = 5
-RESOURCE_CHECK_INTERVAL = 60
-CPU_THRESHOLD = 90.0
-RAM_THRESHOLD = 90.0
-DISK_THRESHOLD = 95.0
-RESOURCE_ALERT_COOLDOWN = 1800
+# Значения по умолчанию
+DEFAULT_CONFIG = {
+    "TRAFFIC_INTERVAL": 5,
+    "RESOURCE_CHECK_INTERVAL": 60,
+    "CPU_THRESHOLD": 90.0,
+    "RAM_THRESHOLD": 90.0,
+    "DISK_THRESHOLD": 95.0,
+    "RESOURCE_ALERT_COOLDOWN": 1800,
+    "NODE_OFFLINE_TIMEOUT": 20
+}
 
-# --- Настройка логирования ---
-# --- ИСПРАВЛЕНО: Функция setup_logging ---
+# Инициализация глобальных переменных
+TRAFFIC_INTERVAL = DEFAULT_CONFIG["TRAFFIC_INTERVAL"]
+RESOURCE_CHECK_INTERVAL = DEFAULT_CONFIG["RESOURCE_CHECK_INTERVAL"]
+CPU_THRESHOLD = DEFAULT_CONFIG["CPU_THRESHOLD"]
+RAM_THRESHOLD = DEFAULT_CONFIG["RAM_THRESHOLD"]
+DISK_THRESHOLD = DEFAULT_CONFIG["DISK_THRESHOLD"]
+RESOURCE_ALERT_COOLDOWN = DEFAULT_CONFIG["RESOURCE_ALERT_COOLDOWN"]
+NODE_OFFLINE_TIMEOUT = DEFAULT_CONFIG["NODE_OFFLINE_TIMEOUT"]
 
+def load_system_config():
+    """Загружает настройки из JSON и обновляет глобальные переменные."""
+    global TRAFFIC_INTERVAL, RESOURCE_CHECK_INTERVAL, CPU_THRESHOLD, RAM_THRESHOLD, DISK_THRESHOLD, RESOURCE_ALERT_COOLDOWN, NODE_OFFLINE_TIMEOUT
+    
+    try:
+        if os.path.exists(SYSTEM_CONFIG_FILE):
+            with open(SYSTEM_CONFIG_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                TRAFFIC_INTERVAL = data.get("TRAFFIC_INTERVAL", DEFAULT_CONFIG["TRAFFIC_INTERVAL"])
+                RESOURCE_CHECK_INTERVAL = data.get("RESOURCE_CHECK_INTERVAL", DEFAULT_CONFIG["RESOURCE_CHECK_INTERVAL"])
+                CPU_THRESHOLD = data.get("CPU_THRESHOLD", DEFAULT_CONFIG["CPU_THRESHOLD"])
+                RAM_THRESHOLD = data.get("RAM_THRESHOLD", DEFAULT_CONFIG["RAM_THRESHOLD"])
+                DISK_THRESHOLD = data.get("DISK_THRESHOLD", DEFAULT_CONFIG["DISK_THRESHOLD"])
+                RESOURCE_ALERT_COOLDOWN = data.get("RESOURCE_ALERT_COOLDOWN", DEFAULT_CONFIG["RESOURCE_ALERT_COOLDOWN"])
+                NODE_OFFLINE_TIMEOUT = data.get("NODE_OFFLINE_TIMEOUT", DEFAULT_CONFIG["NODE_OFFLINE_TIMEOUT"])
+                logging.info("System config loaded successfully.")
+    except Exception as e:
+        logging.error(f"Error loading system config: {e}")
+
+def save_system_config(new_config: dict):
+    """Сохраняет настройки в JSON и обновляет текущие переменные."""
+    global TRAFFIC_INTERVAL, RESOURCE_CHECK_INTERVAL, CPU_THRESHOLD, RAM_THRESHOLD, DISK_THRESHOLD, RESOURCE_ALERT_COOLDOWN, NODE_OFFLINE_TIMEOUT
+    
+    try:
+        # Обновляем переменные
+        if "TRAFFIC_INTERVAL" in new_config: TRAFFIC_INTERVAL = int(new_config["TRAFFIC_INTERVAL"])
+        if "NODE_OFFLINE_TIMEOUT" in new_config: NODE_OFFLINE_TIMEOUT = int(new_config["NODE_OFFLINE_TIMEOUT"])
+        if "CPU_THRESHOLD" in new_config: CPU_THRESHOLD = float(new_config["CPU_THRESHOLD"])
+        if "RAM_THRESHOLD" in new_config: RAM_THRESHOLD = float(new_config["RAM_THRESHOLD"])
+        if "DISK_THRESHOLD" in new_config: DISK_THRESHOLD = float(new_config["DISK_THRESHOLD"])
+        
+        # Собираем полный конфиг для сохранения
+        config_to_save = {
+            "TRAFFIC_INTERVAL": TRAFFIC_INTERVAL,
+            "RESOURCE_CHECK_INTERVAL": RESOURCE_CHECK_INTERVAL,
+            "CPU_THRESHOLD": CPU_THRESHOLD,
+            "RAM_THRESHOLD": RAM_THRESHOLD,
+            "DISK_THRESHOLD": DISK_THRESHOLD,
+            "RESOURCE_ALERT_COOLDOWN": RESOURCE_ALERT_COOLDOWN,
+            "NODE_OFFLINE_TIMEOUT": NODE_OFFLINE_TIMEOUT
+        }
+        
+        with open(SYSTEM_CONFIG_FILE, "w", encoding="utf-8") as f:
+            json.dump(config_to_save, f, indent=4)
+        logging.info("System config saved.")
+    except Exception as e:
+        logging.error(f"Error saving system config: {e}")
+
+# Загружаем конфиг при старте
+load_system_config()
 
 def setup_logging(log_directory, log_filename_prefix):
-    """Настраивает логирование с ежедневной ротацией."""
     log_formatter = logging.Formatter(
         '%(asctime)s - %(levelname)s - %(message)s')
 
-    # Создаем ПОЛНЫЙ путь к основному файлу лога
     log_file_path = os.path.join(log_directory, f"{log_filename_prefix}.log")
 
-    # Настройка обработчика с ротацией по времени (каждый день в полночь)
     rotating_handler = logging.handlers.TimedRotatingFileHandler(
-        log_file_path,  # ПЕРЕДАЕМ ПОЛНЫЙ ПУТЬ
+        log_file_path,
         when="midnight",
         interval=1,
         backupCount=30,
         encoding='utf-8'
-        # Убираем дублирующийся аргумент filename=
     )
 
-    # Суффикс для старых (ротированных) файлов
-    rotating_handler.suffix = "%Y-%m-%d"  # Обработчик сам добавит это к имени файла
+    rotating_handler.suffix = "%Y-%m-%d"
     rotating_handler.setFormatter(log_formatter)
 
     console_handler = logging.StreamHandler()
