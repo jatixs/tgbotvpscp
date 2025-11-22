@@ -14,11 +14,14 @@ from core.utils import escape_html
 
 BUTTON_KEY = "btn_optimize"
 
+
 def get_button() -> KeyboardButton:
     return KeyboardButton(text=_(BUTTON_KEY, config.DEFAULT_LANGUAGE))
 
+
 def register_handlers(dp: Dispatcher):
     dp.message(I18nFilter(BUTTON_KEY))(optimize_handler)
+
 
 async def optimize_handler(message: types.Message):
     user_id = message.from_user.id
@@ -54,7 +57,7 @@ async def optimize_handler(message: types.Message):
     # nosec B602: cmd is a hardcoded system optimization script string
     process = await asyncio.create_subprocess_shell(
         cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
-    ) # nosec
+    )  # nosec
     stdout, stderr = await process.communicate()
 
     output = stdout.decode('utf-8', errors='ignore')
