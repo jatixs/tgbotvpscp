@@ -182,7 +182,6 @@ async def handle_settings_page(request):
     html = html.replace("{val_timeout}", str(current_config.NODE_OFFLINE_TIMEOUT))
     
     # Состояние чекбоксов уведомлений
-    # Важно: если ключа нет, get возвращает False
     for alert in ['resources', 'logins', 'bans', 'downtime']:
         checked = "checked" if user_alerts.get(alert, False) else ""
         html = html.replace(f"{{check_{alert}}}", checked)
@@ -209,10 +208,8 @@ async def handle_save_notifications(request):
         data = await request.json()
         user_id = user['id']
         
-        # Убедимся, что словарь существует
         if user_id not in ALERTS_CONFIG: ALERTS_CONFIG[user_id] = {}
         
-        # Обновляем настройки
         for key in ['resources', 'logins', 'bans', 'downtime']:
             if key in data: ALERTS_CONFIG[user_id][key] = bool(data[key])
             
@@ -226,6 +223,19 @@ async def handle_save_system_config(request):
     if not user or user['role'] != 'admins': return web.json_response({"error": "Admin required"}, status=403)
     try:
         data = await request.json()
+        
+        # --- ДОБАВЛЕНО: Валидация интервала трафика ---
+        try:
+            traffic_interval = int(data.get("TRAFFIC_INTERVAL", 0))
+        except ValueError:
+            traffic_interval = 0
+            
+        if traffic_interval < 5:
+            lang = get_user_lang(user['id'])
+            # Возвращаем ошибку с пояснением, что это трафик в боте
+            return web.json_response({"error": _("error_traffic_interval_low", lang)}, status=400)
+        # ----------------------------------------------
+
         save_system_config(data)
         return web.json_response({"status": "ok"})
     except Exception as e:
@@ -240,7 +250,7 @@ async def handle_clear_logs(request):
                 for f in os.listdir(d):
                     fp = os.path.join(d, f)
                     if os.path.isfile(fp): 
-                        # Очищаем содержимое файла, не удаляя его (чтобы tail -f не ломался)
+                        # Очищаем содержимое файла, не удаляя его
                         with open(fp, 'w') as file:
                             pass 
         return web.json_response({"status": "ok"})

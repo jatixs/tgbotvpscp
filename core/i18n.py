@@ -334,10 +334,11 @@ STRINGS = {
         "web_disk_threshold": "Лимит Disk",
         "web_traffic_interval": "Обновление Трафика",
         "web_node_timeout": "Таймаут Ноды (Offline)",
-        "web_clear_logs_btn": "🗑 Очистить логи",
+        "web_clear_logs_btn": "Очистить логи",
         "web_clear_logs_confirm": "Вы уверены? Это удалит все файлы логов бота и watchdog.",
         "web_logs_cleared": "Логи успешно очищены.",
-        "web_no_users": "Нет дополнительных пользователей"
+        "web_no_users": "Нет дополнительных пользователей",
+        "error_traffic_interval_low": "Интервал обновления трафика в боте не может быть меньше 5 секунд."
     },
     'en': {
         "btn_back": "🔙 Back",
@@ -668,10 +669,11 @@ STRINGS = {
         "web_disk_threshold": "Disk Limit",
         "web_traffic_interval": "Traffic Update",
         "web_node_timeout": "Node Timeout (Offline)",
-        "web_clear_logs_btn": "🗑 Clear Logs",
+        "web_clear_logs_btn": "Clear Logs",
         "web_clear_logs_confirm": "Are you sure? This will delete all bot and watchdog logs.",
         "web_logs_cleared": "Logs cleared successfully.",
-        "web_no_users": "No additional users"
+        "web_no_users": "No additional users",
+        "error_traffic_interval_low": "Bot traffic update interval cannot be less than 5 seconds."
     }
 }
 
