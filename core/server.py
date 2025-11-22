@@ -47,9 +47,7 @@ def get_current_user(request):
         return user_data
     except: return None
 
-# --- ФОНОВАЯ ЗАДАЧА МОНИТОРИНГА АГЕНТА ---
 async def agent_monitor():
-    """Собирает статистику локального сервера (Агента)."""
     global AGENT_IP_CACHE
     
     psutil.cpu_percent(interval=None)
@@ -297,10 +295,17 @@ async def handle_agent_stats(request):
     if not get_current_user(request): return web.json_response({"error": "Unauthorized"}, status=401)
     
     current_stats = {
-        "cpu": 0, "ram": 0, "disk": 0, "ip": AGENT_IP_CACHE
+        "cpu": 0, "ram": 0, "disk": 0, "ip": AGENT_IP_CACHE,
+        "net_sent": 0, "net_recv": 0, "boot_time": 0
     }
     
-    # ДОБАВЛЕНА ПРОВЕРКА, ЧТОБЫ НЕ БРАТЬ [-1] У ПУСТОГО СПИСКА
+    try:
+        net_io = psutil.net_io_counters()
+        current_stats["net_sent"] = net_io.bytes_sent
+        current_stats["net_recv"] = net_io.bytes_recv
+        current_stats["boot_time"] = psutil.boot_time()
+    except: pass
+
     if AGENT_HISTORY:
         latest = AGENT_HISTORY[-1]
         current_stats["cpu"] = latest["c"]
@@ -353,7 +358,7 @@ async def handle_dashboard(request):
     user = get_current_user(request)
     if not user: raise web.HTTPFound('/login')
     is_admin = user['role'] == 'admins'
-    lang = get_user_lang(user['id']) # Получаем язык
+    lang = get_user_lang(user['id'])
 
     now = time.time()
     active_count = 0
@@ -430,12 +435,15 @@ async def handle_dashboard(request):
     html = load_template("dashboard.html")
     html = html.replace("{web_title}", "VPS Bot Dashboard")
     
-    # Перевод заголовков (ИЗМЕНЕНО)
     web_dashboard_title = _("web_dashboard_title", lang)
     web_agent_stats_title = _("web_agent_stats_title", lang)
+    web_stats_total = _("web_stats_total", lang)
+    web_stats_active = _("web_stats_active", lang)
     
-    html = html.replace("{web_agent_running}", web_dashboard_title)
+    html = html.replace("{web_dashboard_title}", web_dashboard_title)
     html = html.replace("{web_agent_stats_title}", web_agent_stats_title)
+    html = html.replace("{web_stats_total}", web_stats_total)
+    html = html.replace("{web_stats_active}", web_stats_active)
     
     html = html.replace("{user_avatar}", _get_avatar_html(user))
     html = html.replace("{user_name}", user.get('first_name', 'User'))

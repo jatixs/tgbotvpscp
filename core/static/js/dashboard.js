@@ -1,13 +1,10 @@
-// Глобальные переменные
 let chartRes = null;
 let chartNet = null;
 let pollInterval = null;
 
-// Для агента
 let chartAgent = null;
 let agentPollInterval = null;
 
-// Функция форматирования скорости (динамические единицы)
 function formatSpeed(valueInKbps) {
     let val = parseFloat(valueInKbps);
     if (isNaN(val)) return '0 Kbit/s';
@@ -21,6 +18,28 @@ function formatSpeed(valueInKbps) {
     return val.toFixed(2) + ' Kbit/s';
 }
 
+function formatBytes(bytes, decimals = 2) {
+    if (!+bytes) return '0 B';
+    const k = 1024;
+    const dm = decimals < 0 ? 0 : decimals;
+    const sizes = ['B', 'KiB', 'MiB', 'GiB', 'TiB', 'PiB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return `${parseFloat((bytes / Math.pow(k, i)).toFixed(dm))} ${sizes[i]}`;
+}
+
+function formatUptime(bootTime) {
+    if (!bootTime) return "...";
+    const now = Date.now() / 1000;
+    const diff = now - bootTime;
+    
+    const days = Math.floor(diff / 86400);
+    const hours = Math.floor((diff % 86400) / 3600);
+    const minutes = Math.floor((diff % 3600) / 60);
+    
+    if (days > 0) return `${days}d ${hours}h`;
+    return `${hours}h ${minutes}m`;
+}
+
 document.addEventListener("DOMContentLoaded", () => {
     if(document.getElementById('chartAgent')) {
         fetchAgentStats();
@@ -28,7 +47,6 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 });
 
-// --- УПРАВЛЕНИЕ АГЕНТОМ (Dashboard Header) ---
 async function fetchAgentStats() {
     try {
         const response = await fetch('/api/agent/stats');
@@ -39,6 +57,12 @@ async function fetchAgentStats() {
             document.getElementById('agentRam').innerText = Math.round(data.stats.ram) + "%";
             document.getElementById('agentDisk').innerText = Math.round(data.stats.disk) + "%";
             document.getElementById('agentIp').innerText = data.stats.ip || "Unknown";
+            
+            if (document.getElementById('trafficRxTotal')) {
+                document.getElementById('trafficRxTotal').innerText = formatBytes(data.stats.net_recv);
+                document.getElementById('trafficTxTotal').innerText = formatBytes(data.stats.net_sent);
+                document.getElementById('agentUptime').innerText = formatUptime(data.stats.boot_time);
+            }
         }
         
         renderAgentChart(data.history);
@@ -69,7 +93,6 @@ function renderAgentChart(history) {
         const dx = Math.max(0, history[i].rx - history[i-1].rx);
         const dy = Math.max(0, history[i].tx - history[i-1].tx);
         
-        // Переводим Байты -> Биты, делим на 1024 -> Кбиты
         netRx.push((dx * 8 / dt / 1024)); 
         netTx.push((dy * 8 / dt / 1024)); 
     }
@@ -83,7 +106,7 @@ function renderAgentChart(history) {
         maintainAspectRatio: false,
         animation: false,
         layout: {
-            padding: { top: 5, bottom: 0, left: 0, right: 5 } // Отступы
+            padding: { top: 5, bottom: 0, left: 0, right: 5 } 
         },
         elements: { point: { radius: 0, hitRadius: 10 } },
         scales: { 
@@ -161,7 +184,7 @@ function renderAgentChart(history) {
                         borderColor: '#22c55e', 
                         borderWidth: 1.5, 
                         fill: true, 
-                        backgroundColor: 'rgba(34, 197, 94, 0.1)', // Заливка
+                        backgroundColor: 'rgba(34, 197, 94, 0.1)', 
                         tension: 0.3 
                     },
                     { 
@@ -170,7 +193,7 @@ function renderAgentChart(history) {
                         borderColor: '#3b82f6', 
                         borderWidth: 1.5, 
                         fill: true, 
-                        backgroundColor: 'rgba(59, 130, 246, 0.1)', // Заливка
+                        backgroundColor: 'rgba(59, 130, 246, 0.1)', 
                         tension: 0.3 
                     }
                 ]
@@ -179,9 +202,6 @@ function renderAgentChart(history) {
         });
     }
 }
-
-
-// --- УПРАВЛЕНИЕ НОДАМИ ---
 
 async function openNodeDetails(token, dotColorClass) {
     const modal = document.getElementById('nodeModal');
@@ -322,7 +342,6 @@ function renderCharts(history) {
         const dt = history[i].t - history[i-1].t || 1; 
         const dx = Math.max(0, history[i].rx - history[i-1].rx);
         const dy = Math.max(0, history[i].tx - history[i-1].tx);
-        // Перевод в Кбит/с
         netRxSpeed.push((dx * 8 / dt / 1024)); 
         netTxSpeed.push((dy * 8 / dt / 1024)); 
     }
@@ -412,7 +431,6 @@ function openLogsModal() {
     modal.classList.remove('hidden');
     modal.classList.add('flex');
     document.body.style.overflow = 'hidden';
-    
     fetchLogs();
 }
 
@@ -426,16 +444,13 @@ function closeLogsModal() {
 async function fetchLogs() {
     const contentDiv = document.getElementById('logsContent');
     contentDiv.innerHTML = '<div class="flex items-center justify-center h-full text-gray-500"><span class="animate-pulse">Загрузка логов...</span></div>';
-    
     try {
         const response = await fetch('/api/logs');
         if (response.status === 403) {
             contentDiv.innerHTML = '<div class="text-red-400 text-center">Доступ запрещен</div>';
             return;
         }
-        
         const data = await response.json();
-        
         if (data.error) {
             contentDiv.innerHTML = `<div class="text-red-400">Ошибка: ${data.error}</div>`;
         } else {
@@ -444,13 +459,10 @@ async function fetchLogs() {
                 if (line.includes("INFO")) cls = "text-blue-300";
                 if (line.includes("WARNING")) cls = "text-yellow-300";
                 if (line.includes("ERROR") || line.includes("CRITICAL") || line.includes("Traceback")) cls = "text-red-400 font-bold";
-                
                 const safeLine = line.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
                 return `<div class="${cls} hover:bg-white/5 px-1 rounded">${safeLine}</div>`;
             }).join('');
-            
             contentDiv.innerHTML = coloredLogs || '<div class="text-gray-600 text-center">Лог пуст</div>';
-            
             contentDiv.scrollTop = contentDiv.scrollHeight;
         }
     } catch (e) {
