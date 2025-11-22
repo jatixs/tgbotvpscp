@@ -277,11 +277,15 @@ STRINGS = {
         "web_agent_stats_title": "Мониторинг (Агент)",
         "web_stats_total": "Всего Нод",
         "web_stats_active": "Активные Ноды",
+        "web_footer_endpoint": "Эндпоинт",
+        "web_footer_powered": "Работает на",
         "web_traffic_total": "Общий трафик",
         "web_uptime": "Аптайм",
         "web_cpu": "CPU",
         "web_ram": "RAM",
         "web_disk": "Диск",
+        "web_rx": "↓ Принято",
+        "web_tx": "↑ Отдано",
         "web_admin_panel": "Панель администратора",
         "web_admin_desc": "Доступны расширенные функции управления сетью.",
         "web_logs_button": "Логи системы",
@@ -302,10 +306,6 @@ STRINGS = {
         "web_access_denied": "Доступ запрещен",
         "web_error": "Ошибка: {error}",
         "web_conn_error": "Ошибка соединения: {error}"
-        "web_rx": "↓ Принято",
-        "web_footer_endpoint": "Эндпоинт",
-        "web_footer_powered": "Работает на",
-        "web_tx": "↑ Отдано",
     },
     'en': {
         "btn_back": "🔙 Back",
@@ -579,11 +579,15 @@ STRINGS = {
         "web_agent_stats_title": "Monitoring (Agent)",
         "web_stats_total": "Total Nodes",
         "web_stats_active": "Active Nodes",
+        "web_footer_endpoint": "Endpoint",
+        "web_footer_powered": "Powered by",
         "web_traffic_total": "Total Traffic",
         "web_uptime": "Uptime",
         "web_cpu": "CPU",
         "web_ram": "RAM",
         "web_disk": "Disk",
+        "web_rx": "↓ RX",
+        "web_tx": "↑ TX",
         "web_admin_panel": "Admin Panel",
         "web_admin_desc": "Advanced network management functions available.",
         "web_logs_button": "System Logs",
@@ -604,11 +608,6 @@ STRINGS = {
         "web_access_denied": "Access denied",
         "web_error": "Error: {error}",
         "web_conn_error": "Connection error: {error}"
-        "web_footer_endpoint": "Endpoint",
-        "web_footer_powered": "Powered by",
-        "web_rx": "↓ RX",
-        "web_tx": "↑ TX",
-        
     }
 }
 
