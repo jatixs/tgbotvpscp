@@ -114,6 +114,94 @@ async def handle_get_logs(request):
     except Exception as e:
         return web.json_response({"error": str(e)}, status=500)
 
+# --- ДОБАВЛЕНА НЕДОСТАЮЩАЯ ФУНКЦИЯ ---
+async def handle_dashboard(request):
+    user = get_current_user(request)
+    if not user: raise web.HTTPFound('/login')
+    
+    html = load_template("dashboard.html")
+    
+    user_id = user['id']
+    lang = get_user_lang(user_id)
+    
+    # Calculate stats
+    nodes_count = len(NODES)
+    active_nodes = sum(1 for n in NODES.values() if time.time() - n.get("last_seen", 0) < NODE_OFFLINE_TIMEOUT)
+    
+    # Role badge
+    role = user.get('role', 'users')
+    role_color = "green" if role == "admins" else "gray"
+    role_badge = f'<span class="px-2 py-0.5 rounded text-[10px] border border-{role_color}-500/30 bg-{role_color}-100 dark:bg-{role_color}-500/20 text-{role_color}-600 dark:text-{role_color}-400 uppercase font-bold">{role}</span>'
+
+    # Admin controls
+    admin_controls_html = ""
+    if role == "admins":
+        admin_controls_html = f"""
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-6">
+            <a href="/settings" class="flex items-center justify-center gap-2 p-4 bg-white/60 dark:bg-white/5 border border-white/40 dark:border-white/10 rounded-xl hover:bg-white/80 dark:hover:bg-white/10 transition group shadow-sm hover:shadow-md backdrop-blur-md">
+                <div class="p-2 bg-blue-100 dark:bg-blue-500/20 rounded-lg text-blue-600 dark:text-blue-400 group-hover:scale-110 transition">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+                </div>
+                <span class="font-bold text-gray-700 dark:text-gray-200">{_("web_settings_button", lang)}</span>
+            </a>
+            <button onclick="openLogsModal()" class="flex items-center justify-center gap-2 p-4 bg-white/60 dark:bg-white/5 border border-white/40 dark:border-white/10 rounded-xl hover:bg-white/80 dark:hover:bg-white/10 transition group shadow-sm hover:shadow-md backdrop-blur-md">
+                <div class="p-2 bg-yellow-100 dark:bg-yellow-500/20 rounded-lg text-yellow-600 dark:text-yellow-400 group-hover:scale-110 transition">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+                </div>
+                <span class="font-bold text-gray-700 dark:text-gray-200">{_("web_logs_button", lang)}</span>
+            </button>
+        </div>
+        """
+
+    # I18n replacements
+    replacements = {
+        "{web_title}": f"{_('web_dashboard_title', lang)} - Web Bot",
+        "{web_dashboard_title}": _("web_dashboard_title", lang),
+        "{role_badge}": role_badge,
+        "{user_avatar}": _get_avatar_html(user),
+        "{user_name}": user.get('first_name', 'User'),
+        "{nodes_count}": str(nodes_count),
+        "{active_nodes}": str(active_nodes),
+        "{web_agent_stats_title}": _("web_agent_stats_title", lang),
+        "{web_uptime}": _("web_uptime", lang),
+        "{web_cpu}": _("web_cpu", lang),
+        "{web_ram}": _("web_ram", lang),
+        "{web_disk}": _("web_disk", lang),
+        "{web_traffic_total}": _("web_traffic_total", lang),
+        "{web_node_mgmt_title}": _("web_node_mgmt_title", lang),
+        "{web_nodes_loading}": _("web_nodes_loading", lang),
+        "{admin_controls_html}": admin_controls_html,
+        "{web_node_details_title}": _("web_node_details_title", lang),
+        "{web_token_label}": _("web_token_label", lang),
+        "{web_copied}": _("web_copied", lang),
+        "{web_resources_chart}": _("web_resources_chart", lang),
+        "{web_network_chart}": _("web_network_chart", lang),
+        "{web_logs_title}": _("web_logs_title", lang),
+        "{web_refresh}": _("web_refresh", lang),
+        "{web_loading}": _("web_loading", lang),
+        "{web_logs_footer}": _("web_logs_footer", lang),
+        "{web_stats_total}": _("web_stats_total", lang),
+        "{web_stats_active}": _("web_stats_active", lang),
+    }
+
+    for k, v in replacements.items():
+        html = html.replace(k, v)
+
+    i18n_data = {
+        "web_cpu": _("web_cpu", lang),
+        "web_ram": _("web_ram", lang),
+        "web_no_nodes": _("web_no_nodes", lang),
+        "web_loading": _("web_loading", lang),
+        "web_access_denied": _("web_access_denied", lang),
+        "web_error": _("web_error", lang, error=""),
+        "web_conn_error": _("web_conn_error", lang, error=""),
+        "web_log_empty": _("web_log_empty", lang)
+    }
+    html = html.replace("{i18n_json}", json.dumps(i18n_data))
+
+    return web.Response(text=html, content_type='text/html')
+# -------------------------------------
+
 async def handle_settings_page(request):
     user = get_current_user(request)
     if not user: raise web.HTTPFound('/login')
