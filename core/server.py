@@ -136,7 +136,7 @@ async def handle_settings_page(request):
     
     user_id = user['id']
     is_admin = user['role'] == 'admins'
-    lang = get_user_lang(user_id) # Получаем язык
+    lang = get_user_lang(user_id)
     
     user_alerts = ALERTS_CONFIG.get(user_id, {})
     
@@ -150,7 +150,8 @@ async def handle_settings_page(request):
             users_list.append({"id": uid, "name": name, "role": role})
         users_json = json.dumps(users_list)
 
-    html = html.replace("{web_title}", f"{_('web_settings_page_title', lang)} - VPS Bot")
+    # ИЗМЕНЕНО: Заголовок страницы
+    html = html.replace("{web_title}", f"{_('web_settings_page_title', lang)} - Web Bot")
     html = html.replace("{user_name}", user.get('first_name', 'User'))
     html = html.replace("{user_avatar}", _get_avatar_html(user))
     html = html.replace("{users_data_json}", users_json)
@@ -180,7 +181,6 @@ async def handle_settings_page(request):
         checked = "checked" if user_alerts.get(alert, False) else ""
         html = html.replace(f"{{check_{alert}}}", checked)
         
-    # Передача JSON переводов для JS
     i18n_data = {
         "web_saving_btn": _("web_saving_btn", lang),
         "web_saved_btn": _("web_saved_btn", lang),
@@ -273,7 +273,6 @@ async def handle_node_add(request):
         return web.json_response({"error": str(e)}, status=500)
 
 async def handle_nodes_list_json(request):
-    """Возвращает JSON со списком нод и их статусом для AJAX обновлений."""
     user = get_current_user(request)
     if not user: return web.json_response({"error": "Unauthorized"}, status=401)
     
@@ -303,7 +302,6 @@ async def handle_nodes_list_json(request):
     return web.json_response({"nodes": nodes_data})
 
 async def handle_set_language(request):
-    """Устанавливает язык пользователя."""
     user = get_current_user(request)
     if not user: return web.json_response({"error": "Unauthorized"}, status=401)
     
@@ -471,7 +469,8 @@ async def handle_dashboard(request):
     """ if is_admin else ""
 
     html = load_template("dashboard.html")
-    html = html.replace("{web_title}", "VPS Bot Dashboard")
+    # ИЗМЕНЕНО: Заголовок страницы
+    html = html.replace("{web_title}", f"{_('web_dashboard_title', lang)} - Web Bot")
     
     web_dashboard_title = _("web_dashboard_title", lang)
     web_agent_stats_title = _("web_agent_stats_title", lang)
