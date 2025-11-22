@@ -16,9 +16,7 @@ from .config import (
     WEB_SERVER_HOST, WEB_SERVER_PORT, NODE_OFFLINE_TIMEOUT, BASE_DIR, ADMIN_USER_ID, ENABLE_WEB_UI,
     save_system_config, BOT_LOG_DIR, WATCHDOG_LOG_DIR, WEB_AUTH_FILE, ADMIN_USERNAME
 )
-# Импортируем конфиг целиком для чтения актуальных значений
 from . import config as current_config
-
 from .shared_state import NODES, NODE_TRAFFIC_MONITORS, ALLOWED_USERS, USER_NAMES, AUTH_TOKENS, ALERTS_CONFIG, AGENT_HISTORY
 from .i18n import STRINGS, get_user_lang, set_user_lang, get_text as _
 from .config import DEFAULT_LANGUAGE
@@ -27,6 +25,7 @@ from .auth import save_users, get_user_name
 
 COOKIE_NAME = "vps_agent_session"
 LOGIN_TOKEN_TTL = 300 
+RESET_TOKEN_TTL = 600 # 10 минут на сброс
 WEB_PASSWORD = os.environ.get("WEB_PASSWORD", "admin")
 TEMPLATE_DIR = os.path.join(BASE_DIR, "core", "templates")
 STATIC_DIR = os.path.join(BASE_DIR, "core", "static")
@@ -34,8 +33,7 @@ STATIC_DIR = os.path.join(BASE_DIR, "core", "static")
 AGENT_FLAG = "🏳️"
 AGENT_IP_CACHE = "Loading..."
 
-# Хранилище токенов сброса пароля: {token: timestamp}
-RESET_TOKENS = {}
+RESET_TOKENS = {} # {token: timestamp}
 
 # --- PASSWORD UTILS ---
 def get_stored_password_hash():
@@ -49,14 +47,11 @@ def get_stored_password_hash():
 def check_web_password(input_pass):
     stored_hash = get_stored_password_hash()
     if stored_hash:
-        # Если есть файл, сравниваем хеш
         return hashlib.sha256(input_pass.encode()).hexdigest() == stored_hash
     else:
-        # Иначе сравниваем с ENV (plain text)
         return input_pass == WEB_PASSWORD
 
 def is_default_password():
-    # Считаем пароль дефолтным, если нет файла хеша И переменная окружения == 'admin'
     return (get_stored_password_hash() is None) and (WEB_PASSWORD == "admin")
 
 def load_template(name):
@@ -72,14 +67,16 @@ def get_current_user(request):
     if not cookie: return None
     try:
         user_data = json.loads(cookie)
+        # Если это вход по паролю, доверяем ему как админу
         if user_data.get('type') == 'password': return user_data
+        
         uid = int(user_data.get('id'))
         if uid not in ALLOWED_USERS: return None
         user_data['role'] = ALLOWED_USERS[uid]
         return user_data
     except: return None
 
-# --- ФОНОВАЯ ЗАДАЧА МОНИТОРИНГА АГЕНТА ---
+# --- BACKGROUND TASKS ---
 async def agent_monitor():
     global AGENT_IP_CACHE
     psutil.cpu_percent(interval=None)
@@ -127,6 +124,8 @@ async def process_node_result_background(bot, user_id, cmd, text, token, node_na
     except Exception as e:
         logging.error(f"Background message send error (User: {user_id}): {e}")
 
+# --- HANDLERS ---
+
 async def handle_get_logs(request):
     user = get_current_user(request)
     if not user or user['role'] != 'admins': return web.json_response({"error": "Unauthorized"}, status=403)
@@ -145,20 +144,16 @@ async def handle_dashboard(request):
     if not user: raise web.HTTPFound('/login')
     
     html = load_template("dashboard.html")
-    
     user_id = user['id']
     lang = get_user_lang(user_id)
     
-    # Calculate stats
     nodes_count = len(NODES)
     active_nodes = sum(1 for n in NODES.values() if time.time() - n.get("last_seen", 0) < NODE_OFFLINE_TIMEOUT)
     
-    # Role badge
     role = user.get('role', 'users')
     role_color = "green" if role == "admins" else "gray"
     role_badge = f'<span class="px-2 py-0.5 rounded text-[10px] border border-{role_color}-500/30 bg-{role_color}-100 dark:bg-{role_color}-500/20 text-{role_color}-600 dark:text-{role_color}-400 uppercase font-bold">{role}</span>'
 
-    # Admin controls
     admin_controls_html = ""
     if role == "admins":
         admin_controls_html = f"""
@@ -178,7 +173,6 @@ async def handle_dashboard(request):
         </div>
         """
 
-    # I18n replacements
     replacements = {
         "{web_title}": f"{_('web_dashboard_title', lang)} - Web Bot",
         "{web_dashboard_title}": _("web_dashboard_title", lang),
@@ -223,7 +217,6 @@ async def handle_dashboard(request):
         "web_log_empty": _("web_log_empty", lang)
     }
     html = html.replace("{i18n_json}", json.dumps(i18n_data))
-
     return web.Response(text=html, content_type='text/html')
 
 async def handle_settings_page(request):
@@ -231,11 +224,9 @@ async def handle_settings_page(request):
     if not user: raise web.HTTPFound('/login')
     
     html = load_template("settings.html")
-    
     user_id = user['id']
     is_admin = user['role'] == 'admins'
     lang = get_user_lang(user_id)
-    
     user_alerts = ALERTS_CONFIG.get(user_id, {})
     
     users_json = "null"
@@ -252,48 +243,18 @@ async def handle_settings_page(request):
     html = html.replace("{user_avatar}", _get_avatar_html(user))
     html = html.replace("{users_data_json}", users_json)
     
-    # Переводы
-    html = html.replace("{web_settings_page_title}", _("web_settings_page_title", lang))
-    html = html.replace("{web_back}", _("web_back", lang))
-    html = html.replace("{web_notif_section}", _("web_notif_section", lang))
-    html = html.replace("{notifications_alert_name_res}", _("notifications_alert_name_res", lang))
-    html = html.replace("{notifications_alert_name_logins}", _("notifications_alert_name_logins", lang))
-    html = html.replace("{notifications_alert_name_bans}", _("notifications_alert_name_bans", lang))
-    html = html.replace("{notifications_alert_name_downtime}", _("notifications_alert_name_downtime", lang))
-    html = html.replace("{web_save_btn}", _("web_save_btn", lang))
-    html = html.replace("{web_users_section}", _("web_users_section", lang))
-    html = html.replace("{web_add_user_btn}", _("web_add_user_btn", lang))
-    html = html.replace("{web_user_id}", _("web_user_id", lang))
-    html = html.replace("{web_user_name}", _("web_user_name", lang))
-    html = html.replace("{web_user_role}", _("web_user_role", lang))
-    html = html.replace("{web_user_action}", _("web_user_action", lang))
-    html = html.replace("{web_add_node_section}", _("web_add_node_section", lang))
-    html = html.replace("{web_node_name_placeholder}", _("web_node_name_placeholder", lang))
-    html = html.replace("{web_create_btn}", _("web_create_btn", lang))
-    html = html.replace("{web_node_token}", _("web_node_token", lang))
-    html = html.replace("{web_node_cmd}", _("web_node_cmd", lang))
-    
-    # Системные настройки
-    html = html.replace("{web_sys_settings_section}", _("web_sys_settings_section", lang))
-    html = html.replace("{web_thresholds_title}", _("web_thresholds_title", lang))
-    html = html.replace("{web_intervals_title}", _("web_intervals_title", lang))
-    html = html.replace("{web_logs_mgmt_title}", _("web_logs_mgmt_title", lang))
-    html = html.replace("{web_cpu_threshold}", _("web_cpu_threshold", lang))
-    html = html.replace("{web_ram_threshold}", _("web_ram_threshold", lang))
-    html = html.replace("{web_disk_threshold}", _("web_disk_threshold", lang))
-    html = html.replace("{web_traffic_interval}", _("web_traffic_interval", lang))
-    html = html.replace("{web_node_timeout}", _("web_node_timeout", lang))
-    html = html.replace("{web_clear_logs_btn}", _("web_clear_logs_btn", lang))
+    # I18n replacements (omitted for brevity, assume all keys are replaced)
+    for key in ["web_settings_page_title", "web_back", "web_notif_section", "notifications_alert_name_res", 
+                "notifications_alert_name_logins", "notifications_alert_name_bans", "notifications_alert_name_downtime",
+                "web_save_btn", "web_users_section", "web_add_user_btn", "web_user_id", "web_user_name", 
+                "web_user_role", "web_user_action", "web_add_node_section", "web_node_name_placeholder", 
+                "web_create_btn", "web_node_token", "web_node_cmd", "web_sys_settings_section", "web_thresholds_title",
+                "web_intervals_title", "web_logs_mgmt_title", "web_cpu_threshold", "web_ram_threshold", 
+                "web_disk_threshold", "web_traffic_interval", "web_node_timeout", "web_clear_logs_btn",
+                "web_security_section", "web_change_password_title", "web_current_password", 
+                "web_new_password", "web_confirm_password", "web_change_btn"]:
+        html = html.replace(f"{{{key}}}", _(key, lang))
 
-    # Password section
-    html = html.replace("{web_security_section}", _("web_security_section", lang))
-    html = html.replace("{web_change_password_title}", _("web_change_password_title", lang))
-    html = html.replace("{web_current_password}", _("web_current_password", lang))
-    html = html.replace("{web_new_password}", _("web_new_password", lang))
-    html = html.replace("{web_confirm_password}", _("web_confirm_password", lang))
-    html = html.replace("{web_change_btn}", _("web_change_btn", lang))
-    
-    # Values
     html = html.replace("{val_cpu}", str(current_config.CPU_THRESHOLD))
     html = html.replace("{val_ram}", str(current_config.RAM_THRESHOLD))
     html = html.replace("{val_disk}", str(current_config.DISK_THRESHOLD))
@@ -323,7 +284,6 @@ async def handle_settings_page(request):
         "web_pass_mismatch": _("web_pass_mismatch", lang)
     }
     html = html.replace("{i18n_json}", json.dumps(i18n_data))
-
     return web.Response(text=html, content_type='text/html')
 
 async def handle_save_notifications(request):
@@ -358,7 +318,8 @@ async def handle_save_system_config(request):
 
 async def handle_change_password(request):
     user = get_current_user(request)
-    if not user or user.get('type') != 'password' or user['id'] != 0:
+    # Разрешаем ЛЮБОМУ админу менять системный пароль, если он знает текущий
+    if not user or user.get('role') != 'admins':
         return web.json_response({"error": "Unauthorized"}, status=403)
     
     try:
@@ -367,7 +328,7 @@ async def handle_change_password(request):
         new_pass = data.get("new_password")
         
         if not check_web_password(current_pass):
-            lang = get_user_lang(0)
+            lang = get_user_lang(user['id'])
             return web.json_response({"error": _("web_pass_wrong_current", lang)}, status=400)
         
         if not new_pass or len(new_pass) < 4:
@@ -474,25 +435,30 @@ async def handle_set_language(request):
 # --- FORGOT PASSWORD HANDLERS ---
 
 async def handle_reset_request(request):
+    """Запрос сброса пароля: проверяет ID и отправляет ссылку в Telegram"""
     try:
         data = await request.json()
         try: user_id = int(data.get("user_id", 0))
         except: user_id = 0
         
-        if user_id not in ALLOWED_USERS:
+        # 1. Проверка: Пользователь должен быть админом, чтобы сбросить пароль
+        if user_id not in ALLOWED_USERS or ALLOWED_USERS[user_id] != 'admins':
             admin_url = f"https://t.me/{ADMIN_USERNAME}" if ADMIN_USERNAME else f"tg://user?id={ADMIN_USER_ID}"
             return web.json_response({
                 "error": "not_found", 
                 "admin_url": admin_url
             }, status=404)
 
+        # 2. Генерация токена
         token = secrets.token_urlsafe(32)
         RESET_TOKENS[token] = time.time()
         
+        # 3. Ссылка
         host = request.headers.get('Host', f'{WEB_SERVER_HOST}:{WEB_SERVER_PORT}')
         proto = "https" if request.headers.get('X-Forwarded-Proto') == "https" else "http"
         reset_link = f"{proto}://{host}/reset_password?token={token}"
         
+        # 4. Отправка через бота
         bot = request.app.get('bot')
         if bot:
             try:
@@ -509,17 +475,25 @@ async def handle_reset_request(request):
         return web.json_response({"error": str(e)}, status=500)
 
 async def handle_reset_page_render(request):
+    """Рендер страницы сброса (используем login.html с флагом)"""
     token = request.query.get("token")
+    
+    # Валидация токена
     if not token or token not in RESET_TOKENS:
-        return web.Response(text=STRINGS[DEFAULT_LANGUAGE]["reset_token_expired"], status=403)
-    if time.time() - RESET_TOKENS[token] > 600:
+        return web.Response(text="Error: Link expired or invalid.", status=403)
+    if time.time() - RESET_TOKENS[token] > RESET_TOKEN_TTL:
         del RESET_TOKENS[token]
-        return web.Response(text=STRINGS[DEFAULT_LANGUAGE]["reset_token_expired"], status=403)
+        return web.Response(text="Error: Link expired.", status=403)
 
-    html = load_template("reset_password.html")
+    # Рендерим ту же страницу логина, JS сам разберется по URL
+    html = load_template("login.html")
+    # Убираем блок ошибки, если есть
+    html = html.replace("{error_block}", "")
+    html = html.replace("{default_pass_alert}", "")
     return web.Response(text=html, content_type='text/html')
 
 async def handle_reset_confirm(request):
+    """Применение нового пароля"""
     try:
         data = await request.json()
         token = data.get("token")
@@ -531,10 +505,12 @@ async def handle_reset_confirm(request):
         if not new_pass or len(new_pass) < 4:
              return web.json_response({"error": "Password too short"}, status=400)
 
+        # Установка нового пароля
         new_hash = hashlib.sha256(new_pass.encode()).hexdigest()
         with open(WEB_AUTH_FILE, "w") as f:
             f.write(new_hash)
         
+        # Удаляем использованный токен
         del RESET_TOKENS[token]
         
         return web.json_response({"status": "ok"})
@@ -588,6 +564,7 @@ async def handle_login_password(request):
     password = data.get("password")
     
     if check_web_password(password):
+        # Вход по паролю дает права ID 0 (System Admin)
         session = {"id": 0, "first_name": "Administrator", "username": "admin", "photo_url": AGENT_FLAG, "role": "admins", "type": "password"}
         resp = web.HTTPFound('/')
         resp.set_cookie(COOKIE_NAME, json.dumps(session), max_age=604800)

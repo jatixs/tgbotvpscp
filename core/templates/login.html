@@ -58,6 +58,7 @@
                         <input type="password" name="password" 
                             class="w-full px-4 py-3 bg-black/20 border border-white/10 rounded-xl text-gray-100 text-base focus:outline-none focus:border-green-500/50 focus:ring-1 focus:ring-green-500/50 transition-all placeholder-gray-600"
                             placeholder="••••••••" required>
+                        
                         <div class="text-right mt-2">
                             <button type="button" onclick="toggleForms('reset')" class="text-xs text-blue-400 hover:text-blue-300 transition-colors">
                                 Забыли пароль?
@@ -109,6 +110,31 @@
                     <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path></svg>
                     Назад к входу
                 </button>
+            </div>
+
+            <div id="set-password-form" class="hidden">
+                <div class="text-center mb-6">
+                    <h3 class="text-lg font-bold text-white mb-2">Новый пароль</h3>
+                    <p class="text-xs text-gray-400">Придумайте надежный пароль для входа.</p>
+                </div>
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-gray-400 text-xs font-bold mb-2 uppercase tracking-wider">Новый пароль</label>
+                        <input type="password" id="new_pass" 
+                            class="w-full px-4 py-3 bg-black/20 border border-white/10 rounded-xl text-gray-100 text-base focus:outline-none focus:border-green-500/50 focus:ring-1 focus:ring-green-500/50 transition-all placeholder-gray-600"
+                            placeholder="••••••••" required>
+                    </div>
+                    <div>
+                        <label class="block text-gray-400 text-xs font-bold mb-2 uppercase tracking-wider">Подтверждение</label>
+                        <input type="password" id="confirm_pass" 
+                            class="w-full px-4 py-3 bg-black/20 border border-white/10 rounded-xl text-gray-100 text-base focus:outline-none focus:border-green-500/50 focus:ring-1 focus:ring-green-500/50 transition-all placeholder-gray-600"
+                            placeholder="••••••••" required>
+                    </div>
+                    <button onclick="submitNewPassword()" id="btn-save-pass"
+                        class="w-full py-3 px-4 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-400 hover:to-emerald-500 rounded-xl font-bold text-white shadow-lg shadow-green-500/20 transition-all duration-200 transform hover:scale-[1.02] active:scale-[0.98]">
+                        Сохранить пароль
+                    </button>
+                </div>
             </div>
         </div>
         
