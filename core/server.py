@@ -38,6 +38,8 @@ LOGIN_ATTEMPTS = {}
 MAX_LOGIN_ATTEMPTS = 5
 LOGIN_BLOCK_TIME = 300
 
+# ДОБАВЛЕНО: Глобальная переменная для задачи монитора
+AGENT_TASK = None
 
 def check_rate_limit(ip):
     now = time.time()
@@ -816,8 +818,19 @@ async def handle_reset_confirm(request):
 async def handle_api_root(request): return web.Response(text="VPS Bot API")
 
 
+# ДОБАВЛЕНО: Функция очистки
+async def cleanup_server():
+    global AGENT_TASK
+    if AGENT_TASK and not AGENT_TASK.done():
+        AGENT_TASK.cancel()
+        try:
+            await AGENT_TASK
+        except asyncio.CancelledError:
+            pass
+
+
 async def start_web_server(bot_instance: Bot):
-    global AGENT_FLAG
+    global AGENT_FLAG, AGENT_TASK
     app = web.Application()
     app['bot'] = bot_instance
     app.router.add_post('/api/heartbeat', handle_heartbeat)
@@ -850,7 +863,9 @@ async def start_web_server(bot_instance: Bot):
         logging.info("Web UI DISABLED.")
         app.router.add_get('/', handle_api_root)
 
-    asyncio.create_task(agent_monitor())
+    # ЗАПУСК ЗАДАЧИ С СОХРАНЕНИЕМ В ПЕРЕМЕННУЮ
+    AGENT_TASK = asyncio.create_task(agent_monitor())
+    
     runner = web.AppRunner(app, access_log=None)
     await runner.setup()
     site = web.TCPSite(runner, WEB_SERVER_HOST, WEB_SERVER_PORT)
