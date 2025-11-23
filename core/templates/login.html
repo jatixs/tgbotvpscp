@@ -7,6 +7,23 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/twemoji@latest/dist/twemoji.min.js" crossorigin="anonymous"></script>
     <link rel="stylesheet" href="/static/css/style.css">
+    
+    <style>
+        body, div, nav, main, button {
+            transition-property: none !important;
+        }
+        /* Возвращаем плавность только для интерактивных элементов, если нужно */
+        .transition-all {
+            transition-property: all !important;
+            transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1) !important;
+            transition-duration: 150ms !important;
+        }
+        .transition-colors {
+            transition-property: color, background-color, border-color, text-decoration-color, fill, stroke !important;
+            transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1) !important;
+            transition-duration: 150ms !important;
+        }
+    </style>
 </head>
 <body class="bg-gray-900 flex items-center justify-center min-h-screen relative overflow-hidden text-gray-100 font-sans selection:bg-green-500/30 p-4">
     
