@@ -108,7 +108,6 @@ async def parse_ssh_log_line(line: str) -> dict | None:
         try:
             user = escape_html(match.group(1))
             ip = escape_html(match.group(2))
-            # ИСПРАВЛЕНО: прямой await
             flag = await get_country_flag(ip)
             return {
                 "key": "alert_ssh_login_detected",
@@ -128,7 +127,6 @@ async def parse_f2b_log_line(line: str) -> dict | None:
     if match:
         try:
             ip = escape_html(match.group(1).strip())
-            # ИСПРАВЛЕНО: прямой await
             flag = await get_country_flag(ip)
             return {
                 "key": "alert_f2b_ban_detected",
@@ -197,6 +195,8 @@ async def resource_monitor(bot: Bot):
 
             if alerts:
                 await send_alert(bot, lambda lang: "\n\n".join([_(k, lang, **p) for k, p in alerts]), "resources")
+        except asyncio.CancelledError:
+            raise
         except Exception as e:
             logging.error(f"ResMonitor error: {e}")
         await asyncio.sleep(config.RESOURCE_CHECK_INTERVAL)
@@ -207,14 +207,37 @@ async def reliable_tail_log_monitor(bot, path, alert_type, parser):
         if not os.path.exists(path):
             await asyncio.sleep(60)
             continue
+        
+        proc = None
         try:
-            proc = await asyncio.create_subprocess_shell(f"tail -n 0 -f {path}", stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
-            proc.bot_ref = bot  # hack
+            proc = await asyncio.create_subprocess_shell(
+                f"tail -n 0 -f {path}", 
+                stdout=asyncio.subprocess.PIPE, 
+                stderr=asyncio.subprocess.PIPE
+            )
+            
             async for line in proc.stdout:
                 l = line.decode('utf-8', 'ignore').strip()
                 if l:
                     data = await parser(l)
                     if data:
                         await send_alert(bot, lambda lang: _(data["key"], lang, **data["params"]), alert_type)
-        except BaseException:
+        
+        except asyncio.CancelledError:
+            # ВАЖНО: При отмене задачи убиваем процесс tail
+            if proc:
+                try:
+                    proc.terminate()
+                    await proc.wait()
+                except Exception:
+                    pass
+            raise
+            
+        except Exception as e:
+            logging.error(f"Tail monitor error ({path}): {e}")
+            if proc:
+                try:
+                    proc.terminate()
+                except:
+                    pass
             await asyncio.sleep(10)
