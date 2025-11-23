@@ -5,7 +5,7 @@
 <h1 align="center">🤖 VPS Manager Telegram Bot</h1>
 
 <p align="center">
-  <b >v1.12.0</b> — a powerful Telegram bot for monitoring and managing your <b>server network</b>. Now powered by <b>SQLite</b> and a fully <b>asynchronous core</b> (AsyncIO). Features <b>multi-node support</b>, a web interface, and full <b>Docker</b> integration.
+  <b >v1.12.2</b> — a powerful Telegram bot for monitoring and managing your <b>server network</b>. Now powered by <b>SQLite</b> and a fully <b>asynchronous core</b> (AsyncIO). Features <b>multi-node support</b>, a web interface, and full <b>Docker</b> integration.
 </p>
 
 <p align="center">
@@ -216,6 +216,6 @@ The agent will install as `tg-node` service and appear in your bot.
 
 ## 👤 Author
 
-**Version:** 1.12.0 (Build 44) <br>
+**Version:** 1.12.2 (Build 44) <br>
 **Author:** Jatix <br>
 📜 **License:** GPL-3.0 <br>
