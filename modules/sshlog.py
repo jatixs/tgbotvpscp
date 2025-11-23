@@ -53,12 +53,14 @@ async def sshlog_handler(message: types.Message):
                 lang,
                 source=os.path.basename(log_file))
             proc = await asyncio.create_subprocess_shell(f"tail -n 200 {log_file}", stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
-            out, stderr = await proc.communicate()
+            # FIX: _ -> stderr_dummy
+            out, stderr_dummy = await proc.communicate()
             lines = out.decode('utf-8', 'ignore').split('\n')
         else:
             src_txt = _("selftest_ssh_source_journal", lang)
             proc = await asyncio.create_subprocess_shell("journalctl -u ssh -n 100 --no-pager -o short-precise", stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
-            out, stderr = await proc.communicate()
+            # FIX: _ -> stderr_dummy
+            out, stderr_dummy = await proc.communicate()
             lines = out.decode('utf-8', 'ignore').split('\n')
 
         entries = []

@@ -42,9 +42,9 @@ async def fail2ban_handler(message: types.Message):
         return
 
     try:
-        # Читаем последние строки через tail (асинхронно)
         proc = await asyncio.create_subprocess_shell(f"tail -n 50 {log_file}", stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
-        out, stderr = await proc.communicate()
+        # FIX: _ -> stderr_dummy
+        out, stderr_dummy = await proc.communicate()
         lines = out.decode('utf-8', 'ignore').split('\n')
 
         entries = []
@@ -54,7 +54,6 @@ async def fail2ban_handler(message: types.Message):
             if "fail2ban.actions" not in line:
                 continue
 
-            # Ban detect
             match = re.search(
                 r"(\d{4}-\d{2}-\d{2}\s\d{2}:\d{2}:\d{2},\d{3}).*fail2ban\.actions.* Ban\s+(\S+)",
                 line)

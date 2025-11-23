@@ -61,6 +61,7 @@ async def selftest_handler(message: types.Message):
 
         # Ping check (async subprocess)
         ping_proc = await asyncio.create_subprocess_shell("ping -c 1 -W 1 8.8.8.8", stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+        # FIX: _ -> stderr_dummy
         p_out, stderr_dummy = await ping_proc.communicate()
         p_match = re.search(r"time=([\d\.]+) ms", p_out.decode())
         ping_time = p_match.group(1) if p_match else "N/A"
@@ -72,6 +73,7 @@ async def selftest_handler(message: types.Message):
 
         # IP check (async subprocess)
         ip_proc = await asyncio.create_subprocess_shell("curl -4 -s --max-time 2 ifconfig.me", stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+        # FIX: _ -> stderr_dummy
         ip_out, stderr_dummy = await ip_proc.communicate()
         ext_ip = ip_out.decode().strip() or _("selftest_ip_fail", lang)
 
@@ -92,6 +94,7 @@ async def selftest_handler(message: types.Message):
                     lang,
                     source=os.path.basename(log_file))
                 proc = await asyncio.create_subprocess_shell(f"tail -n 50 {log_file}", stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+                # FIX: _ -> stderr_dummy
                 l_out, stderr_dummy = await proc.communicate()
                 for l in reversed(l_out.decode('utf-8', 'ignore').split('\n')):
                     if "Accepted" in l and "sshd" in l:
@@ -100,6 +103,7 @@ async def selftest_handler(message: types.Message):
             else:
                 src = _("selftest_ssh_source_journal", lang)
                 proc = await asyncio.create_subprocess_shell("journalctl -u ssh --no-pager -n 50", stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+                # FIX: _ -> stderr_dummy
                 j_out, stderr_dummy = await proc.communicate()
                 for l in reversed(j_out.decode('utf-8', 'ignore').split('\n')):
                     if "Accepted" in l:
@@ -144,4 +148,5 @@ async def selftest_handler(message: types.Message):
         await message.bot.edit_message_text(_("selftest_results_header", lang) + body + ssh_info, chat_id=chat_id, message_id=sent_msg.message_id, parse_mode="HTML")
 
     except Exception as e:
+        logging.error(f"Error in selftest: {e}")
         await message.bot.edit_message_text(_("selftest_error", lang, error=str(e)), chat_id=chat_id, message_id=sent_msg.message_id)
