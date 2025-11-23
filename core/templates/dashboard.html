@@ -9,39 +9,61 @@
     <script>
         const I18N = {i18n_json};
         
-        // --- JS HINT LOGIC FOR DASHBOARD & SETTINGS ---
         window.activeHint = null;
         
-        window.toggleHint = function(event, hintId) {
+        function openHintModal(event, hintId) {
             event.stopPropagation();
-            const hint = document.getElementById(hintId);
-            const isVisible = hint.classList.contains('block');
+            const hintEl = document.getElementById(hintId);
+            
+            const hintText = hintEl ? hintEl.innerHTML.trim() : I18N.web_error.replace('{error}', 'Hint text not found.');
 
-            // 1. Hide all other hints
-            document.querySelectorAll('.web-hint').forEach(h => {
-                if (h.id !== hintId) {
-                    h.classList.add('hidden');
-                    h.classList.remove('block');
+            let titleEl = event.currentTarget.closest('.bg-white\\/50, .bg-black\\/20');
+            let title = 'Информация';
+            if (titleEl) {
+                let metricSpan = titleEl.querySelector('.text-\\[9px\\]');
+                if (metricSpan) {
+                    title = metricSpan.innerText || 'Метрика';
+                }
+            }
+            
+            const modal = document.getElementById('genericHintModal');
+            if (!modal) return;
+            
+            document.getElementById('hintModalTitle').innerText = title;
+            document.getElementById('hintModalContent').innerHTML = hintText;
+            
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+            document.body.style.overflow = 'hidden';
+
+            const parentContainer = event.currentTarget.closest('.relative.inline-block');
+            if(parentContainer) {
+                parentContainer.style.zIndex = 10;
+            }
+
+            if (window.parsePageEmojis) window.parsePageEmojis();
+        }
+
+        function closeHintModal() {
+            const modal = document.getElementById('genericHintModal');
+            if (!modal) return;
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+            document.body.style.overflow = 'auto';
+
+            document.querySelectorAll('[onclick^="toggleHint"]').forEach(btn => {
+                const parentContainer = btn.closest('.relative.inline-block');
+                if(parentContainer) {
+                    parentContainer.style.zIndex = '';
                 }
             });
+        }
 
-            // 2. Toggle current hint
-            if (isVisible) {
-                hint.classList.add('hidden');
-                hint.classList.remove('block');
-                window.activeHint = null;
-            } else {
-                hint.classList.remove('hidden');
-                hint.classList.add('block');
-                window.activeHint = hintId;
-            }
-        };
+        window.toggleHint = openHintModal;
 
-        // 3. Global listener to dismiss hints on outside click/tap
         document.addEventListener('click', function(event) {
             if (window.activeHint) {
                 const activeHintEl = document.getElementById(window.activeHint);
-                // Check if the click target is outside the hint and outside the hint's button/trigger
                 if (activeHintEl && !activeHintEl.contains(event.target) && event.target.closest('button[onclick^="toggleHint"]') === null) {
                     activeHintEl.classList.add('hidden');
                     activeHintEl.classList.remove('block');
@@ -49,7 +71,6 @@
                 }
             }
         });
-        // ---------------------------------------------
     </script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://unpkg.com/twemoji@latest/dist/twemoji.min.js" crossorigin="anonymous"></script>
@@ -59,20 +80,6 @@
         html { background-color: #f3f4f6; }
         html.dark { background-color: #111827; }
         html.dark body { background-color: #111827; color: #f3f4f6; }
-        
-        /* --- КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ Z-INDEX И КОНТРАСТА --- */
-        .web-hint {
-            z-index: 999; /* Максимальный Z-Index */
-            min-width: 15rem; 
-            /* Стиль контраста */
-            background-color: rgb(17 24 39 / 98%); /* bg-gray-900/98 */
-            color: #ffffff;
-        }
-        html.dark .web-hint {
-            background-color: rgb(243 244 246 / 98%); /* bg-gray-100/98 */
-            color: #1f2937; /* dark:text-gray-900 */
-        }
-        /* ------------------------------------------------ */
     </style>
 </head>
 <body class="bg-gray-100 text-gray-900 dark:bg-gray-900 dark:text-gray-100 font-sans selection:bg-green-500/30 pb-10 overflow-x-hidden">
@@ -202,7 +209,7 @@
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                                     </svg>
                                 </button>
-                                <div id="hint-cpu-dash" class="web-hint hidden absolute z-50 p-3 rounded-lg shadow-xl top-0 right-0 transform translate-x-full ml-2 w-56 text-xs text-left">
+                                <div id="hint-cpu-dash" class="hidden">
                                     {web_hint_cpu_usage}
                                 </div>
                             </div>
@@ -218,7 +225,7 @@
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                                     </svg>
                                 </button>
-                                <div id="hint-ram-dash" class="web-hint hidden absolute z-50 p-3 rounded-lg shadow-xl top-0 right-0 transform translate-x-full ml-2 w-56 text-xs text-left">
+                                <div id="hint-ram-dash" class="hidden">
                                     {web_hint_ram_usage}
                                 </div>
                             </div>
@@ -234,7 +241,7 @@
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                                     </svg>
                                 </button>
-                                <div id="hint-disk-dash" class="web-hint hidden absolute z-50 p-3 rounded-lg shadow-xl top-0 right-0 transform translate-x-full ml-2 w-56 text-xs text-left">
+                                <div id="hint-disk-dash" class="hidden">
                                     {web_hint_disk_usage}
                                 </div>
                             </div>
@@ -256,7 +263,7 @@
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                                     </svg>
                                 </button>
-                                <div id="hint-traffic-in-dash" class="web-hint hidden absolute z-50 p-3 rounded-lg shadow-xl top-0 right-0 transform translate-x-full ml-2 w-56 text-xs text-left">
+                                <div id="hint-traffic-in-dash" class="hidden">
                                     {web_hint_traffic_in}
                                 </div>
                             </div>
@@ -272,7 +279,7 @@
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                                     </svg>
                                 </button>
-                                <div id="hint-traffic-out-dash" class="web-hint hidden absolute z-50 p-3 rounded-lg shadow-xl top-0 right-0 transform translate-x-full ml-2 w-56 text-xs text-left">
+                                <div id="hint-traffic-out-dash" class="hidden">
                                     {web_hint_traffic_out}
                                 </div>
                             </div>
@@ -393,6 +400,18 @@
         </div>
     </div>
 
+    <div id="genericHintModal" class="fixed inset-0 z-[100] hidden items-center justify-center bg-black/50 dark:bg-black/80 backdrop-blur-sm p-4">
+        <div class="bg-white dark:bg-gray-800 border border-white/20 dark:border-white/10 rounded-2xl shadow-2xl w-full max-w-md relative flex flex-col backdrop-blur-xl">
+            <div class="p-4 border-b border-gray-200 dark:border-white/5 flex justify-between items-center rounded-t-2xl">
+                <h3 id="hintModalTitle" class="text-lg font-bold text-gray-900 dark:text-white">Информация</h3>
+                <button onclick="closeHintModal()" class="text-gray-400 hover:text-gray-600 dark:hover:text-white transition p-1">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
+                </button>
+            </div>
+            <div id="hintModalContent" class="p-4 text-sm text-gray-700 dark:text-gray-300">
+                </div>
+        </div>
+    </div>
     <script src="/static/js/common.js"></script>
     <script src="/static/js/dashboard.js"></script>
 </body>
