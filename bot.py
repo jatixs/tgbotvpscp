@@ -222,7 +222,7 @@ async def shutdown(dispatcher: Dispatcher, bot_instance: Bot, web_runner=None):
     logging.info("Shutdown signal received.")
     if web_runner:
         await web_runner.cleanup()
-    
+
     # ОТМЕНЯЕМ МОНИТОР СЕРВЕРА
     await server.cleanup_server()
 
