@@ -59,7 +59,7 @@ async def selftest_handler(message: types.Message):
 
         uptime_str = format_uptime(uptime_sec, lang)
 
-        # --- [ИЗМЕНЕНИЕ] Проверка доступности Интернета (HTTP/S) ---
+        # Проверка доступности Интернета (HTTP/S)
         conn_proc = await asyncio.create_subprocess_shell(
             "curl -I -s --max-time 3 https://www.google.com/", # -I: HEAD request, -s: silent
             stdout=asyncio.subprocess.PIPE, 
@@ -67,7 +67,6 @@ async def selftest_handler(message: types.Message):
         )
         c_out, c_err = await conn_proc.communicate()
         
-        # Проверяем, что curl успешно завершился И получил ответ (статус-лайн)
         conn_ok = conn_proc.returncode == 0 and b'HTTP/' in c_out.upper()
         
         inet_status = _(
@@ -75,7 +74,6 @@ async def selftest_handler(message: types.Message):
             lang) if conn_ok else _(
             "selftest_inet_fail",
             lang)
-        # --------------------------------------------------------------------
 
         # Ping check (async subprocess - только для метрики задержки)
         ping_proc = await asyncio.create_subprocess_shell("ping -c 1 -W 1 8.8.8.8", stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
@@ -133,8 +131,33 @@ async def selftest_handler(message: types.Message):
                     u = escape_html(match.group(1))
                     ip = escape_html(match.group(2))
                     fl = await get_country_flag(ip)
+                    
+                    # --- [ИСПРАВЛЕНИЕ] Логика парсинга даты/времени из sshlog.py ---
+                    tz = get_server_timezone_label()
+                    dt = None
+                    
+                    match_iso = re.search(
+                        r"(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})", line)
+                    match_sys = re.search(
+                        r"(\w{3}\s+\d{1,2}\s+\d{2}:\d{2}:\d{2})", line)
+
+                    try:
+                        if match_iso:
+                            dt = datetime.strptime(
+                                match_iso.group(1), "%Y-%m-%dT%H:%M:%S")
+                        elif match_sys:
+                            dt = datetime.strptime(
+                                match_sys.group(1), "%b %d %H:%M:%S")
+                            dt = dt.replace(year=datetime.now().year)
+                    except BaseException:
+                        pass # Если парсинг не удался, dt останется None
+                    
+                    time_str = dt.strftime('%H:%M:%S') if dt else "?"
+                    date_str = dt.strftime('%d.%m.%Y') if dt else "?"
+                    # --- КОНЕЦ ИСПРАВЛЕНИЯ ---
+                    
                     ssh_info = ssh_header + \
-                        _("selftest_ssh_entry", lang, user=u, flag=fl, ip=ip, time="", tz="", date="")
+                        _("selftest_ssh_entry", lang, user=u, flag=fl, ip=ip, time=time_str, tz=tz, date=date_str)
                 else:
                     ssh_info = ssh_header + _("selftest_ssh_parse_fail", lang)
             else:
