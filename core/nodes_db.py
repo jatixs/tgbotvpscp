@@ -8,9 +8,10 @@ from .config import CONFIG_DIR
 
 # Путь к файлу базы данных
 DB_PATH = os.path.join(CONFIG_DIR, "nodes.db")
+LEGACY_JSON_PATH = os.path.join(CONFIG_DIR, "nodes.json")
 
 async def init_db():
-    """Инициализация таблицы в SQLite."""
+    """Инициализация таблицы и миграция старых данных."""
     async with aiosqlite.connect(DB_PATH) as db:
         await db.execute("""
             CREATE TABLE IF NOT EXISTS nodes (
@@ -26,10 +27,58 @@ async def init_db():
             )
         """)
         await db.commit()
+    
     logging.info(f"Database initialized at {DB_PATH}")
+    await _migrate_from_json_if_needed()
+
+async def _migrate_from_json_if_needed():
+    """Переносит данные из nodes.json в SQLite, если json существует."""
+    if not os.path.exists(LEGACY_JSON_PATH):
+        return
+
+    logging.info("Found legacy nodes.json. Starting migration to SQLite...")
+    try:
+        with open(LEGACY_JSON_PATH, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+        
+        if not data:
+            logging.info("nodes.json is empty. Skipping.")
+            return
+
+        async with aiosqlite.connect(DB_PATH) as db:
+            count = 0
+            for token, node in data.items():
+                # Проверяем, нет ли уже такой ноды (на всякий случай)
+                cursor = await db.execute("SELECT 1 FROM nodes WHERE token = ?", (token,))
+                if await cursor.fetchone():
+                    continue
+                
+                await db.execute(
+                    "INSERT INTO nodes (token, name, created_at, last_seen, ip, stats, history, tasks, extra_state) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    (
+                        token,
+                        node.get("name", "Unknown"),
+                        node.get("created_at", time.time()),
+                        node.get("last_seen", 0),
+                        node.get("ip", "Unknown"),
+                        json.dumps(node.get("stats", {})),
+                        json.dumps(node.get("history", [])),
+                        json.dumps(node.get("tasks", [])),
+                        "{}" # extra_state чистый
+                    )
+                )
+                count += 1
+            await db.commit()
+        
+        # Переименовываем старый файл, чтобы не мигрировать повторно
+        os.rename(LEGACY_JSON_PATH, LEGACY_JSON_PATH + ".bak")
+        logging.info(f"Migration successful! Imported {count} nodes. Legacy file renamed to .bak")
+        
+    except Exception as e:
+        logging.error(f"CRITICAL: Migration failed: {e}", exc_info=True)
 
 def _deserialize_node(row):
-    """Собирает объект ноды из строки БД, объединяя основные поля и extra_state."""
+    """Собирает объект ноды из строки БД."""
     base = {
         "token": row['token'],
         "name": row['name'],
@@ -40,12 +89,10 @@ def _deserialize_node(row):
         "history": json.loads(row['history']) if row['history'] else [],
         "tasks": json.loads(row['tasks']) if row['tasks'] else []
     }
-    # extra_state хранит временные флаги вроде is_restarting, alerts и т.д.
     extra = json.loads(row['extra_state']) if row['extra_state'] else {}
     return {**base, **extra}
 
 async def get_all_nodes():
-    """Возвращает словарь всех нод."""
     nodes = {}
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
@@ -55,7 +102,6 @@ async def get_all_nodes():
     return nodes
 
 async def get_node_by_token(token: str):
-    """Получает одну ноду по токену."""
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
         async with db.execute("SELECT * FROM nodes WHERE token = ?", (token,)) as cursor:
@@ -65,7 +111,6 @@ async def get_node_by_token(token: str):
     return None
 
 async def create_node(name: str) -> str:
-    """Создает новую ноду и возвращает токен."""
     token = secrets.token_hex(16)
     now = time.time()
     async with aiosqlite.connect(DB_PATH) as db:
@@ -78,15 +123,12 @@ async def create_node(name: str) -> str:
     return token
 
 async def delete_node(token: str):
-    """Удаляет ноду."""
     async with aiosqlite.connect(DB_PATH) as db:
         await db.execute("DELETE FROM nodes WHERE token = ?", (token,))
         await db.commit()
     logging.info(f"Node deleted: {token[:8]}...")
 
 async def update_node_heartbeat(token: str, ip: str, stats: dict):
-    """Обновляет статус ноды при получении хартбита."""
-    # Сначала читаем историю, чтобы добавить точку
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
         async with db.execute("SELECT history FROM nodes WHERE token = ?", (token,)) as cursor:
@@ -102,7 +144,6 @@ async def update_node_heartbeat(token: str, ip: str, stats: dict):
         "tx": stats.get("net_tx", 0)
     }
     history.append(point)
-    # Ограничиваем историю последними 60 точками для экономии места
     if len(history) > 60:
         history = history[-60:]
     
@@ -114,7 +155,6 @@ async def update_node_heartbeat(token: str, ip: str, stats: dict):
         await db.commit()
 
 async def update_node_task(token: str, task: dict):
-    """Добавляет задачу в очередь ноды."""
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
         async with db.execute("SELECT tasks FROM nodes WHERE token = ?", (token,)) as cursor:
@@ -127,13 +167,11 @@ async def update_node_task(token: str, task: dict):
         await db.commit()
 
 async def clear_node_tasks(token: str):
-    """Очищает очередь задач ноды (после их отправки)."""
     async with aiosqlite.connect(DB_PATH) as db:
         await db.execute("UPDATE nodes SET tasks = '[]' WHERE token = ?", (token,))
         await db.commit()
 
 async def update_node_extra(token: str, key: str, value):
-    """Обновляет поле в JSON-столбце extra_state (для флагов и алертов)."""
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
         async with db.execute("SELECT extra_state FROM nodes WHERE token = ?", (token,)) as cursor:
