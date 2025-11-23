@@ -169,31 +169,31 @@ bash <(wget -qO- https://raw.githubusercontent.com/jatixs/tgbotvpscp/main/deploy
 
 ```
 /opt/tg-bot/
-├── bot.py            # Master (Start point)
-├── watchdog.py       # Alert System & Monitoring
-├── deploy.sh         # Universal Installer
-├── requirements.txt  # Dependencies (aiosqlite, aiohttp...)
-├── Dockerfile        # Docker build
+├── bot.py            # Точка входа (Master)
+├── watchdog.py       # Система оповещений и мониторинг
+├── deploy.sh         # Универсальный установщик
+├── requirements.txt  # Зависимости (aiosqlite, aiohttp...)
+├── Dockerfile        # Сборка Docker-образа
 ├── docker-compose.yml
-├── .env              # Config
+├── .env              # Конфигурация
 │
 ├── config/
-│   ├── nodes.db      # [NEW] SQLite Database
-│   ├── users.json    # Users config
+│   ├── nodes.db      # [NEW] База данных SQLite
+│   ├── users.json    # Конфиг пользователей
 │   └── ...
 │
-├── node/             # Client Side
-│   └── node.py       # Agent script
+├── node/             # Клиентская часть
+│   └── node.py       # Скрипт агента
 │
-├── core/             # Core Logic
-│   ├── server.py     # Async Web Server (aiohttp)
-│   ├── nodes_db.py   # [NEW] Async DB Manager
-│   ├── utils.py      # Async Utils
+├── core/             # Ядро бота
+│   ├── server.py     # Асинхронный Web-сервер (aiohttp)
+│   ├── nodes_db.py   # [NEW] Менеджер асинхронной БД
+│   ├── utils.py      # Асинхронные утилиты
 │   └── ...
 │
-├── modules/          # Features
-    ├── nodes.py      # Node Management
-    ├── speedtest.py  # Async Speedtest
+├── modules/          # Модули функций
+    ├── nodes.py      # Управление нодами
+    ├── speedtest.py  # Асинхронный Speedtest
     └── ...
 ```
 
@@ -215,6 +215,7 @@ bash <(wget -qO- https://raw.githubusercontent.com/jatixs/tgbotvpscp/main/deploy
 4.  **Регистрация:** Импортируйте в `bot.py` и добавьте `register_module()`.
 5.  **Перезапуск:** `sudo systemctl restart tg-bot`.
 
+**[Полноформатная инструкция](/custom_module.md)**.
 </details>
 
 -----

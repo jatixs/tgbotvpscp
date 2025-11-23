@@ -182,6 +182,7 @@ The agent will install as `tg-node` service and appear in your bot.
 4.  **Register:** Import in `bot.py` and call `register_module()`.
 5.  **Restart:** `sudo systemctl restart tg-bot`.
 
+**[Full-format instructions](/custom_module_en.md)**.
 </details>
 
 -----
