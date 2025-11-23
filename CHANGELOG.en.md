@@ -5,11 +5,35 @@
 <h1 align="center">📝 Telegram VPS Management Bot — Changelog</h1>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-v1.11.1-blue?style=flat-square" alt="Version 1.11.1"/>
-  <img src="https://img.shields.io/badge/build-43-purple?style=flat-square" alt="Build 43"/>
+  <img src="https://img.shields.io/badge/version-v1.12.0-blue?style=flat-square" alt="Version 1.12.0"/>
+  <img src="https://img.shields.io/badge/build-44-purple?style=flat-square" alt="Build 44"/>
   <img src="https://img.shields.io/badge/date-November%202025-green?style=flat-square" alt="Date November 2025"/>
   <img src="https://img.shields.io/badge/status-stable-green?style=flat-square" alt="Status Stable"/>
 </p>
+
+---
+## [1.12.0] - 2025-11-23
+
+### ⚡️ Architecture & Performance:
+
+* **SQLite Migration:**
+    * Completely abandoned JSON files (`nodes.json`) for data storage. Implemented **SQLite** database (via `aiosqlite`) for reliable storage of nodes, tasks, and metric history.
+    * Implemented **seamless migration**: upon the first launch, the bot will automatically transfer all existing nodes from JSON to the database.
+* **Async Core (AsyncIO):**
+    * Fully replaced the blocking `requests` library with asynchronous `aiohttp` throughout the project (`core/utils.py`, `speedtest`, `server`).
+    * Network delays (e.g., when fetching country flags or IPs) no longer block the bot and interface operations.
+
+### 🛡️ Security:
+
+* **Shell Injection Protection:**
+    * Implemented mandatory command argument escaping using `shlex.quote()` in `xray`, `speedtest`, and `nodes` modules. This eliminates the risk of arbitrary command execution via manipulation of container names or addresses.
+
+### 🔧 Fixed & Updated:
+
+* **Dependencies:** Added `aiosqlite` and `aiohttp` to `requirements.txt`.
+* **Speedtest:** The module has been rewritten to use `aiohttp` and secure subprocess calls.
+* **Web Server:** Updated application initialization to work with the asynchronous DB.
+---
 
 ## [1.11.1] - 2025-11-22
 

@@ -1,302 +1,280 @@
-import os
 import time
-import json
-import logging
-import platform
 import asyncio
-import requests
-import psutil
-import subprocess
-import threading
-import random
-from logging.handlers import RotatingFileHandler
+import logging
+from datetime import datetime
+from aiogram import F, Dispatcher, types, Bot
+from aiogram.types import KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.fsm.context import FSMContext
+from aiogram.fsm.state import State, StatesGroup
+from aiogram.filters import StateFilter
 
-AGENT_BASE_URL = os.environ.get("AGENT_BASE_URL", "http://localhost:8080")
-AGENT_TOKEN = os.environ.get("AGENT_TOKEN", "")
-NODE_UPDATE_INTERVAL = int(os.environ.get("NODE_UPDATE_INTERVAL", 5))
+from core.i18n import _, I18nFilter, get_user_lang
+from core import config
+from core.auth import is_allowed, send_access_denied_message
+from core.messaging import delete_previous_message, send_alert
+from core.shared_state import LAST_MESSAGE_IDS, NODE_TRAFFIC_MONITORS
+from core import nodes_db
+from core.keyboards import get_nodes_list_keyboard, get_node_management_keyboard, get_nodes_delete_keyboard, get_back_keyboard
 
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-LOG_DIR = os.path.join(BASE_DIR, "logs", "node")
-os.makedirs(LOG_DIR, exist_ok=True)
+BUTTON_KEY = "btn_nodes"
 
-log_file = os.path.join(LOG_DIR, "node.log")
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(levelname)s - %(message)s",
-    handlers=[
-        RotatingFileHandler(log_file, maxBytes=5 * 1024 * 1024, backupCount=2),
-        logging.StreamHandler()
-    ]
-)
+class AddNodeStates(StatesGroup):
+    waiting_for_name = State()
 
-RESULTS_QUEUE = []
-RESULTS_LOCK = threading.Lock()
+def get_button() -> KeyboardButton:
+    return KeyboardButton(text=_(BUTTON_KEY, config.DEFAULT_LANGUAGE))
 
+def register_handlers(dp: Dispatcher):
+    dp.message(I18nFilter(BUTTON_KEY))(nodes_handler)
+    dp.callback_query(F.data == "nodes_list_refresh")(cq_nodes_list_refresh)
+    dp.callback_query(F.data == "node_add_new")(cq_add_node_start)
+    dp.message(StateFilter(AddNodeStates.waiting_for_name))(process_node_name)
+    dp.callback_query(F.data == "node_delete_menu")(cq_node_delete_menu)
+    dp.callback_query(F.data.startswith("node_delete_confirm_"))(cq_node_delete_confirm)
+    dp.callback_query(F.data.startswith("node_select_"))(cq_node_select)
+    dp.callback_query(F.data.startswith("node_stop_traffic_"))(cq_node_stop_traffic)
+    dp.callback_query(F.data.startswith("node_cmd_"))(cq_node_command)
 
-def escape_html(text):
-    if text is None:
-        return ""
-    return str(text).replace(
-        '&',
-        '&amp;').replace(
-        '<',
-        '&lt;').replace(
-            '>',
-        '&gt;')
+def start_background_tasks(bot: Bot) -> list[asyncio.Task]:
+    task_monitor = asyncio.create_task(nodes_monitor(bot), name="NodesMonitor")
+    task_traffic = asyncio.create_task(node_traffic_scheduler(bot), name="NodesTrafficScheduler")
+    return [task_monitor, task_traffic]
 
-
-def get_uptime_str():
-    uptime_seconds = time.time() - psutil.boot_time()
-    days = int(uptime_seconds // (24 * 3600))
-    hours = int((uptime_seconds % (24 * 3600)) // 3600)
-    minutes = int((uptime_seconds % 3600) // 60)
-    return f"{days}d {hours}h {minutes}m"
-
-
-def format_bytes(size):
-    power = 2**10
-    n = 0
-    power_labels = {0: '', 1: 'K', 2: 'M', 3: 'G', 4: 'T'}
-    while size > power:
-        size /= power
-        n += 1
-    return f"{size:.2f} {power_labels[n]}B"
-
-
-def cmd_selftest():
-    cpu = psutil.cpu_percent(interval=1)
-    mem = psutil.virtual_memory().percent
-    disk = psutil.disk_usage('/').percent
-    uptime = get_uptime_str()
-    try:
-        ip = requests.get("https://api.ipify.org", timeout=2).text
-    except BaseException:
-        ip = "Unknown"
-
-    return (
-        f"🛠 <b>Node Status:</b>\n\n"
-        f"📊 CPU: <b>{cpu:.1f}%</b>\n"
-        f"💾 RAM: <b>{mem:.1f}%</b>\n"
-        f"💽 Disk: <b>{disk:.1f}%</b>\n"
-        f"⏱ Uptime: <b>{uptime}</b>\n"
-        f"🌐 IP: <code>{ip}</code>"
-    )
-
-
-def cmd_top():
-    try:
-        cmd = "ps aux --sort=-%cpu | head -n 11"
-        # nosec B602: cmd is hardcoded string, safe here
-        result = subprocess.check_output(
-            cmd, shell=True).decode('utf-8')  # nosec
-        if len(result) > 3000:
-            result = result[:3000] + "\n..."
-        safe_result = escape_html(result)
-        return f"🔥 <b>Top Processes:</b>\n<pre>{safe_result}</pre>"
-    except Exception as e:
-        return f"Error running top: {escape_html(str(e))}"
-
-
-def cmd_traffic():
-    try:
-        c1 = psutil.net_io_counters()
-        time.sleep(1)
-        c2 = psutil.net_io_counters()
-
-        rx_speed = c2.bytes_recv - c1.bytes_recv
-        tx_speed = c2.bytes_sent - c1.bytes_sent
-
-        return (
-            f"📡 <b>Network Traffic:</b>\n"
-            f"⬇️ Total RX: {format_bytes(c2.bytes_recv)}\n"
-            f"⬆️ Total TX: {format_bytes(c2.bytes_sent)}\n\n"
-            f"⚡️ <b>Speed (1 sec):</b>\n"
-            f"⬇️ {format_bytes(rx_speed)}/s\n"
-            f"⬆️ {format_bytes(tx_speed)}/s"
-        )
-    except Exception as e:
-        return f"Error measuring traffic: {escape_html(str(e))}"
-
-
-def run_iperf_cmd(server, port, direction="dl"):
-    try:
-        base_cmd = f"iperf3 -c {server} -p {port} -t 5 -4 --json"
-
-        if direction == "dl":
-            cmd = f"{base_cmd} -R"
+async def _prepare_nodes_data():
+    result = {}
+    now = time.time()
+    nodes = await nodes_db.get_all_nodes()
+    
+    for token, node in nodes.items():
+        last_seen = node.get("last_seen", 0)
+        is_restarting = node.get("is_restarting", False)
+        if is_restarting:
+            icon = "🔵"
+        elif now - last_seen < config.NODE_OFFLINE_TIMEOUT:
+            icon = "🟢"
         else:
-            cmd = base_cmd
+            icon = "🔴"
+        result[token] = {
+            "name": node.get("name", "Unknown"),
+            "status_icon": icon
+        }
+    return result
 
-        # nosec B602: server/port come from hardcoded list in cmd_speedtest
-        res = subprocess.run(
-            cmd,
-            shell=True,
-            capture_output=True,
-            text=True)  # nosec
+async def nodes_handler(message: types.Message):
+    user_id = message.from_user.id
+    lang = get_user_lang(user_id)
+    command = "nodes"
+    if not is_allowed(user_id, command):
+        await send_access_denied_message(message.bot, user_id, message.chat.id, command)
+        return
+    await delete_previous_message(user_id, command, message.chat.id, message.bot)
+    
+    prepared_nodes = await _prepare_nodes_data()
+    keyboard = get_nodes_list_keyboard(prepared_nodes, lang)
+    sent_message = await message.answer(_("nodes_menu_header", lang), reply_markup=keyboard, parse_mode="HTML")
+    LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = sent_message.message_id
 
-        if res.returncode == 0:
-            try:
-                json_data = json.loads(res.stdout)
-                key = 'sum_received' if direction == 'dl' else 'sum_sent'
-                if 'end' in json_data:
-                    end_data = json_data['end']
-                    if key in end_data:
-                        bps = end_data[key]['bits_per_second']
-                    elif 'sum_sent' in end_data:
-                        bps = end_data['sum_sent']['bits_per_second']
-                    else:
-                        return None, "JSON Key Error"
-
-                    return bps / 1_000_000, None
-            except json.JSONDecodeError:
-                return None, "JSON Decode Error"
-        else:
-            err_msg = res.stderr.strip().split(
-                '\n')[-1] if res.stderr else "Unknown Error"
-            return None, err_msg
-
-    except Exception as e:
-        return None, str(e)
-
-    return None, "Unknown"
-
-
-def cmd_speedtest():
-    servers = [
-        ("ping.online.net", "5209"),
-        ("bouygues.testdebit.info", "5209"),
-        ("speedtest.uztelecom.uz", "5209")
-    ]
-
-    logging.info("Starting speedtest sequence...")
-
-    report = []
-    success = False
-
-    for server, port in servers:
-        report.append(f"🔄 Trying <b>{server}</b>...")
-
-        dl_val, dl_err = run_iperf_cmd(server, port, "dl")
-        if dl_val is None:
-            report.append(f"   ⬇️ DL Fail: {escape_html(dl_err)}")
-            continue
-
-        ul_val, ul_err = run_iperf_cmd(server, port, "ul")
-        if ul_val is None:
-            report.append(f"   ⬇️ DL: {dl_val:.2f} Mbps")
-            report.append(f"   ⬆️ UL Fail: {escape_html(ul_err)}")
-            continue
-
-        return (
-            f"🚀 <b>Speedtest Results:</b>\n"
-            f"Server: {server}\n\n"
-            f"⬇️ <b>Download:</b> {dl_val:.2f} Mbps\n"
-            f"⬆️ <b>Upload:</b> {ul_val:.2f} Mbps"
-        )
-
-    final_report = "\n".join(report)
-    return f"⚠️ <b>Speedtest Failed on all servers:</b>\n<pre>{final_report}</pre>"
-
-
-def run_command_thread(cmd, user_id):
-    res = ""
+async def cq_nodes_list_refresh(callback: types.CallbackQuery):
+    user_id = callback.from_user.id
+    lang = get_user_lang(user_id)
+    prepared_nodes = await _prepare_nodes_data()
+    keyboard = get_nodes_list_keyboard(prepared_nodes, lang)
     try:
-        if cmd == "selftest":
-            res = cmd_selftest()
-        elif cmd == "uptime":
-            res = f"⏱ <b>Uptime:</b> {get_uptime_str()}"
-        elif cmd == "top":
-            res = cmd_top()
-        elif cmd == "traffic":
-            res = cmd_traffic()
-        elif cmd == "speedtest":
-            res = cmd_speedtest()
-        elif cmd == "reboot":
-            res = "🔄 <b>Node is rebooting...</b>"
-            with RESULTS_LOCK:
-                RESULTS_QUEUE.append(
-                    {"user_id": user_id, "command": cmd, "result": res})
-            send_heartbeat()
-            os.system("(sleep 2 && /sbin/reboot) &")
-            return
-        else:
-            res = f"⚠️ Unknown command: {escape_html(cmd)}"
-    except Exception as e:
-        res = f"⚠️ Critical Error executing {cmd}: {escape_html(str(e))}"
+        await callback.message.edit_text(_("nodes_menu_header", lang), reply_markup=keyboard, parse_mode="HTML")
+    except Exception: pass
+    await callback.answer()
 
-    if res:
-        with RESULTS_LOCK:
-            RESULTS_QUEUE.append(
-                {"user_id": user_id, "command": cmd, "result": res})
-
-
-def get_stats_short():
-    net = psutil.net_io_counters()
-    return {
-        "cpu": psutil.cpu_percent(interval=None),
-        "ram": psutil.virtual_memory().percent,
-        "disk": psutil.disk_usage('/').percent,
-        "uptime": get_uptime_str(),
-        "net_rx": net.bytes_recv,
-        "net_tx": net.bytes_sent
-    }
-
-
-def send_heartbeat():
-    global RESULTS_QUEUE
-    url = f"{AGENT_BASE_URL}/api/heartbeat"
-    stats = get_stats_short()
-
-    results_to_send = []
-    with RESULTS_LOCK:
-        if RESULTS_QUEUE:
-            results_to_send = list(RESULTS_QUEUE)
-            RESULTS_QUEUE.clear()
-
-    payload = {
-        "token": AGENT_TOKEN,
-        "stats": stats,
-        "results": results_to_send
-    }
-
-    try:
-        response = requests.post(url, json=payload, timeout=10)
-        if response.status_code == 200:
-            data = response.json()
-            tasks = data.get("tasks", [])
-            for task in tasks:
-                logging.info(f"Task: {task['command']}")
-                threading.Thread(
-                    target=run_command_thread, args=(
-                        task['command'], task['user_id'])).start()
-        else:
-            logging.error(f"Server error: {response.status_code}")
-            if results_to_send:
-                with RESULTS_LOCK:
-                    RESULTS_QUEUE[0:0] = results_to_send
-
-    except Exception as e:
-        logging.error(f"Heartbeat error: {e}")
-        if results_to_send:
-            with RESULTS_LOCK:
-                RESULTS_QUEUE[0:0] = results_to_send
-
-
-def main():
-    if not AGENT_TOKEN:
-        logging.critical("AGENT_TOKEN missing!")
+async def cq_node_select(callback: types.CallbackQuery):
+    user_id = callback.from_user.id
+    lang = get_user_lang(user_id)
+    token = callback.data.split("_", 2)[2]
+    
+    node = await nodes_db.get_node_by_token(token)
+    if not node:
+        await callback.answer("Node not found", show_alert=True)
         return
 
-    logging.info(f"Node started. Agent: {AGENT_BASE_URL}")
-    psutil.cpu_percent(interval=None)
+    now = time.time()
+    last_seen = node.get("last_seen", 0)
+    is_restarting = node.get("is_restarting", False)
 
+    if is_restarting:
+        await callback.answer(_("node_restarting_alert", lang, name=node.get("name")), show_alert=True)
+        return
+    if now - last_seen >= config.NODE_OFFLINE_TIMEOUT:
+        stats = node.get("stats", {})
+        fmt_time = datetime.fromtimestamp(last_seen).strftime('%Y-%m-%d %H:%M:%S') if last_seen > 0 else "Never"
+        text = _("node_details_offline", lang, name=node.get("name"), last_seen=fmt_time, ip=node.get("ip", "?"), cpu=stats.get("cpu", "?"), ram=stats.get("ram", "?"), disk=stats.get("disk", "?"))
+        await callback.message.edit_text(text, reply_markup=get_back_keyboard(lang, "nodes_list_refresh"), parse_mode="HTML")
+        return
+
+    stats = node.get("stats", {})
+    text = _("node_management_menu", lang, name=node.get("name"), ip=node.get("ip", "?"), uptime=stats.get("uptime", "?"))
+    keyboard = get_node_management_keyboard(token, lang)
+    await callback.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
+
+async def cq_add_node_start(callback: types.CallbackQuery, state: FSMContext):
+    lang = get_user_lang(callback.from_user.id)
+    await callback.message.edit_text("Введите имя новой ноды:", reply_markup=get_back_keyboard(lang, "nodes_list_refresh"))
+    await state.set_state(AddNodeStates.waiting_for_name)
+    await callback.answer()
+
+async def process_node_name(message: types.Message, state: FSMContext):
+    lang = get_user_lang(message.from_user.id)
+    name = message.text.strip()
+    token = await nodes_db.create_node(name)
+    await message.answer(_("node_add_success_token", lang, name=name, token=token), parse_mode="HTML")
+    await state.clear()
+
+async def cq_node_delete_menu(callback: types.CallbackQuery):
+    lang = get_user_lang(callback.from_user.id)
+    nodes_data = await _prepare_nodes_data()
+    keyboard = get_nodes_delete_keyboard(nodes_data, lang)
+    await callback.message.edit_text(_("node_delete_select", lang), reply_markup=keyboard, parse_mode="HTML")
+    await callback.answer()
+
+async def cq_node_delete_confirm(callback: types.CallbackQuery):
+    lang = get_user_lang(callback.from_user.id)
+    token = callback.data.split("_", 3)[3]
+    await nodes_db.delete_node(token)
+    await callback.answer(_("node_deleted", lang, name="Node"), show_alert=False)
+    await cq_node_delete_menu(callback)
+
+async def cq_node_command(callback: types.CallbackQuery):
+    user_id = callback.from_user.id
+    lang = get_user_lang(user_id)
+    data = callback.data[9:]
+    token = data[:32]
+    cmd = data[33:]
+
+    node = await nodes_db.get_node_by_token(token)
+    if not node:
+        await callback.answer("Error: Node not found", show_alert=True)
+        return
+    
+    if cmd == "reboot":
+        await nodes_db.update_node_extra(token, "is_restarting", True)
+
+    if cmd == "traffic":
+        stop_kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text=_("btn_stop_traffic", lang), callback_data=f"node_stop_traffic_{token}")]])
+        
+        if user_id in NODE_TRAFFIC_MONITORS:
+            if NODE_TRAFFIC_MONITORS[user_id]["token"] != token:
+                del NODE_TRAFFIC_MONITORS[user_id]
+
+        sent_msg = await callback.message.answer(
+            _("traffic_start", lang, interval=config.TRAFFIC_INTERVAL),
+            reply_markup=stop_kb,
+            parse_mode="HTML"
+        )
+        NODE_TRAFFIC_MONITORS[user_id] = {"token": token, "message_id": sent_msg.message_id, "last_update": 0}
+        await nodes_db.update_node_task(token, {"command": cmd, "user_id": user_id})
+        await callback.answer()
+        return
+
+    await nodes_db.update_node_task(token, {"command": cmd, "user_id": user_id})
+    
+    cmd_map = {"selftest": "btn_selftest", "uptime": "btn_uptime", "traffic": "btn_traffic", "top": "btn_top", "speedtest": "btn_speedtest", "reboot": "btn_reboot"}
+    cmd_name = _(cmd_map.get(cmd, cmd), lang)
+    await callback.answer(_("node_cmd_sent", lang, cmd=cmd_name, name=node.get("name")), show_alert=False)
+
+async def cq_node_stop_traffic(callback: types.CallbackQuery):
+    user_id = callback.from_user.id
+    lang = get_user_lang(user_id)
+    token = callback.data.replace("node_stop_traffic_", "")
+    node = await nodes_db.get_node_by_token(token)
+    node_name = node.get("name", "Unknown") if node else "Unknown"
+
+    if user_id in NODE_TRAFFIC_MONITORS:
+        del NODE_TRAFFIC_MONITORS[user_id]
+        try:
+            await callback.message.delete()
+            if node:
+                stats = node.get("stats", {})
+                text = _("node_management_menu", lang, name=node.get("name"), ip=node.get("ip", "?"), uptime=stats.get("uptime", "?"))
+                keyboard = get_node_management_keyboard(token, lang)
+                await callback.message.answer(text, reply_markup=keyboard, parse_mode="HTML")
+        except Exception: pass
+
+    await callback.answer(_("node_traffic_stopped_alert", lang, name=node_name), show_alert=False)
+
+async def node_traffic_scheduler(bot: Bot):
     while True:
-        send_heartbeat()
-        time.sleep(NODE_UPDATE_INTERVAL)
+        try:
+            await asyncio.sleep(config.TRAFFIC_INTERVAL)
+            if not NODE_TRAFFIC_MONITORS: continue
+            
+            for user_id, monitor_data in list(NODE_TRAFFIC_MONITORS.items()):
+                token = monitor_data.get("token")
+                node = await nodes_db.get_node_by_token(token)
+                if not node:
+                    if user_id in NODE_TRAFFIC_MONITORS: del NODE_TRAFFIC_MONITORS[user_id]
+                    continue
+                await nodes_db.update_node_task(token, {"command": "traffic", "user_id": user_id})
+        except Exception as e:
+            logging.error(f"Error in node_traffic_scheduler: {e}")
+            await asyncio.sleep(5)
 
+async def nodes_monitor(bot: Bot):
+    logging.info("Nodes Monitor started.")
+    await asyncio.sleep(10)
+    while True:
+        try:
+            now = time.time()
+            nodes = await nodes_db.get_all_nodes()
+            
+            for token, node in nodes.items():
+                name = node.get("name", "Unknown")
+                last_seen = node.get("last_seen", 0)
+                is_restarting = node.get("is_restarting", False)
+                
+                alerts = node.get("alerts", {
+                    "cpu": {"active": False, "last_time": 0},
+                    "ram": {"active": False, "last_time": 0},
+                    "disk": {"active": False, "last_time": 0}
+                })
+                is_offline_alert_sent = node.get("is_offline_alert_sent", False)
 
-if __name__ == "__main__":
-    try:
-        main()
-    except KeyboardInterrupt:
-        pass
+                is_dead = (now - last_seen >= config.NODE_OFFLINE_TIMEOUT) and (last_seen > 0)
+
+                if is_dead and not is_offline_alert_sent and not is_restarting:
+                    await send_alert(bot, lambda lang: _("alert_node_down", lang, name=name, last_seen=datetime.fromtimestamp(last_seen).strftime('%H:%M:%S')), "downtime")
+                    await nodes_db.update_node_extra(token, "is_offline_alert_sent", True)
+                
+                elif not is_dead and is_offline_alert_sent:
+                    await send_alert(bot, lambda lang: _("alert_node_up", lang, name=name), "downtime")
+                    await nodes_db.update_node_extra(token, "is_offline_alert_sent", False)
+
+                if not is_dead and is_restarting:
+                    await nodes_db.update_node_extra(token, "is_restarting", False)
+
+                if not is_dead and last_seen > 0:
+                    stats = node.get("stats", {})
+                    
+                    async def check(metric, current, threshold, key_high, key_norm):
+                        state = alerts.get(metric, {"active": False, "last_time": 0})
+                        updated = False
+                        if current >= threshold:
+                            if not state["active"] or (now - state["last_time"] > config.RESOURCE_ALERT_COOLDOWN):
+                                await send_alert(bot, lambda lang: _(key_high, lang, name=name, usage=current, threshold=threshold), "resources")
+                                state["active"] = True
+                                state["last_time"] = now
+                                updated = True
+                        elif current < threshold and state["active"]:
+                            await send_alert(bot, lambda lang: _(key_norm, lang, name=name, usage=current), "resources")
+                            state["active"] = False
+                            state["last_time"] = 0
+                            updated = True
+                        alerts[metric] = state
+                        return updated
+
+                    u1 = await check("cpu", stats.get("cpu", 0), config.CPU_THRESHOLD, "alert_node_cpu_high", "alert_node_cpu_normal")
+                    u2 = await check("ram", stats.get("ram", 0), config.RAM_THRESHOLD, "alert_node_ram_high", "alert_node_ram_normal")
+                    u3 = await check("disk", stats.get("disk", 0), config.DISK_THRESHOLD, "alert_node_disk_high", "alert_node_disk_normal")
+                    
+                    if u1 or u2 or u3:
+                        await nodes_db.update_node_extra(token, "alerts", alerts)
+
+        except Exception as e:
+            logging.error(f"Error in nodes_monitor: {e}", exc_info=True)
+        await asyncio.sleep(20)
