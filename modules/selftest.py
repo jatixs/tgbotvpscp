@@ -61,7 +61,7 @@ async def selftest_handler(message: types.Message):
 
         # Ping check (async subprocess)
         ping_proc = await asyncio.create_subprocess_shell("ping -c 1 -W 1 8.8.8.8", stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
-        p_out, _ = await ping_proc.communicate()
+        p_out, stderr_dummy = await ping_proc.communicate()
         p_match = re.search(r"time=([\d\.]+) ms", p_out.decode())
         ping_time = p_match.group(1) if p_match else "N/A"
         inet_status = _(
@@ -72,7 +72,7 @@ async def selftest_handler(message: types.Message):
 
         # IP check (async subprocess)
         ip_proc = await asyncio.create_subprocess_shell("curl -4 -s --max-time 2 ifconfig.me", stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
-        ip_out, _ = await ip_proc.communicate()
+        ip_out, stderr_dummy = await ip_proc.communicate()
         ext_ip = ip_out.decode().strip() or _("selftest_ip_fail", lang)
 
         ssh_info = ""
@@ -92,7 +92,7 @@ async def selftest_handler(message: types.Message):
                     lang,
                     source=os.path.basename(log_file))
                 proc = await asyncio.create_subprocess_shell(f"tail -n 50 {log_file}", stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
-                l_out, _ = await proc.communicate()
+                l_out, stderr_dummy = await proc.communicate()
                 for l in reversed(l_out.decode('utf-8', 'ignore').split('\n')):
                     if "Accepted" in l and "sshd" in l:
                         line = l.strip()
@@ -100,7 +100,7 @@ async def selftest_handler(message: types.Message):
             else:
                 src = _("selftest_ssh_source_journal", lang)
                 proc = await asyncio.create_subprocess_shell("journalctl -u ssh --no-pager -n 50", stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
-                j_out, _ = await proc.communicate()
+                j_out, stderr_dummy = await proc.communicate()
                 for l in reversed(j_out.decode('utf-8', 'ignore').split('\n')):
                     if "Accepted" in l:
                         line = l.strip()
@@ -111,15 +111,10 @@ async def selftest_handler(message: types.Message):
             if line:
                 match = re.search(
                     r"Accepted\s+(?:\S+)\s+for\s+(\S+)\s+from\s+(\S+)", line)
-                # Пытаемся распарсить дату (упрощенно)
-                date_str = "Unknown"
-                time_str = "Unknown"
-                # ... (тут можно добавить парсинг даты, как в sshlog.py, но для краткости опустим сложную логику дат, оставим данные)
-
+                
                 if match:
                     u = escape_html(match.group(1))
                     ip = escape_html(match.group(2))
-                    # ИСПРАВЛЕНО: await
                     fl = await get_country_flag(ip)
                     ssh_info = ssh_header + \
                         _("selftest_ssh_entry", lang, user=u, flag=fl, ip=ip, time="", tz="", date="")

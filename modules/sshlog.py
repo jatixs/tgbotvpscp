@@ -53,14 +53,12 @@ async def sshlog_handler(message: types.Message):
                 lang,
                 source=os.path.basename(log_file))
             proc = await asyncio.create_subprocess_shell(f"tail -n 200 {log_file}", stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
-            out, _ = await proc.communicate()
+            out, stderr = await proc.communicate()
             lines = out.decode('utf-8', 'ignore').split('\n')
         else:
             src_txt = _("selftest_ssh_source_journal", lang)
-            # Using docker-compatible call logic if needed, but here
-            # simplifying for direct call if available
             proc = await asyncio.create_subprocess_shell("journalctl -u ssh -n 100 --no-pager -o short-precise", stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
-            out, _ = await proc.communicate()
+            out, stderr = await proc.communicate()
             lines = out.decode('utf-8', 'ignore').split('\n')
 
         entries = []
@@ -73,7 +71,6 @@ async def sshlog_handler(message: types.Message):
             if "sshd" not in line:
                 continue
 
-            # Date parsing (simplified regex for ISO and syslog)
             dt = None
             match_iso = re.search(
                 r"(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})", line)
@@ -103,7 +100,6 @@ async def sshlog_handler(message: types.Message):
             if m:
                 key = "sshlog_entry_success"
                 u, ip = m.groups()
-                # ИСПРАВЛЕНО: await
                 fl = await get_country_flag(ip)
                 data = {
                     "user": escape_html(u),

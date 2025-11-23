@@ -64,7 +64,6 @@ async def updatexray_handler(message: types.Message, state: FSMContext):
         update_cmd = ""
         version_cmd = ""
 
-        # Экранируем имя контейнера для защиты от Shell Injection
         safe_container = shlex.quote(container_name)
 
         if client == "amnezia":
@@ -96,7 +95,6 @@ async def updatexray_handler(message: types.Message, state: FSMContext):
                 "unzip -o Xray-linux-64.zip xray && "
                 "rm Xray-linux-64.zip")
             env_path = "/opt/marzban/.env"
-            # Для .env файла предполагаем, что пути стандартные
             update_env = f"if [ -f {env_path} ]; then if ! grep -q '^XRAY_EXECUTABLE_PATH=' {env_path}; then echo 'XRAY_EXECUTABLE_PATH=/var/lib/marzban/xray-core/xray' >> {env_path}; fi; fi"
 
             restart_cmd = f"docker restart {safe_container}"
@@ -118,7 +116,8 @@ async def updatexray_handler(message: types.Message, state: FSMContext):
                               error=escape_html(error_output)))
 
         process_version = await asyncio.create_subprocess_shell(version_cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
-        stdout_version, _ = await process_version.communicate()
+        # ИСПРАВЛЕНО ЗДЕСЬ: _ -> stderr_dummy
+        stdout_version, stderr_dummy = await process_version.communicate()
         version_output = stdout_version.decode('utf-8', 'ignore')
         version_match = re.search(r'Xray\s+([\d\.]+)', version_output)
         if version_match:
