@@ -115,7 +115,7 @@ async def selftest_handler(message: types.Message):
             if line:
                 match = re.search(
                     r"Accepted\s+(?:\S+)\s+for\s+(\S+)\s+from\s+(\S+)", line)
-                
+
                 if match:
                     u = escape_html(match.group(1))
                     ip = escape_html(match.group(2))
