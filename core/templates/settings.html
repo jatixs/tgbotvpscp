@@ -77,7 +77,17 @@
                     <div class="space-y-5">
                         <div>
                             <div class="flex justify-between text-sm mb-1">
-                                <span class="text-gray-700 dark:text-gray-300">{web_cpu_threshold}</span>
+                                <div class="flex items-center gap-1">
+                                    <span class="text-gray-700 dark:text-gray-300">{web_cpu_threshold}</span>
+                                    <div class="relative group">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 text-gray-400 cursor-help" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                        </svg>
+                                        <div class="absolute z-50 hidden group-hover:block w-64 p-3 bg-gray-700/95 dark:bg-gray-800/95 text-xs text-white rounded-lg shadow-xl -top-2 left-full ml-2 backdrop-blur-sm transition duration-150">
+                                            {web_hint_cpu_threshold}
+                                        </div>
+                                    </div>
+                                </div>
                                 <span class="font-mono text-blue-600 dark:text-blue-400 font-bold" id="val_cpu_display">{val_cpu}%</span>
                             </div>
                             <input type="range" id="conf_cpu" min="50" max="99" value="{val_cpu}" class="w-full h-2 bg-gray-200 dark:bg-gray-700 rounded-lg appearance-none cursor-pointer accent-blue-500" oninput="document.getElementById('val_cpu_display').innerText = this.value + '%'">
@@ -85,7 +95,17 @@
                         
                         <div>
                             <div class="flex justify-between text-sm mb-1">
-                                <span class="text-gray-700 dark:text-gray-300">{web_ram_threshold}</span>
+                                <div class="flex items-center gap-1">
+                                    <span class="text-gray-700 dark:text-gray-300">{web_ram_threshold}</span>
+                                    <div class="relative group">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 text-gray-400 cursor-help" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                        </svg>
+                                        <div class="absolute z-50 hidden group-hover:block w-64 p-3 bg-gray-700/95 dark:bg-gray-800/95 text-xs text-white rounded-lg shadow-xl -top-2 left-full ml-2 backdrop-blur-sm transition duration-150">
+                                            {web_hint_ram_threshold}
+                                        </div>
+                                    </div>
+                                </div>
                                 <span class="font-mono text-purple-600 dark:text-purple-400 font-bold" id="val_ram_display">{val_ram}%</span>
                             </div>
                             <input type="range" id="conf_ram" min="50" max="99" value="{val_ram}" class="w-full h-2 bg-gray-200 dark:bg-gray-700 rounded-lg appearance-none cursor-pointer accent-purple-500" oninput="document.getElementById('val_ram_display').innerText = this.value + '%'">
@@ -93,7 +113,17 @@
 
                         <div>
                             <div class="flex justify-between text-sm mb-1">
-                                <span class="text-gray-700 dark:text-gray-300">{web_disk_threshold}</span>
+                                <div class="flex items-center gap-1">
+                                    <span class="text-gray-700 dark:text-gray-300">{web_disk_threshold}</span>
+                                    <div class="relative group">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 text-gray-400 cursor-help" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                        </svg>
+                                        <div class="absolute z-50 hidden group-hover:block w-64 p-3 bg-gray-700/95 dark:bg-gray-800/95 text-xs text-white rounded-lg shadow-xl -top-2 left-full ml-2 backdrop-blur-sm transition duration-150">
+                                            {web_hint_disk_threshold}
+                                        </div>
+                                    </div>
+                                </div>
                                 <span class="font-mono text-green-600 dark:text-green-400 font-bold" id="val_disk_display">{val_disk}%</span>
                             </div>
                             <input type="range" id="conf_disk" min="50" max="99" value="{val_disk}" class="w-full h-2 bg-gray-200 dark:bg-gray-700 rounded-lg appearance-none cursor-pointer accent-green-500" oninput="document.getElementById('val_disk_display').innerText = this.value + '%'">
@@ -108,25 +138,35 @@
                             <div>
                                 <div class="flex items-center gap-1 mb-1">
                                     <label class="block text-xs text-gray-600 dark:text-gray-400">{web_traffic_interval}</label>
-                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 text-gray-400 cursor-help" fill="none" viewBox="0 0 24 24" stroke="currentColor" title="Частота обновления графиков трафика (5-100 сек)">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                    </svg>
+                                    <div class="relative group">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 text-gray-400 cursor-help" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                        </svg>
+                                        <div class="absolute z-50 hidden group-hover:block w-64 p-3 bg-gray-700/95 dark:bg-gray-800/95 text-xs text-white rounded-lg shadow-xl -top-2 left-full ml-2 backdrop-blur-sm transition duration-150">
+                                            {web_hint_traffic_interval}
+                                        </div>
+                                    </div>
                                 </div>
                                 <input type="number" id="conf_traffic" value="{val_traffic}" class="w-full bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 text-gray-900 dark:text-white">
                                 <div class="text-red-500 text-xs mt-1 hidden" id="error_conf_traffic"></div>
                             </div>
+                            
                             <div>
                                 <div class="flex items-center gap-1 mb-1">
                                     <label class="block text-xs text-gray-600 dark:text-gray-400">{web_node_timeout}</label>
-                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 text-gray-400 cursor-help" fill="none" viewBox="0 0 24 24" stroke="currentColor" title="Время без ответа, после которого нода считается оффлайн">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                    </svg>
+                                    <div class="relative group">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 text-gray-400 cursor-help" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                        </svg>
+                                        <div class="absolute z-50 hidden group-hover:block w-64 p-3 bg-gray-700/95 dark:bg-gray-800/95 text-xs text-white rounded-lg shadow-xl -top-2 left-full ml-2 backdrop-blur-sm transition duration-150">
+                                            {web_hint_node_timeout}
+                                        </div>
+                                    </div>
                                 </div>
                                 <input type="number" id="conf_timeout" value="{val_timeout}" class="w-full bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 text-gray-900 dark:text-white">
                                 <div class="text-red-500 text-xs mt-1 hidden" id="error_conf_timeout"></div>
                             </div>
                         </div>
-                    </div>
                     
                     <div class="mt-6 pt-6 border-t border-gray-200 dark:border-white/5">
                          <h3 class="text-sm font-bold text-gray-500 dark:text-gray-400 uppercase mb-3 tracking-wider">{web_logs_mgmt_title}</h3>

@@ -59,17 +59,30 @@ async def selftest_handler(message: types.Message):
 
         uptime_str = format_uptime(uptime_sec, lang)
 
-        # Ping check (async subprocess)
+        # --- [ИЗМЕНЕНИЕ] Проверка доступности Интернета (HTTP/S) ---
+        conn_proc = await asyncio.create_subprocess_shell(
+            "curl -I -s --max-time 3 https://www.google.com/", # -I: HEAD request, -s: silent
+            stdout=asyncio.subprocess.PIPE, 
+            stderr=asyncio.subprocess.PIPE
+        )
+        c_out, c_err = await conn_proc.communicate()
+        
+        # Проверяем, что curl успешно завершился И получил ответ (статус-лайн)
+        conn_ok = conn_proc.returncode == 0 and b'HTTP/' in c_out.upper()
+        
+        inet_status = _(
+            "selftest_inet_ok",
+            lang) if conn_ok else _(
+            "selftest_inet_fail",
+            lang)
+        # --------------------------------------------------------------------
+
+        # Ping check (async subprocess - только для метрики задержки)
         ping_proc = await asyncio.create_subprocess_shell("ping -c 1 -W 1 8.8.8.8", stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
         # FIX: _ -> stderr_dummy
         p_out, stderr_dummy = await ping_proc.communicate()
         p_match = re.search(r"time=([\d\.]+) ms", p_out.decode())
         ping_time = p_match.group(1) if p_match else "N/A"
-        inet_status = _(
-            "selftest_inet_ok",
-            lang) if p_match else _(
-            "selftest_inet_fail",
-            lang)
 
         # IP check (async subprocess)
         ip_proc = await asyncio.create_subprocess_shell("curl -4 -s --max-time 2 ifconfig.me", stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
