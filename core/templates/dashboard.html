@@ -8,6 +8,69 @@
     <script src="/static/js/theme_init.js"></script>
     <script>
         const I18N = {i18n_json};
+        
+        window.activeHint = null;
+        
+        function openHintModal(event, hintId) {
+            event.stopPropagation();
+            const hintEl = document.getElementById(hintId);
+            
+            const hintText = hintEl ? hintEl.innerHTML.trim() : I18N.web_error.replace('{error}', 'Hint text not found.');
+
+            let titleEl = event.currentTarget.closest('.bg-white\\/50, .bg-black\\/20');
+            let title = 'Информация';
+            if (titleEl) {
+                let metricSpan = titleEl.querySelector('.text-\\[9px\\]');
+                if (metricSpan) {
+                    title = metricSpan.innerText || 'Метрика';
+                }
+            }
+            
+            const modal = document.getElementById('genericHintModal');
+            if (!modal) return;
+            
+            document.getElementById('hintModalTitle').innerText = title;
+            document.getElementById('hintModalContent').innerHTML = hintText;
+            
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+            document.body.style.overflow = 'hidden';
+
+            const parentContainer = event.currentTarget.closest('.relative.inline-block');
+            if(parentContainer) {
+                parentContainer.style.zIndex = 10;
+            }
+
+            if (window.parsePageEmojis) window.parsePageEmojis();
+        }
+
+        function closeHintModal() {
+            const modal = document.getElementById('genericHintModal');
+            if (!modal) return;
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+            document.body.style.overflow = 'auto';
+
+            document.querySelectorAll('[onclick^="toggleHint"]').forEach(btn => {
+                const parentContainer = btn.closest('.relative.inline-block');
+                if(parentContainer) {
+                    parentContainer.style.zIndex = '';
+                }
+            });
+        }
+
+        window.toggleHint = openHintModal;
+
+        document.addEventListener('click', function(event) {
+            if (window.activeHint) {
+                const activeHintEl = document.getElementById(window.activeHint);
+                if (activeHintEl && !activeHintEl.contains(event.target) && event.target.closest('button[onclick^="toggleHint"]') === null) {
+                    activeHintEl.classList.add('hidden');
+                    activeHintEl.classList.remove('block');
+                    window.activeHint = null;
+                }
+            }
+        });
     </script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://unpkg.com/twemoji@latest/dist/twemoji.min.js" crossorigin="anonymous"></script>
@@ -140,27 +203,48 @@
                     <div class="bg-white/50 dark:bg-black/20 rounded p-2 text-center border border-white/20 dark:border-white/5 backdrop-blur-sm">
                         <div class="flex justify-center items-center gap-1 mb-1">
                             <span class="text-[9px] text-gray-500 uppercase">{web_cpu}</span>
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 text-gray-400 cursor-help" fill="none" viewBox="0 0 24 24" stroke="currentColor" title="CPU Load">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                            </svg>
+                            <div class="relative inline-block">
+                                <button onclick="toggleHint(event, 'hint-cpu-dash')" type="button" class="p-0.5 -m-0.5 rounded-full focus:outline-none focus:ring-1 focus:ring-blue-500/50">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 text-gray-400 cursor-help" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                    </svg>
+                                </button>
+                                <div id="hint-cpu-dash" class="hidden">
+                                    {web_hint_cpu_usage}
+                                </div>
+                            </div>
                         </div>
                         <span id="agentCpu" class="font-bold text-gray-800 dark:text-white text-sm">0%</span>
                     </div>
                     <div class="bg-white/50 dark:bg-black/20 rounded p-2 text-center border border-white/20 dark:border-white/5 backdrop-blur-sm">
                         <div class="flex justify-center items-center gap-1 mb-1">
                             <span class="text-[9px] text-gray-500 uppercase">{web_ram}</span>
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 text-gray-400 cursor-help" fill="none" viewBox="0 0 24 24" stroke="currentColor" title="RAM Usage">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                            </svg>
+                            <div class="relative inline-block">
+                                <button onclick="toggleHint(event, 'hint-ram-dash')" type="button" class="p-0.5 -m-0.5 rounded-full focus:outline-none focus:ring-1 focus:ring-purple-500/50">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 text-gray-400 cursor-help" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                    </svg>
+                                </button>
+                                <div id="hint-ram-dash" class="hidden">
+                                    {web_hint_ram_usage}
+                                </div>
+                            </div>
                         </div>
                         <span id="agentRam" class="font-bold text-gray-800 dark:text-white text-sm">0%</span>
                     </div>
                     <div class="bg-white/50 dark:bg-black/20 rounded p-2 text-center border border-white/20 dark:border-white/5 backdrop-blur-sm">
                         <div class="flex justify-center items-center gap-1 mb-1">
                             <span class="text-[9px] text-gray-500 uppercase">{web_disk}</span>
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 text-gray-400 cursor-help" fill="none" viewBox="0 0 24 24" stroke="currentColor" title="Disk Usage">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                            </svg>
+                            <div class="relative inline-block">
+                                <button onclick="toggleHint(event, 'hint-disk-dash')" type="button" class="p-0.5 -m-0.5 rounded-full focus:outline-none focus:ring-1 focus:ring-green-500/50">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 text-gray-400 cursor-help" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                    </svg>
+                                </button>
+                                <div id="hint-disk-dash" class="hidden">
+                                    {web_hint_disk_usage}
+                                </div>
+                            </div>
                         </div>
                         <span id="agentDisk" class="font-bold text-gray-800 dark:text-white text-sm">0%</span>
                     </div>
@@ -173,18 +257,32 @@
                     <div class="bg-white/50 dark:bg-black/20 rounded p-2 text-center border border-white/20 dark:border-white/5 border-l-2 border-l-blue-500/50 backdrop-blur-sm">
                         <div class="flex justify-center items-center gap-1 mb-1">
                             <span class="text-[9px] text-gray-500 uppercase truncate">{web_traffic_total} ↓</span>
-                             <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 text-gray-400 cursor-help" fill="none" viewBox="0 0 24 24" stroke="currentColor" title="Inbound Traffic">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                            </svg>
+                            <div class="relative inline-block">
+                                <button onclick="toggleHint(event, 'hint-traffic-in-dash')" type="button" class="p-0.5 -m-0.5 rounded-full focus:outline-none focus:ring-1 focus:ring-blue-500/50">
+                                     <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 text-gray-400 cursor-help" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                    </svg>
+                                </button>
+                                <div id="hint-traffic-in-dash" class="hidden">
+                                    {web_hint_traffic_in}
+                                </div>
+                            </div>
                         </div>
                         <span id="trafficRxTotal" class="font-bold text-gray-800 dark:text-white text-xs sm:text-sm">0 B</span>
                     </div>
                     <div class="bg-white/50 dark:bg-black/20 rounded p-2 text-center border border-white/20 dark:border-white/5 border-l-2 border-l-purple-500/50 backdrop-blur-sm">
                         <div class="flex justify-center items-center gap-1 mb-1">
                             <span class="text-[9px] text-gray-500 uppercase truncate">{web_traffic_total} ↑</span>
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 text-gray-400 cursor-help" fill="none" viewBox="0 0 24 24" stroke="currentColor" title="Outbound Traffic">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                            </svg>
+                            <div class="relative inline-block">
+                                <button onclick="toggleHint(event, 'hint-traffic-out-dash')" type="button" class="p-0.5 -m-0.5 rounded-full focus:outline-none focus:ring-1 focus:ring-blue-500/50">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 text-gray-400 cursor-help" fill="none" viewBox="0 0 24 24" stroke="currentColor" title="Outbound Traffic">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                    </svg>
+                                </button>
+                                <div id="hint-traffic-out-dash" class="hidden">
+                                    {web_hint_traffic_out}
+                                </div>
+                            </div>
                         </div>
                         <span id="trafficTxTotal" class="font-bold text-gray-800 dark:text-white text-xs sm:text-sm">0 B</span>
                     </div>
@@ -302,6 +400,18 @@
         </div>
     </div>
 
+    <div id="genericHintModal" class="fixed inset-0 z-[100] hidden items-center justify-center bg-black/50 dark:bg-black/80 backdrop-blur-sm p-4">
+        <div class="bg-white dark:bg-gray-800 border border-white/20 dark:border-white/10 rounded-2xl shadow-2xl w-full max-w-md relative flex flex-col backdrop-blur-xl">
+            <div class="p-4 border-b border-gray-200 dark:border-white/5 flex justify-between items-center rounded-t-2xl">
+                <h3 id="hintModalTitle" class="text-lg font-bold text-gray-900 dark:text-white">Информация</h3>
+                <button onclick="closeHintModal()" class="text-gray-400 hover:text-gray-600 dark:hover:text-white transition p-1">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
+                </button>
+            </div>
+            <div id="hintModalContent" class="p-4 text-sm text-gray-700 dark:text-gray-300">
+                </div>
+        </div>
+    </div>
     <script src="/static/js/common.js"></script>
     <script src="/static/js/dashboard.js"></script>
 </body>

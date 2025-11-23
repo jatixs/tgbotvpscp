@@ -15,6 +15,9 @@ from core.messaging import delete_previous_message, send_alert
 from core.shared_state import LAST_MESSAGE_IDS, NODE_TRAFFIC_MONITORS
 from core import nodes_db
 from core.keyboards import get_nodes_list_keyboard, get_node_management_keyboard, get_nodes_delete_keyboard, get_back_keyboard
+# --- [ИСПРАВЛЕНИЕ 1] Добавляем импорт format_uptime ---
+from core.utils import format_uptime
+# ------------------------------------------------------
 
 BUTTON_KEY = "btn_nodes"
 
@@ -128,6 +131,12 @@ async def cq_node_select(callback: types.CallbackQuery):
         return
 
     stats = node.get("stats", {})
+    
+    # --- [ИСПРАВЛЕНИЕ 2] Форматируем uptime ---
+    raw_uptime = stats.get("uptime", 0)
+    formatted_uptime = format_uptime(raw_uptime, lang)
+    # ------------------------------------------
+
     text = _(
         "node_management_menu",
         lang,
@@ -135,9 +144,8 @@ async def cq_node_select(callback: types.CallbackQuery):
         ip=node.get(
             "ip",
             "?"),
-        uptime=stats.get(
-            "uptime",
-            "?"))
+        uptime=formatted_uptime) # Используем отформатированное значение
+    
     keyboard = get_node_management_keyboard(token, lang)
     await callback.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
 
@@ -235,10 +243,15 @@ async def cq_node_stop_traffic(callback: types.CallbackQuery):
             await callback.message.delete()
             if node:
                 stats = node.get("stats", {})
+                # --- [ИСПРАВЛЕНИЕ 3] Форматируем uptime при возврате ---
+                raw_uptime = stats.get("uptime", 0)
+                formatted_uptime = format_uptime(raw_uptime, lang)
+                # -------------------------------------------------------
+                
                 text = _(
                     "node_management_menu", lang, name=node.get("name"), ip=node.get(
-                        "ip", "?"), uptime=stats.get(
-                        "uptime", "?"))
+                        "ip", "?"), uptime=formatted_uptime)
+                
                 keyboard = get_node_management_keyboard(token, lang)
                 await callback.message.answer(text, reply_markup=keyboard, parse_mode="HTML")
         except Exception:

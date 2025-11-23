@@ -1,6 +1,6 @@
 document.addEventListener("DOMContentLoaded", () => {
     renderUsers();
-    initSystemSettingsTracking(); // Запускаем отслеживание изменений
+    initSystemSettingsTracking();
 });
 
 let initialSysConfig = {};
@@ -11,14 +11,12 @@ function initSystemSettingsTracking() {
     
     if (!btn) return;
 
-    // При инициализации сохраняем исходные значения
     inputs.forEach(id => {
         const el = document.getElementById(id);
         if (el) {
             initialSysConfig[id] = el.value;
-            // Вешаем обработчики
             el.addEventListener('input', checkForChanges);
-            el.addEventListener('change', checkForChanges); // Для range слайдеров важно событие change
+            el.addEventListener('change', checkForChanges);
         }
     });
 }
@@ -37,8 +35,20 @@ function checkForChanges() {
     
     inputs.forEach(id => {
         const el = document.getElementById(id);
-        if (el && el.value != initialSysConfig[id]) {
-            hasChanges = true;
+        if (el) {
+            // --- ИСПРАВЛЕНИЕ: Обновляем отображение значений ползунков здесь ---
+            if (id === 'conf_cpu' || id === 'conf_ram' || id === 'conf_disk') { 
+                const displayId = id.replace('conf_', 'val_') + '_display';
+                const displayEl = document.getElementById(displayId);
+                if (displayEl) {
+                    displayEl.innerText = el.value + '%';
+                }
+            }
+            // -------------------------------------------------------------------
+
+            if (el.value != initialSysConfig[id]) {
+                hasChanges = true;
+            }
         }
     });
     
@@ -51,27 +61,23 @@ function toggleSystemSaveButton(enable) {
 
     if (enable) {
         btn.disabled = false;
-        // Стили активной синей кнопки
         btn.classList.remove('bg-gray-200', 'dark:bg-gray-700', 'text-gray-400', 'dark:text-gray-500', 'cursor-not-allowed');
         btn.classList.add('bg-blue-600', 'hover:bg-blue-500', 'text-white', 'shadow-lg', 'shadow-blue-900/20', 'active:scale-95', 'cursor-pointer');
     } else {
         btn.disabled = true;
-        // Стили неактивной серой кнопки
         btn.classList.remove('bg-blue-600', 'hover:bg-blue-500', 'text-white', 'shadow-lg', 'shadow-blue-900/20', 'active:scale-95', 'cursor-pointer');
         btn.classList.add('bg-gray-200', 'dark:bg-gray-700', 'text-gray-400', 'dark:text-gray-500', 'cursor-not-allowed');
     }
 }
 
-// --- СИСТЕМНЫЕ НАСТРОЙКИ (AJAX) ---
 async function saveSystemConfig() {
     const btn = document.getElementById('saveSysBtn');
     if (!btn) return;
     
-    const originalText = I18N.web_save_btn; // Берем из перевода, так как текст может быть изменен
+    const originalText = I18N.web_save_btn;
     btn.innerText = I18N.web_saving_btn;
     btn.disabled = true;
 
-    // Сброс ошибок
     document.querySelectorAll('[id^="error_"]').forEach(el => el.classList.add('hidden'));
 
     const trafficVal = parseInt(document.getElementById('conf_traffic').value);
@@ -104,28 +110,24 @@ async function saveSystemConfig() {
         });
         
         if(res.ok) {
-            // Обновляем исходные значения на текущие (так как мы сохранили)
             ['conf_cpu', 'conf_ram', 'conf_disk', 'conf_traffic', 'conf_timeout'].forEach(id => {
                  const el = document.getElementById(id);
                  if(el) initialSysConfig[id] = el.value;
             });
 
-            // Анимация успеха (Зеленая кнопка "Сохранено")
             btn.innerText = I18N.web_saved_btn;
-            btn.classList.remove('bg-blue-600', 'hover:bg-blue-500'); // Удаляем синий (если был)
-            btn.classList.remove('bg-gray-200', 'dark:bg-gray-700');   // Удаляем серый (на всякий)
+            btn.classList.remove('bg-blue-600', 'hover:bg-blue-500');
+            btn.classList.remove('bg-gray-200', 'dark:bg-gray-700');
             btn.classList.add('bg-green-600', 'hover:bg-green-500', 'text-white');
             
             setTimeout(() => {
                 btn.innerText = originalText;
                 btn.classList.remove('bg-green-600', 'hover:bg-green-500', 'text-white');
-                // После сохранения кнопка должна стать серой (неактивной), т.к. изменений нет
                 toggleSystemSaveButton(false);
             }, 2000);
         } else {
             const json = await res.json();
             alert(I18N.web_error.replace('{error}', json.error || 'Save failed'));
-            // В случае ошибки возвращаем кнопку в активное состояние (синяя), чтобы можно было поправить
             btn.innerText = originalText;
             toggleSystemSaveButton(true);
         }
@@ -150,7 +152,6 @@ async function clearLogs() {
         if(res.ok) {
             btn.innerText = I18N.web_logs_cleared_alert;
             
-            // Удаляем ВСЕ возможные классы
             btn.className = "w-full px-4 py-2 rounded-lg text-sm transition flex items-center justify-center gap-2 bg-green-500/10 border border-green-500/30 text-green-600 dark:text-green-400";
             
             setTimeout(() => {
@@ -170,11 +171,10 @@ async function clearLogs() {
     }
 }
 
-// --- АВТОСОХРАНЕНИЕ УВЕДОМЛЕНИЙ ---
 async function triggerAutoSave() {
     const statusEl = document.getElementById('notifStatus');
     if(statusEl) {
-        statusEl.innerText = I18N.web_saving_btn; // "Saving..."
+        statusEl.innerText = I18N.web_saving_btn;
         statusEl.classList.remove('text-green-500', 'text-red-500', 'opacity-0');
         statusEl.classList.add('text-gray-500', 'dark:text-gray-400', 'opacity-100');
     }
@@ -196,7 +196,7 @@ async function triggerAutoSave() {
             
             if(statusEl) {
                 if(res.ok) {
-                    statusEl.innerText = I18N.web_saved_btn; // "Saved!"
+                    statusEl.innerText = I18N.web_saved_btn;
                     statusEl.classList.remove('text-gray-500', 'dark:text-gray-400');
                     statusEl.classList.add('text-green-500');
                     setTimeout(() => {
@@ -217,7 +217,6 @@ async function triggerAutoSave() {
     }, 50);
 }
 
-// --- ПОЛЬЗОВАТЕЛИ ---
 function renderUsers() {
     const tbody = document.getElementById('usersTableBody');
     const section = document.getElementById('usersSection');
@@ -244,7 +243,6 @@ function renderUsers() {
             </tr>
         `).join('');
         
-        // Парсим эмодзи в таблице пользователей
         if (window.parsePageEmojis) window.parsePageEmojis();
         
     } else {
@@ -323,7 +321,6 @@ async function addNode() {
     }
 }
 
-// --- СМЕНА ПАРОЛЯ ---
 async function changePassword() {
     const current = document.getElementById('pass_current').value;
     const newPass = document.getElementById('pass_new').value;
