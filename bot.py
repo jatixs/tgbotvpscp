@@ -244,15 +244,15 @@ async def main():
     web_runner = None
     try:
         logging.info(f"Bot starting in mode: {config.INSTALL_MODE.upper()}")
-        
+
         # Инициализация БД
         await nodes_db.init_db()
-        
+
         await asyncio.to_thread(auth.load_users)
         await asyncio.to_thread(utils.load_alerts_config)
         await asyncio.to_thread(i18n.load_user_settings)
         # await asyncio.to_thread(nodes_db.load_nodes) - больше не нужно
-        
+
         await auth.refresh_user_names(bot)
         await utils.initial_reboot_check(bot)
         await utils.initial_restart_check(bot)

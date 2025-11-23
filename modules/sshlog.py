@@ -15,11 +15,14 @@ from core.utils import get_country_flag, get_server_timezone_label, escape_html,
 
 BUTTON_KEY = "btn_sshlog"
 
+
 def get_button() -> KeyboardButton:
     return KeyboardButton(text=_(BUTTON_KEY, config.DEFAULT_LANGUAGE))
 
+
 def register_handlers(dp: Dispatcher):
     dp.message(I18nFilter(BUTTON_KEY))(sshlog_handler)
+
 
 async def sshlog_handler(message: types.Message):
     user_id = message.from_user.id
@@ -36,20 +39,26 @@ async def sshlog_handler(message: types.Message):
 
     try:
         log_file = None
-        if os.path.exists(get_host_path("/var/log/secure")): log_file = get_host_path("/var/log/secure")
-        elif os.path.exists(get_host_path("/var/log/auth.log")): log_file = get_host_path("/var/log/auth.log")
-        
+        if os.path.exists(get_host_path("/var/log/secure")):
+            log_file = get_host_path("/var/log/secure")
+        elif os.path.exists(get_host_path("/var/log/auth.log")):
+            log_file = get_host_path("/var/log/auth.log")
+
         lines = []
         src_txt = ""
-        
+
         if log_file:
-            src_txt = _("selftest_ssh_source", lang, source=os.path.basename(log_file))
+            src_txt = _(
+                "selftest_ssh_source",
+                lang,
+                source=os.path.basename(log_file))
             proc = await asyncio.create_subprocess_shell(f"tail -n 200 {log_file}", stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
             out, _ = await proc.communicate()
             lines = out.decode('utf-8', 'ignore').split('\n')
         else:
             src_txt = _("selftest_ssh_source_journal", lang)
-            # Using docker-compatible call logic if needed, but here simplifying for direct call if available
+            # Using docker-compatible call logic if needed, but here
+            # simplifying for direct call if available
             proc = await asyncio.create_subprocess_shell("journalctl -u ssh -n 100 --no-pager -o short-precise", stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
             out, _ = await proc.communicate()
             lines = out.decode('utf-8', 'ignore').split('\n')
@@ -59,54 +68,75 @@ async def sshlog_handler(message: types.Message):
         tz = get_server_timezone_label()
 
         for line in reversed(lines):
-            if count >= 10: break
-            if "sshd" not in line: continue
-            
+            if count >= 10:
+                break
+            if "sshd" not in line:
+                continue
+
             # Date parsing (simplified regex for ISO and syslog)
             dt = None
-            match_iso = re.search(r"(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})", line)
-            match_sys = re.search(r"(\w{3}\s+\d{1,2}\s+\d{2}:\d{2}:\d{2})", line)
-            
+            match_iso = re.search(
+                r"(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})", line)
+            match_sys = re.search(
+                r"(\w{3}\s+\d{1,2}\s+\d{2}:\d{2}:\d{2})", line)
+
             try:
-                if match_iso: dt = datetime.strptime(match_iso.group(1), "%Y-%m-%dT%H:%M:%S")
+                if match_iso:
+                    dt = datetime.strptime(
+                        match_iso.group(1), "%Y-%m-%dT%H:%M:%S")
                 elif match_sys:
-                    dt = datetime.strptime(match_sys.group(1), "%b %d %H:%M:%S")
+                    dt = datetime.strptime(
+                        match_sys.group(1), "%b %d %H:%M:%S")
                     dt = dt.replace(year=datetime.now().year)
-            except: continue
-            
-            if not dt: continue
-            
+            except BaseException:
+                continue
+
+            if not dt:
+                continue
+
             key = None
             data = {}
-            
+
             # Success
-            m = re.search(r"Accepted\s+(?:\S+)\s+for\s+(\S+)\s+from\s+(\S+)", line)
+            m = re.search(
+                r"Accepted\s+(?:\S+)\s+for\s+(\S+)\s+from\s+(\S+)", line)
             if m:
                 key = "sshlog_entry_success"
                 u, ip = m.groups()
                 # ИСПРАВЛЕНО: await
                 fl = await get_country_flag(ip)
-                data = {"user": escape_html(u), "ip": escape_html(ip), "flag": fl}
+                data = {
+                    "user": escape_html(u),
+                    "ip": escape_html(ip),
+                    "flag": fl}
 
             # Failures
             if not key:
-                m = re.search(r"Failed\s+(?:\S+)\s+for\s+invalid\s+user\s+(\S+)\s+from\s+(\S+)", line)
+                m = re.search(
+                    r"Failed\s+(?:\S+)\s+for\s+invalid\s+user\s+(\S+)\s+from\s+(\S+)", line)
                 if m:
                     key = "sshlog_entry_invalid_user"
                     u, ip = m.groups()
                     fl = await get_country_flag(ip)
-                    data = {"user": escape_html(u), "ip": escape_html(ip), "flag": fl}
-            
+                    data = {
+                        "user": escape_html(u),
+                        "ip": escape_html(ip),
+                        "flag": fl}
+
             if not key:
                 m = re.search(r"Failed password for (\S+) from (\S+)", line)
                 if m:
                     key = "sshlog_entry_wrong_pass"
                     u, ip = m.groups()
                     fl = await get_country_flag(ip)
-                    data = {"user": escape_html(u), "ip": escape_html(ip), "flag": fl}
+                    data = {
+                        "user": escape_html(u),
+                        "ip": escape_html(ip),
+                        "flag": fl}
 
             if key:
-                data.update({"time": dt.strftime('%H:%M:%S'), "date": dt.strftime('%d.%m.%Y'), "tz": tz})
+                data.update({"time": dt.strftime('%H:%M:%S'),
+                            "date": dt.strftime('%d.%m.%Y'), "tz": tz})
                 entries.append(_(key, lang, **data))
                 count += 1
 

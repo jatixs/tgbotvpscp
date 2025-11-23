@@ -16,11 +16,14 @@ from core.utils import escape_html, detect_xray_client
 
 BUTTON_KEY = "btn_xray"
 
+
 def get_button() -> KeyboardButton:
     return KeyboardButton(text=_(BUTTON_KEY, config.DEFAULT_LANGUAGE))
 
+
 def register_handlers(dp: Dispatcher):
     dp.message(I18nFilter(BUTTON_KEY))(updatexray_handler)
+
 
 async def updatexray_handler(message: types.Message, state: FSMContext):
     user_id = message.from_user.id
@@ -60,7 +63,7 @@ async def updatexray_handler(message: types.Message, state: FSMContext):
 
         update_cmd = ""
         version_cmd = ""
-        
+
         # Экранируем имя контейнера для защиты от Shell Injection
         safe_container = shlex.quote(container_name)
 
@@ -79,8 +82,7 @@ async def updatexray_handler(message: types.Message, state: FSMContext):
                 'rm Xray-linux-64.zip xray geoip.dat geosite.dat && '
                 'apk del wget unzip'
                 '" && '
-                f'docker restart {safe_container}'
-            )
+                f'docker restart {safe_container}')
             version_cmd = f"docker exec {safe_container} /usr/bin/xray version"
 
         elif client == "marzban":
@@ -92,12 +94,11 @@ async def updatexray_handler(message: types.Message, state: FSMContext):
                 "wget -q -O geoip.dat https://github.com/v2fly/geoip/releases/latest/download/geoip.dat && "
                 "wget -q -O geosite.dat https://github.com/v2fly/domain-list-community/releases/latest/download/dlc.dat && "
                 "unzip -o Xray-linux-64.zip xray && "
-                "rm Xray-linux-64.zip"
-            )
+                "rm Xray-linux-64.zip")
             env_path = "/opt/marzban/.env"
             # Для .env файла предполагаем, что пути стандартные
             update_env = f"if [ -f {env_path} ]; then if ! grep -q '^XRAY_EXECUTABLE_PATH=' {env_path}; then echo 'XRAY_EXECUTABLE_PATH=/var/lib/marzban/xray-core/xray' >> {env_path}; fi; fi"
-            
+
             restart_cmd = f"docker restart {safe_container}"
             update_cmd = f"{check_deps} && {dl_cmd} && {update_env} && {restart_cmd}"
             version_cmd = f'docker exec {safe_container} /var/lib/marzban/xray-core/xray version'
@@ -106,8 +107,15 @@ async def updatexray_handler(message: types.Message, state: FSMContext):
         stdout_update, stderr_update = await process_update.communicate()
 
         if process_update.returncode != 0:
-            error_output = stderr_update.decode('utf-8', 'ignore') or stdout_update.decode('utf-8', 'ignore')
-            raise Exception(_("xray_update_error", lang, client=client_name_display, error=escape_html(error_output)))
+            error_output = stderr_update.decode(
+                'utf-8',
+                'ignore') or stdout_update.decode(
+                'utf-8',
+                'ignore')
+            raise Exception(_("xray_update_error",
+                              lang,
+                              client=client_name_display,
+                              error=escape_html(error_output)))
 
         process_version = await asyncio.create_subprocess_shell(version_cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
         stdout_version, _ = await process_version.communicate()
@@ -116,7 +124,11 @@ async def updatexray_handler(message: types.Message, state: FSMContext):
         if version_match:
             version = version_match.group(1)
 
-        final_message = _("xray_update_success", lang, client=client_name_display, version=version)
+        final_message = _(
+            "xray_update_success",
+            lang,
+            client=client_name_display,
+            version=version)
         await message.bot.edit_message_text(final_message, chat_id=chat_id, message_id=sent_msg.message_id, parse_mode="HTML")
 
     except Exception as e:
