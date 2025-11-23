@@ -5,7 +5,7 @@ import json
 import secrets
 import asyncio
 import hashlib
-import requests  # Добавлен импорт для agent_monitor
+import requests
 from aiohttp import web
 from aiogram import Bot
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
@@ -666,9 +666,10 @@ async def handle_login_request(request):
     bot = request.app.get('bot')
     if bot:
         try:
+            lang = get_user_lang(uid)
             kb = InlineKeyboardMarkup(
-                inline_keyboard=[[InlineKeyboardButton(text="🔓 Login", url=link)]])
-            await bot.send_message(uid, "<b>🔐 Web Login</b>", reply_markup=kb, parse_mode="HTML")
+                inline_keyboard=[[InlineKeyboardButton(text=_("web_login_btn", lang), url=link)]])
+            await bot.send_message(uid, _("web_login_header", lang), reply_markup=kb, parse_mode="HTML")
             return web.HTTPFound('/login?sent=true')
         except BaseException:
             pass
@@ -758,9 +759,10 @@ async def handle_reset_request(request):
         bot = request.app.get('bot')
         if bot:
             try:
+                lang = get_user_lang(uid)
                 kb = InlineKeyboardMarkup(
-                    inline_keyboard=[[InlineKeyboardButton(text="🔐 Reset", url=link)]])
-                await bot.send_message(uid, "<b>🆘 Reset Password</b>", reply_markup=kb, parse_mode="HTML")
+                    inline_keyboard=[[InlineKeyboardButton(text=_("web_reset_btn", lang), url=link)]])
+                await bot.send_message(uid, _("web_reset_header", lang), reply_markup=kb, parse_mode="HTML")
                 return web.json_response({"status": "ok"})
             except BaseException:
                 return web.json_response(
@@ -865,7 +867,7 @@ async def start_web_server(bot_instance: Bot):
 async def agent_monitor():
     global AGENT_IP_CACHE, AGENT_FLAG
     import psutil
-    import requests # Добавлен локальный импорт на всякий случай
+    import requests
     try:
         AGENT_IP_CACHE = await asyncio.to_thread(lambda: requests.get("https://api.ipify.org", timeout=3).text)
     except Exception:
@@ -890,7 +892,6 @@ async def agent_monitor():
             if len(AGENT_HISTORY) > 60:
                 AGENT_HISTORY.pop(0)
         except asyncio.CancelledError:
-            # Позволяем задаче быть отмененной при шатдауне
             raise
         except Exception:
             pass
