@@ -235,7 +235,7 @@ async def shutdown(dispatcher: Dispatcher, bot_instance: Bot, web_runner=None):
         await asyncio.gather(*cancelled_tasks, return_exceptions=True)
     if getattr(bot_instance, 'session', None):
         await bot_instance.session.close()
-    nodes_db.save_nodes()
+    # nodes_db.save_nodes() больше не нужно для SQLite
     logging.info("Bot stopped.")
 
 
@@ -244,10 +244,15 @@ async def main():
     web_runner = None
     try:
         logging.info(f"Bot starting in mode: {config.INSTALL_MODE.upper()}")
+        
+        # Инициализация БД
+        await nodes_db.init_db()
+        
         await asyncio.to_thread(auth.load_users)
         await asyncio.to_thread(utils.load_alerts_config)
         await asyncio.to_thread(i18n.load_user_settings)
-        await asyncio.to_thread(nodes_db.load_nodes)
+        # await asyncio.to_thread(nodes_db.load_nodes) - больше не нужно
+        
         await auth.refresh_user_names(bot)
         await utils.initial_reboot_check(bot)
         await utils.initial_restart_check(bot)
