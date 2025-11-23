@@ -121,12 +121,39 @@ The agent will install as `tg-node` service and appear in your bot.
 
 ### 🧰 Useful Commands
 
-| Command (Systemd) | Command (Docker) | Description |
+#### 🕹 Process Management
+
+| Action | Systemd (Classic) | Docker (Containers) |
 | :--- | :--- | :--- |
-| `sudo systemctl status tg-bot` | `docker compose -f /opt/tg-bot/docker-compose.yml ps` | Bot Status |
-| `sudo systemctl restart tg-bot` | `docker compose -f /opt/tg-bot/docker-compose.yml restart bot-root` | Restart Bot |
-| `sudo journalctl -u tg-bot -f` | `docker compose -f /opt/tg-bot/docker-compose.yml logs -f bot-root` | Live Logs |
-| `sudo systemctl restart tg-node` | — | Restart Node |
+| **Bot Status** | `sudo systemctl status tg-bot` | `docker compose -f /opt/tg-bot/docker-compose.yml ps` |
+| **Watchdog Status** | `sudo systemctl status tg-watchdog` | *Running inside watchdog container* |
+| **Restart Bot** | `sudo systemctl restart tg-bot` | `docker compose -f /opt/tg-bot/docker-compose.yml restart bot-secure` (or `bot-root`) |
+| **Stop** | `sudo systemctl stop tg-bot` | `docker compose -f /opt/tg-bot/docker-compose.yml stop` |
+| **Start** | `sudo systemctl start tg-bot` | `docker compose -f /opt/tg-bot/docker-compose.yml up -d` |
+
+#### 📜 Logs & Debug
+
+| Action | Systemd | Docker |
+| :--- | :--- | :--- |
+| **Bot Logs (Live)** | `sudo journalctl -u tg-bot -f` | `docker compose -f /opt/tg-bot/docker-compose.yml logs -f bot-secure` |
+| **Watchdog Logs** | `sudo journalctl -u tg-watchdog -f` | `docker compose -f /opt/tg-bot/docker-compose.yml logs -f watchdog` |
+| **Errors (grep)** | `grep "ERROR" /opt/tg-bot/logs/bot/bot.log` | *Same (log files are mounted to host)* |
+
+#### 💾 Database & Maintenance
+
+| Action | Command (Run in `/opt/tg-bot/`) |
+| :--- | :--- |
+| **Backup DB** | `cp config/nodes.db config/nodes.db.bak_$(date +%F)` |
+| **Manual Update** | `git pull && source venv/bin/activate && pip install -r requirements.txt && sudo systemctl restart tg-bot` |
+| **Reset Web Pass** | *Delete the `password_hash` line for the admin in `config/users.json` and restart the bot* |
+
+#### 🖥 For Node (Client)
+
+| Action | Command |
+| :--- | :--- |
+| **Restart** | `sudo systemctl restart tg-node` |
+| **View Logs** | `sudo journalctl -u tg-node -f` |
+| **Check Config** | `cat /opt/tg-bot/.env` |
 
 *(Use `bot-secure` instead of `bot-root` for Docker Secure mode)*
 

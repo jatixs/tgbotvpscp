@@ -154,12 +154,39 @@ bash <(wget -qO- https://raw.githubusercontent.com/jatixs/tgbotvpscp/main/deploy
 
 ### 🧰 Полезные команды
 
-| Команда (Systemd) | Команда (Docker) | Описание |
+#### 🕹 Управление процессами
+
+| Действие | Systemd (Обычный) | Docker (Контейнеры) |
 | :--- | :--- | :--- |
-| `sudo systemctl status tg-bot` | `docker compose -f /opt/tg-bot/docker-compose.yml ps` | Статус бота |
-| `sudo systemctl restart tg-bot` | `docker compose -f /opt/tg-bot/docker-compose.yml restart bot-root` | Перезапустить бота |
-| `sudo journalctl -u tg-bot -f` | `docker compose -f /opt/tg-bot/docker-compose.yml logs -f bot-root` | Логи бота (live) |
-| `sudo systemctl restart tg-node` | — | Перезапуск ноды |
+| **Статус Бота** | `sudo systemctl status tg-bot` | `docker compose -f /opt/tg-bot/docker-compose.yml ps` |
+| **Статус Watchdog** | `sudo systemctl status tg-watchdog` | *Запущен в контейнере watchdog* |
+| **Перезапуск Бота** | `sudo systemctl restart tg-bot` | `docker compose -f /opt/tg-bot/docker-compose.yml restart bot-secure` (или `bot-root`) |
+| **Остановка** | `sudo systemctl stop tg-bot` | `docker compose -f /opt/tg-bot/docker-compose.yml stop` |
+| **Запуск** | `sudo systemctl start tg-bot` | `docker compose -f /opt/tg-bot/docker-compose.yml up -d` |
+
+#### 📜 Логи и Отладка
+
+| Действие | Systemd | Docker |
+| :--- | :--- | :--- |
+| **Логи Бота (Live)** | `sudo journalctl -u tg-bot -f` | `docker compose -f /opt/tg-bot/docker-compose.yml logs -f bot-secure` |
+| **Логи Watchdog** | `sudo journalctl -u tg-watchdog -f` | `docker compose -f /opt/tg-bot/docker-compose.yml logs -f watchdog` |
+| **Ошибки (grep)** | `grep "ERROR" /opt/tg-bot/logs/bot/bot.log` | *Аналогично (файлы логов проброшены на хост)* |
+
+#### 💾 База данных и Обслуживание
+
+| Действие | Команда (Выполнять в `/opt/tg-bot/`) |
+| :--- | :--- |
+| **Бэкап БД** | `cp config/nodes.db config/nodes.db.bak_$(date +%F)` |
+| **Ручное обновление** | `git pull && source venv/bin/activate && pip install -r requirements.txt && sudo systemctl restart tg-bot` |
+| **Сброс пароля Web** | *Удалите строку `password_hash` у админа в `config/users.json` и перезапустите бота* |
+
+#### 🖥 Для Ноды (Клиента)
+
+| Действие | Команда |
+| :--- | :--- |
+| **Перезапуск** | `sudo systemctl restart tg-node` |
+| **Просмотр лога** | `sudo journalctl -u tg-node -f` |
+| **Проверка конфига** | `cat /opt/tg-bot/.env` |
 
 *(Для Docker Secure используйте `bot-secure` вместо `bot-root`)*
 
