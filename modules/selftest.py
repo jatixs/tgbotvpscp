@@ -18,12 +18,15 @@ from core.config import INSTALL_MODE
 
 BUTTON_KEY = "btn_selftest"
 
+
 def get_button() -> KeyboardButton:
     from core.i18n import _
     return KeyboardButton(text=_(BUTTON_KEY, config.DEFAULT_LANGUAGE))
 
+
 def register_handlers(dp: Dispatcher):
     dp.message(I18nFilter(BUTTON_KEY))(selftest_handler)
+
 
 async def selftest_handler(message: types.Message):
     from core.i18n import _
@@ -46,19 +49,26 @@ async def selftest_handler(message: types.Message):
         await asyncio.sleep(0.5)
         cpu = psutil.cpu_percent(interval=None)
         mem = psutil.virtual_memory().percent
-        try: disk = psutil.disk_usage(get_host_path('/')).percent
-        except: disk = 0
-        with open(get_host_path("/proc/uptime")) as f: uptime_sec = float(f.readline().split()[0])
+        try:
+            disk = psutil.disk_usage(get_host_path('/')).percent
+        except BaseException:
+            disk = 0
+        with open(get_host_path("/proc/uptime")) as f:
+            uptime_sec = float(f.readline().split()[0])
         net = psutil.net_io_counters()
-        
+
         uptime_str = format_uptime(uptime_sec, lang)
-        
+
         # Ping check (async subprocess)
         ping_proc = await asyncio.create_subprocess_shell("ping -c 1 -W 1 8.8.8.8", stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
         p_out, _ = await ping_proc.communicate()
         p_match = re.search(r"time=([\d\.]+) ms", p_out.decode())
         ping_time = p_match.group(1) if p_match else "N/A"
-        inet_status = _("selftest_inet_ok", lang) if p_match else _("selftest_inet_fail", lang)
+        inet_status = _(
+            "selftest_inet_ok",
+            lang) if p_match else _(
+            "selftest_inet_fail",
+            lang)
 
         # IP check (async subprocess)
         ip_proc = await asyncio.create_subprocess_shell("curl -4 -s --max-time 2 ifconfig.me", stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
@@ -68,14 +78,19 @@ async def selftest_handler(message: types.Message):
         ssh_info = ""
         if INSTALL_MODE == "root":
             log_file = None
-            if os.path.exists(get_host_path("/var/log/secure")): log_file = get_host_path("/var/log/secure")
-            elif os.path.exists(get_host_path("/var/log/auth.log")): log_file = get_host_path("/var/log/auth.log")
-            
+            if os.path.exists(get_host_path("/var/log/secure")):
+                log_file = get_host_path("/var/log/secure")
+            elif os.path.exists(get_host_path("/var/log/auth.log")):
+                log_file = get_host_path("/var/log/auth.log")
+
             line = None
             src = ""
-            
+
             if log_file:
-                src = _("selftest_ssh_source", lang, source=os.path.basename(log_file))
+                src = _(
+                    "selftest_ssh_source",
+                    lang,
+                    source=os.path.basename(log_file))
                 proc = await asyncio.create_subprocess_shell(f"tail -n 50 {log_file}", stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
                 l_out, _ = await proc.communicate()
                 for l in reversed(l_out.decode('utf-8', 'ignore').split('\n')):
@@ -92,26 +107,45 @@ async def selftest_handler(message: types.Message):
                         break
 
             ssh_header = _("selftest_ssh_header", lang, source=src)
-            
+
             if line:
-                match = re.search(r"Accepted\s+(?:\S+)\s+for\s+(\S+)\s+from\s+(\S+)", line)
+                match = re.search(
+                    r"Accepted\s+(?:\S+)\s+for\s+(\S+)\s+from\s+(\S+)", line)
                 # Пытаемся распарсить дату (упрощенно)
                 date_str = "Unknown"
                 time_str = "Unknown"
                 # ... (тут можно добавить парсинг даты, как в sshlog.py, но для краткости опустим сложную логику дат, оставим данные)
-                
+
                 if match:
                     u = escape_html(match.group(1))
                     ip = escape_html(match.group(2))
                     # ИСПРАВЛЕНО: await
                     fl = await get_country_flag(ip)
-                    ssh_info = ssh_header + _("selftest_ssh_entry", lang, user=u, flag=fl, ip=ip, time="", tz="", date="")
-                else: ssh_info = ssh_header + _("selftest_ssh_parse_fail", lang)
-            else: ssh_info = ssh_header + _("selftest_ssh_not_found", lang)
+                    ssh_info = ssh_header + \
+                        _("selftest_ssh_entry", lang, user=u, flag=fl, ip=ip, time="", tz="", date="")
+                else:
+                    ssh_info = ssh_header + _("selftest_ssh_parse_fail", lang)
+            else:
+                ssh_info = ssh_header + _("selftest_ssh_not_found", lang)
         else:
             ssh_info = _("selftest_ssh_root_only", lang)
 
-        body = _("selftest_results_body", lang, cpu=cpu, mem=mem, disk=disk, uptime=uptime_str, inet_status=inet_status, ping=ping_time, ip=ext_ip, rx=format_traffic(net.bytes_recv, lang), tx=format_traffic(net.bytes_sent, lang))
+        body = _(
+            "selftest_results_body",
+            lang,
+            cpu=cpu,
+            mem=mem,
+            disk=disk,
+            uptime=uptime_str,
+            inet_status=inet_status,
+            ping=ping_time,
+            ip=ext_ip,
+            rx=format_traffic(
+                net.bytes_recv,
+                lang),
+            tx=format_traffic(
+                net.bytes_sent,
+                lang))
         await message.bot.edit_message_text(_("selftest_results_header", lang) + body + ssh_info, chat_id=chat_id, message_id=sent_msg.message_id, parse_mode="HTML")
 
     except Exception as e:

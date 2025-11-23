@@ -10,6 +10,7 @@ from .config import CONFIG_DIR
 DB_PATH = os.path.join(CONFIG_DIR, "nodes.db")
 LEGACY_JSON_PATH = os.path.join(CONFIG_DIR, "nodes.json")
 
+
 async def init_db():
     """Инициализация таблицы и миграция старых данных."""
     async with aiosqlite.connect(DB_PATH) as db:
@@ -27,9 +28,10 @@ async def init_db():
             )
         """)
         await db.commit()
-    
+
     logging.info(f"Database initialized at {DB_PATH}")
     await _migrate_from_json_if_needed()
+
 
 async def _migrate_from_json_if_needed():
     """Переносит данные из nodes.json в SQLite, если json существует."""
@@ -40,7 +42,7 @@ async def _migrate_from_json_if_needed():
     try:
         with open(LEGACY_JSON_PATH, 'r', encoding='utf-8') as f:
             data = json.load(f)
-        
+
         if not data:
             logging.info("nodes.json is empty. Skipping.")
             return
@@ -52,7 +54,7 @@ async def _migrate_from_json_if_needed():
                 cursor = await db.execute("SELECT 1 FROM nodes WHERE token = ?", (token,))
                 if await cursor.fetchone():
                     continue
-                
+
                 await db.execute(
                     "INSERT INTO nodes (token, name, created_at, last_seen, ip, stats, history, tasks, extra_state) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
                     (
@@ -64,18 +66,20 @@ async def _migrate_from_json_if_needed():
                         json.dumps(node.get("stats", {})),
                         json.dumps(node.get("history", [])),
                         json.dumps(node.get("tasks", [])),
-                        "{}" # extra_state чистый
+                        "{}"  # extra_state чистый
                     )
                 )
                 count += 1
             await db.commit()
-        
+
         # Переименовываем старый файл, чтобы не мигрировать повторно
         os.rename(LEGACY_JSON_PATH, LEGACY_JSON_PATH + ".bak")
-        logging.info(f"Migration successful! Imported {count} nodes. Legacy file renamed to .bak")
-        
+        logging.info(
+            f"Migration successful! Imported {count} nodes. Legacy file renamed to .bak")
+
     except Exception as e:
         logging.error(f"CRITICAL: Migration failed: {e}", exc_info=True)
+
 
 def _deserialize_node(row):
     """Собирает объект ноды из строки БД."""
@@ -92,6 +96,7 @@ def _deserialize_node(row):
     extra = json.loads(row['extra_state']) if row['extra_state'] else {}
     return {**base, **extra}
 
+
 async def get_all_nodes():
     nodes = {}
     async with aiosqlite.connect(DB_PATH) as db:
@@ -101,6 +106,7 @@ async def get_all_nodes():
                 nodes[row['token']] = _deserialize_node(row)
     return nodes
 
+
 async def get_node_by_token(token: str):
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
@@ -109,6 +115,7 @@ async def get_node_by_token(token: str):
             if row:
                 return _deserialize_node(row)
     return None
+
 
 async def create_node(name: str) -> str:
     token = secrets.token_hex(16)
@@ -122,20 +129,23 @@ async def create_node(name: str) -> str:
     logging.info(f"Created new node: {name} (Token: {token[:8]}...)")
     return token
 
+
 async def delete_node(token: str):
     async with aiosqlite.connect(DB_PATH) as db:
         await db.execute("DELETE FROM nodes WHERE token = ?", (token,))
         await db.commit()
     logging.info(f"Node deleted: {token[:8]}...")
 
+
 async def update_node_heartbeat(token: str, ip: str, stats: dict):
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
         async with db.execute("SELECT history FROM nodes WHERE token = ?", (token,)) as cursor:
             row = await cursor.fetchone()
-            if not row: return
+            if not row:
+                return
             history = json.loads(row['history']) if row['history'] else []
-    
+
     point = {
         "t": int(time.time()),
         "c": stats.get("cpu", 0),
@@ -146,7 +156,7 @@ async def update_node_heartbeat(token: str, ip: str, stats: dict):
     history.append(point)
     if len(history) > 60:
         history = history[-60:]
-    
+
     async with aiosqlite.connect(DB_PATH) as db:
         await db.execute(
             "UPDATE nodes SET last_seen = ?, ip = ?, stats = ?, history = ? WHERE token = ?",
@@ -154,31 +164,37 @@ async def update_node_heartbeat(token: str, ip: str, stats: dict):
         )
         await db.commit()
 
+
 async def update_node_task(token: str, task: dict):
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
         async with db.execute("SELECT tasks FROM nodes WHERE token = ?", (token,)) as cursor:
             row = await cursor.fetchone()
-            if not row: return
+            if not row:
+                return
             tasks = json.loads(row['tasks']) if row['tasks'] else []
-        
+
         tasks.append(task)
         await db.execute("UPDATE nodes SET tasks = ? WHERE token = ?", (json.dumps(tasks), token))
         await db.commit()
+
 
 async def clear_node_tasks(token: str):
     async with aiosqlite.connect(DB_PATH) as db:
         await db.execute("UPDATE nodes SET tasks = '[]' WHERE token = ?", (token,))
         await db.commit()
 
+
 async def update_node_extra(token: str, key: str, value):
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
         async with db.execute("SELECT extra_state FROM nodes WHERE token = ?", (token,)) as cursor:
             row = await cursor.fetchone()
-            if not row: return
-            state = json.loads(row['extra_state']) if row['extra_state'] else {}
-        
+            if not row:
+                return
+            state = json.loads(
+                row['extra_state']) if row['extra_state'] else {}
+
         state[key] = value
         await db.execute("UPDATE nodes SET extra_state = ? WHERE token = ?", (json.dumps(state), token))
         await db.commit()

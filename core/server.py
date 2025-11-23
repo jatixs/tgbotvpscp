@@ -37,6 +37,7 @@ LOGIN_ATTEMPTS = {}
 MAX_LOGIN_ATTEMPTS = 5
 LOGIN_BLOCK_TIME = 300
 
+
 def check_rate_limit(ip):
     now = time.time()
     attempts = LOGIN_ATTEMPTS.get(ip, [])
@@ -44,28 +45,38 @@ def check_rate_limit(ip):
     LOGIN_ATTEMPTS[ip] = attempts
     return len(attempts) < MAX_LOGIN_ATTEMPTS
 
+
 def add_login_attempt(ip):
-    if ip not in LOGIN_ATTEMPTS: LOGIN_ATTEMPTS[ip] = []
+    if ip not in LOGIN_ATTEMPTS:
+        LOGIN_ATTEMPTS[ip] = []
     LOGIN_ATTEMPTS[ip].append(time.time())
+
 
 def get_client_ip(request):
     ip = request.headers.get('X-Forwarded-For')
-    if ip: return ip.split(',')[0]
+    if ip:
+        return ip.split(',')[0]
     peer = request.transport.get_extra_info('peername')
     return peer[0] if peer else "unknown"
 
+
 def check_user_password(user_id, input_pass):
-    if user_id not in ALLOWED_USERS: return False
+    if user_id not in ALLOWED_USERS:
+        return False
     user_data = ALLOWED_USERS[user_id]
-    if isinstance(user_data, str): return False
+    if isinstance(user_data, str):
+        return False
     stored_hash = user_data.get("password_hash")
     if not stored_hash:
         return user_id == ADMIN_USER_ID and input_pass == "admin"
     return hashlib.sha256(input_pass.encode()).hexdigest() == stored_hash
 
+
 def is_default_password_active(user_id):
-    if user_id != ADMIN_USER_ID: return False
-    if user_id not in ALLOWED_USERS: return False
+    if user_id != ADMIN_USER_ID:
+        return False
+    if user_id not in ALLOWED_USERS:
+        return False
     user_data = ALLOWED_USERS[user_id]
     default_hash = "8c6976e5b5410415bde908bd4dee15dfb167a9c873fc4bb8a81f6f2ab448a918"
     if isinstance(user_data, dict):
@@ -73,52 +84,77 @@ def is_default_password_active(user_id):
         return p_hash == default_hash or p_hash is None
     return True
 
+
 def load_template(name):
     path = os.path.join(TEMPLATE_DIR, name)
     try:
-        with open(path, "r", encoding="utf-8") as f: return f.read()
-    except FileNotFoundError: return "<h1>Template not found</h1>"
+        with open(path, "r", encoding="utf-8") as f:
+            return f.read()
+    except FileNotFoundError:
+        return "<h1>Template not found</h1>"
+
 
 def get_current_user(request):
     token = request.cookies.get(COOKIE_NAME)
-    if not token or token not in SERVER_SESSIONS: return None
+    if not token or token not in SERVER_SESSIONS:
+        return None
     session = SERVER_SESSIONS[token]
     if time.time() > session['expires']:
         del SERVER_SESSIONS[token]
         return None
     uid = session['id']
-    if uid not in ALLOWED_USERS: return None
+    if uid not in ALLOWED_USERS:
+        return None
     u_data = ALLOWED_USERS[uid]
     role = u_data.get("group", "users") if isinstance(u_data, dict) else u_data
-    return {"id": uid, "role": role, "first_name": USER_NAMES.get(str(uid), f"ID: {uid}"), "photo_url": AGENT_FLAG}
+    return {
+        "id": uid,
+        "role": role,
+        "first_name": USER_NAMES.get(
+            str(uid),
+            f"ID: {uid}"),
+        "photo_url": AGENT_FLAG}
+
 
 def _get_avatar_html(user):
     raw = user.get('photo_url', '')
-    if raw.startswith('http'): return f'<img src="{raw}" alt="ava" class="w-6 h-6 rounded-full flex-shrink-0">'
+    if raw.startswith('http'):
+        return f'<img src="{raw}" alt="ava" class="w-6 h-6 rounded-full flex-shrink-0">'
     return f'<span class="text-lg leading-none select-none">{raw}</span>'
+
 
 async def handle_get_logs(request):
     user = get_current_user(request)
-    if not user or user['role'] != 'admins': return web.json_response({"error": "Unauthorized"}, status=403)
+    if not user or user['role'] != 'admins':
+        return web.json_response({"error": "Unauthorized"}, status=403)
     log_path = os.path.join(BASE_DIR, "logs", "bot", "bot.log")
-    if not os.path.exists(log_path): return web.json_response({"logs": ["Logs not found."]})
+    if not os.path.exists(log_path):
+        return web.json_response({"logs": ["Logs not found."]})
     try:
         with open(log_path, "r", encoding="utf-8", errors="ignore") as f:
             lines = f.readlines()
-            if len(lines) > 300: lines = lines[-300:]
+            if len(lines) > 300:
+                lines = lines[-300:]
         return web.json_response({"logs": lines})
-    except Exception as e: return web.json_response({"error": str(e)}, status=500)
+    except Exception as e:
+        return web.json_response({"error": str(e)}, status=500)
+
 
 async def handle_dashboard(request):
     user = get_current_user(request)
-    if not user: raise web.HTTPFound('/login')
+    if not user:
+        raise web.HTTPFound('/login')
     html = load_template("dashboard.html")
     user_id = user['id']
     lang = get_user_lang(user_id)
 
     all_nodes = await nodes_db.get_all_nodes()
     nodes_count = len(all_nodes)
-    active_nodes = sum(1 for n in all_nodes.values() if time.time() - n.get("last_seen", 0) < NODE_OFFLINE_TIMEOUT)
+    active_nodes = sum(
+        1 for n in all_nodes.values() if time.time() -
+        n.get(
+            "last_seen",
+            0) < NODE_OFFLINE_TIMEOUT)
 
     role = user.get('role', 'users')
     role_color = "green" if role == "admins" else "gray"
@@ -174,8 +210,9 @@ async def handle_dashboard(request):
         "{web_stats_active}": _("web_stats_active", lang),
         "{node_action_btn}": node_action_btn,
     }
-    for k, v in replacements.items(): html = html.replace(k, v)
-    
+    for k, v in replacements.items():
+        html = html.replace(k, v)
+
     i18n_data = {
         "web_cpu": _("web_cpu", lang),
         "web_ram": _("web_ram", lang),
@@ -189,51 +226,76 @@ async def handle_dashboard(request):
     html = html.replace("{i18n_json}", json.dumps(i18n_data))
     return web.Response(text=html, content_type='text/html')
 
+
 async def handle_heartbeat(request):
-    try: data = await request.json()
-    except: return web.json_response({"error": "Invalid JSON"}, status=400)
-    
+    try:
+        data = await request.json()
+    except BaseException:
+        return web.json_response({"error": "Invalid JSON"}, status=400)
+
     token = data.get("token")
     node = await nodes_db.get_node_by_token(token)
-    if not token or not node: return web.json_response({"error": "Auth fail"}, status=401)
-    
+    if not token or not node:
+        return web.json_response({"error": "Auth fail"}, status=401)
+
     stats = data.get("stats", {})
     results = data.get("results", [])
     bot = request.app.get('bot')
-    
+
     if bot and results:
-        from core.server import process_node_result_background # Fix import loop if needed
+        from core.server import process_node_result_background  # Fix import loop if needed
         for res in results:
-            asyncio.create_task(process_node_result_background(bot, res.get("user_id"), res.get("command"), res.get("result"), token, node.get("name", "Node")))
-    
-    if node.get("is_restarting"): await nodes_db.update_node_extra(token, "is_restarting", False)
+            asyncio.create_task(
+                process_node_result_background(
+                    bot,
+                    res.get("user_id"),
+                    res.get("command"),
+                    res.get("result"),
+                    token,
+                    node.get(
+                        "name",
+                        "Node")))
+
+    if node.get("is_restarting"):
+        await nodes_db.update_node_extra(token, "is_restarting", False)
     ip = request.transport.get_extra_info('peername')[0]
     await nodes_db.update_node_heartbeat(token, ip, stats)
-    
+
     current_node = await nodes_db.get_node_by_token(token)
     tasks_to_send = current_node.get("tasks", [])
-    if tasks_to_send: await nodes_db.clear_node_tasks(token)
+    if tasks_to_send:
+        await nodes_db.clear_node_tasks(token)
     return web.json_response({"status": "ok", "tasks": tasks_to_send})
 
-async def process_node_result_background(bot, user_id, cmd, text, token, node_name):
-    if not user_id or not text: return
+
+async def process_node_result_background(
+        bot, user_id, cmd, text, token, node_name):
+    if not user_id or not text:
+        return
     try:
         if cmd == "traffic" and user_id in NODE_TRAFFIC_MONITORS:
             monitor = NODE_TRAFFIC_MONITORS[user_id]
             if monitor.get("token") == token:
                 msg_id = monitor.get("message_id")
-                stop_kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="⏹ Stop", callback_data=f"node_stop_traffic_{token}")]])
-                try: await bot.edit_message_text(text=text, chat_id=user_id, message_id=msg_id, reply_markup=stop_kb, parse_mode="HTML")
-                except: pass
+                stop_kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(
+                    text="⏹ Stop", callback_data=f"node_stop_traffic_{token}")]])
+                try:
+                    await bot.edit_message_text(text=text, chat_id=user_id, message_id=msg_id, reply_markup=stop_kb, parse_mode="HTML")
+                except BaseException:
+                    pass
                 return
         await bot.send_message(chat_id=user_id, text=f"🖥 <b>Ответ от {node_name}:</b>\n\n{text}", parse_mode="HTML")
-    except Exception as e: logging.error(f"Background send error: {e}")
+    except Exception as e:
+        logging.error(f"Background send error: {e}")
+
 
 async def handle_node_details(request):
-    if not get_current_user(request): return web.json_response({"error": "Unauthorized"}, status=401)
+    if not get_current_user(request):
+        return web.json_response({"error": "Unauthorized"}, status=401)
     token = request.query.get("token")
     node = await nodes_db.get_node_by_token(token)
-    if not node: return web.json_response({"error": "Node not found"}, status=404)
+    if not node:
+        return web.json_response({"error": "Node not found"}, status=404)
     return web.json_response({
         "name": node.get("name"),
         "ip": node.get("ip"),
@@ -244,40 +306,65 @@ async def handle_node_details(request):
         "is_restarting": node.get("is_restarting", False)
     })
 
+
 async def handle_agent_stats(request):
-    if not get_current_user(request): return web.json_response({"error": "Unauthorized"}, status=401)
-    import psutil # Local import
-    current_stats = {"cpu": 0, "ram": 0, "disk": 0, "ip": AGENT_IP_CACHE, "net_sent": 0, "net_recv": 0, "boot_time": 0}
+    if not get_current_user(request):
+        return web.json_response({"error": "Unauthorized"}, status=401)
+    import psutil  # Local import
+    current_stats = {
+        "cpu": 0,
+        "ram": 0,
+        "disk": 0,
+        "ip": AGENT_IP_CACHE,
+        "net_sent": 0,
+        "net_recv": 0,
+        "boot_time": 0}
     try:
         net = psutil.net_io_counters()
-        current_stats.update({"net_sent": net.bytes_sent, "net_recv": net.bytes_recv, "boot_time": psutil.boot_time()})
-    except: pass
+        current_stats.update({"net_sent": net.bytes_sent,
+                              "net_recv": net.bytes_recv,
+                              "boot_time": psutil.boot_time()})
+    except BaseException:
+        pass
     if AGENT_HISTORY:
         latest = AGENT_HISTORY[-1]
         current_stats.update({"cpu": latest["c"], "ram": latest["r"]})
-        try: current_stats["disk"] = psutil.disk_usage(get_host_path('/')).percent
-        except: pass
-    return web.json_response({"stats": current_stats, "history": AGENT_HISTORY})
+        try:
+            current_stats["disk"] = psutil.disk_usage(
+                get_host_path('/')).percent
+        except BaseException:
+            pass
+    return web.json_response(
+        {"stats": current_stats, "history": AGENT_HISTORY})
+
 
 async def handle_node_add(request):
     user = get_current_user(request)
-    if not user or user['role'] != 'admins': return web.json_response({"error": "Admin required"}, status=403)
+    if not user or user['role'] != 'admins':
+        return web.json_response({"error": "Admin required"}, status=403)
     try:
         data = await request.json()
         name = data.get("name")
-        if not name: return web.json_response({"error": "Name required"}, status=400)
+        if not name:
+            return web.json_response({"error": "Name required"}, status=400)
         token = await nodes_db.create_node(name)
-        host = request.headers.get('Host', f'{WEB_SERVER_HOST}:{WEB_SERVER_PORT}')
-        proto = "https" if request.headers.get('X-Forwarded-Proto') == "https" else "http"
+        host = request.headers.get(
+            'Host', f'{WEB_SERVER_HOST}:{WEB_SERVER_PORT}')
+        proto = "https" if request.headers.get(
+            'X-Forwarded-Proto') == "https" else "http"
         lang = get_user_lang(user['id'])
         script = "deploy_en.sh" if lang == "en" else "deploy.sh"
         cmd = f"bash <(wget -qO- https://raw.githubusercontent.com/jatixs/tgbotvpscp/main/{script}) --agent={proto}://{host} --token={token}"
-        return web.json_response({"status": "ok", "token": token, "command": cmd})
-    except Exception as e: return web.json_response({"error": str(e)}, status=500)
+        return web.json_response(
+            {"status": "ok", "token": token, "command": cmd})
+    except Exception as e:
+        return web.json_response({"error": str(e)}, status=500)
+
 
 async def handle_nodes_list_json(request):
     user = get_current_user(request)
-    if not user: return web.json_response({"error": "Unauthorized"}, status=401)
+    if not user:
+        return web.json_response({"error": "Unauthorized"}, status=401)
     all_nodes = await nodes_db.get_all_nodes()
     nodes_data = []
     now = time.time()
@@ -285,22 +372,30 @@ async def handle_nodes_list_json(request):
         last_seen = node.get("last_seen", 0)
         is_restarting = node.get("is_restarting", False)
         status = "offline"
-        if is_restarting: status = "restarting"
-        elif now - last_seen < NODE_OFFLINE_TIMEOUT: status = "online"
+        if is_restarting:
+            status = "restarting"
+        elif now - last_seen < NODE_OFFLINE_TIMEOUT:
+            status = "online"
         stats = node.get("stats", {})
-        nodes_data.append({
-            "token": token, "name": node.get("name", "Unknown"), "ip": node.get("ip", "Unknown"),
-            "status": status, "cpu": stats.get("cpu", 0), "ram": stats.get("ram", 0), "disk": stats.get("disk", 0)
-        })
+        nodes_data.append(
+            {
+                "token": token, "name": node.get(
+                    "name", "Unknown"), "ip": node.get(
+                    "ip", "Unknown"), "status": status, "cpu": stats.get(
+                    "cpu", 0), "ram": stats.get(
+                        "ram", 0), "disk": stats.get(
+                            "disk", 0)})
     return web.json_response({"nodes": nodes_data})
 
 # ... (Handlers for settings, password, etc. - keep as is or copy from original if not changed) ...
 # I will omit unchanged handlers to save space, assuming you have the original file.
 # BUT for completeness as requested:
 
+
 async def handle_settings_page(request):
     user = get_current_user(request)
-    if not user: raise web.HTTPFound('/login')
+    if not user:
+        raise web.HTTPFound('/login')
     html = load_template("settings.html")
     user_id = user['id']
     is_admin = user['role'] == 'admins'
@@ -308,103 +403,228 @@ async def handle_settings_page(request):
     user_alerts = ALERTS_CONFIG.get(user_id, {})
     users_json = "null"
     if is_admin:
-        ulist = [{"id": uid, "name": USER_NAMES.get(str(uid), f"ID: {uid}"), "role": ALLOWED_USERS[uid].get("group", "users") if isinstance(ALLOWED_USERS[uid], dict) else ALLOWED_USERS[uid]} for uid in ALLOWED_USERS if uid != ADMIN_USER_ID]
+        ulist = [
+            {
+                "id": uid,
+                "name": USER_NAMES.get(
+                    str(uid),
+                    f"ID: {uid}"),
+                "role": ALLOWED_USERS[uid].get(
+                    "group",
+                    "users") if isinstance(
+                    ALLOWED_USERS[uid],
+                    dict) else ALLOWED_USERS[uid]} for uid in ALLOWED_USERS if uid != ADMIN_USER_ID]
         users_json = json.dumps(ulist)
-    
+
     # ... (Replacements logic for settings.html) ...
     # ... (Copy logic from original file) ...
     # Assuming standard replacements...
-    html = html.replace("{web_title}", f"{_('web_settings_page_title', lang)} - Web Bot").replace("{user_name}", user.get('first_name')).replace("{user_avatar}", _get_avatar_html(user)).replace("{users_data_json}", users_json)
-    for k in ["web_settings_page_title", "web_back", "web_notif_section", "notifications_alert_name_res", "notifications_alert_name_logins", "notifications_alert_name_bans", "notifications_alert_name_downtime", "web_save_btn", "web_users_section", "web_add_user_btn", "web_user_id", "web_user_name", "web_user_role", "web_user_action", "web_add_node_section", "web_node_name_placeholder", "web_create_btn", "web_node_token", "web_node_cmd", "web_sys_settings_section", "web_thresholds_title", "web_intervals_title", "web_logs_mgmt_title", "web_cpu_threshold", "web_ram_threshold", "web_disk_threshold", "web_traffic_interval", "web_node_timeout", "web_clear_logs_btn", "web_security_section", "web_change_password_title", "web_current_password", "web_new_password", "web_confirm_password", "web_change_btn"]:
+    html = html.replace(
+        "{web_title}",
+        f"{_('web_settings_page_title', lang)} - Web Bot").replace(
+        "{user_name}",
+        user.get('first_name')).replace(
+            "{user_avatar}",
+            _get_avatar_html(user)).replace(
+                "{users_data_json}",
+        users_json)
+    for k in [
+        "web_settings_page_title",
+        "web_back",
+        "web_notif_section",
+        "notifications_alert_name_res",
+        "notifications_alert_name_logins",
+        "notifications_alert_name_bans",
+        "notifications_alert_name_downtime",
+        "web_save_btn",
+        "web_users_section",
+        "web_add_user_btn",
+        "web_user_id",
+        "web_user_name",
+        "web_user_role",
+        "web_user_action",
+        "web_add_node_section",
+        "web_node_name_placeholder",
+        "web_create_btn",
+        "web_node_token",
+        "web_node_cmd",
+        "web_sys_settings_section",
+        "web_thresholds_title",
+        "web_intervals_title",
+        "web_logs_mgmt_title",
+        "web_cpu_threshold",
+        "web_ram_threshold",
+        "web_disk_threshold",
+        "web_traffic_interval",
+        "web_node_timeout",
+        "web_clear_logs_btn",
+        "web_security_section",
+        "web_change_password_title",
+        "web_current_password",
+        "web_new_password",
+        "web_confirm_password",
+            "web_change_btn"]:
         html = html.replace(f"{{{k}}}", _(k, lang))
-    html = html.replace("{val_cpu}", str(current_config.CPU_THRESHOLD)).replace("{val_ram}", str(current_config.RAM_THRESHOLD)).replace("{val_disk}", str(current_config.DISK_THRESHOLD)).replace("{val_traffic}", str(current_config.TRAFFIC_INTERVAL)).replace("{val_timeout}", str(current_config.NODE_OFFLINE_TIMEOUT))
-    for alert in ['resources', 'logins', 'bans', 'downtime']: html = html.replace(f"{{check_{alert}}}", "checked" if user_alerts.get(alert, False) else "")
-    if user_id != ADMIN_USER_ID: html = html.replace('<div class="bg-white/60 dark:bg-white/5 backdrop-blur-md border border-white/40 dark:border-white/10 rounded-2xl p-6 mb-6 shadow-lg dark:shadow-none" id="securitySection">', '<div class="hidden">')
-    i18n_data = {"web_saving_btn": _("web_saving_btn", lang), "web_saved_btn": _("web_saved_btn", lang), "web_save_btn": _("web_save_btn", lang), "web_change_btn": _("web_change_btn", lang), "web_error": _("web_error", lang, error=""), "web_conn_error": _("web_conn_error", lang, error=""), "web_confirm_delete_user": _("web_confirm_delete_user", lang), "web_no_users": _("web_no_users", lang), "web_clear_logs_confirm": _("web_clear_logs_confirm", lang), "web_logs_cleared": _("web_logs_cleared", lang), "error_traffic_interval_low": _("error_traffic_interval_low", lang), "error_traffic_interval_high": _("error_traffic_interval_high", lang), "web_logs_clearing": _("web_logs_clearing", lang), "web_logs_cleared_alert": _("web_logs_cleared_alert", lang), "web_pass_changed": _("web_pass_changed", lang), "web_pass_mismatch": _("web_pass_mismatch", lang)}
+    html = html.replace(
+        "{val_cpu}", str(
+            current_config.CPU_THRESHOLD)).replace(
+        "{val_ram}", str(
+            current_config.RAM_THRESHOLD)).replace(
+        "{val_disk}", str(
+            current_config.DISK_THRESHOLD)).replace(
+        "{val_traffic}", str(
+            current_config.TRAFFIC_INTERVAL)).replace(
+        "{val_timeout}", str(
+            current_config.NODE_OFFLINE_TIMEOUT))
+    for alert in ['resources', 'logins', 'bans', 'downtime']:
+        html = html.replace(
+            f"{{check_{alert}}}",
+            "checked" if user_alerts.get(
+                alert,
+                False) else "")
+    if user_id != ADMIN_USER_ID:
+        html = html.replace(
+            '<div class="bg-white/60 dark:bg-white/5 backdrop-blur-md border border-white/40 dark:border-white/10 rounded-2xl p-6 mb-6 shadow-lg dark:shadow-none" id="securitySection">',
+            '<div class="hidden">')
+    i18n_data = {
+        "web_saving_btn": _(
+            "web_saving_btn", lang), "web_saved_btn": _(
+            "web_saved_btn", lang), "web_save_btn": _(
+                "web_save_btn", lang), "web_change_btn": _(
+                    "web_change_btn", lang), "web_error": _(
+                        "web_error", lang, error=""), "web_conn_error": _(
+                            "web_conn_error", lang, error=""), "web_confirm_delete_user": _(
+                                "web_confirm_delete_user", lang), "web_no_users": _(
+                                    "web_no_users", lang), "web_clear_logs_confirm": _(
+                                        "web_clear_logs_confirm", lang), "web_logs_cleared": _(
+                                            "web_logs_cleared", lang), "error_traffic_interval_low": _(
+                                                "error_traffic_interval_low", lang), "error_traffic_interval_high": _(
+                                                    "error_traffic_interval_high", lang), "web_logs_clearing": _(
+                                                        "web_logs_clearing", lang), "web_logs_cleared_alert": _(
+                                                            "web_logs_cleared_alert", lang), "web_pass_changed": _(
+                                                                "web_pass_changed", lang), "web_pass_mismatch": _(
+                                                                    "web_pass_mismatch", lang)}
     html = html.replace("{i18n_json}", json.dumps(i18n_data))
     return web.Response(text=html, content_type='text/html')
 
+
 async def handle_save_notifications(request):
     user = get_current_user(request)
-    if not user: return web.json_response({"error": "Auth required"}, status=401)
+    if not user:
+        return web.json_response({"error": "Auth required"}, status=401)
     try:
         data = await request.json()
         uid = user['id']
-        if uid not in ALERTS_CONFIG: ALERTS_CONFIG[uid] = {}
+        if uid not in ALERTS_CONFIG:
+            ALERTS_CONFIG[uid] = {}
         for k in ['resources', 'logins', 'bans', 'downtime']:
-            if k in data: ALERTS_CONFIG[uid][k] = bool(data[k])
+            if k in data:
+                ALERTS_CONFIG[uid][k] = bool(data[k])
         save_alerts_config()
         return web.json_response({"status": "ok"})
-    except Exception as e: return web.json_response({"error": str(e)}, status=500)
+    except Exception as e:
+        return web.json_response({"error": str(e)}, status=500)
+
 
 async def handle_save_system_config(request):
     user = get_current_user(request)
-    if not user or user['role'] != 'admins': return web.json_response({"error": "Admin required"}, status=403)
+    if not user or user['role'] != 'admins':
+        return web.json_response({"error": "Admin required"}, status=403)
     try:
         data = await request.json()
         # Basic validation can be added here
         save_system_config(data)
         return web.json_response({"status": "ok"})
-    except Exception as e: return web.json_response({"error": str(e)}, status=500)
+    except Exception as e:
+        return web.json_response({"error": str(e)}, status=500)
+
 
 async def handle_change_password(request):
     user = get_current_user(request)
-    if not user: return web.json_response({"error": "Unauthorized"}, status=401)
-    if user['id'] != ADMIN_USER_ID: return web.json_response({"error": "Main Admin only"}, status=403)
+    if not user:
+        return web.json_response({"error": "Unauthorized"}, status=401)
+    if user['id'] != ADMIN_USER_ID:
+        return web.json_response({"error": "Main Admin only"}, status=403)
     try:
         data = await request.json()
-        if not check_user_password(user['id'], data.get("current_password")): return web.json_response({"error": "Wrong password"}, status=400)
+        if not check_user_password(user['id'], data.get("current_password")):
+            return web.json_response({"error": "Wrong password"}, status=400)
         new_pass = data.get("new_password")
-        if not new_pass or len(new_pass) < 4: return web.json_response({"error": "Too short"}, status=400)
+        if not new_pass or len(new_pass) < 4:
+            return web.json_response({"error": "Too short"}, status=400)
         new_hash = hashlib.sha256(new_pass.encode()).hexdigest()
-        if isinstance(ALLOWED_USERS[user['id']], str): ALLOWED_USERS[user['id']] = {"group": ALLOWED_USERS[user['id']], "password_hash": new_hash}
-        else: ALLOWED_USERS[user['id']]["password_hash"] = new_hash
+        if isinstance(ALLOWED_USERS[user['id']], str):
+            ALLOWED_USERS[user['id']] = {
+                "group": ALLOWED_USERS[user['id']], "password_hash": new_hash}
+        else:
+            ALLOWED_USERS[user['id']]["password_hash"] = new_hash
         save_users()
         return web.json_response({"status": "ok"})
-    except Exception as e: return web.json_response({"error": str(e)}, status=500)
+    except Exception as e:
+        return web.json_response({"error": str(e)}, status=500)
+
 
 async def handle_clear_logs(request):
     user = get_current_user(request)
-    if not user or user['role'] != 'admins': return web.json_response({"error": "Admin required"}, status=403)
+    if not user or user['role'] != 'admins':
+        return web.json_response({"error": "Admin required"}, status=403)
     try:
         for d in [BOT_LOG_DIR, WATCHDOG_LOG_DIR]:
             if os.path.exists(d):
                 for f in os.listdir(d):
                     fp = os.path.join(d, f)
-                    if os.path.isfile(fp): open(fp, 'w').close()
+                    if os.path.isfile(fp):
+                        open(fp, 'w').close()
         return web.json_response({"status": "ok"})
-    except Exception as e: return web.json_response({"error": str(e)}, status=500)
+    except Exception as e:
+        return web.json_response({"error": str(e)}, status=500)
+
 
 async def handle_user_action(request):
     user = get_current_user(request)
-    if not user or user['role'] != 'admins': return web.json_response({"error": "Admin required"}, status=403)
+    if not user or user['role'] != 'admins':
+        return web.json_response({"error": "Admin required"}, status=403)
     try:
         data = await request.json()
         act = data.get('action')
         tid = int(data.get('id', 0))
-        if not tid or tid == ADMIN_USER_ID: return web.json_response({"error": "Invalid ID"}, status=400)
+        if not tid or tid == ADMIN_USER_ID:
+            return web.json_response({"error": "Invalid ID"}, status=400)
         if act == 'delete':
             if tid in ALLOWED_USERS:
                 del ALLOWED_USERS[tid]
-                if str(tid) in USER_NAMES: del USER_NAMES[str(tid)]
-                if tid in ALERTS_CONFIG: del ALERTS_CONFIG[tid]
+                if str(tid) in USER_NAMES:
+                    del USER_NAMES[str(tid)]
+                if tid in ALERTS_CONFIG:
+                    del ALERTS_CONFIG[tid]
                 save_users()
                 save_alerts_config()
                 return web.json_response({"status": "ok"})
         elif act == 'add':
-            if tid in ALLOWED_USERS: return web.json_response({"error": "Exists"}, status=400)
-            ALLOWED_USERS[tid] = {"group": data.get('role', 'users'), "password_hash": None}
+            if tid in ALLOWED_USERS:
+                return web.json_response({"error": "Exists"}, status=400)
+            ALLOWED_USERS[tid] = {
+                "group": data.get(
+                    'role',
+                    'users'),
+                "password_hash": None}
             bot = request.app.get('bot')
-            if bot: await get_user_name(bot, tid)
-            else: USER_NAMES[str(tid)] = f"User {tid}"
+            if bot:
+                await get_user_name(bot, tid)
+            else:
+                USER_NAMES[str(tid)] = f"User {tid}"
             save_users()
-            return web.json_response({"status": "ok", "name": USER_NAMES.get(str(tid))})
-    except Exception as e: return web.json_response({"error": str(e)}, status=500)
+            return web.json_response(
+                {"status": "ok", "name": USER_NAMES.get(str(tid))})
+    except Exception as e:
+        return web.json_response({"error": str(e)}, status=500)
     return web.json_response({"error": "Unknown"}, status=400)
+
 
 async def handle_set_language(request):
     user = get_current_user(request)
-    if not user: return web.json_response({"error": "Unauthorized"}, status=401)
+    if not user:
+        return web.json_response({"error": "Unauthorized"}, status=401)
     try:
         data = await request.json()
         lang = data.get("lang")
@@ -412,131 +632,193 @@ async def handle_set_language(request):
             set_user_lang(user['id'], lang)
             return web.json_response({"status": "ok"})
         return web.json_response({"error": "Invalid language"}, status=400)
-    except Exception as e: return web.json_response({"error": str(e)}, status=500)
+    except Exception as e:
+        return web.json_response({"error": str(e)}, status=500)
 
 # --- LOGIN & RESET ---
+
+
 async def handle_login_page(request):
-    if get_current_user(request): raise web.HTTPFound('/')
+    if get_current_user(request):
+        raise web.HTTPFound('/')
     html = load_template("login.html")
     alert = ""
     if is_default_password_active(ADMIN_USER_ID):
         alert = f"""<div class="mb-4 p-3 bg-yellow-500/20 border border-yellow-500/50 rounded-xl flex items-start gap-3"><svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-yellow-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg><span class="text-xs text-yellow-200 font-medium">{_("web_default_pass_alert", DEFAULT_LANGUAGE)}</span></div>"""
-    html = html.replace("{default_pass_alert}", alert).replace("{error_block}", "")
+    html = html.replace(
+        "{default_pass_alert}",
+        alert).replace(
+        "{error_block}",
+        "")
     return web.Response(text=html, content_type='text/html')
+
 
 async def handle_login_request(request):
     data = await request.post()
-    try: uid = int(data.get("user_id", 0))
-    except: uid = 0
-    if uid not in ALLOWED_USERS: return web.Response(text="User not found", status=403)
-    
+    try:
+        uid = int(data.get("user_id", 0))
+    except BaseException:
+        uid = 0
+    if uid not in ALLOWED_USERS:
+        return web.Response(text="User not found", status=403)
+
     token = secrets.token_urlsafe(32)
     AUTH_TOKENS[token] = {"user_id": uid, "created_at": time.time()}
     host = request.headers.get('Host', f'{WEB_SERVER_HOST}:{WEB_SERVER_PORT}')
-    proto = "https" if request.headers.get('X-Forwarded-Proto') == "https" else "http"
+    proto = "https" if request.headers.get(
+        'X-Forwarded-Proto') == "https" else "http"
     link = f"{proto}://{host}/api/login/magic?token={token}"
-    
+
     bot = request.app.get('bot')
     if bot:
         try:
-            kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="🔓 Login", url=link)]])
+            kb = InlineKeyboardMarkup(
+                inline_keyboard=[[InlineKeyboardButton(text="🔓 Login", url=link)]])
             await bot.send_message(uid, "<b>🔐 Web Login</b>", reply_markup=kb, parse_mode="HTML")
             return web.HTTPFound('/login?sent=true')
-        except: pass
+        except BaseException:
+            pass
     return web.Response(text="Bot Error", status=500)
+
 
 async def handle_login_password(request):
     data = await request.post()
     ip = get_client_ip(request)
-    if not check_rate_limit(ip): return web.Response(text="Rate limited. Wait 5 mins.", status=429)
-    try: uid = int(data.get("user_id", 0))
-    except: return web.Response(text="Invalid ID", status=400)
-    if uid != ADMIN_USER_ID: return web.Response(text="Password login for Main Admin only.", status=403)
-    
+    if not check_rate_limit(ip):
+        return web.Response(text="Rate limited. Wait 5 mins.", status=429)
+    try:
+        uid = int(data.get("user_id", 0))
+    except BaseException:
+        return web.Response(text="Invalid ID", status=400)
+    if uid != ADMIN_USER_ID:
+        return web.Response(
+            text="Password login for Main Admin only.",
+            status=403)
+
     if check_user_password(uid, data.get("password")):
         st = secrets.token_hex(32)
         SERVER_SESSIONS[st] = {"id": uid, "expires": time.time() + 604800}
         resp = web.HTTPFound('/')
-        resp.set_cookie(COOKIE_NAME, st, max_age=604800, httponly=True, samesite='Lax')
+        resp.set_cookie(
+            COOKIE_NAME,
+            st,
+            max_age=604800,
+            httponly=True,
+            samesite='Lax')
         return resp
     add_login_attempt(ip)
     return web.Response(text="Invalid password", status=403)
 
+
 async def handle_magic_login(request):
     token = request.query.get("token")
-    if not token or token not in AUTH_TOKENS: return web.Response(text="Link expired", status=403)
+    if not token or token not in AUTH_TOKENS:
+        return web.Response(text="Link expired", status=403)
     td = AUTH_TOKENS.pop(token)
-    if time.time() - td["created_at"] > LOGIN_TOKEN_TTL: return web.Response(text="Expired", status=403)
+    if time.time() - td["created_at"] > LOGIN_TOKEN_TTL:
+        return web.Response(text="Expired", status=403)
     uid = td["user_id"]
-    if uid not in ALLOWED_USERS: return web.Response(text="Denied", status=403)
+    if uid not in ALLOWED_USERS:
+        return web.Response(text="Denied", status=403)
     st = secrets.token_hex(32)
     SERVER_SESSIONS[st] = {"id": uid, "expires": time.time() + 2592000}
     resp = web.HTTPFound('/')
-    resp.set_cookie(COOKIE_NAME, st, max_age=2592000, httponly=True, samesite='Lax')
+    resp.set_cookie(
+        COOKIE_NAME,
+        st,
+        max_age=2592000,
+        httponly=True,
+        samesite='Lax')
     return resp
+
 
 async def handle_logout(request):
     token = request.cookies.get(COOKIE_NAME)
-    if token and token in SERVER_SESSIONS: del SERVER_SESSIONS[token]
+    if token and token in SERVER_SESSIONS:
+        del SERVER_SESSIONS[token]
     resp = web.HTTPFound('/login')
     resp.del_cookie(COOKIE_NAME)
     return resp
 
+
 async def handle_reset_request(request):
     try:
         data = await request.json()
-        try: uid = int(data.get("user_id", 0))
-        except: uid = 0
+        try:
+            uid = int(data.get("user_id", 0))
+        except BaseException:
+            uid = 0
         if uid != ADMIN_USER_ID:
             adm = f"https://t.me/{ADMIN_USERNAME}" if ADMIN_USERNAME else f"tg://user?id={ADMIN_USER_ID}"
-            return web.json_response({"error": "not_found", "admin_url": adm}, status=404)
-        
+            return web.json_response(
+                {"error": "not_found", "admin_url": adm}, status=404)
+
         token = secrets.token_urlsafe(32)
         RESET_TOKENS[token] = {"ts": time.time(), "user_id": uid}
-        host = request.headers.get('Host', f'{WEB_SERVER_HOST}:{WEB_SERVER_PORT}')
-        proto = "https" if request.headers.get('X-Forwarded-Proto') == "https" else "http"
+        host = request.headers.get(
+            'Host', f'{WEB_SERVER_HOST}:{WEB_SERVER_PORT}')
+        proto = "https" if request.headers.get(
+            'X-Forwarded-Proto') == "https" else "http"
         link = f"{proto}://{host}/reset_password?token={token}"
-        
+
         bot = request.app.get('bot')
         if bot:
             try:
-                kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="🔐 Reset", url=link)]])
+                kb = InlineKeyboardMarkup(
+                    inline_keyboard=[[InlineKeyboardButton(text="🔐 Reset", url=link)]])
                 await bot.send_message(uid, "<b>🆘 Reset Password</b>", reply_markup=kb, parse_mode="HTML")
                 return web.json_response({"status": "ok"})
-            except: return web.json_response({"error": "bot_send_error"}, status=500)
+            except BaseException:
+                return web.json_response(
+                    {"error": "bot_send_error"}, status=500)
         return web.json_response({"error": "bot_not_ready"}, status=500)
-    except Exception as e: return web.json_response({"error": str(e)}, status=500)
+    except Exception as e:
+        return web.json_response({"error": str(e)}, status=500)
+
 
 async def handle_reset_page_render(request):
     token = request.query.get("token")
-    if not token or token not in RESET_TOKENS: return web.Response(text="Expired", status=403)
+    if not token or token not in RESET_TOKENS:
+        return web.Response(text="Expired", status=403)
     if time.time() - RESET_TOKENS[token]["ts"] > RESET_TOKEN_TTL:
         del RESET_TOKENS[token]
         return web.Response(text="Expired", status=403)
-    html = load_template("login.html").replace("{error_block}", "").replace("{default_pass_alert}", "")
+    html = load_template("login.html").replace(
+        "{error_block}", "").replace(
+        "{default_pass_alert}", "")
     return web.Response(text=html, content_type='text/html')
+
 
 async def handle_reset_confirm(request):
     try:
         data = await request.json()
         token = data.get("token")
         new_pass = data.get("password")
-        if not token or token not in RESET_TOKENS: return web.json_response({"error": "Expired"}, status=403)
+        if not token or token not in RESET_TOKENS:
+            return web.json_response({"error": "Expired"}, status=403)
         uid = RESET_TOKENS[token]["user_id"]
         if uid != ADMIN_USER_ID:
             del RESET_TOKENS[token]
             return web.json_response({"error": "Denied"}, status=403)
-        if not new_pass or len(new_pass) < 4: return web.json_response({"error": "Short pass"}, status=400)
-        
+        if not new_pass or len(new_pass) < 4:
+            return web.json_response({"error": "Short pass"}, status=400)
+
         new_hash = hashlib.sha256(new_pass.encode()).hexdigest()
-        if isinstance(ALLOWED_USERS[uid], str): ALLOWED_USERS[uid] = {"group": ALLOWED_USERS[uid], "password_hash": new_hash}
-        else: ALLOWED_USERS[uid]["password_hash"] = new_hash
+        if isinstance(ALLOWED_USERS[uid], str):
+            ALLOWED_USERS[uid] = {
+                "group": ALLOWED_USERS[uid],
+                "password_hash": new_hash}
+        else:
+            ALLOWED_USERS[uid]["password_hash"] = new_hash
         save_users()
         del RESET_TOKENS[token]
         return web.json_response({"status": "ok"})
-    except Exception as e: return web.json_response({"error": str(e)}, status=500)
+    except Exception as e:
+        return web.json_response({"error": str(e)}, status=500)
+
 
 async def handle_api_root(request): return web.Response(text="VPS Bot API")
+
 
 async def start_web_server(bot_instance: Bot):
     global AGENT_FLAG
@@ -545,7 +827,8 @@ async def start_web_server(bot_instance: Bot):
     app.router.add_post('/api/heartbeat', handle_heartbeat)
     if ENABLE_WEB_UI:
         logging.info("Web UI ENABLED.")
-        if os.path.exists(STATIC_DIR): app.router.add_static('/static', STATIC_DIR)
+        if os.path.exists(STATIC_DIR):
+            app.router.add_static('/static', STATIC_DIR)
         app.router.add_get('/', handle_dashboard)
         app.router.add_get('/settings', handle_settings_page)
         app.router.add_get('/login', handle_login_page)
@@ -577,27 +860,41 @@ async def start_web_server(bot_instance: Bot):
     site = web.TCPSite(runner, WEB_SERVER_HOST, WEB_SERVER_PORT)
     try:
         await site.start()
-        logging.info(f"Web Server started on {WEB_SERVER_HOST}:{WEB_SERVER_PORT}")
+        logging.info(
+            f"Web Server started on {WEB_SERVER_HOST}:{WEB_SERVER_PORT}")
         return runner
     except Exception as e:
         logging.error(f"Failed to start Web Server: {e}")
         return None
 
+
 async def agent_monitor():
     global AGENT_IP_CACHE, AGENT_FLAG
     import psutil
-    try: AGENT_IP_CACHE = await asyncio.to_thread(lambda: requests.get("https://api.ipify.org", timeout=3).text)
-    except: pass
-    try: AGENT_FLAG = await get_country_flag(AGENT_IP_CACHE)
-    except: pass
-    
+    try:
+        AGENT_IP_CACHE = await asyncio.to_thread(lambda: requests.get("https://api.ipify.org", timeout=3).text)
+    except BaseException:
+        pass
+    try:
+        AGENT_FLAG = await get_country_flag(AGENT_IP_CACHE)
+    except BaseException:
+        pass
+
     while True:
         try:
             cpu = psutil.cpu_percent(interval=None)
             ram = psutil.virtual_memory().percent
             net = psutil.net_io_counters()
-            point = {"t": int(time.time()), "c": cpu, "r": ram, "rx": net.bytes_recv, "tx": net.bytes_sent}
+            point = {
+                "t": int(
+                    time.time()),
+                "c": cpu,
+                "r": ram,
+                "rx": net.bytes_recv,
+                "tx": net.bytes_sent}
             AGENT_HISTORY.append(point)
-            if len(AGENT_HISTORY) > 60: AGENT_HISTORY.pop(0)
-        except: pass
+            if len(AGENT_HISTORY) > 60:
+                AGENT_HISTORY.pop(0)
+        except BaseException:
+            pass
         await asyncio.sleep(2)
