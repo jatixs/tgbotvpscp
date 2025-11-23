@@ -35,8 +35,20 @@ function checkForChanges() {
     
     inputs.forEach(id => {
         const el = document.getElementById(id);
-        if (el && el.value != initialSysConfig[id]) {
-            hasChanges = true;
+        if (el) {
+            // --- ИСПРАВЛЕНИЕ: Обновляем отображение значений ползунков здесь ---
+            if (id === 'conf_cpu' || id === 'conf_ram' || id === 'conf_disk') { 
+                const displayId = id.replace('conf_', 'val_') + '_display';
+                const displayEl = document.getElementById(displayId);
+                if (displayEl) {
+                    displayEl.innerText = el.value + '%';
+                }
+            }
+            // -------------------------------------------------------------------
+
+            if (el.value != initialSysConfig[id]) {
+                hasChanges = true;
+            }
         }
     });
     

@@ -460,6 +460,7 @@ async def handle_settings_page(request):
         "{web_user_action}": _("web_user_action", lang),
         "{web_add_node_section}": _("web_add_node_section", lang),
         "{web_node_name_placeholder}": _("web_node_name_placeholder", lang),
+        "{web_no_users}": _("web_no_users", lang),
         "{web_create_btn}": _("web_create_btn", lang),
         "{web_node_token}": _("web_node_token", lang),
         "{web_node_cmd}": _("web_node_cmd", lang),

@@ -8,6 +8,7 @@
     <script src="/static/js/theme_init.js"></script>
     <script>
         const I18N = {i18n_json};
+        const USERS_DATA = {users_data_json};
     </script>
     <script src="https://unpkg.com/twemoji@latest/dist/twemoji.min.js" crossorigin="anonymous"></script>
     <link rel="stylesheet" href="/static/css/style.css">
@@ -135,69 +136,77 @@
             </h2>
 
             <div class="grid grid-cols-1 md:grid-cols-2 gap-8 mb-6">
-                <div>
-                    <h3 class="text-sm font-bold text-gray-500 dark:text-gray-400 uppercase mb-4 tracking-wider">{web_thresholds_title}</h3>
-                    
-                    <div class="space-y-5">
-                        <div>
-                            <div class="flex justify-between text-sm mb-1">
-                                <div class="flex items-center gap-1">
-                                    <span class="text-gray-700 dark:text-gray-300">{web_cpu_threshold}</span>
-                                    <div class="relative inline-block">
-                                        <button onclick="toggleHint(event, 'hint-cpu-set')" type="button" class="p-0.5 -m-0.5 rounded-full focus:outline-none focus:ring-1 focus:ring-blue-500/50">
-                                            <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 text-gray-400 cursor-help" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                            </svg>
-                                        </button>
-                                        <div id="hint-cpu-set" class="hidden">
-                                            {web_hint_cpu_threshold}
-                                        </div>
-                                    </div>
-                                </div>
-                                <span class="font-mono text-blue-600 dark:text-blue-400 font-bold" id="val_cpu_display">{val_cpu}%</span>
-                            </div>
-                            <input type="range" id="conf_cpu" min="50" max="99" value="{val_cpu}" class="w-full h-2 bg-gray-200 dark:bg-gray-700 rounded-lg appearance-none cursor-pointer accent-blue-500" oninput="document.getElementById('val_cpu_display').innerText = this.value + '%'">
-                        </div>
+                <div class="flex flex-col justify-between">
+                    <div>
+                        <h3 class="text-sm font-bold text-gray-500 dark:text-gray-400 uppercase mb-4 tracking-wider">{web_thresholds_title}</h3>
                         
-                        <div>
-                            <div class="flex justify-between text-sm mb-1">
-                                <div class="flex items-center gap-1">
-                                    <span class="text-gray-700 dark:text-gray-300">{web_ram_threshold}</span>
-                                    <div class="relative inline-block">
-                                        <button onclick="toggleHint(event, 'hint-ram-set')" type="button" class="p-0.5 -m-0.5 rounded-full focus:outline-none focus:ring-1 focus:ring-purple-500/50">
-                                            <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 text-gray-400 cursor-help" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                            </svg>
-                                        </button>
-                                        <div id="hint-ram-set" class="hidden">
-                                            {web_hint_ram_threshold}
+                        <div class="space-y-5">
+                            <div>
+                                <div class="flex justify-between text-sm mb-1">
+                                    <div class="flex items-center gap-1">
+                                        <span class="text-gray-700 dark:text-gray-300">{web_cpu_threshold}</span>
+                                        <div class="relative inline-block">
+                                            <button onclick="toggleHint(event, 'hint-cpu-set')" type="button" class="p-0.5 -m-0.5 rounded-full focus:outline-none focus:ring-1 focus:ring-blue-500/50">
+                                                <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 text-gray-400 cursor-help" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                                </svg>
+                                            </button>
+                                            <div id="hint-cpu-set" class="hidden">
+                                                {web_hint_cpu_threshold}
+                                            </div>
                                         </div>
                                     </div>
+                                    <span class="font-mono text-blue-600 dark:text-blue-400 font-bold" id="val_cpu_display">{val_cpu}%</span>
                                 </div>
-                                <span class="font-mono text-purple-600 dark:text-purple-400 font-bold" id="val_ram_display">{val_ram}%</span>
+                                <input type="range" id="conf_cpu" min="50" max="99" value="{val_cpu}" class="w-full h-2 bg-gray-200 dark:bg-gray-700 rounded-lg appearance-none cursor-pointer accent-blue-500">
                             </div>
-                            <input type="range" id="conf_ram" min="50" max="99" value="{val_ram}" class="w-full h-2 bg-gray-200 dark:bg-gray-700 rounded-lg appearance-none cursor-pointer accent-purple-500" oninput="document.getElementById('val_ram_display').innerText = this.value + '%'">
-                        </div>
+                            
+                            <div>
+                                <div class="flex justify-between text-sm mb-1">
+                                    <div class="flex items-center gap-1">
+                                        <span class="text-gray-700 dark:text-gray-300">{web_ram_threshold}</span>
+                                        <div class="relative inline-block">
+                                            <button onclick="toggleHint(event, 'hint-ram-set')" type="button" class="p-0.5 -m-0.5 rounded-full focus:outline-none focus:ring-1 focus:ring-purple-500/50">
+                                                <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 text-gray-400 cursor-help" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                                </svg>
+                                            </button>
+                                            <div id="hint-ram-set" class="hidden">
+                                                {web_hint_ram_threshold}
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <span class="font-mono text-purple-600 dark:text-purple-400 font-bold" id="val_ram_display">{val_ram}%</span>
+                                </div>
+                                <input type="range" id="conf_ram" min="50" max="99" value="{val_ram}" class="w-full h-2 bg-gray-200 dark:bg-gray-700 rounded-lg appearance-none cursor-pointer accent-purple-500">
+                            </div>
 
-                        <div>
-                            <div class="flex justify-between text-sm mb-1">
-                                <div class="flex items-center gap-1">
-                                    <span class="text-gray-700 dark:text-gray-300">{web_disk_threshold}</span>
-                                    <div class="relative inline-block">
-                                        <button onclick="toggleHint(event, 'hint-disk-set')" type="button" class="p-0.5 -m-0.5 rounded-full focus:outline-none focus:ring-1 focus:ring-green-500/50">
-                                            <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 text-gray-400 cursor-help" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                            </svg>
-                                        </button>
-                                        <div id="hint-disk-set" class="hidden">
-                                            {web_hint_disk_threshold}
+                            <div>
+                                <div class="flex justify-between text-sm mb-1">
+                                    <div class="flex items-center gap-1">
+                                        <span class="text-gray-700 dark:text-gray-300">{web_disk_threshold}</span>
+                                        <div class="relative inline-block">
+                                            <button onclick="toggleHint(event, 'hint-disk-set')" type="button" class="p-0.5 -m-0.5 rounded-full focus:outline-none focus:ring-1 focus:ring-green-500/50">
+                                                <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 text-gray-400 cursor-help" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                                </svg>
+                                            </button>
+                                            <div id="hint-disk-set" class="hidden">
+                                                {web_hint_disk_threshold}
+                                            </div>
                                         </div>
                                     </div>
+                                    <span class="font-mono text-green-600 dark:text-green-400 font-bold" id="val_disk_display">{val_disk}%</span>
                                 </div>
-                                <span class="font-mono text-green-600 dark:text-green-400 font-bold" id="val_disk_display">{val_disk}%</span>
+                                <input type="range" id="conf_disk" min="50" max="99" value="{val_disk}" class="w-full h-2 bg-gray-200 dark:bg-gray-700 rounded-lg appearance-none cursor-pointer accent-green-500">
                             </div>
-                            <input type="range" id="conf_disk" min="50" max="99" value="{val_disk}" class="w-full h-2 bg-gray-200 dark:bg-gray-700 rounded-lg appearance-none cursor-pointer accent-green-500" oninput="document.getElementById('val_disk_display').innerText = this.value + '%'">
                         </div>
+                    </div>
+
+                    <div class="mt-6 pt-6 border-t border-gray-200 dark:border-white/5">
+                        <h3 class="text-sm font-bold text-transparent uppercase mb-3 tracking-wider select-none" aria-hidden="true">&nbsp;</h3> <button onclick="saveSystemConfig()" id="saveSysBtn" disabled class="w-full px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-400 dark:text-gray-500 rounded-lg font-bold transition transform cursor-not-allowed flex items-center justify-center gap-2 shadow-sm">
+                            {web_save_btn}
+                        </button>
                     </div>
                 </div>
 
@@ -244,16 +253,12 @@
                     
                     <div class="mt-6 pt-6 border-t border-gray-200 dark:border-white/5">
                          <h3 class="text-sm font-bold text-gray-500 dark:text-gray-400 uppercase mb-3 tracking-wider">{web_logs_mgmt_title}</h3>
-                         <button onclick="clearLogs()" id="clearLogsBtn" class="w-full px-4 py-2 bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 text-red-600 dark:text-red-400 rounded-lg text-sm transition flex items-center justify-center gap-2">
+                         <button onclick="clearLogs()" id="clearLogsBtn" class="w-full px-4 py-2 bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 text-red-600 dark:text-red-400 rounded-lg text-sm transition flex items-center justify-center gap-2 shadow-sm">
                              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
                              {web_clear_logs_btn}
                          </button>
                     </div>
                 </div>
-            </div>
-            
-            <div class="flex justify-end">
-                <button onclick="saveSystemConfig()" id="saveSysBtn" disabled class="px-6 py-2 bg-gray-200 dark:bg-gray-700 text-gray-400 dark:text-gray-500 rounded-lg font-bold transition transform cursor-not-allowed">{web_save_btn}</button>
             </div>
         </div>
 
