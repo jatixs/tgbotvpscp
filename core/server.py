@@ -41,6 +41,7 @@ LOGIN_BLOCK_TIME = 300
 # ДОБАВЛЕНО: Глобальная переменная для задачи монитора
 AGENT_TASK = None
 
+
 def check_rate_limit(ip):
     now = time.time()
     attempts = LOGIN_ATTEMPTS.get(ip, [])
@@ -865,7 +866,7 @@ async def start_web_server(bot_instance: Bot):
 
     # ЗАПУСК ЗАДАЧИ С СОХРАНЕНИЕМ В ПЕРЕМЕННУЮ
     AGENT_TASK = asyncio.create_task(agent_monitor())
-    
+
     runner = web.AppRunner(app, access_log=None)
     await runner.setup()
     site = web.TCPSite(runner, WEB_SERVER_HOST, WEB_SERVER_PORT)
