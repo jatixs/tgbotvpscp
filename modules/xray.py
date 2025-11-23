@@ -104,8 +104,15 @@ async def updatexray_handler(message: types.Message, state: FSMContext):
         stdout_update, stderr_update = await process_update.communicate()
 
         if process_update.returncode != 0:
-            error_output = stderr_update.decode('utf-8', 'ignore') or stdout_update.decode('utf-8', 'ignore')
-            raise Exception(_("xray_update_error", lang, client=client_name_display, error=escape_html(error_output)))
+            error_output = stderr_update.decode(
+                'utf-8',
+                'ignore') or stdout_update.decode(
+                'utf-8',
+                'ignore')
+            raise Exception(_("xray_update_error",
+                              lang,
+                              client=client_name_display,
+                              error=escape_html(error_output)))
 
         process_version = await asyncio.create_subprocess_shell(version_cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
         # FIX: _ -> stderr_dummy
@@ -115,7 +122,11 @@ async def updatexray_handler(message: types.Message, state: FSMContext):
         if version_match:
             version = version_match.group(1)
 
-        final_message = _("xray_update_success", lang, client=client_name_display, version=version)
+        final_message = _(
+            "xray_update_success",
+            lang,
+            client=client_name_display,
+            version=version)
         await message.bot.edit_message_text(final_message, chat_id=chat_id, message_id=sent_msg.message_id, parse_mode="HTML")
 
     except Exception as e:
