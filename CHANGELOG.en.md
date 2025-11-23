@@ -5,13 +5,37 @@
 <h1 align="center">📝 Telegram VPS Management Bot — Changelog</h1>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-v1.12.0-blue?style=flat-square" alt="Version 1.12.0"/>
-  <img src="https://img.shields.io/badge/build-44-purple?style=flat-square" alt="Build 44"/>
+  <img src="https://img.shields.io/badge/version-v1.12.1-blue?style=flat-square" alt="Version 1.12.1"/>
+  <img src="https://img.shields.io/badge/build-45-purple?style=flat-square" alt="Build 45"/>
   <img src="https://img.shields.io/badge/date-November%202025-green?style=flat-square" alt="Date November 2025"/>
   <img src="https://img.shields.io/badge/status-stable-green?style=flat-square" alt="Status Stable"/>
 </p>
 
 ---
+
+## [1.12.1] - 2025-11-23
+
+### 🚑 Hotfixes:
+
+* **Node Agent (`node/node.py`):**
+    * Fixed a critical bug where the agent file was overwritten with server module code. This caused a `ModuleNotFoundError: No module named 'aiogram'` error when starting on remote nodes.
+    * Restored the correct lightweight agent code using only `requests` and `psutil`.
+
+* **Variable Name Conflict (i18n):**
+    * Resolved `TypeError: 'bytes' object is not callable` and `UnboundLocalError` errors.
+    * In modules `selftest`, `fail2ban`, `sshlog`, and `xray`, the `_` variable (translation function) was accidentally overwritten by the `stderr` output of system commands. Variables have been renamed, and conflicts resolved.
+
+* **Freeze on Restart (Watchdog/Systemd):**
+    * Fixed an issue where the `tg-bot` service did not stop correctly and was killed by the system due to timeout (`SIGKILL`).
+    * Added forced termination of the process group (`tail -f`) in the `notifications.py` module when stopping the bot.
+    * Added proper handling of `asyncio.CancelledError` in `core/server.py` (Web Agent), allowing background tasks to terminate gracefully.
+
+### 🔧 Misc:
+
+* Added missing imports (`requests`, `signal`) in `core/server.py` and `modules/notifications.py`.
+* Improved stability of background monitors.
+---
+
 ## [1.12.0] - 2025-11-23
 
 ### ⚡️ Architecture & Performance:
@@ -53,7 +77,6 @@
 
 * Restored the GitHub Actions (Security Scan) pipeline, which was previously blocked due to Bandit false positives.
 ---
-
 
 ## [1.11.1] - 2025-11-22
 

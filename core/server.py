@@ -5,6 +5,7 @@ import json
 import secrets
 import asyncio
 import hashlib
+import requests
 from aiohttp import web
 from aiogram import Bot
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
@@ -387,10 +388,6 @@ async def handle_nodes_list_json(request):
                             "disk", 0)})
     return web.json_response({"nodes": nodes_data})
 
-# ... (Handlers for settings, password, etc. - keep as is or copy from original if not changed) ...
-# I will omit unchanged handlers to save space, assuming you have the original file.
-# BUT for completeness as requested:
-
 
 async def handle_settings_page(request):
     user = get_current_user(request)
@@ -416,9 +413,6 @@ async def handle_settings_page(request):
                     dict) else ALLOWED_USERS[uid]} for uid in ALLOWED_USERS if uid != ADMIN_USER_ID]
         users_json = json.dumps(ulist)
 
-    # ... (Replacements logic for settings.html) ...
-    # ... (Copy logic from original file) ...
-    # Assuming standard replacements...
     html = html.replace(
         "{web_title}",
         f"{_('web_settings_page_title', lang)} - Web Bot").replace(
@@ -672,9 +666,10 @@ async def handle_login_request(request):
     bot = request.app.get('bot')
     if bot:
         try:
+            lang = get_user_lang(uid)
             kb = InlineKeyboardMarkup(
-                inline_keyboard=[[InlineKeyboardButton(text="🔓 Login", url=link)]])
-            await bot.send_message(uid, "<b>🔐 Web Login</b>", reply_markup=kb, parse_mode="HTML")
+                inline_keyboard=[[InlineKeyboardButton(text=_("web_login_btn", lang), url=link)]])
+            await bot.send_message(uid, _("web_login_header", lang), reply_markup=kb, parse_mode="HTML")
             return web.HTTPFound('/login?sent=true')
         except BaseException:
             pass
@@ -764,9 +759,10 @@ async def handle_reset_request(request):
         bot = request.app.get('bot')
         if bot:
             try:
+                lang = get_user_lang(uid)
                 kb = InlineKeyboardMarkup(
-                    inline_keyboard=[[InlineKeyboardButton(text="🔐 Reset", url=link)]])
-                await bot.send_message(uid, "<b>🆘 Reset Password</b>", reply_markup=kb, parse_mode="HTML")
+                    inline_keyboard=[[InlineKeyboardButton(text=_("web_reset_btn", lang), url=link)]])
+                await bot.send_message(uid, _("web_reset_header", lang), reply_markup=kb, parse_mode="HTML")
                 return web.json_response({"status": "ok"})
             except BaseException:
                 return web.json_response(
@@ -871,13 +867,14 @@ async def start_web_server(bot_instance: Bot):
 async def agent_monitor():
     global AGENT_IP_CACHE, AGENT_FLAG
     import psutil
+    import requests
     try:
         AGENT_IP_CACHE = await asyncio.to_thread(lambda: requests.get("https://api.ipify.org", timeout=3).text)
-    except BaseException:
+    except Exception:
         pass
     try:
         AGENT_FLAG = await get_country_flag(AGENT_IP_CACHE)
-    except BaseException:
+    except Exception:
         pass
 
     while True:
@@ -886,8 +883,7 @@ async def agent_monitor():
             ram = psutil.virtual_memory().percent
             net = psutil.net_io_counters()
             point = {
-                "t": int(
-                    time.time()),
+                "t": int(time.time()),
                 "c": cpu,
                 "r": ram,
                 "rx": net.bytes_recv,
@@ -895,6 +891,8 @@ async def agent_monitor():
             AGENT_HISTORY.append(point)
             if len(AGENT_HISTORY) > 60:
                 AGENT_HISTORY.pop(0)
-        except BaseException:
+        except asyncio.CancelledError:
+            raise
+        except Exception:
             pass
         await asyncio.sleep(2)
