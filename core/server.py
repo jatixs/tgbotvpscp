@@ -213,7 +213,24 @@ async def handle_dashboard(request):
         "{web_stats_total}": _("web_stats_total", lang),
         "{web_stats_active}": _("web_stats_active", lang),
         "{node_action_btn}": node_action_btn,
+        
+        # Dashboard Hints (Must be explicitly replaced)
+        "{web_hint_cpu_usage}": _("web_hint_cpu_usage", lang),
+        "{web_hint_ram_usage}": _("web_hint_ram_usage", lang),
+        "{web_hint_disk_usage}": _("web_hint_disk_usage", lang),
+        "{web_hint_traffic_in}": _("web_hint_traffic_in", lang),
+        "{web_hint_traffic_out}": _("web_hint_traffic_out", lang),
+        
+        # Settings Hints (For consistency, though settings.html handler is different)
+        # Note: These are here just for completeness, but they are primarily 
+        # needed by the settings page handler.
+        "{web_hint_cpu_threshold}": _("web_hint_cpu_threshold", lang),
+        "{web_hint_ram_threshold}": _("web_hint_ram_threshold", lang),
+        "{web_hint_disk_threshold}": _("web_hint_disk_threshold", lang),
+        "{web_hint_traffic_interval}": _("web_hint_traffic_interval", lang),
+        "{web_hint_node_timeout}": _("web_hint_node_timeout", lang),
     }
+    
     for k, v in replacements.items():
         html = html.replace(k, v)
 
@@ -416,71 +433,75 @@ async def handle_settings_page(request):
                     dict) else ALLOWED_USERS[uid]} for uid in ALLOWED_USERS if uid != ADMIN_USER_ID]
         users_json = json.dumps(ulist)
 
-    html = html.replace(
-        "{web_title}",
-        f"{_('web_settings_page_title', lang)} - Web Bot").replace(
-        "{user_name}",
-        user.get('first_name')).replace(
-            "{user_avatar}",
-            _get_avatar_html(user)).replace(
-                "{users_data_json}",
-        users_json)
-    for k in [
-        "web_settings_page_title",
-        "web_back",
-        "web_notif_section",
-        "notifications_alert_name_res",
-        "notifications_alert_name_logins",
-        "notifications_alert_name_bans",
-        "notifications_alert_name_downtime",
-        "web_save_btn",
-        "web_users_section",
-        "web_add_user_btn",
-        "web_user_id",
-        "web_user_name",
-        "web_user_role",
-        "web_user_action",
-        "web_add_node_section",
-        "web_node_name_placeholder",
-        "web_create_btn",
-        "web_node_token",
-        "web_node_cmd",
-        "web_sys_settings_section",
-        "web_thresholds_title",
-        "web_intervals_title",
-        "web_logs_mgmt_title",
-        "web_cpu_threshold",
-        "web_ram_threshold",
-        "web_disk_threshold",
-        "web_traffic_interval",
-        "web_node_timeout",
-        "web_clear_logs_btn",
-        "web_security_section",
-        "web_change_password_title",
-        "web_current_password",
-        "web_new_password",
-        "web_confirm_password",
-            "web_change_btn"]:
-        html = html.replace(f"{{{k}}}", _(k, lang))
-    html = html.replace(
-        "{val_cpu}", str(
-            current_config.CPU_THRESHOLD)).replace(
-        "{val_ram}", str(
-            current_config.RAM_THRESHOLD)).replace(
-        "{val_disk}", str(
-            current_config.DISK_THRESHOLD)).replace(
-        "{val_traffic}", str(
-            current_config.TRAFFIC_INTERVAL)).replace(
-        "{val_timeout}", str(
-            current_config.NODE_OFFLINE_TIMEOUT))
+    # --- [ИЗМЕНЕНИЕ] Добавляем все hint placeholders в словарь замен для settings.html ---
+    replacements = {
+        "{web_title}": f"{_('web_settings_page_title', lang)} - Web Bot",
+        "{user_name}": user.get('first_name'),
+        "{user_avatar}": _get_avatar_html(user),
+        "{users_data_json}": users_json,
+        "{val_cpu}": str(current_config.CPU_THRESHOLD),
+        "{val_ram}": str(current_config.RAM_THRESHOLD),
+        "{val_disk}": str(current_config.DISK_THRESHOLD),
+        "{val_traffic}": str(current_config.TRAFFIC_INTERVAL),
+        "{val_timeout}": str(current_config.NODE_OFFLINE_TIMEOUT),
+        "{web_settings_page_title}": _("web_settings_page_title", lang),
+        "{web_back}": _("web_back", lang),
+        "{web_notif_section}": _("web_notif_section", lang),
+        "{notifications_alert_name_res}": _("notifications_alert_name_res", lang),
+        "{notifications_alert_name_logins}": _("notifications_alert_name_logins", lang),
+        "{notifications_alert_name_bans}": _("notifications_alert_name_bans", lang),
+        "{notifications_alert_name_downtime}": _("notifications_alert_name_downtime", lang),
+        "{web_save_btn}": _("web_save_btn", lang),
+        "{web_users_section}": _("web_users_section", lang),
+        "{web_add_user_btn}": _("web_add_user_btn", lang),
+        "{web_user_id}": _("web_user_id", lang),
+        "{web_user_name}": _("web_user_name", lang),
+        "{web_user_role}": _("web_user_role", lang),
+        "{web_user_action}": _("web_user_action", lang),
+        "{web_add_node_section}": _("web_add_node_section", lang),
+        "{web_node_name_placeholder}": _("web_node_name_placeholder", lang),
+        "{web_no_users}": _("web_no_users", lang),
+        "{web_create_btn}": _("web_create_btn", lang),
+        "{web_node_token}": _("web_node_token", lang),
+        "{web_node_cmd}": _("web_node_cmd", lang),
+        "{web_sys_settings_section}": _("web_sys_settings_section", lang),
+        "{web_thresholds_title}": _("web_thresholds_title", lang),
+        "{web_intervals_title}": _("web_intervals_title", lang),
+        "{web_logs_mgmt_title}": _("web_logs_mgmt_title", lang),
+        "{web_cpu_threshold}": _("web_cpu_threshold", lang),
+        "{web_ram_threshold}": _("web_ram_threshold", lang),
+        "{web_disk_threshold}": _("web_disk_threshold", lang),
+        "{web_traffic_interval}": _("web_traffic_interval", lang),
+        "{web_node_timeout}": _("web_node_timeout", lang),
+        "{web_clear_logs_btn}": _("web_clear_logs_btn", lang),
+        "{web_security_section}": _("web_security_section", lang),
+        "{web_change_password_title}": _("web_change_password_title", lang),
+        "{web_current_password}": _("web_current_password", lang),
+        "{web_new_password}": _("web_new_password", lang),
+        "{web_confirm_password}": _("web_confirm_password", lang),
+        "{web_change_btn}": _("web_change_btn", lang),
+        
+        # Settings Hints (Explicitly adding hints)
+        "{web_hint_cpu_threshold}": _("web_hint_cpu_threshold", lang),
+        "{web_hint_ram_threshold}": _("web_hint_ram_threshold", lang),
+        "{web_hint_disk_threshold}": _("web_hint_disk_threshold", lang),
+        "{web_hint_traffic_interval}": _("web_hint_traffic_interval", lang),
+        "{web_hint_node_timeout}": _("web_hint_node_timeout", lang),
+    }
+
+    modified_html = html
+    for k, v in replacements.items():
+        modified_html = modified_html.replace(k, v)
+
+    # ... (старый код удаления циклов и вставки i18n_data) ...
     for alert in ['resources', 'logins', 'bans', 'downtime']:
-        html = html.replace(
+        modified_html = modified_html.replace(
             f"{{check_{alert}}}",
             "checked" if user_alerts.get(
                 alert,
                 False) else "")
     if user_id != ADMIN_USER_ID:
-        html = html.replace(
+        modified_html = modified_html.replace(
             '<div class="bg-white/60 dark:bg-white/5 backdrop-blur-md border border-white/40 dark:border-white/10 rounded-2xl p-6 mb-6 shadow-lg dark:shadow-none" id="securitySection">',
             '<div class="hidden">')
     i18n_data = {
@@ -501,8 +522,9 @@ async def handle_settings_page(request):
                                                             "web_logs_cleared_alert", lang), "web_pass_changed": _(
                                                                 "web_pass_changed", lang), "web_pass_mismatch": _(
                                                                     "web_pass_mismatch", lang)}
-    html = html.replace("{i18n_json}", json.dumps(i18n_data))
-    return web.Response(text=html, content_type='text/html')
+    modified_html = modified_html.replace("{i18n_json}", json.dumps(i18n_data))
+    return web.Response(text=modified_html, content_type='text/html')
+# --------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
 
 async def handle_save_notifications(request):

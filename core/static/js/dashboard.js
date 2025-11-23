@@ -6,13 +6,11 @@ let chartAgent = null;
 let agentPollInterval = null;
 let nodesPollInterval = null;
 
-// Слушаем событие смены темы из common.js
 window.addEventListener('themeChanged', () => {
     updateChartsColors();
 });
 
 document.addEventListener("DOMContentLoaded", () => {
-    // Парсим эмодзи при загрузке
     if (window.parsePageEmojis) window.parsePageEmojis();
 
     if(document.getElementById('chartAgent')) {
@@ -36,7 +34,6 @@ function escapeHtml(text) {
         .replace(/'/g, "&#039;");
 }
 
-// --- AJAX: СПИСОК НОД ---
 async function fetchNodesList() {
     try {
         const response = await fetch('/api/nodes/list');
@@ -46,13 +43,11 @@ async function fetchNodesList() {
         const total = data.nodes.length;
         const activeCount = data.nodes.filter(n => n.status === 'online').length;
         
-        // Обновляем цифры
         const totalEl = document.getElementById('statTotalNodes');
         const activeEl = document.getElementById('statActiveNodes');
         if (totalEl) totalEl.innerText = total;
         if (activeEl) activeEl.innerText = activeCount;
 
-        // Обновляем прогресс-бар и проценты
         const barEl = document.getElementById('statProgressBar');
         const percentEl = document.getElementById('statOnlinePercent');
         
@@ -65,7 +60,6 @@ async function fetchNodesList() {
             barEl.style.width = `${percent}%`;
             percentEl.innerText = `${percent}%`;
             
-            // Меняем цвет бара
             barEl.className = `h-1.5 rounded-full transition-all duration-1000 ease-out ${percent === 100 ? 'bg-gradient-to-r from-green-400 to-emerald-500' : (percent > 50 ? 'bg-gradient-to-r from-yellow-400 to-orange-500' : 'bg-gradient-to-r from-red-500 to-red-600')}`;
         }
             
@@ -131,12 +125,10 @@ function renderNodesGrid(nodes) {
 
     if (container.innerHTML !== html) {
         container.innerHTML = html;
-        // Парсим эмодзи после обновления HTML
         if (window.parsePageEmojis) window.parsePageEmojis();
     }
 }
 
-// --- AJAX: АГЕНТ ---
 async function fetchAgentStats() {
     try {
         const response = await fetch('/api/agent/stats');
@@ -166,7 +158,6 @@ async function fetchAgentStats() {
     }
 }
 
-// --- ГРАФИКИ ---
 function updateChartsColors() {
     const isDark = document.documentElement.classList.contains('dark');
     const gridColor = isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.05)';
@@ -305,6 +296,56 @@ function formatUptime(bootTime) {
     if (days > 0) return `${days}d ${hours}h`;
     return `${hours}h ${minutes}m`;
 }
+
+function openHintModal(event, hintId) {
+    event.stopPropagation();
+    const hintEl = document.getElementById(hintId);
+    
+    const hintText = hintEl ? hintEl.innerHTML.trim() : I18N.web_error.replace('{error}', 'Hint text not found.');
+
+    let titleEl = event.currentTarget.closest('.bg-white\\/50, .bg-black\\/20');
+    let title = 'Информация';
+    if (titleEl) {
+        let metricSpan = titleEl.querySelector('.text-\\[9px\\]');
+        if (metricSpan) {
+            title = metricSpan.innerText || 'Метрика';
+        }
+    }
+    
+    const modal = document.getElementById('genericHintModal');
+    if (!modal) return;
+    
+    document.getElementById('hintModalTitle').innerText = title;
+    document.getElementById('hintModalContent').innerHTML = hintText;
+    
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+    document.body.style.overflow = 'hidden';
+
+    const parentContainer = event.currentTarget.closest('.relative.inline-block');
+    if(parentContainer) {
+        parentContainer.style.zIndex = 10;
+    }
+
+    if (window.parsePageEmojis) window.parsePageEmojis();
+}
+
+function closeHintModal() {
+    const modal = document.getElementById('genericHintModal');
+    if (!modal) return;
+    modal.classList.add('hidden');
+    modal.classList.remove('flex');
+    document.body.style.overflow = 'auto';
+
+    document.querySelectorAll('[onclick^="toggleHint"]').forEach(btn => {
+        const parentContainer = btn.closest('.relative.inline-block');
+        if(parentContainer) {
+            parentContainer.style.zIndex = '';
+        }
+    });
+}
+
+window.toggleHint = openHintModal;
 
 async function openNodeDetails(token, dotColorClass) {
     const modal = document.getElementById('nodeModal');
@@ -496,7 +537,6 @@ async function fetchLogs() {
             }).join('');
             contentDiv.innerHTML = coloredLogs || `<div class="text-gray-600 text-center">${I18N.web_log_empty}</div>`;
             
-            // Парсим эмодзи после загрузки логов
             if (window.parsePageEmojis) window.parsePageEmojis();
             
             contentDiv.scrollTop = contentDiv.scrollHeight;

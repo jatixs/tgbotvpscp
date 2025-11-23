@@ -31,7 +31,9 @@ LOCAL_RU_CACHE_FILE = os.path.join(
     config.CONFIG_DIR,
     "iperf_servers_ru_cache.yml")
 
-MAX_SERVERS_TO_PING = 30
+# --- ИЗМЕНЕНИЕ: УВЕЛИЧИВАЕМ ПУЛ ПРОВЕРКИ ---
+MAX_SERVERS_TO_PING = 100 
+# --------------------------------------------
 PING_COUNT = 3
 PING_TIMEOUT_SEC = 2
 IPERF_TEST_DURATION = 8
@@ -94,9 +96,9 @@ async def get_ping_async(host: str) -> Optional[float]:
         pass
     return None
 
-
-async def get_vps_location() -> Tuple[Optional[str], Optional[str]]:
-    ip, country_code = None, None
+# --- Обновление возвращаемого типа: получаем код страны и континент ---
+async def get_vps_location() -> Tuple[Optional[str], Optional[str], Optional[str]]:
+    ip, country_code, continent = None, None, None
     try:
         async with aiohttp.ClientSession() as session:
             try:
@@ -117,19 +119,22 @@ async def get_vps_location() -> Tuple[Optional[str], Optional[str]]:
 
             if ip:
                 try:
-                    async with session.get(f"http://ip-api.com/json/{ip}?fields=status,countryCode", timeout=5) as resp:
+                    # Запрос к IP-API, включающий код страны и континент
+                    async with session.get(f"http://ip-api.com/json/{ip}?fields=status,countryCode,continent", timeout=5) as resp:
                         if resp.status == 200:
                             data = await resp.json()
                             if data.get("status") == "success":
                                 country_code = data.get("countryCode")
+                                continent = data.get("continent")
                                 # <-- RESTORED
                                 logging.info(
-                                    f"Detected VPS Location: {country_code}")
+                                    f"Detected VPS Location: {country_code} ({continent})")
                 except BaseException:
                     pass
     except BaseException:
         pass
-    return ip, country_code
+    return ip, country_code, continent
+# ------------------------------------------------------------------------
 
 
 def is_ip_address(host: str) -> bool:
@@ -168,7 +173,7 @@ async def fetch_servers_async(
                         if 'address' in s and 'port' in s:
                             port = int(str(s['port']).split('-')[0].strip())
                             servers_list.append({"host": s['address'], "port": port, "city": s.get(
-                                'City'), "country": "RU", "provider": s.get('Name')})
+                                'City'), "country": "RU", "provider": s.get('Name'), "continent": "EU"}) # RU is in EU continent
                     # <-- RESTORED
                     logging.info(f"Loaded {len(servers_list)} RU servers.")
                     return servers_list
@@ -201,7 +206,8 @@ async def fetch_servers_async(
 
                     servers_list.append({
                         "host": host, "port": port, "city": s.get("SITE", "N/A"),
-                        "country": s.get("COUNTRY"), "continent": s.get("CONTINENT"),
+                        "country": s.get("COUNTRY"), 
+                        "continent": s.get("CONTINENT"), # Используем код континента
                         "provider": s.get("PROVIDER", "N/A")
                     })
             except BaseException:
@@ -210,8 +216,10 @@ async def fetch_servers_async(
     return servers_list
 
 
+# --- [ИЗМЕНЕНИЕ: Обновление сигнатуры: принимаем код континента и используем его в сортировке] ---
 async def find_best_servers_async(
-        servers: list) -> List[Tuple[float, Dict[str, Any]]]:
+        servers: list, vps_country_code: Optional[str], vps_continent: Optional[str]) -> List[Tuple[float, Dict[str, Any]]]:
+# --------------------------------------------------------------------------------------------------
     to_check = servers[:MAX_SERVERS_TO_PING]
     tasks = []
     for s in to_check:
@@ -221,14 +229,60 @@ async def find_best_servers_async(
     results = []
     for i, ping in enumerate(pings):
         if ping is not None:
-            results.append((ping, to_check[i]))
+            server_data = to_check[i]
+            
+            # Priority 1: Continent match (0 = match, 1 = no match)
+            continent_match_key = 0 if server_data.get("continent") == vps_continent else 1
+            
+            # Priority 2: Country match (0 = match, 1 = no match)
+            country_match_key = 0 if server_data.get("country") == vps_country_code else 1
+            
+            # Priority 3: Hostname preference (0 = domain, 1 = IP)
+            is_ip_key = is_ip_address(server_data["host"])
+            
+            # Format: (Continent Match, Country Match, Hostname Type, Ping, Server Data)
+            results.append((continent_match_key, country_match_key, is_ip_key, ping, server_data))
 
-    results.sort(key=lambda x: x[0])
-    if results:
-        # <-- RESTORED
+    # Sort key: (P1 asc, P2 asc, P3 asc, P4 asc)
+    # Сортируем: сначала по континенту, потом по стране, потом по типу хоста, потом по пингу
+    results.sort(key=lambda x: (x[0], x[1], x[2], x[3]))
+
+    # Reformat to (Ping, Server Data)
+    final_results = [(item[3], item[4]) for item in results]
+
+    if final_results:
         logging.info(
-            f"Best server found: {results[0][1]['host']} ({results[0][0]:.2f} ms)")
-    return results
+            f"Best server found: {final_results[0][1]['host']} ({final_results[0][0]:.2f} ms)")
+    return final_results
+
+
+# --- НОВАЯ ФУНКЦИЯ ДЛЯ ОБРАБОТКИ ОШИБОК IPERF3 (С JSON) ---
+def _handle_iperf_error_output(out_bytes: bytes, err_bytes: bytes, returncode: int, direction: str) -> Optional[str]:
+    output = (err_bytes or out_bytes).decode('utf-8', 'ignore')
+    
+    # 1. Если код 0, то ошибки нет (но это обрабатывается основным блоком try)
+    if returncode == 0:
+        return None
+        
+    # 2. Пытаемся распарсить JSON для получения конкретной ошибки
+    specific_error = "Connection or Timeout Error"
+    try:
+        error_data = json.loads(output)
+        if "error" in error_data:
+            specific_error = error_data["error"]
+        elif "end" in error_data and "error" in error_data["end"]:
+            specific_error = error_data["end"]["error"]
+    except json.JSONDecodeError:
+        # Если это не JSON, используем просто последние 100 символов
+        specific_error = output[-100:] if len(output) > 100 else output
+    
+    # 3. Возвращаем стандартизированный код ошибки для ретрая в speedtest_handler
+    log_prefix = "DL" if direction == "download" else "UL"
+    logging.error(f"{log_prefix} Test failed (Code {returncode}): {specific_error}")
+    
+    # Возвращаем FAIL префикс + обрезанное сообщение об ошибке
+    return f"{log_prefix}_FAIL:{specific_error[:200]}"
+# -------------------------------------------------------------
 
 
 async def run_iperf_test_async(
@@ -243,9 +297,10 @@ async def run_iperf_test_async(
     safe_host = shlex.quote(host)
     safe_port = shlex.quote(port)
 
-    logging.info(f"Starting iperf3 test on {host}:{port}...")  # <-- RESTORED
+    logging.info(f"Starting iperf3 test on {host}:{port}...")
     await edit_status_safe(bot, chat_id, message_id, _("speedtest_status_testing", lang, host=escape_html(host), ping=f"{ping:.2f}"), lang)
 
+    # Note: DL is REVERSE (-R), UL is standard
     cmd_dl = f"iperf3 -c {safe_host} -p {safe_port} -J -t {IPERF_TEST_DURATION} -R -4"
     cmd_ul = f"iperf3 -c {safe_host} -p {safe_port} -J -t {IPERF_TEST_DURATION} -4"
 
@@ -256,12 +311,23 @@ async def run_iperf_test_async(
     try:
         proc = await asyncio.create_subprocess_shell(cmd_dl, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
         out, err = await asyncio.wait_for(proc.communicate(), timeout=IPERF_PROCESS_TIMEOUT)
+        
+        # --- ИСПОЛЬЗУЕМ НОВЫЙ ХЭНДЛЕР ОШИБОК ---
         if proc.returncode != 0:
-            return "DOWNLOAD_CONNECTION_ERROR_CODE_1"
-        data = json.loads(out)
-        results["download"] = data["end"]["sum_received"]["bits_per_second"] / 1_000_000
-        # <-- RESTORED
-        logging.info(f"Download speed: {results['download']:.2f} Mbps")
+            return _handle_iperf_error_output(out, err, proc.returncode, "download")
+        # ---------------------------------------
+        
+        try:
+            data = json.loads(out)
+            # Дополнительная проверка на отсутствие секции sum_received
+            if "sum_received" not in data["end"]:
+                 return f"DOWNLOAD_FAIL: No sum_received in final report"
+
+            results["download"] = data["end"]["sum_received"]["bits_per_second"] / 1_000_000
+            logging.info(f"Download speed: {results['download']:.2f} Mbps")
+        except json.JSONDecodeError:
+            return f"DOWNLOAD_FAIL: JSON Decode Error"
+            
     except Exception as e:
         logging.error(f"DL Error: {e}")
         return str(e)
@@ -271,12 +337,23 @@ async def run_iperf_test_async(
     try:
         proc = await asyncio.create_subprocess_shell(cmd_ul, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
         out, err = await asyncio.wait_for(proc.communicate(), timeout=IPERF_PROCESS_TIMEOUT)
+        
+        # --- ИСПОЛЬЗУЕМ НОВЫЙ ХЭНДЛЕР ОШИБОК ---
         if proc.returncode != 0:
-            return "UPLOAD_CONNECTION_ERROR_CODE_1"
-        data = json.loads(out)
-        results["upload"] = data["end"]["sum_sent"]["bits_per_second"] / 1_000_000
-        # <-- RESTORED
-        logging.info(f"Upload speed: {results['upload']:.2f} Mbps")
+            return _handle_iperf_error_output(out, err, proc.returncode, "upload")
+        # ---------------------------------------
+            
+        try:
+            data = json.loads(out)
+            # Дополнительная проверка на отсутствие секции sum_sent
+            if "sum_sent" not in data["end"]:
+                 return f"UPLOAD_FAIL: No sum_sent in final report"
+
+            results["upload"] = data["end"]["sum_sent"]["bits_per_second"] / 1_000_000
+            logging.info(f"Upload speed: {results['upload']:.2f} Mbps")
+        except json.JSONDecodeError:
+            return f"UPLOAD_FAIL: JSON Decode Error"
+            
     except Exception as e:
         logging.error(f"UL Error: {e}")
         return str(e)
@@ -308,7 +385,9 @@ async def speedtest_handler(message: types.Message):
     LAST_MESSAGE_IDS.setdefault(user_id, {})["speedtest"] = msg.message_id
 
     try:
-        ip, cc = await get_vps_location()
+        # --- [ИЗМЕНЕНИЕ: Обновление вызова: получаем континент] ---
+        ip, cc, continent = await get_vps_location()
+        # -----------------------------------------------------------
         fetch_key = "speedtest_status_fetch_ru" if cc == 'RU' else "speedtest_status_fetch"
         await edit_status_safe(message.bot, message.chat.id, msg.message_id, _(fetch_key, lang), lang, force=True)
 
@@ -318,7 +397,9 @@ async def speedtest_handler(message: types.Message):
             return
 
         await edit_status_safe(message.bot, message.chat.id, msg.message_id, _("speedtest_status_ping", lang, count=min(len(all_servers), MAX_SERVERS_TO_PING)), lang, force=True)
-        best_servers = await find_best_servers_async(all_servers)
+        # --- [ИЗМЕНЕНИЕ: Обновление вызова: передаем континент] ---
+        best_servers = await find_best_servers_async(all_servers, cc, continent)
+        # -----------------------------------------------------------
 
         if not best_servers:
             await message.bot.edit_message_text(_("iperf_no_servers", lang), chat_id=message.chat.id, message_id=msg.message_id)
@@ -330,10 +411,14 @@ async def speedtest_handler(message: types.Message):
             logging.info(
                 f"Attempting test on server: {server['host']} ({ping:.2f} ms)")
             res = await run_iperf_test_async(message.bot, message.chat.id, msg.message_id, server, ping, lang)
-            if "CONNECTION_ERROR" not in res and "Error:" not in res:
+            
+            # --- Улучшенный чек на ошибку для ретрая ---
+            # Проверяем, что res НЕ начинается с FAIL префиксов
+            if not res.startswith("DL_FAIL:") and not res.startswith("UL_FAIL:") and not res.startswith("DOWNLOAD_FAIL:") and not res.startswith("UPLOAD_FAIL:"):
                 final_text = res
                 break
-            # <-- RESTORED
+            # -------------------------------------------
+            
             logging.warning(f"Test failed on {server['host']}. Retrying...")
             await asyncio.sleep(1)
 

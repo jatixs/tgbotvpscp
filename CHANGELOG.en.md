@@ -12,6 +12,28 @@
 </p>
 
 ---
+## [1.12.2] - 2025-11-23
+
+### ✨ Core & UX Improvements:
+
+* **Web Interface (UX):** Added comprehensive, stylized tooltips (hints) to all input fields (Thresholds, Intervals) on the Settings page and all resource metrics (CPU, RAM, Traffic) on the Dashboard for enhanced usability.
+* **Speedtest Prioritization:** Implemented advanced server selection logic to prioritize geographical proximity over raw ping: **Continent** > **Country** > **Domain Name** > **Minimum Ping**. This significantly improves regional test accuracy.
+* **Speedtest Stability:** Hardened iperf3 test logic to be more resilient against common errors ("server is busy," "connection refused," JSON parsing failures). This improves the success rate of test attempts.
+
+### 🖥 Node Agent (Client)
+
+* **Full Speedtest Implementation:** The Node Agent (`node/node.py`) now executes and fully parses results from dual **iperf3** tests (Download/Upload) instead of using a placeholder ping.
+* **Traffic Monitoring:** Fixed live traffic display (`btn_traffic`) to correctly calculate and report instantaneous network **speed (Mbit/s)** alongside total traffic volume (GB/TB).
+* **Enhanced Selftest (`btn_selftest`):** Improved the node information report to include:
+    * Formatted Uptime, Kernel/OS version, and external IP.
+    * Reliable Internet Connectivity check using an **HTTP HEAD request** (`curl -I`) instead of relying solely on ICMP ping.
+* **Uptime Display Fix:** Corrected the display of Node Uptime in the Telegram management menu to show the properly formatted `Xd Yh Zm` string (instead of raw seconds).
+
+### 🔧 Fixes:
+
+* **SSH Log Date:** Fixed a regression in the `selftest` module where the date and time were missing from the "Last SSH Login" entry.
+
+---
 
 ## [1.12.1] - 2025-11-23
 
