@@ -63,8 +63,6 @@ async def updatexray_handler(message: types.Message, state: FSMContext):
 
         update_cmd = ""
         version_cmd = ""
-
-        # Экранируем имя контейнера для защиты от Shell Injection
         safe_container = shlex.quote(container_name)
 
         if client == "amnezia":
@@ -96,7 +94,6 @@ async def updatexray_handler(message: types.Message, state: FSMContext):
                 "unzip -o Xray-linux-64.zip xray && "
                 "rm Xray-linux-64.zip")
             env_path = "/opt/marzban/.env"
-            # Для .env файла предполагаем, что пути стандартные
             update_env = f"if [ -f {env_path} ]; then if ! grep -q '^XRAY_EXECUTABLE_PATH=' {env_path}; then echo 'XRAY_EXECUTABLE_PATH=/var/lib/marzban/xray-core/xray' >> {env_path}; fi; fi"
 
             restart_cmd = f"docker restart {safe_container}"
@@ -107,28 +104,18 @@ async def updatexray_handler(message: types.Message, state: FSMContext):
         stdout_update, stderr_update = await process_update.communicate()
 
         if process_update.returncode != 0:
-            error_output = stderr_update.decode(
-                'utf-8',
-                'ignore') or stdout_update.decode(
-                'utf-8',
-                'ignore')
-            raise Exception(_("xray_update_error",
-                              lang,
-                              client=client_name_display,
-                              error=escape_html(error_output)))
+            error_output = stderr_update.decode('utf-8', 'ignore') or stdout_update.decode('utf-8', 'ignore')
+            raise Exception(_("xray_update_error", lang, client=client_name_display, error=escape_html(error_output)))
 
         process_version = await asyncio.create_subprocess_shell(version_cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
-        stdout_version, _ = await process_version.communicate()
+        # FIX: _ -> stderr_dummy
+        stdout_version, stderr_dummy = await process_version.communicate()
         version_output = stdout_version.decode('utf-8', 'ignore')
         version_match = re.search(r'Xray\s+([\d\.]+)', version_output)
         if version_match:
             version = version_match.group(1)
 
-        final_message = _(
-            "xray_update_success",
-            lang,
-            client=client_name_display,
-            version=version)
+        final_message = _("xray_update_success", lang, client=client_name_display, version=version)
         await message.bot.edit_message_text(final_message, chat_id=chat_id, message_id=sent_msg.message_id, parse_mode="HTML")
 
     except Exception as e:

@@ -153,7 +153,6 @@ async def process_node_name(message: types.Message, state: FSMContext):
     lang = get_user_lang(message.from_user.id)
     name = message.text.strip()
     token = await nodes_db.create_node(name)
-    logging.info(f"User {message.from_user.id} created node '{name}'")
     await message.answer(_("node_add_success_token", lang, name=name, token=token), parse_mode="HTML")
     await state.clear()
 
@@ -170,7 +169,6 @@ async def cq_node_delete_confirm(callback: types.CallbackQuery):
     lang = get_user_lang(callback.from_user.id)
     token = callback.data.split("_", 3)[3]
     await nodes_db.delete_node(token)
-    logging.info(f"User {callback.from_user.id} deleted node {token[:8]}")
     await callback.answer(_("node_deleted", lang, name="Node"), show_alert=False)
     await cq_node_delete_menu(callback)
 
@@ -189,8 +187,6 @@ async def cq_node_command(callback: types.CallbackQuery):
 
     if cmd == "reboot":
         await nodes_db.update_node_extra(token, "is_restarting", True)
-        logging.info(
-            f"User {user_id} requested reboot for node {node.get('name')}")
 
     if cmd == "traffic":
         stop_kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(
@@ -265,7 +261,6 @@ async def node_traffic_scheduler(bot: Bot):
                     if user_id in NODE_TRAFFIC_MONITORS:
                         del NODE_TRAFFIC_MONITORS[user_id]
                     continue
-
                 await nodes_db.update_node_task(token, {"command": "traffic", "user_id": user_id})
         except Exception as e:
             logging.error(f"Error in node_traffic_scheduler: {e}")
@@ -298,16 +293,13 @@ async def nodes_monitor(bot: Bot):
                     last_seen >= config.NODE_OFFLINE_TIMEOUT) and (
                     last_seen > 0)
 
-                # --- LOGGING RESTORED HERE ---
                 if is_dead and not is_offline_alert_sent and not is_restarting:
                     await send_alert(bot, lambda lang: _("alert_node_down", lang, name=name, last_seen=datetime.fromtimestamp(last_seen).strftime('%H:%M:%S')), "downtime")
                     await nodes_db.update_node_extra(token, "is_offline_alert_sent", True)
-                    logging.warning(f"Node {name} is DOWN. Alert sent.")
 
                 elif not is_dead and is_offline_alert_sent:
                     await send_alert(bot, lambda lang: _("alert_node_up", lang, name=name), "downtime")
                     await nodes_db.update_node_extra(token, "is_offline_alert_sent", False)
-                    logging.info(f"Node {name} recovered. Alert sent.")
 
                 if not is_dead and is_restarting:
                     await nodes_db.update_node_extra(token, "is_restarting", False)
@@ -331,17 +323,11 @@ async def nodes_monitor(bot: Bot):
                                 state["active"] = True
                                 state["last_time"] = now
                                 updated = True
-                                # Log high resource
-                                logging.warning(
-                                    f"Node {name} high {metric}: {current}%")
                         elif current < threshold and state["active"]:
                             await send_alert(bot, lambda lang: _(key_norm, lang, name=name, usage=current), "resources")
                             state["active"] = False
                             state["last_time"] = 0
                             updated = True
-                            # Log normalized
-                            logging.info(f"Node {name} {metric} normalized.")
-
                         alerts[metric] = state
                         return updated
 
