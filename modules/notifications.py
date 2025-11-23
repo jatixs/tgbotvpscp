@@ -4,6 +4,7 @@ import psutil
 import time
 import re
 import os
+import signal  # <--- Добавлено
 from datetime import datetime
 from aiogram import F, Dispatcher, types, Bot
 from aiogram.types import KeyboardButton
@@ -207,37 +208,42 @@ async def reliable_tail_log_monitor(bot, path, alert_type, parser):
         if not os.path.exists(path):
             await asyncio.sleep(60)
             continue
-        
+
         proc = None
         try:
+            # ИСПОЛЬЗУЕМ start_new_session=True ДЛЯ СОЗДАНИЯ ГРУППЫ ПРОЦЕССОВ
             proc = await asyncio.create_subprocess_shell(
-                f"tail -n 0 -f {path}", 
-                stdout=asyncio.subprocess.PIPE, 
-                stderr=asyncio.subprocess.PIPE
+                f"tail -n 0 -f {path}",
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+                start_new_session=True
             )
-            
+
             async for line in proc.stdout:
                 l = line.decode('utf-8', 'ignore').strip()
                 if l:
                     data = await parser(l)
                     if data:
                         await send_alert(bot, lambda lang: _(data["key"], lang, **data["params"]), alert_type)
-        
+
         except asyncio.CancelledError:
-            # ВАЖНО: При отмене задачи убиваем процесс tail
+            # ПРИ ОТМЕНЕ УБИВАЕМ ВСЮ ГРУППУ ПРОЦЕССОВ
             if proc:
                 try:
-                    proc.terminate()
-                    await proc.wait()
-                except Exception:
-                    pass
+                    os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
+                    try:
+                        await asyncio.wait_for(proc.wait(), timeout=2.0)
+                    except asyncio.TimeoutError:
+                        os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+                except Exception as e:
+                    logging.error(f"Error killing tail process group: {e}")
             raise
-            
+
         except Exception as e:
             logging.error(f"Tail monitor error ({path}): {e}")
             if proc:
                 try:
-                    proc.terminate()
-                except:
+                    os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
+                except BaseException:
                     pass
             await asyncio.sleep(10)
