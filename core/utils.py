@@ -236,8 +236,13 @@ async def detect_xray_client():
             parts = line.split()
             if len(parts) >= 2:
                 name, image = parts[0], parts[1]
-                if 'amnezia' in image.lower() or name == 'amnezia-xray':
+                
+                # --- ИСПРАВЛЕНО: Более строгая проверка для Amnezia ---
+                # Ищем "amnezia" И "xray" в имени образа, либо точное совпадение имени контейнера
+                if ('amnezia' in image.lower() and 'xray' in image.lower()) or name == 'amnezia-xray':
                     return "amnezia", name
+                # ------------------------------------------------------
+
                 if 'marzban' in image.lower() or 'marzban' in name:
                     return "marzban", name
         return None, None
