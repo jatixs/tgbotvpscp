@@ -38,7 +38,6 @@ LOGIN_ATTEMPTS = {}
 MAX_LOGIN_ATTEMPTS = 5
 LOGIN_BLOCK_TIME = 300
 
-# ДОБАВЛЕНО: Глобальная переменная для задачи монитора
 AGENT_TASK = None
 
 
@@ -213,17 +212,11 @@ async def handle_dashboard(request):
         "{web_stats_total}": _("web_stats_total", lang),
         "{web_stats_active}": _("web_stats_active", lang),
         "{node_action_btn}": node_action_btn,
-        
-        # Dashboard Hints (Must be explicitly replaced)
         "{web_hint_cpu_usage}": _("web_hint_cpu_usage", lang),
         "{web_hint_ram_usage}": _("web_hint_ram_usage", lang),
         "{web_hint_disk_usage}": _("web_hint_disk_usage", lang),
         "{web_hint_traffic_in}": _("web_hint_traffic_in", lang),
         "{web_hint_traffic_out}": _("web_hint_traffic_out", lang),
-        
-        # Settings Hints (For consistency, though settings.html handler is different)
-        # Note: These are here just for completeness, but they are primarily 
-        # needed by the settings page handler.
         "{web_hint_cpu_threshold}": _("web_hint_cpu_threshold", lang),
         "{web_hint_ram_threshold}": _("web_hint_ram_threshold", lang),
         "{web_hint_disk_threshold}": _("web_hint_disk_threshold", lang),
@@ -264,7 +257,7 @@ async def handle_heartbeat(request):
     bot = request.app.get('bot')
 
     if bot and results:
-        from core.server import process_node_result_background  # Fix import loop if needed
+        from core.server import process_node_result_background
         for res in results:
             asyncio.create_task(
                 process_node_result_background(
@@ -331,7 +324,7 @@ async def handle_node_details(request):
 async def handle_agent_stats(request):
     if not get_current_user(request):
         return web.json_response({"error": "Unauthorized"}, status=401)
-    import psutil  # Local import
+    import psutil
     current_stats = {
         "cpu": 0,
         "ram": 0,
@@ -433,7 +426,6 @@ async def handle_settings_page(request):
                     dict) else ALLOWED_USERS[uid]} for uid in ALLOWED_USERS if uid != ADMIN_USER_ID]
         users_json = json.dumps(ulist)
 
-    # --- [ИЗМЕНЕНИЕ] Добавляем все hint placeholders в словарь замен для settings.html ---
     replacements = {
         "{web_title}": f"{_('web_settings_page_title', lang)} - Web Bot",
         "{user_name}": user.get('first_name'),
@@ -480,8 +472,6 @@ async def handle_settings_page(request):
         "{web_new_password}": _("web_new_password", lang),
         "{web_confirm_password}": _("web_confirm_password", lang),
         "{web_change_btn}": _("web_change_btn", lang),
-        
-        # Settings Hints (Explicitly adding hints)
         "{web_hint_cpu_threshold}": _("web_hint_cpu_threshold", lang),
         "{web_hint_ram_threshold}": _("web_hint_ram_threshold", lang),
         "{web_hint_disk_threshold}": _("web_hint_disk_threshold", lang),
@@ -493,7 +483,6 @@ async def handle_settings_page(request):
     for k, v in replacements.items():
         modified_html = modified_html.replace(k, v)
 
-    # ... (старый код удаления циклов и вставки i18n_data) ...
     for alert in ['resources', 'logins', 'bans', 'downtime']:
         modified_html = modified_html.replace(
             f"{{check_{alert}}}",
@@ -524,7 +513,6 @@ async def handle_settings_page(request):
                                                                     "web_pass_mismatch", lang)}
     modified_html = modified_html.replace("{i18n_json}", json.dumps(i18n_data))
     return web.Response(text=modified_html, content_type='text/html')
-# --------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
 
 async def handle_save_notifications(request):
@@ -551,7 +539,6 @@ async def handle_save_system_config(request):
         return web.json_response({"error": "Admin required"}, status=403)
     try:
         data = await request.json()
-        # Basic validation can be added here
         save_system_config(data)
         return web.json_response({"status": "ok"})
     except Exception as e:
@@ -653,8 +640,6 @@ async def handle_set_language(request):
         return web.json_response({"error": "Invalid language"}, status=400)
     except Exception as e:
         return web.json_response({"error": str(e)}, status=500)
-
-# --- LOGIN & RESET ---
 
 
 async def handle_login_page(request):
@@ -841,7 +826,6 @@ async def handle_reset_confirm(request):
 async def handle_api_root(request): return web.Response(text="VPS Bot API")
 
 
-# ДОБАВЛЕНО: Функция очистки
 async def cleanup_server():
     global AGENT_TASK
     if AGENT_TASK and not AGENT_TASK.done():
@@ -886,7 +870,6 @@ async def start_web_server(bot_instance: Bot):
         logging.info("Web UI DISABLED.")
         app.router.add_get('/', handle_api_root)
 
-    # ЗАПУСК ЗАДАЧИ С СОХРАНЕНИЕМ В ПЕРЕМЕННУЮ
     AGENT_TASK = asyncio.create_task(agent_monitor())
 
     runner = web.AppRunner(app, access_log=None)
