@@ -224,11 +224,14 @@ def execute_command(task):
                 city = server.get("SITE", "Unknown")
                 country = server.get("COUNTRY", "")
                 
+                # --- FIX FOR BANDIT B602 (shell=True) ---
+                # Use list of arguments instead of string, remove shlex.quote, remove shell=True
+                
                 # --- RUNNING DOWNLOAD TEST (-R, client receives) ---
-                cmd_dl = f"iperf3 -c {shlex.quote(host)} -p {shlex.quote(str(port))} -t 5 -4 -R"
+                cmd_dl = ["iperf3", "-c", host, "-p", str(port), "-t", "5", "-4", "-R"]
                 try:
                     res_dl = subprocess.check_output(
-                        cmd_dl, shell=True, stderr=subprocess.STDOUT, timeout=20).decode()
+                        cmd_dl, stderr=subprocess.STDOUT, timeout=20).decode()
                     dl_speed = parse_iperf_speed(res_dl, 'receiver')
                 except subprocess.TimeoutExpired:
                     dl_speed = 0.0
@@ -237,10 +240,10 @@ def execute_command(task):
                     dl_speed = 0.0
                 
                 # --- RUNNING UPLOAD TEST (default, client sends) ---
-                cmd_ul = f"iperf3 -c {shlex.quote(host)} -p {shlex.quote(str(port))} -t 5 -4"
+                cmd_ul = ["iperf3", "-c", host, "-p", str(port), "-t", "5", "-4"]
                 try:
                     res_ul = subprocess.check_output(
-                        cmd_ul, shell=True, stderr=subprocess.STDOUT, timeout=20).decode()
+                        cmd_ul, stderr=subprocess.STDOUT, timeout=20).decode()
                     ul_speed = parse_iperf_speed(res_ul, 'sender')
                 except subprocess.TimeoutExpired:
                     ul_speed = 0.0
