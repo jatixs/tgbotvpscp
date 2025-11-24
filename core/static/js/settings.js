@@ -7,7 +7,9 @@ let initialSysConfig = {};
 
 function initSystemSettingsTracking() {
     const inputs = ['conf_cpu', 'conf_ram', 'conf_disk', 'conf_traffic', 'conf_timeout'];
-    const btn = document.getElementById('saveSysBtn');
+    
+    // Ищем хотя бы одну кнопку сохранения (класс .sys-save-btn), чтобы проверить наличие прав/элементов
+    const btn = document.querySelector('.sys-save-btn');
     
     if (!btn) return;
 
@@ -36,6 +38,7 @@ function checkForChanges() {
     inputs.forEach(id => {
         const el = document.getElementById(id);
         if (el) {
+            // Обновляем отображение значений ползунков (CPU, RAM, Disk)
             if (id === 'conf_cpu' || id === 'conf_ram' || id === 'conf_disk') { 
                 const displayId = id.replace('conf_', 'val_') + '_display';
                 const displayEl = document.getElementById(displayId);
@@ -54,40 +57,47 @@ function checkForChanges() {
 }
 
 function toggleSystemSaveButton(enable) {
-    const btn = document.getElementById('saveSysBtn');
-    if (!btn) return;
+    // Находим ВСЕ кнопки сохранения в разных блоках
+    const btns = document.querySelectorAll('.sys-save-btn');
+    if (!btns.length) return;
 
-    if (enable) {
-        btn.disabled = false;
-        btn.classList.remove('bg-gray-200', 'dark:bg-gray-700', 'text-gray-400', 'dark:text-gray-500', 'cursor-not-allowed');
-        btn.classList.add('bg-blue-600', 'hover:bg-blue-500', 'text-white', 'shadow-lg', 'shadow-blue-900/20', 'active:scale-95', 'cursor-pointer');
-    } else {
-        btn.disabled = true;
-        btn.classList.remove('bg-blue-600', 'hover:bg-blue-500', 'text-white', 'shadow-lg', 'shadow-blue-900/20', 'active:scale-95', 'cursor-pointer');
-        btn.classList.add('bg-gray-200', 'dark:bg-gray-700', 'text-gray-400', 'dark:text-gray-500', 'cursor-not-allowed');
-    }
+    btns.forEach(btn => {
+        if (enable) {
+            btn.disabled = false;
+            btn.classList.remove('bg-gray-200', 'dark:bg-gray-700', 'text-gray-400', 'dark:text-gray-500', 'cursor-not-allowed');
+            btn.classList.add('bg-blue-600', 'hover:bg-blue-500', 'text-white', 'shadow-lg', 'shadow-blue-900/20', 'active:scale-95', 'cursor-pointer');
+        } else {
+            btn.disabled = true;
+            btn.classList.remove('bg-blue-600', 'hover:bg-blue-500', 'text-white', 'shadow-lg', 'shadow-blue-900/20', 'active:scale-95', 'cursor-pointer');
+            btn.classList.add('bg-gray-200', 'dark:bg-gray-700', 'text-gray-400', 'dark:text-gray-500', 'cursor-not-allowed');
+        }
+    });
 }
 
 async function saveSystemConfig() {
-    const btn = document.getElementById('saveSysBtn');
-    if (!btn) return;
+    const btns = document.querySelectorAll('.sys-save-btn');
+    if (!btns.length) return;
     
     const originalText = I18N.web_save_btn;
-    btn.innerText = I18N.web_saving_btn;
-    btn.disabled = true;
+    
+    // Блокируем все кнопки и меняем текст
+    btns.forEach(btn => {
+        btn.innerText = I18N.web_saving_btn;
+        btn.disabled = true;
+    });
 
     document.querySelectorAll('[id^="error_"]').forEach(el => el.classList.add('hidden'));
 
     const trafficVal = parseInt(document.getElementById('conf_traffic').value);
     if (trafficVal < 5) {
         showError('conf_traffic', I18N.error_traffic_interval_low);
-        btn.innerText = originalText;
+        btns.forEach(btn => btn.innerText = originalText);
         toggleSystemSaveButton(true);
         return;
     }
     if (trafficVal > 100) {
         showError('conf_traffic', I18N.error_traffic_interval_high);
-        btn.innerText = originalText;
+        btns.forEach(btn => btn.innerText = originalText);
         toggleSystemSaveButton(true);
         return;
     }
@@ -108,31 +118,37 @@ async function saveSystemConfig() {
         });
         
         if(res.ok) {
+            // Обновляем "исходные" значения, чтобы кнопка снова стала неактивной
             ['conf_cpu', 'conf_ram', 'conf_disk', 'conf_traffic', 'conf_timeout'].forEach(id => {
                  const el = document.getElementById(id);
                  if(el) initialSysConfig[id] = el.value;
             });
 
-            btn.innerText = I18N.web_saved_btn;
-            btn.classList.remove('bg-blue-600', 'hover:bg-blue-500');
-            btn.classList.remove('bg-gray-200', 'dark:bg-gray-700');
-            btn.classList.add('bg-green-600', 'hover:bg-green-500', 'text-white');
+            // Анимация успеха на всех кнопках
+            btns.forEach(btn => {
+                btn.innerText = I18N.web_saved_btn;
+                btn.classList.remove('bg-blue-600', 'hover:bg-blue-500');
+                btn.classList.remove('bg-gray-200', 'dark:bg-gray-700');
+                btn.classList.add('bg-green-600', 'hover:bg-green-500', 'text-white');
+            });
             
             setTimeout(() => {
-                btn.innerText = originalText;
-                btn.classList.remove('bg-green-600', 'hover:bg-green-500', 'text-white');
+                btns.forEach(btn => {
+                    btn.innerText = originalText;
+                    btn.classList.remove('bg-green-600', 'hover:bg-green-500', 'text-white');
+                });
                 toggleSystemSaveButton(false);
             }, 2000);
         } else {
             const json = await res.json();
             alert(I18N.web_error.replace('{error}', json.error || 'Save failed'));
-            btn.innerText = originalText;
+            btns.forEach(btn => btn.innerText = originalText);
             toggleSystemSaveButton(true);
         }
     } catch(e) {
         console.error(e);
         alert(I18N.web_conn_error.replace('{error}', e));
-        btn.innerText = originalText;
+        btns.forEach(btn => btn.innerText = originalText);
         toggleSystemSaveButton(true);
     }
 }
@@ -150,11 +166,13 @@ async function clearLogs() {
         if(res.ok) {
             btn.innerText = I18N.web_logs_cleared_alert;
             
-            btn.className = "w-full px-4 py-2 rounded-lg text-sm transition flex items-center justify-center gap-2 bg-green-500/10 border border-green-500/30 text-green-600 dark:text-green-400";
+            // Стиль успеха
+            btn.className = "w-full px-4 py-3 rounded-xl text-sm font-medium transition flex items-center justify-center gap-2 bg-green-500/10 border border-green-500/30 text-green-600 dark:text-green-400";
             
             setTimeout(() => {
                 btn.innerHTML = originalHTML;
-                btn.className = "w-full px-4 py-2 rounded-lg text-sm transition flex items-center justify-center gap-2 bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 text-red-600 dark:text-red-400";
+                // Возврат к обычному стилю (красная кнопка)
+                btn.className = "w-full px-4 py-3 bg-white dark:bg-white/5 hover:bg-red-50 dark:hover:bg-red-900/20 border border-gray-200 dark:border-white/10 hover:border-red-300 dark:hover:border-red-500/30 text-gray-700 dark:text-gray-300 hover:text-red-600 dark:hover:text-red-400 rounded-xl text-sm font-medium transition flex items-center justify-center gap-2 shadow-sm";
                 btn.disabled = false;
             }, 2000);
         } else {
