@@ -11,7 +11,7 @@ window.addEventListener('themeChanged', () => {
 });
 
 document.addEventListener("DOMContentLoaded", () => {
-    if (window.parsePageEmojis) window.parsePageEmojis();
+    // parsePageEmojis запускается в common.js, здесь не нужно
 
     if(document.getElementById('chartAgent')) {
         fetchAgentStats();
@@ -125,7 +125,7 @@ function renderNodesGrid(nodes) {
 
     if (container.innerHTML !== html) {
         container.innerHTML = html;
-        if (window.parsePageEmojis) window.parsePageEmojis();
+        if (window.parsePageEmojis) window.parsePageEmojis(); // Функция из common.js (если доступна)
     }
 }
 
@@ -296,56 +296,6 @@ function formatUptime(bootTime) {
     if (days > 0) return `${days}d ${hours}h`;
     return `${hours}h ${minutes}m`;
 }
-
-function openHintModal(event, hintId) {
-    event.stopPropagation();
-    const hintEl = document.getElementById(hintId);
-    
-    const hintText = hintEl ? hintEl.innerHTML.trim() : I18N.web_error.replace('{error}', 'Hint text not found.');
-
-    let titleEl = event.currentTarget.closest('.bg-white\\/50, .bg-black\\/20');
-    let title = 'Информация';
-    if (titleEl) {
-        let metricSpan = titleEl.querySelector('.text-\\[9px\\]');
-        if (metricSpan) {
-            title = metricSpan.innerText || 'Метрика';
-        }
-    }
-    
-    const modal = document.getElementById('genericHintModal');
-    if (!modal) return;
-    
-    document.getElementById('hintModalTitle').innerText = title;
-    document.getElementById('hintModalContent').innerHTML = hintText;
-    
-    modal.classList.remove('hidden');
-    modal.classList.add('flex');
-    document.body.style.overflow = 'hidden';
-
-    const parentContainer = event.currentTarget.closest('.relative.inline-block');
-    if(parentContainer) {
-        parentContainer.style.zIndex = 10;
-    }
-
-    if (window.parsePageEmojis) window.parsePageEmojis();
-}
-
-function closeHintModal() {
-    const modal = document.getElementById('genericHintModal');
-    if (!modal) return;
-    modal.classList.add('hidden');
-    modal.classList.remove('flex');
-    document.body.style.overflow = 'auto';
-
-    document.querySelectorAll('[onclick^="toggleHint"]').forEach(btn => {
-        const parentContainer = btn.closest('.relative.inline-block');
-        if(parentContainer) {
-            parentContainer.style.zIndex = '';
-        }
-    });
-}
-
-window.toggleHint = openHintModal;
 
 async function openNodeDetails(token, dotColorClass) {
     const modal = document.getElementById('nodeModal');
@@ -537,7 +487,7 @@ async function fetchLogs() {
             }).join('');
             contentDiv.innerHTML = coloredLogs || `<div class="text-gray-600 text-center">${I18N.web_log_empty}</div>`;
             
-            if (window.parsePageEmojis) window.parsePageEmojis();
+            if (typeof window.parsePageEmojis === 'function') window.parsePageEmojis();
             
             contentDiv.scrollTop = contentDiv.scrollHeight;
         }

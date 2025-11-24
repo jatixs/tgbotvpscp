@@ -368,7 +368,8 @@ STRINGS = {
         "web_logs_cleared_alert": "Очищено!",
         "web_pass_wrong_current": "Неверный текущий пароль",
         "web_default_pass_alert": "⚠️ Внимание! Используется стандартный пароль ('admin'). Рекомендуется сменить его в настройках.",
-
+        "web_keyboard_title": "Клавиатура бота",
+        "web_soon_placeholder": "Скоро...",
         # --- FORGOT PASSWORD ---
         "login_forgot_pass": "Забыли пароль?",
         "login_reset_title": "Сброс пароля",
@@ -382,7 +383,12 @@ STRINGS = {
         "reset_btn_set": "Установить пароль",
         "reset_success_title": "Пароль изменен!",
         "reset_success_desc": "Теперь вы можете войти с новым паролем.",
-        "reset_token_expired": "Ссылка устарела или недействительна."
+        "reset_token_expired": "Ссылка устарела или недействительна.",
+        "modal_title_alert": "Внимание",
+        "modal_title_confirm": "Подтверждение",
+        "modal_title_prompt": "Ввод данных",
+        "modal_btn_ok": "ОК",
+        "modal_btn_cancel": "Отмена"
     },
     'en': {
         "btn_back": "🔙 Back",
@@ -734,6 +740,8 @@ STRINGS = {
         "web_pass_mismatch": "Passwords do not match",
         "web_pass_wrong_current": "Invalid current password",
         "web_default_pass_alert": "⚠️ Warning! Default password ('admin') is in use. Please change it in settings.",
+        "web_keyboard_title": "Bot Keyboard",
+        "web_soon_placeholder": "Coming soon...",
         "web_logs_cleared_alert": "Cleared!",
         # --- NEW HINT KEYS (Settings) ---
         "web_hint_cpu_threshold": "The percentage of CPU usage above which a notification will be sent (minimum 50%).",
@@ -763,7 +771,12 @@ STRINGS = {
         "reset_btn_set": "Set Password",
         "reset_success_title": "Password Changed!",
         "reset_success_desc": "You can now login with your new password.",
-        "reset_token_expired": "Link expired or invalid."
+        "reset_token_expired": "Link expired or invalid.",
+        "modal_title_alert": "Attention",
+        "modal_title_confirm": "Confirmation",
+        "modal_title_prompt": "Input Data",
+        "modal_btn_ok": "OK",
+        "modal_btn_cancel": "Cancel"
     }
 }
 
