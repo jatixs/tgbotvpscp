@@ -65,9 +65,12 @@ async def updatexray_handler(message: types.Message, state: FSMContext):
         version_cmd = ""
         safe_container = shlex.quote(container_name)
 
-if client == "amnezia":
+        if client == "amnezia":
+            # --- ИСПРАВЛЕНИЕ: Универсальная установка зависимостей (Alpine/Debian) ---
+            # Пытаемся использовать apk (Alpine), если нет - apt-get (Debian/Ubuntu)
             install_deps = "(command -v apk >/dev/null && apk add --no-cache wget unzip) || (apt-get update && apt-get install -y wget unzip)"
             remove_deps = "(command -v apk >/dev/null && apk del wget unzip) || (apt-get remove -y wget unzip)"
+            
             update_cmd = (
                 f'docker exec {safe_container} /bin/sh -c "'
                 f'{install_deps} && '
@@ -84,6 +87,7 @@ if client == "amnezia":
                 '" && '
                 f'docker restart {safe_container}')
             version_cmd = f"docker exec {safe_container} /usr/bin/xray version"
+            # ------------------------------------------------------------------------
 
         elif client == "marzban":
             check_deps = "command -v unzip >/dev/null 2>&1 || (DEBIAN_FRONTEND=noninteractive apt-get update -y && apt-get install -y unzip wget)"
