@@ -720,6 +720,7 @@ STRINGS = {
         "error_traffic_interval_low": "Bot traffic update interval cannot be less than 5 seconds.",
         "error_traffic_interval_high": "Traffic update interval cannot be more than 100 seconds.",
         "web_logs_clearing": "Clearing...",
+        "web_security_section": "Security",
         "web_change_password_title": "Change Web Panel Password",
         "web_current_password": "Current Password",
         "web_login_header": "<b>🔐 Web Login</b>",
