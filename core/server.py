@@ -14,7 +14,7 @@ from . import nodes_db
 from .config import (
     WEB_SERVER_HOST, WEB_SERVER_PORT, NODE_OFFLINE_TIMEOUT, BASE_DIR,
     ADMIN_USER_ID, ENABLE_WEB_UI, save_system_config, BOT_LOG_DIR,
-    WATCHDOG_LOG_DIR, WEB_AUTH_FILE, ADMIN_USERNAME
+    WATCHDOG_LOG_DIR, NODE_LOG_DIR, WEB_AUTH_FILE, ADMIN_USERNAME
 )
 from . import config as current_config
 from .shared_state import NODE_TRAFFIC_MONITORS, ALLOWED_USERS, USER_NAMES, AUTH_TOKENS, ALERTS_CONFIG, AGENT_HISTORY
@@ -37,6 +37,9 @@ SERVER_SESSIONS = {}
 LOGIN_ATTEMPTS = {}
 MAX_LOGIN_ATTEMPTS = 5
 LOGIN_BLOCK_TIME = 300
+
+# Версия кэша = время старта
+CACHE_VER = str(int(time.time()))
 
 AGENT_TASK = None
 
@@ -222,6 +225,7 @@ async def handle_dashboard(request):
         "{web_hint_disk_threshold}": _("web_hint_disk_threshold", lang),
         "{web_hint_traffic_interval}": _("web_hint_traffic_interval", lang),
         "{web_hint_node_timeout}": _("web_hint_node_timeout", lang),
+        "{web_version}": CACHE_VER,
     }
     
     for k, v in replacements.items():
@@ -235,7 +239,12 @@ async def handle_dashboard(request):
         "web_access_denied": _("web_access_denied", lang),
         "web_error": _("web_error", lang, error=""),
         "web_conn_error": _("web_conn_error", lang, error=""),
-        "web_log_empty": _("web_log_empty", lang)
+        "web_log_empty": _("web_log_empty", lang),
+        "modal_title_alert": _("modal_title_alert", lang),
+        "modal_title_confirm": _("modal_title_confirm", lang),
+        "modal_title_prompt": _("modal_title_prompt", lang),
+        "modal_btn_ok": _("modal_btn_ok", lang),
+        "modal_btn_cancel": _("modal_btn_cancel", lang),
     }
     html = html.replace("{i18n_json}", json.dumps(i18n_data))
     return web.Response(text=html, content_type='text/html')
@@ -477,6 +486,9 @@ async def handle_settings_page(request):
         "{web_hint_disk_threshold}": _("web_hint_disk_threshold", lang),
         "{web_hint_traffic_interval}": _("web_hint_traffic_interval", lang),
         "{web_hint_node_timeout}": _("web_hint_node_timeout", lang),
+        "{web_keyboard_title}": _("web_keyboard_title", lang),
+        "{web_soon_placeholder}": _("web_soon_placeholder", lang),
+        "{web_version}": CACHE_VER,
     }
 
     modified_html = html
@@ -491,7 +503,7 @@ async def handle_settings_page(request):
                 False) else "")
     if user_id != ADMIN_USER_ID:
         modified_html = modified_html.replace(
-            '<div class="bg-white/60 dark:bg-white/5 backdrop-blur-md border border-white/40 dark:border-white/10 rounded-2xl p-6 mb-6 shadow-lg dark:shadow-none" id="securitySection">',
+            '<div class="bg-white/60 dark:bg-white/5 backdrop-blur-md border border-white/40 dark:border-white/10 rounded-2xl p-6 shadow-lg dark:shadow-none" id="securitySection">',
             '<div class="hidden">')
     i18n_data = {
         "web_saving_btn": _(
@@ -510,7 +522,19 @@ async def handle_settings_page(request):
                                                         "web_logs_clearing", lang), "web_logs_cleared_alert": _(
                                                             "web_logs_cleared_alert", lang), "web_pass_changed": _(
                                                                 "web_pass_changed", lang), "web_pass_mismatch": _(
-                                                                    "web_pass_mismatch", lang)}
+                                                                    "web_pass_mismatch", lang),
+        "web_clear_bot_confirm": _("web_clear_bot_confirm", lang),
+        "web_clear_node_confirm": _("web_clear_node_confirm", lang),
+        "web_clear_all_confirm": _("web_clear_all_confirm", lang),
+        "web_logs_cleared_bot": _("web_logs_cleared_bot", lang),
+        "web_logs_cleared_node": _("web_logs_cleared_node", lang),
+        "web_logs_cleared_all": _("web_logs_cleared_all", lang),
+        "modal_title_alert": _("modal_title_alert", lang),
+        "modal_title_confirm": _("modal_title_confirm", lang),
+        "modal_title_prompt": _("modal_title_prompt", lang),
+        "modal_btn_ok": _("modal_btn_ok", lang),
+        "modal_btn_cancel": _("modal_btn_cancel", lang),
+    }
     modified_html = modified_html.replace("{i18n_json}", json.dumps(i18n_data))
     return web.Response(text=modified_html, content_type='text/html')
 
@@ -575,13 +599,34 @@ async def handle_clear_logs(request):
     if not user or user['role'] != 'admins':
         return web.json_response({"error": "Admin required"}, status=403)
     try:
-        for d in [BOT_LOG_DIR, WATCHDOG_LOG_DIR]:
+        # --- FIX: Handle potential empty JSON/body gracefully ---
+        data = {}
+        try:
+            data = await request.json()
+        except BaseException:
+            pass  # data remains {}
+
+        target = data.get('type', 'all')
+
+        dirs_to_clear = []
+        if target == 'bot':
+            dirs_to_clear = [BOT_LOG_DIR, WATCHDOG_LOG_DIR]
+        elif target == 'node':
+            dirs_to_clear = [NODE_LOG_DIR]
+        elif target == 'all':
+            dirs_to_clear = [BOT_LOG_DIR, WATCHDOG_LOG_DIR, NODE_LOG_DIR]
+        else:
+            # Fallback
+            dirs_to_clear = [BOT_LOG_DIR, WATCHDOG_LOG_DIR, NODE_LOG_DIR]
+
+        for d in dirs_to_clear:
             if os.path.exists(d):
                 for f in os.listdir(d):
                     fp = os.path.join(d, f)
                     if os.path.isfile(fp):
-                        open(fp, 'w').close()
-        return web.json_response({"status": "ok"})
+                        with open(fp, 'w') as f_obj:
+                            f_obj.truncate(0)
+        return web.json_response({"status": "ok", "target": target})
     except Exception as e:
         return web.json_response({"error": str(e)}, status=500)
 
@@ -654,6 +699,28 @@ async def handle_login_page(request):
         alert).replace(
         "{error_block}",
         "")
+    html = html.replace("style.css", f"style.css?v={CACHE_VER}")
+
+    # Инъекция i18n для страницы логина (на дефолтном языке)
+    lang = DEFAULT_LANGUAGE
+    i18n_data = {
+        "web_error": _("web_error", lang, error=""),
+        "web_conn_error": _("web_conn_error", lang, error=""),
+        "modal_title_alert": _("modal_title_alert", lang),
+        "modal_title_confirm": _("modal_title_confirm", lang),
+        "modal_title_prompt": _("modal_title_prompt", lang),
+        "modal_btn_ok": _("modal_btn_ok", lang),
+        "modal_btn_cancel": _("modal_btn_cancel", lang),
+    }
+
+    # Добавляем placeholder в login.html (см. следующий шаг) и заменяем его
+    if "{i18n_json}" in html:
+        html = html.replace("{i18n_json}", json.dumps(i18n_data))
+    else:
+        # Fallback если плейсхолдер не найден, вставляем скрипт перед закрывающим body
+        script = f'<script>const I18N = {json.dumps(i18n_data)};</script>'
+        html = html.replace("</body>", f"{script}</body>")
+
     return web.Response(text=html, content_type='text/html')
 
 
@@ -789,9 +856,26 @@ async def handle_reset_page_render(request):
     if time.time() - RESET_TOKENS[token]["ts"] > RESET_TOKEN_TTL:
         del RESET_TOKENS[token]
         return web.Response(text="Expired", status=403)
-    html = load_template("login.html").replace(
-        "{error_block}", "").replace(
-        "{default_pass_alert}", "")
+    html = load_template("reset_password.html").replace(
+        "{web_version}", CACHE_VER)
+
+    # Инъекция i18n для страницы сброса
+    lang = DEFAULT_LANGUAGE
+    i18n_data = {
+        "web_error": _("web_error", lang, error=""),
+        "web_conn_error": _("web_conn_error", lang, error=""),
+        "modal_title_alert": _("modal_title_alert", lang),
+        "modal_title_confirm": _("modal_title_confirm", lang),
+        "modal_title_prompt": _("modal_title_prompt", lang),
+        "modal_btn_ok": _("modal_btn_ok", lang),
+        "modal_btn_cancel": _("modal_btn_cancel", lang),
+    }
+    if "{i18n_json}" in html:
+        html = html.replace("{i18n_json}", json.dumps(i18n_data))
+    else:
+        script = f'<script>const I18N = {json.dumps(i18n_data)};</script>'
+        html = html.replace("</body>", f"{script}</body>")
+
     return web.Response(text=html, content_type='text/html')
 
 
