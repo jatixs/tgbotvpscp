@@ -162,7 +162,14 @@ def execute_command(task):
             try:
                 res = subprocess.check_output(
                     "ps aux --sort=-%cpu | head -n 11", shell=True).decode()
-                result_text = f"<pre>{res}</pre>"
+                
+                # --- ИСПРАВЛЕНИЕ: Экранирование HTML ---
+                # Заменяем символы <, >, & на безопасные сущности, 
+                # чтобы Telegram не пытался их парсить как теги.
+                safe_res = res.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+                result_text = f"<pre>{safe_res}</pre>"
+                # ---------------------------------------
+                
             except Exception as e:
                 result_text = f"Error running top: {e}"
 
