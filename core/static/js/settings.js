@@ -36,7 +36,6 @@ function checkForChanges() {
     inputs.forEach(id => {
         const el = document.getElementById(id);
         if (el) {
-            // --- ИСПРАВЛЕНИЕ: Обновляем отображение значений ползунков здесь ---
             if (id === 'conf_cpu' || id === 'conf_ram' || id === 'conf_disk') { 
                 const displayId = id.replace('conf_', 'val_') + '_display';
                 const displayEl = document.getElementById(displayId);
@@ -44,7 +43,6 @@ function checkForChanges() {
                     displayEl.innerText = el.value + '%';
                 }
             }
-            // -------------------------------------------------------------------
 
             if (el.value != initialSysConfig[id]) {
                 hasChanges = true;
@@ -228,14 +226,18 @@ function renderUsers() {
     if (USERS_DATA.length > 0) {
         tbody.innerHTML = USERS_DATA.map(u => `
             <tr class="border-b border-gray-100 dark:border-white/5 hover:bg-gray-50 dark:hover:bg-white/5 transition">
-                <td class="px-4 py-3 font-mono text-xs text-gray-500 dark:text-gray-400">${u.id}</td>
-                <td class="px-4 py-3 font-medium text-gray-900 dark:text-white">${u.name}</td>
-                <td class="px-4 py-3">
-                    <span class="px-2 py-0.5 rounded text-[10px] border ${u.role === 'admins' ? 'border-green-500/30 bg-green-100 dark:bg-green-500/20 text-green-600 dark:text-green-400' : 'border-gray-300 dark:border-gray-500/30 bg-gray-100 dark:bg-gray-500/20 text-gray-600 dark:text-gray-300'}">
+                <td class="px-2 sm:px-4 py-3 font-mono text-[10px] sm:text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">
+                    ${u.id}
+                </td>
+                <td class="px-2 sm:px-4 py-3 font-medium text-sm text-gray-900 dark:text-white break-all max-w-[100px] sm:max-w-none">
+                    ${u.name}
+                </td>
+                <td class="px-2 sm:px-4 py-3">
+                    <span class="px-1.5 sm:px-2 py-0.5 rounded text-[9px] sm:text-[10px] uppercase font-bold border ${u.role === 'admins' ? 'border-green-500/30 bg-green-100 dark:bg-green-500/20 text-green-600 dark:text-green-400' : 'border-gray-300 dark:border-gray-500/30 bg-gray-100 dark:bg-gray-500/20 text-gray-600 dark:text-gray-300'}">
                         ${u.role}
                     </span>
                 </td>
-                <td class="px-4 py-3 text-right">
+                <td class="px-2 sm:px-4 py-3 text-right">
                     <button onclick="deleteUser(${u.id})" class="text-red-500 hover:text-red-700 dark:hover:text-red-300 transition p-1" title="Delete">
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
                     </button>
