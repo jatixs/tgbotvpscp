@@ -66,14 +66,26 @@ async def updatexray_handler(message: types.Message, state: FSMContext):
         safe_container = shlex.quote(container_name)
 
         if client == "amnezia":
-            # --- ИСПРАВЛЕНИЕ: Универсальная установка зависимостей (Alpine/Debian) ---
-            # Пытаемся использовать apk (Alpine), если нет - apt-get (Debian/Ubuntu)
-            install_deps = "(command -v apk >/dev/null && apk add --no-cache wget unzip) || (apt-get update && apt-get install -y wget unzip)"
-            remove_deps = "(command -v apk >/dev/null && apk del wget unzip) || (apt-get remove -y wget unzip)"
+            # --- ЛОГИКА УСТАНОВКИ ЗАВИСИМОСТЕЙ ---
+            # 1. Проверяем, есть ли уже wget и unzip. Если да — пропускаем установку.
+            # 2. Если нет, ищем apk (Alpine) и ставим через него.
+            # 3. Если нет apk, ищем apt-get (Debian/Ubuntu) и ставим через него.
             
+            check_tools = "command -v wget >/dev/null && command -v unzip >/dev/null"
+            try_apk = "command -v apk >/dev/null && apk add --no-cache wget unzip"
+            try_apt = "command -v apt-get >/dev/null && (apt-get update && apt-get install -y wget unzip)"
+            
+            # Цепочка: (Есть утилиты?) ИЛИ (Попробовать APK) ИЛИ (Попробовать APT)
+            install_chain = f"({check_tools}) || ({try_apk}) || ({try_apt})"
+
+            # Удаление зависимостей (опционально, чтобы не мусорить, если ставили)
+            clean_apk = "command -v apk >/dev/null && apk del wget unzip"
+            clean_apt = "command -v apt-get >/dev/null && apt-get remove -y wget unzip"
+            clean_chain = f"({clean_apk}) || ({clean_apt}) || true"
+
             update_cmd = (
                 f'docker exec {safe_container} /bin/sh -c "'
-                f'{install_deps} && '
+                f'{install_chain} && '
                 'rm -f Xray-linux-64.zip xray geoip.dat geosite.dat && '
                 'wget -q -O Xray-linux-64.zip https://github.com/XTLS/Xray-core/releases/latest/download/Xray-linux-64.zip && '
                 'wget -q -O geoip.dat https://github.com/v2fly/geoip/releases/latest/download/geoip.dat && '
@@ -83,13 +95,13 @@ async def updatexray_handler(message: types.Message, state: FSMContext):
                 'cp geoip.dat /usr/bin/geoip.dat && '
                 'cp geosite.dat /usr/bin/geosite.dat && '
                 'rm Xray-linux-64.zip xray geoip.dat geosite.dat && '
-                f'{remove_deps}'
+                f'{clean_chain}'
                 '" && '
                 f'docker restart {safe_container}')
             version_cmd = f"docker exec {safe_container} /usr/bin/xray version"
-            # ------------------------------------------------------------------------
 
         elif client == "marzban":
+            # Для Marzban логика похожая, но пути другие
             check_deps = "command -v unzip >/dev/null 2>&1 || (DEBIAN_FRONTEND=noninteractive apt-get update -y && apt-get install -y unzip wget)"
             dl_cmd = (
                 "mkdir -p /var/lib/marzban/xray-core && "
