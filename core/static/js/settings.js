@@ -185,10 +185,14 @@ async function clearLogs() {
     try {
         const res = await fetch('/api/logs/clear', { method: 'POST' });
         if(res.ok) {
-            btn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg> ${I18N.web_logs_cleared_alert}`;
+            // ИЗМЕНЕНО: Ярко-зеленая кнопка при успехе
+            btn.className = "w-full px-4 py-3 rounded-xl text-sm font-bold transition flex items-center justify-center gap-2 bg-green-600 text-white shadow-lg shadow-green-900/20";
+            btn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg> ${I18N.web_logs_cleared_alert}`;
             
             setTimeout(() => {
                 btn.innerHTML = originalHTML;
+                // Возврат к красному стилю
+                btn.className = "w-full px-4 py-3 bg-red-50 dark:bg-red-900/10 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/30 active:scale-95 active:bg-red-200 transition-all duration-150 rounded-xl text-sm font-medium flex items-center justify-center gap-2 shadow-sm";
                 btn.disabled = false;
             }, 2000);
         } else {
@@ -203,7 +207,6 @@ async function clearLogs() {
     }
 }
 
-// ... (остальные функции: renderUsers, deleteUser, triggerAutoSave и т.д. остаются без изменений) ...
 async function triggerAutoSave() {
     const statusEl = document.getElementById('notifStatus');
     if(statusEl) {
