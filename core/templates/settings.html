@@ -338,19 +338,24 @@
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" /></svg>
                 </button>
             </h2>
-            <table class="min-w-full divide-y divide-gray-200 dark:divide-white/5">
-                <thead>
-                    <tr>
-                        <th scope="col" class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{web_user_id}</th>
-                        <th scope="col" class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{web_user_name}</th>
-                        <th scope="col" class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{web_user_role}</th>
-                        <th scope="col" class="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">{web_user_action}</th>
-                    </tr>
-                </thead>
-                <tbody id="usersTableBody" class="divide-y divide-gray-200 dark:divide-white/5">
-                    <tr><td colspan="4" class="px-4 py-3 text-center text-gray-500 text-xs">{web_no_users}</td></tr>
-                </tbody>
-            </table>
+            
+            <div class="overflow-x-auto -mx-4 sm:mx-0">
+                <div class="inline-block min-w-full align-middle">
+                    <table class="min-w-full divide-y divide-gray-200 dark:divide-white/5">
+                        <thead>
+                            <tr>
+                                <th scope="col" class="px-2 sm:px-4 py-2 text-left text-[10px] sm:text-xs font-medium text-gray-500 uppercase tracking-wider">{web_user_id}</th>
+                                <th scope="col" class="px-2 sm:px-4 py-2 text-left text-[10px] sm:text-xs font-medium text-gray-500 uppercase tracking-wider">{web_user_name}</th>
+                                <th scope="col" class="px-2 sm:px-4 py-2 text-left text-[10px] sm:text-xs font-medium text-gray-500 uppercase tracking-wider">{web_user_role}</th>
+                                <th scope="col" class="px-2 sm:px-4 py-2 text-right text-[10px] sm:text-xs font-medium text-gray-500 uppercase tracking-wider">{web_user_action}</th>
+                            </tr>
+                        </thead>
+                        <tbody id="usersTableBody" class="divide-y divide-gray-200 dark:divide-white/5">
+                            <tr><td colspan="4" class="px-4 py-3 text-center text-gray-500 text-xs">{web_no_users}</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
         </div>
 
         <div class="bg-white/60 dark:bg-white/5 backdrop-blur-md border border-white/40 dark:border-white/10 rounded-2xl p-6 shadow-lg dark:shadow-none">
