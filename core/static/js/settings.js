@@ -1,6 +1,7 @@
 document.addEventListener("DOMContentLoaded", () => {
     renderUsers();
     initSystemSettingsTracking();
+    initNodeForm();
 });
 
 // Храним начальные значения раздельно для каждой группы
@@ -39,6 +40,29 @@ function initSystemSettingsTracking() {
             }
         });
     }
+}
+
+function initNodeForm() {
+    const input = document.getElementById('newNodeName');
+    const btn = document.getElementById('btnAddNode');
+    
+    if(!input || !btn) return;
+
+    const validate = () => {
+        const len = input.value.trim().length;
+        if(len >= 2) {
+            btn.disabled = false;
+            btn.classList.remove('bg-gray-200', 'dark:bg-gray-700', 'text-gray-400', 'dark:text-gray-500', 'cursor-not-allowed');
+            btn.classList.add('bg-purple-600', 'hover:bg-purple-500', 'active:scale-95', 'text-white', 'cursor-pointer');
+        } else {
+            btn.disabled = true;
+            btn.classList.remove('bg-purple-600', 'hover:bg-purple-500', 'active:scale-95', 'text-white', 'cursor-pointer');
+            btn.classList.add('bg-gray-200', 'dark:bg-gray-700', 'text-gray-400', 'dark:text-gray-500', 'cursor-not-allowed');
+        }
+    };
+
+    input.addEventListener('input', validate);
+    // Initial validation is handled by default HTML state
 }
 
 function showError(fieldId, message) {
@@ -121,7 +145,7 @@ async function saveSystemConfig(groupName) {
         }
     }
 
-    // Собираем данные (отправляем всё, чтобы не затереть другие настройки на бэкенде)
+    // Собираем данные
     const data = {
         CPU_THRESHOLD: document.getElementById('conf_cpu').value,
         RAM_THRESHOLD: document.getElementById('conf_ram').value,
@@ -138,7 +162,7 @@ async function saveSystemConfig(groupName) {
         });
         
         if(res.ok) {
-            // Обновляем "начальные" значения для ВСЕХ групп, так как сохранение прошло успешно
+            // Обновляем "начальные" значения
             for (const [grp, cfg] of Object.entries(groups)) {
                 cfg.ids.forEach(id => {
                     const el = document.getElementById(id);
@@ -160,48 +184,78 @@ async function saveSystemConfig(groupName) {
             }, 2000);
         } else {
             const json = await res.json();
-            alert(I18N.web_error.replace('{error}', json.error || 'Save failed'));
+            await window.showModalAlert(I18N.web_error.replace('{error}', json.error || 'Save failed'), 'Ошибка');
             btn.innerText = originalText;
             toggleSaveButton(config.btnId, true);
         }
     } catch(e) {
         console.error(e);
-        alert(I18N.web_conn_error.replace('{error}', e));
+        await window.showModalAlert(I18N.web_conn_error.replace('{error}', e), 'Ошибка соединения');
         btn.innerText = originalText;
         toggleSaveButton(config.btnId, true);
     }
 }
 
 async function clearLogs() {
-    if(!confirm(I18N.web_clear_logs_confirm)) return;
+    if(!await window.showModalConfirm(I18N.web_clear_logs_confirm, 'Подтверждение')) return;
     
     const btn = document.getElementById('clearLogsBtn');
     const originalHTML = btn.innerHTML;
     
+    // Полный список "красных" классов, которые нужно удалить
+    const redClasses = [
+        'bg-red-50', 
+        'dark:bg-red-900/10', 
+        'border-red-200', 
+        'dark:border-red-800', 
+        'text-red-600', 
+        'dark:text-red-400', 
+        'hover:bg-red-100', 
+        'dark:hover:bg-red-900/30',
+        'active:bg-red-200'
+    ];
+
+    const greenClasses = [
+        'bg-green-600', 
+        'text-white',
+        'border-transparent',
+        'hover:bg-green-500'
+    ];
+    
     // Анимация загрузки
     btn.disabled = true;
-    btn.innerHTML = `<svg class="animate-spin h-5 w-5 text-red-600 dark:text-red-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> ${I18N.web_logs_clearing}`;
+    btn.innerHTML = `<svg class="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> ${I18N.web_logs_clearing}`;
     
     try {
-        const res = await fetch('/api/logs/clear', { method: 'POST' });
+        // Отправляем JSON body с типом 'all'
+        const res = await fetch('/api/logs/clear', { 
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({type: 'all'})
+        });
+
         if(res.ok) {
-            // ИЗМЕНЕНО: Ярко-зеленая кнопка при успехе
-            btn.className = "w-full px-4 py-3 rounded-xl text-sm font-bold transition flex items-center justify-center gap-2 bg-green-600 text-white shadow-lg shadow-green-900/20";
-            btn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg> ${I18N.web_logs_cleared_alert}`;
+            // Успех - удаляем красные стили, добавляем зеленые
+            btn.classList.remove(...redClasses);
+            btn.classList.add(...greenClasses);
+            
+            btn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg> ${I18N.web_logs_cleared_alert}`;
             
             setTimeout(() => {
                 btn.innerHTML = originalHTML;
-                // Возврат к красному стилю
-                btn.className = "w-full px-4 py-3 bg-red-50 dark:bg-red-900/10 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/30 active:scale-95 active:bg-red-200 transition-all duration-150 rounded-xl text-sm font-medium flex items-center justify-center gap-2 shadow-sm";
+                // Возврат стилей: удаляем зеленые, возвращаем красные
+                btn.classList.remove(...greenClasses);
+                btn.classList.add(...redClasses);
                 btn.disabled = false;
             }, 2000);
         } else {
-            alert("Failed");
+            const data = await res.json();
+            await window.showModalAlert(I18N.web_error.replace('{error}', data.error || "Failed"), 'Ошибка');
             btn.disabled = false;
             btn.innerHTML = originalHTML;
         }
     } catch(e) {
-        alert(I18N.web_conn_error.replace('{error}', e));
+        await window.showModalAlert(I18N.web_conn_error.replace('{error}', e), 'Ошибка соединения');
         btn.disabled = false;
         btn.innerHTML = originalHTML;
     }
@@ -283,7 +337,7 @@ function renderUsers() {
             </tr>
         `).join('');
         
-        if (window.parsePageEmojis) window.parsePageEmojis();
+        if (typeof window.parsePageEmojis === 'function') window.parsePageEmojis();
         
     } else {
         tbody.innerHTML = `<tr><td colspan="4" class="px-4 py-3 text-center text-gray-500 text-xs">${I18N.web_no_users}</td></tr>`;
@@ -291,7 +345,7 @@ function renderUsers() {
 }
 
 async function deleteUser(id) {
-    if(!confirm(I18N.web_confirm_delete_user.replace('{id}', id))) return;
+    if(!await window.showModalConfirm(I18N.web_confirm_delete_user.replace('{id}', id), 'Удаление пользователя')) return;
     
     try {
         const res = await fetch('/api/users/action', {
@@ -305,15 +359,15 @@ async function deleteUser(id) {
             if(idx > -1) USERS_DATA.splice(idx, 1);
             renderUsers();
         } else {
-            alert(I18N.web_error.replace('{error}', 'Delete failed'));
+            await window.showModalAlert(I18N.web_error.replace('{error}', 'Delete failed'), 'Ошибка');
         }
     } catch(e) {
-        alert(I18N.web_conn_error.replace('{error}', e));
+        await window.showModalAlert(I18N.web_conn_error.replace('{error}', e), 'Ошибка соединения');
     }
 }
 
 async function openAddUserModal() {
-    const id = prompt("Telegram ID:"); 
+    const id = await window.showModalPrompt("Введите Telegram ID пользователя:", "Добавление пользователя", "123456789");
     if(!id) return;
     
     try {
@@ -328,17 +382,20 @@ async function openAddUserModal() {
             USERS_DATA.push({id: id, name: data.name || `ID: ${id}`, role: 'users'});
             renderUsers();
         } else {
-            alert(I18N.web_error.replace('{error}', data.error || "Unknown"));
+            await window.showModalAlert(I18N.web_error.replace('{error}', data.error || "Unknown"), 'Ошибка');
         }
     } catch(e) {
-        alert(I18N.web_conn_error.replace('{error}', e));
+        await window.showModalAlert(I18N.web_conn_error.replace('{error}', e), 'Ошибка соединения');
     }
 }
 
 async function addNode() {
     const nameInput = document.getElementById('newNodeName');
     const name = nameInput.value.trim();
-    if(!name) return alert("Name required");
+    if(!name) {
+        await window.showModalAlert("Name required", "Ошибка");
+        return;
+    }
     
     try {
         const res = await fetch('/api/nodes/add', {
@@ -353,11 +410,19 @@ async function addNode() {
             document.getElementById('newNodeToken').innerText = data.token;
             document.getElementById('newNodeCmd').innerText = data.command;
             nameInput.value = "";
+            
+            // Сбрасываем состояние кнопки добавления
+            const btn = document.getElementById('btnAddNode');
+            if(btn) {
+                btn.disabled = true;
+                btn.classList.remove('bg-purple-600', 'hover:bg-purple-500', 'active:scale-95', 'text-white', 'cursor-pointer');
+                btn.classList.add('bg-gray-200', 'dark:bg-gray-700', 'text-gray-400', 'dark:text-gray-500', 'cursor-not-allowed');
+            }
         } else {
-            alert(I18N.web_error.replace('{error}', data.error));
+            await window.showModalAlert(I18N.web_error.replace('{error}', data.error), 'Ошибка');
         }
     } catch(e) {
-        alert(I18N.web_conn_error.replace('{error}', e));
+        await window.showModalAlert(I18N.web_conn_error.replace('{error}', e), 'Ошибка соединения');
     }
 }
 
@@ -369,7 +434,7 @@ async function changePassword() {
     
     if(!current || !newPass || !confirm) return;
     if(newPass !== confirm) {
-        alert(I18N.web_pass_mismatch);
+        await window.showModalAlert(I18N.web_pass_mismatch, 'Ошибка');
         return;
     }
     
@@ -390,15 +455,15 @@ async function changePassword() {
         const data = await res.json();
         
         if(res.ok) {
-            alert(I18N.web_pass_changed);
+            await window.showModalAlert(I18N.web_pass_changed, 'Успех');
             document.getElementById('pass_current').value = "";
             document.getElementById('pass_new').value = "";
             document.getElementById('pass_confirm').value = "";
         } else {
-            alert(I18N.web_error.replace('{error}', data.error));
+            await window.showModalAlert(I18N.web_error.replace('{error}', data.error), 'Ошибка');
         }
     } catch(e) {
-        alert(I18N.web_conn_error.replace('{error}', e));
+        await window.showModalAlert(I18N.web_conn_error.replace('{error}', e), 'Ошибка соединения');
     }
     
     btn.disabled = false;
