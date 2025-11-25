@@ -5,11 +5,42 @@
 <h1 align="center">📝 Telegram VPS Management Bot — Changelog</h1>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-v1.12.1-blue?style=flat-square" alt="Version 1.12.1"/>
-  <img src="https://img.shields.io/badge/build-45-purple?style=flat-square" alt="Build 45"/>
+  <img src="https://img.shields.io/badge/version-v1.12.3-blue?style=flat-square" alt="Version 1.12.3"/>
+  <img src="https://img.shields.io/badge/build-49-purple?style=flat-square" alt="Build 49"/>
   <img src="https://img.shields.io/badge/date-November%202025-green?style=flat-square" alt="Date November 2025"/>
   <img src="https://img.shields.io/badge/status-stable-green?style=flat-square" alt="Status Stable"/>
 </p>
+
+---
+
+## [1.12.3] - 2025-11-25
+
+### ✨ Web Interface Improvements (UX):
+
+* **Hints System:**
+    * Added interactive icons with tooltips for all input fields on the **Settings** page (CPU/RAM/Disk Thresholds, Traffic Intervals, and Timeouts).
+    * Added pop-up tooltips on the **Dashboard** when clicking on resource and traffic metrics, explaining the indicators.
+* **Enhanced Validation:**
+    * Added dynamic name validation (minimum 2 characters) in the Node creation form (`settings.js`) with visual blocking of the create button.
+* **Interface:** Added new loading and transition animations on the login and settings pages.
+
+### 🪵 Logging and File System:
+
+* **Node Log Isolation:** Added a separate directory `logs/node/` for storing client-side (agent) logs.
+* **Extended Log Clearing:**
+    * The API (`core/server.py`) now supports granular log clearing. You can clear bot logs, watchdog logs, or node logs separately (supported via the `type` parameter in the request).
+    * Updated the log clearing button in the Web-UI with improved process indication.
+
+### 🛡️ Security:
+
+* **Rate Limiter (Web-Login):**
+    * Implemented protection against Brute-Force attacks on the login form in `core/server.py`. The IP address is blocked for 5 minutes after 5 failed password attempts.
+* **System Modals:** Implemented a new system of secure modal windows (`showModalConfirm`, `showModalPrompt`) in `common.js` for confirming critical actions, replacing standard browser `alert/confirm`.
+
+### 🔧 Fixes and Optimization:
+
+* **Settings Validation:** Added checks for minimum and maximum values for traffic update intervals (5-100 sec) and node timeout.
+* **i18n:** Added missing translation keys for new tooltips and log clearing confirmation modals.
 
 ---
 ## [1.12.2] - 2025-11-23

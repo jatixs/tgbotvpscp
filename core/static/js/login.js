@@ -5,20 +5,21 @@ function toggleForms(target) {
     const setPass = document.getElementById('set-password-form');
     const errorBlock = document.getElementById('reset-error-block');
     
-    // Скрываем всё
-    magic.classList.add('hidden');
-    password.classList.add('hidden');
-    if(reset) reset.classList.add('hidden');
-    if(setPass) setPass.classList.add('hidden');
-    if(errorBlock) errorBlock.classList.add('hidden');
+    // Скрываем всё, если элементы существуют
+    if (magic) magic.classList.add('hidden');
+    if (password) password.classList.add('hidden');
+    if (reset) reset.classList.add('hidden');
+    if (setPass) setPass.classList.add('hidden');
+    if (errorBlock) errorBlock.classList.add('hidden');
 
-    if (target === 'password') {
+    // Показываем нужное
+    if (target === 'password' && password) {
         password.classList.remove('hidden');
-    } else if (target === 'reset') {
-        if(reset) reset.classList.remove('hidden');
-    } else if (target === 'set-password') {
-        if(setPass) setPass.classList.remove('hidden');
-    } else {
+    } else if (target === 'reset' && reset) {
+        reset.classList.remove('hidden');
+    } else if (target === 'set-password' && setPass) {
+        setPass.classList.remove('hidden');
+    } else if (magic) {
         magic.classList.remove('hidden');
     }
 }
@@ -31,6 +32,8 @@ async function requestPasswordReset() {
     const adminLinkBtn = document.getElementById('admin-link-btn');
     const container = document.getElementById('forms-container');
 
+    if (!userIdInput || !btn) return;
+
     const userId = userIdInput.value.trim();
     if (!userId) {
         userIdInput.focus();
@@ -40,7 +43,7 @@ async function requestPasswordReset() {
     const originalText = btn.innerText;
     btn.disabled = true;
     btn.innerText = "Загрузка...";
-    errorBlock.classList.add('hidden');
+    if (errorBlock) errorBlock.classList.add('hidden');
 
     try {
         const response = await fetch('/api/login/reset', {
@@ -63,20 +66,31 @@ async function requestPasswordReset() {
                 </div>
             `;
         } else {
-            if (data.error === 'not_found') {
+            if (data.error === 'not_found' && errorBlock) {
                 errorBlock.classList.remove('hidden');
-                if (data.admin_url) {
+                if (data.admin_url && adminLinkBtn) {
                     adminLinkBtn.href = data.admin_url;
                 }
             } else {
-                alert("Ошибка: " + (data.error || "Unknown"));
+                // Using the new modal!
+                if (window.showModalAlert) {
+                    await window.showModalAlert("Ошибка: " + (data.error || "Unknown"), 'Ошибка');
+                } else {
+                    alert("Ошибка: " + (data.error || "Unknown"));
+                }
             }
         }
     } catch (e) {
-        alert("Ошибка соединения: " + e);
+        if (window.showModalAlert) {
+            await window.showModalAlert("Ошибка соединения: " + e, 'Ошибка сети');
+        } else {
+            alert("Ошибка соединения: " + e);
+        }
     } finally {
-        btn.disabled = false;
-        btn.innerText = originalText;
+        if (btn) {
+            btn.disabled = false;
+            btn.innerText = originalText;
+        }
     }
 }
 
@@ -90,11 +104,13 @@ async function submitNewPassword() {
     const token = urlParams.get('token');
 
     if (!p1 || p1.length < 4) {
-        alert("Пароль слишком короткий (минимум 4 символа).");
+        if (window.showModalAlert) await window.showModalAlert("Пароль слишком короткий (минимум 4 символа).", 'Ошибка');
+        else alert("Пароль слишком короткий (минимум 4 символа).");
         return;
     }
     if (p1 !== p2) {
-        alert("Пароли не совпадают.");
+        if (window.showModalAlert) await window.showModalAlert("Пароли не совпадают.", 'Ошибка');
+        else alert("Пароли не совпадают.");
         return;
     }
 
@@ -120,31 +136,31 @@ async function submitNewPassword() {
                     <a href="/login" class="w-full block text-center mt-6 py-3 bg-white/10 hover:bg-white/20 rounded-xl font-bold transition">Войти</a>
                 </div>
             `;
-            // Очищаем URL от токена
             window.history.replaceState({}, document.title, "/login");
         } else {
-            alert("Ошибка: " + data.error);
+            if (window.showModalAlert) await window.showModalAlert("Ошибка: " + data.error, 'Ошибка');
+            else alert("Ошибка: " + data.error);
             btn.disabled = false;
             btn.innerText = "Сохранить пароль";
         }
     } catch (e) {
-        alert("Ошибка сети: " + e);
+        if (window.showModalAlert) await window.showModalAlert("Ошибка сети: " + e, 'Ошибка сети');
+        else alert("Ошибка сети: " + e);
         btn.disabled = false;
         btn.innerText = "Сохранить пароль";
     }
 }
 
 document.addEventListener("DOMContentLoaded", () => {
-    // Парсинг эмодзи
     if (window.twemoji) {
         window.twemoji.parse(document.body, { folder: 'svg', ext: '.svg' });
     }
 
     const urlParams = new URLSearchParams(window.location.search);
+    const formsContainer = document.getElementById('forms-container');
     
-    // Сценарий: Успешная отправка Magic Link (для входа)
-    if (urlParams.get('sent') === 'true') {
-        document.getElementById('forms-container').innerHTML = `
+    if (urlParams.get('sent') === 'true' && formsContainer) {
+        formsContainer.innerHTML = `
             <div class="text-center py-4 animate-pulse">
                 <div class="w-16 h-16 bg-green-500/20 rounded-full flex items-center justify-center mx-auto mb-4">
                     <svg class="w-8 h-8 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
@@ -155,10 +171,10 @@ document.addEventListener("DOMContentLoaded", () => {
                 <a href="/login" class="inline-block mt-4 text-xs text-blue-400 hover:text-blue-300">Вернуться</a>
             </div>
         `;
-    }
-    // Сценарий: Пришли по ссылке сброса пароля
-    else if (urlParams.get('token')) {
-        // Проверяем, это страница сброса (по URL или наличию токена)
-        toggleForms('set-password');
+    } else if (urlParams.get('token')) {
+        // Проверяем, есть ли форма смены пароля на странице (чтобы не вызывать на login.html)
+        if (document.getElementById('set-password-form')) {
+            toggleForms('set-password');
+        }
     }
 });

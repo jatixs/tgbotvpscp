@@ -14,8 +14,11 @@ os.makedirs(CONFIG_DIR, exist_ok=True)
 
 BOT_LOG_DIR = os.path.join(LOG_DIR, "bot")
 WATCHDOG_LOG_DIR = os.path.join(LOG_DIR, "watchdog")
+NODE_LOG_DIR = os.path.join(LOG_DIR, "node")  # <-- ДОБАВЛЕНО
+
 os.makedirs(BOT_LOG_DIR, exist_ok=True)
 os.makedirs(WATCHDOG_LOG_DIR, exist_ok=True)
+os.makedirs(NODE_LOG_DIR, exist_ok=True)      # <-- ДОБАВЛЕНО
 
 USERS_FILE = os.path.join(CONFIG_DIR, "users.json")
 NODES_FILE = os.path.join(CONFIG_DIR, "nodes.json")
@@ -24,7 +27,7 @@ RESTART_FLAG_FILE = os.path.join(CONFIG_DIR, "restart_flag.txt")
 ALERTS_CONFIG_FILE = os.path.join(CONFIG_DIR, "alerts_config.json")
 USER_SETTINGS_FILE = os.path.join(CONFIG_DIR, "user_settings.json")
 SYSTEM_CONFIG_FILE = os.path.join(CONFIG_DIR, "system_config.json")
-WEB_AUTH_FILE = os.path.join(CONFIG_DIR, "web_auth.txt")  # <-- Добавлено
+WEB_AUTH_FILE = os.path.join(CONFIG_DIR, "web_auth.txt")
 
 TOKEN = os.environ.get("TG_BOT_TOKEN")
 INSTALL_MODE = os.environ.get("INSTALL_MODE", "secure")

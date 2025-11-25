@@ -5,82 +5,13 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0">
     <title>{web_title}</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="/static/js/theme_init.js"></script>
+    <script src="/static/js/theme_init.js?v={web_version}"></script>
     <script>
         const I18N = {i18n_json};
-        
-        window.activeHint = null;
-        
-        function openHintModal(event, hintId) {
-            event.stopPropagation();
-            const hintEl = document.getElementById(hintId);
-            
-            const hintText = hintEl ? hintEl.innerHTML.trim() : I18N.web_error.replace('{error}', 'Hint text not found.');
-
-            let titleEl = event.currentTarget.closest('.bg-white\\/50, .bg-black\\/20');
-            let title = 'Информация';
-            if (titleEl) {
-                let metricSpan = titleEl.querySelector('.text-\\[9px\\]');
-                if (metricSpan) {
-                    title = metricSpan.innerText || 'Метрика';
-                }
-            }
-            
-            const modal = document.getElementById('genericHintModal');
-            if (!modal) return;
-            
-            document.getElementById('hintModalTitle').innerText = title;
-            document.getElementById('hintModalContent').innerHTML = hintText;
-            
-            modal.classList.remove('hidden');
-            modal.classList.add('flex');
-            document.body.style.overflow = 'hidden';
-
-            const parentContainer = event.currentTarget.closest('.relative.inline-block');
-            if(parentContainer) {
-                parentContainer.style.zIndex = 10;
-            }
-
-            if (window.parsePageEmojis) window.parsePageEmojis();
-        }
-
-        function closeHintModal() {
-            const modal = document.getElementById('genericHintModal');
-            if (!modal) return;
-            modal.classList.add('hidden');
-            modal.classList.remove('flex');
-            document.body.style.overflow = 'auto';
-
-            document.querySelectorAll('[onclick^="toggleHint"]').forEach(btn => {
-                const parentContainer = btn.closest('.relative.inline-block');
-                if(parentContainer) {
-                    parentContainer.style.zIndex = '';
-                }
-            });
-        }
-
-        window.toggleHint = openHintModal;
-
-        document.addEventListener('click', function(event) {
-            if (window.activeHint) {
-                const activeHintEl = document.getElementById(window.activeHint);
-                if (activeHintEl && !activeHintEl.contains(event.target) && event.target.closest('button[onclick^="toggleHint"]') === null) {
-                    activeHintEl.classList.add('hidden');
-                    activeHintEl.classList.remove('block');
-                    window.activeHint = null;
-                }
-            }
-        });
     </script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://unpkg.com/twemoji@latest/dist/twemoji.min.js" crossorigin="anonymous"></script>
-    <link rel="stylesheet" href="/static/css/style.css">
-    
-    <style>
-        html { background-color: #f3f4f6; }
-        html.dark { background-color: #111827; }
-        html.dark body { background-color: #111827; color: #f3f4f6; }
-    </style>
+    <link rel="stylesheet" href="/static/css/style.css?v={web_version}">
 </head>
 <body class="bg-gray-100 text-gray-900 dark:bg-gray-900 dark:text-gray-100 font-sans selection:bg-green-500/30 pb-10 overflow-x-hidden">
     
@@ -412,7 +343,7 @@
                 </div>
         </div>
     </div>
-    <script src="/static/js/common.js"></script>
-    <script src="/static/js/dashboard.js"></script>
+    <script src="/static/js/common.js?v={web_version}"></script>
+    <script src="/static/js/dashboard.js?v={web_version}"></script>
 </body>
 </html>
