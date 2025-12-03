@@ -12,6 +12,11 @@ import asyncio
 import logging
 import signal
 import os
+import psutil
+
+if os.path.isdir("/proc_host"):
+    psutil.PROCFS_PATH = "/proc_host"
+
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.types import KeyboardButton
 from aiogram.fsm.storage.memory import MemoryStorage
@@ -223,7 +228,6 @@ async def shutdown(dispatcher: Dispatcher, bot_instance: Bot, web_runner=None):
     if web_runner:
         await web_runner.cleanup()
 
-    # ОТМЕНЯЕМ МОНИТОР СЕРВЕРА
     await server.cleanup_server()
 
     try:
@@ -239,7 +243,6 @@ async def shutdown(dispatcher: Dispatcher, bot_instance: Bot, web_runner=None):
         await asyncio.gather(*cancelled_tasks, return_exceptions=True)
     if getattr(bot_instance, 'session', None):
         await bot_instance.session.close()
-    # nodes_db.save_nodes() больше не нужно для SQLite
     logging.info("Bot stopped.")
 
 
@@ -249,13 +252,11 @@ async def main():
     try:
         logging.info(f"Bot starting in mode: {config.INSTALL_MODE.upper()}")
 
-        # Инициализация БД
         await nodes_db.init_db()
 
         await asyncio.to_thread(auth.load_users)
         await asyncio.to_thread(utils.load_alerts_config)
         await asyncio.to_thread(i18n.load_user_settings)
-        # await asyncio.to_thread(nodes_db.load_nodes) - больше не нужно
 
         await auth.refresh_user_names(bot)
         await utils.initial_reboot_check(bot)
