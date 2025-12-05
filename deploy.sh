@@ -6,23 +6,13 @@ AUTO_AGENT_URL=""
 AUTO_NODE_TOKEN=""
 AUTO_MODE=false
 
-# Парсинг аргументов (флаги имеют приоритет)
+# Парсинг аргументов
 for arg in "$@"; do
     case $arg in
-        --agent=*)
-            AUTO_AGENT_URL="${arg#*=}"
-            AUTO_MODE=true
-            ;;
-        --token=*)
-            AUTO_NODE_TOKEN="${arg#*=}"
-            AUTO_MODE=true
-            ;;
-        --branch=*)
-            GIT_BRANCH="${arg#*=}"
-            ;;
-        main|develop) # Поддержка старого позиционного аргумента
-            GIT_BRANCH="$arg"
-            ;;
+        --agent=*) AUTO_AGENT_URL="${arg#*=}"; AUTO_MODE=true ;;
+        --token=*) AUTO_NODE_TOKEN="${arg#*=}"; AUTO_MODE=true ;;
+        --branch=*) GIT_BRANCH="${arg#*=}" ;;
+        main|develop) GIT_BRANCH="$arg" ;;
     esac
 done
 
@@ -86,8 +76,6 @@ run_with_spinner() {
     return $exit_code 
 }
 
-if command -v wget &> /dev/null; then DOWNLOADER="wget -qO-"; elif command -v curl &> /dev/null; then DOWNLOADER="curl -sSLf"; else msg_error "Нет wget/curl."; exit 1; fi
-
 get_local_version() { if [ -f "$README_FILE" ]; then grep -oP 'img\.shields\.io/badge/version-v\K[\d\.]+' "$README_FILE" || echo "Не найдена"; else echo "Не установлен"; fi; }
 
 # --- Проверка целостности ---
@@ -108,6 +96,88 @@ check_integrity() {
     else
         INSTALL_TYPE="АГЕНТ (Systemd)"
         if systemctl is-active --quiet ${SERVICE_NAME}.service; then STATUS_MESSAGE="${C_GREEN}Systemd OK${C_RESET}"; else STATUS_MESSAGE="${C_RED}Systemd Stop${C_RESET}"; fi
+    fi
+}
+
+# --- Настройка HTTPS ---
+setup_nginx_proxy() {
+    # Эта функция вызывается в конце установки, если SETUP_HTTPS=true
+    # Использует переменные: HTTPS_DOMAIN, HTTPS_EMAIL, HTTPS_PORT, WEB_PORT (из .env)
+    
+    echo -e "\n${C_CYAN}🔒 Настройка HTTPS (Nginx + Certbot)${C_RESET}"
+    
+    # 1. Установка пакетов
+    # Добавляем psmisc для fuser и lsof (если есть в репозитории, иначе пропускаем)
+    run_with_spinner "Установка Nginx и Certbot" sudo apt-get install -y -q nginx certbot python3-certbot-nginx psmisc
+    
+    # 2. Проверка 80 порта (нужен для certbot standalone или nginx)
+    if command -v lsof &> /dev/null && lsof -Pi :80 -sTCP:LISTEN -t >/dev/null ; then
+        msg_warning "Порт 80 занят. Пытаюсь освободить для получения сертификата..."
+        sudo fuser -k 80/tcp 2>/dev/null
+        sudo systemctl stop nginx 2>/dev/null
+    elif command -v fuser &> /dev/null && sudo fuser 80/tcp >/dev/null; then
+         msg_warning "Порт 80 занят. Пытаюсь освободить..."
+         sudo fuser -k 80/tcp
+         sudo systemctl stop nginx 2>/dev/null
+    fi
+
+    # 3. Получение сертификата
+    msg_info "Получение SSL сертификата для ${HTTPS_DOMAIN}..."
+    if sudo certbot certonly --standalone --non-interactive --agree-tos --email "${HTTPS_EMAIL}" -d "${HTTPS_DOMAIN}"; then
+        msg_success "Сертификат получен!"
+    else
+        msg_error "Ошибка получения сертификата. Проверьте DNS A-запись и открыт ли порт 80."
+        # Пытаемся запустить nginx обратно, чтобы не сломать существующие сайты
+        sudo systemctl start nginx
+        return 1
+    fi
+
+    # 4. Создание конфига
+    msg_info "Создание конфигурации Nginx..."
+    NGINX_CONF="/etc/nginx/sites-available/${HTTPS_DOMAIN}"
+    NGINX_LINK="/etc/nginx/sites-enabled/${HTTPS_DOMAIN}"
+    
+    # Удаляем дефолтный конфиг, если он мешает (опционально, лучше просто отключить)
+    if [ -f "/etc/nginx/sites-enabled/default" ]; then sudo rm -f "/etc/nginx/sites-enabled/default"; fi
+
+    sudo bash -c "cat > ${NGINX_CONF}" <<EOF
+server {
+    listen ${HTTPS_PORT} ssl;
+    server_name ${HTTPS_DOMAIN};
+
+    ssl_certificate /etc/letsencrypt/live/${HTTPS_DOMAIN}/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/${HTTPS_DOMAIN}/privkey.pem;
+
+    access_log /var/log/nginx/${HTTPS_DOMAIN}_access.log;
+    error_log /var/log/nginx/${HTTPS_DOMAIN}_error.log;
+
+    location / {
+        proxy_pass http://127.0.0.1:${WEB_PORT};
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+    }
+}
+EOF
+
+    # 5. Активация
+    sudo ln -sf "${NGINX_CONF}" "${NGINX_LINK}"
+    
+    if sudo nginx -t; then
+        sudo systemctl restart nginx
+        # Открываем порт в UFW если есть
+        if command -v ufw &> /dev/null; then sudo ufw allow ${HTTPS_PORT}/tcp >/dev/null; fi
+        
+        echo ""
+        msg_success "HTTPS настроен успешно!"
+        echo -e "Веб-панель доступна: https://${HTTPS_DOMAIN}:${HTTPS_PORT}/"
+        echo -e "⚠️  Не забудьте включить 'Proxied' (оранжевое облако) в Cloudflare, если используете его."
+    else
+        msg_error "Ошибка в конфиге Nginx."
     fi
 }
 
@@ -133,21 +203,11 @@ setup_repo_and_dirs() {
 }
 
 cleanup_node_files() {
-    msg_info "Очистка лишних файлов (режим Ноды)..."
     cd ${BOT_INSTALL_PATH}
     sudo rm -rf core modules bot.py watchdog.py Dockerfile docker-compose.yml .git .github config/users.json config/alerts_config.json deploy.sh deploy_en.sh requirements.txt README* LICENSE CHANGELOG* .gitignore
-    
-    # ЖЕСТКАЯ ПРОВЕРКА: Если файла ноды нет, значит скачали не ту ветку
-    if [ ! -f "node/node.py" ]; then
-       msg_error "Файл node/node.py не найден!"
-       msg_error "Вероятно, в ветке '${GIT_BRANCH}' нет кода Ноды."
-       msg_warning "Попробуйте указать ветку: bash <(...) --branch=develop"
-       exit 1
-    fi
 }
 
 cleanup_agent_files() {
-    msg_info "Удаление файлов ноды (режим Агента)..."
     cd ${BOT_INSTALL_PATH}
     sudo rm -rf node
 }
@@ -163,10 +223,30 @@ install_extras() {
 
 ask_env_details() {
     msg_info "Ввод данных .env..."
-    msg_question "Токен: " T; msg_question "ID Админа: " A; msg_question "Username (opt): " U; msg_question "Bot Name (opt): " N
-    msg_question "Web Port [8080]: " P; if [ -z "$P" ]; then WEB_PORT="8080"; else WEB_PORT="$P"; fi
-    msg_question "Включить Web-UI (Дашборд)? (y/n) [y]: " W; if [[ "$W" =~ ^[Nn]$ ]]; then ENABLE_WEB="false"; else ENABLE_WEB="true"; fi
-    export T A U N WEB_PORT ENABLE_WEB
+    msg_question "Токен Ботa: " T; msg_question "ID Админа: " A; msg_question "Username (opt): " U; msg_question "Bot Name (opt): " N
+    msg_question "Внутренний Web Port [8080]: " P; if [ -z "$P" ]; then WEB_PORT="8080"; else WEB_PORT="$P"; fi
+    
+    # --- Логика HTTPS ---
+    msg_question "Включить Web-UI (Дашборд)? (y/n) [y]: " W
+    if [[ "$W" =~ ^[Nn]$ ]]; then 
+        ENABLE_WEB="false"
+        SETUP_HTTPS="false"
+    else 
+        ENABLE_WEB="true"
+        # Спрашиваем про HTTPS только если включен Web-UI
+        msg_question "Настроить HTTPS (Nginx Proxy)? (y/n): " H
+        if [[ "$H" =~ ^[Yy]$ ]]; then
+            SETUP_HTTPS="true"
+            msg_question "Домен (напр. bot.site.com): " HTTPS_DOMAIN
+            msg_question "Email для SSL: " HTTPS_EMAIL
+            msg_question "Внешний HTTPS порт [8443]: " HP
+            if [ -z "$HP" ]; then HTTPS_PORT="8443"; else HTTPS_PORT="$HP"; fi
+        else
+            SETUP_HTTPS="false"
+        fi
+    fi
+    
+    export T A U N WEB_PORT ENABLE_WEB SETUP_HTTPS HTTPS_DOMAIN HTTPS_EMAIL HTTPS_PORT
 }
 
 write_env_file() {
@@ -195,7 +275,7 @@ create_dockerfile() {
     sudo tee "${BOT_INSTALL_PATH}/Dockerfile" > /dev/null <<'EOF'
 FROM python:3.10-slim-bookworm
 RUN apt-get update && apt-get install -y python3-yaml iperf3 git curl wget sudo procps iputils-ping net-tools gnupg docker.io coreutils && rm -rf /var/lib/apt/lists/*
-RUN pip install --no-cache-dir docker aiohttp
+RUN pip install --no-cache-dir docker aiohttp aiosqlite
 RUN groupadd -g 1001 tgbot && useradd -u 1001 -g 1001 -m -s /bin/bash tgbot && echo "tgbot ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
 WORKDIR /opt/tg-bot
 COPY requirements.txt .
@@ -231,10 +311,10 @@ services:
       - ./config:/opt/tg-bot/config
       - ./logs/bot:/opt/tg-bot/logs/bot
       - /var/run/docker.sock:/var/run/docker.sock:ro
-      - /proc/uptime:/proc/uptime:ro
-      - /proc/stat:/proc/stat:ro
-      - /proc/meminfo:/proc/meminfo:ro
-      - /proc/net/dev:/proc/net/dev:ro
+      - /proc/uptime:/proc_host/uptime:ro
+      - /proc/stat:/proc_host/stat:ro
+      - /proc/meminfo:/proc_host/meminfo:ro
+      - /proc/net/dev:/proc_host/net/dev:ro
     cap_drop: [ALL]
     cap_add: [NET_RAW]
   bot-root:
@@ -305,12 +385,21 @@ install_systemd_logic() {
         ${PYTHON_BIN} -m venv "${VENV_PATH}"
         run_with_spinner "Установка Python зависимостей" "${VENV_PATH}/bin/pip" install -r "${BOT_INSTALL_PATH}/requirements.txt"
     fi
+    
     ask_env_details
     write_env_file "systemd" "$mode" ""
+    
     create_and_start_service "${SERVICE_NAME}" "${BOT_INSTALL_PATH}/bot.py" "$mode" "Telegram Bot"
     create_and_start_service "${WATCHDOG_SERVICE_NAME}" "${BOT_INSTALL_PATH}/watchdog.py" "root" "Наблюдатель"
     cleanup_agent_files
-    local ip=$(curl -s ipinfo.io/ip); echo ""; msg_success "Установка завершена! Агент доступен: http://${ip}:${WEB_PORT}"
+    
+    local ip=$(curl -s ipinfo.io/ip)
+    echo ""; msg_success "Установка завершена! Агент доступен: http://${ip}:${WEB_PORT}"
+    
+    # Запуск настройки HTTPS, если выбрано
+    if [ "$SETUP_HTTPS" == "true" ]; then
+        setup_nginx_proxy
+    fi
 }
 
 install_docker_logic() {
@@ -330,28 +419,26 @@ install_docker_logic() {
     run_with_spinner "Сборка Docker образов" sudo $dc_cmd build
     run_with_spinner "Запуск контейнеров" sudo $dc_cmd --profile "${mode}" up -d --remove-orphans
     msg_success "Установка Docker завершена!"
+    
+    # Запуск настройки HTTPS, если выбрано
+    if [ "$SETUP_HTTPS" == "true" ]; then
+        setup_nginx_proxy
+    fi
 }
 
 install_node_logic() {
     echo -e "\n${C_BOLD}=== Установка НОДЫ (Клиент) ===${C_RESET}"
-    
-    # Если переменные переданы аргументами, используем их
     if [ -n "$AUTO_AGENT_URL" ]; then AGENT_URL="$AUTO_AGENT_URL"; fi
     if [ -n "$AUTO_NODE_TOKEN" ]; then NODE_TOKEN="$AUTO_NODE_TOKEN"; fi
-
     common_install_steps
     run_with_spinner "Установка iperf3" sudo apt-get install -y -q -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" iperf3
     setup_repo_and_dirs "root"
-    
     msg_info "Настройка venv..."
     if [ ! -d "${VENV_PATH}" ]; then run_with_spinner "Создание venv" ${PYTHON_BIN} -m venv "${VENV_PATH}"; fi
     run_with_spinner "Установка зависимостей" "${VENV_PATH}/bin/pip" install psutil requests
-    
     echo ""; msg_info "Подключение:"
-    # Запрашиваем только если переменные пусты
     msg_question "Agent URL (http://IP:8080): " AGENT_URL
     msg_question "Token: " NODE_TOKEN
-    
     sudo bash -c "cat > ${ENV_FILE}" <<EOF
 MODE=node
 AGENT_BASE_URL="${AGENT_URL}"
@@ -359,7 +446,6 @@ AGENT_TOKEN="${NODE_TOKEN}"
 NODE_UPDATE_INTERVAL=5
 EOF
     sudo chmod 600 "${ENV_FILE}"
-
     sudo tee "/etc/systemd/system/${NODE_SERVICE_NAME}.service" > /dev/null <<EOF
 [Unit]
 Description=Telegram Bot Node Client
@@ -376,10 +462,7 @@ RestartSec=10
 WantedBy=multi-user.target
 EOF
     sudo systemctl daemon-reload; sudo systemctl enable ${NODE_SERVICE_NAME}
-    
-    # Очистка и проверка файлов
     cleanup_node_files
-    
     run_with_spinner "Запуск Ноды" sudo systemctl restart ${NODE_SERVICE_NAME}
     msg_success "Нода установлена!"
 }
@@ -455,7 +538,6 @@ main_menu() {
 
 if [ "$(id -u)" -ne 0 ]; then msg_error "Нужен root."; exit 1; fi
 
-# --- ЛОГИКА ЗАПУСКА ---
 if [ "$AUTO_MODE" = true ] && [ -n "$AUTO_AGENT_URL" ] && [ -n "$AUTO_NODE_TOKEN" ]; then
     install_node_logic
     exit 0

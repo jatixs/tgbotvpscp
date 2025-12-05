@@ -19,6 +19,9 @@ for arg in "$@"; do
             AUTO_NODE_TOKEN="${arg#*=}"
             AUTO_MODE=true
             ;;
+        --branch=*)
+            GIT_BRANCH="${arg#*=}"
+            ;;
     esac
 done
 
@@ -108,6 +111,86 @@ check_integrity() {
     fi
 }
 
+# --- HTTPS Setup ---
+setup_nginx_proxy() {
+    # This function is called at the end of installation if SETUP_HTTPS=true
+    # Uses variables: HTTPS_DOMAIN, HTTPS_EMAIL, HTTPS_PORT, WEB_PORT (from .env)
+    
+    echo -e "\n${C_CYAN}🔒 Setting up HTTPS (Nginx + Certbot)${C_RESET}"
+    
+    # 1. Install packages
+    run_with_spinner "Installing Nginx and Certbot" sudo apt-get install -y -q nginx certbot python3-certbot-nginx psmisc
+    
+    # 2. Check port 80 (needed for certbot standalone or nginx)
+    if command -v lsof &> /dev/null && lsof -Pi :80 -sTCP:LISTEN -t >/dev/null ; then
+        msg_warning "Port 80 is busy. Trying to free it up for certificate generation..."
+        sudo fuser -k 80/tcp 2>/dev/null
+        sudo systemctl stop nginx 2>/dev/null
+    elif command -v fuser &> /dev/null && sudo fuser 80/tcp >/dev/null; then
+         msg_warning "Port 80 is busy. Trying to free it..."
+         sudo fuser -k 80/tcp
+         sudo systemctl stop nginx 2>/dev/null
+    fi
+
+    # 3. Obtain certificate
+    msg_info "Obtaining SSL certificate for ${HTTPS_DOMAIN}..."
+    if sudo certbot certonly --standalone --non-interactive --agree-tos --email "${HTTPS_EMAIL}" -d "${HTTPS_DOMAIN}"; then
+        msg_success "Certificate obtained!"
+    else
+        msg_error "Error obtaining certificate. Check DNS A-record and if port 80 is open."
+        # Try to start nginx back
+        sudo systemctl start nginx
+        return 1
+    fi
+
+    # 4. Create config
+    msg_info "Creating Nginx configuration..."
+    NGINX_CONF="/etc/nginx/sites-available/${HTTPS_DOMAIN}"
+    NGINX_LINK="/etc/nginx/sites-enabled/${HTTPS_DOMAIN}"
+    
+    if [ -f "/etc/nginx/sites-enabled/default" ]; then sudo rm -f "/etc/nginx/sites-enabled/default"; fi
+
+    sudo bash -c "cat > ${NGINX_CONF}" <<EOF
+server {
+    listen ${HTTPS_PORT} ssl;
+    server_name ${HTTPS_DOMAIN};
+
+    ssl_certificate /etc/letsencrypt/live/${HTTPS_DOMAIN}/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/${HTTPS_DOMAIN}/privkey.pem;
+
+    access_log /var/log/nginx/${HTTPS_DOMAIN}_access.log;
+    error_log /var/log/nginx/${HTTPS_DOMAIN}_error.log;
+
+    location / {
+        proxy_pass http://127.0.0.1:${WEB_PORT};
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+    }
+}
+EOF
+
+    # 5. Activate
+    sudo ln -sf "${NGINX_CONF}" "${NGINX_LINK}"
+    
+    if sudo nginx -t; then
+        sudo systemctl restart nginx
+        # Open port in UFW if present
+        if command -v ufw &> /dev/null; then sudo ufw allow ${HTTPS_PORT}/tcp >/dev/null; fi
+        
+        echo ""
+        msg_success "HTTPS setup successful!"
+        echo -e "Web panel available at: https://${HTTPS_DOMAIN}:${HTTPS_PORT}/"
+        echo -e "⚠️  Don't forget to enable 'Proxied' (orange cloud) in Cloudflare if you use it."
+    else
+        msg_error "Error in Nginx config."
+    fi
+}
+
 # --- Install Functions ---
 common_install_steps() {
     echo "" > /tmp/${SERVICE_NAME}_install.log
@@ -120,7 +203,7 @@ setup_repo_and_dirs() {
     local owner_user=$1; if [ -z "$owner_user" ]; then owner_user="root"; fi
     cd /
     
-    msg_info "Preparing files..."
+    msg_info "Preparing files (Branch: ${GIT_BRANCH})..."
     if [ -f "${ENV_FILE}" ]; then cp "${ENV_FILE}" /tmp/tgbot_env.bak; fi
     if [ -d "${VENV_PATH}" ]; then sudo mv "${VENV_PATH}" /tmp/tgbot_venv.bak; fi
 
@@ -145,7 +228,7 @@ cleanup_node_files() {
     msg_info "Cleaning up (Node mode)..."
     cd ${BOT_INSTALL_PATH}
     sudo rm -rf core modules bot.py watchdog.py Dockerfile docker-compose.yml .git .github config/users.json config/alerts_config.json deploy.sh deploy_en.sh requirements.txt README* LICENSE CHANGELOG* .gitignore
-    if [ ! -f "node/node.py" ]; then msg_warning "node.py missing!"; fi
+    if [ ! -f "node/node.py" ]; then msg_warning "node.py missing!"; exit 1; fi
     msg_success "Node optimized."
 }
 
@@ -168,8 +251,27 @@ ask_env_details() {
     msg_info "Enter .env details..."
     msg_question "Bot Token: " T; msg_question "Admin ID: " A; msg_question "Username (opt): " U; msg_question "Bot Name (opt): " N
     msg_question "Web Port [8080]: " P; if [ -z "$P" ]; then WEB_PORT="8080"; else WEB_PORT="$P"; fi
-    msg_question "Enable Web-UI (Dashboard)? (y/n) [y]: " W; if [[ "$W" =~ ^[Nn]$ ]]; then ENABLE_WEB="false"; else ENABLE_WEB="true"; fi
-    export T A U N WEB_PORT ENABLE_WEB
+    
+    # --- HTTPS Logic ---
+    msg_question "Enable Web-UI (Dashboard)? (y/n) [y]: " W
+    if [[ "$W" =~ ^[Nn]$ ]]; then 
+        ENABLE_WEB="false"
+        SETUP_HTTPS="false"
+    else 
+        ENABLE_WEB="true"
+        msg_question "Setup HTTPS (Nginx Proxy)? (y/n): " H
+        if [[ "$H" =~ ^[Yy]$ ]]; then
+            SETUP_HTTPS="true"
+            msg_question "Domain (e.g. bot.site.com): " HTTPS_DOMAIN
+            msg_question "Email for SSL: " HTTPS_EMAIL
+            msg_question "External HTTPS port [8443]: " HP
+            if [ -z "$HP" ]; then HTTPS_PORT="8443"; else HTTPS_PORT="$HP"; fi
+        else
+            SETUP_HTTPS="false"
+        fi
+    fi
+    
+    export T A U N WEB_PORT ENABLE_WEB SETUP_HTTPS HTTPS_DOMAIN HTTPS_EMAIL HTTPS_PORT
 }
 
 write_env_file() {
@@ -201,7 +303,7 @@ create_dockerfile() {
     sudo tee "${BOT_INSTALL_PATH}/Dockerfile" > /dev/null <<'EOF'
 FROM python:3.10-slim-bookworm
 RUN apt-get update && apt-get install -y python3-yaml iperf3 git curl wget sudo procps iputils-ping net-tools gnupg docker.io coreutils && rm -rf /var/lib/apt/lists/*
-RUN pip install --no-cache-dir docker aiohttp
+RUN pip install --no-cache-dir docker aiohttp aiosqlite
 RUN groupadd -g 1001 tgbot && useradd -u 1001 -g 1001 -m -s /bin/bash tgbot && echo "tgbot ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
 WORKDIR /opt/tg-bot
 COPY requirements.txt .
@@ -214,6 +316,7 @@ EOF
 }
 
 create_docker_compose_yml() {
+    # ИСПРАВЛЕНИЕ: Используем /proc_host для монтирования системных директорий
     sudo tee "${BOT_INSTALL_PATH}/docker-compose.yml" > /dev/null <<EOF
 version: '3.8'
 x-bot-base: &bot-base
@@ -237,10 +340,10 @@ services:
       - ./config:/opt/tg-bot/config
       - ./logs/bot:/opt/tg-bot/logs/bot
       - /var/run/docker.sock:/var/run/docker.sock:ro
-      - /proc/uptime:/proc/uptime:ro
-      - /proc/stat:/proc/stat:ro
-      - /proc/meminfo:/proc/meminfo:ro
-      - /proc/net/dev:/proc/net/dev:ro
+      - /proc/uptime:/proc_host/uptime:ro
+      - /proc/stat:/proc_host/stat:ro
+      - /proc/meminfo:/proc_host/meminfo:ro
+      - /proc/net/dev:/proc_host/net/dev:ro
     cap_drop: [ALL]
     cap_add: [NET_RAW]
   bot-root:
@@ -316,7 +419,12 @@ install_systemd_logic() {
     create_and_start_service "${SERVICE_NAME}" "${BOT_INSTALL_PATH}/bot.py" "$mode" "Telegram Bot"
     create_and_start_service "${WATCHDOG_SERVICE_NAME}" "${BOT_INSTALL_PATH}/watchdog.py" "root" "Watchdog"
     cleanup_agent_files
+    
     local ip=$(curl -s ipinfo.io/ip); echo ""; msg_success "Installation complete! Agent: http://${ip}:${WEB_PORT}"
+    
+    if [ "$SETUP_HTTPS" == "true" ]; then
+        setup_nginx_proxy
+    fi
 }
 
 install_docker_logic() {
@@ -336,6 +444,10 @@ install_docker_logic() {
     run_with_spinner "Building Docker images" sudo $dc_cmd build
     run_with_spinner "Starting containers" sudo $dc_cmd --profile "${mode}" up -d --remove-orphans
     msg_success "Docker Install Complete!"
+    
+    if [ "$SETUP_HTTPS" == "true" ]; then
+        setup_nginx_proxy
+    fi
 }
 
 install_node_logic() {
