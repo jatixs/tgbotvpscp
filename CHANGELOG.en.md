@@ -33,6 +33,8 @@
 * **Deployment Scripts:**
     * Updated `docker-compose.yml` generation in `deploy.sh` to implement safe mount paths.
     * Added `psmisc` utility installation (provides `fuser`/`lsof` commands) for more reliable port usage checks before SSL setup.
+* **Telegram Authorization Integration:**
+	* The authorization page now has three authorization forms: HTTP (unsecured connection) - authorization via Magic Link, HTTPS - the official Telegram authorization widget, and http/https - authorization via ID and password**.
 ---
 
 ## [1.12.3] - 2025-11-25
