@@ -147,12 +147,46 @@
         </div>
     </div>
     
+    <div id="cookieConsent" class="fixed bottom-0 inset-x-0 z-[200] transform transition-transform duration-500 translate-y-full pointer-events-none">
+        <div class="max-w-4xl mx-auto px-4 pb-6 sm:px-6 lg:px-8">
+            <div class="pointer-events-auto bg-gray-900/90 backdrop-blur-xl border border-white/10 rounded-2xl p-4 shadow-2xl ring-1 ring-white/5 flex flex-col sm:flex-row items-center justify-between gap-4">
+                <div class="flex items-center gap-4">
+                    <div class="hidden sm:flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-blue-500/20">
+                        <svg class="h-5 w-5 text-blue-400" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
+                        </svg>
+                    </div>
+                    <div class="text-center sm:text-left">
+                        <h3 class="text-sm font-bold text-white">Приватность и Cookie</h3>
+                        <p class="text-xs text-gray-400 mt-1 max-w-xl">
+                            Cookie используются исключительно для сохранения вашей авторизации в системе. Мы не ведем сбор данных и не используем сторонние трекеры.
+                        </p>
+                    </div>
+                </div>
+                <button onclick="acceptCookies()" class="w-full sm:w-auto rounded-xl bg-blue-600 px-6 py-2.5 text-xs font-bold text-white shadow-lg shadow-blue-500/20 hover:bg-blue-500 hover:shadow-blue-500/30 transition-all active:scale-95 whitespace-nowrap uppercase tracking-wider">
+                    ОК, понятно
+                </button>
+            </div>
+        </div>
+    </div>
+    
     <script src="/static/js/common.js?v={web_version}"></script>
     <script src="/static/js/login.js?v={web_version}"></script>
     
     <script>
+        // --- COOKIE CONSENT LOGIC ---
+        function acceptCookies() {
+            localStorage.setItem('cookie_consent', 'true');
+            document.getElementById('cookieConsent').classList.add('translate-y-full');
+        }
+
         // Функция обратного вызова для виджета Telegram
         async function onTelegramAuth(user) {
+            console.log("Telegram widget auth initiated", user);
+            
+            // Автоматическое принятие куки при входе через Telegram
+            acceptCookies();
+            
             try {
                 const response = await fetch('/api/auth/telegram', {
                     method: 'POST',
@@ -161,20 +195,37 @@
                 });
                 
                 if (response.ok) {
+                    console.log("Auth success, reloading...");
                     window.location.reload();
                 } else {
                     const data = await response.json();
+                    console.error("Auth error:", data);
                     if(window.showModalAlert) await window.showModalAlert("Ошибка авторизации: " + (data.error || "Unknown"), "Ошибка");
                     else alert("Ошибка авторизации: " + (data.error || "Unknown"));
                 }
             } catch (e) {
-                console.error(e);
+                console.error("Network error during auth:", e);
                 alert("Ошибка сети.");
             }
         }
 
-        // Логика переключения между IP и Доменом
         document.addEventListener("DOMContentLoaded", () => {
+            // --- Проверка Cookie Banner ---
+            if (!localStorage.getItem('cookie_consent')) {
+                setTimeout(() => {
+                    document.getElementById('cookieConsent').classList.remove('translate-y-full');
+                }, 1000);
+            }
+            
+            // --- Автоматическое принятие куки при отправке любых форм входа ---
+            const forms = document.querySelectorAll('form');
+            forms.forEach(form => {
+                form.addEventListener('submit', () => {
+                    acceptCookies();
+                });
+            });
+
+            // --- Логика Telegram виджета ---
             const botUsername = "{bot_username}";
             const container = document.getElementById('telegram-widget-container');
             const magicForm = document.getElementById('magic-link-form');
@@ -200,7 +251,7 @@
                 container.appendChild(script);
                 container.classList.remove('hidden');
                 
-                // Полностью скрываем форму ввода ID (без кнопок переключения)
+                // Полностью скрываем форму ввода ID
                 magicForm.classList.add('hidden');
             }
         });
