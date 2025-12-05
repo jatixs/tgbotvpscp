@@ -7,18 +7,70 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/twemoji@latest/dist/twemoji.min.js" crossorigin="anonymous"></script>
     <script>
-        // Передача данных с бэкенда (переводы для модалок и ошибок)
         const I18N = {i18n_json};
+        
+        // Настройка Tailwind для кастомных анимаций
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    animation: {
+                        'float': 'float 6s ease-in-out infinite',
+                        'float-delayed': 'float 6s ease-in-out 3s infinite',
+                        'blob': 'blob 7s infinite',
+                        'fade-in-up': 'fadeInUp 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards',
+                        'gradient-x': 'gradient-x 15s ease infinite',
+                    },
+                    keyframes: {
+                        float: {
+                            '0%, 100%': { transform: 'translateY(0)' },
+                            '50%': { transform: 'translateY(-20px)' },
+                        },
+                        blob: {
+                            '0%': { transform: 'translate(0px, 0px) scale(1)' },
+                            '33%': { transform: 'translate(30px, -50px) scale(1.1)' },
+                            '66%': { transform: 'translate(-20px, 20px) scale(0.9)' },
+                            '100%': { transform: 'translate(0px, 0px) scale(1)' },
+                        },
+                        fadeInUp: {
+                            '0%': { opacity: '0', transform: 'translateY(20px) scale(0.95)' },
+                            '100%': { opacity: '1', transform: 'translateY(0) scale(1)' },
+                        },
+                        'gradient-x': {
+                            '0%, 100%': {
+                                'background-size': '200% 200%',
+                                'background-position': 'left center'
+                            },
+                            '50%': {
+                                'background-size': '200% 200%',
+                                'background-position': 'right center'
+                            },
+                        },
+                    }
+                }
+            }
+        }
     </script>
     <link rel="stylesheet" href="/static/css/style.css?v={web_version}">
     <link rel="stylesheet" href="/static/css/login.css?v={web_version}">
+    <style>
+        /* Дополнительный стиль для градиентного фона */
+        .bg-animated-gradient {
+            background: linear-gradient(-45deg, #111827, #1f2937, #111827, #0f172a);
+            background-size: 400% 400%;
+            animation: gradient-x 15s ease infinite;
+        }
+    </style>
 </head>
-<body class="bg-gray-900 flex items-center justify-center min-h-screen relative overflow-hidden text-gray-100 font-sans selection:bg-green-500/30 p-4">
+<body class="bg-animated-gradient flex items-center justify-center min-h-screen relative overflow-hidden text-gray-100 font-sans selection:bg-green-500/30 p-4">
     
-    <div class="absolute top-[-10%] left-[-10%] w-96 h-96 bg-purple-600/20 rounded-full mix-blend-screen filter blur-3xl animate-float"></div>
-    <div class="absolute bottom-[-10%] right-[-10%] w-96 h-96 bg-blue-600/20 rounded-full mix-blend-screen filter blur-3xl animate-float delay-2000"></div>
+    <div class="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none z-0">
+        <div class="absolute top-[-10%] left-[-10%] w-96 h-96 bg-purple-600/30 rounded-full mix-blend-screen filter blur-3xl animate-blob opacity-70"></div>
+        <div class="absolute top-[20%] right-[-10%] w-96 h-96 bg-blue-600/30 rounded-full mix-blend-screen filter blur-3xl animate-blob animation-delay-2000 opacity-70"></div>
+        <div class="absolute bottom-[-20%] left-[20%] w-96 h-96 bg-indigo-600/30 rounded-full mix-blend-screen filter blur-3xl animate-blob animation-delay-4000 opacity-70"></div>
+    </div>
 
-    <div class="relative z-10 backdrop-blur-xl bg-white/5 border border-white/10 rounded-2xl shadow-2xl ring-1 ring-white/10 p-6 sm:p-8 max-w-sm w-full mx-auto transition-all duration-300" id="main-card">
+    <div class="relative z-10 backdrop-blur-xl bg-white/5 border border-white/10 rounded-2xl shadow-2xl ring-1 ring-white/10 p-6 sm:p-8 max-w-sm w-full mx-auto opacity-0 animate-fade-in-up" id="main-card">
         <div class="flex flex-col items-center mb-6">
             <h1 class="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-green-400 to-emerald-500 text-center">
                 VPS Manager
@@ -30,7 +82,11 @@
 
         <div id="forms-container">
             <div id="magic-form">
-                <form action="/api/login/request" method="POST" class="space-y-4">
+                
+                <div id="telegram-widget-container" class="hidden mb-4 flex justify-center">
+                    </div>
+                
+                <form id="magic-link-form" action="/api/login/request" method="POST" class="space-y-4">
                     <div>
                         <label class="block text-gray-400 text-xs font-bold mb-2 uppercase tracking-wider">Ваш Telegram ID</label>
                         <input type="number" name="user_id" 
@@ -42,6 +98,7 @@
                         Войти через Telegram
                     </button>
                 </form>
+                
                 <div class="relative flex py-5 items-center">
                     <div class="flex-grow border-t border-white/10"></div>
                     <span class="flex-shrink-0 mx-4 text-gray-500 text-[10px] uppercase tracking-widest">или</span>
@@ -142,7 +199,114 @@
         </div>
     </div>
     
+    <div id="cookieConsent" class="fixed bottom-0 inset-x-0 z-[200] transform transition-transform duration-500 translate-y-full pointer-events-none">
+        <div class="max-w-4xl mx-auto px-4 pb-6 sm:px-6 lg:px-8">
+            <div class="pointer-events-auto bg-gray-900/90 backdrop-blur-xl border border-white/10 rounded-2xl p-4 shadow-2xl ring-1 ring-white/5 flex flex-col sm:flex-row items-center justify-between gap-4">
+                <div class="flex items-center gap-4">
+                    <div class="hidden sm:flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-blue-500/20">
+                        <svg class="h-5 w-5 text-blue-400" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
+                        </svg>
+                    </div>
+                    <div class="text-center sm:text-left">
+                        <h3 class="text-sm font-bold text-white">Приватность и Cookie</h3>
+                        <p class="text-xs text-gray-400 mt-1 max-w-xl">
+                            Cookie используются исключительно для сохранения вашей авторизации в системе. Мы не ведем сбор данных и не используем сторонние трекеры.
+                        </p>
+                    </div>
+                </div>
+                <button onclick="acceptCookies()" class="w-full sm:w-auto rounded-xl bg-blue-600 px-6 py-2.5 text-xs font-bold text-white shadow-lg shadow-blue-500/20 hover:bg-blue-500 hover:shadow-blue-500/30 transition-all active:scale-95 whitespace-nowrap uppercase tracking-wider">
+                    ОК, понятно
+                </button>
+            </div>
+        </div>
+    </div>
+    
     <script src="/static/js/common.js?v={web_version}"></script>
     <script src="/static/js/login.js?v={web_version}"></script>
+    
+    <script>
+        // --- COOKIE CONSENT LOGIC ---
+        function acceptCookies() {
+            localStorage.setItem('cookie_consent', 'true');
+            document.getElementById('cookieConsent').classList.add('translate-y-full');
+        }
+
+        // Функция обратного вызова для виджета Telegram
+        async function onTelegramAuth(user) {
+            console.log("Telegram widget auth initiated", user);
+            
+            // Автоматическое принятие куки при входе через Telegram
+            acceptCookies();
+            
+            try {
+                const response = await fetch('/api/auth/telegram', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(user)
+                });
+                
+                if (response.ok) {
+                    console.log("Auth success, reloading...");
+                    window.location.reload();
+                } else {
+                    const data = await response.json();
+                    console.error("Auth error:", data);
+                    if(window.showModalAlert) await window.showModalAlert("Ошибка авторизации: " + (data.error || "Unknown"), "Ошибка");
+                    else alert("Ошибка авторизации: " + (data.error || "Unknown"));
+                }
+            } catch (e) {
+                console.error("Network error during auth:", e);
+                alert("Ошибка сети.");
+            }
+        }
+
+        document.addEventListener("DOMContentLoaded", () => {
+            // --- Проверка Cookie Banner ---
+            if (!localStorage.getItem('cookie_consent')) {
+                setTimeout(() => {
+                    document.getElementById('cookieConsent').classList.remove('translate-y-full');
+                }, 1000);
+            }
+            
+            // --- Автоматическое принятие куки при отправке любых форм входа ---
+            const forms = document.querySelectorAll('form');
+            forms.forEach(form => {
+                form.addEventListener('submit', () => {
+                    acceptCookies();
+                });
+            });
+
+            // --- Логика Telegram виджета ---
+            const botUsername = "{bot_username}";
+            const container = document.getElementById('telegram-widget-container');
+            const magicForm = document.getElementById('magic-link-form');
+            
+            // Проверка: это IP адрес или домен?
+            const isIp = /^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$/.test(window.location.hostname);
+            const isLocalhost = window.location.hostname === 'localhost';
+            const isHttps = window.location.protocol === 'https:';
+            
+            // Если есть юзернейм, это НЕ IP, НЕ localhost и ЕСТЬ HTTPS -> показываем виджет
+            if (botUsername && !isIp && !isLocalhost && isHttps) {
+                
+                // Создаем скрипт виджета
+                const script = document.createElement('script');
+                script.async = true;
+                script.src = "https://telegram.org/js/telegram-widget.js?22";
+                script.setAttribute('data-telegram-login', botUsername);
+                script.setAttribute('data-size', 'large');
+                script.setAttribute('data-radius', '10');
+                script.setAttribute('data-onauth', 'onTelegramAuth(user)');
+                script.setAttribute('data-request-access', 'write');
+                
+                container.appendChild(script);
+                container.classList.remove('hidden');
+                
+                // Полностью скрываем форму ввода ID
+                magicForm.classList.add('hidden');
+            }
+        });
+    </script>
 </body>
 </html>

@@ -18,22 +18,26 @@ from .config import ALERTS_CONFIG_FILE, REBOOT_FLAG_FILE, RESTART_FLAG_FILE
 
 
 def get_host_path(path: str) -> str:
-    """Корректирует путь к файлу хоста, если бот запущен в режиме docker-root."""
-    if DEPLOY_MODE == "docker" and INSTALL_MODE == "root":
-        if not path.startswith('/'):
-            path = '/' + path
-        host_path = f"/host{path}"
-        if os.path.exists(host_path):
-            return host_path
-        elif os.path.exists(path):
-            return path
-        else:
-            return host_path
+    if DEPLOY_MODE == "docker":
+        if INSTALL_MODE == "root":
+            if not path.startswith('/'):
+                path = '/' + path
+            host_path = f"/host{path}"
+            if os.path.exists(host_path):
+                return host_path
+            elif os.path.exists(path):
+                return path
+            else:
+                return host_path
+        elif INSTALL_MODE == "secure":
+            if path.startswith("/proc/"):
+                secure_path = path.replace("/proc/", "/proc_host/", 1)
+                if os.path.exists(secure_path):
+                    return secure_path
     return path
 
 
 def load_alerts_config():
-    """Загружает ALERTS_CONFIG в shared_state"""
     try:
         if os.path.exists(ALERTS_CONFIG_FILE):
             with open(ALERTS_CONFIG_FILE, "r", encoding='utf-8') as f:
@@ -53,7 +57,6 @@ def load_alerts_config():
 
 
 def save_alerts_config():
-    """Сохраняет ALERTS_CONFIG из shared_state"""
     try:
         os.makedirs(os.path.dirname(ALERTS_CONFIG_FILE), exist_ok=True)
         config_to_save = {
@@ -66,7 +69,6 @@ def save_alerts_config():
 
 
 async def get_country_flag(ip_or_code: str) -> str:
-    """Асинхронно получает флаг страны по IP или коду."""
     if not ip_or_code or ip_or_code in ["localhost", "127.0.0.1", "::1"]:
         return "🏠"
 
@@ -91,7 +93,6 @@ async def get_country_flag(ip_or_code: str) -> str:
 
 
 async def get_country_details(ip_or_code: str):
-    """Асинхронно получает флаг и название страны."""
     flag = await get_country_flag(ip_or_code)
     country_name = None
     identifier = ip_or_code.strip().upper()
@@ -237,11 +238,8 @@ async def detect_xray_client():
             if len(parts) >= 2:
                 name, image = parts[0], parts[1]
                 
-                # --- ИСПРАВЛЕНО: Более строгая проверка для Amnezia ---
-                # Ищем "amnezia" И "xray" в имени образа, либо точное совпадение имени контейнера
                 if ('amnezia' in image.lower() and 'xray' in image.lower()) or name == 'amnezia-xray':
                     return "amnezia", name
-                # ------------------------------------------------------
 
                 if 'marzban' in image.lower() or 'marzban' in name:
                     return "marzban", name
