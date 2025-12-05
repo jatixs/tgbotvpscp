@@ -5,12 +5,36 @@
 <h1 align="center">📝 Telegram VPS Management Bot — Changelog</h1>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-v1.12.3-blue?style=flat-square" alt="Version 1.12.3"/>
-  <img src="https://img.shields.io/badge/build-49-purple?style=flat-square" alt="Build 49"/>
-  <img src="https://img.shields.io/badge/date-November%202025-green?style=flat-square" alt="Date November 2025"/>
+  <img src="https://img.shields.io/badge/version-v1.12.4-blue?style=flat-square" alt="Version 1.12.4"/>
+  <img src="https://img.shields.io/badge/build-50-purple?style=flat-square" alt="Build 50"/>
+  <img src="https://img.shields.io/badge/date-December%202025-green?style=flat-square" alt="Date December 2025"/>
   <img src="https://img.shields.io/badge/status-stable-green?style=flat-square" alt="Status Stable"/>
 </p>
 
+---
+
+## [1.12.4] - 2025-12-06
+
+### 🚑 Hotfixes:
+
+* **Docker Compatibility (ProcFS):**
+    * Fixed `500 Internal Server Error` and `OCI runtime create failed` on newer Docker/Linux kernel versions caused by restricted mounting over the `/proc` system directory (masked paths).
+    * Updated `docker-compose.yml` to use safe mount paths: host metrics are now mounted to `/proc_host` (e.g., `/proc/uptime` -> `/proc_host/uptime`).
+    * Updated the bot core (`bot.py`) and utilities (`core/utils.py`) to read system data (CPU, RAM, Uptime) from the new `/proc_host` directory when running inside a container.
+
+### 🚀 Added:
+
+* **Automatic HTTPS Configuration:**
+    * Added an **SSL** setup wizard to the installation scripts (`deploy.sh` and `deploy_en.sh`).
+    * You can now automatically deploy **Nginx** as a reverse proxy and obtain a free **Let's Encrypt** certificate (Certbot) for secure Web Panel access during installation.
+
+### ✨ Improved:
+
+* **Deployment Scripts:**
+    * Updated `docker-compose.yml` generation in `deploy.sh` to implement safe mount paths.
+    * Added `psmisc` utility installation (provides `fuser`/`lsof` commands) for more reliable port usage checks before SSL setup.
+* **Telegram Authorization Integration:**
+	* The authorization page now has three authorization forms: HTTP (unsecured connection) - authorization via Magic Link, HTTPS - the official Telegram authorization widget, and http/https - authorization via ID and password**.
 ---
 
 ## [1.12.3] - 2025-11-25

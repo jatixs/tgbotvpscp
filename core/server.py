@@ -5,6 +5,7 @@ import json
 import secrets
 import asyncio
 import hashlib
+import hmac
 import requests
 from aiohttp import web
 from aiogram import Bot
@@ -14,7 +15,7 @@ from . import nodes_db
 from .config import (
     WEB_SERVER_HOST, WEB_SERVER_PORT, NODE_OFFLINE_TIMEOUT, BASE_DIR,
     ADMIN_USER_ID, ENABLE_WEB_UI, save_system_config, BOT_LOG_DIR,
-    WATCHDOG_LOG_DIR, NODE_LOG_DIR, WEB_AUTH_FILE, ADMIN_USERNAME
+    WATCHDOG_LOG_DIR, NODE_LOG_DIR, WEB_AUTH_FILE, ADMIN_USERNAME, TOKEN
 )
 from . import config as current_config
 from .shared_state import NODE_TRAFFIC_MONITORS, ALLOWED_USERS, USER_NAMES, AUTH_TOKENS, ALERTS_CONFIG, AGENT_HISTORY
@@ -37,6 +38,7 @@ SERVER_SESSIONS = {}
 LOGIN_ATTEMPTS = {}
 MAX_LOGIN_ATTEMPTS = 5
 LOGIN_BLOCK_TIME = 300
+BOT_USERNAME_CACHE = None
 
 # Версия кэша = время старта
 CACHE_VER = str(int(time.time()))
@@ -127,6 +129,31 @@ def _get_avatar_html(user):
     if raw.startswith('http'):
         return f'<img src="{raw}" alt="ava" class="w-6 h-6 rounded-full flex-shrink-0">'
     return f'<span class="text-lg leading-none select-none">{raw}</span>'
+
+
+def check_telegram_auth(data, bot_token):
+    """Проверяет хэш авторизации от Telegram."""
+    auth_data = data.copy()
+    check_hash = auth_data.pop('hash', '')
+    if not check_hash:
+        return False
+    
+    data_check_arr = []
+    for key, value in sorted(auth_data.items()):
+        data_check_arr.append(f"{key}={value}")
+    data_check_string = '\n'.join(data_check_arr)
+    
+    secret_key = hashlib.sha256(bot_token.encode()).digest()
+    hash_calc = hmac.new(secret_key, data_check_string.encode(), hashlib.sha256).hexdigest()
+    
+    if hash_calc != check_hash:
+        return False
+        
+    auth_date = int(auth_data.get('auth_date', 0))
+    if time.time() - auth_date > 86400:
+        return False
+        
+    return True
 
 
 async def handle_get_logs(request):
@@ -599,12 +626,11 @@ async def handle_clear_logs(request):
     if not user or user['role'] != 'admins':
         return web.json_response({"error": "Admin required"}, status=403)
     try:
-        # --- FIX: Handle potential empty JSON/body gracefully ---
         data = {}
         try:
             data = await request.json()
         except BaseException:
-            pass  # data remains {}
+            pass
 
         target = data.get('type', 'all')
 
@@ -616,7 +642,6 @@ async def handle_clear_logs(request):
         elif target == 'all':
             dirs_to_clear = [BOT_LOG_DIR, WATCHDOG_LOG_DIR, NODE_LOG_DIR]
         else:
-            # Fallback
             dirs_to_clear = [BOT_LOG_DIR, WATCHDOG_LOG_DIR, NODE_LOG_DIR]
 
         for d in dirs_to_clear:
@@ -690,6 +715,18 @@ async def handle_set_language(request):
 async def handle_login_page(request):
     if get_current_user(request):
         raise web.HTTPFound('/')
+    
+    global BOT_USERNAME_CACHE
+    if BOT_USERNAME_CACHE is None:
+        try:
+            bot = request.app.get('bot')
+            if bot:
+                me = await bot.get_me()
+                BOT_USERNAME_CACHE = me.username
+        except Exception as e:
+            logging.error(f"Error fetching bot username: {e}")
+            BOT_USERNAME_CACHE = ""
+
     html = load_template("login.html")
     alert = ""
     if is_default_password_active(ADMIN_USER_ID):
@@ -699,9 +736,12 @@ async def handle_login_page(request):
         alert).replace(
         "{error_block}",
         "")
+    
+    # Инъекция юзернейма
+    html = html.replace("{bot_username}", BOT_USERNAME_CACHE or "")
+    
     html = html.replace("style.css", f"style.css?v={CACHE_VER}")
 
-    # Инъекция i18n для страницы логина (на дефолтном языке)
     lang = DEFAULT_LANGUAGE
     i18n_data = {
         "web_error": _("web_error", lang, error=""),
@@ -713,11 +753,9 @@ async def handle_login_page(request):
         "modal_btn_cancel": _("modal_btn_cancel", lang),
     }
 
-    # Добавляем placeholder в login.html (см. следующий шаг) и заменяем его
     if "{i18n_json}" in html:
         html = html.replace("{i18n_json}", json.dumps(i18n_data))
     else:
-        # Fallback если плейсхолдер не найден, вставляем скрипт перед закрывающим body
         script = f'<script>const I18N = {json.dumps(i18n_data)};</script>'
         html = html.replace("</body>", f"{script}</body>")
 
@@ -804,6 +842,34 @@ async def handle_magic_login(request):
     return resp
 
 
+async def handle_telegram_auth(request):
+    """Обработка авторизации через Telegram Widget."""
+    try:
+        data = await request.json()
+        if not check_telegram_auth(data, TOKEN):
+            return web.json_response({"error": "Invalid hash or expired"}, status=403)
+        
+        uid = int(data.get('id'))
+        if uid not in ALLOWED_USERS:
+            return web.json_response({"error": "User not allowed"}, status=403)
+            
+        st = secrets.token_hex(32)
+        SERVER_SESSIONS[st] = {"id": uid, "expires": time.time() + 2592000} # 30 дней
+        
+        resp = web.json_response({"status": "ok"})
+        resp.set_cookie(
+            COOKIE_NAME,
+            st,
+            max_age=2592000,
+            httponly=True,
+            samesite='Lax'
+        )
+        return resp
+        
+    except Exception as e:
+        return web.json_response({"error": str(e)}, status=500)
+
+
 async def handle_logout(request):
     token = request.cookies.get(COOKIE_NAME)
     if token and token in SERVER_SESSIONS:
@@ -859,7 +925,6 @@ async def handle_reset_page_render(request):
     html = load_template("reset_password.html").replace(
         "{web_version}", CACHE_VER)
 
-    # Инъекция i18n для страницы сброса
     lang = DEFAULT_LANGUAGE
     i18n_data = {
         "web_error": _("web_error", lang, error=""),
@@ -938,6 +1003,7 @@ async def start_web_server(bot_instance: Bot):
         app.router.add_post('/api/login/reset', handle_reset_request)
         app.router.add_get('/reset_password', handle_reset_page_render)
         app.router.add_post('/api/reset/confirm', handle_reset_confirm)
+        app.router.add_post('/api/auth/telegram', handle_telegram_auth)
         app.router.add_post('/logout', handle_logout)
         app.router.add_get('/api/node/details', handle_node_details)
         app.router.add_get('/api/agent/stats', handle_agent_stats)
