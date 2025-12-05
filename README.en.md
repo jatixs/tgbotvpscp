@@ -9,8 +9,8 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/jatixs/tgbotvpscp/releases/latest"><img src="https://img.shields.io/badge/version-v1.12.3-blue?style=flat-square" alt="Version 1.12.3"/></a>
-  <a href="CHANGELOG.en.md"><img src="https://img.shields.io/badge/build-49-purple?style=flat-square" alt="Build 49"/></a>
+  <a href="https://github.com/jatixs/tgbotvpscp/releases/latest"><img src="https://img.shields.io/badge/version-v1.12.4-blue?style=flat-square" alt="Version 1.12.4"/></a>
+  <a href="CHANGELOG.en.md"><img src="https://img.shields.io/badge/build-50-purple?style=flat-square" alt="Build 50"/></a>
   <a href="https://www.python.org/"><img src="https://img.shields.io/badge/python-3.10%2B-green?style=flat-square" alt="Python 3.10+"/></a>
   <a href="https://choosealicense.com/licenses/gpl-3.0/"><img src="https://img.shields.io/badge/license-GPL--3.0-lightgrey?style=flat-square" alt="License GPL-3.0"/></a>
   <a href="https://github.com/aiogram/aiogram"><img src="https://img.shields.io/badge/aiogram-3.x-orange?style=flat-square" alt="Aiogram 3.x"/></a>
@@ -216,6 +216,6 @@ The agent will install as `tg-node` service and appear in your bot.
 
 ## 👤 Author
 
-**Version:** 1.12.3 (Build 49) <br>
+**Version:** 1.12.4 (Build 50) <br>
 **Author:** Jatix <br>
 📜 **License:** GPL-3.0 <br>

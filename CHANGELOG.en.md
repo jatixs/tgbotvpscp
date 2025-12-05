@@ -5,15 +5,15 @@
 <h1 align="center">📝 Telegram VPS Management Bot — Changelog</h1>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-v1.12.3-blue?style=flat-square" alt="Version 1.12.3"/>
-  <img src="https://img.shields.io/badge/build-49-purple?style=flat-square" alt="Build 49"/>
-  <img src="https://img.shields.io/badge/date-November%202025-green?style=flat-square" alt="Date November 2025"/>
+  <img src="https://img.shields.io/badge/version-v1.12.4-blue?style=flat-square" alt="Version 1.12.4"/>
+  <img src="https://img.shields.io/badge/build-50-purple?style=flat-square" alt="Build 50"/>
+  <img src="https://img.shields.io/badge/date-December%202025-green?style=flat-square" alt="Date December 2025"/>
   <img src="https://img.shields.io/badge/status-stable-green?style=flat-square" alt="Status Stable"/>
 </p>
 
 ---
 
-## [1.12.4] - 2025-12-05
+## [1.12.4] - 2025-12-06
 
 ### 🚑 Hotfixes:
 
