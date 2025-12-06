@@ -24,23 +24,6 @@ from aiogram.filters import Command, StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.exceptions import TelegramBadRequest
 
-ENABLE_SELFTEST = True
-ENABLE_UPTIME = True
-ENABLE_SPEEDTEST = True
-ENABLE_TRAFFIC = True
-ENABLE_TOP = True
-ENABLE_SSHLOG = True
-ENABLE_FAIL2BAN = True
-ENABLE_LOGS = True
-ENABLE_VLESS = True
-ENABLE_XRAY = True
-ENABLE_UPDATE = True
-ENABLE_RESTART = True
-ENABLE_REBOOT = True
-ENABLE_NOTIFICATIONS = True
-ENABLE_USERS = True
-ENABLE_OPTIMIZE = True
-
 config.setup_logging(config.BOT_LOG_DIR, "bot")
 
 bot = Bot(token=config.TOKEN)
@@ -186,41 +169,54 @@ def load_modules():
                 "btn_language",
                 config.DEFAULT_LANGUAGE)))
 
-    if ENABLE_SELFTEST:
+    # Используем config.KEYBOARD_CONFIG для принятия решения о регистрации
+    # Это влияет только на регистрацию хендлеров и добавление в buttons_map
+    # Для скрытия кнопок в реальном времени работает keyboards.py
+    
+    cfg = config.KEYBOARD_CONFIG
+
+    if cfg.get("enable_selftest", True):
         register_module(selftest)
-    if ENABLE_UPTIME:
+    if cfg.get("enable_uptime", True):
         register_module(uptime)
-    if ENABLE_TRAFFIC:
+    if cfg.get("enable_traffic", True):
         register_module(traffic)
-    if ENABLE_NOTIFICATIONS:
+    if cfg.get("enable_notifications", True):
         register_module(notifications)
-    if ENABLE_USERS:
+    
+    # Админские модули
+    if cfg.get("enable_users", True):
         register_module(users, admin_only=True)
-    if ENABLE_SPEEDTEST:
+    if cfg.get("enable_speedtest", True):
         register_module(speedtest, admin_only=True)
-    if ENABLE_TOP:
+    if cfg.get("enable_top", True):
         register_module(top, admin_only=True)
-    if ENABLE_VLESS:
+    if cfg.get("enable_vless", True):
         register_module(vless, admin_only=True)
-    if ENABLE_XRAY:
+    if cfg.get("enable_xray", True):
         register_module(xray, admin_only=True)
-    if ENABLE_SSHLOG:
+        
+    # Root модули
+    if cfg.get("enable_sshlog", True):
         register_module(sshlog, root_only=True)
-    if ENABLE_FAIL2BAN:
+    if cfg.get("enable_fail2ban", True):
         register_module(fail2ban, root_only=True)
-    if ENABLE_LOGS:
+    if cfg.get("enable_logs", True):
         register_module(logs, root_only=True)
-    if ENABLE_UPDATE:
+    if cfg.get("enable_update", True):
         register_module(update, root_only=True)
-    if ENABLE_RESTART:
+    if cfg.get("enable_restart", True):
         register_module(restart, root_only=True)
-    if ENABLE_REBOOT:
+    if cfg.get("enable_reboot", True):
         register_module(reboot, root_only=True)
-    if ENABLE_OPTIMIZE:
+    if cfg.get("enable_optimize", True):
         register_module(optimize, root_only=True)
 
+    # Модуль Nodes всегда нужен, если не отключен глобально
+    # (Хотя в списке переменных его не было, добавим проверку для безопасности или оставим как есть)
     register_module(nodes, admin_only=True)
-    logging.info("All modules loaded.")
+    
+    logging.info("All enabled modules loaded.")
 
 
 async def shutdown(dispatcher: Dispatcher, bot_instance: Bot, web_runner=None):
@@ -257,6 +253,7 @@ async def main():
         await asyncio.to_thread(auth.load_users)
         await asyncio.to_thread(utils.load_alerts_config)
         await asyncio.to_thread(i18n.load_user_settings)
+        # Config уже загружен при импорте
 
         await auth.refresh_user_names(bot)
         await utils.initial_reboot_check(bot)

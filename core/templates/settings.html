@@ -9,6 +9,7 @@
     <script>
         const I18N = {i18n_json};
         const USERS_DATA = {users_data_json};
+        const KEYBOARD_CONFIG = {keyboard_config_json};
     </script>
     <script src="https://unpkg.com/twemoji@latest/dist/twemoji.min.js" crossorigin="anonymous"></script>
     <link rel="stylesheet" href="/static/css/style.css?v={web_version}">
@@ -142,24 +143,20 @@
                     </div>
                 </div>
 
-                <div class="bg-white/60 dark:bg-white/5 backdrop-blur-md border border-white/40 dark:border-white/10 rounded-2xl p-6 shadow-lg dark:shadow-none relative overflow-hidden opacity-50 grayscale select-none flex-1 flex flex-col justify-center">
-                    <div class="absolute inset-0 z-20 flex items-center justify-center bg-white/10 dark:bg-black/10 backdrop-blur-[1px]">
-                        <span class="px-4 py-2 bg-black/80 text-white text-sm font-bold rounded-full shadow-lg animate-pulse">{web_soon_placeholder}</span>
+                <div class="bg-white/60 dark:bg-white/5 backdrop-blur-md border border-white/40 dark:border-white/10 rounded-2xl p-6 shadow-lg dark:shadow-none">
+                    <div class="flex justify-between items-center mb-4">
+                        <h2 class="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
+                            </svg>
+                            {web_keyboard_title}
+                        </h2>
+                        <span id="keyboardStatus" class="text-xs font-medium text-gray-500 dark:text-gray-400 transition-opacity opacity-0"></span>
                     </div>
-                    <h2 class="text-xl font-bold text-gray-900 dark:text-white mb-6 flex items-center gap-2">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
-                        </svg>
-                        {web_keyboard_title}
-                    </h2>
-                    <div class="space-y-4 opacity-50 w-full">
-                        <div class="h-10 bg-gray-200 dark:bg-white/10 rounded-xl w-full"></div>
-                        <div class="flex gap-2">
-                            <div class="h-10 bg-gray-200 dark:bg-white/10 rounded-xl w-1/2"></div>
-                            <div class="h-10 bg-gray-200 dark:bg-white/10 rounded-xl w-1/2"></div>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2" id="keyboardToggles">
                         </div>
-                    </div>
                 </div>
+
             </div>
 
             <div class="md:col-span-2 space-y-6">

@@ -2,6 +2,7 @@ document.addEventListener("DOMContentLoaded", () => {
     renderUsers();
     initSystemSettingsTracking();
     initNodeForm();
+    renderKeyboardConfig(); // NEW
 });
 
 // Храним начальные значения раздельно для каждой группы
@@ -202,7 +203,6 @@ async function clearLogs() {
     const btn = document.getElementById('clearLogsBtn');
     const originalHTML = btn.innerHTML;
     
-    // Полный список "красных" классов, которые нужно удалить
     const redClasses = [
         'bg-red-50', 
         'dark:bg-red-900/10', 
@@ -222,12 +222,10 @@ async function clearLogs() {
         'hover:bg-green-500'
     ];
     
-    // Анимация загрузки
     btn.disabled = true;
     btn.innerHTML = `<svg class="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> ${I18N.web_logs_clearing}`;
     
     try {
-        // Отправляем JSON body с типом 'all'
         const res = await fetch('/api/logs/clear', { 
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
@@ -235,7 +233,6 @@ async function clearLogs() {
         });
 
         if(res.ok) {
-            // Успех - удаляем красные стили, добавляем зеленые
             btn.classList.remove(...redClasses);
             btn.classList.add(...greenClasses);
             
@@ -243,7 +240,6 @@ async function clearLogs() {
             
             setTimeout(() => {
                 btn.innerHTML = originalHTML;
-                // Возврат стилей: удаляем зеленые, возвращаем красные
                 btn.classList.remove(...greenClasses);
                 btn.classList.add(...redClasses);
                 btn.disabled = false;
@@ -259,52 +255,6 @@ async function clearLogs() {
         btn.disabled = false;
         btn.innerHTML = originalHTML;
     }
-}
-
-async function triggerAutoSave() {
-    const statusEl = document.getElementById('notifStatus');
-    if(statusEl) {
-        statusEl.innerText = I18N.web_saving_btn;
-        statusEl.classList.remove('text-green-500', 'text-red-500', 'opacity-0');
-        statusEl.classList.add('text-gray-500', 'dark:text-gray-400', 'opacity-100');
-    }
-
-    setTimeout(async () => {
-        const data = {
-            resources: document.getElementById('alert_resources').checked,
-            logins: document.getElementById('alert_logins').checked,
-            bans: document.getElementById('alert_bans').checked,
-            downtime: document.getElementById('alert_downtime').checked
-        };
-
-        try {
-            const res = await fetch('/api/settings/save', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify(data)
-            });
-            
-            if(statusEl) {
-                if(res.ok) {
-                    statusEl.innerText = I18N.web_saved_btn;
-                    statusEl.classList.remove('text-gray-500', 'dark:text-gray-400');
-                    statusEl.classList.add('text-green-500');
-                    setTimeout(() => {
-                        statusEl.classList.add('opacity-0');
-                    }, 2000);
-                } else {
-                    statusEl.innerText = "Error";
-                    statusEl.classList.add('text-red-500');
-                }
-            }
-        } catch(e) {
-            console.error(e);
-            if(statusEl) {
-                statusEl.innerText = "Conn Error";
-                statusEl.classList.add('text-red-500');
-            }
-        }
-    }, 50);
 }
 
 function renderUsers() {
@@ -410,8 +360,6 @@ async function addNode() {
             document.getElementById('newNodeToken').innerText = data.token;
             document.getElementById('newNodeCmd').innerText = data.command;
             nameInput.value = "";
-            
-            // Сбрасываем состояние кнопки добавления
             const btn = document.getElementById('btnAddNode');
             if(btn) {
                 btn.disabled = true;
@@ -451,9 +399,7 @@ async function changePassword() {
                 new_password: newPass
             })
         });
-        
         const data = await res.json();
-        
         if(res.ok) {
             await window.showModalAlert(I18N.web_pass_changed, 'Успех');
             document.getElementById('pass_current').value = "";
@@ -465,7 +411,97 @@ async function changePassword() {
     } catch(e) {
         await window.showModalAlert(I18N.web_conn_error.replace('{error}', e), 'Ошибка соединения');
     }
-    
     btn.disabled = false;
     btn.innerText = origText;
+}
+
+// --- NEW FUNCTION: RENDER KEYBOARD TOGGLES ---
+function renderKeyboardConfig() {
+    const container = document.getElementById('keyboardToggles');
+    if (!container || typeof KEYBOARD_CONFIG === 'undefined') return;
+
+    // Имена ключей конфига и соответствующие названия
+    // (Опционально можно добавить перевод этих названий в I18N, но пока используем английские ключи как базу или маппинг)
+    const labelMap = {
+        "enable_selftest": "Сведения о сервере",
+        "enable_uptime": "Аптайм",
+        "enable_speedtest": "Скорость сети",
+        "enable_traffic": "Трафик сети",
+        "enable_top": "Топ процессов",
+        "enable_sshlog": "SSH-лог",
+        "enable_fail2ban": "Fail2Ban Log",
+        "enable_logs": "Последние события",
+        "enable_vless": "VLESS-ссылка",
+        "enable_xray": "Обновление X-ray",
+        "enable_update": "Обновление VPS",
+        "enable_restart": "Перезапуск бота",
+        "enable_reboot": "Перезагрузка",
+        "enable_notifications": "Уведомления",
+        "enable_users": "Пользователи",
+        "enable_optimize": "Оптимизация"
+    };
+
+    container.innerHTML = Object.entries(KEYBOARD_CONFIG).map(([key, enabled]) => {
+        if (!labelMap[key]) return ''; // Пропускаем неизвестные ключи
+        const label = labelMap[key];
+        return `
+        <div class="flex items-center justify-between bg-gray-50 dark:bg-black/20 p-3 rounded-xl hover:bg-gray-100 dark:hover:bg-black/30 transition border border-gray-200 dark:border-white/5 cursor-pointer" onclick="document.getElementById('${key}').click(); triggerKeyboardSave();">
+            <span class="text-sm font-medium text-gray-900 dark:text-white truncate" title="${key}">${label}</span>
+            <label class="relative inline-flex items-center cursor-pointer flex-shrink-0" onclick="event.stopPropagation(); triggerKeyboardSave();">
+                <input type="checkbox" id="${key}" class="sr-only peer" ${enabled ? 'checked' : ''}>
+                <div class="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all dark:border-gray-600 peer-checked:bg-blue-600"></div>
+            </label>
+        </div>
+        `;
+    }).join('');
+}
+
+async function triggerKeyboardSave() {
+    const statusEl = document.getElementById('keyboardStatus');
+    if(statusEl) {
+        statusEl.innerText = I18N.web_saving_btn;
+        statusEl.classList.remove('text-green-500', 'text-red-500', 'opacity-0');
+        statusEl.classList.add('text-gray-500', 'dark:text-gray-400', 'opacity-100');
+    }
+
+    setTimeout(async () => {
+        const data = {};
+        // Собираем состояние всех чекбоксов, которые были отрендерены
+        if (typeof KEYBOARD_CONFIG !== 'undefined') {
+            Object.keys(KEYBOARD_CONFIG).forEach(key => {
+                const el = document.getElementById(key);
+                if (el) {
+                    data[key] = el.checked;
+                }
+            });
+        }
+
+        try {
+            const res = await fetch('/api/settings/keyboard', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(data)
+            });
+            
+            if(statusEl) {
+                if(res.ok) {
+                    statusEl.innerText = I18N.web_saved_btn;
+                    statusEl.classList.remove('text-gray-500', 'dark:text-gray-400');
+                    statusEl.classList.add('text-green-500');
+                    setTimeout(() => {
+                        statusEl.classList.add('opacity-0');
+                    }, 2000);
+                } else {
+                    statusEl.innerText = "Error";
+                    statusEl.classList.add('text-red-500');
+                }
+            }
+        } catch(e) {
+            console.error(e);
+            if(statusEl) {
+                statusEl.innerText = "Conn Error";
+                statusEl.classList.add('text-red-500');
+            }
+        }
+    }, 100); // Небольшая задержка
 }
