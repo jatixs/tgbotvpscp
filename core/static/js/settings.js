@@ -2,7 +2,7 @@ document.addEventListener("DOMContentLoaded", () => {
     renderUsers();
     initSystemSettingsTracking();
     initNodeForm();
-    renderKeyboardConfig(); // NEW
+    renderKeyboardConfig(); // Обновлено
 });
 
 // Храним начальные значения раздельно для каждой группы
@@ -415,65 +415,175 @@ async function changePassword() {
     btn.innerText = origText;
 }
 
-// --- NEW FUNCTION: RENDER KEYBOARD TOGGLES ---
+// --- KEYBOARD CONFIGURATION LOGIC ---
+
+// 1. Категоризация кнопок
+const btnCategories = {
+    "monitoring": {
+        title: "📊 Мониторинг",
+        keys: ["enable_selftest", "enable_uptime", "enable_speedtest", "enable_traffic", "enable_top"]
+    },
+    "security": {
+        title: "🛡️ Безопасность и Логи",
+        keys: ["enable_fail2ban", "enable_sshlog", "enable_logs"]
+    },
+    "management": {
+        title: "⚙️ Управление",
+        keys: ["enable_nodes", "enable_users", "enable_update", "enable_optimize"]
+    },
+    "system": {
+        title: "🔌 Питание бота",
+        keys: ["enable_restart", "enable_reboot"]
+    },
+    "tools": {
+        title: "🛠️ Инструменты",
+        keys: ["enable_vless", "enable_xray", "enable_notifications"]
+    }
+};
+
+const btnLabels = {
+    "enable_selftest": "Сведения о сервере",
+    "enable_uptime": "Аптайм",
+    "enable_speedtest": "Скорость сети",
+    "enable_traffic": "Трафик сети",
+    "enable_top": "Топ процессов",
+    "enable_sshlog": "SSH-лог",
+    "enable_fail2ban": "Fail2Ban Log",
+    "enable_logs": "Последние события",
+    "enable_vless": "VLESS-ссылка",
+    "enable_xray": "Обновление X-ray",
+    "enable_update": "Обновление VPS",
+    "enable_restart": "Перезапуск бота",
+    "enable_reboot": "Перезагрузка",
+    "enable_notifications": "Уведомления",
+    "enable_users": "Пользователи",
+    "enable_optimize": "Оптимизация",
+    "enable_nodes": "Ноды"
+};
+
 function renderKeyboardConfig() {
-    const container = document.getElementById('keyboardToggles');
-    if (!container || typeof KEYBOARD_CONFIG === 'undefined') return;
-
-    // Имена ключей конфига и соответствующие названия
-    // (Опционально можно добавить перевод этих названий в I18N, но пока используем английские ключи как базу или маппинг)
-    const labelMap = {
-        "enable_selftest": "Сведения о сервере",
-        "enable_uptime": "Аптайм",
-        "enable_speedtest": "Скорость сети",
-        "enable_traffic": "Трафик сети",
-        "enable_top": "Топ процессов",
-        "enable_sshlog": "SSH-лог",
-        "enable_fail2ban": "Fail2Ban Log",
-        "enable_logs": "Последние события",
-        "enable_vless": "VLESS-ссылка",
-        "enable_xray": "Обновление X-ray",
-        "enable_update": "Обновление VPS",
-        "enable_restart": "Перезапуск бота",
-        "enable_reboot": "Перезагрузка",
-        "enable_notifications": "Уведомления",
-        "enable_users": "Пользователи",
-        "enable_optimize": "Оптимизация"
-    };
-
-    container.innerHTML = Object.entries(KEYBOARD_CONFIG).map(([key, enabled]) => {
-        if (!labelMap[key]) return ''; // Пропускаем неизвестные ключи
-        const label = labelMap[key];
-        return `
-        <div class="flex items-center justify-between bg-gray-50 dark:bg-black/20 p-3 rounded-xl hover:bg-gray-100 dark:hover:bg-black/30 transition border border-gray-200 dark:border-white/5 cursor-pointer" onclick="document.getElementById('${key}').click(); triggerKeyboardSave();">
-            <span class="text-sm font-medium text-gray-900 dark:text-white truncate" title="${key}">${label}</span>
-            <label class="relative inline-flex items-center cursor-pointer flex-shrink-0" onclick="event.stopPropagation(); triggerKeyboardSave();">
-                <input type="checkbox" id="${key}" class="sr-only peer" ${enabled ? 'checked' : ''}>
-                <div class="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all dark:border-gray-600 peer-checked:bg-blue-600"></div>
-            </label>
-        </div>
-        `;
-    }).join('');
+    // Рендеринг превью на главной странице
+    renderKeyboardPreview();
+    
+    // Рендеринг полного списка в модальном окне
+    renderKeyboardModalContent();
 }
 
-async function triggerKeyboardSave() {
-    const statusEl = document.getElementById('keyboardStatus');
-    if(statusEl) {
-        statusEl.innerText = I18N.web_saving_btn;
-        statusEl.classList.remove('text-green-500', 'text-red-500', 'opacity-0');
-        statusEl.classList.add('text-gray-500', 'dark:text-gray-400', 'opacity-100');
+function renderKeyboardPreview() {
+    const container = document.getElementById('keyboardPreview');
+    if (!container || typeof KEYBOARD_CONFIG === 'undefined') return;
+
+    // Считаем сколько включено всего
+    const totalEnabled = Object.values(KEYBOARD_CONFIG).filter(v => v).length;
+    const totalAll = Object.keys(btnLabels).length;
+
+    container.innerHTML = `
+        <span class="px-3 py-1 rounded-full bg-green-100 dark:bg-green-500/20 text-green-700 dark:text-green-300 text-xs font-bold border border-green-200 dark:border-green-500/20">
+            Активно: ${totalEnabled} из ${totalAll}
+        </span>
+    `;
+}
+
+function renderKeyboardModalContent() {
+    const container = document.getElementById('keyboardModalContent');
+    if (!container || typeof KEYBOARD_CONFIG === 'undefined') return;
+
+    let html = '';
+
+    for (const [catKey, catData] of Object.entries(btnCategories)) {
+        // Проверяем, есть ли кнопки из этой категории в конфиге (чтобы не рисовать пустые блоки)
+        const hasButtons = catData.keys.some(k => KEYBOARD_CONFIG.hasOwnProperty(k));
+        
+        if (hasButtons) {
+            html += `
+                <div class="mb-2">
+                    <h4 class="text-sm font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3 ml-1">${catData.title}</h4>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            `;
+
+            catData.keys.forEach(key => {
+                if (!KEYBOARD_CONFIG.hasOwnProperty(key)) return; // Пропуск несуществующих
+                const enabled = KEYBOARD_CONFIG[key];
+                const label = btnLabels[key] || key;
+
+                html += `
+                <div class="flex items-center justify-between bg-gray-50 dark:bg-black/20 p-3 rounded-xl hover:bg-gray-100 dark:hover:bg-black/30 transition border border-gray-200 dark:border-white/5 cursor-pointer select-none" onclick="document.getElementById('${key}').click(); triggerKeyboardSave();">
+                    <span class="text-sm font-medium text-gray-900 dark:text-white truncate pr-2" title="${label}">${label}</span>
+                    <label class="relative inline-flex items-center cursor-pointer flex-shrink-0" onclick="event.stopPropagation(); triggerKeyboardSave();">
+                        <input type="checkbox" id="${key}" class="sr-only peer" ${enabled ? 'checked' : ''}>
+                        <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-blue-600"></div>
+                    </label>
+                </div>
+                `;
+            });
+
+            html += `
+                    </div>
+                </div>
+                <div class="h-px bg-gray-200 dark:bg-white/5 last:hidden"></div>
+            `;
+        }
     }
 
+    container.innerHTML = html;
+}
+
+// Функции модального окна
+window.openKeyboardModal = function() {
+    const modal = document.getElementById('keyboardModal');
+    if (modal) {
+        modal.classList.remove('hidden');
+        modal.classList.add('flex');
+        document.body.style.overflow = 'hidden';
+    }
+};
+
+window.closeKeyboardModal = function() {
+    const modal = document.getElementById('keyboardModal');
+    if (modal) {
+        modal.classList.add('hidden');
+        modal.classList.remove('flex');
+        document.body.style.overflow = 'auto';
+    }
+};
+
+// Функция сохранения (немного модифицированная для обновления превью)
+async function triggerKeyboardSave() {
+    const statusEl = document.getElementById('keyboardStatus');
+    
+    // Обновляем визуально превью сразу (счетчик)
+    // Но нам нужно собрать реальные данные с чекбоксов, так как KEYBOARD_CONFIG реактивно не обновляется тут
+    
     setTimeout(async () => {
         const data = {};
-        // Собираем состояние всех чекбоксов, которые были отрендерены
+        let activeCount = 0;
+        let totalCount = 0;
+
         if (typeof KEYBOARD_CONFIG !== 'undefined') {
             Object.keys(KEYBOARD_CONFIG).forEach(key => {
                 const el = document.getElementById(key);
+                // Чекбоксы теперь живут в модальном окне
                 if (el) {
                     data[key] = el.checked;
+                    if(el.checked) activeCount++;
+                    totalCount++;
+                } else {
+                    // Если элемента нет в DOM (например, категория скрыта), берем старое значение
+                    data[key] = KEYBOARD_CONFIG[key];
+                    if(KEYBOARD_CONFIG[key]) activeCount++;
+                    totalCount++;
                 }
             });
+        }
+        
+        // Обновляем глобальный объект, чтобы превью работало корректно
+        Object.assign(KEYBOARD_CONFIG, data);
+        renderKeyboardPreview();
+
+        if(statusEl) {
+            statusEl.innerText = I18N.web_saving_btn;
+            statusEl.classList.remove('text-green-500', 'text-red-500', 'opacity-0');
+            statusEl.classList.add('text-gray-500', 'dark:text-gray-400', 'opacity-100');
         }
 
         try {
@@ -503,5 +613,5 @@ async function triggerKeyboardSave() {
                 statusEl.classList.add('text-red-500');
             }
         }
-    }, 100); // Небольшая задержка
+    }, 50); 
 }
