@@ -2,7 +2,8 @@ document.addEventListener("DOMContentLoaded", () => {
     renderUsers();
     initSystemSettingsTracking();
     initNodeForm();
-    renderKeyboardConfig(); // Обновлено
+    renderKeyboardConfig();
+    updateBulkButtonsUI(); // Инициализация состояния кнопок
 });
 
 // Храним начальные значения раздельно для каждой группы
@@ -415,71 +416,117 @@ async function changePassword() {
     btn.innerText = origText;
 }
 
+// --- NOTIFICATION SETTINGS LOGIC (ВОССТАНОВЛЕНО) ---
+async function triggerAutoSave() {
+    const statusEl = document.getElementById('notifStatus');
+    
+    // UI update
+    if(statusEl) {
+        statusEl.innerText = (typeof I18N !== 'undefined' && I18N.web_saving_btn) ? I18N.web_saving_btn : "Saving...";
+        statusEl.classList.remove('text-green-500', 'text-red-500', 'opacity-0');
+        statusEl.classList.add('text-gray-500', 'dark:text-gray-400', 'opacity-100');
+    }
+
+    const data = {
+        resources: document.getElementById('alert_resources')?.checked || false,
+        logins: document.getElementById('alert_logins')?.checked || false,
+        bans: document.getElementById('alert_bans')?.checked || false,
+        downtime: document.getElementById('alert_downtime')?.checked || false
+    };
+
+    try {
+        const res = await fetch('/api/settings/save', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(data)
+        });
+        
+        if(statusEl) {
+            if(res.ok) {
+                statusEl.innerText = (typeof I18N !== 'undefined' && I18N.web_saved_btn) ? I18N.web_saved_btn : "Saved!";
+                statusEl.classList.remove('text-gray-500', 'dark:text-gray-400');
+                statusEl.classList.add('text-green-500');
+                setTimeout(() => {
+                    statusEl.classList.add('opacity-0');
+                }, 2000);
+            } else {
+                statusEl.innerText = "Error";
+                statusEl.classList.add('text-red-500');
+            }
+        }
+    } catch(e) {
+        console.error(e);
+        if(statusEl) {
+            statusEl.innerText = "Conn Error";
+            statusEl.classList.add('text-red-500');
+        }
+    }
+}
+
 // --- KEYBOARD CONFIGURATION LOGIC ---
 
 // 1. Категоризация кнопок
 const btnCategories = {
     "monitoring": {
-        title: "📊 Мониторинг",
+        titleKey: "web_kb_cat_monitoring",
         keys: ["enable_selftest", "enable_uptime", "enable_speedtest", "enable_traffic", "enable_top"]
     },
     "security": {
-        title: "🛡️ Безопасность и Логи",
+        titleKey: "web_kb_cat_security",
         keys: ["enable_fail2ban", "enable_sshlog", "enable_logs"]
     },
     "management": {
-        title: "⚙️ Управление",
+        titleKey: "web_kb_cat_management",
         keys: ["enable_nodes", "enable_users", "enable_update", "enable_optimize"]
     },
     "system": {
-        title: "🔌 Питание бота",
+        titleKey: "web_kb_cat_system",
         keys: ["enable_restart", "enable_reboot"]
     },
     "tools": {
-        title: "🛠️ Инструменты",
+        titleKey: "web_kb_cat_tools",
         keys: ["enable_vless", "enable_xray", "enable_notifications"]
     }
 };
 
-const btnLabels = {
-    "enable_selftest": "Сведения о сервере",
-    "enable_uptime": "Аптайм",
-    "enable_speedtest": "Скорость сети",
-    "enable_traffic": "Трафик сети",
-    "enable_top": "Топ процессов",
-    "enable_sshlog": "SSH-лог",
-    "enable_fail2ban": "Fail2Ban Log",
-    "enable_logs": "Последние события",
-    "enable_vless": "VLESS-ссылка",
-    "enable_xray": "Обновление X-ray",
-    "enable_update": "Обновление VPS",
-    "enable_restart": "Перезапуск бота",
-    "enable_reboot": "Перезагрузка",
-    "enable_notifications": "Уведомления",
-    "enable_users": "Пользователи",
-    "enable_optimize": "Оптимизация",
-    "enable_nodes": "Ноды"
-};
-
 function renderKeyboardConfig() {
-    // Рендеринг превью на главной странице
     renderKeyboardPreview();
-    
-    // Рендеринг полного списка в модальном окне
     renderKeyboardModalContent();
+    updateDoneButtonState('default');
+}
+
+// Вспомогательная функция для получения списка всех отображаемых кнопок
+function getVisibleKeys() {
+    let keys = [];
+    if (typeof KEYBOARD_CONFIG === 'undefined') return keys;
+    
+    for (const catData of Object.values(btnCategories)) {
+        catData.keys.forEach(k => {
+            // Кнопка считается видимой, если она существует в конфиге
+            if (KEYBOARD_CONFIG.hasOwnProperty(k)) {
+                keys.push(k);
+            }
+        });
+    }
+    return keys;
 }
 
 function renderKeyboardPreview() {
     const container = document.getElementById('keyboardPreview');
     if (!container || typeof KEYBOARD_CONFIG === 'undefined') return;
 
-    // Считаем сколько включено всего
-    const totalEnabled = Object.values(KEYBOARD_CONFIG).filter(v => v).length;
-    const totalAll = Object.keys(btnLabels).length;
+    const visibleKeys = getVisibleKeys();
+    const totalAll = visibleKeys.length;
+    
+    // Считаем активные только среди видимых
+    const totalEnabled = visibleKeys.filter(k => KEYBOARD_CONFIG[k]).length;
+
+    // Используем I18N.web_kb_active если доступен, иначе fallback
+    const activeText = (typeof I18N !== 'undefined' && I18N.web_kb_active) ? I18N.web_kb_active : "Активно:";
 
     container.innerHTML = `
         <span class="px-3 py-1 rounded-full bg-green-100 dark:bg-green-500/20 text-green-700 dark:text-green-300 text-xs font-bold border border-green-200 dark:border-green-500/20">
-            Активно: ${totalEnabled} из ${totalAll}
+            ${activeText} ${totalEnabled} / ${totalAll}
         </span>
     `;
 }
@@ -491,20 +538,23 @@ function renderKeyboardModalContent() {
     let html = '';
 
     for (const [catKey, catData] of Object.entries(btnCategories)) {
-        // Проверяем, есть ли кнопки из этой категории в конфиге (чтобы не рисовать пустые блоки)
-        const hasButtons = catData.keys.some(k => KEYBOARD_CONFIG.hasOwnProperty(k));
+        // Проверяем, есть ли кнопки из этой категории в конфиге
+        const categoryKeys = catData.keys.filter(k => KEYBOARD_CONFIG.hasOwnProperty(k));
         
-        if (hasButtons) {
+        if (categoryKeys.length > 0) {
+            // Получаем заголовок из I18N или используем дефолтный
+            const title = (typeof I18N !== 'undefined' && I18N[catData.titleKey]) ? I18N[catData.titleKey] : catKey;
+
             html += `
                 <div class="mb-2">
-                    <h4 class="text-sm font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3 ml-1">${catData.title}</h4>
+                    <h4 class="text-sm font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3 ml-1">${title}</h4>
                     <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
             `;
 
-            catData.keys.forEach(key => {
-                if (!KEYBOARD_CONFIG.hasOwnProperty(key)) return; // Пропуск несуществующих
+            categoryKeys.forEach(key => {
                 const enabled = KEYBOARD_CONFIG[key];
-                const label = btnLabels[key] || key;
+                // Получаем название кнопки из I18N (сформировано в server.py как lbl_key)
+                const label = (typeof I18N !== 'undefined' && I18N[`lbl_${key}`]) ? I18N[`lbl_${key}`] : key;
 
                 html += `
                 <div class="flex items-center justify-between bg-gray-50 dark:bg-black/20 p-3 rounded-xl hover:bg-gray-100 dark:hover:bg-black/30 transition border border-gray-200 dark:border-white/5 cursor-pointer select-none" onclick="document.getElementById('${key}').click(); triggerKeyboardSave();">
@@ -547,45 +597,119 @@ window.closeKeyboardModal = function() {
     }
 };
 
-// Функция сохранения (немного модифицированная для обновления превью)
-async function triggerKeyboardSave() {
-    const statusEl = document.getElementById('keyboardStatus');
-    
-    // Обновляем визуально превью сразу (счетчик)
-    // Но нам нужно собрать реальные данные с чекбоксов, так как KEYBOARD_CONFIG реактивно не обновляется тут
-    
-    setTimeout(async () => {
-        const data = {};
-        let activeCount = 0;
-        let totalCount = 0;
+// --- CUSTOM TOAST LOGIC ---
+let currentToast = null;
+let currentToastTimer = null;
 
-        if (typeof KEYBOARD_CONFIG !== 'undefined') {
-            Object.keys(KEYBOARD_CONFIG).forEach(key => {
-                const el = document.getElementById(key);
-                // Чекбоксы теперь живут в модальном окне
-                if (el) {
-                    data[key] = el.checked;
-                    if(el.checked) activeCount++;
-                    totalCount++;
-                } else {
-                    // Если элемента нет в DOM (например, категория скрыта), берем старое значение
-                    data[key] = KEYBOARD_CONFIG[key];
-                    if(KEYBOARD_CONFIG[key]) activeCount++;
-                    totalCount++;
+function showToast(message) {
+    if (currentToast) {
+        if (currentToastTimer) clearTimeout(currentToastTimer);
+        currentToast.remove();
+        currentToast = null;
+    }
+
+    const toast = document.createElement('div');
+    toast.className = 'fixed top-24 left-1/2 transform -translate-x-1/2 z-[200] flex items-center gap-3 px-6 py-3 rounded-2xl shadow-2xl backdrop-blur-xl border transition-all duration-1000 ease-in-out ' +
+        'bg-white/90 dark:bg-gray-800/90 text-gray-900 dark:text-white border-gray-200 dark:border-white/10 opacity-0 translate-y-[-20px]';
+    
+    toast.innerHTML = `
+        <div class="p-1 rounded-full bg-blue-100 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+        </div>
+        <span class="font-medium text-sm">${message}</span>
+    `;
+
+    document.body.appendChild(toast);
+    currentToast = toast;
+
+    // Trigger animation
+    setTimeout(() => {
+        if (currentToast === toast) {
+            toast.classList.remove('opacity-0', 'translate-y-[-20px]');
+            toast.classList.add('opacity-100', 'translate-y-0');
+        }
+    }, 10);
+
+    // Schedule hide
+    currentToastTimer = setTimeout(() => {
+        if (currentToast === toast) {
+            toast.classList.remove('opacity-100', 'translate-y-0');
+            toast.classList.add('opacity-0', 'translate-y-[-20px]');
+            
+            setTimeout(() => {
+                if (currentToast === toast) {
+                    toast.remove();
+                    currentToast = null;
                 }
-            });
+            }, 1000);
         }
-        
-        // Обновляем глобальный объект, чтобы превью работало корректно
-        Object.assign(KEYBOARD_CONFIG, data);
+    }, 3000); 
+}
+
+// --- УПРАВЛЕНИЕ КНОПКОЙ "ГОТОВО" ---
+function updateDoneButtonState(state) {
+    const btn = document.getElementById('keyboardModalDoneBtn');
+    if (!btn) return;
+
+    const activeText = (typeof I18N !== 'undefined' && I18N.web_kb_active) ? I18N.web_kb_active : "Активно:";
+    const savingText = (typeof I18N !== 'undefined' && I18N.web_saving_btn) ? I18N.web_saving_btn : "Сохранение...";
+    const savedText = (typeof I18N !== 'undefined' && I18N.web_saved_btn) ? I18N.web_saved_btn : "Сохранено!";
+
+    const visibleKeys = getVisibleKeys();
+    const totalAll = visibleKeys.length;
+    const totalEnabled = visibleKeys.filter(k => KEYBOARD_CONFIG[k]).length;
+    const counterText = `${activeText} ${totalEnabled} / ${totalAll}`;
+
+    const defaultClasses = ['bg-blue-600', 'hover:bg-blue-500', 'text-white', 'shadow-blue-500/20'];
+    const savingClasses = ['bg-yellow-500', 'hover:bg-yellow-400', 'text-white', 'shadow-yellow-500/20', 'cursor-wait'];
+    const savedClasses = ['bg-green-600', 'hover:bg-green-500', 'text-white', 'shadow-green-500/20'];
+
+    btn.classList.remove(...defaultClasses, ...savingClasses, ...savedClasses);
+
+    if (state === 'saving') {
+        btn.innerHTML = `<svg class="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> ${savingText}`;
+        btn.classList.add(...savingClasses);
+        btn.disabled = true;
+    } else if (state === 'saved') {
+        btn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" /></svg> ${savedText}`;
+        btn.classList.add(...savedClasses);
+        btn.disabled = false;
+    } else {
+        btn.innerText = counterText;
+        btn.classList.add(...defaultClasses);
+        btn.disabled = false;
+    }
+}
+
+// ОБНОВЛЕННАЯ ФУНКЦИЯ СОХРАНЕНИЯ
+async function triggerKeyboardSave(skipPreviewUpdate = false) {
+    const data = {};
+    let hasChanges = false;
+
+    if (typeof KEYBOARD_CONFIG !== 'undefined') {
+        Object.keys(KEYBOARD_CONFIG).forEach(key => {
+            const el = document.getElementById(key);
+            if (el) {
+                if (KEYBOARD_CONFIG[key] !== el.checked) hasChanges = true;
+                data[key] = el.checked;
+            } else {
+                data[key] = KEYBOARD_CONFIG[key];
+            }
+        });
+    }
+    
+    Object.assign(KEYBOARD_CONFIG, data);
+    
+    if (!skipPreviewUpdate) {
         renderKeyboardPreview();
+        updateBulkButtonsUI(); // Обновляем состояние кнопок "Включить/Выключить всё"
+    }
+    
+    updateDoneButtonState('saving');
 
-        if(statusEl) {
-            statusEl.innerText = I18N.web_saving_btn;
-            statusEl.classList.remove('text-green-500', 'text-red-500', 'opacity-0');
-            statusEl.classList.add('text-gray-500', 'dark:text-gray-400', 'opacity-100');
-        }
-
+    setTimeout(async () => {
         try {
             const res = await fetch('/api/settings/keyboard', {
                 method: 'POST',
@@ -593,25 +717,140 @@ async function triggerKeyboardSave() {
                 body: JSON.stringify(data)
             });
             
-            if(statusEl) {
-                if(res.ok) {
-                    statusEl.innerText = I18N.web_saved_btn;
-                    statusEl.classList.remove('text-gray-500', 'dark:text-gray-400');
-                    statusEl.classList.add('text-green-500');
-                    setTimeout(() => {
-                        statusEl.classList.add('opacity-0');
-                    }, 2000);
-                } else {
-                    statusEl.innerText = "Error";
-                    statusEl.classList.add('text-red-500');
-                }
+            if(res.ok) {
+                updateDoneButtonState('saved');
+                setTimeout(() => {
+                    const btn = document.getElementById('keyboardModalDoneBtn');
+                    if (btn && !btn.innerHTML.includes('spin')) { 
+                        updateDoneButtonState('default');
+                    }
+                }, 1500);
+            } else {
+                console.error("Save failed");
+                updateDoneButtonState('default');
             }
         } catch(e) {
             console.error(e);
-            if(statusEl) {
-                statusEl.innerText = "Conn Error";
-                statusEl.classList.add('text-red-500');
-            }
+            updateDoneButtonState('default');
         }
-    }, 50); 
+    }, 300);
 }
+
+// --- НОВАЯ ЛОГИКА ДЛЯ КНОПОК "ВКЛЮЧИТЬ/ВЫКЛЮЧИТЬ ВСЁ" ---
+
+function getBulkStatus() {
+    const keys = getVisibleKeys();
+    const total = keys.length;
+    const enabled = keys.filter(k => KEYBOARD_CONFIG[k]).length;
+    return {
+        allEnabled: total > 0 && enabled === total,
+        allDisabled: total > 0 && enabled === 0
+    };
+}
+
+function updateBulkButtonsUI() {
+    const status = getBulkStatus();
+    const btnEnable = document.getElementById('btnEnableAllKb');
+    const btnDisable = document.getElementById('btnDisableAllKb');
+
+    const setDeactivated = (btn, isDeactivated) => {
+        if (!btn) return;
+        if (isDeactivated) {
+            btn.classList.add('opacity-50', 'cursor-not-allowed');
+        } else {
+            btn.classList.remove('opacity-50', 'cursor-not-allowed');
+        }
+    };
+
+    setDeactivated(btnEnable, status.allEnabled);
+    setDeactivated(btnDisable, status.allDisabled);
+}
+
+function animateBulkButton(btnId, state, originalText) {
+    const btn = document.getElementById(btnId);
+    if (!btn) return;
+
+    if (state === 'loading') {
+        btn.innerHTML = `<svg class="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>`;
+    } else if (state === 'success') {
+        btn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg>`;
+    } else {
+        btn.innerHTML = originalText;
+    }
+}
+
+window.enableAllKeyboard = async function() {
+    const status = getBulkStatus();
+    
+    if (status.allEnabled) {
+        const msg = (typeof I18N !== 'undefined' && I18N.web_kb_all_on_alert) ? I18N.web_kb_all_on_alert : "All buttons already enabled!";
+        showToast(msg);
+        return;
+    }
+
+    const btnId = 'btnEnableAllKb';
+    const btn = document.getElementById(btnId);
+    const originalText = btn ? btn.innerText : 'Enable All';
+
+    animateBulkButton(btnId, 'loading', originalText);
+
+    let changed = false;
+    const keys = getVisibleKeys();
+    keys.forEach(key => {
+        if (!KEYBOARD_CONFIG[key]) {
+            KEYBOARD_CONFIG[key] = true;
+            changed = true;
+            const el = document.getElementById(key);
+            if(el) el.checked = true;
+        }
+    });
+
+    if (changed) {
+        await triggerKeyboardSave(); 
+    }
+
+    animateBulkButton(btnId, 'success', originalText);
+    
+    setTimeout(() => {
+        animateBulkButton(btnId, 'default', originalText);
+        updateBulkButtonsUI();
+    }, 1500);
+};
+
+window.disableAllKeyboard = async function() {
+    const status = getBulkStatus();
+
+    if (status.allDisabled) {
+        const msg = (typeof I18N !== 'undefined' && I18N.web_kb_all_off_alert) ? I18N.web_kb_all_off_alert : "All buttons already disabled!";
+        showToast(msg);
+        return;
+    }
+
+    const btnId = 'btnDisableAllKb';
+    const btn = document.getElementById(btnId);
+    const originalText = btn ? btn.innerText : 'Disable All';
+
+    animateBulkButton(btnId, 'loading', originalText);
+
+    let changed = false;
+    const keys = getVisibleKeys();
+    keys.forEach(key => {
+        if (KEYBOARD_CONFIG[key]) {
+            KEYBOARD_CONFIG[key] = false;
+            changed = true;
+            const el = document.getElementById(key);
+            if(el) el.checked = false;
+        }
+    });
+
+    if (changed) {
+        await triggerKeyboardSave();
+    }
+
+    animateBulkButton(btnId, 'success', originalText);
+
+    setTimeout(() => {
+        animateBulkButton(btnId, 'default', originalText);
+        updateBulkButtonsUI();
+    }, 1500);
+};

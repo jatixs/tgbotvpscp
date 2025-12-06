@@ -24,6 +24,7 @@ from .i18n import STRINGS, get_user_lang, set_user_lang, get_text as _
 from .config import DEFAULT_LANGUAGE
 from .utils import get_country_flag, save_alerts_config, get_host_path
 from .auth import save_users, get_user_name
+from .keyboards import BTN_CONFIG_MAP
 
 COOKIE_NAME = "vps_agent_session"
 LOGIN_TOKEN_TTL = 300
@@ -44,7 +45,6 @@ BOT_USERNAME_CACHE = None
 CACHE_VER = str(int(time.time()))
 AGENT_TASK = None
 
-# ... (Остальные вспомогательные функции оставляем как есть) ...
 def check_rate_limit(ip):
     now = time.time()
     attempts = LOGIN_ATTEMPTS.get(ip, [])
@@ -255,6 +255,9 @@ async def handle_dashboard(request):
     html = html.replace("{i18n_json}", json.dumps(i18n_data))
     return web.Response(text=html, content_type='text/html')
 
+
+# --- RESTORED FUNCTIONS ---
+
 async def handle_heartbeat(request):
     try:
         data = await request.json()
@@ -268,23 +271,28 @@ async def handle_heartbeat(request):
     results = data.get("results", [])
     bot = request.app.get('bot')
     if bot and results:
-        from core.server import process_node_result_background
+        # Send responses in background
         for res in results:
             asyncio.create_task(
                 process_node_result_background(bot, res.get("user_id"), res.get("command"), res.get("result"), token, node.get("name", "Node")))
+    
     if node.get("is_restarting"):
         await nodes_db.update_node_extra(token, "is_restarting", False)
+    
     ip = request.transport.get_extra_info('peername')[0]
     await nodes_db.update_node_heartbeat(token, ip, stats)
+    
     current_node = await nodes_db.get_node_by_token(token)
     tasks_to_send = current_node.get("tasks", [])
     if tasks_to_send:
         await nodes_db.clear_node_tasks(token)
+    
     return web.json_response({"status": "ok", "tasks": tasks_to_send})
 
 async def process_node_result_background(bot, user_id, cmd, text, token, node_name):
     if not user_id or not text: return
     try:
+        # Check if traffic monitor needs update
         if cmd == "traffic" and user_id in NODE_TRAFFIC_MONITORS:
             monitor = NODE_TRAFFIC_MONITORS[user_id]
             if monitor.get("token") == token:
@@ -294,6 +302,8 @@ async def process_node_result_background(bot, user_id, cmd, text, token, node_na
                     await bot.edit_message_text(text=text, chat_id=user_id, message_id=msg_id, reply_markup=stop_kb, parse_mode="HTML")
                 except BaseException: pass
                 return
+        
+        # Default response
         await bot.send_message(chat_id=user_id, text=f"🖥 <b>Ответ от {node_name}:</b>\n\n{text}", parse_mode="HTML")
     except Exception as e:
         logging.error(f"Background send error: {e}")
@@ -324,12 +334,14 @@ async def handle_agent_stats(request):
         net = psutil.net_io_counters()
         current_stats.update({"net_sent": net.bytes_sent, "net_recv": net.bytes_recv, "boot_time": psutil.boot_time()})
     except BaseException: pass
+    
     if AGENT_HISTORY:
         latest = AGENT_HISTORY[-1]
         current_stats.update({"cpu": latest["c"], "ram": latest["r"]})
         try:
             current_stats["disk"] = psutil.disk_usage(get_host_path('/')).percent
         except BaseException: pass
+        
     return web.json_response({"stats": current_stats, "history": AGENT_HISTORY})
 
 async def handle_node_add(request):
@@ -342,10 +354,13 @@ async def handle_node_add(request):
         if not name:
             return web.json_response({"error": "Name required"}, status=400)
         token = await nodes_db.create_node(name)
+        
         host = request.headers.get('Host', f'{WEB_SERVER_HOST}:{WEB_SERVER_PORT}')
         proto = "https" if request.headers.get('X-Forwarded-Proto') == "https" else "http"
+        
         lang = get_user_lang(user['id'])
         script = "deploy_en.sh" if lang == "en" else "deploy.sh"
+        
         cmd = f"bash <(wget -qO- https://raw.githubusercontent.com/jatixs/tgbotvpscp/main/{script}) --agent={proto}://{host} --token={token}"
         return web.json_response({"status": "ok", "token": token, "command": cmd})
     except Exception as e:
@@ -355,20 +370,35 @@ async def handle_nodes_list_json(request):
     user = get_current_user(request)
     if not user:
         return web.json_response({"error": "Unauthorized"}, status=401)
+    
     all_nodes = await nodes_db.get_all_nodes()
     nodes_data = []
     now = time.time()
+    
     for token, node in all_nodes.items():
         last_seen = node.get("last_seen", 0)
         is_restarting = node.get("is_restarting", False)
         status = "offline"
+        
         if is_restarting:
             status = "restarting"
         elif now - last_seen < NODE_OFFLINE_TIMEOUT:
             status = "online"
+            
         stats = node.get("stats", {})
-        nodes_data.append({"token": token, "name": node.get("name", "Unknown"), "ip": node.get("ip", "Unknown"), "status": status, "cpu": stats.get("cpu", 0), "ram": stats.get("ram", 0), "disk": stats.get("disk", 0)})
+        nodes_data.append({
+            "token": token, 
+            "name": node.get("name", "Unknown"), 
+            "ip": node.get("ip", "Unknown"), 
+            "status": status, 
+            "cpu": stats.get("cpu", 0), 
+            "ram": stats.get("ram", 0), 
+            "disk": stats.get("disk", 0)
+        })
+        
     return web.json_response({"nodes": nodes_data})
+
+# ----------------------------
 
 async def handle_settings_page(request):
     user = get_current_user(request)
@@ -442,6 +472,16 @@ async def handle_settings_page(request):
         "{web_hint_node_timeout}": _("web_hint_node_timeout", lang),
         "{web_keyboard_title}": _("web_keyboard_title", lang),
         "{web_soon_placeholder}": _("web_soon_placeholder", lang),
+        
+        # --- ДОБАВЛЕННЫЕ ЗАМЕНЫ ---
+        "{web_kb_desc}": _("web_kb_desc", lang),
+        "{web_kb_btn_config}": _("web_kb_btn_config", lang),
+        "{web_kb_enable_all}": _("web_kb_enable_all", lang),
+        "{web_kb_disable_all}": _("web_kb_disable_all", lang),
+        "{web_kb_modal_title}": _("web_kb_modal_title", lang),
+        "{web_kb_done}": _("web_kb_done", lang),
+        # --------------------------
+        
         "{web_version}": CACHE_VER,
     }
 
@@ -453,6 +493,7 @@ async def handle_settings_page(request):
         modified_html = modified_html.replace(f"{{check_{alert}}}", "checked" if user_alerts.get(alert, False) else "")
     if user_id != ADMIN_USER_ID:
         modified_html = modified_html.replace('<div class="bg-white/60 dark:bg-white/5 backdrop-blur-md border border-white/40 dark:border-white/10 rounded-2xl p-6 shadow-lg dark:shadow-none" id="securitySection">', '<div class="hidden">')
+    
     i18n_data = {
         "web_saving_btn": _("web_saving_btn", lang), "web_saved_btn": _("web_saved_btn", lang), "web_save_btn": _("web_save_btn", lang), "web_change_btn": _("web_change_btn", lang), "web_error": _("web_error", lang, error=""), "web_conn_error": _("web_conn_error", lang, error=""), "web_confirm_delete_user": _("web_confirm_delete_user", lang), "web_no_users": _("web_no_users", lang), "web_clear_logs_confirm": _("web_clear_logs_confirm", lang), "web_logs_cleared": _("web_logs_cleared", lang), "error_traffic_interval_low": _("error_traffic_interval_low", lang), "error_traffic_interval_high": _("error_traffic_interval_high", lang), "web_logs_clearing": _("web_logs_clearing", lang), "web_logs_cleared_alert": _("web_logs_cleared_alert", lang), "web_pass_changed": _("web_pass_changed", lang), "web_pass_mismatch": _("web_pass_mismatch", lang),
         "web_clear_bot_confirm": _("web_clear_bot_confirm", lang),
@@ -466,7 +507,26 @@ async def handle_settings_page(request):
         "modal_title_prompt": _("modal_title_prompt", lang),
         "modal_btn_ok": _("modal_btn_ok", lang),
         "modal_btn_cancel": _("modal_btn_cancel", lang),
+        
+        # --- ДОБАВЛЕННЫЕ КЛЮЧИ ДЛЯ JS ---
+        "web_kb_active": _("web_kb_active", lang),
+        "web_kb_all_on_alert": _("web_kb_all_on_alert", lang),
+        "web_kb_all_off_alert": _("web_kb_all_off_alert", lang),
+        
+        # --- ПЕРЕВОД КАТЕГОРИЙ ---
+        "web_kb_cat_monitoring": _("web_kb_cat_monitoring", lang),
+        "web_kb_cat_security": _("web_kb_cat_security", lang),
+        "web_kb_cat_management": _("web_kb_cat_management", lang),
+        "web_kb_cat_system": _("web_kb_cat_system", lang),
+        "web_kb_cat_tools": _("web_kb_cat_tools", lang),
+        # -------------------------
     }
+
+    # --- ДИНАМИЧЕСКИЙ ПЕРЕВОД НАЗВАНИЙ КНОПОК ---
+    for btn_key, conf_key in BTN_CONFIG_MAP.items():
+        i18n_data[f"lbl_{conf_key}"] = _(btn_key, lang)
+    # --------------------------------------------
+
     modified_html = modified_html.replace("{i18n_json}", json.dumps(i18n_data))
     return web.Response(text=modified_html, content_type='text/html')
 
@@ -601,7 +661,6 @@ async def handle_set_language(request):
     except Exception as e:
         return web.json_response({"error": str(e)}, status=500)
 
-# ... (Остальные методы входа/сброса пароля оставляем без изменений) ...
 async def handle_login_page(request):
     if get_current_user(request):
         raise web.HTTPFound('/')

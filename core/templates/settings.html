@@ -156,7 +156,7 @@
                         </div>
                         
                         <p class="text-sm text-gray-500 dark:text-gray-400 mb-4">
-                            Настройте видимость команд в меню бота.
+                            {web_kb_desc}
                         </p>
                         <div id="keyboardPreview" class="flex flex-wrap gap-2 mb-4">
                             </div>
@@ -165,15 +165,15 @@
                     <div>
                         <button onclick="openKeyboardModal()" class="w-full py-2.5 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/40 rounded-xl font-bold transition flex items-center justify-center gap-2 mb-3">
                             <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
-                            Настроить меню
+                            {web_kb_btn_config}
                         </button>
 
                         <div class="grid grid-cols-2 gap-3">
-                            <button onclick="enableAllKeyboard()" class="px-4 py-4 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 text-green-600 dark:text-green-400 rounded-xl text-sm font-bold hover:bg-green-100 dark:hover:bg-green-900/30 transition">
-                                Включить все
+                            <button id="btnEnableAllKb" onclick="enableAllKeyboard()" class="px-4 py-4 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 text-green-600 dark:text-green-400 rounded-xl text-sm font-bold hover:bg-green-100 dark:hover:bg-green-900/30 transition flex items-center justify-center gap-2">
+                                {web_kb_enable_all}
                             </button>
-                            <button onclick="disableAllKeyboard()" class="px-4 py-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 rounded-xl text-sm font-bold hover:bg-red-100 dark:hover:bg-red-900/30 transition">
-                                Выключить все
+                            <button id="btnDisableAllKb" onclick="disableAllKeyboard()" class="px-4 py-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 rounded-xl text-sm font-bold hover:bg-red-100 dark:hover:bg-red-900/30 transition flex items-center justify-center gap-2">
+                                {web_kb_disable_all}
                             </button>
                         </div>
                     </div>
@@ -225,12 +225,26 @@
         </div>
     </main>
 
-    <div id="keyboardModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/30 dark:bg-black/80 backdrop-blur-sm p-4">
+    <div id="systemModal" class="fixed inset-0 z-[150] hidden items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+        <div class="bg-white dark:bg-gray-800 border border-white/20 dark:border-white/10 rounded-2xl shadow-2xl w-full max-w-sm transform transition-all scale-100">
+            <div class="p-6">
+                <h3 id="sysModalTitle" class="text-lg font-bold text-gray-900 dark:text-white mb-2">Title</h3>
+                <p id="sysModalMessage" class="text-sm text-gray-600 dark:text-gray-300 mb-4">Message</p>
+                <input type="text" id="sysModalInput" class="hidden w-full bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-xl px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-white mb-4">
+                <div class="flex justify-end gap-3">
+                    <button id="sysModalCancel" class="hidden px-4 py-2 rounded-lg text-sm font-medium text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 transition">Cancel</button>
+                    <button id="sysModalOk" class="px-4 py-2 rounded-lg text-sm font-bold bg-blue-600 text-white hover:bg-blue-500 transition shadow-lg shadow-blue-500/20">OK</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="keyboardModal" onclick="if(event.target === this) closeKeyboardModal()" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/30 dark:bg-black/80 backdrop-blur-sm p-4">
         <div class="bg-white/90 dark:bg-gray-900 border border-white/20 dark:border-white/10 rounded-2xl shadow-2xl w-full max-w-2xl relative flex flex-col max-h-[85vh] backdrop-blur-xl">
             <div class="p-5 border-b border-gray-200 dark:border-white/5 flex justify-between items-center rounded-t-2xl z-10 bg-white/50 dark:bg-black/20">
                 <h3 class="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16m-7 6h7" /></svg>
-                    Настройка меню бота
+                    {web_kb_modal_title}
                 </h3>
                 <button onclick="closeKeyboardModal()" class="text-gray-400 hover:text-gray-600 dark:hover:text-white transition p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-white/10">
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
@@ -238,11 +252,10 @@
             </div>
             
             <div class="p-6 overflow-y-auto no-scrollbar space-y-6" id="keyboardModalContent">
-                </div>
+            </div>
 
             <div class="p-4 border-t border-gray-200 dark:border-white/5 bg-gray-50/50 dark:bg-black/20 rounded-b-2xl">
-                <button onclick="closeKeyboardModal()" class="w-full py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-xl font-bold shadow-lg shadow-blue-500/20 transition active:scale-[0.98]">
-                    Готово
+                <button id="keyboardModalDoneBtn" onclick="closeKeyboardModal()" class="w-full py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-xl font-bold shadow-lg shadow-blue-500/20 transition-all duration-300 active:scale-[0.98] flex items-center justify-center gap-2">
                 </button>
             </div>
         </div>
