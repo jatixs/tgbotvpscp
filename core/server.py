@@ -173,7 +173,7 @@ async def handle_dashboard(request):
     role_badge = f'<span class="px-2 py-0.5 rounded text-[10px] border border-{role_color}-500/30 bg-{role_color}-100 dark:bg-{role_color}-500/20 text-{role_color}-600 dark:text-{role_color}-400 uppercase font-bold">{role}</span>'
 
     if user_id == ADMIN_USER_ID:
-        node_action_btn = f"""<a href="/settings" class="inline-flex items-center gap-1.5 py-1 px-2 rounded-lg bg-purple-50 dark:bg-white/5 border border-purple-100 dark:border-white/5 text-[10px] text-purple-600 dark:text-purple-300 font-medium transition hover:bg-purple-100 dark:hover:bg-white/10 cursor-pointer"><svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path></svg>{_("web_add_user_btn", lang)}</a>"""
+        node_action_btn = f"""<button onclick="openAddNodeModal()" class="inline-flex items-center gap-1.5 py-1 px-2 rounded-lg bg-purple-50 dark:bg-white/5 border border-purple-100 dark:border-white/5 text-[10px] text-purple-600 dark:text-purple-300 font-medium transition hover:bg-purple-100 dark:hover:bg-white/10 cursor-pointer"><svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path></svg>{_("web_add_user_btn", lang)}</button>"""
     else:
         node_action_btn = f"""<button onclick="location.reload()" class="inline-flex items-center gap-1.5 py-1 px-2 rounded-lg bg-purple-50 dark:bg-white/5 border border-purple-100 dark:border-white/5 text-[10px] text-purple-600 dark:text-purple-300 font-medium transition hover:bg-purple-100 dark:hover:bg-white/10 cursor-pointer"><svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>{_("web_refresh", lang)}</button>"""
 
@@ -231,6 +231,11 @@ async def handle_dashboard(request):
         "{web_hint_disk_threshold}": _("web_hint_disk_threshold", lang),
         "{web_hint_traffic_interval}": _("web_hint_traffic_interval", lang),
         "{web_hint_node_timeout}": _("web_hint_node_timeout", lang),
+        "{web_add_node_section}": _("web_add_node_section", lang),
+        "{web_node_name_placeholder}": _("web_node_name_placeholder", lang),
+        "{web_create_btn}": _("web_create_btn", lang),
+        "{web_node_token}": _("web_node_token", lang),
+        "{web_node_cmd}": _("web_node_cmd", lang),
         "{web_version}": CACHE_VER,
     }
     
@@ -251,6 +256,7 @@ async def handle_dashboard(request):
         "modal_title_prompt": _("modal_title_prompt", lang),
         "modal_btn_ok": _("modal_btn_ok", lang),
         "modal_btn_cancel": _("modal_btn_cancel", lang),
+        "web_copied": _("web_copied", lang)
     }
     html = html.replace("{i18n_json}", json.dumps(i18n_data))
     return web.Response(text=html, content_type='text/html')
@@ -366,6 +372,20 @@ async def handle_node_add(request):
     except Exception as e:
         return web.json_response({"error": str(e)}, status=500)
 
+async def handle_node_delete(request):
+    user = get_current_user(request)
+    if not user or user['role'] != 'admins':
+        return web.json_response({"error": "Admin required"}, status=403)
+    try:
+        data = await request.json()
+        token = data.get("token")
+        if not token:
+            return web.json_response({"error": "Token required"}, status=400)
+        await nodes_db.delete_node(token)
+        return web.json_response({"status": "ok"})
+    except Exception as e:
+        return web.json_response({"error": str(e)}, status=500)
+
 async def handle_nodes_list_json(request):
     user = get_current_user(request)
     if not user:
@@ -409,10 +429,19 @@ async def handle_settings_page(request):
     is_admin = user['role'] == 'admins'
     lang = get_user_lang(user_id)
     user_alerts = ALERTS_CONFIG.get(user_id, {})
+    
     users_json = "null"
+    nodes_json = "null" # <--- ДОБАВЛЕНО
+
     if is_admin:
+        # Users
         ulist = [{"id": uid, "name": USER_NAMES.get(str(uid), f"ID: {uid}"), "role": ALLOWED_USERS[uid].get("group", "users") if isinstance(ALLOWED_USERS[uid], dict) else ALLOWED_USERS[uid]} for uid in ALLOWED_USERS if uid != ADMIN_USER_ID]
         users_json = json.dumps(ulist)
+        
+        # Nodes <--- ДОБАВЛЕНО
+        all_nodes = await nodes_db.get_all_nodes()
+        nlist = [{"token": t, "name": n.get("name", "Unknown"), "ip": n.get("ip", "Unknown")} for t, n in all_nodes.items()]
+        nodes_json = json.dumps(nlist)
 
     # --- INJECT KEYBOARD CONFIG ---
     keyboard_config_json = json.dumps(KEYBOARD_CONFIG)
@@ -423,7 +452,8 @@ async def handle_settings_page(request):
         "{user_name}": user.get('first_name'),
         "{user_avatar}": _get_avatar_html(user),
         "{users_data_json}": users_json,
-        "{keyboard_config_json}": keyboard_config_json, # NEW
+        "{nodes_data_json}": nodes_json, # <--- ДОБАВЛЕНО
+        "{keyboard_config_json}": keyboard_config_json,
         "{val_cpu}": str(current_config.CPU_THRESHOLD),
         "{val_ram}": str(current_config.RAM_THRESHOLD),
         "{val_disk}": str(current_config.DISK_THRESHOLD),
@@ -472,6 +502,7 @@ async def handle_settings_page(request):
         "{web_hint_node_timeout}": _("web_hint_node_timeout", lang),
         "{web_keyboard_title}": _("web_keyboard_title", lang),
         "{web_soon_placeholder}": _("web_soon_placeholder", lang),
+        "{web_node_mgmt_title}": _("web_node_mgmt_title", lang), # <--- ДОБАВЛЕНО
         
         # --- ДОБАВЛЕННЫЕ ЗАМЕНЫ ---
         "{web_kb_desc}": _("web_kb_desc", lang),
@@ -512,6 +543,8 @@ async def handle_settings_page(request):
         "web_kb_active": _("web_kb_active", lang),
         "web_kb_all_on_alert": _("web_kb_all_on_alert", lang),
         "web_kb_all_off_alert": _("web_kb_all_off_alert", lang),
+        "web_no_nodes": _("web_no_nodes", lang), # <--- ДОБАВЛЕНО
+        "web_copied": _("web_copied", lang),
         
         # --- ПЕРЕВОД КАТЕГОРИЙ ---
         "web_kb_cat_monitoring": _("web_kb_cat_monitoring", lang),
@@ -875,6 +908,7 @@ async def start_web_server(bot_instance: Bot):
         app.router.add_post('/api/logs/clear', handle_clear_logs)
         app.router.add_post('/api/users/action', handle_user_action)
         app.router.add_post('/api/nodes/add', handle_node_add)
+        app.router.add_post('/api/nodes/delete', handle_node_delete) # <--- ДОБАВЛЕН
     else:
         logging.info("Web UI DISABLED.")
         app.router.add_get('/', handle_api_root)
