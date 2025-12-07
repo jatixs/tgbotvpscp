@@ -4,7 +4,7 @@ from .i18n import _, get_user_lang, STRINGS as I18N_STRINGS
 from .shared_state import ALLOWED_USERS, USER_NAMES, ALERTS_CONFIG
 from .config import ADMIN_USER_ID, INSTALL_MODE, DEFAULT_LANGUAGE, KEYBOARD_CONFIG
 
-# Маппинг ключей кнопок на ключи конфигурации
+# Маппинг ключей кнопок на ключи конфигурации (какой флаг отвечает за кнопку)
 BTN_CONFIG_MAP = {
     "btn_selftest": "enable_selftest",
     "btn_traffic": "enable_traffic",
@@ -21,78 +21,110 @@ BTN_CONFIG_MAP = {
     "btn_optimize": "enable_optimize",
     "btn_restart": "enable_restart",
     "btn_reboot": "enable_reboot",
-    "btn_notifications": "enable_notifications"
+    "btn_notifications": "enable_notifications",
+    "btn_nodes": "enable_nodes"
 }
 
-def get_main_reply_keyboard(user_id: int, buttons_map: dict) -> ReplyKeyboardMarkup:
-    is_admin = user_id == ADMIN_USER_ID or ALLOWED_USERS.get(user_id, {}).get("group") == "admins" if isinstance(ALLOWED_USERS.get(user_id), dict) else ALLOWED_USERS.get(user_id) == "admins"
-    is_root_mode = INSTALL_MODE == 'root'
+# Структура меню: Категория -> Список кнопок в ней
+CATEGORY_MAP = {
+    "cat_monitoring": ["btn_selftest", "btn_traffic", "btn_uptime", "btn_speedtest", "btn_top"],
+    "cat_management": ["btn_nodes", "btn_users", "btn_update", "btn_optimize", "btn_restart", "btn_reboot"],
+    "cat_security": ["btn_sshlog", "btn_fail2ban", "btn_logs"],
+    "cat_tools": ["btn_xray", "btn_vless", "btn_notifications"],
+    "cat_settings": ["btn_language", "btn_configure_menu"] 
+}
+
+def get_main_reply_keyboard(user_id: int, buttons_map: dict = None) -> ReplyKeyboardMarkup:
+    """Возвращает главное меню, состоящее из категорий."""
     lang = get_user_lang(user_id)
-    available_buttons_texts = set()
-    available_buttons_map = {}
-
-    def translate_button(btn: KeyboardButton) -> KeyboardButton:
-        key_to_find = None
-        default_strings = I18N_STRINGS.get(DEFAULT_LANGUAGE, {})
-        for key, text in default_strings.items():
-            if text == btn.text:
-                key_to_find = key
-                break
-        if key_to_find:
-            return KeyboardButton(text=_(key_to_find, lang))
-        return btn
-
-    for btn in buttons_map.get("user", []):
-        translated_btn = translate_button(btn)
-        available_buttons_texts.add(translated_btn.text)
-        available_buttons_map[translated_btn.text] = translated_btn
-
-    if is_admin:
-        for btn in buttons_map.get("admin", []):
-            translated_btn = translate_button(btn)
-            available_buttons_texts.add(translated_btn.text)
-            available_buttons_map[translated_btn.text] = translated_btn
-
-    if is_root_mode and is_admin:
-        for btn in buttons_map.get("root", []):
-            translated_btn = translate_button(btn)
-            available_buttons_texts.add(translated_btn.text)
-            available_buttons_map[translated_btn.text] = translated_btn
-
-    button_layout_keys = [
-        ["btn_selftest", "btn_traffic", "btn_uptime"],
-        ["btn_speedtest", "btn_top", "btn_xray"],
-        ["btn_sshlog", "btn_fail2ban", "btn_logs"],
-        ["btn_nodes", "btn_users", "btn_vless"],
-        ["btn_update", "btn_optimize", "btn_restart", "btn_reboot"],
-        ["btn_notifications", "btn_language"],
+    
+    # Раскладка категорий: 2 в ряд, настройки снизу
+    keyboard_layout = [
+        [KeyboardButton(text=_("cat_monitoring", lang)), KeyboardButton(text=_("cat_management", lang))],
+        [KeyboardButton(text=_("cat_security", lang)), KeyboardButton(text=_("cat_tools", lang))],
+        [KeyboardButton(text=_("cat_settings", lang))]
     ]
-
-    final_keyboard_rows = []
-    for row_template_keys in button_layout_keys:
-        current_row = []
-        for btn_key in row_template_keys:
-            # --- ЛОГИКА ФИЛЬТРАЦИИ ---
-            config_key = BTN_CONFIG_MAP.get(btn_key)
-            # Если для кнопки есть настройка и она False - пропускаем
-            if config_key and not KEYBOARD_CONFIG.get(config_key, True):
-                continue
-            # -------------------------
-
-            btn_text = _(btn_key, lang)
-            if btn_text in available_buttons_texts:
-                button_obj = available_buttons_map.get(btn_text)
-                if button_obj:
-                    current_row.append(button_obj)
-        if current_row:
-            final_keyboard_rows.append(current_row)
-
+    
     return ReplyKeyboardMarkup(
-        keyboard=final_keyboard_rows,
+        keyboard=keyboard_layout,
         resize_keyboard=True,
         input_field_placeholder=_("main_menu_placeholder", lang))
 
-# ... (Остальные функции клавиатур оставляем как есть) ...
+def get_subcategory_keyboard(category_key: str, user_id: int) -> ReplyKeyboardMarkup:
+    """Возвращает клавиатуру для конкретной категории с учетом прав и настроек."""
+    lang = get_user_lang(user_id)
+    
+    # Проверка прав доступа (логика дублируется из auth.py для визуального скрытия)
+    is_admin = user_id == ADMIN_USER_ID or (ALLOWED_USERS.get(user_id, {}).get("group") == "admins" if isinstance(ALLOWED_USERS.get(user_id), dict) else ALLOWED_USERS.get(user_id) == "admins")
+    is_root_mode = INSTALL_MODE == 'root'
+
+    # Списки кнопок, требующих особых прав
+    admin_only = ["btn_users", "btn_speedtest", "btn_top", "btn_xray", "btn_vless", "btn_nodes"]
+    root_only = ["btn_sshlog", "btn_fail2ban", "btn_logs", "btn_update", "btn_restart", "btn_reboot", "btn_optimize"]
+
+    buttons_in_category = CATEGORY_MAP.get(category_key, [])
+    keyboard_rows = []
+    current_row = []
+
+    for btn_key in buttons_in_category:
+        # 1. Проверяем, включена ли кнопка в настройках (KEYBOARD_CONFIG)
+        # Специальные кнопки типа языка или настроек меню не отключаются через конфиг
+        config_key = BTN_CONFIG_MAP.get(btn_key)
+        if config_key and not KEYBOARD_CONFIG.get(config_key, True):
+            continue
+
+        # 2. Проверяем права доступа пользователя
+        if btn_key in admin_only and not is_admin:
+            continue
+        if btn_key in root_only and not (is_root_mode and is_admin):
+            continue
+
+        # Добавляем кнопку в текущий ряд
+        current_row.append(KeyboardButton(text=_(btn_key, lang)))
+        
+        # Разбиваем по 2 кнопки в ряд
+        if len(current_row) == 2:
+            keyboard_rows.append(current_row)
+            current_row = []
+
+    # Добавляем оставшиеся кнопки
+    if current_row:
+        keyboard_rows.append(current_row)
+
+    # Всегда добавляем кнопку "Назад в меню"
+    keyboard_rows.append([KeyboardButton(text=_("btn_back_to_menu", lang))])
+
+    return ReplyKeyboardMarkup(
+        keyboard=keyboard_rows,
+        resize_keyboard=True,
+        input_field_placeholder=_("cat_choose_action", lang, category=_(category_key, lang)))
+
+def get_keyboard_settings_inline(lang: str) -> InlineKeyboardMarkup:
+    """Возвращает inline-клавиатуру для включения/выключения кнопок."""
+    buttons = []
+    
+    # Проходим по всем кнопкам, которые можно настроить
+    # Используем сортировку по категориям для удобства (опционально), здесь просто по списку конфига
+    for btn_key, config_key in BTN_CONFIG_MAP.items():
+        is_enabled = KEYBOARD_CONFIG.get(config_key, True)
+        status_icon = "✅" if is_enabled else "❌"
+        btn_label = _(btn_key, lang)
+        text = f"{status_icon} {btn_label}"
+        callback_data = f"toggle_kb_{config_key}"
+        buttons.append(InlineKeyboardButton(text=text, callback_data=callback_data))
+
+    # Разбиваем на ряды по 2 кнопки
+    rows = []
+    for i in range(0, len(buttons), 2):
+        rows.append(buttons[i:i+2])
+    
+    # Кнопка "Готово" (закрыть настройки)
+    rows.append([InlineKeyboardButton(text=_("btn_back", lang), callback_data="close_kb_settings")])
+
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+# --- Стандартные клавиатуры (без изменений) ---
+
 def get_manage_users_keyboard(lang: str):
     return InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text=_("btn_add_user", lang), callback_data="add_user"), InlineKeyboardButton(text=_("btn_delete_user", lang), callback_data="delete_user")], [InlineKeyboardButton(text=_("btn_change_group", lang), callback_data="change_group"), InlineKeyboardButton(text=_("btn_my_id", lang), callback_data="get_id_inline")], [InlineKeyboardButton(text=_("btn_back_to_menu", lang), callback_data="back_to_menu")]])
 
