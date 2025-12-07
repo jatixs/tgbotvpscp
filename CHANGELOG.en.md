@@ -5,12 +5,33 @@
 <h1 align="center">📝 Telegram VPS Management Bot — Changelog</h1>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-v1.12.4-blue?style=flat-square" alt="Version 1.12.4"/>
-  <img src="https://img.shields.io/badge/build-50-purple?style=flat-square" alt="Build 50"/>
+  <img src="https://img.shields.io/badge/version-v1.13.0-blue?style=flat-square" alt="Version 1.13.0"/>
+  <img src="https://img.shields.io/badge/build-51-purple?style=flat-square" alt="Build 51"/>
   <img src="https://img.shields.io/badge/date-December%202025-green?style=flat-square" alt="Date December 2025"/>
   <img src="https://img.shields.io/badge/status-stable-green?style=flat-square" alt="Status Stable"/>
 </p>
+---
 
+## [1.13.0] - 2025-12-07
+
+### 🚀 Added:
+
+* **Categorized Menu (New UX):**
+    * Complete redesign of the Telegram bot navigation. Instead of a long list of commands, a structured menu with 5 categories has been introduced: **📊 Monitoring**, **⚙️ Management**, **🛡️ Security**, **🛠️ Tools**, and **🔧 Settings**.
+    * This makes the interface cleaner and simplifies access to functions.
+
+* **Keyboard Builder:**
+    * Implemented a **module visibility management system**. Administrators can now enable or disable the display of any buttons in the bot menu at their discretion.
+    * Configuration is available in two ways:
+        1.  **Via Web Panel:** New "Bot Keyboard" section in Settings with toggles and bulk actions.
+        2.  **Via Bot:** Interactive configuration menu (Settings -> 🎛 Configure Buttons).
+
+### ✨ Improved:
+
+* **Web Interface (Settings):**
+    * The settings page design has been updated to support the keyboard configurator. Added save animations and loading states.
+* **Bot Navigation:**
+    * Improved logic for "Back" buttons: they now return the user to the corresponding subcategory instead of the main menu.
 ---
 
 ## [1.12.4] - 2025-12-06

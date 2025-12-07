@@ -3,6 +3,7 @@ import logging
 import re
 from aiogram import F, Dispatcher, types
 from aiogram.types import KeyboardButton
+from aiogram.exceptions import TelegramNetworkError, TelegramBadRequest
 
 from core.i18n import _, I18nFilter, get_user_lang
 from core import config
@@ -54,16 +55,19 @@ async def optimize_handler(message: types.Message):
         "sysctl -p && systemctl restart systemd-journald && systemctl daemon-reexec"
         "\"")
 
-    # nosec B602: cmd is a hardcoded system optimization script string
     process = await asyncio.create_subprocess_shell(
         cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
-    )  # nosec
+    )
     stdout, stderr = await process.communicate()
 
     output = stdout.decode('utf-8', errors='ignore')
     error_output = stderr.decode('utf-8', errors='ignore')
 
-    await delete_previous_message(user_id, command, chat_id, message.bot)
+    try:
+        await message.bot.delete_message(chat_id=chat_id, message_id=sent_message.message_id)
+        LAST_MESSAGE_IDS.get(user_id, {}).pop(command, None)
+    except Exception:
+        pass
 
     if process.returncode == 0:
         response_text = _("optimize_success", lang,
@@ -74,6 +78,10 @@ async def optimize_handler(message: types.Message):
                           stdout=escape_html(output[-1000:]),
                           stderr=escape_html(error_output[-2000:]))
 
-    sent_message_final = await message.answer(response_text, parse_mode="HTML")
-    LAST_MESSAGE_IDS.setdefault(
-        user_id, {})[command] = sent_message_final.message_id
+    try:
+        sent_message_final = await message.answer(response_text, parse_mode="HTML")
+        LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = sent_message_final.message_id
+    except (TelegramNetworkError, OSError):
+        logging.warning("Оптимизация: бот перезагружен системой, ответ не отправлен.")
+    except Exception as e:
+        logging.error(f"Ошибка отправки отчета оптимизации: {e}")

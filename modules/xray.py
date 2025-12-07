@@ -44,41 +44,36 @@ async def updatexray_handler(message: types.Message, state: FSMContext):
         client, container_name = await detect_xray_client()
 
         if not client:
-            await message.bot.edit_message_text(
-                _("xray_detect_fail", lang),
-                chat_id=chat_id,
-                message_id=sent_msg.message_id
-            )
+            try:
+                await message.bot.edit_message_text(
+                    _("xray_detect_fail", lang),
+                    chat_id=chat_id,
+                    message_id=sent_msg.message_id
+                )
+            except TelegramBadRequest: pass
             return
 
         version = _("xray_version_unknown", lang)
         client_name_display = client.capitalize()
 
-        await message.bot.edit_message_text(
-            _("xray_detected_start_update", lang, client=client_name_display, container=escape_html(container_name)),
-            chat_id=chat_id,
-            message_id=sent_msg.message_id,
-            parse_mode="HTML"
-        )
+        try:
+            await message.bot.edit_message_text(
+                _("xray_detected_start_update", lang, client=client_name_display, container=escape_html(container_name)),
+                chat_id=chat_id,
+                message_id=sent_msg.message_id,
+                parse_mode="HTML"
+            )
+        except TelegramBadRequest: pass
 
         update_cmd = ""
         version_cmd = ""
         safe_container = shlex.quote(container_name)
 
         if client == "amnezia":
-            # --- ЛОГИКА УСТАНОВКИ ЗАВИСИМОСТЕЙ ---
-            # 1. Проверяем, есть ли уже wget и unzip. Если да — пропускаем установку.
-            # 2. Если нет, ищем apk (Alpine) и ставим через него.
-            # 3. Если нет apk, ищем apt-get (Debian/Ubuntu) и ставим через него.
-            
             check_tools = "command -v wget >/dev/null && command -v unzip >/dev/null"
             try_apk = "command -v apk >/dev/null && apk add --no-cache wget unzip"
             try_apt = "command -v apt-get >/dev/null && (apt-get update && apt-get install -y wget unzip)"
-            
-            # Цепочка: (Есть утилиты?) ИЛИ (Попробовать APK) ИЛИ (Попробовать APT)
             install_chain = f"({check_tools}) || ({try_apk}) || ({try_apt})"
-
-            # Удаление зависимостей (опционально, чтобы не мусорить, если ставили)
             clean_apk = "command -v apk >/dev/null && apk del wget unzip"
             clean_apt = "command -v apt-get >/dev/null && apt-get remove -y wget unzip"
             clean_chain = f"({clean_apk}) || ({clean_apt}) || true"
@@ -101,7 +96,6 @@ async def updatexray_handler(message: types.Message, state: FSMContext):
             version_cmd = f"docker exec {safe_container} /usr/bin/xray version"
 
         elif client == "marzban":
-            # Для Marzban логика похожая, но пути другие
             check_deps = "command -v unzip >/dev/null 2>&1 || (DEBIAN_FRONTEND=noninteractive apt-get update -y && apt-get install -y unzip wget)"
             dl_cmd = (
                 "mkdir -p /var/lib/marzban/xray-core && "
@@ -133,7 +127,6 @@ async def updatexray_handler(message: types.Message, state: FSMContext):
                               error=escape_html(error_output)))
 
         process_version = await asyncio.create_subprocess_shell(version_cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
-        # FIX: _ -> stderr_dummy
         stdout_version, stderr_dummy = await process_version.communicate()
         version_output = stdout_version.decode('utf-8', 'ignore')
         version_match = re.search(r'Xray\s+([\d\.]+)', version_output)
@@ -145,7 +138,10 @@ async def updatexray_handler(message: types.Message, state: FSMContext):
             lang,
             client=client_name_display,
             version=version)
-        await message.bot.edit_message_text(final_message, chat_id=chat_id, message_id=sent_msg.message_id, parse_mode="HTML")
+        try:
+            await message.bot.edit_message_text(final_message, chat_id=chat_id, message_id=sent_msg.message_id, parse_mode="HTML")
+        except TelegramBadRequest:
+            await message.answer(final_message, parse_mode="HTML")
 
     except Exception as e:
         logging.error(f"Error in updatexray_handler: {e}")
