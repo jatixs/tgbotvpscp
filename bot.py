@@ -24,23 +24,6 @@ from aiogram.filters import Command, StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.exceptions import TelegramBadRequest
 
-ENABLE_SELFTEST = True
-ENABLE_UPTIME = True
-ENABLE_SPEEDTEST = True
-ENABLE_TRAFFIC = True
-ENABLE_TOP = True
-ENABLE_SSHLOG = True
-ENABLE_FAIL2BAN = True
-ENABLE_LOGS = True
-ENABLE_VLESS = True
-ENABLE_XRAY = True
-ENABLE_UPDATE = True
-ENABLE_RESTART = True
-ENABLE_REBOOT = True
-ENABLE_NOTIFICATIONS = True
-ENABLE_USERS = True
-ENABLE_OPTIMIZE = True
-
 config.setup_logging(config.BOT_LOG_DIR, "bot")
 
 bot = Bot(token=config.TOKEN)
@@ -66,16 +49,14 @@ def register_module(module, admin_only=False, root_only=False):
             logging.warning(
                 f"Module '{module.__name__}' has no register_handlers().")
 
-        button_level = "user"
-        if root_only:
-            button_level = "root"
-        elif admin_only:
-            button_level = "admin"
-
+        # Примечание: Мы собираем кнопки в buttons_map для совместимости,
+        # но отображение теперь контролируется через keyboards.py и CATEGORY_MAP
         if hasattr(module, 'get_button'):
-            buttons_map[button_level].append(module.get_button())
-        else:
-            logging.warning(f"Module '{module.__name__}' has no get_button().")
+            btn = module.get_button()
+            button_level = "user"
+            if root_only: button_level = "root"
+            elif admin_only: button_level = "admin"
+            buttons_map[button_level].append(btn)
 
         if hasattr(module, 'start_background_tasks'):
             tasks = module.start_background_tasks(bot)
@@ -129,7 +110,8 @@ async def show_main_menu(
         await auth.refresh_user_names(bot)
 
     menu_text = _("main_menu_welcome", user_id)
-    reply_markup = keyboards.get_main_reply_keyboard(user_id, bot.buttons_map)
+    # Используем новое меню категорий
+    reply_markup = keyboards.get_main_reply_keyboard(user_id)
 
     try:
         sent_message = await bot.send_message(chat_id, menu_text, reply_markup=reply_markup)
@@ -156,6 +138,93 @@ async def back_to_menu_callback(
     await callback.answer()
 
 
+# --- ОБРАБОТЧИКИ КАТЕГОРИЙ (НОВОЕ) ---
+@dp.message(I18nFilter("cat_monitoring"))
+async def cat_monitoring_handler(message: types.Message):
+    await _show_subcategory(message, "cat_monitoring")
+
+@dp.message(I18nFilter("cat_management"))
+async def cat_management_handler(message: types.Message):
+    await _show_subcategory(message, "cat_management")
+
+@dp.message(I18nFilter("cat_security"))
+async def cat_security_handler(message: types.Message):
+    await _show_subcategory(message, "cat_security")
+
+@dp.message(I18nFilter("cat_tools"))
+async def cat_tools_handler(message: types.Message):
+    await _show_subcategory(message, "cat_tools")
+
+@dp.message(I18nFilter("cat_settings"))
+async def cat_settings_handler(message: types.Message):
+    await _show_subcategory(message, "cat_settings")
+
+async def _show_subcategory(message: types.Message, category_key: str):
+    user_id = message.from_user.id
+    lang = i18n.get_user_lang(user_id)
+    
+    if not auth.is_allowed(user_id, "menu"):
+        return
+
+    # Получаем клавиатуру подкатегории
+    markup = keyboards.get_subcategory_keyboard(category_key, user_id)
+    cat_name = _(category_key, lang)
+    text = _("cat_choose_action", lang, category=cat_name)
+    
+    sent = await message.answer(text, reply_markup=markup, parse_mode="HTML")
+    shared_state.LAST_MESSAGE_IDS.setdefault(user_id, {})["subcategory"] = sent.message_id
+
+
+# --- НАСТРОЙКИ МЕНЮ (INLINE) ---
+@dp.message(I18nFilter("btn_configure_menu"))
+async def configure_menu_handler(message: types.Message):
+    user_id = message.from_user.id
+    lang = i18n.get_user_lang(user_id)
+    
+    if not auth.is_allowed(user_id, "manage_users"): # Ограничение: только админы могут менять конфиг
+         await message.answer(_("access_denied_no_rights", lang))
+         return
+
+    text = _("main_menu_settings_text", lang)
+    markup = keyboards.get_keyboard_settings_inline(lang)
+    
+    await message.answer(text, reply_markup=markup, parse_mode="HTML")
+
+@dp.callback_query(F.data.startswith("toggle_kb_"))
+async def toggle_kb_config(callback: types.CallbackQuery):
+    user_id = callback.from_user.id
+    lang = i18n.get_user_lang(user_id)
+    
+    if not auth.is_allowed(user_id, "manage_users"):
+         await callback.answer(_("access_denied_no_rights", lang), show_alert=True)
+         return
+
+    config_key = callback.data.replace("toggle_kb_", "")
+    
+    # Переключаем состояние в конфиге
+    current_val = config.KEYBOARD_CONFIG.get(config_key, True)
+    config.KEYBOARD_CONFIG[config_key] = not current_val
+    config.save_keyboard_config(config.KEYBOARD_CONFIG)
+    
+    # Обновляем клавиатуру, чтобы показать новые галочки/крестики
+    new_markup = keyboards.get_keyboard_settings_inline(lang)
+    try:
+        await callback.message.edit_reply_markup(reply_markup=new_markup)
+    except TelegramBadRequest:
+        pass # Игнорируем, если изменений не было (хотя они должны быть)
+    
+    await callback.answer()
+
+@dp.callback_query(F.data == "close_kb_settings")
+async def close_kb_settings(callback: types.CallbackQuery):
+    try:
+        await callback.message.delete()
+    except:
+        pass
+    await callback.answer()
+
+
+# --- ЯЗЫКОВЫЕ НАСТРОЙКИ ---
 @dp.message(I18nFilter("btn_language"))
 async def language_handler(message: types.Message):
     user_id = message.from_user.id
@@ -186,40 +255,32 @@ def load_modules():
                 "btn_language",
                 config.DEFAULT_LANGUAGE)))
 
-    if ENABLE_SELFTEST:
-        register_module(selftest)
-    if ENABLE_UPTIME:
-        register_module(uptime)
-    if ENABLE_TRAFFIC:
-        register_module(traffic)
-    if ENABLE_NOTIFICATIONS:
-        register_module(notifications)
-    if ENABLE_USERS:
-        register_module(users, admin_only=True)
-    if ENABLE_SPEEDTEST:
-        register_module(speedtest, admin_only=True)
-    if ENABLE_TOP:
-        register_module(top, admin_only=True)
-    if ENABLE_VLESS:
-        register_module(vless, admin_only=True)
-    if ENABLE_XRAY:
-        register_module(xray, admin_only=True)
-    if ENABLE_SSHLOG:
-        register_module(sshlog, root_only=True)
-    if ENABLE_FAIL2BAN:
-        register_module(fail2ban, root_only=True)
-    if ENABLE_LOGS:
-        register_module(logs, root_only=True)
-    if ENABLE_UPDATE:
-        register_module(update, root_only=True)
-    if ENABLE_RESTART:
-        register_module(restart, root_only=True)
-    if ENABLE_REBOOT:
-        register_module(reboot, root_only=True)
-    if ENABLE_OPTIMIZE:
-        register_module(optimize, root_only=True)
-
+    # Регистрируем модули. 
+    # ВАЖНО: Мы регистрируем их ВСЕГДА, чтобы хэндлеры работали.
+    # Скрытие кнопок теперь происходит визуально в keyboards.py, а не здесь.
+    
+    register_module(selftest)
+    register_module(uptime)
+    register_module(traffic)
+    register_module(notifications)
+    
+    # Админские модули
+    register_module(users, admin_only=True)
+    register_module(speedtest, admin_only=True)
+    register_module(top, admin_only=True)
+    register_module(vless, admin_only=True)
+    register_module(xray, admin_only=True)
     register_module(nodes, admin_only=True)
+        
+    # Root модули
+    register_module(sshlog, root_only=True)
+    register_module(fail2ban, root_only=True)
+    register_module(logs, root_only=True)
+    register_module(update, root_only=True)
+    register_module(restart, root_only=True)
+    register_module(reboot, root_only=True)
+    register_module(optimize, root_only=True)
+
     logging.info("All modules loaded.")
 
 
@@ -257,6 +318,7 @@ async def main():
         await asyncio.to_thread(auth.load_users)
         await asyncio.to_thread(utils.load_alerts_config)
         await asyncio.to_thread(i18n.load_user_settings)
+        # Config уже загружен при импорте
 
         await auth.refresh_user_names(bot)
         await utils.initial_reboot_check(bot)
