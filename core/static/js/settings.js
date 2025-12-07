@@ -3,8 +3,52 @@ document.addEventListener("DOMContentLoaded", () => {
     initSystemSettingsTracking();
     initNodeForm();
     renderKeyboardConfig();
-    updateBulkButtonsUI(); // Инициализация состояния кнопок
+    updateBulkButtonsUI(); // Инициализация состояния кнопок клавиатуры
+    initChangePasswordUI(); // Инициализация UI формы смены пароля
 });
+
+// Глобальная переменная для хранения ID анимации
+let activeCounterRafId = null;
+
+// --- АНИМАЦИЯ СЧЕТЧИКА ---
+function animateCounter(el, start, end, duration) {
+    // Если значения равны, просто ставим конечное и выходим
+    if (start === end) {
+        el.innerText = end;
+        return;
+    }
+
+    // Отменяем предыдущую анимацию, если она была, чтобы цифры не "скакали"
+    if (activeCounterRafId) {
+        cancelAnimationFrame(activeCounterRafId);
+        activeCounterRafId = null;
+    }
+
+    const range = end - start;
+    let startTime = null;
+    
+    const step = (timestamp) => {
+        if (!startTime) startTime = timestamp;
+        const progress = Math.min((timestamp - startTime) / duration, 1);
+        
+        // Easing: easeOutCubic (более плавная и естественная, чем Expo)
+        // Формула: 1 - (1 - x)^3
+        const ease = 1 - Math.pow(1 - progress, 3);
+        
+        // Вычисляем текущее промежуточное значение
+        const current = Math.floor(start + range * ease);
+        el.innerText = current;
+        
+        if (progress < 1) {
+            activeCounterRafId = window.requestAnimationFrame(step);
+        } else {
+            el.innerText = end; // Гарантируем точное конечное значение
+            activeCounterRafId = null;
+        }
+    };
+    
+    activeCounterRafId = window.requestAnimationFrame(step);
+}
 
 // Храним начальные значения раздельно для каждой группы
 const initialConfig = {
@@ -66,6 +110,77 @@ function initNodeForm() {
     input.addEventListener('input', validate);
     // Initial validation is handled by default HTML state
 }
+
+// --- ЛОГИКА UI СМЕНЫ ПАРОЛЯ ---
+function initChangePasswordUI() {
+    const ids = ['pass_current', 'pass_new', 'pass_confirm'];
+    const btn = document.getElementById('btnChangePass');
+    
+    if (!btn) return;
+
+    // Функция обновления состояния кнопки
+    const updateBtnState = () => {
+        // Проверяем, заполнены ли все поля
+        const allFilled = ids.every(id => {
+            const el = document.getElementById(id);
+            return el && el.value.trim().length > 0;
+        });
+
+        if (allFilled) {
+            // Кнопка активна (яркая)
+            btn.classList.remove('opacity-50', 'grayscale', 'cursor-default');
+            btn.classList.add('shadow-lg', 'shadow-red-500/20', 'hover:bg-red-600');
+        } else {
+            // Кнопка тусклая
+            btn.classList.add('opacity-50', 'grayscale');
+            btn.classList.remove('shadow-lg', 'shadow-red-500/20', 'hover:bg-red-600');
+        }
+    };
+
+    // Навешиваем слушатели на ввод
+    ids.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) {
+            el.addEventListener('input', () => {
+                updateBtnState();
+                clearInputError(el); // Убираем ошибку при вводе
+            });
+        }
+    });
+
+    // Инициализируем состояние при загрузке
+    updateBtnState();
+}
+
+function showInputError(el) {
+    if (!el) return;
+    // Добавляем красную рамку
+    el.classList.add('border-red-500', 'focus:ring-red-500');
+    el.classList.remove('border-gray-200', 'dark:border-white/10');
+
+    // Проверяем, есть ли уже сообщение об ошибке
+    let errorMsg = el.parentNode.querySelector('.pass-error-msg');
+    if (!errorMsg) {
+        errorMsg = document.createElement('div');
+        errorMsg.className = 'pass-error-msg text-[10px] text-red-500 mt-1 ml-1 font-medium animate-pulse';
+        errorMsg.innerText = 'Заполните поле'; 
+        el.parentNode.appendChild(errorMsg);
+    }
+}
+
+function clearInputError(el) {
+    if (!el) return;
+    // Возвращаем стандартные стили рамки (удаляем красную)
+    el.classList.remove('border-red-500');
+    el.classList.add('border-gray-200', 'dark:border-white/10');
+
+    // Удаляем сообщение
+    const errorMsg = el.parentNode.querySelector('.pass-error-msg');
+    if (errorMsg) {
+        errorMsg.remove();
+    }
+}
+// -----------------------------
 
 function showError(fieldId, message) {
     const errorEl = document.getElementById('error_' + fieldId);
@@ -376,12 +491,28 @@ async function addNode() {
 }
 
 async function changePassword() {
-    const current = document.getElementById('pass_current').value;
-    const newPass = document.getElementById('pass_new').value;
-    const confirm = document.getElementById('pass_confirm').value;
+    const currentEl = document.getElementById('pass_current');
+    const newPassEl = document.getElementById('pass_new');
+    const confirmEl = document.getElementById('pass_confirm');
+    
+    const fields = [currentEl, newPassEl, confirmEl];
+    let hasErrors = false;
+
+    // Валидация перед отправкой
+    fields.forEach(el => {
+        if (!el || !el.value.trim()) {
+            showInputError(el);
+            hasErrors = true;
+        }
+    });
+
+    if (hasErrors) return; // Прерываем, если есть пустые поля
+
+    const current = currentEl.value;
+    const newPass = newPassEl.value;
+    const confirm = confirmEl.value;
     const btn = document.getElementById('btnChangePass');
     
-    if(!current || !newPass || !confirm) return;
     if(newPass !== confirm) {
         await window.showModalAlert(I18N.web_pass_mismatch, 'Ошибка');
         return;
@@ -403,9 +534,14 @@ async function changePassword() {
         const data = await res.json();
         if(res.ok) {
             await window.showModalAlert(I18N.web_pass_changed, 'Успех');
-            document.getElementById('pass_current').value = "";
-            document.getElementById('pass_new').value = "";
-            document.getElementById('pass_confirm').value = "";
+            currentEl.value = "";
+            newPassEl.value = "";
+            confirmEl.value = "";
+            // Сбрасываем состояние кнопки на тусклое
+            if(typeof initChangePasswordUI === 'function') {
+                const dummyEvent = new Event('input');
+                currentEl.dispatchEvent(dummyEvent); // Триггерим обновление UI
+            }
         } else {
             await window.showModalAlert(I18N.web_error.replace('{error}', data.error), 'Ошибка');
         }
@@ -524,11 +660,25 @@ function renderKeyboardPreview() {
     // Используем I18N.web_kb_active если доступен, иначе fallback
     const activeText = (typeof I18N !== 'undefined' && I18N.web_kb_active) ? I18N.web_kb_active : "Активно:";
 
+    // --- Анимация счетчика клавиатуры ---
+    const prevEl = document.getElementById('kbActiveCount');
+    let startVal = 0;
+    if (prevEl) {
+        startVal = parseInt(prevEl.innerText) || 0;
+    }
+
     container.innerHTML = `
         <span class="px-3 py-1 rounded-full bg-green-100 dark:bg-green-500/20 text-green-700 dark:text-green-300 text-xs font-bold border border-green-200 dark:border-green-500/20">
-            ${activeText} ${totalEnabled} / ${totalAll}
+            ${activeText} <span id="kbActiveCount">${startVal}</span> / ${totalAll}
         </span>
     `;
+
+    const countEl = document.getElementById('kbActiveCount');
+    if (countEl) {
+        // Увеличено время до 1000мс для большей плавности
+        animateCounter(countEl, startVal, totalEnabled, 1000);
+    }
+    // ------------------------------------
 }
 
 function renderKeyboardModalContent() {
@@ -609,16 +759,17 @@ function showToast(message) {
     }
 
     const toast = document.createElement('div');
-    toast.className = 'fixed top-24 left-1/2 transform -translate-x-1/2 z-[200] flex items-center gap-3 px-6 py-3 rounded-2xl shadow-2xl backdrop-blur-xl border transition-all duration-1000 ease-in-out ' +
-        'bg-white/90 dark:bg-gray-800/90 text-gray-900 dark:text-white border-gray-200 dark:border-white/10 opacity-0 translate-y-[-20px]';
+    // FIX 3: Адаптивность тоста (whitespace-nowrap + w-auto + max-w)
+    toast.className = 'fixed top-24 left-1/2 transform -translate-x-1/2 z-[200] flex items-center gap-3 px-4 sm:px-6 py-3 rounded-2xl shadow-2xl backdrop-blur-xl border transition-all duration-1000 ease-in-out ' +
+        'bg-white/90 dark:bg-gray-800/90 text-gray-900 dark:text-white border-gray-200 dark:border-white/10 opacity-0 translate-y-[-20px] w-auto max-w-[90vw]';
     
     toast.innerHTML = `
-        <div class="p-1 rounded-full bg-blue-100 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400">
+        <div class="p-1 rounded-full bg-blue-100 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400 flex-shrink-0">
             <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
         </div>
-        <span class="font-medium text-sm">${message}</span>
+        <span class="font-medium text-sm whitespace-nowrap overflow-hidden text-ellipsis">${message}</span>
     `;
 
     document.body.appendChild(toast);
@@ -772,14 +923,24 @@ function animateBulkButton(btnId, state, originalText) {
 
     if (state === 'loading') {
         btn.innerHTML = `<svg class="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>`;
+        btn.disabled = true; // FIX 2: Блокируем кнопку во время загрузки
     } else if (state === 'success') {
-        btn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg>`;
+        // FIX 1: Размер иконки изменен на h-5 w-5 для предотвращения прыжков высоты
+        btn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg>`;
+        btn.disabled = true;
     } else {
         btn.innerHTML = originalText;
+        btn.disabled = false; // Разблокируем при возврате
     }
 }
 
 window.enableAllKeyboard = async function() {
+    const btnId = 'btnEnableAllKb';
+    const btn = document.getElementById(btnId);
+    
+    // FIX 2: Проверка на блокировку/загрузку
+    if (btn && (btn.disabled || btn.querySelector('.animate-spin'))) return;
+
     const status = getBulkStatus();
     
     if (status.allEnabled) {
@@ -788,8 +949,6 @@ window.enableAllKeyboard = async function() {
         return;
     }
 
-    const btnId = 'btnEnableAllKb';
-    const btn = document.getElementById(btnId);
     const originalText = btn ? btn.innerText : 'Enable All';
 
     animateBulkButton(btnId, 'loading', originalText);
@@ -818,6 +977,12 @@ window.enableAllKeyboard = async function() {
 };
 
 window.disableAllKeyboard = async function() {
+    const btnId = 'btnDisableAllKb';
+    const btn = document.getElementById(btnId);
+
+    // FIX 2: Проверка на блокировку/загрузку
+    if (btn && (btn.disabled || btn.querySelector('.animate-spin'))) return;
+
     const status = getBulkStatus();
 
     if (status.allDisabled) {
@@ -826,8 +991,6 @@ window.disableAllKeyboard = async function() {
         return;
     }
 
-    const btnId = 'btnDisableAllKb';
-    const btn = document.getElementById(btnId);
     const originalText = btn ? btn.innerText : 'Disable All';
 
     animateBulkButton(btnId, 'loading', originalText);
