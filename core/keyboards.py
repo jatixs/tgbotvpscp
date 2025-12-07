@@ -47,14 +47,16 @@ def get_main_reply_keyboard(user_id: int, buttons_map: dict = None) -> ReplyKeyb
     
     return ReplyKeyboardMarkup(
         keyboard=keyboard_layout,
-        resize_keyboard=True,
-        input_field_placeholder=_("main_menu_placeholder", lang))
+        resize_keyboard=True,     # Подгонять размер под кол-во кнопок
+        is_persistent=True,       # Меню не сворачивается при нажатии (Telegram 5.0+)
+        one_time_keyboard=False   # Явно запрещаем одноразовое скрытие
+        # input_field_placeholder убран, чтобы не триггерить фокус ввода на некоторых устройствах
+    )
 
 def get_subcategory_keyboard(category_key: str, user_id: int) -> ReplyKeyboardMarkup:
     """Возвращает клавиатуру для конкретной категории с учетом прав и настроек."""
     lang = get_user_lang(user_id)
     
-    # Проверка прав доступа (логика дублируется из auth.py для визуального скрытия)
     is_admin = user_id == ADMIN_USER_ID or (ALLOWED_USERS.get(user_id, {}).get("group") == "admins" if isinstance(ALLOWED_USERS.get(user_id), dict) else ALLOWED_USERS.get(user_id) == "admins")
     is_root_mode = INSTALL_MODE == 'root'
 
@@ -67,19 +69,18 @@ def get_subcategory_keyboard(category_key: str, user_id: int) -> ReplyKeyboardMa
     current_row = []
 
     for btn_key in buttons_in_category:
-        # 1. Проверяем, включена ли кнопка в настройках (KEYBOARD_CONFIG)
-        # Специальные кнопки типа языка или настроек меню не отключаются через конфиг
+        # 1. Проверяем, включена ли кнопка в настройках
         config_key = BTN_CONFIG_MAP.get(btn_key)
         if config_key and not KEYBOARD_CONFIG.get(config_key, True):
             continue
 
-        # 2. Проверяем права доступа пользователя
+        # 2. Проверяем права доступа
         if btn_key in admin_only and not is_admin:
             continue
         if btn_key in root_only and not (is_root_mode and is_admin):
             continue
 
-        # Добавляем кнопку в текущий ряд
+        # Добавляем кнопку
         current_row.append(KeyboardButton(text=_(btn_key, lang)))
         
         # Разбиваем по 2 кнопки в ряд
@@ -97,14 +98,15 @@ def get_subcategory_keyboard(category_key: str, user_id: int) -> ReplyKeyboardMa
     return ReplyKeyboardMarkup(
         keyboard=keyboard_rows,
         resize_keyboard=True,
-        input_field_placeholder=_("cat_choose_action", lang, category=_(category_key, lang)))
+        is_persistent=True,       # Меню не сворачивается при нажатии
+        one_time_keyboard=False   # Явно запрещаем одноразовое скрытие
+    )
 
 def get_keyboard_settings_inline(lang: str) -> InlineKeyboardMarkup:
     """Возвращает inline-клавиатуру для включения/выключения кнопок."""
     buttons = []
     
     # Проходим по всем кнопкам, которые можно настроить
-    # Используем сортировку по категориям для удобства (опционально), здесь просто по списку конфига
     for btn_key, config_key in BTN_CONFIG_MAP.items():
         is_enabled = KEYBOARD_CONFIG.get(config_key, True)
         status_icon = "✅" if is_enabled else "❌"
@@ -118,12 +120,12 @@ def get_keyboard_settings_inline(lang: str) -> InlineKeyboardMarkup:
     for i in range(0, len(buttons), 2):
         rows.append(buttons[i:i+2])
     
-    # Кнопка "Готово" (закрыть настройки)
+    # Кнопка "Готово"
     rows.append([InlineKeyboardButton(text=_("btn_back", lang), callback_data="close_kb_settings")])
 
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
-# --- Стандартные клавиатуры (без изменений) ---
+# --- Стандартные клавиатуры ---
 
 def get_manage_users_keyboard(lang: str):
     return InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text=_("btn_add_user", lang), callback_data="add_user"), InlineKeyboardButton(text=_("btn_delete_user", lang), callback_data="delete_user")], [InlineKeyboardButton(text=_("btn_change_group", lang), callback_data="change_group"), InlineKeyboardButton(text=_("btn_my_id", lang), callback_data="get_id_inline")], [InlineKeyboardButton(text=_("btn_back_to_menu", lang), callback_data="back_to_menu")]])

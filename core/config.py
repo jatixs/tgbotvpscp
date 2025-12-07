@@ -27,7 +27,7 @@ RESTART_FLAG_FILE = os.path.join(CONFIG_DIR, "restart_flag.txt")
 ALERTS_CONFIG_FILE = os.path.join(CONFIG_DIR, "alerts_config.json")
 USER_SETTINGS_FILE = os.path.join(CONFIG_DIR, "user_settings.json")
 SYSTEM_CONFIG_FILE = os.path.join(CONFIG_DIR, "system_config.json")
-KEYBOARD_CONFIG_FILE = os.path.join(CONFIG_DIR, "keyboard_config.json") # NEW
+KEYBOARD_CONFIG_FILE = os.path.join(CONFIG_DIR, "keyboard_config.json")
 WEB_AUTH_FILE = os.path.join(CONFIG_DIR, "web_auth.txt")
 
 TOKEN = os.environ.get("TG_BOT_TOKEN")
@@ -80,6 +80,7 @@ DEFAULT_KEYBOARD_CONFIG = {
     "enable_reboot": True,
     "enable_notifications": True,
     "enable_users": True,
+    "enable_nodes": True, # <--- ДОБАВЛЕНО
     "enable_optimize": True
 }
 
@@ -149,6 +150,11 @@ def load_keyboard_config():
                 data = json.load(f)
                 # Обновляем только существующие ключи, чтобы не потерять дефолтные при обновлении структуры
                 KEYBOARD_CONFIG.update(data)
+                
+                # Принудительно добавляем enable_nodes, если его нет (миграция для старых конфигов)
+                if "enable_nodes" not in KEYBOARD_CONFIG:
+                    KEYBOARD_CONFIG["enable_nodes"] = True
+                    
             logging.info("Keyboard config loaded.")
         else:
             logging.info("Keyboard config not found, using defaults.")
