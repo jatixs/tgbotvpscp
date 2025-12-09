@@ -6,13 +6,11 @@ import time
 import os
 from .config import CONFIG_DIR
 
-# Путь к файлу базы данных
 DB_PATH = os.path.join(CONFIG_DIR, "nodes.db")
 LEGACY_JSON_PATH = os.path.join(CONFIG_DIR, "nodes.json")
 
 
 async def init_db():
-    """Инициализация таблицы и миграция старых данных."""
     async with aiosqlite.connect(DB_PATH) as db:
         await db.execute("""
             CREATE TABLE IF NOT EXISTS nodes (
@@ -34,7 +32,6 @@ async def init_db():
 
 
 async def _migrate_from_json_if_needed():
-    """Переносит данные из nodes.json в SQLite, если json существует."""
     if not os.path.exists(LEGACY_JSON_PATH):
         return
 
@@ -50,7 +47,6 @@ async def _migrate_from_json_if_needed():
         async with aiosqlite.connect(DB_PATH) as db:
             count = 0
             for token, node in data.items():
-                # Проверяем, нет ли уже такой ноды (на всякий случай)
                 cursor = await db.execute("SELECT 1 FROM nodes WHERE token = ?", (token,))
                 if await cursor.fetchone():
                     continue
@@ -66,13 +62,12 @@ async def _migrate_from_json_if_needed():
                         json.dumps(node.get("stats", {})),
                         json.dumps(node.get("history", [])),
                         json.dumps(node.get("tasks", [])),
-                        "{}"  # extra_state чистый
+                        "{}"
                     )
                 )
                 count += 1
             await db.commit()
 
-        # Переименовываем старый файл, чтобы не мигрировать повторно
         os.rename(LEGACY_JSON_PATH, LEGACY_JSON_PATH + ".bak")
         logging.info(
             f"Migration successful! Imported {count} nodes. Legacy file renamed to .bak")
@@ -81,8 +76,7 @@ async def _migrate_from_json_if_needed():
         logging.error(f"CRITICAL: Migration failed: {e}", exc_info=True)
 
 
-def _deserialize_node(row):
-    """Собирает объект ноды из строки БД."""
+def _deserialize_node(row, include_history=True):
     base = {
         "token": row['token'],
         "name": row['name'],
@@ -90,9 +84,11 @@ def _deserialize_node(row):
         "last_seen": row['last_seen'],
         "ip": row['ip'],
         "stats": json.loads(row['stats']) if row['stats'] else {},
-        "history": json.loads(row['history']) if row['history'] else [],
         "tasks": json.loads(row['tasks']) if row['tasks'] else []
     }
+    if include_history:
+        base["history"] = json.loads(row['history']) if row['history'] else []
+    
     extra = json.loads(row['extra_state']) if row['extra_state'] else {}
     return {**base, **extra}
 
@@ -101,9 +97,10 @@ async def get_all_nodes():
     nodes = {}
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
-        async with db.execute("SELECT * FROM nodes") as cursor:
+        # Оптимизация RAM: НЕ выбираем history, так как она может быть большой и не нужна для листинга
+        async with db.execute("SELECT token, name, created_at, last_seen, ip, stats, tasks, extra_state FROM nodes") as cursor:
             async for row in cursor:
-                nodes[row['token']] = _deserialize_node(row)
+                nodes[row['token']] = _deserialize_node(row, include_history=False)
     return nodes
 
 
@@ -113,7 +110,7 @@ async def get_node_by_token(token: str):
         async with db.execute("SELECT * FROM nodes WHERE token = ?", (token,)) as cursor:
             row = await cursor.fetchone()
             if row:
-                return _deserialize_node(row)
+                return _deserialize_node(row, include_history=True)
     return None
 
 

@@ -87,7 +87,7 @@ async def sshlog_handler(message: types.Message):
                     dt = datetime.strptime(
                         match_sys.group(1), "%b %d %H:%M:%S")
                     dt = dt.replace(year=datetime.now().year)
-            except BaseException:
+            except Exception:
                 continue
 
             if not dt:

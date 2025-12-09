@@ -4,7 +4,7 @@ import psutil
 import time
 import re
 import os
-import signal  # <--- Добавлено
+import signal
 from datetime import datetime
 from aiogram import F, Dispatcher, types, Bot
 from aiogram.types import KeyboardButton
@@ -118,7 +118,7 @@ async def parse_ssh_log_line(line: str) -> dict | None:
                     "ip": ip,
                     "time": datetime.now().strftime('%H:%M:%S'),
                     "tz": get_server_timezone_label()}}
-        except BaseException:
+        except Exception:
             return None
     return None
 
@@ -136,7 +136,7 @@ async def parse_f2b_log_line(line: str) -> dict | None:
                     "ip": ip,
                     "time": datetime.now().strftime('%H:%M:%S'),
                     "tz": get_server_timezone_label()}}
-        except BaseException:
+        except Exception:
             return None
     return None
 
@@ -150,7 +150,7 @@ async def resource_monitor(bot: Bot):
             ram = psutil.virtual_memory().percent
             try:
                 disk = psutil.disk_usage(get_host_path('/')).percent
-            except BaseException:
+            except Exception:
                 disk = 0
 
             alerts = []
@@ -244,6 +244,6 @@ async def reliable_tail_log_monitor(bot, path, alert_type, parser):
             if proc:
                 try:
                     os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
-                except BaseException:
+                except Exception:
                     pass
             await asyncio.sleep(10)
