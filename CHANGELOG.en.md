@@ -10,8 +10,8 @@
   <img src="https://img.shields.io/badge/date-December%202025-green?style=flat-square" alt="Date December 2025"/>
   <img src="https://img.shields.io/badge/status-stable-green?style=flat-square" alt="Status Stable"/>
 </p>
----
 
+---
 ## [1.13.2] - 2025-12-09
 
 ### 🔥 Critical Fixes
