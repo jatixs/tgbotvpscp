@@ -103,7 +103,7 @@ async def get_vps_location() -> Tuple[Optional[str], Optional[str], Optional[str
                     if resp.status == 200:
                         data = await resp.json()
                         ip = data.get("ip")
-            except BaseException:
+           except Exception:
                 pass
 
             if not ip:
@@ -111,7 +111,7 @@ async def get_vps_location() -> Tuple[Optional[str], Optional[str], Optional[str
                     async with session.get("https://ipinfo.io/ip", timeout=5) as resp:
                         if resp.status == 200:
                             ip = (await resp.text()).strip()
-                except BaseException:
+               except Exception:
                     pass
 
             if ip:
@@ -124,9 +124,9 @@ async def get_vps_location() -> Tuple[Optional[str], Optional[str], Optional[str
                                 continent = data.get("continent")
                                 logging.info(
                                     f"Detected VPS Location: {country_code} ({continent})")
-                except BaseException:
+               except Exception:
                     pass
-    except BaseException:
+   except Exception:
         pass
     return ip, country_code, continent
 
@@ -154,7 +154,7 @@ async def fetch_servers_async(
                         content = await resp.text()
                         with open(LOCAL_RU_CACHE_FILE, "w", encoding='utf-8') as f:
                             f.write(content)
-            except BaseException:
+           except Exception:
                 if os.path.exists(LOCAL_RU_CACHE_FILE):
                     with open(LOCAL_RU_CACHE_FILE, "r", encoding='utf-8') as f:
                         content = f.read()
@@ -169,7 +169,7 @@ async def fetch_servers_async(
                                 'City'), "country": "RU", "provider": s.get('Name'), "continent": "EU"})
                     logging.info(f"Loaded {len(servers_list)} RU servers.")
                     return servers_list
-                except BaseException:
+               except Exception:
                     pass
 
         content = None
@@ -179,7 +179,7 @@ async def fetch_servers_async(
                     content = await resp.text()
                     with open(LOCAL_CACHE_FILE, "w", encoding='utf-8') as f:
                         f.write(content)
-        except BaseException:
+       except Exception:
             if os.path.exists(LOCAL_CACHE_FILE):
                 with open(LOCAL_CACHE_FILE, "r", encoding='utf-8') as f:
                     content = f.read()
@@ -193,7 +193,7 @@ async def fetch_servers_async(
                         continue
                     try:
                         port = int(str(port_str).split('-')[0].strip())
-                    except BaseException:
+                   except Exception:
                         continue
 
                     servers_list.append({
@@ -202,7 +202,7 @@ async def fetch_servers_async(
                         "continent": s.get("CONTINENT"),
                         "provider": s.get("PROVIDER", "N/A")
                     })
-            except BaseException:
+           except Exception:
                 pass
 
     return servers_list

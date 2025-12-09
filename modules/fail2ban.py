@@ -71,7 +71,7 @@ async def fail2ban_handler(message: types.Message):
                                      time=dt.strftime('%H:%M:%S'),
                                      tz=tz,
                                      date=dt.strftime('%d.%m.%Y')))
-                except BaseException:
+               except Exception:
                     continue
 
             if len(entries) >= 10:

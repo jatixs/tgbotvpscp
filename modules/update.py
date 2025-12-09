@@ -2,7 +2,7 @@ import asyncio
 import logging
 from aiogram import F, Dispatcher, types
 from aiogram.types import KeyboardButton
-from aiogram.exceptions import TelegramNetworkError, TelegramBadRequest
+from aiogram.exceptions import TelegramNetworkError
 
 from core.i18n import _, I18nFilter, get_user_lang
 from core import config

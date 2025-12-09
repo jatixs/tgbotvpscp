@@ -219,7 +219,7 @@ async def toggle_kb_config(callback: types.CallbackQuery):
 async def close_kb_settings(callback: types.CallbackQuery):
     try:
         await callback.message.delete()
-    except:
+    except Exception:
         pass
     await callback.answer()
 
