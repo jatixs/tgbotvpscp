@@ -221,7 +221,7 @@ def get_server_timezone_label():
         offset_seconds = -time.altzone if is_dst else -time.timezone
         offset_hours = offset_seconds // 3600
         return f" (GMT{'+' if offset_hours >= 0 else ''}{offset_hours})"
-   except Exception:
+    except Exception:
         return ""
 
 
@@ -244,7 +244,7 @@ async def detect_xray_client():
                 if 'marzban' in image.lower() or 'marzban' in name:
                     return "marzban", name
         return None, None
-   except Exception:
+    except Exception:
         return None, None
 
 
