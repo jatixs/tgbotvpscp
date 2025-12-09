@@ -33,11 +33,6 @@ dp = Dispatcher(storage=storage)
 dp.message.middleware(SpamThrottleMiddleware())
 dp.callback_query.middleware(SpamThrottleMiddleware())
 
-buttons_map = {
-    "user": [],
-    "admin": [],
-    "root": []
-}
 background_tasks = set()
 
 
@@ -48,15 +43,6 @@ def register_module(module, admin_only=False, root_only=False):
         else:
             logging.warning(
                 f"Module '{module.__name__}' has no register_handlers().")
-
-        # Примечание: Мы собираем кнопки в buttons_map для совместимости,
-        # но отображение теперь контролируется через keyboards.py и CATEGORY_MAP
-        if hasattr(module, 'get_button'):
-            btn = module.get_button()
-            button_level = "user"
-            if root_only: button_level = "root"
-            elif admin_only: button_level = "admin"
-            buttons_map[button_level].append(btn)
 
         if hasattr(module, 'start_background_tasks'):
             tasks = module.start_background_tasks(bot)
@@ -93,7 +79,6 @@ async def show_main_menu(
         await auth.send_access_denied_message(bot, user_id, chat_id, command)
         return
 
-    bot.buttons_map = buttons_map
     if message_id_to_delete:
         try:
             await bot.delete_message(chat_id=chat_id, message_id=message_id_to_delete)
@@ -249,16 +234,8 @@ async def set_language_callback(
 
 def load_modules():
     logging.info("Loading modules...")
-    buttons_map["user"].append(
-        KeyboardButton(
-            text=_(
-                "btn_language",
-                config.DEFAULT_LANGUAGE)))
-
-    # Регистрируем модули. 
-    # ВАЖНО: Мы регистрируем их ВСЕГДА, чтобы хэндлеры работали.
-    # Скрытие кнопок теперь происходит визуально в keyboards.py, а не здесь.
     
+    # Регистрируем модули. 
     register_module(selftest)
     register_module(uptime)
     register_module(traffic)

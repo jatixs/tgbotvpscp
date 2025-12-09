@@ -11,6 +11,7 @@ import requests
 from aiohttp import web
 from aiogram import Bot
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+from collections import deque
 
 from . import nodes_db
 from .config import (
@@ -165,10 +166,9 @@ async def handle_get_logs(request):
     if not os.path.exists(log_path):
         return web.json_response({"logs": ["Logs not found."]})
     try:
+        # Оптимизация: читаем только последние 300 строк, не загружая весь файл в память
         with open(log_path, "r", encoding="utf-8", errors="ignore") as f:
-            lines = f.readlines()
-            if len(lines) > 300:
-                lines = lines[-300:]
+            lines = list(deque(f, 300))
         return web.json_response({"logs": lines})
     except Exception as e:
         return web.json_response({"error": str(e)}, status=500)
@@ -284,7 +284,7 @@ async def handle_dashboard(request):
 async def handle_heartbeat(request):
     try:
         data = await request.json()
-   except Exception:
+    except Exception:
         return web.json_response({"error": "Invalid JSON"}, status=400)
     token = data.get("token")
     node = await nodes_db.get_node_by_token(token)
@@ -323,7 +323,7 @@ async def process_node_result_background(bot, user_id, cmd, text, token, node_na
                 stop_kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="⏹ Stop", callback_data=f"node_stop_traffic_{token}")]])
                 try:
                     await bot.edit_message_text(text=text, chat_id=user_id, message_id=msg_id, reply_markup=stop_kb, parse_mode="HTML")
-               except Exception: pass
+                except Exception: pass
                 return
         
         # Default response
@@ -356,14 +356,14 @@ async def handle_agent_stats(request):
     try:
         net = psutil.net_io_counters()
         current_stats.update({"net_sent": net.bytes_sent, "net_recv": net.bytes_recv, "boot_time": psutil.boot_time()})
-   except Exception: pass
+    except Exception: pass
     
     if AGENT_HISTORY:
         latest = AGENT_HISTORY[-1]
         current_stats.update({"cpu": latest["c"], "ram": latest["r"]})
         try:
             current_stats["disk"] = psutil.disk_usage(get_host_path('/')).percent
-       except Exception: pass
+        except Exception: pass
         
     return web.json_response({"stats": current_stats, "history": AGENT_HISTORY})
 
@@ -650,7 +650,7 @@ async def handle_clear_logs(request):
     try:
         data = {}
         try: data = await request.json()
-       except Exception: pass
+        except Exception: pass
         target = data.get('type', 'all')
         dirs_to_clear = []
         if target == 'bot': dirs_to_clear = [BOT_LOG_DIR, WATCHDOG_LOG_DIR]
@@ -752,7 +752,7 @@ async def handle_login_page(request):
 async def handle_login_request(request):
     data = await request.post()
     try: uid = int(data.get("user_id", 0))
-   except Exception: uid = 0
+    except Exception: uid = 0
     if uid not in ALLOWED_USERS: return web.Response(text="User not found", status=403)
     token = secrets.token_urlsafe(32)
     AUTH_TOKENS[token] = {"user_id": uid, "created_at": time.time()}
@@ -766,7 +766,7 @@ async def handle_login_request(request):
             kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text=_("web_login_btn", lang), url=link)]])
             await bot.send_message(uid, _("web_login_header", lang), reply_markup=kb, parse_mode="HTML")
             return web.HTTPFound('/login?sent=true')
-       except Exception: pass
+        except Exception: pass
     return web.Response(text="Bot Error", status=500)
 
 async def handle_login_password(request):
@@ -774,7 +774,7 @@ async def handle_login_password(request):
     ip = get_client_ip(request)
     if not check_rate_limit(ip): return web.Response(text="Rate limited. Wait 5 mins.", status=429)
     try: uid = int(data.get("user_id", 0))
-   except Exception: return web.Response(text="Invalid ID", status=400)
+    except Exception: return web.Response(text="Invalid ID", status=400)
     if uid != ADMIN_USER_ID: return web.Response(text="Password login for Main Admin only.", status=403)
     if check_user_password(uid, data.get("password")):
         st = secrets.token_hex(32)
@@ -823,7 +823,7 @@ async def handle_reset_request(request):
     try:
         data = await request.json()
         try: uid = int(data.get("user_id", 0))
-       except Exception: uid = 0
+        except Exception: uid = 0
         if uid != ADMIN_USER_ID:
             adm = f"https://t.me/{ADMIN_USERNAME}" if ADMIN_USERNAME else f"tg://user?id={ADMIN_USER_ID}"
             return web.json_response({"error": "not_found", "admin_url": adm}, status=404)
@@ -839,7 +839,7 @@ async def handle_reset_request(request):
                 kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text=_("web_reset_btn", lang), url=link)]])
                 await bot.send_message(uid, _("web_reset_header", lang), reply_markup=kb, parse_mode="HTML")
                 return web.json_response({"status": "ok"})
-           except Exception: return web.json_response({"error": "bot_send_error"}, status=500)
+            except Exception: return web.json_response({"error": "bot_send_error"}, status=500)
         return web.json_response({"error": "bot_not_ready"}, status=500)
     except Exception as e:
         return web.json_response({"error": str(e)}, status=500)

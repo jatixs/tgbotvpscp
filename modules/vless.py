@@ -2,8 +2,6 @@
 import logging
 import io
 import qrcode
-# from PIL import Image # Pillow импортирован в requirements, но Image не
-# используется здесь
 from aiogram import F, Dispatcher, types
 from aiogram.types import KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton, BufferedInputFile
 from aiogram.fsm.context import FSMContext
@@ -223,8 +221,7 @@ async def process_vless_name(message: types.Message, state: FSMContext):
         # Возвращаем в главное меню
         sent_message = await message.answer(
             _("vless_menu_return", lang),
-            reply_markup=get_main_reply_keyboard(
-                user_id, message.bot.buttons_map)  # Передаем ID и карту
+            reply_markup=get_main_reply_keyboard(user_id)
         )
         # --------------------------------
         # Сохраняем как сообщение меню

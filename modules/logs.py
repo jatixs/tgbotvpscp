@@ -32,10 +32,7 @@ async def logs_handler(message: types.Message, state: FSMContext):
     user_id = message.from_user.id
     await state.clear()
 
-    buttons_map = getattr(
-        message.bot, 'buttons_map', {
-            "user": [], "admin": [], "root": []})
-    main_keyboard = get_main_reply_keyboard(user_id, buttons_map)
+    main_keyboard = get_main_reply_keyboard(user_id)
 
     if DEPLOY_MODE == "docker" and INSTALL_MODE == "secure":
         await message.answer(

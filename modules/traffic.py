@@ -94,10 +94,7 @@ async def stop_traffic_handler(callback: types.CallbackQuery):
             await bot.delete_message(chat_id=chat_id, message_id=message_id_to_delete)
             await callback.answer(get_text("traffic_stopped_alert", lang))
 
-            buttons_map = getattr(
-                bot, 'buttons_map', {
-                    "user": [], "admin": [], "root": []})
-            reply_markup = get_main_reply_keyboard(user_id, buttons_map)
+            reply_markup = get_main_reply_keyboard(user_id)
             sent_menu_message = await callback.message.answer(get_text("traffic_menu_return", lang), reply_markup=reply_markup)
             shared_state.LAST_MESSAGE_IDS.setdefault(
                 user_id, {})["menu"] = sent_menu_message.message_id
