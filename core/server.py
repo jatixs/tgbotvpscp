@@ -11,7 +11,7 @@ import requests
 from aiohttp import web
 from aiogram import Bot
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-from collections import deque
+from collections import deque  # Оптимизация памяти
 
 from . import nodes_db
 from .config import (
@@ -75,17 +75,15 @@ def check_user_password(user_id, input_pass):
     stored_hash = user_data.get("password_hash")
     if not stored_hash:
         return user_id == ADMIN_USER_ID and input_pass == "admin"
-    # On legacy SHA256 match, upgrade hash to Argon2 and allow login
-    sha256_admin = "8c6976e5b5410415bde908bd4dee15dfb167a9c873fc4bb8a81f6f2ab448a918"  # SHA256('admin')
+    # Legacy SHA256 check and upgrade
+    sha256_admin = "8c6976e5b5410415bde908bd4dee15dfb167a9c873fc4bb8a81f6f2ab448a918"
     input_pass_sha256 = hashlib.sha256(input_pass.encode()).hexdigest()
     if stored_hash == input_pass_sha256:
-        # Upgrade legacy SHA256 hash to Argon2
         ph = PasswordHasher()
         new_hash = ph.hash(input_pass)
         user_data["password_hash"] = new_hash
         save_users()
         return True
-    # For all other (Argon2) hashes
     ph = PasswordHasher()
     try:
         return ph.verify(stored_hash, input_pass)
@@ -93,6 +91,7 @@ def check_user_password(user_id, input_pass):
         return False
     except Exception:
         return False
+
 def is_default_password_active(user_id):
     if user_id != ADMIN_USER_ID:
         return False
@@ -129,10 +128,9 @@ def get_current_user(request):
     return {
         "id": uid,
         "role": role,
-        "first_name": USER_NAMES.get(
-            str(uid),
-            f"ID: {uid}"),
-        "photo_url": AGENT_FLAG}
+        "first_name": USER_NAMES.get(str(uid), f"ID: {uid}"),
+        "photo_url": AGENT_FLAG
+    }
 
 def _get_avatar_html(user):
     raw = user.get('photo_url', '')
@@ -166,7 +164,7 @@ async def handle_get_logs(request):
     if not os.path.exists(log_path):
         return web.json_response({"logs": ["Logs not found."]})
     try:
-        # Оптимизация: читаем только последние 300 строк, не загружая весь файл в память
+        # --- ОПТИМИЗАЦИЯ RAM: Используем deque ---
         with open(log_path, "r", encoding="utf-8", errors="ignore") as f:
             lines = list(deque(f, 300))
         return web.json_response({"logs": lines})
@@ -278,9 +276,6 @@ async def handle_dashboard(request):
     html = html.replace("{i18n_json}", json.dumps(i18n_data))
     return web.Response(text=html, content_type='text/html')
 
-
-# --- RESTORED FUNCTIONS ---
-
 async def handle_heartbeat(request):
     try:
         data = await request.json()
@@ -294,7 +289,6 @@ async def handle_heartbeat(request):
     results = data.get("results", [])
     bot = request.app.get('bot')
     if bot and results:
-        # Send responses in background
         for res in results:
             asyncio.create_task(
                 process_node_result_background(bot, res.get("user_id"), res.get("command"), res.get("result"), token, node.get("name", "Node")))
@@ -315,7 +309,6 @@ async def handle_heartbeat(request):
 async def process_node_result_background(bot, user_id, cmd, text, token, node_name):
     if not user_id or not text: return
     try:
-        # Check if traffic monitor needs update
         if cmd == "traffic" and user_id in NODE_TRAFFIC_MONITORS:
             monitor = NODE_TRAFFIC_MONITORS[user_id]
             if monitor.get("token") == token:
@@ -325,8 +318,6 @@ async def process_node_result_background(bot, user_id, cmd, text, token, node_na
                     await bot.edit_message_text(text=text, chat_id=user_id, message_id=msg_id, reply_markup=stop_kb, parse_mode="HTML")
                 except Exception: pass
                 return
-        
-        # Default response
         await bot.send_message(chat_id=user_id, text=f"🖥 <b>Ответ от {node_name}:</b>\n\n{text}", parse_mode="HTML")
     except Exception as e:
         logging.error(f"Background send error: {e}")
@@ -435,8 +426,6 @@ async def handle_nodes_list_json(request):
         
     return web.json_response({"nodes": nodes_data})
 
-# ----------------------------
-
 async def handle_settings_page(request):
     user = get_current_user(request)
     if not user:
@@ -448,28 +437,24 @@ async def handle_settings_page(request):
     user_alerts = ALERTS_CONFIG.get(user_id, {})
     
     users_json = "null"
-    nodes_json = "null" # <--- ДОБАВЛЕНО
+    nodes_json = "null"
 
     if is_admin:
-        # Users
         ulist = [{"id": uid, "name": USER_NAMES.get(str(uid), f"ID: {uid}"), "role": ALLOWED_USERS[uid].get("group", "users") if isinstance(ALLOWED_USERS[uid], dict) else ALLOWED_USERS[uid]} for uid in ALLOWED_USERS if uid != ADMIN_USER_ID]
         users_json = json.dumps(ulist)
         
-        # Nodes <--- ДОБАВЛЕНО
         all_nodes = await nodes_db.get_all_nodes()
         nlist = [{"token": t, "name": n.get("name", "Unknown"), "ip": n.get("ip", "Unknown")} for t, n in all_nodes.items()]
         nodes_json = json.dumps(nlist)
 
-    # --- INJECT KEYBOARD CONFIG ---
     keyboard_config_json = json.dumps(KEYBOARD_CONFIG)
-    # ------------------------------
 
     replacements = {
         "{web_title}": f"{_('web_settings_page_title', lang)} - Web Bot",
         "{user_name}": user.get('first_name'),
         "{user_avatar}": _get_avatar_html(user),
         "{users_data_json}": users_json,
-        "{nodes_data_json}": nodes_json, # <--- ДОБАВЛЕНО
+        "{nodes_data_json}": nodes_json,
         "{keyboard_config_json}": keyboard_config_json,
         "{val_cpu}": str(current_config.CPU_THRESHOLD),
         "{val_ram}": str(current_config.RAM_THRESHOLD),
@@ -519,17 +504,13 @@ async def handle_settings_page(request):
         "{web_hint_node_timeout}": _("web_hint_node_timeout", lang),
         "{web_keyboard_title}": _("web_keyboard_title", lang),
         "{web_soon_placeholder}": _("web_soon_placeholder", lang),
-        "{web_node_mgmt_title}": _("web_node_mgmt_title", lang), # <--- ДОБАВЛЕНО
-        
-        # --- ДОБАВЛЕННЫЕ ЗАМЕНЫ ---
+        "{web_node_mgmt_title}": _("web_node_mgmt_title", lang),
         "{web_kb_desc}": _("web_kb_desc", lang),
         "{web_kb_btn_config}": _("web_kb_btn_config", lang),
         "{web_kb_enable_all}": _("web_kb_enable_all", lang),
         "{web_kb_disable_all}": _("web_kb_disable_all", lang),
         "{web_kb_modal_title}": _("web_kb_modal_title", lang),
         "{web_kb_done}": _("web_kb_done", lang),
-        # --------------------------
-        
         "{web_version}": CACHE_VER,
     }
 
@@ -555,27 +536,21 @@ async def handle_settings_page(request):
         "modal_title_prompt": _("modal_title_prompt", lang),
         "modal_btn_ok": _("modal_btn_ok", lang),
         "modal_btn_cancel": _("modal_btn_cancel", lang),
-        
-        # --- ДОБАВЛЕННЫЕ КЛЮЧИ ДЛЯ JS ---
         "web_kb_active": _("web_kb_active", lang),
         "web_kb_all_on_alert": _("web_kb_all_on_alert", lang),
         "web_kb_all_off_alert": _("web_kb_all_off_alert", lang),
-        "web_no_nodes": _("web_no_nodes", lang), # <--- ДОБАВЛЕНО
+        "web_no_nodes": _("web_no_nodes", lang),
         "web_copied": _("web_copied", lang),
-        
-        # --- ПЕРЕВОД КАТЕГОРИЙ ---
         "web_kb_cat_monitoring": _("web_kb_cat_monitoring", lang),
         "web_kb_cat_security": _("web_kb_cat_security", lang),
         "web_kb_cat_management": _("web_kb_cat_management", lang),
         "web_kb_cat_system": _("web_kb_cat_system", lang),
         "web_kb_cat_tools": _("web_kb_cat_tools", lang),
-        # -------------------------
     }
 
-    # --- ДИНАМИЧЕСКИЙ ПЕРЕВОД НАЗВАНИЙ КНОПОК ---
+    # Перевод названий кнопок для фронтенда
     for btn_key, conf_key in BTN_CONFIG_MAP.items():
         i18n_data[f"lbl_{conf_key}"] = _(btn_key, lang)
-    # --------------------------------------------
 
     modified_html = modified_html.replace("{i18n_json}", json.dumps(i18n_data))
     return web.Response(text=modified_html, content_type='text/html')
