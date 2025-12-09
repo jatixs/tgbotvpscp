@@ -860,7 +860,6 @@ STRINGS = {
         "web_change_btn": "Change Password",
         "web_pass_changed": "Password changed successfully!",
         "web_pass_mismatch": "Passwords do not match",
-        "web_pass_wrong_current": "Invalid current password",
         
         # --- WEB: KEYBOARD SETTINGS ---
         "web_keyboard_title": "Bot Keyboard",
