@@ -5,6 +5,7 @@ import json
 import secrets
 import asyncio
 import hashlib
+from argon2 import PasswordHasher, exceptions as argon2_exceptions
 import hmac
 import requests
 from aiohttp import web
@@ -73,8 +74,24 @@ def check_user_password(user_id, input_pass):
     stored_hash = user_data.get("password_hash")
     if not stored_hash:
         return user_id == ADMIN_USER_ID and input_pass == "admin"
-    return hashlib.sha256(input_pass.encode()).hexdigest() == stored_hash
-
+    # On legacy SHA256 match, upgrade hash to Argon2 and allow login
+    sha256_admin = "8c6976e5b5410415bde908bd4dee15dfb167a9c873fc4bb8a81f6f2ab448a918"  # SHA256('admin')
+    input_pass_sha256 = hashlib.sha256(input_pass.encode()).hexdigest()
+    if stored_hash == input_pass_sha256:
+        # Upgrade legacy SHA256 hash to Argon2
+        ph = PasswordHasher()
+        new_hash = ph.hash(input_pass)
+        user_data["password_hash"] = new_hash
+        save_users()
+        return True
+    # For all other (Argon2) hashes
+    ph = PasswordHasher()
+    try:
+        return ph.verify(stored_hash, input_pass)
+    except argon2_exceptions.VerifyMismatchError:
+        return False
+    except Exception:
+        return False
 def is_default_password_active(user_id):
     if user_id != ADMIN_USER_ID:
         return False
@@ -615,7 +632,8 @@ async def handle_change_password(request):
         new_pass = data.get("new_password")
         if not new_pass or len(new_pass) < 4:
             return web.json_response({"error": "Too short"}, status=400)
-        new_hash = hashlib.sha256(new_pass.encode()).hexdigest()
+        ph = PasswordHasher()
+        new_hash = ph.hash(new_pass)
         if isinstance(ALLOWED_USERS[user['id']], str):
             ALLOWED_USERS[user['id']] = {"group": ALLOWED_USERS[user['id']], "password_hash": new_hash}
         else:
@@ -860,7 +878,8 @@ async def handle_reset_confirm(request):
             del RESET_TOKENS[token]
             return web.json_response({"error": "Denied"}, status=403)
         if not new_pass or len(new_pass) < 4: return web.json_response({"error": "Short pass"}, status=400)
-        new_hash = hashlib.sha256(new_pass.encode()).hexdigest()
+        ph = PasswordHasher()
+        new_hash = ph.hash(new_pass)
         if isinstance(ALLOWED_USERS[uid], str): ALLOWED_USERS[uid] = {"group": ALLOWED_USERS[uid], "password_hash": new_hash}
         else: ALLOWED_USERS[uid]["password_hash"] = new_hash
         save_users()
