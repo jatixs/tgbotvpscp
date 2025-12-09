@@ -134,7 +134,8 @@ async def delete_node(token: str):
     async with aiosqlite.connect(DB_PATH) as db:
         await db.execute("DELETE FROM nodes WHERE token = ?", (token,))
         await db.commit()
-    logging.info(f"Node deleted: {token[:8]}...")
+    safe_token = token.replace('\r\n', '').replace('\n', '').replace('\r', '')[:8]
+    logging.info(f"Node deleted: {safe_token}...")
 
 
 async def update_node_heartbeat(token: str, ip: str, stats: dict):

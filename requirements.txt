@@ -1,4 +1,5 @@
 aiogram
+argon2-cffi==25.1.0
 psutil
 requests
 qrcode
