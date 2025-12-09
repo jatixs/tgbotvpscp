@@ -74,11 +74,15 @@ def check_user_password(user_id, input_pass):
     stored_hash = user_data.get("password_hash")
     if not stored_hash:
         return user_id == ADMIN_USER_ID and input_pass == "admin"
-    # Check for legacy SHA256 hash for migration support
+    # On legacy SHA256 match, upgrade hash to Argon2 and allow login
     sha256_admin = "8c6976e5b5410415bde908bd4dee15dfb167a9c873fc4bb8a81f6f2ab448a918"  # SHA256('admin')
     input_pass_sha256 = hashlib.sha256(input_pass.encode()).hexdigest()
     if stored_hash == input_pass_sha256:
-        # Legacy match (old SHA256), allow login, recommend to re-set password with Argon2
+        # Upgrade legacy SHA256 hash to Argon2
+        ph = PasswordHasher()
+        new_hash = ph.hash(input_pass)
+        user_data["password_hash"] = new_hash
+        save_users()
         return True
     # For all other (Argon2) hashes
     ph = PasswordHasher()
@@ -88,7 +92,6 @@ def check_user_password(user_id, input_pass):
         return False
     except Exception:
         return False
-
 def is_default_password_active(user_id):
     if user_id != ADMIN_USER_ID:
         return False
