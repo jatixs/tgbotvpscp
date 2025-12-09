@@ -14,10 +14,6 @@
 ---
 ## [1.13.2] - 2025-12-09
 
-### 🔥 Critical Fixes
-* **Fixed Critical Code Crashes:** Resolved `IndentationError` issues in `fail2ban.py`, `sshlog.py`, `notifications.py`, `selftest.py`, and `core/utils.py`. These errors could cause the bot process to crash entirely when exceptions occurred.
-* **Fixed Fail2Ban Logic:** Corrected a typo in the command name (`fall2ban` -> `fail2ban`) that prevented the module from working.
-
 ### 🚀 Low-End Server Optimization
 *Refactored code for stable operation on servers with limited resources (specifically < 1GB RAM).*
 
