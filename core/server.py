@@ -5,6 +5,7 @@ import json
 import secrets
 import asyncio
 import hashlib
+from argon2 import PasswordHasher
 import hmac
 import requests
 from aiohttp import web
@@ -860,7 +861,8 @@ async def handle_reset_confirm(request):
             del RESET_TOKENS[token]
             return web.json_response({"error": "Denied"}, status=403)
         if not new_pass or len(new_pass) < 4: return web.json_response({"error": "Short pass"}, status=400)
-        new_hash = hashlib.sha256(new_pass.encode()).hexdigest()
+        ph = PasswordHasher()
+        new_hash = ph.hash(new_pass)
         if isinstance(ALLOWED_USERS[uid], str): ALLOWED_USERS[uid] = {"group": ALLOWED_USERS[uid], "password_hash": new_hash}
         else: ALLOWED_USERS[uid]["password_hash"] = new_hash
         save_users()
