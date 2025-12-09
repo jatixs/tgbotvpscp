@@ -28,7 +28,7 @@ async def fail2ban_handler(message: types.Message):
     user_id = message.from_user.id
     chat_id = message.chat.id
     lang = get_user_lang(user_id)
-    command = "fall2ban"
+    command = "fail2ban" # Исправлена опечатка (было fall2ban)
     if not is_allowed(user_id, command):
         await send_access_denied_message(message.bot, user_id, chat_id, command)
         return
@@ -71,7 +71,7 @@ async def fail2ban_handler(message: types.Message):
                                      time=dt.strftime('%H:%M:%S'),
                                      tz=tz,
                                      date=dt.strftime('%d.%m.%Y')))
-               except Exception:
+                except Exception:
                     continue
 
             if len(entries) >= 10:
