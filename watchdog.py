@@ -4,7 +4,6 @@ import time
 import subprocess
 import requests
 import logging
-import logging.handlers
 import re
 import json
 import sys

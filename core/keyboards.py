@@ -34,7 +34,7 @@ CATEGORY_MAP = {
     "cat_settings": ["btn_language", "btn_configure_menu"] 
 }
 
-def get_main_reply_keyboard(user_id: int, buttons_map: dict = None) -> ReplyKeyboardMarkup:
+def get_main_reply_keyboard(user_id: int) -> ReplyKeyboardMarkup:
     """Возвращает главное меню, состоящее из категорий."""
     lang = get_user_lang(user_id)
     

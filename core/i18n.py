@@ -5,6 +5,7 @@ from aiogram import F
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from . import config as core_config
 from . import shared_state
+from functools import lru_cache
 
 STRINGS = {
     'ru': {
@@ -1023,6 +1024,7 @@ def get_text(key: str, user_id_or_lang: int | str | None, **kwargs) -> str:
 _ = get_text
 
 
+@lru_cache(maxsize=None)
 def get_all_translations(key: str) -> list[str]:
     translations = []
     for lang_code, lang_strings in STRINGS.items():

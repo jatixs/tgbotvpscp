@@ -5,11 +5,27 @@
 <h1 align="center">📝 Telegram VPS Management Bot — Changelog</h1>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-v1.13.0-blue?style=flat-square" alt="Version 1.13.0"/>
-  <img src="https://img.shields.io/badge/build-51-purple?style=flat-square" alt="Build 51"/>
+  <img src="https://img.shields.io/badge/version-v1.13.2-blue?style=flat-square" alt="Version 1.13.2"/>
+  <img src="https://img.shields.io/badge/build-54-purple?style=flat-square" alt="Build 54"/>
   <img src="https://img.shields.io/badge/date-December%202025-green?style=flat-square" alt="Date December 2025"/>
   <img src="https://img.shields.io/badge/status-stable-green?style=flat-square" alt="Status Stable"/>
 </p>
+
+---
+## [1.13.2] - 2025-12-09
+
+### 🚀 Low-End Server Optimization
+*Refactored code for stable operation on servers with limited resources (specifically < 1GB RAM).*
+
+* **Log Reader:** Rewrote the log reading mechanism in `core/server.py`. Instead of loading the entire file into memory, it now uses `collections.deque` to stream only the last 300 lines. This prevents RAM spikes (OOM Kills) with large log files.
+* **Database (Nodes DB):** Optimized the node list query (`get_all_nodes`). The heavy metric `history` data is now loaded only when viewing a specific node details, rather than for the entire list at once.
+* **Memory Cleanup:** Removed the obsolete `buttons_map` mechanism in `bot.py` and `keyboards.py`, which duplicated button objects in memory but was no longer used.
+* **Server List Caching:** Optimized the loading of the large JSON server list in `speedtest.py` (switched to streamed processing).
+
+### 🧹 Cleanup & Misc
+* **Dependencies:** Removed the `Pillow` library from `requirements.txt`. QR code generation has been switched to native `qrcode` methods to reduce heavy dependencies.
+* **Legacy Code:** Removed unused imports and "dead" code remaining from older menu versions.
+
 ---
 
 ## [1.13.0] - 2025-12-07

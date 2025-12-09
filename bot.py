@@ -33,11 +33,6 @@ dp = Dispatcher(storage=storage)
 dp.message.middleware(SpamThrottleMiddleware())
 dp.callback_query.middleware(SpamThrottleMiddleware())
 
-buttons_map = {
-    "user": [],
-    "admin": [],
-    "root": []
-}
 background_tasks = set()
 
 
@@ -48,15 +43,6 @@ def register_module(module, admin_only=False, root_only=False):
         else:
             logging.warning(
                 f"Module '{module.__name__}' has no register_handlers().")
-
-        # Примечание: Мы собираем кнопки в buttons_map для совместимости,
-        # но отображение теперь контролируется через keyboards.py и CATEGORY_MAP
-        if hasattr(module, 'get_button'):
-            btn = module.get_button()
-            button_level = "user"
-            if root_only: button_level = "root"
-            elif admin_only: button_level = "admin"
-            buttons_map[button_level].append(btn)
 
         if hasattr(module, 'start_background_tasks'):
             tasks = module.start_background_tasks(bot)
@@ -93,7 +79,6 @@ async def show_main_menu(
         await auth.send_access_denied_message(bot, user_id, chat_id, command)
         return
 
-    bot.buttons_map = buttons_map
     if message_id_to_delete:
         try:
             await bot.delete_message(chat_id=chat_id, message_id=message_id_to_delete)
@@ -110,7 +95,6 @@ async def show_main_menu(
         await auth.refresh_user_names(bot)
 
     menu_text = _("main_menu_welcome", user_id)
-    # Используем новое меню категорий
     reply_markup = keyboards.get_main_reply_keyboard(user_id)
 
     try:
@@ -166,7 +150,6 @@ async def _show_subcategory(message: types.Message, category_key: str):
     if not auth.is_allowed(user_id, "menu"):
         return
 
-    # Получаем клавиатуру подкатегории
     markup = keyboards.get_subcategory_keyboard(category_key, user_id)
     cat_name = _(category_key, lang)
     text = _("cat_choose_action", lang, category=cat_name)
@@ -181,7 +164,7 @@ async def configure_menu_handler(message: types.Message):
     user_id = message.from_user.id
     lang = i18n.get_user_lang(user_id)
     
-    if not auth.is_allowed(user_id, "manage_users"): # Ограничение: только админы могут менять конфиг
+    if not auth.is_allowed(user_id, "manage_users"):
          await message.answer(_("access_denied_no_rights", lang))
          return
 
@@ -200,31 +183,25 @@ async def toggle_kb_config(callback: types.CallbackQuery):
          return
 
     config_key = callback.data.replace("toggle_kb_", "")
-    
-    # Переключаем состояние в конфиге
     current_val = config.KEYBOARD_CONFIG.get(config_key, True)
     config.KEYBOARD_CONFIG[config_key] = not current_val
     config.save_keyboard_config(config.KEYBOARD_CONFIG)
-    
-    # Обновляем клавиатуру, чтобы показать новые галочки/крестики
     new_markup = keyboards.get_keyboard_settings_inline(lang)
     try:
         await callback.message.edit_reply_markup(reply_markup=new_markup)
     except TelegramBadRequest:
-        pass # Игнорируем, если изменений не было (хотя они должны быть)
-    
+        pass
     await callback.answer()
 
 @dp.callback_query(F.data == "close_kb_settings")
 async def close_kb_settings(callback: types.CallbackQuery):
     try:
         await callback.message.delete()
-    except:
+    except Exception:
         pass
     await callback.answer()
 
 
-# --- ЯЗЫКОВЫЕ НАСТРОЙКИ ---
 @dp.message(I18nFilter("btn_language"))
 async def language_handler(message: types.Message):
     user_id = message.from_user.id
@@ -249,30 +226,16 @@ async def set_language_callback(
 
 def load_modules():
     logging.info("Loading modules...")
-    buttons_map["user"].append(
-        KeyboardButton(
-            text=_(
-                "btn_language",
-                config.DEFAULT_LANGUAGE)))
-
-    # Регистрируем модули. 
-    # ВАЖНО: Мы регистрируем их ВСЕГДА, чтобы хэндлеры работали.
-    # Скрытие кнопок теперь происходит визуально в keyboards.py, а не здесь.
-    
     register_module(selftest)
     register_module(uptime)
     register_module(traffic)
     register_module(notifications)
-    
-    # Админские модули
     register_module(users, admin_only=True)
     register_module(speedtest, admin_only=True)
     register_module(top, admin_only=True)
     register_module(vless, admin_only=True)
     register_module(xray, admin_only=True)
     register_module(nodes, admin_only=True)
-        
-    # Root модули
     register_module(sshlog, root_only=True)
     register_module(fail2ban, root_only=True)
     register_module(logs, root_only=True)
@@ -280,7 +243,6 @@ def load_modules():
     register_module(restart, root_only=True)
     register_module(reboot, root_only=True)
     register_module(optimize, root_only=True)
-
     logging.info("All modules loaded.")
 
 
@@ -318,7 +280,6 @@ async def main():
         await asyncio.to_thread(auth.load_users)
         await asyncio.to_thread(utils.load_alerts_config)
         await asyncio.to_thread(i18n.load_user_settings)
-        # Config уже загружен при импорте
 
         await auth.refresh_user_names(bot)
         await utils.initial_reboot_check(bot)

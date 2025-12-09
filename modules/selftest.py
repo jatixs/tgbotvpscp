@@ -51,7 +51,7 @@ async def selftest_handler(message: types.Message):
         mem = psutil.virtual_memory().percent
         try:
             disk = psutil.disk_usage(get_host_path('/')).percent
-        except BaseException:
+        except Exception:
             disk = 0
         with open(get_host_path("/proc/uptime")) as f:
             uptime_sec = float(f.readline().split()[0])
@@ -149,7 +149,7 @@ async def selftest_handler(message: types.Message):
                             dt = datetime.strptime(
                                 match_sys.group(1), "%b %d %H:%M:%S")
                             dt = dt.replace(year=datetime.now().year)
-                    except BaseException:
+                    except Exception:
                         pass # Если парсинг не удался, dt останется None
                     
                     time_str = dt.strftime('%H:%M:%S') if dt else "?"
