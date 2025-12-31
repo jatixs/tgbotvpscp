@@ -89,16 +89,48 @@ def parse_iperf_speed(output: str, direction: str) -> float:
         
     return 0.0
 
+# --- НОВАЯ ФУНКЦИЯ: СБОР ТОП ПРОЦЕССОВ ---
+def get_top_processes(metric):
+    """Возвращает строку с топ-3 процессами по CPU или RAM."""
+    try:
+        attrs = ['pid', 'name', 'cpu_percent', 'memory_percent']
+        procs = []
+        for p in psutil.process_iter(attrs):
+            try:
+                p.info['name'] = p.info['name'][:15] # Обрезаем слишком длинные имена
+                procs.append(p.info)
+            except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+                pass
+
+        if metric == 'cpu':
+            # Сортировка по CPU
+            sorted_procs = sorted(procs, key=lambda p: p['cpu_percent'], reverse=True)[:3]
+            info_list = [f"{p['name']} ({p['cpu_percent']}%)" for p in sorted_procs]
+        elif metric == 'ram':
+            # Сортировка по RAM
+            sorted_procs = sorted(procs, key=lambda p: p['memory_percent'], reverse=True)[:3]
+            info_list = [f"{p['name']} ({p['memory_percent']:.1f}%)" for p in sorted_procs]
+        else:
+            return ""
+
+        return ", ".join(info_list)
+    except Exception as e:
+        logging.error(f"Error getting top processes: {e}")
+        return "n/a"
+
 def get_system_stats():
     try:
         net = psutil.net_io_counters()
+        # Добавляем process_cpu и process_ram в статистику
         return {
             "cpu": psutil.cpu_percent(interval=None),
             "ram": psutil.virtual_memory().percent,
             "disk": psutil.disk_usage('/').percent,
             "net_rx": net.bytes_recv,
             "net_tx": net.bytes_sent,
-            "uptime": int(time.time() - psutil.boot_time())
+            "uptime": int(time.time() - psutil.boot_time()),
+            "process_cpu": get_top_processes('cpu'),
+            "process_ram": get_top_processes('ram')
         }
     except Exception as e:
         logging.error(f"Error gathering stats: {e}")
