@@ -2,6 +2,7 @@ import asyncio
 import logging
 import os
 import sys
+import re
 from aiogram import F, Dispatcher, types
 from aiogram.types import KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.exceptions import TelegramBadRequest
@@ -24,6 +25,17 @@ def register_handlers(dp: Dispatcher):
     dp.callback_query(F.data == "update_system_apt")(run_system_update)
     dp.callback_query(F.data == "check_bot_update")(check_bot_update)
     dp.callback_query(F.data == "do_bot_update")(run_bot_update)
+
+def get_version_from_content(content: str) -> str | None:
+    """Извлекает версию из текста CHANGELOG (ищет '## [x.x.x]')."""
+    try:
+        # Ищем паттерн ## [1.2.3]
+        match = re.search(r"## \[([^\]]+)\]", content)
+        if match:
+            return f"v{match.group(1)}"
+    except Exception:
+        pass
+    return None
 
 # --- МЕНЮ ОБНОВЛЕНИЯ ---
 async def update_menu_handler(message: types.Message):
@@ -78,7 +90,7 @@ async def run_system_update(callback: types.CallbackQuery):
     except TelegramBadRequest:
         await callback.message.answer(text, parse_mode="HTML")
 
-# --- 2. ПРОВЕРКА ОБНОВЛЕНИЯ БОТА (GIT) ---
+# --- 2. ПРОВЕРКА ОБНОВЛЕНИЙ БОТА (GIT) ---
 async def check_bot_update(callback: types.CallbackQuery):
     user_id = callback.from_user.id
     lang = get_user_lang(user_id)
@@ -86,33 +98,50 @@ async def check_bot_update(callback: types.CallbackQuery):
     await callback.message.edit_text(_("bot_update_checking", lang), parse_mode="HTML")
 
     try:
-        # Fetch origin
+        # 1. Fetch origin (обновляем информацию о ветках)
         await asyncio.create_subprocess_shell("git fetch origin")
         
-        # Получаем хеши
+        # 2. Получаем хеши для технического сравнения
         proc_local = await asyncio.create_subprocess_shell("git rev-parse HEAD", stdout=asyncio.subprocess.PIPE)
-        # ИСПРАВЛЕНИЕ: Используем dummy_ вместо _
         out_local, dummy_ = await proc_local.communicate()
         local_hash = out_local.decode().strip()[:7]
 
         proc_remote = await asyncio.create_subprocess_shell("git rev-parse @{u}", stdout=asyncio.subprocess.PIPE)
-        # ИСПРАВЛЕНИЕ: Используем dummy_ вместо _
         out_remote, dummy_ = await proc_remote.communicate()
         remote_hash = out_remote.decode().strip()[:7]
 
+        # 3. Получаем красивые версии из CHANGELOG.md
+        
+        # Локальная версия
+        local_ver = local_hash
+        if os.path.exists("CHANGELOG.md"):
+            try:
+                with open("CHANGELOG.md", "r", encoding="utf-8") as f:
+                    local_ver = get_version_from_content(f.read()) or local_hash
+            except Exception: pass
+
+        # Удаленная версия (читаем файл прямо из git без checkout)
+        remote_ver = remote_hash
+        try:
+            proc_cl = await asyncio.create_subprocess_shell("git show @{u}:CHANGELOG.md", stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+            out_cl, dummy_ = await proc_cl.communicate()
+            if proc_cl.returncode == 0:
+                remote_ver = get_version_from_content(out_cl.decode('utf-8', errors='ignore')) or remote_hash
+        except Exception: pass
+
+        # 4. Сравниваем хеши (самый надежный способ узнать, есть ли изменения)
         if local_hash == remote_hash:
             await callback.message.edit_text(
-                _("bot_update_up_to_date", lang, hash=local_hash),
+                _("bot_update_up_to_date", lang, hash=local_ver), # Показываем версию, если есть
                 reply_markup=InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text=_("btn_back", lang), callback_data="back_to_menu")]]),
                 parse_mode="HTML"
             )
         else:
-            # Получаем лог изменений
+            # Получаем лог изменений (коммиты)
             proc_log = await asyncio.create_subprocess_shell(
                 "git log HEAD..@{u} --pretty=format:'%h - %s (%cr)'",
                 stdout=asyncio.subprocess.PIPE
             )
-            # ИСПРАВЛЕНИЕ: Используем dummy_ вместо _
             out_log, dummy_ = await proc_log.communicate()
             changelog = escape_html(out_log.decode().strip())
 
@@ -123,8 +152,9 @@ async def check_bot_update(callback: types.CallbackQuery):
                 [InlineKeyboardButton(text=_("btn_cancel", lang), callback_data="back_to_menu")]
             ])
             
+            # Передаем версии вместо хешей в шаблон сообщения
             await callback.message.edit_text(
-                _("bot_update_available", lang, local=local_hash, remote=remote_hash, log=changelog) + warning,
+                _("bot_update_available", lang, local=local_ver, remote=remote_ver, log=changelog) + warning,
                 reply_markup=keyboard,
                 parse_mode="HTML"
             )
