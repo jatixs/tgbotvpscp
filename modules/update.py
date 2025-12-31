@@ -78,7 +78,7 @@ async def run_system_update(callback: types.CallbackQuery):
     except TelegramBadRequest:
         await callback.message.answer(text, parse_mode="HTML")
 
-# --- 2. ПРОВЕРКА ОБНОВЛЕНИЙ БОТА (GIT) ---
+# --- 2. ПРОВЕРКА ОБНОВЛЕНИЯ БОТА (GIT) ---
 async def check_bot_update(callback: types.CallbackQuery):
     user_id = callback.from_user.id
     lang = get_user_lang(user_id)
@@ -91,17 +91,19 @@ async def check_bot_update(callback: types.CallbackQuery):
         
         # Получаем хеши
         proc_local = await asyncio.create_subprocess_shell("git rev-parse HEAD", stdout=asyncio.subprocess.PIPE)
-        out_local, _ = await proc_local.communicate()
+        # ИСПРАВЛЕНИЕ: Используем dummy_ вместо _
+        out_local, dummy_ = await proc_local.communicate()
         local_hash = out_local.decode().strip()[:7]
 
         proc_remote = await asyncio.create_subprocess_shell("git rev-parse @{u}", stdout=asyncio.subprocess.PIPE)
-        out_remote, _ = await proc_remote.communicate()
+        # ИСПРАВЛЕНИЕ: Используем dummy_ вместо _
+        out_remote, dummy_ = await proc_remote.communicate()
         remote_hash = out_remote.decode().strip()[:7]
 
         if local_hash == remote_hash:
             await callback.message.edit_text(
                 _("bot_update_up_to_date", lang, hash=local_hash),
-                reply_markup=InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text=_("btn_back", lang), callback_data="update")]]), # "update" не хендлер, можно back_to_menu
+                reply_markup=InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text=_("btn_back", lang), callback_data="back_to_menu")]]),
                 parse_mode="HTML"
             )
         else:
@@ -110,7 +112,8 @@ async def check_bot_update(callback: types.CallbackQuery):
                 "git log HEAD..@{u} --pretty=format:'%h - %s (%cr)'",
                 stdout=asyncio.subprocess.PIPE
             )
-            out_log, _ = await proc_log.communicate()
+            # ИСПРАВЛЕНИЕ: Используем dummy_ вместо _
+            out_log, dummy_ = await proc_log.communicate()
             changelog = escape_html(out_log.decode().strip())
 
             warning = _("bot_update_docker_warning", lang) if DEPLOY_MODE == "docker" else ""
@@ -147,14 +150,12 @@ async def run_bot_update(callback: types.CallbackQuery):
         if proc.returncode != 0:
             raise Exception(f"Git Pull Failed: {stderr.decode()}")
 
-        # 2. Update dependencies (в виртуальном окружении или глобально, в зависимости от запуска)
-        # Используем sys.executable для гарантии использования того же python
+        # 2. Update dependencies
         pip_cmd = f"{sys.executable} -m pip install -r requirements.txt"
         proc_pip = await asyncio.create_subprocess_shell(pip_cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
-        await proc_pip.communicate() # Игнорируем вывод pip, если нет фатальных ошибок
+        await proc_pip.communicate() 
 
         # 3. Restart
-        # Создаем флаг для рестарта, чтобы после запуска отправить сообщение
         os.makedirs(os.path.dirname(RESTART_FLAG_FILE), exist_ok=True)
         with open(RESTART_FLAG_FILE, "w") as f:
             f.write(f"{chat_id}:{callback.message.message_id}")
@@ -165,7 +166,6 @@ async def run_bot_update(callback: types.CallbackQuery):
             if container_name:
                 restart_cmd = f"docker restart {container_name}"
             else:
-                # Fallback exit
                 restart_cmd = "kill 1" 
         else:
             restart_cmd = "sudo systemctl restart tg-bot.service"
@@ -173,7 +173,6 @@ async def run_bot_update(callback: types.CallbackQuery):
         await callback.message.edit_text(_("bot_update_success", lang), parse_mode="HTML")
         logging.info(f"Update finished. Restarting via: {restart_cmd}")
         
-        # Запускаем рестарт
         asyncio.create_task(do_restart(restart_cmd))
 
     except Exception as e:
@@ -181,5 +180,5 @@ async def run_bot_update(callback: types.CallbackQuery):
         await callback.message.edit_text(_("bot_update_fail", lang, error=str(e)), parse_mode="HTML")
 
 async def do_restart(cmd):
-    await asyncio.sleep(1) # Даем время отправить сообщение в Telegram
+    await asyncio.sleep(1)
     await asyncio.create_subprocess_shell(cmd)
