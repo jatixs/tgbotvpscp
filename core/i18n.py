@@ -128,8 +128,7 @@ STRINGS = {
         "notifications_toggle_alert": "Уведомления '{alert_name}' {status}",
         "notifications_status_on": "✅ ВКЛЮЧЕНЫ",
         "notifications_status_off": "❌ ОТКЛЮЧЕНЫ",
-        "notifications_downtime_stub": "⏳ Функция уведомлений о даунтайме сервера находится в разработке.\nПока рекомендуем использовать внешние сервисы мониторинга (например, UptimeRobot).",
-        
+        "notifications_downtime_stub": "⏳ Функция уведомлений о даунтайме сервера находится в разработке.\nПока рекомендуем использовать внешние сервисы мониторинга (например, UptimeRobot).", 
         "alert_node_down": "🚨 <b>АЛЕРТ: Нода '{name}' НЕДОСТУПНА (Down)!</b>\n⏱ Последний отклик: {last_seen}",
         "alert_node_up": "✅ <b>Нода '{name}' восстановилась (Up).</b>\n🟢 Снова в сети.",
         "alert_node_restarting": "🔵 <b>Нода '{name}' перезагружается...</b>",
@@ -153,7 +152,21 @@ STRINGS = {
         "alert_no_users_for_type": "Нет пользователей с включенными уведомлениями типа '{alert_type}'.",
         "alert_sending_to_users": "Отправка алерта типа '{alert_type}' {count} пользователям...",
         "alert_sent_to_users": "Алерт типа '{alert_type}' отправлен {count} пользователям.",
-
+        
+        # --- UPDATE MODULE (Добавлено/Изменено) ---
+        "update_select_action": "🔄 <b>Центр обновлений</b>\n\nЧто вы хотите обновить?",
+        "btn_update_system": "🖥 Система (apt)",
+        "btn_check_bot_update": "🤖 Бот (git)",
+        "btn_update_bot_now": "🚀 Обновить Бота",
+        
+        "bot_update_checking": "🔍 Проверяю наличие обновлений на GitHub...",
+        "bot_update_up_to_date": "✅ <b>У вас установлена последняя версия.</b>\nВерсия: {hash}",
+        "bot_update_available": "🎉 <b>Доступно обновление!</b>\n\nТекущая: <code>{local}</code>\nНовая: <code>{remote}</code>\n\n📝 <b>Что нового (коммиты):</b>\n<pre>{log}</pre>",
+        "bot_update_docker_warning": "\n⚠️ <b>Внимание (Docker):</b> Обновление кода внутри контейнера может быть сброшено при пересоздании контейнера. Для полноценного обновления используйте <code>./deploy.sh</code> на хосте.",
+        "bot_update_start": "⏳ <b>Начинаю обновление бота...</b>\n1. Git Pull\n2. Обновление зависимостей\n3. Перезапуск",
+        "bot_update_success": "✅ <b>Бот успешно обновлен!</b>\n♻️ Перезапускаю службу...",
+        "bot_update_fail": "❌ <b>Ошибка обновления:</b>\n<pre>{error}</pre>",
+        
         # --- UTILS & WATCHDOG ---
         "utils_vless_error": "⚠️ Ошибка при генерации VLESS-ссылки: {error}",
         "utils_docker_ps_error": "Не удалось выполнить 'docker ps'. Убедитесь, что Docker установлен и запущен, и у бота есть права.\n<pre>{error}</pre>",
@@ -605,6 +618,19 @@ STRINGS = {
         "alert_no_users_for_type": "No users with notifications enabled for type '{alert_type}'.",
         "alert_sending_to_users": "Sending alert type '{alert_type}' to {count} users...",
         "alert_sent_to_users": "Alert type '{alert_type}' sent to {count} users.",
+        # --- UPDATE MODULE (Added/Changed) ---
+        "update_select_action": "🔄 <b>Update Center</b>\n\nWhat would you like to update?",
+        "btn_update_system": "🖥 System (apt)",
+        "btn_check_bot_update": "🤖 Bot (git)",
+        "btn_update_bot_now": "🚀 Update Bot",
+        
+        "bot_update_checking": "🔍 Checking for updates on GitHub...",
+        "bot_update_up_to_date": "✅ <b>Bot is up to date.</b>\nVersion: {hash}",
+        "bot_update_available": "🎉 <b>Update available!</b>\n\nCurrent: <code>{local}</code>\nLatest: <code>{remote}</code>\n\n📝 <b>Changelog:</b>\n<pre>{log}</pre>",
+        "bot_update_docker_warning": "\n⚠️ <b>Warning (Docker):</b> In-container updates might be lost if the container is recreated. Use <code>./deploy.sh</code> on the host for a persistent update.",
+        "bot_update_start": "⏳ <b>Updating bot...</b>\n1. Git Pull\n2. Update dependencies\n3. Restart",
+        "bot_update_success": "✅ <b>Bot updated successfully!</b>\n♻️ Restarting service...",
+        "bot_update_fail": "❌ <b>Update failed:</b>\n<pre>{error}</pre>",
 
         # --- UTILS & WATCHDOG ---
         "utils_vless_error": "⚠️ Error generating VLESS link: {error}",
