@@ -8,3 +8,4 @@ docker
 aiohttp
 aiosqlite
 Pillow
+packaging
