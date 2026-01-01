@@ -1,5 +1,7 @@
 import logging
 import asyncio
+import time
+import uuid
 from typing import Union, Callable
 from aiogram import Bot
 from aiogram.exceptions import TelegramBadRequest, TelegramRetryAfter
@@ -8,6 +10,7 @@ from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from .i18n import _, get_user_lang
 from . import config
 from .shared_state import LAST_MESSAGE_IDS, ALERTS_CONFIG
+from . import shared_state  # Импорт всего модуля для изменения WEB_UNREAD_COUNT
 
 
 async def delete_previous_message(
@@ -44,6 +47,26 @@ async def send_alert(
     if not alert_type:
         logging.warning("send_alert вызван без указания alert_type")
         return
+
+    # --- ЛОГИКА СОХРАНЕНИЯ WEB УВЕДОМЛЕНИЯ ---
+    try:
+        # Генерируем текст на языке по умолчанию для веб-панели
+        if callable(message_or_func):
+            web_text = message_or_func(config.DEFAULT_LANGUAGE)
+        else:
+            web_text = message_or_func
+        
+        if web_text:
+            shared_state.WEB_NOTIFICATIONS.appendleft({
+                "id": str(uuid.uuid4()),
+                "text": web_text,
+                "time": time.time(),
+                "type": alert_type
+            })
+            shared_state.WEB_UNREAD_COUNT += 1
+    except Exception as e:
+        logging.error(f"Ошибка сохранения Web-уведомления: {e}")
+    # -----------------------------------------
 
     sent_count = 0
     users_to_alert = []

@@ -446,7 +446,8 @@ STRINGS = {
         "web_update_error": "Ошибка обновления: {error}",
         "web_update_placeholder": "Нажмите кнопку для проверки наличия новой версии.",
         "web_update_check_btn": "Проверить обновления",
-        
+        "web_no_notifications": "Уведомлений нет",
+        "web_notifications_title": "Уведомления",
         # --- WEB: KEYBOARD SETTINGS ---
         "web_keyboard_title": "Клавиатура бота",
         "web_kb_desc": "Настройте видимость команд в меню бота.",
@@ -909,6 +910,9 @@ STRINGS = {
         "web_update_error": "Update error: {error}",
         "web_update_placeholder": "Click the button to check for updates.",
         "web_update_check_btn": "Check for Updates",
+        "web_no_notifications": "No notifications",
+        "web_notifications_title": "Notifications",
+        
         # --- WEB: KEYBOARD SETTINGS ---
         "web_keyboard_title": "Bot Keyboard",
         "web_kb_desc": "Configure visibility of commands in the bot menu.",

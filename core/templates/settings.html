@@ -31,6 +31,24 @@
             </div>
             
             <div class="flex items-center gap-3 sm:gap-4">
+                
+                <div class="relative group">
+                    <button id="notifBtn" class="notif-btn flex items-center justify-center w-8 h-8 rounded-lg hover:bg-black/5 dark:hover:bg-white/10 transition text-gray-600 dark:text-gray-400">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+                        </svg>
+                        <span id="notifBadge" class="notif-badge hidden">0</span>
+                    </button>
+                    
+                    <div id="notifDropdown" class="notif-dropdown hidden">
+                        <div class="px-4 py-3 border-b border-gray-100 dark:border-white/5 bg-gray-50/50 dark:bg-white/5 backdrop-blur-sm rounded-t-2xl flex justify-between items-center">
+                            <span class="text-xs font-bold uppercase tracking-widest text-gray-500 dark:text-gray-400" data-i18n="web_notifications_title">{web_notifications_title}</span>
+                        </div>
+                        <div id="notifList" class="max-h-[300px] overflow-y-auto custom-scrollbar">
+                            </div>
+                    </div>
+                </div>
+
                 <div class="relative group">
                     <button class="flex items-center justify-center w-8 h-8 rounded-lg hover:bg-black/5 dark:hover:bg-white/10 transition text-gray-600 dark:text-gray-400" id="langBtn">
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">

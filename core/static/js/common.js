@@ -7,6 +7,7 @@ let currentTheme = localStorage.getItem('theme') || 'system';
 document.addEventListener("DOMContentLoaded", () => {
     applyThemeUI(currentTheme);
     if (typeof window.parsePageEmojis === 'function') window.parsePageEmojis();
+    initNotifications(); // ЗАПУСК СИСТЕМЫ УВЕДОМЛЕНИЙ
 });
 
 function parsePageEmojis() {
@@ -140,7 +141,7 @@ document.addEventListener('click', function(event) {
     }
 });
 
-// --- СИСТЕМНЫЕ МОДАЛЬНЫЕ ОКНА (Alert, Confirm, Prompt) ---
+// --- СИСТЕМНЫЕ МОДАЛЬНЫЕ ОКНА ---
 let sysModalResolve = null;
 
 function closeSystemModal(result) {
@@ -167,7 +168,6 @@ function _showSystemModalBase(title, message, type = 'alert', placeholder = '') 
         const okBtn = document.getElementById('sysModalOk');
 
         if (!modal) {
-            // Fallback, если HTML модалки нет на странице
             if (type === 'confirm') resolve(confirm(message));
             else if (type === 'prompt') resolve(prompt(message, placeholder));
             else { alert(message); resolve(true); }
@@ -175,14 +175,12 @@ function _showSystemModalBase(title, message, type = 'alert', placeholder = '') 
         }
 
         titleEl.innerText = title;
-        msgEl.innerHTML = message.replace(/\n/g, '<br>'); // Поддержка переносов строк
+        msgEl.innerHTML = message.replace(/\n/g, '<br>');
         
-        // Сброс состояния
         inputEl.classList.add('hidden');
         cancelBtn.classList.add('hidden');
         inputEl.value = '';
 
-        // Переводы кнопок
         if (typeof I18N !== 'undefined') {
             cancelBtn.innerText = I18N.modal_btn_cancel || 'Cancel';
             okBtn.innerText = I18N.modal_btn_ok || 'OK';
@@ -200,12 +198,10 @@ function _showSystemModalBase(title, message, type = 'alert', placeholder = '') 
             okBtn.onclick = () => closeSystemModal(inputEl.value);
             cancelBtn.onclick = () => closeSystemModal(null);
             
-            // Enter в поле ввода
             inputEl.onkeydown = (e) => {
                 if(e.key === 'Enter') closeSystemModal(inputEl.value);
             };
         } else {
-            // Alert
             okBtn.onclick = () => closeSystemModal(true);
         }
 
@@ -217,3 +213,117 @@ function _showSystemModalBase(title, message, type = 'alert', placeholder = '') 
 window.showModalAlert = (message, title) => _showSystemModalBase(title || (typeof I18N !== 'undefined' ? I18N.modal_title_alert : 'Alert'), message, 'alert');
 window.showModalConfirm = (message, title) => _showSystemModalBase(title || (typeof I18N !== 'undefined' ? I18N.modal_title_confirm : 'Confirm'), message, 'confirm');
 window.showModalPrompt = (message, title, placeholder = '') => _showSystemModalBase(title || (typeof I18N !== 'undefined' ? I18N.modal_title_prompt : 'Prompt'), message, 'prompt', placeholder);
+
+// --- NOTIFICATION SYSTEM (NEW) ---
+let lastUnreadCount = 0;
+
+function initNotifications() {
+    const btn = document.getElementById('notifBtn');
+    if (!btn) return;
+
+    btn.addEventListener('click', toggleNotifications);
+    
+    // Закрытие при клике вне области
+    document.addEventListener('click', (e) => {
+        if (!e.target.closest('#notifDropdown') && !e.target.closest('#notifBtn')) {
+            closeNotifications();
+        }
+    });
+
+    // Запуск опроса
+    pollNotifications();
+    setInterval(pollNotifications, 3000);
+}
+
+async function pollNotifications() {
+    try {
+        const res = await fetch('/api/notifications/list');
+        if (!res.ok) return;
+        const data = await res.json();
+        
+        updateNotifUI(data.notifications, data.unread_count);
+    } catch (e) {
+        console.error("Notif poll error", e);
+    }
+}
+
+function updateNotifUI(list, count) {
+    const badge = document.getElementById('notifBadge');
+    const listContainer = document.getElementById('notifList');
+    const bellIcon = document.querySelector('#notifBtn svg');
+    
+    // Обновление бейджа
+    if (count > 0) {
+        badge.innerText = count > 99 ? '99+' : count;
+        badge.classList.remove('hidden');
+        
+        // Анимация если счетчик увеличился
+        if (count > lastUnreadCount) {
+            bellIcon.classList.add('notif-bell-shake');
+            setTimeout(() => bellIcon.classList.remove('notif-bell-shake'), 500);
+            
+            // Показываем всплывающее уведомление для самого нового
+            if (list.length > 0) {
+                const newest = list[0];
+                const tmp = document.createElement("DIV");
+                tmp.innerHTML = newest.text;
+                const plainText = tmp.textContent || tmp.innerText || "";
+                showToast(`🔔 ${plainText.substring(0, 50)}${plainText.length>50?'...':''}`);
+            }
+        }
+    } else {
+        badge.classList.add('hidden');
+    }
+    
+    lastUnreadCount = count;
+
+    // Рендер списка
+    if (list.length === 0) {
+        const noText = (typeof I18N !== 'undefined' && I18N.web_no_notifications) ? I18N.web_no_notifications : "No notifications";
+        listContainer.innerHTML = `<div class="p-4 text-center text-gray-500 text-sm">${noText}</div>`;
+    } else {
+        listContainer.innerHTML = list.map(n => {
+            const date = new Date(n.time * 1000);
+            const timeStr = date.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+            return `
+            <div class="notif-item">
+                <div class="text-sm text-gray-800 dark:text-gray-200 leading-snug">${n.text}</div>
+                <div class="notif-time flex items-center gap-1">
+                    <span>${timeStr}</span>
+                    <span class="w-1 h-1 rounded-full bg-gray-300 dark:bg-gray-600"></span>
+                    <span class="uppercase text-[9px] font-bold tracking-wider opacity-70">${n.type}</span>
+                </div>
+            </div>
+            `;
+        }).join('');
+    }
+}
+
+function toggleNotifications() {
+    const dropdown = document.getElementById('notifDropdown');
+    const badge = document.getElementById('notifBadge');
+    
+    if (dropdown.classList.contains('show')) {
+        closeNotifications();
+    } else {
+        dropdown.classList.remove('hidden');
+        setTimeout(() => dropdown.classList.add('show'), 10);
+        
+        // Отмечаем как прочитанное через 3 секунды
+        if (lastUnreadCount > 0) {
+            setTimeout(async () => {
+                try {
+                    await fetch('/api/notifications/read', { method: 'POST' });
+                    badge.classList.add('hidden'); 
+                    lastUnreadCount = 0;
+                } catch(e) { console.error(e); }
+            }, 3000);
+        }
+    }
+}
+
+function closeNotifications() {
+    const dropdown = document.getElementById('notifDropdown');
+    dropdown.classList.remove('show');
+    setTimeout(() => dropdown.classList.add('hidden'), 200);
+}
