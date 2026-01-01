@@ -154,7 +154,14 @@ function renderAgentChart(history) {
 function formatSpeed(v) { return v >= 1024 * 1024 ? (v / 1048576).toFixed(2) + ' Gbps' : (v >= 1024 ? (v / 1024).toFixed(2) + ' Mbps' : v.toFixed(2) + ' Kbps'); }
 
 function formatBytes(b) {
-    const s = ['B', 'KB', 'MB', 'GB', 'TB'];
+    const s = [
+        (typeof I18N !== 'undefined' && I18N.unit_bytes) ? I18N.unit_bytes : 'B',
+        (typeof I18N !== 'undefined' && I18N.unit_kb) ? I18N.unit_kb : 'KB',
+        (typeof I18N !== 'undefined' && I18N.unit_mb) ? I18N.unit_mb : 'MB',
+        (typeof I18N !== 'undefined' && I18N.unit_gb) ? I18N.unit_gb : 'GB',
+        (typeof I18N !== 'undefined' && I18N.unit_tb) ? I18N.unit_tb : 'TB',
+        (typeof I18N !== 'undefined' && I18N.unit_pb) ? I18N.unit_pb : 'PB'
+    ];
     if (!+b) return '0 ' + s[0];
     const i = Math.floor(Math.log(b) / Math.log(1024));
     return `${parseFloat((b / Math.pow(1024, i)).toFixed(2))} ${s[i]}`;
@@ -162,9 +169,20 @@ function formatBytes(b) {
 
 function formatUptime(bt) {
     if (!bt) return "...";
-    const d = Math.floor((Date.now() / 1000 - bt) / 86400);
-    const h = Math.floor(((Date.now() / 1000 - bt) % 86400) / 3600);
-    return d > 0 ? `${d}d ${h}h` : `${h}h`;
+    const now = Date.now() / 1000;
+    const seconds = Math.floor(now - bt);
+    
+    const d = Math.floor(seconds / 86400);
+    const h = Math.floor((seconds % 86400) / 3600);
+    const m = Math.floor((seconds % 3600) / 60);
+
+    const unitD = (typeof I18N !== 'undefined' && I18N.web_time_d) ? I18N.web_time_d : 'd';
+    const unitH = (typeof I18N !== 'undefined' && I18N.web_time_h) ? I18N.web_time_h : 'h';
+    const unitM = (typeof I18N !== 'undefined' && I18N.web_time_m) ? I18N.web_time_m : 'm';
+
+    if (d > 0) return `${d}${unitD} ${h}${unitH}`;
+    if (h > 0) return `${h}${unitH} ${m}${unitM}`;
+    return `${m}${unitM}`;
 }
 
 async function openNodeDetails(token, color) {
