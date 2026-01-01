@@ -330,9 +330,9 @@ async def nodes_monitor(bot: Bot):
                             metric, {"active": False, "last_time": 0})
                         updated = False
                         if current >= threshold:
-                            if not state["active"] or (
-                                    now - state["last_time"] > config.RESOURCE_ALERT_COOLDOWN):
-                                await send_alert(bot, lambda lang: _(key_high, lang, name=name, usage=current, threshold=threshold), "resources")
+                            if not state["active"] or (now - state["last_time"] > config.RESOURCE_ALERT_COOLDOWN):
+                                    p_info = stats.get(f"process_{metric}", "n/a")
+                                await send_alert(bot, lambda lang: _(key_high, lang, name=name, usage=current, threshold=threshold, processes=p_info), "resources")
                                 state["active"] = True
                                 state["last_time"] = now
                                 updated = True
