@@ -28,7 +28,7 @@ from .utils import get_country_flag, save_alerts_config, get_host_path
 from .auth import save_users, get_user_name
 from .keyboards import BTN_CONFIG_MAP
 from modules import update as update_module
-from . import shared_state 
+from . import shared_state
 
 COOKIE_NAME = "vps_agent_session"
 LOGIN_TOKEN_TTL = 300
@@ -253,13 +253,14 @@ async def handle_dashboard(request):
         "{web_node_cmd}": _("web_node_cmd", lang),
         "{web_version}": CACHE_VER,
         "{web_notifications_title}": _("web_notifications_title", lang),
+        "{web_clear_notifications}": _("web_clear_notifications", lang), # <-- ДОБАВЛЕНО
     }
     
     for k, v in replacements.items(): html = html.replace(k, v)
     i18n_data = {
         "web_cpu": _("web_cpu", lang), "web_ram": _("web_ram", lang), "web_no_nodes": _("web_no_nodes", lang), "web_loading": _("web_loading", lang), "web_access_denied": _("web_access_denied", lang), "web_error": _("web_error", lang, error=""), "web_conn_error": _("web_conn_error", lang, error=""), "web_log_empty": _("web_log_empty", lang), "modal_title_alert": _("modal_title_alert", lang), "modal_title_confirm": _("modal_title_confirm", lang), "modal_title_prompt": _("modal_title_prompt", lang), "modal_btn_ok": _("modal_btn_ok", lang), "modal_btn_cancel": _("modal_btn_cancel", lang), "web_copied": _("web_copied", lang), 
         "web_no_notifications": _("web_no_notifications", lang),
-        "web_clear_notifications": _("web_clear_notifications", lang) # NEW
+        "web_clear_notifications": _("web_clear_notifications", lang)
     }
     html = html.replace("{i18n_json}", json.dumps(i18n_data))
     return web.Response(text=html, content_type='text/html')
@@ -448,6 +449,7 @@ async def handle_settings_page(request):
         "{web_update_check_btn}": _("web_update_check_btn", lang),
         "{web_update_do_btn}": _("web_update_do_btn", lang),
         "{web_notifications_title}": _("web_notifications_title", lang),
+        "{web_clear_notifications}": _("web_clear_notifications", lang), # <-- ДОБАВЛЕНО
     }
     modified_html = html
     for k, v in replacements.items(): modified_html = modified_html.replace(k, v)
@@ -458,7 +460,7 @@ async def handle_settings_page(request):
         "web_clear_bot_confirm": _("web_clear_bot_confirm", lang), "web_clear_node_confirm": _("web_clear_node_confirm", lang), "web_clear_all_confirm": _("web_clear_all_confirm", lang), "web_logs_cleared_bot": _("web_logs_cleared_bot", lang), "web_logs_cleared_node": _("web_logs_cleared_node", lang), "web_logs_cleared_all": _("web_logs_cleared_all", lang), "modal_title_alert": _("modal_title_alert", lang), "modal_title_confirm": _("modal_title_confirm", lang), "modal_title_prompt": _("modal_title_prompt", lang), "modal_btn_ok": _("modal_btn_ok", lang), "modal_btn_cancel": _("modal_btn_cancel", lang), "web_kb_active": _("web_kb_active", lang), "web_kb_all_on_alert": _("web_kb_all_on_alert", lang), "web_kb_all_off_alert": _("web_kb_all_off_alert", lang), "web_no_nodes": _("web_no_nodes", lang), "web_copied": _("web_copied", lang), "web_kb_cat_monitoring": _("web_kb_cat_monitoring", lang), "web_kb_cat_security": _("web_kb_cat_security", lang), "web_kb_cat_management": _("web_kb_cat_management", lang), "web_kb_cat_system": _("web_kb_cat_system", lang), "web_kb_cat_tools": _("web_kb_cat_tools", lang),
         "web_update_checking": _("web_update_checking", lang), "web_update_available_title": _("web_update_available_title", lang), "web_update_info": _("web_update_info", lang), "web_update_uptodate": _("web_update_uptodate", lang), "web_update_started": _("web_update_started", lang), "web_update_error": _("web_update_error", lang),
         "web_no_notifications": _("web_no_notifications", lang),
-        "web_clear_notifications": _("web_clear_notifications", lang) # NEW
+        "web_clear_notifications": _("web_clear_notifications", lang)
     }
     for btn_key, conf_key in BTN_CONFIG_MAP.items(): i18n_data[f"lbl_{conf_key}"] = _(btn_key, lang)
     modified_html = modified_html.replace("{i18n_json}", json.dumps(i18n_data))
