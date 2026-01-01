@@ -343,7 +343,9 @@ STRINGS = {
         # --- WEB INTERFACE ---
         "web_title": "Web-агент Бота",
         "web_dashboard_title": "Панель управления",
-        "web_agent_stats_title": "Мониторинг (Агент)",
+        "web_agent_stats_title": "Сетевая активность",
+        "web_logs_btn_bot": "Логи Бота",
+        "web_logs_btn_sys": "Логи VPS",
         "web_stats_total": "Всего Нод",
         "web_stats_active": "Активные Ноды",
         "web_footer_endpoint": "Эндпоинт",
@@ -821,7 +823,9 @@ STRINGS = {
         # --- WEB INTERFACE ---
         "web_title": "Bot Web-agent",
         "web_dashboard_title": "Dashboard",
-        "web_agent_stats_title": "Monitoring (Agent)",
+        "web_agent_stats_title": "Network Activity",
+        "web_logs_btn_bot": "Bot Logs",
+        "web_logs_btn_sys": "VPS Logs",
         "web_stats_total": "Total Nodes",
         "web_stats_active": "Active Nodes",
         "web_footer_endpoint": "Endpoint",

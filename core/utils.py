@@ -274,3 +274,16 @@ async def initial_reboot_check(bot: Bot):
         finally:
             if os.path.exists(REBOOT_FLAG_FILE):
                 os.remove(REBOOT_FLAG_FILE)
+
+def get_app_version() -> str:
+    try:
+        changelog_path = os.path.join(config.BASE_DIR, "CHANGELOG.md")
+        if os.path.exists(changelog_path):
+            with open(changelog_path, "r", encoding="utf-8") as f:
+                content = f.read()
+                match = re.search(r"## \[(\d+\.\d+\.\d+)\]", content)
+                if match:
+                    return f"v{match.group(1)}"
+    except Exception:
+        pass
+    return "v1.0.0"

@@ -43,8 +43,8 @@ async function fetchNodesList() {
         const total = data.nodes.length;
         const activeCount = data.nodes.filter(n => n.status === 'online').length;
         
-        const totalEl = document.getElementById('statTotalNodes');
-        const activeEl = document.getElementById('statActiveNodes');
+        const totalEl = document.getElementById('nodesTotal');
+        const activeEl = document.getElementById('nodesActive');
         if (totalEl) totalEl.innerText = total;
         if (activeEl) activeEl.innerText = activeCount;
 
@@ -69,7 +69,7 @@ async function fetchNodesList() {
 }
 
 function renderNodesGrid(nodes) {
-    const container = document.getElementById('nodesGrid');
+    const container = document.getElementById('nodesList');
     if (!container) return;
     
     if (nodes.length === 0) {
@@ -96,28 +96,14 @@ function renderNodesGrid(nodes) {
         }
 
         return `
-        <div class="bg-white/60 dark:bg-white/5 hover:shadow-md dark:hover:bg-white/10 transition duration-200 rounded-xl p-4 border border-white/40 dark:border-white/10 cursor-pointer shadow-sm backdrop-blur-md" onclick="openNodeDetails('${escapeHtml(node.token)}', '${dotColor}')">
-            <div class="flex justify-between items-start">
-                <div>
-                    <div class="font-bold text-gray-800 dark:text-gray-200">${escapeHtml(node.name)}</div>
-                    <div class="text-[10px] font-mono text-gray-500 mt-1">${escapeHtml(node.token.substring(0, 8))}...</div>
-                </div>
-                <div class="px-2 py-1 rounded text-[10px] font-bold ${statusColor} ${bgClass}">${statusText}</div>
+        <div class="bg-gray-50 dark:bg-white/5 hover:bg-gray-100 dark:hover:bg-white/10 transition duration-200 rounded-xl p-3 border border-gray-100 dark:border-white/5 cursor-pointer shadow-sm backdrop-blur-md flex justify-between items-center" onclick="openNodeDetails('${escapeHtml(node.token)}', '${dotColor}')">
+            <div>
+                <div class="font-bold text-sm text-gray-800 dark:text-gray-200">${escapeHtml(node.name)}</div>
+                <div class="text-[10px] font-mono text-gray-400 mt-0.5">${escapeHtml(node.ip)}</div>
             </div>
-            
-            <div class="mt-4 pt-4 border-t border-gray-200/50 dark:border-white/5 grid grid-cols-3 gap-2">
-                <div class="bg-gray-100/50 dark:bg-white/5 rounded-lg p-2 text-center border border-gray-200 dark:border-white/5">
-                    <div class="text-[10px] text-gray-500 uppercase font-bold">${I18N.web_cpu}</div>
-                    <div class="text-sm font-bold text-gray-900 dark:text-white">${Math.round(node.cpu)}%</div>
-                </div>
-                <div class="bg-gray-100/50 dark:bg-white/5 rounded-lg p-2 text-center border border-gray-200 dark:border-white/5">
-                    <div class="text-[10px] text-gray-500 uppercase font-bold">${I18N.web_ram}</div>
-                    <div class="text-sm font-bold text-gray-900 dark:text-white">${Math.round(node.ram)}%</div>
-                </div>
-                <div class="bg-gray-100/50 dark:bg-white/5 rounded-lg p-2 text-center border border-gray-200 dark:border-white/5">
-                    <div class="text-[10px] text-gray-500 uppercase font-bold">IP</div>
-                    <div class="text-xs font-bold text-gray-900 dark:text-white truncate" title="${escapeHtml(node.ip)}">${escapeHtml(node.ip)}</div>
-                </div>
+            <div class="flex flex-col items-end gap-1">
+                 <div class="px-1.5 py-0.5 rounded text-[9px] font-bold ${statusColor} ${bgClass}">${statusText}</div>
+                 <div class="text-[10px] text-gray-400">CPU: ${Math.round(node.cpu)}% | RAM: ${Math.round(node.ram)}%</div>
             </div>
         </div>
         `;
@@ -125,7 +111,7 @@ function renderNodesGrid(nodes) {
 
     if (container.innerHTML !== html) {
         container.innerHTML = html;
-        if (window.parsePageEmojis) window.parsePageEmojis(); // Функция из common.js (если доступна)
+        if (window.parsePageEmojis) window.parsePageEmojis(); 
     }
 }
 
@@ -135,21 +121,21 @@ async function fetchAgentStats() {
         const data = await response.json();
         
         if(data.stats) {
-            document.getElementById('agentCpu').innerText = Math.round(data.stats.cpu) + "%";
-            document.getElementById('agentRam').innerText = Math.round(data.stats.ram) + "%";
-            document.getElementById('agentDisk').innerText = Math.round(data.stats.disk) + "%";
-            document.getElementById('agentIp').innerText = data.stats.ip || "Unknown";
+            document.getElementById('stat_cpu').innerText = Math.round(data.stats.cpu) + "%";
+            document.getElementById('stat_ram').innerText = Math.round(data.stats.ram) + "%";
+            document.getElementById('stat_disk').innerText = Math.round(data.stats.disk) + "%";
             
-            if (document.getElementById('trafficRxTotal')) {
-                document.getElementById('trafficRxTotal').innerText = formatBytes(data.stats.net_recv);
-                document.getElementById('trafficTxTotal').innerText = formatBytes(data.stats.net_sent);
+            document.getElementById('prog_cpu').style.width = data.stats.cpu + "%";
+            document.getElementById('prog_ram').style.width = data.stats.ram + "%";
+            document.getElementById('prog_disk').style.width = data.stats.disk + "%";
+            
+            if (document.getElementById('stat_net_recv')) {
+                document.getElementById('stat_net_recv').innerText = formatBytes(data.stats.net_recv);
+                document.getElementById('stat_net_sent').innerText = formatBytes(data.stats.net_sent);
                 
                 const uptimeStr = formatUptime(data.stats.boot_time);
-                const uptimeEl = document.getElementById('agentUptime');
-                const uptimeMobileEl = document.getElementById('agentUptimeMobile');
-                
+                const uptimeEl = document.getElementById('stat_uptime');
                 if(uptimeEl) uptimeEl.innerText = uptimeStr;
-                if(uptimeMobileEl) uptimeMobileEl.innerText = uptimeStr;
             }
         }
         renderAgentChart(data.history);
@@ -202,7 +188,7 @@ function renderAgentChart(history) {
     }
     
     const labelsSl = labels.slice(1);
-    const ctx = document.getElementById('chartAgent').getContext('2d');
+    const ctx = document.getElementById('agentChart').getContext('2d');
     const isDark = document.documentElement.classList.contains('dark');
     const gridColor = isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.05)';
     const tickColor = isDark ? '#9ca3af' : '#6b7280';
@@ -454,7 +440,7 @@ function openLogsModal() {
     modal.classList.remove('hidden');
     modal.classList.add('flex');
     document.body.style.overflow = 'hidden';
-    fetchLogs();
+    loadLogs('bot'); // Default
 }
 
 function closeLogsModal() {
@@ -464,35 +450,52 @@ function closeLogsModal() {
     document.body.style.overflow = 'auto';
 }
 
-async function fetchLogs() {
-    const contentDiv = document.getElementById('logsContent');
-    contentDiv.innerHTML = `<div class="flex items-center justify-center h-full text-gray-500"><span class="animate-pulse">${I18N.web_loading}</span></div>`;
+async function loadLogs(type = 'bot') {
+    const container = document.getElementById('logsContainer');
+    if (!container) return;
+    
+    container.innerHTML = `<div class="flex items-center justify-center h-full text-gray-500"><span class="animate-pulse">${I18N.web_loading || "Loading..."}</span></div>`;
+    
+    let url = '/api/logs'; // По умолчанию логи бота
+    if (type === 'sys') {
+        url = '/api/logs/system';
+    }
+
     try {
-        const response = await fetch('/api/logs');
+        const response = await fetch(url);
+        
         if (response.status === 403) {
-            contentDiv.innerHTML = `<div class="text-red-400 text-center">${I18N.web_access_denied}</div>`;
+            container.innerHTML = `<div class="text-red-400 text-center mt-10">${I18N.web_access_denied}</div>`;
             return;
         }
+        
         const data = await response.json();
+        
         if (data.error) {
-            contentDiv.innerHTML = `<div class="text-red-400">${I18N.web_error.replace('{error}', data.error)}</div>`;
+            container.innerHTML = `<div class="text-red-400 p-4 text-xs font-mono">${data.error}</div>`;
         } else {
-            const coloredLogs = data.logs.map(line => {
+            const logs = data.logs || [];
+            if (logs.length === 0) {
+                container.innerHTML = `<div class="text-gray-600 text-center mt-10">${I18N.web_log_empty}</div>`;
+                return;
+            }
+
+            const coloredLogs = logs.map(line => {
                 let cls = "text-gray-500 dark:text-gray-400";
                 if (line.includes("INFO")) cls = "text-blue-600 dark:text-blue-300";
                 if (line.includes("WARNING")) cls = "text-yellow-600 dark:text-yellow-300";
-                if (line.includes("ERROR") || line.includes("CRITICAL") || line.includes("Traceback")) cls = "text-red-600 dark:text-red-400 font-bold";
+                if (line.includes("ERROR") || line.includes("CRITICAL") || line.includes("Traceback") || line.includes("FAILED")) cls = "text-red-600 dark:text-red-400 font-bold";
+                
+                // Экранирование
                 const safeLine = line.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-                return `<div class="${cls} hover:bg-gray-100 dark:hover:bg-white/5 px-1 rounded">${safeLine}</div>`;
+                return `<div class="${cls} hover:bg-gray-100 dark:hover:bg-white/5 px-1 rounded transition">${safeLine}</div>`;
             }).join('');
-            contentDiv.innerHTML = coloredLogs || `<div class="text-gray-600 text-center">${I18N.web_log_empty}</div>`;
             
-            if (typeof window.parsePageEmojis === 'function') window.parsePageEmojis();
-            
-            contentDiv.scrollTop = contentDiv.scrollHeight;
+            container.innerHTML = coloredLogs;
+            container.scrollTop = container.scrollHeight;
         }
     } catch (e) {
-        contentDiv.innerHTML = `<div class="text-red-400">${I18N.web_conn_error.replace('{error}', e)}</div>`;
+        container.innerHTML = `<div class="text-red-400 text-center mt-10">${I18N.web_conn_error.replace('{error}', e)}</div>`;
     }
 }
 

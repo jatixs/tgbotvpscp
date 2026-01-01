@@ -5,6 +5,7 @@ import json
 import secrets
 import asyncio
 import hashlib
+import subprocess
 from argon2 import PasswordHasher, exceptions as argon2_exceptions
 import hmac
 import requests
@@ -18,13 +19,13 @@ from .config import (
     WEB_SERVER_HOST, WEB_SERVER_PORT, NODE_OFFLINE_TIMEOUT, BASE_DIR,
     ADMIN_USER_ID, ENABLE_WEB_UI, save_system_config, BOT_LOG_DIR,
     WATCHDOG_LOG_DIR, NODE_LOG_DIR, WEB_AUTH_FILE, ADMIN_USERNAME, TOKEN,
-    save_keyboard_config, KEYBOARD_CONFIG
+    save_keyboard_config, KEYBOARD_CONFIG, DEPLOY_MODE
 )
 from . import config as current_config
 from .shared_state import NODE_TRAFFIC_MONITORS, ALLOWED_USERS, USER_NAMES, AUTH_TOKENS, ALERTS_CONFIG, AGENT_HISTORY, WEB_NOTIFICATIONS
 from .i18n import STRINGS, get_user_lang, set_user_lang, get_text as _
 from .config import DEFAULT_LANGUAGE
-from .utils import get_country_flag, save_alerts_config, get_host_path
+from .utils import get_country_flag, save_alerts_config, get_host_path, get_app_version
 from .auth import save_users, get_user_name
 from .keyboards import BTN_CONFIG_MAP
 from modules import update as update_module
@@ -46,6 +47,7 @@ MAX_LOGIN_ATTEMPTS = 5
 LOGIN_BLOCK_TIME = 300
 BOT_USERNAME_CACHE = None
 
+APP_VERSION = get_app_version()
 CACHE_VER = str(int(time.time()))
 AGENT_TASK = None
 
@@ -145,7 +147,34 @@ async def handle_get_logs(request):
         return web.json_response({"logs": lines})
     except Exception as e: return web.json_response({"error": str(e)}, status=500)
 
-# --- NOTIFICATION APIs ---
+async def handle_get_sys_logs(request):
+    user = get_current_user(request)
+    if not user or user['role'] != 'admins': 
+        return web.json_response({"error": "Unauthorized"}, status=403)
+    
+    try:
+        cmd = ["journalctl", "-n", "100", "--no-pager"]
+        
+        if DEPLOY_MODE == "docker" and current_config.INSTALL_MODE == "root":
+             if os.path.exists("/host/usr/bin/journalctl"):
+                cmd = ["chroot", "/host", "/usr/bin/journalctl", "-n", "100", "--no-pager"]
+        
+        proc = await asyncio.create_subprocess_exec(
+            *cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE
+        )
+        stdout, stderr = await proc.communicate()
+        
+        if proc.returncode == 0:
+            logs = stdout.decode('utf-8', errors='ignore').strip().split('\n')
+            return web.json_response({"logs": logs})
+        else:
+            return web.json_response({"error": f"Error reading logs: {stderr.decode()}"})
+            
+    except Exception as e:
+        return web.json_response({"error": str(e)}, status=500)
+
 async def api_get_notifications(request):
     user = get_current_user(request)
     if not user: return web.json_response({"error": "Unauthorized"}, status=401)
@@ -163,7 +192,6 @@ async def api_clear_notifications(request):
     WEB_NOTIFICATIONS.clear()
     shared_state.WEB_UNREAD_COUNT = 0
     return web.json_response({"status": "ok"})
-# -------------------------
 
 async def api_check_update(request):
     user = get_current_user(request)
@@ -198,67 +226,69 @@ async def handle_dashboard(request):
     role_color = "green" if role == "admins" else "gray"
     role_badge = f'<span class="px-2 py-0.5 rounded text-[10px] border border-{role_color}-500/30 bg-{role_color}-100 dark:bg-{role_color}-500/20 text-{role_color}-600 dark:text-{role_color}-400 uppercase font-bold">{role}</span>'
     
+    node_action_btn = ""
     if user_id == ADMIN_USER_ID:
-        node_action_btn = f"""<button onclick="openAddNodeModal()" class="inline-flex items-center gap-1.5 py-1 px-2 rounded-lg bg-purple-50 dark:bg-white/5 border border-purple-100 dark:border-white/5 text-[10px] text-purple-600 dark:text-purple-300 font-medium transition hover:bg-purple-100 dark:hover:bg-white/10 cursor-pointer"><svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path></svg>{_("web_add_user_btn", lang)}</button>"""
-    else:
-        node_action_btn = f"""<button onclick="location.reload()" class="inline-flex items-center gap-1.5 py-1 px-2 rounded-lg bg-purple-50 dark:bg-white/5 border border-purple-100 dark:border-white/5 text-[10px] text-purple-600 dark:text-purple-300 font-medium transition hover:bg-purple-100 dark:hover:bg-white/10 cursor-pointer"><svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>{_("web_refresh", lang)}</button>"""
-
-    admin_controls_html = ""
-    if role == "admins":
-        admin_controls_html = f"""<div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-6"><a href="/settings" class="flex items-center justify-center gap-2 p-4 bg-white/60 dark:bg-white/5 border border-white/40 dark:border-white/10 rounded-xl hover:bg-white/80 dark:hover:bg-white/10 transition group shadow-sm hover:shadow-md backdrop-blur-md"><div class="p-2 bg-blue-100 dark:bg-blue-500/20 rounded-lg text-blue-600 dark:text-blue-400 group-hover:scale-110 transition"><svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" /></svg></div><span class="font-bold text-gray-700 dark:text-gray-200">{_("web_settings_button", lang)}</span></a><button onclick="openLogsModal()" class="flex items-center justify-center gap-2 p-4 bg-white/60 dark:bg-white/5 border border-white/40 dark:border-white/10 rounded-xl hover:bg-white/80 dark:hover:bg-white/10 transition group shadow-sm hover:shadow-md backdrop-blur-md"><div class="p-2 bg-yellow-100 dark:bg-yellow-500/20 rounded-lg text-yellow-600 dark:text-yellow-400 group-hover:scale-110 transition"><svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg></div><span class="font-bold text-gray-700 dark:text-gray-200">{_("web_logs_button", lang)}</span></button></div>"""
+        node_action_btn = f"""<button onclick="openAddNodeModal()" class="inline-flex items-center gap-1.5 py-1.5 px-3 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold transition shadow-lg shadow-blue-500/20"><svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path></svg>{_("web_add_node_section", lang)}</button>"""
 
     replacements = {
-        "{web_title}": f"{_('web_dashboard_title', lang)} - Web Bot",
-        "{web_dashboard_title}": _("web_dashboard_title", lang),
+        "{web_title}": f"{_('web_dashboard_title', lang)} - VPS Bot",
+        "{web_version}": APP_VERSION,
+        "{cache_ver}": CACHE_VER,
         "{role_badge}": role_badge,
         "{user_avatar}": _get_avatar_html(user),
         "{user_name}": user.get('first_name', 'User'),
         "{nodes_count}": str(nodes_count),
         "{active_nodes}": str(active_nodes),
         "{web_agent_stats_title}": _("web_agent_stats_title", lang),
-        "{web_uptime}": _("web_uptime", lang),
-        "{web_cpu}": _("web_cpu", lang),
-        "{web_ram}": _("web_ram", lang),
-        "{web_disk}": _("web_disk", lang),
         "{web_traffic_total}": _("web_traffic_total", lang),
+        "{web_uptime}": _("web_uptime", lang),
+        "{web_cpu}": "CPU",
+        "{web_ram}": "RAM",
+        "{web_disk}": "DISK",
+        "{web_rx}": _("web_rx", lang),
+        "{web_tx}": _("web_tx", lang),
         "{web_node_mgmt_title}": _("web_node_mgmt_title", lang),
-        "{web_nodes_loading}": _("web_nodes_loading", lang),
-        "{admin_controls_html}": admin_controls_html,
-        "{web_node_details_title}": _("web_node_details_title", lang),
-        "{web_token_label}": _("web_token_label", lang),
-        "{web_copied}": _("web_copied", lang),
-        "{web_resources_chart}": _("web_resources_chart", lang),
-        "{web_network_chart}": _("web_network_chart", lang),
         "{web_logs_title}": _("web_logs_title", lang),
-        "{web_refresh}": _("web_refresh", lang),
-        "{web_loading}": _("web_loading", lang),
         "{web_logs_footer}": _("web_logs_footer", lang),
-        "{web_stats_total}": _("web_stats_total", lang),
-        "{web_stats_active}": _("web_stats_active", lang),
+        "{web_loading}": _("web_loading", lang),
+        "{web_nodes_loading}": _("web_nodes_loading", lang),
+        "{web_footer_powered}": _("web_footer_powered", lang),
+        "{web_logs_btn_bot}": _("web_logs_btn_bot", lang),
+        "{web_logs_btn_sys}": _("web_logs_btn_sys", lang),
         "{node_action_btn}": node_action_btn,
         "{web_hint_cpu_usage}": _("web_hint_cpu_usage", lang),
         "{web_hint_ram_usage}": _("web_hint_ram_usage", lang),
         "{web_hint_disk_usage}": _("web_hint_disk_usage", lang),
         "{web_hint_traffic_in}": _("web_hint_traffic_in", lang),
         "{web_hint_traffic_out}": _("web_hint_traffic_out", lang),
-        "{web_hint_cpu_threshold}": _("web_hint_cpu_threshold", lang),
-        "{web_hint_ram_threshold}": _("web_hint_ram_threshold", lang),
-        "{web_hint_disk_threshold}": _("web_hint_disk_threshold", lang),
-        "{web_hint_traffic_interval}": _("web_hint_traffic_interval", lang),
-        "{web_hint_node_timeout}": _("web_hint_node_timeout", lang),
         "{web_add_node_section}": _("web_add_node_section", lang),
         "{web_node_name_placeholder}": _("web_node_name_placeholder", lang),
         "{web_create_btn}": _("web_create_btn", lang),
         "{web_node_token}": _("web_node_token", lang),
         "{web_node_cmd}": _("web_node_cmd", lang),
-        "{web_version}": CACHE_VER,
+        "{web_copied}": _("web_copied", lang),
+        "{web_resources_chart}": _("web_resources_chart", lang),
+        "{web_network_chart}": _("web_network_chart", lang),
+        "{web_token_label}": _("web_token_label", lang),
+        "{web_stats_total}": _("web_stats_total", lang),
+        "{web_stats_active}": _("web_stats_active", lang),
         "{web_notifications_title}": _("web_notifications_title", lang),
-        "{web_clear_notifications}": _("web_clear_notifications", lang), # <-- ДОБАВЛЕНО
+        "{web_clear_notifications}": _("web_clear_notifications", lang),
     }
     
-    for k, v in replacements.items(): html = html.replace(k, v)
+    for k, v in replacements.items(): 
+        html = html.replace(k, str(v))
+        
     i18n_data = {
-        "web_cpu": _("web_cpu", lang), "web_ram": _("web_ram", lang), "web_no_nodes": _("web_no_nodes", lang), "web_loading": _("web_loading", lang), "web_access_denied": _("web_access_denied", lang), "web_error": _("web_error", lang, error=""), "web_conn_error": _("web_conn_error", lang, error=""), "web_log_empty": _("web_log_empty", lang), "modal_title_alert": _("modal_title_alert", lang), "modal_title_confirm": _("modal_title_confirm", lang), "modal_title_prompt": _("modal_title_prompt", lang), "modal_btn_ok": _("modal_btn_ok", lang), "modal_btn_cancel": _("modal_btn_cancel", lang), "web_copied": _("web_copied", lang), 
+        "web_cpu": _("web_cpu", lang), 
+        "web_ram": _("web_ram", lang), 
+        "web_no_nodes": _("web_no_nodes", lang),
+        "web_loading": _("web_loading", lang),
+        "web_error": _("web_error", lang, error=""),
+        "web_conn_error": _("web_conn_error", lang, error=""),
+        "web_log_empty": _("web_log_empty", lang),
+        "web_access_denied": _("web_access_denied", lang),
+        "web_copied": _("web_copied", lang),
         "web_no_notifications": _("web_no_notifications", lang),
         "web_clear_notifications": _("web_clear_notifications", lang)
     }
@@ -449,7 +479,7 @@ async def handle_settings_page(request):
         "{web_update_check_btn}": _("web_update_check_btn", lang),
         "{web_update_do_btn}": _("web_update_do_btn", lang),
         "{web_notifications_title}": _("web_notifications_title", lang),
-        "{web_clear_notifications}": _("web_clear_notifications", lang), # <-- ДОБАВЛЕНО
+        "{web_clear_notifications}": _("web_clear_notifications", lang),
     }
     modified_html = html
     for k, v in replacements.items(): modified_html = modified_html.replace(k, v)
@@ -767,6 +797,7 @@ async def start_web_server(bot_instance: Bot):
         app.router.add_get('/api/agent/stats', handle_agent_stats)
         app.router.add_get('/api/nodes/list', handle_nodes_list_json)
         app.router.add_get('/api/logs', handle_get_logs)
+        app.router.add_get('/api/logs/system', handle_get_sys_logs)
         app.router.add_post('/api/settings/save', handle_save_notifications)
         app.router.add_post('/api/settings/language', handle_set_language)
         app.router.add_post('/api/settings/system', handle_save_system_config)
