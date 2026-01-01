@@ -144,7 +144,8 @@ async def check_bot_update(callback: types.CallbackQuery):
 
         # 3. Ищем самую свежую release ветку в origin
         proc_branches = await asyncio.create_subprocess_shell("git branch -r", stdout=asyncio.subprocess.PIPE)
-        out_branches, _ = await proc_branches.communicate()
+        # ИСПОЛЬЗУЕМ dummy_ ВМЕСТО _ ЧТОБЫ НЕ ПЕРЕКРЫТЬ ФУНКЦИЮ ПЕРЕВОДА
+        out_branches, dummy_ = await proc_branches.communicate()
         branches_list = out_branches.decode().strip().split('\n')
 
         latest_ver_str = local_ver_str
@@ -179,7 +180,8 @@ async def check_bot_update(callback: types.CallbackQuery):
             # git show origin/release/1.14.0:CHANGELOG.md
             proc_cl = await asyncio.create_subprocess_shell(f"git show {target_branch}:CHANGELOG.md",
                                                             stdout=asyncio.subprocess.PIPE)
-            out_cl, _ = await proc_cl.communicate()
+            # ИСПОЛЬЗУЕМ dummy_ ВМЕСТО _
+            out_cl, dummy_ = await proc_cl.communicate()
             remote_changelog_content = out_cl.decode('utf-8', errors='ignore')
 
             # Извлекаем секцию
