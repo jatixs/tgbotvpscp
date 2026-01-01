@@ -27,6 +27,61 @@ function parsePageEmojis() {
     }
 }
 
+// --- ПЕРЕКЛЮЧАТЕЛЬ ЯЗЫКА (ИСПРАВЛЕНО) ---
+async function setLanguage(lang) {
+    try {
+        const response = await fetch('/api/settings/language', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ lang: lang })
+        });
+        if (response.ok) {
+            window.location.reload(); 
+        } else {
+            console.error("Failed to set language");
+        }
+    } catch (e) {
+        console.error("Language switch error:", e);
+    }
+}
+window.setLanguage = setLanguage;
+
+// --- КОПИРОВАНИЕ ТОКЕНА (ИСПРАВЛЕНО) ---
+function copyToken(el) {
+    const tokenText = document.getElementById('modalToken').innerText;
+    if (!tokenText || tokenText === '...') return;
+
+    if (navigator.clipboard && window.isSecureContext) {
+        navigator.clipboard.writeText(tokenText).then(() => {
+            showCopyFeedback();
+        });
+    } else {
+        const textArea = document.createElement("textarea");
+        textArea.value = tokenText;
+        document.body.appendChild(textArea);
+        textArea.select();
+        try {
+            document.execCommand('copy');
+            showCopyFeedback();
+        } catch (err) {
+            console.error('Fallback copy failed', err);
+        }
+        document.body.removeChild(textArea);
+    }
+}
+
+function showCopyFeedback() {
+    const toast = document.getElementById('copyToast');
+    if (toast) {
+        toast.classList.replace('translate-y-full', 'translate-y-0');
+        setTimeout(() => {
+            toast.classList.replace('translate-y-0', 'translate-y-full');
+        }, 2000);
+    }
+    if (window.showToast) window.showToast(I18N.web_copied || "Скопировано!");
+}
+window.copyToken = copyToken;
+
 // --- ВСПЛЫВАЮЩИЕ УВЕДОМЛЕНИЯ (TOASTS) ---
 function initToasts() {
     if (!document.getElementById('toast-container')) {
@@ -201,11 +256,24 @@ async function pollNotifications() {
     } catch (e) {}
 }
 
+// --- УВЕДОМЛЕНИЯ: ОЧИСТИТЬ ВСЁ (ИСПРАВЛЕНО) ---
 async function clearNotifications(e) {
     if (e) e.stopPropagation();
-    const msg = (typeof I18N !== 'undefined' ? I18N.web_clear_notif_confirm : "Очистить все уведомления?");
-    if (!await window.showModalConfirm(msg, (typeof I18N !== 'undefined' ? I18N.modal_title_confirm : "Подтверждение"))) return;
-    try { await fetch('/api/notifications/clear', { method: 'POST' }); updateNotifUI([], 0); } catch (e) {}
+    
+    // Вызов модального окна подтверждения (как в настройках)
+    const msg = I18N.web_clear_notif_confirm || "Очистить все уведомления?";
+    const title = I18N.modal_title_confirm || "Подтверждение";
+    if (!await window.showModalConfirm(msg, title)) return;
+
+    try { 
+        const res = await fetch('/api/notifications/clear', { method: 'POST' }); 
+        if (res.ok) {
+            updateNotifUI([], 0); 
+            if (window.showToast) window.showToast(I18N.web_logs_cleared_alert || "Очищено!");
+        }
+    } catch (e) {
+        console.error("Clear notifications error:", e);
+    }
 }
 
 function updateNotifUI(list, count) {
