@@ -60,21 +60,15 @@ function copyToken(element) {
     const tokenEl = document.getElementById('modalToken');
     const tokenText = tokenEl ? tokenEl.innerText : '';
     if (!tokenText || tokenText === '...') return;
-    const showToast = () => {
-        const toast = document.getElementById('copyToast');
-        if (toast) {
-            toast.classList.remove('translate-y-full');
-            setTimeout(() => toast.classList.add('translate-y-full'), 2000);
-        }
-    };
+    // Используем новую систему тостов
     if (navigator.clipboard && window.isSecureContext) {
-        navigator.clipboard.writeText(tokenText).then(showToast).catch(() => fallbackCopyTextToClipboard(tokenText, showToast));
+        navigator.clipboard.writeText(tokenText).then(() => showToast(I18N.web_copied || "Copied!")).catch(() => fallbackCopyTextToClipboard(tokenText));
     } else {
-        fallbackCopyTextToClipboard(tokenText, showToast);
+        fallbackCopyTextToClipboard(tokenText);
     }
 }
 
-function fallbackCopyTextToClipboard(text, onSuccess) {
+function fallbackCopyTextToClipboard(text) {
     const textArea = document.createElement("textarea");
     textArea.value = text;
     textArea.style.position = "fixed";
@@ -82,7 +76,7 @@ function fallbackCopyTextToClipboard(text, onSuccess) {
     textArea.focus();
     textArea.select();
     try {
-        if (document.execCommand('copy') && onSuccess) onSuccess();
+        if (document.execCommand('copy')) showToast(I18N.web_copied || "Copied!");
     } catch (err) { console.error('Fallback error', err); }
     document.body.removeChild(textArea);
 }
@@ -214,14 +208,20 @@ window.showModalAlert = (message, title) => _showSystemModalBase(title || (typeo
 window.showModalConfirm = (message, title) => _showSystemModalBase(title || (typeof I18N !== 'undefined' ? I18N.modal_title_confirm : 'Confirm'), message, 'confirm');
 window.showModalPrompt = (message, title, placeholder = '') => _showSystemModalBase(title || (typeof I18N !== 'undefined' ? I18N.modal_title_prompt : 'Prompt'), message, 'prompt', placeholder);
 
-// --- NOTIFICATION SYSTEM (NEW) ---
-let lastUnreadCount = 0;
+// --- NOTIFICATION SYSTEM ---
+let lastUnreadCount = -1; // -1 = первая загрузка (не показывать тост)
 
 function initNotifications() {
     const btn = document.getElementById('notifBtn');
     if (!btn) return;
 
     btn.addEventListener('click', toggleNotifications);
+    
+    // Кнопка очистки
+    const clearBtn = document.getElementById('notifClearBtn');
+    if(clearBtn) {
+        clearBtn.addEventListener('click', clearNotifications);
+    }
     
     // Закрытие при клике вне области
     document.addEventListener('click', (e) => {
@@ -247,35 +247,53 @@ async function pollNotifications() {
     }
 }
 
+async function clearNotifications(e) {
+    e.stopPropagation();
+    if(!confirm(I18N.web_clear_logs_confirm || "Clear all?")) return;
+    
+    try {
+        await fetch('/api/notifications/clear', { method: 'POST' });
+        updateNotifUI([], 0);
+    } catch(e) { console.error(e); }
+}
+
 function updateNotifUI(list, count) {
     const badge = document.getElementById('notifBadge');
     const listContainer = document.getElementById('notifList');
     const bellIcon = document.querySelector('#notifBtn svg');
+    const clearBtn = document.getElementById('notifClearBtn');
     
     // Обновление бейджа
     if (count > 0) {
         badge.innerText = count > 99 ? '99+' : count;
         badge.classList.remove('hidden');
         
-        // Анимация если счетчик увеличился
-        if (count > lastUnreadCount) {
+        // Анимация и тост только если это НЕ первая загрузка и счетчик вырос
+        if (lastUnreadCount !== -1 && count > lastUnreadCount) {
             bellIcon.classList.add('notif-bell-shake');
             setTimeout(() => bellIcon.classList.remove('notif-bell-shake'), 500);
             
-            // Показываем всплывающее уведомление для самого нового
+            // Показываем тост только для самого нового
             if (list.length > 0) {
                 const newest = list[0];
                 const tmp = document.createElement("DIV");
                 tmp.innerHTML = newest.text;
                 const plainText = tmp.textContent || tmp.innerText || "";
-                showToast(`🔔 ${plainText.substring(0, 50)}${plainText.length>50?'...':''}`);
+                showToast(plainText);
             }
         }
     } else {
         badge.classList.add('hidden');
     }
     
+    // Обновляем состояние
     lastUnreadCount = count;
+
+    // Управление видимостью кнопки очистки
+    if(clearBtn) {
+        if(list.length > 0) clearBtn.classList.remove('hidden');
+        else clearBtn.classList.add('hidden');
+    }
 
     // Рендер списка
     if (list.length === 0) {
@@ -309,13 +327,13 @@ function toggleNotifications() {
         dropdown.classList.remove('hidden');
         setTimeout(() => dropdown.classList.add('show'), 10);
         
-        // Отмечаем как прочитанное через 3 секунды
+        // Сброс счетчика через 3 секунды
         if (lastUnreadCount > 0) {
             setTimeout(async () => {
                 try {
                     await fetch('/api/notifications/read', { method: 'POST' });
                     badge.classList.add('hidden'); 
-                    lastUnreadCount = 0;
+                    // Не сбрасываем lastUnreadCount в 0, чтобы избежать повторного тоста при следующем поллинге
                 } catch(e) { console.error(e); }
             }, 3000);
         }
@@ -326,4 +344,45 @@ function closeNotifications() {
     const dropdown = document.getElementById('notifDropdown');
     dropdown.classList.remove('show');
     setTimeout(() => dropdown.classList.add('hidden'), 200);
+}
+
+// --- НОВАЯ СИСТЕМА TOAST (Снизу справа + крестик) ---
+function showToast(message) {
+    let container = document.getElementById('toast-container');
+    if (!container) {
+        container = document.createElement('div');
+        container.id = 'toast-container';
+        document.body.appendChild(container);
+    }
+
+    const toast = document.createElement('div');
+    toast.className = 'toast-msg';
+    toast.innerHTML = `
+        <div class="p-1.5 rounded-full bg-blue-100 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400 flex-shrink-0">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+        </div>
+        <div class="text-sm font-medium leading-tight pt-0.5 break-words w-full">${message}</div>
+        <div class="toast-close" onclick="this.parentElement.remove()">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+        </div>
+    `;
+
+    container.appendChild(toast);
+
+    // Анимация
+    requestAnimationFrame(() => {
+        toast.classList.add('show');
+    });
+
+    // Автоскрытие через 5 сек
+    setTimeout(() => {
+        if (toast && toast.parentElement) {
+            toast.classList.remove('show');
+            setTimeout(() => toast.remove(), 400);
+        }
+    }, 5000);
 }

@@ -67,7 +67,7 @@ body, div, nav, main, button {
     transition-duration: 300ms;
 }
 
-/* --- NOTIFICATIONS --- */
+/* --- NOTIFICATIONS (MENU) --- */
 .notif-btn {
     position: relative;
     cursor: pointer;
@@ -158,4 +158,58 @@ body, div, nav, main, button {
     font-size: 0.7rem;
     color: #9ca3af;
     margin-top: 4px;
+}
+
+/* --- TOAST NOTIFICATIONS (BOTTOM RIGHT) --- */
+#toast-container {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    z-index: 200;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    pointer-events: none; /* Пропускаем клики сквозь контейнер */
+}
+
+.toast-msg {
+    pointer-events: auto; /* Возвращаем клики для самих тостов */
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 16px;
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(10px);
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+    border: 1px solid rgba(229, 231, 235, 0.5);
+    color: #1f2937;
+    max-width: 350px;
+    width: 100%;
+    transform: translateX(100%); /* Начальная позиция (справа) */
+    opacity: 0;
+    transition: all 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+}
+
+.dark .toast-msg {
+    background: rgba(31, 41, 55, 0.95);
+    border-color: rgba(255, 255, 255, 0.1);
+    color: #f3f4f6;
+}
+
+.toast-msg.show {
+    transform: translateX(0);
+    opacity: 1;
+}
+
+.toast-close {
+    cursor: pointer;
+    opacity: 0.5;
+    transition: opacity 0.2s;
+    margin-left: auto;
+    padding: 2px;
+}
+
+.toast-close:hover {
+    opacity: 1;
 }

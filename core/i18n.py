@@ -448,6 +448,7 @@ STRINGS = {
         "web_update_check_btn": "Проверить обновления",
         "web_no_notifications": "Уведомлений нет",
         "web_notifications_title": "Уведомления",
+        "web_clear_notifications": "Очистить все"
         # --- WEB: KEYBOARD SETTINGS ---
         "web_keyboard_title": "Клавиатура бота",
         "web_kb_desc": "Настройте видимость команд в меню бота.",
@@ -912,6 +913,7 @@ STRINGS = {
         "web_update_check_btn": "Check for Updates",
         "web_no_notifications": "No notifications",
         "web_notifications_title": "Notifications",
+        "web_clear_notifications": "Clear all",
         
         # --- WEB: KEYBOARD SETTINGS ---
         "web_keyboard_title": "Bot Keyboard",
