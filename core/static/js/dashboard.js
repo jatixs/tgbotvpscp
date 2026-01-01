@@ -5,6 +5,7 @@ let pollInterval = null;
 let agentChart = null;
 let agentPollInterval = null;
 let nodesPollInterval = null;
+let logPollInterval = null;
 
 window.addEventListener('themeChanged', () => {
     updateChartsColors();
@@ -21,6 +22,22 @@ document.addEventListener("DOMContentLoaded", () => {
     if (document.getElementById('nodesList')) {
         fetchNodesList();
         nodesPollInterval = setInterval(fetchNodesList, 3000);
+    }
+
+    // --- ИСПРАВЛЕНИЕ 1: Валидация модального окна добавления ноды ---
+    const inputDash = document.getElementById('newNodeNameDash');
+    if (inputDash) {
+        inputDash.addEventListener('input', validateNodeInput);
+        inputDash.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && !document.getElementById('btnAddNodeDash').disabled) {
+                addNodeDash();
+            }
+        });
+    }
+
+    // --- ИСПРАВЛЕНИЕ 2: Инициализация логов ---
+    if (document.getElementById('logsContainer')) {
+        switchLogType('bot');
     }
 });
 
@@ -65,16 +82,13 @@ function renderNodesList(nodes) {
     const html = nodes.map(node => {
         let statusColor = "bg-green-500";
         let statusText = "ONLINE";
-        let ringColor = "ring-green-500/20";
 
         if (node.status === 'restarting') {
             statusColor = "bg-yellow-500";
             statusText = "RESTARTING";
-            ringColor = "ring-yellow-500/20";
         } else if (node.status === 'offline') {
             statusColor = "bg-red-500";
             statusText = "OFFLINE";
-            ringColor = "ring-red-500/20";
         }
 
         return `
@@ -108,7 +122,6 @@ async function fetchAgentStats() {
         const data = await response.json();
         
         if(data.stats) {
-            // Update IDs matching the new template (stat_*)
             const cpuEl = document.getElementById('stat_cpu');
             if (cpuEl) cpuEl.innerText = Math.round(data.stats.cpu) + "%";
             
@@ -287,7 +300,6 @@ async function openNodeDetails(token, dotColorClass) {
     modal.classList.add('flex');
     document.body.style.overflow = 'hidden';
     
-    // Reset charts
     if (chartRes) { chartRes.destroy(); chartRes = null; }
     if (chartNet) { chartNet.destroy(); chartNet = null; }
 
@@ -309,8 +321,6 @@ async function fetchAndRender(token) {
         }
         document.getElementById('modalNodeName').innerText = data.name || 'Unknown';
         document.getElementById('modalNodeIp').innerText = data.ip || 'Unknown';
-        
-        // Render stats if needed...
         
         const tokenEl = document.getElementById('modalToken');
         if(tokenEl) tokenEl.innerText = data.token || token;
@@ -426,12 +436,46 @@ function renderCharts(history) {
     }
 }
 
+// --- ИСПРАВЛЕНИЕ 2: Функция переключения типов логов ---
+window.switchLogType = function(type) {
+    const btnBot = document.getElementById('btnLogBot');
+    const btnSys = document.getElementById('btnLogSys');
+    
+    // Классы для активного и неактивного состояния
+    const activeClasses = ['bg-white', 'dark:bg-gray-700', 'shadow-sm', 'text-gray-900', 'dark:text-white'];
+    const inactiveClasses = ['text-gray-500', 'dark:text-gray-400'];
+
+    if (btnBot && btnSys) {
+        if(type === 'bot') {
+            btnBot.classList.add(...activeClasses);
+            btnBot.classList.remove(...inactiveClasses);
+            
+            btnSys.classList.remove(...activeClasses);
+            btnSys.classList.add(...inactiveClasses);
+        } else {
+            btnSys.classList.add(...activeClasses);
+            btnSys.classList.remove(...inactiveClasses);
+            
+            btnBot.classList.remove(...activeClasses);
+            btnBot.classList.add(...inactiveClasses);
+        }
+    }
+
+    loadLogs(type);
+
+    if (logPollInterval) clearInterval(logPollInterval);
+    logPollInterval = setInterval(() => loadLogs(type), 5000);
+};
+
 async function loadLogs(type = 'bot') {
     const container = document.getElementById('logsContainer');
     if (!container) return;
     
-    container.innerHTML = `<div class="flex items-center justify-center h-full text-gray-500"><span class="animate-pulse">${I18N.web_loading || "Loading..."}</span></div>`;
-    
+    // Если это первый вызов и контейнер пуст или содержит "Загрузка", показываем спиннер, но осторожно, чтобы не мигать при поллинге
+    if (container.querySelector('.text-gray-500.italic') || container.innerText.includes(I18N.web_loading || "Loading")) {
+         container.innerHTML = `<div class="flex items-center justify-center h-full text-gray-500"><span class="animate-pulse">${I18N.web_loading || "Loading..."}</span></div>`;
+    }
+
     let url = '/api/logs';
     if (type === 'sys') {
         url = '/api/logs/system';
@@ -466,13 +510,18 @@ async function loadLogs(type = 'bot') {
                 return `<div class="${cls} hover:bg-gray-100 dark:hover:bg-white/5 px-1 rounded transition">${safeLine}</div>`;
             }).join('');
             
-            container.innerHTML = coloredLogs;
-            container.scrollTop = container.scrollHeight;
+            // Проверяем, был ли скролл внизу перед обновлением
+            const isScrolledToBottom = container.scrollHeight - container.scrollTop <= container.clientHeight + 50;
+
+            if (container.innerHTML !== coloredLogs) {
+                 container.innerHTML = coloredLogs;
+                 // Автопрокрутка только если пользователь был внизу
+                 if (isScrolledToBottom) {
+                     container.scrollTop = container.scrollHeight;
+                 }
+            }
         }
     } catch (e) {
         container.innerHTML = `<div class="text-red-400 text-center mt-10">${I18N.web_conn_error.replace('{error}', e)}</div>`;
     }
 }
-
-// ... (Остальной код модальных окон остался без изменений, так как он не зависит от IDs дашборда)
-// ... openAddNodeModal, closeAddNodeModal, validateNodeInput, addNodeDash, copyTextToClipboard ...
