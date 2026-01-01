@@ -1,395 +1,361 @@
 import time
-import json
-import psutil
-import requests
+import asyncio
 import logging
-import os
-import sys
-import subprocess
-import shlex
-import random
-import re 
+from datetime import datetime
+from aiogram import F, Dispatcher, types, Bot
+from aiogram.types import KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.fsm.context import FSMContext
+from aiogram.fsm.state import State, StatesGroup
+from aiogram.filters import StateFilter
 
-# Настройка логирования
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.FileHandler("/opt/tg-bot/logs/node/node.log"),
-        logging.StreamHandler()
-    ]
-)
+from core.i18n import _, I18nFilter, get_user_lang
+from core import config
+from core.auth import is_allowed, send_access_denied_message
+from core.messaging import delete_previous_message, send_alert
+from core.shared_state import LAST_MESSAGE_IDS, NODE_TRAFFIC_MONITORS
+from core import nodes_db
+from core.keyboards import get_nodes_list_keyboard, get_node_management_keyboard, get_nodes_delete_keyboard, get_back_keyboard
+from core.utils import format_uptime
 
-# Загрузка конфигурации
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-ENV_FILE = os.path.join(BASE_DIR, '.env')
+BUTTON_KEY = "btn_nodes"
 
-def load_config():
-    config = {}
-    if os.path.exists(ENV_FILE):
-        with open(ENV_FILE, 'r') as f:
-            for line in f:
-                line = line.strip()
-                if line and not line.startswith('#') and '=' in line:
-                    key, value = line.split('=', 1)
-                    value = value.strip().strip('"').strip("'")
-                    config[key.strip()] = value
-    return config
 
-CONF = load_config()
-AGENT_BASE_URL = CONF.get("AGENT_BASE_URL")
-AGENT_TOKEN = CONF.get("AGENT_TOKEN")
-UPDATE_INTERVAL = int(CONF.get("NODE_UPDATE_INTERVAL", 5))
+class AddNodeStates(StatesGroup):
+    waiting_for_name = State()
 
-if not AGENT_BASE_URL or not AGENT_TOKEN:
-    logging.error("CRITICAL: AGENT_BASE_URL or AGENT_TOKEN not found in .env")
-    sys.exit(1)
 
-# Хранилище результатов и состояний
-PENDING_RESULTS = []
-LAST_TRAFFIC_STATS = {}
+def get_button() -> KeyboardButton:
+    return KeyboardButton(text=_(BUTTON_KEY, config.DEFAULT_LANGUAGE))
 
-# [FIX] Глобальные переменные для IP. По умолчанию None, чтобы сервер мог определить сам.
-EXTERNAL_IP_CACHE = None 
-LAST_IP_CHECK = 0
-IP_CHECK_INTERVAL = 300  # Проверять раз в 5 минут
 
-def get_external_ip():
-    global EXTERNAL_IP_CACHE, LAST_IP_CHECK
+def register_handlers(dp: Dispatcher):
+    dp.message(I18nFilter(BUTTON_KEY))(nodes_handler)
+    dp.callback_query(F.data == "nodes_list_refresh")(cq_nodes_list_refresh)
+    dp.callback_query(F.data == "node_add_new")(cq_add_node_start)
+    dp.message(StateFilter(AddNodeStates.waiting_for_name))(process_node_name)
+    dp.callback_query(F.data == "node_delete_menu")(cq_node_delete_menu)
+    dp.callback_query(F.data.startswith("node_delete_confirm_"))(
+        cq_node_delete_confirm)
+    dp.callback_query(F.data.startswith("node_select_"))(cq_node_select)
+    dp.callback_query(F.data.startswith(
+        "node_stop_traffic_"))(cq_node_stop_traffic)
+    dp.callback_query(F.data.startswith("node_cmd_"))(cq_node_command)
+
+
+def start_background_tasks(bot: Bot) -> list[asyncio.Task]:
+    task_monitor = asyncio.create_task(nodes_monitor(bot), name="NodesMonitor")
+    task_traffic = asyncio.create_task(
+        node_traffic_scheduler(bot),
+        name="NodesTrafficScheduler")
+    return [task_monitor, task_traffic]
+
+
+async def _prepare_nodes_data():
+    result = {}
     now = time.time()
-    
-    # Если IP уже есть и он свежий, возвращаем его
-    if EXTERNAL_IP_CACHE and (now - LAST_IP_CHECK < IP_CHECK_INTERVAL):
-        return EXTERNAL_IP_CACHE
+    nodes = await nodes_db.get_all_nodes()
 
-    # 1. Пробуем через requests (Python)
-    services = [
-        "https://api.ipify.org",
-        "https://ifconfig.me/ip",
-        "https://icanhazip.com",
-        "https://ipecho.net/plain",
-        "http://checkip.amazonaws.com"
-    ]
+    for token, node in nodes.items():
+        last_seen = node.get("last_seen", 0)
+        is_restarting = node.get("is_restarting", False)
+        if is_restarting:
+            icon = "🔵"
+        elif now - last_seen < config.NODE_OFFLINE_TIMEOUT:
+            icon = "🟢"
+        else:
+            icon = "🔴"
+        result[token] = {
+            "name": node.get("name", "Unknown"),
+            "status_icon": icon
+        }
+    return result
 
-    for service in services:
-        try:
-            response = requests.get(service, timeout=5)
-            if response.status_code == 200:
-                ip = response.text.strip()
-                if re.match(r"^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$", ip):
-                    EXTERNAL_IP_CACHE = ip
-                    LAST_IP_CHECK = now
-                    logging.info(f"External IP updated (requests): {ip}")
-                    return ip
-        except Exception:
-            continue
-    
-    # 2. Если requests не справился, пробуем системный curl (надежнее)
+
+async def nodes_handler(message: types.Message):
+    user_id = message.from_user.id
+    lang = get_user_lang(user_id)
+    command = "nodes"
+    if not is_allowed(user_id, command):
+        await send_access_denied_message(message.bot, user_id, message.chat.id, command)
+        return
+    await delete_previous_message(user_id, command, message.chat.id, message.bot)
+
+    prepared_nodes = await _prepare_nodes_data()
+    keyboard = get_nodes_list_keyboard(prepared_nodes, lang)
+    sent_message = await message.answer(_("nodes_menu_header", lang), reply_markup=keyboard, parse_mode="HTML")
+    LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = sent_message.message_id
+
+
+async def cq_nodes_list_refresh(callback: types.CallbackQuery):
+    user_id = callback.from_user.id
+    lang = get_user_lang(user_id)
+    prepared_nodes = await _prepare_nodes_data()
+    keyboard = get_nodes_list_keyboard(prepared_nodes, lang)
     try:
-        # -4 принудительно IPv4, -s тихо, --max-time 5 таймаут
-        res = subprocess.check_output("curl -4 -s --max-time 5 ifconfig.me", shell=True).decode().strip()
-        if re.match(r"^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$", res):
-            EXTERNAL_IP_CACHE = res
-            LAST_IP_CHECK = now
-            logging.info(f"External IP updated (curl): {res}")
-            return res
+        await callback.message.edit_text(_("nodes_menu_header", lang), reply_markup=keyboard, parse_mode="HTML")
     except Exception:
         pass
+    await callback.answer()
 
-    # 3. Если ничего не вышло - возвращаем None.
-    # Сервер сам определит IP по входящему соединению.
-    logging.warning("Could not determine external IP locally. Delegating to Agent Server.")
-    return None
 
-# --- УТИЛИТЫ ДЛЯ ФОРМАТИРОВАНИЯ ---
-def format_uptime_simple(seconds):
-    seconds = int(seconds)
-    d, s = divmod(seconds, 86400)
-    h, s = divmod(s, 3600)
-    m, s = divmod(s, 60)
-    parts = []
-    if d > 0: parts.append(f"{d}d")
-    if h > 0: parts.append(f"{h}h")
-    parts.append(f"{m}m")
-    return " ".join(parts)
+async def cq_node_select(callback: types.CallbackQuery):
+    user_id = callback.from_user.id
+    lang = get_user_lang(user_id)
+    token = callback.data.split("_", 2)[2]
 
-def format_bytes_simple(bytes_value):
-    units = ['B', 'KB', 'MB', 'GB', 'TB']
-    value = float(bytes_value)
-    unit_index = 0
-    while value >= 1024 and unit_index < len(units) - 1:
-        value /= 1024
-        unit_index += 1
-    return f"{value:.2f} {units[unit_index]}"
-# -----------------------------------
+    node = await nodes_db.get_node_by_token(token)
+    if not node:
+        await callback.answer("Node not found", show_alert=True)
+        return
 
-def parse_iperf_speed(output: str, direction: str) -> float:
-    for line in reversed(output.splitlines()):
-        if "Mbits/sec" in line and (direction in line or direction == 'sender'):
-            speed_match = re.search(r"(\d+\.?\d*)\s+Mbits/sec", line)
-            if speed_match:
-                return float(speed_match.group(1))
+    now = time.time()
+    last_seen = node.get("last_seen", 0)
+    is_restarting = node.get("is_restarting", False)
+
+    if is_restarting:
+        await callback.answer(_("node_restarting_alert", lang, name=node.get("name")), show_alert=True)
+        return
+    if now - last_seen >= config.NODE_OFFLINE_TIMEOUT:
+        stats = node.get("stats", {})
+        fmt_time = datetime.fromtimestamp(last_seen).strftime(
+            '%Y-%m-%d %H:%M:%S') if last_seen > 0 else "Never"
+        text = _(
+            "node_details_offline", lang, name=node.get("name"), last_seen=fmt_time, ip=node.get(
+                "ip", "?"), cpu=stats.get(
+                "cpu", "?"), ram=stats.get(
+                "ram", "?"), disk=stats.get(
+                    "disk", "?"))
+        await callback.message.edit_text(text, reply_markup=get_back_keyboard(lang, "nodes_list_refresh"), parse_mode="HTML")
+        return
+
+    stats = node.get("stats", {})
     
-    fallback_match = re.findall(r"(\d+\.?\d*)\s+Mbits/sec", output)
-    if fallback_match:
-        return float(fallback_match[-1])
-        
-    return 0.0
+    raw_uptime = stats.get("uptime", 0)
+    formatted_uptime = format_uptime(raw_uptime, lang)
 
-def get_top_processes(metric):
-    try:
-        attrs = ['pid', 'name', 'cpu_percent', 'memory_percent']
-        procs = []
-        for p in psutil.process_iter(attrs):
-            try:
-                p.info['name'] = p.info['name'][:15]
-                procs.append(p.info)
-            except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
-                pass
+    text = _(
+        "node_management_menu",
+        lang,
+        name=node.get("name"),
+        ip=node.get(
+            "ip",
+            "?"),
+        uptime=formatted_uptime)
+    
+    keyboard = get_node_management_keyboard(token, lang)
+    await callback.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
 
-        if metric == 'cpu':
-            sorted_procs = sorted(procs, key=lambda p: p['cpu_percent'], reverse=True)[:3]
-            info_list = [f"{p['name']} ({p['cpu_percent']}%)" for p in sorted_procs]
-        elif metric == 'ram':
-            sorted_procs = sorted(procs, key=lambda p: p['memory_percent'], reverse=True)[:3]
-            info_list = [f"{p['name']} ({p['memory_percent']:.1f}%)" for p in sorted_procs]
-        else:
-            return ""
 
-        return ", ".join(info_list)
-    except Exception as e:
-        logging.error(f"Error getting top processes: {e}")
-        return "n/a"
+async def cq_add_node_start(callback: types.CallbackQuery, state: FSMContext):
+    lang = get_user_lang(callback.from_user.id)
+    await callback.message.edit_text("Введите имя новой ноды:", reply_markup=get_back_keyboard(lang, "nodes_list_refresh"))
+    await state.set_state(AddNodeStates.waiting_for_name)
+    await callback.answer()
 
-def get_system_stats():
-    try:
-        net = psutil.net_io_counters()
-        # Пробуем получить IP. Если вернет None, сервер подставит свой.
-        ext_ip = get_external_ip()
-        
-        return {
-            "cpu": psutil.cpu_percent(interval=None),
-            "ram": psutil.virtual_memory().percent,
-            "disk": psutil.disk_usage('/').percent,
-            "net_rx": net.bytes_recv,
-            "net_tx": net.bytes_sent,
-            "uptime": int(time.time() - psutil.boot_time()),
-            "process_cpu": get_top_processes('cpu'),
-            "process_ram": get_top_processes('ram'),
-            "external_ip": ext_ip
-        }
-    except Exception as e:
-        logging.error(f"Error gathering stats: {e}")
-        return {}
 
-def get_public_iperf_server():
-    try:
-        url = "https://export.iperf3serverlist.net/listed_iperf3_servers.json"
-        response = requests.get(url, timeout=5)
-        if response.status_code == 200:
-            servers = response.json()
-            valid_servers = [s for s in servers if s.get("IP/HOST") and s.get("PORT") and s.get("COUNTRY") != "RU"]
-            if valid_servers:
-                return random.choice(valid_servers)
-    except Exception as e:
-        logging.error(f"Error fetching iperf servers: {e}")
-    return None
+async def process_node_name(message: types.Message, state: FSMContext):
+    lang = get_user_lang(message.from_user.id)
+    name = message.text.strip()
+    token = await nodes_db.create_node(name)
+    await message.answer(_("node_add_success_token", lang, name=name, token=token), parse_mode="HTML")
+    await state.clear()
 
-def execute_command(task):
-    global LAST_TRAFFIC_STATS
-    cmd = task.get("command")
-    user_id = task.get("user_id")
-    logging.info(f"Executing command: {cmd}")
 
-    result_text = ""
-    try:
-        if cmd == "uptime":
-            uptime_sec = int(time.time() - psutil.boot_time())
-            result_text = f"⏱ Uptime: {format_uptime_simple(uptime_sec)}"
+async def cq_node_delete_menu(callback: types.CallbackQuery):
+    lang = get_user_lang(callback.from_user.id)
+    nodes_data = await _prepare_nodes_data()
+    keyboard = get_nodes_delete_keyboard(nodes_data, lang)
+    await callback.message.edit_text(_("node_delete_select", lang), reply_markup=keyboard, parse_mode="HTML")
+    await callback.answer()
 
-        elif cmd == "traffic":
-            net = psutil.net_io_counters()
-            now = time.time()
-            
-            rx_total = format_bytes_simple(net.bytes_recv)
-            tx_total = format_bytes_simple(net.bytes_sent)
-            
-            speed_info = ""
-            
-            if LAST_TRAFFIC_STATS:
-                prev_rx = LAST_TRAFFIC_STATS.get('rx', 0)
-                prev_tx = LAST_TRAFFIC_STATS.get('tx', 0)
-                prev_time = LAST_TRAFFIC_STATS.get('time', 0)
+
+async def cq_node_delete_confirm(callback: types.CallbackQuery):
+    lang = get_user_lang(callback.from_user.id)
+    token = callback.data.split("_", 3)[3]
+    await nodes_db.delete_node(token)
+    await callback.answer(_("node_deleted", lang, name="Node"), show_alert=False)
+    await cq_node_delete_menu(callback)
+
+
+async def cq_node_command(callback: types.CallbackQuery):
+    user_id = callback.from_user.id
+    lang = get_user_lang(user_id)
+    data = callback.data[9:]
+    token = data[:32]
+    cmd = data[33:]
+
+    node = await nodes_db.get_node_by_token(token)
+    if not node:
+        await callback.answer("Error: Node not found", show_alert=True)
+        return
+
+    if cmd == "reboot":
+        await nodes_db.update_node_extra(token, "is_restarting", True)
+
+    if cmd == "traffic":
+        stop_kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(
+            text=_("btn_stop_traffic", lang), callback_data=f"node_stop_traffic_{token}")]])
+
+        if user_id in NODE_TRAFFIC_MONITORS:
+            if NODE_TRAFFIC_MONITORS[user_id]["token"] != token:
+                del NODE_TRAFFIC_MONITORS[user_id]
+
+        sent_msg = await callback.message.answer(
+            _("traffic_start", lang, interval=config.TRAFFIC_INTERVAL),
+            reply_markup=stop_kb,
+            parse_mode="HTML"
+        )
+        NODE_TRAFFIC_MONITORS[user_id] = {
+            "token": token,
+            "message_id": sent_msg.message_id,
+            "last_update": 0}
+        await nodes_db.update_node_task(token, {"command": cmd, "user_id": user_id})
+        await callback.answer()
+        return
+
+    await nodes_db.update_node_task(token, {"command": cmd, "user_id": user_id})
+
+    cmd_map = {
+        "selftest": "btn_selftest",
+        "uptime": "btn_uptime",
+        "traffic": "btn_traffic",
+        "top": "btn_top",
+        "speedtest": "btn_speedtest",
+        "reboot": "btn_reboot"}
+    cmd_name = _(cmd_map.get(cmd, cmd), lang)
+    await callback.answer(_("node_cmd_sent", lang, cmd=cmd_name, name=node.get("name")), show_alert=False)
+
+
+async def cq_node_stop_traffic(callback: types.CallbackQuery):
+    user_id = callback.from_user.id
+    lang = get_user_lang(user_id)
+    token = callback.data.replace("node_stop_traffic_", "")
+    node = await nodes_db.get_node_by_token(token)
+    node_name = node.get("name", "Unknown") if node else "Unknown"
+
+    if user_id in NODE_TRAFFIC_MONITORS:
+        del NODE_TRAFFIC_MONITORS[user_id]
+        try:
+            await callback.message.delete()
+            if node:
+                stats = node.get("stats", {})
+                raw_uptime = stats.get("uptime", 0)
+                formatted_uptime = format_uptime(raw_uptime, lang)
                 
-                dt = now - prev_time
-                if dt > 0:
-                    rx_speed = (net.bytes_recv - prev_rx) * 8 / (1024 * 1024) / dt
-                    tx_speed = (net.bytes_sent - prev_tx) * 8 / (1024 * 1024) / dt
-                    speed_info = f"\n\n⚡️ <b>Скорость:</b>\n⬇️ {rx_speed:.2f} Mbit/s\n⬆️ {tx_speed:.2f} Mbit/s"
-
-            LAST_TRAFFIC_STATS = {
-                'rx': net.bytes_recv,
-                'tx': net.bytes_sent,
-                'time': now
-            }
-            
-            result_text = f"📡 <b>Traffic:</b>\n⬇️ Total RX: {rx_total}\n⬆️ Total TX: {tx_total}{speed_info}"
-
-        elif cmd == "top":
-            try:
-                res = subprocess.check_output(
-                    "ps aux --sort=-%cpu | head -n 11", shell=True).decode()
+                text = _(
+                    "node_management_menu", lang, name=node.get("name"), ip=node.get(
+                        "ip", "?"), uptime=formatted_uptime)
                 
-                safe_res = res.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-                result_text = f"<pre>{safe_res}</pre>"
-                
-            except Exception as e:
-                result_text = f"Error running top: {e}"
+                keyboard = get_node_management_keyboard(token, lang)
+                await callback.message.answer(text, reply_markup=keyboard, parse_mode="HTML")
+        except Exception:
+            pass
 
-        elif cmd == "selftest":
-            stats = get_system_stats()
-            
-            try:
-                ext_ip = stats.get("external_ip")
-                if not ext_ip:
-                     # Если локально не определили, пробуем curl один раз для отчета
-                     ext_ip = subprocess.check_output("curl -4 -s --max-time 2 ifconfig.me", shell=True).decode().strip()
-            except:
-                ext_ip = "N/A"
-                
-            try:
-                ping_res = subprocess.check_output("ping -c 1 -W 1 8.8.8.8", shell=True).decode()
-                ping_match = re.search(r"time=([\d\.]+) ms", ping_res)
-                ping_status = f"🔗 {ping_match.group(1)} ms" if ping_match else "🔗 ❌ Fail"
-            except:
-                ping_status = "🔗 ❌ Fail"
+    await callback.answer(_("node_traffic_stopped_alert", lang, name=node_name), show_alert=False)
 
-            try:
-                kernel = subprocess.check_output("uname -r", shell=True).decode().strip()
-            except:
-                kernel = "N/A"
-            
-            uptime_str = format_uptime_simple(stats.get('uptime', 0))
-            rx_total = format_bytes_simple(stats.get('net_rx', 0))
-            tx_total = format_bytes_simple(stats.get('net_tx', 0))
-            
-            result_text = (
-                f"🛠 <b>Server Info:</b>\n\n"
-                f"✅ Node Status: <b>Active</b>\n"
-                f"⏱ Uptime: <b>{uptime_str}</b>\n"
-                f"📦 OS/Kernel: {kernel}\n"
-                f"🌐 External IP: <code>{ext_ip}</code>\n"
-                f"📡 {ping_status}\n\n"
-                f"📊 <b>Resources:</b>\n"
-                f"  CPU: <b>{stats.get('cpu', 0):.1f}%</b>\n"
-                f"  RAM: <b>{stats.get('ram', 0):.1f}%</b>\n"
-                f"  Disk: <b>{stats.get('disk', 0):.1f}%</b>\n\n"
-                f"📈 <b>Traffic (Total):</b>\n"
-                f"  ⬇️ RX: {rx_total}\n"
-                f"  ⬆️ TX: {tx_total}"
-            )
 
-        elif cmd == "speedtest":
-            server = get_public_iperf_server()
-            if server:
-                host = server.get("IP/HOST")
-                port = server.get("PORT")
-                city = server.get("SITE", "Unknown")
-                country = server.get("COUNTRY", "")
-                
-                cmd_dl = ["iperf3", "-c", host, "-p", str(port), "-t", "5", "-4", "-R"]
-                try:
-                    res_dl = subprocess.check_output(
-                        cmd_dl, stderr=subprocess.STDOUT, timeout=20).decode()
-                    dl_speed = parse_iperf_speed(res_dl, 'receiver')
-                except subprocess.TimeoutExpired:
-                    dl_speed = 0.0
-                except Exception as e:
-                    logging.error(f"DL Test failed: {e}")
-                    dl_speed = 0.0
-                
-                cmd_ul = ["iperf3", "-c", host, "-p", str(port), "-t", "5", "-4"]
-                try:
-                    res_ul = subprocess.check_output(
-                        cmd_ul, stderr=subprocess.STDOUT, timeout=20).decode()
-                    ul_speed = parse_iperf_speed(res_ul, 'sender')
-                except subprocess.TimeoutExpired:
-                    ul_speed = 0.0
-                except Exception as e:
-                    logging.error(f"UL Test failed: {e}")
-                    ul_speed = 0.0
-                
-                if dl_speed == 0.0 and ul_speed == 0.0:
-                    raise Exception("iperf3 returned zero speed or failed to parse.")
-                    
-                result_text = (f"🚀 <b>Speedtest (iperf3)</b>\n"
-                               f"🌍 Server: {city}, {country} ({host})\n"
-                               f"⬇️ <b>Download:</b> {dl_speed:.2f} Mbit/s\n"
-                               f"⬆️ <b>Upload:</b> {ul_speed:.2f} Mbit/s\n\n"
-                               f"iPerf Done.")
-            else:
-                try:
-                    res = subprocess.check_output("ping -c 3 8.8.8.8", shell=True).decode()
-                    result_text = f"⚠️ iperf3 servers unavailable. Ping check:\n<pre>{res}</pre>"
-                except Exception as e:
-                    result_text = f"Network check failed: {e}"
-
-        elif cmd == "reboot":
-            result_text = "🔄 Reboot command received. Rebooting..."
-            PENDING_RESULTS.append(
-                {"command": cmd, "user_id": user_id, "result": result_text})
-            send_heartbeat()
-            os.system("reboot")
-            return
-
-        else:
-            result_text = f"Unknown command: {cmd}"
-
-    except subprocess.TimeoutExpired:
-        result_text = "❌ Speedtest timed out (server busy or test too long)."
-    except Exception as e:
-        logging.error(f"Command execution failed: {e}")
-        result_text = f"❌ Error: {str(e)}"
-
-    if result_text:
-        PENDING_RESULTS.append({
-            "command": cmd,
-            "user_id": user_id,
-            "result": result_text
-        })
-
-def send_heartbeat():
-    global PENDING_RESULTS
-    url = f"{AGENT_BASE_URL}/api/heartbeat"
-    payload = {
-        "token": AGENT_TOKEN,
-        "stats": get_system_stats(),
-        "results": PENDING_RESULTS
-    }
-
-    try:
-        response = requests.post(url, json=payload, timeout=5)
-        if response.status_code == 200:
-            data = response.json()
-            PENDING_RESULTS = []
-
-            tasks = data.get("tasks", [])
-            for task in tasks:
-                execute_command(task)
-        else:
-            logging.warning(f"Server returned status: {response.status_code}")
-    except Exception as e:
-        logging.error(f"Connection error: {e}")
-
-def main():
-    logging.info(f"Node Agent started. Target: {AGENT_BASE_URL}")
-    psutil.cpu_percent(interval=None)
-    # Инициализация IP
-    get_external_ip()
-
+async def node_traffic_scheduler(bot: Bot):
     while True:
-        send_heartbeat()
-        time.sleep(UPDATE_INTERVAL)
+        try:
+            await asyncio.sleep(config.TRAFFIC_INTERVAL)
+            if not NODE_TRAFFIC_MONITORS:
+                continue
 
-if __name__ == "__main__":
-    main()
+            for user_id, monitor_data in list(NODE_TRAFFIC_MONITORS.items()):
+                token = monitor_data.get("token")
+                node = await nodes_db.get_node_by_token(token)
+                if not node:
+                    if user_id in NODE_TRAFFIC_MONITORS:
+                        del NODE_TRAFFIC_MONITORS[user_id]
+                    continue
+                await nodes_db.update_node_task(token, {"command": "traffic", "user_id": user_id})
+        except Exception as e:
+            logging.error(f"Error in node_traffic_scheduler: {e}")
+            await asyncio.sleep(5)
+
+
+async def nodes_monitor(bot: Bot):
+    logging.info("Nodes Monitor started.")
+    await asyncio.sleep(10)
+    while True:
+        try:
+            now = time.time()
+            nodes = await nodes_db.get_all_nodes()
+
+            for token, node in nodes.items():
+                name = node.get("name", "Unknown")
+                last_seen = node.get("last_seen", 0)
+                is_restarting = node.get("is_restarting", False)
+
+                alerts = node.get("alerts", {
+                    "cpu": {"active": False, "last_time": 0},
+                    "ram": {"active": False, "last_time": 0},
+                    "disk": {"active": False, "last_time": 0}
+                })
+                is_offline_alert_sent = node.get(
+                    "is_offline_alert_sent", False)
+
+                is_dead = (
+                    now -
+                    last_seen >= config.NODE_OFFLINE_TIMEOUT) and (
+                    last_seen > 0)
+
+                if is_dead and not is_offline_alert_sent and not is_restarting:
+                    await send_alert(bot, lambda lang: _("alert_node_down", lang, name=name, last_seen=datetime.fromtimestamp(last_seen).strftime('%H:%M:%S')), "downtime")
+                    await nodes_db.update_node_extra(token, "is_offline_alert_sent", True)
+
+                elif not is_dead and is_offline_alert_sent:
+                    await send_alert(bot, lambda lang: _("alert_node_up", lang, name=name), "downtime")
+                    await nodes_db.update_node_extra(token, "is_offline_alert_sent", False)
+
+                if not is_dead and is_restarting:
+                    await nodes_db.update_node_extra(token, "is_restarting", False)
+
+                if not is_dead and last_seen > 0:
+                    stats = node.get("stats", {})
+
+                    async def check(
+                            metric,
+                            current,
+                            threshold,
+                            key_high,
+                            key_norm):
+                        state = alerts.get(
+                            metric, {"active": False, "last_time": 0})
+                        updated = False
+                        
+                        # --- FIX START: Извлекаем процессы из статистики ---
+                        proc_info = ""
+                        if metric == "cpu":
+                            proc_info = stats.get("process_cpu", "")
+                        elif metric == "ram":
+                            proc_info = stats.get("process_ram", "")
+                        # --- FIX END ---
+
+                        if current >= threshold:
+                            if not state["active"] or (
+                                    now - state["last_time"] > config.RESOURCE_ALERT_COOLDOWN):
+                                # --- FIX START: Передаем processes в шаблон перевода ---
+                                await send_alert(bot, lambda lang: _(key_high, lang, name=name, usage=current, threshold=threshold, processes=proc_info), "resources")
+                                # --- FIX END ---
+                                state["active"] = True
+                                state["last_time"] = now
+                                updated = True
+                        elif current < threshold and state["active"]:
+                            await send_alert(bot, lambda lang: _(key_norm, lang, name=name, usage=current), "resources")
+                            state["active"] = False
+                            state["last_time"] = 0
+                            updated = True
+                        alerts[metric] = state
+                        return updated
+
+                    u1 = await check("cpu", stats.get("cpu", 0), config.CPU_THRESHOLD, "alert_node_cpu_high", "alert_node_cpu_normal")
+                    u2 = await check("ram", stats.get("ram", 0), config.RAM_THRESHOLD, "alert_node_ram_high", "alert_node_ram_normal")
+                    u3 = await check("disk", stats.get("disk", 0), config.DISK_THRESHOLD, "alert_node_disk_high", "alert_node_disk_normal")
+
+                    if u1 or u2 or u3:
+                        await nodes_db.update_node_extra(token, "alerts", alerts)
+
+        except Exception as e:
+            logging.error(f"Error in nodes_monitor: {e}", exc_info=True)
+        await asyncio.sleep(20)
