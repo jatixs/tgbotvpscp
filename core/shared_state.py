@@ -18,5 +18,4 @@ AGENT_HISTORY = []
 
 # --- WEB UI NOTIFICATIONS ---
 WEB_NOTIFICATIONS = deque(maxlen=50)
-WEB_USER_LAST_READ = {}  # Время последнего прочтения для каждого user_id
-WEB_UNREAD_COUNT = 0     # Глобальный счетчик (теперь вычисляется динамически в API)
+WEB_USER_LAST_READ = {} # Персональное время прочтения для синхронизации
