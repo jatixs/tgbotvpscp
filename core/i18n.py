@@ -444,6 +444,8 @@ STRINGS = {
         "web_update_checking": "Проверка...",
         "web_update_started": "Обновление запущено! Сервер перезагружается, подождите...",
         "web_update_error": "Ошибка обновления: {error}",
+        "web_update_placeholder": "Нажмите кнопку для проверки наличия новой версии.",
+        "web_update_check_btn": "Проверить обновления",
         
         # --- WEB: KEYBOARD SETTINGS ---
         "web_keyboard_title": "Клавиатура бота",
@@ -905,7 +907,8 @@ STRINGS = {
         "web_update_checking": "Checking...",
         "web_update_started": "Update started! Server is restarting, please wait...",
         "web_update_error": "Update error: {error}",
-        
+        "web_update_placeholder": "Click the button to check for updates.",
+        "web_update_check_btn": "Check for Updates",
         # --- WEB: KEYBOARD SETTINGS ---
         "web_keyboard_title": "Bot Keyboard",
         "web_kb_desc": "Configure visibility of commands in the bot menu.",
