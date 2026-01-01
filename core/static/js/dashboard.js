@@ -12,26 +12,19 @@ window.addEventListener('themeChanged', () => {
 });
 
 document.addEventListener("DOMContentLoaded", () => {
+    // График агента
     if(document.getElementById('agentChart')) {
         fetchAgentStats();
         agentPollInterval = setInterval(fetchAgentStats, 3000);
     }
     
+    // Список нод
     if (document.getElementById('nodesList')) {
         fetchNodesList();
         nodesPollInterval = setInterval(fetchNodesList, 3000);
     }
 
-    const inputDash = document.getElementById('newNodeNameDash');
-    if (inputDash) {
-        inputDash.addEventListener('input', validateNodeInput);
-        inputDash.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter' && !document.getElementById('btnAddNodeDash').disabled) {
-                addNodeDash();
-            }
-        });
-    }
-
+    // Логи
     if (document.getElementById('logsContainer')) {
         switchLogType('bot');
     }
@@ -114,7 +107,6 @@ function updateChartsColors() {
     });
 }
 
-// --- ГРАФИК АГЕНТА (ИСПРАВЛЕНО) ---
 function renderAgentChart(history) {
     if (!history || history.length < 2) return;
     const labels = history.slice(1).map((_, i) => `-${(history.length - 2 - i) * 2}s`);
@@ -146,11 +138,11 @@ function renderAgentChart(history) {
                 datasets: [
                     { 
                         label: 'RX', data: netRx, borderColor: '#22c55e', fill: true, backgroundColor: 'rgba(34,197,94,0.1)', tension: 0.3,
-                        pointRadius: 0, pointHoverRadius: 5, pointHitRadius: 10 // ИСПРАВЛЕНО: Скрыты точки
+                        pointRadius: 0, pointHoverRadius: 5, pointHitRadius: 10 
                     }, 
                     { 
                         label: 'TX', data: netTx, borderColor: '#3b82f6', fill: true, backgroundColor: 'rgba(59,130,246,0.1)', tension: 0.3,
-                        pointRadius: 0, pointHoverRadius: 5, pointHitRadius: 10 // ИСПРАВЛЕНО: Скрыты точки
+                        pointRadius: 0, pointHoverRadius: 5, pointHitRadius: 10
                     }
                 ] 
             }, 
@@ -204,7 +196,6 @@ function closeNodeModal() {
     if (pollInterval) clearInterval(pollInterval);
 }
 
-// --- ГРАФИКИ НОДЫ В МОДАЛКЕ (ИСПРАВЛЕНО) ---
 function renderCharts(history) {
     if (!history || history.length < 2) return; 
     const labels = history.map(h => new Date(h.t * 1000).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', second:'2-digit'}));
@@ -230,8 +221,8 @@ function renderCharts(history) {
             data: { 
                 labels, 
                 datasets: [
-                    { label: 'CPU (%)', data: history.map(h => h.c), borderColor: '#3b82f6', pointRadius: 0, pointHoverRadius: 5 }, // ИСПРАВЛЕНО
-                    { label: 'RAM (%)', data: history.map(h => h.r), borderColor: '#a855f7', pointRadius: 0, pointHoverRadius: 5 }  // ИСПРАВЛЕНО
+                    { label: 'CPU (%)', data: history.map(h => h.c), borderColor: '#3b82f6', pointRadius: 0, pointHoverRadius: 5 }, 
+                    { label: 'RAM (%)', data: history.map(h => h.r), borderColor: '#a855f7', pointRadius: 0, pointHoverRadius: 5 }
                 ] 
             }, 
             options: { ...commonOptions, scales: { ...commonOptions.scales, y: { ...commonOptions.scales.y, max: 100 } } } 
@@ -253,8 +244,8 @@ function renderCharts(history) {
             data: { 
                 labels: labels.slice(1), 
                 datasets: [
-                    { label: 'RX', data: netRxSpeed, borderColor: '#22c55e', fill: true, backgroundColor: 'rgba(34,197,94,0.1)', pointRadius: 0, pointHoverRadius: 5 }, // ИСПРАВЛЕНО
-                    { label: 'TX', data: netTxSpeed, borderColor: '#ef4444', pointRadius: 0, pointHoverRadius: 5 } // ИСПРАВЛЕНО
+                    { label: 'RX', data: netRxSpeed, borderColor: '#22c55e', fill: true, backgroundColor: 'rgba(34,197,94,0.1)', pointRadius: 0, pointHoverRadius: 5 }, 
+                    { label: 'TX', data: netTxSpeed, borderColor: '#ef4444', pointRadius: 0, pointHoverRadius: 5 } 
                 ] 
             }, 
             options: netOpts 

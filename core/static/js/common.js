@@ -8,11 +8,12 @@ document.addEventListener("DOMContentLoaded", () => {
     // Фикс флагов Windows
     if (typeof window.parsePageEmojis === 'function') { window.parsePageEmojis(); } else { parsePageEmojis(); }
 
+    // Инициализация глобальных компонентов
     initNotifications(); 
     initHolidayMood(); 
-    initToasts();
+    initAddNodeLogic();
 
-    // Автозагрузка системных логов
+    // Автозагрузка системных логов (если есть контейнер)
     if (document.getElementById('logsContainer')) {
         if (typeof window.switchLogType === 'function') { window.switchLogType('bot'); }
     }
@@ -27,7 +28,7 @@ function parsePageEmojis() {
     }
 }
 
-// --- ПЕРЕКЛЮЧАТЕЛЬ ЯЗЫКА (ИСПРАВЛЕНО) ---
+// --- ПЕРЕКЛЮЧАТЕЛЬ ЯЗЫКА ---
 async function setLanguage(lang) {
     try {
         const response = await fetch('/api/settings/language', {
@@ -46,19 +47,24 @@ async function setLanguage(lang) {
 }
 window.setLanguage = setLanguage;
 
-// --- КОПИРОВАНИЕ ТОКЕНА (ИСПРАВЛЕНО) ---
+// --- КОПИРОВАНИЕ ТОКЕНА ---
 function copyToken(el) {
     const tokenText = document.getElementById('modalToken').innerText;
     if (!tokenText || tokenText === '...') return;
+    copyTextToClipboard(tokenText);
+}
 
+function copyTextToClipboard(text) {
     if (navigator.clipboard && window.isSecureContext) {
-        navigator.clipboard.writeText(tokenText).then(() => {
+        navigator.clipboard.writeText(text).then(() => {
             showCopyFeedback();
         });
     } else {
         const textArea = document.createElement("textarea");
-        textArea.value = tokenText;
+        textArea.value = text;
+        textArea.style.position = "fixed";
         document.body.appendChild(textArea);
+        textArea.focus();
         textArea.select();
         try {
             document.execCommand('copy');
@@ -69,47 +75,62 @@ function copyToken(el) {
         document.body.removeChild(textArea);
     }
 }
+window.copyTextToClipboard = copyTextToClipboard;
 
 function showCopyFeedback() {
-    const toast = document.getElementById('copyToast');
-    if (toast) {
-        toast.classList.replace('translate-y-full', 'translate-y-0');
-        setTimeout(() => {
-            toast.classList.replace('translate-y-0', 'translate-y-full');
-        }, 2000);
-    }
-    if (window.showToast) window.showToast(I18N.web_copied || "Скопировано!");
+    // Показываем текстовый тост
+    if (window.showToast) window.showToast(typeof I18N !== 'undefined' ? I18N.web_copied : "Скопировано!");
 }
 window.copyToken = copyToken;
 
-// --- ВСПЛЫВАЮЩИЕ УВЕДОМЛЕНИЯ (TOASTS) ---
-function initToasts() {
-    if (!document.getElementById('toast-container')) {
-        const container = document.createElement('div');
-        container.id = 'toast-container';
-        document.body.appendChild(container);
-    }
-}
+// --- ВСПЛЫВАЮЩИЕ УВЕДОМЛЕНИЯ (TOASTS) - FIXED (RIGHT BOTTOM) ---
+let currentToast = null;
+let currentToastTimer = null;
 
-function showToast(message, duration = 3000) {
-    const container = document.getElementById('toast-container');
-    if (!container) return;
+function showToast(message) {
+    // Удаляем предыдущий тост, если есть
+    if (currentToast) {
+        if (currentToastTimer) clearTimeout(currentToastTimer);
+        currentToast.remove();
+        currentToast = null;
+    }
 
     const toast = document.createElement('div');
-    toast.className = 'toast-msg';
+    // FIXED: Позиционирование справа снизу (bottom-5 right-5) и высокий Z-index (z-[9999])
+    toast.className = 'fixed bottom-5 right-5 z-[9999] flex items-center gap-3 px-5 py-3 rounded-2xl shadow-2xl backdrop-blur-md border transition-all duration-500 ease-out ' +
+        'bg-white/95 dark:bg-gray-800/95 text-gray-900 dark:text-white border-gray-200 dark:border-white/10 opacity-0 translate-y-10 w-auto max-w-[300px] pointer-events-none';
+    
     toast.innerHTML = `
-        <div class="flex-1">${message}</div>
-        <div class="toast-close" onclick="this.parentElement.remove()">
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+        <div class="p-1.5 rounded-full bg-blue-100 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400 flex-shrink-0">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
         </div>
+        <span class="font-medium text-sm leading-snug">${message}</span>
     `;
+    
+    document.body.appendChild(toast);
+    currentToast = toast;
+    
+    // Анимация появления
+    requestAnimationFrame(() => {
+        toast.classList.remove('opacity-0', 'translate-y-10');
+        toast.classList.add('opacity-100', 'translate-y-0');
+    });
 
-    container.appendChild(toast);
-    setTimeout(() => toast.classList.add('show'), 10);
-    setTimeout(() => {
-        toast.classList.remove('show');
-        setTimeout(() => toast.remove(), 400);
-    }, duration);
+    // Таймер исчезновения (3 секунды)
+    currentToastTimer = setTimeout(() => {
+        if (currentToast === toast) {
+            toast.classList.remove('opacity-100', 'translate-y-0');
+            toast.classList.add('opacity-0', 'translate-y-10');
+            setTimeout(() => {
+                if (currentToast === toast) {
+                    toast.remove();
+                    currentToast = null;
+                }
+            }, 500);
+        }
+    }, 3000); 
 }
 window.showToast = showToast;
 
@@ -143,6 +164,106 @@ function closeHintModal() {
 }
 window.toggleHint = toggleHint;
 window.closeHintModal = closeHintModal;
+
+// --- ЛОГИКА ДОБАВЛЕНИЯ НОДЫ (ГЛОБАЛЬНО) ---
+function initAddNodeLogic() {
+    const input = document.getElementById('newNodeNameDash');
+    if (input) {
+        // Удаляем старые слушатели во избежание дублирования
+        input.removeEventListener('input', validateNodeInput); 
+        input.addEventListener('input', validateNodeInput);
+        input.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && !document.getElementById('btnAddNodeDash').disabled) {
+                addNodeDash();
+            }
+        });
+    }
+}
+
+function openAddNodeModal() {
+    const modal = document.getElementById('addNodeModal');
+    if (modal) {
+        modal.classList.remove('hidden');
+        modal.classList.add('flex');
+        document.body.style.overflow = 'hidden';
+        const resDiv = document.getElementById('nodeResultDash');
+        if(resDiv) resDiv.classList.add('hidden');
+        const input = document.getElementById('newNodeNameDash');
+        if(input) {
+            input.value = '';
+            input.focus();
+            validateNodeInput();
+        }
+    }
+}
+window.openAddNodeModal = openAddNodeModal;
+
+function closeAddNodeModal() {
+    const modal = document.getElementById('addNodeModal');
+    if (modal) {
+        modal.classList.add('hidden');
+        modal.classList.remove('flex');
+        document.body.style.overflow = 'auto';
+    }
+}
+window.closeAddNodeModal = closeAddNodeModal;
+
+function validateNodeInput() {
+    const input = document.getElementById('newNodeNameDash');
+    const btn = document.getElementById('btnAddNodeDash');
+    if (!input || !btn) return;
+    if (input.value.trim().length >= 2) {
+        btn.disabled = false;
+        btn.classList.remove('bg-gray-200', 'dark:bg-gray-700', 'text-gray-400', 'dark:text-gray-500', 'cursor-not-allowed');
+        btn.classList.add('bg-purple-600', 'hover:bg-purple-500', 'active:scale-95', 'text-white', 'cursor-pointer', 'shadow-lg', 'shadow-purple-500/20');
+    } else {
+        btn.disabled = true;
+        btn.classList.remove('bg-purple-600', 'hover:bg-purple-500', 'active:scale-95', 'text-white', 'cursor-pointer', 'shadow-lg', 'shadow-purple-500/20');
+        btn.classList.add('bg-gray-200', 'dark:bg-gray-700', 'text-gray-400', 'dark:text-gray-500', 'cursor-not-allowed');
+    }
+}
+window.validateNodeInput = validateNodeInput;
+
+async function addNodeDash() {
+    const nameInput = document.getElementById('newNodeNameDash');
+    const name = nameInput.value.trim();
+    const btn = document.getElementById('btnAddNodeDash');
+    if (!name) return;
+    btn.disabled = true;
+    const originalText = btn.innerText;
+    btn.innerHTML = `<svg class="animate-spin h-5 w-5 text-white mx-auto" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>`;
+    try {
+        const res = await fetch('/api/nodes/add', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({name: name})
+        });
+        const data = await res.json();
+        if (res.ok) {
+            document.getElementById('nodeResultDash').classList.remove('hidden');
+            document.getElementById('newNodeTokenDash').innerText = data.token;
+            document.getElementById('newNodeCmdDash').innerText = data.command;
+            
+            // Универсальное обновление списков (для Settings и Dashboard)
+            if (typeof NODES_DATA !== 'undefined') {
+                NODES_DATA.push({token: data.token, name: name, ip: 'Unknown'});
+            }
+            if (typeof renderNodes === 'function') renderNodes(); 
+            if (typeof fetchNodesList === 'function') fetchNodesList(); 
+            
+            nameInput.value = "";
+            validateNodeInput();
+        } else {
+            await window.showModalAlert((typeof I18N !== 'undefined' ? I18N.web_error : "Error").replace('{error}', data.error), 'Ошибка');
+        }
+    } catch (e) {
+        await window.showModalAlert((typeof I18N !== 'undefined' ? I18N.web_conn_error : "Connection Error").replace('{error}', e), 'Ошибка соединения');
+    } finally {
+        btn.innerText = originalText;
+        validateNodeInput();
+    }
+}
+window.addNodeDash = addNodeDash;
 
 // --- НОВОГОДНЯЯ ЛОГИКА ---
 function isHolidayPeriod() {
@@ -240,9 +361,23 @@ let lastUnreadCount = -1;
 function initNotifications() {
     const btn = document.getElementById('notifBtn');
     if (!btn) return;
-    btn.addEventListener('click', toggleNotifications);
-    if (document.getElementById('notifClearBtn')) document.getElementById('notifClearBtn').addEventListener('click', clearNotifications);
-    document.addEventListener('click', (e) => { if (!e.target.closest('#notifDropdown') && !e.target.closest('#notifBtn')) closeNotifications(); });
+    
+    // Удаляем старые слушатели, клонируя узел (самый надежный способ очистки)
+    const newBtn = btn.cloneNode(true);
+    btn.parentNode.replaceChild(newBtn, btn);
+    newBtn.addEventListener('click', toggleNotifications);
+    
+    const clearBtn = document.getElementById('notifClearBtn');
+    if (clearBtn) {
+        const newClearBtn = clearBtn.cloneNode(true);
+        clearBtn.parentNode.replaceChild(newClearBtn, clearBtn);
+        newClearBtn.addEventListener('click', clearNotifications);
+    }
+
+    document.addEventListener('click', (e) => { 
+        if (!e.target.closest('#notifDropdown') && !e.target.closest('#notifBtn')) closeNotifications(); 
+    });
+    
     pollNotifications();
     setInterval(pollNotifications, 3000);
 }
@@ -256,20 +391,20 @@ async function pollNotifications() {
     } catch (e) {}
 }
 
-// --- УВЕДОМЛЕНИЯ: ОЧИСТИТЬ ВСЁ (ИСПРАВЛЕНО) ---
 async function clearNotifications(e) {
     if (e) e.stopPropagation();
     
-    // Вызов модального окна подтверждения (как в настройках)
-    const msg = I18N.web_clear_notif_confirm || "Очистить все уведомления?";
-    const title = I18N.modal_title_confirm || "Подтверждение";
+    const msg = (typeof I18N !== 'undefined' && I18N.web_clear_notif_confirm) ? I18N.web_clear_notif_confirm : "Очистить все уведомления?";
+    const title = (typeof I18N !== 'undefined' && I18N.modal_title_confirm) ? I18N.modal_title_confirm : "Подтверждение";
+    
+    // FIXED: Используем window.showModalConfirm вместо confirm()
     if (!await window.showModalConfirm(msg, title)) return;
 
     try { 
         const res = await fetch('/api/notifications/clear', { method: 'POST' }); 
         if (res.ok) {
             updateNotifUI([], 0); 
-            if (window.showToast) window.showToast(I18N.web_logs_cleared_alert || "Очищено!");
+            if (window.showToast) window.showToast((typeof I18N !== 'undefined' && I18N.web_logs_cleared_alert) ? I18N.web_logs_cleared_alert : "Очищено!");
         }
     } catch (e) {
         console.error("Clear notifications error:", e);
@@ -289,10 +424,13 @@ function updateNotifUI(list, count) {
         }
     } else badge.classList.add('hidden');
     lastUnreadCount = count;
-    if (document.getElementById('notifClearBtn')) {
-        if (list.length > 0) document.getElementById('notifClearBtn').classList.remove('hidden');
-        else document.getElementById('notifClearBtn').classList.add('hidden');
+    
+    const clearBtn = document.getElementById('notifClearBtn');
+    if (clearBtn) {
+        if (list.length > 0) clearBtn.classList.remove('hidden');
+        else clearBtn.classList.add('hidden');
     }
+    
     if (list.length === 0) {
         listContainer.innerHTML = `<div class="p-4 text-center text-gray-500 text-sm">${(typeof I18N !== 'undefined' ? I18N.web_no_notifications : "Нет уведомлений")}</div>`;
     } else {
@@ -350,17 +488,34 @@ function _showSystemModalBase(title, message, type = 'alert', placeholder = '') 
     return new Promise((resolve) => {
         sysModalResolve = resolve;
         const modal = document.getElementById('systemModal');
+        // Fallback если модалки нет в DOM
         if (!modal) { resolve(type === 'confirm' ? confirm(message) : prompt(message, placeholder)); return; }
+        
         document.getElementById('sysModalTitle').innerText = title;
-        document.getElementById('sysModalMessage').innerHTML = message.replace(/\n/g, '<br>');
+        // FIXED: Безопасная обработка message, даже если он undefined
+        const safeMessage = message ? String(message).replace(/\n/g, '<br>') : "";
+        document.getElementById('sysModalMessage').innerHTML = safeMessage;
+        
         const input = document.getElementById('sysModalInput');
         const cancel = document.getElementById('sysModalCancel');
         input.classList.toggle('hidden', type !== 'prompt');
         cancel.classList.toggle('hidden', type === 'alert');
         modal.classList.remove('hidden');
         modal.classList.add('flex');
+        
+        // Фокус если это промпт
+        if (type === 'prompt') {
+            input.value = placeholder;
+            setTimeout(() => input.focus(), 50);
+        }
+
         document.getElementById('sysModalOk').onclick = () => closeSystemModal(type === 'prompt' ? input.value : true);
         cancel.onclick = () => closeSystemModal(type === 'prompt' ? null : false);
+        
+        // Поддержка Enter
+        if (type === 'prompt') {
+            input.onkeydown = (e) => { if(e.key === 'Enter') document.getElementById('sysModalOk').click(); };
+        }
     });
 }
 window.showModalAlert = (m, t) => _showSystemModalBase(t || 'Alert', m, 'alert');
