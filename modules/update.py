@@ -3,7 +3,6 @@ import logging
 import os
 import sys
 import re
-from packaging import version  # Для правильного сравнения версий (нужно будет добавить в requirements, или использовать простую логику)
 from aiogram import F, Dispatcher, types
 from aiogram.types import KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.exceptions import TelegramBadRequest
@@ -159,9 +158,6 @@ async def check_bot_update(callback: types.CallbackQuery):
                 v_str = match.group(1)
                 found_versions.append((v_str, br))
         
-        # Также проверяем main, вдруг там версия выше чем в release (хотя по условию приоритет release)
-        # Но для простоты: берем версии из названий release веток
-        
         if found_versions:
             # Сортируем версии
             found_versions.sort(key=lambda x: parse_version(x[0]), reverse=True)
@@ -172,8 +168,6 @@ async def check_bot_update(callback: types.CallbackQuery):
             if parse_version(latest_remote_ver_str) > parse_version(local_ver_str):
                 latest_ver_str = latest_remote_ver_str
                 target_branch = latest_remote_branch
-        
-        # Если не нашли release веток новее, можно проверить main (опционально), но пока следуем строго условию release
         
         if target_branch and latest_ver_str != local_ver_str:
             # Есть обновление!
