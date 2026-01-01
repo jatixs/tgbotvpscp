@@ -229,8 +229,6 @@ async def handle_dashboard(request):
     role_color = "green" if role == "admins" else "gray"
     role_badge_html = f'<span class="ml-2 px-1.5 py-0.5 rounded text-[10px] border border-{role_color}-500/30 bg-{role_color}-100 dark:bg-{role_color}-500/20 text-{role_color}-600 dark:text-{role_color}-400 uppercase font-bold align-middle">{role}</span>'
     
-    ip_badge_html = f'<span id="agentIp" class="ml-2 px-2 py-0.5 rounded text-[10px] bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 font-mono hidden sm:inline-block align-middle">{AGENT_IP_CACHE}</span>'
-    
     node_action_btn = ""
     settings_btn = ""
 
@@ -253,7 +251,10 @@ async def handle_dashboard(request):
         "{nodes_count}": str(nodes_count),
         "{active_nodes}": str(active_nodes),
         
-        "{web_agent_stats_title}": _("web_agent_stats_title", lang).replace("Мониторинг (Агент)", "Сетевая активность").replace("Monitoring (Agent)", "Network Activity") + ip_badge_html,
+        "{web_agent_stats_title}": _("web_agent_stats_title", lang).replace("Мониторинг (Агент)", "Сетевая активность").replace("Monitoring (Agent)", "Network Activity"),
+        
+        # Передаем IP адрес для использования в шаблоне
+        "{agent_ip}": AGENT_IP_CACHE,
         
         "{web_traffic_total}": _("web_traffic_total", lang),
         "{web_uptime}": _("web_uptime", lang),

@@ -52,34 +52,41 @@ LAST_TRAFFIC_STATS = {}
 # [FIX 2] Глобальные переменные для IP
 EXTERNAL_IP_CACHE = "Loading..."
 LAST_IP_CHECK = 0
-IP_CHECK_INTERVAL = 3600  # 1 час
+IP_CHECK_INTERVAL = 1800  # 30 минут
 
 # [FIX 2] Функция получения внешнего IP
 def get_external_ip():
     global EXTERNAL_IP_CACHE, LAST_IP_CHECK
     now = time.time()
     
-    # Если прошло меньше часа и IP уже есть, возвращаем кэш
-    if now - LAST_IP_CHECK < IP_CHECK_INTERVAL and EXTERNAL_IP_CACHE != "Loading...":
+    # Если прошло меньше интервала и IP уже есть, возвращаем кэш
+    if now - LAST_IP_CHECK < IP_CHECK_INTERVAL and EXTERNAL_IP_CACHE != "Loading..." and EXTERNAL_IP_CACHE != "N/A":
         return EXTERNAL_IP_CACHE
 
-    try:
-        # Пробуем несколько сервисов
-        for service in ["https://api.ipify.org", "https://ifconfig.me/ip", "https://icanhazip.com"]:
-            try:
-                response = requests.get(service, timeout=3)
-                if response.status_code == 200:
-                    ip = response.text.strip()
-                    # Простая валидация IPv4
-                    if re.match(r"^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$", ip):
-                        EXTERNAL_IP_CACHE = ip
-                        LAST_IP_CHECK = now
-                        return ip
-            except Exception:
-                continue
-    except Exception as e:
-        logging.error(f"Error fetching external IP: {e}")
+    # Список сервисов для проверки IP
+    services = [
+        "[https://api.ipify.org](https://api.ipify.org)",
+        "[https://ifconfig.me/ip](https://ifconfig.me/ip)",
+        "[https://icanhazip.com](https://icanhazip.com)",
+        "[https://ipecho.net/plain](https://ipecho.net/plain)",
+        "[http://checkip.amazonaws.com](http://checkip.amazonaws.com)"
+    ]
+
+    for service in services:
+        try:
+            response = requests.get(service, timeout=5)
+            if response.status_code == 200:
+                ip = response.text.strip()
+                # Валидация IPv4
+                if re.match(r"^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$", ip):
+                    EXTERNAL_IP_CACHE = ip
+                    LAST_IP_CHECK = now
+                    logging.info(f"External IP updated: {ip}")
+                    return ip
+        except Exception:
+            continue
     
+    logging.warning("Could not determine external IP from any service.")
     return EXTERNAL_IP_CACHE
 
 # --- УТИЛИТЫ ДЛЯ ФОРМАТИРОВАНИЯ ---
@@ -155,6 +162,9 @@ def get_system_stats():
     try:
         net = psutil.net_io_counters()
         # [FIX 2] Добавляем external_ip в статистику
+        # Принудительно вызываем get_external_ip() чтобы обновить кэш если нужно
+        ext_ip = get_external_ip()
+        
         return {
             "cpu": psutil.cpu_percent(interval=None),
             "ram": psutil.virtual_memory().percent,
@@ -164,7 +174,7 @@ def get_system_stats():
             "uptime": int(time.time() - psutil.boot_time()),
             "process_cpu": get_top_processes('cpu'),
             "process_ram": get_top_processes('ram'),
-            "external_ip": get_external_ip()
+            "external_ip": ext_ip
         }
     except Exception as e:
         logging.error(f"Error gathering stats: {e}")
@@ -173,7 +183,7 @@ def get_system_stats():
 def get_public_iperf_server():
     """Получает список публичных iperf3 серверов и выбирает случайный."""
     try:
-        url = "https://export.iperf3serverlist.net/listed_iperf3_servers.json"
+        url = "[https://export.iperf3serverlist.net/listed_iperf3_servers.json](https://export.iperf3serverlist.net/listed_iperf3_servers.json)"
         response = requests.get(url, timeout=5)
         if response.status_code == 200:
             servers = response.json()
@@ -240,8 +250,8 @@ def execute_command(task):
             
             # --- Сбор дополнительной информации ---
             try:
-                ip_res = stats.get("external_ip") or subprocess.check_output("curl -4 -s --max-time 2 ifconfig.me", shell=True).decode().strip()
-                ext_ip = ip_res or "N/A"
+                # Используем get_external_ip() вместо curl
+                ext_ip = get_external_ip()
             except:
                 ext_ip = "N/A"
                 
