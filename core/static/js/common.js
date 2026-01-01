@@ -1,24 +1,38 @@
-// /core/static/js/common.js
-// Общие функции для всех страниц
-
-// --- ЛОГИКА ТЕМЫ ---
+// --- ЛОГИКА ТЕМЫ И ИНИЦИАЛИЗАЦИЯ ---
 const themes = ['dark', 'light', 'system'];
 let currentTheme = localStorage.getItem('theme') || 'system';
 
 document.addEventListener("DOMContentLoaded", () => {
     applyThemeUI(currentTheme);
-    if (typeof window.parsePageEmojis === 'function') window.parsePageEmojis();
+    
+    // ФИКС ФЛАГОВ ДЛЯ WINDOWS (библиотека Twemoji)
+    if (typeof window.parsePageEmojis === 'function') {
+        window.parsePageEmojis();
+    } else {
+        parsePageEmojis(); 
+    }
+
     initNotifications(); 
     initHolidayMood(); 
     
-    // Инициализация логов (если блок присутствует на странице)
+    // Инициализация логов (автозагрузка при входе)
     if (document.getElementById('logsContainer')) {
-        // Вызываем функцию из dashboard.js, если она определена
         if (typeof window.switchLogType === 'function') {
             window.switchLogType('bot');
         }
     }
 });
+
+function parsePageEmojis() {
+    if (window.twemoji) {
+        window.twemoji.parse(document.body, { 
+            folder: 'svg', 
+            ext: '.svg',
+            base: 'https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/'
+        });
+    }
+}
+window.parsePageEmojis = parsePageEmojis;
 
 // --- ПОДСКАЗКИ (ХИНТЫ) ---
 function toggleHint(event, hintId) {
@@ -305,8 +319,14 @@ function updateNotifUI(list, count) {
     } else badge.classList.add('hidden');
     lastUnreadCount = count;
 
+    const clearBtn = document.getElementById('notifClearBtn');
+    if(clearBtn) {
+        if(list.length > 0) clearBtn.classList.remove('hidden');
+        else clearBtn.classList.add('hidden');
+    }
+
     if (list.length === 0) {
-        listContainer.innerHTML = `<div class="p-4 text-center text-gray-500 text-sm">${I18N.web_no_notifications}</div>`;
+        listContainer.innerHTML = `<div class="p-4 text-center text-gray-500 text-sm">${(typeof I18N !== 'undefined' ? I18N.web_no_notifications : "Нет уведомлений")}</div>`;
     } else {
         listContainer.innerHTML = list.map(n => `
             <div class="notif-item">

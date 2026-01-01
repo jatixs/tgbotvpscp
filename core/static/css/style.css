@@ -58,8 +58,6 @@ nav {
 .animate-float {
     animation: float 6s ease-in-out infinite;
 }
-.delay-2000 { animation-delay: 2s; }
-.delay-4000 { animation-delay: 4s; }
 .modal-open { display: flex !important; }
 .no-scrollbar::-webkit-scrollbar { display: none; }
 .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
