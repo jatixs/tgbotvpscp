@@ -1,8 +1,7 @@
 document.addEventListener("DOMContentLoaded", () => {
     renderUsers();
-    renderNodes(); // <--- Добавлено
+    renderNodes();
     initSystemSettingsTracking();
-    // initNodeForm(); // <--- Удалено (старая форма удалена)
     renderKeyboardConfig();
     updateBulkButtonsUI();
     initChangePasswordUI();
@@ -14,6 +13,89 @@ document.addEventListener("DOMContentLoaded", () => {
         input.addEventListener('keydown', (e) => {
             if (e.key === 'Enter' && !document.getElementById('btnAddNodeDash').disabled) {
                 addNodeDash();
+            }
+        });
+    }
+
+    // --- ЛОГИКА ОБНОВЛЕНИЯ БОТА (НОВОЕ) ---
+    const btnCheckUpdate = document.getElementById('btn-check-update');
+    const btnDoUpdate = document.getElementById('btn-do-update');
+    const updateStatusArea = document.getElementById('update-status-area');
+    const updateProgress = document.getElementById('update-progress');
+    
+    let targetBranch = null;
+
+    if(btnCheckUpdate) {
+        btnCheckUpdate.addEventListener('click', async function() {
+            btnCheckUpdate.disabled = true;
+            // Используем spinner из fontawesome или svg
+            const spinner = '<svg class="animate-spin h-4 w-4 text-gray-500 inline-block mr-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>';
+            updateStatusArea.innerHTML = `${spinner} <span class="text-gray-500">${I18N.web_update_checking || "Checking..."}</span>`;
+            
+            if(btnDoUpdate) btnDoUpdate.classList.add('d-none');
+
+            try {
+                const response = await fetch('/api/update/check');
+                const data = await response.json();
+
+                if (data.error) throw new Error(data.error);
+
+                if (data.update_available) {
+                    const infoText = (I18N.web_update_info || "Current: {local} -> New: {remote}")
+                        .replace('{local}', 'v' + data.local_version)
+                        .replace('{remote}', 'v' + data.remote_version);
+                    
+                    updateStatusArea.innerHTML = `
+                        <div>
+                            <div class="font-bold text-green-600 dark:text-green-400">${I18N.web_update_available_title || "Update Available!"}</div>
+                            <div class="text-xs text-gray-500 dark:text-gray-400 mt-1">${infoText}</div>
+                        </div>
+                    `;
+                    targetBranch = data.target_branch;
+                    if(btnDoUpdate) btnDoUpdate.classList.remove('d-none');
+                } else {
+                    const uptodateText = (I18N.web_update_uptodate || "Latest version installed ({version})").replace('{version}', 'v' + data.local_version);
+                    updateStatusArea.innerHTML = `<span class="text-gray-500 dark:text-gray-400 text-sm"><i class="fas fa-check-circle text-green-500 mr-1"></i> ${uptodateText}</span>`;
+                }
+
+            } catch (error) {
+                const errorText = (I18N.web_update_error || "Error: {error}").replace('{error}', error.message);
+                updateStatusArea.innerHTML = `<span class="text-red-500 text-sm"><i class="fas fa-exclamation-triangle mr-1"></i> ${errorText}</span>`;
+            } finally {
+                btnCheckUpdate.disabled = false;
+            }
+        });
+    }
+
+    if(btnDoUpdate) {
+        btnDoUpdate.addEventListener('click', async function() {
+            if(!confirm("Are you sure you want to update the bot? The server will restart.")) return;
+
+            btnCheckUpdate.disabled = true;
+            btnDoUpdate.disabled = true;
+            if(updateProgress) updateProgress.classList.remove('d-none');
+            
+            updateStatusArea.innerHTML = `<span class="text-blue-600 dark:text-blue-400 font-medium animate-pulse">${I18N.web_update_started || "Updating..."}</span>`;
+
+            try {
+                const response = await fetch('/api/update/run', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ branch: targetBranch })
+                });
+                const data = await response.json();
+                
+                if (data.error) throw new Error(data.error);
+
+                alert("Update started! Page will reload in 15 seconds.");
+                setTimeout(() => location.reload(), 15000);
+
+            } catch (error) {
+                const errorText = (I18N.web_update_error || "Error: {error}").replace('{error}', error.message);
+                updateStatusArea.innerHTML = `<span class="text-red-500 text-sm">${errorText}</span>`;
+                if(updateProgress) updateProgress.classList.add('d-none');
+                btnCheckUpdate.disabled = false;
+                btnDoUpdate.disabled = false;
             }
         });
     }
@@ -348,7 +430,7 @@ async function openAddUserModal() {
     }
 }
 
-// --- NODES FUNCTIONS (NEW) ---
+// --- NODES FUNCTIONS ---
 function renderNodes() {
     const tbody = document.getElementById('nodesTableBody');
     const section = document.getElementById('nodesSection');
@@ -395,7 +477,7 @@ async function deleteNode(token) {
     }
 }
 
-// --- ADD NODE MODAL FUNCTIONS (Copied & Adapted) ---
+// --- ADD NODE MODAL FUNCTIONS ---
 function openAddNodeModal() {
     const modal = document.getElementById('addNodeModal');
     if (modal) {

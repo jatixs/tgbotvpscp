@@ -435,6 +435,15 @@ STRINGS = {
         "web_hint_traffic_out": "Суммарный объем отправленного трафика с момента запуска бота.",
         "web_default_pass_alert": "⚠️ Внимание! Используется стандартный пароль ('admin'). Рекомендуется сменить его в настройках.",
         "web_logs_cleared_alert": "Очищено!",
+        "web_update_section": "Обновление Бота",
+        "web_update_check_btn": "Проверить обновления",
+        "web_update_available_title": "Доступно обновление!",
+        "web_update_info": "Текущая: {local} → Новая: {remote}",
+        "web_update_do_btn": "Обновить сейчас",
+        "web_update_uptodate": "Установлена последняя версия ({version})",
+        "web_update_checking": "Проверка...",
+        "web_update_started": "Обновление запущено! Сервер перезагружается, подождите...",
+        "web_update_error": "Ошибка обновления: {error}",
         
         # --- WEB: KEYBOARD SETTINGS ---
         "web_keyboard_title": "Клавиатура бота",
@@ -887,6 +896,15 @@ STRINGS = {
         "web_change_btn": "Change Password",
         "web_pass_changed": "Password changed successfully!",
         "web_pass_mismatch": "Passwords do not match",
+        "web_update_section": "Bot Update",
+        "web_update_check_btn": "Check for Updates",
+        "web_update_available_title": "Update Available!",
+        "web_update_info": "Current: {local} → New: {remote}",
+        "web_update_do_btn": "Update Now",
+        "web_update_uptodate": "Latest version installed ({version})",
+        "web_update_checking": "Checking...",
+        "web_update_started": "Update started! Server is restarting, please wait...",
+        "web_update_error": "Update error: {error}",
         
         # --- WEB: KEYBOARD SETTINGS ---
         "web_keyboard_title": "Bot Keyboard",

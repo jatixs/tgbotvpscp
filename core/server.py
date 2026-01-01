@@ -27,6 +27,7 @@ from .config import DEFAULT_LANGUAGE
 from .utils import get_country_flag, save_alerts_config, get_host_path
 from .auth import save_users, get_user_name
 from .keyboards import BTN_CONFIG_MAP
+from modules import update as update_module  # <--- ИМПОРТ МОДУЛЯ ОБНОВЛЕНИЯ
 
 COOKIE_NAME = "vps_agent_session"
 LOGIN_TOKEN_TTL = 300
@@ -75,12 +76,8 @@ def check_user_password(user_id, input_pass):
     stored_hash = user_data.get("password_hash")
     if not stored_hash:
         return user_id == ADMIN_USER_ID and input_pass == "admin"
-    # On legacy SHA256 match, upgrade hash to Argon2 and allow login
-    # Refuse login if legacy SHA256 hash detected; require password reset.
     if len(stored_hash) == 64 and all(c in "0123456789abcdef" for c in stored_hash):
-        # This seems to be a legacy SHA256 hash -- refuse login.
         return False
-    # For all other (Argon2) hashes
     # Legacy SHA256 check and upgrade
     sha256_admin = "8c6976e5b5410415bde908bd4dee15dfb167a9c873fc4bb8a81f6f2ab448a918"
     input_pass_sha256 = hashlib.sha256(input_pass.encode()).hexdigest()
@@ -170,7 +167,6 @@ async def handle_get_logs(request):
     if not os.path.exists(log_path):
         return web.json_response({"logs": ["Logs not found."]})
     try:
-        # --- ОПТИМИЗАЦИЯ RAM: Используем deque ---
         with open(log_path, "r", encoding="utf-8", errors="ignore") as f:
             lines = list(deque(f, 300))
         return web.json_response({"logs": lines})
@@ -432,6 +428,44 @@ async def handle_nodes_list_json(request):
         
     return web.json_response({"nodes": nodes_data})
 
+# --- НОВЫЕ ФУНКЦИИ API ДЛЯ ОБНОВЛЕНИЯ ---
+async def api_check_update(request):
+    session = await get_current_user(request) # ВАЖНО: Используем уже имеющуюся функцию
+    if not session:
+        return web.json_response({'error': 'Unauthorized'}, status=401)
+
+    try:
+        local_ver, remote_ver, target_branch = await update_module.get_update_info()
+        return web.json_response({
+            'local_version': local_ver,
+            'remote_version': remote_ver,
+            'target_branch': target_branch,
+            'update_available': (target_branch is not None)
+        })
+    except Exception as e:
+        return web.json_response({'error': str(e)}, status=500)
+
+async def api_run_update(request):
+    session = await get_current_user(request)
+    if not session or session['role'] != 'admins':
+        return web.json_response({'error': 'Unauthorized'}, status=401)
+    
+    try:
+        data = await request.json()
+        branch = data.get('branch')
+        
+        if not branch:
+             return web.json_response({'error': 'No branch specified'}, status=400)
+             
+        branch = branch.replace('origin/', '')
+
+        await update_module.execute_bot_update(branch, restart_source="web:admin")
+        
+        return web.json_response({'status': 'Update started, server restarting...'})
+    except Exception as e:
+        return web.json_response({'error': str(e)}, status=500)
+# ---------------------------------------
+
 async def handle_settings_page(request):
     user = get_current_user(request)
     if not user:
@@ -518,6 +552,9 @@ async def handle_settings_page(request):
         "{web_kb_modal_title}": _("web_kb_modal_title", lang),
         "{web_kb_done}": _("web_kb_done", lang),
         "{web_version}": CACHE_VER,
+        "{web_update_section}": _("web_update_section", lang),
+        "{web_update_check_btn}": _("web_update_check_btn", lang),
+        "{web_update_do_btn}": _("web_update_do_btn", lang),
     }
 
     modified_html = html
@@ -900,15 +937,17 @@ async def start_web_server(bot_instance: Bot):
         app.router.add_get('/api/agent/stats', handle_agent_stats)
         app.router.add_get('/api/nodes/list', handle_nodes_list_json)
         app.router.add_get('/api/logs', handle_get_logs)
+        app.router.add_get('/api/update/check', api_check_update) # <---
+        app.router.add_post('/api/update/run', api_run_update)    # <---
         app.router.add_post('/api/settings/save', handle_save_notifications)
         app.router.add_post('/api/settings/language', handle_set_language)
         app.router.add_post('/api/settings/system', handle_save_system_config)
         app.router.add_post('/api/settings/password', handle_change_password)
-        app.router.add_post('/api/settings/keyboard', handle_save_keyboard_config) # NEW
+        app.router.add_post('/api/settings/keyboard', handle_save_keyboard_config)
         app.router.add_post('/api/logs/clear', handle_clear_logs)
         app.router.add_post('/api/users/action', handle_user_action)
         app.router.add_post('/api/nodes/add', handle_node_add)
-        app.router.add_post('/api/nodes/delete', handle_node_delete) # <--- ДОБАВЛЕН
+        app.router.add_post('/api/nodes/delete', handle_node_delete)
     else:
         logging.info("Web UI DISABLED.")
         app.router.add_get('/', handle_api_root)
