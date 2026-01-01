@@ -45,6 +45,10 @@ html.dark body {
     color: #f3f4f6;
 }
 
+nav {
+    position: relative; 
+}
+
 /* --- Анимации --- */
 @keyframes float {
     0% { transform: translateY(0px); }
@@ -66,182 +70,102 @@ body, div, nav, main, button {
     transition-duration: 300ms;
 }
 
-/* --- NOTIFICATIONS (MENU) --- */
-.notif-btn {
-    position: relative;
-    cursor: pointer;
-}
-
+/* --- NOTIFICATIONS --- */
+.notif-btn { position: relative; cursor: pointer; }
 .notif-badge {
-    position: absolute;
-    top: -2px;
-    right: -2px;
-    background-color: #ef4444;
-    color: white;
-    font-size: 0.65rem;
-    font-weight: bold;
-    height: 16px;
-    width: 16px;
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    pointer-events: none;
-    transition: transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    position: absolute; top: -2px; right: -2px;
+    background-color: #ef4444; color: white;
+    font-size: 0.65rem; font-weight: bold;
+    height: 16px; width: 16px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    pointer-events: none; transition: transform 0.2s;
 }
-
-.notif-badge.hidden {
-    transform: scale(0);
-}
-
-.notif-bell-shake {
-    animation: bell-shake 0.5s cubic-bezier(.36,.07,.19,.97) both;
-}
-
-@keyframes bell-shake {
-  0% { transform: rotate(0); }
-  15% { transform: rotate(5deg); }
-  30% { transform: rotate(-5deg); }
-  45% { transform: rotate(4deg); }
-  60% { transform: rotate(-4deg); }
-  75% { transform: rotate(2deg); }
-  85% { transform: rotate(-2deg); }
-  100% { transform: rotate(0); }
-}
-
+.notif-badge.hidden { transform: scale(0); }
 .notif-dropdown {
-    position: absolute;
-    top: 100%;
-    right: 0;
-    margin-top: 10px;
-    width: 320px;
-    max-height: 400px;
-    overflow-y: auto;
-    background: rgba(255, 255, 255, 0.95);
-    backdrop-filter: blur(12px);
-    border-radius: 1rem;
-    box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
-    z-index: 60;
-    border: 1px solid rgba(229, 231, 235, 0.5);
-    opacity: 0;
-    transform: translateY(-10px);
-    pointer-events: none;
+    position: absolute; top: 100%; right: 0; margin-top: 10px;
+    width: 320px; max-height: 400px; overflow-y: auto;
+    background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(12px);
+    border-radius: 1rem; box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+    z-index: 60; border: 1px solid rgba(229,231,235,0.5);
+    opacity: 0; transform: translateY(-10px); pointer-events: none;
     transition: all 0.2s ease-out;
 }
+.dark .notif-dropdown { background: rgba(17,24,39,0.95); border-color: rgba(255,255,255,0.1); }
+.notif-dropdown.show { opacity: 1; transform: translateY(0); pointer-events: auto; }
 
-.dark .notif-dropdown {
-    background: rgba(17, 24, 39, 0.95);
-    border-color: rgba(255, 255, 255, 0.1);
-    box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
-}
-
-.notif-dropdown.show {
-    opacity: 1;
-    transform: translateY(0);
-    pointer-events: auto;
-}
-
-.notif-item {
-    padding: 12px 16px;
-    border-bottom: 1px solid rgba(0,0,0,0.05);
-    transition: background 0.15s;
-}
-.dark .notif-item {
-    border-bottom: 1px solid rgba(255,255,255,0.05);
-}
-.notif-item:last-child { border-bottom: none; }
-.notif-item:hover { background-color: rgba(0,0,0,0.02); }
-.dark .notif-item:hover { background-color: rgba(255,255,255,0.02); }
-
-.notif-time {
-    font-size: 0.7rem;
-    color: #9ca3af;
-    margin-top: 4px;
-}
-
-/* --- TOAST NOTIFICATIONS --- */
-#toast-container {
-    position: fixed;
-    bottom: 20px;
-    right: 20px;
-    z-index: 200;
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-    pointer-events: none;
-}
-
-.toast-msg {
-    pointer-events: auto;
-    display: flex;
-    align-items: flex-start;
-    gap: 12px;
-    padding: 16px;
-    border-radius: 12px;
-    background: rgba(255, 255, 255, 0.95);
-    backdrop-filter: blur(10px);
-    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
-    border: 1px solid rgba(229, 231, 235, 0.5);
-    color: #1f2937;
-    max-width: 350px;
-    width: 100%;
-    transform: translateX(100%);
-    opacity: 0;
-    transition: all 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55);
-}
-
-.dark .toast-msg {
-    background: rgba(31, 41, 55, 0.95);
-    border-color: rgba(255, 255, 255, 0.1);
-    color: #f3f4f6;
-}
-
-.toast-msg.show {
-    transform: translateX(0);
-    opacity: 1;
-}
-
-.toast-close {
-    cursor: pointer;
-    opacity: 0.5;
-    transition: opacity 0.2s;
-    margin-left: auto;
-    padding: 2px;
-}
-
-.toast-close:hover {
-    opacity: 1;
-}
-
-/* --- НОВОГОДНЕЕ НАСТРОЕНИЕ (СНЕГ) --- */
-#snow-container {
-    position: fixed;
-    top: 0;
+/* --- ГИРЛЯНДА --- */
+.lights-garland {
+    position: absolute;
+    z-index: 40;
+    bottom: -15px;
     left: 0;
     width: 100%;
-    height: 100%;
+    padding: 0;
+    margin: 0;
     pointer-events: none;
-    z-index: 1;
-    overflow: hidden;
+    display: flex;
+    justify-content: space-around;
+    overflow: visible;
 }
 
-.snowflake {
+.lights-garland li {
+    list-style: none;
+    width: 8px;
+    height: 12px;
+    border-radius: 50% 50% 50% 50% / 70% 70% 30% 30%;
+    background: #4b5563;
+    position: relative;
+    transition: background 1s ease;
+    top: 5px;
+}
+
+.lights-garland li::after {
+    content: '';
     position: absolute;
     top: -10px;
-    color: white;
-    user-select: none;
-    z-index: 1;
-    opacity: 0.8;
-    filter: drop-shadow(0 0 2px rgba(255,255,255,0.5));
-    animation: fall linear infinite;
+    left: 4px;
+    width: 60px; 
+    height: 15px;
+    border-bottom: 2px solid rgba(107, 114, 128, 0.4);
+    border-radius: 50%;
+    z-index: -1;
 }
 
-@keyframes fall {
-    0% { transform: translateY(-10vh) rotate(0deg); }
-    100% { transform: translateY(110vh) rotate(360deg); }
+.lights-garland li::before {
+    content: '';
+    position: absolute;
+    top: -3px;
+    left: 1.5px;
+    width: 5px;
+    height: 4px;
+    background: #374151;
+    border-radius: 1px;
 }
 
-.holiday-btn-active svg {
-    color: #60a5fa !important;
-    filter: drop-shadow(0 0 8px rgba(96, 165, 250, 0.6));
+.garland-on li:nth-child(4n+1) { animation: glow-red 3s ease-in-out infinite; }
+.garland-on li:nth-child(4n+2) { animation: glow-blue 3.5s ease-in-out infinite; animation-delay: 0.5s; }
+.garland-on li:nth-child(4n+3) { animation: glow-yellow 4s ease-in-out infinite; animation-delay: 1s; }
+.garland-on li:nth-child(4n+4) { animation: glow-green 3s ease-in-out infinite; animation-delay: 1.5s; }
+
+@keyframes glow-red { 
+    0%, 100% { background: #ff2d55; box-shadow: 0 0 10px #ff2d55; } 
+    50% { background: #7c1a2d; box-shadow: none; } 
 }
+@keyframes glow-blue { 
+    0%, 100% { background: #007aff; box-shadow: 0 0 10px #007aff; } 
+    50% { background: #0a3a6b; box-shadow: none; } 
+}
+@keyframes glow-yellow { 
+    0%, 100% { background: #ffcc00; box-shadow: 0 0 10px #ffcc00; } 
+    50% { background: #7a6200; box-shadow: none; } 
+}
+@keyframes glow-green { 
+    0%, 100% { background: #34c759; box-shadow: 0 0 10px #34c759; } 
+    50% { background: #1a5e2b; box-shadow: none; } 
+}
+
+/* Snow */
+#snow-container { position: fixed; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 1; overflow: hidden; }
+.snowflake { position: absolute; top: -10px; color: white; user-select: none; opacity: 0.8; animation: fall linear infinite; }
+@keyframes fall { 0% { transform: translateY(-10vh) rotate(0deg); } 100% { transform: translateY(110vh) rotate(360deg); } }
+.holiday-btn-active svg { color: #60a5fa !important; filter: drop-shadow(0 0 5px rgba(96,165,250,0.5)); }
