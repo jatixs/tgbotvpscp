@@ -182,11 +182,8 @@ async def api_get_notifications(request):
     
     uid = user['id']
     user_alerts = ALERTS_CONFIG.get(uid, {})
-    
-    # Фильтруем уведомления: оставляем только те типы, которые включены у пользователя
     filtered = [n for n in list(shared_state.WEB_NOTIFICATIONS) if user_alerts.get(n['type'], False)]
     
-    # Считаем непрочитанные персонально по времени последнего прочтения
     last_read = shared_state.WEB_USER_LAST_READ.get(uid, 0)
     unread_count = sum(1 for n in filtered if n['time'] > last_read)
     
@@ -199,7 +196,6 @@ async def api_read_notifications(request):
     user = get_current_user(request)
     if not user: return web.json_response({"error": "Unauthorized"}, status=401)
     
-    # Помечаем время прочтения для конкретного пользователя
     uid = user['id']
     shared_state.WEB_USER_LAST_READ[uid] = time.time()
     return web.json_response({"status": "ok"})
@@ -209,8 +205,6 @@ async def api_clear_notifications(request):
     if not user: return web.json_response({"error": "Unauthorized"}, status=401)
     
     shared_state.WEB_NOTIFICATIONS.clear()
-    shared_state.WEB_UNREAD_COUNT = 0
-    # Сбрасываем метки прочтения для всех
     shared_state.WEB_USER_LAST_READ.clear()
     return web.json_response({"status": "ok"})
 
@@ -270,7 +264,7 @@ async def handle_dashboard(request):
         "{user_name}": user.get('first_name', 'User'),
         "{nodes_count}": str(nodes_count),
         "{active_nodes}": str(active_nodes),
-        "{web_agent_stats_title}": _("web_agent_stats_title", lang).replace("Мониторинг (Агент)", "Сетевая активность").replace("Monitoring (Agent)", "Network Activity"),
+        "{web_agent_stats_title}": _("web_agent_stats_title", lang),
         "{agent_ip}": AGENT_IP_CACHE,
         "{web_traffic_total}": _("web_traffic_total", lang),
         "{web_uptime}": _("web_uptime", lang),
@@ -331,9 +325,10 @@ async def handle_dashboard(request):
         "web_clear_notif_confirm": _("web_clear_notifications", lang) + "?",
         "modal_btn_ok": _("modal_btn_ok", lang),
         "modal_btn_cancel": _("modal_btn_cancel", lang),
-        "web_time_d": "д" if lang == 'ru' else "d",
-        "web_time_h": "ч" if lang == 'ru' else "h",
-        "web_time_m": "м" if lang == 'ru' else "m",
+        # === ОБНОВЛЕНИЕ: Передача ключей для локализации времени и байтов ===
+        "web_time_d": _("unit_day_short", lang),
+        "web_time_h": _("unit_hour_short", lang),
+        "web_time_m": _("unit_minute_short", lang),
         "unit_bytes": _("unit_bytes", lang),
         "unit_kb": _("unit_kb", lang),
         "unit_mb": _("unit_mb", lang),

@@ -2,6 +2,10 @@
 const themes = ['dark', 'light', 'system'];
 let currentTheme = localStorage.getItem('theme') || 'system';
 
+// Переменная для отслеживания времени последнего полученного уведомления
+// Инициализируем текущим временем, чтобы не показывать старые уведомления при перезагрузке страницы
+let latestNotificationTime = Math.floor(Date.now() / 1000);
+
 document.addEventListener("DOMContentLoaded", () => {
     applyThemeUI(currentTheme);
     
@@ -78,59 +82,81 @@ function copyTextToClipboard(text) {
 window.copyTextToClipboard = copyTextToClipboard;
 
 function showCopyFeedback() {
-    // Показываем текстовый тост
     if (window.showToast) window.showToast(typeof I18N !== 'undefined' ? I18N.web_copied : "Скопировано!");
 }
 window.copyToken = copyToken;
 
-// --- ВСПЛЫВАЮЩИЕ УВЕДОМЛЕНИЯ (TOASTS) - FIXED (RIGHT BOTTOM) ---
-let currentToast = null;
-let currentToastTimer = null;
+// --- ВСПЛЫВАЮЩИЕ УВЕДОМЛЕНИЯ (TOASTS) - НОВЫЙ ДИЗАЙН ---
+let toastContainer = null;
+
+function getToastContainer() {
+    if (!toastContainer) {
+        toastContainer = document.createElement('div');
+        // Контейнер для тостов: фиксирован снизу справа, элементы складываются стопкой
+        toastContainer.className = 'fixed bottom-5 right-5 z-[9999] flex flex-col items-end gap-3 pointer-events-none';
+        document.body.appendChild(toastContainer);
+    }
+    return toastContainer;
+}
 
 function showToast(message) {
-    // Удаляем предыдущий тост, если есть
-    if (currentToast) {
-        if (currentToastTimer) clearTimeout(currentToastTimer);
-        currentToast.remove();
-        currentToast = null;
-    }
-
-    const toast = document.createElement('div');
-    // FIXED: Позиционирование справа снизу (bottom-5 right-5) и высокий Z-index (z-[9999])
-    toast.className = 'fixed bottom-5 right-5 z-[9999] flex items-center gap-3 px-5 py-3 rounded-2xl shadow-2xl backdrop-blur-md border transition-all duration-500 ease-out ' +
-        'bg-white/95 dark:bg-gray-800/95 text-gray-900 dark:text-white border-gray-200 dark:border-white/10 opacity-0 translate-y-10 w-auto max-w-[300px] pointer-events-none';
+    const container = getToastContainer();
     
+    // Создаем элемент тоста
+    const toast = document.createElement('div');
+    
+    // Стили: Glassmorphism, тени, анимация появления снизу
+    toast.className = 'pointer-events-auto flex items-start gap-3 p-4 rounded-2xl shadow-xl backdrop-blur-md border transition-all duration-500 ease-out transform translate-y-10 opacity-0 bg-white/90 dark:bg-gray-800/90 border-gray-200 dark:border-white/10 max-w-sm w-full sm:w-80';
+    
+    // Иконка
+    const icon = `
+    <div class="p-1.5 rounded-full bg-blue-100 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+    </div>`;
+
+    // Кнопка закрытия (крестик)
+    const closeBtn = `
+    <button onclick="this.closest('div').classList.add('opacity-0', 'translate-x-10'); setTimeout(() => this.closest('div').remove(), 300)" class="text-gray-400 hover:text-gray-600 dark:hover:text-white transition -mr-1 -mt-1 p-1 rounded-lg hover:bg-black/5 dark:hover:bg-white/10">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+        </svg>
+    </button>`;
+
     toast.innerHTML = `
-        <div class="p-1.5 rounded-full bg-blue-100 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400 flex-shrink-0">
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
+        ${icon}
+        <div class="flex-1 min-w-0">
+            <p class="text-sm font-medium text-gray-900 dark:text-white leading-snug break-words">${message}</p>
         </div>
-        <span class="font-medium text-sm leading-snug">${message}</span>
+        ${closeBtn}
     `;
     
-    document.body.appendChild(toast);
-    currentToast = toast;
+    container.appendChild(toast);
     
-    // Анимация появления
+    // Запуск анимации появления
     requestAnimationFrame(() => {
-        toast.classList.remove('opacity-0', 'translate-y-10');
-        toast.classList.add('opacity-100', 'translate-y-0');
+        toast.classList.remove('translate-y-10', 'opacity-0');
     });
 
-    // Таймер исчезновения (3 секунды)
-    currentToastTimer = setTimeout(() => {
-        if (currentToast === toast) {
-            toast.classList.remove('opacity-100', 'translate-y-0');
-            toast.classList.add('opacity-0', 'translate-y-10');
-            setTimeout(() => {
-                if (currentToast === toast) {
-                    toast.remove();
-                    currentToast = null;
-                }
-            }, 500);
-        }
-    }, 3000); 
+    // Автоматическое закрытие через 5 секунд
+    const autoClose = setTimeout(() => {
+        closeToast(toast);
+    }, 5000);
+
+    // Пауза при наведении
+    toast.onmouseenter = () => clearTimeout(autoClose);
+    toast.onmouseleave = () => {
+        setTimeout(() => closeToast(toast), 2000);
+    };
+}
+
+function closeToast(toastElement) {
+    if (!toastElement) return;
+    toastElement.classList.add('opacity-0', 'translate-x-10');
+    setTimeout(() => {
+        if (toastElement.parentElement) toastElement.remove();
+    }, 500); 
 }
 window.showToast = showToast;
 
@@ -165,11 +191,10 @@ function closeHintModal() {
 window.toggleHint = toggleHint;
 window.closeHintModal = closeHintModal;
 
-// --- ЛОГИКА ДОБАВЛЕНИЯ НОДЫ (ГЛОБАЛЬНО) ---
+// --- ЛОГИКА ДОБАВЛЕНИЯ НОДЫ ---
 function initAddNodeLogic() {
     const input = document.getElementById('newNodeNameDash');
     if (input) {
-        // Удаляем старые слушатели во избежание дублирования
         input.removeEventListener('input', validateNodeInput); 
         input.addEventListener('input', validateNodeInput);
         input.addEventListener('keydown', (e) => {
@@ -244,7 +269,6 @@ async function addNodeDash() {
             document.getElementById('newNodeTokenDash').innerText = data.token;
             document.getElementById('newNodeCmdDash').innerText = data.command;
             
-            // Универсальное обновление списков (для Settings и Dashboard)
             if (typeof NODES_DATA !== 'undefined') {
                 NODES_DATA.push({token: data.token, name: name, ip: 'Unknown'});
             }
@@ -263,7 +287,6 @@ async function addNodeDash() {
         validateNodeInput();
     }
 }
-window.addNodeDash = addNodeDash;
 
 // --- НОВОГОДНЯЯ ЛОГИКА ---
 function isHolidayPeriod() {
@@ -356,13 +379,12 @@ function startSnow() {
 
 function stopSnow() { clearInterval(snowInterval); snowInterval = null; if (document.getElementById('snow-container')) document.getElementById('snow-container').innerHTML = ''; }
 
-// --- УВЕДОМЛЕНИЯ (КОЛОКОЛЬЧИК) ---
+// --- УВЕДОМЛЕНИЯ (КОЛОКОЛЬЧИК И TOASTS) ---
 let lastUnreadCount = -1;
 function initNotifications() {
     const btn = document.getElementById('notifBtn');
     if (!btn) return;
     
-    // Удаляем старые слушатели, клонируя узел (самый надежный способ очистки)
     const newBtn = btn.cloneNode(true);
     btn.parentNode.replaceChild(newBtn, btn);
     newBtn.addEventListener('click', toggleNotifications);
@@ -387,6 +409,22 @@ async function pollNotifications() {
         const res = await fetch('/api/notifications/list');
         if (!res.ok) return;
         const data = await res.json();
+        
+        // --- ЛОГИКА ОТОБРАЖЕНИЯ TOAST-УВЕДОМЛЕНИЙ ---
+        if (data.notifications && data.notifications.length > 0) {
+            let maxTime = latestNotificationTime;
+            
+            data.notifications.forEach(notif => {
+                // Если уведомление пришло позже, чем последнее зафиксированное время
+                if (notif.time > latestNotificationTime) {
+                    showToast(notif.text);
+                    if (notif.time > maxTime) maxTime = notif.time;
+                }
+            });
+            
+            latestNotificationTime = maxTime;
+        }
+        
         updateNotifUI(data.notifications, data.unread_count);
     } catch (e) {}
 }
@@ -397,13 +435,15 @@ async function clearNotifications(e) {
     const msg = (typeof I18N !== 'undefined' && I18N.web_clear_notif_confirm) ? I18N.web_clear_notif_confirm : "Очистить все уведомления?";
     const title = (typeof I18N !== 'undefined' && I18N.modal_title_confirm) ? I18N.modal_title_confirm : "Подтверждение";
     
-    // FIXED: Используем window.showModalConfirm вместо confirm()
+    // Используем системное модальное окно в дизайне сайта
+    // Элемент #systemModal присутствует на всех страницах (dashboard.html, settings.html)
     if (!await window.showModalConfirm(msg, title)) return;
 
     try { 
         const res = await fetch('/api/notifications/clear', { method: 'POST' }); 
         if (res.ok) {
             updateNotifUI([], 0); 
+            // Показываем подтверждение через новый Toast
             if (window.showToast) window.showToast((typeof I18N !== 'undefined' && I18N.web_logs_cleared_alert) ? I18N.web_logs_cleared_alert : "Очищено!");
         }
     } catch (e) {
@@ -488,11 +528,10 @@ function _showSystemModalBase(title, message, type = 'alert', placeholder = '') 
     return new Promise((resolve) => {
         sysModalResolve = resolve;
         const modal = document.getElementById('systemModal');
-        // Fallback если модалки нет в DOM
+        // Fallback если модалки нет в DOM (маловероятно, так как она есть в шаблонах)
         if (!modal) { resolve(type === 'confirm' ? confirm(message) : prompt(message, placeholder)); return; }
         
         document.getElementById('sysModalTitle').innerText = title;
-        // FIXED: Безопасная обработка message, даже если он undefined
         const safeMessage = message ? String(message).replace(/\n/g, '<br>') : "";
         document.getElementById('sysModalMessage').innerHTML = safeMessage;
         
@@ -503,7 +542,6 @@ function _showSystemModalBase(title, message, type = 'alert', placeholder = '') 
         modal.classList.remove('hidden');
         modal.classList.add('flex');
         
-        // Фокус если это промпт
         if (type === 'prompt') {
             input.value = placeholder;
             setTimeout(() => input.focus(), 50);
@@ -512,7 +550,6 @@ function _showSystemModalBase(title, message, type = 'alert', placeholder = '') 
         document.getElementById('sysModalOk').onclick = () => closeSystemModal(type === 'prompt' ? input.value : true);
         cancel.onclick = () => closeSystemModal(type === 'prompt' ? null : false);
         
-        // Поддержка Enter
         if (type === 'prompt') {
             input.onkeydown = (e) => { if(e.key === 'Enter') document.getElementById('sysModalOk').click(); };
         }
