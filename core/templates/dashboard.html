@@ -9,29 +9,44 @@
     <script>
         const I18N = {i18n_json};
     </script>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://unpkg.com/twemoji@latest/dist/twemoji.min.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <link rel="stylesheet" href="/static/css/style.css?v={web_version}">
 </head>
-<body class="bg-gray-100 text-gray-900 dark:bg-gray-900 dark:text-gray-100 font-sans selection:bg-green-500/30 pb-10 overflow-x-hidden">
+<body class="bg-gray-100 text-gray-900 dark:bg-gray-900 dark:text-gray-100 font-sans selection:bg-blue-500/30 pb-10 overflow-x-hidden">
     
-    <div class="fixed top-[-10%] left-[-10%] w-96 h-96 rounded-full mix-blend-multiply dark:mix-blend-screen filter blur-3xl animate-float pointer-events-none opacity-70 dark:opacity-100 bg-cyan-300 dark:bg-purple-600/20"></div>
-    <div class="fixed bottom-[-10%] right-[-10%] w-96 h-96 rounded-full mix-blend-multiply dark:mix-blend-screen filter blur-3xl animate-float delay-2000 pointer-events-none opacity-70 dark:opacity-100 bg-rose-300 dark:bg-blue-600/20"></div>
+    <div class="fixed top-[-10%] left-[-10%] w-96 h-96 rounded-full mix-blend-multiply dark:mix-blend-screen filter blur-3xl animate-float pointer-events-none opacity-70 dark:opacity-100 bg-blue-300 dark:bg-blue-600/20"></div>
+    <div class="fixed bottom-[-10%] right-[-10%] w-96 h-96 rounded-full mix-blend-multiply dark:mix-blend-screen filter blur-3xl animate-float delay-2000 pointer-events-none opacity-70 dark:opacity-100 bg-purple-300 dark:bg-purple-600/20"></div>
 
     <nav class="bg-white/70 dark:bg-black/40 backdrop-blur-xl border-b border-white/20 dark:border-white/5 sticky top-0 z-40 shadow-sm dark:shadow-none">
-        <div class="max-w-6xl mx-auto px-3 sm:px-4 py-3 flex flex-wrap justify-between items-center gap-2">
-            
-            <div class="flex items-center space-x-2 min-w-0">
-                <span class="relative flex h-3 w-3 flex-shrink-0">
-                  <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
-                  <span class="relative inline-flex rounded-full h-3 w-3 bg-green-500"></span>
-                </span>
-                <span class="font-bold text-base sm:text-lg tracking-tight truncate">{web_dashboard_title}</span>
-                <div class="ml-1 sm:ml-2 flex-shrink-0">{role_badge}</div>
+        <div class="max-w-6xl mx-auto px-4 py-3 flex flex-wrap justify-between items-center gap-3">
+            <div class="flex items-center space-x-2">
+                <span class="font-bold text-xl bg-clip-text text-transparent bg-gradient-to-r from-blue-600 to-purple-600 dark:from-blue-400 dark:to-purple-400">VPS Bot</span>
+                <span class="px-2 py-0.5 rounded text-[10px] border border-blue-500/30 bg-blue-100 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400 uppercase font-bold">v{web_version}</span>
             </div>
             
-            <div class="flex items-center gap-2 sm:gap-4 flex-shrink-0">
+            <div class="flex items-center gap-3 sm:gap-4">
                 
+                {settings_btn}
+
+                <div class="relative group">
+                    <button id="notifBtn" class="notif-btn flex items-center justify-center w-8 h-8 rounded-lg hover:bg-black/5 dark:hover:bg-white/10 transition text-gray-600 dark:text-gray-400">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+                        </svg>
+                        <span id="notifBadge" class="notif-badge hidden">0</span>
+                    </button>
+                    
+                    <div id="notifDropdown" class="notif-dropdown hidden">
+                        <div class="px-4 py-3 border-b border-gray-100 dark:border-white/5 bg-gray-50/50 dark:bg-white/5 backdrop-blur-sm rounded-t-2xl flex justify-between items-center">
+                            <span class="text-xs font-bold uppercase tracking-widest text-gray-500 dark:text-gray-400" data-i18n="web_notifications_title">{web_notifications_title}</span>
+                            <button id="notifClearBtn" class="text-[10px] font-bold text-red-500 hover:text-red-600 uppercase tracking-wider hidden transition" data-i18n="web_clear_notifications">{web_clear_notifications}</button>
+                        </div>
+                        <div id="notifList" class="max-h-[300px] overflow-y-auto custom-scrollbar">
+                            </div>
+                    </div>
+                </div>
+
                 <div class="relative group">
                     <button class="flex items-center justify-center w-8 h-8 rounded-lg hover:bg-black/5 dark:hover:bg-white/10 transition text-gray-600 dark:text-gray-400" id="langBtn">
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
@@ -56,290 +71,172 @@
                     <svg id="iconSystem" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>
                 </button>
 
-                <div class="hidden sm:flex items-center gap-2 bg-white/60 dark:bg-white/5 px-3 py-1.5 rounded-full border border-white/40 dark:border-white/5 shadow-sm dark:shadow-none max-w-[140px]">
+                <div class="hidden sm:flex items-center gap-2 bg-white/60 dark:bg-white/5 px-3 py-1.5 rounded-full border border-white/40 dark:border-white/5 shadow-sm dark:shadow-none max-w-[140px] sm:max-w-none">
                     {user_avatar}
                     <span class="text-xs font-medium text-gray-700 dark:text-gray-300 truncate">{user_name}</span>
                 </div>
-                
-                <form action="/logout" method="POST" class="flex">
-                    <button type="submit" class="text-gray-500 hover:text-red-500 transition-colors p-1">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-                        </svg>
-                    </button>
-                </form>
             </div>
         </div>
     </nav>
 
     <main class="max-w-6xl mx-auto px-4 mt-6 sm:mt-8 relative z-10">
         
-        <div class="grid grid-cols-1 lg:grid-cols-4 gap-4 mb-8">
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+            <div class="bg-white/60 dark:bg-white/5 backdrop-blur-md border border-white/40 dark:border-white/10 rounded-2xl p-5 shadow-lg dark:shadow-none flex flex-col justify-between h-32 relative overflow-hidden group hover:scale-[1.02] transition duration-300">
+                <div class="absolute right-[-20px] top-[-20px] w-24 h-24 bg-blue-500/10 rounded-full blur-2xl group-hover:bg-blue-500/20 transition"></div>
+                <div class="flex justify-between items-start">
+                    <div>
+                        <p class="text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-1">{web_uptime}</p>
+                        <h3 class="text-xl font-bold text-gray-900 dark:text-white" id="stat_uptime">{web_loading}</h3>
+                    </div>
+                    <div class="p-2 bg-blue-100 dark:bg-blue-500/20 rounded-xl text-blue-600 dark:text-blue-400">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                    </div>
+                </div>
+                <div class="text-xs text-gray-400 dark:text-gray-500 font-mono mt-auto">{web_footer_powered} Python</div>
+            </div>
+
+            <div class="bg-white/60 dark:bg-white/5 backdrop-blur-md border border-white/40 dark:border-white/10 rounded-2xl p-5 shadow-lg dark:shadow-none flex flex-col justify-between h-32 relative overflow-hidden group hover:scale-[1.02] transition duration-300 cursor-help" onclick="toggleHint(event, 'hint-cpu')">
+                <div class="absolute right-[-20px] top-[-20px] w-24 h-24 bg-indigo-500/10 rounded-full blur-2xl group-hover:bg-indigo-500/20 transition"></div>
+                <div class="flex justify-between items-start">
+                    <div>
+                        <div class="flex items-center gap-1">
+                            <p class="text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-1">{web_cpu}</p>
+                            <div id="hint-cpu" class="hidden">{web_hint_cpu_usage}</div>
+                        </div>
+                        <h3 class="text-2xl font-black text-indigo-600 dark:text-indigo-400" id="stat_cpu">0%</h3>
+                    </div>
+                    <div class="p-2 bg-indigo-100 dark:bg-indigo-500/20 rounded-xl text-indigo-600 dark:text-indigo-400">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z" /></svg>
+                    </div>
+                </div>
+                <div class="w-full bg-gray-200 dark:bg-gray-700 h-1.5 rounded-full mt-auto overflow-hidden">
+                    <div class="bg-indigo-500 h-1.5 rounded-full transition-all duration-1000 ease-out" id="prog_cpu" style="width: 0%"></div>
+                </div>
+            </div>
+
+            <div class="bg-white/60 dark:bg-white/5 backdrop-blur-md border border-white/40 dark:border-white/10 rounded-2xl p-5 shadow-lg dark:shadow-none flex flex-col justify-between h-32 relative overflow-hidden group hover:scale-[1.02] transition duration-300 cursor-help" onclick="toggleHint(event, 'hint-ram')">
+                <div class="absolute right-[-20px] top-[-20px] w-24 h-24 bg-purple-500/10 rounded-full blur-2xl group-hover:bg-purple-500/20 transition"></div>
+                <div class="flex justify-between items-start">
+                    <div>
+                        <div class="flex items-center gap-1">
+                            <p class="text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-1">{web_ram}</p>
+                            <div id="hint-ram" class="hidden">{web_hint_ram_usage}</div>
+                        </div>
+                        <h3 class="text-2xl font-black text-purple-600 dark:text-purple-400" id="stat_ram">0%</h3>
+                    </div>
+                    <div class="p-2 bg-purple-100 dark:bg-purple-500/20 rounded-xl text-purple-600 dark:text-purple-400">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.384-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" /></svg>
+                    </div>
+                </div>
+                <div class="w-full bg-gray-200 dark:bg-gray-700 h-1.5 rounded-full mt-auto overflow-hidden">
+                    <div class="bg-purple-500 h-1.5 rounded-full transition-all duration-1000 ease-out" id="prog_ram" style="width: 0%"></div>
+                </div>
+            </div>
+
+            <div class="bg-white/60 dark:bg-white/5 backdrop-blur-md border border-white/40 dark:border-white/10 rounded-2xl p-5 shadow-lg dark:shadow-none flex flex-col justify-between h-32 relative overflow-hidden group hover:scale-[1.02] transition duration-300 cursor-help" onclick="toggleHint(event, 'hint-disk')">
+                <div class="absolute right-[-20px] top-[-20px] w-24 h-24 bg-green-500/10 rounded-full blur-2xl group-hover:bg-green-500/20 transition"></div>
+                <div class="flex justify-between items-start">
+                    <div>
+                        <div class="flex items-center gap-1">
+                            <p class="text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-1">{web_disk}</p>
+                            <div id="hint-disk" class="hidden">{web_hint_disk_usage}</div>
+                        </div>
+                        <h3 class="text-2xl font-black text-green-600 dark:text-green-400" id="stat_disk">0%</h3>
+                    </div>
+                    <div class="p-2 bg-green-100 dark:bg-green-500/20 rounded-xl text-green-600 dark:text-green-400">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01" /></svg>
+                    </div>
+                </div>
+                <div class="w-full bg-gray-200 dark:bg-gray-700 h-1.5 rounded-full mt-auto overflow-hidden">
+                    <div class="bg-green-500 h-1.5 rounded-full transition-all duration-1000 ease-out" id="prog_disk" style="width: 0%"></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+            <div class="lg:col-span-2 bg-white/60 dark:bg-white/5 backdrop-blur-md border border-white/40 dark:border-white/10 rounded-2xl p-6 shadow-lg dark:shadow-none">
+                <h3 class="text-lg font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z" /></svg>
+                    {web_agent_stats_title}
+                </h3>
+                <div class="h-[250px] w-full">
+                    <canvas id="agentChart"></canvas>
+                </div>
+            </div>
+
+            <div class="bg-white/60 dark:bg-white/5 backdrop-blur-md border border-white/40 dark:border-white/10 rounded-2xl p-6 shadow-lg dark:shadow-none flex flex-col">
+                <h3 class="text-lg font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
+                    {web_traffic_total}
+                </h3>
+                <div class="flex-1 flex flex-col justify-center gap-4">
+                    <div class="bg-gray-50 dark:bg-black/20 p-4 rounded-xl border border-gray-200 dark:border-white/5 cursor-help" onclick="toggleHint(event, 'hint-tx')">
+                        <div class="flex justify-between items-center mb-1">
+                            <span class="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">{web_tx}</span>
+                            <div id="hint-tx" class="hidden">{web_hint_traffic_out}</div>
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-orange-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 10l7-7m0 0l7 7m-7-7v18" /></svg>
+                        </div>
+                        <div class="text-xl font-mono font-bold text-gray-900 dark:text-white" id="stat_net_sent">0 B</div>
+                    </div>
+                    <div class="bg-gray-50 dark:bg-black/20 p-4 rounded-xl border border-gray-200 dark:border-white/5 cursor-help" onclick="toggleHint(event, 'hint-rx')">
+                        <div class="flex justify-between items-center mb-1">
+                            <span class="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">{web_rx}</span>
+                            <div id="hint-rx" class="hidden">{web_hint_traffic_in}</div>
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-cyan-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 14l-7 7m0 0l-7-7m7 7V3" /></svg>
+                        </div>
+                        <div class="text-xl font-mono font-bold text-gray-900 dark:text-white" id="stat_net_recv">0 B</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
             
-            <div class="col-span-1 grid grid-cols-2 lg:flex lg:flex-col gap-4">
-                
-                <div class="bg-white/60 dark:bg-white/5 backdrop-blur-md border border-white/40 dark:border-white/10 rounded-2xl p-5 relative overflow-hidden group flex flex-col justify-between transition shadow-lg hover:shadow-xl dark:shadow-none h-full min-h-[140px]">
-                    <div class="absolute right-[-20px] top-[-20px] p-6 bg-purple-100/50 dark:bg-purple-500/10 rounded-full group-hover:scale-110 transition transform duration-500">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-16 w-16 text-purple-500/50 dark:text-purple-400/30" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" /></svg>
-                    </div>
-                    <div class="relative z-10">
-                        <div class="text-gray-500 dark:text-gray-400 text-[10px] font-bold uppercase tracking-widest mb-1">{web_stats_total}</div>
-                        <div class="text-5xl font-extrabold text-gray-800 dark:text-white tracking-tight mt-2" id="statTotalNodes">{nodes_count}</div>
-                    </div>
-                    <div class="relative z-10 mt-4">
-                        {node_action_btn}
-                    </div>
-                </div>
-
-                <div class="bg-white/60 dark:bg-white/5 backdrop-blur-md border border-white/40 dark:border-white/10 rounded-2xl p-5 relative overflow-hidden group flex flex-col justify-between transition shadow-lg hover:shadow-xl dark:shadow-none h-full min-h-[140px]">
-                    <div class="absolute right-[-20px] top-[-20px] p-6 bg-green-100/50 dark:bg-green-500/10 rounded-full group-hover:scale-110 transition transform duration-500">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-16 w-16 text-green-500/50 dark:text-green-400/30" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                    </div>
-                    
-                    <div class="relative z-10">
-                        <div class="text-gray-500 dark:text-gray-400 text-[10px] font-bold uppercase tracking-widest mb-1">{web_stats_active}</div>
-                        <div class="flex items-baseline gap-2 mt-2">
-                            <span class="text-5xl font-extrabold text-gray-800 dark:text-white tracking-tight" id="statActiveNodes">{active_nodes}</span>
-                            <span class="text-xs font-medium text-green-500 dark:text-green-400" id="statOnlinePercent">--%</span>
-                        </div>
-                    </div>
-
-                    <div class="relative z-10 mt-4 w-full">
-                        <div class="flex justify-between text-[10px] text-gray-400 mb-1">
-                            <span>Network Health</span>
-                        </div>
-                        <div class="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-1.5 overflow-hidden">
-                            <div id="statProgressBar" class="bg-gradient-to-r from-green-400 to-emerald-500 h-1.5 rounded-full transition-all duration-1000 ease-out" style="width: 0%"></div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <div class="col-span-1 lg:col-span-3 bg-white/60 dark:bg-white/5 backdrop-blur-md border border-white/40 dark:border-white/10 rounded-2xl p-5 relative overflow-hidden flex flex-col justify-between shadow-lg dark:shadow-none">
-                <div class="flex justify-between items-start mb-4">
-                    <div class="flex items-center gap-2">
-                        <div class="h-2 w-2 rounded-full bg-green-500 animate-pulse"></div>
-                        <div class="text-gray-700 dark:text-gray-200 text-sm font-bold uppercase tracking-wide">{web_agent_stats_title}</div>
-                    </div>
-                    <div class="flex items-center gap-3">
-                         <div class="hidden sm:flex items-center gap-1 text-[10px] text-gray-500 bg-white/50 dark:bg-black/20 px-2 py-1 rounded border border-gray-200 dark:border-white/5">
-                            <span>{web_uptime}:</span>
-                            <span id="agentUptime" class="font-mono text-blue-600 dark:text-blue-300 font-bold">...</span>
-                        </div>
-                        <div id="agentIp" class="text-[10px] font-mono text-gray-500 bg-white/50 dark:bg-black/20 px-2 py-1 rounded border border-gray-200 dark:border-white/5">...</div>
+            <div class="bg-white/60 dark:bg-white/5 backdrop-blur-md border border-white/40 dark:border-white/10 rounded-2xl p-6 shadow-lg dark:shadow-none">
+                <div class="flex justify-between items-center mb-4">
+                    <h3 class="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" /></svg>
+                        {web_node_mgmt_title}
+                    </h3>
+                    <div class="flex gap-2">
+                        <span class="px-2 py-1 bg-gray-100 dark:bg-gray-700 rounded text-xs font-bold text-gray-600 dark:text-gray-300">{web_stats_total}: <span id="nodesTotal">{nodes_count}</span></span>
+                        <span class="px-2 py-1 bg-green-100 dark:bg-green-900/30 rounded text-xs font-bold text-green-600 dark:text-green-400">{web_stats_active}: <span id="nodesActive">{active_nodes}</span></span>
                     </div>
                 </div>
                 
-                <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3 mb-4">
-                    <div class="bg-white/50 dark:bg-black/20 rounded p-2 text-center border border-white/20 dark:border-white/5 backdrop-blur-sm">
-                        <div class="flex justify-center items-center gap-1 mb-1">
-                            <span class="text-[9px] text-gray-500 uppercase">{web_cpu}</span>
-                            <div class="relative inline-block">
-                                <button onclick="toggleHint(event, 'hint-cpu-dash')" type="button" class="p-0.5 -m-0.5 rounded-full focus:outline-none focus:ring-1 focus:ring-blue-500/50">
-                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 text-gray-400 cursor-help" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                    </svg>
-                                </button>
-                                <div id="hint-cpu-dash" class="hidden">
-                                    {web_hint_cpu_usage}
-                                </div>
-                            </div>
-                        </div>
-                        <span id="agentCpu" class="font-bold text-gray-800 dark:text-white text-sm">0%</span>
-                    </div>
-                    <div class="bg-white/50 dark:bg-black/20 rounded p-2 text-center border border-white/20 dark:border-white/5 backdrop-blur-sm">
-                        <div class="flex justify-center items-center gap-1 mb-1">
-                            <span class="text-[9px] text-gray-500 uppercase">{web_ram}</span>
-                            <div class="relative inline-block">
-                                <button onclick="toggleHint(event, 'hint-ram-dash')" type="button" class="p-0.5 -m-0.5 rounded-full focus:outline-none focus:ring-1 focus:ring-purple-500/50">
-                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 text-gray-400 cursor-help" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                    </svg>
-                                </button>
-                                <div id="hint-ram-dash" class="hidden">
-                                    {web_hint_ram_usage}
-                                </div>
-                            </div>
-                        </div>
-                        <span id="agentRam" class="font-bold text-gray-800 dark:text-white text-sm">0%</span>
-                    </div>
-                    <div class="bg-white/50 dark:bg-black/20 rounded p-2 text-center border border-white/20 dark:border-white/5 backdrop-blur-sm">
-                        <div class="flex justify-center items-center gap-1 mb-1">
-                            <span class="text-[9px] text-gray-500 uppercase">{web_disk}</span>
-                            <div class="relative inline-block">
-                                <button onclick="toggleHint(event, 'hint-disk-dash')" type="button" class="p-0.5 -m-0.5 rounded-full focus:outline-none focus:ring-1 focus:ring-green-500/50">
-                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 text-gray-400 cursor-help" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                    </svg>
-                                </button>
-                                <div id="hint-disk-dash" class="hidden">
-                                    {web_hint_disk_usage}
-                                </div>
-                            </div>
-                        </div>
-                        <span id="agentDisk" class="font-bold text-gray-800 dark:text-white text-sm">0%</span>
-                    </div>
-                    <div class="block sm:hidden bg-white/50 dark:bg-black/20 rounded p-2 text-center border border-white/20 dark:border-white/5 backdrop-blur-sm">
-                         <div class="flex justify-center items-center gap-1 mb-1">
-                            <span class="text-[9px] text-gray-500 uppercase">{web_uptime}</span>
-                        </div>
-                        <span id="agentUptimeMobile" class="font-bold text-blue-600 dark:text-blue-400 text-sm">...</span>
-                    </div>
-                    <div class="bg-white/50 dark:bg-black/20 rounded p-2 text-center border border-white/20 dark:border-white/5 border-l-2 border-l-blue-500/50 backdrop-blur-sm">
-                        <div class="flex justify-center items-center gap-1 mb-1">
-                            <span class="text-[9px] text-gray-500 uppercase truncate">{web_traffic_total} ↓</span>
-                            <div class="relative inline-block">
-                                <button onclick="toggleHint(event, 'hint-traffic-in-dash')" type="button" class="p-0.5 -m-0.5 rounded-full focus:outline-none focus:ring-1 focus:ring-blue-500/50">
-                                     <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 text-gray-400 cursor-help" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                    </svg>
-                                </button>
-                                <div id="hint-traffic-in-dash" class="hidden">
-                                    {web_hint_traffic_in}
-                                </div>
-                            </div>
-                        </div>
-                        <span id="trafficRxTotal" class="font-bold text-gray-800 dark:text-white text-xs sm:text-sm">0 B</span>
-                    </div>
-                    <div class="bg-white/50 dark:bg-black/20 rounded p-2 text-center border border-white/20 dark:border-white/5 border-l-2 border-l-purple-500/50 backdrop-blur-sm">
-                        <div class="flex justify-center items-center gap-1 mb-1">
-                            <span class="text-[9px] text-gray-500 uppercase truncate">{web_traffic_total} ↑</span>
-                            <div class="relative inline-block">
-                                <button onclick="toggleHint(event, 'hint-traffic-out-dash')" type="button" class="p-0.5 -m-0.5 rounded-full focus:outline-none focus:ring-1 focus:ring-blue-500/50">
-                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 text-gray-400 cursor-help" fill="none" viewBox="0 0 24 24" stroke="currentColor" title="Outbound Traffic">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                    </svg>
-                                </button>
-                                <div id="hint-traffic-out-dash" class="hidden">
-                                    {web_hint_traffic_out}
-                                </div>
-                            </div>
-                        </div>
-                        <span id="trafficTxTotal" class="font-bold text-gray-800 dark:text-white text-xs sm:text-sm">0 B</span>
+                <div class="space-y-3 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar" id="nodesList">
+                    <div class="text-center py-8 text-gray-400 dark:text-gray-500 text-sm">
+                        <svg class="animate-spin h-5 w-5 mx-auto mb-2 opacity-50" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                        {web_nodes_loading}
                     </div>
                 </div>
-                
-                <div class="relative h-40 w-full">
-                    <canvas id="chartAgent"></canvas>
+                <div class="mt-4 pt-4 border-t border-gray-200 dark:border-white/5 flex justify-end">
+                    {node_action_btn}
                 </div>
             </div>
-        </div>
 
-        <div class="flex justify-between items-center mb-4 pl-1">
-            <h2 class="text-lg sm:text-xl font-bold text-gray-800 dark:text-white flex items-center gap-2">
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-blue-500 dark:text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
-                </svg>
-                {web_node_mgmt_title}
-            </h2>
-            <button onclick="openLogsModal()" class="flex items-center gap-1.5 px-3 py-1.5 bg-gray-200 dark:bg-gray-800 hover:bg-gray-300 dark:hover:bg-gray-700 rounded-lg transition text-xs font-bold text-gray-700 dark:text-gray-300">
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
-                <span class="hidden sm:inline">{web_logs_title}</span>
-            </button>
-        </div>
-        
-        <div id="nodesGrid" class="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <div class="col-span-full text-center py-10 text-gray-500 animate-pulse">{web_nodes_loading}</div>
-        </div>
-        
-    </main>
-
-    <div id="nodeModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/30 dark:bg-black/80 backdrop-blur-sm p-4" onclick="if(event.target === this) closeModal()">
-        <div class="bg-white/90 dark:bg-gray-900 border border-white/20 dark:border-white/10 rounded-2xl shadow-2xl w-full max-w-4xl relative flex flex-col max-h-[90vh] backdrop-blur-xl">
-            <div class="p-6 border-b border-gray-200 dark:border-white/5 flex justify-between items-center rounded-t-2xl z-10">
-                <div class="flex items-center gap-3">
-                    <div id="modalStatusDot" class="h-3 w-3 rounded-full bg-gray-500 animate-pulse"></div>
-                    <h3 id="modalTitle" class="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white truncate max-w-[200px] sm:max-w-md">{web_node_details_title}</h3>
-                </div>
-                <button onclick="closeModal()" class="text-gray-400 hover:text-gray-600 dark:hover:text-white transition p-2 -mr-2">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
-                </button>
-            </div>
-            <div class="p-6 overflow-y-auto no-scrollbar">
-                <div class="grid grid-cols-3 gap-4 mb-6">
-                    <div class="bg-gray-100/50 dark:bg-white/5 p-3 rounded-xl border border-gray-200 dark:border-white/10 text-center">
-                        <div class="text-[10px] text-gray-500 uppercase font-bold tracking-wider mb-1">{web_cpu}</div>
-                        <div id="modalCpu" class="text-xl font-bold text-gray-900 dark:text-white">0%</div>
-                    </div>
-                    <div class="bg-gray-100/50 dark:bg-white/5 p-3 rounded-xl border border-gray-200 dark:border-white/10 text-center">
-                        <div class="text-[10px] text-gray-500 uppercase font-bold tracking-wider mb-1">{web_ram}</div>
-                        <div id="modalRam" class="text-xl font-bold text-gray-900 dark:text-white">0%</div>
-                    </div>
-                    <div class="bg-gray-100/50 dark:bg-white/5 p-3 rounded-xl border border-gray-200 dark:border-white/10 text-center">
-                        <div class="text-[10px] text-gray-500 uppercase font-bold tracking-wider mb-1">IP</div>
-                        <div id="modalIp" class="text-sm font-bold text-gray-900 dark:text-white truncate px-1">Unknown</div>
-                    </div>
-                </div>
-
-                <div class="mb-6">
-                    <div onclick="copyToken(this)" class="group bg-gray-100/50 dark:bg-white/5 hover:bg-gray-200 dark:hover:bg-white/10 transition-colors border border-gray-200 dark:border-white/10 rounded-xl p-3 flex items-center justify-between cursor-pointer relative overflow-hidden">
-                        <div class="flex items-center gap-3 overflow-hidden">
-                            <div class="bg-green-500/20 p-2 rounded-lg text-green-600 dark:text-green-400">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11.542 16.49a1 1 0 01-.17.21l-.414.415a2 2 0 00-.586 1.414V22h-3v-2.764a1 1 0 00-.293-.707l-5.964-5.964A6 6 0 1121 9z" /></svg>
-                            </div>
-                            <div class="flex flex-col overflow-hidden">
-                                <span class="text-[10px] text-gray-500 uppercase font-bold tracking-wider">{web_token_label}</span>
-                                <span id="modalToken" class="text-xs font-mono text-green-600/80 dark:text-green-400/80 blur-sm group-hover:text-green-600 dark:group-hover:text-green-400 transition duration-300 select-all truncate">...</span>
-                            </div>
-                        </div>
-                        <div class="text-gray-400 group-hover:text-gray-600 dark:group-hover:text-white transition">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
-                        </div>
-                        <div class="absolute inset-0 bg-green-600 flex items-center justify-center text-white font-bold text-sm transition-transform translate-y-full group-active:translate-y-0 pointer-events-none" id="copyToast">{web_copied}</div>
-                    </div>
-                </div>
-
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div class="bg-gray-100/50 dark:bg-white/5 p-4 rounded-xl border border-gray-200 dark:border-white/5">
-                        <h4 class="text-sm font-bold text-gray-500 dark:text-gray-400 mb-4">{web_resources_chart}</h4>
-                        <div class="relative h-48 sm:h-64 w-full">
-                            <canvas id="chartResources"></canvas>
-                        </div>
-                    </div>
-                    <div class="bg-gray-100/50 dark:bg-white/5 p-4 rounded-xl border border-gray-200 dark:border-white/5">
-                        <h4 class="text-sm font-bold text-gray-500 dark:text-gray-400 mb-4">{web_network_chart}</h4>
-                        <div class="relative h-48 sm:h-64 w-full">
-                            <canvas id="chartNetwork"></canvas>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <div id="logsModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/30 dark:bg-black/80 backdrop-blur-sm p-4" onclick="if(event.target === this) closeLogsModal()">
-        <div class="bg-white/90 dark:bg-gray-900 border border-gray-200 dark:border-white/10 rounded-2xl shadow-2xl w-full max-w-5xl relative flex flex-col h-[80vh] backdrop-blur-xl">
-            <div class="p-4 sm:p-6 border-b border-gray-200 dark:border-white/5 flex justify-between items-center rounded-t-2xl z-10">
-                <div class="flex items-center gap-3">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-blue-500 dark:text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
-                    <h3 class="text-lg sm:text-xl font-bold text-gray-900 dark:text-white">{web_logs_title}</h3>
-                </div>
-                
-                <div class="flex items-center gap-2">
-                     <div class="flex bg-gray-100 dark:bg-black/30 rounded-lg p-1 text-[10px] font-bold mr-2">
+            <div class="bg-white/60 dark:bg-white/5 backdrop-blur-md border border-white/40 dark:border-white/10 rounded-2xl p-6 shadow-lg dark:shadow-none flex flex-col">
+                <div class="flex justify-between items-center mb-4">
+                    <h3 class="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+                        {web_logs_title}
+                    </h3>
+                    <div class="flex bg-gray-100 dark:bg-black/30 rounded-lg p-1 text-[10px] font-bold">
                         <button onclick="switchLogType('bot')" id="btnLogBot" class="px-3 py-1.5 rounded-md transition-all text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white">{web_logs_btn_bot}</button>
                         <button onclick="switchLogType('sys')" id="btnLogSys" class="px-3 py-1.5 rounded-md transition-all text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white">{web_logs_btn_sys}</button>
                     </div>
-
-                     <button onclick="fetchLogs()" class="text-gray-400 hover:text-green-500 transition p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-white/5" title="{web_refresh}">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
-                    </button>
-                    <button onclick="closeLogsModal()" class="text-gray-400 hover:text-gray-600 dark:hover:text-white transition p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-white/5">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
-                    </button>
+                </div>
+                <div class="flex-1 bg-gray-900 rounded-xl p-4 overflow-hidden relative font-mono text-xs border border-gray-800 shadow-inner group">
+                    <div id="logsContainer" class="h-[300px] overflow-y-auto text-gray-300 space-y-1 custom-scrollbar scroll-smooth">
+                        <div class="text-gray-600 italic text-center mt-20">{web_loading}</div>
+                    </div>
+                    <div class="absolute bottom-2 right-4 text-[10px] text-gray-600 pointer-events-none opacity-0 group-hover:opacity-100 transition">{web_logs_footer}</div>
                 </div>
             </div>
-            <div class="flex-1 p-0 relative bg-gray-50/50 dark:bg-black/30">
-                 <div id="logsContent" class="absolute inset-0 overflow-y-auto p-4 sm:p-6 font-mono text-xs sm:text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap break-words leading-relaxed scroll-smooth custom-scrollbar">
-                    <div class="flex items-center justify-center h-full text-gray-500">{web_loading}</div>
-                 </div>
-            </div>
-             <div class="p-3 border-t border-gray-200 dark:border-white/5 rounded-b-2xl text-[10px] text-gray-500 dark:text-gray-600 flex justify-between">
-                <span>{web_logs_footer}</span>
-                <span>bot.log / syslog</span>
-            </div>
+
         </div>
-    </div>
+    </main>
 
     <div id="genericHintModal" class="fixed inset-0 z-[100] hidden items-center justify-center bg-black/50 dark:bg-black/80 backdrop-blur-sm p-4" onclick="if(event.target === this) closeHintModal()">
         <div class="bg-white dark:bg-gray-800 border border-white/20 dark:border-white/10 rounded-2xl shadow-2xl w-full max-w-md relative flex flex-col backdrop-blur-xl">
@@ -350,20 +247,57 @@
                 </button>
             </div>
             <div id="hintModalContent" class="p-4 text-sm text-gray-700 dark:text-gray-300">
-                </div>
+            </div>
         </div>
     </div>
-    
-    <div id="systemModal" class="fixed inset-0 z-[150] hidden items-center justify-center bg-black/60 backdrop-blur-sm p-4" onclick="if(event.target === this) closeSystemModal(null)">
-        <div class="bg-white dark:bg-gray-800 border border-white/20 dark:border-white/10 rounded-2xl shadow-2xl w-[90%] sm:w-full sm:max-w-md transform transition-all scale-100 mx-auto">
-            <div class="p-6">
-                <h3 id="sysModalTitle" class="text-lg font-bold text-gray-900 dark:text-white mb-2">Title</h3>
-                <p id="sysModalMessage" class="text-sm text-gray-600 dark:text-gray-300 mb-4 break-words whitespace-pre-wrap">Message</p>
-                <input type="text" id="sysModalInput" class="hidden w-full bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-xl px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-white mb-4">
-                <div class="flex justify-end gap-3">
-                    <button id="sysModalCancel" class="hidden px-4 py-2 rounded-lg text-sm font-medium text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 transition">Cancel</button>
-                    <button id="sysModalOk" class="px-4 py-2 rounded-lg text-sm font-bold bg-blue-600 text-white hover:bg-blue-500 transition shadow-lg shadow-blue-500/20">OK</button>
+
+    <div id="nodeModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/30 dark:bg-black/80 backdrop-blur-sm p-4" onclick="if(event.target === this) closeNodeModal()">
+        <div class="bg-white/90 dark:bg-gray-900 border border-white/20 dark:border-white/10 rounded-2xl shadow-2xl w-full max-w-4xl relative flex flex-col max-h-[90vh] backdrop-blur-xl">
+            <div class="p-5 border-b border-gray-200 dark:border-white/5 flex justify-between items-center rounded-t-2xl z-10 bg-white/50 dark:bg-black/20">
+                <div class="flex items-center gap-3">
+                    <div class="p-2 bg-blue-100 dark:bg-blue-500/20 rounded-lg text-blue-600 dark:text-blue-400">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01" /></svg>
+                    </div>
+                    <div>
+                        <h3 class="text-xl font-bold text-gray-900 dark:text-white" id="modalNodeName">Node Name</h3>
+                        <div class="flex items-center gap-2 text-xs text-gray-500">
+                            <span id="modalNodeIp">IP</span> &bull; <span id="modalNodeLastSeen">Last seen</span>
+                        </div>
+                    </div>
                 </div>
+                <button onclick="closeNodeModal()" class="text-gray-400 hover:text-gray-600 dark:hover:text-white transition p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-white/10">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
+                </button>
+            </div>
+            
+            <div class="p-6 overflow-y-auto no-scrollbar">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                    <div class="h-[200px] bg-white/50 dark:bg-black/20 rounded-xl p-4 border border-gray-100 dark:border-white/5">
+                        <h4 class="text-xs font-bold text-gray-500 uppercase mb-2 text-center">{web_resources_chart}</h4>
+                        <canvas id="nodeResChart"></canvas>
+                    </div>
+                    <div class="h-[200px] bg-white/50 dark:bg-black/20 rounded-xl p-4 border border-gray-100 dark:border-white/5">
+                        <h4 class="text-xs font-bold text-gray-500 uppercase mb-2 text-center">{web_network_chart}</h4>
+                        <canvas id="nodeNetChart"></canvas>
+                    </div>
+                </div>
+
+                <div onclick="copyToken(this)" class="group bg-gray-100/50 dark:bg-white/5 hover:bg-gray-200 dark:hover:bg-white/10 transition-colors border border-gray-200 dark:border-white/10 rounded-xl p-3 flex items-center justify-between cursor-pointer relative overflow-hidden">
+                    <div class="flex items-center gap-3 overflow-hidden">
+                        <div class="bg-green-500/20 p-2 rounded-lg text-green-600 dark:text-green-400">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11.542 16.49a1 1 0 01-.17.21l-.414.415a2 2 0 00-.586 1.414V22h-3v-2.764a1 1 0 00-.293-.707l-5.964-5.964A6 6 0 1121 9z" /></svg>
+                        </div>
+                        <div class="flex flex-col overflow-hidden">
+                            <span class="text-[10px] text-gray-500 uppercase font-bold tracking-wider">{web_token_label}</span>
+                            <span id="modalToken" class="text-xs font-mono text-green-600/80 dark:text-green-400/80 blur-sm group-hover:text-green-600 dark:group-hover:text-green-400 transition duration-300 select-all truncate">...</span>
+                        </div>
+                    </div>
+                    <div class="text-gray-400 group-hover:text-gray-600 dark:group-hover:text-white transition">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
+                    </div>
+                    <div class="absolute inset-0 bg-green-600 flex items-center justify-center text-white font-bold text-sm transition-transform translate-y-full group-active:translate-y-0 pointer-events-none" id="copyToast">{web_copied}</div>
+                </div>
+
             </div>
         </div>
     </div>
