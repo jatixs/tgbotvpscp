@@ -1,38 +1,62 @@
-// --- ЛОГИКА ТЕМЫ И ИНИЦИАЛИЗАЦИЯ ---
+// --- ИНИЦИАЛИЗАЦИЯ ПРИ ЗАГРУЗКЕ ---
 const themes = ['dark', 'light', 'system'];
 let currentTheme = localStorage.getItem('theme') || 'system';
 
 document.addEventListener("DOMContentLoaded", () => {
     applyThemeUI(currentTheme);
     
-    // ФИКС ФЛАГОВ ДЛЯ WINDOWS (библиотека Twemoji)
-    if (typeof window.parsePageEmojis === 'function') {
-        window.parsePageEmojis();
-    } else {
-        parsePageEmojis(); 
-    }
+    // Фикс флагов Windows
+    if (typeof window.parsePageEmojis === 'function') { window.parsePageEmojis(); } else { parsePageEmojis(); }
 
     initNotifications(); 
     initHolidayMood(); 
-    
-    // Инициализация логов (автозагрузка при входе)
+    initToasts();
+
+    // Автозагрузка системных логов
     if (document.getElementById('logsContainer')) {
-        if (typeof window.switchLogType === 'function') {
-            window.switchLogType('bot');
-        }
+        if (typeof window.switchLogType === 'function') { window.switchLogType('bot'); }
     }
 });
 
 function parsePageEmojis() {
     if (window.twemoji) {
         window.twemoji.parse(document.body, { 
-            folder: 'svg', 
-            ext: '.svg',
+            folder: 'svg', ext: '.svg',
             base: 'https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/'
         });
     }
 }
-window.parsePageEmojis = parsePageEmojis;
+
+// --- ВСПЛЫВАЮЩИЕ УВЕДОМЛЕНИЯ (TOASTS) ---
+function initToasts() {
+    if (!document.getElementById('toast-container')) {
+        const container = document.createElement('div');
+        container.id = 'toast-container';
+        document.body.appendChild(container);
+    }
+}
+
+function showToast(message, duration = 3000) {
+    const container = document.getElementById('toast-container');
+    if (!container) return;
+
+    const toast = document.createElement('div');
+    toast.className = 'toast-msg';
+    toast.innerHTML = `
+        <div class="flex-1">${message}</div>
+        <div class="toast-close" onclick="this.parentElement.remove()">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+        </div>
+    `;
+
+    container.appendChild(toast);
+    setTimeout(() => toast.classList.add('show'), 10);
+    setTimeout(() => {
+        toast.classList.remove('show');
+        setTimeout(() => toast.remove(), 400);
+    }, duration);
+}
+window.showToast = showToast;
 
 // --- ПОДСКАЗКИ (ХИНТЫ) ---
 function toggleHint(event, hintId) {
@@ -48,7 +72,6 @@ function toggleHint(event, hintId) {
         content.innerHTML = hintElement.innerHTML;
         const parentLabel = hintElement.closest('div')?.querySelector('span, label')?.innerText;
         title.innerText = parentLabel || (typeof I18N !== 'undefined' ? I18N.modal_title_alert : 'Информация');
-        
         modal.classList.remove('hidden');
         modal.classList.add('flex');
         document.body.style.overflow = 'hidden';
@@ -69,9 +92,7 @@ window.closeHintModal = closeHintModal;
 // --- НОВОГОДНЯЯ ЛОГИКА ---
 function isHolidayPeriod() {
     const now = new Date();
-    const month = now.getMonth(); 
-    const day = now.getDate();
-    return (month === 11 && day === 31) || (month === 0 && day <= 14);
+    return (now.getMonth() === 11 && now.getDate() === 31) || (now.getMonth() === 0 && now.getDate() <= 14);
 }
 
 let snowInterval = null;
@@ -84,32 +105,18 @@ function initHolidayMood() {
         const holidayBtn = document.createElement('button');
         holidayBtn.id = 'holidayBtn';
         holidayBtn.className = 'flex items-center justify-center w-8 h-8 rounded-lg hover:bg-black/5 dark:hover:bg-white/10 transition text-gray-600 dark:text-gray-400 mr-1';
-        
-        holidayBtn.innerHTML = `
-            <svg viewBox="0 0 24 24" class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-                <line x1="12" y1="2" x2="12" y2="22"></line>
-                <line x1="20" y1="12" x2="4" y2="12"></line>
-                <line x1="17.66" y1="6.34" x2="6.34" y2="17.66"></line>
-                <line x1="17.66" y1="17.66" x2="6.34" y2="6.34"></line>
-                <polyline points="9 4 12 7 15 4"></polyline>
-                <polyline points="15 20 12 17 9 20"></polyline>
-                <polyline points="20 9 17 12 20 15"></polyline>
-                <polyline points="4 15 7 12 4 9"></polyline>
-            </svg>`;
+        holidayBtn.innerHTML = `<svg viewBox="0 0 24 24" class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="2" x2="12" y2="22"></line><line x1="20" y1="12" x2="4" y2="12"></line><line x1="17.66" y1="6.34" x2="6.34" y2="17.66"></line><line x1="17.66" y1="17.66" x2="6.34" y2="6.34"></line><polyline points="9 4 12 7 15 4"></polyline><polyline points="15 20 12 17 9 20"></polyline><polyline points="20 9 17 12 20 15"></polyline><polyline points="4 15 7 12 4 9"></polyline></svg>`;
         holidayBtn.onclick = toggleHolidayMood;
         themeBtn.parentNode.insertBefore(holidayBtn, themeBtn);
     }
 
     createHolidayStructure();
-
-    let resizeTimer;
     window.addEventListener('resize', () => {
-        clearTimeout(resizeTimer);
-        resizeTimer = setTimeout(createHolidayStructure, 250);
+        clearTimeout(window.resizeTimer);
+        window.resizeTimer = setTimeout(createHolidayStructure, 250);
     });
 
-    const isEnabled = localStorage.getItem('holiday_mood') !== 'false';
-    if (isEnabled) {
+    if (localStorage.getItem('holiday_mood') !== 'false') {
         startHolidayEffects();
         document.getElementById('holidayBtn')?.classList.add('holiday-btn-active');
     }
@@ -118,37 +125,26 @@ function initHolidayMood() {
 function createHolidayStructure() {
     const nav = document.querySelector('nav');
     if (!nav) return;
-
     let lights = document.getElementById('holiday-lights');
-    if (lights) lights.remove(); 
-
+    if (lights) lights.remove();
     lights = document.createElement('ul');
     lights.id = 'holiday-lights';
     lights.className = 'lights-garland';
-    
     const spacing = window.innerWidth < 640 ? 50 : 60;
     const count = Math.floor(window.innerWidth / spacing);
-    
-    for (let i = 0; i < count; i++) {
-        lights.appendChild(document.createElement('li'));
-    }
+    for (let i = 0; i < count; i++) { lights.appendChild(document.createElement('li')); }
     nav.appendChild(lights);
-
-    const isEnabled = localStorage.getItem('holiday_mood') !== 'false';
-    if (isEnabled) {
-        lights.classList.add('garland-on');
-    }
+    if (localStorage.getItem('holiday_mood') !== 'false') lights.classList.add('garland-on');
 
     if (!document.getElementById('snow-container')) {
-        const snowContainer = document.createElement('div');
-        snowContainer.id = 'snow-container';
-        document.body.appendChild(snowContainer);
+        const snow = document.createElement('div');
+        snow.id = 'snow-container';
+        document.body.appendChild(snow);
     }
 }
 
 function toggleHolidayMood() {
-    const isEnabled = localStorage.getItem('holiday_mood') !== 'false';
-    const newState = !isEnabled;
+    const newState = localStorage.getItem('holiday_mood') === 'false';
     localStorage.setItem('holiday_mood', newState);
     const btn = document.getElementById('holidayBtn');
     if (newState) { startHolidayEffects(); btn?.classList.add('holiday-btn-active'); }
@@ -170,133 +166,28 @@ function startSnow() {
     const container = document.getElementById('snow-container');
     const icons = ['❄', '❅', '❆'];
     snowInterval = setInterval(() => {
-        const snowflake = document.createElement('div');
-        snowflake.className = 'snowflake';
-        snowflake.innerText = icons[Math.floor(Math.random() * icons.length)];
-        snowflake.style.left = Math.random() * 100 + 'vw';
-        snowflake.style.animationDuration = (Math.random() * 3 + 4) + 's';
-        snowflake.style.opacity = Math.random() * 0.7;
-        snowflake.style.fontSize = (Math.random() * 8 + 8) + 'px';
-        container.appendChild(snowflake);
-        setTimeout(() => snowflake.remove(), 6000);
+        const s = document.createElement('div');
+        s.className = 'snowflake';
+        s.innerText = icons[Math.floor(Math.random() * icons.length)];
+        s.style.left = Math.random() * 100 + 'vw';
+        s.style.animationDuration = (Math.random() * 3 + 4) + 's';
+        s.style.opacity = Math.random() * 0.7;
+        s.style.fontSize = (Math.random() * 8 + 8) + 'px';
+        container.appendChild(s);
+        setTimeout(() => s.remove(), 6000);
     }, 300);
 }
 
-function stopSnow() {
-    clearInterval(snowInterval);
-    snowInterval = null;
-    const container = document.getElementById('snow-container');
-    if (container) container.innerHTML = '';
-}
+function stopSnow() { clearInterval(snowInterval); snowInterval = null; if (document.getElementById('snow-container')) document.getElementById('snow-container').innerHTML = ''; }
 
-// --- СИСТЕМНЫЕ МОДАЛЬНЫЕ ОКНА ---
-let sysModalResolve = null;
-
-function closeSystemModal(result) {
-    const modal = document.getElementById('systemModal');
-    if (modal) {
-        modal.classList.add('hidden');
-        modal.classList.remove('flex');
-    }
-    if (sysModalResolve) {
-        sysModalResolve(result);
-        sysModalResolve = null;
-    }
-}
-window.closeSystemModal = closeSystemModal;
-
-function _showSystemModalBase(title, message, type = 'alert', placeholder = '') {
-    return new Promise((resolve) => {
-        sysModalResolve = resolve;
-        const modal = document.getElementById('systemModal');
-        const titleEl = document.getElementById('sysModalTitle');
-        const msgEl = document.getElementById('sysModalMessage');
-        const inputEl = document.getElementById('sysModalInput');
-        const cancelBtn = document.getElementById('sysModalCancel');
-        const okBtn = document.getElementById('sysModalOk');
-
-        if (!modal) {
-            if (type === 'confirm') resolve(confirm(message));
-            else if (type === 'prompt') resolve(prompt(message, placeholder));
-            else { alert(message); resolve(true); }
-            return;
-        }
-
-        titleEl.innerText = title;
-        msgEl.innerHTML = message.replace(/\n/g, '<br>');
-        inputEl.classList.add('hidden');
-        cancelBtn.classList.add('hidden');
-        inputEl.value = '';
-
-        if (typeof I18N !== 'undefined') {
-            cancelBtn.innerText = I18N.modal_btn_cancel || 'Cancel';
-            okBtn.innerText = I18N.modal_btn_ok || 'OK';
-        }
-
-        if (type === 'confirm') {
-            cancelBtn.classList.remove('hidden');
-            okBtn.onclick = () => closeSystemModal(true);
-            cancelBtn.onclick = () => closeSystemModal(false);
-        } else if (type === 'prompt') {
-            cancelBtn.classList.remove('hidden');
-            inputEl.classList.remove('hidden');
-            inputEl.placeholder = placeholder;
-            inputEl.focus();
-            okBtn.onclick = () => closeSystemModal(inputEl.value);
-            cancelBtn.onclick = () => closeSystemModal(null);
-            inputEl.onkeydown = (e) => { if(e.key === 'Enter') closeSystemModal(inputEl.value); };
-        } else { okBtn.onclick = () => closeSystemModal(true); }
-
-        modal.classList.remove('hidden');
-        modal.classList.add('flex');
-    });
-}
-
-window.showModalAlert = (message, title) => _showSystemModalBase(title || (typeof I18N !== 'undefined' ? I18N.modal_title_alert : 'Alert'), message, 'alert');
-window.showModalConfirm = (message, title) => _showSystemModalBase(title || (typeof I18N !== 'undefined' ? I18N.modal_title_confirm : 'Confirm'), message, 'confirm');
-window.showModalPrompt = (message, title, placeholder = '') => _showSystemModalBase(title || (typeof I18N !== 'undefined' ? I18N.modal_title_prompt : 'Prompt'), message, 'prompt', placeholder);
-
-// --- ТЕМА ---
-function toggleTheme() {
-    const idx = themes.indexOf(currentTheme);
-    const nextIdx = (idx + 1) % themes.length;
-    currentTheme = themes[nextIdx];
-    localStorage.setItem('theme', currentTheme);
-    const isDark = currentTheme === 'dark' || (currentTheme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
-    if (isDark) document.documentElement.classList.add('dark');
-    else document.documentElement.classList.remove('dark');
-    applyThemeUI(currentTheme);
-    window.dispatchEvent(new CustomEvent('themeChanged', { detail: { theme: currentTheme, isDark: isDark } }));
-}
-
-function applyThemeUI(theme) {
-    const iconMoon = document.getElementById('iconMoon');
-    const iconSun = document.getElementById('iconSun');
-    const iconSystem = document.getElementById('iconSystem');
-    if (!iconMoon || !iconSun || !iconSystem) return;
-    [iconMoon, iconSun, iconSystem].forEach(el => el.classList.add('hidden'));
-    if (theme === 'dark') iconMoon.classList.remove('hidden');
-    else if (theme === 'light') iconSun.classList.remove('hidden');
-    else iconSystem.classList.remove('hidden');
-}
-
-async function setLanguage(lang) {
-    try {
-        const res = await fetch('/api/settings/language', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({lang: lang})
-        });
-        if (res.ok) window.location.reload();
-    } catch (e) { console.error("Lang switch failed", e); }
-}
-
-// --- NOTIFICATION SYSTEM ---
+// --- УВЕДОМЛЕНИЯ (КОЛОКОЛЬЧИК) ---
 let lastUnreadCount = -1;
 function initNotifications() {
     const btn = document.getElementById('notifBtn');
     if (!btn) return;
     btn.addEventListener('click', toggleNotifications);
+    if (document.getElementById('notifClearBtn')) document.getElementById('notifClearBtn').addEventListener('click', clearNotifications);
+    document.addEventListener('click', (e) => { if (!e.target.closest('#notifDropdown') && !e.target.closest('#notifBtn')) closeNotifications(); });
     pollNotifications();
     setInterval(pollNotifications, 3000);
 }
@@ -307,24 +198,33 @@ async function pollNotifications() {
         if (!res.ok) return;
         const data = await res.json();
         updateNotifUI(data.notifications, data.unread_count);
-    } catch (e) { console.error("Notif poll error", e); }
+    } catch (e) {}
+}
+
+async function clearNotifications(e) {
+    if (e) e.stopPropagation();
+    const msg = (typeof I18N !== 'undefined' ? I18N.web_clear_notif_confirm : "Очистить все уведомления?");
+    if (!await window.showModalConfirm(msg, (typeof I18N !== 'undefined' ? I18N.modal_title_confirm : "Подтверждение"))) return;
+    try { await fetch('/api/notifications/clear', { method: 'POST' }); updateNotifUI([], 0); } catch (e) {}
 }
 
 function updateNotifUI(list, count) {
     const badge = document.getElementById('notifBadge');
     const listContainer = document.getElementById('notifList');
+    const bellIcon = document.querySelector('#notifBtn svg');
     if (count > 0) {
         badge.innerText = count > 99 ? '99+' : count;
         badge.classList.remove('hidden');
+        if (lastUnreadCount !== -1 && count > lastUnreadCount) {
+            bellIcon.classList.add('notif-bell-shake');
+            setTimeout(() => bellIcon.classList.remove('notif-bell-shake'), 500);
+        }
     } else badge.classList.add('hidden');
     lastUnreadCount = count;
-
-    const clearBtn = document.getElementById('notifClearBtn');
-    if(clearBtn) {
-        if(list.length > 0) clearBtn.classList.remove('hidden');
-        else clearBtn.classList.add('hidden');
+    if (document.getElementById('notifClearBtn')) {
+        if (list.length > 0) document.getElementById('notifClearBtn').classList.remove('hidden');
+        else document.getElementById('notifClearBtn').classList.add('hidden');
     }
-
     if (list.length === 0) {
         listContainer.innerHTML = `<div class="p-4 text-center text-gray-500 text-sm">${(typeof I18N !== 'undefined' ? I18N.web_no_notifications : "Нет уведомлений")}</div>`;
     } else {
@@ -339,14 +239,62 @@ function updateNotifUI(list, count) {
 function toggleNotifications() {
     const dropdown = document.getElementById('notifDropdown');
     const badge = document.getElementById('notifBadge');
-    if (dropdown.classList.contains('show')) {
-        dropdown.classList.remove('show');
-        setTimeout(() => dropdown.classList.add('hidden'), 200);
-    } else {
+    if (dropdown.classList.contains('show')) closeNotifications();
+    else {
         dropdown.classList.remove('hidden');
         setTimeout(() => dropdown.classList.add('show'), 10);
-        if (lastUnreadCount > 0) {
-            fetch('/api/notifications/read', { method: 'POST' }).then(() => badge.classList.add('hidden'));
-        }
+        if (lastUnreadCount > 0) { fetch('/api/notifications/read', { method: 'POST' }).then(() => badge.classList.add('hidden')); }
     }
 }
+
+function closeNotifications() {
+    const dropdown = document.getElementById('notifDropdown');
+    if (dropdown) { dropdown.classList.remove('show'); setTimeout(() => dropdown.classList.add('hidden'), 200); }
+}
+
+// --- ТЕМА И СИСТЕМНЫЕ ОКНА ---
+function toggleTheme() {
+    const nextIdx = (themes.indexOf(currentTheme) + 1) % themes.length;
+    currentTheme = themes[nextIdx];
+    localStorage.setItem('theme', currentTheme);
+    const isDark = currentTheme === 'dark' || (currentTheme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+    document.documentElement.classList.toggle('dark', isDark);
+    applyThemeUI(currentTheme);
+}
+
+function applyThemeUI(theme) {
+    const icons = ['iconMoon', 'iconSun', 'iconSystem'];
+    icons.forEach(id => document.getElementById(id)?.classList.add('hidden'));
+    if (theme === 'dark') document.getElementById('iconMoon')?.classList.remove('hidden');
+    else if (theme === 'light') document.getElementById('iconSun')?.classList.remove('hidden');
+    else document.getElementById('iconSystem')?.classList.remove('hidden');
+}
+
+let sysModalResolve = null;
+function closeSystemModal(result) {
+    const modal = document.getElementById('systemModal');
+    if (modal) { modal.classList.add('hidden'); modal.classList.remove('flex'); }
+    if (sysModalResolve) { sysModalResolve(result); sysModalResolve = null; }
+}
+window.closeSystemModal = closeSystemModal;
+
+function _showSystemModalBase(title, message, type = 'alert', placeholder = '') {
+    return new Promise((resolve) => {
+        sysModalResolve = resolve;
+        const modal = document.getElementById('systemModal');
+        if (!modal) { resolve(type === 'confirm' ? confirm(message) : prompt(message, placeholder)); return; }
+        document.getElementById('sysModalTitle').innerText = title;
+        document.getElementById('sysModalMessage').innerHTML = message.replace(/\n/g, '<br>');
+        const input = document.getElementById('sysModalInput');
+        const cancel = document.getElementById('sysModalCancel');
+        input.classList.toggle('hidden', type !== 'prompt');
+        cancel.classList.toggle('hidden', type === 'alert');
+        modal.classList.remove('hidden');
+        modal.classList.add('flex');
+        document.getElementById('sysModalOk').onclick = () => closeSystemModal(type === 'prompt' ? input.value : true);
+        cancel.onclick = () => closeSystemModal(type === 'prompt' ? null : false);
+    });
+}
+window.showModalAlert = (m, t) => _showSystemModalBase(t || 'Alert', m, 'alert');
+window.showModalConfirm = (m, t) => _showSystemModalBase(t || 'Confirm', m, 'confirm');
+window.showModalPrompt = (m, t, p) => _showSystemModalBase(t || 'Prompt', m, 'prompt', p);
