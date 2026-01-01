@@ -81,6 +81,26 @@ function fallbackCopyTextToClipboard(text) {
     document.body.removeChild(textArea);
 }
 
+function copyTextToClipboard(text) {
+    if (navigator.clipboard && window.isSecureContext) {
+        navigator.clipboard.writeText(text).then(() => {
+            if(window.showToast) window.showToast(I18N.web_copied || "Copied!");
+        });
+    } else {
+        const textArea = document.createElement("textarea");
+        textArea.value = text;
+        textArea.style.position = "fixed";
+        document.body.appendChild(textArea);
+        textArea.focus();
+        textArea.select();
+        try {
+            document.execCommand('copy');
+            if(window.showToast) window.showToast(I18N.web_copied || "Copied!");
+        } catch (err) {}
+        document.body.removeChild(textArea);
+    }
+}
+
 // --- ЛОГИКА HINTS (Подсказки) ---
 window.activeHint = null;
 function openHintModal(event, hintId) {
@@ -386,3 +406,90 @@ function showToast(message) {
         }
     }, 5000);
 }
+
+// --- ФУНКЦИИ ДОБАВЛЕНИЯ НОДЫ (ОБЩИЕ) ---
+function openAddNodeModal() {
+    const modal = document.getElementById('addNodeModal');
+    if (modal) {
+        modal.classList.remove('hidden');
+        modal.classList.add('flex');
+        document.body.style.overflow = 'hidden';
+        const resDiv = document.getElementById('nodeResultDash');
+        if(resDiv) resDiv.classList.add('hidden');
+        const input = document.getElementById('newNodeNameDash');
+        if(input) {
+            input.value = '';
+            input.focus();
+            validateNodeInput();
+        }
+    }
+}
+
+function closeAddNodeModal() {
+    const modal = document.getElementById('addNodeModal');
+    if (modal) {
+        modal.classList.add('hidden');
+        modal.classList.remove('flex');
+        document.body.style.overflow = 'auto';
+    }
+}
+
+function validateNodeInput() {
+    const input = document.getElementById('newNodeNameDash');
+    const btn = document.getElementById('btnAddNodeDash');
+    if (!input || !btn) return;
+    if (input.value.trim().length >= 2) {
+        btn.disabled = false;
+        btn.classList.remove('bg-gray-200', 'dark:bg-gray-700', 'text-gray-400', 'dark:text-gray-500', 'cursor-not-allowed');
+        btn.classList.add('bg-purple-600', 'hover:bg-purple-500', 'active:scale-95', 'text-white', 'cursor-pointer', 'shadow-lg', 'shadow-purple-500/20');
+    } else {
+        btn.disabled = true;
+        btn.classList.remove('bg-purple-600', 'hover:bg-purple-500', 'active:scale-95', 'text-white', 'cursor-pointer', 'shadow-lg', 'shadow-purple-500/20');
+        btn.classList.add('bg-gray-200', 'dark:bg-gray-700', 'text-gray-400', 'dark:text-gray-500', 'cursor-not-allowed');
+    }
+}
+
+window.openAddNodeModal = openAddNodeModal;
+window.closeAddNodeModal = closeAddNodeModal;
+window.validateNodeInput = validateNodeInput;
+
+async function addNodeDash() {
+    const nameInput = document.getElementById('newNodeNameDash');
+    const name = nameInput.value.trim();
+    const btn = document.getElementById('btnAddNodeDash');
+    if (!name) return;
+    btn.disabled = true;
+    const originalText = btn.innerText;
+    btn.innerHTML = `<svg class="animate-spin h-5 w-5 text-white mx-auto" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>`;
+    try {
+        const res = await fetch('/api/nodes/add', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({name: name})
+        });
+        const data = await res.json();
+        if (res.ok) {
+            document.getElementById('nodeResultDash').classList.remove('hidden');
+            document.getElementById('newNodeTokenDash').innerText = data.token;
+            document.getElementById('newNodeCmdDash').innerText = data.command;
+            
+            // Обновляем списки на обеих страницах, если они есть
+            if (typeof fetchNodesList === 'function') fetchNodesList(); // Dashboard
+            if (typeof renderNodes === 'function' && typeof NODES_DATA !== 'undefined') { // Settings
+                 NODES_DATA.push({token: data.token, name: name, ip: 'Unknown'});
+                 renderNodes();
+            }
+            
+            nameInput.value = "";
+            validateNodeInput();
+        } else {
+            await window.showModalAlert(I18N.web_error.replace('{error}', data.error), 'Ошибка');
+        }
+    } catch (e) {
+        await window.showModalAlert(I18N.web_conn_error.replace('{error}', e), 'Ошибка соединения');
+    } finally {
+        btn.innerText = originalText;
+        validateNodeInput();
+    }
+}
+window.addNodeDash = addNodeDash;
