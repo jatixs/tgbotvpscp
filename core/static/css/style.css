@@ -7,7 +7,7 @@ img.emoji {
     display: inline-block;
 }
 
-/* --- AUTOFILL FIX (Исправление белой полосы в полях ввода) --- */
+/* --- AUTOFILL FIX --- */
 input:-webkit-autofill,
 input:-webkit-autofill:hover, 
 input:-webkit-autofill:focus, 
@@ -19,7 +19,7 @@ input:-webkit-autofill:active {
     border-radius: 0.75rem;
 }
 
-/* --- NUMBER INPUT FIX (Убираем стрелочки в input type="number") --- */
+/* --- NUMBER INPUT FIX --- */
 input::-webkit-outer-spin-button,
 input::-webkit-inner-spin-button {
   -webkit-appearance: none;
@@ -31,14 +31,14 @@ input[type=number] {
 
 /* --- Базовые стили --- */
 html {
-    background-color: #f3f4f6; /* gray-100 */
+    background-color: #f3f4f6;
     height: 100%;
 }
 body {
     min-height: 100%;
 }
 html.dark {
-    background-color: #111827; /* gray-900 */
+    background-color: #111827;
 }
 html.dark body {
     background-color: #111827;
@@ -60,7 +60,6 @@ html.dark body {
 .no-scrollbar::-webkit-scrollbar { display: none; }
 .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 
-/* Глобальные переходы для темы */
 body, div, nav, main, button {
     transition-property: background-color, border-color, color, fill, stroke, opacity, box-shadow;
     transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
@@ -77,7 +76,7 @@ body, div, nav, main, button {
     position: absolute;
     top: -2px;
     right: -2px;
-    background-color: #ef4444; /* red-500 */
+    background-color: #ef4444;
     color: white;
     font-size: 0.65rem;
     font-weight: bold;
@@ -160,7 +159,7 @@ body, div, nav, main, button {
     margin-top: 4px;
 }
 
-/* --- TOAST NOTIFICATIONS (BOTTOM RIGHT) --- */
+/* --- TOAST NOTIFICATIONS --- */
 #toast-container {
     position: fixed;
     bottom: 20px;
@@ -169,11 +168,11 @@ body, div, nav, main, button {
     display: flex;
     flex-direction: column;
     gap: 10px;
-    pointer-events: none; /* Пропускаем клики сквозь контейнер */
+    pointer-events: none;
 }
 
 .toast-msg {
-    pointer-events: auto; /* Возвращаем клики для самих тостов */
+    pointer-events: auto;
     display: flex;
     align-items: flex-start;
     gap: 12px;
@@ -186,7 +185,7 @@ body, div, nav, main, button {
     color: #1f2937;
     max-width: 350px;
     width: 100%;
-    transform: translateX(100%); /* Начальная позиция (справа) */
+    transform: translateX(100%);
     opacity: 0;
     transition: all 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55);
 }
@@ -212,4 +211,37 @@ body, div, nav, main, button {
 
 .toast-close:hover {
     opacity: 1;
+}
+
+/* --- НОВОГОДНЕЕ НАСТРОЕНИЕ (СНЕГ) --- */
+#snow-container {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 1;
+    overflow: hidden;
+}
+
+.snowflake {
+    position: absolute;
+    top: -10px;
+    color: white;
+    user-select: none;
+    z-index: 1;
+    opacity: 0.8;
+    filter: drop-shadow(0 0 2px rgba(255,255,255,0.5));
+    animation: fall linear infinite;
+}
+
+@keyframes fall {
+    0% { transform: translateY(-10vh) rotate(0deg); }
+    100% { transform: translateY(110vh) rotate(360deg); }
+}
+
+.holiday-btn-active svg {
+    color: #60a5fa !important;
+    filter: drop-shadow(0 0 8px rgba(96, 165, 250, 0.6));
 }
