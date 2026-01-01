@@ -146,7 +146,6 @@ async function fetchAgentStats() {
                 const uptimeEl = document.getElementById('stat_uptime');
                 if(uptimeEl) uptimeEl.innerText = uptimeStr;
                 
-                // [NEW] Обновление IP агента в бейдже
                 const ipEl = document.getElementById('agentIp');
                 if(ipEl && data.stats.ip) ipEl.innerText = data.stats.ip;
             }
@@ -277,7 +276,6 @@ function formatSpeed(valueInKbps) {
 }
 
 function formatBytes(bytes, decimals = 2) {
-    // Используем переводы из I18N, если они доступны
     const sizes = (typeof I18N !== 'undefined' && I18N.unit_bytes) 
         ? [I18N.unit_bytes, I18N.unit_kb, I18N.unit_mb, I18N.unit_gb, I18N.unit_tb, I18N.unit_pb]
         : ['B', 'KiB', 'MiB', 'GiB', 'TiB', 'PiB'];
@@ -299,7 +297,6 @@ function formatUptime(bootTime) {
     const hours = Math.floor((diff % 86400) / 3600);
     const minutes = Math.floor((diff % 3600) / 60);
 
-    // Получаем переведенные суффиксы из I18N, либо используем английские по умолчанию
     const dSym = (typeof I18N !== 'undefined' && I18N.web_time_d) ? I18N.web_time_d : 'd';
     const hSym = (typeof I18N !== 'undefined' && I18N.web_time_h) ? I18N.web_time_h : 'h';
     const mSym = (typeof I18N !== 'undefined' && I18N.web_time_m) ? I18N.web_time_m : 'm';
@@ -377,7 +374,10 @@ function renderCharts(history) {
     const commonOptions = {
         responsive: true,
         maintainAspectRatio: false,
-        interaction: { mode: 'index', intersect: false,
+        interaction: { 
+            mode: 'index', 
+            intersect: false 
+        },
         animation: false,
         scales: { 
             y: { beginAtZero: true, grid: { color: gridColor }, ticks: { color: tickColor, font: {size: 10} } }, 
@@ -393,7 +393,7 @@ function renderCharts(history) {
                 borderWidth: 1 
             }
         }
-    }};
+    };
 
     const ctxRes = document.getElementById('nodeResChart').getContext('2d');
     if (chartRes) {
