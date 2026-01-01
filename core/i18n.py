@@ -448,7 +448,7 @@ STRINGS = {
         "web_update_check_btn": "Проверить обновления",
         "web_no_notifications": "Уведомлений нет",
         "web_notifications_title": "Уведомления",
-        "web_clear_notifications": "Очистить все"
+        "web_clear_notifications": "Очистить все",
         # --- WEB: KEYBOARD SETTINGS ---
         "web_keyboard_title": "Клавиатура бота",
         "web_kb_desc": "Настройте видимость команд в меню бота.",
