@@ -320,10 +320,18 @@ async def handle_dashboard(request):
         "modal_btn_ok": _("modal_btn_ok", lang),
         "modal_btn_cancel": _("modal_btn_cancel", lang),
         
-        # [NEW] Перевод аптайма
+        # Перевод аптайма
         "web_time_d": "д" if lang == 'ru' else "d",
         "web_time_h": "ч" if lang == 'ru' else "h",
         "web_time_m": "м" if lang == 'ru' else "m",
+
+        # [NEW] Добавляем единицы измерения для JS
+        "unit_bytes": _("unit_bytes", lang),
+        "unit_kb": _("unit_kb", lang),
+        "unit_mb": _("unit_mb", lang),
+        "unit_gb": _("unit_gb", lang),
+        "unit_tb": _("unit_tb", lang),
+        "unit_pb": _("unit_pb", lang),
     }
     html = html.replace("{i18n_json}", json.dumps(i18n_data))
     return web.Response(text=html, content_type='text/html')

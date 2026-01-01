@@ -277,11 +277,17 @@ function formatSpeed(valueInKbps) {
 }
 
 function formatBytes(bytes, decimals = 2) {
-    if (!+bytes) return '0 B';
+    // Используем переводы из I18N, если они доступны
+    const sizes = (typeof I18N !== 'undefined' && I18N.unit_bytes) 
+        ? [I18N.unit_bytes, I18N.unit_kb, I18N.unit_mb, I18N.unit_gb, I18N.unit_tb, I18N.unit_pb]
+        : ['B', 'KiB', 'MiB', 'GiB', 'TiB', 'PiB'];
+
+    if (!+bytes) return '0 ' + sizes[0];
+
     const k = 1024;
     const dm = decimals < 0 ? 0 : decimals;
-    const sizes = ['B', 'KiB', 'MiB', 'GiB', 'TiB', 'PiB'];
     const i = Math.floor(Math.log(bytes) / Math.log(k));
+
     return `${parseFloat((bytes / Math.pow(k, i)).toFixed(dm))} ${sizes[i]}`;
 }
 
