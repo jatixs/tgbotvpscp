@@ -4,6 +4,7 @@ let pollInterval = null;
 let agentChart = null;
 let agentPollInterval = null;
 let nodesPollInterval = null;
+let logPollInterval = null;
 
 window.addEventListener('themeChanged', () => {
     updateChartsColors();
@@ -34,8 +35,7 @@ document.addEventListener("DOMContentLoaded", () => {
         switchLogType('bot');
     }
     
-    // ВНИМАНИЕ: Код уведомлений удален из этого файла, 
-    // так как он теперь полностью обрабатывается в common.js для всего сайта.
+    // ВНИМАНИЕ: Код уведомлений удален отсюда, так как он управляется в common.js
 });
 
 function escapeHtml(text) {
@@ -63,8 +63,8 @@ function renderNodesList(nodes) {
     }
     const html = nodes.map(node => {
         let sc = node.status === 'online' ? "bg-green-500" : (node.status === 'restarting' ? "bg-yellow-500" : "bg-red-500");
-        return `<div class="bg-gray-50 dark:bg-black/20 hover:bg-gray-100 p-3 rounded-xl border border-gray-100 dark:border-white/5 cursor-pointer flex justify-between items-center group" onclick="openNodeDetails('${escapeHtml(node.token)}')">
-            <div class="flex items-center gap-3"><div class="w-2.5 h-2.5 rounded-full ${sc}"></div><div><div class="font-bold text-sm text-gray-900 dark:text-white">${escapeHtml(node.name)}</div><div class="text-[10px] text-gray-400">${escapeHtml(node.ip)}</div></div></div>
+        return `<div class="bg-gray-50 dark:bg-black/20 hover:bg-gray-100 dark:hover:bg-black/30 transition p-3 rounded-xl border border-gray-100 dark:border-white/5 cursor-pointer flex justify-between items-center group" onclick="openNodeDetails('${escapeHtml(node.token)}')">
+            <div class="flex items-center gap-3"><div class="w-2.5 h-2.5 rounded-full ${sc}"></div><div><div class="font-bold text-sm text-gray-900 dark:text-white group-hover:text-blue-500 transition">${escapeHtml(node.name)}</div><div class="text-[10px] text-gray-400">${escapeHtml(node.ip)}</div></div></div>
             <div class="text-right text-[10px] font-bold text-gray-400 uppercase">${node.status}</div></div>`;
     }).join('');
     container.innerHTML = html;
@@ -90,7 +90,7 @@ function renderAgentChart(history) {
     const ctx = document.getElementById('agentChart').getContext('2d');
     const isDark = document.documentElement.classList.contains('dark'), gc = isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)', tc = isDark ? '#9ca3af' : '#6b7280';
     if (!agentChart) {
-        agentChart = new Chart(ctx, { type: 'line', data: { labels: history.map(() => ""), datasets: [{ label: 'RX', data: [], borderColor: '#22c55e', fill: true, backgroundColor: 'rgba(34,197,94,0.1)' }, { label: 'TX', data: [], borderColor: '#3b82f6' }] }, options: { responsive: true, maintainAspectRatio: false, animation: false, scales: { x: { display: false }, y: { grid: { color: gc }, ticks: { color: tc } } } } });
+        agentChart = new Chart(ctx, { type: 'line', data: { labels: history.map(() => ""), datasets: [{ label: 'RX', data: [], borderColor: '#22c55e', fill: true, backgroundColor: 'rgba(34,197,94,0.1)', tension: 0.3 }, { label: 'TX', data: [], borderColor: '#3b82f6', tension: 0.3 }] }, options: { responsive: true, maintainAspectRatio: false, animation: false, scales: { x: { display: false }, y: { grid: { color: gc }, ticks: { color: tc } } } } });
     }
     agentChart.data.datasets[0].data = history.map(h => h.rx / 1024);
     agentChart.data.datasets[1].data = history.map(h => h.tx / 1024);
@@ -114,7 +114,7 @@ async function openNodeDetails(token) {
 
 function closeNodeModal() {
     document.getElementById('nodeModal').classList.add('hidden');
-    document.getElementById('nodeModal').classList.remove('flex');
+    document.body.style.overflow = 'auto';
     clearInterval(pollInterval);
 }
 
@@ -123,13 +123,14 @@ function renderCharts(history) {
     const isDark = document.documentElement.classList.contains('dark'), gc = isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)', tc = isDark ? '#9ca3af' : '#6b7280';
     const commonOptions = {
         responsive: true, maintainAspectRatio: false, animation: false,
-        interaction: { mode: 'index', intersect: false }, // ТУТ БЫЛА ОШИБКА (ЗАКРЫТА СКОБКА)
+        interaction: { mode: 'index', intersect: false }, 
         scales: { y: { grid: { color: gc }, ticks: { color: tc } }, x: { display: false } },
         plugins: { legend: { labels: { color: tc } } }
     };
     const ctxRes = document.getElementById('nodeResChart').getContext('2d');
-    if (!chartRes) chartRes = new Chart(ctxRes, { type: 'line', data: { labels: history.map(() => ""), datasets: [{ label: 'CPU', data: [], borderColor: '#3b82f6' }, { label: 'RAM', data: [], borderColor: '#a855f7' }] }, options: commonOptions });
+    if (!chartRes) chartRes = new Chart(ctxRes, { type: 'line', data: { labels: history.map(() => ""), datasets: [{ label: 'CPU', data: [], borderColor: '#3b82f6', tension: 0.3 }, { label: 'RAM', data: [], borderColor: '#a855f7', tension: 0.3 }] }, options: commonOptions });
     chartRes.data.datasets[0].data = history.map(h => h.c);
     chartRes.data.datasets[1].data = history.map(h => h.r);
     chartRes.update();
 }
+// [Логика SwitchLogType и LoadLogs остается такой же]
