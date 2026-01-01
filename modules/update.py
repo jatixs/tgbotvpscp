@@ -4,19 +4,21 @@ import os
 import sys
 import re
 from packaging import version
-from aiogram import F, Dispatcher, types
+from aiogram import F, Dispatcher, types, Bot
 from aiogram.types import KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.exceptions import TelegramBadRequest
 
 from core.i18n import _, I18nFilter, get_user_lang
 from core import config
 from core.auth import is_allowed, send_access_denied_message
-from core.messaging import delete_previous_message
+from core.messaging import delete_previous_message, send_alert
 from core.shared_state import LAST_MESSAGE_IDS
 from core.utils import escape_html
 from core.config import RESTART_FLAG_FILE, DEPLOY_MODE
 
 BUTTON_KEY = "btn_update"
+CHECK_INTERVAL = 21600  # Проверка каждые 6 часов (6 * 3600)
+LAST_NOTIFIED_VERSION = None # Чтобы не спамить уведомлениями об одной и той же версии
 
 
 def get_button() -> KeyboardButton:
@@ -28,6 +30,12 @@ def register_handlers(dp: Dispatcher):
     dp.callback_query(F.data == "update_system_apt")(run_system_update)
     dp.callback_query(F.data == "check_bot_update")(check_bot_update)
     dp.callback_query(F.data == "do_bot_update")(run_bot_update)
+
+
+def start_background_tasks(bot: Bot) -> list[asyncio.Task]:
+    return [
+        asyncio.create_task(auto_update_checker(bot), name="AutoUpdateChecker")
+    ]
 
 
 def get_version_from_content(content: str) -> str | None:
@@ -44,7 +52,6 @@ def get_version_from_content(content: str) -> str | None:
 def extract_changelog_section(content: str, ver: str) -> str:
     """Извлекает текст изменений для конкретной версии."""
     try:
-        # Ищем начало секции ## [version]
         start_pattern = re.escape(f"## [{ver}]")
         start_match = re.search(start_pattern, content)
 
@@ -52,20 +59,102 @@ def extract_changelog_section(content: str, ver: str) -> str:
             return "Разработчик не предоставил пока что список изменений"
 
         start_pos = start_match.start()
-
-        # Ищем следующую секцию (любую ## [x.x.x]) после текущей
         next_match = re.search(r"## \[\d+\.\d+\.\d+\]", content[start_match.end():])
 
         if next_match:
             end_pos = start_match.end() + next_match.start()
             section = content[start_pos:end_pos]
         else:
-            # Если это последняя (самая старая) запись в файле
             section = content[start_pos:]
 
         return section.strip()
     except Exception:
         return "Разработчик не предоставил пока что список изменений"
+
+
+async def get_update_info():
+    """Общая логика получения версий (используется и в ручной, и в авто проверке)."""
+    try:
+        # 1. Fetch origin
+        await asyncio.create_subprocess_shell("git fetch origin")
+
+        # 2. Local version
+        local_ver_str = "0.0.0"
+        if os.path.exists("CHANGELOG.md"):
+            with open("CHANGELOG.md", "r", encoding="utf-8") as f:
+                content = f.read()
+                local_ver_str = get_version_from_content(content) or "0.0.0"
+
+        # 3. Remote version (branches)
+        proc_branches = await asyncio.create_subprocess_shell("git branch -r", stdout=asyncio.subprocess.PIPE)
+        out_branches, dummy_ = await proc_branches.communicate()
+        branches_list = out_branches.decode().strip().split('\n')
+
+        latest_ver_str = local_ver_str
+        target_branch = None
+
+        release_pattern = re.compile(r"origin/release/(\d+\.\d+\.\d+)")
+        found_versions = []
+        for br in branches_list:
+            br = br.strip()
+            match = release_pattern.search(br)
+            if match:
+                v_str = match.group(1)
+                found_versions.append((v_str, br))
+
+        if found_versions:
+            found_versions.sort(key=lambda x: version.parse(x[0]), reverse=True)
+            latest_remote_ver_str = found_versions[0][0]
+            latest_remote_branch = found_versions[0][1]
+
+            if version.parse(latest_remote_ver_str) > version.parse(local_ver_str):
+                latest_ver_str = latest_remote_ver_str
+                target_branch = latest_remote_branch
+
+        return local_ver_str, latest_ver_str, target_branch
+    except Exception as e:
+        logging.error(f"Error getting update info: {e}")
+        return "0.0.0", "0.0.0", None
+
+
+async def auto_update_checker(bot: Bot):
+    """Фоновая задача для проверки обновлений."""
+    global LAST_NOTIFIED_VERSION
+    logging.info("AutoUpdateChecker started.")
+    await asyncio.sleep(60)  # Даем боту запуститься
+
+    while True:
+        try:
+            local_ver, remote_ver, target_branch = await get_update_info()
+
+            # Если есть новая версия И мы о ней еще не сообщали (в рамках текущего запуска бота)
+            if target_branch and (version.parse(remote_ver) > version.parse(local_ver)):
+                if LAST_NOTIFIED_VERSION != remote_ver:
+                    logging.info(f"AutoUpdate: Found new version {remote_ver} (Local: {local_ver})")
+                    
+                    # Получаем Changelog
+                    proc_cl = await asyncio.create_subprocess_shell(f"git show {target_branch}:CHANGELOG.md", stdout=asyncio.subprocess.PIPE)
+                    out_cl, dummy_ = await proc_cl.communicate()
+                    changes_text = extract_changelog_section(out_cl.decode('utf-8', errors='ignore'), remote_ver)
+                    
+                    warning = _("bot_update_docker_warning", config.DEFAULT_LANGUAGE) if DEPLOY_MODE == "docker" else ""
+                    
+                    # Отправляем алерт (используем "system" или "update" как тип, чтобы send_alert обработал это)
+                    # Мы передаем lambda для i18n, чтобы каждый админ получил на своем языке (если send_alert это поддерживает)
+                    # или используем дефолтный язык.
+                    
+                    await send_alert(
+                        bot, 
+                        lambda lang: _("bot_update_available", lang, local=f"v{local_ver}", remote=f"v{remote_ver}", log=escape_html(changes_text)) + warning,
+                        "update" 
+                    )
+                    
+                    LAST_NOTIFIED_VERSION = remote_ver
+            
+        except Exception as e:
+            logging.error(f"AutoUpdateChecker iteration failed: {e}")
+        
+        await asyncio.sleep(CHECK_INTERVAL)
 
 
 # --- МЕНЮ ОБНОВЛЕНИЯ ---
@@ -132,73 +221,26 @@ async def check_bot_update(callback: types.CallbackQuery):
     await callback.message.edit_text(_("bot_update_checking", lang), parse_mode="HTML")
 
     try:
-        # 1. Fetch origin (обновляем инфо о ветках)
-        await asyncio.create_subprocess_shell("git fetch origin")
+        local_ver, remote_ver, target_branch = await get_update_info()
 
-        # 2. Определяем локальную версию из файла
-        local_ver_str = "0.0.0"
-        if os.path.exists("CHANGELOG.md"):
-            with open("CHANGELOG.md", "r", encoding="utf-8") as f:
-                content = f.read()
-                local_ver_str = get_version_from_content(content) or "0.0.0"
-
-        # 3. Ищем самую свежую release ветку в origin
-        proc_branches = await asyncio.create_subprocess_shell("git branch -r", stdout=asyncio.subprocess.PIPE)
-        # ИСПОЛЬЗУЕМ dummy_ ВМЕСТО _ ЧТОБЫ НЕ ПЕРЕКРЫТЬ ФУНКЦИЮ ПЕРЕВОДА
-        out_branches, dummy_ = await proc_branches.communicate()
-        branches_list = out_branches.decode().strip().split('\n')
-
-        latest_ver_str = local_ver_str
-        target_branch = None
-
-        # Паттерн для веток origin/release/1.14.0
-        release_pattern = re.compile(r"origin/release/(\d+\.\d+\.\d+)")
-
-        found_versions = []
-        for br in branches_list:
-            br = br.strip()
-            match = release_pattern.search(br)
-            if match:
-                v_str = match.group(1)
-                found_versions.append((v_str, br))
-
-        if found_versions:
-            # Сортируем версии, используя библиотеку packaging
-            found_versions.sort(key=lambda x: version.parse(x[0]), reverse=True)
-            latest_remote_ver_str = found_versions[0][0]
-            latest_remote_branch = found_versions[0][1]  # например origin/release/1.14.0
-
-            # Сравниваем версии через packaging
-            if version.parse(latest_remote_ver_str) > version.parse(local_ver_str):
-                latest_ver_str = latest_remote_ver_str
-                target_branch = latest_remote_branch
-
-        if target_branch and latest_ver_str != local_ver_str:
+        if target_branch and local_ver != remote_ver:
             # Есть обновление!
-
-            # Читаем CHANGELOG из целевой ветки
-            # git show origin/release/1.14.0:CHANGELOG.md
             proc_cl = await asyncio.create_subprocess_shell(f"git show {target_branch}:CHANGELOG.md",
                                                             stdout=asyncio.subprocess.PIPE)
-            # ИСПОЛЬЗУЕМ dummy_ ВМЕСТО _
             out_cl, dummy_ = await proc_cl.communicate()
-            remote_changelog_content = out_cl.decode('utf-8', errors='ignore')
-
-            # Извлекаем секцию
-            changes_text = extract_changelog_section(remote_changelog_content, latest_ver_str)
+            
+            changes_text = extract_changelog_section(out_cl.decode('utf-8', errors='ignore'), remote_ver)
 
             warning = _("bot_update_docker_warning", lang) if DEPLOY_MODE == "docker" else ""
 
             keyboard = InlineKeyboardMarkup(inline_keyboard=[
-                # При нажатии кнопки мы передадим имя ветки (обрезав origin/), на которую нужно переключиться
-                # target_branch = origin/release/1.14.0 -> release/1.14.0
                 [InlineKeyboardButton(text=_("btn_update_bot_now", lang),
                                       callback_data=f"do_bot_update:{target_branch.replace('origin/', '')}")],
                 [InlineKeyboardButton(text=_("btn_cancel", lang), callback_data="back_to_menu")]
             ])
 
             await callback.message.edit_text(
-                _("bot_update_available", lang, local=f"v{local_ver_str}", remote=f"v{latest_ver_str}",
+                _("bot_update_available", lang, local=f"v{local_ver}", remote=f"v{remote_ver}",
                   log=escape_html(changes_text)) + warning,
                 reply_markup=keyboard,
                 parse_mode="HTML"
@@ -207,7 +249,7 @@ async def check_bot_update(callback: types.CallbackQuery):
         else:
             # Обновление не требуется
             await callback.message.edit_text(
-                _("bot_update_up_to_date", lang, hash=f"v{local_ver_str}"),
+                _("bot_update_up_to_date", lang, hash=f"v{local_ver}"),
                 reply_markup=InlineKeyboardMarkup(
                     inline_keyboard=[[InlineKeyboardButton(text=_("btn_back", lang), callback_data="back_to_menu")]]),
                 parse_mode="HTML"
@@ -224,7 +266,6 @@ async def run_bot_update(callback: types.CallbackQuery):
     lang = get_user_lang(user_id)
     chat_id = callback.message.chat.id
 
-    # Получаем ветку из callback_data (do_bot_update:release/1.14.0)
     data_parts = callback.data.split(":")
     target_branch = "main"
     if len(data_parts) > 1:
@@ -234,13 +275,11 @@ async def run_bot_update(callback: types.CallbackQuery):
 
     try:
         # 1. Checkout & Pull
-        # Сначала переключаемся на нужную ветку
         checkout_cmd = f"git checkout {target_branch}"
         proc_co = await asyncio.create_subprocess_shell(checkout_cmd, stdout=asyncio.subprocess.PIPE,
                                                         stderr=asyncio.subprocess.PIPE)
         await proc_co.communicate()
 
-        # Потом тянем
         pull_cmd = "git pull"
         proc = await asyncio.create_subprocess_shell(pull_cmd, stdout=asyncio.subprocess.PIPE,
                                                      stderr=asyncio.subprocess.PIPE)
