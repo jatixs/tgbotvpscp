@@ -6,6 +6,7 @@ import secrets
 import asyncio
 import hashlib
 import subprocess
+import ipaddress
 from argon2 import PasswordHasher, exceptions as argon2_exceptions
 import hmac
 import requests
@@ -225,9 +226,10 @@ async def handle_dashboard(request):
     active_nodes = sum(1 for n in all_nodes.values() if time.time() - n.get("last_seen", 0) < NODE_OFFLINE_TIMEOUT)
     role = user.get('role', 'users')
     
-    # [NEW] Бейдж роли пользователя
     role_color = "green" if role == "admins" else "gray"
-    role_badge = f'<span class="px-2 py-0.5 rounded text-[10px] border border-{role_color}-500/30 bg-{role_color}-100 dark:bg-{role_color}-500/20 text-{role_color}-600 dark:text-{role_color}-400 uppercase font-bold">{role}</span>'
+    role_badge_html = f'<span class="ml-2 px-1.5 py-0.5 rounded text-[10px] border border-{role_color}-500/30 bg-{role_color}-100 dark:bg-{role_color}-500/20 text-{role_color}-600 dark:text-{role_color}-400 uppercase font-bold align-middle">{role}</span>'
+    
+    ip_badge_html = f'<span id="agentIp" class="ml-2 px-2 py-0.5 rounded text-[10px] bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 font-mono hidden sm:inline-block align-middle">{AGENT_IP_CACHE}</span>'
     
     node_action_btn = ""
     settings_btn = ""
@@ -242,16 +244,16 @@ async def handle_dashboard(request):
 
     replacements = {
         "{web_title}": f"{_('web_dashboard_title', lang)} - VPS Bot",
-        "{web_version}": APP_VERSION.lstrip('v'), # [FIX] Убираем лишнюю v
+        "{web_version}": APP_VERSION.lstrip('v'), 
         "{cache_ver}": CACHE_VER,
         "{web_dashboard_title}": _("web_dashboard_title", lang),
-        "{role_badge}": role_badge,
+        "{role_badge}": role_badge_html,
         "{user_avatar}": _get_avatar_html(user),
         "{user_name}": user.get('first_name', 'User'),
         "{nodes_count}": str(nodes_count),
         "{active_nodes}": str(active_nodes),
         
-        "{web_agent_stats_title}": _("web_agent_stats_title", lang).replace("Мониторинг (Агент)", "Сетевая активность").replace("Monitoring (Agent)", "Network Activity"),
+        "{web_agent_stats_title}": _("web_agent_stats_title", lang).replace("Мониторинг (Агент)", "Сетевая активность").replace("Monitoring (Agent)", "Network Activity") + ip_badge_html,
         
         "{web_traffic_total}": _("web_traffic_total", lang),
         "{web_uptime}": _("web_uptime", lang),
@@ -312,6 +314,11 @@ async def handle_dashboard(request):
         "web_no_notifications": _("web_no_notifications", lang),
         "web_clear_notifications": _("web_clear_notifications", lang),
         "modal_title_alert": _("modal_title_alert", lang),
+        # [NEW] Ключи для модального окна очистки уведомлений
+        "modal_title_confirm": _("modal_title_confirm", lang),
+        "web_clear_notif_confirm": _("web_clear_notifications", lang) + "?",
+        "modal_btn_ok": _("modal_btn_ok", lang),
+        "modal_btn_cancel": _("modal_btn_cancel", lang),
     }
     html = html.replace("{i18n_json}", json.dumps(i18n_data))
     return web.Response(text=html, content_type='text/html')
@@ -330,10 +337,17 @@ async def handle_heartbeat(request):
             asyncio.create_task(process_node_result_background(bot, res.get("user_id"), res.get("command"), res.get("result"), token, node.get("name", "Node")))
     if node.get("is_restarting"): await nodes_db.update_node_extra(token, "is_restarting", False)
     
-    # [FIX] Приоритет внешнего IP из статистики, иначе IP соединения
-    ip = stats.get("external_ip")
-    if not ip or ip == "Loading...":
-        ip = request.transport.get_extra_info('peername')[0]
+    ip = request.transport.get_extra_info('peername')[0]
+    
+    if stats.get("external_ip"):
+        ip = stats.get("external_ip")
+    else:
+        try:
+            ip_obj = ipaddress.ip_address(ip)
+            if (ip_obj.is_private or ip_obj.is_loopback) and AGENT_IP_CACHE and AGENT_IP_CACHE != "Loading...":
+                ip = AGENT_IP_CACHE
+        except ValueError:
+            pass
         
     await nodes_db.update_node_heartbeat(token, ip, stats)
     current_node = await nodes_db.get_node_by_token(token)
@@ -365,7 +379,6 @@ async def handle_node_details(request):
 async def handle_agent_stats(request):
     if not get_current_user(request): return web.json_response({"error": "Unauthorized"}, status=401)
     import psutil
-    # [FIX] Передаем IP из кэша
     current_stats = {"cpu": 0, "ram": 0, "disk": 0, "ip": AGENT_IP_CACHE, "net_sent": 0, "net_recv": 0, "boot_time": 0}
     try:
         net = psutil.net_io_counters()

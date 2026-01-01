@@ -146,7 +146,7 @@ async function fetchAgentStats() {
                 const uptimeEl = document.getElementById('stat_uptime');
                 if(uptimeEl) uptimeEl.innerText = uptimeStr;
                 
-                // [NEW] Обновление IP агента в карточке
+                // [NEW] Обновление IP агента в бейдже
                 const ipEl = document.getElementById('agentIp');
                 if(ipEl && data.stats.ip) ipEl.innerText = data.stats.ip;
             }

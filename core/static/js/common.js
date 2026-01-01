@@ -267,9 +267,14 @@ async function pollNotifications() {
     }
 }
 
+// [FIX] Модальное окно для очистки уведомлений
 async function clearNotifications(e) {
     e.stopPropagation();
-    if(!confirm(I18N.web_clear_logs_confirm || "Clear all?")) return;
+    
+    const msg = (typeof I18N !== 'undefined' && I18N.web_clear_notif_confirm) ? I18N.web_clear_notif_confirm : "Очистить все уведомления?";
+    const title = (typeof I18N !== 'undefined' && I18N.modal_title_confirm) ? I18N.modal_title_confirm : "Подтверждение";
+    
+    if(!await window.showModalConfirm(msg, title)) return;
     
     try {
         await fetch('/api/notifications/clear', { method: 'POST' });
