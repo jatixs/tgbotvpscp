@@ -49,27 +49,26 @@ if not AGENT_BASE_URL or not AGENT_TOKEN:
 PENDING_RESULTS = []
 LAST_TRAFFIC_STATS = {}
 
-# [FIX 2] Глобальные переменные для IP
-EXTERNAL_IP_CACHE = "Loading..."
+# [FIX] Глобальные переменные для IP. По умолчанию None, чтобы сервер мог определить сам.
+EXTERNAL_IP_CACHE = None 
 LAST_IP_CHECK = 0
-IP_CHECK_INTERVAL = 1800  # 30 минут
+IP_CHECK_INTERVAL = 300  # Проверять раз в 5 минут
 
-# [FIX 2] Функция получения внешнего IP
 def get_external_ip():
     global EXTERNAL_IP_CACHE, LAST_IP_CHECK
     now = time.time()
     
-    # Если прошло меньше интервала и IP уже есть, возвращаем кэш
-    if now - LAST_IP_CHECK < IP_CHECK_INTERVAL and EXTERNAL_IP_CACHE != "Loading..." and EXTERNAL_IP_CACHE != "N/A":
+    # Если IP уже есть и он свежий, возвращаем его
+    if EXTERNAL_IP_CACHE and (now - LAST_IP_CHECK < IP_CHECK_INTERVAL):
         return EXTERNAL_IP_CACHE
 
-    # Список сервисов для проверки IP
+    # 1. Пробуем через requests (Python)
     services = [
-        "[https://api.ipify.org](https://api.ipify.org)",
-        "[https://ifconfig.me/ip](https://ifconfig.me/ip)",
-        "[https://icanhazip.com](https://icanhazip.com)",
-        "[https://ipecho.net/plain](https://ipecho.net/plain)",
-        "[http://checkip.amazonaws.com](http://checkip.amazonaws.com)"
+        "https://api.ipify.org",
+        "https://ifconfig.me/ip",
+        "https://icanhazip.com",
+        "https://ipecho.net/plain",
+        "http://checkip.amazonaws.com"
     ]
 
     for service in services:
@@ -77,17 +76,30 @@ def get_external_ip():
             response = requests.get(service, timeout=5)
             if response.status_code == 200:
                 ip = response.text.strip()
-                # Валидация IPv4
                 if re.match(r"^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$", ip):
                     EXTERNAL_IP_CACHE = ip
                     LAST_IP_CHECK = now
-                    logging.info(f"External IP updated: {ip}")
+                    logging.info(f"External IP updated (requests): {ip}")
                     return ip
         except Exception:
             continue
     
-    logging.warning("Could not determine external IP from any service.")
-    return EXTERNAL_IP_CACHE
+    # 2. Если requests не справился, пробуем системный curl (надежнее)
+    try:
+        # -4 принудительно IPv4, -s тихо, --max-time 5 таймаут
+        res = subprocess.check_output("curl -4 -s --max-time 5 ifconfig.me", shell=True).decode().strip()
+        if re.match(r"^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$", res):
+            EXTERNAL_IP_CACHE = res
+            LAST_IP_CHECK = now
+            logging.info(f"External IP updated (curl): {res}")
+            return res
+    except Exception:
+        pass
+
+    # 3. Если ничего не вышло - возвращаем None.
+    # Сервер сам определит IP по входящему соединению.
+    logging.warning("Could not determine external IP locally. Delegating to Agent Server.")
+    return None
 
 # --- УТИЛИТЫ ДЛЯ ФОРМАТИРОВАНИЯ ---
 def format_uptime_simple(seconds):
@@ -111,12 +123,7 @@ def format_bytes_simple(bytes_value):
     return f"{value:.2f} {units[unit_index]}"
 # -----------------------------------
 
-# Utility function to safely parse speed from iperf3 output (plain text)
 def parse_iperf_speed(output: str, direction: str) -> float:
-    """
-    Парсит вывод iperf3 для нахождения скорости передачи.
-    direction: 'sender' (для Upload) или 'receiver' (для Download).
-    """
     for line in reversed(output.splitlines()):
         if "Mbits/sec" in line and (direction in line or direction == 'sender'):
             speed_match = re.search(r"(\d+\.?\d*)\s+Mbits/sec", line)
@@ -129,25 +136,21 @@ def parse_iperf_speed(output: str, direction: str) -> float:
         
     return 0.0
 
-# --- НОВАЯ ФУНКЦИЯ: СБОР ТОП ПРОЦЕССОВ ---
 def get_top_processes(metric):
-    """Возвращает строку с топ-3 процессами по CPU или RAM."""
     try:
         attrs = ['pid', 'name', 'cpu_percent', 'memory_percent']
         procs = []
         for p in psutil.process_iter(attrs):
             try:
-                p.info['name'] = p.info['name'][:15] # Обрезаем слишком длинные имена
+                p.info['name'] = p.info['name'][:15]
                 procs.append(p.info)
             except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
                 pass
 
         if metric == 'cpu':
-            # Сортировка по CPU
             sorted_procs = sorted(procs, key=lambda p: p['cpu_percent'], reverse=True)[:3]
             info_list = [f"{p['name']} ({p['cpu_percent']}%)" for p in sorted_procs]
         elif metric == 'ram':
-            # Сортировка по RAM
             sorted_procs = sorted(procs, key=lambda p: p['memory_percent'], reverse=True)[:3]
             info_list = [f"{p['name']} ({p['memory_percent']:.1f}%)" for p in sorted_procs]
         else:
@@ -161,8 +164,7 @@ def get_top_processes(metric):
 def get_system_stats():
     try:
         net = psutil.net_io_counters()
-        # [FIX 2] Добавляем external_ip в статистику
-        # Принудительно вызываем get_external_ip() чтобы обновить кэш если нужно
+        # Пробуем получить IP. Если вернет None, сервер подставит свой.
         ext_ip = get_external_ip()
         
         return {
@@ -181,9 +183,8 @@ def get_system_stats():
         return {}
 
 def get_public_iperf_server():
-    """Получает список публичных iperf3 серверов и выбирает случайный."""
     try:
-        url = "[https://export.iperf3serverlist.net/listed_iperf3_servers.json](https://export.iperf3serverlist.net/listed_iperf3_servers.json)"
+        url = "https://export.iperf3serverlist.net/listed_iperf3_servers.json"
         response = requests.get(url, timeout=5)
         if response.status_code == 200:
             servers = response.json()
@@ -248,10 +249,11 @@ def execute_command(task):
         elif cmd == "selftest":
             stats = get_system_stats()
             
-            # --- Сбор дополнительной информации ---
             try:
-                # Используем get_external_ip() вместо curl
-                ext_ip = get_external_ip()
+                ext_ip = stats.get("external_ip")
+                if not ext_ip:
+                     # Если локально не определили, пробуем curl один раз для отчета
+                     ext_ip = subprocess.check_output("curl -4 -s --max-time 2 ifconfig.me", shell=True).decode().strip()
             except:
                 ext_ip = "N/A"
                 
@@ -266,7 +268,6 @@ def execute_command(task):
                 kernel = subprocess.check_output("uname -r", shell=True).decode().strip()
             except:
                 kernel = "N/A"
-            # --------------------------------------
             
             uptime_str = format_uptime_simple(stats.get('uptime', 0))
             rx_total = format_bytes_simple(stats.get('net_rx', 0))
