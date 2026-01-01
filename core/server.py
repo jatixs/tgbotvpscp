@@ -219,6 +219,7 @@ async def handle_dashboard(request):
     html = load_template("dashboard.html")
     user_id = user['id']
     lang = get_user_lang(user_id)
+    
     all_nodes = await nodes_db.get_all_nodes()
     nodes_count = len(all_nodes)
     active_nodes = sum(1 for n in all_nodes.values() if time.time() - n.get("last_seen", 0) < NODE_OFFLINE_TIMEOUT)
@@ -234,17 +235,21 @@ async def handle_dashboard(request):
         "{web_title}": f"{_('web_dashboard_title', lang)} - VPS Bot",
         "{web_version}": APP_VERSION,
         "{cache_ver}": CACHE_VER,
+        "{web_dashboard_title}": _("web_dashboard_title", lang),
         "{role_badge}": role_badge,
         "{user_avatar}": _get_avatar_html(user),
         "{user_name}": user.get('first_name', 'User'),
         "{nodes_count}": str(nodes_count),
         "{active_nodes}": str(active_nodes),
-        "{web_agent_stats_title}": _("web_agent_stats_title", lang),
+        
+        # Заголовок агента переименован
+        "{web_agent_stats_title}": _("web_agent_stats_title", lang).replace("Мониторинг (Агент)", "Сетевая активность").replace("Monitoring (Agent)", "Network Activity"),
+        
         "{web_traffic_total}": _("web_traffic_total", lang),
         "{web_uptime}": _("web_uptime", lang),
-        "{web_cpu}": "CPU",
-        "{web_ram}": "RAM",
-        "{web_disk}": "DISK",
+        "{web_cpu}": _("web_cpu", lang),
+        "{web_ram}": _("web_ram", lang),
+        "{web_disk}": _("web_disk", lang),
         "{web_rx}": _("web_rx", lang),
         "{web_tx}": _("web_tx", lang),
         "{web_node_mgmt_title}": _("web_node_mgmt_title", lang),
@@ -252,15 +257,19 @@ async def handle_dashboard(request):
         "{web_logs_footer}": _("web_logs_footer", lang),
         "{web_loading}": _("web_loading", lang),
         "{web_nodes_loading}": _("web_nodes_loading", lang),
-        "{web_footer_powered}": _("web_footer_powered", lang),
-        "{web_logs_btn_bot}": _("web_logs_btn_bot", lang),
-        "{web_logs_btn_sys}": _("web_logs_btn_sys", lang),
+        
+        # Кнопки логов
+        "{web_logs_btn_bot}": "Логи Бота" if lang == 'ru' else "Bot Logs",
+        "{web_logs_btn_sys}": "Логи VPS" if lang == 'ru' else "VPS Logs",
+        
         "{node_action_btn}": node_action_btn,
+        
         "{web_hint_cpu_usage}": _("web_hint_cpu_usage", lang),
         "{web_hint_ram_usage}": _("web_hint_ram_usage", lang),
         "{web_hint_disk_usage}": _("web_hint_disk_usage", lang),
         "{web_hint_traffic_in}": _("web_hint_traffic_in", lang),
         "{web_hint_traffic_out}": _("web_hint_traffic_out", lang),
+        
         "{web_add_node_section}": _("web_add_node_section", lang),
         "{web_node_name_placeholder}": _("web_node_name_placeholder", lang),
         "{web_create_btn}": _("web_create_btn", lang),
@@ -274,6 +283,8 @@ async def handle_dashboard(request):
         "{web_stats_active}": _("web_stats_active", lang),
         "{web_notifications_title}": _("web_notifications_title", lang),
         "{web_clear_notifications}": _("web_clear_notifications", lang),
+        "{web_node_details_title}": _("web_node_details_title", lang),
+        "{web_clear_logs_btn}": _("web_clear_logs_btn", lang),
     }
     
     for k, v in replacements.items(): 
@@ -290,7 +301,8 @@ async def handle_dashboard(request):
         "web_access_denied": _("web_access_denied", lang),
         "web_copied": _("web_copied", lang),
         "web_no_notifications": _("web_no_notifications", lang),
-        "web_clear_notifications": _("web_clear_notifications", lang)
+        "web_clear_notifications": _("web_clear_notifications", lang),
+        "modal_title_alert": _("modal_title_alert", lang),
     }
     html = html.replace("{i18n_json}", json.dumps(i18n_data))
     return web.Response(text=html, content_type='text/html')

@@ -69,7 +69,7 @@ async function fetchNodesList() {
 }
 
 function renderNodesGrid(nodes) {
-    const container = document.getElementById('nodesList');
+    const container = document.getElementById('nodesGrid');
     if (!container) return;
     
     if (nodes.length === 0) {
@@ -121,20 +121,32 @@ async function fetchAgentStats() {
         const data = await response.json();
         
         if(data.stats) {
-            document.getElementById('stat_cpu').innerText = Math.round(data.stats.cpu) + "%";
-            document.getElementById('stat_ram').innerText = Math.round(data.stats.ram) + "%";
-            document.getElementById('stat_disk').innerText = Math.round(data.stats.disk) + "%";
+            // Используем ID из 1.14.0 для совместимости
+            const cpuEl = document.getElementById('agentCpu');
+            if (cpuEl) cpuEl.innerText = Math.round(data.stats.cpu) + "%";
             
-            document.getElementById('prog_cpu').style.width = data.stats.cpu + "%";
-            document.getElementById('prog_ram').style.width = data.stats.ram + "%";
-            document.getElementById('prog_disk').style.width = data.stats.disk + "%";
+            const ramEl = document.getElementById('agentRam');
+            if (ramEl) ramEl.innerText = Math.round(data.stats.ram) + "%";
             
-            if (document.getElementById('stat_net_recv')) {
-                document.getElementById('stat_net_recv').innerText = formatBytes(data.stats.net_recv);
-                document.getElementById('stat_net_sent').innerText = formatBytes(data.stats.net_sent);
+            const diskEl = document.getElementById('agentDisk');
+            if (diskEl) diskEl.innerText = Math.round(data.stats.disk) + "%";
+            
+            // Также обновляем прогресс бары если они есть (новые элементы)
+            const progCpu = document.getElementById('prog_cpu');
+            if (progCpu) progCpu.style.width = data.stats.cpu + "%";
+            
+            const progRam = document.getElementById('prog_ram');
+            if (progRam) progRam.style.width = data.stats.ram + "%";
+            
+            const progDisk = document.getElementById('prog_disk');
+            if (progDisk) progDisk.style.width = data.stats.disk + "%";
+            
+            if (document.getElementById('trafficRxTotal')) {
+                document.getElementById('trafficRxTotal').innerText = formatBytes(data.stats.net_recv);
+                document.getElementById('trafficTxTotal').innerText = formatBytes(data.stats.net_sent);
                 
                 const uptimeStr = formatUptime(data.stats.boot_time);
-                const uptimeEl = document.getElementById('stat_uptime');
+                const uptimeEl = document.getElementById('agentUptime');
                 if(uptimeEl) uptimeEl.innerText = uptimeStr;
             }
         }
@@ -188,7 +200,7 @@ function renderAgentChart(history) {
     }
     
     const labelsSl = labels.slice(1);
-    const ctx = document.getElementById('agentChart').getContext('2d');
+    const ctx = document.getElementById('chartAgent').getContext('2d');
     const isDark = document.documentElement.classList.contains('dark');
     const gridColor = isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.05)';
     const tickColor = isDark ? '#9ca3af' : '#6b7280';
