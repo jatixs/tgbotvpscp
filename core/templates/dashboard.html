@@ -161,13 +161,13 @@
 
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
             <div class="lg:col-span-2 bg-white/60 dark:bg-white/5 backdrop-blur-md border border-white/40 dark:border-white/10 rounded-2xl p-6 shadow-lg dark:shadow-none">
-                <div class="flex justify-between items-center mb-4 flex-wrap gap-2">
-                    <h3 class="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z" /></svg>
-                        {web_agent_stats_title}
+                <div class="flex justify-between items-center mb-4 gap-2">
+                    <h3 class="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2 min-w-0">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-gray-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z" /></svg>
+                        <span class="truncate">{web_agent_stats_title}</span>
                     </h3>
                     
-                    <div class="flex items-center gap-2 bg-gray-100 dark:bg-black/30 px-3 py-1 rounded-lg border border-gray-200 dark:border-white/10 shadow-sm">
+                    <div class="flex-shrink-0 flex items-center gap-2 bg-gray-100 dark:bg-black/30 px-3 py-1 rounded-lg border border-gray-200 dark:border-white/10 shadow-sm">
                         <span id="agentIp" class="font-mono text-xs font-bold text-gray-600 dark:text-gray-300 select-all">{agent_ip}</span>
                     </div>
                 </div>

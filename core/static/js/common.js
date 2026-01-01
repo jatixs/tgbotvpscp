@@ -3,7 +3,6 @@ const themes = ['dark', 'light', 'system'];
 let currentTheme = localStorage.getItem('theme') || 'system';
 
 // Переменная для отслеживания времени последнего полученного уведомления
-// Инициализируем текущим временем, чтобы не показывать старые уведомления при перезагрузке страницы
 let latestNotificationTime = Math.floor(Date.now() / 1000);
 
 document.addEventListener("DOMContentLoaded", () => {
@@ -86,14 +85,18 @@ function showCopyFeedback() {
 }
 window.copyToken = copyToken;
 
-// --- ВСПЛЫВАЮЩИЕ УВЕДОМЛЕНИЯ (TOASTS) - НОВЫЙ ДИЗАЙН ---
+// --- ВСПЛЫВАЮЩИЕ УВЕДОМЛЕНИЯ (TOASTS) - ФИНАЛЬНАЯ ВЕРСИЯ ---
 let toastContainer = null;
 
 function getToastContainer() {
     if (!toastContainer) {
         toastContainer = document.createElement('div');
-        // Контейнер для тостов: фиксирован снизу справа, элементы складываются стопкой
-        toastContainer.className = 'fixed bottom-5 right-5 z-[9999] flex flex-col items-end gap-3 pointer-events-none';
+        // Контейнер:
+        // fixed bottom-4 right-4: отступ от края экрана
+        // items-end: выравнивание по правому краю (чтобы уведомления разной ширины выглядели аккуратно)
+        // z-[9999]: максимальный слой
+        // max-w-[calc...]: защита от вылезания за экран на мобилках (100% ширины минус отступы)
+        toastContainer.className = 'fixed bottom-4 right-4 z-[9999] flex flex-col items-end gap-2 pointer-events-none max-w-[calc(100vw-2rem)]';
         document.body.appendChild(toastContainer);
     }
     return toastContainer;
@@ -102,24 +105,27 @@ function getToastContainer() {
 function showToast(message) {
     const container = getToastContainer();
     
-    // Создаем элемент тоста
     const toast = document.createElement('div');
     
-    // Стили: Glassmorphism, тени, анимация появления снизу
-    toast.className = 'pointer-events-auto flex items-start gap-3 p-4 rounded-2xl shadow-xl backdrop-blur-md border transition-all duration-500 ease-out transform translate-y-10 opacity-0 bg-white/90 dark:bg-gray-800/90 border-gray-200 dark:border-white/10 max-w-sm w-full sm:w-80';
+    // Стили тоста:
+    // w-auto: ширина подстраивается под контент
+    // max-w-sm: но не шире 384px (на десктопе)
+    // w-full (внутри flex-контейнера с max-w): на мобилках будет сжиматься, если текст длинный
+    // transform translate-y-10 opacity-0: начальное скрытое состояние для анимации
+    toast.className = 'pointer-events-auto flex items-center gap-3 px-4 py-3 rounded-2xl shadow-xl backdrop-blur-md border transition-all duration-500 ease-out transform translate-y-10 opacity-0 bg-white/90 dark:bg-gray-800/90 border-gray-200 dark:border-white/10 w-auto max-w-sm';
     
     // Иконка
     const icon = `
-    <div class="p-1.5 rounded-full bg-blue-100 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5">
-        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+    <div class="p-1.5 rounded-full bg-blue-100 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400 flex-shrink-0">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
         </svg>
     </div>`;
 
-    // Кнопка закрытия (крестик)
+    // Кнопка закрытия
     const closeBtn = `
-    <button onclick="this.closest('div').classList.add('opacity-0', 'translate-x-10'); setTimeout(() => this.closest('div').remove(), 300)" class="text-gray-400 hover:text-gray-600 dark:hover:text-white transition -mr-1 -mt-1 p-1 rounded-lg hover:bg-black/5 dark:hover:bg-white/10">
-        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+    <button onclick="closeToast(this.closest('div'))" class="text-gray-400 hover:text-gray-600 dark:hover:text-white transition p-1 rounded-lg hover:bg-black/5 dark:hover:bg-white/10 ml-1 flex-shrink-0">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
         </svg>
     </button>`;
@@ -134,9 +140,14 @@ function showToast(message) {
     
     container.appendChild(toast);
     
-    // Запуск анимации появления
+    // --- ИСПРАВЛЕНИЕ ВСПЫШКИ ---
+    // Используем double requestAnimationFrame.
+    // Это гарантирует, что браузер успеет отрисовать элемент с классом opacity-0 (начальное состояние)
+    // перед тем, как мы уберем этот класс для запуска анимации.
     requestAnimationFrame(() => {
-        toast.classList.remove('translate-y-10', 'opacity-0');
+        requestAnimationFrame(() => {
+            toast.classList.remove('translate-y-10', 'opacity-0');
+        });
     });
 
     // Автоматическое закрытие через 5 секунд
@@ -153,12 +164,21 @@ function showToast(message) {
 
 function closeToast(toastElement) {
     if (!toastElement) return;
+    // Запуск анимации исчезновения
     toastElement.classList.add('opacity-0', 'translate-x-10');
+    
+    // Удаление из DOM после завершения CSS-транзишн (500мс)
     setTimeout(() => {
-        if (toastElement.parentElement) toastElement.remove();
+        if (toastElement.parentElement) {
+            toastElement.remove();
+            
+            // Если контейнер пуст, можно его тоже почистить (опционально), 
+            // но мы оставляем его для производительности.
+        }
     }, 500); 
 }
 window.showToast = showToast;
+window.closeToast = closeToast;
 
 // --- ПОДСКАЗКИ (ХИНТЫ) ---
 function toggleHint(event, hintId) {
@@ -436,7 +456,6 @@ async function clearNotifications(e) {
     const title = (typeof I18N !== 'undefined' && I18N.modal_title_confirm) ? I18N.modal_title_confirm : "Подтверждение";
     
     // Используем системное модальное окно в дизайне сайта
-    // Элемент #systemModal присутствует на всех страницах (dashboard.html, settings.html)
     if (!await window.showModalConfirm(msg, title)) return;
 
     try { 
@@ -528,7 +547,7 @@ function _showSystemModalBase(title, message, type = 'alert', placeholder = '') 
     return new Promise((resolve) => {
         sysModalResolve = resolve;
         const modal = document.getElementById('systemModal');
-        // Fallback если модалки нет в DOM (маловероятно, так как она есть в шаблонах)
+        // Fallback если модалки нет в DOM
         if (!modal) { resolve(type === 'confirm' ? confirm(message) : prompt(message, placeholder)); return; }
         
         document.getElementById('sysModalTitle').innerText = title;
