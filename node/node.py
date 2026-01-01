@@ -49,6 +49,39 @@ if not AGENT_BASE_URL or not AGENT_TOKEN:
 PENDING_RESULTS = []
 LAST_TRAFFIC_STATS = {}
 
+# [FIX 2] Глобальные переменные для IP
+EXTERNAL_IP_CACHE = "Loading..."
+LAST_IP_CHECK = 0
+IP_CHECK_INTERVAL = 3600  # 1 час
+
+# [FIX 2] Функция получения внешнего IP
+def get_external_ip():
+    global EXTERNAL_IP_CACHE, LAST_IP_CHECK
+    now = time.time()
+    
+    # Если прошло меньше часа и IP уже есть, возвращаем кэш
+    if now - LAST_IP_CHECK < IP_CHECK_INTERVAL and EXTERNAL_IP_CACHE != "Loading...":
+        return EXTERNAL_IP_CACHE
+
+    try:
+        # Пробуем несколько сервисов
+        for service in ["https://api.ipify.org", "https://ifconfig.me/ip", "https://icanhazip.com"]:
+            try:
+                response = requests.get(service, timeout=3)
+                if response.status_code == 200:
+                    ip = response.text.strip()
+                    # Простая валидация IPv4
+                    if re.match(r"^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$", ip):
+                        EXTERNAL_IP_CACHE = ip
+                        LAST_IP_CHECK = now
+                        return ip
+            except Exception:
+                continue
+    except Exception as e:
+        logging.error(f"Error fetching external IP: {e}")
+    
+    return EXTERNAL_IP_CACHE
+
 # --- УТИЛИТЫ ДЛЯ ФОРМАТИРОВАНИЯ ---
 def format_uptime_simple(seconds):
     seconds = int(seconds)
@@ -121,7 +154,7 @@ def get_top_processes(metric):
 def get_system_stats():
     try:
         net = psutil.net_io_counters()
-        # Добавляем process_cpu и process_ram в статистику
+        # [FIX 2] Добавляем external_ip в статистику
         return {
             "cpu": psutil.cpu_percent(interval=None),
             "ram": psutil.virtual_memory().percent,
@@ -130,7 +163,8 @@ def get_system_stats():
             "net_tx": net.bytes_sent,
             "uptime": int(time.time() - psutil.boot_time()),
             "process_cpu": get_top_processes('cpu'),
-            "process_ram": get_top_processes('ram')
+            "process_ram": get_top_processes('ram'),
+            "external_ip": get_external_ip()
         }
     except Exception as e:
         logging.error(f"Error gathering stats: {e}")
@@ -195,12 +229,8 @@ def execute_command(task):
                 res = subprocess.check_output(
                     "ps aux --sort=-%cpu | head -n 11", shell=True).decode()
                 
-                # --- ИСПРАВЛЕНИЕ: Экранирование HTML ---
-                # Заменяем символы <, >, & на безопасные сущности, 
-                # чтобы Telegram не пытался их парсить как теги.
                 safe_res = res.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
                 result_text = f"<pre>{safe_res}</pre>"
-                # ---------------------------------------
                 
             except Exception as e:
                 result_text = f"Error running top: {e}"
@@ -210,7 +240,7 @@ def execute_command(task):
             
             # --- Сбор дополнительной информации ---
             try:
-                ip_res = subprocess.check_output("curl -4 -s --max-time 2 ifconfig.me", shell=True).decode().strip()
+                ip_res = stats.get("external_ip") or subprocess.check_output("curl -4 -s --max-time 2 ifconfig.me", shell=True).decode().strip()
                 ext_ip = ip_res or "N/A"
             except:
                 ext_ip = "N/A"
@@ -256,10 +286,6 @@ def execute_command(task):
                 city = server.get("SITE", "Unknown")
                 country = server.get("COUNTRY", "")
                 
-                # --- FIX FOR BANDIT B602 (shell=True) ---
-                # Use list of arguments instead of string, remove shlex.quote, remove shell=True
-                
-                # --- RUNNING DOWNLOAD TEST (-R, client receives) ---
                 cmd_dl = ["iperf3", "-c", host, "-p", str(port), "-t", "5", "-4", "-R"]
                 try:
                     res_dl = subprocess.check_output(
@@ -271,7 +297,6 @@ def execute_command(task):
                     logging.error(f"DL Test failed: {e}")
                     dl_speed = 0.0
                 
-                # --- RUNNING UPLOAD TEST (default, client sends) ---
                 cmd_ul = ["iperf3", "-c", host, "-p", str(port), "-t", "5", "-4"]
                 try:
                     res_ul = subprocess.check_output(
@@ -348,6 +373,8 @@ def send_heartbeat():
 def main():
     logging.info(f"Node Agent started. Target: {AGENT_BASE_URL}")
     psutil.cpu_percent(interval=None)
+    # Инициализация IP
+    get_external_ip()
 
     while True:
         send_heartbeat()

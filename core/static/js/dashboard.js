@@ -24,7 +24,6 @@ document.addEventListener("DOMContentLoaded", () => {
         nodesPollInterval = setInterval(fetchNodesList, 3000);
     }
 
-    // --- ИСПРАВЛЕНИЕ 1: Валидация модального окна добавления ноды ---
     const inputDash = document.getElementById('newNodeNameDash');
     if (inputDash) {
         inputDash.addEventListener('input', validateNodeInput);
@@ -35,7 +34,6 @@ document.addEventListener("DOMContentLoaded", () => {
         });
     }
 
-    // --- ИСПРАВЛЕНИЕ 2: Инициализация логов ---
     if (document.getElementById('logsContainer')) {
         switchLogType('bot');
     }
@@ -147,6 +145,10 @@ async function fetchAgentStats() {
                 const uptimeStr = formatUptime(data.stats.boot_time);
                 const uptimeEl = document.getElementById('stat_uptime');
                 if(uptimeEl) uptimeEl.innerText = uptimeStr;
+                
+                // [NEW] Обновление IP агента в карточке
+                const ipEl = document.getElementById('agentIp');
+                if(ipEl && data.stats.ip) ipEl.innerText = data.stats.ip;
             }
         }
         renderAgentChart(data.history);
@@ -436,12 +438,10 @@ function renderCharts(history) {
     }
 }
 
-// --- ИСПРАВЛЕНИЕ 2: Функция переключения типов логов ---
 window.switchLogType = function(type) {
     const btnBot = document.getElementById('btnLogBot');
     const btnSys = document.getElementById('btnLogSys');
     
-    // Классы для активного и неактивного состояния
     const activeClasses = ['bg-white', 'dark:bg-gray-700', 'shadow-sm', 'text-gray-900', 'dark:text-white'];
     const inactiveClasses = ['text-gray-500', 'dark:text-gray-400'];
 
@@ -471,7 +471,6 @@ async function loadLogs(type = 'bot') {
     const container = document.getElementById('logsContainer');
     if (!container) return;
     
-    // Если это первый вызов и контейнер пуст или содержит "Загрузка", показываем спиннер, но осторожно, чтобы не мигать при поллинге
     if (container.querySelector('.text-gray-500.italic') || container.innerText.includes(I18N.web_loading || "Loading")) {
          container.innerHTML = `<div class="flex items-center justify-center h-full text-gray-500"><span class="animate-pulse">${I18N.web_loading || "Loading..."}</span></div>`;
     }
@@ -510,12 +509,10 @@ async function loadLogs(type = 'bot') {
                 return `<div class="${cls} hover:bg-gray-100 dark:hover:bg-white/5 px-1 rounded transition">${safeLine}</div>`;
             }).join('');
             
-            // Проверяем, был ли скролл внизу перед обновлением
             const isScrolledToBottom = container.scrollHeight - container.scrollTop <= container.clientHeight + 50;
 
             if (container.innerHTML !== coloredLogs) {
                  container.innerHTML = coloredLogs;
-                 // Автопрокрутка только если пользователь был внизу
                  if (isScrolledToBottom) {
                      container.scrollTop = container.scrollHeight;
                  }

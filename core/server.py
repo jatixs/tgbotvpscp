@@ -224,6 +224,8 @@ async def handle_dashboard(request):
     nodes_count = len(all_nodes)
     active_nodes = sum(1 for n in all_nodes.values() if time.time() - n.get("last_seen", 0) < NODE_OFFLINE_TIMEOUT)
     role = user.get('role', 'users')
+    
+    # [NEW] Бейдж роли пользователя
     role_color = "green" if role == "admins" else "gray"
     role_badge = f'<span class="px-2 py-0.5 rounded text-[10px] border border-{role_color}-500/30 bg-{role_color}-100 dark:bg-{role_color}-500/20 text-{role_color}-600 dark:text-{role_color}-400 uppercase font-bold">{role}</span>'
     
@@ -232,7 +234,6 @@ async def handle_dashboard(request):
 
     if user_id == ADMIN_USER_ID:
         node_action_btn = f"""<button onclick="openAddNodeModal()" class="inline-flex items-center gap-1.5 py-1.5 px-3 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold transition shadow-lg shadow-blue-500/20"><svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path></svg>{_("web_add_node_section", lang)}</button>"""
-        # Кнопка настроек в шапку (иконка)
         settings_btn = f"""
         <a href="/settings" class="flex items-center justify-center w-8 h-8 rounded-lg hover:bg-black/5 dark:hover:bg-white/10 transition text-gray-600 dark:text-gray-400" title="{_("web_settings_button", lang)}">
             <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
@@ -241,7 +242,7 @@ async def handle_dashboard(request):
 
     replacements = {
         "{web_title}": f"{_('web_dashboard_title', lang)} - VPS Bot",
-        "{web_version}": APP_VERSION,
+        "{web_version}": APP_VERSION.lstrip('v'), # [FIX] Убираем лишнюю v
         "{cache_ver}": CACHE_VER,
         "{web_dashboard_title}": _("web_dashboard_title", lang),
         "{role_badge}": role_badge,
@@ -269,7 +270,7 @@ async def handle_dashboard(request):
         "{web_logs_btn_sys}": "Логи VPS" if lang == 'ru' else "VPS Logs",
         
         "{node_action_btn}": node_action_btn,
-        "{settings_btn}": settings_btn, # Добавляем кнопку настроек
+        "{settings_btn}": settings_btn,
         "{web_footer_powered}": _("web_footer_powered", lang),
         
         "{web_hint_cpu_usage}": _("web_hint_cpu_usage", lang),
@@ -328,7 +329,12 @@ async def handle_heartbeat(request):
         for res in results:
             asyncio.create_task(process_node_result_background(bot, res.get("user_id"), res.get("command"), res.get("result"), token, node.get("name", "Node")))
     if node.get("is_restarting"): await nodes_db.update_node_extra(token, "is_restarting", False)
-    ip = request.transport.get_extra_info('peername')[0]
+    
+    # [FIX] Приоритет внешнего IP из статистики, иначе IP соединения
+    ip = stats.get("external_ip")
+    if not ip or ip == "Loading...":
+        ip = request.transport.get_extra_info('peername')[0]
+        
     await nodes_db.update_node_heartbeat(token, ip, stats)
     current_node = await nodes_db.get_node_by_token(token)
     tasks_to_send = current_node.get("tasks", [])
@@ -359,6 +365,7 @@ async def handle_node_details(request):
 async def handle_agent_stats(request):
     if not get_current_user(request): return web.json_response({"error": "Unauthorized"}, status=401)
     import psutil
+    # [FIX] Передаем IP из кэша
     current_stats = {"cpu": 0, "ram": 0, "disk": 0, "ip": AGENT_IP_CACHE, "net_sent": 0, "net_recv": 0, "boot_time": 0}
     try:
         net = psutil.net_io_counters()
