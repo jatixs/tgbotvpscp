@@ -179,19 +179,39 @@ async def handle_get_sys_logs(request):
 async def api_get_notifications(request):
     user = get_current_user(request)
     if not user: return web.json_response({"error": "Unauthorized"}, status=401)
-    return web.json_response({"notifications": list(WEB_NOTIFICATIONS), "unread_count": shared_state.WEB_UNREAD_COUNT})
+    
+    uid = user['id']
+    user_alerts = ALERTS_CONFIG.get(uid, {})
+    
+    # Фильтруем уведомления: оставляем только те типы, которые включены у пользователя
+    filtered = [n for n in list(shared_state.WEB_NOTIFICATIONS) if user_alerts.get(n['type'], False)]
+    
+    # Считаем непрочитанные персонально по времени последнего прочтения
+    last_read = shared_state.WEB_USER_LAST_READ.get(uid, 0)
+    unread_count = sum(1 for n in filtered if n['time'] > last_read)
+    
+    return web.json_response({
+        "notifications": filtered, 
+        "unread_count": unread_count
+    })
 
 async def api_read_notifications(request):
     user = get_current_user(request)
     if not user: return web.json_response({"error": "Unauthorized"}, status=401)
-    shared_state.WEB_UNREAD_COUNT = 0
+    
+    # Помечаем время прочтения для конкретного пользователя
+    uid = user['id']
+    shared_state.WEB_USER_LAST_READ[uid] = time.time()
     return web.json_response({"status": "ok"})
 
 async def api_clear_notifications(request):
     user = get_current_user(request)
     if not user: return web.json_response({"error": "Unauthorized"}, status=401)
-    WEB_NOTIFICATIONS.clear()
+    
+    shared_state.WEB_NOTIFICATIONS.clear()
     shared_state.WEB_UNREAD_COUNT = 0
+    # Сбрасываем метки прочтения для всех
+    shared_state.WEB_USER_LAST_READ.clear()
     return web.json_response({"status": "ok"})
 
 async def api_check_update(request):
@@ -250,12 +270,8 @@ async def handle_dashboard(request):
         "{user_name}": user.get('first_name', 'User'),
         "{nodes_count}": str(nodes_count),
         "{active_nodes}": str(active_nodes),
-        
         "{web_agent_stats_title}": _("web_agent_stats_title", lang).replace("Мониторинг (Агент)", "Сетевая активность").replace("Monitoring (Agent)", "Network Activity"),
-        
-        # IP адрес для шаблона
         "{agent_ip}": AGENT_IP_CACHE,
-        
         "{web_traffic_total}": _("web_traffic_total", lang),
         "{web_uptime}": _("web_uptime", lang),
         "{web_cpu}": _("web_cpu", lang),
@@ -268,20 +284,16 @@ async def handle_dashboard(request):
         "{web_logs_footer}": _("web_logs_footer", lang),
         "{web_loading}": _("web_loading", lang),
         "{web_nodes_loading}": _("web_nodes_loading", lang),
-        
         "{web_logs_btn_bot}": "Логи Бота" if lang == 'ru' else "Bot Logs",
         "{web_logs_btn_sys}": "Логи VPS" if lang == 'ru' else "VPS Logs",
-        
         "{node_action_btn}": node_action_btn,
         "{settings_btn}": settings_btn,
         "{web_footer_powered}": _("web_footer_powered", lang),
-        
         "{web_hint_cpu_usage}": _("web_hint_cpu_usage", lang),
         "{web_hint_ram_usage}": _("web_hint_ram_usage", lang),
         "{web_hint_disk_usage}": _("web_hint_disk_usage", lang),
         "{web_hint_traffic_in}": _("web_hint_traffic_in", lang),
         "{web_hint_traffic_out}": _("web_hint_traffic_out", lang),
-        
         "{web_add_node_section}": _("web_add_node_section", lang),
         "{web_node_name_placeholder}": _("web_node_name_placeholder", lang),
         "{web_create_btn}": _("web_create_btn", lang),
@@ -319,13 +331,9 @@ async def handle_dashboard(request):
         "web_clear_notif_confirm": _("web_clear_notifications", lang) + "?",
         "modal_btn_ok": _("modal_btn_ok", lang),
         "modal_btn_cancel": _("modal_btn_cancel", lang),
-        
-        # Перевод аптайма
         "web_time_d": "д" if lang == 'ru' else "d",
         "web_time_h": "ч" if lang == 'ru' else "h",
         "web_time_m": "м" if lang == 'ru' else "m",
-
-        # [NEW] Добавляем единицы измерения для JS
         "unit_bytes": _("unit_bytes", lang),
         "unit_kb": _("unit_kb", lang),
         "unit_mb": _("unit_mb", lang),
@@ -351,14 +359,11 @@ async def handle_heartbeat(request):
     if node.get("is_restarting"): await nodes_db.update_node_extra(token, "is_restarting", False)
     
     ip = request.transport.get_extra_info('peername')[0]
-    
-    # [FIX] Используем IP, переданный нодой, если он есть. Если нет - берем из соединения.
     if stats.get("external_ip"):
         ip = stats.get("external_ip")
     else:
         try:
             ip_obj = ipaddress.ip_address(ip)
-            # Если IP локальный, и у нас есть закэшированный внешний IP агента - используем его (для случая агента на том же сервере)
             if (ip_obj.is_private or ip_obj.is_loopback) and AGENT_IP_CACHE and AGENT_IP_CACHE not in ["Loading...", "Unknown"]:
                 ip = AGENT_IP_CACHE
         except ValueError:
@@ -862,14 +867,11 @@ async def start_web_server(bot_instance: Bot):
         app.router.add_post('/api/users/action', handle_user_action)
         app.router.add_post('/api/nodes/add', handle_node_add)
         app.router.add_post('/api/nodes/delete', handle_node_delete)
-        # --- UPDATE ROUTES ---
         app.router.add_get('/api/update/check', api_check_update)
         app.router.add_post('/api/update/run', api_run_update)
-        # --- NOTIFICATION ROUTES ---
         app.router.add_get('/api/notifications/list', api_get_notifications)
         app.router.add_post('/api/notifications/read', api_read_notifications)
-        app.router.add_post('/api/notifications/clear', api_clear_notifications) # NEW
-        # -------------------
+        app.router.add_post('/api/notifications/clear', api_clear_notifications)
     else:
         logging.info("Web UI DISABLED.")
         app.router.add_get('/', handle_api_root)

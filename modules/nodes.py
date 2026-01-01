@@ -326,11 +326,10 @@ async def nodes_monitor(bot: Bot):
                             if not state["active"] or (
                                     now - state["last_time"] > config.RESOURCE_ALERT_COOLDOWN):
                                 
-                                # --- ИСПРАВЛЕНИЕ: Получаем процессы из статистики ноды ---
+                                # --- ИСПРАВЛЕНИЕ: Извлекаем процессы и передаем в алерты ---
                                 p_info = stats.get(f"process_{metric}", "n/a")
-                                # --------------------------------------------------------
+                                await send_alert(bot, lambda lang: _(key_high, lang, name=name, usage=current, threshold=threshold, processes=p_info), "resources", processes=p_info)
                                 
-                                await send_alert(bot, lambda lang: _(key_high, lang, name=name, usage=current, threshold=threshold, processes=p_info), "resources")
                                 state["active"] = True
                                 state["last_time"] = now
                                 updated = True
