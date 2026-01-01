@@ -253,7 +253,7 @@ async def handle_dashboard(request):
         
         "{web_agent_stats_title}": _("web_agent_stats_title", lang).replace("Мониторинг (Агент)", "Сетевая активность").replace("Monitoring (Agent)", "Network Activity"),
         
-        # Передаем IP адрес для использования в шаблоне
+        # IP адрес для шаблона
         "{agent_ip}": AGENT_IP_CACHE,
         
         "{web_traffic_total}": _("web_traffic_total", lang),
@@ -315,11 +315,15 @@ async def handle_dashboard(request):
         "web_no_notifications": _("web_no_notifications", lang),
         "web_clear_notifications": _("web_clear_notifications", lang),
         "modal_title_alert": _("modal_title_alert", lang),
-        # [NEW] Ключи для модального окна очистки уведомлений
         "modal_title_confirm": _("modal_title_confirm", lang),
         "web_clear_notif_confirm": _("web_clear_notifications", lang) + "?",
         "modal_btn_ok": _("modal_btn_ok", lang),
         "modal_btn_cancel": _("modal_btn_cancel", lang),
+        
+        # [NEW] Перевод аптайма
+        "web_time_d": "д" if lang == 'ru' else "d",
+        "web_time_h": "ч" if lang == 'ru' else "h",
+        "web_time_m": "м" if lang == 'ru' else "m",
     }
     html = html.replace("{i18n_json}", json.dumps(i18n_data))
     return web.Response(text=html, content_type='text/html')
@@ -340,12 +344,14 @@ async def handle_heartbeat(request):
     
     ip = request.transport.get_extra_info('peername')[0]
     
+    # [FIX] Используем IP, переданный нодой, если он есть. Если нет - берем из соединения.
     if stats.get("external_ip"):
         ip = stats.get("external_ip")
     else:
         try:
             ip_obj = ipaddress.ip_address(ip)
-            if (ip_obj.is_private or ip_obj.is_loopback) and AGENT_IP_CACHE and AGENT_IP_CACHE != "Loading...":
+            # Если IP локальный, и у нас есть закэшированный внешний IP агента - используем его (для случая агента на том же сервере)
+            if (ip_obj.is_private or ip_obj.is_loopback) and AGENT_IP_CACHE and AGENT_IP_CACHE not in ["Loading...", "Unknown"]:
                 ip = AGENT_IP_CACHE
         except ValueError:
             pass

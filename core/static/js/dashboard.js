@@ -292,8 +292,14 @@ function formatUptime(bootTime) {
     const days = Math.floor(diff / 86400);
     const hours = Math.floor((diff % 86400) / 3600);
     const minutes = Math.floor((diff % 3600) / 60);
-    if (days > 0) return `${days}d ${hours}h`;
-    return `${hours}h ${minutes}m`;
+
+    // Получаем переведенные суффиксы из I18N, либо используем английские по умолчанию
+    const dSym = (typeof I18N !== 'undefined' && I18N.web_time_d) ? I18N.web_time_d : 'd';
+    const hSym = (typeof I18N !== 'undefined' && I18N.web_time_h) ? I18N.web_time_h : 'h';
+    const mSym = (typeof I18N !== 'undefined' && I18N.web_time_m) ? I18N.web_time_m : 'm';
+    
+    if (days > 0) return `${days}${dSym} ${hours}${hSym}`;
+    return `${hours}${hSym} ${minutes}${mSym}`;
 }
 
 async function openNodeDetails(token, dotColorClass) {
@@ -365,7 +371,7 @@ function renderCharts(history) {
     const commonOptions = {
         responsive: true,
         maintainAspectRatio: false,
-        interaction: { mode: 'index', intersect: false },
+        interaction: { mode: 'index', intersect: false,
         animation: false,
         scales: { 
             y: { beginAtZero: true, grid: { color: gridColor }, ticks: { color: tickColor, font: {size: 10} } }, 
@@ -381,7 +387,7 @@ function renderCharts(history) {
                 borderWidth: 1 
             }
         }
-    };
+    }};
 
     const ctxRes = document.getElementById('nodeResChart').getContext('2d');
     if (chartRes) {
