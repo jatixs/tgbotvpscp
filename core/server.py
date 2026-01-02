@@ -351,7 +351,6 @@ async def handle_dashboard(request):
         "{web_node_details_title}": _("web_node_details_title", lang),
         "{web_clear_logs_btn}": _("web_clear_logs_btn", lang),
         "{web_logout}": _("web_logout", lang),
-        "{web_sessions_title}": _("web_sessions_title", lang),
     }
     
     for k, v in replacements.items(): 
@@ -584,6 +583,7 @@ async def handle_settings_page(request):
         "{web_notifications_title}": _("web_notifications_title", lang),
         "{web_clear_notifications}": _("web_clear_notifications", lang),
         "{web_logout}": _("web_logout", lang),
+        "{web_sessions_title}": _("web_sessions_title", lang),
     }
     modified_html = html
     for k, v in replacements.items(): modified_html = modified_html.replace(k, v)
