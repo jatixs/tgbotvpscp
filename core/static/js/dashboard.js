@@ -374,6 +374,30 @@ function renderCharts(history) {
     }
 }
 
+// Функция генерации "фейковых" строк для эффекта размытия
+function generateDummyLogs() {
+    const lines = [
+        "INFO:system:Starting background service monitoring...",
+        "DEBUG:core.utils:Connection established with remote node",
+        "INFO:modules.traffic:Traffic metrics updated successfully",
+        "WARNING:network:Latency spike detected (150ms)",
+        "INFO:auth:User session verified securely",
+        "DEBUG:database:Query executed in 0.02s",
+        "INFO:system:System resources check passed",
+        "INFO:bot:Webhook set successfully",
+        "DEBUG:asyncio:Event loop running...",
+        "INFO:server:Web server listening on port 8080"
+    ];
+    // Дублируем строки, чтобы заполнить контейнер
+    let html = '';
+    for(let i=0; i<30; i++) {
+        const line = lines[Math.floor(Math.random() * lines.length)];
+        // Добавляем blur класс к тексту
+        html += `<div class="text-gray-400 dark:text-gray-600 select-none filter blur-[3px] opacity-50">${line}</div>`;
+    }
+    return html;
+}
+
 window.switchLogType = function(type) {
     ['btnLogBot', 'btnLogSys'].forEach(id => {
         const el = document.getElementById(id);
@@ -387,22 +411,58 @@ window.switchLogType = function(type) {
 
 async function loadLogs(type = 'bot') {
     const container = document.getElementById('logsContainer');
+    const overlay = document.getElementById('logsOverlay');
     const url = type === 'sys' ? '/api/logs/system' : '/api/logs';
+    
     try {
         const res = await fetch(url);
-        if (res.status === 403) { container.innerHTML = `<div class="text-red-400 text-center mt-10">${I18N.web_access_denied}</div>`; return; }
+        
+        // --- НОВАЯ ЛОГИКА ДЛЯ 403 ---
+        if (res.status === 403) { 
+            // Показываем оверлей
+            if(overlay) overlay.classList.remove('hidden');
+            
+            // Если контейнер пуст или содержит текст ошибки, заполняем его "фейковыми" размытыми данными для красоты
+            if (!container.innerHTML.includes('blur')) {
+                container.innerHTML = generateDummyLogs();
+                container.scrollTop = 0;
+            }
+            return; 
+        }
+        
+        // Если доступ есть (не 403), скрываем оверлей
+        if(overlay) overlay.classList.add('hidden');
+
         const data = await res.json();
-        if (data.error) container.innerHTML = `<div class="text-red-400 p-4 font-mono">${data.error}</div>`;
-        else {
+        
+        if (data.error) {
+            container.innerHTML = `<div class="text-red-400 p-4 font-mono">${escapeHtml(data.error)}</div>`;
+        } else {
             const logs = data.logs || [];
-            if (logs.length === 0) { container.innerHTML = `<div class="text-gray-600 text-center mt-10">${I18N.web_log_empty}</div>`; return; }
+            if (logs.length === 0) { 
+                container.innerHTML = `<div class="text-gray-600 text-center mt-10">${typeof I18N !== 'undefined' ? I18N.web_log_empty : "Log empty"}</div>`; 
+                return; 
+            }
+            
             const html = logs.map(line => {
                 let cls = "text-gray-500";
-                if (line.includes("INFO")) cls = "text-blue-400"; else if (line.includes("WARNING")) cls = "text-yellow-400"; else if (line.includes("ERROR") || line.includes("CRITICAL")) cls = "text-red-500 font-bold";
+                if (line.includes("INFO")) cls = "text-blue-400"; 
+                else if (line.includes("WARNING")) cls = "text-yellow-400"; 
+                else if (line.includes("ERROR") || line.includes("CRITICAL")) cls = "text-red-500 font-bold";
                 return `<div class="${cls}">${escapeHtml(line)}</div>`;
             }).join('');
-            const isBottom = container.scrollHeight - container.scrollTop <= container.clientHeight + 50;
-            if (container.innerHTML !== html) { container.innerHTML = html; if (isBottom) container.scrollTop = container.scrollHeight; }
+            
+            // Проверка скролла
+            const isBottom = container.scrollHeight - container.scrollTop <= container.clientHeight + 100;
+            
+            // Обновляем только если контент изменился
+            if (container.innerHTML !== html) { 
+                container.innerHTML = html; 
+                if (isBottom) container.scrollTop = container.scrollHeight; 
+            }
         }
-    } catch (e) { container.innerHTML = `<div class="text-red-400 text-center mt-10">Conn error</div>`; }
+    } catch (e) { 
+        if(overlay) overlay.classList.add('hidden');
+        container.innerHTML = `<div class="text-red-400 text-center mt-10">Connection error</div>`; 
+    }
 }

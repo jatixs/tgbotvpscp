@@ -235,8 +235,8 @@
                 </div>
             </div>
 
-            <div class="bg-white/60 dark:bg-white/5 backdrop-blur-md border border-white/40 dark:border-white/10 rounded-2xl p-6 shadow-lg dark:shadow-none flex flex-col">
-                <div class="flex justify-between items-center mb-4 flex-wrap gap-2">
+            <div class="bg-white/60 dark:bg-white/5 backdrop-blur-md border border-white/40 dark:border-white/10 rounded-2xl p-6 shadow-lg dark:shadow-none flex flex-col relative overflow-hidden">
+                <div class="flex justify-between items-center mb-4 flex-wrap gap-2 relative z-10">
                     <h3 class="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
                         {web_logs_title}
@@ -246,11 +246,26 @@
                         <button onclick="switchLogType('sys')" id="btnLogSys" class="px-3 py-1.5 rounded-md transition-all text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white">{web_logs_btn_sys}</button>
                     </div>
                 </div>
+                
                 <div class="flex-1 bg-gray-50 dark:bg-gray-900 rounded-xl p-4 overflow-hidden relative font-mono text-xs border border-gray-200 dark:border-gray-800 shadow-inner group">
-                    <div id="logsContainer" class="h-[300px] overflow-y-auto text-gray-700 dark:text-gray-300 space-y-1 custom-scrollbar scroll-smooth">
+                    
+                    <div id="logsOverlay" class="hidden absolute inset-0 z-20 flex items-center justify-center bg-white/10 dark:bg-black/10 backdrop-blur-sm transition-all duration-500">
+                        <div class="px-6 py-3 rounded-2xl bg-white/80 dark:bg-gray-800/90 border border-red-200 dark:border-red-900/30 shadow-2xl backdrop-blur-md transform scale-100 flex flex-col items-center gap-2">
+                            <div class="p-2 bg-red-100 dark:bg-red-900/20 rounded-full text-red-500 dark:text-red-400">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                                </svg>
+                            </div>
+                            <span class="font-bold text-gray-900 dark:text-white text-sm" data-i18n="web_access_denied">{web_access_denied}</span>
+                            <span class="text-[10px] text-gray-500 dark:text-gray-400 text-center max-w-[200px]" data-i18n="web_logs_protected_desc">{web_logs_protected_desc}</span>
+                        </div>
+                    </div>
+
+                    <div id="logsContainer" class="h-[300px] overflow-y-auto text-gray-700 dark:text-gray-300 space-y-1 custom-scrollbar scroll-smooth relative z-0">
                         <div class="text-gray-600 italic text-center mt-20">{web_loading}</div>
                     </div>
-                    <div class="absolute bottom-2 right-4 text-[10px] text-gray-600 pointer-events-none opacity-0 group-hover:opacity-100 transition">{web_logs_footer}</div>
+                    
+                    <div class="absolute bottom-2 right-4 text-[10px] text-gray-600 pointer-events-none opacity-0 group-hover:opacity-100 transition z-10">{web_logs_footer}</div>
                 </div>
             </div>
 
