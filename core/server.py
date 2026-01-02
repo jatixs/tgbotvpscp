@@ -649,6 +649,7 @@ async def handle_settings_page(request):
         "web_sessions_revoked_alert": _("web_sessions_revoked_alert", lang),
         "web_session_current_label": _("web_session_current_label", lang),
         "web_sessions_revoke_all": _("web_sessions_revoke_all", lang),
+        "web_search_nothing_found": _("web_search_nothing_found", lang),
     }
     for btn_key, conf_key in BTN_CONFIG_MAP.items(): i18n_data[f"lbl_{conf_key}"] = _(btn_key, lang)
     modified_html = modified_html.replace("{i18n_json}", json.dumps(i18n_data))

@@ -92,15 +92,11 @@ function renderNodesList(nodes) {
     if (!container) return;
     
     if (nodes.length === 0) {
-        // Проверяем, пусто из-за поиска или вообще нет нод
         const searchInput = document.getElementById('nodeSearch');
         const isSearchActive = searchInput && searchInput.value.trim().length > 0;
-        
         let emptyText = (typeof I18N !== 'undefined' && I18N.web_no_nodes) ? I18N.web_no_nodes : "No nodes connected";
-        
-        // Если ноды есть, но поиск их отфильтровал
         if (isSearchActive && allNodesData.length > 0) {
-            emptyText = "Ничего не найдено / Nothing found"; 
+            emptyText = (typeof I18N !== 'undefined' && I18N.web_search_nothing_found) ? I18N.web_search_nothing_found : "Nothing found"; 
         }
 
         container.innerHTML = `<div class="text-center py-8 text-gray-400 dark:text-gray-500 text-sm">${emptyText}</div>`;
