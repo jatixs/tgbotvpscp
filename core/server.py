@@ -116,7 +116,11 @@ def get_current_user(request):
     if uid not in ALLOWED_USERS: return None
     u_data = ALLOWED_USERS[uid]
     role = u_data.get("group", "users") if isinstance(u_data, dict) else u_data
-    return {"id": uid, "role": role, "first_name": USER_NAMES.get(str(uid), f"ID: {uid}"), "photo_url": AGENT_FLAG}
+    
+    # ИЗМЕНЕНИЕ: Берем фото из сессии
+    photo = session.get('photo_url', AGENT_FLAG)
+    
+    return {"id": uid, "role": role, "first_name": USER_NAMES.get(str(uid), f"ID: {uid}"), "photo_url": photo}
 
 def _get_avatar_html(user):
     raw = user.get('photo_url', '')
@@ -236,26 +240,39 @@ async def api_get_sessions(request):
     user_sessions = []
     expired_tokens = []
     
+    # ИЗМЕНЕНИЕ: Проверяем, является ли пользователь главным админом
+    is_main_admin = (user['id'] == ADMIN_USER_ID)
+    
     for token, session in SERVER_SESSIONS.items():
         if time.time() > session['expires']:
             expired_tokens.append(token)
             continue
             
-        if session['id'] == user['id']:
+        # ИЗМЕНЕНИЕ: Админ видит всех, остальные только себя
+        if is_main_admin or session['id'] == user['id']:
             is_current = (token == current_token)
+            
+            # Получаем имя пользователя для отображения
+            s_uid = session['id']
+            user_name = USER_NAMES.get(str(s_uid), f"ID: {s_uid}")
+            
             user_sessions.append({
                 "token_prefix": token[:6] + "...", 
                 "id": token, 
                 "ip": session.get("ip", "Unknown"),
                 "ua": session.get("ua", "Unknown"),
                 "created": session.get("created", 0),
-                "current": is_current
+                "current": is_current,
+                "user_id": s_uid,          # Добавили ID владельца сессии
+                "user_name": user_name,    # Добавили Имя владельца
+                "is_mine": (s_uid == user['id']) # Флаг "Моя сессия"
             })
     
     for t in expired_tokens:
         del SERVER_SESSIONS[t]
         
-    user_sessions.sort(key=lambda x: (not x['current'], x['created']), reverse=True)
+    # Сортировка: Сначала текущая, потом мои, потом чужие (новые сверху)
+    user_sessions.sort(key=lambda x: (not x['current'], not x['is_mine'], x['created']), reverse=True)
     return web.json_response({"sessions": user_sessions})
 
 async def api_revoke_session(request):
@@ -267,11 +284,14 @@ async def api_revoke_session(request):
         current_token = request.cookies.get(COOKIE_NAME)
         if target_token == current_token:
              return web.json_response({"error": "Cannot revoke current session"}, status=400)
+        
         if target_token in SERVER_SESSIONS:
-            if SERVER_SESSIONS[target_token]['id'] == user['id']:
+            # Админ может удалять любые сессии, пользователь - только свои
+            if user['id'] == ADMIN_USER_ID or SERVER_SESSIONS[target_token]['id'] == user['id']:
                 del SERVER_SESSIONS[target_token]
                 return web.json_response({"status": "ok"})
-        return web.json_response({"error": "Session not found"}, status=404)
+                
+        return web.json_response({"error": "Session not found or access denied"}, status=404)
     except Exception as e:
         return web.json_response({"error": str(e)}, status=500)
 
@@ -286,7 +306,7 @@ async def api_revoke_all_sessions(request):
     # Итерируемся по копии ключей
     for token in list(SERVER_SESSIONS.keys()):
         session = SERVER_SESSIONS[token]
-        # Удаляем все сессии этого пользователя, кроме текущей
+        # Удаляем все сессии ТОЛЬКО ЭТОГО пользователя, кроме текущей
         if session['id'] == uid and token != current_token:
             del SERVER_SESSIONS[token]
             count += 1
@@ -836,14 +856,19 @@ async def handle_telegram_auth(request):
         if not check_telegram_auth(data, TOKEN): return web.json_response({"error": "Invalid hash or expired"}, status=403)
         uid = int(data.get('id'))
         if uid not in ALLOWED_USERS: return web.json_response({"error": "User not allowed"}, status=403)
+        
         st = secrets.token_hex(32)
+        
+        # ИЗМЕНЕНИЕ: Сохраняем photo_url
         SERVER_SESSIONS[st] = {
             "id": uid, 
             "expires": time.time() + 2592000,
             "ip": get_client_ip(request),
             "ua": request.headers.get("User-Agent", "Unknown Device"),
-            "created": time.time()
+            "created": time.time(),
+            "photo_url": data.get('photo_url')  # <-- Сохраняем аватарку
         }
+        
         resp = web.json_response({"status": "ok"})
         resp.set_cookie(COOKIE_NAME, st, max_age=2592000, httponly=True, samesite='Lax')
         return resp

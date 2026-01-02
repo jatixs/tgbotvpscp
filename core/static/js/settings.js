@@ -905,6 +905,7 @@ function renderSessionsMainWidget(sessions) {
 // Генерация HTML для одной сессии
 function renderSessionItem(s) {
     const isCurrent = s.current;
+    const isMine = s.is_mine !== false; // По умолчанию true для старых версий API
     
     // Новая логика парсинга User-Agent
     let deviceText = s.ua;
@@ -946,15 +947,37 @@ function renderSessionItem(s) {
         iconPath = "M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"; // Terminal
     }
 
+    // Бейдж пользователя (если сессия чужая)
+    let userBadge = "";
+    if (!isMine) {
+        userBadge = `<div class="text-[10px] font-bold text-blue-500 mb-0.5 uppercase tracking-wide flex items-center gap-1">
+            <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path></svg>
+            ${s.user_name}
+        </div>`;
+    }
+
+    // Цвет фона: Текущая (Зеленый), Моя другая (Серый), Чужая (Желтоватый/Прозрачный)
+    let bgClass = 'bg-gray-50 dark:bg-black/20 border-gray-100 dark:border-white/5';
+    let iconBgClass = 'bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400';
+    
+    if (isCurrent) {
+        bgClass = 'bg-green-50/50 dark:bg-green-900/10 border-green-200 dark:border-green-800';
+        iconBgClass = 'bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400';
+    } else if (!isMine) {
+        bgClass = 'bg-blue-50/30 dark:bg-blue-900/10 border-blue-100 dark:border-blue-800';
+        iconBgClass = 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400';
+    }
+
     return `
-    <div class="flex items-center justify-between p-3 rounded-xl border ${isCurrent ? 'bg-green-50/50 dark:bg-green-900/10 border-green-200 dark:border-green-800' : 'bg-gray-50 dark:bg-black/20 border-gray-100 dark:border-white/5'}">
+    <div class="flex items-center justify-between p-3 rounded-xl border ${bgClass} transition hover:shadow-sm">
         <div class="flex items-center gap-3 overflow-hidden">
-            <div class="p-2 rounded-lg ${isCurrent ? 'bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400' : 'bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400'} flex-shrink-0">
+            <div class="p-2 rounded-lg ${iconBgClass} flex-shrink-0">
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="${iconPath}" />
                 </svg>
             </div>
             <div class="min-w-0">
+                ${userBadge}
                 <div class="text-sm font-bold text-gray-900 dark:text-white truncate" title="${s.ua}">${deviceText}</div>
                 <div class="text-xs text-gray-500 dark:text-gray-400 flex items-center gap-2">
                     <span class="font-mono">${s.ip}</span>
