@@ -463,7 +463,7 @@ STRINGS = {
         "web_sessions_modal_title": "Управление сессиями",
         "web_sessions_revoked_alert": "Все остальные сессии завершены!",
         "web_session_current_label": "Текущая сессия",
-        "web_search_placeholder": "Поиск...",
+        "web_search_placeholder": "Поиск...", 
         "web_search_nothing_found": "Ничего не найдено",
         # --- WEB: KEYBOARD SETTINGS ---
         "web_keyboard_title": "Клавиатура бота",
@@ -944,7 +944,7 @@ STRINGS = {
         "web_sessions_modal_title": "Session Management",
         "web_sessions_revoked_alert": "All other sessions revoked!",
         "web_session_current_label": "Current Session",
-        "web_search_placeholder": "Search...",
+        "web_search_placeholder": "Search...", 
         "web_search_nothing_found": "Nothing found",
         
         # --- WEB: KEYBOARD SETTINGS ---

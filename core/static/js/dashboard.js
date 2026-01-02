@@ -9,7 +9,7 @@ let agentPollInterval = null;
 let nodesPollInterval = null;
 let logPollInterval = null;
 
-// [NEW] Кэш для списка нод, чтобы работал поиск
+// Кэш для списка нод, чтобы работал поиск
 let allNodesData = [];
 
 window.addEventListener('themeChanged', () => {
@@ -28,7 +28,7 @@ document.addEventListener("DOMContentLoaded", () => {
         fetchNodesList();
         nodesPollInterval = setInterval(fetchNodesList, 3000);
 
-        // [NEW] Обработчик поиска
+        // Обработчик поиска
         const searchInput = document.getElementById('nodeSearch');
         if (searchInput) {
             searchInput.addEventListener('input', () => {
@@ -48,7 +48,7 @@ function escapeHtml(text) {
     return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
 }
 
-// [UPDATED] Получение списка нод
+// Получение списка нод
 async function fetchNodesList() {
     try {
         const response = await fetch('/api/nodes/list');
@@ -69,7 +69,7 @@ async function fetchNodesList() {
     } catch (e) { console.error("Nodes list error:", e); }
 }
 
-// [NEW] Фильтрация и рендер
+// Фильтрация и рендер
 function filterAndRenderNodes() {
     const searchInput = document.getElementById('nodeSearch');
     const query = searchInput ? searchInput.value.trim().toLowerCase() : "";
@@ -92,9 +92,14 @@ function renderNodesList(nodes) {
     if (!container) return;
     
     if (nodes.length === 0) {
+        // Проверяем, пусто из-за поиска или вообще нет нод
         const searchInput = document.getElementById('nodeSearch');
         const isSearchActive = searchInput && searchInput.value.trim().length > 0;
+        
+        // Текст по умолчанию: "Нет подключенных нод"
         let emptyText = (typeof I18N !== 'undefined' && I18N.web_no_nodes) ? I18N.web_no_nodes : "No nodes connected";
+        
+        // Если ноды есть (в allNodesData), но поиск их отфильтровал -> "Ничего не найдено"
         if (isSearchActive && allNodesData.length > 0) {
             emptyText = (typeof I18N !== 'undefined' && I18N.web_search_nothing_found) ? I18N.web_search_nothing_found : "Nothing found"; 
         }
@@ -116,10 +121,8 @@ function renderNodesList(nodes) {
         </div>`;
     }).join('');
     
-    // Обновляем HTML только если он изменился (для предотвращения мерцания при частых опросах)
-    // Но при поиске это может мешать, если мы фильтруем. 
-    // В данном случае простая замена безопасна, так как DOM перестраивается быстро.
-    if (container.innerHTML !== html) container.innerHTML = html;
+    // Обновляем HTML только если он изменился (но при фильтрации лучше обновлять всегда, чтобы не было рассинхрона)
+    container.innerHTML = html;
 }
 
 async function fetchAgentStats() {
