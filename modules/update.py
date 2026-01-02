@@ -21,6 +21,20 @@ CHECK_INTERVAL = 21600  # 6 часов
 LAST_NOTIFIED_VERSION = None
 
 
+def validate_branch_name(branch: str) -> str:
+    """
+    Validate git branch name to prevent command injection.
+
+    Allows only common branch name characters: letters, digits, dot, underscore,
+    slash and dash. Raises ValueError on invalid input.
+    """
+    branch = (branch or "").strip()
+    # Very conservative pattern for branch names.
+    if not re.fullmatch(r"[A-Za-z0-9._/\-]+", branch):
+        raise ValueError(f"Invalid branch name: {branch!r}")
+    return branch
+
+
 def get_button() -> KeyboardButton:
     return KeyboardButton(text=_(BUTTON_KEY, config.DEFAULT_LANGUAGE))
 
@@ -127,11 +141,18 @@ async def execute_bot_update(branch: str, restart_source: str = "unknown"):
     restart_source: строка, которая будет записана в флаг рестарта.
     """
     try:
+        # Validate branch to avoid command injection and invalid refs
+        branch = validate_branch_name(branch)
         logging.info(f"Starting bot update to branch {branch}...")
         
         # 1. Checkout
-        checkout_cmd = f"git checkout {branch}"
-        proc_co = await asyncio.create_subprocess_shell(checkout_cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+        proc_co = await asyncio.create_subprocess_exec(
+            "git",
+            "checkout",
+            branch,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
         await proc_co.communicate()
         
         # 2. Pull
