@@ -99,51 +99,91 @@ function updateChartsColors() {
     const tickColor = isDark ? '#9ca3af' : '#6b7280'; 
     [agentChart, chartRes, chartNet].forEach(chart => {
         if (chart) {
-            chart.options.scales.x.grid.color = gridColor; chart.options.scales.x.ticks.color = tickColor;
-            chart.options.scales.y.grid.color = gridColor; chart.options.scales.y.ticks.color = tickColor;
+            chart.options.scales.x.grid.color = 'transparent'; // Скрываем сетку X
+            chart.options.scales.x.ticks.color = tickColor;
+            chart.options.scales.y.grid.color = gridColor; 
+            chart.options.scales.y.ticks.color = tickColor;
             if (chart.options.plugins.legend) chart.options.plugins.legend.labels.color = tickColor;
             chart.update();
         }
     });
 }
 
+// Хелпер для создания градиента
+function getGradient(ctx, colorBase) {
+    const gradient = ctx.createLinearGradient(0, 0, 0, 400);
+    // Преобразуем rgb(r, g, b) в rgba(r, g, b, alpha)
+    gradient.addColorStop(0, colorBase.replace(')', ', 0.5)').replace('rgb', 'rgba'));
+    gradient.addColorStop(1, colorBase.replace(')', ', 0.0)').replace('rgb', 'rgba'));
+    return gradient;
+}
+
 function renderAgentChart(history) {
     if (!history || history.length < 2) return;
-    const labels = history.slice(1).map((_, i) => `-${(history.length - 2 - i) * 2}s`);
-    const netRx = [], netTx = [];
+    const ctx = document.getElementById('agentChart').getContext('2d');
+    
+    const labels = [];
+    const netRx = [];
+    const netTx = [];
+    // Если разрыв больше 10 секунд -> считаем даунтаймом (агент шлет данные каждые 2-3 сек)
+    const gapThreshold = 10; 
+
     for(let i=1; i<history.length; i++) {
-        const dt = history[i].t - history[i-1].t || 1;
+        const dt = history[i].t - history[i-1].t;
+        
+        // Обнаружение разрыва (Downtime)
+        if (dt > gapThreshold) {
+            labels.push(""); // Пустая метка
+            netRx.push(null); // Разрыв линии
+            netTx.push(null);
+        }
+
+        labels.push(new Date(history[i].t * 1000).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', second:'2-digit'}));
         netRx.push((Math.max(0, history[i].rx - history[i-1].rx) * 8 / dt / 1024));
         netTx.push((Math.max(0, history[i].tx - history[i-1].tx) * 8 / dt / 1024));
     }
+
     const isDark = document.documentElement.classList.contains('dark');
     const gridColor = isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.05)';
     const tickColor = isDark ? '#9ca3af' : '#6b7280';
+
     const opts = {
         responsive: true, maintainAspectRatio: false, animation: false,
+        interaction: { mode: 'index', intersect: false },
         scales: { 
-            x: { grid: { color: gridColor }, ticks: { color: tickColor, font: {size: 9} } },
-            y: { position: 'right', grid: { color: gridColor }, ticks: { color: tickColor, callback: (v) => formatSpeed(v) } }
+            x: { grid: { display: false }, ticks: { color: tickColor, maxTicksLimit: 8, maxRotation: 0 } },
+            y: { position: 'right', grid: { color: gridColor }, ticks: { color: tickColor, callback: (v) => formatSpeed(v) }, beginAtZero: true }
         },
-        plugins: { legend: { labels: { color: tickColor, usePointStyle: true } } }
+        plugins: { 
+            legend: { labels: { color: tickColor, usePointStyle: true } },
+            tooltip: {
+                mode: 'index', intersect: false,
+                callbacks: { label: (c) => c.dataset.label + ': ' + formatSpeed(c.raw) }
+            }
+        },
+        elements: {
+            line: { tension: 0.4 }, // Сглаживание
+            point: { radius: 0, hitRadius: 20, hoverRadius: 4 }
+        }
     };
+
     if (agentChart) {
-        agentChart.data.labels = labels; agentChart.data.datasets[0].data = netRx; agentChart.data.datasets[1].data = netTx; agentChart.update();
+        agentChart.data.labels = labels; 
+        agentChart.data.datasets[0].data = netRx; 
+        agentChart.data.datasets[1].data = netTx; 
+        agentChart.update();
     } else {
-        const ctx = document.getElementById('agentChart').getContext('2d');
+        // Создаем градиенты
+        const rxGrad = getGradient(ctx, 'rgb(34, 197, 94)');
+        const txGrad = getGradient(ctx, 'rgb(59, 130, 246)');
+
         agentChart = new Chart(ctx, { 
             type: 'line', 
             data: { 
                 labels, 
                 datasets: [
-                    { 
-                        label: 'RX', data: netRx, borderColor: '#22c55e', fill: true, backgroundColor: 'rgba(34,197,94,0.1)', tension: 0.3,
-                        pointRadius: 0, pointHoverRadius: 5, pointHitRadius: 10 
-                    }, 
-                    { 
-                        label: 'TX', data: netTx, borderColor: '#3b82f6', fill: true, backgroundColor: 'rgba(59,130,246,0.1)', tension: 0.3,
-                        pointRadius: 0, pointHoverRadius: 5, pointHitRadius: 10
-                    }
+                    { label: 'RX', data: netRx, borderColor: '#22c55e', borderWidth: 2, backgroundColor: rxGrad, fill: true }, 
+                    { label: 'TX', data: netTx, borderColor: '#3b82f6', borderWidth: 2, backgroundColor: txGrad, fill: true }
                 ] 
             }, 
             options: opts 
@@ -151,7 +191,10 @@ function renderAgentChart(history) {
     }
 }
 
-function formatSpeed(v) { return v >= 1024 * 1024 ? (v / 1048576).toFixed(2) + ' Gbps' : (v >= 1024 ? (v / 1024).toFixed(2) + ' Mbps' : v.toFixed(2) + ' Kbps'); }
+function formatSpeed(v) { 
+    if (v === null || v === undefined) return '0 Kbps';
+    return v >= 1024 * 1024 ? (v / 1048576).toFixed(2) + ' Gbps' : (v >= 1024 ? (v / 1024).toFixed(2) + ' Mbps' : v.toFixed(2) + ' Kbps'); 
+}
 
 function formatBytes(b) {
     const s = [
@@ -204,6 +247,17 @@ async function fetchAndRender(token) {
         document.getElementById('modalNodeName').innerText = data.name;
         document.getElementById('modalNodeIp').innerText = data.ip;
         document.getElementById('modalToken').innerText = data.token;
+        
+        // Last Seen logic
+        const lastSeen = data.last_seen || 0;
+        const now = Math.floor(Date.now() / 1000);
+        const diff = now - lastSeen;
+        const lsEl = document.getElementById('modalNodeLastSeen');
+        if (lsEl) {
+            lsEl.innerText = diff < 60 ? "Online" : `Last seen: ${new Date(lastSeen * 1000).toLocaleString()}`;
+            lsEl.className = diff < 60 ? "text-green-500 font-bold text-xs" : "text-red-500 font-bold text-xs";
+        }
+
         renderCharts(data.history);
     } catch (e) { console.error("Node detail error:", e); }
 }
@@ -216,7 +270,45 @@ function closeNodeModal() {
 
 function renderCharts(history) {
     if (!history || history.length < 2) return; 
-    const labels = history.map(h => new Date(h.t * 1000).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', second:'2-digit'}));
+    
+    const ctxRes = document.getElementById('nodeResChart').getContext('2d');
+    const ctxNet = document.getElementById('nodeNetChart').getContext('2d');
+
+    // Для нод интервал обновления больше, ставим порог 25 сек для даунтайма
+    const gapThreshold = 25; 
+
+    const labels = [];
+    const cpuData = [];
+    const ramData = [];
+    const netRx = [];
+    const netTx = [];
+
+    // Инициализация первой точки
+    labels.push(new Date(history[0].t * 1000).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', second:'2-digit'}));
+    cpuData.push(history[0].c);
+    ramData.push(history[0].r);
+    netRx.push(0);
+    netTx.push(0);
+
+    for(let i=1; i<history.length; i++) {
+        const dt = history[i].t - history[i-1].t;
+        
+        // Обнаружение разрыва (Downtime) для Ноды
+        if (dt > gapThreshold) {
+            labels.push("");
+            cpuData.push(null);
+            ramData.push(null);
+            netRx.push(null);
+            netTx.push(null);
+        }
+
+        labels.push(new Date(history[i].t * 1000).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', second:'2-digit'}));
+        cpuData.push(history[i].c);
+        ramData.push(history[i].r);
+        netRx.push((Math.max(0, history[i].rx - history[i-1].rx) * 8 / dt / 1024));
+        netTx.push((Math.max(0, history[i].tx - history[i-1].tx) * 8 / dt / 1024));
+    }
+
     const isDark = document.documentElement.classList.contains('dark');
     const gridColor = isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.05)';
     const tickColor = isDark ? '#9ca3af' : '#6b7280';
@@ -226,44 +318,55 @@ function renderCharts(history) {
         interaction: { mode: 'index', intersect: false }, 
         scales: { 
             y: { beginAtZero: true, grid: { color: gridColor }, ticks: { color: tickColor, font: {size: 10} } }, 
-            x: { display: false } 
+            x: { grid: { display: false }, ticks: { display: false } } 
         },
-        plugins: { legend: { labels: { color: tickColor, boxWidth: 10 } } }
+        plugins: { legend: { labels: { color: tickColor, boxWidth: 10, usePointStyle: true } } },
+        elements: { line: { tension: 0.4 }, point: { radius: 0, hitRadius: 10 } }
     };
 
+    // Resources Chart (Node)
     if (chartRes) {
-        chartRes.data.labels = labels; chartRes.data.datasets[0].data = history.map(h => h.c); chartRes.data.datasets[1].data = history.map(h => h.r); chartRes.update();
+        chartRes.data.labels = labels; 
+        chartRes.data.datasets[0].data = cpuData; 
+        chartRes.data.datasets[1].data = ramData; 
+        chartRes.update();
     } else {
-        chartRes = new Chart(document.getElementById('nodeResChart').getContext('2d'), { 
+        const cpuGrad = getGradient(ctxRes, 'rgb(59, 130, 246)');
+        const ramGrad = getGradient(ctxRes, 'rgb(168, 85, 247)');
+
+        chartRes = new Chart(ctxRes, { 
             type: 'line', 
             data: { 
                 labels, 
                 datasets: [
-                    { label: 'CPU (%)', data: history.map(h => h.c), borderColor: '#3b82f6', pointRadius: 0, pointHoverRadius: 5 }, 
-                    { label: 'RAM (%)', data: history.map(h => h.r), borderColor: '#a855f7', pointRadius: 0, pointHoverRadius: 5 }
+                    { label: 'CPU (%)', data: cpuData, borderColor: '#3b82f6', borderWidth: 2, backgroundColor: cpuGrad, fill: true }, 
+                    { label: 'RAM (%)', data: ramData, borderColor: '#a855f7', borderWidth: 2, backgroundColor: ramGrad, fill: true }
                 ] 
             }, 
             options: { ...commonOptions, scales: { ...commonOptions.scales, y: { ...commonOptions.scales.y, max: 100 } } } 
         });
     }
 
-    const netRxSpeed = [], netTxSpeed = [];
-    for(let i=1; i<history.length; i++) {
-        const dt = history[i].t - history[i-1].t || 1;
-        netRxSpeed.push((Math.max(0, history[i].rx - history[i-1].rx) * 8 / dt / 1024));
-        netTxSpeed.push((Math.max(0, history[i].tx - history[i-1].tx) * 8 / dt / 1024));
-    }
+    // Network Chart (Node)
     if (chartNet) {
-        chartNet.data.labels = labels.slice(1); chartNet.data.datasets[0].data = netRxSpeed; chartNet.data.datasets[1].data = netTxSpeed; chartNet.update();
+        chartNet.data.labels = labels; 
+        chartNet.data.datasets[0].data = netRx; 
+        chartNet.data.datasets[1].data = netTx; 
+        chartNet.update();
     } else {
-        const netOpts = JSON.parse(JSON.stringify(commonOptions)); netOpts.scales.y.ticks.callback = (v) => formatSpeed(v);
-        chartNet = new Chart(document.getElementById('nodeNetChart').getContext('2d'), { 
+        const netOpts = JSON.parse(JSON.stringify(commonOptions)); 
+        netOpts.scales.y.ticks.callback = (v) => formatSpeed(v);
+        
+        const rxGrad = getGradient(ctxNet, 'rgb(34, 197, 94)');
+        const txGrad = getGradient(ctxNet, 'rgb(239, 68, 68)');
+
+        chartNet = new Chart(ctxNet, { 
             type: 'line', 
             data: { 
-                labels: labels.slice(1), 
+                labels, 
                 datasets: [
-                    { label: 'RX', data: netRxSpeed, borderColor: '#22c55e', fill: true, backgroundColor: 'rgba(34,197,94,0.1)', pointRadius: 0, pointHoverRadius: 5 }, 
-                    { label: 'TX', data: netTxSpeed, borderColor: '#ef4444', pointRadius: 0, pointHoverRadius: 5 } 
+                    { label: 'RX', data: netRx, borderColor: '#22c55e', borderWidth: 2, backgroundColor: rxGrad, fill: true }, 
+                    { label: 'TX', data: netTx, borderColor: '#ef4444', borderWidth: 2, backgroundColor: txGrad, fill: true } 
                 ] 
             }, 
             options: netOpts 
