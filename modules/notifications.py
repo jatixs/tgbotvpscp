@@ -62,6 +62,36 @@ def start_background_tasks(bot: Bot) -> list[asyncio.Task]:
     return tasks
 
 
+# --- НОВАЯ ФУНКЦИЯ ДЛЯ ПОЛУЧЕНИЯ ТОП ПРОЦЕССОВ ---
+def get_top_processes_info(metric: str) -> str:
+    """Возвращает строку с топ-3 процессами по CPU или RAM."""
+    try:
+        attrs = ['pid', 'name', 'cpu_percent', 'memory_percent']
+        procs = []
+        for p in psutil.process_iter(attrs):
+            try:
+                # process_iter может вызвать исключение, если процесс завершился во время итерации
+                procs.append(p.info)
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                pass
+
+        if metric == 'cpu':
+            # Сортировка по CPU
+            sorted_procs = sorted(procs, key=lambda p: p['cpu_percent'], reverse=True)[:3]
+            info_list = [f"{p['name']} ({p['cpu_percent']}%)" for p in sorted_procs]
+        elif metric == 'ram':
+            # Сортировка по RAM
+            sorted_procs = sorted(procs, key=lambda p: p['memory_percent'], reverse=True)[:3]
+            info_list = [f"{p['name']} ({p['memory_percent']:.1f}%)" for p in sorted_procs]
+        else:
+            return ""
+
+        return ", ".join(info_list)
+    except Exception as e:
+        logging.error(f"Error getting top processes: {e}")
+        return "n/a"
+
+
 async def notifications_menu_handler(message: types.Message):
     user_id = message.from_user.id
     lang = get_user_lang(user_id)
@@ -146,6 +176,7 @@ async def resource_monitor(bot: Bot):
     await asyncio.sleep(15)
     while True:
         try:
+            # interval=1 нужен для корректного расчета загрузки CPU
             cpu = psutil.cpu_percent(interval=1)
             ram = psutil.virtual_memory().percent
             try:
@@ -158,14 +189,19 @@ async def resource_monitor(bot: Bot):
 
             def check(metric, val, thresh, key_high, key_rep, key_norm):
                 if val >= thresh:
+                    # ПОЛУЧАЕМ ИНФОРМАЦИЮ О ПРОЦЕССАХ ТОЛЬКО ПРИ ВЫСОКОЙ НАГРУЗКЕ
+                    proc_info = ""
+                    if metric in ['cpu', 'ram']:
+                        proc_info = get_top_processes_info(metric)
+
                     if not RESOURCE_ALERT_STATE[metric]:
                         alerts.append(
-                            (key_high, {"usage": val, "threshold": thresh}))
+                            (key_high, {"usage": val, "threshold": thresh, "processes": proc_info}))
                         RESOURCE_ALERT_STATE[metric] = True
                         LAST_RESOURCE_ALERT_TIME[metric] = now
                     elif now - LAST_RESOURCE_ALERT_TIME[metric] > config.RESOURCE_ALERT_COOLDOWN:
                         alerts.append(
-                            (key_rep, {"usage": val, "threshold": thresh}))
+                            (key_rep, {"usage": val, "threshold": thresh, "processes": proc_info}))
                         LAST_RESOURCE_ALERT_TIME[metric] = now
                 elif val < thresh and RESOURCE_ALERT_STATE[metric]:
                     alerts.append((key_norm, {"usage": val}))
@@ -186,13 +222,20 @@ async def resource_monitor(bot: Bot):
                 "alert_ram_high",
                 "alert_ram_high_repeat",
                 "alert_ram_normal")
-            check(
-                "disk",
-                disk,
-                config.DISK_THRESHOLD,
-                "alert_disk_high",
-                "alert_disk_high_repeat",
-                "alert_disk_normal")
+            
+            # Для диска логика немного отличается (процессы не нужны)
+            if disk >= config.DISK_THRESHOLD:
+                 if not RESOURCE_ALERT_STATE["disk"]:
+                    alerts.append(("alert_disk_high", {"usage": disk, "threshold": config.DISK_THRESHOLD, "processes": ""}))
+                    RESOURCE_ALERT_STATE["disk"] = True
+                    LAST_RESOURCE_ALERT_TIME["disk"] = now
+                 elif now - LAST_RESOURCE_ALERT_TIME["disk"] > config.RESOURCE_ALERT_COOLDOWN:
+                    alerts.append(("alert_disk_high_repeat", {"usage": disk, "threshold": config.DISK_THRESHOLD, "processes": ""}))
+                    LAST_RESOURCE_ALERT_TIME["disk"] = now
+            elif disk < config.DISK_THRESHOLD and RESOURCE_ALERT_STATE["disk"]:
+                alerts.append(("alert_disk_normal", {"usage": disk}))
+                RESOURCE_ALERT_STATE["disk"] = False
+                LAST_RESOURCE_ALERT_TIME["disk"] = 0
 
             if alerts:
                 await send_alert(bot, lambda lang: "\n\n".join([_(k, lang, **p) for k, p in alerts]), "resources")

@@ -7,3 +7,5 @@ PyYAML
 docker
 aiohttp
 aiosqlite
+Pillow
+packaging
