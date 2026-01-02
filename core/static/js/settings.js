@@ -6,6 +6,9 @@ document.addEventListener("DOMContentLoaded", () => {
     updateBulkButtonsUI();
     initChangePasswordUI();
     
+    // Загрузка сессий (НОВОЕ)
+    fetchSessions();
+    
     // Инициализация валидации ноды уже в common.js, здесь просто убеждаемся что слушатели повешены
     const input = document.getElementById('newNodeNameDash');
     if (input) {
@@ -483,8 +486,6 @@ async function deleteNode(token) {
     }
 }
 
-// ЛОГИКА ДОБАВЛЕНИЯ НОДЫ ПЕРЕНЕСЕНА В COMMON.JS
-
 async function changePassword() {
     const currentEl = document.getElementById('pass_current');
     const newPassEl = document.getElementById('pass_new');
@@ -865,3 +866,95 @@ window.disableAllKeyboard = async function() {
         updateBulkButtonsUI();
     }, 1500);
 };
+
+// --- SESSIONS LOGIC ---
+async function fetchSessions() {
+    const container = document.getElementById('sessionsList');
+    if (!container) return;
+
+    try {
+        const res = await fetch('/api/sessions/list');
+        const data = await res.json();
+        
+        if (data.sessions) {
+            renderSessions(data.sessions);
+        }
+    } catch (e) {
+        container.innerHTML = `<div class="text-red-500 text-sm text-center">Error loading sessions</div>`;
+    }
+}
+
+function renderSessions(sessions) {
+    const container = document.getElementById('sessionsList');
+    if (!container) return;
+    
+    if (sessions.length === 0) {
+        container.innerHTML = `<div class="text-gray-500 text-sm text-center">No active sessions</div>`;
+        return;
+    }
+
+    container.innerHTML = sessions.map(s => {
+        const isCurrent = s.current;
+        const ua = s.ua.length > 30 ? s.ua.substring(0, 30) + '...' : s.ua;
+        const date = new Date(s.created * 1000).toLocaleString();
+        
+        // Определение иконки устройства (примитивное)
+        let iconPath = "M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"; // Monitor
+        if (s.ua.toLowerCase().includes('mobile') || s.ua.toLowerCase().includes('android') || s.ua.toLowerCase().includes('iphone')) {
+            iconPath = "M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z"; // Phone
+        }
+
+        return `
+        <div class="flex items-center justify-between p-3 rounded-xl border ${isCurrent ? 'bg-green-50/50 dark:bg-green-900/10 border-green-200 dark:border-green-800' : 'bg-gray-50 dark:bg-black/20 border-gray-100 dark:border-white/5'}">
+            <div class="flex items-center gap-3 overflow-hidden">
+                <div class="p-2 rounded-lg ${isCurrent ? 'bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400' : 'bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400'} flex-shrink-0">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="${iconPath}" />
+                    </svg>
+                </div>
+                <div class="min-w-0">
+                    <div class="text-sm font-bold text-gray-900 dark:text-white truncate" title="${s.ua}">${ua}</div>
+                    <div class="text-xs text-gray-500 dark:text-gray-400 flex items-center gap-2">
+                        <span class="font-mono">${s.ip}</span>
+                        <span>•</span>
+                        <span>${date}</span>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="flex-shrink-0 ml-2">
+                ${isCurrent 
+                    ? `<span class="px-2 py-1 bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400 text-[10px] font-bold uppercase rounded-lg tracking-wider">${I18N.web_session_current || 'Current'}</span>`
+                    : `<button onclick="revokeSession('${s.id}')" class="p-2 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition" title="${I18N.web_session_revoke || 'Revoke'}">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+                       </button>`
+                }
+            </div>
+        </div>
+        `;
+    }).join('');
+}
+
+async function revokeSession(token) {
+    if (!await window.showModalConfirm(I18N.web_session_revoke + "?", I18N.modal_title_confirm)) return;
+    
+    try {
+        const res = await fetch('/api/sessions/revoke', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({token: token})
+        });
+        
+        if (res.ok) {
+            fetchSessions(); // Обновляем список
+            if (window.showToast) window.showToast("Сессия завершена");
+        } else {
+            const data = await res.json();
+            await window.showModalAlert(data.error || "Failed", "Error");
+        }
+    } catch (e) {
+        console.error(e);
+    }
+}

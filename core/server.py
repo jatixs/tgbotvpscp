@@ -228,6 +228,53 @@ async def api_run_update(request):
         return web.json_response({'status': 'Update started, server restarting...'})
     except Exception as e: return web.json_response({'error': str(e)}, status=500)
 
+async def api_get_sessions(request):
+    user = get_current_user(request)
+    if not user: return web.json_response({"error": "Unauthorized"}, status=401)
+    
+    current_token = request.cookies.get(COOKIE_NAME)
+    user_sessions = []
+    expired_tokens = []
+    
+    for token, session in SERVER_SESSIONS.items():
+        if time.time() > session['expires']:
+            expired_tokens.append(token)
+            continue
+            
+        if session['id'] == user['id']:
+            is_current = (token == current_token)
+            user_sessions.append({
+                "token_prefix": token[:6] + "...", 
+                "id": token, 
+                "ip": session.get("ip", "Unknown"),
+                "ua": session.get("ua", "Unknown"),
+                "created": session.get("created", 0),
+                "current": is_current
+            })
+    
+    for t in expired_tokens:
+        del SERVER_SESSIONS[t]
+        
+    user_sessions.sort(key=lambda x: (not x['current'], x['created']), reverse=True)
+    return web.json_response({"sessions": user_sessions})
+
+async def api_revoke_session(request):
+    user = get_current_user(request)
+    if not user: return web.json_response({"error": "Unauthorized"}, status=401)
+    try:
+        data = await request.json()
+        target_token = data.get("token")
+        current_token = request.cookies.get(COOKIE_NAME)
+        if target_token == current_token:
+             return web.json_response({"error": "Cannot revoke current session"}, status=400)
+        if target_token in SERVER_SESSIONS:
+            if SERVER_SESSIONS[target_token]['id'] == user['id']:
+                del SERVER_SESSIONS[target_token]
+                return web.json_response({"status": "ok"})
+        return web.json_response({"error": "Session not found"}, status=404)
+    except Exception as e:
+        return web.json_response({"error": str(e)}, status=500)
+
 async def handle_dashboard(request):
     user = get_current_user(request)
     if not user: raise web.HTTPFound('/login')
@@ -303,6 +350,7 @@ async def handle_dashboard(request):
         "{web_clear_notifications}": _("web_clear_notifications", lang),
         "{web_node_details_title}": _("web_node_details_title", lang),
         "{web_clear_logs_btn}": _("web_clear_logs_btn", lang),
+        "{web_logout}": _("web_logout", lang),
     }
     
     for k, v in replacements.items(): 
@@ -325,7 +373,6 @@ async def handle_dashboard(request):
         "web_clear_notif_confirm": _("web_clear_notifications", lang) + "?",
         "modal_btn_ok": _("modal_btn_ok", lang),
         "modal_btn_cancel": _("modal_btn_cancel", lang),
-        # === ОБНОВЛЕНИЕ: Передача ключей для локализации времени и байтов ===
         "web_time_d": _("unit_day_short", lang),
         "web_time_h": _("unit_hour_short", lang),
         "web_time_m": _("unit_minute_short", lang),
@@ -535,6 +582,7 @@ async def handle_settings_page(request):
         "{web_update_do_btn}": _("web_update_do_btn", lang),
         "{web_notifications_title}": _("web_notifications_title", lang),
         "{web_clear_notifications}": _("web_clear_notifications", lang),
+        "{web_logout}": _("web_logout", lang),
     }
     modified_html = html
     for k, v in replacements.items(): modified_html = modified_html.replace(k, v)
@@ -545,7 +593,14 @@ async def handle_settings_page(request):
         "web_clear_bot_confirm": _("web_clear_bot_confirm", lang), "web_clear_node_confirm": _("web_clear_node_confirm", lang), "web_clear_all_confirm": _("web_clear_all_confirm", lang), "web_logs_cleared_bot": _("web_logs_cleared_bot", lang), "web_logs_cleared_node": _("web_logs_cleared_node", lang), "web_logs_cleared_all": _("web_logs_cleared_all", lang), "modal_title_alert": _("modal_title_alert", lang), "modal_title_confirm": _("modal_title_confirm", lang), "modal_title_prompt": _("modal_title_prompt", lang), "modal_btn_ok": _("modal_btn_ok", lang), "modal_btn_cancel": _("modal_btn_cancel", lang), "web_kb_active": _("web_kb_active", lang), "web_kb_all_on_alert": _("web_kb_all_on_alert", lang), "web_kb_all_off_alert": _("web_kb_all_off_alert", lang), "web_no_nodes": _("web_no_nodes", lang), "web_copied": _("web_copied", lang), "web_kb_cat_monitoring": _("web_kb_cat_monitoring", lang), "web_kb_cat_security": _("web_kb_cat_security", lang), "web_kb_cat_management": _("web_kb_cat_management", lang), "web_kb_cat_system": _("web_kb_cat_system", lang), "web_kb_cat_tools": _("web_kb_cat_tools", lang),
         "web_update_checking": _("web_update_checking", lang), "web_update_available_title": _("web_update_available_title", lang), "web_update_info": _("web_update_info", lang), "web_update_uptodate": _("web_update_uptodate", lang), "web_update_started": _("web_update_started", lang), "web_update_error": _("web_update_error", lang),
         "web_no_notifications": _("web_no_notifications", lang),
-        "web_clear_notifications": _("web_clear_notifications", lang)
+        "web_clear_notifications": _("web_clear_notifications", lang),
+        "web_sessions_title": _("web_sessions_title", lang),
+        "web_session_current": _("web_session_current", lang),
+        "web_session_revoke": _("web_session_revoke", lang),
+        "web_logout": _("web_logout", lang),
+        "web_ip": _("web_ip", lang),
+        "web_device": _("web_device", lang),
+        "web_last_active": _("web_last_active", lang),
     }
     for btn_key, conf_key in BTN_CONFIG_MAP.items(): i18n_data[f"lbl_{conf_key}"] = _(btn_key, lang)
     modified_html = modified_html.replace("{i18n_json}", json.dumps(i18n_data))
@@ -718,7 +773,13 @@ async def handle_login_password(request):
     if uid != ADMIN_USER_ID: return web.Response(text="Password login for Main Admin only.", status=403)
     if check_user_password(uid, data.get("password")):
         st = secrets.token_hex(32)
-        SERVER_SESSIONS[st] = {"id": uid, "expires": time.time() + 604800}
+        SERVER_SESSIONS[st] = {
+            "id": uid, 
+            "expires": time.time() + 604800,
+            "ip": get_client_ip(request),
+            "ua": request.headers.get("User-Agent", "Unknown Device"),
+            "created": time.time()
+        }
         resp = web.HTTPFound('/')
         resp.set_cookie(COOKIE_NAME, st, max_age=604800, httponly=True, samesite='Lax')
         return resp
@@ -733,7 +794,13 @@ async def handle_magic_login(request):
     uid = td["user_id"]
     if uid not in ALLOWED_USERS: return web.Response(text="Denied", status=403)
     st = secrets.token_hex(32)
-    SERVER_SESSIONS[st] = {"id": uid, "expires": time.time() + 2592000}
+    SERVER_SESSIONS[st] = {
+        "id": uid, 
+        "expires": time.time() + 2592000,
+        "ip": get_client_ip(request),
+        "ua": request.headers.get("User-Agent", "Unknown Device"),
+        "created": time.time()
+    }
     resp = web.HTTPFound('/')
     resp.set_cookie(COOKIE_NAME, st, max_age=2592000, httponly=True, samesite='Lax')
     return resp
@@ -745,7 +812,13 @@ async def handle_telegram_auth(request):
         uid = int(data.get('id'))
         if uid not in ALLOWED_USERS: return web.json_response({"error": "User not allowed"}, status=403)
         st = secrets.token_hex(32)
-        SERVER_SESSIONS[st] = {"id": uid, "expires": time.time() + 2592000}
+        SERVER_SESSIONS[st] = {
+            "id": uid, 
+            "expires": time.time() + 2592000,
+            "ip": get_client_ip(request),
+            "ua": request.headers.get("User-Agent", "Unknown Device"),
+            "created": time.time()
+        }
         resp = web.json_response({"status": "ok"})
         resp.set_cookie(COOKIE_NAME, st, max_age=2592000, httponly=True, samesite='Lax')
         return resp
@@ -867,6 +940,8 @@ async def start_web_server(bot_instance: Bot):
         app.router.add_get('/api/notifications/list', api_get_notifications)
         app.router.add_post('/api/notifications/read', api_read_notifications)
         app.router.add_post('/api/notifications/clear', api_clear_notifications)
+        app.router.add_get('/api/sessions/list', api_get_sessions)
+        app.router.add_post('/api/sessions/revoke', api_revoke_session)
     else:
         logging.info("Web UI DISABLED.")
         app.router.add_get('/', handle_api_root)

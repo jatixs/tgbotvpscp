@@ -76,6 +76,14 @@
                     <svg id="iconSystem" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>
                 </button>
 
+                <form action="/logout" method="POST" class="inline-block">
+                    <button type="submit" class="flex items-center justify-center w-8 h-8 rounded-lg hover:bg-red-100 dark:hover:bg-red-900/30 text-gray-500 dark:text-gray-400 hover:text-red-600 dark:hover:text-red-400 transition" title="{web_logout}">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                        </svg>
+                    </button>
+                </form>
+
                 <div class="hidden md:flex items-center gap-2 bg-white/60 dark:bg-white/5 px-3 py-1.5 rounded-full border border-white/40 dark:border-white/5 shadow-sm dark:shadow-none max-w-[140px] sm:max-w-none">
                     {user_avatar}
                     <span class="text-xs font-medium text-gray-700 dark:text-gray-300 truncate">{user_name}</span>

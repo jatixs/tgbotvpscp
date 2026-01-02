@@ -451,6 +451,13 @@ STRINGS = {
         "web_no_notifications": "Уведомлений нет",
         "web_notifications_title": "Уведомления",
         "web_clear_notifications": "Очистить все",
+        "web_sessions_title": "Активные сессии",
+        "web_session_current": "Текущая",
+        "web_session_revoke": "Завершить",
+        "web_logout": "Выйти",
+        "web_ip": "IP адрес",
+        "web_device": "Устройство",
+        "web_last_active": "Вход",
         # --- WEB: KEYBOARD SETTINGS ---
         "web_keyboard_title": "Клавиатура бота",
         "web_kb_desc": "Настройте видимость команд в меню бота.",
@@ -918,6 +925,13 @@ STRINGS = {
         "web_no_notifications": "No notifications",
         "web_notifications_title": "Notifications",
         "web_clear_notifications": "Clear all",
+        "web_sessions_title": "Active Sessions",
+        "web_session_current": "Current",
+        "web_session_revoke": "Revoke",
+        "web_logout": "Logout",
+        "web_ip": "IP Address",
+        "web_device": "Device",
+        "web_last_active": "Login Time",
         
         # --- WEB: KEYBOARD SETTINGS ---
         "web_keyboard_title": "Bot Keyboard",
