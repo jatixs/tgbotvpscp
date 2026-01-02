@@ -128,7 +128,6 @@ STRINGS = {
         "notifications_toggle_alert": "Уведомления '{alert_name}' {status}",
         "notifications_status_on": "✅ ВКЛЮЧЕНЫ",
         "notifications_status_off": "❌ ОТКЛЮЧЕНЫ",
-        "notifications_downtime_stub": "⏳ Функция уведомлений о даунтайме сервера находится в разработке.\nПока рекомендуем использовать внешние сервисы мониторинга (например, UptimeRobot).", 
         "alert_node_down": "🚨 <b>АЛЕРТ: Нода '{name}' НЕДОСТУПНА (Down)!</b>\n⏱ Последний отклик: {last_seen}",
         "alert_node_up": "✅ <b>Нода '{name}' восстановилась (Up).</b>\n🟢 Снова в сети.",
         "alert_node_restarting": "🔵 <b>Нода '{name}' перезагружается...</b>",
@@ -620,7 +619,6 @@ STRINGS = {
         "notifications_toggle_alert": "Notifications '{alert_name}' {status}",
         "notifications_status_on": "✅ ENABLED",
         "notifications_status_off": "❌ DISABLED",
-        "notifications_downtime_stub": "⏳ Server downtime notifications are under development.\nFor now, we recommend using an external monitoring service (e.g., UptimeRobot).",
         
         "alert_node_down": "🚨 <b>ALERT: Node '{name}' is DOWN!</b>\n⏱ Last seen: {last_seen}",
         "alert_node_up": "✅ <b>Node '{name}' recovered (Up).</b>\n🟢 Online now.",
