@@ -414,15 +414,24 @@ async function loadLogs(type = 'bot') {
     const overlay = document.getElementById('logsOverlay');
     const url = type === 'sys' ? '/api/logs/system' : '/api/logs';
     
+    // --- ПРОВЕРКА ПРАВ НА КЛИЕНТЕ ---
+    // Если роль определена и это не админ -> сразу показываем заглушку, не делая запрос
+    if (typeof USER_ROLE !== 'undefined' && USER_ROLE !== 'admins') {
+        if (overlay) overlay.classList.remove('hidden');
+        if (!container.innerHTML.includes('blur')) {
+            container.innerHTML = generateDummyLogs();
+            container.scrollTop = 0;
+        }
+        return; // Прерываем выполнение, запрос не отправляется -> ошибки в консоли нет
+    }
+    // --------------------------------
+
     try {
         const res = await fetch(url);
         
-        // --- НОВАЯ ЛОГИКА ДЛЯ 403 ---
+        // Оставляем обработку 403 на всякий случай (если переменная USER_ROLE не сработала)
         if (res.status === 403) { 
-            // Показываем оверлей
             if(overlay) overlay.classList.remove('hidden');
-            
-            // Если контейнер пуст или содержит текст ошибки, заполняем его "фейковыми" размытыми данными для красоты
             if (!container.innerHTML.includes('blur')) {
                 container.innerHTML = generateDummyLogs();
                 container.scrollTop = 0;
@@ -430,7 +439,6 @@ async function loadLogs(type = 'bot') {
             return; 
         }
         
-        // Если доступ есть (не 403), скрываем оверлей
         if(overlay) overlay.classList.add('hidden');
 
         const data = await res.json();
@@ -452,10 +460,8 @@ async function loadLogs(type = 'bot') {
                 return `<div class="${cls}">${escapeHtml(line)}</div>`;
             }).join('');
             
-            // Проверка скролла
             const isBottom = container.scrollHeight - container.scrollTop <= container.clientHeight + 100;
             
-            // Обновляем только если контент изменился
             if (container.innerHTML !== html) { 
                 container.innerHTML = html; 
                 if (isBottom) container.scrollTop = container.scrollHeight; 

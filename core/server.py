@@ -627,6 +627,8 @@ async def handle_settings_page(request):
         "{web_sessions_view_all}": _("web_sessions_view_all", lang),
         "{web_sessions_revoke_all}": _("web_sessions_revoke_all", lang),
         "{web_sessions_modal_title}": _("web_sessions_modal_title", lang),
+        "{user_role_js}": f"const USER_ROLE = '{role}';",
+        "{web_sessions_title}": _("web_sessions_title", lang),
     }
     modified_html = html
     for k, v in replacements.items(): modified_html = modified_html.replace(k, v)
