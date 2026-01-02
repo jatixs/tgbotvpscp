@@ -383,8 +383,8 @@ async def handle_dashboard(request):
         "{web_logout}": _("web_logout", lang),
         "{web_access_denied}": _("web_access_denied", lang),
         "{web_logs_protected_desc}": _("web_logs_protected_desc", lang),
-        "{user_role_js}": f"const USER_ROLE = '{role}';",  # <--- ДОБАВЛЕНО
-        "{web_search_placeholder}": _("web_search_placeholder", lang), # <--- ДОБАВЛЕНО
+        "{user_role_js}": f"const USER_ROLE = '{role}';",  
+        "{web_search_placeholder}": _("web_search_placeholder", lang),
     }
     
     for k, v in replacements.items(): 
@@ -535,7 +535,12 @@ async def handle_settings_page(request):
     if not user: raise web.HTTPFound('/login')
     html = load_template("settings.html")
     user_id = user['id']
-    is_admin = user['role'] == 'admins'
+    
+    # --- ИСПРАВЛЕНИЕ: Добавляем объявление переменной role ---
+    role = user.get('role', 'users')
+    # ---------------------------------------------------------
+    
+    is_admin = role == 'admins'
     lang = get_user_lang(user_id)
     user_alerts = ALERTS_CONFIG.get(user_id, {})
     users_json = "null"

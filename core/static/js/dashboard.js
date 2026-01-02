@@ -1,3 +1,5 @@
+/* /core/static/js/dashboard.js */
+
 let chartRes = null;
 let chartNet = null;
 let pollInterval = null;
@@ -6,6 +8,9 @@ let agentChart = null;
 let agentPollInterval = null;
 let nodesPollInterval = null;
 let logPollInterval = null;
+
+// [NEW] Кэш для списка нод, чтобы работал поиск
+let allNodesData = [];
 
 window.addEventListener('themeChanged', () => {
     updateChartsColors();
@@ -22,6 +27,14 @@ document.addEventListener("DOMContentLoaded", () => {
     if (document.getElementById('nodesList')) {
         fetchNodesList();
         nodesPollInterval = setInterval(fetchNodesList, 3000);
+
+        // [NEW] Обработчик поиска
+        const searchInput = document.getElementById('nodeSearch');
+        if (searchInput) {
+            searchInput.addEventListener('input', () => {
+                filterAndRenderNodes();
+            });
+        }
     }
 
     // Логи
@@ -35,25 +48,65 @@ function escapeHtml(text) {
     return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
 }
 
+// [UPDATED] Получение списка нод
 async function fetchNodesList() {
     try {
         const response = await fetch('/api/nodes/list');
         const data = await response.json();
-        renderNodesList(data.nodes);
-        const totalCount = data.nodes.length;
-        const activeCount = data.nodes.filter(n => n.status === 'online').length;
+        
+        // Сохраняем все ноды в глобальную переменную
+        allNodesData = data.nodes || [];
+        
+        // Рендерим с учетом текущего поиска
+        filterAndRenderNodes();
+
+        // Обновляем счетчики (Всего/Активные) на основе ПОЛНОГО списка
+        const totalCount = allNodesData.length;
+        const activeCount = allNodesData.filter(n => n.status === 'online').length;
+        
         if (document.getElementById('nodesTotal')) document.getElementById('nodesTotal').innerText = totalCount;
         if (document.getElementById('nodesActive')) document.getElementById('nodesActive').innerText = activeCount;
     } catch (e) { console.error("Nodes list error:", e); }
 }
 
+// [NEW] Фильтрация и рендер
+function filterAndRenderNodes() {
+    const searchInput = document.getElementById('nodeSearch');
+    const query = searchInput ? searchInput.value.trim().toLowerCase() : "";
+    
+    let filteredNodes = allNodesData;
+    
+    if (query) {
+        filteredNodes = allNodesData.filter(node => {
+            const name = (node.name || "").toLowerCase();
+            const ip = (node.ip || "").toLowerCase();
+            return name.includes(query) || ip.includes(query);
+        });
+    }
+    
+    renderNodesList(filteredNodes);
+}
+
 function renderNodesList(nodes) {
     const container = document.getElementById('nodesList');
     if (!container) return;
+    
     if (nodes.length === 0) {
-        container.innerHTML = `<div class="text-center py-8 text-gray-400 dark:text-gray-500 text-sm">${I18N.web_no_nodes}</div>`;
+        // Проверяем, пусто из-за поиска или вообще нет нод
+        const searchInput = document.getElementById('nodeSearch');
+        const isSearchActive = searchInput && searchInput.value.trim().length > 0;
+        
+        let emptyText = (typeof I18N !== 'undefined' && I18N.web_no_nodes) ? I18N.web_no_nodes : "No nodes connected";
+        
+        // Если ноды есть, но поиск их отфильтровал
+        if (isSearchActive && allNodesData.length > 0) {
+            emptyText = "Ничего не найдено / Nothing found"; 
+        }
+
+        container.innerHTML = `<div class="text-center py-8 text-gray-400 dark:text-gray-500 text-sm">${emptyText}</div>`;
         return;
     }
+    
     const html = nodes.map(node => {
         let statusColor = node.status === 'online' ? "bg-green-500" : (node.status === 'restarting' ? "bg-yellow-500" : "bg-red-500");
         let statusText = node.status.toUpperCase();
@@ -66,6 +119,10 @@ function renderNodesList(nodes) {
             <div class="text-right"><div class="text-[10px] font-bold text-gray-400 mb-0.5">${statusText}</div><div class="text-[10px] text-gray-500 font-mono">CPU: ${Math.round(node.cpu)}%</div></div>
         </div>`;
     }).join('');
+    
+    // Обновляем HTML только если он изменился (для предотвращения мерцания при частых опросах)
+    // Но при поиске это может мешать, если мы фильтруем. 
+    // В данном случае простая замена безопасна, так как DOM перестраивается быстро.
     if (container.innerHTML !== html) container.innerHTML = html;
 }
 
