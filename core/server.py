@@ -351,6 +351,7 @@ async def handle_dashboard(request):
         "{web_node_details_title}": _("web_node_details_title", lang),
         "{web_clear_logs_btn}": _("web_clear_logs_btn", lang),
         "{web_logout}": _("web_logout", lang),
+        "{web_sessions_title}": _("web_sessions_title", lang),
     }
     
     for k, v in replacements.items(): 
