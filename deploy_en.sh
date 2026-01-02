@@ -1,5 +1,3 @@
-#!/bin/bash
-
 # --- Argument Parsing ---
 GIT_BRANCH="main"
 AUTO_AGENT_URL=""
@@ -224,6 +222,41 @@ setup_repo_and_dirs() {
     sudo chown -R ${owner_user}:${owner_user} ${BOT_INSTALL_PATH}
 }
 
+# --- NEW FUNCTION: Load vars from .env ---
+load_cached_env() {
+    local env_file="${ENV_FILE}"
+    
+    # Check backup if main file is missing
+    if [ ! -f "$env_file" ] && [ -f "/tmp/tgbot_env.bak" ]; then
+        env_file="/tmp/tgbot_env.bak"
+    fi
+
+    if [ -f "$env_file" ]; then
+        msg_info "Found previous configuration. Using saved data..."
+        
+        get_env_val() {
+            grep "^$1=" "$env_file" | cut -d'=' -f2- | sed 's/^"//;s/"$//' | sed "s/^'//;s/'$//"
+        }
+
+        # Bot vars
+        [ -z "$T" ] && T=$(get_env_val "TG_BOT_TOKEN")
+        [ -z "$A" ] && A=$(get_env_val "TG_ADMIN_ID")
+        [ -z "$U" ] && U=$(get_env_val "TG_ADMIN_USERNAME")
+        [ -z "$N" ] && N=$(get_env_val "TG_BOT_NAME")
+        [ -z "$P" ] && P=$(get_env_val "WEB_SERVER_PORT")
+        
+        # Web UI vars
+        if [ -z "$W" ]; then
+            local val=$(get_env_val "ENABLE_WEB_UI")
+            if [[ "$val" == "false" ]]; then W="n"; else W="y"; fi
+        fi
+
+        # Node vars
+        [ -z "$AGENT_URL" ] && AGENT_URL=$(get_env_val "AGENT_BASE_URL")
+        [ -z "$NODE_TOKEN" ] && NODE_TOKEN=$(get_env_val "AGENT_TOKEN")
+    fi
+}
+
 cleanup_node_files() {
     msg_info "Cleaning up (Node mode)..."
     cd ${BOT_INSTALL_PATH}
@@ -316,7 +349,6 @@ EOF
 }
 
 create_docker_compose_yml() {
-    # ИСПРАВЛЕНИЕ: Используем /proc_host для монтирования системных директорий
     sudo tee "${BOT_INSTALL_PATH}/docker-compose.yml" > /dev/null <<EOF
 version: '3.8'
 x-bot-base: &bot-base
@@ -414,8 +446,11 @@ install_systemd_logic() {
         ${PYTHON_BIN} -m venv "${VENV_PATH}"
         run_with_spinner "Installing Python deps" "${VENV_PATH}/bin/pip" install -r "${BOT_INSTALL_PATH}/requirements.txt"
     fi
+    
+    load_cached_env # <--- Load cached env vars
     ask_env_details
     write_env_file "systemd" "$mode" ""
+    
     create_and_start_service "${SERVICE_NAME}" "${BOT_INSTALL_PATH}/bot.py" "$mode" "Telegram Bot"
     create_and_start_service "${WATCHDOG_SERVICE_NAME}" "${BOT_INSTALL_PATH}/watchdog.py" "root" "Watchdog"
     cleanup_agent_files
@@ -433,7 +468,10 @@ install_docker_logic() {
     install_extras
     setup_repo_and_dirs "root" 
     check_docker_deps
+    
+    load_cached_env # <--- Load cached env vars
     ask_env_details
+    
     create_dockerfile
     create_docker_compose_yml
     write_env_file "docker" "$mode" "tg-bot-${mode}"
@@ -463,6 +501,8 @@ install_node_logic() {
     msg_info "Setting up venv..."
     if [ ! -d "${VENV_PATH}" ]; then run_with_spinner "Creating venv" ${PYTHON_BIN} -m venv "${VENV_PATH}"; fi
     run_with_spinner "Installing deps" "${VENV_PATH}/bin/pip" install psutil requests
+    
+    load_cached_env # <--- Load cached env vars
     
     echo ""; msg_info "Connection Setup:"
     msg_question "Agent URL (http://IP:8080): " AGENT_URL
