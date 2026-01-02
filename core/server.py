@@ -117,7 +117,6 @@ def get_current_user(request):
     u_data = ALLOWED_USERS[uid]
     role = u_data.get("group", "users") if isinstance(u_data, dict) else u_data
     
-    # ИЗМЕНЕНИЕ: Берем фото из сессии
     photo = session.get('photo_url', AGENT_FLAG)
     
     return {"id": uid, "role": role, "first_name": USER_NAMES.get(str(uid), f"ID: {uid}"), "photo_url": photo}
@@ -240,7 +239,6 @@ async def api_get_sessions(request):
     user_sessions = []
     expired_tokens = []
     
-    # ИЗМЕНЕНИЕ: Проверяем, является ли пользователь главным админом
     is_main_admin = (user['id'] == ADMIN_USER_ID)
     
     for token, session in SERVER_SESSIONS.items():
@@ -248,11 +246,9 @@ async def api_get_sessions(request):
             expired_tokens.append(token)
             continue
             
-        # ИЗМЕНЕНИЕ: Админ видит всех, остальные только себя
         if is_main_admin or session['id'] == user['id']:
             is_current = (token == current_token)
             
-            # Получаем имя пользователя для отображения
             s_uid = session['id']
             user_name = USER_NAMES.get(str(s_uid), f"ID: {s_uid}")
             
@@ -263,15 +259,14 @@ async def api_get_sessions(request):
                 "ua": session.get("ua", "Unknown"),
                 "created": session.get("created", 0),
                 "current": is_current,
-                "user_id": s_uid,          # Добавили ID владельца сессии
-                "user_name": user_name,    # Добавили Имя владельца
-                "is_mine": (s_uid == user['id']) # Флаг "Моя сессия"
+                "user_id": s_uid,
+                "user_name": user_name,
+                "is_mine": (s_uid == user['id'])
             })
     
     for t in expired_tokens:
         del SERVER_SESSIONS[t]
         
-    # Сортировка: Сначала текущая, потом мои, потом чужие (новые сверху)
     user_sessions.sort(key=lambda x: (not x['current'], not x['is_mine'], x['created']), reverse=True)
     return web.json_response({"sessions": user_sessions})
 
@@ -286,7 +281,6 @@ async def api_revoke_session(request):
              return web.json_response({"error": "Cannot revoke current session"}, status=400)
         
         if target_token in SERVER_SESSIONS:
-            # Админ может удалять любые сессии, пользователь - только свои
             if user['id'] == ADMIN_USER_ID or SERVER_SESSIONS[target_token]['id'] == user['id']:
                 del SERVER_SESSIONS[target_token]
                 return web.json_response({"status": "ok"})
@@ -303,10 +297,8 @@ async def api_revoke_all_sessions(request):
     uid = user['id']
     count = 0
     
-    # Итерируемся по копии ключей
     for token in list(SERVER_SESSIONS.keys()):
         session = SERVER_SESSIONS[token]
-        # Удаляем все сессии ТОЛЬКО ЭТОГО пользователя, кроме текущей
         if session['id'] == uid and token != current_token:
             del SERVER_SESSIONS[token]
             count += 1
@@ -335,7 +327,7 @@ async def handle_dashboard(request):
         node_action_btn = f"""<button onclick="openAddNodeModal()" class="inline-flex items-center gap-1.5 py-1.5 px-3 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold transition shadow-lg shadow-blue-500/20"><svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path></svg>{_("web_add_node_section", lang)}</button>"""
         settings_btn = f"""
         <a href="/settings" class="flex items-center justify-center w-8 h-8 rounded-lg hover:bg-black/5 dark:hover:bg-white/10 transition text-gray-600 dark:text-gray-400" title="{_("web_settings_button", lang)}">
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-1.066 2.573c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
         </a>
         """
 
@@ -391,6 +383,7 @@ async def handle_dashboard(request):
         "{web_logout}": _("web_logout", lang),
         "{web_access_denied}": _("web_access_denied", lang),
         "{web_logs_protected_desc}": _("web_logs_protected_desc", lang),
+        "{user_role_js}": f"const USER_ROLE = '{role}';",  # <--- ДОБАВЛЕНО
     }
     
     for k, v in replacements.items(): 
@@ -627,7 +620,7 @@ async def handle_settings_page(request):
         "{web_sessions_view_all}": _("web_sessions_view_all", lang),
         "{web_sessions_revoke_all}": _("web_sessions_revoke_all", lang),
         "{web_sessions_modal_title}": _("web_sessions_modal_title", lang),
-        "{user_role_js}": f"const USER_ROLE = '{role}';",
+        "{user_role_js}": f"const USER_ROLE = '{role}';", # <--- THIS LINE IS ADDED
         "{web_sessions_title}": _("web_sessions_title", lang),
     }
     modified_html = html
@@ -863,14 +856,13 @@ async def handle_telegram_auth(request):
         
         st = secrets.token_hex(32)
         
-        # ИЗМЕНЕНИЕ: Сохраняем photo_url
         SERVER_SESSIONS[st] = {
             "id": uid, 
             "expires": time.time() + 2592000,
             "ip": get_client_ip(request),
             "ua": request.headers.get("User-Agent", "Unknown Device"),
             "created": time.time(),
-            "photo_url": data.get('photo_url')  # <-- Сохраняем аватарку
+            "photo_url": data.get('photo_url')
         }
         
         resp = web.json_response({"status": "ok"})
