@@ -15,9 +15,7 @@ from core.messaging import delete_previous_message, send_alert
 from core.shared_state import LAST_MESSAGE_IDS, NODE_TRAFFIC_MONITORS
 from core import nodes_db
 from core.keyboards import get_nodes_list_keyboard, get_node_management_keyboard, get_nodes_delete_keyboard, get_back_keyboard
-# --- [ИСПРАВЛЕНИЕ 1] Добавляем импорт format_uptime ---
 from core.utils import format_uptime
-# ------------------------------------------------------
 
 BUTTON_KEY = "btn_nodes"
 
@@ -131,11 +129,8 @@ async def cq_node_select(callback: types.CallbackQuery):
         return
 
     stats = node.get("stats", {})
-    
-    # --- [ИСПРАВЛЕНИЕ 2] Форматируем uptime ---
     raw_uptime = stats.get("uptime", 0)
     formatted_uptime = format_uptime(raw_uptime, lang)
-    # ------------------------------------------
 
     text = _(
         "node_management_menu",
@@ -144,7 +139,7 @@ async def cq_node_select(callback: types.CallbackQuery):
         ip=node.get(
             "ip",
             "?"),
-        uptime=formatted_uptime) # Используем отформатированное значение
+        uptime=formatted_uptime)
     
     keyboard = get_node_management_keyboard(token, lang)
     await callback.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
@@ -243,10 +238,8 @@ async def cq_node_stop_traffic(callback: types.CallbackQuery):
             await callback.message.delete()
             if node:
                 stats = node.get("stats", {})
-                # --- [ИСПРАВЛЕНИЕ 3] Форматируем uptime при возврате ---
                 raw_uptime = stats.get("uptime", 0)
                 formatted_uptime = format_uptime(raw_uptime, lang)
-                # -------------------------------------------------------
                 
                 text = _(
                     "node_management_menu", lang, name=node.get("name"), ip=node.get(
@@ -332,7 +325,11 @@ async def nodes_monitor(bot: Bot):
                         if current >= threshold:
                             if not state["active"] or (
                                     now - state["last_time"] > config.RESOURCE_ALERT_COOLDOWN):
-                                await send_alert(bot, lambda lang: _(key_high, lang, name=name, usage=current, threshold=threshold), "resources")
+                                
+                                # --- ИСПРАВЛЕНИЕ: Извлекаем процессы и передаем в алерты ---
+                                p_info = stats.get(f"process_{metric}", "n/a")
+                                await send_alert(bot, lambda lang: _(key_high, lang, name=name, usage=current, threshold=threshold, processes=p_info), "resources", processes=p_info)
+                                
                                 state["active"] = True
                                 state["last_time"] = now
                                 updated = True

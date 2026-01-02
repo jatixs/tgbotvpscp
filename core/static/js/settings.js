@@ -1,19 +1,102 @@
 document.addEventListener("DOMContentLoaded", () => {
     renderUsers();
-    renderNodes(); // <--- Добавлено
+    renderNodes();
     initSystemSettingsTracking();
-    // initNodeForm(); // <--- Удалено (старая форма удалена)
     renderKeyboardConfig();
     updateBulkButtonsUI();
     initChangePasswordUI();
     
-    // Инициализация валидации для новой модалки ноды
+    // Загрузка сессий
+    fetchSessions();
+    
     const input = document.getElementById('newNodeNameDash');
     if (input) {
         input.addEventListener('input', validateNodeInput);
         input.addEventListener('keydown', (e) => {
             if (e.key === 'Enter' && !document.getElementById('btnAddNodeDash').disabled) {
                 addNodeDash();
+            }
+        });
+    }
+
+    // --- ЛОГИКА ОБНОВЛЕНИЯ БОТА ---
+    const btnCheckUpdate = document.getElementById('btn-check-update');
+    const btnDoUpdate = document.getElementById('btn-do-update');
+    const updateStatusArea = document.getElementById('update-status-area');
+    const updateProgress = document.getElementById('update-progress');
+    
+    let targetBranch = null;
+
+    if(btnCheckUpdate) {
+        btnCheckUpdate.addEventListener('click', async function() {
+            btnCheckUpdate.disabled = true;
+            const spinner = '<svg class="animate-spin h-4 w-4 text-gray-500 inline-block mr-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>';
+            updateStatusArea.innerHTML = `${spinner} <span class="text-gray-500">${I18N.web_update_checking || "Checking..."}</span>`;
+            
+            if(btnDoUpdate) btnDoUpdate.classList.add('d-none');
+
+            try {
+                const response = await fetch('/api/update/check');
+                const data = await response.json();
+
+                if (data.error) throw new Error(data.error);
+
+                if (data.update_available) {
+                    const infoText = (I18N.web_update_info || "Current: {local} -> New: {remote}")
+                        .replace('{local}', 'v' + data.local_version)
+                        .replace('{remote}', 'v' + data.remote_version);
+                    
+                    updateStatusArea.innerHTML = `
+                        <div>
+                            <div class="font-bold text-green-600 dark:text-green-400">${I18N.web_update_available_title || "Update Available!"}</div>
+                            <div class="text-xs text-gray-500 dark:text-gray-400 mt-1">${infoText}</div>
+                        </div>
+                    `;
+                    targetBranch = data.target_branch;
+                    if(btnDoUpdate) btnDoUpdate.classList.remove('d-none');
+                } else {
+                    const uptodateText = (I18N.web_update_uptodate || "Latest version installed ({version})").replace('{version}', 'v' + data.local_version);
+                    updateStatusArea.innerHTML = `<span class="text-gray-500 dark:text-gray-400 text-sm"><i class="fas fa-check-circle text-green-500 mr-1"></i> ${uptodateText}</span>`;
+                }
+
+            } catch (error) {
+                const errorText = (I18N.web_update_error || "Error: {error}").replace('{error}', error.message);
+                updateStatusArea.innerHTML = `<span class="text-red-500 text-sm"><i class="fas fa-exclamation-triangle mr-1"></i> ${errorText}</span>`;
+            } finally {
+                btnCheckUpdate.disabled = false;
+            }
+        });
+    }
+
+    if(btnDoUpdate) {
+        btnDoUpdate.addEventListener('click', async function() {
+            if(!await window.showModalConfirm(I18N.web_update_started || "Are you sure you want to update the bot? The server will restart.", I18N.modal_title_confirm)) return;
+
+            btnCheckUpdate.disabled = true;
+            btnDoUpdate.disabled = true;
+            if(updateProgress) updateProgress.classList.remove('d-none');
+            
+            updateStatusArea.innerHTML = `<span class="text-blue-600 dark:text-blue-400 font-medium animate-pulse">${I18N.web_update_started || "Updating..."}</span>`;
+
+            try {
+                const response = await fetch('/api/update/run', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ branch: targetBranch })
+                });
+                const data = await response.json();
+                
+                if (data.error) throw new Error(data.error);
+
+                await window.showModalAlert("Update started! Page will reload in 15 seconds.", "Info");
+                setTimeout(() => location.reload(), 15000);
+
+            } catch (error) {
+                const errorText = (I18N.web_update_error || "Error: {error}").replace('{error}', error.message);
+                updateStatusArea.innerHTML = `<span class="text-red-500 text-sm">${errorText}</span>`;
+                if(updateProgress) updateProgress.classList.add('d-none');
+                btnCheckUpdate.disabled = false;
+                btnDoUpdate.disabled = false;
             }
         });
     }
@@ -233,12 +316,14 @@ async function saveSystemConfig(groupName) {
             }, 2000);
         } else {
             const json = await res.json();
+            // МОДАЛЬНОЕ ОКНО
             await window.showModalAlert(I18N.web_error.replace('{error}', json.error || 'Save failed'), 'Ошибка');
             btn.innerText = originalText;
             toggleSaveButton(config.btnId, true);
         }
     } catch(e) {
         console.error(e);
+        // МОДАЛЬНОЕ ОКНО
         await window.showModalAlert(I18N.web_conn_error.replace('{error}', e), 'Ошибка соединения');
         btn.innerText = originalText;
         toggleSaveButton(config.btnId, true);
@@ -246,7 +331,8 @@ async function saveSystemConfig(groupName) {
 }
 
 async function clearLogs() {
-    if(!await window.showModalConfirm(I18N.web_clear_logs_confirm, 'Подтверждение')) return;
+    // МОДАЛЬНОЕ ОКНО
+    if(!await window.showModalConfirm(I18N.web_clear_logs_confirm, I18N.modal_title_confirm)) return;
     const btn = document.getElementById('clearLogsBtn');
     const originalHTML = btn.innerHTML;
     const redClasses = ['bg-red-50', 'dark:bg-red-900/10', 'border-red-200', 'dark:border-red-800', 'text-red-600', 'dark:text-red-400', 'hover:bg-red-100', 'dark:hover:bg-red-900/30', 'active:bg-red-200'];
@@ -308,7 +394,8 @@ function renderUsers() {
 }
 
 async function deleteUser(id) {
-    if(!await window.showModalConfirm(I18N.web_confirm_delete_user.replace('{id}', id), 'Удаление пользователя')) return;
+    // МОДАЛЬНОЕ ОКНО
+    if(!await window.showModalConfirm(I18N.web_confirm_delete_user.replace('{id}', id), I18N.modal_title_confirm)) return;
     try {
         const res = await fetch('/api/users/action', {
             method: 'POST',
@@ -328,7 +415,8 @@ async function deleteUser(id) {
 }
 
 async function openAddUserModal() {
-    const id = await window.showModalPrompt("Введите Telegram ID пользователя:", "Добавление пользователя", "123456789");
+    // МОДАЛЬНОЕ ОКНО
+    const id = await window.showModalPrompt("Введите Telegram ID пользователя:", I18N.modal_title_prompt, "123456789");
     if(!id) return;
     try {
         const res = await fetch('/api/users/action', {
@@ -348,7 +436,7 @@ async function openAddUserModal() {
     }
 }
 
-// --- NODES FUNCTIONS (NEW) ---
+// --- NODES FUNCTIONS ---
 function renderNodes() {
     const tbody = document.getElementById('nodesTableBody');
     const section = document.getElementById('nodesSection');
@@ -375,7 +463,8 @@ function renderNodes() {
 }
 
 async function deleteNode(token) {
-    if(!await window.showModalConfirm("Удалить эту ноду?", "Подтверждение")) return;
+    // МОДАЛЬНОЕ ОКНО
+    if(!await window.showModalConfirm("Удалить эту ноду?", I18N.modal_title_confirm)) return;
     try {
         const res = await fetch('/api/nodes/delete', {
             method: 'POST',
@@ -392,102 +481,6 @@ async function deleteNode(token) {
         }
     } catch(e) {
         await window.showModalAlert(I18N.web_conn_error.replace('{error}', e), 'Ошибка соединения');
-    }
-}
-
-// --- ADD NODE MODAL FUNCTIONS (Copied & Adapted) ---
-function openAddNodeModal() {
-    const modal = document.getElementById('addNodeModal');
-    if (modal) {
-        modal.classList.remove('hidden');
-        modal.classList.add('flex');
-        document.body.style.overflow = 'hidden';
-        document.getElementById('nodeResultDash').classList.add('hidden');
-        const input = document.getElementById('newNodeNameDash');
-        input.value = '';
-        input.focus();
-        validateNodeInput();
-    }
-}
-
-function closeAddNodeModal() {
-    const modal = document.getElementById('addNodeModal');
-    if (modal) {
-        modal.classList.add('hidden');
-        modal.classList.remove('flex');
-        document.body.style.overflow = 'auto';
-    }
-}
-
-function validateNodeInput() {
-    const input = document.getElementById('newNodeNameDash');
-    const btn = document.getElementById('btnAddNodeDash');
-    if (!input || !btn) return;
-    if (input.value.trim().length >= 2) {
-        btn.disabled = false;
-        btn.classList.remove('bg-gray-200', 'dark:bg-gray-700', 'text-gray-400', 'dark:text-gray-500', 'cursor-not-allowed');
-        btn.classList.add('bg-purple-600', 'hover:bg-purple-500', 'active:scale-95', 'text-white', 'cursor-pointer', 'shadow-lg', 'shadow-purple-500/20');
-    } else {
-        btn.disabled = true;
-        btn.classList.remove('bg-purple-600', 'hover:bg-purple-500', 'active:scale-95', 'text-white', 'cursor-pointer', 'shadow-lg', 'shadow-purple-500/20');
-        btn.classList.add('bg-gray-200', 'dark:bg-gray-700', 'text-gray-400', 'dark:text-gray-500', 'cursor-not-allowed');
-    }
-}
-
-async function addNodeDash() {
-    const nameInput = document.getElementById('newNodeNameDash');
-    const name = nameInput.value.trim();
-    const btn = document.getElementById('btnAddNodeDash');
-    if (!name) return;
-    btn.disabled = true;
-    const originalText = btn.innerText;
-    btn.innerHTML = `<svg class="animate-spin h-5 w-5 text-white mx-auto" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>`;
-    try {
-        const res = await fetch('/api/nodes/add', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({name: name})
-        });
-        const data = await res.json();
-        if (res.ok) {
-            document.getElementById('nodeResultDash').classList.remove('hidden');
-            document.getElementById('newNodeTokenDash').innerText = data.token;
-            document.getElementById('newNodeCmdDash').innerText = data.command;
-            
-            // Add to list and render
-            NODES_DATA.push({token: data.token, name: name, ip: 'Unknown'});
-            renderNodes();
-            
-            nameInput.value = "";
-            validateNodeInput();
-        } else {
-            await window.showModalAlert(I18N.web_error.replace('{error}', data.error), 'Ошибка');
-        }
-    } catch (e) {
-        await window.showModalAlert(I18N.web_conn_error.replace('{error}', e), 'Ошибка соединения');
-    } finally {
-        btn.innerText = originalText;
-        validateNodeInput();
-    }
-}
-
-function copyTextToClipboard(text) {
-    if (navigator.clipboard && window.isSecureContext) {
-        navigator.clipboard.writeText(text).then(() => {
-            if(window.showToast) window.showToast(I18N.web_copied || "Copied!");
-        });
-    } else {
-        const textArea = document.createElement("textarea");
-        textArea.value = text;
-        textArea.style.position = "fixed";
-        document.body.appendChild(textArea);
-        textArea.focus();
-        textArea.select();
-        try {
-            document.execCommand('copy');
-            if(window.showToast) window.showToast(I18N.web_copied || "Copied!");
-        } catch (err) {}
-        document.body.removeChild(textArea);
     }
 }
 
@@ -509,6 +502,7 @@ async function changePassword() {
     const confirm = confirmEl.value;
     const btn = document.getElementById('btnChangePass');
     if(newPass !== confirm) {
+        // МОДАЛЬНОЕ ОКНО
         await window.showModalAlert(I18N.web_pass_mismatch, 'Ошибка');
         return;
     }
@@ -526,6 +520,7 @@ async function changePassword() {
         });
         const data = await res.json();
         if(res.ok) {
+            // МОДАЛЬНОЕ ОКНО
             await window.showModalAlert(I18N.web_pass_changed, 'Успех');
             currentEl.value = "";
             newPassEl.value = "";
@@ -689,48 +684,6 @@ window.closeKeyboardModal = function() {
         document.body.style.overflow = 'auto';
     }
 };
-
-let currentToast = null;
-let currentToastTimer = null;
-
-function showToast(message) {
-    if (currentToast) {
-        if (currentToastTimer) clearTimeout(currentToastTimer);
-        currentToast.remove();
-        currentToast = null;
-    }
-    const toast = document.createElement('div');
-    toast.className = 'fixed top-24 left-1/2 transform -translate-x-1/2 z-[200] flex items-center gap-3 px-4 sm:px-6 py-3 rounded-2xl shadow-2xl backdrop-blur-xl border transition-all duration-1000 ease-in-out ' +
-        'bg-white/90 dark:bg-gray-800/90 text-gray-900 dark:text-white border-gray-200 dark:border-white/10 opacity-0 translate-y-[-20px] w-auto max-w-[90vw]';
-    toast.innerHTML = `
-        <div class="p-1 rounded-full bg-blue-100 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400 flex-shrink-0">
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-        </div>
-        <span class="font-medium text-sm whitespace-nowrap overflow-hidden text-ellipsis">${message}</span>
-    `;
-    document.body.appendChild(toast);
-    currentToast = toast;
-    setTimeout(() => {
-        if (currentToast === toast) {
-            toast.classList.remove('opacity-0', 'translate-y-[-20px]');
-            toast.classList.add('opacity-100', 'translate-y-0');
-        }
-    }, 10);
-    currentToastTimer = setTimeout(() => {
-        if (currentToast === toast) {
-            toast.classList.remove('opacity-100', 'translate-y-0');
-            toast.classList.add('opacity-0', 'translate-y-[-20px]');
-            setTimeout(() => {
-                if (currentToast === toast) {
-                    toast.remove();
-                    currentToast = null;
-                }
-            }, 1000);
-        }
-    }, 3000); 
-}
 
 function updateDoneButtonState(state) {
     const btn = document.getElementById('keyboardModalDoneBtn');
@@ -911,3 +864,251 @@ window.disableAllKeyboard = async function() {
         updateBulkButtonsUI();
     }, 1500);
 };
+
+// --- SESSIONS LOGIC ---
+let ALL_SESSIONS = [];
+
+async function fetchSessions() {
+    const container = document.getElementById('sessionsList');
+    if (!container) return;
+
+    try {
+        const res = await fetch('/api/sessions/list');
+        const data = await res.json();
+        
+        if (data.sessions) {
+            ALL_SESSIONS = data.sessions;
+            renderSessionsMainWidget(data.sessions);
+        }
+    } catch (e) {
+        container.innerHTML = `<div class="text-red-500 text-sm text-center">Error loading sessions</div>`;
+    }
+}
+
+// Рендеринг только текущей сессии в главном блоке настроек
+function renderSessionsMainWidget(sessions) {
+    const container = document.getElementById('sessionsList');
+    if (!container) return;
+    
+    // Находим текущую сессию
+    const currentSession = sessions.find(s => s.current);
+    
+    if (currentSession) {
+        container.innerHTML = `
+            ${renderSessionItem(currentSession)}
+        `;
+    } else {
+        container.innerHTML = `<div class="text-gray-500 text-sm text-center">No active sessions</div>`;
+    }
+}
+
+// Генерация HTML для одной сессии
+function renderSessionItem(s) {
+    const isCurrent = s.current;
+    
+    // Новая логика парсинга User-Agent
+    let deviceText = s.ua;
+    let iconType = "desktop"; // desktop, mobile, terminal
+
+    const ua = s.ua.toLowerCase();
+    
+    // Определение ОС
+    let os = "";
+    if (ua.includes('windows')) os = "Windows";
+    else if (ua.includes('mac os')) os = "macOS";
+    else if (ua.includes('android')) { os = "Android"; iconType = "mobile"; }
+    else if (ua.includes('iphone')) { os = "iPhone"; iconType = "mobile"; }
+    else if (ua.includes('ipad')) { os = "iPad"; iconType = "mobile"; }
+    else if (ua.includes('linux')) os = "Linux";
+    
+    // Определение Браузера
+    let browser = "";
+    if (ua.includes('edg')) browser = "Edge";
+    else if (ua.includes('opr') || ua.includes('opera')) browser = "Opera";
+    else if (ua.includes('firefox')) browser = "Firefox";
+    else if (ua.includes('chrome') && !ua.includes('edg') && !ua.includes('opr')) browser = "Chrome";
+    else if (ua.includes('safari') && !ua.includes('chrome')) browser = "Safari";
+    else if (ua.includes('telegram')) browser = "Telegram";
+    else if (ua.includes('python') || ua.includes('curl')) { browser = "Script"; iconType = "terminal"; }
+
+    if (os && browser) deviceText = `${browser} (${os})`;
+    else if (os) deviceText = os;
+    else if (browser) deviceText = browser;
+    else deviceText = s.ua.length > 30 ? s.ua.substring(0, 30) + "..." : s.ua;
+
+    const date = new Date(s.created * 1000).toLocaleString();
+    
+    // Выбор иконки
+    let iconPath = "M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"; // Monitor
+    if (iconType === "mobile") {
+        iconPath = "M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z"; // Phone
+    } else if (iconType === "terminal") {
+        iconPath = "M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"; // Terminal
+    }
+
+    return `
+    <div class="flex items-center justify-between p-3 rounded-xl border ${isCurrent ? 'bg-green-50/50 dark:bg-green-900/10 border-green-200 dark:border-green-800' : 'bg-gray-50 dark:bg-black/20 border-gray-100 dark:border-white/5'}">
+        <div class="flex items-center gap-3 overflow-hidden">
+            <div class="p-2 rounded-lg ${isCurrent ? 'bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400' : 'bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400'} flex-shrink-0">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="${iconPath}" />
+                </svg>
+            </div>
+            <div class="min-w-0">
+                <div class="text-sm font-bold text-gray-900 dark:text-white truncate" title="${s.ua}">${deviceText}</div>
+                <div class="text-xs text-gray-500 dark:text-gray-400 flex items-center gap-2">
+                    <span class="font-mono">${s.ip}</span>
+                    <span>•</span>
+                    <span>${date}</span>
+                </div>
+            </div>
+        </div>
+        
+        <div class="flex-shrink-0 ml-2">
+            ${isCurrent 
+                ? `<span class="px-2 py-1 bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400 text-[10px] font-bold uppercase rounded-lg tracking-wider">${I18N.web_session_current || 'Current'}</span>`
+                : `<button onclick="revokeSession('${s.id}')" class="p-2 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition" title="${I18N.web_session_revoke || 'Revoke'}">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    </svg>
+                   </button>`
+            }
+        </div>
+    </div>
+    `;
+}
+
+// Модальное окно
+window.openSessionsModal = function() {
+    const modal = document.getElementById('sessionsModal');
+    const content = document.getElementById('sessionsModalContent');
+    const btnRevokeAll = document.getElementById('btnRevokeAllSessions');
+    
+    if (modal && content) {
+        // Рендерим все сессии в модалку
+        if (ALL_SESSIONS.length > 0) {
+            content.innerHTML = ALL_SESSIONS.map(s => renderSessionItem(s)).join('');
+        } else {
+            content.innerHTML = `<div class="text-center text-gray-500 py-4">No sessions</div>`;
+        }
+        
+        // Отключаем кнопку "Завершить все", если только 1 (текущая) сессия
+        if (ALL_SESSIONS.length <= 1 && btnRevokeAll) {
+            btnRevokeAll.disabled = true;
+            btnRevokeAll.classList.add('opacity-50', 'cursor-not-allowed');
+        } else if (btnRevokeAll) {
+            btnRevokeAll.disabled = false;
+            btnRevokeAll.classList.remove('opacity-50', 'cursor-not-allowed');
+            // Сброс состояния кнопки
+            const originalText = I18N.web_sessions_revoke_all || "Revoke all other";
+            btnRevokeAll.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg> ${originalText}`;
+            btnRevokeAll.className = "w-full py-3 bg-red-600 hover:bg-red-500 text-white rounded-xl font-bold shadow-lg shadow-red-500/20 transition-all duration-300 active:scale-[0.98] flex items-center justify-center gap-2";
+        }
+
+        modal.classList.remove('hidden');
+        modal.classList.add('flex');
+        document.body.style.overflow = 'hidden';
+    }
+};
+
+window.closeSessionsModal = function() {
+    const modal = document.getElementById('sessionsModal');
+    if (modal) {
+        modal.classList.add('hidden');
+        modal.classList.remove('flex');
+        document.body.style.overflow = 'auto';
+    }
+};
+
+// Завершение конкретной сессии
+async function revokeSession(token) {
+    if (!await window.showModalConfirm(I18N.web_session_revoke + "?", I18N.modal_title_confirm)) return;
+    
+    try {
+        const res = await fetch('/api/sessions/revoke', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({token: token})
+        });
+        
+        if (res.ok) {
+            await fetchSessions(); // Обновляем данные
+            // Обновляем контент в открытой модалке
+            const content = document.getElementById('sessionsModalContent');
+            if (content && !document.getElementById('sessionsModal').classList.contains('hidden')) {
+                content.innerHTML = ALL_SESSIONS.map(s => renderSessionItem(s)).join('');
+                
+                // Проверяем кнопку Revoke All
+                const btnRevokeAll = document.getElementById('btnRevokeAllSessions');
+                if (ALL_SESSIONS.length <= 1 && btnRevokeAll) {
+                    btnRevokeAll.disabled = true;
+                    btnRevokeAll.classList.add('opacity-50', 'cursor-not-allowed');
+                }
+            }
+            if (window.showToast) window.showToast("Сессия завершена");
+        } else {
+            const data = await res.json();
+            await window.showModalAlert(data.error || "Failed", "Error");
+        }
+    } catch (e) {
+        console.error(e);
+    }
+}
+
+// Завершение ВСЕХ сессий (кроме текущей) с анимацией
+async function revokeAllSessions() {
+    if (!await window.showModalConfirm(I18N.web_sessions_revoke_all + "?", I18N.modal_title_confirm)) return;
+
+    const btn = document.getElementById('btnRevokeAllSessions');
+    const originalText = btn ? btn.innerHTML : "";
+    
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = `<svg class="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>`;
+    }
+
+    try {
+        const res = await fetch('/api/sessions/revoke_all', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'}
+        });
+
+        if (res.ok) {
+            // Успех: Зеленая галочка и текст
+            if (btn) {
+                btn.className = "w-full py-3 bg-green-600 text-white rounded-xl font-bold shadow-lg shadow-green-500/20 transition-all duration-300 flex items-center justify-center gap-2";
+                btn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" /></svg> ${I18N.web_sessions_revoked_alert}`;
+            }
+            
+            await fetchSessions();
+            
+            // Обновляем список в модалке (там останется только текущая)
+            const content = document.getElementById('sessionsModalContent');
+            if (content) {
+                content.innerHTML = ALL_SESSIONS.map(s => renderSessionItem(s)).join('');
+            }
+
+            // Через 2 секунды закрываем модалку или возвращаем кнопку (но она уже disabled, т.к. 1 сессия)
+            setTimeout(() => {
+                if (btn) {
+                    btn.disabled = true;
+                    btn.classList.add('opacity-50', 'cursor-not-allowed');
+                }
+            }, 2000);
+
+        } else {
+            const data = await res.json();
+            await window.showModalAlert(data.error || "Failed", "Error");
+            if (btn) {
+                btn.disabled = false;
+                btn.innerHTML = originalText;
+            }
+        }
+    } catch (e) {
+        console.error(e);
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = originalText;
+        }
+    }
+}

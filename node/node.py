@@ -49,6 +49,58 @@ if not AGENT_BASE_URL or not AGENT_TOKEN:
 PENDING_RESULTS = []
 LAST_TRAFFIC_STATS = {}
 
+# [FIX] Глобальные переменные для IP. По умолчанию None, чтобы сервер мог определить сам.
+EXTERNAL_IP_CACHE = None 
+LAST_IP_CHECK = 0
+IP_CHECK_INTERVAL = 300  # Проверять раз в 5 минут
+
+def get_external_ip():
+    global EXTERNAL_IP_CACHE, LAST_IP_CHECK
+    now = time.time()
+    
+    # Если IP уже есть и он свежий, возвращаем его
+    if EXTERNAL_IP_CACHE and (now - LAST_IP_CHECK < IP_CHECK_INTERVAL):
+        return EXTERNAL_IP_CACHE
+
+    # 1. Пробуем через requests (Python)
+    services = [
+        "https://api.ipify.org",
+        "https://ifconfig.me/ip",
+        "https://icanhazip.com",
+        "https://ipecho.net/plain",
+        "http://checkip.amazonaws.com"
+    ]
+
+    for service in services:
+        try:
+            response = requests.get(service, timeout=5)
+            if response.status_code == 200:
+                ip = response.text.strip()
+                if re.match(r"^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$", ip):
+                    EXTERNAL_IP_CACHE = ip
+                    LAST_IP_CHECK = now
+                    logging.info(f"External IP updated (requests): {ip}")
+                    return ip
+        except Exception:
+            continue
+    
+    # 2. Если requests не справился, пробуем системный curl (надежнее)
+    try:
+        # -4 принудительно IPv4, -s тихо, --max-time 5 таймаут
+        res = subprocess.check_output("curl -4 -s --max-time 5 ifconfig.me", shell=True).decode().strip()
+        if re.match(r"^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$", res):
+            EXTERNAL_IP_CACHE = res
+            LAST_IP_CHECK = now
+            logging.info(f"External IP updated (curl): {res}")
+            return res
+    except Exception:
+        pass
+
+    # 3. Если ничего не вышло - возвращаем None.
+    # Сервер сам определит IP по входящему соединению.
+    logging.warning("Could not determine external IP locally. Delegating to Agent Server.")
+    return None
+
 # --- УТИЛИТЫ ДЛЯ ФОРМАТИРОВАНИЯ ---
 def format_uptime_simple(seconds):
     seconds = int(seconds)
@@ -71,12 +123,7 @@ def format_bytes_simple(bytes_value):
     return f"{value:.2f} {units[unit_index]}"
 # -----------------------------------
 
-# Utility function to safely parse speed from iperf3 output (plain text)
 def parse_iperf_speed(output: str, direction: str) -> float:
-    """
-    Парсит вывод iperf3 для нахождения скорости передачи.
-    direction: 'sender' (для Upload) или 'receiver' (для Download).
-    """
     for line in reversed(output.splitlines()):
         if "Mbits/sec" in line and (direction in line or direction == 'sender'):
             speed_match = re.search(r"(\d+\.?\d*)\s+Mbits/sec", line)
@@ -89,23 +136,53 @@ def parse_iperf_speed(output: str, direction: str) -> float:
         
     return 0.0
 
+def get_top_processes(metric):
+    try:
+        attrs = ['pid', 'name', 'cpu_percent', 'memory_percent']
+        procs = []
+        for p in psutil.process_iter(attrs):
+            try:
+                p.info['name'] = p.info['name'][:15]
+                procs.append(p.info)
+            except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+                pass
+
+        if metric == 'cpu':
+            sorted_procs = sorted(procs, key=lambda p: p['cpu_percent'], reverse=True)[:3]
+            info_list = [f"{p['name']} ({p['cpu_percent']}%)" for p in sorted_procs]
+        elif metric == 'ram':
+            sorted_procs = sorted(procs, key=lambda p: p['memory_percent'], reverse=True)[:3]
+            info_list = [f"{p['name']} ({p['memory_percent']:.1f}%)" for p in sorted_procs]
+        else:
+            return ""
+
+        return ", ".join(info_list)
+    except Exception as e:
+        logging.error(f"Error getting top processes: {e}")
+        return "n/a"
+
 def get_system_stats():
     try:
         net = psutil.net_io_counters()
+        # Пробуем получить IP. Если вернет None, сервер подставит свой.
+        ext_ip = get_external_ip()
+        
         return {
             "cpu": psutil.cpu_percent(interval=None),
             "ram": psutil.virtual_memory().percent,
             "disk": psutil.disk_usage('/').percent,
             "net_rx": net.bytes_recv,
             "net_tx": net.bytes_sent,
-            "uptime": int(time.time() - psutil.boot_time())
+            "uptime": int(time.time() - psutil.boot_time()),
+            "process_cpu": get_top_processes('cpu'),
+            "process_ram": get_top_processes('ram'),
+            "external_ip": ext_ip
         }
     except Exception as e:
         logging.error(f"Error gathering stats: {e}")
         return {}
 
 def get_public_iperf_server():
-    """Получает список публичных iperf3 серверов и выбирает случайный."""
     try:
         url = "https://export.iperf3serverlist.net/listed_iperf3_servers.json"
         response = requests.get(url, timeout=5)
@@ -163,12 +240,8 @@ def execute_command(task):
                 res = subprocess.check_output(
                     "ps aux --sort=-%cpu | head -n 11", shell=True).decode()
                 
-                # --- ИСПРАВЛЕНИЕ: Экранирование HTML ---
-                # Заменяем символы <, >, & на безопасные сущности, 
-                # чтобы Telegram не пытался их парсить как теги.
                 safe_res = res.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
                 result_text = f"<pre>{safe_res}</pre>"
-                # ---------------------------------------
                 
             except Exception as e:
                 result_text = f"Error running top: {e}"
@@ -176,10 +249,11 @@ def execute_command(task):
         elif cmd == "selftest":
             stats = get_system_stats()
             
-            # --- Сбор дополнительной информации ---
             try:
-                ip_res = subprocess.check_output("curl -4 -s --max-time 2 ifconfig.me", shell=True).decode().strip()
-                ext_ip = ip_res or "N/A"
+                ext_ip = stats.get("external_ip")
+                if not ext_ip:
+                     # Если локально не определили, пробуем curl один раз для отчета
+                     ext_ip = subprocess.check_output("curl -4 -s --max-time 2 ifconfig.me", shell=True).decode().strip()
             except:
                 ext_ip = "N/A"
                 
@@ -194,7 +268,6 @@ def execute_command(task):
                 kernel = subprocess.check_output("uname -r", shell=True).decode().strip()
             except:
                 kernel = "N/A"
-            # --------------------------------------
             
             uptime_str = format_uptime_simple(stats.get('uptime', 0))
             rx_total = format_bytes_simple(stats.get('net_rx', 0))
@@ -224,10 +297,6 @@ def execute_command(task):
                 city = server.get("SITE", "Unknown")
                 country = server.get("COUNTRY", "")
                 
-                # --- FIX FOR BANDIT B602 (shell=True) ---
-                # Use list of arguments instead of string, remove shlex.quote, remove shell=True
-                
-                # --- RUNNING DOWNLOAD TEST (-R, client receives) ---
                 cmd_dl = ["iperf3", "-c", host, "-p", str(port), "-t", "5", "-4", "-R"]
                 try:
                     res_dl = subprocess.check_output(
@@ -239,7 +308,6 @@ def execute_command(task):
                     logging.error(f"DL Test failed: {e}")
                     dl_speed = 0.0
                 
-                # --- RUNNING UPLOAD TEST (default, client sends) ---
                 cmd_ul = ["iperf3", "-c", host, "-p", str(port), "-t", "5", "-4"]
                 try:
                     res_ul = subprocess.check_output(
@@ -316,6 +384,8 @@ def send_heartbeat():
 def main():
     logging.info(f"Node Agent started. Target: {AGENT_BASE_URL}")
     psutil.cpu_percent(interval=None)
+    # Инициализация IP
+    get_external_ip()
 
     while True:
         send_heartbeat()

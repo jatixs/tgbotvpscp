@@ -2,622 +2,407 @@ let chartRes = null;
 let chartNet = null;
 let pollInterval = null;
 
-let chartAgent = null;
+let agentChart = null;
 let agentPollInterval = null;
 let nodesPollInterval = null;
+let logPollInterval = null;
 
 window.addEventListener('themeChanged', () => {
     updateChartsColors();
 });
 
 document.addEventListener("DOMContentLoaded", () => {
-    // parsePageEmojis запускается в common.js, здесь не нужно
-
-    if(document.getElementById('chartAgent')) {
+    // График агента
+    if(document.getElementById('agentChart')) {
         fetchAgentStats();
         agentPollInterval = setInterval(fetchAgentStats, 3000);
     }
     
-    if (document.getElementById('nodesGrid')) {
+    // Список нод
+    if (document.getElementById('nodesList')) {
         fetchNodesList();
         nodesPollInterval = setInterval(fetchNodesList, 3000);
+    }
+
+    // Логи
+    if (document.getElementById('logsContainer')) {
+        switchLogType('bot');
     }
 });
 
 function escapeHtml(text) {
     if (!text) return text;
-    return text
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/"/g, "&quot;")
-        .replace(/'/g, "&#039;");
+    return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
 }
 
 async function fetchNodesList() {
     try {
         const response = await fetch('/api/nodes/list');
         const data = await response.json();
-        renderNodesGrid(data.nodes);
-        
-        const total = data.nodes.length;
+        renderNodesList(data.nodes);
+        const totalCount = data.nodes.length;
         const activeCount = data.nodes.filter(n => n.status === 'online').length;
-        
-        const totalEl = document.getElementById('statTotalNodes');
-        const activeEl = document.getElementById('statActiveNodes');
-        if (totalEl) totalEl.innerText = total;
-        if (activeEl) activeEl.innerText = activeCount;
-
-        const barEl = document.getElementById('statProgressBar');
-        const percentEl = document.getElementById('statOnlinePercent');
-        
-        if (barEl && percentEl) {
-            let percent = 0;
-            if (total > 0) {
-                percent = Math.round((activeCount / total) * 100);
-            }
-            
-            barEl.style.width = `${percent}%`;
-            percentEl.innerText = `${percent}%`;
-            
-            barEl.className = `h-1.5 rounded-full transition-all duration-1000 ease-out ${percent === 100 ? 'bg-gradient-to-r from-green-400 to-emerald-500' : (percent > 50 ? 'bg-gradient-to-r from-yellow-400 to-orange-500' : 'bg-gradient-to-r from-red-500 to-red-600')}`;
-        }
-            
-    } catch (e) {
-        console.error("Ошибка обновления списка нод:", e);
-    }
+        if (document.getElementById('nodesTotal')) document.getElementById('nodesTotal').innerText = totalCount;
+        if (document.getElementById('nodesActive')) document.getElementById('nodesActive').innerText = activeCount;
+    } catch (e) { console.error("Nodes list error:", e); }
 }
 
-function renderNodesGrid(nodes) {
-    const container = document.getElementById('nodesGrid');
+function renderNodesList(nodes) {
+    const container = document.getElementById('nodesList');
     if (!container) return;
-    
     if (nodes.length === 0) {
-        container.innerHTML = `<div class="col-span-full text-center text-gray-500 py-10">${I18N.web_no_nodes}</div>`;
+        container.innerHTML = `<div class="text-center py-8 text-gray-400 dark:text-gray-500 text-sm">${I18N.web_no_nodes}</div>`;
         return;
     }
-
     const html = nodes.map(node => {
-        let statusColor = "text-green-500";
-        let statusText = "ONLINE";
-        let bgClass = "bg-green-500/10 border-green-500/30";
-        let dotColor = "bg-green-500";
-
-        if (node.status === 'restarting') {
-            statusColor = "text-yellow-500";
-            statusText = "RESTARTING";
-            bgClass = "bg-yellow-500/10 border-yellow-500/30";
-            dotColor = "bg-yellow-500";
-        } else if (node.status === 'offline') {
-            statusColor = "text-red-500";
-            statusText = "OFFLINE";
-            bgClass = "bg-red-500/10 border-red-500/30";
-            dotColor = "bg-red-500";
-        }
-
+        let statusColor = node.status === 'online' ? "bg-green-500" : (node.status === 'restarting' ? "bg-yellow-500" : "bg-red-500");
+        let statusText = node.status.toUpperCase();
         return `
-        <div class="bg-white/60 dark:bg-white/5 hover:shadow-md dark:hover:bg-white/10 transition duration-200 rounded-xl p-4 border border-white/40 dark:border-white/10 cursor-pointer shadow-sm backdrop-blur-md" onclick="openNodeDetails('${escapeHtml(node.token)}', '${dotColor}')">
-            <div class="flex justify-between items-start">
-                <div>
-                    <div class="font-bold text-gray-800 dark:text-gray-200">${escapeHtml(node.name)}</div>
-                    <div class="text-[10px] font-mono text-gray-500 mt-1">${escapeHtml(node.token.substring(0, 8))}...</div>
-                </div>
-                <div class="px-2 py-1 rounded text-[10px] font-bold ${statusColor} ${bgClass}">${statusText}</div>
+        <div class="bg-gray-50 dark:bg-black/20 hover:bg-gray-100 dark:hover:bg-black/30 transition p-3 rounded-xl border border-gray-100 dark:border-white/5 cursor-pointer flex justify-between items-center group" onclick="openNodeDetails('${escapeHtml(node.token)}', '${statusColor}')">
+            <div class="flex items-center gap-3">
+                <div class="relative"><div class="w-2.5 h-2.5 rounded-full ${statusColor}"></div><div class="absolute inset-0 w-2.5 h-2.5 rounded-full ${statusColor} animate-ping opacity-75"></div></div>
+                <div><div class="font-bold text-sm text-gray-900 dark:text-white group-hover:text-blue-500 transition">${escapeHtml(node.name)}</div><div class="text-[10px] font-mono text-gray-400">${escapeHtml(node.ip)}</div></div>
             </div>
-            
-            <div class="mt-4 pt-4 border-t border-gray-200/50 dark:border-white/5 grid grid-cols-3 gap-2">
-                <div class="bg-gray-100/50 dark:bg-white/5 rounded-lg p-2 text-center border border-gray-200 dark:border-white/5">
-                    <div class="text-[10px] text-gray-500 uppercase font-bold">${I18N.web_cpu}</div>
-                    <div class="text-sm font-bold text-gray-900 dark:text-white">${Math.round(node.cpu)}%</div>
-                </div>
-                <div class="bg-gray-100/50 dark:bg-white/5 rounded-lg p-2 text-center border border-gray-200 dark:border-white/5">
-                    <div class="text-[10px] text-gray-500 uppercase font-bold">${I18N.web_ram}</div>
-                    <div class="text-sm font-bold text-gray-900 dark:text-white">${Math.round(node.ram)}%</div>
-                </div>
-                <div class="bg-gray-100/50 dark:bg-white/5 rounded-lg p-2 text-center border border-gray-200 dark:border-white/5">
-                    <div class="text-[10px] text-gray-500 uppercase font-bold">IP</div>
-                    <div class="text-xs font-bold text-gray-900 dark:text-white truncate" title="${escapeHtml(node.ip)}">${escapeHtml(node.ip)}</div>
-                </div>
-            </div>
-        </div>
-        `;
+            <div class="text-right"><div class="text-[10px] font-bold text-gray-400 mb-0.5">${statusText}</div><div class="text-[10px] text-gray-500 font-mono">CPU: ${Math.round(node.cpu)}%</div></div>
+        </div>`;
     }).join('');
-
-    if (container.innerHTML !== html) {
-        container.innerHTML = html;
-        if (window.parsePageEmojis) window.parsePageEmojis(); // Функция из common.js (если доступна)
-    }
+    if (container.innerHTML !== html) container.innerHTML = html;
 }
 
 async function fetchAgentStats() {
     try {
         const response = await fetch('/api/agent/stats');
         const data = await response.json();
-        
         if(data.stats) {
-            document.getElementById('agentCpu').innerText = Math.round(data.stats.cpu) + "%";
-            document.getElementById('agentRam').innerText = Math.round(data.stats.ram) + "%";
-            document.getElementById('agentDisk').innerText = Math.round(data.stats.disk) + "%";
-            document.getElementById('agentIp').innerText = data.stats.ip || "Unknown";
-            
-            if (document.getElementById('trafficRxTotal')) {
-                document.getElementById('trafficRxTotal').innerText = formatBytes(data.stats.net_recv);
-                document.getElementById('trafficTxTotal').innerText = formatBytes(data.stats.net_sent);
-                
-                const uptimeStr = formatUptime(data.stats.boot_time);
-                const uptimeEl = document.getElementById('agentUptime');
-                const uptimeMobileEl = document.getElementById('agentUptimeMobile');
-                
-                if(uptimeEl) uptimeEl.innerText = uptimeStr;
-                if(uptimeMobileEl) uptimeMobileEl.innerText = uptimeStr;
+            ['cpu', 'ram', 'disk'].forEach(m => {
+                const el = document.getElementById('stat_'+m);
+                const prog = document.getElementById('prog_'+m);
+                if (el) el.innerText = Math.round(data.stats[m]) + "%";
+                if (prog) prog.style.width = data.stats[m] + "%";
+            });
+            if (document.getElementById('stat_net_recv')) {
+                document.getElementById('stat_net_recv').innerText = formatBytes(data.stats.net_recv);
+                document.getElementById('stat_net_sent').innerText = formatBytes(data.stats.net_sent);
+                const uptimeEl = document.getElementById('stat_uptime');
+                if(uptimeEl) uptimeEl.innerText = formatUptime(data.stats.boot_time);
+                const ipEl = document.getElementById('agentIp');
+                if(ipEl && data.stats.ip) ipEl.innerText = data.stats.ip;
             }
         }
         renderAgentChart(data.history);
-    } catch (e) {
-        console.error("Agent stats error:", e);
-    }
+    } catch (e) { console.error("Agent stats error:", e); }
 }
 
 function updateChartsColors() {
     const isDark = document.documentElement.classList.contains('dark');
     const gridColor = isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.05)';
     const tickColor = isDark ? '#9ca3af' : '#6b7280'; 
-    
-    [chartAgent, chartRes, chartNet].forEach(chart => {
+    [agentChart, chartRes, chartNet].forEach(chart => {
         if (chart) {
-            if (chart.options.scales.x) {
-                chart.options.scales.x.grid.color = gridColor;
-                chart.options.scales.x.ticks.color = tickColor;
-            }
-            if (chart.options.scales.y) {
-                chart.options.scales.y.grid.color = gridColor;
-                chart.options.scales.y.ticks.color = tickColor;
-            }
-            if (chart.options.plugins.legend) {
-                 chart.options.plugins.legend.labels.color = tickColor;
-            }
+            chart.options.scales.x.grid.color = 'transparent'; // Скрываем сетку X
+            chart.options.scales.x.ticks.color = tickColor;
+            chart.options.scales.y.grid.color = gridColor; 
+            chart.options.scales.y.ticks.color = tickColor;
+            if (chart.options.plugins.legend) chart.options.plugins.legend.labels.color = tickColor;
             chart.update();
         }
     });
 }
 
+// Хелпер для создания градиента
+function getGradient(ctx, colorBase) {
+    const gradient = ctx.createLinearGradient(0, 0, 0, 400);
+    // Преобразуем rgb(r, g, b) в rgba(r, g, b, alpha)
+    gradient.addColorStop(0, colorBase.replace(')', ', 0.5)').replace('rgb', 'rgba'));
+    gradient.addColorStop(1, colorBase.replace(')', ', 0.0)').replace('rgb', 'rgba'));
+    return gradient;
+}
+
 function renderAgentChart(history) {
     if (!history || history.length < 2) return;
+    const ctx = document.getElementById('agentChart').getContext('2d');
     
     const labels = [];
-    const totalPoints = history.length;
-    for(let i=0; i<totalPoints; i++) {
-        const secondsAgo = (totalPoints - 1 - i) * 2; 
-        labels.push(secondsAgo % 20 === 0 || i === totalPoints-1 ? `-${secondsAgo}s` : "");
-    }
-    
     const netRx = [];
     const netTx = [];
+    // Если разрыв больше 10 секунд -> считаем даунтаймом (агент шлет данные каждые 2-3 сек)
+    const gapThreshold = 10; 
+
     for(let i=1; i<history.length; i++) {
-        const dt = history[i].t - history[i-1].t || 1; 
-        const dx = Math.max(0, history[i].rx - history[i-1].rx);
-        const dy = Math.max(0, history[i].tx - history[i-1].tx);
-        netRx.push((dx * 8 / dt / 1024)); 
-        netTx.push((dy * 8 / dt / 1024)); 
+        const dt = history[i].t - history[i-1].t;
+        
+        // Обнаружение разрыва (Downtime)
+        if (dt > gapThreshold) {
+            labels.push(""); // Пустая метка
+            netRx.push(null); // Разрыв линии
+            netTx.push(null);
+        }
+
+        labels.push(new Date(history[i].t * 1000).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', second:'2-digit'}));
+        netRx.push((Math.max(0, history[i].rx - history[i-1].rx) * 8 / dt / 1024));
+        netTx.push((Math.max(0, history[i].tx - history[i-1].tx) * 8 / dt / 1024));
     }
-    
-    const labelsSl = labels.slice(1);
-    const ctx = document.getElementById('chartAgent').getContext('2d');
+
     const isDark = document.documentElement.classList.contains('dark');
     const gridColor = isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.05)';
     const tickColor = isDark ? '#9ca3af' : '#6b7280';
 
     const opts = {
-        responsive: true,
-        maintainAspectRatio: false,
-        animation: false,
-        layout: { padding: { top: 5, bottom: 0, left: 0, right: 5 } },
-        elements: { point: { radius: 0, hitRadius: 10 } },
+        responsive: true, maintainAspectRatio: false, animation: false,
+        interaction: { mode: 'index', intersect: false },
         scales: { 
-            x: { 
-                display: true, 
-                grid: { display: true, color: gridColor, borderDash: [4, 4], drawBorder: true, borderColor: gridColor },
-                ticks: { color: tickColor, font: {size: 9}, maxRotation: 0, autoSkip: false }
-            }, 
-            y: { 
-                display: true, position: 'right',
-                grid: { display: true, color: gridColor, borderDash: [4, 4], drawBorder: true, borderColor: gridColor },
-                ticks: { color: tickColor, font: {size: 9}, callback: (val) => formatSpeed(val) }
-            } 
+            x: { grid: { display: false }, ticks: { color: tickColor, maxTicksLimit: 8, maxRotation: 0 } },
+            y: { position: 'right', grid: { color: gridColor }, ticks: { color: tickColor, callback: (v) => formatSpeed(v) }, beginAtZero: true }
         },
         plugins: { 
-            legend: { display: true, labels: { color: tickColor, font: {size: 10}, boxWidth: 8, usePointStyle: true } }, 
-            tooltip: { 
-                enabled: true, mode: 'index', intersect: false,
-                backgroundColor: isDark ? 'rgba(17, 24, 39, 0.95)' : 'rgba(255, 255, 255, 0.95)',
-                titleColor: isDark ? '#fff' : '#111827',
-                bodyColor: isDark ? '#ccc' : '#4b5563',
-                borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)',
-                borderWidth: 1,
-                callbacks: {
-                    title: () => '', 
-                    label: (ctx) => (ctx.dataset.label || '') + ': ' + (ctx.parsed.y !== null ? formatSpeed(ctx.parsed.y) : '')
-                }
-            } 
-        } 
+            legend: { labels: { color: tickColor, usePointStyle: true } },
+            tooltip: {
+                mode: 'index', intersect: false,
+                callbacks: { label: (c) => c.dataset.label + ': ' + formatSpeed(c.raw) }
+            }
+        },
+        elements: {
+            line: { tension: 0.4 }, // Сглаживание
+            point: { radius: 0, hitRadius: 20, hoverRadius: 4 }
+        }
     };
 
-    if (chartAgent) {
-        chartAgent.data.labels = labelsSl;
-        chartAgent.data.datasets[0].data = netRx;
-        chartAgent.data.datasets[1].data = netTx;
-        
-        chartAgent.options.scales.x.grid.color = gridColor;
-        chartAgent.options.scales.x.ticks.color = tickColor;
-        chartAgent.options.scales.y.grid.color = gridColor;
-        chartAgent.options.scales.y.ticks.color = tickColor;
-        chartAgent.options.plugins.legend.labels.color = tickColor;
-        
-        chartAgent.update();
+    if (agentChart) {
+        agentChart.data.labels = labels; 
+        agentChart.data.datasets[0].data = netRx; 
+        agentChart.data.datasets[1].data = netTx; 
+        agentChart.update();
     } else {
-        chartAgent = new Chart(ctx, {
-            type: 'line',
-            data: {
-                labels: labelsSl,
+        // Создаем градиенты
+        const rxGrad = getGradient(ctx, 'rgb(34, 197, 94)');
+        const txGrad = getGradient(ctx, 'rgb(59, 130, 246)');
+
+        agentChart = new Chart(ctx, { 
+            type: 'line', 
+            data: { 
+                labels, 
                 datasets: [
-                    { label: 'RX (In)', data: netRx, borderColor: '#22c55e', borderWidth: 1.5, fill: true, backgroundColor: 'rgba(34, 197, 94, 0.1)', tension: 0.3 },
-                    { label: 'TX (Out)', data: netTx, borderColor: '#3b82f6', borderWidth: 1.5, fill: true, backgroundColor: 'rgba(59, 130, 246, 0.1)', tension: 0.3 }
-                ]
-            },
-            options: opts
+                    { label: 'RX', data: netRx, borderColor: '#22c55e', borderWidth: 2, backgroundColor: rxGrad, fill: true }, 
+                    { label: 'TX', data: netTx, borderColor: '#3b82f6', borderWidth: 2, backgroundColor: txGrad, fill: true }
+                ] 
+            }, 
+            options: opts 
         });
     }
 }
 
-function formatSpeed(valueInKbps) {
-    let val = parseFloat(valueInKbps);
-    if (isNaN(val)) return '0 Kbit/s';
-    if (val >= 1024 * 1024) return (val / (1024 * 1024)).toFixed(2) + ' Gbit/s';
-    if (val >= 1024) return (val / 1024).toFixed(2) + ' Mbit/s';
-    return val.toFixed(2) + ' Kbit/s';
+function formatSpeed(v) { 
+    if (v === null || v === undefined) return '0 Kbps';
+    return v >= 1024 * 1024 ? (v / 1048576).toFixed(2) + ' Gbps' : (v >= 1024 ? (v / 1024).toFixed(2) + ' Mbps' : v.toFixed(2) + ' Kbps'); 
 }
 
-function formatBytes(bytes, decimals = 2) {
-    if (!+bytes) return '0 B';
-    const k = 1024;
-    const dm = decimals < 0 ? 0 : decimals;
-    const sizes = ['B', 'KiB', 'MiB', 'GiB', 'TiB', 'PiB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return `${parseFloat((bytes / Math.pow(k, i)).toFixed(dm))} ${sizes[i]}`;
+function formatBytes(b) {
+    const s = [
+        (typeof I18N !== 'undefined' && I18N.unit_bytes) ? I18N.unit_bytes : 'B',
+        (typeof I18N !== 'undefined' && I18N.unit_kb) ? I18N.unit_kb : 'KB',
+        (typeof I18N !== 'undefined' && I18N.unit_mb) ? I18N.unit_mb : 'MB',
+        (typeof I18N !== 'undefined' && I18N.unit_gb) ? I18N.unit_gb : 'GB',
+        (typeof I18N !== 'undefined' && I18N.unit_tb) ? I18N.unit_tb : 'TB',
+        (typeof I18N !== 'undefined' && I18N.unit_pb) ? I18N.unit_pb : 'PB'
+    ];
+    if (!+b) return '0 ' + s[0];
+    const i = Math.floor(Math.log(b) / Math.log(1024));
+    return `${parseFloat((b / Math.pow(1024, i)).toFixed(2))} ${s[i]}`;
 }
 
-function formatUptime(bootTime) {
-    if (!bootTime) return "...";
+function formatUptime(bt) {
+    if (!bt) return "...";
     const now = Date.now() / 1000;
-    const diff = now - bootTime;
-    const days = Math.floor(diff / 86400);
-    const hours = Math.floor((diff % 86400) / 3600);
-    const minutes = Math.floor((diff % 3600) / 60);
-    if (days > 0) return `${days}d ${hours}h`;
-    return `${hours}h ${minutes}m`;
+    const seconds = Math.floor(now - bt);
+    
+    const d = Math.floor(seconds / 86400);
+    const h = Math.floor((seconds % 86400) / 3600);
+    const m = Math.floor((seconds % 3600) / 60);
+
+    const unitD = (typeof I18N !== 'undefined' && I18N.web_time_d) ? I18N.web_time_d : 'd';
+    const unitH = (typeof I18N !== 'undefined' && I18N.web_time_h) ? I18N.web_time_h : 'h';
+    const unitM = (typeof I18N !== 'undefined' && I18N.web_time_m) ? I18N.web_time_m : 'm';
+
+    if (d > 0) return `${d}${unitD} ${h}${unitH}`;
+    if (h > 0) return `${h}${unitH} ${m}${unitM}`;
+    return `${m}${unitM}`;
 }
 
-async function openNodeDetails(token, dotColorClass) {
+async function openNodeDetails(token, color) {
     const modal = document.getElementById('nodeModal');
-    modal.classList.remove('hidden');
-    modal.classList.add('flex');
+    modal.classList.replace('hidden', 'flex');
     document.body.style.overflow = 'hidden';
-    
-    const dot = document.getElementById('modalStatusDot');
-    if (dot && dotColorClass) {
-         dot.className = dot.className.replace(/bg-\w+-500/g, "");
-         const newColor = dotColorClass.replace("bg-", "").trim() ? dotColorClass : "bg-gray-500";
-         dot.classList.add("h-3", "w-3", "rounded-full", "animate-pulse", newColor);
-    }
-
-    if (chartRes) { chartRes.destroy(); chartRes = null; }
-    if (chartNet) { chartNet.destroy(); chartNet = null; }
-
+    if (chartRes) chartRes.destroy(); if (chartNet) chartNet.destroy();
+    chartRes = null; chartNet = null;
     await fetchAndRender(token);
-
     if (pollInterval) clearInterval(pollInterval);
     pollInterval = setInterval(() => fetchAndRender(token), 3000);
 }
 
 async function fetchAndRender(token) {
     try {
-        const response = await fetch(`/api/node/details?token=${token}`);
-        const data = await response.json();
+        const res = await fetch(`/api/node/details?token=${token}`);
+        const data = await res.json();
+        if (data.error) { clearInterval(pollInterval); return; }
+        document.getElementById('modalNodeName').innerText = data.name;
+        document.getElementById('modalNodeIp').innerText = data.ip;
+        document.getElementById('modalToken').innerText = data.token;
         
-        if (data.error) {
-            console.error(data.error);
-            if (pollInterval) clearInterval(pollInterval);
-            return;
+        // Last Seen logic
+        const lastSeen = data.last_seen || 0;
+        const now = Math.floor(Date.now() / 1000);
+        const diff = now - lastSeen;
+        const lsEl = document.getElementById('modalNodeLastSeen');
+        if (lsEl) {
+            lsEl.innerText = diff < 60 ? "Online" : `Last seen: ${new Date(lastSeen * 1000).toLocaleString()}`;
+            lsEl.className = diff < 60 ? "text-green-500 font-bold text-xs" : "text-red-500 font-bold text-xs";
         }
-        document.getElementById('modalTitle').innerText = data.name || 'Unknown';
-        const stats = data.stats || {};
-        document.getElementById('modalCpu').innerText = (stats.cpu !== undefined ? stats.cpu : 0) + '%';
-        document.getElementById('modalRam').innerText = (stats.ram !== undefined ? stats.ram : 0) + '%';
-        document.getElementById('modalIp').innerText = data.ip || 'Unknown';
-        
-        const tokenEl = document.getElementById('modalToken');
-        if(tokenEl) tokenEl.innerText = data.token || token;
 
         renderCharts(data.history);
-    } catch (e) {
-        console.error("Error render node details:", e);
-    }
+    } catch (e) { console.error("Node detail error:", e); }
 }
 
-function closeModal() {
-    const modal = document.getElementById('nodeModal');
-    modal.classList.add('hidden');
-    modal.classList.remove('flex');
-    document.body.style.overflow = 'auto';
-    if (pollInterval) { clearInterval(pollInterval); pollInterval = null; }
+function closeNodeModal() {
+    document.getElementById('nodeModal').classList.replace('flex', 'hidden');
+    document.body.style.overflow = '';
+    if (pollInterval) clearInterval(pollInterval);
 }
 
 function renderCharts(history) {
     if (!history || history.length < 2) return; 
-    const labels = history.map(h => new Date(h.t * 1000).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', second:'2-digit'}));
-    const cpuData = history.map(h => h.c);
-    const ramData = history.map(h => h.r);
     
-    const netRxSpeed = [];
-    const netTxSpeed = [];
+    const ctxRes = document.getElementById('nodeResChart').getContext('2d');
+    const ctxNet = document.getElementById('nodeNetChart').getContext('2d');
+
+    // Для нод интервал обновления больше, ставим порог 25 сек для даунтайма
+    const gapThreshold = 25; 
+
+    const labels = [];
+    const cpuData = [];
+    const ramData = [];
+    const netRx = [];
+    const netTx = [];
+
+    // Инициализация первой точки
+    labels.push(new Date(history[0].t * 1000).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', second:'2-digit'}));
+    cpuData.push(history[0].c);
+    ramData.push(history[0].r);
+    netRx.push(0);
+    netTx.push(0);
+
     for(let i=1; i<history.length; i++) {
-        const dt = history[i].t - history[i-1].t || 1; 
-        const dx = Math.max(0, history[i].rx - history[i-1].rx);
-        const dy = Math.max(0, history[i].tx - history[i-1].tx);
-        netRxSpeed.push((dx * 8 / dt / 1024)); 
-        netTxSpeed.push((dy * 8 / dt / 1024)); 
+        const dt = history[i].t - history[i-1].t;
+        
+        // Обнаружение разрыва (Downtime) для Ноды
+        if (dt > gapThreshold) {
+            labels.push("");
+            cpuData.push(null);
+            ramData.push(null);
+            netRx.push(null);
+            netTx.push(null);
+        }
+
+        labels.push(new Date(history[i].t * 1000).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', second:'2-digit'}));
+        cpuData.push(history[i].c);
+        ramData.push(history[i].r);
+        netRx.push((Math.max(0, history[i].rx - history[i-1].rx) * 8 / dt / 1024));
+        netTx.push((Math.max(0, history[i].tx - history[i-1].tx) * 8 / dt / 1024));
     }
-    const netLabels = labels.slice(1);
 
     const isDark = document.documentElement.classList.contains('dark');
     const gridColor = isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.05)';
     const tickColor = isDark ? '#9ca3af' : '#6b7280';
 
     const commonOptions = {
-        responsive: true,
-        maintainAspectRatio: false,
-        interaction: { mode: 'index', intersect: false },
-        animation: false,
+        responsive: true, maintainAspectRatio: false, animation: false,
+        interaction: { mode: 'index', intersect: false }, 
         scales: { 
             y: { beginAtZero: true, grid: { color: gridColor }, ticks: { color: tickColor, font: {size: 10} } }, 
-            x: { display: false } 
+            x: { grid: { display: false }, ticks: { display: false } } 
         },
-        plugins: { 
-            legend: { labels: { color: tickColor, font: {size: 11}, boxWidth: 10 } },
-            tooltip: { 
-                backgroundColor: isDark ? 'rgba(17, 24, 39, 0.9)' : 'rgba(255, 255, 255, 0.9)',
-                titleColor: isDark ? '#fff' : '#111827',
-                bodyColor: isDark ? '#ccc' : '#4b5563',
-                borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)',
-                borderWidth: 1 
-            }
-        }
+        plugins: { legend: { labels: { color: tickColor, boxWidth: 10, usePointStyle: true } } },
+        elements: { line: { tension: 0.4 }, point: { radius: 0, hitRadius: 10 } }
     };
 
-    const ctxRes = document.getElementById('chartResources').getContext('2d');
+    // Resources Chart (Node)
     if (chartRes) {
-        chartRes.data.labels = labels;
-        chartRes.data.datasets[0].data = cpuData;
-        chartRes.data.datasets[1].data = ramData;
-        chartRes.options.scales.y.grid.color = gridColor;
-        chartRes.options.scales.y.ticks.color = tickColor;
-        chartRes.options.plugins.legend.labels.color = tickColor;
+        chartRes.data.labels = labels; 
+        chartRes.data.datasets[0].data = cpuData; 
+        chartRes.data.datasets[1].data = ramData; 
         chartRes.update();
     } else {
-        chartRes = new Chart(ctxRes, {
-            type: 'line',
-            data: {
-                labels: labels,
+        const cpuGrad = getGradient(ctxRes, 'rgb(59, 130, 246)');
+        const ramGrad = getGradient(ctxRes, 'rgb(168, 85, 247)');
+
+        chartRes = new Chart(ctxRes, { 
+            type: 'line', 
+            data: { 
+                labels, 
                 datasets: [
-                    { label: 'CPU (%)', data: cpuData, borderColor: '#3b82f6', tension: 0.3, borderWidth: 2, pointRadius: 0 },
-                    { label: 'RAM (%)', data: ramData, borderColor: '#a855f7', tension: 0.3, borderWidth: 2, pointRadius: 0 }
-                ]
-            },
-            options: { ...commonOptions, scales: { ...commonOptions.scales, y: { ...commonOptions.scales.y, max: 100 } } }
+                    { label: 'CPU (%)', data: cpuData, borderColor: '#3b82f6', borderWidth: 2, backgroundColor: cpuGrad, fill: true }, 
+                    { label: 'RAM (%)', data: ramData, borderColor: '#a855f7', borderWidth: 2, backgroundColor: ramGrad, fill: true }
+                ] 
+            }, 
+            options: { ...commonOptions, scales: { ...commonOptions.scales, y: { ...commonOptions.scales.y, max: 100 } } } 
         });
     }
 
-    const ctxNet = document.getElementById('chartNetwork').getContext('2d');
-    const netOptions = JSON.parse(JSON.stringify(commonOptions));
-    if (!netOptions.scales) netOptions.scales = {};
-    if (!netOptions.scales.y) netOptions.scales.y = {};
-    if (!netOptions.scales.y.ticks) netOptions.scales.y.ticks = {};
-    netOptions.scales.y.grid.color = gridColor;
-    netOptions.scales.y.ticks.color = tickColor;
-    netOptions.scales.y.ticks.callback = (val) => formatSpeed(val);
-    
+    // Network Chart (Node)
     if (chartNet) {
-        chartNet.data.labels = netLabels;
-        chartNet.data.datasets[0].data = netRxSpeed;
-        chartNet.data.datasets[1].data = netTxSpeed;
-        chartNet.options.scales.y.grid.color = gridColor;
-        chartNet.options.scales.y.ticks.color = tickColor;
-        chartNet.options.plugins.legend.labels.color = tickColor;
+        chartNet.data.labels = labels; 
+        chartNet.data.datasets[0].data = netRx; 
+        chartNet.data.datasets[1].data = netTx; 
         chartNet.update();
     } else {
-        chartNet = new Chart(ctxNet, {
-            type: 'line',
-            data: {
-                labels: netLabels,
+        const netOpts = JSON.parse(JSON.stringify(commonOptions)); 
+        netOpts.scales.y.ticks.callback = (v) => formatSpeed(v);
+        
+        const rxGrad = getGradient(ctxNet, 'rgb(34, 197, 94)');
+        const txGrad = getGradient(ctxNet, 'rgb(239, 68, 68)');
+
+        chartNet = new Chart(ctxNet, { 
+            type: 'line', 
+            data: { 
+                labels, 
                 datasets: [
-                    { label: 'RX (In)', data: netRxSpeed, borderColor: '#22c55e', backgroundColor: 'rgba(34, 197, 94, 0.1)', fill: true, tension: 0.3, borderWidth: 2, pointRadius: 0 },
-                    { label: 'TX (Out)', data: netTxSpeed, borderColor: '#ef4444', tension: 0.3, borderWidth: 2, pointRadius: 0 }
-                ]
-            },
-            options: netOptions
+                    { label: 'RX', data: netRx, borderColor: '#22c55e', borderWidth: 2, backgroundColor: rxGrad, fill: true }, 
+                    { label: 'TX', data: netTx, borderColor: '#ef4444', borderWidth: 2, backgroundColor: txGrad, fill: true } 
+                ] 
+            }, 
+            options: netOpts 
         });
     }
 }
 
-function openLogsModal() {
-    const modal = document.getElementById('logsModal');
-    modal.classList.remove('hidden');
-    modal.classList.add('flex');
-    document.body.style.overflow = 'hidden';
-    fetchLogs();
-}
+window.switchLogType = function(type) {
+    ['btnLogBot', 'btnLogSys'].forEach(id => {
+        const el = document.getElementById(id);
+        const isActive = (id === 'btnLogBot' && type === 'bot') || (id === 'btnLogSys' && type === 'sys');
+        el.classList.toggle('bg-white', isActive); el.classList.toggle('dark:bg-gray-700', isActive); el.classList.toggle('text-gray-900', isActive); el.classList.toggle('text-gray-500', !isActive);
+    });
+    loadLogs(type);
+    if (logPollInterval) clearInterval(logPollInterval);
+    logPollInterval = setInterval(() => loadLogs(type), 5000);
+};
 
-function closeLogsModal() {
-    const modal = document.getElementById('logsModal');
-    modal.classList.add('hidden');
-    modal.classList.remove('flex');
-    document.body.style.overflow = 'auto';
-}
-
-async function fetchLogs() {
-    const contentDiv = document.getElementById('logsContent');
-    contentDiv.innerHTML = `<div class="flex items-center justify-center h-full text-gray-500"><span class="animate-pulse">${I18N.web_loading}</span></div>`;
+async function loadLogs(type = 'bot') {
+    const container = document.getElementById('logsContainer');
+    const url = type === 'sys' ? '/api/logs/system' : '/api/logs';
     try {
-        const response = await fetch('/api/logs');
-        if (response.status === 403) {
-            contentDiv.innerHTML = `<div class="text-red-400 text-center">${I18N.web_access_denied}</div>`;
-            return;
-        }
-        const data = await response.json();
-        if (data.error) {
-            contentDiv.innerHTML = `<div class="text-red-400">${I18N.web_error.replace('{error}', data.error)}</div>`;
-        } else {
-            const coloredLogs = data.logs.map(line => {
-                let cls = "text-gray-500 dark:text-gray-400";
-                if (line.includes("INFO")) cls = "text-blue-600 dark:text-blue-300";
-                if (line.includes("WARNING")) cls = "text-yellow-600 dark:text-yellow-300";
-                if (line.includes("ERROR") || line.includes("CRITICAL") || line.includes("Traceback")) cls = "text-red-600 dark:text-red-400 font-bold";
-                const safeLine = line.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-                return `<div class="${cls} hover:bg-gray-100 dark:hover:bg-white/5 px-1 rounded">${safeLine}</div>`;
-            }).join('');
-            contentDiv.innerHTML = coloredLogs || `<div class="text-gray-600 text-center">${I18N.web_log_empty}</div>`;
-            
-            if (typeof window.parsePageEmojis === 'function') window.parsePageEmojis();
-            
-            contentDiv.scrollTop = contentDiv.scrollHeight;
-        }
-    } catch (e) {
-        contentDiv.innerHTML = `<div class="text-red-400">${I18N.web_conn_error.replace('{error}', e)}</div>`;
-    }
-}
-
-// --- НОВАЯ ЛОГИКА ДЛЯ МОДАЛЬНОГО ОКНА ДОБАВЛЕНИЯ НОДЫ ---
-
-function openAddNodeModal() {
-    const modal = document.getElementById('addNodeModal');
-    if (modal) {
-        modal.classList.remove('hidden');
-        modal.classList.add('flex');
-        document.body.style.overflow = 'hidden';
-        
-        // Сброс формы
-        document.getElementById('nodeResultDash').classList.add('hidden');
-        const input = document.getElementById('newNodeNameDash');
-        input.value = '';
-        input.focus();
-        validateNodeInput(); // Сброс состояния кнопки
-    }
-}
-
-function closeAddNodeModal() {
-    const modal = document.getElementById('addNodeModal');
-    if (modal) {
-        modal.classList.add('hidden');
-        modal.classList.remove('flex');
-        document.body.style.overflow = 'auto';
-    }
-}
-
-function validateNodeInput() {
-    const input = document.getElementById('newNodeNameDash');
-    const btn = document.getElementById('btnAddNodeDash');
-    if (!input || !btn) return;
-
-    if (input.value.trim().length >= 2) {
-        btn.disabled = false;
-        btn.classList.remove('bg-gray-200', 'dark:bg-gray-700', 'text-gray-400', 'dark:text-gray-500', 'cursor-not-allowed');
-        btn.classList.add('bg-purple-600', 'hover:bg-purple-500', 'active:scale-95', 'text-white', 'cursor-pointer', 'shadow-lg', 'shadow-purple-500/20');
-    } else {
-        btn.disabled = true;
-        btn.classList.remove('bg-purple-600', 'hover:bg-purple-500', 'active:scale-95', 'text-white', 'cursor-pointer', 'shadow-lg', 'shadow-purple-500/20');
-        btn.classList.add('bg-gray-200', 'dark:bg-gray-700', 'text-gray-400', 'dark:text-gray-500', 'cursor-not-allowed');
-    }
-}
-
-async function addNodeDash() {
-    const nameInput = document.getElementById('newNodeNameDash');
-    const name = nameInput.value.trim();
-    const btn = document.getElementById('btnAddNodeDash');
-    
-    if (!name) return;
-
-    // Блокируем интерфейс
-    btn.disabled = true;
-    const originalText = btn.innerText;
-    btn.innerHTML = `<svg class="animate-spin h-5 w-5 text-white mx-auto" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>`;
-
-    try {
-        const res = await fetch('/api/nodes/add', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({name: name})
-        });
-        
+        const res = await fetch(url);
+        if (res.status === 403) { container.innerHTML = `<div class="text-red-400 text-center mt-10">${I18N.web_access_denied}</div>`; return; }
         const data = await res.json();
-        
-        if (res.ok) {
-            // Показываем результат
-            document.getElementById('nodeResultDash').classList.remove('hidden');
-            document.getElementById('newNodeTokenDash').innerText = data.token;
-            document.getElementById('newNodeCmdDash').innerText = data.command;
-            
-            // Очищаем поле ввода, но оставляем результат
-            nameInput.value = "";
-            validateNodeInput(); // Кнопка станет неактивной
-            
-            // Обновляем список нод на фоне
-            if (typeof fetchNodesList === 'function') {
-                fetchNodesList();
-            }
-        } else {
-            await window.showModalAlert(I18N.web_error.replace('{error}', data.error), 'Ошибка');
+        if (data.error) container.innerHTML = `<div class="text-red-400 p-4 font-mono">${data.error}</div>`;
+        else {
+            const logs = data.logs || [];
+            if (logs.length === 0) { container.innerHTML = `<div class="text-gray-600 text-center mt-10">${I18N.web_log_empty}</div>`; return; }
+            const html = logs.map(line => {
+                let cls = "text-gray-500";
+                if (line.includes("INFO")) cls = "text-blue-400"; else if (line.includes("WARNING")) cls = "text-yellow-400"; else if (line.includes("ERROR") || line.includes("CRITICAL")) cls = "text-red-500 font-bold";
+                return `<div class="${cls}">${escapeHtml(line)}</div>`;
+            }).join('');
+            const isBottom = container.scrollHeight - container.scrollTop <= container.clientHeight + 50;
+            if (container.innerHTML !== html) { container.innerHTML = html; if (isBottom) container.scrollTop = container.scrollHeight; }
         }
-    } catch (e) {
-        await window.showModalAlert(I18N.web_conn_error.replace('{error}', e), 'Ошибка соединения');
-    } finally {
-        // Восстанавливаем кнопку
-        btn.innerText = originalText;
-        validateNodeInput(); // Проверяем состояние еще раз
-    }
+    } catch (e) { container.innerHTML = `<div class="text-red-400 text-center mt-10">Conn error</div>`; }
 }
-
-// Хелпер для копирования текста по клику
-function copyTextToClipboard(text) {
-    if (navigator.clipboard && window.isSecureContext) {
-        navigator.clipboard.writeText(text).then(() => {
-            showToast && showToast(I18N.web_copied || "Copied!");
-        });
-    } else {
-        // Fallback
-        const textArea = document.createElement("textarea");
-        textArea.value = text;
-        textArea.style.position = "fixed";
-        document.body.appendChild(textArea);
-        textArea.focus();
-        textArea.select();
-        try {
-            document.execCommand('copy');
-            showToast && showToast(I18N.web_copied || "Copied!");
-        } catch (err) {}
-        document.body.removeChild(textArea);
-    }
-}
-
-// Инициализация слушателя ввода
-document.addEventListener("DOMContentLoaded", () => {
-    const input = document.getElementById('newNodeNameDash');
-    if (input) {
-        input.addEventListener('input', validateNodeInput);
-        // Обработка Enter
-        input.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter' && !document.getElementById('btnAddNodeDash').disabled) {
-                addNodeDash();
-            }
-        });
-    }
-});
