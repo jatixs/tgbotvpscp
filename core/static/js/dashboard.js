@@ -264,7 +264,7 @@ async function fetchAndRender(token) {
 
 function closeNodeModal() {
     document.getElementById('nodeModal').classList.replace('flex', 'hidden');
-    document.body.style.overflow = 'auto';
+    document.body.style.overflow = '';
     if (pollInterval) clearInterval(pollInterval);
 }
 
