@@ -275,6 +275,24 @@ async def api_revoke_session(request):
     except Exception as e:
         return web.json_response({"error": str(e)}, status=500)
 
+async def api_revoke_all_sessions(request):
+    user = get_current_user(request)
+    if not user: return web.json_response({"error": "Unauthorized"}, status=401)
+    
+    current_token = request.cookies.get(COOKIE_NAME)
+    uid = user['id']
+    count = 0
+    
+    # Итерируемся по копии ключей
+    for token in list(SERVER_SESSIONS.keys()):
+        session = SERVER_SESSIONS[token]
+        # Удаляем все сессии этого пользователя, кроме текущей
+        if session['id'] == uid and token != current_token:
+            del SERVER_SESSIONS[token]
+            count += 1
+            
+    return web.json_response({"status": "ok", "revoked_count": count})
+
 async def handle_dashboard(request):
     user = get_current_user(request)
     if not user: raise web.HTTPFound('/login')
@@ -584,6 +602,9 @@ async def handle_settings_page(request):
         "{web_clear_notifications}": _("web_clear_notifications", lang),
         "{web_logout}": _("web_logout", lang),
         "{web_sessions_title}": _("web_sessions_title", lang),
+        "{web_sessions_view_all}": _("web_sessions_view_all", lang),
+        "{web_sessions_revoke_all}": _("web_sessions_revoke_all", lang),
+        "{web_sessions_modal_title}": _("web_sessions_modal_title", lang),
     }
     modified_html = html
     for k, v in replacements.items(): modified_html = modified_html.replace(k, v)
@@ -602,6 +623,9 @@ async def handle_settings_page(request):
         "web_ip": _("web_ip", lang),
         "web_device": _("web_device", lang),
         "web_last_active": _("web_last_active", lang),
+        "web_sessions_revoked_alert": _("web_sessions_revoked_alert", lang),
+        "web_session_current_label": _("web_session_current_label", lang),
+        "web_sessions_revoke_all": _("web_sessions_revoke_all", lang),
     }
     for btn_key, conf_key in BTN_CONFIG_MAP.items(): i18n_data[f"lbl_{conf_key}"] = _(btn_key, lang)
     modified_html = modified_html.replace("{i18n_json}", json.dumps(i18n_data))
@@ -943,6 +967,7 @@ async def start_web_server(bot_instance: Bot):
         app.router.add_post('/api/notifications/clear', api_clear_notifications)
         app.router.add_get('/api/sessions/list', api_get_sessions)
         app.router.add_post('/api/sessions/revoke', api_revoke_session)
+        app.router.add_post('/api/sessions/revoke_all', api_revoke_all_sessions)
     else:
         logging.info("Web UI DISABLED.")
         app.router.add_get('/', handle_api_root)

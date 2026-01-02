@@ -6,10 +6,9 @@ document.addEventListener("DOMContentLoaded", () => {
     updateBulkButtonsUI();
     initChangePasswordUI();
     
-    // Загрузка сессий (НОВОЕ)
+    // Загрузка сессий
     fetchSessions();
     
-    // Инициализация валидации ноды уже в common.js, здесь просто убеждаемся что слушатели повешены
     const input = document.getElementById('newNodeNameDash');
     if (input) {
         input.addEventListener('input', validateNodeInput);
@@ -71,7 +70,6 @@ document.addEventListener("DOMContentLoaded", () => {
 
     if(btnDoUpdate) {
         btnDoUpdate.addEventListener('click', async function() {
-            // ИСПОЛЬЗОВАНИЕ МОДАЛЬНОГО ОКНА
             if(!await window.showModalConfirm(I18N.web_update_started || "Are you sure you want to update the bot? The server will restart.", I18N.modal_title_confirm)) return;
 
             btnCheckUpdate.disabled = true;
@@ -868,6 +866,8 @@ window.disableAllKeyboard = async function() {
 };
 
 // --- SESSIONS LOGIC ---
+let ALL_SESSIONS = [];
+
 async function fetchSessions() {
     const container = document.getElementById('sessionsList');
     if (!container) return;
@@ -877,66 +877,150 @@ async function fetchSessions() {
         const data = await res.json();
         
         if (data.sessions) {
-            renderSessions(data.sessions);
+            ALL_SESSIONS = data.sessions;
+            renderSessionsMainWidget(data.sessions);
         }
     } catch (e) {
         container.innerHTML = `<div class="text-red-500 text-sm text-center">Error loading sessions</div>`;
     }
 }
 
-function renderSessions(sessions) {
+// Рендеринг только текущей сессии в главном блоке настроек
+function renderSessionsMainWidget(sessions) {
     const container = document.getElementById('sessionsList');
     if (!container) return;
     
-    if (sessions.length === 0) {
-        container.innerHTML = `<div class="text-gray-500 text-sm text-center">No active sessions</div>`;
-        return;
-    }
-
-    container.innerHTML = sessions.map(s => {
-        const isCurrent = s.current;
-        const ua = s.ua.length > 30 ? s.ua.substring(0, 30) + '...' : s.ua;
-        const date = new Date(s.created * 1000).toLocaleString();
-        
-        // Определение иконки устройства (примитивное)
-        let iconPath = "M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"; // Monitor
-        if (s.ua.toLowerCase().includes('mobile') || s.ua.toLowerCase().includes('android') || s.ua.toLowerCase().includes('iphone')) {
-            iconPath = "M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z"; // Phone
-        }
-
-        return `
-        <div class="flex items-center justify-between p-3 rounded-xl border ${isCurrent ? 'bg-green-50/50 dark:bg-green-900/10 border-green-200 dark:border-green-800' : 'bg-gray-50 dark:bg-black/20 border-gray-100 dark:border-white/5'}">
-            <div class="flex items-center gap-3 overflow-hidden">
-                <div class="p-2 rounded-lg ${isCurrent ? 'bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400' : 'bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400'} flex-shrink-0">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="${iconPath}" />
-                    </svg>
-                </div>
-                <div class="min-w-0">
-                    <div class="text-sm font-bold text-gray-900 dark:text-white truncate" title="${s.ua}">${ua}</div>
-                    <div class="text-xs text-gray-500 dark:text-gray-400 flex items-center gap-2">
-                        <span class="font-mono">${s.ip}</span>
-                        <span>•</span>
-                        <span>${date}</span>
-                    </div>
-                </div>
-            </div>
-            
-            <div class="flex-shrink-0 ml-2">
-                ${isCurrent 
-                    ? `<span class="px-2 py-1 bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400 text-[10px] font-bold uppercase rounded-lg tracking-wider">${I18N.web_session_current || 'Current'}</span>`
-                    : `<button onclick="revokeSession('${s.id}')" class="p-2 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition" title="${I18N.web_session_revoke || 'Revoke'}">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                        </svg>
-                       </button>`
-                }
-            </div>
-        </div>
+    // Находим текущую сессию
+    const currentSession = sessions.find(s => s.current);
+    
+    if (currentSession) {
+        container.innerHTML = `
+            ${renderSessionItem(currentSession)}
         `;
-    }).join('');
+    } else {
+        container.innerHTML = `<div class="text-gray-500 text-sm text-center">No active sessions</div>`;
+    }
 }
 
+// Генерация HTML для одной сессии
+function renderSessionItem(s) {
+    const isCurrent = s.current;
+    
+    // Новая логика парсинга User-Agent
+    let deviceText = s.ua;
+    let iconType = "desktop"; // desktop, mobile, terminal
+
+    const ua = s.ua.toLowerCase();
+    
+    // Определение ОС
+    let os = "";
+    if (ua.includes('windows')) os = "Windows";
+    else if (ua.includes('mac os')) os = "macOS";
+    else if (ua.includes('android')) { os = "Android"; iconType = "mobile"; }
+    else if (ua.includes('iphone')) { os = "iPhone"; iconType = "mobile"; }
+    else if (ua.includes('ipad')) { os = "iPad"; iconType = "mobile"; }
+    else if (ua.includes('linux')) os = "Linux";
+    
+    // Определение Браузера
+    let browser = "";
+    if (ua.includes('edg')) browser = "Edge";
+    else if (ua.includes('opr') || ua.includes('opera')) browser = "Opera";
+    else if (ua.includes('firefox')) browser = "Firefox";
+    else if (ua.includes('chrome') && !ua.includes('edg') && !ua.includes('opr')) browser = "Chrome";
+    else if (ua.includes('safari') && !ua.includes('chrome')) browser = "Safari";
+    else if (ua.includes('telegram')) browser = "Telegram";
+    else if (ua.includes('python') || ua.includes('curl')) { browser = "Script"; iconType = "terminal"; }
+
+    if (os && browser) deviceText = `${browser} (${os})`;
+    else if (os) deviceText = os;
+    else if (browser) deviceText = browser;
+    else deviceText = s.ua.length > 30 ? s.ua.substring(0, 30) + "..." : s.ua;
+
+    const date = new Date(s.created * 1000).toLocaleString();
+    
+    // Выбор иконки
+    let iconPath = "M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"; // Monitor
+    if (iconType === "mobile") {
+        iconPath = "M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z"; // Phone
+    } else if (iconType === "terminal") {
+        iconPath = "M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"; // Terminal
+    }
+
+    return `
+    <div class="flex items-center justify-between p-3 rounded-xl border ${isCurrent ? 'bg-green-50/50 dark:bg-green-900/10 border-green-200 dark:border-green-800' : 'bg-gray-50 dark:bg-black/20 border-gray-100 dark:border-white/5'}">
+        <div class="flex items-center gap-3 overflow-hidden">
+            <div class="p-2 rounded-lg ${isCurrent ? 'bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400' : 'bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400'} flex-shrink-0">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="${iconPath}" />
+                </svg>
+            </div>
+            <div class="min-w-0">
+                <div class="text-sm font-bold text-gray-900 dark:text-white truncate" title="${s.ua}">${deviceText}</div>
+                <div class="text-xs text-gray-500 dark:text-gray-400 flex items-center gap-2">
+                    <span class="font-mono">${s.ip}</span>
+                    <span>•</span>
+                    <span>${date}</span>
+                </div>
+            </div>
+        </div>
+        
+        <div class="flex-shrink-0 ml-2">
+            ${isCurrent 
+                ? `<span class="px-2 py-1 bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400 text-[10px] font-bold uppercase rounded-lg tracking-wider">${I18N.web_session_current || 'Current'}</span>`
+                : `<button onclick="revokeSession('${s.id}')" class="p-2 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition" title="${I18N.web_session_revoke || 'Revoke'}">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    </svg>
+                   </button>`
+            }
+        </div>
+    </div>
+    `;
+}
+
+// Модальное окно
+window.openSessionsModal = function() {
+    const modal = document.getElementById('sessionsModal');
+    const content = document.getElementById('sessionsModalContent');
+    const btnRevokeAll = document.getElementById('btnRevokeAllSessions');
+    
+    if (modal && content) {
+        // Рендерим все сессии в модалку
+        if (ALL_SESSIONS.length > 0) {
+            content.innerHTML = ALL_SESSIONS.map(s => renderSessionItem(s)).join('');
+        } else {
+            content.innerHTML = `<div class="text-center text-gray-500 py-4">No sessions</div>`;
+        }
+        
+        // Отключаем кнопку "Завершить все", если только 1 (текущая) сессия
+        if (ALL_SESSIONS.length <= 1 && btnRevokeAll) {
+            btnRevokeAll.disabled = true;
+            btnRevokeAll.classList.add('opacity-50', 'cursor-not-allowed');
+        } else if (btnRevokeAll) {
+            btnRevokeAll.disabled = false;
+            btnRevokeAll.classList.remove('opacity-50', 'cursor-not-allowed');
+            // Сброс состояния кнопки
+            const originalText = I18N.web_sessions_revoke_all || "Revoke all other";
+            btnRevokeAll.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg> ${originalText}`;
+            btnRevokeAll.className = "w-full py-3 bg-red-600 hover:bg-red-500 text-white rounded-xl font-bold shadow-lg shadow-red-500/20 transition-all duration-300 active:scale-[0.98] flex items-center justify-center gap-2";
+        }
+
+        modal.classList.remove('hidden');
+        modal.classList.add('flex');
+        document.body.style.overflow = 'hidden';
+    }
+};
+
+window.closeSessionsModal = function() {
+    const modal = document.getElementById('sessionsModal');
+    if (modal) {
+        modal.classList.add('hidden');
+        modal.classList.remove('flex');
+        document.body.style.overflow = 'auto';
+    }
+};
+
+// Завершение конкретной сессии
 async function revokeSession(token) {
     if (!await window.showModalConfirm(I18N.web_session_revoke + "?", I18N.modal_title_confirm)) return;
     
@@ -948,7 +1032,19 @@ async function revokeSession(token) {
         });
         
         if (res.ok) {
-            fetchSessions(); // Обновляем список
+            await fetchSessions(); // Обновляем данные
+            // Обновляем контент в открытой модалке
+            const content = document.getElementById('sessionsModalContent');
+            if (content && !document.getElementById('sessionsModal').classList.contains('hidden')) {
+                content.innerHTML = ALL_SESSIONS.map(s => renderSessionItem(s)).join('');
+                
+                // Проверяем кнопку Revoke All
+                const btnRevokeAll = document.getElementById('btnRevokeAllSessions');
+                if (ALL_SESSIONS.length <= 1 && btnRevokeAll) {
+                    btnRevokeAll.disabled = true;
+                    btnRevokeAll.classList.add('opacity-50', 'cursor-not-allowed');
+                }
+            }
             if (window.showToast) window.showToast("Сессия завершена");
         } else {
             const data = await res.json();
@@ -956,5 +1052,63 @@ async function revokeSession(token) {
         }
     } catch (e) {
         console.error(e);
+    }
+}
+
+// Завершение ВСЕХ сессий (кроме текущей) с анимацией
+async function revokeAllSessions() {
+    if (!await window.showModalConfirm(I18N.web_sessions_revoke_all + "?", I18N.modal_title_confirm)) return;
+
+    const btn = document.getElementById('btnRevokeAllSessions');
+    const originalText = btn ? btn.innerHTML : "";
+    
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = `<svg class="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>`;
+    }
+
+    try {
+        const res = await fetch('/api/sessions/revoke_all', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'}
+        });
+
+        if (res.ok) {
+            // Успех: Зеленая галочка и текст
+            if (btn) {
+                btn.className = "w-full py-3 bg-green-600 text-white rounded-xl font-bold shadow-lg shadow-green-500/20 transition-all duration-300 flex items-center justify-center gap-2";
+                btn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" /></svg> ${I18N.web_sessions_revoked_alert}`;
+            }
+            
+            await fetchSessions();
+            
+            // Обновляем список в модалке (там останется только текущая)
+            const content = document.getElementById('sessionsModalContent');
+            if (content) {
+                content.innerHTML = ALL_SESSIONS.map(s => renderSessionItem(s)).join('');
+            }
+
+            // Через 2 секунды закрываем модалку или возвращаем кнопку (но она уже disabled, т.к. 1 сессия)
+            setTimeout(() => {
+                if (btn) {
+                    btn.disabled = true;
+                    btn.classList.add('opacity-50', 'cursor-not-allowed');
+                }
+            }, 2000);
+
+        } else {
+            const data = await res.json();
+            await window.showModalAlert(data.error || "Failed", "Error");
+            if (btn) {
+                btn.disabled = false;
+                btn.innerHTML = originalText;
+            }
+        }
+    } catch (e) {
+        console.error(e);
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = originalText;
+        }
     }
 }

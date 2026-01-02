@@ -21,16 +21,16 @@
     <div class="fixed bottom-[-10%] right-[-10%] w-96 h-96 rounded-full mix-blend-multiply dark:mix-blend-screen filter blur-3xl animate-float delay-2000 pointer-events-none opacity-70 dark:opacity-100 bg-rose-300 dark:bg-blue-600/20"></div>
 
     <nav class="bg-white/70 dark:bg-black/40 backdrop-blur-xl border-b border-white/20 dark:border-white/5 sticky top-0 z-40 shadow-sm dark:shadow-none">
-        <div class="max-w-6xl mx-auto px-4 py-3 flex flex-wrap justify-between items-center gap-3">
-            <div class="flex items-center space-x-2">
-                <a href="/" class="text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white transition flex items-center gap-2 text-sm font-medium">
+        <div class="max-w-7xl mx-auto px-3 py-2 sm:px-4 sm:py-3 flex flex-nowrap justify-between items-center gap-2">
+            <div class="flex items-center space-x-2 shrink-0">
+                <a href="/" class="text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white transition flex items-center gap-2 text-sm font-medium whitespace-nowrap">
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" /></svg>
-                    {web_back}
+                    <span class="hidden sm:inline">{web_back}</span>
                 </a>
-                <span class="font-bold text-lg ml-2">{web_settings_page_title}</span>
+                <span class="font-bold text-lg ml-2 whitespace-nowrap">{web_settings_page_title}</span>
             </div>
             
-            <div class="flex items-center gap-3 sm:gap-4">
+            <div class="flex items-center gap-1 sm:gap-4 shrink-0">
                 
                 <div class="relative group">
                     <button id="notifBtn" class="notif-btn flex items-center justify-center w-8 h-8 rounded-lg hover:bg-black/5 dark:hover:bg-white/10 transition text-gray-600 dark:text-gray-400">
@@ -82,7 +82,7 @@
                     </button>
                 </form>
 
-                <div class="hidden sm:flex items-center gap-2 bg-white/60 dark:bg-white/5 px-3 py-1.5 rounded-full border border-white/40 dark:border-white/5 shadow-sm dark:shadow-none max-w-[140px] sm:max-w-none">
+                <div class="hidden md:flex items-center gap-2 bg-white/60 dark:bg-white/5 px-3 py-1.5 rounded-full border border-white/40 dark:border-white/5 shadow-sm dark:shadow-none max-w-[140px] sm:max-w-none">
                     {user_avatar}
                     <span class="text-xs font-medium text-gray-700 dark:text-gray-300 truncate">{user_name}</span>
                 </div>
@@ -130,11 +130,16 @@
                         </svg>
                         {web_sessions_title}
                     </h2>
-                    <div id="sessionsList" class="space-y-4">
+                    <div id="sessionsList" class="space-y-4 mb-4">
                         <div class="text-center py-4">
                             <svg class="animate-spin h-6 w-6 text-gray-400 mx-auto" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
                         </div>
                     </div>
+                    
+                    <button onclick="openSessionsModal()" class="w-full py-2.5 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 text-green-600 dark:text-green-400 hover:bg-green-100 dark:hover:bg-green-900/40 rounded-xl font-bold transition flex items-center justify-center gap-2 mt-auto">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16" /></svg>
+                        {web_sessions_view_all}
+                    </button>
                 </div>
 
                 <div class="bg-white/60 dark:bg-white/5 backdrop-blur-md border border-white/40 dark:border-white/10 rounded-2xl p-4 shadow-lg dark:shadow-none flex flex-col sm:flex-row items-center justify-between gap-4">
@@ -336,15 +341,26 @@
         </div>
     </div>
 
-    <div id="genericHintModal" class="fixed inset-0 z-[100] hidden items-center justify-center bg-black/50 dark:bg-black/80 backdrop-blur-sm p-4" onclick="if(event.target === this) closeHintModal()">
-        <div class="bg-white dark:bg-gray-800 border border-white/20 dark:border-white/10 rounded-2xl shadow-2xl w-full max-w-md relative flex flex-col backdrop-blur-xl">
-            <div class="p-4 border-b border-gray-200 dark:border-white/5 flex justify-between items-center rounded-t-2xl">
-                <h3 id="hintModalTitle" class="text-lg font-bold text-gray-900 dark:text-white">Информация</h3>
-                <button onclick="closeHintModal()" class="text-gray-400 hover:text-gray-600 dark:hover:text-white transition p-1">
+    <div id="sessionsModal" onclick="if(event.target === this) closeSessionsModal()" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/30 dark:bg-black/80 backdrop-blur-sm p-4">
+        <div class="bg-white/90 dark:bg-gray-900 border border-white/20 dark:border-white/10 rounded-2xl shadow-2xl w-full max-w-2xl relative flex flex-col max-h-[85vh] backdrop-blur-xl">
+            <div class="p-5 border-b border-gray-200 dark:border-white/5 flex justify-between items-center rounded-t-2xl z-10 bg-white/50 dark:bg-black/20">
+                <h3 class="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>
+                    {web_sessions_modal_title}
+                </h3>
+                <button onclick="closeSessionsModal()" class="text-gray-400 hover:text-gray-600 dark:hover:text-white transition p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-white/10">
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
                 </button>
             </div>
-            <div id="hintModalContent" class="p-4 text-sm text-gray-700 dark:text-gray-300">
+            
+            <div class="p-6 overflow-y-auto no-scrollbar space-y-4" id="sessionsModalContent">
+                </div>
+
+            <div class="p-4 border-t border-gray-200 dark:border-white/5 bg-gray-50/50 dark:bg-black/20 rounded-b-2xl">
+                <button id="btnRevokeAllSessions" onclick="revokeAllSessions()" class="w-full py-3 bg-red-600 hover:bg-red-500 text-white rounded-xl font-bold shadow-lg shadow-red-500/20 transition-all duration-300 active:scale-[0.98] flex items-center justify-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                    {web_sessions_revoke_all}
+                </button>
             </div>
         </div>
     </div>

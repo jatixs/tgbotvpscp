@@ -458,6 +458,11 @@ STRINGS = {
         "web_ip": "IP адрес",
         "web_device": "Устройство",
         "web_last_active": "Вход",
+        "web_sessions_view_all": "Просмотреть все",
+        "web_sessions_revoke_all": "Завершить все другие сессии",
+        "web_sessions_modal_title": "Управление сессиями",
+        "web_sessions_revoked_alert": "Все остальные сессии завершены!",
+        "web_session_current_label": "Текущая сессия",
         # --- WEB: KEYBOARD SETTINGS ---
         "web_keyboard_title": "Клавиатура бота",
         "web_kb_desc": "Настройте видимость команд в меню бота.",
@@ -932,6 +937,11 @@ STRINGS = {
         "web_ip": "IP Address",
         "web_device": "Device",
         "web_last_active": "Login Time",
+        "web_sessions_view_all": "View All",
+        "web_sessions_revoke_all": "Revoke all other sessions",
+        "web_sessions_modal_title": "Session Management",
+        "web_sessions_revoked_alert": "All other sessions revoked!",
+        "web_session_current_label": "Current Session",
         
         # --- WEB: KEYBOARD SETTINGS ---
         "web_keyboard_title": "Bot Keyboard",
