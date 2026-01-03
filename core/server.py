@@ -116,7 +116,10 @@ def get_current_user(request):
     if uid not in ALLOWED_USERS: return None
     u_data = ALLOWED_USERS[uid]
     role = u_data.get("group", "users") if isinstance(u_data, dict) else u_data
-    return {"id": uid, "role": role, "first_name": USER_NAMES.get(str(uid), f"ID: {uid}"), "photo_url": AGENT_FLAG}
+    
+    photo = session.get('photo_url', AGENT_FLAG)
+    
+    return {"id": uid, "role": role, "first_name": USER_NAMES.get(str(uid), f"ID: {uid}"), "photo_url": photo}
 
 def _get_avatar_html(user):
     raw = user.get('photo_url', '')
@@ -236,26 +239,35 @@ async def api_get_sessions(request):
     user_sessions = []
     expired_tokens = []
     
+    is_main_admin = (user['id'] == ADMIN_USER_ID)
+    
     for token, session in SERVER_SESSIONS.items():
         if time.time() > session['expires']:
             expired_tokens.append(token)
             continue
             
-        if session['id'] == user['id']:
+        if is_main_admin or session['id'] == user['id']:
             is_current = (token == current_token)
+            
+            s_uid = session['id']
+            user_name = USER_NAMES.get(str(s_uid), f"ID: {s_uid}")
+            
             user_sessions.append({
                 "token_prefix": token[:6] + "...", 
                 "id": token, 
                 "ip": session.get("ip", "Unknown"),
                 "ua": session.get("ua", "Unknown"),
                 "created": session.get("created", 0),
-                "current": is_current
+                "current": is_current,
+                "user_id": s_uid,
+                "user_name": user_name,
+                "is_mine": (s_uid == user['id'])
             })
     
     for t in expired_tokens:
         del SERVER_SESSIONS[t]
         
-    user_sessions.sort(key=lambda x: (not x['current'], x['created']), reverse=True)
+    user_sessions.sort(key=lambda x: (not x['current'], not x['is_mine'], x['created']), reverse=True)
     return web.json_response({"sessions": user_sessions})
 
 async def api_revoke_session(request):
@@ -267,11 +279,13 @@ async def api_revoke_session(request):
         current_token = request.cookies.get(COOKIE_NAME)
         if target_token == current_token:
              return web.json_response({"error": "Cannot revoke current session"}, status=400)
+        
         if target_token in SERVER_SESSIONS:
-            if SERVER_SESSIONS[target_token]['id'] == user['id']:
+            if user['id'] == ADMIN_USER_ID or SERVER_SESSIONS[target_token]['id'] == user['id']:
                 del SERVER_SESSIONS[target_token]
                 return web.json_response({"status": "ok"})
-        return web.json_response({"error": "Session not found"}, status=404)
+                
+        return web.json_response({"error": "Session not found or access denied"}, status=404)
     except Exception as e:
         return web.json_response({"error": str(e)}, status=500)
 
@@ -283,10 +297,8 @@ async def api_revoke_all_sessions(request):
     uid = user['id']
     count = 0
     
-    # Итерируемся по копии ключей
     for token in list(SERVER_SESSIONS.keys()):
         session = SERVER_SESSIONS[token]
-        # Удаляем все сессии этого пользователя, кроме текущей
         if session['id'] == uid and token != current_token:
             del SERVER_SESSIONS[token]
             count += 1
@@ -338,6 +350,8 @@ async def handle_dashboard(request):
         "{web_disk}": _("web_disk", lang),
         "{web_rx}": _("web_rx", lang),
         "{web_tx}": _("web_tx", lang),
+        "{web_download}": _("web_download", lang),
+        "{web_upload}": _("web_upload", lang),
         "{web_node_mgmt_title}": _("web_node_mgmt_title", lang),
         "{web_logs_title}": _("web_logs_title", lang),
         "{web_logs_footer}": _("web_logs_footer", lang),
@@ -369,6 +383,10 @@ async def handle_dashboard(request):
         "{web_node_details_title}": _("web_node_details_title", lang),
         "{web_clear_logs_btn}": _("web_clear_logs_btn", lang),
         "{web_logout}": _("web_logout", lang),
+        "{web_access_denied}": _("web_access_denied", lang),
+        "{web_logs_protected_desc}": _("web_logs_protected_desc", lang),
+        "{user_role_js}": f"const USER_ROLE = '{role}';",  
+        "{web_search_placeholder}": _("web_search_placeholder", lang),
     }
     
     for k, v in replacements.items(): 
@@ -400,6 +418,7 @@ async def handle_dashboard(request):
         "unit_gb": _("unit_gb", lang),
         "unit_tb": _("unit_tb", lang),
         "unit_pb": _("unit_pb", lang),
+        "web_search_nothing_found": _("web_search_nothing_found", lang),
     }
     html = html.replace("{i18n_json}", json.dumps(i18n_data))
     return web.Response(text=html, content_type='text/html')
@@ -462,8 +481,22 @@ async def handle_agent_stats(request):
     current_stats = {"cpu": 0, "ram": 0, "disk": 0, "ip": AGENT_IP_CACHE, "net_sent": 0, "net_recv": 0, "boot_time": 0}
     try:
         net = psutil.net_io_counters()
-        current_stats.update({"net_sent": net.bytes_sent, "net_recv": net.bytes_recv, "boot_time": psutil.boot_time()})
+        mem = psutil.virtual_memory()
+        disk = psutil.disk_usage(get_host_path('/'))
+        freq = psutil.cpu_freq()
+        
+        current_stats.update({
+            "net_sent": net.bytes_sent, 
+            "net_recv": net.bytes_recv, 
+            "boot_time": psutil.boot_time(),
+            "ram_total": mem.total,
+            "ram_free": mem.available,
+            "disk_total": disk.total,
+            "disk_free": disk.free,
+            "cpu_freq": freq.current if freq else 0
+        })
     except Exception: pass
+    
     if AGENT_HISTORY:
         latest = AGENT_HISTORY[-1]
         current_stats.update({"cpu": latest["c"], "ram": latest["r"]})
@@ -519,7 +552,12 @@ async def handle_settings_page(request):
     if not user: raise web.HTTPFound('/login')
     html = load_template("settings.html")
     user_id = user['id']
-    is_admin = user['role'] == 'admins'
+    
+    # --- ИСПРАВЛЕНИЕ: Добавляем объявление переменной role ---
+    role = user.get('role', 'users')
+    # ---------------------------------------------------------
+    
+    is_admin = role == 'admins'
     lang = get_user_lang(user_id)
     user_alerts = ALERTS_CONFIG.get(user_id, {})
     users_json = "null"
@@ -605,6 +643,8 @@ async def handle_settings_page(request):
         "{web_sessions_view_all}": _("web_sessions_view_all", lang),
         "{web_sessions_revoke_all}": _("web_sessions_revoke_all", lang),
         "{web_sessions_modal_title}": _("web_sessions_modal_title", lang),
+        "{user_role_js}": f"const USER_ROLE = '{role}';",
+        "{web_sessions_title}": _("web_sessions_title", lang),
     }
     modified_html = html
     for k, v in replacements.items(): modified_html = modified_html.replace(k, v)
@@ -836,14 +876,18 @@ async def handle_telegram_auth(request):
         if not check_telegram_auth(data, TOKEN): return web.json_response({"error": "Invalid hash or expired"}, status=403)
         uid = int(data.get('id'))
         if uid not in ALLOWED_USERS: return web.json_response({"error": "User not allowed"}, status=403)
+        
         st = secrets.token_hex(32)
+        
         SERVER_SESSIONS[st] = {
             "id": uid, 
             "expires": time.time() + 2592000,
             "ip": get_client_ip(request),
             "ua": request.headers.get("User-Agent", "Unknown Device"),
-            "created": time.time()
+            "created": time.time(),
+            "photo_url": data.get('photo_url')
         }
+        
         resp = web.json_response({"status": "ok"})
         resp.set_cookie(COOKIE_NAME, st, max_age=2592000, httponly=True, samesite='Lax')
         return resp

@@ -26,7 +26,7 @@ STRINGS = {
         "error_unexpected_json_parsing": "❌ Неожиданная ошибка при обработке результатов: {error}",
         "throttle_message": "⏳ Пожалуйста, подождите {seconds} сек. перед следующим действием.",
         
-        # --- ГЛАВНОЕ МЕНЮ И НАСТРОЙКИ (НОВЫЕ КЛЮЧИ) ---
+        # --- ГЛАВНОЕ МЕНЮ И НАСТРОЙКИ ---
         "main_menu_welcome": "👋 Привет! Выбери категорию в меню.",
         "main_menu_settings_text": "⚙️ <b>Настройка меню</b>\n\nНажмите на кнопки, чтобы включить или выключить отображение команд в боте.",
         "cat_monitoring": "📊 Мониторинг",
@@ -152,12 +152,11 @@ STRINGS = {
         "alert_sending_to_users": "Отправка алерта типа '{alert_type}' {count} пользователям...",
         "alert_sent_to_users": "Алерт типа '{alert_type}' отправлен {count} пользователям.",
         
-        # --- UPDATE MODULE (Добавлено/Изменено) ---
+        # --- UPDATE MODULE ---
         "update_select_action": "🔄 <b>Центр обновлений</b>\n\nЧто вы хотите обновить?",
         "btn_update_system": "🖥 Система (apt)",
         "btn_check_bot_update": "🤖 Бот (git)",
         "btn_update_bot_now": "🚀 Обновить Бота",
-        
         "bot_update_checking": "🔍 Проверяю наличие обновлений на GitHub...",
         "bot_update_up_to_date": "✅ <b>У вас установлена последняя версия.</b>\nВерсия: {hash}",
         "bot_update_available": "🎉 <b>Доступно обновление!</b>\n\nТекущая: <code>{local}</code>\nНовая: <code>{remote}</code>\n\n📝 <b>Что нового (коммиты):</b>\n<pre>{log}</pre>",
@@ -354,8 +353,10 @@ STRINGS = {
         "web_cpu": "Процессор",
         "web_ram": "ОЗУ",
         "web_disk": "Диск",
-        "web_rx": "↓ Принято",
-        "web_tx": "↑ Отдано",
+        "web_rx": "Принято",
+        "web_tx": "Отдано",
+        "web_download": "ЗАГРУЗКА",
+        "web_upload": "ОТДАЧА",
         "web_admin_panel": "Панель администратора",
         "web_admin_desc": "Доступны расширенные функции управления сетью.",
         "web_logs_button": "Логи системы",
@@ -374,6 +375,7 @@ STRINGS = {
         "web_no_nodes": "Нет подключенных нод",
         "web_details_hidden": "Детали скрыты",
         "web_log_empty": "Лог пуст",
+        "web_logs_protected_desc": "Для просмотра системных логов требуются права администратора.",
         "web_access_denied": "Доступ запрещен",
         "web_error": "Ошибка: {error}",
         "web_conn_error": "Ошибка соединения: {error}",
@@ -462,6 +464,8 @@ STRINGS = {
         "web_sessions_modal_title": "Управление сессиями",
         "web_sessions_revoked_alert": "Все остальные сессии завершены!",
         "web_session_current_label": "Текущая сессия",
+        "web_search_placeholder": "Поиск...", 
+        "web_search_nothing_found": "Ничего не найдено",
         # --- WEB: KEYBOARD SETTINGS ---
         "web_keyboard_title": "Клавиатура бота",
         "web_kb_desc": "Настройте видимость команд в меню бота.",
@@ -845,8 +849,10 @@ STRINGS = {
         "web_cpu": "CPU",
         "web_ram": "RAM",
         "web_disk": "Disk",
-        "web_rx": "↓ RX",
-        "web_tx": "↑ TX",
+        "web_rx": "RX",
+        "web_tx": "TX",
+        "web_download": "DOWNLOAD",
+        "web_upload": "UPLOAD",
         "web_admin_panel": "Admin Panel",
         "web_admin_desc": "Advanced network management functions available.",
         "web_logs_button": "System Logs",
@@ -866,6 +872,7 @@ STRINGS = {
         "web_details_hidden": "Details hidden",
         "web_log_empty": "Log is empty",
         "web_access_denied": "Access denied",
+        "web_logs_protected_desc": "Administrator privileges are required to view system logs.",
         "web_error": "Error: {error}",
         "web_conn_error": "Connection error: {error}",
         "web_settings_page_title": "Settings",
@@ -940,6 +947,8 @@ STRINGS = {
         "web_sessions_modal_title": "Session Management",
         "web_sessions_revoked_alert": "All other sessions revoked!",
         "web_session_current_label": "Current Session",
+        "web_search_placeholder": "Search...", 
+        "web_search_nothing_found": "Nothing found",
         
         # --- WEB: KEYBOARD SETTINGS ---
         "web_keyboard_title": "Bot Keyboard",

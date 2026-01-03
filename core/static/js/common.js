@@ -1,324 +1,115 @@
-// --- ИНИЦИАЛИЗАЦИЯ ПРИ ЗАГРУЗКЕ ---
+/* /core/static/js/common.js */
+
+// --- FIX: Tailwind Warning Suppression ---
+(function() {
+    const originalWarn = console.warn;
+    console.warn = function(...args) {
+        if (args[0] && typeof args[0] === 'string' && args[0].includes('cdn.tailwindcss.com')) return;
+        originalWarn.apply(console, args);
+    };
+})();
+
+// --- GLOBAL VARIABLES ---
 const themes = ['dark', 'light', 'system'];
 let currentTheme = localStorage.getItem('theme') || 'system';
-
-// Переменная для отслеживания времени последнего полученного уведомления
 let latestNotificationTime = Math.floor(Date.now() / 1000);
+const pageCache = new Map();
 
+// --- MODAL STATE VARIABLES ---
+let modalCloseTimer = null;    // Таймер для предотвращения мерцания
+let activeMobileModal = null;  // Активная модалка (для Viewport API)
+let bodyScrollTop = 0;         // Позиция скролла для фиксации body
+
+// --- INITIALIZATION ---
 document.addEventListener("DOMContentLoaded", () => {
     applyThemeUI(currentTheme);
-    
-    // Фикс флагов Windows
     if (typeof window.parsePageEmojis === 'function') { window.parsePageEmojis(); } else { parsePageEmojis(); }
-
-    // Инициализация глобальных компонентов
     initNotifications(); 
     initHolidayMood(); 
     initAddNodeLogic();
-
-    // Автозагрузка системных логов (если есть контейнер)
     if (document.getElementById('logsContainer')) {
         if (typeof window.switchLogType === 'function') { window.switchLogType('bot'); }
     }
+    pageCache.set(window.location.href, document.documentElement.outerHTML);
 });
 
+// --- HELPER FUNCTIONS ---
 function parsePageEmojis() {
     if (window.twemoji) {
-        window.twemoji.parse(document.body, { 
-            folder: 'svg', ext: '.svg',
-            base: 'https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/'
-        });
+        window.twemoji.parse(document.body, { folder: 'svg', ext: '.svg', base: 'https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/' });
     }
 }
 
-// --- ПЕРЕКЛЮЧАТЕЛЬ ЯЗЫКА ---
 async function setLanguage(lang) {
     try {
-        const response = await fetch('/api/settings/language', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ lang: lang })
-        });
-        if (response.ok) {
-            window.location.reload(); 
-        } else {
-            console.error("Failed to set language");
-        }
-    } catch (e) {
-        console.error("Language switch error:", e);
-    }
+        await fetch('/api/settings/language', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ lang: lang }) });
+        window.location.reload(); 
+    } catch (e) { console.error(e); }
 }
 window.setLanguage = setLanguage;
 
-// --- КОПИРОВАНИЕ ТОКЕНА ---
-function copyToken(el) {
-    const tokenText = document.getElementById('modalToken').innerText;
-    if (!tokenText || tokenText === '...') return;
-    copyTextToClipboard(tokenText);
-}
-
+function copyToken(el) { copyTextToClipboard(document.getElementById('modalToken').innerText); }
 function copyTextToClipboard(text) {
-    if (navigator.clipboard && window.isSecureContext) {
-        navigator.clipboard.writeText(text).then(() => {
-            showCopyFeedback();
-        });
-    } else {
-        const textArea = document.createElement("textarea");
-        textArea.value = text;
-        textArea.style.position = "fixed";
-        document.body.appendChild(textArea);
-        textArea.focus();
-        textArea.select();
-        try {
-            document.execCommand('copy');
-            showCopyFeedback();
-        } catch (err) {
-            console.error('Fallback copy failed', err);
-        }
-        document.body.removeChild(textArea);
-    }
+    if (navigator.clipboard && window.isSecureContext) { navigator.clipboard.writeText(text).then(showCopyFeedback); } 
+    else { const t = document.createElement("textarea"); t.value = text; t.style.position = "fixed"; document.body.appendChild(t); t.focus(); t.select(); try { document.execCommand('copy'); showCopyFeedback(); } catch (e) {} document.body.removeChild(t); }
 }
 window.copyTextToClipboard = copyTextToClipboard;
-
-function showCopyFeedback() {
-    if (window.showToast) window.showToast(typeof I18N !== 'undefined' ? I18N.web_copied : "Скопировано!");
-}
+function showCopyFeedback() { if (window.showToast) window.showToast(typeof I18N !== 'undefined' ? I18N.web_copied : "Скопировано!"); }
 window.copyToken = copyToken;
 
-// --- ВСПЛЫВАЮЩИЕ УВЕДОМЛЕНИЯ (TOASTS) - ФИНАЛЬНАЯ ВЕРСИЯ ---
+// --- TOASTS ---
 let toastContainer = null;
-
 function getToastContainer() {
     if (!toastContainer) {
         toastContainer = document.createElement('div');
-        // Контейнер:
-        // fixed bottom-4 right-4: отступ от края экрана
-        // items-end: выравнивание по правому краю (чтобы уведомления разной ширины выглядели аккуратно)
-        // z-[9999]: максимальный слой
-        // max-w-[calc...]: защита от вылезания за экран на мобилках (100% ширины минус отступы)
         toastContainer.className = 'fixed bottom-4 right-4 z-[9999] flex flex-col items-end gap-2 pointer-events-none max-w-[calc(100vw-2rem)]';
         document.body.appendChild(toastContainer);
     }
     return toastContainer;
 }
-
 function showToast(message) {
     const container = getToastContainer();
-    
     const toast = document.createElement('div');
-    
-    // Стили тоста:
-    // w-auto: ширина подстраивается под контент
-    // max-w-sm: но не шире 384px (на десктопе)
-    // w-full (внутри flex-контейнера с max-w): на мобилках будет сжиматься, если текст длинный
-    // transform translate-y-10 opacity-0: начальное скрытое состояние для анимации
     toast.className = 'pointer-events-auto flex items-center gap-3 px-4 py-3 rounded-2xl shadow-xl backdrop-blur-md border transition-all duration-500 ease-out transform translate-y-10 opacity-0 bg-white/90 dark:bg-gray-800/90 border-gray-200 dark:border-white/10 w-auto max-w-sm';
-    
-    // Иконка
-    const icon = `
-    <div class="p-1.5 rounded-full bg-blue-100 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400 flex-shrink-0">
-        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-        </svg>
-    </div>`;
-
-    // Кнопка закрытия
-    const closeBtn = `
-    <button onclick="closeToast(this.closest('div'))" class="text-gray-400 hover:text-gray-600 dark:hover:text-white transition p-1 rounded-lg hover:bg-black/5 dark:hover:bg-white/10 ml-1 flex-shrink-0">
-        <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-        </svg>
-    </button>`;
-
-    toast.innerHTML = `
-        ${icon}
-        <div class="flex-1 min-w-0">
-            <p class="text-sm font-medium text-gray-900 dark:text-white leading-snug break-words">${message}</p>
-        </div>
-        ${closeBtn}
-    `;
-    
+    const icon = `<div class="p-1.5 rounded-full bg-blue-100 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400 flex-shrink-0"><svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg></div>`;
+    const closeBtn = `<button onclick="closeToast(this.closest('div'))" class="text-gray-400 hover:text-gray-600 dark:hover:text-white transition p-1 rounded-lg hover:bg-black/5 dark:hover:bg-white/10 ml-1 flex-shrink-0"><svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg></button>`;
+    toast.innerHTML = `${icon}<div class="flex-1 min-w-0"><p class="text-sm font-medium text-gray-900 dark:text-white leading-snug break-words">${message}</p></div>${closeBtn}`;
     container.appendChild(toast);
-    
-    // --- ИСПРАВЛЕНИЕ ВСПЫШКИ ---
-    // Используем double requestAnimationFrame.
-    // Это гарантирует, что браузер успеет отрисовать элемент с классом opacity-0 (начальное состояние)
-    // перед тем, как мы уберем этот класс для запуска анимации.
-    requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-            toast.classList.remove('translate-y-10', 'opacity-0');
-        });
-    });
-
-    // Автоматическое закрытие через 5 секунд
-    const autoClose = setTimeout(() => {
-        closeToast(toast);
-    }, 5000);
-
-    // Пауза при наведении
+    requestAnimationFrame(() => { requestAnimationFrame(() => { toast.classList.remove('translate-y-10', 'opacity-0'); }); });
+    const autoClose = setTimeout(() => { closeToast(toast); }, 5000);
     toast.onmouseenter = () => clearTimeout(autoClose);
-    toast.onmouseleave = () => {
-        setTimeout(() => closeToast(toast), 2000);
-    };
+    toast.onmouseleave = () => { setTimeout(() => closeToast(toast), 2000); };
 }
-
-function closeToast(toastElement) {
-    if (!toastElement) return;
-    // Запуск анимации исчезновения
-    toastElement.classList.add('opacity-0', 'translate-x-10');
-    
-    // Удаление из DOM после завершения CSS-транзишн (500мс)
-    setTimeout(() => {
-        if (toastElement.parentElement) {
-            toastElement.remove();
-            
-            // Если контейнер пуст, можно его тоже почистить (опционально), 
-            // но мы оставляем его для производительности.
-        }
-    }, 500); 
-}
+function closeToast(el) { if (!el) return; el.classList.add('opacity-0', 'translate-x-10'); setTimeout(() => { if (el.parentElement) el.remove(); }, 500); }
 window.showToast = showToast;
 window.closeToast = closeToast;
 
-// --- ПОДСКАЗКИ (ХИНТЫ) ---
-function toggleHint(event, hintId) {
-    if (event) event.stopPropagation();
-    const hintElement = document.getElementById(hintId);
-    if (!hintElement) return;
+// --- MODALS BASE ---
+function toggleHint(e, id) { if(e) e.stopPropagation(); const el = document.getElementById(id); if(!el) return; const m = document.getElementById('genericHintModal'); const c = document.getElementById('hintModalContent'); if(m && c) { c.innerHTML = el.innerHTML; document.getElementById('hintModalTitle').innerText = el.closest('div')?.querySelector('span, label')?.innerText || 'Info'; animateModalOpen(m, false); } }
+function closeHintModal() { const m = document.getElementById('genericHintModal'); if(m) { animateModalClose(m); } }
+window.toggleHint = toggleHint; window.closeHintModal = closeHintModal;
 
-    const modal = document.getElementById('genericHintModal');
-    const content = document.getElementById('hintModalContent');
-    const title = document.getElementById('hintModalTitle');
-
-    if (modal && content) {
-        content.innerHTML = hintElement.innerHTML;
-        const parentLabel = hintElement.closest('div')?.querySelector('span, label')?.innerText;
-        title.innerText = parentLabel || (typeof I18N !== 'undefined' ? I18N.modal_title_alert : 'Информация');
-        modal.classList.remove('hidden');
-        modal.classList.add('flex');
-        document.body.style.overflow = 'hidden';
-    }
+function initAddNodeLogic() { const i = document.getElementById('newNodeNameDash'); if(i) { i.addEventListener('input', validateNodeInput); i.addEventListener('keydown', (e) => { if(e.key==='Enter' && !document.getElementById('btnAddNodeDash').disabled) addNodeDash(); }); } }
+function openAddNodeModal() { 
+    const m = document.getElementById('addNodeModal'); 
+    if(m) { 
+        document.getElementById('nodeResultDash')?.classList.add('hidden'); 
+        const i = document.getElementById('newNodeNameDash'); 
+        if(i) { i.value=''; validateNodeInput(); }
+        animateModalOpen(m, true); 
+        if(i) setTimeout(() => i.focus(), 100);
+    } 
 }
+function closeAddNodeModal() { const m = document.getElementById('addNodeModal'); if(m) { animateModalClose(m); } }
+function validateNodeInput() { const i = document.getElementById('newNodeNameDash'); const b = document.getElementById('btnAddNodeDash'); if(!i || !b) return; if(i.value.trim().length >= 2) { b.disabled=false; b.classList.replace('bg-gray-200','bg-purple-600'); b.classList.replace('text-gray-400','text-white'); b.classList.remove('cursor-not-allowed'); } else { b.disabled=true; b.classList.replace('bg-purple-600','bg-gray-200'); b.classList.replace('text-white','text-gray-400'); b.classList.add('cursor-not-allowed'); } }
+window.openAddNodeModal=openAddNodeModal; window.closeAddNodeModal=closeAddNodeModal; window.validateNodeInput=validateNodeInput;
+async function addNodeDash() { const i = document.getElementById('newNodeNameDash'); const n = i.value.trim(); if(!n) return; try { const r = await fetch('/api/nodes/add', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:n})}); const d = await r.json(); if(r.ok) { document.getElementById('nodeResultDash').classList.remove('hidden'); document.getElementById('newNodeTokenDash').innerText = d.token; document.getElementById('newNodeCmdDash').innerText = d.command; if(typeof NODES_DATA!=='undefined') NODES_DATA.push({token:d.token,name:n,ip:'Unknown'}); if(typeof renderNodes==='function') renderNodes(); if(typeof fetchNodesList==='function') fetchNodesList(); i.value=''; validateNodeInput(); } else { window.showModalAlert(d.error, 'Error'); } } catch(e) { window.showModalAlert(e, 'Error'); } }
 
-function closeHintModal() {
-    const modal = document.getElementById('genericHintModal');
-    if (modal) {
-        modal.classList.add('hidden');
-        modal.classList.remove('flex');
-        document.body.style.overflow = 'auto';
-    }
-}
-window.toggleHint = toggleHint;
-window.closeHintModal = closeHintModal;
-
-// --- ЛОГИКА ДОБАВЛЕНИЯ НОДЫ ---
-function initAddNodeLogic() {
-    const input = document.getElementById('newNodeNameDash');
-    if (input) {
-        input.removeEventListener('input', validateNodeInput); 
-        input.addEventListener('input', validateNodeInput);
-        input.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter' && !document.getElementById('btnAddNodeDash').disabled) {
-                addNodeDash();
-            }
-        });
-    }
-}
-
-function openAddNodeModal() {
-    const modal = document.getElementById('addNodeModal');
-    if (modal) {
-        modal.classList.remove('hidden');
-        modal.classList.add('flex');
-        document.body.style.overflow = 'hidden';
-        const resDiv = document.getElementById('nodeResultDash');
-        if(resDiv) resDiv.classList.add('hidden');
-        const input = document.getElementById('newNodeNameDash');
-        if(input) {
-            input.value = '';
-            input.focus();
-            validateNodeInput();
-        }
-    }
-}
-window.openAddNodeModal = openAddNodeModal;
-
-function closeAddNodeModal() {
-    const modal = document.getElementById('addNodeModal');
-    if (modal) {
-        modal.classList.add('hidden');
-        modal.classList.remove('flex');
-        document.body.style.overflow = 'auto';
-    }
-}
-window.closeAddNodeModal = closeAddNodeModal;
-
-function validateNodeInput() {
-    const input = document.getElementById('newNodeNameDash');
-    const btn = document.getElementById('btnAddNodeDash');
-    if (!input || !btn) return;
-    if (input.value.trim().length >= 2) {
-        btn.disabled = false;
-        btn.classList.remove('bg-gray-200', 'dark:bg-gray-700', 'text-gray-400', 'dark:text-gray-500', 'cursor-not-allowed');
-        btn.classList.add('bg-purple-600', 'hover:bg-purple-500', 'active:scale-95', 'text-white', 'cursor-pointer', 'shadow-lg', 'shadow-purple-500/20');
-    } else {
-        btn.disabled = true;
-        btn.classList.remove('bg-purple-600', 'hover:bg-purple-500', 'active:scale-95', 'text-white', 'cursor-pointer', 'shadow-lg', 'shadow-purple-500/20');
-        btn.classList.add('bg-gray-200', 'dark:bg-gray-700', 'text-gray-400', 'dark:text-gray-500', 'cursor-not-allowed');
-    }
-}
-window.validateNodeInput = validateNodeInput;
-
-async function addNodeDash() {
-    const nameInput = document.getElementById('newNodeNameDash');
-    const name = nameInput.value.trim();
-    const btn = document.getElementById('btnAddNodeDash');
-    if (!name) return;
-    btn.disabled = true;
-    const originalText = btn.innerText;
-    btn.innerHTML = `<svg class="animate-spin h-5 w-5 text-white mx-auto" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>`;
-    try {
-        const res = await fetch('/api/nodes/add', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({name: name})
-        });
-        const data = await res.json();
-        if (res.ok) {
-            document.getElementById('nodeResultDash').classList.remove('hidden');
-            document.getElementById('newNodeTokenDash').innerText = data.token;
-            document.getElementById('newNodeCmdDash').innerText = data.command;
-            
-            if (typeof NODES_DATA !== 'undefined') {
-                NODES_DATA.push({token: data.token, name: name, ip: 'Unknown'});
-            }
-            if (typeof renderNodes === 'function') renderNodes(); 
-            if (typeof fetchNodesList === 'function') fetchNodesList(); 
-            
-            nameInput.value = "";
-            validateNodeInput();
-        } else {
-            await window.showModalAlert((typeof I18N !== 'undefined' ? I18N.web_error : "Error").replace('{error}', data.error), 'Ошибка');
-        }
-    } catch (e) {
-        await window.showModalAlert((typeof I18N !== 'undefined' ? I18N.web_conn_error : "Connection Error").replace('{error}', e), 'Ошибка соединения');
-    } finally {
-        btn.innerText = originalText;
-        validateNodeInput();
-    }
-}
-
-// --- НОВОГОДНЯЯ ЛОГИКА ---
-function isHolidayPeriod() {
-    const now = new Date();
-    return (now.getMonth() === 11 && now.getDate() === 31) || (now.getMonth() === 0 && now.getDate() <= 14);
-}
-
+// --- HOLIDAY ---
+function isHolidayPeriod() { const now = new Date(); return (now.getMonth() === 11 && now.getDate() === 31) || (now.getMonth() === 0 && now.getDate() <= 14); }
 let snowInterval = null;
-
 function initHolidayMood() {
     if (!isHolidayPeriod()) return;
-
     const themeBtn = document.getElementById('themeBtn');
     if (themeBtn && !document.getElementById('holidayBtn')) {
         const holidayBtn = document.createElement('button');
@@ -328,25 +119,15 @@ function initHolidayMood() {
         holidayBtn.onclick = toggleHolidayMood;
         themeBtn.parentNode.insertBefore(holidayBtn, themeBtn);
     }
-
     createHolidayStructure();
-    window.addEventListener('resize', () => {
-        clearTimeout(window.resizeTimer);
-        window.resizeTimer = setTimeout(createHolidayStructure, 250);
-    });
-
-    if (localStorage.getItem('holiday_mood') !== 'false') {
-        startHolidayEffects();
-        document.getElementById('holidayBtn')?.classList.add('holiday-btn-active');
-    }
+    window.addEventListener('resize', () => { clearTimeout(window.resizeTimer); window.resizeTimer = setTimeout(createHolidayStructure, 250); });
+    if (localStorage.getItem('holiday_mood') !== 'false') { startHolidayEffects(); document.getElementById('holidayBtn')?.classList.add('holiday-btn-active'); }
 }
-
 function createHolidayStructure() {
+    if (document.getElementById('holiday-lights')) return;
     const nav = document.querySelector('nav');
     if (!nav) return;
-    let lights = document.getElementById('holiday-lights');
-    if (lights) lights.remove();
-    lights = document.createElement('ul');
+    let lights = document.createElement('ul');
     lights.id = 'holiday-lights';
     lights.className = 'lights-garland';
     const spacing = window.innerWidth < 640 ? 50 : 60;
@@ -354,14 +135,8 @@ function createHolidayStructure() {
     for (let i = 0; i < count; i++) { lights.appendChild(document.createElement('li')); }
     nav.appendChild(lights);
     if (localStorage.getItem('holiday_mood') !== 'false') lights.classList.add('garland-on');
-
-    if (!document.getElementById('snow-container')) {
-        const snow = document.createElement('div');
-        snow.id = 'snow-container';
-        document.body.appendChild(snow);
-    }
+    if (!document.getElementById('snow-container')) { const snow = document.createElement('div'); snow.id = 'snow-container'; document.body.appendChild(snow); }
 }
-
 function toggleHolidayMood() {
     const newState = localStorage.getItem('holiday_mood') === 'false';
     localStorage.setItem('holiday_mood', newState);
@@ -369,20 +144,12 @@ function toggleHolidayMood() {
     if (newState) { startHolidayEffects(); btn?.classList.add('holiday-btn-active'); }
     else { stopHolidayEffects(); btn?.classList.remove('holiday-btn-active'); }
 }
-
-function startHolidayEffects() {
-    startSnow();
-    document.getElementById('holiday-lights')?.classList.add('garland-on');
-}
-
-function stopHolidayEffects() {
-    stopSnow();
-    document.getElementById('holiday-lights')?.classList.remove('garland-on');
-}
-
+function startHolidayEffects() { startSnow(); document.getElementById('holiday-lights')?.classList.add('garland-on'); }
+function stopHolidayEffects() { stopSnow(); document.getElementById('holiday-lights')?.classList.remove('garland-on'); }
 function startSnow() {
     if (snowInterval) return;
     const container = document.getElementById('snow-container');
+    if (!container) return;
     const icons = ['❄', '❅', '❆'];
     snowInterval = setInterval(() => {
         const s = document.createElement('div');
@@ -396,80 +163,54 @@ function startSnow() {
         setTimeout(() => s.remove(), 6000);
     }, 300);
 }
-
 function stopSnow() { clearInterval(snowInterval); snowInterval = null; if (document.getElementById('snow-container')) document.getElementById('snow-container').innerHTML = ''; }
 
-// --- УВЕДОМЛЕНИЯ (КОЛОКОЛЬЧИК И TOASTS) ---
+// --- NOTIFICATIONS ---
 let lastUnreadCount = -1;
 function initNotifications() {
     const btn = document.getElementById('notifBtn');
     if (!btn) return;
-    
     const newBtn = btn.cloneNode(true);
     btn.parentNode.replaceChild(newBtn, btn);
     newBtn.addEventListener('click', toggleNotifications);
-    
     const clearBtn = document.getElementById('notifClearBtn');
     if (clearBtn) {
         const newClearBtn = clearBtn.cloneNode(true);
         clearBtn.parentNode.replaceChild(newClearBtn, clearBtn);
         newClearBtn.addEventListener('click', clearNotifications);
     }
-
-    document.addEventListener('click', (e) => { 
-        if (!e.target.closest('#notifDropdown') && !e.target.closest('#notifBtn')) closeNotifications(); 
-    });
-    
+    document.addEventListener('click', (e) => { if (!e.target.closest('#notifDropdown') && !e.target.closest('#notifBtn')) closeNotifications(); });
     pollNotifications();
     setInterval(pollNotifications, 3000);
 }
-
 async function pollNotifications() {
     try {
         const res = await fetch('/api/notifications/list');
         if (!res.ok) return;
         const data = await res.json();
-        
-        // --- ЛОГИКА ОТОБРАЖЕНИЯ TOAST-УВЕДОМЛЕНИЙ ---
         if (data.notifications && data.notifications.length > 0) {
             let maxTime = latestNotificationTime;
-            
             data.notifications.forEach(notif => {
-                // Если уведомление пришло позже, чем последнее зафиксированное время
                 if (notif.time > latestNotificationTime) {
                     showToast(notif.text);
                     if (notif.time > maxTime) maxTime = notif.time;
                 }
             });
-            
             latestNotificationTime = maxTime;
         }
-        
         updateNotifUI(data.notifications, data.unread_count);
     } catch (e) {}
 }
-
 async function clearNotifications(e) {
     if (e) e.stopPropagation();
-    
     const msg = (typeof I18N !== 'undefined' && I18N.web_clear_notif_confirm) ? I18N.web_clear_notif_confirm : "Очистить все уведомления?";
     const title = (typeof I18N !== 'undefined' && I18N.modal_title_confirm) ? I18N.modal_title_confirm : "Подтверждение";
-    
-    // Используем системное модальное окно в дизайне сайта
     if (!await window.showModalConfirm(msg, title)) return;
-
     try { 
         const res = await fetch('/api/notifications/clear', { method: 'POST' }); 
-        if (res.ok) {
-            updateNotifUI([], 0); 
-            // Показываем подтверждение через новый Toast
-            if (window.showToast) window.showToast((typeof I18N !== 'undefined' && I18N.web_logs_cleared_alert) ? I18N.web_logs_cleared_alert : "Очищено!");
-        }
-    } catch (e) {
-        console.error("Clear notifications error:", e);
-    }
+        if (res.ok) { updateNotifUI([], 0); if (window.showToast) window.showToast((typeof I18N !== 'undefined' && I18N.web_logs_cleared_alert) ? I18N.web_logs_cleared_alert : "Очищено!"); }
+    } catch (e) { console.error("Clear notifications error:", e); }
 }
-
 function updateNotifUI(list, count) {
     const badge = document.getElementById('notifBadge');
     const listContainer = document.getElementById('notifList');
@@ -483,97 +224,345 @@ function updateNotifUI(list, count) {
         }
     } else badge.classList.add('hidden');
     lastUnreadCount = count;
-    
     const clearBtn = document.getElementById('notifClearBtn');
-    if (clearBtn) {
-        if (list.length > 0) clearBtn.classList.remove('hidden');
-        else clearBtn.classList.add('hidden');
-    }
-    
-    if (list.length === 0) {
-        listContainer.innerHTML = `<div class="p-4 text-center text-gray-500 text-sm">${(typeof I18N !== 'undefined' ? I18N.web_no_notifications : "Нет уведомлений")}</div>`;
-    } else {
-        listContainer.innerHTML = list.map(n => `
-            <div class="notif-item">
-                <div class="text-sm text-gray-800 dark:text-gray-200 leading-snug">${n.text}</div>
-                <div class="notif-time">${new Date(n.time * 1000).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</div>
-            </div>`).join('');
-    }
+    if (clearBtn) { if (list.length > 0) clearBtn.classList.remove('hidden'); else clearBtn.classList.add('hidden'); }
+    if (list.length === 0) { listContainer.innerHTML = `<div class="p-4 text-center text-gray-500 text-sm">${(typeof I18N !== 'undefined' ? I18N.web_no_notifications : "Нет уведомлений")}</div>`; } 
+    else { listContainer.innerHTML = list.map(n => `<div class="notif-item"><div class="text-sm text-gray-800 dark:text-gray-200 leading-snug">${n.text}</div><div class="notif-time">${new Date(n.time * 1000).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</div></div>`).join(''); }
 }
-
 function toggleNotifications() {
     const dropdown = document.getElementById('notifDropdown');
     const badge = document.getElementById('notifBadge');
     if (dropdown.classList.contains('show')) closeNotifications();
-    else {
-        dropdown.classList.remove('hidden');
-        setTimeout(() => dropdown.classList.add('show'), 10);
-        if (lastUnreadCount > 0) { fetch('/api/notifications/read', { method: 'POST' }).then(() => badge.classList.add('hidden')); }
+    else { dropdown.classList.remove('hidden'); setTimeout(() => dropdown.classList.add('show'), 10); if (lastUnreadCount > 0) { fetch('/api/notifications/read', { method: 'POST' }).then(() => badge.classList.add('hidden')); } }
+}
+function closeNotifications() { const d = document.getElementById('notifDropdown'); if (d) { d.classList.remove('show'); setTimeout(() => d.classList.add('hidden'), 200); } }
+
+function toggleTheme() { const n = (themes.indexOf(currentTheme)+1)%themes.length; currentTheme=themes[n]; localStorage.setItem('theme',currentTheme); applyThemeUI(currentTheme); document.documentElement.classList.toggle('dark', currentTheme==='dark'||(currentTheme==='system'&&window.matchMedia('(prefers-color-scheme: dark)').matches)); }
+function applyThemeUI(t) { ['iconMoon','iconSun','iconSystem'].forEach(id=>document.getElementById(id)?.classList.add('hidden')); if(t==='dark') document.getElementById('iconMoon')?.classList.remove('hidden'); else if(t==='light') document.getElementById('iconSun')?.classList.remove('hidden'); else document.getElementById('iconSystem')?.classList.remove('hidden'); }
+
+// ======================================================================
+// === MODAL ANIMATIONS & VISUAL VIEWPORT LOGIC ===
+// ======================================================================
+
+function handleVisualViewportResize() {
+    if (!activeMobileModal) return;
+    
+    const viewport = window.visualViewport;
+    // Вычисляем высоту клавиатуры (полный экран минус видимая область)
+    const keyboardHeight = window.innerHeight - viewport.height;
+    
+    // Оставляем высоту 100dvh (весь экран, чтобы фон и блюр не пропадали).
+    // Добавляем padding-bottom равный высоте клавиатуры.
+    activeMobileModal.style.height = '100dvh'; 
+    activeMobileModal.style.paddingBottom = `${Math.max(0, keyboardHeight)}px`;
+    activeMobileModal.style.top = '0';
+}
+
+function animateModalOpen(modal, isInput = false) {
+    if (!modal) return;
+    
+    if (modalCloseTimer) {
+        clearTimeout(modalCloseTimer);
+        modalCloseTimer = null;
+    }
+
+    const isMobile = window.innerWidth < 640;
+    const card = modal.firstElementChild; 
+    
+    // --- 1. BODY SCROLL LOCK (Фиксация фона) ---
+    if (isMobile) {
+        bodyScrollTop = window.scrollY;
+        document.body.style.position = 'fixed';
+        document.body.style.top = `-${bodyScrollTop}px`;
+        document.body.style.width = '100%';
+        document.body.style.overflow = 'hidden'; 
+    } else {
+        document.body.style.overflow = 'hidden';
+    }
+
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+
+    modal.style.height = '';
+    modal.style.top = '';
+    modal.style.paddingBottom = '';
+    // Очищаем transition, чтобы не мешал при десктопном режиме или закрытии
+    modal.style.transition = '';
+    modal.style.willChange = '';
+
+    // --- 2. ЛОГИКА ПОЗИЦИОНИРОВАНИЯ ---
+    if (isMobile && isInput) {
+        activeMobileModal = modal;
+        
+        // ВКЛЮЧАЕМ ПЛАВНУЮ АНИМАЦИЮ ОТСТУПА
+        // will-change помогает браузеру оптимизировать рендеринг
+        modal.style.willChange = 'padding-bottom';
+        // cubic-bezier для естественного "выезда"
+        modal.style.transition = 'padding-bottom 0.3s cubic-bezier(0.2, 0, 0, 1)';
+
+        if (window.visualViewport) {
+            window.visualViewport.addEventListener('resize', handleVisualViewportResize);
+            window.visualViewport.addEventListener('scroll', handleVisualViewportResize);
+            handleVisualViewportResize();
+        } else {
+            modal.style.height = '100dvh';
+        }
+
+        modal.classList.add('items-center', 'overflow-y-auto'); 
+        modal.classList.remove('items-start', 'pt-4', 'pt-20');
+        
+        if (card) {
+            card.classList.add('my-auto');
+            card.style.marginBottom = 'auto';
+        }
+
+    } else {
+        // Десктоп или Модалка без ввода
+        if (activeMobileModal === modal) {
+            if (window.visualViewport) {
+                window.visualViewport.removeEventListener('resize', handleVisualViewportResize);
+                window.visualViewport.removeEventListener('scroll', handleVisualViewportResize);
+            }
+            activeMobileModal = null;
+        }
+
+        modal.classList.add('items-center');
+        modal.classList.remove('items-start', 'pt-4', 'pt-20', 'overflow-y-auto');
+        
+        if (card) {
+            card.classList.add('my-auto');
+            card.style.marginBottom = '';
+        }
+        
+        if (isMobile) {
+             modal.style.height = '100dvh';
+        } else {
+             modal.style.height = ''; 
+        }
+    }
+
+    if (card) {
+        card.style.opacity = '0';
+        card.style.transform = 'scale(0.95)';
+        requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+                card.style.opacity = '1';
+                card.style.transform = 'scale(1)';
+            });
+        });
     }
 }
 
-function closeNotifications() {
-    const dropdown = document.getElementById('notifDropdown');
-    if (dropdown) { dropdown.classList.remove('show'); setTimeout(() => dropdown.classList.add('hidden'), 200); }
-}
-
-// --- ТЕМА И СИСТЕМНЫЕ ОКНА ---
-function toggleTheme() {
-    const nextIdx = (themes.indexOf(currentTheme) + 1) % themes.length;
-    currentTheme = themes[nextIdx];
-    localStorage.setItem('theme', currentTheme);
-    const isDark = currentTheme === 'dark' || (currentTheme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
-    document.documentElement.classList.toggle('dark', isDark);
-    applyThemeUI(currentTheme);
-}
-
-function applyThemeUI(theme) {
-    const icons = ['iconMoon', 'iconSun', 'iconSystem'];
-    icons.forEach(id => document.getElementById(id)?.classList.add('hidden'));
-    if (theme === 'dark') document.getElementById('iconMoon')?.classList.remove('hidden');
-    else if (theme === 'light') document.getElementById('iconSun')?.classList.remove('hidden');
-    else document.getElementById('iconSystem')?.classList.remove('hidden');
+function animateModalClose(modal) {
+    if (!modal) return;
+    const card = modal.firstElementChild;
+    if (card) {
+        card.style.opacity = '0';
+        card.style.transform = 'scale(0.95)';
+    }
+    
+    if (activeMobileModal === modal && window.visualViewport) {
+        window.visualViewport.removeEventListener('resize', handleVisualViewportResize);
+        window.visualViewport.removeEventListener('scroll', handleVisualViewportResize);
+        activeMobileModal = null;
+    }
+    
+    modalCloseTimer = setTimeout(() => {
+        modal.classList.add('hidden');
+        modal.classList.remove('flex');
+        
+        // --- RESTORE BODY SCROLL ---
+        if (document.body.style.position === 'fixed') {
+            document.body.style.position = '';
+            document.body.style.top = '';
+            document.body.style.width = '';
+            document.body.style.overflow = '';
+            window.scrollTo(0, bodyScrollTop);
+        } else {
+            document.body.style.overflow = '';
+        }
+        
+        // Сброс всех стилей и анимаций
+        modal.style.height = '';
+        modal.style.top = '';
+        modal.style.paddingBottom = '';
+        modal.style.transition = '';
+        modal.style.willChange = '';
+        
+        modal.classList.remove('items-start', 'pt-4', 'overflow-y-auto');
+        modal.classList.add('items-center');
+        
+        if (card) {
+            card.classList.add('my-auto');
+            card.style.marginBottom = '';
+        }
+        modalCloseTimer = null;
+    }, 200); 
 }
 
 let sysModalResolve = null;
 function closeSystemModal(result) {
     const modal = document.getElementById('systemModal');
-    if (modal) { modal.classList.add('hidden'); modal.classList.remove('flex'); }
+    animateModalClose(modal);
     if (sysModalResolve) { sysModalResolve(result); sysModalResolve = null; }
 }
 window.closeSystemModal = closeSystemModal;
 
-function _showSystemModalBase(title, message, type = 'alert', placeholder = '') {
+function _showSystemModalBase(title, message, type = 'alert', placeholder = '', inputType = 'text') {
     return new Promise((resolve) => {
         sysModalResolve = resolve;
         const modal = document.getElementById('systemModal');
-        // Fallback если модалки нет в DOM
         if (!modal) { resolve(type === 'confirm' ? confirm(message) : prompt(message, placeholder)); return; }
         
+        if (typeof I18N !== 'undefined') {
+            const btnCancel = document.getElementById('sysModalCancel');
+            const btnOk = document.getElementById('sysModalOk');
+            if (btnCancel && I18N.modal_btn_cancel) btnCancel.innerText = I18N.modal_btn_cancel;
+            if (btnOk && I18N.modal_btn_ok) btnOk.innerText = I18N.modal_btn_ok;
+        }
+
         document.getElementById('sysModalTitle').innerText = title;
-        const safeMessage = message ? String(message).replace(/\n/g, '<br>') : "";
-        document.getElementById('sysModalMessage').innerHTML = safeMessage;
+        document.getElementById('sysModalMessage').innerHTML = message ? String(message).replace(/\n/g, '<br>') : "";
         
         const input = document.getElementById('sysModalInput');
         const cancel = document.getElementById('sysModalCancel');
         input.classList.toggle('hidden', type !== 'prompt');
         cancel.classList.toggle('hidden', type === 'alert');
-        modal.classList.remove('hidden');
-        modal.classList.add('flex');
         
+        animateModalOpen(modal, type === 'prompt');
+
         if (type === 'prompt') {
-            input.value = placeholder;
-            setTimeout(() => input.focus(), 50);
+            input.value = ''; 
+            input.placeholder = placeholder;
+            
+            if (inputType === 'number') {
+                input.type = 'number';
+                input.inputMode = 'numeric';
+                input.pattern = '[0-9]*';
+            } else {
+                input.type = 'text';
+                input.inputMode = 'text';
+                input.removeAttribute('pattern');
+            }
+
+            setTimeout(() => input.focus(), 100);
+            input.onkeydown = (e) => { if(e.key === 'Enter') document.getElementById('sysModalOk').click(); };
         }
 
         document.getElementById('sysModalOk').onclick = () => closeSystemModal(type === 'prompt' ? input.value : true);
         cancel.onclick = () => closeSystemModal(type === 'prompt' ? null : false);
-        
-        if (type === 'prompt') {
-            input.onkeydown = (e) => { if(e.key === 'Enter') document.getElementById('sysModalOk').click(); };
-        }
     });
 }
 window.showModalAlert = (m, t) => _showSystemModalBase(t || 'Alert', m, 'alert');
 window.showModalConfirm = (m, t) => _showSystemModalBase(t || 'Confirm', m, 'confirm');
-window.showModalPrompt = (m, t, p) => _showSystemModalBase(t || 'Prompt', m, 'prompt', p);
+window.showModalPrompt = (m, t, p, it) => _showSystemModalBase(t || 'Prompt', m, 'prompt', p, it);
+
+// ======================================================================
+// === SPA PAGE TRANSITIONS ===
+// ======================================================================
+
+function prefetchUrl(url) {
+    if (pageCache.has(url)) return; 
+    fetch(url).then(res => { if(res.ok) return res.text(); throw new Error('err'); }).then(text => { pageCache.set(url, text); }).catch(() => {});
+}
+
+document.addEventListener('mouseover', (e) => {
+    const link = e.target.closest('a');
+    if (shouldHandleLink(link)) prefetchUrl(link.href);
+});
+
+document.addEventListener('touchstart', (e) => {
+    const link = e.target.closest('a');
+    if (shouldHandleLink(link)) prefetchUrl(link.href);
+}, {passive: true});
+
+function shouldHandleLink(link) {
+    return link && 
+           link.href.startsWith(window.location.origin) && 
+           link.target !== '_blank' && 
+           !link.hasAttribute('download') && 
+           link.getAttribute('href') !== '/logout' &&
+           link.href !== window.location.href; 
+}
+
+document.addEventListener('click', async (e) => {
+    const link = e.target.closest('a');
+    if (!shouldHandleLink(link)) return;
+
+    e.preventDefault();
+    const url = link.href;
+
+    const progressBar = document.createElement('div');
+    progressBar.className = 'fixed top-0 left-0 h-1 bg-blue-500 z-[9999] transition-all duration-300 ease-out';
+    progressBar.style.width = '0%';
+    document.body.appendChild(progressBar);
+    requestAnimationFrame(() => progressBar.style.width = '40%');
+
+    try {
+        let htmlContent;
+        if (pageCache.has(url)) {
+            htmlContent = pageCache.get(url);
+            progressBar.style.width = '100%'; 
+        } else {
+            const response = await fetch(url);
+            if (!response.ok) throw new Error('Network error');
+            htmlContent = await response.text();
+            pageCache.set(url, htmlContent);
+        }
+        
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(htmlContent, 'text/html');
+        
+        const newMain = doc.querySelector('main');
+        const newNav = doc.querySelector('nav');
+        const currentMain = document.querySelector('main');
+        const currentNav = document.querySelector('nav');
+        
+        if (newMain && currentMain && newNav && currentNav) {
+            document.title = doc.title;
+            
+            const elementsToFade = [currentNav, currentMain];
+            elementsToFade.forEach(el => {
+                el.style.transition = 'opacity 0.2s ease-out, transform 0.2s ease-out';
+                el.style.opacity = '0';
+                el.style.transform = 'translateY(10px)';
+            });
+
+            setTimeout(() => {
+                currentMain.innerHTML = newMain.innerHTML;
+                currentMain.className = newMain.className;
+                currentNav.innerHTML = newNav.innerHTML;
+                currentNav.className = newNav.className;
+                
+                window.scrollTo(0, 0);
+                window.history.pushState({}, '', url);
+                
+                requestAnimationFrame(() => {
+                    elementsToFade.forEach(el => {
+                        el.style.opacity = '1';
+                        el.style.transform = 'translateY(0)';
+                    });
+                });
+
+                try { if (typeof parsePageEmojis === 'function') parsePageEmojis(); } catch(e){}
+                initHolidayMood();
+                
+                try {
+                    if (url.includes('/settings')) { if (window.initSettings) window.initSettings(); else window.location.reload(); } 
+                    else if (url.endsWith('/') || url.includes('/dashboard')) { if (window.initDashboard) window.initDashboard(); else window.location.reload(); }
+                } catch(e) { window.location.reload(); }
+                
+                setTimeout(() => progressBar.remove(), 200);
+            }, 200); 
+        } else {
+            window.location.href = url;
+        }
+    } catch (error) {
+        console.error("SPA Error:", error);
+        window.location.href = url;
+    }
+});
+
+window.addEventListener('popstate', async () => {
+    window.location.reload(); 
+});

@@ -191,28 +191,36 @@ load_cached_env() {
     fi
 
     if [ -f "$env_file" ]; then
-        msg_info "Найдена предыдущая конфигурация. Использую сохраненные данные..."
-        
-        get_env_val() {
-            grep "^$1=" "$env_file" | cut -d'=' -f2- | sed 's/^"//;s/"$//' | sed "s/^'//;s/'$//"
-        }
+        echo -e "${C_YELLOW}⚠️  Обнаружена сохраненная конфигурация от предыдущей установки.${C_RESET}"
+        read -p "$(echo -e "${C_CYAN}❓ Восстановить настройки (Токен, ID, Порт)? (y/n) [y]: ${C_RESET}")" RESTORE_CHOICE
+        RESTORE_CHOICE=${RESTORE_CHOICE:-y}
 
-        # Бот
-        [ -z "$T" ] && T=$(get_env_val "TG_BOT_TOKEN")
-        [ -z "$A" ] && A=$(get_env_val "TG_ADMIN_ID")
-        [ -z "$U" ] && U=$(get_env_val "TG_ADMIN_USERNAME")
-        [ -z "$N" ] && N=$(get_env_val "TG_BOT_NAME")
-        [ -z "$P" ] && P=$(get_env_val "WEB_SERVER_PORT")
-        
-        # Web UI
-        if [ -z "$W" ]; then
-            local val=$(get_env_val "ENABLE_WEB_UI")
-            if [[ "$val" == "false" ]]; then W="n"; else W="y"; fi
+        if [[ "$RESTORE_CHOICE" =~ ^[Yy]$ ]]; then
+            msg_info "Загружаю сохраненные данные..."
+            
+            get_env_val() {
+                grep "^$1=" "$env_file" | cut -d'=' -f2- | sed 's/^"//;s/"$//' | sed "s/^'//;s/'$//"
+            }
+
+            # Бот
+            [ -z "$T" ] && T=$(get_env_val "TG_BOT_TOKEN")
+            [ -z "$A" ] && A=$(get_env_val "TG_ADMIN_ID")
+            [ -z "$U" ] && U=$(get_env_val "TG_ADMIN_USERNAME")
+            [ -z "$N" ] && N=$(get_env_val "TG_BOT_NAME")
+            [ -z "$P" ] && P=$(get_env_val "WEB_SERVER_PORT")
+            
+            # Web UI
+            if [ -z "$W" ]; then
+                local val=$(get_env_val "ENABLE_WEB_UI")
+                if [[ "$val" == "false" ]]; then W="n"; else W="y"; fi
+            fi
+
+            # Нода
+            [ -z "$AGENT_URL" ] && AGENT_URL=$(get_env_val "AGENT_BASE_URL")
+            [ -z "$NODE_TOKEN" ] && NODE_TOKEN=$(get_env_val "AGENT_TOKEN")
+        else
+            msg_info "Восстановление пропущено. Введите данные заново."
         fi
-
-        # Нода
-        [ -z "$AGENT_URL" ] && AGENT_URL=$(get_env_val "AGENT_BASE_URL")
-        [ -z "$NODE_TOKEN" ] && NODE_TOKEN=$(get_env_val "AGENT_TOKEN")
     fi
 }
 
