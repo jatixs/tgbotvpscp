@@ -591,4 +591,4 @@ async function loadLogs(type = 'bot') {
         if (overlay) overlay.classList.add('hidden');
         container.innerHTML = `<div class="text-red-400 text-center mt-10">Connection error</div>`;
     }
-// }
+}
