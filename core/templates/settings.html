@@ -4,6 +4,18 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0">
     <title>{web_title}</title>
+	<script>
+        // Hack to suppress Tailwind CDN warning in production
+        (function() {
+            const originalWarn = console.warn;
+            console.warn = function(...args) {
+                if (args[0] && typeof args[0] === 'string' && args[0].includes('cdn.tailwindcss.com')) {
+                    return; // Suppress this specific warning
+                }
+                originalWarn.apply(console, args);
+            };
+        })();
+    </script>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="/static/js/theme_init.js?v={web_version}"></script>
     <script>
@@ -263,18 +275,25 @@
             <div class="md:col-span-2 space-y-6">
                 <div class="bg-white/60 dark:bg-white/5 backdrop-blur-md border border-white/40 dark:border-white/10 rounded-2xl p-6 shadow-lg dark:shadow-none" id="usersSection">
                     <h2 class="text-xl font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-purple-500 dark:text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-orange-500 dark:text-orange-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
                         </svg>
                         {web_users_section}
-                        <button onclick="openAddUserModal()" class="ml-auto flex items-center justify-center w-8 h-8 rounded-full text-purple-600 dark:text-purple-400 bg-purple-100/50 dark:bg-purple-500/20 hover:bg-purple-100 dark:hover:bg-purple-500/30 transition">
+                        <button onclick="openAddUserModal()" class="ml-auto flex items-center justify-center w-8 h-8 rounded-full text-orange-600 dark:text-orange-400 bg-orange-100/50 dark:bg-orange-500/20 hover:bg-orange-100 dark:hover:bg-orange-500/30 transition">
                             <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" /></svg>
                         </button>
                     </h2>
                     <div class="overflow-x-auto -mx-4 sm:mx-0">
                         <div class="inline-block min-w-full align-middle">
                             <table class="min-w-full divide-y divide-gray-200 dark:divide-white/5">
-                                <thead><tr><th scope="col" class="px-2 sm:px-4 py-2 text-left text-[10px] sm:text-xs font-medium text-gray-500 uppercase tracking-wider">{web_user_id}</th><th scope="col" class="px-2 sm:px-4 py-2 text-left text-[10px] sm:text-xs font-medium text-gray-500 uppercase tracking-wider">{web_user_name}</th><th scope="col" class="px-2 sm:px-4 py-2 text-left text-[10px] sm:text-xs font-medium text-gray-500 uppercase tracking-wider">{web_user_role}</th><th scope="col" class="px-2 sm:px-4 py-2 text-right text-[10px] sm:text-xs font-medium text-gray-500 uppercase tracking-wider">{web_user_action}</th></tr></thead>
+                                <thead>
+                                    <tr>
+                                        <th scope="col" class="px-2 sm:px-4 py-2 text-left text-[10px] sm:text-xs font-medium text-gray-500 uppercase tracking-wider">{web_user_name}</th>
+                                        <th scope="col" class="px-2 sm:px-4 py-2 text-left text-[10px] sm:text-xs font-medium text-gray-500 uppercase tracking-wider">{web_user_role}</th>
+                                        <th scope="col" class="px-2 sm:px-4 py-2 text-left text-[10px] sm:text-xs font-medium text-gray-500 uppercase tracking-wider">{web_user_id}</th>
+                                        <th scope="col" class="px-2 sm:px-4 py-2 text-right text-[10px] sm:text-xs font-medium text-gray-500 uppercase tracking-wider">{web_user_action}</th>
+                                    </tr>
+                                </thead>
                                 <tbody id="usersTableBody" class="divide-y divide-gray-200 dark:divide-white/5"><tr><td colspan="4" class="px-4 py-3 text-center text-gray-500 text-xs">{web_no_users}</td></tr></tbody>
                             </table>
                         </div>
@@ -304,6 +323,19 @@
 
         </div>
     </main>
+
+    <div id="genericHintModal" class="fixed inset-0 z-[100] hidden items-center justify-center bg-black/50 dark:bg-black/80 backdrop-blur-sm p-4" onclick="if(event.target === this) closeHintModal()">
+        <div class="bg-white dark:bg-gray-800 border border-white/20 dark:border-white/10 rounded-2xl shadow-2xl w-full max-w-md relative flex flex-col backdrop-blur-xl">
+            <div class="p-4 border-b border-gray-200 dark:border-white/5 flex justify-between items-center rounded-t-2xl">
+                <h3 id="hintModalTitle" class="text-lg font-bold text-gray-900 dark:text-white">Информация</h3>
+                <button onclick="closeHintModal()" class="text-gray-400 hover:text-gray-600 dark:hover:text-white transition p-1">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
+                </button>
+            </div>
+            <div id="hintModalContent" class="p-4 text-sm text-gray-700 dark:text-gray-300">
+            </div>
+        </div>
+    </div>
 
     <div id="systemModal" class="fixed inset-0 z-[150] hidden items-center justify-center bg-black/60 backdrop-blur-sm p-4" onclick="if(event.target === this) closeSystemModal(null)">
         <div class="bg-white dark:bg-gray-800 border border-white/20 dark:border-white/10 rounded-2xl shadow-2xl w-full max-w-sm transform transition-all scale-100">

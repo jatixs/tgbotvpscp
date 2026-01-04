@@ -1,5 +1,3 @@
-#!/bin/bash
-
 # --- Запоминаем аргументы ---
 GIT_BRANCH="main"
 AUTO_AGENT_URL=""
@@ -191,28 +189,36 @@ load_cached_env() {
     fi
 
     if [ -f "$env_file" ]; then
-        msg_info "Найдена предыдущая конфигурация. Использую сохраненные данные..."
-        
-        get_env_val() {
-            grep "^$1=" "$env_file" | cut -d'=' -f2- | sed 's/^"//;s/"$//' | sed "s/^'//;s/'$//"
-        }
+        echo -e "${C_YELLOW}⚠️  Обнаружена сохраненная конфигурация от предыдущей установки.${C_RESET}"
+        read -p "$(echo -e "${C_CYAN}❓ Восстановить настройки (Токен, ID, Порт)? (y/n) [y]: ${C_RESET}")" RESTORE_CHOICE
+        RESTORE_CHOICE=${RESTORE_CHOICE:-y}
 
-        # Бот
-        [ -z "$T" ] && T=$(get_env_val "TG_BOT_TOKEN")
-        [ -z "$A" ] && A=$(get_env_val "TG_ADMIN_ID")
-        [ -z "$U" ] && U=$(get_env_val "TG_ADMIN_USERNAME")
-        [ -z "$N" ] && N=$(get_env_val "TG_BOT_NAME")
-        [ -z "$P" ] && P=$(get_env_val "WEB_SERVER_PORT")
-        
-        # Web UI
-        if [ -z "$W" ]; then
-            local val=$(get_env_val "ENABLE_WEB_UI")
-            if [[ "$val" == "false" ]]; then W="n"; else W="y"; fi
+        if [[ "$RESTORE_CHOICE" =~ ^[Yy]$ ]]; then
+            msg_info "Загружаю сохраненные данные..."
+            
+            get_env_val() {
+                grep "^$1=" "$env_file" | cut -d'=' -f2- | sed 's/^"//;s/"$//' | sed "s/^'//;s/'$//"
+            }
+
+            # Бот
+            [ -z "$T" ] && T=$(get_env_val "TG_BOT_TOKEN")
+            [ -z "$A" ] && A=$(get_env_val "TG_ADMIN_ID")
+            [ -z "$U" ] && U=$(get_env_val "TG_ADMIN_USERNAME")
+            [ -z "$N" ] && N=$(get_env_val "TG_BOT_NAME")
+            [ -z "$P" ] && P=$(get_env_val "WEB_SERVER_PORT")
+            
+            # Web UI
+            if [ -z "$W" ]; then
+                local val=$(get_env_val "ENABLE_WEB_UI")
+                if [[ "$val" == "false" ]]; then W="n"; else W="y"; fi
+            fi
+
+            # Нода
+            [ -z "$AGENT_URL" ] && AGENT_URL=$(get_env_val "AGENT_BASE_URL")
+            [ -z "$NODE_TOKEN" ] && NODE_TOKEN=$(get_env_val "AGENT_TOKEN")
+        else
+            msg_info "Восстановление пропущено. Введите данные заново."
         fi
-
-        # Нода
-        [ -z "$AGENT_URL" ] && AGENT_URL=$(get_env_val "AGENT_BASE_URL")
-        [ -z "$NODE_TOKEN" ] && NODE_TOKEN=$(get_env_val "AGENT_TOKEN")
     fi
 }
 
@@ -246,6 +252,10 @@ ask_env_details() {
         SETUP_HTTPS="false"
     else 
         ENABLE_WEB="true"
+        
+        # Генерация случайного пароля
+        GEN_PASS=$(tr -dc A-Za-z0-9 </dev/urandom | head -c 12)
+        
         # Настройка HTTPS не сохраняется в .env, поэтому спрашиваем каждый раз, если нет флагов
         msg_question "Настроить HTTPS (Nginx Proxy)? (y/n): " H
         if [[ "$H" =~ ^[Yy]$ ]]; then
@@ -258,7 +268,7 @@ ask_env_details() {
             SETUP_HTTPS="false"
         fi
     fi
-    export T A U N WEB_PORT ENABLE_WEB SETUP_HTTPS HTTPS_DOMAIN HTTPS_EMAIL HTTPS_PORT
+    export T A U N WEB_PORT ENABLE_WEB SETUP_HTTPS HTTPS_DOMAIN HTTPS_EMAIL HTTPS_PORT GEN_PASS
 }
 
 write_env_file() {
@@ -274,6 +284,7 @@ INSTALL_MODE="${im}"
 DEPLOY_MODE="${dm}"
 TG_BOT_CONTAINER_NAME="${cn}"
 ENABLE_WEB_UI="${ENABLE_WEB}"
+TG_WEB_INITIAL_PASSWORD="${GEN_PASS}"
 EOF
     sudo chmod 600 "${ENV_FILE}"
 }
@@ -287,7 +298,7 @@ create_dockerfile() {
     sudo tee "${BOT_INSTALL_PATH}/Dockerfile" > /dev/null <<'EOF'
 FROM python:3.10-slim-bookworm
 RUN apt-get update && apt-get install -y python3-yaml iperf3 git curl wget sudo procps iputils-ping net-tools gnupg docker.io coreutils && rm -rf /var/lib/apt/lists/*
-RUN pip install --no-cache-dir docker aiohttp aiosqlite
+RUN pip install --no-cache-dir docker aiohttp aiosqlite argon2-cffi
 RUN groupadd -g 1001 tgbot && useradd -u 1001 -g 1001 -m -s /bin/bash tgbot && echo "tgbot ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
 WORKDIR /opt/tg-bot
 COPY requirements.txt .
@@ -409,6 +420,11 @@ install_systemd_logic() {
     local ip=$(curl -s ipinfo.io/ip)
     echo ""; msg_success "Установка завершена! Агент доступен: http://${ip}:${WEB_PORT}"
     
+    if [ "${ENABLE_WEB}" == "true" ]; then
+        echo -e "${C_CYAN}🔑 ВАШ ПАРОЛЬ ОТ WEB-ПАНЕЛИ: ${C_BOLD}${GEN_PASS}${C_RESET}"
+        echo -e "Сохраните его! Он необходим для входа."
+    fi
+    
     if [ "$SETUP_HTTPS" == "true" ]; then setup_nginx_proxy; fi
 }
 
@@ -432,6 +448,11 @@ install_docker_logic() {
     run_with_spinner "Сборка Docker образов" sudo $dc_cmd build
     run_with_spinner "Запуск контейнеров" sudo $dc_cmd --profile "${mode}" up -d --remove-orphans
     msg_success "Установка Docker завершена!"
+    
+    if [ "${ENABLE_WEB}" == "true" ]; then
+        echo -e "${C_CYAN}🔑 ВАШ ПАРОЛЬ ОТ WEB-ПАНЕЛИ: ${C_BOLD}${GEN_PASS}${C_RESET}"
+        echo -e "Сохраните его! Он необходим для входа."
+    fi
     
     if [ "$SETUP_HTTPS" == "true" ]; then setup_nginx_proxy; fi
 }

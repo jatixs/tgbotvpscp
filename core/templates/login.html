@@ -3,310 +3,267 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0">
-    <title>Вход - Web Bot</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://unpkg.com/twemoji@latest/dist/twemoji.min.js" crossorigin="anonymous"></script>
+    <title>VPS Manager</title> <script src="https://cdn.tailwindcss.com"></script>
+    
     <script>
         const I18N = {i18n_json};
-        
-        // Настройка Tailwind для кастомных анимаций
-        tailwind.config = {
-            darkMode: 'class',
-            theme: {
-                extend: {
-                    animation: {
-                        'float': 'float 6s ease-in-out infinite',
-                        'float-delayed': 'float 6s ease-in-out 3s infinite',
-                        'blob': 'blob 7s infinite',
-                        'fade-in-up': 'fadeInUp 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards',
-                        'gradient-x': 'gradient-x 15s ease infinite',
-                    },
-                    keyframes: {
-                        float: {
-                            '0%, 100%': { transform: 'translateY(0)' },
-                            '50%': { transform: 'translateY(-20px)' },
-                        },
-                        blob: {
-                            '0%': { transform: 'translate(0px, 0px) scale(1)' },
-                            '33%': { transform: 'translate(30px, -50px) scale(1.1)' },
-                            '66%': { transform: 'translate(-20px, 20px) scale(0.9)' },
-                            '100%': { transform: 'translate(0px, 0px) scale(1)' },
-                        },
-                        fadeInUp: {
-                            '0%': { opacity: '0', transform: 'translateY(20px) scale(0.95)' },
-                            '100%': { opacity: '1', transform: 'translateY(0) scale(1)' },
-                        },
-                        'gradient-x': {
-                            '0%, 100%': {
-                                'background-size': '200% 200%',
-                                'background-position': 'left center'
-                            },
-                            '50%': {
-                                'background-size': '200% 200%',
-                                'background-position': 'right center'
-                            },
-                        },
-                    }
-                }
-            }
-        }
+        const BOT_USERNAME = "{bot_username}";
     </script>
+
     <link rel="stylesheet" href="/static/css/style.css?v={web_version}">
     <link rel="stylesheet" href="/static/css/login.css?v={web_version}">
-    <style>
-        /* Дополнительный стиль для градиентного фона */
-        .bg-animated-gradient {
-            background: linear-gradient(-45deg, #111827, #1f2937, #111827, #0f172a);
-            background-size: 400% 400%;
-            animation: gradient-x 15s ease infinite;
-        }
-    </style>
 </head>
-<body class="bg-animated-gradient flex items-center justify-center min-h-screen relative overflow-hidden text-gray-100 font-sans selection:bg-green-500/30 p-4">
-    
-    <div class="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none z-0">
-        <div class="absolute top-[-10%] left-[-10%] w-96 h-96 bg-purple-600/30 rounded-full mix-blend-screen filter blur-3xl animate-blob opacity-70"></div>
-        <div class="absolute top-[20%] right-[-10%] w-96 h-96 bg-blue-600/30 rounded-full mix-blend-screen filter blur-3xl animate-blob animation-delay-2000 opacity-70"></div>
-        <div class="absolute bottom-[-20%] left-[20%] w-96 h-96 bg-indigo-600/30 rounded-full mix-blend-screen filter blur-3xl animate-blob animation-delay-4000 opacity-70"></div>
+<body class="bg-gray-100 text-gray-900 dark:bg-gray-900 dark:text-gray-100 font-sans selection:bg-blue-500/30 overflow-hidden relative">
+
+    <div class="absolute top-6 right-6 z-50">
+        <div class="relative bg-white/30 dark:bg-black/30 backdrop-blur-md border border-white/20 dark:border-white/10 rounded-full p-1 shadow-xl flex items-center w-[140px] h-[46px] select-none transition-transform hover:scale-105">
+            
+            <div id="lang-slider-bg" class="absolute left-1 top-1 bottom-1 w-[calc(50%-4px)] bg-white dark:bg-gray-700 rounded-full shadow-md transform transition-transform duration-300 ease-out will-change-transform"></div>
+
+            <button onclick="setLoginLanguage('ru')" id="btn-ru" class="relative z-10 w-1/2 h-full flex items-center justify-center gap-2 rounded-full focus:outline-none transition-colors duration-200 group">
+                <span class="text-xl leading-none filter drop-shadow-sm">🇷🇺</span>
+                <span class="text-xs font-bold tracking-wider uppercase font-mono mt-0.5 group-hover:opacity-100 opacity-80 transition-opacity">RU</span>
+            </button>
+
+            <button onclick="setLoginLanguage('en')" id="btn-en" class="relative z-10 w-1/2 h-full flex items-center justify-center gap-2 rounded-full focus:outline-none transition-colors duration-200 group">
+                <span class="text-xl leading-none filter drop-shadow-sm">🇬🇧</span>
+                <span class="text-xs font-bold tracking-wider uppercase font-mono mt-0.5 group-hover:opacity-100 opacity-80 transition-opacity">EN</span>
+            </button>
+        </div>
+        
+        <script>
+            document.addEventListener("DOMContentLoaded", () => {
+                const lang = "{current_lang}"; // 'ru' or 'en' provided by server
+                const bg = document.getElementById('lang-slider-bg');
+                const btnRu = document.getElementById('btn-ru');
+                const btnEn = document.getElementById('btn-en');
+                
+                const activeCls = ['text-gray-900', 'dark:text-white'];
+                const inactiveCls = ['text-gray-600', 'dark:text-gray-400'];
+
+                if (lang === 'en') {
+                    // Translate 100% relative to itself + gap adjustment
+                    bg.style.transform = 'translateX(100%) translateX(4px)'; 
+                    
+                    btnEn.classList.add(...activeCls);
+                    btnRu.classList.add(...inactiveCls);
+                } else {
+                    bg.style.transform = 'translateX(0)';
+                    btnRu.classList.add(...activeCls);
+                    btnEn.classList.add(...inactiveCls);
+                }
+            });
+        </script>
     </div>
 
-    <div class="relative z-10 backdrop-blur-xl bg-white/5 border border-white/10 rounded-2xl shadow-2xl ring-1 ring-white/10 p-6 sm:p-8 max-w-sm w-full mx-auto opacity-0 animate-fade-in-up" id="main-card">
-        <div class="flex flex-col items-center mb-6">
-            <h1 class="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-green-400 to-emerald-500 text-center">
-                VPS Manager
-            </h1>
-            <p class="text-gray-400 text-xs mt-2 text-center">Панель управления</p>
-        </div>
+    <div class="fixed inset-0 overflow-hidden pointer-events-none">
+        <div class="absolute top-[-10%] left-[-10%] w-[500px] h-[500px] rounded-full mix-blend-multiply dark:mix-blend-screen filter blur-3xl animate-float opacity-30 dark:opacity-20 bg-blue-300 dark:bg-blue-600/30"></div>
+        <div class="absolute bottom-[-10%] right-[-10%] w-[500px] h-[500px] rounded-full mix-blend-multiply dark:mix-blend-screen filter blur-3xl animate-float delay-2000 opacity-30 dark:opacity-20 bg-purple-300 dark:bg-purple-600/30"></div>
+    </div>
 
-        {default_pass_alert}
-
-        <div id="forms-container">
-            <div id="magic-form">
-                
-                <div id="telegram-widget-container" class="hidden mb-4 flex justify-center">
-                    </div>
-                
-                <form id="magic-link-form" action="/api/login/request" method="POST" class="space-y-4">
-                    <div>
-                        <label class="block text-gray-400 text-xs font-bold mb-2 uppercase tracking-wider">Ваш Telegram ID</label>
-                        <input type="number" name="user_id" 
-                            class="w-full px-4 py-3 bg-black/20 border border-white/10 rounded-xl text-gray-100 text-base focus:outline-none focus:border-green-500/50 focus:ring-1 focus:ring-green-500/50 transition-all placeholder-gray-600 text-center"
-                            placeholder="123456789" required inputmode="numeric">
-                    </div>
-                    <button type="submit" 
-                        class="w-full py-3 px-4 bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-400 hover:to-indigo-500 rounded-xl font-bold text-white shadow-lg shadow-blue-500/20 transition-all duration-200 transform hover:scale-[1.02] active:scale-[0.98]">
-                        Войти через Telegram
-                    </button>
-                </form>
-                
-                <div class="relative flex py-5 items-center">
-                    <div class="flex-grow border-t border-white/10"></div>
-                    <span class="flex-shrink-0 mx-4 text-gray-500 text-[10px] uppercase tracking-widest">или</span>
-                    <div class="flex-grow border-t border-white/10"></div>
+    <div class="min-h-screen flex flex-col items-center justify-center p-4 relative z-10">
+        
+        <div class="w-full max-w-md bg-white/70 dark:bg-gray-800/60 backdrop-blur-xl border border-white/20 dark:border-white/10 rounded-3xl shadow-2xl p-8 transform transition-all hover:scale-[1.01] duration-500 opacity-0 animate-fade-in-up" id="main-card">
+            
+            <div class="text-center mb-8">
+                <div class="w-20 h-20 bg-gradient-to-tr from-blue-500 to-purple-600 rounded-2xl mx-auto flex items-center justify-center shadow-lg mb-4">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-10 w-10 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path>
+                    </svg>
                 </div>
-                <button onclick="toggleForms('password')" 
-                    class="w-full py-3 px-4 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl text-gray-300 text-sm font-medium transition-all">
-                    Войти по паролю
-                </button>
+                <h1 class="text-3xl font-bold text-gray-900 dark:text-white tracking-tight" data-i18n="web_title">VPS Manager</h1>
+                <p class="text-sm text-gray-500 dark:text-gray-400 mt-2" data-i18n="login_secure_gateway">Secure Gateway</p>
             </div>
 
-            <div id="password-form" class="hidden">
-                <form action="/api/login/password" method="POST" class="space-y-4">
-                    <div>
-                        <label class="block text-gray-400 text-xs font-bold mb-2 uppercase tracking-wider">Telegram ID</label>
-                        <input type="number" name="user_id" 
-                            class="w-full px-4 py-3 bg-black/20 border border-white/10 rounded-xl text-gray-100 text-base focus:outline-none focus:border-green-500/50 focus:ring-1 focus:ring-green-500/50 transition-all placeholder-gray-600 text-center"
-                            placeholder="123456789" required inputmode="numeric">
-                    </div>
-                    <div>
-                        <label class="block text-gray-400 text-xs font-bold mb-2 uppercase tracking-wider">Пароль</label>
-                        <input type="password" name="password" 
-                            class="w-full px-4 py-3 bg-black/20 border border-white/10 rounded-xl text-gray-100 text-base focus:outline-none focus:border-green-500/50 focus:ring-1 focus:ring-green-500/50 transition-all placeholder-gray-600"
-                            placeholder="••••••••" required>
-                        <div class="text-right mt-2">
-                            <button type="button" onclick="toggleForms('reset')" class="text-xs text-blue-400 hover:text-blue-300 transition-colors">
-                                Забыли пароль?
-                            </button>
+            {default_pass_alert}
+
+            <div id="forms-container">
+                
+                <div id="magic-form">
+                    <div id="telegram-widget-container" class="hidden mb-6 flex justify-center"></div>
+                    
+                    <form id="magic-link-form" action="/api/login/request" method="POST" class="space-y-5">
+                        <div>
+                            <label class="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2 ml-1">Telegram ID</label>
+                            <div class="relative">
+                                <input type="number" name="user_id" class="w-full bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-xl px-4 py-3 pl-11 outline-none focus:ring-2 focus:ring-blue-500/50 transition-all font-mono text-gray-900 dark:text-white placeholder-gray-400 text-center" placeholder="123456789" required inputmode="numeric">
+                                <div class="absolute left-3 top-3.5 text-gray-400">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path></svg>
+                                </div>
+                            </div>
                         </div>
+                        <button type="submit" class="w-full py-3.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white rounded-xl font-bold shadow-lg shadow-blue-500/20 transition-all transform active:scale-[0.98]">
+                            Login via Telegram
+                        </button>
+                    </form>
+                    
+                    <div class="relative flex py-6 items-center">
+                        <div class="flex-grow border-t border-gray-200 dark:border-white/10"></div>
+                        <span class="flex-shrink-0 mx-4 text-gray-400 text-[10px] uppercase tracking-widest" data-i18n="login_or">OR</span>
+                        <div class="flex-grow border-t border-gray-200 dark:border-white/10"></div>
+                    </div>
+                    
+                    <button onclick="toggleForms('password')" class="w-full py-3.5 bg-white dark:bg-white/5 border border-gray-200 dark:border-white/10 hover:bg-gray-50 dark:hover:bg-white/10 text-gray-700 dark:text-gray-300 rounded-xl font-bold transition-all text-sm" data-i18n="login_pass_btn">
+                        Password Login
+                    </button>
+                </div>
+
+                <div id="password-form" class="hidden">
+                    <form action="/api/login/password" method="POST" class="space-y-5">
+                        <div>
+                            <label class="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2 ml-1">Telegram ID</label>
+                            <div class="relative">
+                                <input type="number" name="user_id" class="w-full bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-xl px-4 py-3 pl-11 outline-none focus:ring-2 focus:ring-blue-500/50 transition-all font-mono text-gray-900 dark:text-white placeholder-gray-400" placeholder="123456789" required inputmode="numeric">
+                                <div class="absolute left-3 top-3.5 text-gray-400">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path></svg>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div>
+                            <label class="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2 ml-1" data-i18n="web_current_password">Password</label>
+                            <div class="relative">
+                                <input type="password" name="password" class="w-full bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-xl px-4 py-3 pl-11 outline-none focus:ring-2 focus:ring-blue-500/50 transition-all text-gray-900 dark:text-white placeholder-gray-400" placeholder="••••••••" required>
+                                <div class="absolute left-3 top-3.5 text-gray-400">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path></svg>
+                                </div>
+                            </div>
+                            <div class="text-right mt-2">
+                                <button type="button" onclick="toggleForms('reset')" class="text-xs font-medium text-blue-500 hover:text-blue-600 dark:text-blue-400 dark:hover:text-blue-300 transition" data-i18n="login_forgot_pass">Forgot?</button>
+                            </div>
+                        </div>
+
+                        <button type="submit" class="w-full py-3.5 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 text-white rounded-xl font-bold shadow-lg shadow-blue-500/20 transition-all transform active:scale-[0.98] flex items-center justify-center gap-2">
+                            <span data-i18n="web_login_btn">Login</span>
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"></path></svg>
+                        </button>
+                    </form>
+                    
+                    <button onclick="toggleForms('magic')" class="mt-6 w-full text-center text-sm text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 transition flex items-center justify-center gap-2">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path></svg> 
+                        <span data-i18n="login_back_magic">Back to Magic Link</span>
+                    </button>
+                </div>
+
+                <div id="reset-form" class="hidden">
+                    <div class="text-center mb-6">
+                        <h3 class="text-lg font-bold text-gray-900 dark:text-white" data-i18n="login_reset_title">Reset Password</h3>
+                        <p class="text-xs text-gray-500 dark:text-gray-400 mt-1" data-i18n="login_reset_desc">Enter your Telegram ID to receive a reset link</p>
+                    </div>
+                    <div class="space-y-5">
+                        <div>
+                            <label class="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2 ml-1">Telegram ID</label>
+                            <div class="relative">
+                                <input type="number" id="reset_user_id" class="w-full bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-xl px-4 py-3 pl-11 outline-none focus:ring-2 focus:ring-yellow-500/50 transition-all font-mono text-gray-900 dark:text-white placeholder-gray-400 text-center" placeholder="123456789" required inputmode="numeric">
+                                <div class="absolute left-3 top-3.5 text-gray-400">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path></svg>
+                                </div>
+                            </div>
+                        </div>
+                        <button onclick="requestPasswordReset()" id="btn-reset-send" class="w-full py-3.5 bg-gradient-to-r from-yellow-500 to-orange-600 hover:from-yellow-400 hover:to-orange-500 text-white rounded-xl font-bold shadow-lg shadow-yellow-500/20 transition-all transform active:scale-[0.98]" data-i18n="login_btn_send_link">
+                            Send Link
+                        </button>
+                    </div>
+                    
+                    <div id="reset-error-block" class="hidden mt-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl text-center">
+                        <p class="text-xs font-bold text-red-600 dark:text-red-400 mb-2">User not found.</p>
+                        <a href="#" id="admin-link-btn" target="_blank" class="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-white transition">
+                            Contact Admin <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg>
+                        </a>
                     </div>
 
-                    <button type="submit" 
-                        class="w-full py-3 px-4 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-400 hover:to-emerald-500 rounded-xl font-bold text-white shadow-lg shadow-green-500/20 transition-all duration-200 transform hover:scale-[1.02] active:scale-[0.98]">
-                        Войти
+                    <button onclick="toggleForms('password')" class="mt-6 w-full text-center text-sm text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 transition flex items-center justify-center gap-2">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m7 7h18"></path></svg> 
+                        <span data-i18n="login_btn_back">Back</span>
                     </button>
-                </form>
-                <button onclick="toggleForms('magic')" class="mt-6 text-gray-500 hover:text-gray-300 text-xs w-full text-center transition-colors flex justify-center items-center gap-1 py-2">
-                    <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path></svg>
-                    Назад к авторизации через Telegram
+                </div>
+
+                <div id="set-password-form" class="hidden">
+                    <div class="text-center mb-6">
+                        <h3 class="text-lg font-bold text-gray-900 dark:text-white">New Password</h3>
+                    </div>
+                    <div class="space-y-5">
+                        <div>
+                            <label class="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2 ml-1">Password</label>
+                            <input type="password" id="new_pass" class="w-full bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-green-500/50 transition-all text-gray-900 dark:text-white" required>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2 ml-1">Confirm</label>
+                            <input type="password" id="confirm_pass" class="w-full bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-green-500/50 transition-all text-gray-900 dark:text-white" required>
+                        </div>
+                        <button onclick="submitNewPassword()" id="btn-save-pass" class="w-full py-3.5 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-400 hover:to-emerald-500 text-white rounded-xl font-bold shadow-lg shadow-green-500/20 transition-all transform active:scale-[0.98]">
+                            Save Password
+                        </button>
+                    </div>
+                </div>
+
+            </div>
+            
+            {error_block}
+        </div>
+
+        <div class="mt-8 flex gap-4">
+            <a href="https://github.com/jatixs/tgbotvpscp" target="_blank" title="GitHub" class="group p-3 bg-white/70 dark:bg-gray-800/60 backdrop-blur-md rounded-full shadow-lg border border-white/20 dark:border-white/10 hover:scale-110 transition-transform">
+                <svg class="h-6 w-6 text-gray-700 dark:text-gray-300 group-hover:text-black dark:group-hover:text-white transition-colors" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
+                </svg>
+            </a>
+            
+            <button onclick="openSupportModal()" title="Support" class="group p-3 bg-white/70 dark:bg-gray-800/60 backdrop-blur-md rounded-full shadow-lg border border-white/20 dark:border-white/10 hover:scale-110 transition-transform">
+                <svg class="h-6 w-6 text-pink-500 group-hover:text-red-600 transition-colors group-hover:animate-pulse" xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"></path>
+                </svg>
+            </button>
+        </div>
+    </div>
+
+    <div id="cookieConsent" class="fixed bottom-0 inset-x-0 z-[100] transform transition-transform duration-500 translate-y-full pointer-events-none">
+        <div class="max-w-4xl mx-auto p-4 m-4 bg-white/90 dark:bg-gray-900/90 backdrop-blur-lg border border-gray-200 dark:border-white/10 rounded-2xl shadow-2xl flex flex-col sm:flex-row items-center justify-between gap-4 pointer-events-auto">
+            <div class="text-sm text-gray-600 dark:text-gray-300 leading-snug text-center sm:text-left" data-i18n="login_cookie_text">
+                Cookie Text
+            </div>
+            <button onclick="acceptCookies()" class="shrink-0 px-6 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm font-bold rounded-xl shadow-lg shadow-blue-500/20 transition active:scale-95" data-i18n="login_cookie_btn">
+                OK
+            </button>
+        </div>
+    </div>
+
+    <div id="support-modal" class="fixed inset-0 z-[150] hidden items-center justify-center bg-black/60 backdrop-blur-sm p-4" onclick="if(event.target === this) closeSupportModal()">
+        <div class="bg-white dark:bg-gray-900 border border-white/20 dark:border-white/10 rounded-2xl shadow-2xl w-full max-w-sm relative flex flex-col backdrop-blur-xl p-6">
+            <div class="flex justify-between items-center mb-6">
+                <h3 class="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                    <span class="text-red-500">❤️</span> <span data-i18n="login_support_title">Support</span>
+                </h3>
+                <button onclick="closeSupportModal()" class="text-gray-400 hover:text-gray-600 dark:hover:text-white transition p-1">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
                 </button>
             </div>
+            
+            <p class="text-sm text-gray-600 dark:text-gray-300 mb-6 leading-relaxed" data-i18n="login_support_desc">
+                If you like the bot, you can support the author via YooMoney.
+            </p>
 
-            <div id="reset-form" class="hidden">
-                <div class="text-center mb-6">
-                    <h3 class="text-lg font-bold text-white mb-2">Сброс пароля</h3>
-                    <p class="text-xs text-gray-400">Введите ваш Telegram ID. Мы отправим ссылку для сброса в личные сообщения.</p>
-                </div>
-                <div class="space-y-4">
-                    <div>
-                        <label class="block text-gray-400 text-xs font-bold mb-2 uppercase tracking-wider">Ваш Telegram ID</label>
-                        <input type="number" id="reset_user_id" 
-                            class="w-full px-4 py-3 bg-black/20 border border-white/10 rounded-xl text-gray-100 text-base focus:outline-none focus:border-yellow-500/50 focus:ring-1 focus:ring-yellow-500/50 transition-all placeholder-gray-600 text-center"
-                            placeholder="123456789" required inputmode="numeric">
-                    </div>
-                    <button onclick="requestPasswordReset()" id="btn-reset-send"
-                        class="w-full py-3 px-4 bg-gradient-to-r from-yellow-600 to-orange-600 hover:from-yellow-500 hover:to-orange-500 rounded-xl font-bold text-white shadow-lg shadow-yellow-500/20 transition-all duration-200 transform hover:scale-[1.02] active:scale-[0.98]">
-                        Отправить ссылку
-                    </button>
-                </div>
-                <div id="reset-error-block" class="hidden mt-4 p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-center">
-                    <p class="text-sm text-red-400 mb-3">Пользователь не найден.</p>
-                    <a href="#" id="admin-link-btn" target="_blank" class="inline-flex items-center gap-2 px-4 py-2 bg-white/5 hover:bg-white/10 rounded-lg text-xs font-bold text-white transition border border-white/10">Написать Админу</a>
-                </div>
-                <button onclick="toggleForms('password')" class="mt-6 text-gray-500 hover:text-gray-300 text-xs w-full text-center transition-colors flex justify-center items-center gap-1 py-2">Назад</button>
-            </div>
-
-            <div id="set-password-form" class="hidden">
-                <div class="text-center mb-6">
-                    <h3 class="text-lg font-bold text-white mb-2">Новый пароль</h3>
-                </div>
-                <div class="space-y-4">
-                    <div>
-                        <label class="block text-gray-400 text-xs font-bold mb-2 uppercase tracking-wider">Пароль</label>
-                        <input type="password" id="new_pass" class="w-full px-4 py-3 bg-black/20 border border-white/10 rounded-xl text-gray-100 text-base focus:outline-none focus:border-green-500/50 focus:ring-1 focus:ring-green-500/50 transition-all placeholder-gray-600" required>
-                    </div>
-                    <div>
-                        <label class="block text-gray-400 text-xs font-bold mb-2 uppercase tracking-wider">Повтор</label>
-                        <input type="password" id="confirm_pass" class="w-full px-4 py-3 bg-black/20 border border-white/10 rounded-xl text-gray-100 text-base focus:outline-none focus:border-green-500/50 focus:ring-1 focus:ring-green-500/50 transition-all placeholder-gray-600" required>
-                    </div>
-                    <button onclick="submitNewPassword()" id="btn-save-pass" class="w-full py-3 px-4 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-400 hover:to-emerald-500 rounded-xl font-bold text-white shadow-lg shadow-green-500/20 transition-all duration-200 transform hover:scale-[1.02] active:scale-[0.98]">Сохранить</button>
-                </div>
-            </div>
+            <a href="https://yoomoney.ru/to/410011639584793" target="_blank" class="w-full py-3.5 bg-gradient-to-r from-pink-500 to-red-600 hover:from-pink-400 hover:to-red-500 text-white rounded-xl font-bold shadow-lg shadow-red-500/20 transition-all transform active:scale-[0.98] text-center flex items-center justify-center gap-2">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                <span data-i18n="login_support_btn_pay">Go to support (YooMoney)</span>
+            </a>
         </div>
-        {error_block}
     </div>
     
-    <div id="systemModal" class="fixed inset-0 z-[150] hidden items-center justify-center bg-black/60 backdrop-blur-sm p-4" onclick="if(event.target === this) closeSystemModal(null)">
+    <div id="systemModal" class="fixed inset-0 z-[200] hidden items-center justify-center bg-black/60 backdrop-blur-sm p-4" onclick="if(event.target === this) closeSystemModal(null)">
         <div class="bg-white dark:bg-gray-800 border border-white/20 dark:border-white/10 rounded-2xl shadow-2xl w-[90%] sm:w-full sm:max-w-md transform transition-all scale-100 mx-auto">
             <div class="p-6">
                 <h3 id="sysModalTitle" class="text-lg font-bold text-gray-900 dark:text-white mb-2">Title</h3>
                 <p id="sysModalMessage" class="text-sm text-gray-600 dark:text-gray-300 mb-4 break-words whitespace-pre-wrap">Message</p>
-                <input type="text" id="sysModalInput" class="hidden w-full bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-xl px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-white mb-4">
                 <div class="flex justify-end gap-3">
-                    <button id="sysModalCancel" class="hidden px-4 py-2 rounded-lg text-sm font-medium text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 transition">Cancel</button>
                     <button id="sysModalOk" class="px-4 py-2 rounded-lg text-sm font-bold bg-blue-600 text-white hover:bg-blue-500 transition shadow-lg shadow-blue-500/20">OK</button>
                 </div>
             </div>
         </div>
     </div>
-    
-    <div id="cookieConsent" class="fixed bottom-0 inset-x-0 z-[200] transform transition-transform duration-500 translate-y-full pointer-events-none">
-        <div class="max-w-4xl mx-auto px-4 pb-6 sm:px-6 lg:px-8">
-            <div class="pointer-events-auto bg-gray-900/90 backdrop-blur-xl border border-white/10 rounded-2xl p-4 shadow-2xl ring-1 ring-white/5 flex flex-col sm:flex-row items-center justify-between gap-4">
-                <div class="flex items-center gap-4">
-                    <div class="hidden sm:flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-blue-500/20">
-                        <svg class="h-5 w-5 text-blue-400" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
-                        </svg>
-                    </div>
-                    <div class="text-center sm:text-left">
-                        <h3 class="text-sm font-bold text-white">Приватность и Cookie</h3>
-                        <p class="text-xs text-gray-400 mt-1 max-w-xl">
-                            Cookie используются исключительно для сохранения вашей авторизации в системе. Мы не ведем сбор данных и не используем сторонние трекеры.
-                        </p>
-                    </div>
-                </div>
-                <button onclick="acceptCookies()" class="w-full sm:w-auto rounded-xl bg-blue-600 px-6 py-2.5 text-xs font-bold text-white shadow-lg shadow-blue-500/20 hover:bg-blue-500 hover:shadow-blue-500/30 transition-all active:scale-95 whitespace-nowrap uppercase tracking-wider">
-                    ОК, понятно
-                </button>
-            </div>
-        </div>
-    </div>
-    
+
+    <script src="https://unpkg.com/twemoji@latest/dist/twemoji.min.js" crossorigin="anonymous"></script>
     <script src="/static/js/common.js?v={web_version}"></script>
     <script src="/static/js/login.js?v={web_version}"></script>
-    
-    <script>
-        // --- COOKIE CONSENT LOGIC ---
-        function acceptCookies() {
-            localStorage.setItem('cookie_consent', 'true');
-            document.getElementById('cookieConsent').classList.add('translate-y-full');
-        }
-
-        // Функция обратного вызова для виджета Telegram
-        async function onTelegramAuth(user) {
-            console.log("Telegram widget auth initiated", user);
-            
-            // Автоматическое принятие куки при входе через Telegram
-            acceptCookies();
-            
-            try {
-                const response = await fetch('/api/auth/telegram', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify(user)
-                });
-                
-                if (response.ok) {
-                    console.log("Auth success, reloading...");
-                    window.location.reload();
-                } else {
-                    const data = await response.json();
-                    console.error("Auth error:", data);
-                    if(window.showModalAlert) await window.showModalAlert("Ошибка авторизации: " + (data.error || "Unknown"), "Ошибка");
-                    else alert("Ошибка авторизации: " + (data.error || "Unknown"));
-                }
-            } catch (e) {
-                console.error("Network error during auth:", e);
-                alert("Ошибка сети.");
-            }
-        }
-
-        document.addEventListener("DOMContentLoaded", () => {
-            // --- Проверка Cookie Banner ---
-            if (!localStorage.getItem('cookie_consent')) {
-                setTimeout(() => {
-                    document.getElementById('cookieConsent').classList.remove('translate-y-full');
-                }, 1000);
-            }
-            
-            // --- Автоматическое принятие куки при отправке любых форм входа ---
-            const forms = document.querySelectorAll('form');
-            forms.forEach(form => {
-                form.addEventListener('submit', () => {
-                    acceptCookies();
-                });
-            });
-
-            // --- Логика Telegram виджета ---
-            const botUsername = "{bot_username}";
-            const container = document.getElementById('telegram-widget-container');
-            const magicForm = document.getElementById('magic-link-form');
-            
-            // Проверка: это IP адрес или домен?
-            const isIp = /^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$/.test(window.location.hostname);
-            const isLocalhost = window.location.hostname === 'localhost';
-            const isHttps = window.location.protocol === 'https:';
-            
-            // Если есть юзернейм, это НЕ IP, НЕ localhost и ЕСТЬ HTTPS -> показываем виджет
-            if (botUsername && !isIp && !isLocalhost && isHttps) {
-                
-                // Создаем скрипт виджета
-                const script = document.createElement('script');
-                script.async = true;
-                script.src = "https://telegram.org/js/telegram-widget.js?22";
-                script.setAttribute('data-telegram-login', botUsername);
-                script.setAttribute('data-size', 'large');
-                script.setAttribute('data-radius', '10');
-                script.setAttribute('data-onauth', 'onTelegramAuth(user)');
-                script.setAttribute('data-request-access', 'write');
-                
-                container.appendChild(script);
-                container.classList.remove('hidden');
-                
-                // Полностью скрываем форму ввода ID
-                magicForm.classList.add('hidden');
-            }
-        });
-    </script>
 </body>
 </html>
