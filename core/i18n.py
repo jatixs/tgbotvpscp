@@ -477,6 +477,11 @@ STRINGS = {
         "web_search_nothing_found": "Ничего не найдено",
         "web_session_expired": "Сессия истекла",
         "web_please_relogin": "Пожалуйста, авторизуйтесь заново",
+        "login_secure_gateway": "Безопасный шлюз",
+        "login_pass_btn": "Вход по паролю",
+        "login_back_magic": "Назад к Magic Link",
+        "login_or": "ИЛИ",
+        "login_support_btn_pay": "Перейти к поддержке (YooMoney)",
         
         # --- WEB: KEYBOARD SETTINGS ---
         "web_keyboard_title": "Клавиатура бота",
@@ -972,6 +977,11 @@ STRINGS = {
         "web_search_nothing_found": "Nothing found",
         "web_session_expired": "Session Expired",
         "web_please_relogin": "Please login again",
+        "login_secure_gateway": "Secure Gateway",
+        "login_pass_btn": "Password Login",
+        "login_back_magic": "Back to Magic Link",
+        "login_or": "OR",
+        "login_support_btn_pay": "Go to support (YooMoney)",
         
         # --- WEB: KEYBOARD SETTINGS ---
         "web_keyboard_title": "Bot Keyboard",

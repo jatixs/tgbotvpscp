@@ -8,6 +8,12 @@
     <script>
         const I18N = {i18n_json};
         const BOT_USERNAME = "{bot_username}";
+        
+        // Логика переключения языка через слайдер
+        function toggleLoginLanguage(checkbox) {
+            const lang = checkbox.checked ? 'en' : 'ru';
+            setLoginLanguage(lang);
+        }
     </script>
 
     <link rel="stylesheet" href="/static/css/style.css?v={web_version}">
@@ -15,13 +21,21 @@
 </head>
 <body class="bg-gray-100 text-gray-900 dark:bg-gray-900 dark:text-gray-100 font-sans selection:bg-blue-500/30 overflow-hidden relative">
 
-    <div class="absolute top-4 right-4 z-50 flex gap-2">
-        <button onclick="setLoginLanguage('ru')" class="p-2 rounded-lg bg-white/50 dark:bg-black/30 hover:bg-white/80 dark:hover:bg-black/50 transition backdrop-blur-sm border border-gray-200 dark:border-white/10 text-sm font-bold shadow-sm">
-            🇷🇺 RU
-        </button>
-        <button onclick="setLoginLanguage('en')" class="p-2 rounded-lg bg-white/50 dark:bg-black/30 hover:bg-white/80 dark:hover:bg-black/50 transition backdrop-blur-sm border border-gray-200 dark:border-white/10 text-sm font-bold shadow-sm">
-            🇬🇧 EN
-        </button>
+    <div class="absolute top-4 right-4 z-50">
+        <label class="relative inline-flex items-center cursor-pointer group">
+            <input type="checkbox" id="langToggle" class="sr-only peer" onchange="toggleLoginLanguage(this)">
+            <div class="w-16 h-8 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-black/40 border border-gray-300 dark:border-white/10 peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[4px] after:left-[4px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-6 after:w-6 after:transition-all dark:border-gray-600 peer-checked:bg-blue-600/80 shadow-inner flex items-center justify-between px-2">
+                <span class="text-[10px] font-bold text-gray-500 select-none pointer-events-none z-10 ml-1">RU</span>
+                <span class="text-[10px] font-bold text-white select-none pointer-events-none z-10 mr-1 opacity-0 peer-checked:opacity-100 transition-opacity">EN</span>
+            </div>
+        </label>
+        <script>
+            // Установка начального положения слайдера
+            const currentLang = "{current_lang}"; // Эта переменная должна быть заменена сервером
+            if (currentLang === 'en') {
+                document.getElementById('langToggle').checked = true;
+            }
+        </script>
     </div>
 
     <div class="fixed inset-0 overflow-hidden pointer-events-none">
@@ -40,7 +54,7 @@
                     </svg>
                 </div>
                 <h1 class="text-3xl font-bold text-gray-900 dark:text-white tracking-tight" data-i18n="web_title">VPS Manager</h1>
-                <p class="text-sm text-gray-500 dark:text-gray-400 mt-2">Secure Gateway</p>
+                <p class="text-sm text-gray-500 dark:text-gray-400 mt-2" data-i18n="login_secure_gateway">Secure Gateway</p>
             </div>
 
             {default_pass_alert}
@@ -67,11 +81,11 @@
                     
                     <div class="relative flex py-6 items-center">
                         <div class="flex-grow border-t border-gray-200 dark:border-white/10"></div>
-                        <span class="flex-shrink-0 mx-4 text-gray-400 text-[10px] uppercase tracking-widest">OR</span>
+                        <span class="flex-shrink-0 mx-4 text-gray-400 text-[10px] uppercase tracking-widest" data-i18n="login_or">OR</span>
                         <div class="flex-grow border-t border-gray-200 dark:border-white/10"></div>
                     </div>
                     
-                    <button onclick="toggleForms('password')" class="w-full py-3.5 bg-white dark:bg-white/5 border border-gray-200 dark:border-white/10 hover:bg-gray-50 dark:hover:bg-white/10 text-gray-700 dark:text-gray-300 rounded-xl font-bold transition-all text-sm">
+                    <button onclick="toggleForms('password')" class="w-full py-3.5 bg-white dark:bg-white/5 border border-gray-200 dark:border-white/10 hover:bg-gray-50 dark:hover:bg-white/10 text-gray-700 dark:text-gray-300 rounded-xl font-bold transition-all text-sm" data-i18n="login_pass_btn">
                         Password Login
                     </button>
                 </div>
@@ -109,14 +123,14 @@
                     
                     <button onclick="toggleForms('magic')" class="mt-6 w-full text-center text-sm text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 transition flex items-center justify-center gap-2">
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path></svg> 
-                        Back to Magic Link
+                        <span data-i18n="login_back_magic">Back to Magic Link</span>
                     </button>
                 </div>
 
                 <div id="reset-form" class="hidden">
                     <div class="text-center mb-6">
-                        <h3 class="text-lg font-bold text-gray-900 dark:text-white">Reset Password</h3>
-                        <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">Enter your Telegram ID to receive a reset link</p>
+                        <h3 class="text-lg font-bold text-gray-900 dark:text-white" data-i18n="login_reset_title">Reset Password</h3>
+                        <p class="text-xs text-gray-500 dark:text-gray-400 mt-1" data-i18n="login_reset_desc">Enter your Telegram ID to receive a reset link</p>
                     </div>
                     <div class="space-y-5">
                         <div>
@@ -128,7 +142,7 @@
                                 </div>
                             </div>
                         </div>
-                        <button onclick="requestPasswordReset()" id="btn-reset-send" class="w-full py-3.5 bg-gradient-to-r from-yellow-500 to-orange-600 hover:from-yellow-400 hover:to-orange-500 text-white rounded-xl font-bold shadow-lg shadow-yellow-500/20 transition-all transform active:scale-[0.98]">
+                        <button onclick="requestPasswordReset()" id="btn-reset-send" class="w-full py-3.5 bg-gradient-to-r from-yellow-500 to-orange-600 hover:from-yellow-400 hover:to-orange-500 text-white rounded-xl font-bold shadow-lg shadow-yellow-500/20 transition-all transform active:scale-[0.98]" data-i18n="login_btn_send_link">
                             Send Link
                         </button>
                     </div>
@@ -142,7 +156,7 @@
 
                     <button onclick="toggleForms('password')" class="mt-6 w-full text-center text-sm text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 transition flex items-center justify-center gap-2">
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m7 7h18"></path></svg> 
-                        Back
+                        <span data-i18n="btn_back">Back</span>
                     </button>
                 </div>
 
@@ -197,8 +211,8 @@
     </div>
 
     <div id="support-modal" class="fixed inset-0 z-[150] hidden items-center justify-center bg-black/60 backdrop-blur-sm p-4" onclick="if(event.target === this) closeSupportModal()">
-        <div class="bg-white dark:bg-gray-900 border border-white/20 dark:border-white/10 rounded-2xl shadow-2xl w-full max-w-lg relative flex flex-col h-[600px] overflow-hidden">
-            <div class="p-4 border-b border-gray-200 dark:border-white/5 flex justify-between items-center bg-gray-50 dark:bg-black/20">
+        <div class="bg-white dark:bg-gray-900 border border-white/20 dark:border-white/10 rounded-2xl shadow-2xl w-full max-w-sm relative flex flex-col backdrop-blur-xl p-6">
+            <div class="flex justify-between items-center mb-6">
                 <h3 class="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
                     <span class="text-red-500">❤️</span> <span data-i18n="login_support_title">Support</span>
                 </h3>
@@ -206,12 +220,15 @@
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
                 </button>
             </div>
-            <div class="flex-1 bg-white relative">
-                <iframe src="https://yoomoney.ru/quickpay/fundraise/button?billNumber=410011639584793" width="100%" height="100%" frameborder="0" allowtransparency="true"></iframe>
-            </div>
-            <div class="p-3 bg-gray-50 dark:bg-black/20 text-center text-xs text-gray-500 dark:text-gray-400 border-t border-gray-200 dark:border-white/5">
-                <span data-i18n="login_support_desc">Support Description</span>
-            </div>
+            
+            <p class="text-sm text-gray-600 dark:text-gray-300 mb-6 leading-relaxed" data-i18n="login_support_desc">
+                If you like the bot, you can support the author via YooMoney.
+            </p>
+
+            <a href="https://yoomoney.ru/to/410011639584793" target="_blank" class="w-full py-3.5 bg-gradient-to-r from-pink-500 to-red-600 hover:from-pink-400 hover:to-red-500 text-white rounded-xl font-bold shadow-lg shadow-red-500/20 transition-all transform active:scale-[0.98] text-center flex items-center justify-center gap-2">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                <span data-i18n="login_support_btn_pay">Go to support (YooMoney)</span>
+            </a>
         </div>
     </div>
     

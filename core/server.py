@@ -420,7 +420,7 @@ async def handle_dashboard(request):
         "unit_pb": _("unit_pb", lang),
         "web_search_nothing_found": _("web_search_nothing_found", lang),
     }
-    html = html.replace("{i18n_json}", json.dumps(i18n_data))
+    html = html.replace("{current_lang}", lang)
     return web.Response(text=html, content_type='text/html')
 
 async def handle_heartbeat(request):
@@ -816,15 +816,25 @@ async def handle_login_page(request):
         "login_support_title": _("login_support_title", lang),
         "login_support_desc": _("login_support_desc", lang),
         "login_github_tooltip": _("login_github_tooltip", lang),
+        "login_secure_gateway": _("login_secure_gateway", lang),
+        "login_pass_btn": _("login_pass_btn", lang),
+        "login_back_magic": _("login_back_magic", lang),
+        "login_or": _("login_or", lang),
+        "login_reset_title": _("login_reset_title", lang),
+        "login_reset_desc": _("login_reset_desc", lang),
+        "login_btn_send_link": _("login_btn_send_link", lang),
+        "btn_back": _("btn_back", lang),
+        "login_support_btn_pay": _("login_support_btn_pay", lang),
         "login_support_tooltip": _("login_support_tooltip", lang),
         "web_title": _("web_title", lang),
         "web_current_password": _("web_current_password", lang),
         "web_login_btn": _("web_login_btn", lang),
         "login_forgot_pass": _("login_forgot_pass", lang)
+        
     }
 
     if "{i18n_json}" in html: 
-        html = html.replace("{i18n_json}", json.dumps(i18n_data))
+        html = html.replace("{current_lang}", lang)
     else:
         script = f'<script>const I18N = {json.dumps(i18n_data)};</script>'
         html = html.replace("</body>", f"{script}</body>")
