@@ -105,16 +105,10 @@ function toggleHint(e, id) {
     if(m && c) { 
         c.innerHTML = el.innerHTML; 
         
-        // --- FIX: Улучшенный поиск заголовка ---
-        // 1. Ищем родительский контейнер .flex (используется в Settings и Dashboard) и берем текст оттуда
         let titleEl = el.closest('.flex')?.querySelector('span, label, p, h3');
-        
-        // 2. Если не найдено, пробуем искать выше (для специфичной верстки)
         if (!titleEl) {
             titleEl = el.parentElement?.parentElement?.querySelector('span, label, p, h3');
         }
-        
-        // 3. Устанавливаем заголовок или Info
         document.getElementById('hintModalTitle').innerText = titleEl ? titleEl.innerText : 'Info'; 
         
         animateModalOpen(m, false); 
@@ -137,7 +131,6 @@ function openAddNodeModal() {
 }
 function closeAddNodeModal() { const m = document.getElementById('addNodeModal'); if(m) { animateModalClose(m); } }
 
-// --- FIX: Исправлена валидация кнопки (теперь корректно меняет цвета в темной теме) ---
 function validateNodeInput() { 
     const i = document.getElementById('newNodeNameDash'); 
     const b = document.getElementById('btnAddNodeDash'); 
@@ -220,7 +213,6 @@ function stopSnow() { clearInterval(snowInterval); snowInterval = null; if (docu
 // --- NOTIFICATIONS & SESSION CHECK ---
 let lastUnreadCount = -1;
 function initNotifications() {
-    // SKIP SESSION CHECK on login pages
     if (window.location.pathname === '/login' || window.location.pathname.startsWith('/reset_password')) return;
 
     const btn = document.getElementById('notifBtn');
@@ -239,11 +231,8 @@ function initNotifications() {
     setInterval(pollNotifications, 3000);
 }
 
-// --- NEW: Session Expiry Handler ---
 function handleSessionExpired() {
     if (document.getElementById('session-expired-overlay')) return;
-
-    // Localized text with fallbacks
     const title = (typeof I18N !== 'undefined' && I18N.web_session_expired) ? I18N.web_session_expired : "Сессия истекла";
     const msg = (typeof I18N !== 'undefined' && I18N.web_please_relogin) ? I18N.web_please_relogin : "Пожалуйста, авторизуйтесь заново";
     const btnText = (typeof I18N !== 'undefined' && I18N.web_login_btn) ? I18N.web_login_btn : "Войти";
@@ -268,11 +257,7 @@ function handleSessionExpired() {
     `;
 
     document.body.appendChild(overlay);
-    
-    // Prevent scrolling
     document.body.style.overflow = 'hidden';
-
-    // Hide other open modals to avoid clutter
     const modals = document.querySelectorAll('[id$="Modal"]');
     modals.forEach(m => m.classList.add('hidden'));
 
@@ -284,18 +269,13 @@ function handleSessionExpired() {
 }
 
 async function pollNotifications() {
-    // SKIP CHECK on login pages
     if (window.location.pathname === '/login' || window.location.pathname.startsWith('/reset_password')) return;
-
     try {
         const res = await fetch('/api/notifications/list');
-        
-        // --- CHECK FOR SESSION EXPIRY ---
         if (res.status === 401) {
             handleSessionExpired();
             return;
         }
-
         if (!res.ok) return;
         const data = await res.json();
         if (data.notifications && data.notifications.length > 0) {
@@ -356,13 +336,8 @@ function applyThemeUI(t) { ['iconMoon','iconSun','iconSystem'].forEach(id=>docum
 
 function handleVisualViewportResize() {
     if (!activeMobileModal) return;
-    
     const viewport = window.visualViewport;
-    // Вычисляем высоту клавиатуры (полный экран минус видимая область)
     const keyboardHeight = window.innerHeight - viewport.height;
-    
-    // Оставляем высоту 100dvh (весь экран, чтобы фон и блюр не пропадали).
-    // Добавляем padding-bottom равный высоте клавиатуры.
     activeMobileModal.style.height = '100dvh'; 
     activeMobileModal.style.paddingBottom = `${Math.max(0, keyboardHeight)}px`;
     activeMobileModal.style.top = '0';
@@ -386,7 +361,6 @@ function animateModalOpen(modal, isInput = false) {
     const isMobile = window.innerWidth < 640;
     const card = modal.firstElementChild; 
     
-    // --- 1. BODY SCROLL LOCK (Фиксация фона) ---
     if (isMobile) {
         bodyScrollTop = window.scrollY;
         document.body.style.position = 'fixed';
@@ -403,18 +377,12 @@ function animateModalOpen(modal, isInput = false) {
     modal.style.height = '';
     modal.style.top = '';
     modal.style.paddingBottom = '';
-    // Очищаем transition, чтобы не мешал при десктопном режиме или закрытии
     modal.style.transition = '';
     modal.style.willChange = '';
 
-    // --- 2. ЛОГИКА ПОЗИЦИОНИРОВАНИЯ ---
     if (isMobile && isInput) {
         activeMobileModal = modal;
-        
-        // ВКЛЮЧАЕМ ПЛАВНУЮ АНИМАЦИЮ ОТСТУПА
-        // will-change помогает браузеру оптимизировать рендеринг
         modal.style.willChange = 'padding-bottom';
-        // cubic-bezier для естественного "выезда"
         modal.style.transition = 'padding-bottom 0.3s cubic-bezier(0.2, 0, 0, 1)';
 
         if (window.visualViewport) {
@@ -425,9 +393,7 @@ function animateModalOpen(modal, isInput = false) {
             modal.style.height = '100dvh';
         }
         
-        // ADDED: Обработчик клика для скролла к полю
         modal.addEventListener('click', handleModalInputClick);
-
         modal.classList.add('items-center', 'overflow-y-auto'); 
         modal.classList.remove('items-start', 'pt-4', 'pt-20');
         
@@ -437,7 +403,6 @@ function animateModalOpen(modal, isInput = false) {
         }
 
     } else {
-        // Десктоп или Модалка без ввода
         if (activeMobileModal === modal) {
             if (window.visualViewport) {
                 window.visualViewport.removeEventListener('resize', handleVisualViewportResize);
@@ -487,14 +452,12 @@ function animateModalClose(modal) {
         activeMobileModal = null;
     }
     
-    // REMOVED: Удаляем обработчик клика
     modal.removeEventListener('click', handleModalInputClick);
     
     modalCloseTimer = setTimeout(() => {
         modal.classList.add('hidden');
         modal.classList.remove('flex');
         
-        // --- RESTORE BODY SCROLL ---
         if (document.body.style.position === 'fixed') {
             document.body.style.position = '';
             document.body.style.top = '';
@@ -505,7 +468,6 @@ function animateModalClose(modal) {
             document.body.style.overflow = '';
         }
         
-        // Сброс всех стилей и анимаций
         modal.style.height = '';
         modal.style.top = '';
         modal.style.paddingBottom = '';
@@ -689,3 +651,7 @@ document.addEventListener('click', async (e) => {
 window.addEventListener('popstate', async () => {
     window.location.reload(); 
 });
+
+// Экспорт функций анимации для использования в других скриптах (например, settings.js)
+window.animateModalOpen = animateModalOpen;
+window.animateModalClose = animateModalClose;

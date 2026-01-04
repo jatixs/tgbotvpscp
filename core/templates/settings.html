@@ -324,6 +324,19 @@
         </div>
     </main>
 
+    <div id="genericHintModal" class="fixed inset-0 z-[100] hidden items-center justify-center bg-black/50 dark:bg-black/80 backdrop-blur-sm p-4" onclick="if(event.target === this) closeHintModal()">
+        <div class="bg-white dark:bg-gray-800 border border-white/20 dark:border-white/10 rounded-2xl shadow-2xl w-full max-w-md relative flex flex-col backdrop-blur-xl">
+            <div class="p-4 border-b border-gray-200 dark:border-white/5 flex justify-between items-center rounded-t-2xl">
+                <h3 id="hintModalTitle" class="text-lg font-bold text-gray-900 dark:text-white">Информация</h3>
+                <button onclick="closeHintModal()" class="text-gray-400 hover:text-gray-600 dark:hover:text-white transition p-1">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
+                </button>
+            </div>
+            <div id="hintModalContent" class="p-4 text-sm text-gray-700 dark:text-gray-300">
+            </div>
+        </div>
+    </div>
+
     <div id="systemModal" class="fixed inset-0 z-[150] hidden items-center justify-center bg-black/60 backdrop-blur-sm p-4" onclick="if(event.target === this) closeSystemModal(null)">
         <div class="bg-white dark:bg-gray-800 border border-white/20 dark:border-white/10 rounded-2xl shadow-2xl w-full max-w-sm transform transition-all scale-100">
             <div class="p-6">
