@@ -8,6 +8,7 @@ window.initSettings = function() {
     updateBulkButtonsUI();
     initChangePasswordUI();
     fetchSessions();
+    initInputScrollLogic(); // Добавлена инициализация скролла
 
     const input = document.getElementById('newNodeNameDash');
     if (input) {
@@ -94,6 +95,26 @@ window.initSettings = function() {
         });
     }
 };
+
+// --- FIX: Логика плавного скролла только для Touch устройств ---
+function initInputScrollLogic() {
+    // Проверка на touch-устройство (мобильные, планшеты)
+    const isTouchDevice = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
+    
+    if (!isTouchDevice) return; // Если не тач-устройство, выходим
+
+    const ids = ['conf_traffic', 'conf_timeout', 'pass_current', 'pass_new', 'pass_confirm'];
+    ids.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) {
+            const scrollFn = (e) => {
+                e.target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            };
+            el.addEventListener('click', scrollFn);
+            el.addEventListener('focus', scrollFn);
+        }
+    });
+}
 
 document.addEventListener("DOMContentLoaded", () => {
     if (document.getElementById('usersSection')) {

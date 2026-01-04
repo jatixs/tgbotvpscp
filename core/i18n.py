@@ -466,6 +466,8 @@ STRINGS = {
         "web_session_current_label": "Текущая сессия",
         "web_search_placeholder": "Поиск...", 
         "web_search_nothing_found": "Ничего не найдено",
+        "web_session_expired": "Сессия истекла",
+        "web_please_relogin": "Пожалуйста, авторизуйтесь заново",
         # --- WEB: KEYBOARD SETTINGS ---
         "web_keyboard_title": "Клавиатура бота",
         "web_kb_desc": "Настройте видимость команд в меню бота.",
@@ -949,6 +951,8 @@ STRINGS = {
         "web_session_current_label": "Current Session",
         "web_search_placeholder": "Search...", 
         "web_search_nothing_found": "Nothing found",
+        "web_session_expired": "Session Expired",
+        "web_please_relogin": "Please login again",
         
         # --- WEB: KEYBOARD SETTINGS ---
         "web_keyboard_title": "Bot Keyboard",

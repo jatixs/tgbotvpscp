@@ -31,6 +31,13 @@ document.addEventListener("DOMContentLoaded", () => {
         if (typeof window.switchLogType === 'function') { window.switchLogType('bot'); }
     }
     pageCache.set(window.location.href, document.documentElement.outerHTML);
+    
+    // Check session on tab focus
+    document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') {
+            pollNotifications();
+        }
+    });
 });
 
 // --- HELPER FUNCTIONS ---
@@ -85,7 +92,33 @@ window.showToast = showToast;
 window.closeToast = closeToast;
 
 // --- MODALS BASE ---
-function toggleHint(e, id) { if(e) e.stopPropagation(); const el = document.getElementById(id); if(!el) return; const m = document.getElementById('genericHintModal'); const c = document.getElementById('hintModalContent'); if(m && c) { c.innerHTML = el.innerHTML; document.getElementById('hintModalTitle').innerText = el.closest('div')?.querySelector('span, label')?.innerText || 'Info'; animateModalOpen(m, false); } }
+function toggleHint(e, id) { 
+    if(e) e.stopPropagation(); 
+    const el = document.getElementById(id); 
+    if(!el) return; 
+    
+    const m = document.getElementById('genericHintModal'); 
+    const c = document.getElementById('hintModalContent'); 
+    
+    if(m && c) { 
+        c.innerHTML = el.innerHTML; 
+        
+        // --- FIX: Улучшенный поиск заголовка ---
+        // 1. Ищем родительский контейнер .flex (используется в Settings и Dashboard) и берем текст оттуда
+        let titleEl = el.closest('.flex')?.querySelector('span, label, p, h3');
+        
+        // 2. Если не найдено, пробуем искать выше (для специфичной верстки)
+        if (!titleEl) {
+            titleEl = el.parentElement?.parentElement?.querySelector('span, label, p, h3');
+        }
+        
+        // 3. Устанавливаем заголовок или Info
+        document.getElementById('hintModalTitle').innerText = titleEl ? titleEl.innerText : 'Info'; 
+        
+        animateModalOpen(m, false); 
+    } 
+}
+
 function closeHintModal() { const m = document.getElementById('genericHintModal'); if(m) { animateModalClose(m); } }
 window.toggleHint = toggleHint; window.closeHintModal = closeHintModal;
 
@@ -101,7 +134,24 @@ function openAddNodeModal() {
     } 
 }
 function closeAddNodeModal() { const m = document.getElementById('addNodeModal'); if(m) { animateModalClose(m); } }
-function validateNodeInput() { const i = document.getElementById('newNodeNameDash'); const b = document.getElementById('btnAddNodeDash'); if(!i || !b) return; if(i.value.trim().length >= 2) { b.disabled=false; b.classList.replace('bg-gray-200','bg-purple-600'); b.classList.replace('text-gray-400','text-white'); b.classList.remove('cursor-not-allowed'); } else { b.disabled=true; b.classList.replace('bg-purple-600','bg-gray-200'); b.classList.replace('text-white','text-gray-400'); b.classList.add('cursor-not-allowed'); } }
+
+// --- FIX: Исправлена валидация кнопки (теперь корректно меняет цвета в темной теме) ---
+function validateNodeInput() { 
+    const i = document.getElementById('newNodeNameDash'); 
+    const b = document.getElementById('btnAddNodeDash'); 
+    if(!i || !b) return; 
+    
+    if(i.value.trim().length >= 2) { 
+        b.disabled = false;
+        b.classList.remove('bg-gray-200', 'dark:bg-gray-700', 'text-gray-400', 'dark:text-gray-500', 'cursor-not-allowed');
+        b.classList.add('bg-purple-600', 'text-white', 'hover:bg-purple-700', 'shadow-lg');
+    } else { 
+        b.disabled = true;
+        b.classList.remove('bg-purple-600', 'text-white', 'hover:bg-purple-700', 'shadow-lg');
+        b.classList.add('bg-gray-200', 'dark:bg-gray-700', 'text-gray-400', 'dark:text-gray-500', 'cursor-not-allowed');
+    } 
+}
+
 window.openAddNodeModal=openAddNodeModal; window.closeAddNodeModal=closeAddNodeModal; window.validateNodeInput=validateNodeInput;
 async function addNodeDash() { const i = document.getElementById('newNodeNameDash'); const n = i.value.trim(); if(!n) return; try { const r = await fetch('/api/nodes/add', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:n})}); const d = await r.json(); if(r.ok) { document.getElementById('nodeResultDash').classList.remove('hidden'); document.getElementById('newNodeTokenDash').innerText = d.token; document.getElementById('newNodeCmdDash').innerText = d.command; if(typeof NODES_DATA!=='undefined') NODES_DATA.push({token:d.token,name:n,ip:'Unknown'}); if(typeof renderNodes==='function') renderNodes(); if(typeof fetchNodesList==='function') fetchNodesList(); i.value=''; validateNodeInput(); } else { window.showModalAlert(d.error, 'Error'); } } catch(e) { window.showModalAlert(e, 'Error'); } }
 
@@ -165,7 +215,7 @@ function startSnow() {
 }
 function stopSnow() { clearInterval(snowInterval); snowInterval = null; if (document.getElementById('snow-container')) document.getElementById('snow-container').innerHTML = ''; }
 
-// --- NOTIFICATIONS ---
+// --- NOTIFICATIONS & SESSION CHECK ---
 let lastUnreadCount = -1;
 function initNotifications() {
     const btn = document.getElementById('notifBtn');
@@ -183,9 +233,61 @@ function initNotifications() {
     pollNotifications();
     setInterval(pollNotifications, 3000);
 }
+
+// --- NEW: Session Expiry Handler ---
+function handleSessionExpired() {
+    if (document.getElementById('session-expired-overlay')) return;
+
+    // Localized text with fallbacks
+    const title = (typeof I18N !== 'undefined' && I18N.web_session_expired) ? I18N.web_session_expired : "Сессия истекла";
+    const msg = (typeof I18N !== 'undefined' && I18N.web_please_relogin) ? I18N.web_please_relogin : "Пожалуйста, авторизуйтесь заново";
+    const btnText = (typeof I18N !== 'undefined' && I18N.web_login_btn) ? I18N.web_login_btn : "Войти";
+
+    const overlay = document.createElement('div');
+    overlay.id = 'session-expired-overlay';
+    overlay.className = 'fixed inset-0 z-[9999] bg-white/30 dark:bg-black/50 backdrop-blur-md flex items-center justify-center p-4 transition-opacity duration-300 opacity-0';
+    
+    overlay.innerHTML = `
+        <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl p-8 max-w-sm w-full text-center border border-gray-200 dark:border-white/10 transform scale-95 transition-transform duration-300">
+            <div class="mb-4 text-red-500 mx-auto bg-red-100 dark:bg-red-900/20 w-16 h-16 flex items-center justify-center rounded-full">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                </svg>
+            </div>
+            <h3 class="text-xl font-bold text-gray-900 dark:text-white mb-2">${title}</h3>
+            <p class="text-gray-500 dark:text-gray-400 mb-6 text-sm leading-relaxed">${msg}</p>
+            <a href="/login" class="block w-full py-3 px-4 bg-blue-600 hover:bg-blue-500 text-white rounded-xl font-bold transition shadow-lg shadow-blue-500/20 active:scale-95">
+                ${btnText}
+            </a>
+        </div>
+    `;
+
+    document.body.appendChild(overlay);
+    
+    // Prevent scrolling
+    document.body.style.overflow = 'hidden';
+
+    // Hide other open modals to avoid clutter
+    const modals = document.querySelectorAll('[id$="Modal"]');
+    modals.forEach(m => m.classList.add('hidden'));
+
+    requestAnimationFrame(() => {
+        overlay.classList.remove('opacity-0');
+        overlay.querySelector('div').classList.remove('scale-95');
+        overlay.querySelector('div').classList.add('scale-100');
+    });
+}
+
 async function pollNotifications() {
     try {
         const res = await fetch('/api/notifications/list');
+        
+        // --- CHECK FOR SESSION EXPIRY ---
+        if (res.status === 401) {
+            handleSessionExpired();
+            return;
+        }
+
         if (!res.ok) return;
         const data = await res.json();
         if (data.notifications && data.notifications.length > 0) {
@@ -258,6 +360,13 @@ function handleVisualViewportResize() {
     activeMobileModal.style.top = '0';
 }
 
+function handleModalInputClick(e) {
+    const el = e.target.closest('input, textarea, select');
+    if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+}
+
 function animateModalOpen(modal, isInput = false) {
     if (!modal) return;
     
@@ -307,6 +416,9 @@ function animateModalOpen(modal, isInput = false) {
         } else {
             modal.style.height = '100dvh';
         }
+        
+        // ADDED: Обработчик клика для скролла к полю
+        modal.addEventListener('click', handleModalInputClick);
 
         modal.classList.add('items-center', 'overflow-y-auto'); 
         modal.classList.remove('items-start', 'pt-4', 'pt-20');
@@ -366,6 +478,9 @@ function animateModalClose(modal) {
         window.visualViewport.removeEventListener('scroll', handleVisualViewportResize);
         activeMobileModal = null;
     }
+    
+    // REMOVED: Удаляем обработчик клика
+    modal.removeEventListener('click', handleModalInputClick);
     
     modalCloseTimer = setTimeout(() => {
         modal.classList.add('hidden');
