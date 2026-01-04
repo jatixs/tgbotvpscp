@@ -3,6 +3,7 @@ import logging
 import os
 import sys
 import re
+import signal
 from packaging import version
 from aiogram import F, Dispatcher, types, Bot
 from aiogram.types import KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
@@ -156,7 +157,8 @@ async def execute_bot_update(branch: str, restart_source: str = "unknown"):
         await proc_co.communicate()
         
         # 2. Pull
-        pull_cmd = "git pull"
+        # Используем reset --hard для сброса локальных изменений, которые могут блокировать pull
+        pull_cmd = f"git fetch origin {branch} && git reset --hard origin/{branch}"
         proc = await asyncio.create_subprocess_shell(pull_cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
         stdout, stderr = await proc.communicate()
         
@@ -173,28 +175,21 @@ async def execute_bot_update(branch: str, restart_source: str = "unknown"):
         with open(RESTART_FLAG_FILE, "w") as f:
             f.write(restart_source)
 
-        # 5. Restart Command
-        restart_cmd = ""
-        if DEPLOY_MODE == "docker":
-            container_name = os.environ.get("TG_BOT_CONTAINER_NAME")
-            if container_name:
-                restart_cmd = f"docker restart {container_name}"
-            else:
-                restart_cmd = "kill 1" 
-        else:
-            restart_cmd = "sudo systemctl restart tg-bot.service"
-            
-        logging.info(f"Update finished. Restarting via: {restart_cmd}")
-        asyncio.create_task(do_restart(restart_cmd))
+        # 5. Restart (Self-termination)
+        logging.info("Update finished. Initiating self-restart (relying on service manager)...")
+        asyncio.create_task(self_terminate())
         
     except Exception as e:
         logging.error(f"Execute update failed: {e}")
         raise e
 
 
-async def do_restart(cmd):
-    await asyncio.sleep(1)
-    await asyncio.create_subprocess_shell(cmd)
+async def self_terminate():
+    """Завершает процесс бота, полагаясь на авто-рестарт системы (systemd/docker)."""
+    await asyncio.sleep(1) # Даем время на отправку сообщения "Успешно"
+    logging.info("Stopping process for restart/update...")
+    # Отправляем сигнал SIGTERM самому себе (корректное завершение)
+    os.kill(os.getpid(), signal.SIGTERM)
 
 
 async def auto_update_checker(bot: Bot):
