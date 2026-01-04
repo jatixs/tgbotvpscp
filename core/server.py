@@ -552,11 +552,7 @@ async def handle_settings_page(request):
     if not user: raise web.HTTPFound('/login')
     html = load_template("settings.html")
     user_id = user['id']
-    
-    # --- ИСПРАВЛЕНИЕ: Добавляем объявление переменной role ---
     role = user.get('role', 'users')
-    # ---------------------------------------------------------
-    
     is_admin = role == 'admins'
     lang = get_user_lang(user_id)
     user_alerts = ALERTS_CONFIG.get(user_id, {})
@@ -792,21 +788,47 @@ async def handle_login_page(request):
         except Exception as e:
             logging.error(f"Error fetching bot username: {e}")
             BOT_USERNAME_CACHE = ""
+    
     html = load_template("login.html")
+    
+    lang = request.cookies.get('guest_lang', DEFAULT_LANGUAGE)
+    
     alert = ""
     if is_default_password_active(ADMIN_USER_ID):
-        alert = f"""<div class="mb-4 p-3 bg-yellow-500/20 border border-yellow-500/50 rounded-xl flex items-start gap-3"><svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-yellow-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg><span class="text-xs text-yellow-200 font-medium">{_("web_default_pass_alert", DEFAULT_LANGUAGE)}</span></div>"""
+        alert = f"""<div class="mb-4 p-3 bg-yellow-500/20 border border-yellow-500/50 rounded-xl flex items-start gap-3"><svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-yellow-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg><span class="text-xs text-yellow-200 font-medium">{_("web_default_pass_alert", lang)}</span></div>"""
+    
     html = html.replace("{default_pass_alert}", alert).replace("{error_block}", "")
     html = html.replace("{bot_username}", BOT_USERNAME_CACHE or "")
     html = html.replace("style.css", f"style.css?v={CACHE_VER}")
-    lang = DEFAULT_LANGUAGE
+    
     i18n_data = {
-        "web_error": _("web_error", lang, error=""), "web_conn_error": _("web_conn_error", lang, error=""), "modal_title_alert": _("modal_title_alert", lang), "modal_title_confirm": _("modal_title_confirm", lang), "modal_title_prompt": _("modal_title_prompt", lang), "modal_btn_ok": _("modal_btn_ok", lang), "modal_btn_cancel": _("modal_btn_cancel", lang),
+        "web_error": _("web_error", lang, error=""), 
+        "web_conn_error": _("web_conn_error", lang, error=""),
+        "modal_title_alert": _("modal_title_alert", lang), 
+        "modal_title_confirm": _("modal_title_confirm", lang), 
+        "modal_title_prompt": _("modal_title_prompt", lang), 
+        "modal_btn_ok": _("modal_btn_ok", lang), 
+        "modal_btn_cancel": _("modal_btn_cancel", lang),
+        # New Login Keys
+        "login_cookie_title": _("login_cookie_title", lang),
+        "login_cookie_text": _("login_cookie_text", lang),
+        "login_cookie_btn": _("login_cookie_btn", lang),
+        "login_support_title": _("login_support_title", lang),
+        "login_support_desc": _("login_support_desc", lang),
+        "login_github_tooltip": _("login_github_tooltip", lang),
+        "login_support_tooltip": _("login_support_tooltip", lang),
+        "web_title": _("web_title", lang),
+        "web_current_password": _("web_current_password", lang),
+        "web_login_btn": _("web_login_btn", lang),
+        "login_forgot_pass": _("login_forgot_pass", lang)
     }
-    if "{i18n_json}" in html: html = html.replace("{i18n_json}", json.dumps(i18n_data))
+
+    if "{i18n_json}" in html: 
+        html = html.replace("{i18n_json}", json.dumps(i18n_data))
     else:
         script = f'<script>const I18N = {json.dumps(i18n_data)};</script>'
         html = html.replace("</body>", f"{script}</body>")
+        
     return web.Response(text=html, content_type='text/html')
 
 async def handle_login_request(request):

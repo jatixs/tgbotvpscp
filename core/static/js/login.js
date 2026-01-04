@@ -1,19 +1,14 @@
 /* /core/static/js/login.js */
 
-// --- NEW: Language & Support Logic ---
-async function setLoginLanguage(lang) {
-    localStorage.setItem('user_lang_choice', lang);
-    try {
-        await fetch('/api/settings/language', { 
-            method: 'POST', 
-            headers: { 'Content-Type': 'application/json' }, 
-            body: JSON.stringify({ lang: lang }) 
-        });
-    } catch (e) { console.error(e); }
-    window.location.reload(); 
+// --- Language Switching ---
+function setLoginLanguage(lang) {
+    // Устанавливаем куку, чтобы сервер (handle_login_page) знал, какой язык отдать
+    document.cookie = "guest_lang=" + lang + "; path=/; max-age=31536000"; // 1 год
+    window.location.reload();
 }
 window.setLoginLanguage = setLoginLanguage;
 
+// --- Support Modal ---
 function openSupportModal() {
     const modal = document.getElementById('support-modal');
     if (modal) {
@@ -34,7 +29,8 @@ function closeSupportModal() {
 window.openSupportModal = openSupportModal;
 window.closeSupportModal = closeSupportModal;
 
-// --- EXISTING LOGIC ---
+
+// --- Existing Login Logic ---
 function toggleForms(target) {
     const magic = document.getElementById('magic-form');
     const password = document.getElementById('password-form');
@@ -42,14 +38,12 @@ function toggleForms(target) {
     const setPass = document.getElementById('set-password-form');
     const errorBlock = document.getElementById('reset-error-block');
     
-    // Скрываем всё, если элементы существуют
     if (magic) magic.classList.add('hidden');
     if (password) password.classList.add('hidden');
     if (reset) reset.classList.add('hidden');
     if (setPass) setPass.classList.add('hidden');
     if (errorBlock) errorBlock.classList.add('hidden');
 
-    // Показываем нужное
     if (target === 'password' && password) {
         password.classList.remove('hidden');
     } else if (target === 'reset' && reset) {
@@ -61,7 +55,6 @@ function toggleForms(target) {
     }
 }
 
-// Запрос на сброс (отправка ссылки в ТГ)
 async function requestPasswordReset() {
     const userIdInput = document.getElementById('reset_user_id');
     const btn = document.getElementById('btn-reset-send');
@@ -109,20 +102,13 @@ async function requestPasswordReset() {
                     adminLinkBtn.href = data.admin_url;
                 }
             } else {
-                // Using the new modal!
-                if (window.showModalAlert) {
-                    await window.showModalAlert("Ошибка: " + (data.error || "Unknown"), 'Ошибка');
-                } else {
-                    alert("Ошибка: " + (data.error || "Unknown"));
-                }
+                if (window.showModalAlert) await window.showModalAlert("Ошибка: " + (data.error || "Unknown"), 'Ошибка');
+                else alert("Ошибка: " + (data.error || "Unknown"));
             }
         }
     } catch (e) {
-        if (window.showModalAlert) {
-            await window.showModalAlert("Ошибка соединения: " + e, 'Ошибка сети');
-        } else {
-            alert("Ошибка соединения: " + e);
-        }
+        if (window.showModalAlert) await window.showModalAlert("Ошибка соединения: " + e, 'Ошибка сети');
+        else alert("Ошибка соединения: " + e);
     } finally {
         if (btn) {
             btn.disabled = false;
@@ -131,7 +117,6 @@ async function requestPasswordReset() {
     }
 }
 
-// Сохранение нового пароля (по токену)
 async function submitNewPassword() {
     const p1 = document.getElementById('new_pass').value;
     const p2 = document.getElementById('confirm_pass').value;
@@ -189,9 +174,7 @@ async function submitNewPassword() {
 }
 
 document.addEventListener("DOMContentLoaded", () => {
-    if (window.twemoji) {
-        window.twemoji.parse(document.body, { folder: 'svg', ext: '.svg' });
-    }
+    if (window.twemoji) window.twemoji.parse(document.body, { folder: 'svg', ext: '.svg' });
 
     const urlParams = new URLSearchParams(window.location.search);
     const formsContainer = document.getElementById('forms-container');
@@ -209,7 +192,6 @@ document.addEventListener("DOMContentLoaded", () => {
             </div>
         `;
     } else if (urlParams.get('token')) {
-        // Проверяем, есть ли форма смены пароля на странице (чтобы не вызывать на login.html)
         if (document.getElementById('set-password-form')) {
             toggleForms('set-password');
         }
