@@ -1,18 +1,8 @@
 /* /core/static/js/login.js */
 
-// --- COOKIE & LANG LOGIC ---
-document.addEventListener("DOMContentLoaded", () => {
-    initLanguage();
-    checkCookieConsent();
-    initLoginInputs();
-});
-
-// --- LANGUAGE ---
+// --- NEW: Language & Support Logic ---
 async function setLoginLanguage(lang) {
-    // Сохраняем выбор в LocalStorage (чтобы запомнить "навсегда" на клиенте)
     localStorage.setItem('user_lang_choice', lang);
-    
-    // Отправляем запрос на сервер для смены языка сессии/контекста (если нужно)
     try {
         await fetch('/api/settings/language', { 
             method: 'POST', 
@@ -20,49 +10,10 @@ async function setLoginLanguage(lang) {
             body: JSON.stringify({ lang: lang }) 
         });
     } catch (e) { console.error(e); }
-
-    // Перезагружаем страницу чтобы применились переводы (так как login.html рендерится сервером)
     window.location.reload(); 
 }
-
-function initLanguage() {
-    // Проверяем, есть ли сохраненный выбор
-    const savedLang = localStorage.getItem('user_lang_choice');
-    
-    // Если есть сохраненный язык, и он отличается от текущего (можно проверить через I18N, но проще не усложнять на логине),
-    // то сервер уже должен был его подхватить если мы его туда отправляли.
-    // Но так как это страница логина, она может быть анонимной. 
-    // Если сервер не знает языка, можно попробовать форсировать релоад один раз, но это может вызвать циклы.
-    // Поэтому просто оставляем кнопки выбора доступными.
-}
-
-// --- COOKIE BANNER ---
-function checkCookieConsent() {
-    const consent = localStorage.getItem('cookie_consent');
-    if (!consent) {
-        // Показываем баннер с небольшой задержкой для анимации
-        setTimeout(() => {
-            const banner = document.getElementById('cookie-banner');
-            if (banner) {
-                banner.classList.remove('hidden');
-                banner.classList.add('animate-fade-in-up'); // Ensure you have this animation or generic transition
-            }
-        }, 1000);
-    }
-}
-
-function acceptCookies() {
-    localStorage.setItem('cookie_consent', 'true');
-    const banner = document.getElementById('cookie-banner');
-    if (banner) {
-        banner.classList.add('opacity-0', 'translate-y-10', 'transition-all', 'duration-500');
-        setTimeout(() => banner.remove(), 500);
-    }
-}
-window.acceptCookies = acceptCookies;
 window.setLoginLanguage = setLoginLanguage;
 
-// --- SUPPORT MODAL ---
 function openSupportModal() {
     const modal = document.getElementById('support-modal');
     if (modal) {
@@ -83,88 +34,184 @@ function closeSupportModal() {
 window.openSupportModal = openSupportModal;
 window.closeSupportModal = closeSupportModal;
 
+// --- EXISTING LOGIC ---
+function toggleForms(target) {
+    const magic = document.getElementById('magic-form');
+    const password = document.getElementById('password-form');
+    const reset = document.getElementById('reset-form');
+    const setPass = document.getElementById('set-password-form');
+    const errorBlock = document.getElementById('reset-error-block');
+    
+    // Скрываем всё, если элементы существуют
+    if (magic) magic.classList.add('hidden');
+    if (password) password.classList.add('hidden');
+    if (reset) reset.classList.add('hidden');
+    if (setPass) setPass.classList.add('hidden');
+    if (errorBlock) errorBlock.classList.add('hidden');
 
-// --- EXISTING LOGIN LOGIC ---
-function initLoginInputs() {
-    const idInput = document.getElementById('login_id');
-    const passInput = document.getElementById('login_pass');
-
-    // Auto-focus logic
-    if (idInput && !idInput.value) {
-        idInput.focus();
-    } else if (passInput) {
-        passInput.focus();
+    // Показываем нужное
+    if (target === 'password' && password) {
+        password.classList.remove('hidden');
+    } else if (target === 'reset' && reset) {
+        reset.classList.remove('hidden');
+    } else if (target === 'set-password' && setPass) {
+        setPass.classList.remove('hidden');
+    } else if (magic) {
+        magic.classList.remove('hidden');
     }
-
-    // Enter key support
-    const handleEnter = (e) => { if(e.key === 'Enter') performLogin(); };
-    if(idInput) idInput.addEventListener('keydown', handleEnter);
-    if(passInput) passInput.addEventListener('keydown', handleEnter);
 }
 
-async function performLogin() {
-    const idInput = document.getElementById('login_id');
-    const passInput = document.getElementById('login_pass');
-    const btn = document.getElementById('btn_login');
-    const errorDiv = document.getElementById('login_error');
-    const errorText = document.getElementById('login_error_text');
+// Запрос на сброс (отправка ссылки в ТГ)
+async function requestPasswordReset() {
+    const userIdInput = document.getElementById('reset_user_id');
+    const btn = document.getElementById('btn-reset-send');
+    const errorBlock = document.getElementById('reset-error-block');
+    const adminLinkBtn = document.getElementById('admin-link-btn');
+    const container = document.getElementById('forms-container');
 
-    if (!idInput || !passInput || !btn) return;
+    if (!userIdInput || !btn) return;
 
-    const id = idInput.value.trim();
-    const password = passInput.value.trim();
-
-    if (!id || !password) {
-        showLoginError("Please enter ID and Password");
+    const userId = userIdInput.value.trim();
+    if (!userId) {
+        userIdInput.focus();
         return;
     }
 
-    // UI Loading state
-    const originalBtnContent = btn.innerHTML;
+    const originalText = btn.innerText;
     btn.disabled = true;
-    btn.innerHTML = `<svg class="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>`;
-    errorDiv.classList.add('hidden');
+    btn.innerText = "Загрузка...";
+    if (errorBlock) errorBlock.classList.add('hidden');
 
     try {
-        const response = await fetch('/login', {
+        const response = await fetch('/api/login/reset', {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ user_id: id, password: password })
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ user_id: userId })
         });
 
         const data = await response.json();
 
         if (response.ok) {
-            // Success
-            btn.classList.remove('from-blue-600', 'to-purple-600');
-            btn.classList.add('bg-green-500');
-            btn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg>`;
-            
-            setTimeout(() => {
-                window.location.href = data.redirect || '/dashboard';
-            }, 500);
+            container.innerHTML = `
+                <div class="text-center py-4 animate-pulse">
+                    <div class="w-16 h-16 bg-yellow-500/20 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <svg class="w-8 h-8 text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 00-2-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path></svg>
+                    </div>
+                    <h3 class="text-lg font-bold text-white mb-2">Ссылка отправлена!</h3>
+                    <p class="text-sm text-gray-300">Проверьте сообщения от бота.</p>
+                    <a href="/login" class="inline-block mt-4 text-xs text-blue-400 hover:text-blue-300">Вернуться</a>
+                </div>
+            `;
         } else {
-            // Error
-            showLoginError(data.error || "Login failed");
-            btn.disabled = false;
-            btn.innerHTML = originalBtnContent;
+            if (data.error === 'not_found' && errorBlock) {
+                errorBlock.classList.remove('hidden');
+                if (data.admin_url && adminLinkBtn) {
+                    adminLinkBtn.href = data.admin_url;
+                }
+            } else {
+                // Using the new modal!
+                if (window.showModalAlert) {
+                    await window.showModalAlert("Ошибка: " + (data.error || "Unknown"), 'Ошибка');
+                } else {
+                    alert("Ошибка: " + (data.error || "Unknown"));
+                }
+            }
         }
-    } catch (error) {
-        showLoginError("Connection error");
-        btn.disabled = false;
-        btn.innerHTML = originalBtnContent;
+    } catch (e) {
+        if (window.showModalAlert) {
+            await window.showModalAlert("Ошибка соединения: " + e, 'Ошибка сети');
+        } else {
+            alert("Ошибка соединения: " + e);
+        }
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            btn.innerText = originalText;
+        }
     }
 }
 
-function showLoginError(msg) {
-    const errorDiv = document.getElementById('login_error');
-    const errorText = document.getElementById('login_error_text');
-    if (errorDiv && errorText) {
-        errorText.innerText = msg;
-        errorDiv.classList.remove('hidden');
-        errorDiv.classList.add('animate-shake'); // Ensure you have this animation in CSS or remove class
-        setTimeout(() => errorDiv.classList.remove('animate-shake'), 500);
+// Сохранение нового пароля (по токену)
+async function submitNewPassword() {
+    const p1 = document.getElementById('new_pass').value;
+    const p2 = document.getElementById('confirm_pass').value;
+    const btn = document.getElementById('btn-save-pass');
+    const container = document.getElementById('forms-container');
+    const urlParams = new URLSearchParams(window.location.search);
+    const token = urlParams.get('token');
+
+    if (!p1 || p1.length < 4) {
+        if (window.showModalAlert) await window.showModalAlert("Пароль слишком короткий (минимум 4 символа).", 'Ошибка');
+        else alert("Пароль слишком короткий (минимум 4 символа).");
+        return;
+    }
+    if (p1 !== p2) {
+        if (window.showModalAlert) await window.showModalAlert("Пароли не совпадают.", 'Ошибка');
+        else alert("Пароли не совпадают.");
+        return;
+    }
+
+    btn.disabled = true;
+    btn.innerText = "Сохранение...";
+
+    try {
+        const res = await fetch('/api/reset/confirm', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ token: token, password: p1 })
+        });
+        
+        const data = await res.json();
+        if (res.ok) {
+            container.innerHTML = `
+                <div class="text-center py-4">
+                    <div class="w-16 h-16 bg-green-500/20 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <svg class="w-8 h-8 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
+                    </div>
+                    <h3 class="text-lg font-bold text-white mb-2">Успешно!</h3>
+                    <p class="text-sm text-gray-300">Пароль изменен.</p>
+                    <a href="/login" class="w-full block text-center mt-6 py-3 bg-white/10 hover:bg-white/20 rounded-xl font-bold transition">Войти</a>
+                </div>
+            `;
+            window.history.replaceState({}, document.title, "/login");
+        } else {
+            if (window.showModalAlert) await window.showModalAlert("Ошибка: " + data.error, 'Ошибка');
+            else alert("Ошибка: " + data.error);
+            btn.disabled = false;
+            btn.innerText = "Сохранить пароль";
+        }
+    } catch (e) {
+        if (window.showModalAlert) await window.showModalAlert("Ошибка сети: " + e, 'Ошибка сети');
+        else alert("Ошибка сети: " + e);
+        btn.disabled = false;
+        btn.innerText = "Сохранить пароль";
     }
 }
+
+document.addEventListener("DOMContentLoaded", () => {
+    if (window.twemoji) {
+        window.twemoji.parse(document.body, { folder: 'svg', ext: '.svg' });
+    }
+
+    const urlParams = new URLSearchParams(window.location.search);
+    const formsContainer = document.getElementById('forms-container');
+    
+    if (urlParams.get('sent') === 'true' && formsContainer) {
+        formsContainer.innerHTML = `
+            <div class="text-center py-4 animate-pulse">
+                <div class="w-16 h-16 bg-green-500/20 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <svg class="w-8 h-8 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
+                </div>
+                <h3 class="text-lg font-bold text-white mb-2">Готово!</h3>
+                <p class="text-sm text-gray-300">Ссылка отправлена в Telegram.</p>
+                <p class="text-xs text-gray-500 mt-4">Проверьте сообщения от бота.</p>
+                <a href="/login" class="inline-block mt-4 text-xs text-blue-400 hover:text-blue-300">Вернуться</a>
+            </div>
+        `;
+    } else if (urlParams.get('token')) {
+        // Проверяем, есть ли форма смены пароля на странице (чтобы не вызывать на login.html)
+        if (document.getElementById('set-password-form')) {
+            toggleForms('set-password');
+        }
+    }
+});

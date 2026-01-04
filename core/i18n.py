@@ -26,6 +26,15 @@ STRINGS = {
         "error_unexpected_json_parsing": "❌ Неожиданная ошибка при обработке результатов: {error}",
         "throttle_message": "⏳ Пожалуйста, подождите {seconds} сек. перед следующим действием.",
         
+        # --- LOGIN PAGE (NEW) ---
+        "login_cookie_title": "Приватность и Данные",
+        "login_cookie_text": "🍪 Мы используем кэш и куки <b>только для сохранения настроек</b> интерфейса. Никакие данные не отслеживаются и не передаются третьим лицам.",
+        "login_cookie_btn": "Понятно",
+        "login_support_title": "Поддержать проект",
+        "login_support_desc": "Если вам нравится бот, вы можете поддержать автора через YooMoney.",
+        "login_github_tooltip": "Исходный код на GitHub",
+        "login_support_tooltip": "Поддержать проект",
+        
         # --- ГЛАВНОЕ МЕНЮ И НАСТРОЙКИ ---
         "main_menu_welcome": "👋 Привет! Выбери категорию в меню.",
         "main_menu_settings_text": "⚙️ <b>Настройка меню</b>\n\nНажмите на кнопки, чтобы включить или выключить отображение команд в боте.",
@@ -422,12 +431,6 @@ STRINGS = {
         "web_pass_changed": "Пароль успешно изменен!",
         "web_pass_mismatch": "Пароли не совпадают",
         "web_login_header": "<b>🔐 Вход в Web-панель</b>",
-        "login_cookie_text": "🍪 Мы используем кэш и куки <b>только для сохранения настроек</b> веб-интерфейса. Никакие данные не отслеживаются, не собираются и не отправляются никуда в обезличенном виде.",
-        "login_cookie_btn": "Понятно",
-        "login_support_title": "Поддержать проект",
-        "login_support_desc": "Если вам нравится этот бот, вы можете поддержать автора копеечкой через YooMoney.",
-        "login_github_tooltip": "Исходный код на GitHub",
-        "login_support_tooltip": "Поддержать проект",
         "web_login_btn": "🔓 Войти",
         "web_reset_header": "<b>🆘 Сброс пароля</b>",
         "web_reset_btn": "🔐 Сбросить",
@@ -474,6 +477,7 @@ STRINGS = {
         "web_search_nothing_found": "Ничего не найдено",
         "web_session_expired": "Сессия истекла",
         "web_please_relogin": "Пожалуйста, авторизуйтесь заново",
+        
         # --- WEB: KEYBOARD SETTINGS ---
         "web_keyboard_title": "Клавиатура бота",
         "web_kb_desc": "Настройте видимость команд в меню бота.",
@@ -529,6 +533,15 @@ STRINGS = {
         "error_unexpected_json_parsing": "❌ Parsing error: {error}",
         "throttle_message": "⏳ Wait {seconds}s.",
         
+        # --- LOGIN PAGE NEW ---
+        "login_cookie_title": "Privacy & Data",
+        "login_cookie_text": "🍪 We use cache and cookies <b>only to save interface settings</b>. No data is tracked, collected, or shared with third parties.",
+        "login_cookie_btn": "Got it",
+        "login_support_title": "Support the Project",
+        "login_support_desc": "If you like the bot, you can support the author via YooMoney.",
+        "login_github_tooltip": "Source code on GitHub",
+        "login_support_tooltip": "Support the project",
+
         # --- MAIN MENU & SETTINGS (NEW KEYS) ---
         "main_menu_welcome": "👋 Hi! Select a category.",
         "main_menu_settings_text": "⚙️ <b>Menu Configuration</b>\n\nClick buttons to toggle visibility in the bot.",
@@ -922,12 +935,6 @@ STRINGS = {
         "web_current_password": "Current Password",
         "web_login_header": "<b>🔐 Web Login</b>",
         "web_login_btn": "🔓 Login",
-        "login_cookie_text": "🍪 We use cache and cookies <b>only to save web interface settings</b>. No data is tracked, collected, or sent anywhere in anonymized form.",
-        "login_cookie_btn": "Got it",
-        "login_support_title": "Support the Project",
-        "login_support_desc": "If you like this bot, you can support the author via YooMoney.",
-        "login_github_tooltip": "Source code on GitHub",
-        "login_support_tooltip": "Support the project",
         "web_reset_header": "<b>🆘 Reset Password</b>",
         "web_reset_btn": "🔐 Reset",
         "web_new_password": "New Password",

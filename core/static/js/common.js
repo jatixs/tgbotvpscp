@@ -32,12 +32,14 @@ document.addEventListener("DOMContentLoaded", () => {
     }
     pageCache.set(window.location.href, document.documentElement.outerHTML);
     
-    // Check session on tab focus
-    document.addEventListener('visibilitychange', () => {
-        if (document.visibilityState === 'visible') {
-            pollNotifications();
-        }
-    });
+    // Check session on tab focus (except login/reset pages)
+    if (!['/login', '/reset_password'].includes(window.location.pathname)) {
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'visible') {
+                pollNotifications();
+            }
+        });
+    }
 });
 
 // --- HELPER FUNCTIONS ---
@@ -218,6 +220,9 @@ function stopSnow() { clearInterval(snowInterval); snowInterval = null; if (docu
 // --- NOTIFICATIONS & SESSION CHECK ---
 let lastUnreadCount = -1;
 function initNotifications() {
+    // SKIP SESSION CHECK on login pages
+    if (window.location.pathname === '/login' || window.location.pathname.startsWith('/reset_password')) return;
+
     const btn = document.getElementById('notifBtn');
     if (!btn) return;
     const newBtn = btn.cloneNode(true);
@@ -279,6 +284,9 @@ function handleSessionExpired() {
 }
 
 async function pollNotifications() {
+    // SKIP CHECK on login pages
+    if (window.location.pathname === '/login' || window.location.pathname.startsWith('/reset_password')) return;
+
     try {
         const res = await fetch('/api/notifications/list');
         
