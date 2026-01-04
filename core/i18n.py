@@ -34,6 +34,12 @@ STRINGS = {
         "login_support_desc": "Если вам нравится бот, вы можете поддержать автора через YooMoney.",
         "login_github_tooltip": "Исходный код на GitHub",
         "login_support_tooltip": "Поддержать проект",
+        "login_secure_gateway": "Безопасный шлюз",
+        "login_pass_btn": "Вход по паролю",
+        "login_back_magic": "Назад к Magic Link",
+        "login_or": "ИЛИ",
+        "login_btn_back": "Назад",
+        "login_support_btn_pay": "Перейти к поддержке (YooMoney)",
         
         # --- ГЛАВНОЕ МЕНЮ И НАСТРОЙКИ ---
         "main_menu_welcome": "👋 Привет! Выбери категорию в меню.",
@@ -477,11 +483,6 @@ STRINGS = {
         "web_search_nothing_found": "Ничего не найдено",
         "web_session_expired": "Сессия истекла",
         "web_please_relogin": "Пожалуйста, авторизуйтесь заново",
-        "login_secure_gateway": "Безопасный шлюз",
-        "login_pass_btn": "Вход по паролю",
-        "login_back_magic": "Назад к Magic Link",
-        "login_or": "ИЛИ",
-        "login_support_btn_pay": "Перейти к поддержке (YooMoney)",
         
         # --- WEB: KEYBOARD SETTINGS ---
         "web_keyboard_title": "Клавиатура бота",
@@ -518,7 +519,13 @@ STRINGS = {
         "modal_title_confirm": "Подтверждение",
         "modal_title_prompt": "Ввод данных",
         "modal_btn_ok": "ОК",
-        "modal_btn_cancel": "Отмена"
+        "modal_btn_cancel": "Отмена",
+        "login_secure_gateway": "Безопасный шлюз",
+        "login_pass_btn": "Вход по паролю",
+        "login_back_magic": "Назад к Magic Link",
+        "login_or": "ИЛИ",
+        "login_btn_back": "Назад",
+        "login_support_btn_pay": "Перейти к поддержке (YooMoney)"
     },
     'en': {
         # --- GENERAL ---
@@ -977,11 +984,6 @@ STRINGS = {
         "web_search_nothing_found": "Nothing found",
         "web_session_expired": "Session Expired",
         "web_please_relogin": "Please login again",
-        "login_secure_gateway": "Secure Gateway",
-        "login_pass_btn": "Password Login",
-        "login_back_magic": "Back to Magic Link",
-        "login_or": "OR",
-        "login_support_btn_pay": "Go to support (YooMoney)",
         
         # --- WEB: KEYBOARD SETTINGS ---
         "web_keyboard_title": "Bot Keyboard",
@@ -1035,7 +1037,13 @@ STRINGS = {
         "modal_title_confirm": "Confirmation",
         "modal_title_prompt": "Input Data",
         "modal_btn_ok": "OK",
-        "modal_btn_cancel": "Cancel"
+        "modal_btn_cancel": "Cancel",
+        "login_secure_gateway": "Secure Gateway",
+        "login_pass_btn": "Password Login",
+        "login_back_magic": "Back to Magic Link",
+        "login_or": "OR",
+        "login_btn_back": "Back",
+        "login_support_btn_pay": "Go to support (YooMoney)"
     }
 }
 

@@ -420,7 +420,7 @@ async def handle_dashboard(request):
         "unit_pb": _("unit_pb", lang),
         "web_search_nothing_found": _("web_search_nothing_found", lang),
     }
-    html = html.replace("{current_lang}", lang)
+    html = html.replace("{i18n_json}", json.dumps(i18n_data))
     return web.Response(text=html, content_type='text/html')
 
 async def handle_heartbeat(request):
@@ -801,6 +801,9 @@ async def handle_login_page(request):
     html = html.replace("{bot_username}", BOT_USERNAME_CACHE or "")
     html = html.replace("style.css", f"style.css?v={CACHE_VER}")
     
+    # Вставляем текущий язык для JS
+    html = html.replace("{current_lang}", lang)
+
     i18n_data = {
         "web_error": _("web_error", lang, error=""), 
         "web_conn_error": _("web_conn_error", lang, error=""),
@@ -816,6 +819,12 @@ async def handle_login_page(request):
         "login_support_title": _("login_support_title", lang),
         "login_support_desc": _("login_support_desc", lang),
         "login_github_tooltip": _("login_github_tooltip", lang),
+        "login_support_tooltip": _("login_support_tooltip", lang),
+        "web_title": _("web_title", lang),
+        "web_current_password": _("web_current_password", lang),
+        "web_login_btn": _("web_login_btn", lang),
+        "login_forgot_pass": _("login_forgot_pass", lang),
+        # Added keys
         "login_secure_gateway": _("login_secure_gateway", lang),
         "login_pass_btn": _("login_pass_btn", lang),
         "login_back_magic": _("login_back_magic", lang),
@@ -823,18 +832,20 @@ async def handle_login_page(request):
         "login_reset_title": _("login_reset_title", lang),
         "login_reset_desc": _("login_reset_desc", lang),
         "login_btn_send_link": _("login_btn_send_link", lang),
+        "login_btn_back": _("login_btn_back", lang),
         "btn_back": _("btn_back", lang),
         "login_support_btn_pay": _("login_support_btn_pay", lang),
-        "login_support_tooltip": _("login_support_tooltip", lang),
-        "web_title": _("web_title", lang),
-        "web_current_password": _("web_current_password", lang),
-        "web_login_btn": _("web_login_btn", lang),
-        "login_forgot_pass": _("login_forgot_pass", lang)
         
+        # --- NEW SUCCESS KEYS FOR JS ---
+        "login_link_sent_title": _("login_link_sent_title", lang),
+        "login_link_sent_desc": _("login_link_sent_desc", lang),
+        "reset_success_title": _("reset_success_title", lang),
+        "reset_success_desc": _("reset_success_desc", lang),
+        "login_error_user_not_found": _("login_error_user_not_found", lang)
     }
 
     if "{i18n_json}" in html: 
-        html = html.replace("{current_lang}", lang)
+        html = html.replace("{i18n_json}", json.dumps(i18n_data))
     else:
         script = f'<script>const I18N = {json.dumps(i18n_data)};</script>'
         html = html.replace("</body>", f"{script}</body>")

@@ -1,7 +1,6 @@
 /* /core/static/js/login.js */
 
 // --- Tailwind Config & Hacks ---
-// Настройка цветов и анимаций для Tailwind прямо в браузере (если CDN используется)
 if (window.tailwind) {
     window.tailwind.config = {
         darkMode: 'class',
@@ -55,6 +54,11 @@ function setLoginLanguage(lang) {
     window.location.reload();
 }
 window.setLoginLanguage = setLoginLanguage;
+
+function toggleLoginLanguage(checkbox) {
+    const lang = checkbox.checked ? 'en' : 'ru';
+    setLoginLanguage(lang);
+}
 
 // --- UI Logic: Modals ---
 function openSupportModal() {
@@ -127,18 +131,28 @@ async function requestPasswordReset() {
         const data = await response.json();
 
         if (response.ok) {
+            // Success Message with Translations
+            const title = (I18N && I18N.login_link_sent_title) || "Link Sent!";
+            const desc = (I18N && I18N.login_link_sent_desc) || "Check your Telegram messages.";
+            const btnText = (I18N && I18N.login_btn_back) || "Back";
+
             container.innerHTML = `
                 <div class="text-center py-8 animate-fade-in-up">
                     <div class="w-16 h-16 bg-yellow-500/20 rounded-full flex items-center justify-center mx-auto mb-4 border border-yellow-500/30">
                         <svg class="w-8 h-8 text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 00-2-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path></svg>
                     </div>
-                    <h3 class="text-lg font-bold text-white mb-2">Link Sent!</h3>
-                    <p class="text-sm text-gray-300">Check your Telegram messages.</p>
-                    <a href="/login" class="inline-block mt-6 px-6 py-2 bg-white/10 hover:bg-white/20 rounded-lg text-sm font-bold transition">Back</a>
+                    <h3 class="text-lg font-bold text-white mb-2">${title}</h3>
+                    <p class="text-sm text-gray-300">${desc}</p>
+                    <a href="/login" class="inline-block mt-6 px-6 py-2 bg-white/10 hover:bg-white/20 rounded-lg text-sm font-bold transition">${btnText}</a>
                 </div>
             `;
         } else {
             if (data.error === 'not_found' && errorBlock) {
+                // User not found text
+                const errMsg = (I18N && I18N.login_error_user_not_found) || "User not found.";
+                const errP = errorBlock.querySelector('p');
+                if(errP) errP.textContent = errMsg;
+                
                 errorBlock.classList.remove('hidden');
                 if (data.admin_url && adminLinkBtn) {
                     adminLinkBtn.href = data.admin_url;
@@ -188,14 +202,18 @@ async function submitNewPassword() {
         
         const data = await res.json();
         if (res.ok) {
+            const title = (I18N && I18N.reset_success_title) || "Success!";
+            const desc = (I18N && I18N.reset_success_desc) || "Password changed successfully.";
+            const btnText = (I18N && I18N.web_login_btn) || "Login";
+
             container.innerHTML = `
                 <div class="text-center py-8 animate-fade-in-up">
                     <div class="w-16 h-16 bg-green-500/20 rounded-full flex items-center justify-center mx-auto mb-4 border border-green-500/30">
                         <svg class="w-8 h-8 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
                     </div>
-                    <h3 class="text-lg font-bold text-white mb-2">Success!</h3>
-                    <p class="text-sm text-gray-300">Password changed successfully.</p>
-                    <a href="/login" class="w-full block text-center mt-6 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 rounded-xl font-bold text-white shadow-lg transition">Login</a>
+                    <h3 class="text-lg font-bold text-white mb-2">${title}</h3>
+                    <p class="text-sm text-gray-300">${desc}</p>
+                    <a href="/login" class="w-full block text-center mt-6 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 rounded-xl font-bold text-white shadow-lg transition">${btnText}</a>
                 </div>
             `;
             window.history.replaceState({}, document.title, "/login");
@@ -244,18 +262,21 @@ document.addEventListener("DOMContentLoaded", () => {
     const formsContainer = document.getElementById('forms-container');
     
     if (urlParams.get('sent') === 'true' && formsContainer) {
+        const title = (I18N && I18N.login_link_sent_title) || "Magic Link Sent!";
+        const desc = (I18N && I18N.login_link_sent_desc) || "Check your Telegram messages.";
+        const btnText = (I18N && I18N.login_btn_back) || "Return";
+
         formsContainer.innerHTML = `
             <div class="text-center py-8 animate-fade-in-up">
                 <div class="w-16 h-16 bg-blue-500/20 rounded-full flex items-center justify-center mx-auto mb-4 border border-blue-500/30">
                     <svg class="w-8 h-8 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 00-2-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path></svg>
                 </div>
-                <h3 class="text-lg font-bold text-white mb-2">Magic Link Sent!</h3>
-                <p class="text-sm text-gray-300">Check your Telegram messages.</p>
-                <a href="/login" class="inline-block mt-6 px-6 py-2 bg-white/10 hover:bg-white/20 rounded-lg text-sm font-bold transition">Return</a>
+                <h3 class="text-lg font-bold text-white mb-2">${title}</h3>
+                <p class="text-sm text-gray-300">${desc}</p>
+                <a href="/login" class="inline-block mt-6 px-6 py-2 bg-white/10 hover:bg-white/20 rounded-lg text-sm font-bold transition">${btnText}</a>
             </div>
         `;
     } else if (urlParams.get('token')) {
-        // Если есть токен сброса в URL -> показываем форму смены пароля
         toggleForms('set-password');
     }
 
@@ -272,7 +293,6 @@ document.addEventListener("DOMContentLoaded", () => {
     const container = document.getElementById('telegram-widget-container');
     const magicForm = document.getElementById('magic-link-form');
     
-    // Проверки безопасности для виджета (HTTPS + не IP + не localhost)
     const isIp = /^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$/.test(window.location.hostname);
     const isLocalhost = window.location.hostname === 'localhost';
     const isHttps = window.location.protocol === 'https:';
@@ -283,11 +303,11 @@ document.addEventListener("DOMContentLoaded", () => {
         script.src = "https://telegram.org/js/telegram-widget.js?22";
         script.setAttribute('data-telegram-login', botUsername);
         script.setAttribute('data-size', 'large');
-        script.setAttribute('data-radius', '12'); // Скругление под стиль кнопок
+        script.setAttribute('data-radius', '12');
         script.setAttribute('data-onauth', 'onTelegramAuth(user)');
         script.setAttribute('data-request-access', 'write');
         container.appendChild(script);
         container.classList.remove('hidden');
-        magicForm.classList.add('hidden'); // Скрываем форму ввода ID, если виджет доступен
+        magicForm.classList.add('hidden');
     }
 });

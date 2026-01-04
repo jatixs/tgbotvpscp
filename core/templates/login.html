@@ -8,12 +8,6 @@
     <script>
         const I18N = {i18n_json};
         const BOT_USERNAME = "{bot_username}";
-        
-        // Логика переключения языка через слайдер
-        function toggleLoginLanguage(checkbox) {
-            const lang = checkbox.checked ? 'en' : 'ru';
-            setLoginLanguage(lang);
-        }
     </script>
 
     <link rel="stylesheet" href="/static/css/style.css?v={web_version}">
@@ -21,20 +15,44 @@
 </head>
 <body class="bg-gray-100 text-gray-900 dark:bg-gray-900 dark:text-gray-100 font-sans selection:bg-blue-500/30 overflow-hidden relative">
 
-    <div class="absolute top-4 right-4 z-50">
-        <label class="relative inline-flex items-center cursor-pointer group">
-            <input type="checkbox" id="langToggle" class="sr-only peer" onchange="toggleLoginLanguage(this)">
-            <div class="w-16 h-8 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-black/40 border border-gray-300 dark:border-white/10 peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[4px] after:left-[4px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-6 after:w-6 after:transition-all dark:border-gray-600 peer-checked:bg-blue-600/80 shadow-inner flex items-center justify-between px-2">
-                <span class="text-[10px] font-bold text-gray-500 select-none pointer-events-none z-10 ml-1">RU</span>
-                <span class="text-[10px] font-bold text-white select-none pointer-events-none z-10 mr-1 opacity-0 peer-checked:opacity-100 transition-opacity">EN</span>
-            </div>
-        </label>
+    <div class="absolute top-6 right-6 z-50">
+        <div class="relative bg-white/30 dark:bg-black/30 backdrop-blur-md border border-white/20 dark:border-white/10 rounded-full p-1 shadow-xl flex items-center w-[140px] h-[46px] select-none transition-transform hover:scale-105">
+            
+            <div id="lang-slider-bg" class="absolute left-1 top-1 bottom-1 w-[calc(50%-4px)] bg-white dark:bg-gray-700 rounded-full shadow-md transform transition-transform duration-300 ease-out will-change-transform"></div>
+
+            <button onclick="setLoginLanguage('ru')" id="btn-ru" class="relative z-10 w-1/2 h-full flex items-center justify-center gap-2 rounded-full focus:outline-none transition-colors duration-200 group">
+                <span class="text-xl leading-none filter drop-shadow-sm">🇷🇺</span>
+                <span class="text-xs font-bold tracking-wider uppercase font-mono mt-0.5 group-hover:opacity-100 opacity-80 transition-opacity">RU</span>
+            </button>
+
+            <button onclick="setLoginLanguage('en')" id="btn-en" class="relative z-10 w-1/2 h-full flex items-center justify-center gap-2 rounded-full focus:outline-none transition-colors duration-200 group">
+                <span class="text-xl leading-none filter drop-shadow-sm">🇬🇧</span>
+                <span class="text-xs font-bold tracking-wider uppercase font-mono mt-0.5 group-hover:opacity-100 opacity-80 transition-opacity">EN</span>
+            </button>
+        </div>
+        
         <script>
-            // Установка начального положения слайдера
-            const currentLang = "{current_lang}"; // Эта переменная должна быть заменена сервером
-            if (currentLang === 'en') {
-                document.getElementById('langToggle').checked = true;
-            }
+            document.addEventListener("DOMContentLoaded", () => {
+                const lang = "{current_lang}"; // 'ru' or 'en' provided by server
+                const bg = document.getElementById('lang-slider-bg');
+                const btnRu = document.getElementById('btn-ru');
+                const btnEn = document.getElementById('btn-en');
+                
+                const activeCls = ['text-gray-900', 'dark:text-white'];
+                const inactiveCls = ['text-gray-600', 'dark:text-gray-400'];
+
+                if (lang === 'en') {
+                    // Translate 100% relative to itself + gap adjustment
+                    bg.style.transform = 'translateX(100%) translateX(4px)'; 
+                    
+                    btnEn.classList.add(...activeCls);
+                    btnRu.classList.add(...inactiveCls);
+                } else {
+                    bg.style.transform = 'translateX(0)';
+                    btnRu.classList.add(...activeCls);
+                    btnEn.classList.add(...inactiveCls);
+                }
+            });
         </script>
     </div>
 
@@ -156,7 +174,7 @@
 
                     <button onclick="toggleForms('password')" class="mt-6 w-full text-center text-sm text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 transition flex items-center justify-center gap-2">
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m7 7h18"></path></svg> 
-                        <span data-i18n="btn_back">Back</span>
+                        <span data-i18n="login_btn_back">Back</span>
                     </button>
                 </div>
 
