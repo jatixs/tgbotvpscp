@@ -5,13 +5,46 @@
 <h1 align="center">📝 Telegram VPS Management Bot — Changelog</h1>
 
 <p align="center">
-	<img src="https://img.shields.io/badge/version-v1.14.0-blue?style=flat-square " alt="Version 1.14.0"/>
-	<img src="https://img.shields.io/badge/build-55-purple?style=flat-square " alt="Build 55"/>
+	<img src="https://img.shields.io/badge/version-v1.15.0-blue?style=flat-square " alt="Version 1.15.0"/>
+	<img src="https://img.shields.io/badge/build-56-purple?style=flat-square " alt="Build 56"/>
 	<img src="https://img.shields.io/badge/date-Январь%2026-green?style=flat-square " alt="Date January 2026"/>
 	<img src="https://img.shields.io/badge/status-stable-green?style=flat-square " alt="Status Stable"/>
 </p>
 
 ---
+
+## [1.15.0] - 2026-01-04
+
+### 🚀 Added (WebUI Features):
+
+* **Node Search:** Implemented a search function to quickly filter servers in the node list.
+* **Global Session View:** The Main Administrator can now view active sessions of all bot users in the "Active Sessions" widget.
+* **Smooth Animations:** Added smooth transitions and animations for modal windows.
+
+### ✨ Improved (UX/UI):
+
+* **Mobile Adaptation:**
+* Visual corrections for modal windows to ensure proper centering.
+* Improved handling of layout shifts when the on-screen keyboard is active on mobile devices.
+* Enhanced general page adaptability for various screen sizes.
+
+
+* **Detail Level:** Increased the detail of displayed content and information across the dashboard.
+* **Auth & Reset Pages:** Refactored the Authorization and Password Reset pages for a better user experience.
+* **Visual Polish:** Numerous visual changes to improve the intuitive interface and overall user experience.
+
+### 🛡️ Security:
+
+* **Critical Security Fix:** Addressed a critical vulnerability to ensure system safety.
+* **Auth Logic:** Corrected the behavior of credential requests when the bot is restarting or updating.
+
+### 🔧 Fixed:
+
+* **Console Spam:** Fixed a bug causing constant "access denied" errors in the browser console.
+* **Minor Fixes:** Various small bug fixes and stability improvements.
+
+---
+
 ## [1.14.0] - 2026-01-02
 
 ## 🔄 New update system (Smart Update)
