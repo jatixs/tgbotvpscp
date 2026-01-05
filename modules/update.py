@@ -78,7 +78,6 @@ async def get_current_branch():
 
 async def get_remote_hash(branch):
     """Получает хеш последнего коммита в удаленном репозитории."""
-    # Сначала обновляем информацию о ветках
     await run_command(f"git fetch origin {branch}")
     code, out, err = await run_command(f"git rev-parse origin/{branch}")
     return out.strip() if code == 0 else None
@@ -96,7 +95,6 @@ def get_version_from_changelog() -> str:
         if os.path.exists("CHANGELOG.md"):
             with open("CHANGELOG.md", "r", encoding="utf-8") as f:
                 content = f.read()
-                # Ищем ## [1.2.3]
                 match = re.search(r"## \[(\d+\.\d+\.\d+)\]", content)
                 if match:
                     return match.group(1)
@@ -112,10 +110,8 @@ async def get_update_info():
     """
     try:
         branch = await get_current_branch()
-        # Валидируем имя ветки сразу
         branch = validate_branch_name(branch)
 
-        # 1. Синхронизируем ссылки (без изменения файлов)
         fetch_code, _, fetch_err = await run_command("git fetch origin")
         if fetch_code != 0:
             logging.error(f"Git fetch failed: {fetch_err}")
@@ -126,11 +122,9 @@ async def get_update_info():
         
         local_ver_display = get_version_from_changelog()
         
-        # Если не смогли получить хеши
         if not local_hash or not remote_hash:
             return local_ver_display, "Unknown", branch, False
 
-        # Сравниваем хеши
         update_available = local_hash != remote_hash
         
         remote_ver_display = "New Commit"
@@ -155,36 +149,33 @@ async def get_update_info():
 
 
 async def execute_bot_update(branch: str, restart_source: str = "unknown"):
-    """
-    Выполняет безопасное обновление бота.
-    """
+    """Выполняет безопасное обновление бота."""
     try:
-        # 1. Security Check
         branch = validate_branch_name(branch)
         logging.info(f"Starting bot update sequence on branch '{branch}'...")
         
-        # 2. Fetch
+        # 1. Fetch
         code, _, err = await run_command("git fetch origin")
         if code != 0:
             raise Exception(f"Git fetch failed: {err}")
         
-        # 3. Hard Reset
+        # 2. Hard Reset (Сброс локальных изменений)
         code, _, err = await run_command(f"git reset --hard origin/{branch}")
         if code != 0:
             raise Exception(f"Git reset failed: {err}")
 
-        # 4. Dependency Update
+        # 3. Dependency Update
         pip_cmd = f"{sys.executable} -m pip install -r requirements.txt"
         code, _, err = await run_command(pip_cmd)
         if code != 0:
-            logging.warning(f"Pip install warning (non-critical): {err}")
+            logging.warning(f"Pip install warning: {err}")
 
-        # 5. Set Restart Flag
+        # 4. Set Restart Flag
         os.makedirs(os.path.dirname(RESTART_FLAG_FILE), exist_ok=True)
         with open(RESTART_FLAG_FILE, "w") as f:
             f.write(restart_source)
 
-        # 6. Self-Termination
+        # 5. Self-Termination
         logging.info("Update finished successfully. Initiating self-restart...")
         asyncio.create_task(self_terminate())
         
@@ -259,7 +250,6 @@ async def update_menu_handler(message: types.Message):
 
 
 async def run_system_update(callback: types.CallbackQuery):
-    """Обновление системных пакетов (apt)."""
     user_id = callback.from_user.id
     lang = get_user_lang(user_id)
     
@@ -283,7 +273,6 @@ async def check_bot_update(callback: types.CallbackQuery):
     user_id = callback.from_user.id
     lang = get_user_lang(user_id)
     
-    # Теперь _ это функция перевода, и она не перекрывается локальной переменной
     await callback.message.edit_text(_("bot_update_checking", lang), parse_mode="HTML")
 
     try:
@@ -291,7 +280,6 @@ async def check_bot_update(callback: types.CallbackQuery):
         
         if available:
             branch = validate_branch_name(branch)
-            # Переменная ошибки переименована в err
             code, out, err = await run_command(f"git log HEAD..origin/{branch} --pretty=format:'%%h - %%s' -n 5")
             changes_log = out if code == 0 else "Details on GitHub"
             
