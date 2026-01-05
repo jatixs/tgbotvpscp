@@ -1,4 +1,3 @@
-/* /core/static/js/login.js */
 
 // --- Tailwind Config & Hacks ---
 if (window.tailwind) {
@@ -50,33 +49,63 @@ async function onTelegramAuth(user) {
 
 // --- UI Logic: Language & Slider ---
 
-// Функция обновления позиции слайдера и стилей кнопок
+// Функция обновления позиции слайдера и стилей кнопок (Liquid Glass Spring Animation)
 function updateLangSlider(lang) {
     const slider = document.getElementById('lang-slider-bg');
     const btnRu = document.getElementById('btn-ru');
     const btnEn = document.getElementById('btn-en');
 
     if (slider) {
-        // Логика перемещения: ширина контейнера 140px, padding 4px (p-1).
-        // Слайдер занимает 50% - 4px.
-        // Если EN, сдвигаем на 100% своей ширины + 8px (компенсация отступов).
+        // [LIQUID ANIMATION] Использование Spring Physics (пружина)
+        // cubic-bezier(0.34, 1.56, 0.64, 1) создает эффект "выстреливания" и мягкого возврата (bounciness)
+        slider.style.transition = 'transform 0.6s cubic-bezier(0.34, 1.56, 0.64, 1)';
+        slider.style.willChange = 'transform';
+        
+        // Сдвиг на 100% ширины + небольшая коррекция, если нужно (здесь 100% идеально для flex/relative верстки)
         if (lang === 'en') {
-            slider.style.transform = 'translateX(100%) translateX(8px)';
+            slider.style.transform = 'translate3d(100%, 0, 0)';
         } else {
-            slider.style.transform = 'translateX(0)';
+            slider.style.transform = 'translate3d(0, 0, 0)';
         }
     }
 
-    // Обновляем прозрачность/активность текста
     if (btnRu && btnEn) {
+        // Убираем обводку
+        btnRu.style.outline = 'none';
+        btnEn.style.outline = 'none';
+        
+        // Плавная смена стилей текста
+        const transition = 'all 0.4s ease';
+        btnRu.style.transition = transition;
+        btnEn.style.transition = transition;
+
         if (lang === 'ru') {
-            btnRu.classList.remove('opacity-50');
-            btnRu.querySelector('span').classList.remove('opacity-80');
-            btnEn.classList.add('opacity-50');
+            // RU Active
+            btnRu.style.opacity = '1';
+            btnRu.style.transform = 'scale(1.1)'; // Активный элемент чуть больше (Liquid Pop)
+            btnRu.style.filter = 'drop-shadow(0 0 8px rgba(255,255,255,0.3))'; // Свечение
+            
+            // EN Inactive
+            btnEn.style.opacity = '0.4';
+            btnEn.style.transform = 'scale(0.9)';
+            btnEn.style.filter = 'none';
+            
+            // Font weight hack via classList usually safer, but inline for force
+            btnRu.querySelector('span')?.classList.add('font-bold');
+            btnEn.querySelector('span')?.classList.remove('font-bold');
         } else {
-            btnEn.classList.remove('opacity-50');
-            btnEn.querySelector('span').classList.remove('opacity-80');
-            btnRu.classList.add('opacity-50');
+            // EN Active
+            btnEn.style.opacity = '1';
+            btnEn.style.transform = 'scale(1.1)';
+            btnEn.style.filter = 'drop-shadow(0 0 8px rgba(255,255,255,0.3))';
+            
+            // RU Inactive
+            btnRu.style.opacity = '0.4';
+            btnRu.style.transform = 'scale(0.9)';
+            btnRu.style.filter = 'none';
+            
+            btnEn.querySelector('span')?.classList.add('font-bold');
+            btnRu.querySelector('span')?.classList.remove('font-bold');
         }
     }
 }
@@ -87,34 +116,39 @@ function setLoginLanguage(lang) {
     // 1. Сохраняем куки
     document.cookie = "guest_lang=" + lang + "; path=/; max-age=31536000";
     
-    // 2. Анимируем слайдер
+    // 2. Анимация
     updateLangSlider(lang);
 
-    // 3. Динамически меняем текст на странице
+    // 3. Динамическая смена текста
     if (typeof I18N_ALL !== 'undefined' && I18N_ALL[lang]) {
         const dict = I18N_ALL[lang];
-        window.I18N = dict; // Обновляем глобальную ссылку
+        window.I18N = dict; 
 
-        // Обновляем все элементы с data-i18n
-        document.querySelectorAll('[data-i18n]').forEach(el => {
-            const key = el.getAttribute('data-i18n');
-            if (dict[key]) {
-                // Если элемент — input, меняем placeholder
-                if (el.tagName === 'INPUT') el.placeholder = dict[key];
-                // Иначе меняем содержимое
-                else el.innerHTML = dict[key];
-            }
+        // Анимированная смена текста
+        const elements = document.querySelectorAll('[data-i18n]');
+        elements.forEach(el => {
+            el.style.transition = 'opacity 0.2s ease';
+            el.style.opacity = '0';
         });
 
-        // Обновляем заголовок страницы
-        if (dict.web_title) document.title = dict.web_title;
-
-        // Обновляем тултипы (если есть специфичные)
-        const gh = document.querySelector('a[title="GitHub"]');
-        if(gh && dict['login_github_tooltip']) gh.title = dict['login_github_tooltip'];
-        
-        const sp = document.querySelector('button[title="Support"]');
-        if(sp && dict['login_support_tooltip']) sp.title = dict['login_support_tooltip'];
+        setTimeout(() => {
+            elements.forEach(el => {
+                const key = el.getAttribute('data-i18n');
+                if (dict[key]) {
+                    if (el.tagName === 'INPUT') el.placeholder = dict[key];
+                    else el.innerHTML = dict[key];
+                }
+                el.style.opacity = '1';
+            });
+            
+            if (dict.web_title) document.title = dict.web_title;
+            
+            const gh = document.querySelector('a[title="GitHub"]');
+            if(gh && dict['login_github_tooltip']) gh.title = dict['login_github_tooltip'];
+            
+            const sp = document.querySelector('button[title="Support"]');
+            if(sp && dict['login_support_tooltip']) sp.title = dict['login_support_tooltip'];
+        }, 200);
     }
 }
 window.setLoginLanguage = setLoginLanguage;
@@ -153,15 +187,15 @@ function toggleForms(target) {
     const setPass = document.getElementById('set-password-form');
     const errorBlock = document.getElementById('reset-error-block');
     
-    // Скрываем все
     [magic, password, reset, setPass].forEach(el => el?.classList.add('hidden'));
     if (errorBlock) errorBlock.classList.add('hidden');
 
-    // Показываем целевой с анимацией
     const show = (el) => {
         if (!el) return;
         el.classList.remove('hidden');
-        el.classList.add('animate-fade-in-up'); // Перезапуск анимации
+        el.classList.remove('animate-fade-in-up');
+        void el.offsetWidth; // trigger reflow
+        el.classList.add('animate-fade-in-up');
     };
 
     if (target === 'password') show(password);
@@ -201,7 +235,6 @@ async function requestPasswordReset() {
         const data = await response.json();
 
         if (response.ok) {
-            // Success Message with Translations
             const title = (I18N && I18N.login_link_sent_title) || "Link Sent!";
             const desc = (I18N && I18N.login_link_sent_desc) || "Check your Telegram messages.";
             const btnText = (I18N && I18N.login_btn_back) || "Back";
@@ -218,7 +251,6 @@ async function requestPasswordReset() {
             `;
         } else {
             if (data.error === 'not_found' && errorBlock) {
-                // User not found text
                 const errMsg = (I18N && I18N.login_error_user_not_found) || "User not found.";
                 const errP = errorBlock.querySelector('p');
                 if(errP) errP.textContent = errMsg;
@@ -326,7 +358,7 @@ document.addEventListener("DOMContentLoaded", () => {
         if(sp && I18N['login_support_tooltip']) sp.title = I18N['login_support_tooltip'];
     }
 
-    // 4. Handle URL Params (Reset Token or Sent Magic Link)
+    // 4. Handle URL Params
     const urlParams = new URLSearchParams(window.location.search);
     const formsContainer = document.getElementById('forms-container');
     
