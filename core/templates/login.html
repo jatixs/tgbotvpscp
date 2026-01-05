@@ -21,36 +21,21 @@
             <div id="lang-slider-bg" class="absolute left-1 top-1 bottom-1 w-[calc(50%-4px)] bg-white dark:bg-gray-700 rounded-full shadow-md transform transition-transform duration-300 ease-out will-change-transform"></div>
 
             <button onclick="setLoginLanguage('ru')" id="btn-ru" class="relative z-10 w-1/2 h-full flex items-center justify-center gap-2 rounded-full focus:outline-none transition-colors duration-200 group">
-                <span class="text-xl leading-none filter drop-shadow-sm">🇷🇺</span>
+                <img src="https://flagcdn.com/ru.svg" alt="RU" class="w-5 h-auto rounded-[2px] filter drop-shadow-sm object-cover">
                 <span class="text-xs font-bold tracking-wider uppercase font-mono mt-0.5 group-hover:opacity-100 opacity-80 transition-opacity">RU</span>
             </button>
 
             <button onclick="setLoginLanguage('en')" id="btn-en" class="relative z-10 w-1/2 h-full flex items-center justify-center gap-2 rounded-full focus:outline-none transition-colors duration-200 group">
-                <span class="text-xl leading-none filter drop-shadow-sm">🇬🇧</span>
+                <img src="https://flagcdn.com/gb.svg" alt="EN" class="w-5 h-auto rounded-[2px] filter drop-shadow-sm object-cover">
                 <span class="text-xs font-bold tracking-wider uppercase font-mono mt-0.5 group-hover:opacity-100 opacity-80 transition-opacity">EN</span>
             </button>
         </div>
         
         <script>
             document.addEventListener("DOMContentLoaded", () => {
-                const lang = "{current_lang}"; // 'ru' or 'en' provided by server
-                const bg = document.getElementById('lang-slider-bg');
-                const btnRu = document.getElementById('btn-ru');
-                const btnEn = document.getElementById('btn-en');
-                
-                const activeCls = ['text-gray-900', 'dark:text-white'];
-                const inactiveCls = ['text-gray-600', 'dark:text-gray-400'];
-
-                if (lang === 'en') {
-                    // Translate 100% relative to itself + gap adjustment
-                    bg.style.transform = 'translateX(100%) translateX(4px)'; 
-                    
-                    btnEn.classList.add(...activeCls);
-                    btnRu.classList.add(...inactiveCls);
-                } else {
-                    bg.style.transform = 'translateX(0)';
-                    btnRu.classList.add(...activeCls);
-                    btnEn.classList.add(...inactiveCls);
+                const lang = "{current_lang}";
+                if (typeof updateLangSlider === 'function') {
+                    updateLangSlider(lang);
                 }
             });
         </script>
