@@ -6,6 +6,7 @@ import hashlib
 from aiogram import Bot
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.exceptions import TelegramBadRequest
+from argon2 import PasswordHasher
 
 from . import config
 from .i18n import _
@@ -46,12 +47,21 @@ def load_users():
         if ADMIN_USER_ID not in ALLOWED_USERS:
             logging.info(
                 f"Главный админ ID {ADMIN_USER_ID} не найден, добавляю.")
-            # Дефолтный хеш для "admin" (sha256)
-            default_hash = "8c6976e5b5410415bde908bd4dee15dfb167a9c873fc4bb8a81f6f2ab448a918"
+            
+            # Проверяем, передан ли начальный пароль через .env (генерируется при установке)
+            initial_pass = os.environ.get("TG_WEB_INITIAL_PASSWORD")
+            if initial_pass:
+                logging.info("Использую сгенерированный пароль из переменных окружения.")
+                ph = PasswordHasher()
+                p_hash = ph.hash(initial_pass)
+            else:
+                # Дефолтный хеш для "admin" (sha256 - legacy, но поддерживается сервером для миграции)
+                logging.warning("Случайный пароль не найден. Использую дефолтный ('admin').")
+                p_hash = "8c6976e5b5410415bde908bd4dee15dfb167a9c873fc4bb8a81f6f2ab448a918"
 
             ALLOWED_USERS[ADMIN_USER_ID] = {
                 "group": "admins",
-                "password_hash": default_hash
+                "password_hash": p_hash
             }
             USER_NAMES[str(ADMIN_USER_ID)] = _(
                 "default_admin_name", config.DEFAULT_LANGUAGE)

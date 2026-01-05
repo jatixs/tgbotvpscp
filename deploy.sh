@@ -1,3 +1,5 @@
+#!/bin/bash
+
 # --- Запоминаем аргументы ---
 GIT_BRANCH="main"
 AUTO_AGENT_URL=""

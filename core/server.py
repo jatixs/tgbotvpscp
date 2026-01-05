@@ -308,6 +308,15 @@ async def api_revoke_all_sessions(request):
 async def handle_dashboard(request):
     user = get_current_user(request)
     if not user: raise web.HTTPFound('/login')
+    
+    # --- Force Password Change Check ---
+    if is_default_password_active(user['id']):
+        # If user is using default password ("admin"), force reset
+        token = secrets.token_urlsafe(32)
+        RESET_TOKENS[token] = {"ts": time.time(), "user_id": user['id']}
+        raise web.HTTPFound(f'/reset_password?token={token}')
+    # -----------------------------------
+
     html = load_template("dashboard.html")
     user_id = user['id']
     lang = get_user_lang(user_id)
