@@ -271,7 +271,19 @@ async def api_check_update(request):
     user = get_current_user(request)
     if not user: return web.json_response({'error': 'Unauthorized'}, status=401)
     try:
-        local_ver, remote_ver, target_branch, update_available = await update_module.get_update_info()
+        # ОБРАТНАЯ СОВМЕСТИМОСТЬ:
+        # Получаем данные и проверяем их количество, чтобы не упасть с ошибкой unpack
+        info = await update_module.get_update_info()
+        
+        if len(info) == 4:
+            local_ver, remote_ver, target_branch, update_available = info
+        elif len(info) == 3:
+            # Если старая версия модуля
+            local_ver, remote_ver, target_branch = info
+            update_available = (target_branch is not None)
+        else:
+            return web.json_response({'error': 'Invalid update module response'}, status=500)
+
         return web.json_response({
             'local_version': local_ver, 
             'remote_version': remote_ver, 
