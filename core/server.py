@@ -271,8 +271,14 @@ async def api_check_update(request):
     user = get_current_user(request)
     if not user: return web.json_response({'error': 'Unauthorized'}, status=401)
     try:
-        local_ver, remote_ver, target_branch = await update_module.get_update_info()
-        return web.json_response({'local_version': local_ver, 'remote_version': remote_ver, 'target_branch': target_branch, 'update_available': (target_branch is not None)})
+        # ИСПРАВЛЕНИЕ: распаковка 4 значений вместо 3
+        local_ver, remote_ver, target_branch, update_available = await update_module.get_update_info()
+        return web.json_response({
+            'local_version': local_ver, 
+            'remote_version': remote_ver, 
+            'target_branch': target_branch, 
+            'update_available': update_available
+        })
     except Exception as e: return web.json_response({'error': str(e)}, status=500)
 
 async def api_run_update(request):
