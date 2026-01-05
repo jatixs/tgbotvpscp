@@ -59,6 +59,45 @@ function escapeHtml(text) {
         .replace(/'/g, "&#039;");
 }
 
+/* --- НОВАЯ ФУНКЦИЯ ДЛЯ КРАСИВОГО ОТОБРАЖЕНИЯ СПИСКА ПРОЦЕССОВ --- */
+function formatProcessList(procList, title, colorClass = "text-gray-500") {
+    if (!procList || procList.length === 0) return '';
+
+    const rows = procList.map(procStr => {
+        // Парсим строку вида "name (value)" с помощью регулярки
+        // Например: "python3 (12.5%)" -> name="python3", value="12.5%"
+        const match = procStr.match(/^(.*)\s\((.*)\)$/);
+        let name = procStr;
+        let value = "";
+        
+        if (match) {
+            name = match[1];
+            value = match[2];
+        }
+
+        return `
+        <div class="flex justify-between items-center py-1.5 border-b border-gray-500/10 last:border-0 group">
+            <div class="flex items-center gap-2 overflow-hidden">
+                <div class="w-1 h-1 rounded-full bg-gray-300 dark:bg-gray-600 group-hover:bg-blue-400 transition-colors"></div>
+                <span class="text-xs font-medium text-gray-700 dark:text-gray-200 truncate" title="${escapeHtml(name)}">${escapeHtml(name)}</span>
+            </div>
+            <span class="text-[10px] font-mono font-bold bg-gray-100 dark:bg-white/10 px-1.5 py-0.5 rounded ml-2 text-gray-600 dark:text-gray-300 whitespace-nowrap">${escapeHtml(value)}</span>
+        </div>`;
+    }).join('');
+
+    return `
+        <div class="min-w-[180px]">
+            <div class="text-[10px] uppercase tracking-wider font-bold mb-2 pb-1 border-b border-gray-500/20 ${colorClass}">
+                ${title}
+            </div>
+            <div class="flex flex-col">
+                ${rows}
+            </div>
+        </div>
+    `;
+}
+/* ---------------------------------------------------------------- */
+
 async function fetchNodesList() {
     try {
         const response = await fetch('/api/nodes/list');
@@ -136,6 +175,7 @@ async function fetchAgentStats() {
         const freeIcon = `<svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 inline mb-0.5 opacity-60" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>`;
 
         if (data.stats) {
+            // CPU Section
             const cpuEl = document.getElementById('stat_cpu');
             const progCpu = document.getElementById('prog_cpu');
             if (cpuEl) {
@@ -144,9 +184,17 @@ async function fetchAgentStats() {
                     html += ` <span class="text-xs font-normal opacity-60">/ ${formatHz(data.stats.cpu_freq)}</span>`;
                 }
                 cpuEl.innerHTML = html;
+
+                // --- Top Processes Hint for CPU ---
+                const hintCpu = document.getElementById('hint-cpu');
+                if (hintCpu) {
+                    hintCpu.innerHTML = formatProcessList(data.stats.process_cpu, "Top CPU Consumers", "text-blue-500");
+                }
+                // ----------------------------------
             }
             if (progCpu) progCpu.style.width = data.stats.cpu + "%";
 
+            // RAM Section
             const ramEl = document.getElementById('stat_ram');
             const progRam = document.getElementById('prog_ram');
             if (ramEl) {
@@ -155,9 +203,17 @@ async function fetchAgentStats() {
                     html += ` <span class="text-xs font-normal opacity-60">/ ${formatBytes(data.stats.ram_free)} ${freeIcon}</span>`;
                 }
                 ramEl.innerHTML = html;
+
+                // --- Top Processes Hint for RAM ---
+                const hintRam = document.getElementById('hint-ram');
+                if (hintRam) {
+                    hintRam.innerHTML = formatProcessList(data.stats.process_ram, "Top Memory Consumers", "text-purple-500");
+                }
+                // ----------------------------------
             }
             if (progRam) progRam.style.width = data.stats.ram + "%";
 
+            // Disk Section
             const diskEl = document.getElementById('stat_disk');
             const progDisk = document.getElementById('prog_disk');
             if (diskEl) {
@@ -166,9 +222,17 @@ async function fetchAgentStats() {
                     html += ` <span class="text-xs font-normal opacity-60">/ ${formatBytes(data.stats.disk_free)} ${freeIcon}</span>`;
                 }
                 diskEl.innerHTML = html;
+
+                // --- Top Processes Hint for Disk ---
+                const hintDisk = document.getElementById('hint-disk');
+                if (hintDisk) {
+                    hintDisk.innerHTML = formatProcessList(data.stats.process_disk, "Top I/O Usage (Total)", "text-emerald-500");
+                }
+                // -----------------------------------
             }
             if (progDisk) progDisk.style.width = data.stats.disk + "%";
 
+            // Network Section
             let rxSpeed = 0,
                 txSpeed = 0;
             if (data.history && data.history.length >= 2) {

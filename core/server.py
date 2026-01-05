@@ -90,14 +90,70 @@ def check_user_password(user_id, input_pass):
     except Exception: return False
 
 def is_default_password_active(user_id):
+    """Проверяет, установлен ли дефолтный пароль 'admin'."""
     if user_id != ADMIN_USER_ID: return False
     if user_id not in ALLOWED_USERS: return False
     user_data = ALLOWED_USERS[user_id]
+    # Legacy SHA256 hash of "admin"
     default_hash = "8c6976e5b5410415bde908bd4dee15dfb167a9c873fc4bb8a81f6f2ab448a918"
     if isinstance(user_data, dict):
         p_hash = user_data.get("password_hash")
         return p_hash == default_hash or p_hash is None
     return True
+
+def _get_top_processes(metric):
+    """
+    Синхронная функция для получения списка топ-процессов.
+    metric: 'cpu', 'ram', 'disk'
+    """
+    import psutil
+    
+    def sizeof_fmt(num):
+        for unit in ["B", "KB", "MB", "GB", "TB"]:
+            if abs(num) < 1024.0:
+                return f"{num:3.1f} {unit}"
+            num /= 1024.0
+        return f"{num:.1f} PB"
+
+    try:
+        attrs = ['pid', 'name', 'cpu_percent', 'memory_percent']
+        if metric == 'disk':
+            attrs.append('io_counters')
+
+        procs = []
+        for p in psutil.process_iter(attrs):
+            try:
+                p_info = p.info
+                # Обрезаем имя для компактности
+                p_info['name'] = p_info['name'][:15]
+                procs.append(p_info)
+            except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+                pass
+
+        if metric == 'cpu':
+            sorted_procs = sorted(procs, key=lambda p: p['cpu_percent'], reverse=True)[:5]
+            return [f"{p['name']} ({p['cpu_percent']}%)" for p in sorted_procs]
+        
+        elif metric == 'ram':
+            sorted_procs = sorted(procs, key=lambda p: p['memory_percent'], reverse=True)[:5]
+            return [f"{p['name']} ({p['memory_percent']:.1f}%)" for p in sorted_procs]
+            
+        elif metric == 'disk':
+            # Сортируем по сумме чтение+запись
+            def get_io(p):
+                io = p.get('io_counters')
+                if io:
+                    return io.read_bytes + io.write_bytes
+                return 0
+            
+            sorted_procs = sorted(procs, key=get_io, reverse=True)[:5]
+            # Фильтруем процессы с 0 I/O, если хочется, но топ-5 обычно имеют нагрузку
+            return [f"{p['name']} ({sizeof_fmt(get_io(p))})" for p in sorted_procs]
+
+        return []
+    except Exception as e:
+        logging.error(f"Error getting processes: {e}")
+        return []
 
 def load_template(name):
     path = os.path.join(TEMPLATE_DIR, name)
@@ -308,6 +364,15 @@ async def api_revoke_all_sessions(request):
 async def handle_dashboard(request):
     user = get_current_user(request)
     if not user: raise web.HTTPFound('/login')
+    
+    # --- SECURITY CHECK: Force Password Change ---
+    if is_default_password_active(user['id']):
+        # If user is using default password, force reset
+        token = secrets.token_urlsafe(32)
+        RESET_TOKENS[token] = {"ts": time.time(), "user_id": user['id']}
+        raise web.HTTPFound(f'/reset_password?token={token}')
+    # ---------------------------------------------
+
     html = load_template("dashboard.html")
     user_id = user['id']
     lang = get_user_lang(user_id)
@@ -485,6 +550,12 @@ async def handle_agent_stats(request):
         disk = psutil.disk_usage(get_host_path('/'))
         freq = psutil.cpu_freq()
         
+        # --- СБОР ТОП-ПРОЦЕССОВ (Асинхронно в треде) ---
+        proc_cpu = await asyncio.to_thread(_get_top_processes, 'cpu')
+        proc_ram = await asyncio.to_thread(_get_top_processes, 'ram')
+        proc_disk = await asyncio.to_thread(_get_top_processes, 'disk')
+        # -----------------------------------------------
+
         current_stats.update({
             "net_sent": net.bytes_sent, 
             "net_recv": net.bytes_recv, 
@@ -493,7 +564,12 @@ async def handle_agent_stats(request):
             "ram_free": mem.available,
             "disk_total": disk.total,
             "disk_free": disk.free,
-            "cpu_freq": freq.current if freq else 0
+            "cpu_freq": freq.current if freq else 0,
+            
+            # Добавляем списки процессов в ответ
+            "process_cpu": proc_cpu,
+            "process_ram": proc_ram,
+            "process_disk": proc_disk 
         })
     except Exception: pass
     
@@ -502,6 +578,7 @@ async def handle_agent_stats(request):
         current_stats.update({"cpu": latest["c"], "ram": latest["r"]})
         try: current_stats["disk"] = psutil.disk_usage(get_host_path('/')).percent
         except Exception: pass
+        
     return web.json_response({"stats": current_stats, "history": AGENT_HISTORY})
 
 async def handle_node_add(request):
