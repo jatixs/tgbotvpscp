@@ -3,7 +3,8 @@ import logging
 import os
 import sys
 import re
-from packaging import version
+import signal
+import subprocess
 from aiogram import F, Dispatcher, types, Bot
 from aiogram.types import KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.exceptions import TelegramBadRequest
@@ -17,198 +18,211 @@ from core.utils import escape_html
 from core.config import RESTART_FLAG_FILE, DEPLOY_MODE
 
 BUTTON_KEY = "btn_update"
-CHECK_INTERVAL = 21600  # 6 часов
+CHECK_INTERVAL = 21600
 LAST_NOTIFIED_VERSION = None
-
 
 def get_button() -> KeyboardButton:
     return KeyboardButton(text=_(BUTTON_KEY, config.DEFAULT_LANGUAGE))
-
 
 def register_handlers(dp: Dispatcher):
     dp.message(I18nFilter(BUTTON_KEY))(update_menu_handler)
     dp.callback_query(F.data == "update_system_apt")(run_system_update)
     dp.callback_query(F.data == "check_bot_update")(check_bot_update)
-    dp.callback_query(F.data == "do_bot_update")(run_bot_update)
-
+    dp.callback_query(F.data.startswith("do_bot_update"))(run_bot_update)
 
 def start_background_tasks(bot: Bot) -> list[asyncio.Task]:
     return [
         asyncio.create_task(auto_update_checker(bot), name="AutoUpdateChecker")
     ]
 
+# --- SYSTEM UTILS ---
 
-def get_version_from_content(content: str) -> str | None:
-    """Извлекает версию из текста CHANGELOG (первое совпадение ## [x.x.x])."""
+def validate_branch_name(branch: str) -> str:
+    branch = (branch or "").strip()
+    if not re.fullmatch(r"[A-Za-z0-9._/\-]+", branch):
+        raise ValueError(f"Security Alert: Invalid branch name: '{branch}'")
+    return branch
+
+async def run_command(cmd: str):
     try:
-        match = re.search(r"## \[(\d+\.\d+\.\d+)\]", content)
-        if match:
-            return match.group(1)
-    except Exception:
-        pass
-    return None
+        proc = await asyncio.create_subprocess_shell(
+            cmd,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE
+        )
+        stdout, stderr = await proc.communicate()
+        return proc.returncode, stdout.decode().strip(), stderr.decode().strip()
+    except Exception as e:
+        return -1, "", str(e)
 
+# --- GIT HELPERS ---
 
-def extract_changelog_section(content: str, ver: str) -> str:
-    """Извлекает текст изменений для конкретной версии."""
+async def get_current_branch():
+    code, out, err = await run_command("git rev-parse --abbrev-ref HEAD")
+    if code == 0 and out:
+        return out.strip()
+    return "main"
+
+async def get_remote_hash(branch):
+    await run_command(f"git fetch origin {branch}")
+    code, out, err = await run_command(f"git rev-parse origin/{branch}")
+    return out.strip() if code == 0 else None
+
+async def get_local_hash():
+    code, out, err = await run_command("git rev-parse HEAD")
+    return out.strip() if code == 0 else None
+
+async def get_changelog_entry(branch: str, lang: str) -> str:
+    """
+    Получает описание последнего обновления из CHANGELOG.md или CHANGELOG.en.md.
+    """
+    filename = "CHANGELOG.en.md" if lang == "en" else "CHANGELOG.md"
+    cmd = f"git show origin/{branch}:{filename}"
+    
+    code, out, err = await run_command(cmd)
+    
+    if code != 0 or not out:
+        return "Changelog not found or empty."
+
+    lines = out.splitlines()
+    result = []
+    found_start = False
+    
+    # Ищем блок, начинающийся с ## [X.Y.Z] и берем всё до следующего такого блока
+    for line in lines:
+        # Регулярка для поиска заголовка версии: ## [1.2.3] ...
+        if re.match(r"^## \[\d+\.\d+\.\d+\]", line):
+            if found_start:
+                # Нашли СЛЕДУЮЩУЮ версию - останавливаемся
+                break
+            else:
+                # Нашли ПЕРВУЮ (новую) версию
+                found_start = True
+                result.append(line)
+        elif found_start:
+            result.append(line)
+            
+    if not result:
+        return "No release notes found in recent CHANGELOG."
+        
+    return "\n".join(result).strip()
+
+def get_version_from_file() -> str:
     try:
-        # Ищем начало секции ## [version]
-        start_pattern = re.escape(f"## [{ver}]")
-        start_match = re.search(start_pattern, content)
-
-        if not start_match:
-            return "Разработчик не предоставил пока что список изменений"
-
-        start_pos = start_match.start()
-
-        # Ищем следующую секцию (любую ## [x.x.x]) после текущей
-        next_match = re.search(r"## \[\d+\.\d+\.\d+\]", content[start_match.end():])
-
-        if next_match:
-            end_pos = start_match.end() + next_match.start()
-            section = content[start_pos:end_pos]
-        else:
-            # Если это последняя (самая старая) запись в файле
-            section = content[start_pos:]
-
-        return section.strip()
-    except Exception:
-        return "Разработчик не предоставил пока что список изменений"
-
-
-async def get_update_info():
-    """Возвращает информацию о версиях (local, remote, branch)."""
-    try:
-        # 1. Fetch origin
-        await asyncio.create_subprocess_shell("git fetch origin")
-
-        # 2. Local version
-        local_ver_str = "0.0.0"
         if os.path.exists("CHANGELOG.md"):
             with open("CHANGELOG.md", "r", encoding="utf-8") as f:
                 content = f.read()
-                local_ver_str = get_version_from_content(content) or "0.0.0"
+                match = re.search(r"## \[(\d+\.\d+\.\d+)\]", content)
+                if match:
+                    return match.group(1)
+    except Exception:
+        pass
+    return "Unknown"
 
-        # 3. Remote version (branches)
-        proc_branches = await asyncio.create_subprocess_shell("git branch -r", stdout=asyncio.subprocess.PIPE)
-        out_branches, dummy_ = await proc_branches.communicate()
-        branches_list = out_branches.decode().strip().split('\n')
+async def get_update_info():
+    try:
+        branch = await get_current_branch()
+        branch = validate_branch_name(branch)
 
-        latest_ver_str = local_ver_str
-        target_branch = None
+        fetch_code, _, _ = await run_command("git fetch origin")
+        if fetch_code != 0:
+            return get_version_from_file(), "Error", branch, False
 
-        release_pattern = re.compile(r"origin/release/(\d+\.\d+\.\d+)")
-        found_versions = []
-        for br in branches_list:
-            br = br.strip()
-            match = release_pattern.search(br)
-            if match:
-                v_str = match.group(1)
-                found_versions.append((v_str, br))
+        local_hash = await get_local_hash()
+        remote_hash = await get_remote_hash(branch)
+        local_ver_display = get_version_from_file()
+        
+        if not local_hash or not remote_hash:
+            return local_ver_display, "Unknown", branch, False
 
-        if found_versions:
-            found_versions.sort(key=lambda x: version.parse(x[0]), reverse=True)
-            latest_remote_ver_str = found_versions[0][0]
-            latest_remote_branch = found_versions[0][1]
+        update_available = (local_hash != remote_hash)
+        remote_ver_display = "New Commit"
+        
+        if update_available:
+            # Пытаемся вытащить номер версии из удаленного файла для красоты
+            code, out, err = await run_command(f"git show origin/{branch}:CHANGELOG.md")
+            if code == 0:
+                match = re.search(r"## \[(\d+\.\d+\.\d+)\]", out)
+                remote_ver_display = match.group(1) if match else remote_hash[:7]
+            else:
+                remote_ver_display = remote_hash[:7]
+        else:
+            remote_ver_display = local_ver_display
 
-            if version.parse(latest_remote_ver_str) > version.parse(local_ver_str):
-                latest_ver_str = latest_remote_ver_str
-                target_branch = latest_remote_branch
+        return local_ver_display, remote_ver_display, branch, update_available
 
-        return local_ver_str, latest_ver_str, target_branch
     except Exception as e:
         logging.error(f"Error getting update info: {e}")
-        return "0.0.0", "0.0.0", None
-
+        return "Error", "Error", "main", False
 
 async def execute_bot_update(branch: str, restart_source: str = "unknown"):
-    """
-    Выполняет обновление бота (checkout, pull, pip, restart).
-    restart_source: строка, которая будет записана в флаг рестарта.
-    """
     try:
-        logging.info(f"Starting bot update to branch {branch}...")
+        branch = validate_branch_name(branch)
+        logging.info(f"Starting bot update on branch '{branch}'...")
         
-        # 1. Checkout
-        checkout_cmd = f"git checkout {branch}"
-        proc_co = await asyncio.create_subprocess_shell(checkout_cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
-        await proc_co.communicate()
+        code, _, err = await run_command("git fetch origin")
+        if code != 0:
+            raise Exception(f"Git fetch failed: {err}")
         
-        # 2. Pull
-        pull_cmd = "git pull"
-        proc = await asyncio.create_subprocess_shell(pull_cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
-        stdout, stderr = await proc.communicate()
-        
-        if proc.returncode != 0:
-            raise Exception(f"Git Pull Failed: {stderr.decode()}")
+        code, _, err = await run_command(f"git reset --hard origin/{branch}")
+        if code != 0:
+            raise Exception(f"Git reset failed: {err}")
 
-        # 3. Dependencies
         pip_cmd = f"{sys.executable} -m pip install -r requirements.txt"
-        proc_pip = await asyncio.create_subprocess_shell(pip_cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
-        await proc_pip.communicate()
+        code, _, err = await run_command(pip_cmd)
+        if code != 0:
+            logging.warning(f"Pip install warning: {err}")
 
-        # 4. Restart Flag
         os.makedirs(os.path.dirname(RESTART_FLAG_FILE), exist_ok=True)
         with open(RESTART_FLAG_FILE, "w") as f:
             f.write(restart_source)
 
-        # 5. Restart Command
-        restart_cmd = ""
-        if DEPLOY_MODE == "docker":
-            container_name = os.environ.get("TG_BOT_CONTAINER_NAME")
-            if container_name:
-                restart_cmd = f"docker restart {container_name}"
-            else:
-                restart_cmd = "kill 1" 
-        else:
-            restart_cmd = "sudo systemctl restart tg-bot.service"
-            
-        logging.info(f"Update finished. Restarting via: {restart_cmd}")
-        asyncio.create_task(do_restart(restart_cmd))
+        logging.info("Update finished. Restarting...")
+        asyncio.create_task(self_terminate())
         
     except Exception as e:
         logging.error(f"Execute update failed: {e}")
         raise e
 
-
-async def do_restart(cmd):
+async def self_terminate():
     await asyncio.sleep(1)
-    await asyncio.create_subprocess_shell(cmd)
-
+    os.kill(os.getpid(), signal.SIGTERM)
 
 async def auto_update_checker(bot: Bot):
-    """Фоновая задача для проверки обновлений."""
     global LAST_NOTIFIED_VERSION
-    logging.info("AutoUpdateChecker started.")
     await asyncio.sleep(60)
 
     while True:
         try:
-            local_ver, remote_ver, target_branch = await get_update_info()
+            local_v, remote_v, branch, available = await get_update_info()
 
-            if target_branch and (version.parse(remote_ver) > version.parse(local_ver)):
-                if LAST_NOTIFIED_VERSION != remote_ver:
-                    proc_cl = await asyncio.create_subprocess_shell(f"git show {target_branch}:CHANGELOG.md", stdout=asyncio.subprocess.PIPE)
-                    out_cl, dummy_ = await proc_cl.communicate()
-                    changes_text = extract_changelog_section(out_cl.decode('utf-8', errors='ignore'), remote_ver)
-                    
-                    warning = _("bot_update_docker_warning", config.DEFAULT_LANGUAGE) if DEPLOY_MODE == "docker" else ""
-                    
-                    await send_alert(
-                        bot, 
-                        lambda lang: _("bot_update_available", lang, local=f"v{local_ver}", remote=f"v{remote_ver}", log=escape_html(changes_text)) + warning,
-                        "update" 
-                    )
-                    
-                    LAST_NOTIFIED_VERSION = remote_ver
+            if available and remote_v != LAST_NOTIFIED_VERSION:
+                branch = validate_branch_name(branch)
+                
+                # Заранее получаем логи для поддерживаемых языков
+                log_ru = await get_changelog_entry(branch, "ru")
+                log_en = await get_changelog_entry(branch, "en")
+                
+                def get_log_for_lang(l):
+                    return log_en if l == "en" else log_ru
+
+                warning = _("bot_update_docker_warning", config.DEFAULT_LANGUAGE) if DEPLOY_MODE == "docker" else ""
+                
+                # Передаем правильный лог в зависимости от языка админа
+                await send_alert(
+                    bot, 
+                    lambda lang: _("bot_update_available", lang, local=local_v, remote=remote_v, log=escape_html(get_log_for_lang(lang))) + warning,
+                    "update" 
+                )
+                LAST_NOTIFIED_VERSION = remote_v
             
         except Exception as e:
-            logging.error(f"AutoUpdateChecker iteration failed: {e}")
+            logging.error(f"AutoUpdateChecker failed: {e}")
         
         await asyncio.sleep(CHECK_INTERVAL)
 
+# --- HANDLERS ---
 
-# --- TELEGRAM HANDLERS ---
 async def update_menu_handler(message: types.Message):
     user_id = message.from_user.id
     chat_id = message.chat.id
@@ -219,7 +233,6 @@ async def update_menu_handler(message: types.Message):
         await send_access_denied_message(message.bot, user_id, chat_id, command)
         return
 
-    await message.bot.send_chat_action(chat_id=chat_id, action="typing")
     await delete_previous_message(user_id, command, chat_id, message.bot)
 
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
@@ -237,7 +250,6 @@ async def update_menu_handler(message: types.Message):
     )
     LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = sent_message.message_id
 
-
 async def run_system_update(callback: types.CallbackQuery):
     user_id = callback.from_user.id
     lang = get_user_lang(user_id)
@@ -245,22 +257,17 @@ async def run_system_update(callback: types.CallbackQuery):
     await callback.message.edit_text(_("update_start", lang), parse_mode="HTML")
     
     cmd = "sudo DEBIAN_FRONTEND=noninteractive apt update && sudo DEBIAN_FRONTEND=noninteractive apt upgrade -y && sudo apt autoremove -y"
-    process = await asyncio.create_subprocess_shell(cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
-    stdout, stderr = await process.communicate()
-    
-    output = stdout.decode('utf-8', errors='ignore')
-    error_output = stderr.decode('utf-8', errors='ignore')
+    code, out, err = await run_command(cmd)
 
-    if process.returncode == 0:
-        text = _("update_success", lang, output=escape_html(output[-2000:]))
+    if code == 0:
+        text = _("update_success", lang, output=escape_html(out[-2000:]))
     else:
-        text = _("update_fail", lang, code=process.returncode, error=escape_html(error_output[-2000:]))
+        text = _("update_fail", lang, code=code, error=escape_html(err[-2000:]))
     
     try:
         await callback.message.edit_text(text, parse_mode="HTML")
     except TelegramBadRequest:
         await callback.message.answer(text, parse_mode="HTML")
-
 
 async def check_bot_update(callback: types.CallbackQuery):
     user_id = callback.from_user.id
@@ -269,30 +276,29 @@ async def check_bot_update(callback: types.CallbackQuery):
     await callback.message.edit_text(_("bot_update_checking", lang), parse_mode="HTML")
 
     try:
-        local_ver, remote_ver, target_branch = await get_update_info()
+        local_v, remote_v, branch, available = await get_update_info()
         
-        if target_branch and local_ver != remote_ver:
-            # Есть обновление!
-            proc_cl = await asyncio.create_subprocess_shell(f"git show {target_branch}:CHANGELOG.md", stdout=asyncio.subprocess.PIPE)
-            out_cl, dummy_ = await proc_cl.communicate()
+        if available:
+            branch = validate_branch_name(branch)
+            # Получаем лог именно для языка пользователя
+            changes_log = await get_changelog_entry(branch, lang)
             
-            changes_text = extract_changelog_section(out_cl.decode('utf-8', errors='ignore'), remote_ver)
             warning = _("bot_update_docker_warning", lang) if DEPLOY_MODE == "docker" else ""
             
             keyboard = InlineKeyboardMarkup(inline_keyboard=[
-                [InlineKeyboardButton(text=_("btn_update_bot_now", lang), callback_data=f"do_bot_update:{target_branch.replace('origin/', '')}")],
+                [InlineKeyboardButton(text=_("btn_update_bot_now", lang), callback_data=f"do_bot_update:{branch}")],
                 [InlineKeyboardButton(text=_("btn_cancel", lang), callback_data="back_to_menu")]
             ])
             
             await callback.message.edit_text(
-                _("bot_update_available", lang, local=f"v{local_ver}", remote=f"v{remote_ver}", log=escape_html(changes_text)) + warning,
+                _("bot_update_available", lang, local=local_v, remote=remote_v, log=escape_html(changes_log)) + warning,
                 reply_markup=keyboard,
                 parse_mode="HTML"
             )
             
         else:
             await callback.message.edit_text(
-                _("bot_update_up_to_date", lang, hash=f"v{local_ver}"),
+                _("bot_update_up_to_date", lang, hash=local_v),
                 reply_markup=InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text=_("btn_back", lang), callback_data="back_to_menu")]]),
                 parse_mode="HTML"
             )
@@ -301,21 +307,20 @@ async def check_bot_update(callback: types.CallbackQuery):
         logging.error(f"Update check error: {e}", exc_info=True)
         await callback.message.edit_text(f"Error checking updates: {e}")
 
-
 async def run_bot_update(callback: types.CallbackQuery):
     user_id = callback.from_user.id
     lang = get_user_lang(user_id)
     chat_id = callback.message.chat.id
     
     data_parts = callback.data.split(":")
-    target_branch = "main"
-    if len(data_parts) > 1:
-        target_branch = data_parts[1]
+    branch = data_parts[1] if len(data_parts) > 1 else "main"
     
     await callback.message.edit_text(_("bot_update_start", lang), parse_mode="HTML")
 
     try:
-        await execute_bot_update(target_branch, restart_source=f"{chat_id}:{callback.message.message_id}")
+        restart_token = f"{chat_id}:{callback.message.message_id}"
+        await execute_bot_update(branch, restart_source=restart_token)
+        
         await callback.message.edit_text(_("bot_update_success", lang), parse_mode="HTML")
         
     except Exception as e:
