@@ -48,10 +48,74 @@ async function onTelegramAuth(user) {
     } catch (e) { console.error(e); }
 }
 
-// --- UI Logic: Language ---
+// --- UI Logic: Language & Slider ---
+
+// Функция обновления позиции слайдера и стилей кнопок
+function updateLangSlider(lang) {
+    const slider = document.getElementById('lang-slider-bg');
+    const btnRu = document.getElementById('btn-ru');
+    const btnEn = document.getElementById('btn-en');
+
+    if (slider) {
+        // Логика перемещения: ширина контейнера 140px, padding 4px (p-1).
+        // Слайдер занимает 50% - 4px.
+        // Если EN, сдвигаем на 100% своей ширины + 8px (компенсация отступов).
+        if (lang === 'en') {
+            slider.style.transform = 'translateX(100%) translateX(8px)';
+        } else {
+            slider.style.transform = 'translateX(0)';
+        }
+    }
+
+    // Обновляем прозрачность/активность текста
+    if (btnRu && btnEn) {
+        if (lang === 'ru') {
+            btnRu.classList.remove('opacity-50');
+            btnRu.querySelector('span').classList.remove('opacity-80');
+            btnEn.classList.add('opacity-50');
+        } else {
+            btnEn.classList.remove('opacity-50');
+            btnEn.querySelector('span').classList.remove('opacity-80');
+            btnRu.classList.add('opacity-50');
+        }
+    }
+}
+window.updateLangSlider = updateLangSlider;
+
+// Основная функция переключения языка (БЕЗ ПЕРЕЗАГРУЗКИ)
 function setLoginLanguage(lang) {
+    // 1. Сохраняем куки
     document.cookie = "guest_lang=" + lang + "; path=/; max-age=31536000";
-    window.location.reload();
+    
+    // 2. Анимируем слайдер
+    updateLangSlider(lang);
+
+    // 3. Динамически меняем текст на странице
+    if (typeof I18N_ALL !== 'undefined' && I18N_ALL[lang]) {
+        const dict = I18N_ALL[lang];
+        window.I18N = dict; // Обновляем глобальную ссылку
+
+        // Обновляем все элементы с data-i18n
+        document.querySelectorAll('[data-i18n]').forEach(el => {
+            const key = el.getAttribute('data-i18n');
+            if (dict[key]) {
+                // Если элемент — input, меняем placeholder
+                if (el.tagName === 'INPUT') el.placeholder = dict[key];
+                // Иначе меняем содержимое
+                else el.innerHTML = dict[key];
+            }
+        });
+
+        // Обновляем заголовок страницы
+        if (dict.web_title) document.title = dict.web_title;
+
+        // Обновляем тултипы (если есть специфичные)
+        const gh = document.querySelector('a[title="GitHub"]');
+        if(gh && dict['login_github_tooltip']) gh.title = dict['login_github_tooltip'];
+        
+        const sp = document.querySelector('button[title="Support"]');
+        if(sp && dict['login_support_tooltip']) sp.title = dict['login_support_tooltip'];
+    }
 }
 window.setLoginLanguage = setLoginLanguage;
 
@@ -93,11 +157,17 @@ function toggleForms(target) {
     [magic, password, reset, setPass].forEach(el => el?.classList.add('hidden'));
     if (errorBlock) errorBlock.classList.add('hidden');
 
-    // Показываем целевой
-    if (target === 'password' && password) password.classList.remove('hidden');
-    else if (target === 'reset' && reset) reset.classList.remove('hidden');
-    else if (target === 'set-password' && setPass) setPass.classList.remove('hidden');
-    else if (magic) magic.classList.remove('hidden');
+    // Показываем целевой с анимацией
+    const show = (el) => {
+        if (!el) return;
+        el.classList.remove('hidden');
+        el.classList.add('animate-fade-in-up'); // Перезапуск анимации
+    };
+
+    if (target === 'password') show(password);
+    else if (target === 'reset') show(reset);
+    else if (target === 'set-password') show(setPass);
+    else show(magic);
 }
 
 // --- API: Reset Password Request ---
@@ -239,7 +309,7 @@ document.addEventListener("DOMContentLoaded", () => {
     // 2. Parse Emojis
     if (window.twemoji) window.twemoji.parse(document.body, { folder: 'svg', ext: '.svg' });
 
-    // 3. I18N Apply
+    // 3. I18N Initial Apply
     if (typeof I18N !== 'undefined') {
         document.querySelectorAll('[data-i18n]').forEach(el => {
             const key = el.getAttribute('data-i18n');
@@ -250,7 +320,6 @@ document.addEventListener("DOMContentLoaded", () => {
             if (el.title && I18N[key]) el.title = I18N[key];
         });
         
-        // Manual tooltips
         const gh = document.querySelector('a[title="GitHub"]');
         if(gh && I18N['login_github_tooltip']) gh.title = I18N['login_github_tooltip'];
         const sp = document.querySelector('button[title="Support"]');
