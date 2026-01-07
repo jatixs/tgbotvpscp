@@ -4,7 +4,6 @@ import os
 import sys
 import re
 import signal
-import subprocess
 import shlex
 from aiogram import F, Dispatcher, types, Bot
 from aiogram.types import KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
@@ -178,20 +177,22 @@ async def get_update_info():
 async def execute_bot_update(branch: str, restart_source: str = "unknown"):
     try:
         branch = validate_branch_name(branch)
-        logging.info(f"Starting bot update on branch '{branch}'...")
+        # Log Injection protection
+        safe_branch = branch.replace('\n', '').replace('\r', '')
+        logging.info(f"Starting bot update on branch '{safe_branch}'...")
         
-        code, _, err = await run_command(["git", "fetch", "origin"])
-        if code != 0:
-            raise Exception(f"Git fetch failed: {err}")
+        fetch_code, _, fetch_err = await run_command(["git", "fetch", "origin"])
+        if fetch_code != 0:
+            raise Exception(f"Git fetch failed: {fetch_err}")
         
-        code, _, err = await run_command(["git", "reset", "--hard", f"origin/{branch}"])
-        if code != 0:
-            raise Exception(f"Git reset failed: {err}")
+        reset_code, _, reset_err = await run_command(["git", "reset", "--hard", f"origin/{branch}"])
+        if reset_code != 0:
+            raise Exception(f"Git reset failed: {reset_err}")
 
         pip_cmd = [sys.executable, "-m", "pip", "install", "-r", "requirements.txt"]
-        code, _, err = await run_command(pip_cmd)
-        if code != 0:
-            logging.warning(f"Pip install warning: {err}")
+        pip_code, _, pip_err = await run_command(pip_cmd)
+        if pip_code != 0:
+            logging.warning(f"Pip install warning: {pip_err}")
 
         os.makedirs(os.path.dirname(RESTART_FLAG_FILE), exist_ok=True)
         with open(RESTART_FLAG_FILE, "w") as f:

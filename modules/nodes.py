@@ -93,8 +93,8 @@ async def cq_nodes_list_refresh(callback: types.CallbackQuery):
     keyboard = get_nodes_list_keyboard(prepared_nodes, lang)
     try:
         await callback.message.edit_text(_("nodes_menu_header", lang), reply_markup=keyboard, parse_mode="HTML")
-    except Exception:
-        pass
+    except Exception as e:
+        logging.debug(f"cq_nodes_list_refresh edit error: {e}")
     await callback.answer()
 
 
@@ -247,8 +247,8 @@ async def cq_node_stop_traffic(callback: types.CallbackQuery):
                 
                 keyboard = get_node_management_keyboard(token, lang)
                 await callback.message.answer(text, reply_markup=keyboard, parse_mode="HTML")
-        except Exception:
-            pass
+        except Exception as e:
+            logging.debug(f"cq_node_stop_traffic delete/answer error: {e}")
 
     await callback.answer(_("node_traffic_stopped_alert", lang, name=node_name), show_alert=False)
 
@@ -326,7 +326,6 @@ async def nodes_monitor(bot: Bot):
                             if not state["active"] or (
                                     now - state["last_time"] > config.RESOURCE_ALERT_COOLDOWN):
                                 
-                                # --- ИСПРАВЛЕНИЕ: Извлекаем процессы и передаем в алерты ---
                                 p_info = stats.get(f"process_{metric}", "n/a")
                                 await send_alert(bot, lambda lang: _(key_high, lang, name=name, usage=current, threshold=threshold, processes=p_info), "resources", processes=p_info)
                                 

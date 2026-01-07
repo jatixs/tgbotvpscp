@@ -1,4 +1,17 @@
-tailwind.config = {
+/* /core/static/js/theme_init.js */
+
+(function() {
+    const originalWarn = console.warn;
+    console.warn = function(...args) {
+        if (args[0] && typeof args[0] === 'string' && args[0].includes('cdn.tailwindcss.com')) {
+            return;
+        }
+        originalWarn.apply(console, args);
+    };
+})();
+
+window.tailwind = window.tailwind || {};
+window.tailwind.config = {
     darkMode: 'class',
     theme: {
         extend: {
@@ -12,6 +25,7 @@ tailwind.config = {
         }
     }
 };
+
 
 (function() {
     try {

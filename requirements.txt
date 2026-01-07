@@ -9,3 +9,4 @@ aiohttp
 aiosqlite
 Pillow
 packaging
+Jinja2

@@ -5,7 +5,6 @@ import time
 import uuid
 from typing import Union, Callable
 from aiogram import Bot
-from aiogram.exceptions import TelegramBadRequest, TelegramRetryAfter
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
 from .i18n import _, get_user_lang
@@ -48,7 +47,7 @@ async def send_alert(bot: Bot, message_or_func: Union[str, Callable[[str], str]]
         if web_text:
             try:
                 if kwargs: web_text = web_text.format(**kwargs)
-            except: pass
+            except Exception: pass
 
             shared_state.WEB_NOTIFICATIONS.appendleft({
                 "id": str(uuid.uuid4()),

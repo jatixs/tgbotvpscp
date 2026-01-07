@@ -1,6 +1,5 @@
 import asyncio
 import logging
-import re
 from aiogram import F, Dispatcher, types
 from aiogram.types import KeyboardButton
 from aiogram.exceptions import TelegramNetworkError
@@ -66,8 +65,8 @@ async def optimize_handler(message: types.Message):
     try:
         await message.bot.delete_message(chat_id=chat_id, message_id=sent_message.message_id)
         LAST_MESSAGE_IDS.get(user_id, {}).pop(command, None)
-    except Exception:
-        pass
+    except Exception as e:
+        logging.debug(f"Failed to delete optimize start message: {e}")
 
     if process.returncode == 0:
         response_text = _("optimize_success", lang,
