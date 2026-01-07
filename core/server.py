@@ -9,6 +9,7 @@ import ipaddress
 from argon2 import PasswordHasher, exceptions as argon2_exceptions
 import hmac
 from aiohttp import web
+from aiohttp.web import WebSocketResponse  # <--- ДОБАВЛЕН ИМПОРТ
 from aiogram import Bot
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from collections import deque
@@ -85,7 +86,6 @@ def check_user_password(user_id, input_pass):
     # Legacy SHA256 check (Migration purpose only)
     if len(stored_hash) == 64 and all(c in "0123456789abcdef" for c in stored_hash):
         input_pass_sha256 = hashlib.sha256(input_pass.encode()).hexdigest()
-        # Use compare_digest to mitigate timing attacks on legacy hashes
         if hmac.compare_digest(stored_hash, input_pass_sha256):
             try:
                 ph = PasswordHasher()
@@ -94,7 +94,7 @@ def check_user_password(user_id, input_pass):
                 save_users()
                 return True
             except Exception:
-                return True # Allow login even if migration fails
+                return True
         return False
 
     ph = PasswordHasher()
@@ -178,6 +178,63 @@ def check_telegram_auth(data, bot_token):
     auth_date = int(auth_data.get('auth_date', 0))
     if time.time() - auth_date > 86400: return False
     return True
+
+# --- НОВЫЙ WEBSOCKET ХЕНДЛЕР ---
+async def api_websocket_stream(request):
+    user = get_current_user(request)
+    if not user:
+        return web.json_response({"error": "Unauthorized"}, status=401)
+
+    ws = WebSocketResponse()
+    await ws.prepare(request)
+    
+    import psutil
+    
+    try:
+        while True:
+            # 1. Сбор системной статистики
+            current_stats = {
+                "cpu": 0, "ram": 0, "disk": 0, 
+                "ip": AGENT_IP_CACHE, 
+                "net_sent": 0, "net_recv": 0
+            }
+            try:
+                net = psutil.net_io_counters()
+                mem = psutil.virtual_memory()
+                disk = psutil.disk_usage(get_host_path('/'))
+                current_stats.update({
+                    "net_sent": net.bytes_sent, "net_recv": net.bytes_recv,
+                    "ram_total": mem.total, "ram_free": mem.available,
+                    "disk_total": disk.total, "disk_free": disk.free,
+                })
+                if AGENT_HISTORY:
+                    latest = AGENT_HISTORY[-1]
+                    current_stats.update({"cpu": latest["c"], "ram": latest["r"]})
+                    try: current_stats["disk"] = psutil.disk_usage(get_host_path('/')).percent
+                    except Exception: pass
+            except Exception: pass
+
+            # 2. Сбор статистики по нодам
+            all_nodes = await nodes_db.get_all_nodes()
+            nodes_count = len(all_nodes)
+            active_nodes = sum(1 for n in all_nodes.values() if time.time() - n.get("last_seen", 0) < NODE_OFFLINE_TIMEOUT)
+
+            # 3. Отправка пакета
+            payload = {
+                "type": "stats_update",
+                "stats": current_stats,
+                "nodes": {
+                    "total": nodes_count,
+                    "active": active_nodes
+                }
+            }
+            await ws.send_json(payload)
+            await asyncio.sleep(3) # Интервал обновления WebSocket
+
+    except Exception: pass
+    finally: pass
+    return ws
+# -------------------------------
 
 async def handle_get_logs(request):
     user = get_current_user(request)
@@ -415,6 +472,8 @@ async def handle_dashboard(request):
     template = JINJA_ENV.get_template("dashboard.html")
     html = template.render(**context)
     return web.Response(text=html, content_type='text/html')
+
+# ... (Остальные методы без изменений) ...
 
 async def handle_heartbeat(request):
     try: data = await request.json()
@@ -978,6 +1037,7 @@ async def start_web_server(bot_instance: Bot):
         app.router.add_post('/logout', handle_logout)
         app.router.add_get('/api/node/details', handle_node_details)
         app.router.add_get('/api/agent/stats', handle_agent_stats)
+        app.router.add_get('/api/stream', api_websocket_stream) # <--- РЕГИСТРАЦИЯ WS МАРШРУТА
         app.router.add_get('/api/nodes/list', handle_nodes_list_json)
         app.router.add_get('/api/logs', handle_get_logs)
         app.router.add_get('/api/logs/system', handle_get_sys_logs)
