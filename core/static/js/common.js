@@ -318,7 +318,17 @@ function toggleNotifications() {
 }
 function closeNotifications() { const d = document.getElementById('notifDropdown'); if (d) { d.classList.remove('show'); setTimeout(() => d.classList.add('hidden'), 200); } }
 
-function toggleTheme() { const n = (themes.indexOf(currentTheme)+1)%themes.length; currentTheme=themes[n]; localStorage.setItem('theme',currentTheme); applyThemeUI(currentTheme); document.documentElement.classList.toggle('dark', currentTheme==='dark'||(currentTheme==='system'&&window.matchMedia('(prefers-color-scheme: dark)').matches)); }
+function toggleTheme() { 
+    const n = (themes.indexOf(currentTheme)+1)%themes.length; 
+    currentTheme=themes[n]; 
+    localStorage.setItem('theme',currentTheme); 
+    applyThemeUI(currentTheme); 
+    document.documentElement.classList.toggle('dark', currentTheme==='dark'||(currentTheme==='system'&&window.matchMedia('(prefers-color-scheme: dark)').matches)); 
+    
+    // --- ДОБАВЛЕНО: Диспатч события для обновления графиков ---
+    window.dispatchEvent(new Event('themeChanged'));
+}
+
 function applyThemeUI(t) { ['iconMoon','iconSun','iconSystem'].forEach(id=>document.getElementById(id)?.classList.add('hidden')); if(t==='dark') document.getElementById('iconMoon')?.classList.remove('hidden'); else if(t==='light') document.getElementById('iconSun')?.classList.remove('hidden'); else document.getElementById('iconSystem')?.classList.remove('hidden'); }
 
 // ======================================================================
