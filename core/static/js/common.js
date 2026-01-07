@@ -5,8 +5,6 @@ const themes = ['dark', 'light', 'system'];
 let currentTheme = localStorage.getItem('theme') || 'system';
 let latestNotificationTime = Math.floor(Date.now() / 1000);
 const pageCache = new Map();
-const NOTIF_INTERVAL = 5000; // Опрос уведомлений раз в 5 секунд
-let notifTimer = null;
 
 // --- MODAL STATE VARIABLES ---
 let modalCloseTimer = null;    // Таймер для предотвращения мерцания
@@ -17,15 +15,22 @@ let bodyScrollTop = 0;         // Позиция скролла для фикс�
 document.addEventListener("DOMContentLoaded", () => {
     applyThemeUI(currentTheme);
     if (typeof window.parsePageEmojis === 'function') { window.parsePageEmojis(); } else { parsePageEmojis(); }
-    
-    startNotifPolling(); // <--- Умный опрос уведомлений
-    
+    initNotifications(); 
     initHolidayMood(); 
     initAddNodeLogic();
     if (document.getElementById('logsContainer')) {
         if (typeof window.switchLogType === 'function') { window.switchLogType('bot'); }
     }
     pageCache.set(window.location.href, document.documentElement.outerHTML);
+    
+    // Check session on tab focus (except login/reset pages)
+    if (!['/login', '/reset_password'].includes(window.location.pathname)) {
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'visible') {
+                pollNotifications();
+            }
+        });
+    }
 });
 
 // --- HELPER FUNCTIONS ---
@@ -198,64 +203,23 @@ function stopSnow() { clearInterval(snowInterval); snowInterval = null; if (docu
 
 // --- NOTIFICATIONS & SESSION CHECK ---
 let lastUnreadCount = -1;
-
-function startNotifPolling() {
-    // В login/reset уведомления не нужны
+function initNotifications() {
     if (window.location.pathname === '/login' || window.location.pathname.startsWith('/reset_password')) return;
 
-    // Кнопка есть?
     const btn = document.getElementById('notifBtn');
     if (!btn) return;
-    
-    // Пересоздаем кнопку (удаляем старые листенеры)
     const newBtn = btn.cloneNode(true);
     btn.parentNode.replaceChild(newBtn, btn);
     newBtn.addEventListener('click', toggleNotifications);
-    
     const clearBtn = document.getElementById('notifClearBtn');
     if (clearBtn) {
         const newClearBtn = clearBtn.cloneNode(true);
         clearBtn.parentNode.replaceChild(newClearBtn, clearBtn);
         newClearBtn.addEventListener('click', clearNotifications);
     }
-    
     document.addEventListener('click', (e) => { if (!e.target.closest('#notifDropdown') && !e.target.closest('#notifBtn')) closeNotifications(); });
-    
-    // Запускаем рекурсивный поллинг
     pollNotifications();
-}
-
-async function pollNotifications() {
-    if (document.hidden) {
-        notifTimer = setTimeout(pollNotifications, NOTIF_INTERVAL);
-        return;
-    }
-
-    try {
-        const res = await fetch('/api/notifications/list');
-        if (res.status === 401) {
-            handleSessionExpired();
-            return; // Останавливаем поллинг при истечении сессии
-        }
-        if (!res.ok) return;
-        const data = await res.json();
-        
-        if (data.notifications && data.notifications.length > 0) {
-            let maxTime = latestNotificationTime;
-            data.notifications.forEach(notif => {
-                if (notif.time > latestNotificationTime) {
-                    showToast(notif.text);
-                    if (notif.time > maxTime) maxTime = notif.time;
-                }
-            });
-            latestNotificationTime = maxTime;
-        }
-        updateNotifUI(data.notifications, data.unread_count);
-    } catch (e) {
-        // Silent error
-    } finally {
-        notifTimer = setTimeout(pollNotifications, NOTIF_INTERVAL);
-    }
+    setInterval(pollNotifications, 3000);
 }
 
 function handleSessionExpired() {
@@ -295,7 +259,30 @@ function handleSessionExpired() {
     });
 }
 
-async def clearNotifications(e) {
+async function pollNotifications() {
+    if (window.location.pathname === '/login' || window.location.pathname.startsWith('/reset_password')) return;
+    try {
+        const res = await fetch('/api/notifications/list');
+        if (res.status === 401) {
+            handleSessionExpired();
+            return;
+        }
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data.notifications && data.notifications.length > 0) {
+            let maxTime = latestNotificationTime;
+            data.notifications.forEach(notif => {
+                if (notif.time > latestNotificationTime) {
+                    showToast(notif.text);
+                    if (notif.time > maxTime) maxTime = notif.time;
+                }
+            });
+            latestNotificationTime = maxTime;
+        }
+        updateNotifUI(data.notifications, data.unread_count);
+    } catch (e) {}
+}
+async function clearNotifications(e) {
     if (e) e.stopPropagation();
     const msg = (typeof I18N !== 'undefined' && I18N.web_clear_notif_confirm) ? I18N.web_clear_notif_confirm : "Очистить все уведомления?";
     const title = (typeof I18N !== 'undefined' && I18N.modal_title_confirm) ? I18N.modal_title_confirm : "Подтверждение";
@@ -338,6 +325,7 @@ function toggleTheme() {
     applyThemeUI(currentTheme); 
     document.documentElement.classList.toggle('dark', currentTheme==='dark'||(currentTheme==='system'&&window.matchMedia('(prefers-color-scheme: dark)').matches)); 
     
+    // --- ДОБАВЛЕНО: Диспатч события для обновления графиков ---
     window.dispatchEvent(new Event('themeChanged'));
 }
 
@@ -665,5 +653,6 @@ window.addEventListener('popstate', async () => {
     window.location.reload(); 
 });
 
+// Экспорт функций анимации для использования в других скриптах (например, settings.js)
 window.animateModalOpen = animateModalOpen;
 window.animateModalClose = animateModalClose;
