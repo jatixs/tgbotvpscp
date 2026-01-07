@@ -324,7 +324,7 @@ async def handle_dashboard(request):
     settings_btn = ""
     if user_id == ADMIN_USER_ID:
         node_action_btn = f"""<button onclick="openAddNodeModal()" class="inline-flex items-center gap-1.5 py-1.5 px-3 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold transition shadow-lg shadow-blue-500/20"><svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path></svg>{_("web_add_node_section", lang)}</button>"""
-        settings_btn = f"""<a href="/settings" class="flex items-center justify-center w-8 h-8 rounded-lg hover:bg-black/5 dark:hover:bg-white/10 transition text-gray-600 dark:text-gray-400" title="{_("web_settings_button", lang)}"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg></a>"""
+        settings_btn = f"""<a href="/settings" class="flex items-center justify-center w-8 h-8 rounded-lg hover:bg-black/5 dark:hover:bg-white/10 transition text-gray-600 dark:text-gray-400" title="{_("web_settings_button", lang)}"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg></a>"""
 
     context = {
         "web_title": f"{_('web_dashboard_title', lang)} - VPS Bot",
@@ -514,6 +514,26 @@ async def handle_node_delete(request):
         await nodes_db.delete_node(token)
         return web.json_response({"status": "ok"})
     except Exception as e: return web.json_response({"error": str(e)}, status=500)
+
+async def handle_node_reboot(request):
+    user = get_current_user(request)
+    if not user or user['role'] != 'admins':
+        return web.json_response({"error": "Admin required"}, status=403)
+    
+    try:
+        data = await request.json()
+        token = data.get("token")
+        if not token:
+            return web.json_response({"error": "Token required"}, status=400)
+        
+        # Отправляем задачу на ноду (user_id=0 означает Web/System)
+        await nodes_db.update_node_task(token, {"command": "reboot", "user_id": 0})
+        # Ставим флаг перезагрузки для визуализации
+        await nodes_db.update_node_extra(token, "is_restarting", True)
+        
+        return web.json_response({"status": "ok"})
+    except Exception as e: 
+        return web.json_response({"error": str(e)}, status=500)
 
 async def handle_nodes_list_json(request):
     user = get_current_user(request)
@@ -990,6 +1010,7 @@ async def start_web_server(bot_instance: Bot):
         app.router.add_post('/api/users/action', handle_user_action)
         app.router.add_post('/api/nodes/add', handle_node_add)
         app.router.add_post('/api/nodes/delete', handle_node_delete)
+        app.router.add_post('/api/node/reboot', handle_node_reboot) # <--- ADDED REBOOT ROUTE
         app.router.add_get('/api/update/check', api_check_update)
         app.router.add_post('/api/update/run', api_run_update)
         app.router.add_get('/api/notifications/list', api_get_notifications)
