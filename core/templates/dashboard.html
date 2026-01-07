@@ -331,6 +331,25 @@
             </div>
             
             <div class="p-6 overflow-y-auto no-scrollbar">
+                
+                <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
+                    <div class="bg-gray-50 dark:bg-black/20 p-2.5 rounded-xl border border-gray-200 dark:border-white/5 text-center">
+                        <div class="text-[10px] text-gray-500 font-bold uppercase tracking-wider mb-1">Uptime</div>
+                        <div class="font-mono text-sm font-bold text-gray-700 dark:text-gray-200" id="modalNodeUptime">-</div>
+                    </div>
+                    <div class="bg-gray-50 dark:bg-black/20 p-2.5 rounded-xl border border-gray-200 dark:border-white/5 text-center">
+                        <div class="text-[10px] text-gray-500 font-bold uppercase tracking-wider mb-1">RAM</div>
+                        <div class="font-mono text-xs sm:text-sm font-bold text-purple-600 dark:text-purple-400 truncate" id="modalNodeRam">-</div>
+                    </div>
+                    <div class="bg-gray-50 dark:bg-black/20 p-2.5 rounded-xl border border-gray-200 dark:border-white/5 text-center">
+                        <div class="text-[10px] text-gray-500 font-bold uppercase tracking-wider mb-1">Disk</div>
+                        <div class="font-mono text-xs sm:text-sm font-bold text-green-600 dark:text-green-400 truncate" id="modalNodeDisk">-</div>
+                    </div>
+                    <div class="bg-gray-50 dark:bg-black/20 p-2.5 rounded-xl border border-gray-200 dark:border-white/5 text-center">
+                        <div class="text-[10px] text-gray-500 font-bold uppercase tracking-wider mb-1">Traffic</div>
+                        <div class="font-mono text-xs sm:text-sm font-bold text-blue-600 dark:text-blue-400 truncate" id="modalNodeTraffic">-</div>
+                    </div>
+                </div>
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
                     <div class="h-[200px] bg-white/50 dark:bg-black/20 rounded-xl p-4 border border-gray-100 dark:border-white/5">
                         <h4 class="text-xs font-bold text-gray-500 uppercase mb-2 text-center">{{ web_resources_chart }}</h4>
