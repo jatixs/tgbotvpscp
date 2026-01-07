@@ -325,18 +325,9 @@
                         </div>
                     </div>
                 </div>
-                
-                <div class="flex items-center gap-2">
-                    <button id="modalBtnReboot" class="text-gray-400 hover:text-orange-500 dark:hover:text-orange-400 transition p-2 rounded-lg hover:bg-orange-50 dark:hover:bg-orange-500/10" title="Reboot Node">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                        </svg>
-                    </button>
-
-                    <button onclick="closeNodeModal()" class="text-gray-400 hover:text-gray-600 dark:hover:text-white transition p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-white/10">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
-                    </button>
-                </div>
+                <button onclick="closeNodeModal()" class="text-gray-400 hover:text-gray-600 dark:hover:text-white transition p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-white/10">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
+                </button>
             </div>
             
             <div class="p-6 overflow-y-auto no-scrollbar">
@@ -359,7 +350,6 @@
                         <div class="font-mono text-xs sm:text-sm font-bold text-blue-600 dark:text-blue-400 truncate" id="modalNodeTraffic">-</div>
                     </div>
                 </div>
-
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
                     <div class="h-[200px] bg-white/50 dark:bg-black/20 rounded-xl p-4 border border-gray-100 dark:border-white/5">
                         <h4 class="text-xs font-bold text-gray-500 uppercase mb-2 text-center">{{ web_resources_chart }}</h4>

@@ -515,26 +515,6 @@ async def handle_node_delete(request):
         return web.json_response({"status": "ok"})
     except Exception as e: return web.json_response({"error": str(e)}, status=500)
 
-async def handle_node_reboot(request):
-    user = get_current_user(request)
-    if not user or user['role'] != 'admins':
-        return web.json_response({"error": "Admin required"}, status=403)
-    
-    try:
-        data = await request.json()
-        token = data.get("token")
-        if not token:
-            return web.json_response({"error": "Token required"}, status=400)
-        
-        # Отправляем задачу на ноду (user_id=0 означает Web/System)
-        await nodes_db.update_node_task(token, {"command": "reboot", "user_id": 0})
-        # Ставим флаг перезагрузки для визуализации
-        await nodes_db.update_node_extra(token, "is_restarting", True)
-        
-        return web.json_response({"status": "ok"})
-    except Exception as e: 
-        return web.json_response({"error": str(e)}, status=500)
-
 async def handle_nodes_list_json(request):
     user = get_current_user(request)
     if not user: return web.json_response({"error": "Unauthorized"}, status=401)
@@ -1010,7 +990,6 @@ async def start_web_server(bot_instance: Bot):
         app.router.add_post('/api/users/action', handle_user_action)
         app.router.add_post('/api/nodes/add', handle_node_add)
         app.router.add_post('/api/nodes/delete', handle_node_delete)
-        app.router.add_post('/api/node/reboot', handle_node_reboot) # <--- ADDED REBOOT ROUTE
         app.router.add_get('/api/update/check', api_check_update)
         app.router.add_post('/api/update/run', api_run_update)
         app.router.add_get('/api/notifications/list', api_get_notifications)
