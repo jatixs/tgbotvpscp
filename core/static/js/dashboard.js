@@ -59,13 +59,10 @@ function escapeHtml(text) {
         .replace(/'/g, "&#039;");
 }
 
-/* --- НОВАЯ ФУНКЦИЯ ДЛЯ КРАСИВОГО ОТОБРАЖЕНИЯ СПИСКА ПРОЦЕССОВ --- */
 function formatProcessList(procList, title, colorClass = "text-gray-500") {
     if (!procList || procList.length === 0) return '';
 
     const rows = procList.map(procStr => {
-        // Парсим строку вида "name (value)" с помощью регулярки
-        // Например: "python3 (12.5%)" -> name="python3", value="12.5%"
         const match = procStr.match(/^(.*)\s\((.*)\)$/);
         let name = procStr;
         let value = "";
@@ -96,7 +93,6 @@ function formatProcessList(procList, title, colorClass = "text-gray-500") {
         </div>
     `;
 }
-/* ---------------------------------------------------------------- */
 
 async function fetchNodesList() {
     try {
@@ -147,53 +143,59 @@ function renderNodesList(nodes) {
     }
 
     const html = nodes.map(node => {
-        let statusColor = node.status === 'online' ? "bg-green-500" : (node.status === 'restarting' ? "bg-yellow-500" : "bg-red-500");
-        let statusText = node.status.toUpperCase();
+        let statusColor = node.status === 'online' ? "bg-green-500" : (node.status === 'restarting' ? "bg-blue-500" : "bg-red-500");
+        let statusText = node.status === 'restarting' ? "RESTART" : node.status.toUpperCase();
+        let statusTextClass = node.status === 'online' ? "text-green-500" : (node.status === 'restarting' ? "text-blue-500" : "text-red-500");
+        let statusBg = node.status === 'online' ? "bg-green-500/10 text-green-600 dark:text-green-400" : (node.status === 'restarting' ? "bg-blue-500/10 text-blue-600 dark:text-blue-400" : "bg-red-500/10 text-red-600 dark:text-red-400");
         
-        // Округляем метрики
         const cpu = Math.round(node.cpu || 0);
         const ram = Math.round(node.ram || 0);
         const disk = Math.round(node.disk || 0);
 
-        // Цвета для высоких нагрузок
         const cpuColor = cpu > 80 ? 'text-red-500' : 'text-gray-600 dark:text-gray-300';
         const ramColor = ram > 80 ? 'text-red-500' : 'text-gray-600 dark:text-gray-300';
         const diskColor = disk > 90 ? 'text-red-500' : 'text-gray-600 dark:text-gray-300';
 
         return `
-        <div class="bg-gray-50 dark:bg-black/20 hover:bg-white dark:hover:bg-white/5 transition-all duration-200 p-3 rounded-xl border border-gray-100 dark:border-white/5 cursor-pointer flex flex-col sm:flex-row sm:items-center justify-between gap-3 group shadow-sm hover:shadow-md" onclick="openNodeDetails('${escapeHtml(node.token)}', '${statusColor}')">
+        <div class="bg-white dark:bg-white/5 hover:bg-gray-50 dark:hover:bg-white/10 transition-all duration-200 rounded-xl border border-gray-100 dark:border-white/5 cursor-pointer shadow-sm hover:shadow-md overflow-hidden group mb-2" onclick="openNodeDetails('${escapeHtml(node.token)}', '${statusColor}')">
             
-            <div class="flex items-center gap-3 min-w-0">
-                <div class="relative shrink-0">
-                    <div class="w-3 h-3 rounded-full ${statusColor}"></div>
-                    ${node.status === 'online' ? `<div class="absolute inset-0 w-3 h-3 rounded-full ${statusColor} animate-ping opacity-75"></div>` : ''}
-                </div>
-                <div class="min-w-0 overflow-hidden">
-                    <div class="font-bold text-sm text-gray-900 dark:text-white group-hover:text-blue-500 transition truncate pr-2">${escapeHtml(node.name)}</div>
-                    <div class="text-[10px] font-mono text-gray-400 truncate">${escapeHtml(node.ip)}</div>
-                </div>
-            </div>
-
-            <div class="flex items-center justify-between sm:justify-end gap-2 sm:gap-6 w-full sm:w-auto mt-2 sm:mt-0 pl-6 sm:pl-0 border-l-2 border-gray-100 dark:border-white/5 sm:border-0">
+            <div class="p-3 sm:p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
                 
-                <div class="text-right min-w-[40px]">
-                    <div class="text-[9px] font-bold text-gray-400 uppercase tracking-wider">CPU</div>
-                    <div class="text-xs font-mono font-bold ${cpuColor}">${cpu}%</div>
+                <div class="flex items-center gap-3 min-w-0">
+                    <div class="relative shrink-0 flex items-center justify-center w-8 h-8 rounded-full bg-gray-100 dark:bg-black/20">
+                        <div class="w-2.5 h-2.5 rounded-full ${statusColor}"></div>
+                        ${node.status === 'online' ? `<div class="absolute w-2.5 h-2.5 rounded-full ${statusColor} animate-ping opacity-75"></div>` : ''}
+                    </div>
+                    <div class="min-w-0 flex-1">
+                        <div class="flex items-center gap-2">
+                            <div class="font-bold text-sm text-gray-900 dark:text-white truncate group-hover:text-blue-600 dark:group-hover:text-blue-400 transition">${escapeHtml(node.name)}</div>
+                            <div class="sm:hidden px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider ${statusBg}">${statusText}</div>
+                        </div>
+                        <div class="text-[10px] sm:text-xs font-mono text-gray-400 truncate">${escapeHtml(node.ip)}</div>
+                    </div>
                 </div>
 
-                <div class="text-right min-w-[40px]">
-                    <div class="text-[9px] font-bold text-gray-400 uppercase tracking-wider">RAM</div>
-                    <div class="text-xs font-mono font-bold ${ramColor}">${ram}%</div>
-                </div>
+                <div class="flex items-center justify-between sm:justify-end gap-1 sm:gap-6 mt-1 sm:mt-0 pt-3 sm:pt-0 border-t border-gray-100 dark:border-white/5 sm:border-0">
+                    
+                    <div class="text-center sm:text-right flex-1 sm:flex-none">
+                        <div class="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">CPU</div>
+                        <div class="text-xs font-mono font-bold ${cpuColor}">${cpu}%</div>
+                    </div>
 
-                <div class="text-right min-w-[40px] hidden xs:block">
-                    <div class="text-[9px] font-bold text-gray-400 uppercase tracking-wider">DSK</div>
-                    <div class="text-xs font-mono font-bold ${diskColor}">${disk}%</div>
-                </div>
+                    <div class="text-center sm:text-right flex-1 sm:flex-none">
+                        <div class="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">RAM</div>
+                        <div class="text-xs font-mono font-bold ${ramColor}">${ram}%</div>
+                    </div>
 
-                <div class="text-right ml-2 pl-3 border-l border-gray-200 dark:border-white/10 hidden sm:block">
-                    <div class="text-[10px] font-bold text-gray-400 mb-0.5">${statusText}</div>
-                    <div class="text-[9px] text-gray-300 dark:text-gray-600">STATUS</div>
+                    <div class="text-center sm:text-right flex-1 sm:flex-none">
+                        <div class="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">DISK</div>
+                        <div class="text-xs font-mono font-bold ${diskColor}">${disk}%</div>
+                    </div>
+
+                    <div class="hidden sm:block text-right ml-2 pl-3 border-l border-gray-200 dark:border-white/10 min-w-[70px]">
+                        <div class="text-[10px] font-bold ${statusTextClass} mb-0.5">${statusText}</div>
+                        <div class="text-[9px] text-gray-300 dark:text-gray-600">STATUS</div>
+                    </div>
                 </div>
             </div>
         </div>`;
@@ -209,7 +211,6 @@ async function fetchAgentStats() {
         const freeIcon = `<svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 inline mb-0.5 opacity-60" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>`;
 
         if (data.stats) {
-            // CPU Section
             const cpuEl = document.getElementById('stat_cpu');
             const progCpu = document.getElementById('prog_cpu');
             if (cpuEl) {
@@ -218,17 +219,13 @@ async function fetchAgentStats() {
                     html += ` <span class="text-xs font-normal opacity-60">/ ${formatHz(data.stats.cpu_freq)}</span>`;
                 }
                 cpuEl.innerHTML = html;
-
-                // --- Top Processes Hint for CPU ---
                 const hintCpu = document.getElementById('hint-cpu');
                 if (hintCpu) {
                     hintCpu.innerHTML = formatProcessList(data.stats.process_cpu, "Top CPU Consumers", "text-blue-500");
                 }
-                // ----------------------------------
             }
             if (progCpu) progCpu.style.width = data.stats.cpu + "%";
 
-            // RAM Section
             const ramEl = document.getElementById('stat_ram');
             const progRam = document.getElementById('prog_ram');
             if (ramEl) {
@@ -237,17 +234,13 @@ async function fetchAgentStats() {
                     html += ` <span class="text-xs font-normal opacity-60">/ ${formatBytes(data.stats.ram_free)} ${freeIcon}</span>`;
                 }
                 ramEl.innerHTML = html;
-
-                // --- Top Processes Hint for RAM ---
                 const hintRam = document.getElementById('hint-ram');
                 if (hintRam) {
                     hintRam.innerHTML = formatProcessList(data.stats.process_ram, "Top Memory Consumers", "text-purple-500");
                 }
-                // ----------------------------------
             }
             if (progRam) progRam.style.width = data.stats.ram + "%";
 
-            // Disk Section
             const diskEl = document.getElementById('stat_disk');
             const progDisk = document.getElementById('prog_disk');
             if (diskEl) {
@@ -256,19 +249,14 @@ async function fetchAgentStats() {
                     html += ` <span class="text-xs font-normal opacity-60">/ ${formatBytes(data.stats.disk_free)} ${freeIcon}</span>`;
                 }
                 diskEl.innerHTML = html;
-
-                // --- Top Processes Hint for Disk ---
                 const hintDisk = document.getElementById('hint-disk');
                 if (hintDisk) {
                     hintDisk.innerHTML = formatProcessList(data.stats.process_disk, "Top I/O Usage (Total)", "text-emerald-500");
                 }
-                // -----------------------------------
             }
             if (progDisk) progDisk.style.width = data.stats.disk + "%";
 
-            // Network Section
-            let rxSpeed = 0,
-                txSpeed = 0;
+            let rxSpeed = 0, txSpeed = 0;
             if (data.history && data.history.length >= 2) {
                 const last = data.history[data.history.length - 1];
                 const prev = data.history[data.history.length - 2];
@@ -452,8 +440,9 @@ function formatUptime(bt) {
 
 async function openNodeDetails(token, color) {
     const modal = document.getElementById('nodeModal');
-    modal.classList.replace('hidden', 'flex');
-    document.body.style.overflow = 'hidden';
+    if (modal) {
+        animateModalOpen(modal); 
+    }
 
     if (chartRes) chartRes.destroy();
     if (chartNet) chartNet.destroy();
@@ -479,10 +468,8 @@ async function fetchAndRender(token) {
         document.getElementById('modalNodeIp').innerText = data.ip;
         document.getElementById('modalToken').innerText = data.token;
 
-        // [НОВОЕ] Заполнение детальной статистики
         const stats = data.stats || {};
         
-        // 1. Uptime (нода присылает длительность в секундах, конвертируем для formatUptime)
         if (stats.uptime) {
             const bootTimestamp = (Date.now() / 1000) - stats.uptime;
             document.getElementById('modalNodeUptime').innerText = formatUptime(bootTimestamp);
@@ -490,7 +477,6 @@ async function fetchAndRender(token) {
             document.getElementById('modalNodeUptime').innerText = "-";
         }
 
-        // 2. RAM (Занято / Всего)
         if (stats.ram_total) {
             const ramUsed = stats.ram_total - (stats.ram_free || 0);
             document.getElementById('modalNodeRam').innerText = `${formatBytes(ramUsed)} / ${formatBytes(stats.ram_total)}`;
@@ -498,7 +484,6 @@ async function fetchAndRender(token) {
             document.getElementById('modalNodeRam').innerText = "-";
         }
 
-        // 3. Disk (Занято / Всего)
         if (stats.disk_total) {
             const diskUsed = stats.disk_total - (stats.disk_free || 0);
             document.getElementById('modalNodeDisk').innerText = `${formatBytes(diskUsed)} / ${formatBytes(stats.disk_total)}`;
@@ -506,13 +491,11 @@ async function fetchAndRender(token) {
             document.getElementById('modalNodeDisk').innerText = "-";
         }
 
-        // 4. Traffic (RX / TX)
         if (stats.net_rx !== undefined) {
             document.getElementById('modalNodeTraffic').innerText = `⬇${formatBytes(stats.net_rx)} ⬆${formatBytes(stats.net_tx)}`;
         } else {
             document.getElementById('modalNodeTraffic').innerText = "-";
         }
-        // [КОНЕЦ НОВОГО КОДА]
 
         const lastSeen = data.last_seen || 0;
         const now = Math.floor(Date.now() / 1000);
@@ -530,8 +513,10 @@ async function fetchAndRender(token) {
 }
 
 function closeNodeModal() {
-    document.getElementById('nodeModal').classList.replace('flex', 'hidden');
-    document.body.style.overflow = '';
+    const modal = document.getElementById('nodeModal');
+    if (modal) {
+        animateModalClose(modal);
+    }
     if (pollInterval) clearInterval(pollInterval);
 }
 
