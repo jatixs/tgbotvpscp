@@ -1,6 +1,5 @@
 import asyncio
 import psutil
-import time
 import re
 import os
 import logging
@@ -51,7 +50,8 @@ async def selftest_handler(message: types.Message):
         mem = psutil.virtual_memory().percent
         try:
             disk = psutil.disk_usage(get_host_path('/')).percent
-        except Exception:
+        except Exception as e:
+            logging.debug(f"Disk usage check failed: {e}")
             disk = 0
         with open(get_host_path("/proc/uptime")) as f:
             uptime_sec = float(f.readline().split()[0])
@@ -149,8 +149,9 @@ async def selftest_handler(message: types.Message):
                             dt = datetime.strptime(
                                 match_sys.group(1), "%b %d %H:%M:%S")
                             dt = dt.replace(year=datetime.now().year)
-                    except Exception:
-                        pass # Если парсинг не удался, dt останется None
+                    except Exception as e:
+                        logging.debug(f"Date parse error in selftest: {e}")
+                        pass 
                     
                     time_str = dt.strftime('%H:%M:%S') if dt else "?"
                     date_str = dt.strftime('%d.%m.%Y') if dt else "?"

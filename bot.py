@@ -18,9 +18,8 @@ if os.path.isdir("/proc_host"):
     psutil.PROCFS_PATH = "/proc_host"
 
 from aiogram import Bot, Dispatcher, types, F
-from aiogram.types import KeyboardButton
 from aiogram.fsm.storage.memory import MemoryStorage
-from aiogram.filters import Command, StateFilter
+from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.exceptions import TelegramBadRequest
 
@@ -83,7 +82,7 @@ async def show_main_menu(
         try:
             await bot.delete_message(chat_id=chat_id, message_id=message_id_to_delete)
         except TelegramBadRequest:
-            pass
+            pass # Message might be already deleted or too old
 
     await messaging.delete_previous_message(user_id, list(shared_state.LAST_MESSAGE_IDS.get(user_id, {}).keys()), chat_id, bot)
 
@@ -197,8 +196,8 @@ async def toggle_kb_config(callback: types.CallbackQuery):
 async def close_kb_settings(callback: types.CallbackQuery):
     try:
         await callback.message.delete()
-    except Exception:
-        pass
+    except Exception as e:
+        logging.debug(f"Failed to delete message in close_kb_settings: {e}")
     await callback.answer()
 
 

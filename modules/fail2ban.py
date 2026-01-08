@@ -3,7 +3,7 @@ import os
 import re
 import logging
 from datetime import datetime
-from aiogram import F, Dispatcher, types
+from aiogram import Dispatcher, types
 from aiogram.types import KeyboardButton
 
 from core.i18n import _, I18nFilter, get_user_lang
@@ -71,7 +71,8 @@ async def fail2ban_handler(message: types.Message):
                                      time=dt.strftime('%H:%M:%S'),
                                      tz=tz,
                                      date=dt.strftime('%d.%m.%Y')))
-                except Exception:
+                except Exception as e:
+                    logging.debug(f"Fail2Ban parse error: {e}")
                     continue
 
             if len(entries) >= 10:

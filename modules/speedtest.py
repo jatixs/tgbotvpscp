@@ -5,7 +5,6 @@ import json
 import platform
 import shlex
 import os
-import concurrent.futures
 import time
 import aiohttp
 from typing import Optional, Dict, Any, Tuple, List
@@ -66,7 +65,8 @@ async def edit_status_safe(
         await bot.edit_message_text(text, chat_id=chat_id, message_id=message_id, parse_mode="HTML")
         MESSAGE_EDIT_THROTTLE[message_id] = now
         return message_id
-    except Exception:
+    except Exception as e:
+        logging.debug(f"edit_status_safe failed: {e}")
         return None
 
 
@@ -90,8 +90,8 @@ async def get_ping_async(host: str) -> Optional[float]:
         match = re.search(regex, output)
         if match:
             return float(match.group(1))
-    except Exception:
-        pass
+    except Exception as e:
+        logging.debug(f"Ping failed for {host}: {e}")
     return None
 
 async def get_vps_location() -> Tuple[Optional[str], Optional[str], Optional[str]]:
@@ -103,16 +103,16 @@ async def get_vps_location() -> Tuple[Optional[str], Optional[str], Optional[str
                     if resp.status == 200:
                         data = await resp.json()
                         ip = data.get("ip")
-            except Exception:
-                pass
+            except Exception as e:
+                logging.debug(f"IP fetch failed (ipify): {e}")
 
             if not ip:
                 try:
                     async with session.get("https://ipinfo.io/ip", timeout=5) as resp:
                         if resp.status == 200:
                             ip = (await resp.text()).strip()
-                except Exception:
-                    pass
+                except Exception as e:
+                    logging.debug(f"IP fetch failed (ipinfo): {e}")
 
             if ip:
                 try:
@@ -124,10 +124,10 @@ async def get_vps_location() -> Tuple[Optional[str], Optional[str], Optional[str
                                 continent = data.get("continent")
                                 logging.info(
                                     f"Detected VPS Location: {country_code} ({continent})")
-                except Exception:
-                    pass
-    except Exception:
-        pass
+                except Exception as e:
+                    logging.debug(f"Geo fetch failed: {e}")
+    except Exception as e:
+        logging.debug(f"VPS Location check failed: {e}")
     return ip, country_code, continent
 
 
@@ -154,7 +154,8 @@ async def fetch_servers_async(
                         content = await resp.text()
                         with open(LOCAL_RU_CACHE_FILE, "w", encoding='utf-8') as f:
                             f.write(content)
-            except Exception:
+            except Exception as e:
+                logging.debug(f"Failed to fetch RU list: {e}")
                 if os.path.exists(LOCAL_RU_CACHE_FILE):
                     with open(LOCAL_RU_CACHE_FILE, "r", encoding='utf-8') as f:
                         content = f.read()
@@ -169,8 +170,8 @@ async def fetch_servers_async(
                                 'City'), "country": "RU", "provider": s.get('Name'), "continent": "EU"})
                     logging.info(f"Loaded {len(servers_list)} RU servers.")
                     return servers_list
-                except Exception:
-                    pass
+                except Exception as e:
+                    logging.error(f"Error parsing RU list: {e}")
 
         try:
             async with session.get(SERVER_LIST_URL, timeout=10) as resp:
@@ -178,10 +179,9 @@ async def fetch_servers_async(
                     content = await resp.text()
                     with open(LOCAL_CACHE_FILE, "w", encoding='utf-8') as f:
                         f.write(content)
-        except Exception:
-            pass
+        except Exception as e:
+            logging.debug(f"Failed to fetch global list: {e}")
         
-        # --- Оптимизация RAM: потоковая загрузка JSON вместо чтения всего файла в строку ---
         if os.path.exists(LOCAL_CACHE_FILE):
             try:
                 with open(LOCAL_CACHE_FILE, "r", encoding='utf-8') as f:
@@ -202,8 +202,8 @@ async def fetch_servers_async(
                         "continent": s.get("CONTINENT"),
                         "provider": s.get("PROVIDER", "N/A")
                     })
-            except Exception:
-                pass
+            except Exception as e:
+                logging.error(f"Error reading local cache: {e}")
 
     return servers_list
 

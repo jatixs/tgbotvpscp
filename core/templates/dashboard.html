@@ -3,28 +3,19 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0">
-    <title>{web_title}</title>
-	<script>
-        // Hack to suppress Tailwind CDN warning in production
-        (function() {
-            const originalWarn = console.warn;
-            console.warn = function(...args) {
-                if (args[0] && typeof args[0] === 'string' && args[0].includes('cdn.tailwindcss.com')) {
-                    return; // Suppress this specific warning
-                }
-                originalWarn.apply(console, args);
-            };
-        })();
-    </script>
+    <title>{{ web_title }}</title>
+    
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="/static/js/theme_init.js?v={web_version}"></script>
+    <script src="/static/js/theme_init.js?v={{ web_version }}"></script>
+    
     <script>
-        const I18N = {i18n_json};
-		{user_role_js}
+        const I18N = {{ i18n_json | safe }};
+        {{ user_role_js | safe }}
     </script>
+    
     <script src="https://unpkg.com/twemoji@latest/dist/twemoji.min.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <link rel="stylesheet" href="/static/css/style.css?v={web_version}">
+    <link rel="stylesheet" href="/static/css/style.css?v={{ web_version }}">
 </head>
 <body class="bg-gray-100 text-gray-900 dark:bg-gray-900 dark:text-gray-100 font-sans selection:bg-blue-500/30 pb-10 overflow-x-hidden">
     
@@ -37,16 +28,16 @@
             <div class="flex items-center gap-2 shrink-0">
                 <span class="font-bold text-lg sm:text-xl bg-clip-text text-transparent bg-gradient-to-r from-blue-600 to-purple-600 dark:from-blue-400 dark:to-purple-400 whitespace-nowrap">VPS Bot</span>
                 
-                <span class="hidden sm:inline-flex px-2 py-0.5 rounded text-[10px] border border-blue-500/30 bg-blue-100 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400 uppercase font-bold">{web_version}</span>
+                <span class="hidden sm:inline-flex px-2 py-0.5 rounded text-[10px] border border-blue-500/30 bg-blue-100 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400 uppercase font-bold">{{ web_version }}</span>
                 
                 <div class="scale-90 sm:scale-100 origin-left">
-                    {role_badge}
+                    {{ role_badge | safe }}
                 </div>
             </div>
             
             <div class="flex items-center gap-1 sm:gap-4 shrink-0">
                 
-                {settings_btn}
+                {{ settings_btn | safe }}
 
                 <div class="relative group">
                     <button id="notifBtn" class="notif-btn flex items-center justify-center w-8 h-8 rounded-lg hover:bg-black/5 dark:hover:bg-white/10 transition text-gray-600 dark:text-gray-400">
@@ -58,8 +49,8 @@
                     
                     <div id="notifDropdown" class="notif-dropdown hidden fixed inset-x-4 top-16 z-50 sm:absolute sm:top-full sm:right-0 sm:left-auto sm:w-80 sm:z-auto sm:inset-auto origin-top-right !w-auto sm:!w-[320px] rounded-2xl shadow-2xl">
                         <div class="px-4 py-3 border-b border-gray-100 dark:border-white/5 bg-gray-50/50 dark:bg-white/5 backdrop-blur-sm rounded-t-2xl flex justify-between items-center">
-                            <span class="text-xs font-bold uppercase tracking-widest text-gray-500 dark:text-gray-400" data-i18n="web_notifications_title">{web_notifications_title}</span>
-                            <button id="notifClearBtn" class="text-[10px] font-bold text-red-500 hover:text-red-600 uppercase tracking-wider hidden transition" data-i18n="web_clear_notifications">{web_clear_notifications}</button>
+                            <span class="text-xs font-bold uppercase tracking-widest text-gray-500 dark:text-gray-400" data-i18n="web_notifications_title">{{ web_notifications_title }}</span>
+                            <button id="notifClearBtn" class="text-[10px] font-bold text-red-500 hover:text-red-600 uppercase tracking-wider hidden transition" data-i18n="web_clear_notifications">{{ web_clear_notifications }}</button>
                         </div>
                         <div id="notifList" class="max-h-[300px] overflow-y-auto custom-scrollbar"></div>
                     </div>
@@ -90,7 +81,7 @@
                 </button>
 
                 <form action="/logout" method="POST" class="inline-block">
-                    <button type="submit" class="flex items-center justify-center w-8 h-8 rounded-lg hover:bg-red-100 dark:hover:bg-red-900/30 text-gray-500 dark:text-gray-400 hover:text-red-600 dark:hover:text-red-400 transition" title="{web_logout}">
+                    <button type="submit" class="flex items-center justify-center w-8 h-8 rounded-lg hover:bg-red-100 dark:hover:bg-red-900/30 text-gray-500 dark:text-gray-400 hover:text-red-600 dark:hover:text-red-400 transition" title="{{ web_logout }}">
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
                         </svg>
@@ -98,8 +89,8 @@
                 </form>
 
                 <div class="hidden md:flex items-center gap-2 bg-white/60 dark:bg-white/5 px-3 py-1.5 rounded-full border border-white/40 dark:border-white/5 shadow-sm dark:shadow-none max-w-[140px] sm:max-w-none">
-                    {user_avatar}
-                    <span class="text-xs font-medium text-gray-700 dark:text-gray-300 truncate">{user_name}</span>
+                    {{ user_avatar | safe }}
+                    <span class="text-xs font-medium text-gray-700 dark:text-gray-300 truncate">{{ user_name }}</span>
                 </div>
             </div>
         </div>
@@ -112,14 +103,14 @@
                 <div class="absolute right-[-20px] top-[-20px] w-24 h-24 bg-blue-500/10 rounded-full blur-2xl group-hover:bg-blue-500/20 transition"></div>
                 <div class="flex justify-between items-start">
                     <div>
-                        <p class="text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-1">{web_uptime}</p>
-                        <h3 class="text-xl font-bold text-gray-900 dark:text-white" id="stat_uptime">{web_loading}</h3>
+                        <p class="text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-1">{{ web_uptime }}</p>
+                        <h3 class="text-xl font-bold text-gray-900 dark:text-white" id="stat_uptime">{{ web_loading }}</h3>
                     </div>
                     <div class="p-2 bg-blue-100 dark:bg-blue-500/20 rounded-xl text-blue-600 dark:text-blue-400">
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
                     </div>
                 </div>
-                <div class="text-xs text-gray-400 dark:text-gray-500 font-mono mt-auto">{web_footer_powered} Python</div>
+                <div class="text-xs text-gray-400 dark:text-gray-500 font-mono mt-auto">{{ web_footer_powered }} Python</div>
             </div>
 
             <div class="bg-white/60 dark:bg-white/5 backdrop-blur-md border border-white/40 dark:border-white/10 rounded-2xl p-5 shadow-lg dark:shadow-none flex flex-col justify-between h-32 relative overflow-hidden group hover:scale-[1.02] transition duration-300 cursor-help" onclick="toggleHint(event, 'hint-cpu')">
@@ -127,8 +118,8 @@
                 <div class="flex justify-between items-start">
                     <div>
                         <div class="flex items-center gap-1">
-                            <p class="text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-1">{web_cpu}</p>
-                            <div id="hint-cpu" class="hidden">{web_hint_cpu_usage}</div>
+                            <p class="text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-1">{{ web_cpu }}</p>
+                            <div id="hint-cpu" class="hidden">{{ web_hint_cpu_usage }}</div>
                         </div>
                         <h3 class="text-2xl font-black text-indigo-600 dark:text-indigo-400" id="stat_cpu">0%</h3>
                     </div>
@@ -146,8 +137,8 @@
                 <div class="flex justify-between items-start">
                     <div>
                         <div class="flex items-center gap-1">
-                            <p class="text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-1">{web_ram}</p>
-                            <div id="hint-ram" class="hidden">{web_hint_ram_usage}</div>
+                            <p class="text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-1">{{ web_ram }}</p>
+                            <div id="hint-ram" class="hidden">{{ web_hint_ram_usage }}</div>
                         </div>
                         <h3 class="text-2xl font-black text-purple-600 dark:text-purple-400" id="stat_ram">0%</h3>
                     </div>
@@ -165,8 +156,8 @@
                 <div class="flex justify-between items-start">
                     <div>
                         <div class="flex items-center gap-1">
-                            <p class="text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-1">{web_disk}</p>
-                            <div id="hint-disk" class="hidden">{web_hint_disk_usage}</div>
+                            <p class="text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-1">{{ web_disk }}</p>
+                            <div id="hint-disk" class="hidden">{{ web_hint_disk_usage }}</div>
                         </div>
                         <h3 class="text-2xl font-black text-green-600 dark:text-green-400" id="stat_disk">0%</h3>
                     </div>
@@ -185,11 +176,11 @@
                 <div class="flex justify-between items-center mb-4 gap-2">
                     <h3 class="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2 min-w-0">
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-gray-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z" /></svg>
-                        <span class="truncate">{web_agent_stats_title}</span>
+                        <span class="truncate">{{ web_agent_stats_title }}</span>
                     </h3>
                     
                     <div class="flex-shrink-0 flex items-center gap-2 bg-gray-100 dark:bg-black/30 px-3 py-1 rounded-lg border border-gray-200 dark:border-white/10 shadow-sm">
-                        <span id="agentIp" class="font-mono text-xs font-bold text-gray-600 dark:text-gray-300 select-all">{agent_ip}</span>
+                        <span id="agentIp" class="font-mono text-xs font-bold text-gray-600 dark:text-gray-300 select-all">{{ agent_ip }}</span>
                     </div>
                 </div>
                 <div class="h-[250px] w-full">
@@ -200,21 +191,21 @@
             <div class="bg-white/60 dark:bg-white/5 backdrop-blur-md border border-white/40 dark:border-white/10 rounded-2xl p-6 shadow-lg dark:shadow-none flex flex-col">
                 <h3 class="text-lg font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
-                    {web_traffic_total}
+                    {{ web_traffic_total }}
                 </h3>
                 <div class="flex-1 flex flex-col justify-center gap-4">
                     <div class="bg-gray-50 dark:bg-black/20 p-4 rounded-xl border border-gray-200 dark:border-white/5 cursor-help" onclick="toggleHint(event, 'hint-tx')">
                         <div class="flex justify-between items-center mb-1">
-                            <span class="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">{web_tx}</span>
-                            <div id="hint-tx" class="hidden">{web_hint_traffic_out}</div>
+                            <span class="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">{{ web_tx }}</span>
+                            <div id="hint-tx" class="hidden">{{ web_hint_traffic_out }}</div>
                             <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-orange-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 10l7-7m0 0l7 7m-7-7v18" /></svg>
                         </div>
                         <div class="text-xl font-mono font-bold text-gray-900 dark:text-white" id="stat_net_sent">0 B</div>
                     </div>
                     <div class="bg-gray-50 dark:bg-black/20 p-4 rounded-xl border border-gray-200 dark:border-white/5 cursor-help" onclick="toggleHint(event, 'hint-rx')">
                         <div class="flex justify-between items-center mb-1">
-                            <span class="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">{web_rx}</span>
-                            <div id="hint-rx" class="hidden">{web_hint_traffic_in}</div>
+                            <span class="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">{{ web_rx }}</span>
+                            <div id="hint-rx" class="hidden">{{ web_hint_traffic_in }}</div>
                             <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-cyan-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 14l-7 7m0 0l-7-7m7 7V3" /></svg>
                         </div>
                         <div class="text-xl font-mono font-bold text-gray-900 dark:text-white" id="stat_net_recv">0 B</div>
@@ -223,8 +214,8 @@
                 
                 <div class="mt-4">
                     <div class="flex justify-between text-[10px] font-bold text-gray-400 mb-1">
-                        <span>{web_download}</span>
-                        <span>{web_upload}</span>
+                        <span>{{ web_download }}</span>
+                        <span>{{ web_upload }}</span>
                     </div>
                     <div class="w-full h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden flex">
                         <div id="trafficBarRx" class="h-full bg-cyan-500 transition-all duration-500" style="width: 50%"></div>
@@ -241,11 +232,11 @@
                 <div class="flex justify-between items-center mb-4 flex-wrap gap-2">
                     <h3 class="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" /></svg>
-                        {web_node_mgmt_title}
+                        {{ web_node_mgmt_title }}
                     </h3>
                     <div class="flex gap-2">
-                        <span class="px-2 py-1 bg-gray-100 dark:bg-gray-700 rounded text-xs font-bold text-gray-600 dark:text-gray-300">{web_stats_total}: <span id="nodesTotal">{nodes_count}</span></span>
-                        <span class="px-2 py-1 bg-green-100 dark:bg-green-900/30 rounded text-xs font-bold text-green-600 dark:text-green-400">{web_stats_active}: <span id="nodesActive">{active_nodes}</span></span>
+                        <span class="px-2 py-1 bg-gray-100 dark:bg-gray-700 rounded text-xs font-bold text-gray-600 dark:text-gray-300">{{ web_stats_total }}: <span id="nodesTotal">{{ nodes_count }}</span></span>
+                        <span class="px-2 py-1 bg-green-100 dark:bg-green-900/30 rounded text-xs font-bold text-green-600 dark:text-green-400">{{ web_stats_active }}: <span id="nodesActive">{{ active_nodes }}</span></span>
                     </div>
                 </div>
                 
@@ -257,16 +248,16 @@
                     </div>
                     <input type="text" id="nodeSearch" 
                            class="w-full pl-10 pr-4 py-2 bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 transition-all duration-300 placeholder-gray-400 text-gray-900 dark:text-white" 
-                           placeholder="{web_search_placeholder}">
+                           placeholder="{{ web_search_placeholder }}">
                 </div>
                 <div class="space-y-3 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar" id="nodesList">
                     <div class="text-center py-8 text-gray-400 dark:text-gray-500 text-sm">
                         <svg class="animate-spin h-5 w-5 mx-auto mb-2 opacity-50" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
-                        {web_nodes_loading}
+                        {{ web_nodes_loading }}
                     </div>
                 </div>
                 <div class="mt-4 pt-4 border-t border-gray-200 dark:border-white/5 flex justify-end">
-                    {node_action_btn}
+                    {{ node_action_btn | safe }}
                 </div>
             </div>
 
@@ -274,11 +265,11 @@
                 <div class="flex justify-between items-center mb-4 flex-wrap gap-2 relative z-10">
                     <h3 class="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
-                        {web_logs_title}
+                        {{ web_logs_title }}
                     </h3>
                     <div class="flex bg-gray-100 dark:bg-black/30 rounded-lg p-1 text-[10px] font-bold">
-                        <button onclick="switchLogType('bot')" id="btnLogBot" class="px-3 py-1.5 rounded-md transition-all text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white">{web_logs_btn_bot}</button>
-                        <button onclick="switchLogType('sys')" id="btnLogSys" class="px-3 py-1.5 rounded-md transition-all text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white">{web_logs_btn_sys}</button>
+                        <button onclick="switchLogType('bot')" id="btnLogBot" class="px-3 py-1.5 rounded-md transition-all text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white">{{ web_logs_btn_bot }}</button>
+                        <button onclick="switchLogType('sys')" id="btnLogSys" class="px-3 py-1.5 rounded-md transition-all text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white">{{ web_logs_btn_sys }}</button>
                     </div>
                 </div>
                 
@@ -291,16 +282,16 @@
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
                                 </svg>
                             </div>
-                            <span class="font-bold text-gray-900 dark:text-white text-sm" data-i18n="web_access_denied">{web_access_denied}</span>
-                            <span class="text-[10px] text-gray-500 dark:text-gray-400 text-center max-w-[200px]" data-i18n="web_logs_protected_desc">{web_logs_protected_desc}</span>
+                            <span class="font-bold text-gray-900 dark:text-white text-sm" data-i18n="web_access_denied">{{ web_access_denied }}</span>
+                            <span class="text-[10px] text-gray-500 dark:text-gray-400 text-center max-w-[200px]" data-i18n="web_logs_protected_desc">{{ web_logs_protected_desc }}</span>
                         </div>
                     </div>
 
                     <div id="logsContainer" class="h-[300px] overflow-y-auto text-gray-700 dark:text-gray-300 space-y-1 custom-scrollbar scroll-smooth relative z-0">
-                        <div class="text-gray-600 italic text-center mt-20">{web_loading}</div>
+                        <div class="text-gray-600 italic text-center mt-20">{{ web_loading }}</div>
                     </div>
                     
-                    <div class="absolute bottom-2 right-4 text-[10px] text-gray-600 pointer-events-none opacity-0 group-hover:opacity-100 transition z-10">{web_logs_footer}</div>
+                    <div class="absolute bottom-2 right-4 text-[10px] text-gray-600 pointer-events-none opacity-0 group-hover:opacity-100 transition z-10">{{ web_logs_footer }}</div>
                 </div>
             </div>
 
@@ -321,12 +312,14 @@
     </div>
 
     <div id="nodeModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/30 dark:bg-black/80 backdrop-blur-sm p-4" onclick="if(event.target === this) closeNodeModal()">
-        <div class="bg-white/90 dark:bg-gray-900 border border-white/20 dark:border-white/10 rounded-2xl shadow-2xl w-full max-w-4xl relative flex flex-col max-h-[90vh] backdrop-blur-xl">
-            <div class="p-5 border-b border-gray-200 dark:border-white/5 flex justify-between items-center rounded-t-2xl z-10 bg-white/50 dark:bg-black/20">
+        <div class="bg-white/90 dark:bg-gray-900 border border-white/20 dark:border-white/10 rounded-2xl shadow-2xl w-full max-w-4xl relative flex flex-col h-full sm:h-auto sm:max-h-[85vh] backdrop-blur-xl transition-all">
+            <div class="p-4 sm:p-5 border-b border-gray-200 dark:border-white/5 flex justify-between items-center rounded-t-2xl z-10 bg-white/50 dark:bg-black/20">
                 <div class="flex items-center gap-3">
-                    <div class="p-2 bg-blue-100 dark:bg-blue-500/20 rounded-lg text-blue-600 dark:text-blue-400">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01" /></svg>
-                    </div>
+                   <div class="p-2 bg-blue-100 dark:bg-blue-500/20 rounded-lg text-blue-600 dark:text-blue-400">
+					<svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z" />
+						</svg>
+							</div>
                     <div>
                         <h3 class="text-xl font-bold text-gray-900 dark:text-white" id="modalNodeName">Node Name</h3>
                         <div class="flex items-center gap-2 text-xs text-gray-500">
@@ -339,14 +332,33 @@
                 </button>
             </div>
             
-            <div class="p-6 overflow-y-auto no-scrollbar">
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+            <div class="p-4 sm:p-6 overflow-y-auto no-scrollbar flex-1">
+                
+                <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4 mb-6">
+                    <div class="bg-gray-50 dark:bg-black/20 p-2.5 rounded-xl border border-gray-200 dark:border-white/5 text-center">
+                        <div class="text-[10px] text-gray-500 font-bold uppercase tracking-wider mb-1">Uptime</div>
+                        <div class="font-mono text-sm font-bold text-gray-700 dark:text-gray-200" id="modalNodeUptime">-</div>
+                    </div>
+                    <div class="bg-gray-50 dark:bg-black/20 p-2.5 rounded-xl border border-gray-200 dark:border-white/5 text-center">
+                        <div class="text-[10px] text-gray-500 font-bold uppercase tracking-wider mb-1">RAM</div>
+                        <div class="font-mono text-xs sm:text-sm font-bold text-purple-600 dark:text-purple-400 truncate" id="modalNodeRam">-</div>
+                    </div>
+                    <div class="bg-gray-50 dark:bg-black/20 p-2.5 rounded-xl border border-gray-200 dark:border-white/5 text-center">
+                        <div class="text-[10px] text-gray-500 font-bold uppercase tracking-wider mb-1">Disk</div>
+                        <div class="font-mono text-xs sm:text-sm font-bold text-green-600 dark:text-green-400 truncate" id="modalNodeDisk">-</div>
+                    </div>
+                    <div class="bg-gray-50 dark:bg-black/20 p-2.5 rounded-xl border border-gray-200 dark:border-white/5 text-center">
+                        <div class="text-[10px] text-gray-500 font-bold uppercase tracking-wider mb-1">Traffic</div>
+                        <div class="font-mono text-xs sm:text-sm font-bold text-blue-600 dark:text-blue-400 truncate" id="modalNodeTraffic">-</div>
+                    </div>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6 mb-6">
                     <div class="h-[200px] bg-white/50 dark:bg-black/20 rounded-xl p-4 border border-gray-100 dark:border-white/5">
-                        <h4 class="text-xs font-bold text-gray-500 uppercase mb-2 text-center">{web_resources_chart}</h4>
+                        <h4 class="text-xs font-bold text-gray-500 uppercase mb-2 text-center">{{ web_resources_chart }}</h4>
                         <canvas id="nodeResChart"></canvas>
                     </div>
                     <div class="h-[200px] bg-white/50 dark:bg-black/20 rounded-xl p-4 border border-gray-100 dark:border-white/5">
-                        <h4 class="text-xs font-bold text-gray-500 uppercase mb-2 text-center">{web_network_chart}</h4>
+                        <h4 class="text-xs font-bold text-gray-500 uppercase mb-2 text-center">{{ web_network_chart }}</h4>
                         <canvas id="nodeNetChart"></canvas>
                     </div>
                 </div>
@@ -357,14 +369,14 @@
                             <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11.542 16.49a1 1 0 01-.17.21l-.414.415a2 2 0 00-.586 1.414V22h-3v-2.764a1 1 0 00-.293-.707l-5.964-5.964A6 6 0 1121 9z" /></svg>
                         </div>
                         <div class="flex flex-col overflow-hidden">
-                            <span class="text-[10px] text-gray-500 uppercase font-bold tracking-wider">{web_token_label}</span>
+                            <span class="text-[10px] text-gray-500 uppercase font-bold tracking-wider">{{ web_token_label }}</span>
                             <span id="modalToken" class="text-xs font-mono text-green-600/80 dark:text-green-400/80 blur-sm group-hover:text-green-600 dark:group-hover:text-green-400 transition duration-300 select-all truncate">...</span>
                         </div>
                     </div>
                     <div class="text-gray-400 group-hover:text-gray-600 dark:group-hover:text-white transition">
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
                     </div>
-                    <div class="absolute inset-0 bg-green-600 flex items-center justify-center text-white font-bold text-sm transition-transform translate-y-full group-active:translate-y-0 pointer-events-none" id="copyToast">{web_copied}</div>
+                    <div class="absolute inset-0 bg-green-600 flex items-center justify-center text-white font-bold text-sm transition-transform translate-y-full group-active:translate-y-0 pointer-events-none" id="copyToast">{{ web_copied }}</div>
                 </div>
 
             </div>
@@ -378,7 +390,7 @@
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-purple-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
                     </svg>
-                    {web_add_node_section}
+                    {{ web_add_node_section }}
                 </h3>
                 <button onclick="closeAddNodeModal()" class="text-gray-400 hover:text-gray-600 dark:hover:text-white transition p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-white/10">
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
@@ -388,18 +400,18 @@
             <div class="p-6">
                 <div class="flex flex-col gap-4">
                     <div class="flex flex-wrap sm:flex-nowrap gap-2">
-                        <input type="text" id="newNodeNameDash" placeholder="{web_node_name_placeholder}" class="w-full flex-1 bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-lg px-4 py-2 text-gray-900 dark:text-white focus:outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500 placeholder-gray-400 dark:placeholder-gray-600 transition-all">
+                        <input type="text" id="newNodeNameDash" placeholder="{{ web_node_name_placeholder }}" class="w-full flex-1 bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-lg px-4 py-2 text-gray-900 dark:text-white focus:outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500 placeholder-gray-400 dark:placeholder-gray-600 transition-all">
                         <button onclick="addNodeDash()" id="btnAddNodeDash" disabled class="w-full sm:w-auto px-6 py-2 bg-gray-200 dark:bg-gray-700 text-gray-400 dark:text-gray-500 rounded-lg font-bold transition transform duration-100 flex-shrink-0 cursor-not-allowed">
-                            {web_create_btn}
+                            {{ web_create_btn }}
                         </button>
                     </div>
 
                     <div id="nodeResultDash" class="hidden animate-fade-in-up">
                         <div class="bg-gray-50 dark:bg-black/30 p-4 rounded-lg border border-gray-200 dark:border-white/10">
-                            <div class="text-xs text-gray-500 mb-1 font-medium uppercase tracking-wider">{web_node_token}</div>
+                            <div class="text-xs text-gray-500 mb-1 font-medium uppercase tracking-wider">{{ web_node_token }}</div>
                             <div onclick="copyTextToClipboard(this.innerText)" class="font-mono text-green-600 dark:text-green-400 break-all select-all text-sm bg-white dark:bg-black/20 p-2 rounded border border-gray-100 dark:border-white/5 cursor-pointer hover:bg-green-50 dark:hover:bg-green-900/10 transition" id="newNodeTokenDash"></div>
                             
-                            <div class="text-xs text-gray-500 mt-4 mb-1 font-medium uppercase tracking-wider">{web_node_cmd}</div>
+                            <div class="text-xs text-gray-500 mt-4 mb-1 font-medium uppercase tracking-wider">{{ web_node_cmd }}</div>
                             <div onclick="copyTextToClipboard(this.innerText)" class="font-mono text-xs text-blue-600 dark:text-blue-300 break-all bg-white dark:bg-black/50 p-2 rounded select-all border border-gray-100 dark:border-white/5 cursor-pointer hover:bg-blue-50 dark:hover:bg-blue-900/10 transition" id="newNodeCmdDash"></div>
                             
                             <div class="text-[10px] text-gray-400 mt-2 text-center">Нажмите на текст, чтобы скопировать</div>
@@ -424,7 +436,7 @@
         </div>
     </div>
 
-    <script src="/static/js/common.js?v={web_version}"></script>
-    <script src="/static/js/dashboard.js?v={web_version}"></script>
+    <script src="/static/js/common.js?v={{ web_version }}"></script>
+    <script src="/static/js/dashboard.js?v={{ web_version }}"></script>
 </body>
 </html>
