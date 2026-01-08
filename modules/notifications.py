@@ -148,7 +148,8 @@ async def parse_ssh_log_line(line: str) -> dict | None:
                     "ip": ip,
                     "time": datetime.now().strftime('%H:%M:%S'),
                     "tz": get_server_timezone_label()}}
-        except Exception:
+        except Exception as e:
+            logging.debug(f"SSH log parse error: {e}")
             return None
     return None
 
@@ -166,7 +167,8 @@ async def parse_f2b_log_line(line: str) -> dict | None:
                     "ip": ip,
                     "time": datetime.now().strftime('%H:%M:%S'),
                     "tz": get_server_timezone_label()}}
-        except Exception:
+        except Exception as e:
+            logging.debug(f"F2B log parse error: {e}")
             return None
     return None
 
@@ -181,7 +183,8 @@ async def resource_monitor(bot: Bot):
             ram = psutil.virtual_memory().percent
             try:
                 disk = psutil.disk_usage(get_host_path('/')).percent
-            except Exception:
+            except Exception as e:
+                logging.debug(f"Disk usage check failed: {e}")
                 disk = 0
 
             alerts = []
@@ -287,6 +290,6 @@ async def reliable_tail_log_monitor(bot, path, alert_type, parser):
             if proc:
                 try:
                     os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
-                except Exception:
-                    pass
+                except Exception as e_kill:
+                    logging.debug(f"Failed to kill tail process in except: {e_kill}")
             await asyncio.sleep(10)

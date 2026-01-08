@@ -5,13 +5,33 @@
 <h1 align="center">📝 Telegram VPS Management Bot — Changelog</h1>
 
 <p align="center">
-	<img src="https://img.shields.io/badge/version-v1.15.0-blue?style=flat-square " alt="Version 1.15.0"/>
-	<img src="https://img.shields.io/badge/build-56-purple?style=flat-square " alt="Build 56"/>
+	<img src="https://img.shields.io/badge/version-v1.15.1-blue?style=flat-square " alt="Version 1.15.1"/>
+	<img src="https://img.shields.io/badge/build-57-purple?style=flat-square " alt="Build 57"/>
 	<img src="https://img.shields.io/badge/date-January%2026-green?style=flat-square " alt="Date January 2026"/>
 	<img src="https://img.shields.io/badge/status-stable-green?style=flat-square " alt="Status Stable"/>
 </p>
 
 ---
+## [1.15.1] - 2026-01-07
+
+### ✨ Improved (WebUI):
+
+* **Jinja2 Migration:** Migrated to the **Jinja2** template engine. This improves page rendering performance and simplifies future interface development.
+* **Code Cleanup:** Performed deep cleanup and optimization of the web agent code.
+
+### 🛡️ Security:
+
+* **Code Review Patch:** Implemented security fixes and code improvements based on internal audit (Code Review) results.
+
+### 👷 CI/CD:
+
+* **Workflows:** Updated branch checking logic in GitHub Actions for more accurate CI/CD pipeline operation.
+
+### 🔧 Fixed:
+
+* **Pop-ups:** Fixed display and behavior of pop-up windows in the web interface.
+---
+
 ## [1.15.0] - 2026-01-05
 
 ### 🚀 Added (WebUI Features):

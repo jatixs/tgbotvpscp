@@ -49,8 +49,8 @@ async def traffic_handler(message: types.Message):
         if msg_id:
             try:
                 await message.bot.delete_message(chat_id=chat_id, message_id=msg_id)
-            except Exception:
-                pass
+            except Exception as e:
+                logging.debug(f"Failed to delete old traffic message: {e}")
 
     await delete_previous_message(user_id, list(shared_state.LAST_MESSAGE_IDS.get(user_id, {}).keys()), chat_id, message.bot)
 
@@ -99,7 +99,8 @@ async def stop_traffic_handler(callback: types.CallbackQuery):
             shared_state.LAST_MESSAGE_IDS.setdefault(
                 user_id, {})["menu"] = sent_menu_message.message_id
 
-        except Exception:
+        except Exception as e:
+            logging.debug(f"Error stopping traffic (delete msg): {e}")
             await callback.answer(get_text("traffic_stopped_alert", lang))
     else:
         await callback.answer(get_text("traffic_stopped_alert", lang))
@@ -170,8 +171,16 @@ async def traffic_monitor(bot: Bot):
                 MESSAGE_EDIT_THROTTLE[message_id] = now
 
             except TelegramRetryAfter as e:
+                logging.debug(f"Traffic monitor rate limit: {e}")
                 await asyncio.sleep(e.retry_after)
-            except Exception:
+            except TelegramBadRequest as e:
+                if "message is not modified" in str(e).lower():
+                    continue
+                logging.debug(f"Traffic message invalid/deleted: {e}")
+                shared_state.TRAFFIC_MESSAGE_IDS.pop(user_id, None)
+                shared_state.TRAFFIC_PREV.pop(user_id, None)
+            except Exception as e:
+                logging.error(f"Traffic monitor generic error: {e}")
                 shared_state.TRAFFIC_MESSAGE_IDS.pop(user_id, None)
                 shared_state.TRAFFIC_PREV.pop(user_id, None)
 

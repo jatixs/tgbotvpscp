@@ -1,24 +1,4 @@
-
-// --- Tailwind Config & Hacks ---
-if (window.tailwind) {
-    window.tailwind.config = {
-        darkMode: 'class',
-        theme: {
-            extend: {
-                animation: {
-                    'float': 'float 6s ease-in-out infinite',
-                    'blob': 'blob 7s infinite',
-                    'fade-in-up': 'fadeInUp 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards',
-                },
-                keyframes: {
-                    float: { '0%, 100%': { transform: 'translateY(0)' }, '50%': { transform: 'translateY(-20px)' } },
-                    blob: { '0%': { transform: 'translate(0px, 0px) scale(1)' }, '33%': { transform: 'translate(30px, -50px) scale(1.1)' }, '66%': { transform: 'translate(-20px, 20px) scale(0.9)' }, '100%': { transform: 'translate(0px, 0px) scale(1)' } },
-                    fadeInUp: { '0%': { opacity: '0', transform: 'translateY(20px) scale(0.95)' }, '100%': { opacity: '1', transform: 'translateY(0) scale(1)' } },
-                }
-            }
-        }
-    };
-}
+/* /core/static/js/login.js */
 
 // --- Cookie Management ---
 function acceptCookies() {
@@ -333,6 +313,11 @@ async function submitNewPassword() {
 
 // --- Initialization ---
 document.addEventListener("DOMContentLoaded", () => {
+    // --- НОВАЯ ЛОГИКА: Инициализация слайдера языка ---
+    if (typeof CURRENT_LANG !== 'undefined' && typeof updateLangSlider === 'function') {
+        updateLangSlider(CURRENT_LANG);
+    }
+
     // 1. Fix Title
     if (typeof I18N !== 'undefined' && I18N.web_title) {
         document.title = I18N.web_title;

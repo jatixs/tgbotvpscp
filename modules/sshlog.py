@@ -3,7 +3,7 @@ import os
 import re
 import logging
 from datetime import datetime
-from aiogram import F, Dispatcher, types
+from aiogram import Dispatcher, types
 from aiogram.types import KeyboardButton
 
 from core.i18n import _, I18nFilter, get_user_lang
@@ -87,7 +87,8 @@ async def sshlog_handler(message: types.Message):
                     dt = datetime.strptime(
                         match_sys.group(1), "%b %d %H:%M:%S")
                     dt = dt.replace(year=datetime.now().year)
-            except Exception:
+            except Exception as e:
+                logging.debug(f"SSH log date parse error: {e}")
                 continue
 
             if not dt:

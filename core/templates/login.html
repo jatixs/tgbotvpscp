@@ -1,17 +1,20 @@
 <!DOCTYPE html>
-<html lang="ru" class="dark">
+<html lang="ru">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0">
-    <title>VPS Manager</title> <script src="https://cdn.tailwindcss.com"></script>
+    <title>VPS Manager</title> 
+    <script src="https://cdn.tailwindcss.com"></script>
     
     <script>
-        const I18N = {i18n_json};
-        const BOT_USERNAME = "{bot_username}";
+        const I18N = {{ i18n_json | safe }};
+        const BOT_USERNAME = "{{ bot_username }}";
+        const CURRENT_LANG = "{{ current_lang }}";
     </script>
 
-    <link rel="stylesheet" href="/static/css/style.css?v={web_version}">
-    <link rel="stylesheet" href="/static/css/login.css?v={web_version}">
+    <link rel="stylesheet" href="/static/css/style.css?v={{ web_version }}">
+    <link rel="stylesheet" href="/static/css/login.css?v={{ web_version }}">
+    <script src="/static/js/theme_init.js?v={{ web_version }}"></script>
 </head>
 <body class="bg-gray-100 text-gray-900 dark:bg-gray-900 dark:text-gray-100 font-sans selection:bg-blue-500/30 overflow-hidden relative">
 
@@ -30,15 +33,6 @@
                 <span class="text-xs font-bold tracking-wider uppercase font-mono mt-0.5 group-hover:opacity-100 opacity-80 transition-opacity">EN</span>
             </button>
         </div>
-        
-        <script>
-            document.addEventListener("DOMContentLoaded", () => {
-                const lang = "{current_lang}";
-                if (typeof updateLangSlider === 'function') {
-                    updateLangSlider(lang);
-                }
-            });
-        </script>
     </div>
 
     <div class="fixed inset-0 overflow-hidden pointer-events-none">
@@ -60,7 +54,7 @@
                 <p class="text-sm text-gray-500 dark:text-gray-400 mt-2" data-i18n="login_secure_gateway">Secure Gateway</p>
             </div>
 
-            {default_pass_alert}
+            {{ default_pass_alert | safe }}
 
             <div id="forms-container">
                 
@@ -184,7 +178,7 @@
 
             </div>
             
-            {error_block}
+            {{ error_block | safe }}
         </div>
 
         <div class="mt-8 flex gap-4">
@@ -248,7 +242,7 @@
     </div>
 
     <script src="https://unpkg.com/twemoji@latest/dist/twemoji.min.js" crossorigin="anonymous"></script>
-    <script src="/static/js/common.js?v={web_version}"></script>
-    <script src="/static/js/login.js?v={web_version}"></script>
+    <script src="/static/js/common.js?v={{ web_version }}"></script>
+    <script src="/static/js/login.js?v={{ web_version }}"></script>
 </body>
 </html>

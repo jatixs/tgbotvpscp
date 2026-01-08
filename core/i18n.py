@@ -1063,7 +1063,8 @@ def load_user_settings():
             logging.info(
                 "Файл user_settings.json не найден, используются пустые настройки.")
     except Exception as e:
-        logging.error(f"Ошибка загрузки user_settings.json: {e}")
+        safe_e = str(e).replace('\n', ' ').replace('\r', '')
+        logging.error(f"Ошибка сохранения user_settings.json: {safe_e}")
         shared_state.USER_SETTINGS.clear()
 
 
@@ -1079,7 +1080,8 @@ def save_user_settings():
             json.dump(settings_to_save, f, indent=4, ensure_ascii=False)
         logging.debug("Настройки пользователей (языки) сохранены.")
     except Exception as e:
-        logging.error(f"Ошибка сохранения user_settings.json: {e}")
+        safe_e = str(e).replace('\n', ' ').replace('\r', '')
+        logging.error(f"Ошибка сохранения user_settings.json: {safe_e}")
 
 
 def get_user_lang(user_id: int | str | None) -> str:
@@ -1145,8 +1147,11 @@ def get_text(key: str, user_id_or_lang: int | str | None, **kwargs) -> str:
         else:
             return string_template
     except (KeyError, TypeError, ValueError) as e:
+        safe_key = key.replace('\n', '').replace('\r', '')
+        safe_lang = lang.replace('\n', '').replace('\r', '')
+        safe_e = str(e).replace('\n', ' ').replace('\r', '')
         logging.warning(
-            f"Ошибка форматирования для ключа '{key}' языка '{lang}' с параметрами {kwargs}. Шаблон: '{string_template}'. Ошибка: {e}")
+            f"Ошибка форматирования для ключа '{safe_key}' языка '{safe_lang}'. Ошибка: {safe_e}")
         return string_template
 
 
@@ -1161,7 +1166,8 @@ def get_all_translations(key: str) -> list[str]:
             translations.append(lang_strings[key])
     unique_translations = list(set(translations))
     if not unique_translations:
-        logging.error(f"Ключ перевода '{key}' не найден ни в одном языке!")
+        safe_key = key.replace('\n', '').replace('\r', '')
+        logging.error(f"Ключ перевода '{safe_key}' не найден ни в одном языке!")
         return [f"[{key}]"]
     return unique_translations
 

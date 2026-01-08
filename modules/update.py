@@ -5,7 +5,6 @@ import sys
 import re
 import signal
 import subprocess
-import shlex
 from aiogram import F, Dispatcher, types, Bot
 from aiogram.types import KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.exceptions import TelegramBadRequest
@@ -44,29 +43,10 @@ def validate_branch_name(branch: str) -> str:
         raise ValueError(f"Security Alert: Invalid branch name: '{branch}'")
     return branch
 
-async def run_command(cmd):
-    """
-    Run a command asynchronously without invoking a shell.
-
-    `cmd` can be either:
-      - a list/tuple of arguments: ['git', 'fetch', 'origin']
-      - a string, which will be split into args with shlex.split
-    """
+async def run_command(cmd: str):
     try:
-        if isinstance(cmd, (str, bytes)):
-            # Safely split string into arguments; no shell is used.
-            if isinstance(cmd, bytes):
-                cmd = cmd.decode()
-            args = shlex.split(cmd)
-        else:
-            args = list(cmd)
-
-        if not args:
-            return -1, "", "Empty command"
-
-        proc = await asyncio.create_subprocess_exec(
-            args[0],
-            *args[1:],
+        proc = await asyncio.create_subprocess_shell(
+            cmd,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE
         )
@@ -78,7 +58,7 @@ async def run_command(cmd):
 # --- GIT HELPERS ---
 
 async def get_current_branch():
-    code, out, err = await run_command(["git", "rev-parse", "--abbrev-ref", "HEAD"])
+    code, out, err = await run_command("git rev-parse --abbrev-ref HEAD")
     if code == 0 and out:
         return out.strip()
     return "main"
@@ -144,7 +124,7 @@ async def get_update_info():
         branch = await get_current_branch()
         branch = validate_branch_name(branch)
 
-        fetch_code, _, _ = await run_command(["git", "fetch", "origin"])
+        fetch_code, _, _ = await run_command("git fetch origin")
         if fetch_code != 0:
             return get_version_from_file(), "Error", branch, False
 
@@ -160,7 +140,7 @@ async def get_update_info():
         
         if update_available:
             # Пытаемся вытащить номер версии из удаленного файла для красоты
-            code, out, err = await run_command(["git", "show", f"origin/{branch}:CHANGELOG.md"])
+            code, out, err = await run_command(f"git show origin/{branch}:CHANGELOG.md")
             if code == 0:
                 match = re.search(r"## \[(\d+\.\d+\.\d+)\]", out)
                 remote_ver_display = match.group(1) if match else remote_hash[:7]
@@ -180,15 +160,15 @@ async def execute_bot_update(branch: str, restart_source: str = "unknown"):
         branch = validate_branch_name(branch)
         logging.info(f"Starting bot update on branch '{branch}'...")
         
-        code, _, err = await run_command(["git", "fetch", "origin"])
+        code, _, err = await run_command("git fetch origin")
         if code != 0:
             raise Exception(f"Git fetch failed: {err}")
         
-        code, _, err = await run_command(["git", "reset", "--hard", f"origin/{branch}"])
+        code, _, err = await run_command(f"git reset --hard origin/{branch}")
         if code != 0:
             raise Exception(f"Git reset failed: {err}")
 
-        pip_cmd = [sys.executable, "-m", "pip", "install", "-r", "requirements.txt"]
+        pip_cmd = f"{sys.executable} -m pip install -r requirements.txt"
         code, _, err = await run_command(pip_cmd)
         if code != 0:
             logging.warning(f"Pip install warning: {err}")

@@ -1,12 +1,10 @@
 import time
-import json
 import psutil
 import requests
 import logging
 import os
 import sys
 import subprocess
-import shlex
 import random
 import re 
 
@@ -164,13 +162,16 @@ def get_top_processes(metric):
 def get_system_stats():
     try:
         net = psutil.net_io_counters()
-        # Пробуем получить IP. Если вернет None, сервер подставит свой.
+        mem = psutil.virtual_memory()
+        disk = psutil.disk_usage('/')
+        freq = psutil.cpu_freq()
+        
         ext_ip = get_external_ip()
         
         return {
             "cpu": psutil.cpu_percent(interval=None),
-            "ram": psutil.virtual_memory().percent,
-            "disk": psutil.disk_usage('/').percent,
+            "ram": mem.percent,
+            "disk": disk.percent,
             "ram_total": mem.total,
             "ram_free": mem.available,
             "disk_total": disk.total,
@@ -259,19 +260,19 @@ def execute_command(task):
                 if not ext_ip:
                      # Если локально не определили, пробуем curl один раз для отчета
                      ext_ip = subprocess.check_output("curl -4 -s --max-time 2 ifconfig.me", shell=True).decode().strip()
-            except:
+            except Exception:
                 ext_ip = "N/A"
                 
             try:
                 ping_res = subprocess.check_output("ping -c 1 -W 1 8.8.8.8", shell=True).decode()
                 ping_match = re.search(r"time=([\d\.]+) ms", ping_res)
                 ping_status = f"🔗 {ping_match.group(1)} ms" if ping_match else "🔗 ❌ Fail"
-            except:
+            except Exception:
                 ping_status = "🔗 ❌ Fail"
 
             try:
                 kernel = subprocess.check_output("uname -r", shell=True).decode().strip()
-            except:
+            except Exception:
                 kernel = "N/A"
             
             uptime_str = format_uptime_simple(stats.get('uptime', 0))
