@@ -5,11 +5,32 @@
 <h1 align="center">📝 Telegram VPS Management Bot — Changelog</h1>
 
 <p align="center">
-	<img src="https://img.shields.io/badge/version-v1.15.1-blue?style=flat-square " alt="Version 1.15.1"/>
-	<img src="https://img.shields.io/badge/build-57-purple?style=flat-square " alt="Build 57"/>
+	<img src="https://img.shields.io/badge/version-v1.15.2-blue?style=flat-square " alt="Version 1.15.2"/>
+	<img src="https://img.shields.io/badge/build-58-purple?style=flat-square " alt="Build 58"/>
 	<img src="https://img.shields.io/badge/date-January%2026-green?style=flat-square " alt="Date January 2026"/>
 	<img src="https://img.shields.io/badge/status-stable-green?style=flat-square " alt="Status Stable"/>
 </p>
+
+---
+## [1.15.2] - 2026-01-10
+
+### 🛡️ Core & Security:
+
+* **Core:** Added support for migrations and encryption; optimized request streams.
+* **Security:** Enhanced internal security measures.
+
+### 🪵 Logging:
+
+* **Privacy:** Automatic redaction of sensitive data in release logs.
+* **Modes:** Introduced "Debug" and "Release" logging modes.
+
+### 🚀 Deploy:
+
+* **Automation:** Automated execution of migrations during updates.
+
+### 🧹 Project:
+
+* **Cleanup:** Global code formatting and removal of redundant comments.
 
 ---
 ## [1.15.1] - 2026-01-07

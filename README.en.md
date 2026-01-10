@@ -5,12 +5,12 @@
 <h1 align="center">🤖 VPS Manager Telegram Bot</h1>
 
 <p align="center">
-  <b >v1.15.1</b> — a powerful Telegram bot for monitoring and managing your <b>server network</b>. Now powered by <b>SQLite</b> and a fully <b>asynchronous core</b> (AsyncIO). Features <b>multi-node support</b>, a web interface, and full <b>Docker</b> integration.
+  <b >v1.15.2</b> — a powerful Telegram bot for monitoring and managing your <b>server network</b>. Now powered by <b>SQLite</b> and a fully <b>asynchronous core</b> (AsyncIO). Features <b>multi-node support</b>, a web interface, and full <b>Docker</b> integration.
 </p>
 
 <p align="center">
-  <a href="https://github.com/jatixs/tgbotvpscp/releases/latest"><img src="https://img.shields.io/badge/version-v1.15.1-blue?style=flat-square" alt="Version 1.15.1"/></a>
-  <a href="CHANGELOG.en.md"><img src="https://img.shields.io/badge/build-57-purple?style=flat-square" alt="Build 57"/></a>
+  <a href="https://github.com/jatixs/tgbotvpscp/releases/latest"><img src="https://img.shields.io/badge/version-v1.15.2-blue?style=flat-square" alt="Version 1.15.2"/></a>
+  <a href="CHANGELOG.en.md"><img src="https://img.shields.io/badge/build-58-purple?style=flat-square" alt="Build 58"/></a>
   <a href="https://www.python.org/"><img src="https://img.shields.io/badge/python-3.10%2B-green?style=flat-square" alt="Python 3.10+"/></a>
   <a href="https://choosealicense.com/licenses/gpl-3.0/"><img src="https://img.shields.io/badge/license-GPL--3.0-lightgrey?style=flat-square" alt="License GPL-3.0"/></a>
   <a href="https://github.com/aiogram/aiogram"><img src="https://img.shields.io/badge/aiogram-3.x-orange?style=flat-square" alt="Aiogram 3.x"/></a>
@@ -31,7 +31,7 @@
    - [Commands](#-useful-commands)
 4. [Project Structure](#️-project-structure)
 5. [Security](#-security)
-6. [Custom Modules](#-adding-your-own-module)
+6. [Documentation](#-documentation)
 7. [Author](#-author)
 
 ---
@@ -214,8 +214,15 @@ The agent will install as `tg-node` service and appear in your bot.
 
 -----
 
+## 📚 Documentation
+
+* 📖 **[Architecture & Full Feature Guide](ARCHITECTURE.en.md)** — learn how the bot is structured and what each file does.
+* 🧩 **[Create Custom Module](custom_module_en.md)** — guide on adding new buttons and features.
+
+-----
+
 ## 👤 Author
 
-**Version:** 1.15.1 (Build 57) <br>
+**Version:** 1.15.2 (Build 58) <br>
 **Author:** Jatix <br>
 📜 **License:** GPL-3.0 <br>
