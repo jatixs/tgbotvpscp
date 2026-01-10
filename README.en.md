@@ -163,32 +163,81 @@ The agent will install as `tg-node` service and appear in your bot.
 
 ```
 /opt/tg-bot/
-├── bot.py            # Master Entry Point
-├── watchdog.py       # Alert System
-├── deploy.sh         # Installer
-├── requirements.txt  # Deps (aiosqlite, aiohttp...)
-├── Dockerfile        # Docker build
-├── docker-compose.yml
-├── .env              # Config
-│
-├── config/
-│   ├── nodes.db      # [NEW] SQLite Database
-│   ├── users.json    # Users config
-│   └── ...
-│
-├── node/             # Client Side
-│   └── node.py       # Agent script
-│
-├── core/             # Core Logic
-│   ├── server.py     # Async Web Server
-│   ├── nodes_db.py   # [NEW] Async DB Manager
-│   ├── utils.py      # Async Utils
-│   └── ...
-│
-├── modules/          # Features
-    ├── nodes.py      # Node Management
-    ├── speedtest.py  # Async Speedtest
-    └── ...
+├── .github/
+│   └── workflows/
+│       ├── codeql.yml
+│       ├── gitleaks.yml
+│       ├── python-safety.yml
+│       ├── security.yml
+│       └── trivy.yml
+├── assets/                  # Images (for README)
+│   ├── bot_1.png ...
+│   └── web_1.png ...
+├── core/                    # Bot Core
+│   ├── static/              # Static files for Web Panel
+│   │   ├── css/
+│   │   │   ├── login.css
+│   │   │   └── style.css
+│   │   └── js/
+│   │       ├── common.js
+│   │       ├── dashboard.js
+│   │       ├── login.js
+│   │       ├── settings.js
+│   │       └── theme_init.js
+│   ├── templates/           # HTML templates
+│   │   ├── dashboard.html
+│   │   ├── login.html
+│   │   ├── reset_password.html
+│   │   └── settings.html
+│   ├── auth.py              # Authorization and permissions
+│   ├── config.py            # Configuration (.env)
+│   ├── i18n.py              # Multilingual support (RU/EN)
+│   ├── keyboards.py         # Keyboards (Inline/Reply)
+│   ├── messaging.py         # Message management
+│   ├── middlewares.py       # Anti-spam (Middleware)
+│   ├── models.py            # DB Models (Tortoise ORM)
+│   ├── nodes_db.py          # Node Database (SQLite)
+│   ├── server.py            # Web Server (Aiohttp)
+│   ├── shared_state.py      # State (caches)
+│   └── utils.py             # Utilities
+├── modules/                 # Command Modules
+│   ├── fail2ban.py
+│   ├── logs.py
+│   ├── nodes.py             # Node management
+│   ├── notifications.py     # Alerts and monitoring
+│   ├── optimize.py
+│   ├── reboot.py
+│   ├── restart.py
+│   ├── selftest.py
+│   ├── speedtest.py
+│   ├── sshlog.py
+│   ├── top.py
+│   ├── traffic.py
+│   ├── update.py
+│   ├── uptime.py
+│   ├── users.py
+│   ├── vless.py
+│   └── xray.py
+├── node/                    # Agent for remote servers
+│   └── node.py
+├── .env.example             # Config example
+├── .gitignore
+├── aerich.ini               # Migration config
+├── bot.py                   # Main entry point
+├── CHANGELOG.md             # Changelog (RU)
+├── CHANGELOG.en.md          # Changelog (EN)
+├── custom_module.md         # Guide: Custom Module (RU)
+├── custom_module_en.md      # Guide: Custom Module (EN)
+├── deploy.sh                # Installer (RU)
+├── deploy_en.sh             # Installer (EN)
+├── docker-compose.yml       # Docker config
+├── Dockerfile
+├── LICENSE
+├── migrate.py               # Migration script
+├── README.md                # Description (RU)
+├── README.en.md             # Description (EN)
+├── requirements.txt         # Dependencies
+└── watchdog.py              # Watchdog (restart)
 ```
 
 -----

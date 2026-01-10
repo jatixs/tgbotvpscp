@@ -196,32 +196,81 @@ bash <(wget -qO- https://raw.githubusercontent.com/jatixs/tgbotvpscp/main/deploy
 
 ```
 /opt/tg-bot/
-├── bot.py            # Точка входа (Master)
-├── watchdog.py       # Система оповещений и мониторинг
-├── deploy.sh         # Универсальный установщик
-├── requirements.txt  # Зависимости (aiosqlite, aiohttp...)
-├── Dockerfile        # Сборка Docker-образа
-├── docker-compose.yml
-├── .env              # Конфигурация
-│
-├── config/
-│   ├── nodes.db      # [NEW] База данных SQLite
-│   ├── users.json    # Конфиг пользователей
-│   └── ...
-│
-├── node/             # Клиентская часть
-│   └── node.py       # Скрипт агента
-│
-├── core/             # Ядро бота
-│   ├── server.py     # Асинхронный Web-сервер (aiohttp)
-│   ├── nodes_db.py   # [NEW] Менеджер асинхронной БД
-│   ├── utils.py      # Асинхронные утилиты
-│   └── ...
-│
-├── modules/          # Модули функций
-    ├── nodes.py      # Управление нодами
-    ├── speedtest.py  # Асинхронный Speedtest
-    └── ...
+├── .github/
+│   └── workflows/
+│       ├── codeql.yml
+│       ├── gitleaks.yml
+│       ├── python-safety.yml
+│       ├── security.yml
+│       └── trivy.yml
+├── assets/                  # Изображения (для README)
+│   ├── bot_1.png ...
+│   └── web_1.png ...
+├── core/                    # Ядро бота
+│   ├── static/              # Статика для Web-панели
+│   │   ├── css/
+│   │   │   ├── login.css
+│   │   │   └── style.css
+│   │   └── js/
+│   │       ├── common.js
+│   │       ├── dashboard.js
+│   │       ├── login.js
+│   │       ├── settings.js
+│   │       └── theme_init.js
+│   ├── templates/           # HTML-шаблоны
+│   │   ├── dashboard.html
+│   │   ├── login.html
+│   │   ├── reset_password.html
+│   │   └── settings.html
+│   ├── auth.py              # Авторизация и права
+│   ├── config.py            # Конфигурация (.env)
+│   ├── i18n.py              # Мультиязычность (RU/EN)
+│   ├── keyboards.py         # Клавиатуры (Inline/Reply)
+│   ├── messaging.py         # Управление сообщениями
+│   ├── middlewares.py       # Анти-спам (Middleware)
+│   ├── models.py            # Модели БД (Tortoise ORM)
+│   ├── nodes_db.py          # БД для Нод (SQLite)
+│   ├── server.py            # Веб-сервер (Aiohttp)
+│   ├── shared_state.py      # Состояние (кэши)
+│   └── utils.py             # Утилиты
+├── modules/                 # Модули команд
+│   ├── fail2ban.py
+│   ├── logs.py
+│   ├── nodes.py             # Управление нодами
+│   ├── notifications.py     # Алерты и мониторинг
+│   ├── optimize.py
+│   ├── reboot.py
+│   ├── restart.py
+│   ├── selftest.py
+│   ├── speedtest.py
+│   ├── sshlog.py
+│   ├── top.py
+│   ├── traffic.py
+│   ├── update.py
+│   ├── uptime.py
+│   ├── users.py
+│   ├── vless.py
+│   └── xray.py
+├── node/                    # Агент для удаленных серверов
+│   └── node.py
+├── .env.example             # Пример конфига
+├── .gitignore
+├── aerich.ini               # Конфиг миграций
+├── bot.py                   # Главный файл запуска
+├── CHANGELOG.md             # История изменений (RU)
+├── CHANGELOG.en.md          # История изменений (EN)
+├── custom_module.md         # Инструкция: Свой модуль (RU)
+├── custom_module_en.md      # Инструкция: Свой модуль (EN)
+├── deploy.sh                # Установщик (RU)
+├── deploy_en.sh             # Установщик (EN)
+├── docker-compose.yml       # Docker конфиг
+├── Dockerfile
+├── LICENSE
+├── migrate.py               # Скрипт миграций
+├── README.md                # Описание (RU)
+├── README.en.md             # Описание (EN)
+├── requirements.txt         # Зависимости
+└── watchdog.py              # Watchdog (перезапуск)
 ```
 
 -----

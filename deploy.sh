@@ -1,3 +1,5 @@
+#!/bin/bash
+
 GIT_BRANCH="main"
 AUTO_AGENT_URL=""
 AUTO_NODE_TOKEN=""
@@ -219,6 +221,30 @@ cleanup_node_files() {
 cleanup_agent_files() {
     cd ${BOT_INSTALL_PATH}
     sudo rm -rf node
+}
+
+# --- ОЧИСТКА МУСОРА ПОСЛЕ УСТАНОВКИ ---
+cleanup_files() {
+    msg_info "🧹 Запуск очистки ненужных файлов..."
+
+    # Удаляем папки, не влияющие на работу
+    if [ -d "$BOT_INSTALL_PATH/.github" ]; then sudo rm -rf "$BOT_INSTALL_PATH/.github"; fi
+    if [ -d "$BOT_INSTALL_PATH/assets" ]; then sudo rm -rf "$BOT_INSTALL_PATH/assets"; fi
+
+    # Удаляем документацию разработчика и лицензии
+    sudo rm -f "$BOT_INSTALL_PATH/custom_module.md"
+    sudo rm -f "$BOT_INSTALL_PATH/custom_module_en.md"
+    sudo rm -f "$BOT_INSTALL_PATH/.gitignore"
+    sudo rm -f "$BOT_INSTALL_PATH/LICENSE"
+    
+    # README тоже не нужен для работы
+    sudo rm -f "$BOT_INSTALL_PATH/README.md"
+    sudo rm -f "$BOT_INSTALL_PATH/README.en.md"
+
+    # Очистка кэша Python (__pycache__), чтобы освободить место
+    sudo find "$BOT_INSTALL_PATH" -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null
+
+    msg_success "Очистка завершена."
 }
 
 install_extras() {
@@ -457,6 +483,7 @@ install_systemd_logic() {
     # Запуск миграций (включая JSON)
     run_with_spinner "Настройка базы данных и миграция" run_db_migrations "$exec_cmd"
 
+    cleanup_files
     create_and_start_service "${SERVICE_NAME}" "${BOT_INSTALL_PATH}/bot.py" "$mode" "Telegram Bot"
     create_and_start_service "${WATCHDOG_SERVICE_NAME}" "${BOT_INSTALL_PATH}/watchdog.py" "root" "Наблюдатель"
     cleanup_agent_files
@@ -487,6 +514,7 @@ install_docker_logic() {
     local container_name="tg-bot-${mode}"
     write_env_file "docker" "$mode" "${container_name}"
     cleanup_agent_files
+    cleanup_files
     cd ${BOT_INSTALL_PATH}
     local dc_cmd=""
     if sudo docker compose version &>/dev/null; then dc_cmd="docker compose"; elif command -v docker-compose &>/dev/null; then dc_cmd="docker-compose"; else msg_error "Docker Compose не найден."; return 1; fi
@@ -583,6 +611,7 @@ update_bot() {
     if ! run_with_spinner "Git fetch" $exec_cmd git fetch origin; then return 1; fi
     if ! run_with_spinner "Git reset" $exec_cmd git reset --hard "origin/${GIT_BRANCH}"; then return 1; fi
     cleanup_agent_files
+    cleanup_files
 
     if [ -f "${ENV_FILE}" ] && grep -q "DEPLOY_MODE=docker" "${ENV_FILE}"; then
         if [ -f "docker-compose.yml" ]; then
