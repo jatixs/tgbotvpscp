@@ -249,18 +249,6 @@ The agent will install as `tg-node` service and appear in your bot.
   * **Injection Protection:** `shlex` command escaping.
   * **Tokens:** Unique auth tokens for each node.
 
-<details>
-<summary><h2>🧩 Adding Your Own Module</h2></summary>
-
-1.  **File:** Create `modules/my_module.py`.
-2.  **Code:** Use `BUTTON_KEY` and `register_handlers(dp)`.
-3.  **i18n:** Add strings to `core/i18n.py`.
-4.  **Register:** Import in `bot.py` and call `register_module()`.
-5.  **Restart:** `sudo systemctl restart tg-bot`.
-
-**[Full-format instructions](/custom_module_en.md)**.
-</details>
-
 -----
 
 ## 📚 Documentation
