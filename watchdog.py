@@ -1,4 +1,4 @@
-# /opt-tg-bot/watchdog.py
+
 import os
 import time
 import subprocess
@@ -8,9 +8,9 @@ import re
 import json
 import sys
 from datetime import datetime, timedelta
-from typing import Optional, Callable  # <-- Добавлено
+from typing import Optional, Callable
 
-# --- ДОБАВЛЕНЫ ИМПОРТЫ DOCKER ---
+
 try:
     import docker
     import docker.errors
@@ -18,9 +18,8 @@ try:
     DOCKER_AVAILABLE = True
 except ImportError:
     DOCKER_AVAILABLE = False
-# ---------------------------------
 
-# Добавляем путь к core
+
 BASE_DIR_WATCHDOG = os.path.dirname(__file__)
 CORE_DIR_WATCHDOG = os.path.join(BASE_DIR_WATCHDOG, "core")
 if CORE_DIR_WATCHDOG not in sys.path:
@@ -35,12 +34,12 @@ except ImportError as e:
     print("Ensure watchdog.py is run from the correct directory (/opt-tg-bot) and venv.")
     sys.exit(1)
 
-# --- Настройки ---
+
 ALERT_BOT_TOKEN = config.TOKEN
 ALERT_ADMIN_ID = config.ADMIN_USER_ID
-# --- ИЗМЕНЕНО: DEPLOY_MODE ---
+
 DEPLOY_MODE = config.DEPLOY_MODE
-# ------------------------------
+
 
 dotenv_path = os.path.join(BASE_DIR_WATCHDOG, '.env')
 env_vars = {}
@@ -60,14 +59,14 @@ except Exception as e:
 
 BOT_NAME = env_vars.get("TG_BOT_NAME", "VPS Bot")
 
-# --- ИЗМЕНЕНО: Определение имени службы/контейнера ---
+
 if DEPLOY_MODE == "docker":
     BOT_SERVICE_NAME = env_vars.get("TG_BOT_CONTAINER_NAME", "tg-bot-root")
-else:  # systemd
+else:
     BOT_SERVICE_NAME = "tg-bot.service"
-# ----------------------------------------------------
 
-WATCHDOG_SERVICE_NAME = "tg-watchdog.service"  # Используется только в systemd
+
+WATCHDOG_SERVICE_NAME = "tg-watchdog.service"
 
 
 CONFIG_DIR = config.CONFIG_DIR
@@ -78,7 +77,7 @@ WATCHDOG_LOG_DIR = config.WATCHDOG_LOG_DIR
 CHECK_INTERVAL_SECONDS = 5
 ALERT_COOLDOWN_SECONDS = 300
 
-# Настройка логирования для watchdog
+
 config.setup_logging(WATCHDOG_LOG_DIR, "watchdog")
 
 last_alert_times = {}
@@ -87,7 +86,7 @@ status_alert_message_id = None
 current_reported_state = None
 WD_LANG = config.DEFAULT_LANGUAGE
 
-# --- ДОБАВЛЕНО: Инициализация Docker клиента ---
+
 docker_client: Optional[DockerClient] = None
 if DEPLOY_MODE == "docker":
     if DOCKER_AVAILABLE:
@@ -106,7 +105,6 @@ if DEPLOY_MODE == "docker":
     else:
         logging.critical(
             "Режим Docker, но библиотека 'docker' не установлена! Watchdog не сможет работать.")
-# --------------------------------------------
 
 
 def send_or_edit_telegram_alert(
@@ -129,7 +127,6 @@ def send_or_edit_telegram_alert(
             f"Активен кулдаун для '{alert_type}', пропуск уведомления.")
         return message_id_to_edit
 
-    # --- ИСПРАВЛЕНО: Используем WD_LANG для всех i18n-строк ---
     alert_prefix = get_text("watchdog_alert_prefix", WD_LANG)
     if not message_key:
         logging.error(
@@ -137,7 +134,7 @@ def send_or_edit_telegram_alert(
         message_body = get_text("error_internal", WD_LANG)
     else:
         message_body = get_text(message_key, WD_LANG, **kwargs)
-    # --------------------------------------------------------
+
     text_to_send = f"{alert_prefix}\n\n{message_body}"
 
     message_sent_or_edited = False
@@ -276,7 +273,6 @@ def check_bot_log_for_errors():
         return "watchdog_log_exception", {"error": error_safe}
 
 
-# --- ФУНКЦИЯ ДЛЯ SYSTEMD ---
 def check_bot_service_systemd():
     """Проверяет статус сервиса systemd."""
     global bot_service_was_down_or_activating, status_alert_message_id, current_reported_state
@@ -318,7 +314,7 @@ def check_bot_service_systemd():
             current_reported_state = "systemctl_error"
             status_alert_message_id = None
         time.sleep(CHECK_INTERVAL_SECONDS * 5)
-        return  # Возвращаем, т.к. process_service_state вызовет ошибку
+        return
     except Exception as e:
         logging.error(
             f"Неожиданная ошибка при вызове systemctl status: {e}",
@@ -333,9 +329,8 @@ def check_bot_service_systemd():
             current_reported_state = "check_error"
             status_alert_message_id = None
         time.sleep(CHECK_INTERVAL_SECONDS)
-        return  # Возвращаем
+        return
 
-    # --- Функция перезапуска для systemd ---
     def restart_service_systemd():
         try:
             subprocess.run(['sudo',
@@ -371,14 +366,12 @@ def check_bot_service_systemd():
                 service_name=BOT_SERVICE_NAME,
                 error=f"Unexpected error: {error_msg}")
 
-    # --- Вызов общей логики ---
     process_service_state(
         actual_state,
         status_output_full,
         restart_service_systemd)
 
 
-# --- ФУНКЦИЯ ДЛЯ DOCKER ---
 def check_bot_service_docker():
     """Проверяет статус контейнера Docker."""
     global bot_service_was_down_or_activating, status_alert_message_id, current_reported_state
@@ -393,9 +386,9 @@ def check_bot_service_docker():
     container = None
 
     try:
-        # 1. Получаем контейнер по имени
+
         container = docker_client.containers.get(BOT_SERVICE_NAME)
-        # 'running', 'restarting', 'exited', 'paused'
+
         container_status = container.status
         logging.debug(
             f"Контейнер {BOT_SERVICE_NAME} найден. Статус: {container_status}")
@@ -407,7 +400,7 @@ def check_bot_service_docker():
         elif container_status in ["exited", "dead"]:
             actual_state = "failed"
         else:
-            actual_state = "inactive"  # 'created', 'paused'
+            actual_state = "inactive"
 
     except docker.errors.NotFound:
         logging.warning(f"Контейнер {BOT_SERVICE_NAME} не найден.")
@@ -441,7 +434,6 @@ def check_bot_service_docker():
         time.sleep(CHECK_INTERVAL_SECONDS)
         return
 
-    # --- Функция перезапуска для Docker ---
     def restart_service_docker():
         if not container:
             logging.error(
@@ -472,18 +464,16 @@ def check_bot_service_docker():
                 service_name=BOT_SERVICE_NAME,
                 error=f"Unexpected error: {error_msg}")
 
-    # --- Вызов общей логики ---
     process_service_state(
         actual_state,
         f"Docker status: {container_status}",
         restart_service_docker)
 
 
-# --- ОБЩАЯ ЛОГИКА ОБРАБОТКИ СОСТОЯНИЯ ---
 def process_service_state(
         actual_state: str,
         status_output_full: str,
-        restart_function: Callable[[], None]):  # Принимает функцию перезапуска
+        restart_function: Callable[[], None]):
     """
     Общая логика обработки состояния, не зависящая от systemd или docker.
     """
@@ -494,7 +484,6 @@ def process_service_state(
     message_key = None
     message_kwargs = {"bot_name": BOT_NAME}
 
-    # --- ЛОГИКА ПЛАНОВОГО ПЕРЕЗАПУСКА ---
     restart_flag_exists = os.path.exists(RESTART_FLAG_FILE)
     logging.debug(
         f"Проверка флага перезапуска ({RESTART_FLAG_FILE}): {'Найден' if restart_flag_exists else 'Не найден'}")
@@ -511,7 +500,6 @@ def process_service_state(
         logging.debug(
             "Флаг перезапуска найден, но бот активен. Игнорирую флаг.")
 
-    # --- ЛОГИКА АКТИВНОСТИ И СБОЕВ ---
     elif actual_state == "active":
         logging.debug(f"Сервис/контейнер '{BOT_SERVICE_NAME}' активен.")
         if bot_service_was_down_or_activating:
@@ -526,14 +514,14 @@ def process_service_state(
                 message_key = "watchdog_status_active_ok"
             elif log_status_key is not None:
                 log_details = get_text(
-                    log_status_key, WD_LANG, **log_kwargs)  # Используем WD_LANG
+                    log_status_key, WD_LANG, **log_kwargs)
                 logging.warning(
                     f"Проверка лога: ОБНАРУЖЕНЫ ОШИБКИ ({log_details}).")
                 state_to_report = "active_error"
                 alert_type = "bot_service_up_error"
                 message_key = "watchdog_status_active_error"
                 message_kwargs["details"] = log_details
-            else:  # log_status_key is None
+            else:
                 logging.warning("Файл лога бота не найден.")
                 state_to_report = "active_ok"
                 alert_type = "bot_service_up_no_log_file"
@@ -548,7 +536,6 @@ def process_service_state(
         message_key = "watchdog_status_activating"
         bot_service_was_down_or_activating = True
 
-    # Неплановый сбой
     elif actual_state in ["inactive", "failed", "unknown"] and not restart_flag_exists:
         logging.warning(
             f"Сервис/контейнер '{BOT_SERVICE_NAME}' НЕАКТИВЕН. Фактическое состояние: '{actual_state}'.")
@@ -558,31 +545,32 @@ def process_service_state(
         alert_type = "bot_service_down"
         message_key = "watchdog_status_down"
 
-        # --- Логика определения причины (остается полезной) ---
         if actual_state == "failed":
             fail_reason_match = re.search(
                 r"Failed with result '([^']*)'",
-                status_output_full)  # Для systemd
+                status_output_full)
             if fail_reason_match:
                 reason = fail_reason_match.group(1)
-                message_kwargs["reason"] = f" ({get_text('watchdog_status_down_reason', WD_LANG)}: {reason})"
+                message_kwargs["reason"] = f" ({
+                    get_text(
+                        'watchdog_status_down_reason',
+                        WD_LANG)}: {reason})"
             else:
-                message_kwargs["reason"] = f" ({get_text('watchdog_status_down_failed', WD_LANG)})"
+                message_kwargs["reason"] = f" ({get_text(
+                    'watchdog_status_down_failed', WD_LANG)})"
         elif DEPLOY_MODE == "docker":
-            # Для Docker просто показываем статус
+
             message_kwargs["reason"] = f" (Status: {status_output_full})"
         else:
             message_kwargs["reason"] = ""
-        # --------------------------------------------------------
 
         if not bot_service_was_down_or_activating:
             logging.info(
                 f"Первое обнаружение сбоя (флаг не найден). Вызов функции перезапуска...")
-            restart_function()  # Вызываем переданную функцию (systemd или docker)
+            restart_function()
 
         bot_service_was_down_or_activating = True
 
-    # --- Отправка или Редактирование Сообщения ---
     try:
         logging.debug(
             f"Перед отправкой: state_to_report='{state_to_report}', current_reported_state='{current_reported_state}', message_key='{message_key}'")
@@ -643,15 +631,12 @@ if __name__ == "__main__":
     logging.info(
         f"Система оповещений (Alert) запущена. Режим: {DEPLOY_MODE.upper()}. Отслеживание: {BOT_SERVICE_NAME}")
 
-    # --- ОТПРАВКА АЛЕРТА О ЗАПУСКЕ САМОГО НАБЛЮДАТЕЛЯ (Watchdog) ---
     send_or_edit_telegram_alert(
         "watchdog_status_restarting_wd",
         "watchdog_start",
         None,
         bot_name=BOT_NAME)
-    # -----------------------------------------------------------------
 
-    # --- ГЛАВНЫЙ ЦИКЛ ---
     while True:
         if DEPLOY_MODE == "docker":
             if DOCKER_AVAILABLE and docker_client:
@@ -659,7 +644,7 @@ if __name__ == "__main__":
             else:
                 logging.critical(
                     "Режим Docker, но клиент не инициализирован или недоступен. Watchdog не может работать.")
-                # Отправляем алерт, если еще не отправляли
+
                 if current_reported_state != "docker_lib_error":
                     send_or_edit_telegram_alert(
                         "watchdog_check_error",
@@ -667,9 +652,9 @@ if __name__ == "__main__":
                         None,
                         error="Docker client not available or not installed")
                     current_reported_state = "docker_lib_error"
-                time.sleep(60)  # Спим долго
+                time.sleep(60)
         else:
-            # По умолчанию используем systemd
+
             check_bot_service_systemd()
 
         time.sleep(CHECK_INTERVAL_SECONDS)

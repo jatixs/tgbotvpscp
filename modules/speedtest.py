@@ -30,7 +30,7 @@ LOCAL_RU_CACHE_FILE = os.path.join(
     config.CONFIG_DIR,
     "iperf_servers_ru_cache.yml")
 
-MAX_SERVERS_TO_PING = 100 
+MAX_SERVERS_TO_PING = 100
 PING_COUNT = 3
 PING_TIMEOUT_SEC = 2
 IPERF_TEST_DURATION = 8
@@ -93,6 +93,7 @@ async def get_ping_async(host: str) -> Optional[float]:
     except Exception as e:
         logging.debug(f"Ping failed for {host}: {e}")
     return None
+
 
 async def get_vps_location() -> Tuple[Optional[str], Optional[str], Optional[str]]:
     ip, country_code, continent = None, None, None
@@ -181,12 +182,12 @@ async def fetch_servers_async(
                         f.write(content)
         except Exception as e:
             logging.debug(f"Failed to fetch global list: {e}")
-        
+
         if os.path.exists(LOCAL_CACHE_FILE):
             try:
                 with open(LOCAL_CACHE_FILE, "r", encoding='utf-8') as f:
                     data = json.load(f)
-                
+
                 for s in data:
                     host, port_str = s.get("IP/HOST"), s.get("PORT")
                     if not host or not port_str:
@@ -198,7 +199,7 @@ async def fetch_servers_async(
 
                     servers_list.append({
                         "host": host, "port": port, "city": s.get("SITE", "N/A"),
-                        "country": s.get("COUNTRY"), 
+                        "country": s.get("COUNTRY"),
                         "continent": s.get("CONTINENT"),
                         "provider": s.get("PROVIDER", "N/A")
                     })
@@ -220,12 +221,19 @@ async def find_best_servers_async(
     for i, ping in enumerate(pings):
         if ping is not None:
             server_data = to_check[i]
-            
-            continent_match_key = 0 if server_data.get("continent") == vps_continent else 1
-            country_match_key = 0 if server_data.get("country") == vps_country_code else 1
+
+            continent_match_key = 0 if server_data.get(
+                "continent") == vps_continent else 1
+            country_match_key = 0 if server_data.get(
+                "country") == vps_country_code else 1
             is_ip_key = is_ip_address(server_data["host"])
-            
-            results.append((continent_match_key, country_match_key, is_ip_key, ping, server_data))
+
+            results.append(
+                (continent_match_key,
+                 country_match_key,
+                 is_ip_key,
+                 ping,
+                 server_data))
 
     results.sort(key=lambda x: (x[0], x[1], x[2], x[3]))
 
@@ -237,12 +245,13 @@ async def find_best_servers_async(
     return final_results
 
 
-def _handle_iperf_error_output(out_bytes: bytes, err_bytes: bytes, returncode: int, direction: str) -> Optional[str]:
+def _handle_iperf_error_output(
+        out_bytes: bytes, err_bytes: bytes, returncode: int, direction: str) -> Optional[str]:
     output = (err_bytes or out_bytes).decode('utf-8', 'ignore')
-    
+
     if returncode == 0:
         return None
-        
+
     specific_error = "Connection or Timeout Error"
     try:
         error_data = json.loads(output)
@@ -252,10 +261,11 @@ def _handle_iperf_error_output(out_bytes: bytes, err_bytes: bytes, returncode: i
             specific_error = error_data["end"]["error"]
     except json.JSONDecodeError:
         specific_error = output[-100:] if len(output) > 100 else output
-    
+
     log_prefix = "DL" if direction == "download" else "UL"
-    logging.error(f"{log_prefix} Test failed (Code {returncode}): {specific_error}")
-    
+    logging.error(f"{log_prefix} Test failed (Code {
+                  returncode}): {specific_error}")
+
     return f"{log_prefix}_FAIL:{specific_error[:200]}"
 
 
@@ -274,7 +284,8 @@ async def run_iperf_test_async(
     logging.info(f"Starting iperf3 test on {host}:{port}...")
     await edit_status_safe(bot, chat_id, message_id, _("speedtest_status_testing", lang, host=escape_html(host), ping=f"{ping:.2f}"), lang)
 
-    cmd_dl = f"iperf3 -c {safe_host} -p {safe_port} -J -t {IPERF_TEST_DURATION} -R -4"
+    cmd_dl = f"iperf3 -c {safe_host} -p {
+        safe_port} -J -t {IPERF_TEST_DURATION} -R -4"
     cmd_ul = f"iperf3 -c {safe_host} -p {safe_port} -J -t {IPERF_TEST_DURATION} -4"
 
     results = {"download": 0.0, "upload": 0.0, "ping": ping}
@@ -283,20 +294,21 @@ async def run_iperf_test_async(
     try:
         proc = await asyncio.create_subprocess_shell(cmd_dl, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
         out, err = await asyncio.wait_for(proc.communicate(), timeout=IPERF_PROCESS_TIMEOUT)
-        
+
         if proc.returncode != 0:
-            return _handle_iperf_error_output(out, err, proc.returncode, "download")
-        
+            return _handle_iperf_error_output(
+                out, err, proc.returncode, "download")
+
         try:
             data = json.loads(out)
             if "sum_received" not in data["end"]:
-                 return f"DOWNLOAD_FAIL: No sum_received in final report"
+                return f"DOWNLOAD_FAIL: No sum_received in final report"
 
             results["download"] = data["end"]["sum_received"]["bits_per_second"] / 1_000_000
             logging.info(f"Download speed: {results['download']:.2f} Mbps")
         except json.JSONDecodeError:
             return f"DOWNLOAD_FAIL: JSON Decode Error"
-            
+
     except Exception as e:
         logging.error(f"DL Error: {e}")
         return str(e)
@@ -305,20 +317,21 @@ async def run_iperf_test_async(
     try:
         proc = await asyncio.create_subprocess_shell(cmd_ul, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
         out, err = await asyncio.wait_for(proc.communicate(), timeout=IPERF_PROCESS_TIMEOUT)
-        
+
         if proc.returncode != 0:
-            return _handle_iperf_error_output(out, err, proc.returncode, "upload")
-            
+            return _handle_iperf_error_output(
+                out, err, proc.returncode, "upload")
+
         try:
             data = json.loads(out)
             if "sum_sent" not in data["end"]:
-                 return f"UPLOAD_FAIL: No sum_sent in final report"
+                return f"UPLOAD_FAIL: No sum_sent in final report"
 
             results["upload"] = data["end"]["sum_sent"]["bits_per_second"] / 1_000_000
             logging.info(f"Upload speed: {results['upload']:.2f} Mbps")
         except json.JSONDecodeError:
             return f"UPLOAD_FAIL: JSON Decode Error"
-            
+
     except Exception as e:
         logging.error(f"UL Error: {e}")
         return str(e)
@@ -358,7 +371,8 @@ async def speedtest_handler(message: types.Message):
         if not all_servers:
             try:
                 await message.bot.edit_message_text(_("iperf_fetch_error", lang), chat_id=message.chat.id, message_id=msg.message_id)
-            except TelegramBadRequest: pass
+            except TelegramBadRequest:
+                pass
             return
 
         await edit_status_safe(message.bot, message.chat.id, msg.message_id, _("speedtest_status_ping", lang, count=min(len(all_servers), MAX_SERVERS_TO_PING)), lang, force=True)
@@ -367,7 +381,8 @@ async def speedtest_handler(message: types.Message):
         if not best_servers:
             try:
                 await message.bot.edit_message_text(_("iperf_no_servers", lang), chat_id=message.chat.id, message_id=msg.message_id)
-            except TelegramBadRequest: pass
+            except TelegramBadRequest:
+                pass
             return
 
         final_text = ""
@@ -375,11 +390,12 @@ async def speedtest_handler(message: types.Message):
             logging.info(
                 f"Attempting test on server: {server['host']} ({ping:.2f} ms)")
             res = await run_iperf_test_async(message.bot, message.chat.id, msg.message_id, server, ping, lang)
-            
-            if not res.startswith("DL_FAIL:") and not res.startswith("UL_FAIL:") and not res.startswith("DOWNLOAD_FAIL:") and not res.startswith("UPLOAD_FAIL:"):
+
+            if not res.startswith("DL_FAIL:") and not res.startswith("UL_FAIL:") and not res.startswith(
+                    "DOWNLOAD_FAIL:") and not res.startswith("UPLOAD_FAIL:"):
                 final_text = res
                 break
-            
+
             logging.warning(f"Test failed on {server['host']}. Retrying...")
             await asyncio.sleep(1)
 
@@ -398,4 +414,5 @@ async def speedtest_handler(message: types.Message):
         logging.error(f"Speedtest fatal: {e}", exc_info=True)
         try:
             await message.bot.edit_message_text(_("speedtest_fail", lang, error=str(e)), chat_id=message.chat.id, message_id=msg.message_id)
-        except TelegramBadRequest: pass
+        except TelegramBadRequest:
+            pass

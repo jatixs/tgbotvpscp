@@ -140,7 +140,7 @@ async def cq_node_select(callback: types.CallbackQuery):
             "ip",
             "?"),
         uptime=formatted_uptime)
-    
+
     keyboard = get_node_management_keyboard(token, lang)
     await callback.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
 
@@ -240,11 +240,11 @@ async def cq_node_stop_traffic(callback: types.CallbackQuery):
                 stats = node.get("stats", {})
                 raw_uptime = stats.get("uptime", 0)
                 formatted_uptime = format_uptime(raw_uptime, lang)
-                
+
                 text = _(
                     "node_management_menu", lang, name=node.get("name"), ip=node.get(
                         "ip", "?"), uptime=formatted_uptime)
-                
+
                 keyboard = get_node_management_keyboard(token, lang)
                 await callback.message.answer(text, reply_markup=keyboard, parse_mode="HTML")
         except Exception as e:
@@ -325,10 +325,10 @@ async def nodes_monitor(bot: Bot):
                         if current >= threshold:
                             if not state["active"] or (
                                     now - state["last_time"] > config.RESOURCE_ALERT_COOLDOWN):
-                                
+
                                 p_info = stats.get(f"process_{metric}", "n/a")
                                 await send_alert(bot, lambda lang: _(key_high, lang, name=name, usage=current, threshold=threshold, processes=p_info), "resources", processes=p_info)
-                                
+
                                 state["active"] = True
                                 state["last_time"] = now
                                 updated = True

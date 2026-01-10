@@ -47,7 +47,6 @@
 * Improved handling of layout shifts when the on-screen keyboard is active on mobile devices.
 * Enhanced general page adaptability for various screen sizes.
 
-
 * **Detail Level:** Increased the detail of displayed content and information across the dashboard.
 * **Auth & Reset Pages:** Refactored the Authorization and Password Reset pages for a better user experience.
 * **Visual Polish:** Numerous visual changes to improve the intuitive interface and overall user experience.
@@ -74,7 +73,6 @@ The update module (`modules/update.py `) has been completely rewritten.
 * **Update the bot:** Downloads fresh code from Git, updates dependencies (`pip`), and restarts the service (Systemd or Docker).
 * **Update the system:** Performs the standard update of Linux packages ('apt update && apt upgrade`).
 
-
 * **Self-Healing:** The bot has learned how to restart its process after updating. For Docker, a container restart mechanism is implemented via `docker restart` (using the container name from the environment variables).
 * **Background check:** Added the `auto_update_checker` task, which checks for a new version on GitHub every 6 hours and sends a notification to the administrator with a Changelog.
 
@@ -86,25 +84,19 @@ Into the core of the web server (`core/server.py `) added a number of new APIs a
 * Added API `api_get_sessions' to view all active logins (IP, browser, login time).
 * Implemented the possibility of **forced termination of sessions** (the "Log out on all devices" button or revocation of a specific session) via `api_revoke_session'.
 
-
 * **Notification Center:**
 * The web dashboard now has a notification bell (API `api_get_notifications`), which stores the history of important events (inputs, errors), and not only sends them to Telegram.
 
-
 * **Web update:**
 * A tab has been added to the WebUI settings to check and run bot updates directly from the browser (`api_check_update`, `api_run_update').
-
-
 
 ### 🛡️ Security
 
 * **Password protection (Brute-Force Protection):**
 * Implemented `check_rate_limit` in 'core/server.py `. If there are 5 unsuccessful login attempts from one IP, this IP is blocked for 5 minutes.
 
-
 * **Restoring access (Magic Link):**
 * If you forgot the password from the web panel, you can now request the **Magic Link** (temporary login link) via the Telegram bot and reset the password ('handle_reset_request`).
-
 
 ### 📜 Changes in `deploy.sh `:
 

@@ -7,6 +7,9 @@ PyYAML
 docker
 aiohttp
 aiosqlite
-Pillow
 packaging
 Jinja2
+cryptography
+sentry-sdk
+tortoise-orm
+aerich

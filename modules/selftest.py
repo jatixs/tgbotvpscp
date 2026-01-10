@@ -59,32 +59,29 @@ async def selftest_handler(message: types.Message):
 
         uptime_str = format_uptime(uptime_sec, lang)
 
-        # Проверка доступности Интернета (HTTP/S)
         conn_proc = await asyncio.create_subprocess_shell(
-            "curl -I -s --max-time 3 https://www.google.com/", # -I: HEAD request, -s: silent
-            stdout=asyncio.subprocess.PIPE, 
+            "curl -I -s --max-time 3 https://www.google.com/",
+            stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE
         )
         c_out, c_err = await conn_proc.communicate()
-        
+
         conn_ok = conn_proc.returncode == 0 and b'HTTP/' in c_out.upper()
-        
+
         inet_status = _(
             "selftest_inet_ok",
             lang) if conn_ok else _(
             "selftest_inet_fail",
             lang)
 
-        # Ping check (async subprocess - только для метрики задержки)
         ping_proc = await asyncio.create_subprocess_shell("ping -c 1 -W 1 8.8.8.8", stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
-        # FIX: _ -> stderr_dummy
+
         p_out, stderr_dummy = await ping_proc.communicate()
         p_match = re.search(r"time=([\d\.]+) ms", p_out.decode())
         ping_time = p_match.group(1) if p_match else "N/A"
 
-        # IP check (async subprocess)
         ip_proc = await asyncio.create_subprocess_shell("curl -4 -s --max-time 2 ifconfig.me", stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
-        # FIX: _ -> stderr_dummy
+
         ip_out, stderr_dummy = await ip_proc.communicate()
         ext_ip = ip_out.decode().strip() or _("selftest_ip_fail", lang)
 
@@ -105,7 +102,7 @@ async def selftest_handler(message: types.Message):
                     lang,
                     source=os.path.basename(log_file))
                 proc = await asyncio.create_subprocess_shell(f"tail -n 50 {log_file}", stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
-                # FIX: _ -> stderr_dummy
+
                 l_out, stderr_dummy = await proc.communicate()
                 for l in reversed(l_out.decode('utf-8', 'ignore').split('\n')):
                     if "Accepted" in l and "sshd" in l:
@@ -114,7 +111,7 @@ async def selftest_handler(message: types.Message):
             else:
                 src = _("selftest_ssh_source_journal", lang)
                 proc = await asyncio.create_subprocess_shell("journalctl -u ssh --no-pager -n 50", stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
-                # FIX: _ -> stderr_dummy
+
                 j_out, stderr_dummy = await proc.communicate()
                 for l in reversed(j_out.decode('utf-8', 'ignore').split('\n')):
                     if "Accepted" in l:
@@ -131,11 +128,10 @@ async def selftest_handler(message: types.Message):
                     u = escape_html(match.group(1))
                     ip = escape_html(match.group(2))
                     fl = await get_country_flag(ip)
-                    
-                    # --- [ИСПРАВЛЕНИЕ] Логика парсинга даты/времени из sshlog.py ---
+
                     tz = get_server_timezone_label()
                     dt = None
-                    
+
                     match_iso = re.search(
                         r"(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})", line)
                     match_sys = re.search(
@@ -151,14 +147,14 @@ async def selftest_handler(message: types.Message):
                             dt = dt.replace(year=datetime.now().year)
                     except Exception as e:
                         logging.debug(f"Date parse error in selftest: {e}")
-                        pass 
-                    
+                        pass
+
                     time_str = dt.strftime('%H:%M:%S') if dt else "?"
                     date_str = dt.strftime('%d.%m.%Y') if dt else "?"
-                    # --- КОНЕЦ ИСПРАВЛЕНИЯ ---
-                    
+
                     ssh_info = ssh_header + \
-                        _("selftest_ssh_entry", lang, user=u, flag=fl, ip=ip, time=time_str, tz=tz, date=date_str)
+                        _("selftest_ssh_entry", lang, user=u, flag=fl,
+                          ip=ip, time=time_str, tz=tz, date=date_str)
                 else:
                     ssh_info = ssh_header + _("selftest_ssh_parse_fail", lang)
             else:

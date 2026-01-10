@@ -1,4 +1,4 @@
-# /opt-tg-bot/core/shared_state.py
+
 import time
 from collections import deque
 
@@ -16,6 +16,6 @@ RESOURCE_ALERT_STATE = {"cpu": False, "ram": False, "disk": False}
 LAST_RESOURCE_ALERT_TIME = {"cpu": 0, "ram": 0, "disk": 0}
 AGENT_HISTORY = []
 
-# --- WEB UI NOTIFICATIONS ---
+
 WEB_NOTIFICATIONS = deque(maxlen=50)
-WEB_USER_LAST_READ = {} # Персональное время прочтения для синхронизации
+WEB_USER_LAST_READ = {}

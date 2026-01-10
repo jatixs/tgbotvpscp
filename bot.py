@@ -13,6 +13,8 @@ import logging
 import signal
 import os
 import psutil
+import sentry_sdk
+from tortoise import Tortoise
 
 if os.path.isdir("/proc_host"):
     psutil.PROCFS_PATH = "/proc_host"
@@ -22,6 +24,20 @@ from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.exceptions import TelegramBadRequest
+
+
+if config.SENTRY_DSN and config.SENTRY_DSN.strip().startswith("http"):
+    try:
+        sentry_sdk.init(
+            dsn=config.SENTRY_DSN,
+            traces_sample_rate=1.0,
+            profiles_sample_rate=1.0,
+        )
+        logging.info("Sentry initialized successfully.")
+    except Exception as e:
+        logging.error(f"Failed to initialize Sentry: {e}")
+else:
+    logging.info("Sentry disabled (DSN not set or invalid).")
 
 config.setup_logging(config.BOT_LOG_DIR, "bot")
 
@@ -82,7 +98,7 @@ async def show_main_menu(
         try:
             await bot.delete_message(chat_id=chat_id, message_id=message_id_to_delete)
         except TelegramBadRequest:
-            pass # Message might be already deleted or too old
+            pass
 
     await messaging.delete_previous_message(user_id, list(shared_state.LAST_MESSAGE_IDS.get(user_id, {}).keys()), chat_id, bot)
 
@@ -121,65 +137,70 @@ async def back_to_menu_callback(
     await callback.answer()
 
 
-# --- ОБРАБОТЧИКИ КАТЕГОРИЙ (НОВОЕ) ---
 @dp.message(I18nFilter("cat_monitoring"))
 async def cat_monitoring_handler(message: types.Message):
     await _show_subcategory(message, "cat_monitoring")
+
 
 @dp.message(I18nFilter("cat_management"))
 async def cat_management_handler(message: types.Message):
     await _show_subcategory(message, "cat_management")
 
+
 @dp.message(I18nFilter("cat_security"))
 async def cat_security_handler(message: types.Message):
     await _show_subcategory(message, "cat_security")
+
 
 @dp.message(I18nFilter("cat_tools"))
 async def cat_tools_handler(message: types.Message):
     await _show_subcategory(message, "cat_tools")
 
+
 @dp.message(I18nFilter("cat_settings"))
 async def cat_settings_handler(message: types.Message):
     await _show_subcategory(message, "cat_settings")
 
+
 async def _show_subcategory(message: types.Message, category_key: str):
     user_id = message.from_user.id
     lang = i18n.get_user_lang(user_id)
-    
+
     if not auth.is_allowed(user_id, "menu"):
         return
 
     markup = keyboards.get_subcategory_keyboard(category_key, user_id)
     cat_name = _(category_key, lang)
     text = _("cat_choose_action", lang, category=cat_name)
-    
+
     sent = await message.answer(text, reply_markup=markup, parse_mode="HTML")
-    shared_state.LAST_MESSAGE_IDS.setdefault(user_id, {})["subcategory"] = sent.message_id
+    shared_state.LAST_MESSAGE_IDS.setdefault(
+        user_id, {})["subcategory"] = sent.message_id
 
 
-# --- НАСТРОЙКИ МЕНЮ (INLINE) ---
 @dp.message(I18nFilter("btn_configure_menu"))
 async def configure_menu_handler(message: types.Message):
     user_id = message.from_user.id
     lang = i18n.get_user_lang(user_id)
-    
+
     if not auth.is_allowed(user_id, "manage_users"):
-         await message.answer(_("access_denied_no_rights", lang))
-         return
+        await message.answer(_("access_denied_no_rights", lang))
+        return
 
     text = _("main_menu_settings_text", lang)
     markup = keyboards.get_keyboard_settings_inline(lang)
-    
+
     await message.answer(text, reply_markup=markup, parse_mode="HTML")
+
 
 @dp.callback_query(F.data.startswith("toggle_kb_"))
 async def toggle_kb_config(callback: types.CallbackQuery):
     user_id = callback.from_user.id
     lang = i18n.get_user_lang(user_id)
-    
+
     if not auth.is_allowed(user_id, "manage_users"):
-         await callback.answer(_("access_denied_no_rights", lang), show_alert=True)
-         return
+        await callback.answer(_("access_denied_no_rights", lang), show_alert=True)
+        return
 
     config_key = callback.data.replace("toggle_kb_", "")
     current_val = config.KEYBOARD_CONFIG.get(config_key, True)
@@ -191,6 +212,7 @@ async def toggle_kb_config(callback: types.CallbackQuery):
     except TelegramBadRequest:
         pass
     await callback.answer()
+
 
 @dp.callback_query(F.data == "close_kb_settings")
 async def close_kb_settings(callback: types.CallbackQuery):
@@ -251,6 +273,8 @@ async def shutdown(dispatcher: Dispatcher, bot_instance: Bot, web_runner=None):
         await web_runner.cleanup()
 
     await server.cleanup_server()
+
+    await Tortoise.close_connections()
 
     try:
         await dispatcher.stop_polling()

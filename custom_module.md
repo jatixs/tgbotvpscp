@@ -57,14 +57,14 @@ async def my_feature_handler(message: types.Message):
 
     # --- Ваша логика ---
     # Пример: выполнение какой-то операции
-    result_data = "Работа выполнена успешно!" 
-    
+    result_data = "Работа выполнена успешно!"
+
     # Формируем ответ (текст берем из i18n)
     response_text = _("my_feature_response", lang, data=result_data)
 
     # --- Отправка ответа ---
     sent_message = await message.answer(response_text, parse_mode="HTML")
-    
+
     # Сохраняем ID сообщения, чтобы удалить его при следующем вызове
     LAST_MESSAGE_IDS.setdefault(user_id, {})[command_name] = sent_message.message_id
 ```
@@ -106,7 +106,7 @@ STRINGS = {
 
     ```python
     from modules import (
-        selftest, traffic, uptime, ..., 
+        selftest, traffic, uptime, ...,
         my_feature  # <-- Добавьте ваш модуль сюда
     )
     ```
@@ -122,14 +122,14 @@ STRINGS = {
     ```python
     def load_modules():
         # ... другие модули ...
-        
+
         if ENABLE_MY_FEATURE:
             # Обычная регистрация (доступно всем пользователям из whitelist)
-            register_module(my_feature) 
-            
+            register_module(my_feature)
+
             # ИЛИ только для админов:
             # register_module(my_feature, admin_only=True)
-            
+
             # ИЛИ только для Root (полный доступ к системе):
             # register_module(my_feature, root_only=True)
     ```

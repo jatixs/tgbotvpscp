@@ -50,7 +50,8 @@ async def updatexray_handler(message: types.Message, state: FSMContext):
                     chat_id=chat_id,
                     message_id=sent_msg.message_id
                 )
-            except TelegramBadRequest: pass
+            except TelegramBadRequest:
+                pass
             return
 
         version = _("xray_version_unknown", lang)
@@ -58,12 +59,16 @@ async def updatexray_handler(message: types.Message, state: FSMContext):
 
         try:
             await message.bot.edit_message_text(
-                _("xray_detected_start_update", lang, client=client_name_display, container=escape_html(container_name)),
+                _("xray_detected_start_update",
+                  lang,
+                  client=client_name_display,
+                  container=escape_html(container_name)),
                 chat_id=chat_id,
                 message_id=sent_msg.message_id,
                 parse_mode="HTML"
             )
-        except TelegramBadRequest: pass
+        except TelegramBadRequest:
+            pass
 
         update_cmd = ""
         version_cmd = ""
@@ -106,11 +111,14 @@ async def updatexray_handler(message: types.Message, state: FSMContext):
                 "unzip -o Xray-linux-64.zip xray && "
                 "rm Xray-linux-64.zip")
             env_path = "/opt/marzban/.env"
-            update_env = f"if [ -f {env_path} ]; then if ! grep -q '^XRAY_EXECUTABLE_PATH=' {env_path}; then echo 'XRAY_EXECUTABLE_PATH=/var/lib/marzban/xray-core/xray' >> {env_path}; fi; fi"
+            update_env = f"if [ -f {env_path} ]; then if ! grep -q '^XRAY_EXECUTABLE_PATH=' {
+                env_path}; then echo 'XRAY_EXECUTABLE_PATH=/var/lib/marzban/xray-core/xray' >> {env_path}; fi; fi"
 
             restart_cmd = f"docker restart {safe_container}"
-            update_cmd = f"{check_deps} && {dl_cmd} && {update_env} && {restart_cmd}"
-            version_cmd = f'docker exec {safe_container} /var/lib/marzban/xray-core/xray version'
+            update_cmd = f"{check_deps} && {dl_cmd} && {
+                update_env} && {restart_cmd}"
+            version_cmd = f'docker exec {
+                safe_container} /var/lib/marzban/xray-core/xray version'
 
         process_update = await asyncio.create_subprocess_shell(update_cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
         stdout_update, stderr_update = await process_update.communicate()

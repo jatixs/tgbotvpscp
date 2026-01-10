@@ -1,4 +1,4 @@
-# /opt-tg-bot/modules/users.py
+
 import asyncio
 import logging
 from aiogram import F, Dispatcher, types
@@ -8,12 +8,11 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.filters import StateFilter
 from aiogram.exceptions import TelegramBadRequest
 
-# --- ИЗМЕНЕНО: Импортируем i18n ---
+
 from core.i18n import _, I18nFilter, get_user_lang
 from core import config
-# -----------------------------------
 
-# ИСПРАВЛЕНИЕ: Добавляем 'get_user_name' в импорт
+
 from core.auth import is_allowed, send_access_denied_message, refresh_user_names, save_users, get_user_name
 from core.messaging import delete_previous_message
 from core.shared_state import LAST_MESSAGE_IDS, ALLOWED_USERS, USER_NAMES, ALERTS_CONFIG
@@ -26,9 +25,8 @@ from core.keyboards import (
     get_self_delete_confirmation_keyboard,
     get_back_keyboard)
 
-# --- ИЗМЕНЕНО: Используем ключ ---
+
 BUTTON_KEY = "btn_users"
-# --------------------------------
 
 
 class ManageUsersStates(StatesGroup):
@@ -37,36 +35,29 @@ class ManageUsersStates(StatesGroup):
 
 
 def get_button() -> KeyboardButton:
-    # --- ИЗМЕНЕНО: Используем i18n ---
+
     return KeyboardButton(text=_(BUTTON_KEY, config.DEFAULT_LANGUAGE))
-    # --------------------------------
 
 
 def register_handlers(dp: Dispatcher):
-    # --- ИЗМЕНЕНО: Используем I18nFilter ---
+
     dp.message(I18nFilter(BUTTON_KEY))(manage_users_handler)
     dp.message(I18nFilter("btn_my_id"))(text_get_id_handler)
-    # --------------------------------------
 
-    # FSM handlers
     dp.message(StateFilter(ManageUsersStates.waiting_for_user_id))(
         process_add_user_id)
-    # --- ИСПРАВЛЕНИЕ: Обновляем фильтр callback для новых ключей ---
+
     dp.callback_query(
         StateFilter(
             ManageUsersStates.waiting_for_group),
         F.data.startswith("set_group_new_"))(process_add_user_group)
-    # -----------------------------------------------------------
 
-    # Callback handlers
     dp.callback_query(F.data == "back_to_manage_users")(
         cq_back_to_manage_users)
     dp.callback_query(F.data == "get_id_inline")(cq_get_id_inline)
 
-    # Add
     dp.callback_query(F.data == "add_user")(cq_add_user_start)
 
-    # Delete
     dp.callback_query(F.data == "delete_user")(cq_delete_user_list)
     dp.callback_query(F.data.startswith("delete_user_"))(
         cq_delete_user_confirm)
@@ -77,19 +68,13 @@ def register_handlers(dp: Dispatcher):
     dp.callback_query(F.data == "back_to_delete_users")(
         cq_back_to_delete_users)
 
-    # Change Group
     dp.callback_query(F.data == "change_group")(cq_change_group_list)
     dp.callback_query(F.data.startswith("select_user_change_group_"))(
         cq_select_user_for_group_change)
 
-    # Set Group (для существующих пользователей)
-    # --- ИСПРАВЛЕНИЕ: Обновляем фильтр callback для новых ключей ---
     dp.callback_query(StateFilter(None), F.data.startswith(
         "set_group_"))(cq_set_group_existing)
-    # -----------------------------------------------------------
 
-
-# --- Хэндлеры ---
 
 async def manage_users_handler(message: types.Message):
     user_id = message.from_user.id
@@ -100,16 +85,15 @@ async def manage_users_handler(message: types.Message):
         return
     await delete_previous_message(user_id, command, message.chat.id, message.bot)
 
-    # --- ИСПРАВЛЕНИЕ: Используем ключ group_key для перевода ---
     user_list_items = []
     sorted_users = sorted(
         ALLOWED_USERS.items(),
         key=lambda item: USER_NAMES.get(str(item[0]), f"ID: {item[0]}").lower()
     )
-    for uid, group_key in sorted_users:  # Используем group_key
+    for uid, group_key in sorted_users:
         if uid == ADMIN_USER_ID:
             continue
-        # Переводим группу по ключу
+
         group_display = _(
             "group_admins",
             lang) if group_key == "admins" else _(
@@ -118,7 +102,6 @@ async def manage_users_handler(message: types.Message):
         user_name = USER_NAMES.get(str(uid), f'ID: {uid}')
         user_list_items.append(f" • {user_name} (<b>{group_display}</b>)")
     user_list = "\n".join(user_list_items)
-    # --- КОНЕЦ ИСПРАВЛЕНИЯ ---
 
     if not user_list:
         user_list = _("users_list_empty", lang)
@@ -185,16 +168,16 @@ async def cq_back_to_manage_users(
     try:
         await state.clear()
 
-        # --- ИСПРАВЛЕНИЕ: Используем ключ group_key для перевода ---
         user_list_items = []
         sorted_users = sorted(
             ALLOWED_USERS.items(),
-            key=lambda item: USER_NAMES.get(str(item[0]), f"ID: {item[0]}").lower()
+            key=lambda item: USER_NAMES.get(
+                str(item[0]), f"ID: {item[0]}").lower()
         )
-        for uid, group_key in sorted_users:  # Используем group_key
+        for uid, group_key in sorted_users:
             if uid == ADMIN_USER_ID:
                 continue
-            # Переводим группу по ключу
+
             group_display = _(
                 "group_admins",
                 lang) if group_key == "admins" else _(
@@ -203,7 +186,6 @@ async def cq_back_to_manage_users(
             user_name = USER_NAMES.get(str(uid), f'ID: {uid}')
             user_list_items.append(f" • {user_name} (<b>{group_display}</b>)")
         user_list = "\n".join(user_list_items)
-        # --- КОНЕЦ ИСПРАВЛЕНИЯ ---
 
         if not user_list:
             user_list = _("users_list_empty", lang)
@@ -223,8 +205,6 @@ async def cq_back_to_manage_users(
     except Exception as e:
         logging.error(f"Ошибка в cq_back_to_manage_users: {e}")
         await callback.answer(_("error_unexpected", lang), show_alert=True)
-
-# --- Add User ---
 
 
 async def cq_add_user_start(callback: types.CallbackQuery, state: FSMContext):
@@ -260,7 +240,7 @@ async def process_add_user_id(message: types.Message, state: FSMContext):
 
         await state.update_data(new_user_id=new_user_id)
         prompt_text = _("users_add_group_prompt", lang)
-        # Клавиатура уже использует новые callback_data
+
         keyboard = get_group_selection_keyboard(lang)
 
         if original_question_msg_id:
@@ -286,15 +266,13 @@ async def process_add_user_id(message: types.Message, state: FSMContext):
         logging.error(f"Ошибка в process_add_user_id: {e}")
         await message.reply(_("error_unexpected", lang))
 
-# --- ИСПРАВЛЕНИЕ: Извлекаем ключ 'admins'/'users' и сохраняем его ---
-
 
 async def process_add_user_group(
         callback: types.CallbackQuery,
         state: FSMContext):
     lang = get_user_lang(callback.from_user.id)
     try:
-        # Получаем 'admins' или 'users'
+
         group_key = callback.data.split('_')[-1]
         if group_key not in ["admins", "users"]:
             raise ValueError(
@@ -306,21 +284,21 @@ async def process_add_user_group(
         if not new_user_id:
             raise ValueError(_("users_add_fsm_error", lang))
 
-        ALLOWED_USERS[new_user_id] = group_key  # Сохраняем ключ
-        # get_user_name сохранит имя в USER_NAMES и вызовет save_users()
+        ALLOWED_USERS[new_user_id] = group_key
+
         new_user_name = await get_user_name(callback.bot, new_user_id)
 
         logging.info(
             f"Админ {callback.from_user.id} добавил пользователя {new_user_name} ({new_user_id}) в группу '{group_key}'")
 
-        # Переводим ключ для отображения
         group_display = _(
             "group_admins",
             lang) if group_key == "admins" else _(
             "group_users",
             lang)
         await callback.message.edit_text(
-            _("users_add_success", lang, user_name=new_user_name, user_id=new_user_id, group=group_display),
+            _("users_add_success", lang, user_name=new_user_name,
+              user_id=new_user_id, group=group_display),
             parse_mode="HTML",
             reply_markup=get_back_keyboard(lang, "back_to_manage_users")
         )
@@ -334,9 +312,6 @@ async def process_add_user_group(
         )
     finally:
         await callback.answer()
-# --- КОНЕЦ ИСПРАВЛЕНИЯ ---
-
-# --- Delete User ---
 
 
 async def cq_delete_user_list(callback: types.CallbackQuery):
@@ -345,7 +320,7 @@ async def cq_delete_user_list(callback: types.CallbackQuery):
     if not is_allowed(user_id, "delete_user"):
         await callback.answer(_("access_denied_generic", lang), show_alert=True)
         return
-    # get_delete_users_keyboard уже исправлен для использования ключей
+
     keyboard = get_delete_users_keyboard(user_id)
     await callback.message.edit_text(
         _("users_delete_title", lang),
@@ -358,7 +333,7 @@ async def cq_delete_user_list(callback: types.CallbackQuery):
 async def cq_delete_user_confirm(callback: types.CallbackQuery):
     admin_id = callback.from_user.id
     lang = get_user_lang(admin_id)
-    # Права проверяются по callback.data, которая содержит ID, это ОК
+
     if not is_allowed(admin_id, callback.data):
         await callback.answer(_("access_denied_generic", lang), show_alert=True)
         return
@@ -376,16 +351,16 @@ async def cq_delete_user_confirm(callback: types.CallbackQuery):
         deleted_user_name = USER_NAMES.get(
             str(user_id_to_delete), f"ID: {user_id_to_delete}")
         deleted_group_key = ALLOWED_USERS.pop(
-            user_id_to_delete, "unknown")  # Используем ключ 'unknown'
+            user_id_to_delete, "unknown")
         USER_NAMES.pop(str(user_id_to_delete), None)
-        # Удаляем настройки уведомлений и языка для удаленного пользователя
+
         ALERTS_CONFIG.pop(user_id_to_delete, None)
         shared_state.USER_SETTINGS.pop(user_id_to_delete, None)
-        # Сохраняем все изменения
+
         save_users()
-        from core.utils import save_alerts_config  # Импорт здесь, чтобы избежать цикла
+        from core.utils import save_alerts_config
         save_alerts_config()
-        from core.i18n import save_user_settings  # Импорт здесь, чтобы избежать цикла
+        from core.i18n import save_user_settings
         save_user_settings()
 
         logging.info(
@@ -410,7 +385,7 @@ async def cq_delete_user_confirm(callback: types.CallbackQuery):
 async def cq_request_self_delete(callback: types.CallbackQuery):
     user_id = callback.from_user.id
     lang = get_user_lang(user_id)
-    # Права проверяются по callback.data, которая содержит ID, это ОК
+
     if not is_allowed(user_id, callback.data):
         await callback.answer(_("access_denied_generic", lang), show_alert=True)
         return
@@ -439,7 +414,7 @@ async def cq_request_self_delete(callback: types.CallbackQuery):
 async def cq_confirm_self_delete(callback: types.CallbackQuery):
     user_id = callback.from_user.id
     lang = get_user_lang(user_id)
-    # Права проверяются по callback.data, которая содержит ID, это ОК
+
     if not is_allowed(user_id, callback.data):
         await callback.answer(_("access_denied_generic", lang), show_alert=True)
         return
@@ -456,10 +431,10 @@ async def cq_confirm_self_delete(callback: types.CallbackQuery):
             str(user_id_to_delete), f"ID: {user_id_to_delete}")
         deleted_group_key = ALLOWED_USERS.pop(user_id_to_delete, "unknown")
         USER_NAMES.pop(str(user_id_to_delete), None)
-        # Удаляем настройки уведомлений и языка
+
         ALERTS_CONFIG.pop(user_id_to_delete, None)
         shared_state.USER_SETTINGS.pop(user_id_to_delete, None)
-        # Сохраняем
+
         save_users()
         from core.utils import save_alerts_config
         save_alerts_config()
@@ -480,8 +455,6 @@ async def cq_confirm_self_delete(callback: types.CallbackQuery):
 async def cq_back_to_delete_users(callback: types.CallbackQuery):
     await cq_delete_user_list(callback)
 
-# --- Change Group ---
-
 
 async def cq_change_group_list(callback: types.CallbackQuery):
     user_id = callback.from_user.id
@@ -489,7 +462,7 @@ async def cq_change_group_list(callback: types.CallbackQuery):
     if not is_allowed(user_id, "change_group"):
         await callback.answer(_("access_denied_generic", lang), show_alert=True)
         return
-    # get_change_group_keyboard уже исправлен для использования ключей
+
     keyboard = get_change_group_keyboard(user_id)
     await callback.message.edit_text(
         _("users_change_group_title", lang),
@@ -502,7 +475,7 @@ async def cq_change_group_list(callback: types.CallbackQuery):
 async def cq_select_user_for_group_change(callback: types.CallbackQuery):
     user_id = callback.from_user.id
     lang = get_user_lang(user_id)
-    # Права проверяются по callback.data, которая содержит ID, это ОК
+
     if not is_allowed(user_id, callback.data):
         await callback.answer(_("access_denied_generic", lang), show_alert=True)
         return
@@ -515,19 +488,19 @@ async def cq_select_user_for_group_change(callback: types.CallbackQuery):
         user_name = USER_NAMES.get(
             str(user_id_to_change),
             f"ID: {user_id_to_change}")
-        # Получаем ключ 'admins' или 'users'
+
         current_group_key = ALLOWED_USERS[user_id_to_change]
-        # Переводим ключ для отображения
+
         current_group_display = _(
             "group_admins",
             lang) if current_group_key == "admins" else _(
             "group_users",
             lang)
 
-        # Клавиатура уже использует новые callback_data
         keyboard = get_group_selection_keyboard(lang, user_id_to_change)
         await callback.message.edit_text(
-            _("users_change_group_prompt", lang, user_name=user_name, group=current_group_display),
+            _("users_change_group_prompt", lang,
+              user_name=user_name, group=current_group_display),
             reply_markup=keyboard,
             parse_mode="HTML"
         )
@@ -536,15 +509,13 @@ async def cq_select_user_for_group_change(callback: types.CallbackQuery):
         logging.error(f"Ошибка в cq_select_user_for_group_change: {e}")
         await callback.answer(_("error_unexpected", lang), show_alert=True)
 
-# --- ИСПРАВЛЕНИЕ: Извлекаем ключ 'admins'/'users' и сохраняем его ---
-
 
 async def cq_set_group_existing(
         callback: types.CallbackQuery,
         state: FSMContext):
     admin_id = callback.from_user.id
     lang = get_user_lang(admin_id)
-    # Права проверяются по callback.data, это ОК
+
     if not is_allowed(admin_id, callback.data):
         await callback.answer(_("access_denied_generic", lang), show_alert=True)
         return
@@ -559,7 +530,7 @@ async def cq_set_group_existing(
             return
 
         user_id_to_change = int(parts[2])
-        new_group_key = parts[3]  # Получаем 'admins' или 'users'
+        new_group_key = parts[3]
         if new_group_key not in ["admins", "users"]:
             raise ValueError(
                 f"Неверный ключ группы в callback_data: {new_group_key}")
@@ -569,7 +540,7 @@ async def cq_set_group_existing(
             return
 
         old_group_key = ALLOWED_USERS[user_id_to_change]
-        ALLOWED_USERS[user_id_to_change] = new_group_key  # Сохраняем ключ
+        ALLOWED_USERS[user_id_to_change] = new_group_key
         save_users()
         user_name = USER_NAMES.get(
             str(user_id_to_change),
@@ -577,9 +548,8 @@ async def cq_set_group_existing(
         logging.info(
             f"Админ {admin_id} изменил группу для {user_name} ({user_id_to_change}) с '{old_group_key}' на '{new_group_key}'")
 
-        # get_change_group_keyboard уже исправлен для отображения по ключам
         keyboard = get_change_group_keyboard(admin_id)
-        # Переводим новый ключ для отображения
+
         new_group_display = _(
             "group_admins",
             lang) if new_group_key == "admins" else _(
@@ -587,7 +557,8 @@ async def cq_set_group_existing(
             lang)
 
         await callback.message.edit_text(
-            _("users_change_group_success_text", lang, user_name=user_name, group=new_group_display),
+            _("users_change_group_success_text", lang,
+              user_name=user_name, group=new_group_display),
             reply_markup=keyboard,
             parse_mode="HTML"
         )
@@ -600,4 +571,3 @@ async def cq_set_group_existing(
     except Exception as e:
         logging.error(f"Ошибка в cq_set_group_existing: {e}")
         await callback.answer(_("error_unexpected", lang), show_alert=True)
-# --- КОНЕЦ ИСПРАВЛЕНИЯ ---

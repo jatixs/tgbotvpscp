@@ -95,7 +95,7 @@
   | ![Web 3](assets/web_3.png) | ![Web 4](assets/web_4.png) |
   | **Настройки** | **Безопасность** |
   | ![Web 5](assets/web_5.png) | ![Web 6](assets/web_6.png) |
-  
+
   <p align="center">
     <b>📱 Светлая тема / Языки</b><br>
     <img src="assets/web_7.png" width="60%">

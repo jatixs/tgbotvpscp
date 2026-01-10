@@ -6,19 +6,11 @@ import os
 import sys
 import subprocess
 import random
-import re 
+import re
+import hmac
+import hashlib
+import json
 
-# Настройка логирования
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.FileHandler("/opt/tg-bot/logs/node/node.log"),
-        logging.StreamHandler()
-    ]
-)
-
-# Загрузка конфигурации
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 ENV_FILE = os.path.join(BASE_DIR, '.env')
 
@@ -35,6 +27,41 @@ def load_config():
     return config
 
 CONF = load_config()
+DEBUG_MODE = CONF.get("DEBUG", "false").lower() == "true"
+
+class RedactingFormatter(logging.Formatter):
+    def format(self, record):
+        msg = super().format(record)
+        if DEBUG_MODE:
+            return msg
+        
+        # 1. Tokens
+        msg = re.sub(r'\b[a-fA-F0-9]{32,64}\b', '[TOKEN_REDACTED]', msg)
+        # 2. IPs
+        msg = re.sub(r'\b(?!(?:127\.0\.0\.1|0\.0\.0\.0|localhost))(?:\d{1,3}\.){3}\d{1,3}\b', '[IP_REDACTED]', msg)
+        # 3. IDs (System/Agent logs might contain IDs)
+        msg = re.sub(r'\b(id|user_id|chat_id|user)=(\d+)\b', r'\1=[ID_REDACTED]', msg)
+        # 4. Usernames (rare in node, but consistent)
+        msg = re.sub(r'@[\w_]{5,}', '@[USERNAME_REDACTED]', msg)
+        
+        return msg
+
+logger = logging.getLogger()
+logger.setLevel(logging.DEBUG if DEBUG_MODE else logging.INFO)
+
+file_handler = logging.FileHandler("/opt/tg-bot/logs/node/node.log")
+stream_handler = logging.StreamHandler()
+
+formatter = RedactingFormatter('%(asctime)s - %(levelname)s - %(message)s')
+file_handler.setFormatter(formatter)
+stream_handler.setFormatter(formatter)
+
+if logger.hasHandlers():
+    logger.handlers.clear()
+
+logger.addHandler(file_handler)
+logger.addHandler(stream_handler)
+
 AGENT_BASE_URL = CONF.get("AGENT_BASE_URL")
 AGENT_TOKEN = CONF.get("AGENT_TOKEN")
 UPDATE_INTERVAL = int(CONF.get("NODE_UPDATE_INTERVAL", 5))
@@ -43,24 +70,20 @@ if not AGENT_BASE_URL or not AGENT_TOKEN:
     logging.error("CRITICAL: AGENT_BASE_URL or AGENT_TOKEN not found in .env")
     sys.exit(1)
 
-# Хранилище результатов и состояний
 PENDING_RESULTS = []
 LAST_TRAFFIC_STATS = {}
 
-# [FIX] Глобальные переменные для IP. По умолчанию None, чтобы сервер мог определить сам.
 EXTERNAL_IP_CACHE = None 
 LAST_IP_CHECK = 0
-IP_CHECK_INTERVAL = 300  # Проверять раз в 5 минут
+IP_CHECK_INTERVAL = 300 
 
 def get_external_ip():
     global EXTERNAL_IP_CACHE, LAST_IP_CHECK
     now = time.time()
     
-    # Если IP уже есть и он свежий, возвращаем его
     if EXTERNAL_IP_CACHE and (now - LAST_IP_CHECK < IP_CHECK_INTERVAL):
         return EXTERNAL_IP_CACHE
 
-    # 1. Пробуем через requests (Python)
     services = [
         "https://api.ipify.org",
         "https://ifconfig.me/ip",
@@ -77,14 +100,12 @@ def get_external_ip():
                 if re.match(r"^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$", ip):
                     EXTERNAL_IP_CACHE = ip
                     LAST_IP_CHECK = now
-                    logging.info(f"External IP updated (requests): {ip}")
+                    logging.info(f"External IP updated: {ip}")
                     return ip
         except Exception:
             continue
     
-    # 2. Если requests не справился, пробуем системный curl (надежнее)
     try:
-        # -4 принудительно IPv4, -s тихо, --max-time 5 таймаут
         res = subprocess.check_output("curl -4 -s --max-time 5 ifconfig.me", shell=True).decode().strip()
         if re.match(r"^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$", res):
             EXTERNAL_IP_CACHE = res
@@ -94,12 +115,9 @@ def get_external_ip():
     except Exception:
         pass
 
-    # 3. Если ничего не вышло - возвращаем None.
-    # Сервер сам определит IP по входящему соединению.
     logging.warning("Could not determine external IP locally. Delegating to Agent Server.")
     return None
 
-# --- УТИЛИТЫ ДЛЯ ФОРМАТИРОВАНИЯ ---
 def format_uptime_simple(seconds):
     seconds = int(seconds)
     d, s = divmod(seconds, 86400)
@@ -119,7 +137,6 @@ def format_bytes_simple(bytes_value):
         value /= 1024
         unit_index += 1
     return f"{value:.2f} {units[unit_index]}"
-# -----------------------------------
 
 def parse_iperf_speed(output: str, direction: str) -> float:
     for line in reversed(output.splitlines()):
@@ -231,7 +248,7 @@ def execute_command(task):
                 if dt > 0:
                     rx_speed = (net.bytes_recv - prev_rx) * 8 / (1024 * 1024) / dt
                     tx_speed = (net.bytes_sent - prev_tx) * 8 / (1024 * 1024) / dt
-                    speed_info = f"\n\n⚡️ <b>Скорость:</b>\n⬇️ {rx_speed:.2f} Mbit/s\n⬆️ {tx_speed:.2f} Mbit/s"
+                    speed_info = f"\n\n⚡️ <b>Speed:</b>\n⬇️ {rx_speed:.2f} Mbit/s\n⬆️ {tx_speed:.2f} Mbit/s"
 
             LAST_TRAFFIC_STATS = {
                 'rx': net.bytes_recv,
@@ -254,11 +271,9 @@ def execute_command(task):
 
         elif cmd == "selftest":
             stats = get_system_stats()
-            
             try:
                 ext_ip = stats.get("external_ip")
                 if not ext_ip:
-                     # Если локально не определили, пробуем curl один раз для отчета
                      ext_ip = subprocess.check_output("curl -4 -s --max-time 2 ifconfig.me", shell=True).decode().strip()
             except Exception:
                 ext_ip = "N/A"
@@ -367,14 +382,25 @@ def execute_command(task):
 def send_heartbeat():
     global PENDING_RESULTS
     url = f"{AGENT_BASE_URL}/api/heartbeat"
-    payload = {
+    
+    payload_dict = {
         "token": AGENT_TOKEN,
         "stats": get_system_stats(),
-        "results": PENDING_RESULTS
+        "results": PENDING_RESULTS,
+        "timestamp": int(time.time())
+    }
+    
+    payload_bytes = json.dumps(payload_dict, sort_keys=True).encode('utf-8')
+    
+    signature = hmac.new(AGENT_TOKEN.encode(), payload_bytes, hashlib.sha256).hexdigest()
+    
+    headers = {
+        "Content-Type": "application/json",
+        "X-Signature": signature
     }
 
     try:
-        response = requests.post(url, json=payload, timeout=5)
+        response = requests.post(url, data=payload_bytes, headers=headers, timeout=5)
         if response.status_code == 200:
             data = response.json()
             PENDING_RESULTS = []
@@ -383,14 +409,13 @@ def send_heartbeat():
             for task in tasks:
                 execute_command(task)
         else:
-            logging.warning(f"Server returned status: {response.status_code}")
+            logging.warning(f"Server returned status: {response.status_code} {response.text}")
     except Exception as e:
         logging.error(f"Connection error: {e}")
 
 def main():
-    logging.info(f"Node Agent started. Target: {AGENT_BASE_URL}")
+    logging.info(f"Node Agent started. Target: {AGENT_BASE_URL}. Mode: {'DEBUG' if DEBUG_MODE else 'RELEASE'}")
     psutil.cpu_percent(interval=None)
-    # Инициализация IP
     get_external_ip()
 
     while True:
