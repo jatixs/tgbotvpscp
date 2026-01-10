@@ -4,38 +4,41 @@ import argparse
 import sys
 import os
 import logging
+base_dir = os.path.dirname(os.path.abspath(__file__))
+sys.path.append(base_dir)
+env_file = os.path.join(base_dir, ".env")
 
-# Настраиваем путь к модулям проекта
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
-
-# Настройка простого логгера для вывода
+if os.path.exists(env_file):
+    try:
+        with open(env_file, "r") as f:
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith("#") and "=" in line:
+                    key, val = line.split("=", 1)
+                    # setdefault чтобы не перезаписать системные переменные, если они уже есть
+                    os.environ.setdefault(key, val.strip('"').strip("'"))
+    except Exception as e:
+        print(f"⚠️ Ошибка чтения .env: {e}")
 logging.basicConfig(format='%(message)s', level=logging.INFO)
 
 from tortoise import Tortoise
 from core import config, auth, models, utils
 from core.nodes_db import init_db
 
-# --- Вспомогательные функции ---
-
 async def init_services():
-    """Инициализация конфигурации и БД"""
-    # Загружаем .env, если не загружен
-    if not config.TOKEN: 
-        # Это простой способ триггернуть загрузку переменных в config.py
-        pass
+    """Инициализация БД"""
     await init_db()
 
 async def close_services():
     """Закрытие соединений"""
     await Tortoise.close_connections()
 
-# --- Реализация команд ---
 
 async def cmd_adduser(args):
     print(f"🔧 Добавление администратора...")
-    auth.load_users() # Загружаем текущий список
+    auth.load_users()
+    # Предполагаем, что add_user работает с текущим хранилищем (JSON или БД)
     if auth.add_user(args.id, "admins", args.name):
-        # Если используется JSON, сохраняем принудительно (если в add_user нет автосохранения)
         if hasattr(auth, 'save_users'):
             auth.save_users()
         print(f"✅ Администратор {args.name} (ID: {args.id}) добавлен.")
@@ -65,7 +68,6 @@ async def cmd_stats(args):
 
 async def cmd_cleanlogs(args):
     log_dirs = ["logs/bot", "logs/watchdog", "logs/node"]
-    base_dir = os.path.dirname(os.path.abspath(__file__))
     print("🧹 Очистка логов...")
     count = 0
     for d in log_dirs:
@@ -83,22 +85,15 @@ async def cmd_cleanlogs(args):
 
 async def cmd_restart(args):
     print("♻️  Перезапуск службы бота...")
-    # Определяем, как запущен бот (Docker или Systemd) по .env
-    is_docker = False
-    try:
-        with open(os.path.join(os.path.dirname(__file__), ".env")) as f:
-            if "DEPLOY_MODE=\"docker\"" in f.read() or "DEPLOY_MODE=docker" in f.read():
-                is_docker = True
-    except:
-        pass
-
+    is_docker = os.environ.get("DEPLOY_MODE") == "docker"
+    
     if is_docker:
-        os.system("docker compose restart")
+        # Для Docker нужно знать имя контейнера или использовать docker compose
+        os.system("docker compose restart") # Запуск из папки проекта должен сработать
     else:
         os.system("sudo systemctl restart tg-bot")
     print("✅ Команда отправлена.")
 
-# --- MAIN ---
 
 def main():
     parser = argparse.ArgumentParser(
@@ -129,11 +124,9 @@ def main():
 
     args = parser.parse_args()
 
-    # === ВОТ ЗДЕСЬ РЕАЛИЗУЕТСЯ ВАШЕ ТРЕБОВАНИЕ ===
     if not args.command:
         parser.print_help()
         return
-    # =============================================
 
     try:
         if args.command == "adduser":

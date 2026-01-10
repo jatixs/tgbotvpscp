@@ -493,19 +493,31 @@ install_systemd_logic() {
     # --- CLI UTILS ---
     msg_info "Создание команды 'tgcp-bot'..."
     if [ ! -f "${BOT_INSTALL_PATH}/manage.py" ]; then
-       # Если файла manage.py нет в репозитории (вы его не пушили), он не появится сам.
-       # Но создадим обертку в расчете, что вы его добавили.
+       # Если файла manage.py нет, просто создаем заглушку, но мы его уже создали ранее
        true
     else
        chmod +x "${BOT_INSTALL_PATH}/manage.py"
     fi
     
+    # FIX: Добавлено чтение .env перед запуском
     sudo bash -c "cat > /usr/local/bin/tgcp-bot" <<EOF
 #!/bin/bash
 cd ${BOT_INSTALL_PATH}
+if [ -f .env ]; then
+  set -a
+  source .env
+  set +a
+fi
 ${VENV_PATH}/bin/python manage.py "\$@"
 EOF
     sudo chmod +x /usr/local/bin/tgcp-bot
+
+    # Проверка создания
+    if [ -f "/usr/local/bin/tgcp-bot" ] && [ -x "/usr/local/bin/tgcp-bot" ]; then
+        msg_success "Команда 'tgcp-bot' успешно создана!"
+    else
+        msg_error "Не удалось создать команду 'tgcp-bot'."
+    fi
 
     local ip=$(curl -s ipinfo.io/ip)
     echo ""; msg_success "Установка завершена! Агент доступен: http://${ip}:${WEB_PORT}"
@@ -552,17 +564,23 @@ install_docker_logic() {
     sudo $dc_cmd --profile "${mode}" exec -T ${container_name} python migrate.py >/dev/null 2>&1
     
     # --- CLI UTILS ---
-    # Для докера CLI будет работать, только если manage.py тоже запускать через docker exec
     msg_info "Создание команды 'tgcp-bot' (Docker Wrapper)..."
+    # FIX: Передаем переменные, но в Docker они уже в контейнере
     sudo bash -c "cat > /usr/local/bin/tgcp-bot" <<EOF
 #!/bin/bash
 cd ${BOT_INSTALL_PATH}
-# Определяем, какой контейнер запущен (root или secure) по .env
 MODE=\$(grep '^INSTALL_MODE=' .env | cut -d'=' -f2 | tr -d '"')
 CONTAINER="tg-bot-\$MODE"
 sudo $dc_cmd --profile "\$MODE" exec -T \$CONTAINER python manage.py "\$@"
 EOF
     sudo chmod +x /usr/local/bin/tgcp-bot
+
+    # Проверка создания
+    if [ -f "/usr/local/bin/tgcp-bot" ] && [ -x "/usr/local/bin/tgcp-bot" ]; then
+        msg_success "Команда 'tgcp-bot' (Docker) успешно создана!"
+    else
+        msg_error "Не удалось создать команду 'tgcp-bot'."
+    fi
 
     msg_success "Установка Docker завершена!"
     echo -e "💡 Используйте команду ${C_BOLD}tgcp-bot${C_RESET} для управления."
@@ -663,6 +681,7 @@ update_bot() {
             sudo $dc_cmd --profile "${mode}" exec -T ${cn} python migrate.py >/dev/null 2>&1
             
             # Обновление CLI wrapper для докера (на всякий случай)
+            msg_info "Обновление CLI 'tgcp-bot'..."
             sudo bash -c "cat > /usr/local/bin/tgcp-bot" <<EOF
 #!/bin/bash
 cd ${BOT_INSTALL_PATH}
@@ -671,6 +690,11 @@ CONTAINER="tg-bot-\$MODE"
 sudo $dc_cmd --profile "\$MODE" exec -T \$CONTAINER python manage.py "\$@"
 EOF
             sudo chmod +x /usr/local/bin/tgcp-bot
+            
+            # Проверка создания
+            if [ -f "/usr/local/bin/tgcp-bot" ] && [ -x "/usr/local/bin/tgcp-bot" ]; then
+                msg_success "CLI 'tgcp-bot' обновлен."
+            fi
 
         else msg_error "Нет docker-compose.yml"; return 1; fi
     else
@@ -679,12 +703,24 @@ EOF
         run_with_spinner "Миграция БД и JSON" run_db_migrations "$exec_cmd"
         
         # Обновление CLI wrapper для systemd
+        msg_info "Обновление CLI 'tgcp-bot'..."
+        # FIX: Добавлено чтение .env
         sudo bash -c "cat > /usr/local/bin/tgcp-bot" <<EOF
 #!/bin/bash
 cd ${BOT_INSTALL_PATH}
+if [ -f .env ]; then
+  set -a
+  source .env
+  set +a
+fi
 ${VENV_PATH}/bin/python manage.py "\$@"
 EOF
         sudo chmod +x /usr/local/bin/tgcp-bot
+        
+        # Проверка создания
+        if [ -f "/usr/local/bin/tgcp-bot" ] && [ -x "/usr/local/bin/tgcp-bot" ]; then
+            msg_success "CLI 'tgcp-bot' обновлен."
+        fi
 
         if systemctl list-unit-files | grep -q "^${SERVICE_NAME}.service"; then sudo systemctl restart ${SERVICE_NAME}; fi
         if systemctl list-unit-files | grep -q "^${WATCHDOG_SERVICE_NAME}.service"; then sudo systemctl restart ${WATCHDOG_SERVICE_NAME}; fi
