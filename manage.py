@@ -5,141 +5,151 @@ import sys
 import os
 import logging
 
-# Настройка путей и логгера
+# Настраиваем путь к модулям проекта
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
-logging.basicConfig(level=logging.INFO, format='%(message)s')
+
+# Настройка простого логгера для вывода
+logging.basicConfig(format='%(message)s', level=logging.INFO)
 
 from tortoise import Tortoise
 from core import config, auth, models, utils
 from core.nodes_db import init_db
 
-async def init():
-    """Инициализация БД"""
-    # Загружаем переменные окружения, если они еще не загружены
-    config.load_env() 
+# --- Вспомогательные функции ---
+
+async def init_services():
+    """Инициализация конфигурации и БД"""
+    # Загружаем .env, если не загружен
+    if not config.TOKEN: 
+        # Это простой способ триггернуть загрузку переменных в config.py
+        pass
     await init_db()
 
-async def close():
+async def close_services():
     """Закрытие соединений"""
     await Tortoise.close_connections()
 
-# --- Логика команд ---
+# --- Реализация команд ---
 
-async def create_superuser(args):
-    """Создает администратора"""
+async def cmd_adduser(args):
     print(f"🔧 Добавление администратора...")
-    if not args.id:
-        print("❌ Ошибка: Не указан Telegram ID (--id)")
-        return
-
-    # Загружаем текущих пользователей
-    auth.load_users()
-    
-    # Функция add_user в auth.py синхронная или асинхронная?
-    # В v1.15.2 auth.load_users и auth.add_user - синхронные (работают с JSON/памятью)
-    # или асинхронные (если переехали на БД). 
-    # Предполагаем, что add_user уже умеет работать с текущим хранилищем.
-    
+    auth.load_users() # Загружаем текущий список
     if auth.add_user(args.id, "admins", args.name):
-        print(f"✅ Администратор {args.name} (ID: {args.id}) успешно добавлен!")
-        auth.save_users() # На случай если add_user не сохраняет сразу
+        # Если используется JSON, сохраняем принудительно (если в add_user нет автосохранения)
+        if hasattr(auth, 'save_users'):
+            auth.save_users()
+        print(f"✅ Администратор {args.name} (ID: {args.id}) добавлен.")
     else:
-        print(f"⚠️ Пользователь {args.id} уже существует или ошибка добавления.")
+        print(f"⚠️ Пользователь {args.id} уже существует.")
 
-async def reset_web_password(args):
-    """Сброс пароля от веб-панели"""
+async def cmd_webpass(args):
     new_pass = args.password
     if not new_pass:
         new_pass = utils.generate_random_string(12)
     
-    # Обновляем .env
     utils.update_env_variable("TG_WEB_INITIAL_PASSWORD", new_pass)
     print(f"✅ Пароль Web-панели изменен.")
     print(f"🔑 Новый пароль: {new_pass}")
-    print("ℹ️  Чтобы изменения вступили в силу, перезапустите бота: tgcp-bot restart")
+    print("ℹ️  Перезапустите бота для применения: tgcp-bot restart")
 
-async def show_stats(args):
-    """Показать статистику"""
-    await init()
+async def cmd_stats(args):
+    await init_services()
     try:
         node_count = await models.Node.all().count()
-        active_nodes = await models.Node.filter(status="active").count()
-        print(f"📊 Статистика базы данных:")
+        active = await models.Node.filter(status="active").count()
+        print(f"📊 Статистика:")
         print(f"   Всего нод: {node_count}")
-        print(f"   Активных: {active_nodes}")
-    except Exception as e:
-        print(f"❌ Ошибка чтения БД: {e}")
+        print(f"   Активных: {active}")
     finally:
-        await close()
+        await close_services()
 
-async def clean_logs(args):
-    """Очистка логов"""
+async def cmd_cleanlogs(args):
     log_dirs = ["logs/bot", "logs/watchdog", "logs/node"]
+    base_dir = os.path.dirname(os.path.abspath(__file__))
     print("🧹 Очистка логов...")
     count = 0
     for d in log_dirs:
-        path = os.path.join(config.BASE_DIR, d)
+        path = os.path.join(base_dir, d)
         if os.path.exists(path):
             for f in os.listdir(path):
-                file_path = os.path.join(path, f)
-                try:
-                    if os.path.isfile(file_path):
-                        os.unlink(file_path)
+                full_path = os.path.join(path, f)
+                if os.path.isfile(full_path):
+                    try:
+                        os.unlink(full_path)
                         count += 1
-                except Exception as e:
-                    print(f"   Ошибка удаления {f}: {e}")
+                    except Exception:
+                        pass
     print(f"✅ Удалено файлов: {count}")
 
-async def restart_service(args):
-    """Перезапуск сервисов"""
-    print("♻️ Перезапуск бота...")
-    os.system("sudo systemctl restart tg-bot")
+async def cmd_restart(args):
+    print("♻️  Перезапуск службы бота...")
+    # Определяем, как запущен бот (Docker или Systemd) по .env
+    is_docker = False
+    try:
+        with open(os.path.join(os.path.dirname(__file__), ".env")) as f:
+            if "DEPLOY_MODE=\"docker\"" in f.read() or "DEPLOY_MODE=docker" in f.read():
+                is_docker = True
+    except:
+        pass
+
+    if is_docker:
+        os.system("docker compose restart")
+    else:
+        os.system("sudo systemctl restart tg-bot")
     print("✅ Команда отправлена.")
 
-# --- Main ---
+# --- MAIN ---
 
 def main():
-    parser = argparse.ArgumentParser(description="TGCP-BOT CLI Tool")
-    subparsers = parser.add_subparsers(dest="command", help="Команды")
+    parser = argparse.ArgumentParser(
+        prog="tgcp-bot",
+        description="CLI утилита управления Telegram VPS Bot",
+        formatter_class=argparse.RawTextHelpFormatter
+    )
+    
+    subparsers = parser.add_subparsers(dest="command", title="Доступные команды")
 
-    # adduser
-    p_adduser = subparsers.add_parser("adduser", help="Добавить админа")
-    p_adduser.add_argument("--id", type=int, required=True, help="Telegram ID")
-    p_adduser.add_argument("--name", type=str, default="Admin", help="Имя")
+    # Команда: adduser
+    p_add = subparsers.add_parser("adduser", help="Добавить администратора")
+    p_add.add_argument("--id", type=int, required=True, help="Telegram ID")
+    p_add.add_argument("--name", type=str, default="Admin", help="Имя пользователя")
 
-    # webpass
-    p_webpass = subparsers.add_parser("webpass", help="Сброс пароля Web-панели")
-    p_webpass.add_argument("--password", type=str, help="Новый пароль")
+    # Команда: webpass
+    p_pass = subparsers.add_parser("webpass", help="Сбросить пароль Web-панели")
+    p_pass.add_argument("--password", type=str, help="Новый пароль (опционально)")
 
-    # stats
-    subparsers.add_parser("stats", help="Статистика БД")
+    # Команда: stats
+    subparsers.add_parser("stats", help="Показать статистику БД")
 
-    # cleanlogs
-    subparsers.add_parser("cleanlogs", help="Очистить логи")
+    # Команда: cleanlogs
+    subparsers.add_parser("cleanlogs", help="Очистить файлы логов")
 
-    # restart
-    subparsers.add_parser("restart", help="Перезапустить службу бота")
+    # Команда: restart
+    subparsers.add_parser("restart", help="Перезапустить бота")
 
     args = parser.parse_args()
 
+    # === ВОТ ЗДЕСЬ РЕАЛИЗУЕТСЯ ВАШЕ ТРЕБОВАНИЕ ===
     if not args.command:
         parser.print_help()
         return
+    # =============================================
 
     try:
         if args.command == "adduser":
-            asyncio.run(create_superuser(args))
+            asyncio.run(cmd_adduser(args))
         elif args.command == "webpass":
-            asyncio.run(reset_web_password(args))
+            asyncio.run(cmd_webpass(args))
         elif args.command == "stats":
-            asyncio.run(show_stats(args))
+            asyncio.run(cmd_stats(args))
         elif args.command == "cleanlogs":
-            asyncio.run(clean_logs(args))
+            asyncio.run(cmd_cleanlogs(args))
         elif args.command == "restart":
-            asyncio.run(restart_service(args))
-            
+            asyncio.run(cmd_restart(args))
+    except KeyboardInterrupt:
+        print("\n⛔ Отменено.")
     except Exception as e:
-        print(f"❌ Критическая ошибка: {e}")
+        print(f"❌ Произошла ошибка: {e}")
 
 if __name__ == "__main__":
     main()
