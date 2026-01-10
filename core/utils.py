@@ -318,3 +318,43 @@ def get_app_version() -> str:
     except Exception:
         pass
     return "v1.0.0"
+
+
+def update_env_variable(key: str, value: str, env_path: str = None):
+    """
+    Обновляет или добавляет переменную в .env файл.
+    Используется CLI утилитой.
+    """
+    if env_path is None:
+        try:
+            from core import config
+            env_path = config.ENV_FILE_PATH
+        except ImportError:
+            # Фолбек, если конфиг еще не загружен или вызов извне
+            env_path = "/opt/tg-bot/.env"
+
+    if not os.path.exists(env_path):
+        return
+
+    try:
+        with open(env_path, "r") as f:
+            lines = f.readlines()
+
+        new_lines = []
+        found = False
+        value_str = str(value).replace('"', '\\"')
+        
+        for line in lines:
+            if line.strip().startswith(f"{key}="):
+                new_lines.append(f'{key}="{value_str}"\n')
+                found = True
+            else:
+                new_lines.append(line)
+        
+        if not found:
+            new_lines.append(f'{key}="{value_str}"\n')
+
+        with open(env_path, "w") as f:
+            f.writelines(new_lines)
+    except Exception as e:
+        logging.error(f"Error updating env variable {key}: {e}")

@@ -243,6 +243,8 @@ cleanup_files() {
 
     # Очистка кэша Python (__pycache__), чтобы освободить место
     sudo find "$BOT_INSTALL_PATH" -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null
+    
+    # ВАЖНО: deploy.sh и deploy_en.sh НЕ удаляем, они нужны для меню управления.
 
     msg_success "Очистка завершена."
 }
@@ -488,8 +490,26 @@ install_systemd_logic() {
     create_and_start_service "${WATCHDOG_SERVICE_NAME}" "${BOT_INSTALL_PATH}/watchdog.py" "root" "Наблюдатель"
     cleanup_agent_files
 
+    # --- CLI UTILS ---
+    msg_info "Создание команды 'tgcp-bot'..."
+    if [ ! -f "${BOT_INSTALL_PATH}/manage.py" ]; then
+       # Если файла manage.py нет в репозитории (вы его не пушили), он не появится сам.
+       # Но создадим обертку в расчете, что вы его добавили.
+       true
+    else
+       chmod +x "${BOT_INSTALL_PATH}/manage.py"
+    fi
+    
+    sudo bash -c "cat > /usr/local/bin/tgcp-bot" <<EOF
+#!/bin/bash
+cd ${BOT_INSTALL_PATH}
+${VENV_PATH}/bin/python manage.py "\$@"
+EOF
+    sudo chmod +x /usr/local/bin/tgcp-bot
+
     local ip=$(curl -s ipinfo.io/ip)
     echo ""; msg_success "Установка завершена! Агент доступен: http://${ip}:${WEB_PORT}"
+    echo -e "💡 Используйте команду ${C_BOLD}tgcp-bot${C_RESET} для управления (сброс пароля и др.)."
 
     if [ "${ENABLE_WEB}" == "true" ]; then
         echo -e "${C_CYAN}🔑 ВАШ ПАРОЛЬ ОТ WEB-ПАНЕЛИ: ${C_BOLD}${GEN_PASS}${C_RESET}"
@@ -527,11 +547,25 @@ install_docker_logic() {
     sudo $dc_cmd --profile "${mode}" exec -T ${container_name} aerich init-db >/dev/null 2>&1
     sudo $dc_cmd --profile "${mode}" exec -T ${container_name} aerich upgrade >/dev/null 2>&1
 
-    # Миграция JSON (ДОБАВЛЕНО)
+    # Миграция JSON
     msg_info "Миграция JSON файлов в контейнере..."
     sudo $dc_cmd --profile "${mode}" exec -T ${container_name} python migrate.py >/dev/null 2>&1
+    
+    # --- CLI UTILS ---
+    # Для докера CLI будет работать, только если manage.py тоже запускать через docker exec
+    msg_info "Создание команды 'tgcp-bot' (Docker Wrapper)..."
+    sudo bash -c "cat > /usr/local/bin/tgcp-bot" <<EOF
+#!/bin/bash
+cd ${BOT_INSTALL_PATH}
+# Определяем, какой контейнер запущен (root или secure) по .env
+MODE=\$(grep '^INSTALL_MODE=' .env | cut -d'=' -f2 | tr -d '"')
+CONTAINER="tg-bot-\$MODE"
+sudo $dc_cmd --profile "\$MODE" exec -T \$CONTAINER python manage.py "\$@"
+EOF
+    sudo chmod +x /usr/local/bin/tgcp-bot
 
     msg_success "Установка Docker завершена!"
+    echo -e "💡 Используйте команду ${C_BOLD}tgcp-bot${C_RESET} для управления."
 
     if [ "${ENABLE_WEB}" == "true" ]; then
         echo -e "${C_CYAN}🔑 ВАШ ПАРОЛЬ ОТ WEB-ПАНЕЛИ: ${C_BOLD}${GEN_PASS}${C_RESET}"
@@ -595,6 +629,9 @@ uninstall_bot() {
     sudo systemctl daemon-reload
     if [ -f "${DOCKER_COMPOSE_FILE}" ]; then cd ${BOT_INSTALL_PATH} && sudo docker-compose down -v --remove-orphans &> /dev/null; fi
     sudo rm -rf "${BOT_INSTALL_PATH}"
+    # Удаляем CLI утилиту
+    sudo rm -f /usr/local/bin/tgcp-bot
+    
     if id "${SERVICE_USER}" &>/dev/null; then sudo userdel -r "${SERVICE_USER}" &> /dev/null; fi
     msg_success "Удалено."
 }
@@ -624,11 +661,30 @@ update_bot() {
 
             msg_info "Миграция JSON файлов в Docker..."
             sudo $dc_cmd --profile "${mode}" exec -T ${cn} python migrate.py >/dev/null 2>&1
+            
+            # Обновление CLI wrapper для докера (на всякий случай)
+            sudo bash -c "cat > /usr/local/bin/tgcp-bot" <<EOF
+#!/bin/bash
+cd ${BOT_INSTALL_PATH}
+MODE=\$(grep '^INSTALL_MODE=' .env | cut -d'=' -f2 | tr -d '"')
+CONTAINER="tg-bot-\$MODE"
+sudo $dc_cmd --profile "\$MODE" exec -T \$CONTAINER python manage.py "\$@"
+EOF
+            sudo chmod +x /usr/local/bin/tgcp-bot
+
         else msg_error "Нет docker-compose.yml"; return 1; fi
     else
         run_with_spinner "Обновление pip" $exec_cmd "${VENV_PATH}/bin/pip" install -r "${BOT_INSTALL_PATH}/requirements.txt" --upgrade
 
         run_with_spinner "Миграция БД и JSON" run_db_migrations "$exec_cmd"
+        
+        # Обновление CLI wrapper для systemd
+        sudo bash -c "cat > /usr/local/bin/tgcp-bot" <<EOF
+#!/bin/bash
+cd ${BOT_INSTALL_PATH}
+${VENV_PATH}/bin/python manage.py "\$@"
+EOF
+        sudo chmod +x /usr/local/bin/tgcp-bot
 
         if systemctl list-unit-files | grep -q "^${SERVICE_NAME}.service"; then sudo systemctl restart ${SERVICE_NAME}; fi
         if systemctl list-unit-files | grep -q "^${WATCHDOG_SERVICE_NAME}.service"; then sudo systemctl restart ${WATCHDOG_SERVICE_NAME}; fi
