@@ -1,4 +1,4 @@
-# /opt-tg-bot/modules/logs.py
+
 import asyncio
 import logging
 import os
@@ -9,7 +9,7 @@ from aiogram.types import KeyboardButton
 from core.config import INSTALL_MODE, DEPLOY_MODE, DEFAULT_LANGUAGE
 from core.keyboards import get_main_reply_keyboard
 from core.i18n import I18nFilter, get_text as _
-from core.utils import escape_html  # <-- (ВАЖНО) ДОБАВЛЕН ИМПОРТ
+from core.utils import escape_html
 
 BUTTON_KEY = "btn_logs"
 
@@ -43,7 +43,7 @@ async def logs_handler(message: types.Message, state: FSMContext):
 
     cmd = []
     if DEPLOY_MODE == "docker" and INSTALL_MODE == "root":
-        # Docker-Root (с chroot)
+
         if os.path.exists("/host/usr/bin/journalctl"):
             cmd = [
                 "chroot",
@@ -67,7 +67,7 @@ async def logs_handler(message: types.Message, state: FSMContext):
             )
             return
     else:
-        # Systemd
+
         cmd = ["journalctl", "-n", "20", "--no-pager"]
 
     try:
@@ -79,21 +79,21 @@ async def logs_handler(message: types.Message, state: FSMContext):
         stdout, stderr = await process.communicate()
 
         if process.returncode == 0:
-            # --- [ИСПРАВЛЕНО] Экранируем вывод ---
+
             log_output = escape_html(stdout.decode().strip())
-            # -------------------------------------
+
             response_text = _("logs_header", user_id, log_output=log_output)
         else:
-            # --- [ИСПРАВЛЕНО] Экранируем ошибку ---
+
             error_message = escape_html(stderr.decode().strip())
-            # ---------------------------------------
+
             logging.error(f"Ошибка при чтении журналов: {error_message}")
             response_text = _("logs_read_error", user_id, error=error_message)
 
         await message.answer(
             response_text,
             reply_markup=main_keyboard,
-            parse_mode="HTML"  # Убедимся, что parse_mode включен
+            parse_mode="HTML"
         )
 
     except FileNotFoundError:

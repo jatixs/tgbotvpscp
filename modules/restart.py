@@ -39,8 +39,16 @@ async def restart_confirm_handler(message: types.Message):
 
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
         [
-            InlineKeyboardButton(text=_("btn_confirm", lang), callback_data="restart_confirm"),
-            InlineKeyboardButton(text=_("btn_cancel", lang), callback_data="restart_cancel")
+            InlineKeyboardButton(
+                text=_(
+                    "btn_confirm",
+                    lang),
+                callback_data="restart_confirm"),
+            InlineKeyboardButton(
+                text=_(
+                    "btn_cancel",
+                    lang),
+                callback_data="restart_cancel")
         ]
     ])
 
@@ -66,21 +74,21 @@ async def restart_execute_handler(callback: types.CallbackQuery):
     user_id = callback.from_user.id
     chat_id = callback.message.chat.id
     lang = get_user_lang(user_id)
-    
+
     await callback.message.edit_text(_("restart_start", lang), parse_mode="HTML")
 
     try:
-        # Маркер перезапуска для уведомления после старта
+
         os.makedirs(os.path.dirname(RESTART_FLAG_FILE), exist_ok=True)
         with open(RESTART_FLAG_FILE, "w") as f:
             f.write(f"{chat_id}:{callback.message.message_id}")
-        
-        # Самоубийство (Systemd или Docker перезапустят процесс)
+
         asyncio.create_task(self_terminate())
-        
+
     except Exception as e:
         logging.error(f"Restart command failed: {e}")
         await callback.message.edit_text(_("restart_error", lang, error=str(e)))
+
 
 async def self_terminate():
     await asyncio.sleep(1)

@@ -7,9 +7,11 @@ from . import config as core_config
 from . import shared_state
 from functools import lru_cache
 
+from .config import load_encrypted_json, save_encrypted_json
+
 STRINGS = {
     'ru': {
-        # --- ОБЩИЕ ---
+
         "btn_back": "🔙 Назад",
         "btn_cancel": "❌ Отмена",
         "btn_back_to_menu": "🔙 Назад в меню",
@@ -25,8 +27,8 @@ STRINGS = {
         "error_parsing_json": "❌ Ошибка при обработке результатов: Неверный формат ответа.\n<pre>{output}</pre>",
         "error_unexpected_json_parsing": "❌ Неожиданная ошибка при обработке результатов: {error}",
         "throttle_message": "⏳ Пожалуйста, подождите {seconds} сек. перед следующим действием.",
-        
-        # --- LOGIN PAGE (NEW) ---
+
+
         "login_cookie_title": "Приватность и Данные",
         "login_cookie_text": "🍪 Мы используем кэш и куки <b>только для сохранения настроек</b> интерфейса. Никакие данные не отслеживаются и не передаются третьим лицам.",
         "login_cookie_btn": "Понятно",
@@ -40,8 +42,8 @@ STRINGS = {
         "login_or": "ИЛИ",
         "login_btn_back": "Назад",
         "login_support_btn_pay": "Перейти к поддержке (YooMoney)",
-        
-        # --- ГЛАВНОЕ МЕНЮ И НАСТРОЙКИ ---
+
+
         "main_menu_welcome": "👋 Привет! Выбери категорию в меню.",
         "main_menu_settings_text": "⚙️ <b>Настройка меню</b>\n\nНажмите на кнопки, чтобы включить или выключить отображение команд в боте.",
         "cat_monitoring": "📊 Мониторинг",
@@ -51,14 +53,14 @@ STRINGS = {
         "cat_settings": "🔧 Настройки Бота",
         "cat_choose_action": "📂 Категория: <b>{category}</b>\nВыберите действие:",
         "btn_configure_menu": "🎛 Настроить кнопки",
-        
-        # --- ЯЗЫК ---
+
+
         "language_select": "Пожалуйста, выберите ваш язык:",
         "language_selected": "✅ Язык успешно изменен на Русский.",
         "btn_language": "🇷🇺 Язык",
         "main_menu_placeholder": "Выберите опцию в меню...",
-        
-        # --- ДОСТУП ---
+
+
         "access_denied_message": "⛔ Вы не являетесь пользователем бота. Ваш ID: <code>{user_id}</code>.\nК командам нет доступа, обратитесь к администратору.",
         "access_denied_button": "📤 Отправить свой ID администратору",
         "access_denied_generic": "⛔ Доступ запрещен.",
@@ -67,8 +69,8 @@ STRINGS = {
         "default_admin_name": "Главный Админ",
         "default_new_user_name": "Новый_{uid}",
         "default_id_user_name": "ID: {uid}",
-        
-        # --- КНОПКИ МОДУЛЕЙ ---
+
+
         "btn_selftest": "🛠 Сведения о сервере",
         "btn_traffic": "📡 Трафик сети",
         "btn_uptime": "⏱ Аптайм",
@@ -90,8 +92,8 @@ STRINGS = {
         "btn_delete_user": "➖ Удалить пользователя",
         "btn_change_group": "🔄 Изменить группу",
         "btn_my_id": "🆔 Мой ID",
-        
-        # --- УПРАВЛЕНИЕ ПОЛЬЗОВАТЕЛЯМИ ---
+
+
         "delete_user_button_text": "{user_name} ({group})",
         "delete_self_button_text": "❌ Удалить себя ({user_name}, {group})",
         "btn_group_admins": "👑 Админы",
@@ -121,7 +123,7 @@ STRINGS = {
         "users_change_group_success_text": "✅ Группа для <b>{user_name}</b> изменена на <b>{group}</b>.\n\nВыберите пользователя:",
         "users_change_group_success_alert": "Группа для {user_name} изменена.",
 
-        # --- REBOOT / RESTART ---
+
         "btn_reboot_confirm": "✅ Да, перезагрузить",
         "btn_reboot_cancel": "❌ Нет, отмена",
         "reboot_confirm_prompt": "⚠️ Вы уверены, что хотите <b>перезагрузить сервер</b>? Все активные соединения будут разорваны.",
@@ -130,7 +132,7 @@ STRINGS = {
         "restart_start": "♻️ Бот уходит на перезапуск…",
         "restart_error": "⚠️ Ошибка при попытке перезапуска сервиса: {error}",
 
-        # --- NOTIFICATIONS / ALERTS ---
+
         "alerts_menu_res": "{status} Ресурсы (CPU/RAM/Disk)",
         "alerts_menu_logins": "{status} Входы SSH",
         "alerts_menu_bans": "{status} Баны (Fail2Ban)",
@@ -161,13 +163,13 @@ STRINGS = {
         "alert_ram_high_repeat": "‼️ <b>RAM все еще ВЫСОКАЯ!</b>\nТекущее использование: <b>{usage:.1f}%</b> (Порог: {threshold}%)\n\n💾 <b>Потребление:</b>\n{processes}",
         "alert_ram_normal": "✅ <b>Использование RAM нормализовалось.</b>\nТекущее использование: <b>{usage:.1f}%</b>",
         "alert_disk_high": "⚠️ <b>Превышен порог Disk!</b>\nТекущее использование: <b>{usage:.1f}%</b> (Порог: {threshold}%) {processes}",
-        "alert_disk_high_repeat": "‼️ <b>Disk все еще ВЫСОКИЙ!</b>\nТекущее использование: <b>{usage:.1f}%</b> (Порог: {threshold}%) {processes}",        
+        "alert_disk_high_repeat": "‼️ <b>Disk все еще ВЫСОКИЙ!</b>\nТекущее использование: <b>{usage:.1f}%</b> (Порог: {threshold}%) {processes}",
         "alert_disk_normal": "✅ <b>Использование Disk нормализовалось.</b>\nТекущее использование: <b>{usage:.1f}%</b>",
         "alert_no_users_for_type": "Нет пользователей с включенными уведомлениями типа '{alert_type}'.",
         "alert_sending_to_users": "Отправка алерта типа '{alert_type}' {count} пользователям...",
         "alert_sent_to_users": "Алерт типа '{alert_type}' отправлен {count} пользователям.",
-        
-        # --- UPDATE MODULE ---
+
+
         "update_select_action": "🔄 <b>Центр обновлений</b>\n\nЧто вы хотите обновить?",
         "btn_update_system": "🖥 Система (apt)",
         "btn_check_bot_update": "🤖 Бот (git)",
@@ -179,8 +181,8 @@ STRINGS = {
         "bot_update_start": "⏳ <b>Начинаю обновление бота...</b>\n1. Git Pull\n2. Обновление зависимостей\n3. Перезапуск",
         "bot_update_success": "✅ <b>Бот успешно обновлен!</b>\n♻️ Перезапускаю службу...",
         "bot_update_fail": "❌ <b>Ошибка обновления:</b>\n<pre>{error}</pre>",
-        
-        # --- UTILS & WATCHDOG ---
+
+
         "utils_vless_error": "⚠️ Ошибка при генерации VLESS-ссылки: {error}",
         "utils_docker_ps_error": "Не удалось выполнить 'docker ps'. Убедитесь, что Docker установлен и запущен, и у бота есть права.\n<pre>{error}</pre>",
         "utils_bot_restarted": "✅ Бот успешно перезапущен.",
@@ -203,8 +205,8 @@ STRINGS = {
         "watchdog_systemctl_not_found": "⚠️ <code>systemctl</code> не найден. Не могу проверить статус сервиса.",
         "watchdog_check_error": "⚠️ Ошибка проверки статуса сервиса: {error}",
 
-        # --- МОДУЛИ ---
-        # Fail2Ban
+
+
         "f2b_log_not_found": "⚠️ Файл лога Fail2Ban не найден: <code>{path}</code>",
         "f2b_log_read_error": "Не удалось прочитать файл лога.",
         "f2b_banned": "Бан",
@@ -213,20 +215,20 @@ STRINGS = {
         "f2b_no_bans": "🔒 Нет недавних блокировок IP в логах Fail2Ban (проверено 50 последних строк).",
         "f2b_read_error_generic": "⚠️ Ошибка при чтении журнала Fail2Ban: {error}",
         "f2b_ban_entry": "🔒 <b>{ban_type}</b>\n🌍 IP: <b>{flag} {ip}</b>\n⏰ Время: <b>{time}</b>{tz}\n🗓️ Дата: <b>{date}</b>",
-        
-        # Logs
+
+
         "logs_header": "📜 <b>Последние системные журналы:</b>\n<pre>{log_output}</pre>",
         "logs_read_error": "⚠️ Ошибка при чтении журналов: {error}",
         "logs_docker_secure_not_available": "⛔ Чтение системных логов (journalctl) недоступно в режиме Docker (Secure) из соображений безопасности.",
         "logs_journalctl_not_found": "⚠️ Команда <code>journalctl</code> не найдена. Модуль 'Последние события' не может работать.",
         "logs_journalctl_not_found_in_host": "⚠️ Не удалось найти <code>journalctl</code> на хосте (/host/usr/bin/journalctl или /host/bin/journalctl).",
-        
-        # Optimize
+
+
         "optimize_start": "⏳ <b>Запускаю оптимизацию системы...</b>\n\nЭто очень долгий процесс (5-15 минут).\nПожалуйста, не перезапускайте бота и не вызывайте другие команды.",
         "optimize_success": "✅ <b>Оптимизация завершена успешно!</b>\n\n<b>Последние 1000 символов вывода (включая sysctl):</b>\n<pre>{output}</pre>",
         "optimize_fail": "❌ <b>Ошибка во время оптимизации!</b>\n\n<b>Код возврата:</b> {code}\n<b>Вывод STDOUT (последние 1000):</b>\n<pre>{stdout}</pre>\n<b>Вывод STDERR (последние 2000):</b>\n<pre>{stderr}</pre>",
-        
-        # Selftest
+
+
         "selftest_gathering_info": "🔍 Собираю сведения о сервере...",
         "selftest_error": "⚠️ Ошибка при сборе системной статистики: {error}",
         "selftest_inet_ok": "✅ Интернет доступен",
@@ -242,8 +244,8 @@ STRINGS = {
         "selftest_ssh_root_only": "\n\n📄 <b>Последний SSH-вход:</b>\n<i>Информация доступна только в режиме root</i>",
         "selftest_results_header": "🛠 <b>Состояние сервера:</b>\n\n",
         "selftest_results_body": "✅ Бот работает\n📊 Процессор: <b>{cpu:.1f}%</b>\n💾 ОЗУ: <b>{mem:.1f}%</b>\n💽 ПЗУ: <b>{disk:.1f}%</b>\n⏱ Время работы: <b>{uptime}</b>\n{inet_status}\n⌛ Задержка (8.8.8.8): <b>{ping} мс</b>\n🌐 Внешний IP: <code>{ip}</code>\n📡 Трафик ⬇ <b>{rx}</b> / ⬆ <b>{tx}</b>",
-        
-        # Speedtest
+
+
         "speedtest_start": "🚀 <b>Запуск iperf3...</b>\n\nИщу ближайший сервер. Это может занять до 30-40 секунд.",
         "speedtest_results": "🚀 <b>Speedtest Результаты (iperf3):</b>\n\n⬇️ <b>Скачивание:</b> {dl:.2f} Мбит/с\n⬆️ <b>Загрузка:</b> {ul:.2f} Мбит/с\n⏱️ <b>Пинг:</b> {ping:.2f} мс\n\n🌍 <b>Локация:</b> {flag} {server}\n🏢 <b>Сервер:</b> {provider}",
         "speedtest_fail": "❌ Ошибка при запуске iperf3:\n<pre>{error}</pre>",
@@ -263,8 +265,8 @@ STRINGS = {
         "speedtest_status_uploading": "🚀 Тестирую скорость на <b>{host}</b> ({ping} мс)... ⬆️ Загрузка...",
         "error_message_edit_failed": "ОШИБКА: Не удалось обновить статусное сообщение.",
         "iperf_all_attempts_failed": "❌ Не удалось выполнить тест скорости после {attempts} попыток.",
-        
-        # SSH Log
+
+
         "sshlog_searching": "🔍 Ищу последние 10 событий SSH (вход/провал)...",
         "sshlog_header": "🔐 <b>Последние {count} событий SSH{source}:</b>\n\n{log_output}",
         "sshlog_not_found": "🔐 Не найдено событий SSH (вход/провал){source}.",
@@ -273,12 +275,12 @@ STRINGS = {
         "sshlog_entry_invalid_user": "❌ <b>Неверный юзер</b>\n👤 Попытка: <b>{user}</b>\n🌍 IP: <b>{flag} {ip}</b>\n⏰ {time}{tz} ({date})",
         "sshlog_entry_wrong_pass": "❌ <b>Неверный пароль</b>\n👤 Пользователь: <b>{user}</b>\n🌍 IP: <b>{flag} {ip}</b>\n⏰ {time}{tz} ({date})",
         "sshlog_entry_fail_pam": "❌ <b>Провал (PAM)</b>\n👤 Пользователь: <b>{user}</b>\n🌍 IP: <b>{flag} {ip}</b>\n⏰ {time}{tz} ({date})",
-        
-        # Top
+
+
         "top_header": "🔥 <b>Топ 10 процессов по загрузке CPU:</b>\n<pre>{output}</pre>",
         "top_fail": "❌ Ошибка при получении списка процессов:\n<pre>{error}</pre>",
-        
-        # Traffic
+
+
         "traffic_stop": "✅ Мониторинг трафика остановлен.",
         "traffic_menu_return": "🏠 Главное меню:",
         "traffic_start": "📡 <b>Мониторинг трафика</b>\n\n<i>Обновление каждые {interval} секунд.</i>",
@@ -291,17 +293,17 @@ STRINGS = {
         "traffic_speed_tx": "⬆️ TX: {speed:.2f} Мбит/с",
         "btn_stop_traffic": "⏹ Остановить",
         "traffic_stopped_alert": "Мониторинг трафика остановлен.",
-        
-        # Update
+
+
         "update_start": "🔄 Выполняю обновление VPS... Это может занять несколько минут.",
         "update_success": "✅ Обновление завершено:\n<pre>{output}</pre>",
         "update_fail": "❌ Ошибка при обновлении (Код: {code}):\n<pre>{error}</pre>",
-        
-        # Uptime
+
+
         "uptime_text": "⏱ Время работы: <b>{uptime}</b>",
         "uptime_fail": "⚠️ Ошибка при получении аптайма: {error}",
-        
-        # VLESS
+
+
         "vless_prompt_file": "📤 <b>Отправьте файл конфигурации Xray (JSON)</b>\n\n<i>Важно: файл должен содержать рабочую конфигурацию outbound с Reality.</i>",
         "vless_error_not_json": "⛔ <b>Ошибка:</b> Файл должен быть формата <code>.json</code>.\n\nПопробуйте отправить файл еще раз.",
         "vless_prompt_name": "✅ Файл JSON получен.\n\nТеперь <b>введите имя</b> для этой VLESS-ссылки (например, 'My_Server_1'):",
@@ -311,8 +313,8 @@ STRINGS = {
         "vless_menu_return": "🏠 Возврат в главное меню.",
         "vless_error_not_file": "⛔ Пожалуйста, отправьте <b>документ</b> (файл), а не текст.",
         "vless_error_not_text": "⛔ Пожалуйста, отправьте <b>текстовое имя</b>.",
-        
-        # Xray
+
+
         "xray_detecting": "🔍 Определяю установленный клиент Xray...",
         "xray_detect_fail": "❌ Не удалось определить поддерживаемый клиент Xray (Marzban, Amnezia). Обновление невозможно.",
         "xray_detected_start_update": "✅ Обнаружен: <b>{client}</b> (контейнер: <code>{container}</code>). Начинаю обновление...",
@@ -320,8 +322,8 @@ STRINGS = {
         "xray_update_success": "✅ Xray для <b>{client}</b> успешно обновлен до версии <b>{version}</b>",
         "xray_error_generic": "⚠️ <b>Ошибка обновления Xray:</b>\n\n{error}",
         "xray_version_unknown": "неизвестной",
-        
-        # Nodes
+
+
         "nodes_menu_header": "🖥 <b>Список ваших серверов (Нод):</b>\n\nВыберите сервер для просмотра деталей или управления, либо используйте кнопки ниже:",
         "node_status_active": "Активен 🟢",
         "node_status_offline": "Не в сети 🔴",
@@ -338,7 +340,7 @@ STRINGS = {
         "node_deleted": "✅ Нода '{name}' успешно удалена.",
         "node_traffic_stopped_alert": "✅ Мониторинг трафика на ноде '{name}' остановлен.",
 
-        # --- UNITS & MISC ---
+
         "unit_bytes": "Б",
         "unit_kb": "КБ",
         "unit_mb": "МБ",
@@ -353,7 +355,7 @@ STRINGS = {
         "start_support_message": "Это open-source проект, автор проекта <a href=\"https://t.me/faridshykhaliev\">@faridshykhaliev</a>. При желании вы можете поддержать автора. Это мотивирует автора продолжать развивать проект.",
         "start_support_button": " ❤️ Поддержать разработчика",
 
-        # --- WEB INTERFACE ---
+
         "web_title": "Web-агент Бота",
         "web_dashboard_title": "Панель управления",
         "web_agent_stats_title": "Сетевая активность",
@@ -479,12 +481,12 @@ STRINGS = {
         "web_sessions_modal_title": "Управление сессиями",
         "web_sessions_revoked_alert": "Все остальные сессии завершены!",
         "web_session_current_label": "Текущая сессия",
-        "web_search_placeholder": "Поиск...", 
+        "web_search_placeholder": "Поиск...",
         "web_search_nothing_found": "Ничего не найдено",
         "web_session_expired": "Сессия истекла",
         "web_please_relogin": "Пожалуйста, авторизуйтесь заново",
-        
-        # --- WEB: KEYBOARD SETTINGS ---
+
+
         "web_keyboard_title": "Клавиатура бота",
         "web_kb_desc": "Настройте видимость команд в меню бота.",
         "web_kb_btn_config": "Настроить меню",
@@ -500,8 +502,8 @@ STRINGS = {
         "web_kb_cat_tools": "🛠️ Инструменты",
         "web_kb_all_on_alert": "Все кнопки уже включены!",
         "web_kb_all_off_alert": "Все кнопки уже выключены!",
-        
-        # --- FORGOT PASSWORD ---
+
+
         "login_forgot_pass": "Забыли пароль?",
         "login_reset_title": "Сброс пароля",
         "login_reset_desc": "Введите ваш Telegram ID. Мы отправим ссылку для сброса вам в личные сообщения.",
@@ -528,7 +530,7 @@ STRINGS = {
         "login_support_btn_pay": "Перейти к поддержке (YooMoney)"
     },
     'en': {
-        # --- GENERAL ---
+
         "btn_back": "🔙 Back",
         "btn_cancel": "❌ Cancel",
         "btn_back_to_menu": "🔙 Back to menu",
@@ -544,8 +546,8 @@ STRINGS = {
         "error_parsing_json": "❌ JSON Error.",
         "error_unexpected_json_parsing": "❌ Parsing error: {error}",
         "throttle_message": "⏳ Wait {seconds}s.",
-        
-        # --- LOGIN PAGE NEW ---
+
+
         "login_cookie_title": "Privacy & Data",
         "login_cookie_text": "🍪 We use cache and cookies <b>only to save interface settings</b>. No data is tracked, collected, or shared with third parties.",
         "login_cookie_btn": "Got it",
@@ -554,7 +556,7 @@ STRINGS = {
         "login_github_tooltip": "Source code on GitHub",
         "login_support_tooltip": "Support the project",
 
-        # --- MAIN MENU & SETTINGS (NEW KEYS) ---
+
         "main_menu_welcome": "👋 Hi! Select a category.",
         "main_menu_settings_text": "⚙️ <b>Menu Configuration</b>\n\nClick buttons to toggle visibility in the bot.",
         "cat_monitoring": "📊 Monitoring",
@@ -564,14 +566,14 @@ STRINGS = {
         "cat_settings": "🔧 Bot Settings",
         "cat_choose_action": "📂 Category: <b>{category}</b>\nSelect action:",
         "btn_configure_menu": "🎛 Configure Buttons",
-        
-        # --- LANGUAGE ---
+
+
         "language_select": "Select language:",
         "language_selected": "✅ Language changed to English.",
         "btn_language": "🇬🇧 Language",
         "main_menu_placeholder": "Select option...",
-        
-        # --- ACCESS ---
+
+
         "access_denied_message": "⛔ Access denied. ID: <code>{user_id}</code>.",
         "access_denied_button": "📤 Send ID to Admin",
         "access_denied_generic": "⛔ Access denied.",
@@ -580,8 +582,8 @@ STRINGS = {
         "default_admin_name": "Admin",
         "default_new_user_name": "New_{uid}",
         "default_id_user_name": "ID: {uid}",
-        
-        # --- MODULE BUTTONS ---
+
+
         "btn_selftest": "🛠 Server Info",
         "btn_traffic": "📡 Traffic",
         "btn_uptime": "⏱ Uptime",
@@ -603,8 +605,8 @@ STRINGS = {
         "btn_delete_user": "➖ Delete User",
         "btn_change_group": "🔄 Change Group",
         "btn_my_id": "🆔 My ID",
-        
-        # --- USER MANAGEMENT ---
+
+
         "delete_user_button_text": "{user_name} ({group})",
         "delete_self_button_text": "❌ Delete self ({user_name}, {group})",
         "btn_group_admins": "👑 Admins",
@@ -634,7 +636,7 @@ STRINGS = {
         "users_change_group_success_text": "✅ Group for <b>{user_name}</b> changed to <b>{group}</b>.\n\nSelect a user:",
         "users_change_group_success_alert": "Group for {user_name} changed.",
 
-        # --- REBOOT / RESTART ---
+
         "btn_reboot_confirm": "✅ Yes, reboot",
         "btn_reboot_cancel": "❌ No, cancel",
         "reboot_confirm_prompt": "⚠️ Are you sure you want to <b>reboot the server</b>? All active connections will be lost.",
@@ -643,7 +645,7 @@ STRINGS = {
         "restart_start": "♻️ Bot is restarting…",
         "restart_error": "⚠️ Error trying to restart service: {error}",
 
-        # --- NOTIFICATIONS ---
+
         "alerts_menu_res": "{status} Resources",
         "alerts_menu_logins": "{status} SSH",
         "alerts_menu_bans": "{status} Bans",
@@ -656,7 +658,7 @@ STRINGS = {
         "notifications_toggle_alert": "Notifications '{alert_name}' {status}",
         "notifications_status_on": "✅ ENABLED",
         "notifications_status_off": "❌ DISABLED",
-        
+
         "alert_node_down": "🚨 <b>ALERT: Node '{name}' is DOWN!</b>\n⏱ Last seen: {last_seen}",
         "alert_node_up": "✅ <b>Node '{name}' recovered (Up).</b>\n🟢 Online now.",
         "alert_node_restarting": "🔵 <b>Node '{name}' is restarting...</b>",
@@ -680,12 +682,12 @@ STRINGS = {
         "alert_no_users_for_type": "No users with notifications enabled for type '{alert_type}'.",
         "alert_sending_to_users": "Sending alert type '{alert_type}' to {count} users...",
         "alert_sent_to_users": "Alert type '{alert_type}' sent to {count} users.",
-        # --- UPDATE MODULE (Added/Changed) ---
+
         "update_select_action": "🔄 <b>Update Center</b>\n\nWhat would you like to update?",
         "btn_update_system": "🖥 System (apt)",
         "btn_check_bot_update": "🤖 Bot (git)",
         "btn_update_bot_now": "🚀 Update Bot",
-        
+
         "bot_update_checking": "🔍 Checking for updates on GitHub...",
         "bot_update_up_to_date": "✅ <b>Bot is up to date.</b>\nVersion: {hash}",
         "bot_update_available": "🎉 <b>Update available!</b>\n\nCurrent: <code>{local}</code>\nLatest: <code>{remote}</code>\n\n📝 <b>Changelog:</b>\n<pre>{log}</pre>",
@@ -694,7 +696,7 @@ STRINGS = {
         "bot_update_success": "✅ <b>Bot updated successfully!</b>\n♻️ Restarting service...",
         "bot_update_fail": "❌ <b>Update failed:</b>\n<pre>{error}</pre>",
 
-        # --- UTILS & WATCHDOG ---
+
         "utils_vless_error": "⚠️ Error generating VLESS link: {error}",
         "utils_docker_ps_error": "Failed to execute 'docker ps'. Ensure Docker is installed, running, and the bot has permissions.\n<pre>{error}</pre>",
         "utils_bot_restarted": "✅ Bot restarted successfully.",
@@ -717,8 +719,8 @@ STRINGS = {
         "watchdog_systemctl_not_found": "⚠️ <code>systemctl</code> not found. Cannot check service status.",
         "watchdog_check_error": "⚠️ Error checking service status: {error}",
 
-        # --- MODULES ---
-        # Fail2Ban
+
+
         "f2b_log_not_found": "⚠️ Fail2Ban log file not found: <code>{path}</code>",
         "f2b_log_read_error": "Could not read log file.",
         "f2b_banned": "Banned",
@@ -727,20 +729,20 @@ STRINGS = {
         "f2b_no_bans": "🔒 No recent IP bans found in Fail2Ban logs (checked last 50 lines).",
         "f2b_read_error_generic": "⚠️ Error reading Fail2Ban log: {error}",
         "f2b_ban_entry": "🔒 <b>{ban_type}</b>\n🌍 IP: <b>{flag} {ip}</b>\n⏰ Time: <b>{time}</b>{tz}\n🗓️ Date: <b>{date}</b>",
-        
-        # Logs
+
+
         "logs_header": "📜 <b>Recent system logs:</b>\n<pre>{log_output}</pre>",
         "logs_read_error": "⚠️ Error reading logs: {error}",
         "logs_docker_secure_not_available": "⛔ Reading system logs (journalctl) is not available in Docker (Secure) mode for security reasons.",
         "logs_journalctl_not_found": "⚠️ Command <code>journalctl</code> not found. The 'Recent Events' module cannot work.",
         "logs_journalctl_not_found_in_host": "⚠️ Could not find <code>journalctl</code> on the host machine (/host/usr/bin/journalctl or /host/bin/journalctl).",
-        
-        # Optimize
+
+
         "optimize_start": "⏳ <b>Starting system optimization...</b>\n\nThis is a very long process (5-15 minutes).\nPlease do not restart the bot or run other commands.",
         "optimize_success": "✅ <b>Optimization completed successfully!</b>\n\n<b>Last 1000 characters of output (including sysctl):</b>\n<pre>{output}</pre>",
         "optimize_fail": "❌ <b>Error during optimization!</b>\n\n<b>Return Code:</b> {code}\n<b>STDOUT (last 1000):</b>\n<pre>{stdout}</pre>\n<b>STDERR (last 2000):</b>\n<pre>{stderr}</pre>",
-        
-        # Selftest
+
+
         "selftest_gathering_info": "🔍 Gathering server info...",
         "selftest_error": "⚠️ Error gathering system stats: {error}",
         "selftest_inet_ok": "✅ Internet available",
@@ -756,8 +758,8 @@ STRINGS = {
         "selftest_ssh_root_only": "\n\n📄 <b>Last SSH login:</b>\n<i>Info available in root mode only</i>",
         "selftest_results_header": "🛠 <b>Server Status:</b>\n\n",
         "selftest_results_body": "✅ Bot is running\n📊 CPU: <b>{cpu:.1f}%</b>\n💾 RAM: <b>{mem:.1f}%</b>\n💽 Disk: <b>{disk:.1f}%</b>\n⏱ Uptime: <b>{uptime}</b>\n{inet_status}\n⌛ Ping (8.8.8.8): <b>{ping} ms</b>\n🌐 External IP: <code>{ip}</code>\n📡 Traffic ⬇ <b>{rx}</b> / ⬆ <b>{tx}</b>",
-        
-        # Speedtest
+
+
         "speedtest_start": "🚀 <b>Starting iperf3...</b>\n\nFinding the closest server. This may take 30-40 seconds.",
         "speedtest_results": "🚀 <b>Speedtest Results (iperf3):</b>\n\n⬇️ <b>Download:</b> {dl:.2f} Mbps\n⬆️ <b>Upload:</b> {ul:.2f} Mbps\n⏱️ <b>Ping:</b> {ping:.2f} ms\n\n🌍 <b>Location:</b> {flag} {server}\n🏢 <b>Server:</b> {provider}",
         "speedtest_fail": "❌ Error running iperf3:\n<pre>{error}</pre>",
@@ -777,8 +779,8 @@ STRINGS = {
         "speedtest_status_uploading": "🚀 Testing speed on <b>{host}</b> ({ping} ms)... ⬆️ Uploading...",
         "error_message_edit_failed": "ERROR: Failed to update status message.",
         "iperf_all_attempts_failed": "❌ Speedtest failed after {attempts} attempts.",
-        
-        # SSH Log
+
+
         "sshlog_searching": "🔍 Searching for last 10 SSH events (login/fail)...",
         "sshlog_header": "🔐 <b>Last {count} SSH events{source}:</b>\n\n{log_output}",
         "sshlog_not_found": "🔐 No SSH events (login/fail) found{source}.",
@@ -787,12 +789,12 @@ STRINGS = {
         "sshlog_entry_invalid_user": "❌ <b>Invalid user</b>\n👤 Attempt: <b>{user}</b>\n🌍 IP: <b>{flag} {ip}</b>\n⏰ {time}{tz} ({date})",
         "sshlog_entry_wrong_pass": "❌ <b>Failed password</b>\n👤 User: <b>{user}</b>\n🌍 IP: <b>{flag} {ip}</b>\n⏰ {time}{tz} ({date})",
         "sshlog_entry_fail_pam": "❌ <b>Failure (PAM)</b>\n👤 User: <b>{user}</b>\n🌍 IP: <b>{flag} {ip}</b>\n⏰ {time}{tz} ({date})",
-        
-        # Top
+
+
         "top_header": "🔥 <b>Top 10 processes by CPU load:</b>\n<pre>{output}</pre>",
         "top_fail": "❌ Error getting process list:\n<pre>{error}</pre>",
-        
-        # Traffic
+
+
         "traffic_stop": "✅ Traffic monitoring stopped.",
         "traffic_menu_return": "🏠 Main menu:",
         "traffic_start": "📡 <b>Traffic Monitoring</b>\n\n<i>Updates every {interval} seconds.</i>",
@@ -805,17 +807,17 @@ STRINGS = {
         "traffic_speed_tx": "⬆️ TX: {speed:.2f} Mbps",
         "btn_stop_traffic": "⏹ Stop",
         "traffic_stopped_alert": "Traffic monitoring stopped.",
-        
-        # Update
+
+
         "update_start": "🔄 Updating VPS... This may take a few minutes.",
         "update_success": "✅ Update complete:\n<pre>{output}</pre>",
         "update_fail": "❌ Error during update (Code: {code}):\n<pre>{error}</pre>",
-        
-        # Uptime
+
+
         "uptime_text": "⏱ Uptime: <b>{uptime}</b>",
         "uptime_fail": "⚠️ Error getting uptime: {error}",
-        
-        # VLESS
+
+
         "vless_prompt_file": "📤 <b>Send your Xray configuration file (JSON)</b>\n\n<i>Important: The file must contain a working outbound configuration with Reality.</i>",
         "vless_error_not_json": "⛔ <b>Error:</b> File must be in <code>.json</code> format.\n\nPlease try sending the file again.",
         "vless_prompt_name": "✅ JSON file received.\n\nNow, <b>enter a name</b> for this VLESS link (e.g., 'My_Server_1'):",
@@ -825,8 +827,8 @@ STRINGS = {
         "vless_menu_return": "🏠 Returning to main menu.",
         "vless_error_not_file": "⛔ Please send a <b>document</b> (file), not text.",
         "vless_error_not_text": "⛔ Please send a <b>text name</b>.",
-        
-        # Xray
+
+
         "xray_detecting": "🔍 Detecting installed Xray client...",
         "xray_detect_fail": "❌ Could not detect a supported Xray client (Marzban, Amnezia). Update aborted.",
         "xray_detected_start_update": "✅ Detected: <b>{client}</b> (container: <code>{container}</code>). Starting update...",
@@ -834,8 +836,8 @@ STRINGS = {
         "xray_update_success": "✅ Xray for <b>{client}</b> successfully updated to version <b>{version}</b>",
         "xray_error_generic": "⚠️ <b>Xray Update Error:</b>\n\n{error}",
         "xray_version_unknown": "unknown",
-        
-        # Nodes
+
+
         "nodes_menu_header": "🖥 <b>Your Server List (Nodes):</b>\n\nSelect a server to view details or manage, or use the buttons below:",
         "node_status_active": "Active 🟢",
         "node_status_offline": "Offline 🔴",
@@ -852,7 +854,7 @@ STRINGS = {
         "node_deleted": "✅ Node '{name}' successfully deleted.",
         "node_traffic_stopped_alert": "✅ Traffic monitoring for node '{name}' stopped.",
 
-        # --- UNITS & MISC ---
+
         "unit_bytes": "B",
         "unit_kb": "KB",
         "unit_mb": "MB",
@@ -867,7 +869,7 @@ STRINGS = {
         "start_support_message": "This is an open-source project, the author is <a href=\"https://t.me/faridshykhaliev\">@faridshykhaliev</a>. If you wish, you can support the author. This motivates the author to continue developing the project.",
         "start_support_button": " ❤️ Support the developer",
 
-        # --- WEB INTERFACE ---
+
         "web_title": "Bot Web-agent",
         "web_dashboard_title": "Dashboard",
         "web_agent_stats_title": "Network Activity",
@@ -980,12 +982,12 @@ STRINGS = {
         "web_sessions_modal_title": "Session Management",
         "web_sessions_revoked_alert": "All other sessions revoked!",
         "web_session_current_label": "Current Session",
-        "web_search_placeholder": "Search...", 
+        "web_search_placeholder": "Search...",
         "web_search_nothing_found": "Nothing found",
         "web_session_expired": "Session Expired",
         "web_please_relogin": "Please login again",
-        
-        # --- WEB: KEYBOARD SETTINGS ---
+
+
         "web_keyboard_title": "Bot Keyboard",
         "web_kb_desc": "Configure visibility of commands in the bot menu.",
         "web_kb_btn_config": "Configure Menu",
@@ -1002,15 +1004,15 @@ STRINGS = {
         "web_kb_all_on_alert": "All buttons are already enabled!",
         "web_kb_all_off_alert": "All buttons are already disabled!",
         "web_logs_cleared_alert": "Cleared!",
-        
-        # --- NEW HINT KEYS (Settings) ---
+
+
         "web_hint_cpu_threshold": "The percentage of CPU usage above which a notification will be sent (minimum 50%).",
         "web_hint_ram_threshold": "The percentage of RAM usage above which a notification will be sent (minimum 50%).",
         "web_hint_disk_threshold": "The percentage of disk usage above which a notification will be sent (minimum 50%).",
         "web_hint_traffic_interval": "Frequency of current traffic speed updates in Telegram (minimum 5 sec).",
         "web_hint_node_timeout": "Time in seconds after which a Node (remote server) without response is considered offline and generates an alert (minimum 20 sec).",
 
-        # --- NEW HINT KEYS (Dashboard) ---
+
         "web_hint_cpu_usage": "Current utilization of the Central Processing Unit.",
         "web_hint_ram_usage": "Current RAM utilization (in percentage).",
         "web_hint_disk_usage": "Current disk space usage (on the root partition '/').",
@@ -1018,8 +1020,8 @@ STRINGS = {
         "web_hint_traffic_out": "Total volume of outbound traffic since the bot was launched.",
         "web_pass_wrong_current": "Invalid current password",
         "web_default_pass_alert": "⚠️ Warning! Default password ('admin') is in use. Please change it in settings.",
-        
-        # --- FORGOT PASSWORD ---
+
+
         "login_forgot_pass": "Forgot password?",
         "login_reset_title": "Reset Password",
         "login_reset_desc": "Enter your Telegram ID. We will send a reset link to your private messages.",
@@ -1050,21 +1052,19 @@ STRINGS = {
 
 def load_user_settings():
     try:
-        if os.path.exists(core_config.USER_SETTINGS_FILE):
-            with open(core_config.USER_SETTINGS_FILE, "r", encoding='utf-8') as f:
-                settings = json.load(f)
-                loaded_data_int_keys = {
-                    int(k): v for k, v in settings.items()}
-                shared_state.USER_SETTINGS.clear()
-                shared_state.USER_SETTINGS.update(loaded_data_int_keys)
-            logging.info("Настройки пользователей (языки) загружены.")
+
+        settings = load_encrypted_json(core_config.USER_SETTINGS_FILE)
+        if settings:
+            loaded_data_int_keys = {int(k): v for k, v in settings.items()}
+            shared_state.USER_SETTINGS.clear()
+            shared_state.USER_SETTINGS.update(loaded_data_int_keys)
+            logging.info("Настройки пользователей (языки) загружены (secure).")
         else:
             shared_state.USER_SETTINGS.clear()
-            logging.info(
-                "Файл user_settings.json не найден, используются пустые настройки.")
+            logging.info("Файл user_settings.json не найден или пуст.")
     except Exception as e:
         safe_e = str(e).replace('\n', ' ').replace('\r', '')
-        logging.error(f"Ошибка сохранения user_settings.json: {safe_e}")
+        logging.error(f"Ошибка загрузки user_settings.json: {safe_e}")
         shared_state.USER_SETTINGS.clear()
 
 
@@ -1076,8 +1076,8 @@ def save_user_settings():
             exist_ok=True)
         settings_to_save = {str(k): v for k,
                             v in shared_state.USER_SETTINGS.items()}
-        with open(core_config.USER_SETTINGS_FILE, "w", encoding='utf-8') as f:
-            json.dump(settings_to_save, f, indent=4, ensure_ascii=False)
+
+        save_encrypted_json(core_config.USER_SETTINGS_FILE, settings_to_save)
         logging.debug("Настройки пользователей (языки) сохранены.")
     except Exception as e:
         safe_e = str(e).replace('\n', ' ').replace('\r', '')
@@ -1167,7 +1167,8 @@ def get_all_translations(key: str) -> list[str]:
     unique_translations = list(set(translations))
     if not unique_translations:
         safe_key = key.replace('\n', '').replace('\r', '')
-        logging.error(f"Ключ перевода '{safe_key}' не найден ни в одном языке!")
+        logging.error(
+            f"Ключ перевода '{safe_key}' не найден ни в одном языке!")
         return [f"[{key}]"]
     return unique_translations
 

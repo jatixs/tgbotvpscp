@@ -79,8 +79,10 @@ async def optimize_handler(message: types.Message):
 
     try:
         sent_message_final = await message.answer(response_text, parse_mode="HTML")
-        LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = sent_message_final.message_id
+        LAST_MESSAGE_IDS.setdefault(
+            user_id, {})[command] = sent_message_final.message_id
     except (TelegramNetworkError, OSError):
-        logging.warning("Оптимизация: бот перезагружен системой, ответ не отправлен.")
+        logging.warning(
+            "Оптимизация: бот перезагружен системой, ответ не отправлен.")
     except Exception as e:
         logging.error(f"Ошибка отправки отчета оптимизации: {e}")

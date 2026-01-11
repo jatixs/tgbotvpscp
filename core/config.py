@@ -3,7 +3,9 @@ import sys
 import json
 import logging
 import logging.handlers
+import re
 from datetime import datetime
+from cryptography.fernet import Fernet
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 LOG_DIR = os.path.join(BASE_DIR, "logs")
@@ -22,6 +24,7 @@ os.makedirs(NODE_LOG_DIR, exist_ok=True)
 
 USERS_FILE = os.path.join(CONFIG_DIR, "users.json")
 NODES_FILE = os.path.join(CONFIG_DIR, "nodes.json")
+
 REBOOT_FLAG_FILE = os.path.join(CONFIG_DIR, "reboot_flag.txt")
 RESTART_FLAG_FILE = os.path.join(CONFIG_DIR, "restart_flag.txt")
 ALERTS_CONFIG_FILE = os.path.join(CONFIG_DIR, "alerts_config.json")
@@ -29,7 +32,76 @@ USER_SETTINGS_FILE = os.path.join(CONFIG_DIR, "user_settings.json")
 SYSTEM_CONFIG_FILE = os.path.join(CONFIG_DIR, "system_config.json")
 KEYBOARD_CONFIG_FILE = os.path.join(CONFIG_DIR, "keyboard_config.json")
 WEB_AUTH_FILE = os.path.join(CONFIG_DIR, "web_auth.txt")
+SECURITY_KEY_FILE = os.path.join(CONFIG_DIR, "security.key")
 
+
+def load_or_create_key():
+    if os.path.exists(SECURITY_KEY_FILE):
+        with open(SECURITY_KEY_FILE, "rb") as f:
+            return f.read()
+    else:
+        key = Fernet.generate_key()
+        with open(SECURITY_KEY_FILE, "wb") as f:
+            f.write(key)
+        try:
+            os.chmod(SECURITY_KEY_FILE, 0o600)
+        except Exception:
+            pass
+        return key
+
+
+DATA_ENCRYPTION_KEY = load_or_create_key()
+CIPHER_SUITE = Fernet(DATA_ENCRYPTION_KEY)
+
+
+def load_encrypted_json(path: str) -> dict | list:
+    """
+    Загружает JSON из файла.
+    1. Пробует расшифровать (новый формат).
+    2. Если не вышло — пробует загрузить как обычный JSON (старый формат, авто-миграция).
+    """
+    if not os.path.exists(path):
+        return {}
+
+    try:
+        with open(path, "rb") as f:
+            data = f.read()
+
+        if not data:
+            return {}
+
+        try:
+            decrypted = CIPHER_SUITE.decrypt(data)
+            return json.loads(decrypted.decode("utf-8"))
+        except Exception:
+
+            return json.loads(data.decode("utf-8"))
+
+    except Exception as e:
+        logging.error(f"Error loading secure config {path}: {e}")
+        return {}
+
+
+def save_encrypted_json(path: str, data: dict | list):
+    """
+    Сохраняет данные в файл, полностью шифруя JSON-контент.
+    """
+    try:
+        json_str = json.dumps(data, indent=4, ensure_ascii=False)
+        encrypted = CIPHER_SUITE.encrypt(json_str.encode("utf-8"))
+
+        tmp_path = path + ".tmp"
+        with open(tmp_path, "wb") as f:
+            f.write(encrypted)
+            f.flush()
+            os.fsync(f.fileno())
+
+        os.replace(tmp_path, path)
+    except Exception as e:
+        logging.error(f"Error saving secure config {path}: {e}")
+
+
+DEBUG_MODE = os.environ.get("DEBUG", "false").lower() == "true"
 TOKEN = os.environ.get("TG_BOT_TOKEN")
 INSTALL_MODE = os.environ.get("INSTALL_MODE", "secure")
 DEPLOY_MODE = os.environ.get("DEPLOY_MODE", "systemd")
@@ -52,7 +124,6 @@ if not TOKEN:
 
 DEFAULT_LANGUAGE = "ru"
 
-# Значения по умолчанию для системы
 DEFAULT_CONFIG = {
     "TRAFFIC_INTERVAL": 5,
     "RESOURCE_CHECK_INTERVAL": 60,
@@ -63,7 +134,6 @@ DEFAULT_CONFIG = {
     "NODE_OFFLINE_TIMEOUT": 20
 }
 
-# Значения по умолчанию для модулей (клавиатуры)
 DEFAULT_KEYBOARD_CONFIG = {
     "enable_selftest": True,
     "enable_uptime": True,
@@ -80,11 +150,10 @@ DEFAULT_KEYBOARD_CONFIG = {
     "enable_reboot": True,
     "enable_notifications": True,
     "enable_users": True,
-    "enable_nodes": True, # <--- ДОБАВЛЕНО
+    "enable_nodes": True,
     "enable_optimize": True
 }
 
-# Глобальные переменные
 TRAFFIC_INTERVAL = DEFAULT_CONFIG["TRAFFIC_INTERVAL"]
 RESOURCE_CHECK_INTERVAL = DEFAULT_CONFIG["RESOURCE_CHECK_INTERVAL"]
 CPU_THRESHOLD = DEFAULT_CONFIG["CPU_THRESHOLD"]
@@ -95,35 +164,47 @@ NODE_OFFLINE_TIMEOUT = DEFAULT_CONFIG["NODE_OFFLINE_TIMEOUT"]
 
 KEYBOARD_CONFIG = DEFAULT_KEYBOARD_CONFIG.copy()
 
-def load_system_config():
-    """Загружает системные настройки."""
-    global TRAFFIC_INTERVAL, RESOURCE_CHECK_INTERVAL, CPU_THRESHOLD, RAM_THRESHOLD, DISK_THRESHOLD, RESOURCE_ALERT_COOLDOWN, NODE_OFFLINE_TIMEOUT
 
+def load_system_config():
+    global TRAFFIC_INTERVAL, RESOURCE_CHECK_INTERVAL, CPU_THRESHOLD, RAM_THRESHOLD, DISK_THRESHOLD, RESOURCE_ALERT_COOLDOWN, NODE_OFFLINE_TIMEOUT
     try:
         if os.path.exists(SYSTEM_CONFIG_FILE):
             with open(SYSTEM_CONFIG_FILE, "r", encoding="utf-8") as f:
                 data = json.load(f)
-                TRAFFIC_INTERVAL = data.get("TRAFFIC_INTERVAL", DEFAULT_CONFIG["TRAFFIC_INTERVAL"])
-                RESOURCE_CHECK_INTERVAL = data.get("RESOURCE_CHECK_INTERVAL", DEFAULT_CONFIG["RESOURCE_CHECK_INTERVAL"])
-                CPU_THRESHOLD = data.get("CPU_THRESHOLD", DEFAULT_CONFIG["CPU_THRESHOLD"])
-                RAM_THRESHOLD = data.get("RAM_THRESHOLD", DEFAULT_CONFIG["RAM_THRESHOLD"])
-                DISK_THRESHOLD = data.get("DISK_THRESHOLD", DEFAULT_CONFIG["DISK_THRESHOLD"])
-                RESOURCE_ALERT_COOLDOWN = data.get("RESOURCE_ALERT_COOLDOWN", DEFAULT_CONFIG["RESOURCE_ALERT_COOLDOWN"])
-                NODE_OFFLINE_TIMEOUT = data.get("NODE_OFFLINE_TIMEOUT", DEFAULT_CONFIG["NODE_OFFLINE_TIMEOUT"])
+                TRAFFIC_INTERVAL = data.get(
+                    "TRAFFIC_INTERVAL", DEFAULT_CONFIG["TRAFFIC_INTERVAL"])
+                RESOURCE_CHECK_INTERVAL = data.get(
+                    "RESOURCE_CHECK_INTERVAL",
+                    DEFAULT_CONFIG["RESOURCE_CHECK_INTERVAL"])
+                CPU_THRESHOLD = data.get(
+                    "CPU_THRESHOLD", DEFAULT_CONFIG["CPU_THRESHOLD"])
+                RAM_THRESHOLD = data.get(
+                    "RAM_THRESHOLD", DEFAULT_CONFIG["RAM_THRESHOLD"])
+                DISK_THRESHOLD = data.get(
+                    "DISK_THRESHOLD", DEFAULT_CONFIG["DISK_THRESHOLD"])
+                RESOURCE_ALERT_COOLDOWN = data.get(
+                    "RESOURCE_ALERT_COOLDOWN",
+                    DEFAULT_CONFIG["RESOURCE_ALERT_COOLDOWN"])
+                NODE_OFFLINE_TIMEOUT = data.get(
+                    "NODE_OFFLINE_TIMEOUT", DEFAULT_CONFIG["NODE_OFFLINE_TIMEOUT"])
                 logging.info("System config loaded successfully.")
     except Exception as e:
         logging.error(f"Error loading system config: {e}")
 
-def save_system_config(new_config: dict):
-    """Сохраняет системные настройки."""
-    global TRAFFIC_INTERVAL, RESOURCE_CHECK_INTERVAL, CPU_THRESHOLD, RAM_THRESHOLD, DISK_THRESHOLD, RESOURCE_ALERT_COOLDOWN, NODE_OFFLINE_TIMEOUT
 
+def save_system_config(new_config: dict):
+    global TRAFFIC_INTERVAL, RESOURCE_CHECK_INTERVAL, CPU_THRESHOLD, RAM_THRESHOLD, DISK_THRESHOLD, RESOURCE_ALERT_COOLDOWN, NODE_OFFLINE_TIMEOUT
     try:
-        if "TRAFFIC_INTERVAL" in new_config: TRAFFIC_INTERVAL = int(new_config["TRAFFIC_INTERVAL"])
-        if "NODE_OFFLINE_TIMEOUT" in new_config: NODE_OFFLINE_TIMEOUT = int(new_config["NODE_OFFLINE_TIMEOUT"])
-        if "CPU_THRESHOLD" in new_config: CPU_THRESHOLD = float(new_config["CPU_THRESHOLD"])
-        if "RAM_THRESHOLD" in new_config: RAM_THRESHOLD = float(new_config["RAM_THRESHOLD"])
-        if "DISK_THRESHOLD" in new_config: DISK_THRESHOLD = float(new_config["DISK_THRESHOLD"])
+        if "TRAFFIC_INTERVAL" in new_config:
+            TRAFFIC_INTERVAL = int(new_config["TRAFFIC_INTERVAL"])
+        if "NODE_OFFLINE_TIMEOUT" in new_config:
+            NODE_OFFLINE_TIMEOUT = int(new_config["NODE_OFFLINE_TIMEOUT"])
+        if "CPU_THRESHOLD" in new_config:
+            CPU_THRESHOLD = float(new_config["CPU_THRESHOLD"])
+        if "RAM_THRESHOLD" in new_config:
+            RAM_THRESHOLD = float(new_config["RAM_THRESHOLD"])
+        if "DISK_THRESHOLD" in new_config:
+            DISK_THRESHOLD = float(new_config["DISK_THRESHOLD"])
 
         config_to_save = {
             "TRAFFIC_INTERVAL": TRAFFIC_INTERVAL,
@@ -141,59 +222,108 @@ def save_system_config(new_config: dict):
     except Exception as e:
         logging.error(f"Error saving system config: {e}")
 
+
 def load_keyboard_config():
-    """Загружает настройки клавиатуры."""
     global KEYBOARD_CONFIG
     try:
-        if os.path.exists(KEYBOARD_CONFIG_FILE):
-            with open(KEYBOARD_CONFIG_FILE, "r", encoding="utf-8") as f:
-                data = json.load(f)
-                # Обновляем только существующие ключи, чтобы не потерять дефолтные при обновлении структуры
-                KEYBOARD_CONFIG.update(data)
-                
-                # Принудительно добавляем enable_nodes, если его нет (миграция для старых конфигов)
-                if "enable_nodes" not in KEYBOARD_CONFIG:
-                    KEYBOARD_CONFIG["enable_nodes"] = True
-                    
-            logging.info("Keyboard config loaded.")
+
+        data = load_encrypted_json(KEYBOARD_CONFIG_FILE)
+        if data:
+            KEYBOARD_CONFIG.update(data)
+            if "enable_nodes" not in KEYBOARD_CONFIG:
+                KEYBOARD_CONFIG["enable_nodes"] = True
+            logging.info("Keyboard config loaded (secure).")
         else:
-            logging.info("Keyboard config not found, using defaults.")
+            logging.info("Keyboard config not found or empty, using defaults.")
     except Exception as e:
         logging.error(f"Error loading keyboard config: {e}")
 
+
 def save_keyboard_config(new_config: dict):
-    """Сохраняет настройки клавиатуры."""
     global KEYBOARD_CONFIG
     try:
-        # Обновляем только те ключи, которые есть в дефолтном конфиге (безопасность)
         for key in DEFAULT_KEYBOARD_CONFIG:
             if key in new_config:
                 KEYBOARD_CONFIG[key] = bool(new_config[key])
-        
-        with open(KEYBOARD_CONFIG_FILE, "w", encoding="utf-8") as f:
-            json.dump(KEYBOARD_CONFIG, f, indent=4)
-        logging.info("Keyboard config saved.")
+
+        save_encrypted_json(KEYBOARD_CONFIG_FILE, KEYBOARD_CONFIG)
+        logging.info("Keyboard config saved (secure).")
     except Exception as e:
         logging.error(f"Error saving keyboard config: {e}")
 
-# Загружаем конфиги при старте модуля
+
 load_system_config()
 load_keyboard_config()
 
+
+class RedactingFormatter(logging.Formatter):
+    def __init__(self, orig_formatter):
+        self.orig_formatter = orig_formatter
+        self._datefmt = orig_formatter.datefmt
+
+    def format(self, record):
+        msg = self.orig_formatter.format(record)
+        if DEBUG_MODE:
+            return msg
+
+        msg = re.sub(r'\d{8,10}:[\w-]{35}', '[TOKEN_REDACTED]', msg)
+        ip_pattern = r'\b(?!(?:127\.0\.0\.1|0\.0\.0\.0|localhost))(?:\d{1,3}\.){3}\d{1,3}\b'
+        msg = re.sub(ip_pattern, '[IP_REDACTED]', msg)
+        msg = re.sub(r'\b[a-fA-F0-9]{32,64}\b', '[HASH_REDACTED]', msg)
+        msg = re.sub(
+            r'\b(id|user_id|chat_id|user)=(\d+)\b',
+            r'\1=[ID_REDACTED]',
+            msg)
+        msg = re.sub(r'@[\w_]{5,}', '@[USERNAME_REDACTED]', msg)
+
+        return msg
+
+    def __getattr__(self, attr):
+        return getattr(self.orig_formatter, attr)
+
+
 def setup_logging(log_directory, log_filename_prefix):
-    log_formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+    log_format_str = '%(asctime)s - %(levelname)s - %(name)s - %(message)s'
+    base_formatter = logging.Formatter(log_format_str)
+
+    secure_formatter = RedactingFormatter(base_formatter)
+
     log_file_path = os.path.join(log_directory, f"{log_filename_prefix}.log")
+
     rotating_handler = logging.handlers.TimedRotatingFileHandler(
         log_file_path, when="midnight", interval=1, backupCount=30, encoding='utf-8'
     )
     rotating_handler.suffix = "%Y-%m-%d"
-    rotating_handler.setFormatter(log_formatter)
+    rotating_handler.setFormatter(secure_formatter)
+
     console_handler = logging.StreamHandler()
-    console_handler.setFormatter(log_formatter)
+    console_handler.setFormatter(secure_formatter)
+
     logger = logging.getLogger()
-    logger.setLevel(logging.INFO)
+    logger.setLevel(logging.DEBUG if DEBUG_MODE else logging.INFO)
+
     if logger.hasHandlers():
         logger.handlers.clear()
+
     logger.addHandler(rotating_handler)
     logger.addHandler(console_handler)
-    logging.info(f"Logging configured. Files will be saved in {log_directory}")
+
+    mode_name = "DEBUG" if DEBUG_MODE else "RELEASE"
+    logging.info(
+        f"Logging initialized. Mode: {mode_name}. Sensitive data redaction: {
+            'OFF' if DEBUG_MODE else 'ON'}")
+
+
+SENTRY_DSN = os.environ.get("SENTRY_DSN")
+
+DB_URL = f"sqlite://{os.path.join(CONFIG_DIR, 'nodes.db')}"
+
+TORTOISE_ORM = {
+    "connections": {"default": DB_URL},
+    "apps": {
+        "models": {
+            "models": ["core.models", "aerich.models"],
+            "default_connection": "default",
+        }
+    },
+}
