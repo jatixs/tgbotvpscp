@@ -1,4 +1,3 @@
-# file: core/server.py
 import logging
 import time
 import os
@@ -32,11 +31,6 @@ from .keyboards import BTN_CONFIG_MAP
 from modules import update as update_module
 from . import shared_state
 
-# --- SSE Imports ---
-from core.web.sse import sse_handler
-from core.metrics.publisher import system_metrics_publisher
-# -------------------
-
 COOKIE_NAME = "vps_agent_session"
 LOGIN_TOKEN_TTL = 300
 RESET_TOKEN_TTL = 600
@@ -56,7 +50,6 @@ BOT_USERNAME_CACHE = None
 APP_VERSION = get_app_version()
 CACHE_VER = str(int(time.time()))
 AGENT_TASK = None
-METRICS_TASK = None  # Task for SSE Publisher
 
 
 JINJA_ENV = Environment(
@@ -199,18 +192,6 @@ def get_current_user(request):
     return {"id": uid, "role": role, "first_name": USER_NAMES.get(
         str(uid), f"ID: {uid}"), "photo_url": photo}
 
-# --- SSE Protected Route Wrapper ---
-async def protected_sse_handler(request):
-    """
-    Обертка для защиты SSE роута.
-    Проверяет сессию перед передачей управления в sse_handler.
-    """
-    user = get_current_user(request)
-    if not user:
-        # Для EventSource (JS) лучше вернуть 401, клиент обработает это
-        raise web.HTTPUnauthorized()
-    return await sse_handler(request)
-# -----------------------------------
 
 def _get_avatar_html(user):
     raw = user.get('photo_url', '')
@@ -1300,23 +1281,17 @@ async def handle_api_root(request): return web.Response(text="VPS Bot API")
 
 
 async def cleanup_server():
-    global AGENT_TASK, METRICS_TASK
+    global AGENT_TASK
     if AGENT_TASK and not AGENT_TASK.done():
         AGENT_TASK.cancel()
         try:
             await AGENT_TASK
         except asyncio.CancelledError:
             pass
-    if METRICS_TASK and not METRICS_TASK.done():
-        METRICS_TASK.cancel()
-        try:
-            await METRICS_TASK
-        except asyncio.CancelledError:
-            pass
 
 
 async def start_web_server(bot_instance: Bot):
-    global AGENT_FLAG, AGENT_TASK, METRICS_TASK
+    global AGENT_FLAG, AGENT_TASK
     app = web.Application()
     app['bot'] = bot_instance
     app.router.add_post('/api/heartbeat', handle_heartbeat)
@@ -1363,20 +1338,10 @@ async def start_web_server(bot_instance: Bot):
         app.router.add_post(
             '/api/sessions/revoke_all',
             api_revoke_all_sessions)
-        
-        # --- SSE Route ---
-        app.router.add_get('/events', protected_sse_handler)
-        # -----------------
     else:
         logging.info("Web UI DISABLED.")
         app.router.add_get('/', handle_api_root)
-    
     AGENT_TASK = asyncio.create_task(agent_monitor())
-    
-    # --- Start Publisher ---
-    METRICS_TASK = asyncio.create_task(system_metrics_publisher(app))
-    # ---------------------
-    
     runner = web.AppRunner(app, access_log=None)
     await runner.setup()
     site = web.TCPSite(runner, WEB_SERVER_HOST, WEB_SERVER_PORT)
