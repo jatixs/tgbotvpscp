@@ -5,12 +5,12 @@
 <h1 align="center">🤖 VPS Manager Telegram Bot</h1>
 
 <p align="center">
-  <b >v1.15.1</b> — a powerful Telegram bot for monitoring and managing your <b>server network</b>. Now powered by <b>SQLite</b> and a fully <b>asynchronous core</b> (AsyncIO). Features <b>multi-node support</b>, a web interface, and full <b>Docker</b> integration.
+  <b >v1.15.2</b> — a powerful Telegram bot for monitoring and managing your <b>server network</b>. Now powered by <b>SQLite</b> and a fully <b>asynchronous core</b> (AsyncIO). Features <b>multi-node support</b>, a web interface, and full <b>Docker</b> integration.
 </p>
 
 <p align="center">
-  <a href="https://github.com/jatixs/tgbotvpscp/releases/latest"><img src="https://img.shields.io/badge/version-v1.15.1-blue?style=flat-square" alt="Version 1.15.1"/></a>
-  <a href="CHANGELOG.en.md"><img src="https://img.shields.io/badge/build-57-purple?style=flat-square" alt="Build 57"/></a>
+  <a href="https://github.com/jatixs/tgbotvpscp/releases/latest"><img src="https://img.shields.io/badge/version-v1.15.2-blue?style=flat-square" alt="Version 1.15.2"/></a>
+  <a href="CHANGELOG.en.md"><img src="https://img.shields.io/badge/build-58-purple?style=flat-square" alt="Build 58"/></a>
   <a href="https://www.python.org/"><img src="https://img.shields.io/badge/python-3.10%2B-green?style=flat-square" alt="Python 3.10+"/></a>
   <a href="https://choosealicense.com/licenses/gpl-3.0/"><img src="https://img.shields.io/badge/license-GPL--3.0-lightgrey?style=flat-square" alt="License GPL-3.0"/></a>
   <a href="https://github.com/aiogram/aiogram"><img src="https://img.shields.io/badge/aiogram-3.x-orange?style=flat-square" alt="Aiogram 3.x"/></a>
@@ -31,7 +31,7 @@
    - [Commands](#-useful-commands)
 4. [Project Structure](#️-project-structure)
 5. [Security](#-security)
-6. [Custom Modules](#-adding-your-own-module)
+6. [Documentation](#-documentation)
 7. [Author](#-author)
 
 ---
@@ -163,32 +163,81 @@ The agent will install as `tg-node` service and appear in your bot.
 
 ```
 /opt/tg-bot/
-├── bot.py            # Master Entry Point
-├── watchdog.py       # Alert System
-├── deploy.sh         # Installer
-├── requirements.txt  # Deps (aiosqlite, aiohttp...)
-├── Dockerfile        # Docker build
-├── docker-compose.yml
-├── .env              # Config
-│
-├── config/
-│   ├── nodes.db      # [NEW] SQLite Database
-│   ├── users.json    # Users config
-│   └── ...
-│
-├── node/             # Client Side
-│   └── node.py       # Agent script
-│
-├── core/             # Core Logic
-│   ├── server.py     # Async Web Server
-│   ├── nodes_db.py   # [NEW] Async DB Manager
-│   ├── utils.py      # Async Utils
-│   └── ...
-│
-├── modules/          # Features
-    ├── nodes.py      # Node Management
-    ├── speedtest.py  # Async Speedtest
-    └── ...
+├── .github/
+│   └── workflows/
+│       ├── codeql.yml
+│       ├── gitleaks.yml
+│       ├── python-safety.yml
+│       ├── security.yml
+│       └── trivy.yml
+├── assets/                  # Images (for README)
+│   ├── bot_1.png ...
+│   └── web_1.png ...
+├── core/                    # Bot Core
+│   ├── static/              # Static files for Web Panel
+│   │   ├── css/
+│   │   │   ├── login.css
+│   │   │   └── style.css
+│   │   └── js/
+│   │       ├── common.js
+│   │       ├── dashboard.js
+│   │       ├── login.js
+│   │       ├── settings.js
+│   │       └── theme_init.js
+│   ├── templates/           # HTML templates
+│   │   ├── dashboard.html
+│   │   ├── login.html
+│   │   ├── reset_password.html
+│   │   └── settings.html
+│   ├── auth.py              # Authorization and permissions
+│   ├── config.py            # Configuration (.env)
+│   ├── i18n.py              # Multilingual support (RU/EN)
+│   ├── keyboards.py         # Keyboards (Inline/Reply)
+│   ├── messaging.py         # Message management
+│   ├── middlewares.py       # Anti-spam (Middleware)
+│   ├── models.py            # DB Models (Tortoise ORM)
+│   ├── nodes_db.py          # Node Database (SQLite)
+│   ├── server.py            # Web Server (Aiohttp)
+│   ├── shared_state.py      # State (caches)
+│   └── utils.py             # Utilities
+├── modules/                 # Command Modules
+│   ├── fail2ban.py
+│   ├── logs.py
+│   ├── nodes.py             # Node management
+│   ├── notifications.py     # Alerts and monitoring
+│   ├── optimize.py
+│   ├── reboot.py
+│   ├── restart.py
+│   ├── selftest.py
+│   ├── speedtest.py
+│   ├── sshlog.py
+│   ├── top.py
+│   ├── traffic.py
+│   ├── update.py
+│   ├── uptime.py
+│   ├── users.py
+│   ├── vless.py
+│   └── xray.py
+├── node/                    # Agent for remote servers
+│   └── node.py
+├── .env.example             # Config example
+├── .gitignore
+├── aerich.ini               # Migration config
+├── bot.py                   # Main entry point
+├── CHANGELOG.md             # Changelog (RU)
+├── CHANGELOG.en.md          # Changelog (EN)
+├── custom_module.md         # Guide: Custom Module (RU)
+├── custom_module_en.md      # Guide: Custom Module (EN)
+├── deploy.sh                # Installer (RU)
+├── deploy_en.sh             # Installer (EN)
+├── docker-compose.yml       # Docker config
+├── Dockerfile
+├── LICENSE
+├── migrate.py               # Migration script
+├── README.md                # Description (RU)
+├── README.en.md             # Description (EN)
+├── requirements.txt         # Dependencies
+└── watchdog.py              # Watchdog (restart)
 ```
 
 -----
@@ -200,22 +249,17 @@ The agent will install as `tg-node` service and appear in your bot.
   * **Injection Protection:** `shlex` command escaping.
   * **Tokens:** Unique auth tokens for each node.
 
-<details>
-<summary><h2>🧩 Adding Your Own Module</h2></summary>
+-----
 
-1.  **File:** Create `modules/my_module.py`.
-2.  **Code:** Use `BUTTON_KEY` and `register_handlers(dp)`.
-3.  **i18n:** Add strings to `core/i18n.py`.
-4.  **Register:** Import in `bot.py` and call `register_module()`.
-5.  **Restart:** `sudo systemctl restart tg-bot`.
+## 📚 Documentation
 
-**[Full-format instructions](/custom_module_en.md)**.
-</details>
+* 📖 **[Architecture & Full Feature Guide](ARCHITECTURE.en.md)** — learn how the bot is structured and what each file does.
+* 🧩 **[Create Custom Module](custom_module_en.md)** — guide on adding new buttons and features.
 
 -----
 
 ## 👤 Author
 
-**Version:** 1.15.1 (Build 57) <br>
+**Version:** 1.15.2 (Build 58) <br>
 **Author:** Jatix <br>
 📜 **License:** GPL-3.0 <br>

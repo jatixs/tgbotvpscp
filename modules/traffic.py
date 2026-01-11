@@ -160,8 +160,10 @@ async def traffic_monitor(bot: Bot):
                 msg_text = (
                     f"{get_text('traffic_update_total', lang)}\n"
                     f"=========================\n"
-                    f"{get_text('traffic_rx', lang, value=format_traffic(rx, lang))}\n"
-                    f"{get_text('traffic_tx', lang, value=format_traffic(tx, lang))}\n\n"
+                    f"{get_text('traffic_rx', lang,
+                                value=format_traffic(rx, lang))}\n"
+                    f"{get_text('traffic_tx', lang,
+                                value=format_traffic(tx, lang))}\n\n"
                     f"{get_text('traffic_update_speed', lang)}\n"
                     f"=========================\n"
                     f"{get_text('traffic_speed_rx', lang, speed=rx_speed)}\n"

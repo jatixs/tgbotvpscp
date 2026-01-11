@@ -62,7 +62,6 @@ def start_background_tasks(bot: Bot) -> list[asyncio.Task]:
     return tasks
 
 
-# --- НОВАЯ ФУНКЦИЯ ДЛЯ ПОЛУЧЕНИЯ ТОП ПРОЦЕССОВ ---
 def get_top_processes_info(metric: str) -> str:
     """Возвращает строку с топ-3 процессами по CPU или RAM."""
     try:
@@ -70,19 +69,30 @@ def get_top_processes_info(metric: str) -> str:
         procs = []
         for p in psutil.process_iter(attrs):
             try:
-                # process_iter может вызвать исключение, если процесс завершился во время итерации
+                # process_iter может вызвать исключение, если процесс
+                # завершился во время итерации
                 procs.append(p.info)
             except (psutil.NoSuchProcess, psutil.AccessDenied):
                 pass
 
         if metric == 'cpu':
             # Сортировка по CPU
-            sorted_procs = sorted(procs, key=lambda p: p['cpu_percent'], reverse=True)[:3]
-            info_list = [f"{p['name']} ({p['cpu_percent']}%)" for p in sorted_procs]
+            sorted_procs = sorted(
+                procs,
+                key=lambda p: p['cpu_percent'],
+                reverse=True)[
+                :3]
+            info_list = [
+                f"{p['name']} ({p['cpu_percent']}%)" for p in sorted_procs]
         elif metric == 'ram':
             # Сортировка по RAM
-            sorted_procs = sorted(procs, key=lambda p: p['memory_percent'], reverse=True)[:3]
-            info_list = [f"{p['name']} ({p['memory_percent']:.1f}%)" for p in sorted_procs]
+            sorted_procs = sorted(
+                procs,
+                key=lambda p: p['memory_percent'],
+                reverse=True)[
+                :3]
+            info_list = [
+                f"{p['name']} ({p['memory_percent']:.1f}%)" for p in sorted_procs]
         else:
             return ""
 
@@ -178,7 +188,7 @@ async def resource_monitor(bot: Bot):
     await asyncio.sleep(15)
     while True:
         try:
-            # interval=1 нужен для корректного расчета загрузки CPU
+
             cpu = psutil.cpu_percent(interval=1)
             ram = psutil.virtual_memory().percent
             try:
@@ -192,7 +202,7 @@ async def resource_monitor(bot: Bot):
 
             def check(metric, val, thresh, key_high, key_rep, key_norm):
                 if val >= thresh:
-                    # ПОЛУЧАЕМ ИНФОРМАЦИЮ О ПРОЦЕССАХ ТОЛЬКО ПРИ ВЫСОКОЙ НАГРУЗКЕ
+
                     proc_info = ""
                     if metric in ['cpu', 'ram']:
                         proc_info = get_top_processes_info(metric)
@@ -225,15 +235,18 @@ async def resource_monitor(bot: Bot):
                 "alert_ram_high",
                 "alert_ram_high_repeat",
                 "alert_ram_normal")
-            
-            # Для диска логика немного отличается (процессы не нужны)
+
             if disk >= config.DISK_THRESHOLD:
-                 if not RESOURCE_ALERT_STATE["disk"]:
-                    alerts.append(("alert_disk_high", {"usage": disk, "threshold": config.DISK_THRESHOLD, "processes": ""}))
+                if not RESOURCE_ALERT_STATE["disk"]:
+                    alerts.append(
+                        ("alert_disk_high", {
+                            "usage": disk, "threshold": config.DISK_THRESHOLD, "processes": ""}))
                     RESOURCE_ALERT_STATE["disk"] = True
                     LAST_RESOURCE_ALERT_TIME["disk"] = now
-                 elif now - LAST_RESOURCE_ALERT_TIME["disk"] > config.RESOURCE_ALERT_COOLDOWN:
-                    alerts.append(("alert_disk_high_repeat", {"usage": disk, "threshold": config.DISK_THRESHOLD, "processes": ""}))
+                elif now - LAST_RESOURCE_ALERT_TIME["disk"] > config.RESOURCE_ALERT_COOLDOWN:
+                    alerts.append(
+                        ("alert_disk_high_repeat", {
+                            "usage": disk, "threshold": config.DISK_THRESHOLD, "processes": ""}))
                     LAST_RESOURCE_ALERT_TIME["disk"] = now
             elif disk < config.DISK_THRESHOLD and RESOURCE_ALERT_STATE["disk"]:
                 alerts.append(("alert_disk_normal", {"usage": disk}))
@@ -257,7 +270,7 @@ async def reliable_tail_log_monitor(bot, path, alert_type, parser):
 
         proc = None
         try:
-            # ИСПОЛЬЗУЕМ start_new_session=True ДЛЯ СОЗДАНИЯ ГРУППЫ ПРОЦЕССОВ
+
             proc = await asyncio.create_subprocess_shell(
                 f"tail -n 0 -f {path}",
                 stdout=asyncio.subprocess.PIPE,
@@ -273,7 +286,7 @@ async def reliable_tail_log_monitor(bot, path, alert_type, parser):
                         await send_alert(bot, lambda lang: _(data["key"], lang, **data["params"]), alert_type)
 
         except asyncio.CancelledError:
-            # ПРИ ОТМЕНЕ УБИВАЕМ ВСЮ ГРУППУ ПРОЦЕССОВ
+
             if proc:
                 try:
                     os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
@@ -291,5 +304,6 @@ async def reliable_tail_log_monitor(bot, path, alert_type, parser):
                 try:
                     os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
                 except Exception as e_kill:
-                    logging.debug(f"Failed to kill tail process in except: {e_kill}")
+                    logging.debug(
+                        f"Failed to kill tail process in except: {e_kill}")
             await asyncio.sleep(10)

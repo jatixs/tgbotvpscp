@@ -28,7 +28,7 @@ async def fail2ban_handler(message: types.Message):
     user_id = message.from_user.id
     chat_id = message.chat.id
     lang = get_user_lang(user_id)
-    command = "fail2ban" # Исправлена опечатка (было fall2ban)
+    command = "fail2ban"
     if not is_allowed(user_id, command):
         await send_access_denied_message(message.bot, user_id, chat_id, command)
         return
@@ -43,7 +43,7 @@ async def fail2ban_handler(message: types.Message):
 
     try:
         proc = await asyncio.create_subprocess_shell(f"tail -n 50 {log_file}", stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
-        # FIX: _ -> stderr_dummy
+
         out, stderr_dummy = await proc.communicate()
         lines = out.decode('utf-8', 'ignore').split('\n')
 

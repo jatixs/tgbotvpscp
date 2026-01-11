@@ -11,52 +11,52 @@ from argon2 import PasswordHasher
 from . import config
 from .i18n import _
 from .config import USERS_FILE, ADMIN_USER_ID, ADMIN_USERNAME, INSTALL_MODE
+from .config import load_encrypted_json, save_encrypted_json
 from .shared_state import ALLOWED_USERS, USER_NAMES, LAST_MESSAGE_IDS
 from .messaging import delete_previous_message
 from .utils import escape_html
 
 
 def load_users():
-    """Загружает данные пользователей в ALLOWED_USERS."""
+    """Загружает данные пользователей (шифровано)."""
     try:
         os.makedirs(os.path.dirname(USERS_FILE), exist_ok=True)
 
         ALLOWED_USERS.clear()
         USER_NAMES.clear()
 
-        if os.path.exists(USERS_FILE):
-            with open(USERS_FILE, "r", encoding='utf-8') as f:
-                data = json.load(f)
+        data = load_encrypted_json(USERS_FILE)
 
-                for user in data.get("allowed_users", []):
-                    uid = int(user["id"])
-                    # Поддержка миграции со старого формата
-                    group = user.get("group", "users")
-                    password_hash = user.get("password_hash", None)
+        if data:
+            for user in data.get("allowed_users", []):
+                uid = int(user["id"])
+                group = user.get("group", "users")
+                password_hash = user.get("password_hash", None)
 
-                    ALLOWED_USERS[uid] = {
-                        "group": group,
-                        "password_hash": password_hash
-                    }
+                ALLOWED_USERS[uid] = {
+                    "group": group,
+                    "password_hash": password_hash
+                }
 
-                USER_NAMES.update(data.get("user_names", {}))
+            USER_NAMES.update(data.get("user_names", {}))
         else:
-            logging.warning(f"Файл {USERS_FILE} не найден. Инициализация.")
+            if os.path.exists(USERS_FILE):
+                logging.warning(f"Файл {USERS_FILE} пуст или поврежден.")
+            else:
+                logging.info(f"Файл {USERS_FILE} не найден. Инициализация.")
 
-        # Гарантируем наличие главного админа
         if ADMIN_USER_ID not in ALLOWED_USERS:
             logging.info(
                 f"Главный админ ID {ADMIN_USER_ID} не найден, добавляю.")
-            
-            # Проверяем, передан ли начальный пароль через .env (генерируется при установке)
+
             initial_pass = os.environ.get("TG_WEB_INITIAL_PASSWORD")
             if initial_pass:
-                logging.info("Использую сгенерированный пароль из переменных окружения.")
+                logging.info("Использую сгенерированный пароль.")
                 ph = PasswordHasher()
                 p_hash = ph.hash(initial_pass)
             else:
-                # Дефолтный хеш для "admin" (sha256 - legacy, но поддерживается сервером для миграции)
-                logging.warning("Случайный пароль не найден. Использую дефолтный ('admin').")
+                logging.warning(
+                    "Случайный пароль не найден. Использую дефолтный ('admin').")
                 p_hash = "8c6976e5b5410415bde908bd4dee15dfb167a9c873fc4bb8a81f6f2ab448a918"
 
             ALLOWED_USERS[ADMIN_USER_ID] = {
@@ -67,7 +67,6 @@ def load_users():
                 "default_admin_name", config.DEFAULT_LANGUAGE)
             save_users()
 
-        # Миграция старой записи админа (если вдруг в памяти строка)
         elif isinstance(ALLOWED_USERS[ADMIN_USER_ID], str):
             ALLOWED_USERS[ADMIN_USER_ID] = {
                 "group": "admins", "password_hash": None}
@@ -78,14 +77,13 @@ def load_users():
         logging.error(
             f"Критическая ошибка загрузки users.json: {e}",
             exc_info=True)
-        # Аварийное восстановление доступа админа
         ALLOWED_USERS[ADMIN_USER_ID] = {
             "group": "admins", "password_hash": None}
         save_users()
 
 
 def save_users():
-    """Сохраняет пользователей в users.json."""
+    """Сохраняет пользователей (шифровано)."""
     try:
         user_names_to_save = {str(k): v for k, v in USER_NAMES.items()}
 
@@ -109,16 +107,13 @@ def save_users():
             "user_names": user_names_to_save
         }
         os.makedirs(os.path.dirname(USERS_FILE), exist_ok=True)
-        with open(USERS_FILE, "w", encoding='utf-8') as f:
-            json.dump(data, f, indent=4, ensure_ascii=False)
-            f.flush()
-            os.fsync(f.fileno())
+
+        save_encrypted_json(USERS_FILE, data)
     except Exception as e:
         logging.error(f"Ошибка сохранения users.json: {e}", exc_info=True)
 
 
 def is_allowed(user_id, command=None):
-    """Проверяет права доступа."""
     if user_id not in ALLOWED_USERS:
         return False
 
@@ -128,20 +123,10 @@ def is_allowed(user_id, command=None):
         "group", "users")
 
     user_commands = [
-        "start",
-        "menu",
-        "back_to_menu",
-        "uptime",
-        "traffic",
-        "selftest",
-        "get_id",
-        "get_id_inline",
-        "notifications_menu",
-        "toggle_alert_resources",
-        "toggle_alert_logins",
-        "toggle_alert_bans",
-        "alert_downtime_stub",
-        "language"]
+        "start", "menu", "back_to_menu", "uptime", "traffic",
+        "selftest", "get_id", "get_id_inline", "notifications_menu",
+        "toggle_alert_resources", "toggle_alert_logins",
+        "toggle_alert_bans", "alert_downtime_stub", "language"]
     admin_only_commands = [
         "manage_users", "generate_vless", "speedtest", "top", "updatexray",
         "adduser", "add_user", "delete_user", "set_group", "change_group",
@@ -219,9 +204,9 @@ async def refresh_user_names(bot: Bot):
                         needs_save = True
                 else:
                     logging.error(
-                        f"Ошибка Telegram API при обновлении имени для {uid}: {e}")
+                        f"Ошибка API при обновлении имени {uid}: {e}")
             except Exception as e:
-                logging.error(f"Ошибка при обновлении имени для {uid}: {e}")
+                logging.error(f"Ошибка при обновлении имени {uid}: {e}")
 
     if needs_save:
         save_users()
@@ -287,7 +272,8 @@ async def send_access_denied_message(
     admin_link = ""
 
     if ADMIN_USERNAME:
-        admin_link = f"https://t.me/{ADMIN_USERNAME}?text={urllib.parse.quote(text_to_send)}"
+        admin_link = f"https://t.me/{ADMIN_USERNAME}?text={
+            urllib.parse.quote(text_to_send)}"
     else:
         admin_link = f"tg://user?id={ADMIN_USER_ID}"
 
@@ -303,4 +289,4 @@ async def send_access_denied_message(
             user_id, {})[command] = sent_message.message_id
     except Exception as e:
         logging.error(
-            f"Не удалось отправить сообщение об отказе в доступе пользователю {user_id}: {e}")
+            f"Не удалось отправить отказ пользователю {user_id}: {e}")

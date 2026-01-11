@@ -36,8 +36,16 @@ async def reboot_confirm_handler(message: types.Message):
 
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
         [
-            InlineKeyboardButton(text=_("btn_reboot_confirm", lang), callback_data="reboot_confirm"),
-            InlineKeyboardButton(text=_("btn_reboot_cancel", lang), callback_data="reboot_cancel")
+            InlineKeyboardButton(
+                text=_(
+                    "btn_reboot_confirm",
+                    lang),
+                callback_data="reboot_confirm"),
+            InlineKeyboardButton(
+                text=_(
+                    "btn_reboot_cancel",
+                    lang),
+                callback_data="reboot_cancel")
         ]
     ])
 
@@ -67,7 +75,7 @@ async def reboot_execute_handler(callback: types.CallbackQuery):
     await callback.message.edit_text(_("reboot_confirmed", lang), parse_mode="HTML")
 
     try:
-        # Используем nohup и задержку, чтобы успеть отправить ответ в Telegram
+
         cmd = "nohup sh -c 'sleep 2 && /sbin/reboot' >/dev/null 2>&1 &"
         await asyncio.create_subprocess_shell(cmd)
     except Exception as e:

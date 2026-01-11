@@ -1,4 +1,4 @@
-# /opt/tg-bot/modules/top.py
+
 import asyncio
 from aiogram import Dispatcher, types
 from aiogram.types import KeyboardButton

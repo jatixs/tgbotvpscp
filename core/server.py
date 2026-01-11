@@ -57,6 +57,7 @@ JINJA_ENV = Environment(
     autoescape=select_autoescape(['html', 'xml'])
 )
 
+
 def check_rate_limit(ip):
     now = time.time()
     attempts = LOGIN_ATTEMPTS.get(ip, [])
@@ -64,28 +65,34 @@ def check_rate_limit(ip):
     LOGIN_ATTEMPTS[ip] = attempts
     return len(attempts) < MAX_LOGIN_ATTEMPTS
 
+
 def add_login_attempt(ip):
     if ip not in LOGIN_ATTEMPTS:
         LOGIN_ATTEMPTS[ip] = []
     LOGIN_ATTEMPTS[ip].append(time.time())
 
+
 def get_client_ip(request):
     ip = request.headers.get('X-Forwarded-For')
-    if ip: return ip.split(',')[0]
+    if ip:
+        return ip.split(',')[0]
     peer = request.transport.get_extra_info('peername')
     return peer[0] if peer else "unknown"
 
+
 def check_user_password(user_id, input_pass):
-    if user_id not in ALLOWED_USERS: return False
+    if user_id not in ALLOWED_USERS:
+        return False
     user_data = ALLOWED_USERS[user_id]
-    if isinstance(user_data, str): return False
+    if isinstance(user_data, str):
+        return False
     stored_hash = user_data.get("password_hash")
-    if not stored_hash: return user_id == ADMIN_USER_ID and input_pass == "admin"
-    
-    # Legacy SHA256 check (Migration purpose only)
-    if len(stored_hash) == 64 and all(c in "0123456789abcdef" for c in stored_hash):
+    if not stored_hash:
+        return user_id == ADMIN_USER_ID and input_pass == "admin"
+
+    if len(stored_hash) == 64 and all(
+            c in "0123456789abcdef" for c in stored_hash):
         input_pass_sha256 = hashlib.sha256(input_pass.encode()).hexdigest()
-        # Use compare_digest to mitigate timing attacks on legacy hashes
         if hmac.compare_digest(stored_hash, input_pass_sha256):
             try:
                 ph = PasswordHasher()
@@ -94,17 +101,23 @@ def check_user_password(user_id, input_pass):
                 save_users()
                 return True
             except Exception:
-                return True # Allow login even if migration fails
+                return True
         return False
 
     ph = PasswordHasher()
-    try: return ph.verify(stored_hash, input_pass)
-    except argon2_exceptions.VerifyMismatchError: return False
-    except Exception: return False
+    try:
+        return ph.verify(stored_hash, input_pass)
+    except argon2_exceptions.VerifyMismatchError:
+        return False
+    except Exception:
+        return False
+
 
 def is_default_password_active(user_id):
-    if user_id != ADMIN_USER_ID: return False
-    if user_id not in ALLOWED_USERS: return False
+    if user_id != ADMIN_USER_ID:
+        return False
+    if user_id not in ALLOWED_USERS:
+        return False
     user_data = ALLOWED_USERS[user_id]
     default_hash = "8c6976e5b5410415bde908bd4dee15dfb167a9c873fc4bb8a81f6f2ab448a918"
     if isinstance(user_data, dict):
@@ -112,152 +125,223 @@ def is_default_password_active(user_id):
         return p_hash == default_hash or p_hash is None
     return True
 
+
 def _get_top_processes(metric):
     import psutil
+
     def sizeof_fmt(num):
         for unit in ["B", "KB", "MB", "GB", "TB"]:
-            if abs(num) < 1024.0: return f"{num:3.1f} {unit}"
+            if abs(num) < 1024.0:
+                return f"{num:3.1f} {unit}"
             num /= 1024.0
         return f"{num:.1f} PB"
     try:
         attrs = ['pid', 'name', 'cpu_percent', 'memory_percent']
-        if metric == 'disk': attrs.append('io_counters')
+        if metric == 'disk':
+            attrs.append('io_counters')
         procs = []
         for p in psutil.process_iter(attrs):
             try:
                 p_info = p.info
                 p_info['name'] = p_info['name'][:15]
                 procs.append(p_info)
-            except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess): pass
+            except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+                pass
         if metric == 'cpu':
-            sorted_procs = sorted(procs, key=lambda p: p['cpu_percent'], reverse=True)[:5]
+            sorted_procs = sorted(
+                procs,
+                key=lambda p: p['cpu_percent'],
+                reverse=True)[
+                :5]
             return [f"{p['name']} ({p['cpu_percent']}%)" for p in sorted_procs]
         elif metric == 'ram':
-            sorted_procs = sorted(procs, key=lambda p: p['memory_percent'], reverse=True)[:5]
-            return [f"{p['name']} ({p['memory_percent']:.1f}%)" for p in sorted_procs]
+            sorted_procs = sorted(
+                procs,
+                key=lambda p: p['memory_percent'],
+                reverse=True)[
+                :5]
+            return [
+                f"{p['name']} ({p['memory_percent']:.1f}%)" for p in sorted_procs]
         elif metric == 'disk':
             def get_io(p):
                 io = p.get('io_counters')
                 return (io.read_bytes + io.write_bytes) if io else 0
             sorted_procs = sorted(procs, key=get_io, reverse=True)[:5]
-            return [f"{p['name']} ({sizeof_fmt(get_io(p))})" for p in sorted_procs]
+            return [
+                f"{p['name']} ({sizeof_fmt(get_io(p))})" for p in sorted_procs]
         return []
     except Exception as e:
         logging.error(f"Error getting processes: {e}")
         return []
 
+
 def get_current_user(request):
     token = request.cookies.get(COOKIE_NAME)
-    if not token or token not in SERVER_SESSIONS: return None
+    if not token or token not in SERVER_SESSIONS:
+        return None
     session = SERVER_SESSIONS[token]
     if time.time() > session['expires']:
         del SERVER_SESSIONS[token]
         return None
     uid = session['id']
-    if uid not in ALLOWED_USERS: return None
+    if uid not in ALLOWED_USERS:
+        return None
     u_data = ALLOWED_USERS[uid]
     role = u_data.get("group", "users") if isinstance(u_data, dict) else u_data
     photo = session.get('photo_url', AGENT_FLAG)
-    return {"id": uid, "role": role, "first_name": USER_NAMES.get(str(uid), f"ID: {uid}"), "photo_url": photo}
+    return {"id": uid, "role": role, "first_name": USER_NAMES.get(
+        str(uid), f"ID: {uid}"), "photo_url": photo}
+
 
 def _get_avatar_html(user):
     raw = user.get('photo_url', '')
-    if raw.startswith('http'): return f'<img src="{raw}" alt="ava" class="w-6 h-6 rounded-full flex-shrink-0">'
+    if raw.startswith('http'):
+        return f'<img src="{
+            raw}" alt="ava" class="w-6 h-6 rounded-full flex-shrink-0">'
     return f'<span class="text-lg leading-none select-none">{raw}</span>'
+
 
 def check_telegram_auth(data, bot_token):
     auth_data = data.copy()
     check_hash = auth_data.pop('hash', '')
-    if not check_hash: return False
+    if not check_hash:
+        return False
     data_check_arr = []
-    for key, value in sorted(auth_data.items()): data_check_arr.append(f"{key}={value}")
+    for key, value in sorted(auth_data.items()):
+        data_check_arr.append(f"{key}={value}")
     data_check_string = '\n'.join(data_check_arr)
     secret_key = hashlib.sha256(bot_token.encode()).digest()
-    hash_calc = hmac.new(secret_key, data_check_string.encode(), hashlib.sha256).hexdigest()
-    if hash_calc != check_hash: return False
+    hash_calc = hmac.new(
+        secret_key,
+        data_check_string.encode(),
+        hashlib.sha256).hexdigest()
+    if hash_calc != check_hash:
+        return False
     auth_date = int(auth_data.get('auth_date', 0))
-    if time.time() - auth_date > 86400: return False
+    if time.time() - auth_date > 86400:
+        return False
     return True
+
 
 async def handle_get_logs(request):
     user = get_current_user(request)
-    if not user or user['role'] != 'admins': return web.json_response({"error": "Unauthorized"}, status=403)
+    if not user or user['role'] != 'admins':
+        return web.json_response({"error": "Unauthorized"}, status=403)
     log_path = os.path.join(BASE_DIR, "logs", "bot", "bot.log")
-    if not os.path.exists(log_path): return web.json_response({"logs": ["Logs not found."]})
+    if not os.path.exists(log_path):
+        return web.json_response({"logs": ["Logs not found."]})
     try:
         with open(log_path, "r", encoding="utf-8", errors="ignore") as f:
             lines = list(deque(f, 300))
         return web.json_response({"logs": lines})
-    except Exception as e: return web.json_response({"error": str(e)}, status=500)
+    except Exception as e:
+        return web.json_response({"error": str(e)}, status=500)
+
 
 async def handle_get_sys_logs(request):
     user = get_current_user(request)
-    if not user or user['role'] != 'admins': return web.json_response({"error": "Unauthorized"}, status=403)
+    if not user or user['role'] != 'admins':
+        return web.json_response({"error": "Unauthorized"}, status=403)
     try:
         cmd = ["journalctl", "-n", "100", "--no-pager"]
         if DEPLOY_MODE == "docker" and current_config.INSTALL_MODE == "root":
-             if os.path.exists("/host/usr/bin/journalctl"):
-                cmd = ["chroot", "/host", "/usr/bin/journalctl", "-n", "100", "--no-pager"]
+            if os.path.exists("/host/usr/bin/journalctl"):
+                cmd = [
+                    "chroot",
+                    "/host",
+                    "/usr/bin/journalctl",
+                    "-n",
+                    "100",
+                    "--no-pager"]
         proc = await asyncio.create_subprocess_exec(*cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
         stdout, stderr = await proc.communicate()
         if proc.returncode == 0:
             logs = stdout.decode('utf-8', errors='ignore').strip().split('\n')
             return web.json_response({"logs": logs})
-        else: return web.json_response({"error": f"Error reading logs: {stderr.decode()}"})
-    except Exception as e: return web.json_response({"error": str(e)}, status=500)
+        else:
+            return web.json_response(
+                {"error": f"Error reading logs: {stderr.decode()}"})
+    except Exception as e:
+        return web.json_response({"error": str(e)}, status=500)
+
 
 async def api_get_notifications(request):
     user = get_current_user(request)
-    if not user: return web.json_response({"error": "Unauthorized"}, status=401)
+    if not user:
+        return web.json_response({"error": "Unauthorized"}, status=401)
     uid = user['id']
     user_alerts = ALERTS_CONFIG.get(uid, {})
-    filtered = [n for n in list(shared_state.WEB_NOTIFICATIONS) if user_alerts.get(n['type'], False)]
+    filtered = [
+        n for n in list(
+            shared_state.WEB_NOTIFICATIONS) if user_alerts.get(
+            n['type'],
+            False)]
     last_read = shared_state.WEB_USER_LAST_READ.get(uid, 0)
     unread_count = sum(1 for n in filtered if n['time'] > last_read)
-    return web.json_response({"notifications": filtered, "unread_count": unread_count})
+    return web.json_response(
+        {"notifications": filtered, "unread_count": unread_count})
+
 
 async def api_read_notifications(request):
     user = get_current_user(request)
-    if not user: return web.json_response({"error": "Unauthorized"}, status=401)
+    if not user:
+        return web.json_response({"error": "Unauthorized"}, status=401)
     uid = user['id']
     shared_state.WEB_USER_LAST_READ[uid] = time.time()
     return web.json_response({"status": "ok"})
 
+
 async def api_clear_notifications(request):
     user = get_current_user(request)
-    if not user: return web.json_response({"error": "Unauthorized"}, status=401)
+    if not user:
+        return web.json_response({"error": "Unauthorized"}, status=401)
     shared_state.WEB_NOTIFICATIONS.clear()
     shared_state.WEB_USER_LAST_READ.clear()
     return web.json_response({"status": "ok"})
 
+
 async def api_check_update(request):
     user = get_current_user(request)
-    if not user: return web.json_response({'error': 'Unauthorized'}, status=401)
+    if not user:
+        return web.json_response({'error': 'Unauthorized'}, status=401)
     try:
         info = await update_module.get_update_info()
-        if len(info) == 4: local_ver, remote_ver, target_branch, update_available = info
+        if len(info) == 4:
+            local_ver, remote_ver, target_branch, update_available = info
         elif len(info) == 3:
             local_ver, remote_ver, target_branch = info
             update_available = (target_branch is not None)
-        else: return web.json_response({'error': 'Invalid update module response'}, status=500)
-        return web.json_response({'local_version': local_ver, 'remote_version': remote_ver, 'target_branch': target_branch, 'update_available': update_available})
-    except Exception as e: return web.json_response({'error': str(e)}, status=500)
+        else:
+            return web.json_response(
+                {'error': 'Invalid update module response'}, status=500)
+        return web.json_response({'local_version': local_ver, 'remote_version': remote_ver,
+                                 'target_branch': target_branch, 'update_available': update_available})
+    except Exception as e:
+        return web.json_response({'error': str(e)}, status=500)
+
 
 async def api_run_update(request):
     user = get_current_user(request)
-    if not user or user['role'] != 'admins': return web.json_response({'error': 'Unauthorized'}, status=401)
+    if not user or user['role'] != 'admins':
+        return web.json_response({'error': 'Unauthorized'}, status=401)
     try:
         data = await request.json()
         branch = data.get('branch')
-        if not branch: return web.json_response({'error': 'No branch specified'}, status=400)
+        if not branch:
+            return web.json_response(
+                {'error': 'No branch specified'}, status=400)
         branch = branch.replace('origin/', '')
         await update_module.execute_bot_update(branch, restart_source="web:admin")
-        return web.json_response({'status': 'Update started, server restarting...'})
-    except Exception as e: return web.json_response({'error': str(e)}, status=500)
+        return web.json_response(
+            {'status': 'Update started, server restarting...'})
+    except Exception as e:
+        return web.json_response({'error': str(e)}, status=500)
+
 
 async def api_get_sessions(request):
     user = get_current_user(request)
-    if not user: return web.json_response({"error": "Unauthorized"}, status=401)
+    if not user:
+        return web.json_response({"error": "Unauthorized"}, status=401)
     current_token = request.cookies.get(COOKIE_NAME)
     user_sessions = []
     expired_tokens = []
@@ -270,29 +354,54 @@ async def api_get_sessions(request):
             is_current = (token == current_token)
             s_uid = session['id']
             user_name = USER_NAMES.get(str(s_uid), f"ID: {s_uid}")
-            user_sessions.append({"token_prefix": token[:6] + "...", "id": token, "ip": session.get("ip", "Unknown"), "ua": session.get("ua", "Unknown"), "created": session.get("created", 0), "current": is_current, "user_id": s_uid, "user_name": user_name, "is_mine": (s_uid == user['id'])})
-    for t in expired_tokens: del SERVER_SESSIONS[t]
-    user_sessions.sort(key=lambda x: (not x['current'], not x['is_mine'], x['created']), reverse=True)
+            user_sessions.append({"token_prefix": token[:6] + "...",
+                                  "id": token,
+                                  "ip": session.get("ip",
+                                                    "Unknown"),
+                                  "ua": session.get("ua",
+                                                    "Unknown"),
+                                  "created": session.get("created",
+                                                         0),
+                                  "current": is_current,
+                                  "user_id": s_uid,
+                                  "user_name": user_name,
+                                  "is_mine": (s_uid == user['id'])})
+    for t in expired_tokens:
+        del SERVER_SESSIONS[t]
+    user_sessions.sort(
+        key=lambda x: (
+            not x['current'],
+            not x['is_mine'],
+            x['created']),
+        reverse=True)
     return web.json_response({"sessions": user_sessions})
+
 
 async def api_revoke_session(request):
     user = get_current_user(request)
-    if not user: return web.json_response({"error": "Unauthorized"}, status=401)
+    if not user:
+        return web.json_response({"error": "Unauthorized"}, status=401)
     try:
         data = await request.json()
         target_token = data.get("token")
         current_token = request.cookies.get(COOKIE_NAME)
-        if target_token == current_token: return web.json_response({"error": "Cannot revoke current session"}, status=400)
+        if target_token == current_token:
+            return web.json_response(
+                {"error": "Cannot revoke current session"}, status=400)
         if target_token in SERVER_SESSIONS:
             if user['id'] == ADMIN_USER_ID or SERVER_SESSIONS[target_token]['id'] == user['id']:
                 del SERVER_SESSIONS[target_token]
                 return web.json_response({"status": "ok"})
-        return web.json_response({"error": "Session not found or access denied"}, status=404)
-    except Exception as e: return web.json_response({"error": str(e)}, status=500)
+        return web.json_response(
+            {"error": "Session not found or access denied"}, status=404)
+    except Exception as e:
+        return web.json_response({"error": str(e)}, status=500)
+
 
 async def api_revoke_all_sessions(request):
     user = get_current_user(request)
-    if not user: return web.json_response({"error": "Unauthorized"}, status=401)
+    if not user:
+        return web.json_response({"error": "Unauthorized"}, status=401)
     current_token = request.cookies.get(COOKIE_NAME)
     uid = user['id']
     count = 0
@@ -303,28 +412,37 @@ async def api_revoke_all_sessions(request):
             count += 1
     return web.json_response({"status": "ok", "revoked_count": count})
 
+
 async def handle_dashboard(request):
     user = get_current_user(request)
-    if not user: raise web.HTTPFound('/login')
+    if not user:
+        raise web.HTTPFound('/login')
     if is_default_password_active(user['id']):
         token = secrets.token_urlsafe(32)
         RESET_TOKENS[token] = {"ts": time.time(), "user_id": user['id']}
         raise web.HTTPFound(f'/reset_password?token={token}')
-    
+
     user_id = user['id']
     lang = get_user_lang(user_id)
     all_nodes = await nodes_db.get_all_nodes()
     nodes_count = len(all_nodes)
-    active_nodes = sum(1 for n in all_nodes.values() if time.time() - n.get("last_seen", 0) < NODE_OFFLINE_TIMEOUT)
+    active_nodes = sum(
+        1 for n in all_nodes.values() if time.time() -
+        n.get(
+            "last_seen",
+            0) < NODE_OFFLINE_TIMEOUT)
     role = user.get('role', 'users')
     role_color = "green" if role == "admins" else "gray"
-    role_badge_html = f'<span class="ml-2 px-1.5 py-0.5 rounded text-[10px] border border-{role_color}-500/30 bg-{role_color}-100 dark:bg-{role_color}-500/20 text-{role_color}-600 dark:text-{role_color}-400 uppercase font-bold align-middle">{role}</span>'
-    
+    role_badge_html = f'<span class="ml-2 px-1.5 py-0.5 rounded text-[10px] border border-{role_color}-500/30 bg-{role_color}-100 dark:bg-{
+        role_color}-500/20 text-{role_color}-600 dark:text-{role_color}-400 uppercase font-bold align-middle">{role}</span>'
+
     node_action_btn = ""
     settings_btn = ""
     if user_id == ADMIN_USER_ID:
-        node_action_btn = f"""<button onclick="openAddNodeModal()" class="inline-flex items-center gap-1.5 py-1.5 px-3 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold transition shadow-lg shadow-blue-500/20"><svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path></svg>{_("web_add_node_section", lang)}</button>"""
-        settings_btn = f"""<a href="/settings" class="flex items-center justify-center w-8 h-8 rounded-lg hover:bg-black/5 dark:hover:bg-white/10 transition text-gray-600 dark:text-gray-400" title="{_("web_settings_button", lang)}"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg></a>"""
+        node_action_btn = f"""<button onclick="openAddNodeModal()" class="inline-flex items-center gap-1.5 py-1.5 px-3 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold transition shadow-lg shadow-blue-500/20"><svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path></svg>{
+            _("web_add_node_section", lang)}</button>"""
+        settings_btn = f"""<a href="/settings" class="flex items-center justify-center w-8 h-8 rounded-lg hover:bg-black/5 dark:hover:bg-white/10 transition text-gray-600 dark:text-gray-400" title="{
+            _("web_settings_button", lang)}"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg></a>"""
 
     context = {
         "web_title": f"{_('web_dashboard_title', lang)} - VPS Bot",
@@ -411,62 +529,118 @@ async def handle_dashboard(request):
             "web_search_nothing_found": _("web_search_nothing_found", lang),
         })
     }
-    
+
     template = JINJA_ENV.get_template("dashboard.html")
     html = template.render(**context)
     return web.Response(text=html, content_type='text/html')
 
+
 async def handle_heartbeat(request):
-    try: data = await request.json()
-    except Exception: return web.json_response({"error": "Invalid JSON"}, status=400)
+    signature = request.headers.get('X-Signature')
+    if not signature:
+        return web.json_response({"error": "Signature missing"}, status=401)
+    try:
+        body_bytes = await request.read()
+        data = json.loads(body_bytes)
+    except Exception:
+        return web.json_response({"error": "Invalid JSON"}, status=400)
+
     token = data.get("token")
+    if not token:
+        return web.json_response({"error": "Token missing"}, status=401)
+
+    expected_signature = hmac.new(
+        token.encode(),
+        body_bytes,
+        hashlib.sha256).hexdigest()
+
+    if not hmac.compare_digest(expected_signature, signature):
+        logging.warning(f"Invalid signature from {request.remote}")
+        return web.json_response({"error": "Invalid signature"}, status=403)
+
     node = await nodes_db.get_node_by_token(token)
-    if not token or not node: return web.json_response({"error": "Auth fail"}, status=401)
+    if not node:
+        return web.json_response({"error": "Auth fail"}, status=401)
+
     stats = data.get("stats", {})
     results = data.get("results", [])
     bot = request.app.get('bot')
     if bot and results:
         for res in results:
-            asyncio.create_task(process_node_result_background(bot, res.get("user_id"), res.get("command"), res.get("result"), token, node.get("name", "Node")))
-    if node.get("is_restarting"): await nodes_db.update_node_extra(token, "is_restarting", False)
+            asyncio.create_task(
+                process_node_result_background(
+                    bot,
+                    res.get("user_id"),
+                    res.get("command"),
+                    res.get("result"),
+                    token,
+                    node.get(
+                        "name",
+                        "Node")))
+    if node.get("is_restarting"):
+        await nodes_db.update_node_extra(token, "is_restarting", False)
     ip = request.transport.get_extra_info('peername')[0]
-    if stats.get("external_ip"): ip = stats.get("external_ip")
+    if stats.get("external_ip"):
+        ip = stats.get("external_ip")
     else:
         try:
             ip_obj = ipaddress.ip_address(ip)
-            if (ip_obj.is_private or ip_obj.is_loopback) and AGENT_IP_CACHE and AGENT_IP_CACHE not in ["Loading...", "Unknown"]: ip = AGENT_IP_CACHE
-        except ValueError: pass
+            if (ip_obj.is_private or ip_obj.is_loopback) and AGENT_IP_CACHE and AGENT_IP_CACHE not in [
+                    "Loading...", "Unknown"]:
+                ip = AGENT_IP_CACHE
+        except ValueError:
+            pass
     await nodes_db.update_node_heartbeat(token, ip, stats)
     current_node = await nodes_db.get_node_by_token(token)
     tasks_to_send = current_node.get("tasks", [])
-    if tasks_to_send: await nodes_db.clear_node_tasks(token)
+    if tasks_to_send:
+        await nodes_db.clear_node_tasks(token)
     return web.json_response({"status": "ok", "tasks": tasks_to_send})
 
+
 async def process_node_result_background(bot, user_id, cmd, text, token, node_name):
-    if not user_id or not text: return
+    if not user_id or not text:
+        return
     try:
         if cmd == "traffic" and user_id in NODE_TRAFFIC_MONITORS:
             monitor = NODE_TRAFFIC_MONITORS[user_id]
             if monitor.get("token") == token:
                 msg_id = monitor.get("message_id")
-                stop_kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="⏹ Stop", callback_data=f"node_stop_traffic_{token}")]])
-                try: await bot.edit_message_text(text=text, chat_id=user_id, message_id=msg_id, reply_markup=stop_kb, parse_mode="HTML")
-                except Exception: pass
+                stop_kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(
+                    text="⏹ Stop", callback_data=f"node_stop_traffic_{token}")]])
+                try:
+                    await bot.edit_message_text(text=text, chat_id=user_id, message_id=msg_id, reply_markup=stop_kb, parse_mode="HTML")
+                except Exception:
+                    pass
                 return
         await bot.send_message(chat_id=user_id, text=f"🖥 <b>Ответ от {node_name}:</b>\n\n{text}", parse_mode="HTML")
-    except Exception as e: logging.error(f"Background send error: {e}")
+    except Exception as e:
+        logging.error(f"Background send error: {e}")
+
 
 async def handle_node_details(request):
-    if not get_current_user(request): return web.json_response({"error": "Unauthorized"}, status=401)
+    if not get_current_user(request):
+        return web.json_response({"error": "Unauthorized"}, status=401)
     token = request.query.get("token")
     node = await nodes_db.get_node_by_token(token)
-    if not node: return web.json_response({"error": "Node not found"}, status=404)
-    return web.json_response({"name": node.get("name"), "ip": node.get("ip"), "stats": node.get("stats"), "history": node.get("history", []), "token": token, "last_seen": node.get("last_seen", 0), "is_restarting": node.get("is_restarting", False)})
+    if not node:
+        return web.json_response({"error": "Node not found"}, status=404)
+    return web.json_response({"name": node.get("name"), "ip": node.get("ip"), "stats": node.get("stats"), "history": node.get(
+        "history", []), "token": token, "last_seen": node.get("last_seen", 0), "is_restarting": node.get("is_restarting", False)})
+
 
 async def handle_agent_stats(request):
-    if not get_current_user(request): return web.json_response({"error": "Unauthorized"}, status=401)
+    if not get_current_user(request):
+        return web.json_response({"error": "Unauthorized"}, status=401)
     import psutil
-    current_stats = {"cpu": 0, "ram": 0, "disk": 0, "ip": AGENT_IP_CACHE, "net_sent": 0, "net_recv": 0, "boot_time": 0}
+    current_stats = {
+        "cpu": 0,
+        "ram": 0,
+        "disk": 0,
+        "ip": AGENT_IP_CACHE,
+        "net_sent": 0,
+        "net_recv": 0,
+        "boot_time": 0}
     try:
         net = psutil.net_io_counters()
         mem = psutil.virtual_memory()
@@ -478,46 +652,65 @@ async def handle_agent_stats(request):
         current_stats.update({
             "net_sent": net.bytes_sent, "net_recv": net.bytes_recv, "boot_time": psutil.boot_time(),
             "ram_total": mem.total, "ram_free": mem.available, "disk_total": disk.total, "disk_free": disk.free,
-            "cpu_freq": freq.current if freq else 0, "process_cpu": proc_cpu, "process_ram": proc_ram, "process_disk": proc_disk 
+            "cpu_freq": freq.current if freq else 0, "process_cpu": proc_cpu, "process_ram": proc_ram, "process_disk": proc_disk
         })
-    except Exception: pass
+    except Exception:
+        pass
     if AGENT_HISTORY:
         latest = AGENT_HISTORY[-1]
         current_stats.update({"cpu": latest["c"], "ram": latest["r"]})
-        try: current_stats["disk"] = psutil.disk_usage(get_host_path('/')).percent
-        except Exception: pass
-    return web.json_response({"stats": current_stats, "history": AGENT_HISTORY})
+        try:
+            current_stats["disk"] = psutil.disk_usage(
+                get_host_path('/')).percent
+        except Exception:
+            pass
+    return web.json_response(
+        {"stats": current_stats, "history": AGENT_HISTORY})
+
 
 async def handle_node_add(request):
     user = get_current_user(request)
-    if not user or user['role'] != 'admins': return web.json_response({"error": "Admin required"}, status=403)
+    if not user or user['role'] != 'admins':
+        return web.json_response({"error": "Admin required"}, status=403)
     try:
         data = await request.json()
         name = data.get("name")
-        if not name: return web.json_response({"error": "Name required"}, status=400)
+        if not name:
+            return web.json_response({"error": "Name required"}, status=400)
         token = await nodes_db.create_node(name)
-        host = request.headers.get('Host', f'{WEB_SERVER_HOST}:{WEB_SERVER_PORT}')
-        proto = "https" if request.headers.get('X-Forwarded-Proto') == "https" else "http"
+        host = request.headers.get(
+            'Host', f'{WEB_SERVER_HOST}:{WEB_SERVER_PORT}')
+        proto = "https" if request.headers.get(
+            'X-Forwarded-Proto') == "https" else "http"
         lang = get_user_lang(user['id'])
         script = "deploy_en.sh" if lang == "en" else "deploy.sh"
-        cmd = f"bash <(wget -qO- https://raw.githubusercontent.com/jatixs/tgbotvpscp/main/{script}) --agent={proto}://{host} --token={token}"
-        return web.json_response({"status": "ok", "token": token, "command": cmd})
-    except Exception as e: return web.json_response({"error": str(e)}, status=500)
+        cmd = f"bash <(wget -qO- https://raw.githubusercontent.com/jatixs/tgbotvpscp/main/{
+            script}) --agent={proto}://{host} --token={token}"
+        return web.json_response(
+            {"status": "ok", "token": token, "command": cmd})
+    except Exception as e:
+        return web.json_response({"error": str(e)}, status=500)
+
 
 async def handle_node_delete(request):
     user = get_current_user(request)
-    if not user or user['role'] != 'admins': return web.json_response({"error": "Admin required"}, status=403)
+    if not user or user['role'] != 'admins':
+        return web.json_response({"error": "Admin required"}, status=403)
     try:
         data = await request.json()
         token = data.get("token")
-        if not token: return web.json_response({"error": "Token required"}, status=400)
+        if not token:
+            return web.json_response({"error": "Token required"}, status=400)
         await nodes_db.delete_node(token)
         return web.json_response({"status": "ok"})
-    except Exception as e: return web.json_response({"error": str(e)}, status=500)
+    except Exception as e:
+        return web.json_response({"error": str(e)}, status=500)
+
 
 async def handle_nodes_list_json(request):
     user = get_current_user(request)
-    if not user: return web.json_response({"error": "Unauthorized"}, status=401)
+    if not user:
+        return web.json_response({"error": "Unauthorized"}, status=401)
     all_nodes = await nodes_db.get_all_nodes()
     nodes_data = []
     now = time.time()
@@ -525,16 +718,27 @@ async def handle_nodes_list_json(request):
         last_seen = node.get("last_seen", 0)
         is_restarting = node.get("is_restarting", False)
         status = "offline"
-        if is_restarting: status = "restarting"
-        elif now - last_seen < NODE_OFFLINE_TIMEOUT: status = "online"
+        if is_restarting:
+            status = "restarting"
+        elif now - last_seen < NODE_OFFLINE_TIMEOUT:
+            status = "online"
         stats = node.get("stats", {})
-        nodes_data.append({"token": token, "name": node.get("name", "Unknown"), "ip": node.get("ip", "Unknown"), "status": status, "cpu": stats.get("cpu", 0), "ram": stats.get("ram", 0), "disk": stats.get("disk", 0)})
+        nodes_data.append(
+            {
+                "token": token, "name": node.get(
+                    "name", "Unknown"), "ip": node.get(
+                    "ip", "Unknown"), "status": status, "cpu": stats.get(
+                    "cpu", 0), "ram": stats.get(
+                        "ram", 0), "disk": stats.get(
+                            "disk", 0)})
     return web.json_response({"nodes": nodes_data})
+
 
 async def handle_settings_page(request):
     user = get_current_user(request)
-    if not user: raise web.HTTPFound('/login')
-    
+    if not user:
+        raise web.HTTPFound('/login')
+
     user_id = user['id']
     role = user.get('role', 'users')
     is_admin = role == 'admins'
@@ -543,13 +747,24 @@ async def handle_settings_page(request):
     users_json = "null"
     nodes_json = "null"
     if is_admin:
-        ulist = [{"id": uid, "name": USER_NAMES.get(str(uid), f"ID: {uid}"), "role": ALLOWED_USERS[uid].get("group", "users") if isinstance(ALLOWED_USERS[uid], dict) else ALLOWED_USERS[uid]} for uid in ALLOWED_USERS if uid != ADMIN_USER_ID]
+        ulist = [
+            {
+                "id": uid,
+                "name": USER_NAMES.get(
+                    str(uid),
+                    f"ID: {uid}"),
+                "role": ALLOWED_USERS[uid].get(
+                    "group",
+                    "users") if isinstance(
+                    ALLOWED_USERS[uid],
+                    dict) else ALLOWED_USERS[uid]} for uid in ALLOWED_USERS if uid != ADMIN_USER_ID]
         users_json = json.dumps(ulist)
         all_nodes = await nodes_db.get_all_nodes()
-        nlist = [{"token": t, "name": n.get("name", "Unknown"), "ip": n.get("ip", "Unknown")} for t, n in all_nodes.items()]
+        nlist = [{"token": t, "name": n.get("name", "Unknown"), "ip": n.get(
+            "ip", "Unknown")} for t, n in all_nodes.items()]
         nodes_json = json.dumps(nlist)
     keyboard_config_json = json.dumps(KEYBOARD_CONFIG)
-    
+
     i18n_data = {
         "web_saving_btn": _("web_saving_btn", lang), "web_saved_btn": _("web_saved_btn", lang), "web_save_btn": _("web_save_btn", lang), "web_change_btn": _("web_change_btn", lang), "web_error": _("web_error", lang, error=""), "web_conn_error": _("web_conn_error", lang, error=""), "web_confirm_delete_user": _("web_confirm_delete_user", lang), "web_no_users": _("web_no_users", lang), "web_clear_logs_confirm": _("web_clear_logs_confirm", lang), "web_logs_cleared": _("web_logs_cleared", lang), "error_traffic_interval_low": _("error_traffic_interval_low", lang), "error_traffic_interval_high": _("error_traffic_interval_high", lang), "web_logs_clearing": _("web_logs_clearing", lang), "web_logs_cleared_alert": _("web_logs_cleared_alert", lang), "web_pass_changed": _("web_pass_changed", lang), "web_pass_mismatch": _("web_pass_mismatch", lang),
         "web_clear_bot_confirm": _("web_clear_bot_confirm", lang), "web_clear_node_confirm": _("web_clear_node_confirm", lang), "web_clear_all_confirm": _("web_clear_all_confirm", lang), "web_logs_cleared_bot": _("web_logs_cleared_bot", lang), "web_logs_cleared_node": _("web_logs_cleared_node", lang), "web_logs_cleared_all": _("web_logs_cleared_all", lang), "modal_title_alert": _("modal_title_alert", lang), "modal_title_confirm": _("modal_title_confirm", lang), "modal_title_prompt": _("modal_title_prompt", lang), "modal_btn_ok": _("modal_btn_ok", lang), "modal_btn_cancel": _("modal_btn_cancel", lang), "web_kb_active": _("web_kb_active", lang), "web_kb_all_on_alert": _("web_kb_all_on_alert", lang), "web_kb_all_off_alert": _("web_kb_all_off_alert", lang), "web_no_nodes": _("web_no_nodes", lang), "web_copied": _("web_copied", lang), "web_kb_cat_monitoring": _("web_kb_cat_monitoring", lang), "web_kb_cat_security": _("web_kb_cat_security", lang), "web_kb_cat_management": _("web_kb_cat_management", lang), "web_kb_cat_system": _("web_kb_cat_system", lang), "web_kb_cat_tools": _("web_kb_cat_tools", lang),
@@ -557,7 +772,8 @@ async def handle_settings_page(request):
         "web_no_notifications": _("web_no_notifications", lang), "web_clear_notifications": _("web_clear_notifications", lang), "web_sessions_title": _("web_sessions_title", lang), "web_session_current": _("web_session_current", lang), "web_session_revoke": _("web_session_revoke", lang), "web_logout": _("web_logout", lang), "web_ip": _("web_ip", lang), "web_device": _("web_device", lang), "web_last_active": _("web_last_active", lang), "web_sessions_revoked_alert": _("web_sessions_revoked_alert", lang), "web_session_current_label": _("web_session_current_label", lang), "web_sessions_revoke_all": _("web_sessions_revoke_all", lang),
         "web_update_placeholder": _("web_update_placeholder", lang), "web_update_check_btn": _("web_update_check_btn", lang), "web_update_do_btn": _("web_update_do_btn", lang), "web_notifications_title": _("web_notifications_title", lang), "web_clear_notifications": _("web_clear_notifications", lang), "web_logout": _("web_logout", lang),
     }
-    for btn_key, conf_key in BTN_CONFIG_MAP.items(): i18n_data[f"lbl_{conf_key}"] = _(btn_key, lang)
+    for btn_key, conf_key in BTN_CONFIG_MAP.items():
+        i18n_data[f"lbl_{conf_key}"] = _(btn_key, lang)
 
     context = {
         "web_title": f"{_('web_settings_page_title', lang)} - Web Bot",
@@ -640,111 +856,157 @@ async def handle_settings_page(request):
         "check_downtime": "checked" if user_alerts.get("downtime", False) else "",
         "i18n_json": json.dumps(i18n_data)
     }
-    
+
     template = JINJA_ENV.get_template("settings.html")
     html = template.render(**context)
     return web.Response(text=html, content_type='text/html')
 
+
 async def handle_save_notifications(request):
     user = get_current_user(request)
-    if not user: return web.json_response({"error": "Auth required"}, status=401)
+    if not user:
+        return web.json_response({"error": "Auth required"}, status=401)
     try:
         data = await request.json()
         uid = user['id']
-        if uid not in ALERTS_CONFIG: ALERTS_CONFIG[uid] = {}
+        if uid not in ALERTS_CONFIG:
+            ALERTS_CONFIG[uid] = {}
         for k in ['resources', 'logins', 'bans', 'downtime']:
-            if k in data: ALERTS_CONFIG[uid][k] = bool(data[k])
+            if k in data:
+                ALERTS_CONFIG[uid][k] = bool(data[k])
         save_alerts_config()
         return web.json_response({"status": "ok"})
-    except Exception as e: return web.json_response({"error": str(e)}, status=500)
+    except Exception as e:
+        return web.json_response({"error": str(e)}, status=500)
+
 
 async def handle_save_system_config(request):
     user = get_current_user(request)
-    if not user or user['role'] != 'admins': return web.json_response({"error": "Admin required"}, status=403)
+    if not user or user['role'] != 'admins':
+        return web.json_response({"error": "Admin required"}, status=403)
     try:
         data = await request.json()
         save_system_config(data)
         return web.json_response({"status": "ok"})
-    except Exception as e: return web.json_response({"error": str(e)}, status=500)
+    except Exception as e:
+        return web.json_response({"error": str(e)}, status=500)
+
 
 async def handle_save_keyboard_config(request):
     user = get_current_user(request)
-    if not user or user['role'] != 'admins': return web.json_response({"error": "Admin required"}, status=403)
+    if not user or user['role'] != 'admins':
+        return web.json_response({"error": "Admin required"}, status=403)
     try:
         data = await request.json()
         save_keyboard_config(data)
         return web.json_response({"status": "ok"})
-    except Exception as e: return web.json_response({"error": str(e)}, status=500)
+    except Exception as e:
+        return web.json_response({"error": str(e)}, status=500)
+
 
 async def handle_change_password(request):
     user = get_current_user(request)
-    if not user: return web.json_response({"error": "Unauthorized"}, status=401)
-    if user['id'] != ADMIN_USER_ID: return web.json_response({"error": "Main Admin only"}, status=403)
+    if not user:
+        return web.json_response({"error": "Unauthorized"}, status=401)
+    if user['id'] != ADMIN_USER_ID:
+        return web.json_response({"error": "Main Admin only"}, status=403)
     try:
         data = await request.json()
-        if not check_user_password(user['id'], data.get("current_password")): return web.json_response({"error": "Wrong password"}, status=400)
+        if not check_user_password(user['id'], data.get("current_password")):
+            return web.json_response({"error": "Wrong password"}, status=400)
         new_pass = data.get("new_password")
-        if not new_pass or len(new_pass) < 4: return web.json_response({"error": "Too short"}, status=400)
+        if not new_pass or len(new_pass) < 4:
+            return web.json_response({"error": "Too short"}, status=400)
         ph = PasswordHasher()
         new_hash = ph.hash(new_pass)
-        if isinstance(ALLOWED_USERS[user['id']], str): ALLOWED_USERS[user['id']] = {"group": ALLOWED_USERS[user['id']], "password_hash": new_hash}
-        else: ALLOWED_USERS[user['id']]["password_hash"] = new_hash
+        if isinstance(ALLOWED_USERS[user['id']], str):
+            ALLOWED_USERS[user['id']] = {
+                "group": ALLOWED_USERS[user['id']], "password_hash": new_hash}
+        else:
+            ALLOWED_USERS[user['id']]["password_hash"] = new_hash
         save_users()
         return web.json_response({"status": "ok"})
-    except Exception as e: return web.json_response({"error": str(e)}, status=500)
+    except Exception as e:
+        return web.json_response({"error": str(e)}, status=500)
+
 
 async def handle_clear_logs(request):
     user = get_current_user(request)
-    if not user or user['role'] != 'admins': return web.json_response({"error": "Admin required"}, status=403)
+    if not user or user['role'] != 'admins':
+        return web.json_response({"error": "Admin required"}, status=403)
     try:
         data = {}
-        try: data = await request.json()
-        except Exception: pass
+        try:
+            data = await request.json()
+        except Exception:
+            pass
         target = data.get('type', 'all')
         dirs_to_clear = []
-        if target == 'bot': dirs_to_clear = [BOT_LOG_DIR, WATCHDOG_LOG_DIR]
-        elif target == 'node': dirs_to_clear = [NODE_LOG_DIR]
-        elif target == 'all': dirs_to_clear = [BOT_LOG_DIR, WATCHDOG_LOG_DIR, NODE_LOG_DIR]
-        else: dirs_to_clear = [BOT_LOG_DIR, WATCHDOG_LOG_DIR, NODE_LOG_DIR]
+        if target == 'bot':
+            dirs_to_clear = [BOT_LOG_DIR, WATCHDOG_LOG_DIR]
+        elif target == 'node':
+            dirs_to_clear = [NODE_LOG_DIR]
+        elif target == 'all':
+            dirs_to_clear = [BOT_LOG_DIR, WATCHDOG_LOG_DIR, NODE_LOG_DIR]
+        else:
+            dirs_to_clear = [BOT_LOG_DIR, WATCHDOG_LOG_DIR, NODE_LOG_DIR]
         for d in dirs_to_clear:
             if os.path.exists(d):
                 for f in os.listdir(d):
                     fp = os.path.join(d, f)
                     if os.path.isfile(fp):
-                        with open(fp, 'w') as f_obj: f_obj.truncate(0)
+                        with open(fp, 'w') as f_obj:
+                            f_obj.truncate(0)
         return web.json_response({"status": "ok", "target": target})
-    except Exception as e: return web.json_response({"error": str(e)}, status=500)
+    except Exception as e:
+        return web.json_response({"error": str(e)}, status=500)
+
 
 async def handle_user_action(request):
     user = get_current_user(request)
-    if not user or user['role'] != 'admins': return web.json_response({"error": "Admin required"}, status=403)
+    if not user or user['role'] != 'admins':
+        return web.json_response({"error": "Admin required"}, status=403)
     try:
         data = await request.json()
         act = data.get('action')
         tid = int(data.get('id', 0))
-        if not tid or tid == ADMIN_USER_ID: return web.json_response({"error": "Invalid ID"}, status=400)
+        if not tid or tid == ADMIN_USER_ID:
+            return web.json_response({"error": "Invalid ID"}, status=400)
         if act == 'delete':
             if tid in ALLOWED_USERS:
                 del ALLOWED_USERS[tid]
-                if str(tid) in USER_NAMES: del USER_NAMES[str(tid)]
-                if tid in ALERTS_CONFIG: del ALERTS_CONFIG[tid]
+                if str(tid) in USER_NAMES:
+                    del USER_NAMES[str(tid)]
+                if tid in ALERTS_CONFIG:
+                    del ALERTS_CONFIG[tid]
                 save_users()
                 save_alerts_config()
                 return web.json_response({"status": "ok"})
         elif act == 'add':
-            if tid in ALLOWED_USERS: return web.json_response({"error": "Exists"}, status=400)
-            ALLOWED_USERS[tid] = {"group": data.get('role', 'users'), "password_hash": None}
+            if tid in ALLOWED_USERS:
+                return web.json_response({"error": "Exists"}, status=400)
+            ALLOWED_USERS[tid] = {
+                "group": data.get(
+                    'role',
+                    'users'),
+                "password_hash": None}
             bot = request.app.get('bot')
-            if bot: await get_user_name(bot, tid)
-            else: USER_NAMES[str(tid)] = f"User {tid}"
+            if bot:
+                await get_user_name(bot, tid)
+            else:
+                USER_NAMES[str(tid)] = f"User {tid}"
             save_users()
-            return web.json_response({"status": "ok", "name": USER_NAMES.get(str(tid))})
-    except Exception as e: return web.json_response({"error": str(e)}, status=500)
+            return web.json_response(
+                {"status": "ok", "name": USER_NAMES.get(str(tid))})
+    except Exception as e:
+        return web.json_response({"error": str(e)}, status=500)
     return web.json_response({"error": "Unknown"}, status=400)
+
 
 async def handle_set_language(request):
     user = get_current_user(request)
-    if not user: return web.json_response({"error": "Unauthorized"}, status=401)
+    if not user:
+        return web.json_response({"error": "Unauthorized"}, status=401)
     try:
         data = await request.json()
         lang = data.get("lang")
@@ -752,10 +1014,13 @@ async def handle_set_language(request):
             set_user_lang(user['id'], lang)
             return web.json_response({"status": "ok"})
         return web.json_response({"error": "Invalid language"}, status=400)
-    except Exception as e: return web.json_response({"error": str(e)}, status=500)
+    except Exception as e:
+        return web.json_response({"error": str(e)}, status=500)
+
 
 async def handle_login_page(request):
-    if get_current_user(request): raise web.HTTPFound('/')
+    if get_current_user(request):
+        raise web.HTTPFound('/')
     global BOT_USERNAME_CACHE
     if BOT_USERNAME_CACHE is None:
         try:
@@ -766,19 +1031,19 @@ async def handle_login_page(request):
         except Exception as e:
             logging.error(f"Error fetching bot username: {e}")
             BOT_USERNAME_CACHE = ""
-    
+
     lang_cookie = request.cookies.get('guest_lang', DEFAULT_LANGUAGE)
     lang = lang_cookie if lang_cookie in ['ru', 'en'] else DEFAULT_LANGUAGE
-    
+
     keys = [
-        "web_error", "web_conn_error", "modal_title_alert", "modal_title_confirm", 
-        "modal_title_prompt", "modal_btn_ok", "modal_btn_cancel", "login_cookie_title", 
-        "login_cookie_text", "login_cookie_btn", "login_support_title", "login_support_desc", 
+        "web_error", "web_conn_error", "modal_title_alert", "modal_title_confirm",
+        "modal_title_prompt", "modal_btn_ok", "modal_btn_cancel", "login_cookie_title",
+        "login_cookie_text", "login_cookie_btn", "login_support_title", "login_support_desc",
         "login_github_tooltip", "login_support_tooltip", "web_title", "web_current_password",
-        "web_login_btn", "login_forgot_pass", "login_secure_gateway", "login_pass_btn", 
-        "login_back_magic", "login_or", "login_reset_title", "login_reset_desc", 
-        "login_btn_send_link", "login_btn_back", "btn_back", "login_support_btn_pay", 
-        "login_link_sent_title", "login_link_sent_desc", "reset_success_title", 
+        "web_login_btn", "login_forgot_pass", "login_secure_gateway", "login_pass_btn",
+        "login_back_magic", "login_or", "login_reset_title", "login_reset_desc",
+        "login_btn_send_link", "login_btn_back", "btn_back", "login_support_btn_pay",
+        "login_link_sent_title", "login_link_sent_desc", "reset_success_title",
         "reset_success_desc", "login_error_user_not_found", "web_default_pass_alert"
     ]
     i18n_all = {}
@@ -787,14 +1052,17 @@ async def handle_login_page(request):
         d["web_error"] = _("web_error", l, error="")
         d["web_conn_error"] = _("web_conn_error", l, error="")
         i18n_all[l] = d
-    
+
     current_data = i18n_all.get(lang, i18n_all['en'])
-    injection = f"{json.dumps(current_data)};\n        const I18N_ALL = {json.dumps(i18n_all)}"
-    
+    injection = f"{
+        json.dumps(current_data)};\n        const I18N_ALL = {
+        json.dumps(i18n_all)}"
+
     alert = ""
     if is_default_password_active(ADMIN_USER_ID):
-        alert = f"""<div class="mb-4 p-3 bg-yellow-500/20 border border-yellow-500/50 rounded-xl flex items-start gap-3"><svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-yellow-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg><span class="text-xs text-yellow-200 font-medium" data-i18n="web_default_pass_alert">{_("web_default_pass_alert", lang)}</span></div>"""
-    
+        alert = f"""<div class="mb-4 p-3 bg-yellow-500/20 border border-yellow-500/50 rounded-xl flex items-start gap-3"><svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-yellow-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg><span class="text-xs text-yellow-200 font-medium" data-i18n="web_default_pass_alert">{
+            _("web_default_pass_alert", lang)}</span></div>"""
+
     context = {
         "default_pass_alert": alert,
         "error_block": "",
@@ -803,159 +1071,224 @@ async def handle_login_page(request):
         "current_lang": lang,
         "i18n_json": injection
     }
-    
+
     template = JINJA_ENV.get_template("login.html")
     html = template.render(**context)
     return web.Response(text=html, content_type='text/html')
 
+
 async def handle_login_request(request):
     data = await request.post()
-    try: uid = int(data.get("user_id", 0))
-    except Exception: uid = 0
-    if uid not in ALLOWED_USERS: return web.Response(text="User not found", status=403)
+    try:
+        uid = int(data.get("user_id", 0))
+    except Exception:
+        uid = 0
+    if uid not in ALLOWED_USERS:
+        return web.Response(text="User not found", status=403)
     token = secrets.token_urlsafe(32)
     AUTH_TOKENS[token] = {"user_id": uid, "created_at": time.time()}
     host = request.headers.get('Host', f'{WEB_SERVER_HOST}:{WEB_SERVER_PORT}')
-    proto = "https" if request.headers.get('X-Forwarded-Proto') == "https" else "http"
+    proto = "https" if request.headers.get(
+        'X-Forwarded-Proto') == "https" else "http"
     link = f"{proto}://{host}/api/login/magic?token={token}"
     bot = request.app.get('bot')
     if bot:
         try:
             lang = get_user_lang(uid)
-            kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text=_("web_login_btn", lang), url=link)]])
+            kb = InlineKeyboardMarkup(inline_keyboard=[
+                                      [InlineKeyboardButton(text=_("web_login_btn", lang), url=link)]])
             await bot.send_message(uid, _("web_login_header", lang), reply_markup=kb, parse_mode="HTML")
             return web.HTTPFound('/login?sent=true')
-        except Exception: pass
+        except Exception:
+            pass
     return web.Response(text="Bot Error", status=500)
+
 
 async def handle_login_password(request):
     data = await request.post()
     ip = get_client_ip(request)
-    if not check_rate_limit(ip): return web.Response(text="Rate limited. Wait 5 mins.", status=429)
-    try: uid = int(data.get("user_id", 0))
-    except Exception: return web.Response(text="Invalid ID", status=400)
-    if uid != ADMIN_USER_ID: return web.Response(text="Password login for Main Admin only.", status=403)
+    if not check_rate_limit(ip):
+        return web.Response(text="Rate limited. Wait 5 mins.", status=429)
+    try:
+        uid = int(data.get("user_id", 0))
+    except Exception:
+        return web.Response(text="Invalid ID", status=400)
+    if uid != ADMIN_USER_ID:
+        return web.Response(
+            text="Password login for Main Admin only.", status=403)
     if check_user_password(uid, data.get("password")):
         st = secrets.token_hex(32)
         SERVER_SESSIONS[st] = {
             "id": uid, "expires": time.time() + 604800, "ip": get_client_ip(request), "ua": request.headers.get("User-Agent", "Unknown Device"), "created": time.time()
         }
         resp = web.HTTPFound('/')
-        resp.set_cookie(COOKIE_NAME, st, max_age=604800, httponly=True, samesite='Lax')
+        resp.set_cookie(
+            COOKIE_NAME,
+            st,
+            max_age=604800,
+            httponly=True,
+            samesite='Lax')
         return resp
     add_login_attempt(ip)
     return web.Response(text="Invalid password", status=403)
 
+
 async def handle_magic_login(request):
     token = request.query.get("token")
-    if not token or token not in AUTH_TOKENS: return web.Response(text="Link expired", status=403)
+    if not token or token not in AUTH_TOKENS:
+        return web.Response(text="Link expired", status=403)
     td = AUTH_TOKENS.pop(token)
-    if time.time() - td["created_at"] > LOGIN_TOKEN_TTL: return web.Response(text="Expired", status=403)
+    if time.time() - td["created_at"] > LOGIN_TOKEN_TTL:
+        return web.Response(text="Expired", status=403)
     uid = td["user_id"]
-    if uid not in ALLOWED_USERS: return web.Response(text="Denied", status=403)
+    if uid not in ALLOWED_USERS:
+        return web.Response(text="Denied", status=403)
     st = secrets.token_hex(32)
     SERVER_SESSIONS[st] = {
         "id": uid, "expires": time.time() + 2592000, "ip": get_client_ip(request), "ua": request.headers.get("User-Agent", "Unknown Device"), "created": time.time()
     }
     resp = web.HTTPFound('/')
-    resp.set_cookie(COOKIE_NAME, st, max_age=2592000, httponly=True, samesite='Lax')
+    resp.set_cookie(
+        COOKIE_NAME,
+        st,
+        max_age=2592000,
+        httponly=True,
+        samesite='Lax')
     return resp
+
 
 async def handle_telegram_auth(request):
     try:
         data = await request.json()
-        if not check_telegram_auth(data, TOKEN): return web.json_response({"error": "Invalid hash or expired"}, status=403)
+        if not check_telegram_auth(data, TOKEN):
+            return web.json_response(
+                {"error": "Invalid hash or expired"}, status=403)
         uid = int(data.get('id'))
-        if uid not in ALLOWED_USERS: return web.json_response({"error": "User not allowed"}, status=403)
+        if uid not in ALLOWED_USERS:
+            return web.json_response({"error": "User not allowed"}, status=403)
         st = secrets.token_hex(32)
         SERVER_SESSIONS[st] = {
             "id": uid, "expires": time.time() + 2592000, "ip": get_client_ip(request), "ua": request.headers.get("User-Agent", "Unknown Device"), "created": time.time(), "photo_url": data.get('photo_url')
         }
         resp = web.json_response({"status": "ok"})
-        resp.set_cookie(COOKIE_NAME, st, max_age=2592000, httponly=True, samesite='Lax')
+        resp.set_cookie(
+            COOKIE_NAME,
+            st,
+            max_age=2592000,
+            httponly=True,
+            samesite='Lax')
         return resp
-    except Exception as e: return web.json_response({"error": str(e)}, status=500)
+    except Exception as e:
+        return web.json_response({"error": str(e)}, status=500)
+
 
 async def handle_logout(request):
     token = request.cookies.get(COOKIE_NAME)
-    if token and token in SERVER_SESSIONS: del SERVER_SESSIONS[token]
+    if token and token in SERVER_SESSIONS:
+        del SERVER_SESSIONS[token]
     resp = web.HTTPFound('/login')
     resp.del_cookie(COOKIE_NAME)
     return resp
 
+
 async def handle_reset_request(request):
     try:
         data = await request.json()
-        try: uid = int(data.get("user_id", 0))
-        except Exception: uid = 0
+        try:
+            uid = int(data.get("user_id", 0))
+        except Exception:
+            uid = 0
         if uid != ADMIN_USER_ID:
-            adm = f"https://t.me/{ADMIN_USERNAME}" if ADMIN_USERNAME else f"tg://user?id={ADMIN_USER_ID}"
-            return web.json_response({"error": "not_found", "admin_url": adm}, status=404)
+            adm = f"https://t.me/{
+                ADMIN_USERNAME}" if ADMIN_USERNAME else f"tg://user?id={ADMIN_USER_ID}"
+            return web.json_response(
+                {"error": "not_found", "admin_url": adm}, status=404)
         token = secrets.token_urlsafe(32)
         RESET_TOKENS[token] = {"ts": time.time(), "user_id": uid}
-        host = request.headers.get('Host', f'{WEB_SERVER_HOST}:{WEB_SERVER_PORT}')
-        proto = "https" if request.headers.get('X-Forwarded-Proto') == "https" else "http"
+        host = request.headers.get(
+            'Host', f'{WEB_SERVER_HOST}:{WEB_SERVER_PORT}')
+        proto = "https" if request.headers.get(
+            'X-Forwarded-Proto') == "https" else "http"
         link = f"{proto}://{host}/reset_password?token={token}"
         bot = request.app.get('bot')
         if bot:
             try:
                 lang = get_user_lang(uid)
-                kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text=_("web_reset_btn", lang), url=link)]])
+                kb = InlineKeyboardMarkup(inline_keyboard=[
+                                          [InlineKeyboardButton(text=_("web_reset_btn", lang), url=link)]])
                 await bot.send_message(uid, _("web_reset_header", lang), reply_markup=kb, parse_mode="HTML")
                 return web.json_response({"status": "ok"})
-            except Exception: return web.json_response({"error": "bot_send_error"}, status=500)
+            except Exception:
+                return web.json_response(
+                    {"error": "bot_send_error"}, status=500)
         return web.json_response({"error": "bot_not_ready"}, status=500)
-    except Exception as e: return web.json_response({"error": str(e)}, status=500)
+    except Exception as e:
+        return web.json_response({"error": str(e)}, status=500)
+
 
 async def handle_reset_page_render(request):
     token = request.query.get("token")
-    if not token or token not in RESET_TOKENS: return web.Response(text="Expired", status=403)
+    if not token or token not in RESET_TOKENS:
+        return web.Response(text="Expired", status=403)
     if time.time() - RESET_TOKENS[token]["ts"] > RESET_TOKEN_TTL:
         del RESET_TOKENS[token]
         return web.Response(text="Expired", status=403)
-    
+
     lang = DEFAULT_LANGUAGE
     i18n_data = {
         "web_error": _("web_error", lang, error=""), "web_conn_error": _("web_conn_error", lang, error=""), "modal_title_alert": _("modal_title_alert", lang), "modal_title_confirm": _("modal_title_confirm", lang), "modal_title_prompt": _("modal_title_prompt", lang), "modal_btn_ok": _("modal_btn_ok", lang), "modal_btn_cancel": _("modal_btn_cancel", lang),
     }
-    
+
     context = {
         "web_version": CACHE_VER,
         "i18n_json": json.dumps(i18n_data)
     }
-    
+
     template = JINJA_ENV.get_template("reset_password.html")
     html = template.render(**context)
     return web.Response(text=html, content_type='text/html')
+
 
 async def handle_reset_confirm(request):
     try:
         data = await request.json()
         token = data.get("token")
         new_pass = data.get("password")
-        if not token or token not in RESET_TOKENS: return web.json_response({"error": "Expired"}, status=403)
+        if not token or token not in RESET_TOKENS:
+            return web.json_response({"error": "Expired"}, status=403)
         uid = RESET_TOKENS[token]["user_id"]
         if uid != ADMIN_USER_ID:
             del RESET_TOKENS[token]
             return web.json_response({"error": "Denied"}, status=403)
-        if not new_pass or len(new_pass) < 4: return web.json_response({"error": "Short pass"}, status=400)
+        if not new_pass or len(new_pass) < 4:
+            return web.json_response({"error": "Short pass"}, status=400)
         ph = PasswordHasher()
         new_hash = ph.hash(new_pass)
-        if isinstance(ALLOWED_USERS[uid], str): ALLOWED_USERS[uid] = {"group": ALLOWED_USERS[uid], "password_hash": new_hash}
-        else: ALLOWED_USERS[uid]["password_hash"] = new_hash
+        if isinstance(ALLOWED_USERS[uid], str):
+            ALLOWED_USERS[uid] = {
+                "group": ALLOWED_USERS[uid],
+                "password_hash": new_hash}
+        else:
+            ALLOWED_USERS[uid]["password_hash"] = new_hash
         save_users()
         del RESET_TOKENS[token]
         return web.json_response({"status": "ok"})
-    except Exception as e: return web.json_response({"error": str(e)}, status=500)
+    except Exception as e:
+        return web.json_response({"error": str(e)}, status=500)
+
 
 async def handle_api_root(request): return web.Response(text="VPS Bot API")
+
 
 async def cleanup_server():
     global AGENT_TASK
     if AGENT_TASK and not AGENT_TASK.done():
         AGENT_TASK.cancel()
-        try: await AGENT_TASK
-        except asyncio.CancelledError: pass
+        try:
+            await AGENT_TASK
+        except asyncio.CancelledError:
+            pass
+
 
 async def start_web_server(bot_instance: Bot):
     global AGENT_FLAG, AGENT_TASK
@@ -964,7 +1297,8 @@ async def start_web_server(bot_instance: Bot):
     app.router.add_post('/api/heartbeat', handle_heartbeat)
     if ENABLE_WEB_UI:
         logging.info("Web UI ENABLED.")
-        if os.path.exists(STATIC_DIR): app.router.add_static('/static', STATIC_DIR)
+        if os.path.exists(STATIC_DIR):
+            app.router.add_static('/static', STATIC_DIR)
         app.router.add_get('/', handle_dashboard)
         app.router.add_get('/settings', handle_settings_page)
         app.router.add_get('/login', handle_login_page)
@@ -985,7 +1319,9 @@ async def start_web_server(bot_instance: Bot):
         app.router.add_post('/api/settings/language', handle_set_language)
         app.router.add_post('/api/settings/system', handle_save_system_config)
         app.router.add_post('/api/settings/password', handle_change_password)
-        app.router.add_post('/api/settings/keyboard', handle_save_keyboard_config)
+        app.router.add_post(
+            '/api/settings/keyboard',
+            handle_save_keyboard_config)
         app.router.add_post('/api/logs/clear', handle_clear_logs)
         app.router.add_post('/api/users/action', handle_user_action)
         app.router.add_post('/api/nodes/add', handle_node_add)
@@ -994,10 +1330,14 @@ async def start_web_server(bot_instance: Bot):
         app.router.add_post('/api/update/run', api_run_update)
         app.router.add_get('/api/notifications/list', api_get_notifications)
         app.router.add_post('/api/notifications/read', api_read_notifications)
-        app.router.add_post('/api/notifications/clear', api_clear_notifications)
+        app.router.add_post(
+            '/api/notifications/clear',
+            api_clear_notifications)
         app.router.add_get('/api/sessions/list', api_get_sessions)
         app.router.add_post('/api/sessions/revoke', api_revoke_session)
-        app.router.add_post('/api/sessions/revoke_all', api_revoke_all_sessions)
+        app.router.add_post(
+            '/api/sessions/revoke_all',
+            api_revoke_all_sessions)
     else:
         logging.info("Web UI DISABLED.")
         app.router.add_get('/', handle_api_root)
@@ -1007,28 +1347,43 @@ async def start_web_server(bot_instance: Bot):
     site = web.TCPSite(runner, WEB_SERVER_HOST, WEB_SERVER_PORT)
     try:
         await site.start()
-        logging.info(f"Web Server started on {WEB_SERVER_HOST}:{WEB_SERVER_PORT}")
+        logging.info(f"Web Server started on {
+                     WEB_SERVER_HOST}:{WEB_SERVER_PORT}")
         return runner
     except Exception as e:
         logging.error(f"Failed to start Web Server: {e}")
         return None
 
+
 async def agent_monitor():
     global AGENT_IP_CACHE, AGENT_FLAG
     import psutil
     import requests
-    try: AGENT_IP_CACHE = await asyncio.to_thread(lambda: requests.get("https://api.ipify.org", timeout=3).text)
-    except Exception: pass
-    try: AGENT_FLAG = await get_country_flag(AGENT_IP_CACHE)
-    except Exception: pass
+    try:
+        AGENT_IP_CACHE = await asyncio.to_thread(lambda: requests.get("https://api.ipify.org", timeout=3).text)
+    except Exception:
+        pass
+    try:
+        AGENT_FLAG = await get_country_flag(AGENT_IP_CACHE)
+    except Exception:
+        pass
     while True:
         try:
             cpu = psutil.cpu_percent(interval=None)
             ram = psutil.virtual_memory().percent
             net = psutil.net_io_counters()
-            point = {"t": int(time.time()), "c": cpu, "r": ram, "rx": net.bytes_recv, "tx": net.bytes_sent}
+            point = {
+                "t": int(
+                    time.time()),
+                "c": cpu,
+                "r": ram,
+                "rx": net.bytes_recv,
+                "tx": net.bytes_sent}
             AGENT_HISTORY.append(point)
-            if len(AGENT_HISTORY) > 60: AGENT_HISTORY.pop(0)
-        except asyncio.CancelledError: raise
-        except Exception: pass
+            if len(AGENT_HISTORY) > 60:
+                AGENT_HISTORY.pop(0)
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            pass
         await asyncio.sleep(2)

@@ -13,8 +13,38 @@ from aiogram.exceptions import TelegramBadRequest
 from . import config
 from . import shared_state
 from .i18n import get_text, get_user_lang
-from .config import INSTALL_MODE, DEPLOY_MODE
-from .config import ALERTS_CONFIG_FILE, REBOOT_FLAG_FILE, RESTART_FLAG_FILE
+from .config import INSTALL_MODE, DEPLOY_MODE, DEBUG_MODE
+from .config import ALERTS_CONFIG_FILE, REBOOT_FLAG_FILE, RESTART_FLAG_FILE, CIPHER_SUITE
+from .config import load_encrypted_json, save_encrypted_json
+
+
+def anonymize_user(user_id: int, username: str = None) -> str:
+    if DEBUG_MODE:
+        user_str = f"User:{user_id}"
+        if username:
+            user_str += f" (@{username})"
+        return user_str
+    else:
+        return "[USER]"
+
+
+def encrypt_data(data: str) -> str:
+    if not data:
+        return ""
+    try:
+        return CIPHER_SUITE.encrypt(data.encode()).decode()
+    except Exception as e:
+        logging.error(f"Encryption error: {e}")
+        return data
+
+
+def decrypt_data(data: str) -> str:
+    if not data:
+        return ""
+    try:
+        return CIPHER_SUITE.decrypt(data.encode()).decode()
+    except Exception:
+        return data
 
 
 def get_host_path(path: str) -> str:
@@ -39,20 +69,19 @@ def get_host_path(path: str) -> str:
 
 def load_alerts_config():
     try:
-        if os.path.exists(ALERTS_CONFIG_FILE):
-            with open(ALERTS_CONFIG_FILE, "r", encoding='utf-8') as f:
-                loaded_data = json.load(f)
-                loaded_data_int_keys = {
-                    int(k): v for k, v in loaded_data.items()}
-                shared_state.ALERTS_CONFIG.clear()
-                shared_state.ALERTS_CONFIG.update(loaded_data_int_keys)
-            logging.info("Настройки уведомлений загружены.")
+
+        loaded_data = load_encrypted_json(ALERTS_CONFIG_FILE)
+        if loaded_data:
+            loaded_data_int_keys = {
+                int(k): v for k, v in loaded_data.items()}
+            shared_state.ALERTS_CONFIG.clear()
+            shared_state.ALERTS_CONFIG.update(loaded_data_int_keys)
+            logging.info("Alerts config loaded (secure).")
         else:
             shared_state.ALERTS_CONFIG.clear()
-            logging.info(
-                "Файл настроек уведомлений не найден, используется пустой конфиг.")
+            logging.info("Alerts config empty or not found.")
     except Exception as e:
-        logging.error(f"Ошибка загрузки alerts_config.json: {e}")
+        logging.error(f"Error loading alerts_config.json: {e}")
         shared_state.ALERTS_CONFIG.clear()
 
 
@@ -62,10 +91,10 @@ def save_alerts_config():
         config_to_save = {
             str(k): v for k,
             v in shared_state.ALERTS_CONFIG.items()}
-        with open(ALERTS_CONFIG_FILE, "w", encoding='utf-8') as f:
-            json.dump(config_to_save, f, indent=4, ensure_ascii=False)
+
+        save_encrypted_json(ALERTS_CONFIG_FILE, config_to_save)
     except Exception as e:
-        logging.error(f"Ошибка сохранения alerts_config.json: {e}")
+        logging.error(f"Error saving alerts_config.json: {e}")
 
 
 async def get_country_flag(ip_or_code: str) -> str:
@@ -237,8 +266,9 @@ async def detect_xray_client():
             parts = line.split()
             if len(parts) >= 2:
                 name, image = parts[0], parts[1]
-                
-                if ('amnezia' in image.lower() and 'xray' in image.lower()) or name == 'amnezia-xray':
+
+                if ('amnezia' in image.lower() and 'xray' in image.lower()
+                    ) or name == 'amnezia-xray':
                     return "amnezia", name
 
                 if 'marzban' in image.lower() or 'marzban' in name:
@@ -275,17 +305,56 @@ async def initial_reboot_check(bot: Bot):
             if os.path.exists(REBOOT_FLAG_FILE):
                 os.remove(REBOOT_FLAG_FILE)
 
+
 def get_app_version() -> str:
-    """Извлекает последнюю версию из CHANGELOG.md"""
     try:
         changelog_path = os.path.join(config.BASE_DIR, "CHANGELOG.md")
         if os.path.exists(changelog_path):
             with open(changelog_path, "r", encoding="utf-8") as f:
                 content = f.read()
-                # Ищем первое совпадение вида [1.14.0]
                 match = re.search(r"## \[(\d+\.\d+\.\d+)\]", content)
                 if match:
                     return f"v{match.group(1)}"
     except Exception:
         pass
     return "v1.0.0"
+
+
+def update_env_variable(key: str, value: str, env_path: str = None):
+    """
+    Обновляет или добавляет переменную в .env файл.
+    Используется CLI утилитой.
+    """
+    if env_path is None:
+        try:
+            from core import config
+            env_path = config.ENV_FILE_PATH
+        except ImportError:
+            # Фолбек, если конфиг еще не загружен или вызов извне
+            env_path = "/opt/tg-bot/.env"
+
+    if not os.path.exists(env_path):
+        return
+
+    try:
+        with open(env_path, "r") as f:
+            lines = f.readlines()
+
+        new_lines = []
+        found = False
+        value_str = str(value).replace('"', '\\"')
+        
+        for line in lines:
+            if line.strip().startswith(f"{key}="):
+                new_lines.append(f'{key}="{value_str}"\n')
+                found = True
+            else:
+                new_lines.append(line)
+        
+        if not found:
+            new_lines.append(f'{key}="{value_str}"\n')
+
+        with open(env_path, "w") as f:
+            f.writelines(new_lines)
+    except Exception as e:
+        logging.error(f"Error updating env variable {key}: {e}")
