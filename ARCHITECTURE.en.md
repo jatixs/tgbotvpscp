@@ -31,7 +31,7 @@ Each file here is a separate command in the bot menu:
 
 * **`traffic.py`**: Real-time network traffic monitoring.
 * **`speedtest.py`**: Internet speed measurement via `iperf3`.
-* **`xray.py` / `vless.py**`: VPN management (Xray core update, link generation).
+* **`xray.py` / `vless.py`**: VPN management (Xray core update, link generation).
 * **`notifications.py`**: Background tasks for resource checking (CPU/RAM) and alert sending.
 * **`users.py`**: Bot user management (add/remove).
 * And others (`uptime`, `top`, `reboot`, `sshlog`...).
