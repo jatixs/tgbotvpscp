@@ -28,6 +28,8 @@
             <div class="flex items-center gap-2 shrink-0">
                 <span class="font-bold text-lg sm:text-xl bg-clip-text text-transparent bg-gradient-to-r from-blue-600 to-purple-600 dark:from-blue-400 dark:to-purple-400 whitespace-nowrap">VPS Bot</span>
                 
+                <span id="sse-status-dot" class="text-2xl leading-none transition-colors duration-300 text-gray-400" title="Realtime Connection">●</span>
+
                 <span class="hidden sm:inline-flex px-2 py-0.5 rounded text-[10px] border border-blue-500/30 bg-blue-100 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400 uppercase font-bold">{{ web_version }}</span>
                 
                 <div class="scale-90 sm:scale-100 origin-left">
@@ -104,7 +106,7 @@
                 <div class="flex justify-between items-start">
                     <div>
                         <p class="text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-1">{{ web_uptime }}</p>
-                        <h3 class="text-xl font-bold text-gray-900 dark:text-white" id="stat_uptime">{{ web_loading }}</h3>
+                        <h3 class="text-xl font-bold text-gray-900 dark:text-white" id="metric-uptime">{{ web_loading }}</h3>
                     </div>
                     <div class="p-2 bg-blue-100 dark:bg-blue-500/20 rounded-xl text-blue-600 dark:text-blue-400">
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
@@ -121,14 +123,14 @@
                             <p class="text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-1">{{ web_cpu }}</p>
                             <div id="hint-cpu" class="hidden">{{ web_hint_cpu_usage }}</div>
                         </div>
-                        <h3 class="text-2xl font-black text-indigo-600 dark:text-indigo-400" id="stat_cpu">0%</h3>
+                        <h3 class="text-2xl font-black text-indigo-600 dark:text-indigo-400" id="metric-cpu">0%</h3>
                     </div>
                     <div class="p-2 bg-indigo-100 dark:bg-indigo-500/20 rounded-xl text-indigo-600 dark:text-indigo-400">
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z" /></svg>
                     </div>
                 </div>
                 <div class="w-full bg-gray-200 dark:bg-gray-700 h-1.5 rounded-full mt-auto overflow-hidden">
-                    <div class="bg-indigo-500 h-1.5 rounded-full transition-all duration-1000 ease-out" id="prog_cpu" style="width: 0%"></div>
+                    <div class="bg-indigo-500 h-1.5 rounded-full transition-all duration-1000 ease-out" id="bar-cpu" style="width: 0%"></div>
                 </div>
             </div>
 
@@ -140,14 +142,14 @@
                             <p class="text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-1">{{ web_ram }}</p>
                             <div id="hint-ram" class="hidden">{{ web_hint_ram_usage }}</div>
                         </div>
-                        <h3 class="text-2xl font-black text-purple-600 dark:text-purple-400" id="stat_ram">0%</h3>
+                        <h3 class="text-2xl font-black text-purple-600 dark:text-purple-400" id="metric-ram">0%</h3>
                     </div>
                     <div class="p-2 bg-purple-100 dark:bg-purple-500/20 rounded-xl text-purple-600 dark:text-purple-400">
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.384-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" /></svg>
                     </div>
                 </div>
                 <div class="w-full bg-gray-200 dark:bg-gray-700 h-1.5 rounded-full mt-auto overflow-hidden">
-                    <div class="bg-purple-500 h-1.5 rounded-full transition-all duration-1000 ease-out" id="prog_ram" style="width: 0%"></div>
+                    <div class="bg-purple-500 h-1.5 rounded-full transition-all duration-1000 ease-out" id="bar-ram" style="width: 0%"></div>
                 </div>
             </div>
 
@@ -159,14 +161,14 @@
                             <p class="text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-1">{{ web_disk }}</p>
                             <div id="hint-disk" class="hidden">{{ web_hint_disk_usage }}</div>
                         </div>
-                        <h3 class="text-2xl font-black text-green-600 dark:text-green-400" id="stat_disk">0%</h3>
+                        <h3 class="text-2xl font-black text-green-600 dark:text-green-400" id="metric-disk">0%</h3>
                     </div>
                     <div class="p-2 bg-green-100 dark:bg-green-500/20 rounded-xl text-green-600 dark:text-green-400">
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01" /></svg>
                     </div>
                 </div>
                 <div class="w-full bg-gray-200 dark:bg-gray-700 h-1.5 rounded-full mt-auto overflow-hidden">
-                    <div class="bg-green-500 h-1.5 rounded-full transition-all duration-1000 ease-out" id="prog_disk" style="width: 0%"></div>
+                    <div class="bg-green-500 h-1.5 rounded-full transition-all duration-1000 ease-out" id="bar-disk" style="width: 0%"></div>
                 </div>
             </div>
         </div>
@@ -438,5 +440,6 @@
 
     <script src="/static/js/common.js?v={{ web_version }}"></script>
     <script src="/static/js/dashboard.js?v={{ web_version }}"></script>
+    <script src="/static/js/sse.js?v={{ web_version }}"></script>
 </body>
 </html>
