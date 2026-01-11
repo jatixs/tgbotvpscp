@@ -14,6 +14,10 @@
 ---
 ## [1.15.2] - 2026-01-10
 
+### 🚀 Added:
+
+* **CLI:** Integrated Command Line Interface (CLI) for convenient interaction and bot management via console.
+
 ### 🛡️ Core & Security:
 
 * **Core:** Added support for migrations and encryption; optimized request streams.
@@ -30,6 +34,7 @@
 
 ### 🧹 Project:
 
+* **Refactoring:** Source code has been completely redesigned and structured to improve readability and maintainability.
 * **Cleanup:** Global code formatting and removal of redundant comments.
 
 ---
