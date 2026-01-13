@@ -309,9 +309,9 @@ def setup_logging(log_directory, log_filename_prefix):
     logger.addHandler(console_handler)
 
     mode_name = "DEBUG" if DEBUG_MODE else "RELEASE"
-    logging.info(
-        f"Logging initialized. Mode: {mode_name}. Sensitive data redaction: {
-            'OFF' if DEBUG_MODE else 'ON'}")
+logging.info(
+        f"Logging initialized. Mode: {mode_name}. Sensitive data redaction: {'OFF' if DEBUG_MODE else 'ON'}"
+    )
 
 
 SENTRY_DSN = os.environ.get("SENTRY_DSN")
