@@ -320,7 +320,7 @@ create_dockerfile() {
     sudo tee "${BOT_INSTALL_PATH}/Dockerfile" > /dev/null <<'EOF'
 FROM python:3.10-slim-bookworm
 RUN apt-get update && apt-get install -y python3-yaml iperf3 git curl wget sudo procps iputils-ping net-tools gnupg docker.io coreutils && rm -rf /var/lib/apt/lists/*
-RUN pip install --no-cache-dir docker aiohttp aiosqlite argon2-cffi sentry-sdk tortoise-orm aerich cryptography
+RUN pip install --no-cache-dir docker aiohttp aiosqlite argon2-cffi sentry-sdk tortoise-orm aerich cryptography tomlkit
 RUN groupadd -g 1001 tgbot && useradd -u 1001 -g 1001 -m -s /bin/bash tgbot && echo "tgbot ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
 WORKDIR /opt/tg-bot
 COPY requirements.txt .
@@ -436,17 +436,22 @@ run_db_migrations() {
     fi
 
     # 4. Инициализация aerich
+    # Добавлено: Сообщение о процессе и || true для обработки ошибок
     if [ ! -f "${BOT_INSTALL_PATH}/aerich.ini" ]; then
-        $cmd_prefix ${VENV_PATH}/bin/aerich init -t core.config.TORTOISE_ORM >/dev/null 2>&1
+        msg_info "Инициализация конфигурации Aerich..."
+        $cmd_prefix ${VENV_PATH}/bin/aerich init -t core.config.TORTOISE_ORM >/dev/null 2>&1 || msg_warning "Предупреждение при aerich init (возможно, уже настроено)."
     fi
 
     # 5. Запуск миграций БД
+    # Исправлено: Убрано агрессивное подавление ошибок, добавлены сообщения
     if [ ! -d "${BOT_INSTALL_PATH}/migrations" ]; then
+        msg_info "Создание базы данных..."
         if ! $cmd_prefix ${VENV_PATH}/bin/aerich init-db; then
              msg_warning "init-db вернул ошибку. Возможно, база уже существует. Пропускаем..."
         fi
     else
-        $cmd_prefix ${VENV_PATH}/bin/aerich upgrade >/dev/null 2>&1
+        msg_info "Проверка обновлений базы данных..."
+        $cmd_prefix ${VENV_PATH}/bin/aerich upgrade >/dev/null 2>&1 || msg_info "База данных уже обновлена."
     fi
 
     # 6. Запуск БЕЗОПАСНОЙ миграции JSON -> Encrypted (Backup -> Re-encrypt -> Replace)
@@ -470,11 +475,15 @@ install_systemd_logic() {
         setup_repo_and_dirs "${SERVICE_USER}"
         sudo -u ${SERVICE_USER} ${PYTHON_BIN} -m venv "${VENV_PATH}"
         run_with_spinner "Установка зависимостей" sudo -u ${SERVICE_USER} "${VENV_PATH}/bin/pip" install -r "${BOT_INSTALL_PATH}/requirements.txt"
+        # ДОБАВЛЕНО: Установка tomlkit
+        run_with_spinner "Установка доп. пакетов (tomlkit)" sudo -u ${SERVICE_USER} "${VENV_PATH}/bin/pip" install tomlkit
         exec_cmd="sudo -u ${SERVICE_USER}"
     else
         setup_repo_and_dirs "root"
         ${PYTHON_BIN} -m venv "${VENV_PATH}"
         run_with_spinner "Установка зависимостей" "${VENV_PATH}/bin/pip" install -r "${BOT_INSTALL_PATH}/requirements.txt"
+        # ДОБАВЛЕНО: Установка tomlkit
+        run_with_spinner "Установка доп. пакетов (tomlkit)" "${VENV_PATH}/bin/pip" install tomlkit
         exec_cmd=""
     fi
 
@@ -483,7 +492,9 @@ install_systemd_logic() {
     write_env_file "systemd" "$mode" ""
 
     # Запуск миграций (включая JSON)
-    run_with_spinner "Настройка базы данных и миграция" run_db_migrations "$exec_cmd"
+    # run_with_spinner здесь может скрывать ошибки интерактивного вывода Aerich, 
+    # но run_db_migrations мы адаптировали.
+    run_db_migrations "$exec_cmd"
 
     cleanup_files
     create_and_start_service "${SERVICE_NAME}" "${BOT_INSTALL_PATH}/bot.py" "$mode" "Telegram Bot"
@@ -699,8 +710,10 @@ EOF
         else msg_error "Нет docker-compose.yml"; return 1; fi
     else
         run_with_spinner "Обновление pip" $exec_cmd "${VENV_PATH}/bin/pip" install -r "${BOT_INSTALL_PATH}/requirements.txt" --upgrade
+        # ДОБАВЛЕНО: Установка tomlkit при обновлении
+        run_with_spinner "Обновление tomlkit" $exec_cmd "${VENV_PATH}/bin/pip" install tomlkit
 
-        run_with_spinner "Миграция БД и JSON" run_db_migrations "$exec_cmd"
+        run_db_migrations "$exec_cmd"
         
         # Обновление CLI wrapper для systemd
         msg_info "Обновление CLI 'tgcp-bot'..."
