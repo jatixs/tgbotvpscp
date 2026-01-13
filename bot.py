@@ -1,343 +1,292 @@
-from core.middlewares import SpamThrottleMiddleware
-from modules import (
-    selftest, traffic, uptime, notifications, users, vless,
-    speedtest, top, xray, sshlog, fail2ban, logs, update, reboot, restart,
-    optimize, nodes
-)
-from core.i18n import _, I18nFilter, get_language_keyboard
-from core import i18n
-from core import config, shared_state, auth, utils, keyboards, messaging
-from core import nodes_db, server
-import asyncio
-import logging
-import signal
 import os
-import psutil
-import sentry_sdk
-from tortoise import Tortoise
-
-if os.path.isdir("/proc_host"):
-    psutil.PROCFS_PATH = "/proc_host"
-
-from aiogram import Bot, Dispatcher, types, F
-from aiogram.fsm.storage.memory import MemoryStorage
-from aiogram.filters import Command
-from aiogram.fsm.context import FSMContext
+import json
+import logging
+import urllib.parse
+import hashlib
+from aiogram import Bot
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.exceptions import TelegramBadRequest
+from argon2 import PasswordHasher
+
+from . import config
+from .i18n import _
+from .config import USERS_FILE, ADMIN_USER_ID, ADMIN_USERNAME, INSTALL_MODE
+from .config import load_encrypted_json, save_encrypted_json
+from .shared_state import ALLOWED_USERS, USER_NAMES, LAST_MESSAGE_IDS
+from .messaging import delete_previous_message
+from .utils import escape_html
 
 
-if config.SENTRY_DSN and config.SENTRY_DSN.strip().startswith("http"):
+def load_users():
+    """Загружает данные пользователей (шифровано)."""
     try:
-        sentry_sdk.init(
-            dsn=config.SENTRY_DSN,
-            traces_sample_rate=1.0,
-            profiles_sample_rate=1.0,
-        )
-        logging.info("Sentry initialized successfully.")
-    except Exception as e:
-        logging.error(f"Failed to initialize Sentry: {e}")
-else:
-    logging.info("Sentry disabled (DSN not set or invalid).")
+        os.makedirs(os.path.dirname(USERS_FILE), exist_ok=True)
 
-config.setup_logging(config.BOT_LOG_DIR, "bot")
+        ALLOWED_USERS.clear()
+        USER_NAMES.clear()
 
-bot = Bot(token=config.TOKEN)
-storage = MemoryStorage()
-dp = Dispatcher(storage=storage)
+        data = load_encrypted_json(USERS_FILE)
 
-dp.message.middleware(SpamThrottleMiddleware())
-dp.callback_query.middleware(SpamThrottleMiddleware())
+        if data:
+            for user in data.get("allowed_users", []):
+                uid = int(user["id"])
+                group = user.get("group", "users")
+                password_hash = user.get("password_hash", None)
 
-background_tasks = set()
+                ALLOWED_USERS[uid] = {
+                    "group": group,
+                    "password_hash": password_hash
+                }
 
-
-def register_module(module, admin_only=False, root_only=False):
-    try:
-        if hasattr(module, 'register_handlers'):
-            module.register_handlers(dp)
+            USER_NAMES.update(data.get("user_names", {}))
         else:
-            logging.warning(
-                f"Module '{module.__name__}' has no register_handlers().")
+            if os.path.exists(USERS_FILE):
+                logging.warning(f"Файл {USERS_FILE} пуст или поврежден.")
+            else:
+                logging.info(f"Файл {USERS_FILE} не найден. Инициализация.")
 
-        if hasattr(module, 'start_background_tasks'):
-            tasks = module.start_background_tasks(bot)
-            for task in tasks:
-                background_tasks.add(task)
+        if ADMIN_USER_ID not in ALLOWED_USERS:
+            logging.info(
+                f"Главный админ ID {ADMIN_USER_ID} не найден, добавляю.")
 
-        logging.info(f"Module '{module.__name__}' successfully registered.")
+            initial_pass = os.environ.get("TG_WEB_INITIAL_PASSWORD")
+            if initial_pass:
+                logging.info("Использую сгенерированный пароль.")
+                ph = PasswordHasher()
+                p_hash = ph.hash(initial_pass)
+            else:
+                logging.warning(
+                    "Случайный пароль не найден. Использую дефолтный ('admin').")
+                p_hash = "8c6976e5b5410415bde908bd4dee15dfb167a9c873fc4bb8a81f6f2ab448a918"
+
+            ALLOWED_USERS[ADMIN_USER_ID] = {
+                "group": "admins",
+                "password_hash": p_hash
+            }
+            USER_NAMES[str(ADMIN_USER_ID)] = _(
+                "default_admin_name", config.DEFAULT_LANGUAGE)
+            save_users()
+
+        elif isinstance(ALLOWED_USERS[ADMIN_USER_ID], str):
+            ALLOWED_USERS[ADMIN_USER_ID] = {
+                "group": "admins", "password_hash": None}
+
+        logging.info(f"Пользователи загружены: {len(ALLOWED_USERS)}")
 
     except Exception as e:
         logging.error(
-            f"Error registering module '{module.__name__}': {e}",
+            f"Критическая ошибка загрузки users.json: {e}",
             exc_info=True)
+        ALLOWED_USERS[ADMIN_USER_ID] = {
+            "group": "admins", "password_hash": None}
+        save_users()
 
 
-async def show_main_menu(
-        user_id: int,
-        chat_id: int,
-        state: FSMContext,
-        message_id_to_delete: int = None,
-        is_start_command: bool = False):
-    command = "menu"
-    await state.clear()
-    lang = i18n.get_user_lang(user_id)
-    is_first_start = (
-        is_start_command and user_id not in i18n.shared_state.USER_SETTINGS)
-
-    if not auth.is_allowed(user_id, command):
-        if is_first_start:
-            await messaging.send_support_message(bot, user_id, lang)
-        if lang == config.DEFAULT_LANGUAGE and user_id not in i18n.shared_state.USER_SETTINGS:
-            await bot.send_message(chat_id, _("language_select", 'ru'), reply_markup=get_language_keyboard())
-            await auth.send_access_denied_message(bot, user_id, chat_id, command)
-            return
-        await auth.send_access_denied_message(bot, user_id, chat_id, command)
-        return
-
-    if message_id_to_delete:
-        try:
-            await bot.delete_message(chat_id=chat_id, message_id=message_id_to_delete)
-        except TelegramBadRequest:
-            pass
-
-    await messaging.delete_previous_message(user_id, list(shared_state.LAST_MESSAGE_IDS.get(user_id, {}).keys()), chat_id, bot)
-
-    if is_first_start:
-        await messaging.send_support_message(bot, user_id, lang)
-        i18n.set_user_lang(user_id, lang)
-
-    if str(user_id) not in shared_state.USER_NAMES:
-        await auth.refresh_user_names(bot)
-
-    menu_text = _("main_menu_welcome", user_id)
-    reply_markup = keyboards.get_main_reply_keyboard(user_id)
-
+def save_users():
+    """Сохраняет пользователей (шифровано)."""
     try:
-        sent_message = await bot.send_message(chat_id, menu_text, reply_markup=reply_markup)
-        shared_state.LAST_MESSAGE_IDS.setdefault(
-            user_id, {})[command] = sent_message.message_id
+        user_names_to_save = {str(k): v for k, v in USER_NAMES.items()}
+
+        allowed_users_to_save = []
+        for uid, data in ALLOWED_USERS.items():
+            if isinstance(data, str):
+                group = data
+                p_hash = None
+            else:
+                group = data.get("group", "users")
+                p_hash = data.get("password_hash")
+
+            allowed_users_to_save.append({
+                "id": int(uid),
+                "group": group,
+                "password_hash": p_hash
+            })
+
+        data = {
+            "allowed_users": allowed_users_to_save,
+            "user_names": user_names_to_save
+        }
+        os.makedirs(os.path.dirname(USERS_FILE), exist_ok=True)
+
+        save_encrypted_json(USERS_FILE, data)
     except Exception as e:
-        logging.error(f"Failed to send main menu to user {user_id}: {e}")
+        logging.error(f"Ошибка сохранения users.json: {e}", exc_info=True)
 
 
-@dp.message(Command("start", "menu"))
-@dp.message(I18nFilter("btn_back_to_menu"))
-async def start_or_menu_handler_message(
-        message: types.Message,
-        state: FSMContext):
-    is_start_command = message.text == "/start"
-    await show_main_menu(message.from_user.id, message.chat.id, state, is_start_command=is_start_command)
+def is_allowed(user_id, command=None):
+    if user_id not in ALLOWED_USERS:
+        return False
+
+    user_data = ALLOWED_USERS[user_id]
+    user_group = user_data if isinstance(
+        user_data, str) else user_data.get(
+        "group", "users")
+
+    user_commands = [
+        "start", "menu", "back_to_menu", "uptime", "traffic",
+        "selftest", "get_id", "get_id_inline", "notifications_menu",
+        "toggle_alert_resources", "toggle_alert_logins",
+        "toggle_alert_bans", "alert_downtime_stub", "language"]
+    admin_only_commands = [
+        "manage_users", "generate_vless", "speedtest", "top", "updatexray",
+        "adduser", "add_user", "delete_user", "set_group", "change_group",
+        "back_to_manage_users", "back_to_delete_users",
+        "nodes", "node_add_new", "nodes_list_refresh"
+    ]
+    root_only_commands = [
+        "reboot_confirm", "reboot", "fall2ban", "sshlog", "logs",
+        "restart", "update", "optimize"
+    ]
+
+    if command in user_commands:
+        return True
+
+    is_admin_group = (user_id == ADMIN_USER_ID) or (user_group == "admins")
+
+    if command in admin_only_commands:
+        return is_admin_group
+
+    if command in root_only_commands:
+        if INSTALL_MODE == "root" and is_admin_group:
+            return True
+        return False
+
+    if command and (command.startswith("delete_user_") or
+                    command.startswith("request_self_delete_") or
+                    command.startswith("confirm_self_delete_") or
+                    command.startswith("select_user_change_group_") or
+                    command.startswith("set_group_") or
+                    command.startswith("node_select_") or
+                    command.startswith("node_delete_") or
+                    command.startswith("node_cmd_")):
+        return is_admin_group
+
+    return True
 
 
-@dp.callback_query(F.data == "back_to_menu")
-async def back_to_menu_callback(
-        callback: types.CallbackQuery,
-        state: FSMContext):
-    await show_main_menu(callback.from_user.id, callback.message.chat.id, state, callback.message.message_id, is_start_command=False)
-    await callback.answer()
+async def refresh_user_names(bot: Bot):
+    needs_save = False
+    user_ids_to_check = list(ALLOWED_USERS.keys())
+
+    lang = config.DEFAULT_LANGUAGE
+    new_user_prefix = _("default_new_user_name", lang, uid="").split('_')[0]
+    id_user_prefix = _("default_id_user_name", lang, uid="").split(' ')[0]
+    admin_name_default = _("default_admin_name", lang)
+
+    for uid in user_ids_to_check:
+        uid_str = str(uid)
+        current_name = USER_NAMES.get(uid_str)
+
+        should_refresh = (
+            not current_name
+            or current_name.startswith(new_user_prefix)
+            or current_name.startswith(id_user_prefix)
+            or (current_name == admin_name_default and uid == ADMIN_USER_ID)
+        )
+
+        if should_refresh:
+            new_name = _("default_id_user_name", lang, uid=uid)
+            try:
+                chat = await bot.get_chat(uid)
+                fetched_name = chat.first_name or chat.username
+                if fetched_name:
+                    new_name = escape_html(fetched_name)
+
+                if current_name != new_name:
+                    USER_NAMES[uid_str] = new_name
+                    needs_save = True
+
+            except TelegramBadRequest as e:
+                if "chat not found" in str(e).lower(
+                ) or "bot was blocked by the user" in str(e).lower():
+                    if current_name != new_name:
+                        USER_NAMES[uid_str] = new_name
+                        needs_save = True
+                else:
+                    logging.error(
+                        f"Ошибка API при обновлении имени {uid}: {e}")
+            except Exception as e:
+                logging.error(f"Ошибка при обновлении имени {uid}: {e}")
+
+    if needs_save:
+        save_users()
 
 
-@dp.message(I18nFilter("cat_monitoring"))
-async def cat_monitoring_handler(message: types.Message):
-    await _show_subcategory(message, "cat_monitoring")
+async def get_user_name(bot: Bot, user_id: int) -> str:
+    uid_str = str(user_id)
+    cached_name = USER_NAMES.get(uid_str)
 
-
-@dp.message(I18nFilter("cat_management"))
-async def cat_management_handler(message: types.Message):
-    await _show_subcategory(message, "cat_management")
-
-
-@dp.message(I18nFilter("cat_security"))
-async def cat_security_handler(message: types.Message):
-    await _show_subcategory(message, "cat_security")
-
-
-@dp.message(I18nFilter("cat_tools"))
-async def cat_tools_handler(message: types.Message):
-    await _show_subcategory(message, "cat_tools")
-
-
-@dp.message(I18nFilter("cat_settings"))
-async def cat_settings_handler(message: types.Message):
-    await _show_subcategory(message, "cat_settings")
-
-
-async def _show_subcategory(message: types.Message, category_key: str):
-    user_id = message.from_user.id
-    lang = i18n.get_user_lang(user_id)
-
-    if not auth.is_allowed(user_id, "menu"):
-        return
-
-    markup = keyboards.get_subcategory_keyboard(category_key, user_id)
-    cat_name = _(category_key, lang)
-    text = _("cat_choose_action", lang, category=cat_name)
-
-    sent = await message.answer(text, reply_markup=markup, parse_mode="HTML")
-    shared_state.LAST_MESSAGE_IDS.setdefault(
-        user_id, {})["subcategory"] = sent.message_id
-
-
-@dp.message(I18nFilter("btn_configure_menu"))
-async def configure_menu_handler(message: types.Message):
-    user_id = message.from_user.id
-    lang = i18n.get_user_lang(user_id)
-
-    if not auth.is_allowed(user_id, "manage_users"):
-        await message.answer(_("access_denied_no_rights", lang))
-        return
-
-    text = _("main_menu_settings_text", lang)
-    markup = keyboards.get_keyboard_settings_inline(lang)
-
-    await message.answer(text, reply_markup=markup, parse_mode="HTML")
-
-
-@dp.callback_query(F.data.startswith("toggle_kb_"))
-async def toggle_kb_config(callback: types.CallbackQuery):
-    user_id = callback.from_user.id
-    lang = i18n.get_user_lang(user_id)
-
-    if not auth.is_allowed(user_id, "manage_users"):
-        await callback.answer(_("access_denied_no_rights", lang), show_alert=True)
-        return
-
-    config_key = callback.data.replace("toggle_kb_", "")
-    current_val = config.KEYBOARD_CONFIG.get(config_key, True)
-    config.KEYBOARD_CONFIG[config_key] = not current_val
-    config.save_keyboard_config(config.KEYBOARD_CONFIG)
-    new_markup = keyboards.get_keyboard_settings_inline(lang)
+    lang = config.DEFAULT_LANGUAGE
     try:
-        await callback.message.edit_reply_markup(reply_markup=new_markup)
-    except TelegramBadRequest:
+        from .i18n import get_user_lang
+        lang = get_user_lang(user_id)
+    except ImportError:
         pass
-    await callback.answer()
-
-
-@dp.callback_query(F.data == "close_kb_settings")
-async def close_kb_settings(callback: types.CallbackQuery):
-    try:
-        await callback.message.delete()
-    except Exception as e:
-        logging.debug(f"Failed to delete message in close_kb_settings: {e}")
-    await callback.answer()
-
-
-@dp.message(I18nFilter("btn_language"))
-async def language_handler(message: types.Message):
-    user_id = message.from_user.id
-    if not auth.is_allowed(user_id, "start"):
-        await auth.send_access_denied_message(bot, user_id, message.chat.id, "start")
-        return
-    await message.answer(_("language_select", user_id), reply_markup=get_language_keyboard())
-
-
-@dp.callback_query(F.data.startswith("set_lang_"))
-async def set_language_callback(
-        callback: types.CallbackQuery,
-        state: FSMContext):
-    user_id = callback.from_user.id
-    lang = callback.data.split('_')[-1]
-    if lang not in i18n.STRINGS:
-        lang = config.DEFAULT_LANGUAGE
-    i18n.set_user_lang(user_id, lang)
-    await callback.answer(_("language_selected", lang))
-    await show_main_menu(user_id, callback.message.chat.id, state, callback.message.message_id)
-
-
-def load_modules():
-    logging.info("Loading modules...")
-    register_module(selftest)
-    register_module(uptime)
-    register_module(traffic)
-    register_module(notifications)
-    register_module(users, admin_only=True)
-    register_module(speedtest, admin_only=True)
-    register_module(top, admin_only=True)
-    register_module(vless, admin_only=True)
-    register_module(xray, admin_only=True)
-    register_module(nodes, admin_only=True)
-    register_module(sshlog, root_only=True)
-    register_module(fail2ban, root_only=True)
-    register_module(logs, root_only=True)
-    register_module(update, root_only=True)
-    register_module(restart, root_only=True)
-    register_module(reboot, root_only=True)
-    register_module(optimize, root_only=True)
-    logging.info("All modules loaded.")
-
-
-async def shutdown(dispatcher: Dispatcher, bot_instance: Bot, web_runner=None):
-    logging.info("Shutdown signal received.")
-    if web_runner:
-        await web_runner.cleanup()
-
-    await server.cleanup_server()
-
-    await Tortoise.close_connections()
-
-    try:
-        await dispatcher.stop_polling()
     except Exception:
         pass
-    cancelled_tasks = []
-    for task in list(background_tasks):
-        if task and not task.done():
-            task.cancel()
-            cancelled_tasks.append(task)
-    if cancelled_tasks:
-        await asyncio.gather(*cancelled_tasks, return_exceptions=True)
-    if getattr(bot_instance, 'session', None):
-        await bot_instance.session.close()
-    logging.info("Bot stopped.")
 
+    new_user_prefix = _("default_new_user_name", lang, uid="").split('_')[0]
+    id_user_prefix = _("default_id_user_name", lang, uid="").split(' ')[0]
 
-async def main():
-    loop = asyncio.get_event_loop()
-    web_runner = None
+    if cached_name and not cached_name.startswith(
+            new_user_prefix) and not cached_name.startswith(id_user_prefix):
+        return cached_name
+
+    new_name = _("default_id_user_name", lang, uid=user_id)
     try:
-        logging.info(f"Bot starting in mode: {config.INSTALL_MODE.upper()}")
-
-        await nodes_db.init_db()
-
-        await asyncio.to_thread(auth.load_users)
-        await asyncio.to_thread(utils.load_alerts_config)
-        await asyncio.to_thread(i18n.load_user_settings)
-
-        await auth.refresh_user_names(bot)
-        await utils.initial_reboot_check(bot)
-        await utils.initial_restart_check(bot)
-
-        load_modules()
-
-        logging.info("Starting Agent Web Server...")
-        web_runner = await server.start_web_server(bot)
-        if not web_runner:
-            logging.warning("Web Server NOT started.")
-
-        try:
-            for s in (signal.SIGINT, signal.SIGTERM):
-                loop.add_signal_handler(
-                    s, lambda s=s: asyncio.create_task(
-                        shutdown(
-                            dp, bot, web_runner)))
-        except NotImplementedError:
-            pass
-
-        logging.info("Starting polling...")
-        await bot.delete_webhook(drop_pending_updates=True)
-        await dp.start_polling(bot, allowed_updates=dp.resolve_used_update_types())
-    except (KeyboardInterrupt, SystemExit):
-        logging.info("Exit main.")
+        chat = await bot.get_chat(user_id)
+        fetched_name = chat.first_name or chat.username
+        if fetched_name:
+            new_name = escape_html(fetched_name)
+            USER_NAMES[uid_str] = new_name
+            save_users()
+            return new_name
+        else:
+            if cached_name != new_name:
+                USER_NAMES[uid_str] = new_name
+                save_users()
+            return new_name
     except Exception as e:
-        logging.critical(f"Critical error: {e}", exc_info=True)
-    finally:
-        if web_runner:
-            await web_runner.cleanup()
-        await shutdown(dp, bot, web_runner)
+        logging.error(f"Ошибка получения имени для ID {user_id}: {e}")
+        if cached_name != new_name:
+            USER_NAMES[uid_str] = new_name
+            save_users()
+        return new_name
 
-if __name__ == "__main__":
+
+async def send_access_denied_message(
+        bot: Bot,
+        user_id: int,
+        chat_id: int,
+        command: str):
+    await delete_previous_message(user_id, command, chat_id, bot)
+
+    lang = config.DEFAULT_LANGUAGE
     try:
-        asyncio.run(main())
-    except KeyboardInterrupt:
+        from .i18n import get_user_lang
+        lang = get_user_lang(user_id)
+    except Exception:
         pass
+
+    text_to_send = f"my ID: {user_id}"
+    admin_link = ""
+
+    if ADMIN_USERNAME:
+        # ИСПРАВЛЕНО: f-строка объединена
+        admin_link = f"https://t.me/{ADMIN_USERNAME}?text={urllib.parse.quote(text_to_send)}"
+    else:
+        admin_link = f"tg://user?id={ADMIN_USER_ID}"
+
+    button_text = _("access_denied_button", lang)
+    message_text = _("access_denied_message", lang, user_id=user_id)
+
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text=button_text, url=admin_link)]
+    ])
+    try:
+        sent_message = await bot.send_message(chat_id, message_text, reply_markup=keyboard, parse_mode="HTML")
+        LAST_MESSAGE_IDS.setdefault(
+            user_id, {})[command] = sent_message.message_id
+    except Exception as e:
+        logging.error(
+            f"Не удалось отправить отказ пользователю {user_id}: {e}")
