@@ -272,8 +272,8 @@ async def send_access_denied_message(
     admin_link = ""
 
     if ADMIN_USERNAME:
-        admin_link = f"https://t.me/{ADMIN_USERNAME}?text={
-            urllib.parse.quote(text_to_send)}"
+        # ИСПРАВЛЕНО: f-строка объединена в одну линию
+        admin_link = f"https://t.me/{ADMIN_USERNAME}?text={urllib.parse.quote(text_to_send)}"
     else:
         admin_link = f"tg://user?id={ADMIN_USER_ID}"
 
