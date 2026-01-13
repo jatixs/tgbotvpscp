@@ -56,9 +56,9 @@ class SpamThrottleMiddleware(BaseMiddleware):
 
         if is_throttled:
 
+            # ИСПРАВЛЕНО: Объединена разорванная f-строка
             logging.info(
-                f"Throttling active for {user_log_str}. Action: '{
-                    current_action_key}'. "
+                f"Throttling active for {user_log_str}. Action: '{current_action_key}'. "
                 f"Diff: {current_time - last_timestamp:.2f}s"
             )
 

@@ -13,3 +13,4 @@ cryptography
 sentry-sdk
 tortoise-orm
 aerich
+tomlkit
