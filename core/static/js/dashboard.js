@@ -177,6 +177,11 @@ function renderNodesList(nodes) {
         return;
     }
 
+    const lblCpu = (typeof I18N !== 'undefined' && I18N.web_label_cpu) ? I18N.web_label_cpu : "CPU";
+    const lblRam = (typeof I18N !== 'undefined' && I18N.web_label_ram) ? I18N.web_label_ram : "RAM";
+    const lblDisk = (typeof I18N !== 'undefined' && I18N.web_label_disk) ? I18N.web_label_disk : "DISK";
+    const lblStatus = (typeof I18N !== 'undefined' && I18N.web_label_status) ? I18N.web_label_status : "STATUS";
+
     const html = nodes.map(node => {
         let statusColor = node.status === 'online' ? "bg-green-500" : (node.status === 'restarting' ? "bg-blue-500" : "bg-red-500");
         let statusText = node.status === 'restarting' ? "RESTART" : node.status.toUpperCase();
@@ -213,23 +218,23 @@ function renderNodesList(nodes) {
                 <div class="flex items-center justify-between sm:justify-end gap-1 sm:gap-6 mt-1 sm:mt-0 pt-3 sm:pt-0 border-t border-gray-100 dark:border-white/5 sm:border-0">
                     
                     <div class="text-center sm:text-right flex-1 sm:flex-none">
-                        <div class="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">CPU</div>
+                        <div class="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">${lblCpu}</div>
                         <div class="text-xs font-mono font-bold ${cpuColor}">${cpu}%</div>
                     </div>
 
                     <div class="text-center sm:text-right flex-1 sm:flex-none">
-                        <div class="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">RAM</div>
+                        <div class="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">${lblRam}</div>
                         <div class="text-xs font-mono font-bold ${ramColor}">${ram}%</div>
                     </div>
 
                     <div class="text-center sm:text-right flex-1 sm:flex-none">
-                        <div class="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">DISK</div>
+                        <div class="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">${lblDisk}</div>
                         <div class="text-xs font-mono font-bold ${diskColor}">${disk}%</div>
                     </div>
 
                     <div class="hidden sm:block text-right ml-2 pl-3 border-l border-gray-200 dark:border-white/10 min-w-[70px]">
                         <div class="text-[10px] font-bold ${statusTextClass} mb-0.5">${statusText}</div>
-                        <div class="text-[9px] text-gray-300 dark:text-gray-600">STATUS</div>
+                        <div class="text-[9px] text-gray-300 dark:text-gray-600">${lblStatus}</div>
                     </div>
                 </div>
             </div>
@@ -518,7 +523,7 @@ window.switchLogType = function(type) {
             const logs = data.logs || [];
             
             if (logs.length === 0) {
-                container.innerHTML = `<div class="text-gray-600 text-center mt-10">${typeof I18N !== 'undefined' ? I18N.web_log_empty : "Log empty"}</div>`;
+                container.innerHTML = `<div class="text-gray-600 text-center mt-10">${typeof I18N !== 'undefined' && I18N.web_log_empty ? I18N.web_log_empty : "Log empty"}</div>`;
                 return;
             }
 
@@ -601,6 +606,8 @@ function setModalLoading() {
     const existing = document.getElementById('node-modal-loader');
     if (existing) existing.remove();
 
+    const loadingText = (typeof I18N !== 'undefined' && I18N.web_node_modal_loading) ? I18N.web_node_modal_loading : "Loading node data...";
+
     const loader = document.createElement('div');
     loader.id = 'node-modal-loader';
     loader.className = 'absolute inset-0 z-50 flex flex-col items-center justify-center bg-white/60 dark:bg-gray-900/60 backdrop-blur-md rounded-2xl transition-opacity duration-300 opacity-0';
@@ -609,7 +616,7 @@ function setModalLoading() {
             <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
             <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
         </svg>
-        <span class="text-sm font-medium text-gray-600 dark:text-gray-300 animate-pulse">Loading node data...</span>
+        <span class="text-sm font-medium text-gray-600 dark:text-gray-300 animate-pulse">${escapeHtml(loadingText)}</span>
     `;
     
     card.appendChild(loader);
@@ -719,8 +726,11 @@ function updateNodeDetailsUI(data) {
     const diff = now - lastSeen;
     const lsEl = document.getElementById('modalNodeLastSeen');
 
+    const statusOnline = (typeof I18N !== 'undefined' && I18N.web_node_status_online) ? I18N.web_node_status_online : "Online";
+    const statusLastSeen = (typeof I18N !== 'undefined' && I18N.web_node_last_seen) ? I18N.web_node_last_seen : "Last seen: ";
+
     if (lsEl) {
-        lsEl.innerText = diff < 60 ? "Online" : `Last seen: ${new Date(lastSeen * 1000).toLocaleString()}`;
+        lsEl.innerText = diff < 60 ? statusOnline : `${statusLastSeen}${new Date(lastSeen * 1000).toLocaleString()}`;
         lsEl.className = diff < 60 ? "text-green-500 font-bold text-xs" : "text-red-500 font-bold text-xs";
     }
     renderCharts(data.history);
@@ -783,6 +793,9 @@ function renderCharts(history) {
     const tickColor = isDark ? '#9ca3af' : '#6b7280';
     const isMobile = window.innerWidth < 640;
 
+    const lblCpu = (typeof I18N !== 'undefined' && I18N.web_label_cpu) ? I18N.web_label_cpu : "CPU";
+    const lblRam = (typeof I18N !== 'undefined' && I18N.web_label_ram) ? I18N.web_label_ram : "RAM";
+
     const commonOptions = {
         responsive: true,
         maintainAspectRatio: false,
@@ -809,8 +822,8 @@ function renderCharts(history) {
             data: {
                 labels,
                 datasets: [
-                    { label: 'CPU (%)', data: cpuData, borderColor: '#3b82f6', borderWidth: 2, backgroundColor: cpuGrad, fill: true },
-                    { label: 'RAM (%)', data: ramData, borderColor: '#a855f7', borderWidth: 2, backgroundColor: ramGrad, fill: true }
+                    { label: `${lblCpu} (%)`, data: cpuData, borderColor: '#3b82f6', borderWidth: 2, backgroundColor: cpuGrad, fill: true },
+                    { label: `${lblRam} (%)`, data: ramData, borderColor: '#a855f7', borderWidth: 2, backgroundColor: ramGrad, fill: true }
                 ]
             },
             options: { ...commonOptions, scales: { ...commonOptions.scales, y: { ...commonOptions.scales.y, max: 100 } } }

@@ -301,7 +301,7 @@
     <div id="genericHintModal" class="fixed inset-0 z-[100] hidden items-center justify-center bg-black/50 dark:bg-black/80 backdrop-blur-sm p-4" onclick="if(event.target === this) closeHintModal()">
         <div class="bg-white dark:bg-gray-800 border border-white/20 dark:border-white/10 rounded-2xl shadow-2xl w-full max-w-md relative flex flex-col backdrop-blur-xl">
             <div class="p-4 border-b border-gray-200 dark:border-white/5 flex justify-between items-center rounded-t-2xl">
-                <h3 id="hintModalTitle" class="text-lg font-bold text-gray-900 dark:text-white">Информация</h3>
+                <h3 id="hintModalTitle" class="text-lg font-bold text-gray-900 dark:text-white">{{ modal_title_info }}</h3>
                 <button onclick="closeHintModal()" class="text-gray-400 hover:text-gray-600 dark:hover:text-white transition p-1">
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
                 </button>
@@ -321,9 +321,9 @@
 						</svg>
 							</div>
                     <div>
-                        <h3 class="text-xl font-bold text-gray-900 dark:text-white" id="modalNodeName">Node Name</h3>
+                        <h3 class="text-xl font-bold text-gray-900 dark:text-white" id="modalNodeName">...</h3>
                         <div class="flex items-center gap-2 text-xs text-gray-500">
-                            <span id="modalNodeIp">IP</span> &bull; <span id="modalNodeLastSeen">Last seen</span>
+                            <span id="modalNodeIp">{{ web_ip }}</span> &bull; <span id="modalNodeLastSeen">{{ web_node_last_seen_label }}</span>
                         </div>
                     </div>
                 </div>
@@ -336,19 +336,19 @@
                 
                 <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4 mb-6">
                     <div class="bg-gray-50 dark:bg-black/20 p-2.5 rounded-xl border border-gray-200 dark:border-white/5 text-center">
-                        <div class="text-[10px] text-gray-500 font-bold uppercase tracking-wider mb-1">Uptime</div>
+                        <div class="text-[10px] text-gray-500 font-bold uppercase tracking-wider mb-1">{{ web_uptime }}</div>
                         <div class="font-mono text-sm font-bold text-gray-700 dark:text-gray-200" id="modalNodeUptime">-</div>
                     </div>
                     <div class="bg-gray-50 dark:bg-black/20 p-2.5 rounded-xl border border-gray-200 dark:border-white/5 text-center">
-                        <div class="text-[10px] text-gray-500 font-bold uppercase tracking-wider mb-1">RAM</div>
+                        <div class="text-[10px] text-gray-500 font-bold uppercase tracking-wider mb-1">{{ web_ram }}</div>
                         <div class="font-mono text-xs sm:text-sm font-bold text-purple-600 dark:text-purple-400 truncate" id="modalNodeRam">-</div>
                     </div>
                     <div class="bg-gray-50 dark:bg-black/20 p-2.5 rounded-xl border border-gray-200 dark:border-white/5 text-center">
-                        <div class="text-[10px] text-gray-500 font-bold uppercase tracking-wider mb-1">Disk</div>
+                        <div class="text-[10px] text-gray-500 font-bold uppercase tracking-wider mb-1">{{ web_disk }}</div>
                         <div class="font-mono text-xs sm:text-sm font-bold text-green-600 dark:text-green-400 truncate" id="modalNodeDisk">-</div>
                     </div>
                     <div class="bg-gray-50 dark:bg-black/20 p-2.5 rounded-xl border border-gray-200 dark:border-white/5 text-center">
-                        <div class="text-[10px] text-gray-500 font-bold uppercase tracking-wider mb-1">Traffic</div>
+                        <div class="text-[10px] text-gray-500 font-bold uppercase tracking-wider mb-1">{{ web_node_traffic }}</div>
                         <div class="font-mono text-xs sm:text-sm font-bold text-blue-600 dark:text-blue-400 truncate" id="modalNodeTraffic">-</div>
                     </div>
                 </div>
@@ -414,7 +414,7 @@
                             <div class="text-xs text-gray-500 mt-4 mb-1 font-medium uppercase tracking-wider">{{ web_node_cmd }}</div>
                             <div onclick="copyTextToClipboard(this.innerText)" class="font-mono text-xs text-blue-600 dark:text-blue-300 break-all bg-white dark:bg-black/50 p-2 rounded select-all border border-gray-100 dark:border-white/5 cursor-pointer hover:bg-blue-50 dark:hover:bg-blue-900/10 transition" id="newNodeCmdDash"></div>
                             
-                            <div class="text-[10px] text-gray-400 mt-2 text-center">Нажмите на текст, чтобы скопировать</div>
+                            <div class="text-[10px] text-gray-400 mt-2 text-center">{{ web_click_copy }}</div>
                         </div>
                     </div>
                 </div>
@@ -429,8 +429,8 @@
                 <p id="sysModalMessage" class="text-sm text-gray-600 dark:text-gray-300 mb-4 whitespace-pre-wrap">Message</p>
                 <input type="text" id="sysModalInput" class="hidden w-full bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-xl px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-white mb-4">
                 <div class="flex justify-end gap-3">
-                    <button id="sysModalCancel" class="hidden px-4 py-2 rounded-lg text-sm font-medium text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 transition">Cancel</button>
-                    <button id="sysModalOk" class="px-4 py-2 rounded-lg text-sm font-bold bg-blue-600 text-white hover:bg-blue-500 transition shadow-lg shadow-blue-500/20">OK</button>
+                    <button id="sysModalCancel" class="hidden px-4 py-2 rounded-lg text-sm font-medium text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 transition">{{ modal_btn_cancel }}</button>
+                    <button id="sysModalOk" class="px-4 py-2 rounded-lg text-sm font-bold bg-blue-600 text-white hover:bg-blue-500 transition shadow-lg shadow-blue-500/20">{{ modal_btn_ok }}</button>
                 </div>
             </div>
         </div>

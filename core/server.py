@@ -196,8 +196,7 @@ def get_current_user(request):
 def _get_avatar_html(user):
     raw = user.get('photo_url', '')
     if raw.startswith('http'):
-        return f'<img src="{
-            raw}" alt="ava" class="w-6 h-6 rounded-full flex-shrink-0">'
+        return f'<img src="{raw}" alt="ava" class="w-6 h-6 rounded-full flex-shrink-0">'
     return f'<span class="text-lg leading-none select-none">{raw}</span>'
 
 
@@ -433,16 +432,13 @@ async def handle_dashboard(request):
             0) < NODE_OFFLINE_TIMEOUT)
     role = user.get('role', 'users')
     role_color = "green" if role == "admins" else "gray"
-    role_badge_html = f'<span class="ml-2 px-1.5 py-0.5 rounded text-[10px] border border-{role_color}-500/30 bg-{role_color}-100 dark:bg-{
-        role_color}-500/20 text-{role_color}-600 dark:text-{role_color}-400 uppercase font-bold align-middle">{role}</span>'
+    role_badge_html = f'<span class="ml-2 px-1.5 py-0.5 rounded text-[10px] border border-{role_color}-500/30 bg-{role_color}-100 dark:bg-{role_color}-500/20 text-{role_color}-600 dark:text-{role_color}-400 uppercase font-bold align-middle">{role}</span>'
 
     node_action_btn = ""
     settings_btn = ""
     if user_id == ADMIN_USER_ID:
-        node_action_btn = f"""<button onclick="openAddNodeModal()" class="inline-flex items-center gap-1.5 py-1.5 px-3 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold transition shadow-lg shadow-blue-500/20"><svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path></svg>{
-            _("web_add_node_section", lang)}</button>"""
-        settings_btn = f"""<a href="/settings" class="flex items-center justify-center w-8 h-8 rounded-lg hover:bg-black/5 dark:hover:bg-white/10 transition text-gray-600 dark:text-gray-400" title="{
-            _("web_settings_button", lang)}"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg></a>"""
+        node_action_btn = f"""<button onclick="openAddNodeModal()" class="inline-flex items-center gap-1.5 py-1.5 px-3 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold transition shadow-lg shadow-blue-500/20"><svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path></svg>{_("web_add_node_section", lang)}</button>"""
+        settings_btn = f"""<a href="/settings" class="flex items-center justify-center w-8 h-8 rounded-lg hover:bg-black/5 dark:hover:bg-white/10 transition text-gray-600 dark:text-gray-400" title="{_("web_settings_button", lang)}"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg></a>"""
 
     context = {
         "web_title": f"{_('web_dashboard_title', lang)} - VPS Bot",
@@ -498,6 +494,8 @@ async def handle_dashboard(request):
         "web_logout": _("web_logout", lang),
         "web_access_denied": _("web_access_denied", lang),
         "web_logs_protected_desc": _("web_logs_protected_desc", lang),
+        "web_node_last_seen_label": _("web_node_last_seen", lang),
+        "web_node_traffic": _("web_node_traffic", lang),
         "user_role_js": f"const USER_ROLE = '{role}';",
         "web_search_placeholder": _("web_search_placeholder", lang),
         "i18n_json": json.dumps({
@@ -527,6 +525,16 @@ async def handle_dashboard(request):
             "unit_tb": _("unit_tb", lang),
             "unit_pb": _("unit_pb", lang),
             "web_search_nothing_found": _("web_search_nothing_found", lang),
+            "web_node_modal_loading": _("web_node_modal_loading", lang),
+            "web_node_status_online": _("web_node_status_online", lang),
+            "web_node_last_seen": _("web_node_last_seen", lang),
+            "web_node_traffic": _("web_node_traffic", lang),
+            "web_label_cpu": _("web_label_cpu", lang),
+            "web_label_ram": _("web_label_ram", lang),
+            "web_label_disk": _("web_label_disk", lang),
+            "web_label_status": _("web_label_status", lang),
+            "modal_title_info": _("web_node_details_title", lang),
+            "web_click_copy": "Click to copy" if lang == 'en' else "Нажмите, чтобы скопировать"
         })
     }
 
@@ -684,8 +692,7 @@ async def handle_node_add(request):
             'X-Forwarded-Proto') == "https" else "http"
         lang = get_user_lang(user['id'])
         script = "deploy_en.sh" if lang == "en" else "deploy.sh"
-        cmd = f"bash <(wget -qO- https://raw.githubusercontent.com/jatixs/tgbotvpscp/main/{
-            script}) --agent={proto}://{host} --token={token}"
+        cmd = f"bash <(wget -qO- https://raw.githubusercontent.com/jatixs/tgbotvpscp/main/{script}) --agent={proto}://{host} --token={token}"
         return web.json_response(
             {"status": "ok", "token": token, "command": cmd})
     except Exception as e:
