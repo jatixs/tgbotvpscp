@@ -5,6 +5,7 @@ const themes = ['dark', 'light', 'system'];
 let currentTheme = localStorage.getItem('theme') || 'system';
 let latestNotificationTime = Math.floor(Date.now() / 1000);
 const pageCache = new Map();
+let sseSource = null; // Глобальный объект для SSE соединения
 
 // --- MODAL STATE VARIABLES ---
 let modalCloseTimer = null;    // Таймер для предотвращения мерцания
@@ -16,21 +17,13 @@ document.addEventListener("DOMContentLoaded", () => {
     applyThemeUI(currentTheme);
     if (typeof window.parsePageEmojis === 'function') { window.parsePageEmojis(); } else { parsePageEmojis(); }
     initNotifications(); 
+    initSSE(); // Инициализация SSE потока
     initHolidayMood(); 
     initAddNodeLogic();
     if (document.getElementById('logsContainer')) {
         if (typeof window.switchLogType === 'function') { window.switchLogType('bot'); }
     }
     pageCache.set(window.location.href, document.documentElement.outerHTML);
-    
-    // Check session on tab focus (except login/reset pages)
-    if (!['/login', '/reset_password'].includes(window.location.pathname)) {
-        document.addEventListener('visibilitychange', () => {
-            if (document.visibilityState === 'visible') {
-                pollNotifications();
-            }
-        });
-    }
 });
 
 // --- HELPER FUNCTIONS ---
@@ -201,6 +194,37 @@ function startSnow() {
 }
 function stopSnow() { clearInterval(snowInterval); snowInterval = null; if (document.getElementById('snow-container')) document.getElementById('snow-container').innerHTML = ''; }
 
+// --- SSE SYSTEM ---
+function initSSE() {
+    if (window.location.pathname === '/login' || window.location.pathname.startsWith('/reset_password')) return;
+    
+    if (sseSource) return;
+
+    sseSource = new EventSource('/api/events');
+
+    sseSource.addEventListener('notifications', (e) => {
+        try {
+            const data = JSON.parse(e.data);
+            if (data.notifications && data.notifications.length > 0) {
+                let maxTime = latestNotificationTime;
+                data.notifications.forEach(notif => {
+                    if (notif.time > latestNotificationTime) {
+                        showToast(notif.text);
+                        if (notif.time > maxTime) maxTime = notif.time;
+                    }
+                });
+                latestNotificationTime = maxTime;
+            }
+            updateNotifUI(data.notifications, data.unread_count);
+        } catch (err) {
+            console.error("Error parsing notification event", err);
+        }
+    });
+
+    // Экспортируем глобально для использования в других скриптах
+    window.sseSource = sseSource;
+}
+
 // --- NOTIFICATIONS & SESSION CHECK ---
 let lastUnreadCount = -1;
 function initNotifications() {
@@ -218,8 +242,7 @@ function initNotifications() {
         newClearBtn.addEventListener('click', clearNotifications);
     }
     document.addEventListener('click', (e) => { if (!e.target.closest('#notifDropdown') && !e.target.closest('#notifBtn')) closeNotifications(); });
-    pollNotifications();
-    setInterval(pollNotifications, 3000);
+    // Интервальный опрос удален в пользу SSE
 }
 
 function handleSessionExpired() {
@@ -259,29 +282,6 @@ function handleSessionExpired() {
     });
 }
 
-async function pollNotifications() {
-    if (window.location.pathname === '/login' || window.location.pathname.startsWith('/reset_password')) return;
-    try {
-        const res = await fetch('/api/notifications/list');
-        if (res.status === 401) {
-            handleSessionExpired();
-            return;
-        }
-        if (!res.ok) return;
-        const data = await res.json();
-        if (data.notifications && data.notifications.length > 0) {
-            let maxTime = latestNotificationTime;
-            data.notifications.forEach(notif => {
-                if (notif.time > latestNotificationTime) {
-                    showToast(notif.text);
-                    if (notif.time > maxTime) maxTime = notif.time;
-                }
-            });
-            latestNotificationTime = maxTime;
-        }
-        updateNotifUI(data.notifications, data.unread_count);
-    } catch (e) {}
-}
 async function clearNotifications(e) {
     if (e) e.stopPropagation();
     const msg = (typeof I18N !== 'undefined' && I18N.web_clear_notif_confirm) ? I18N.web_clear_notif_confirm : "Очистить все уведомления?";
@@ -325,7 +325,7 @@ function toggleTheme() {
     applyThemeUI(currentTheme); 
     document.documentElement.classList.toggle('dark', currentTheme==='dark'||(currentTheme==='system'&&window.matchMedia('(prefers-color-scheme: dark)').matches)); 
     
-    // --- ДОБАВЛЕНО: Диспатч события для обновления графиков ---
+    // Диспатч события для обновления графиков
     window.dispatchEvent(new Event('themeChanged'));
 }
 
@@ -653,6 +653,5 @@ window.addEventListener('popstate', async () => {
     window.location.reload(); 
 });
 
-// Экспорт функций анимации для использования в других скриптах (например, settings.js)
 window.animateModalOpen = animateModalOpen;
 window.animateModalClose = animateModalClose;

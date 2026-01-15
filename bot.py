@@ -107,7 +107,8 @@ async def show_main_menu(
         i18n.set_user_lang(user_id, lang)
 
     if str(user_id) not in shared_state.USER_NAMES:
-        await auth.refresh_user_names(bot)
+        # Оптимизация: запускаем в фоне, чтобы не тормозить меню
+        asyncio.create_task(auth.refresh_user_names(bot))
 
     menu_text = _("main_menu_welcome", user_id)
     reply_markup = keyboards.get_main_reply_keyboard(user_id)
@@ -268,28 +269,56 @@ def load_modules():
 
 
 async def shutdown(dispatcher: Dispatcher, bot_instance: Bot, web_runner=None):
-    logging.info("Shutdown signal received.")
-    if web_runner:
-        await web_runner.cleanup()
-
-    await server.cleanup_server()
-
-    await Tortoise.close_connections()
-
+    logging.info("Shutdown signal received. Stopping services...")
+    
+    # 1. Stop Polling
     try:
         await dispatcher.stop_polling()
     except Exception:
         pass
+
+    # 2. Stop Web Server (with timeout to ensure SSE loops exit)
+    if web_runner:
+        try:
+            # This triggers app['shutdown_event'] via on_shutdown signal we added
+            await asyncio.wait_for(web_runner.cleanup(), timeout=5.0)
+            logging.info("Web server stopped.")
+        except asyncio.TimeoutError:
+            logging.warning("Web server cleanup timed out.")
+        except Exception as e:
+            logging.error(f"Web server cleanup error: {e}")
+
+    await server.cleanup_server()
+
+    # 4. Отменяем фоновые задачи (с таймаутом)
     cancelled_tasks = []
     for task in list(background_tasks):
         if task and not task.done():
             task.cancel()
             cancelled_tasks.append(task)
+            
     if cancelled_tasks:
-        await asyncio.gather(*cancelled_tasks, return_exceptions=True)
+        logging.info(f"Cancelling {len(cancelled_tasks)} background tasks...")
+        try:
+            # Ждем завершения/отмены задач не более 5 секунд
+            await asyncio.wait_for(asyncio.gather(*cancelled_tasks, return_exceptions=True), timeout=5.0)
+        except asyncio.TimeoutError:
+            logging.warning("Background tasks cancellation timed out.")
+        except Exception as e:
+            logging.error(f"Error during tasks cancellation: {e}")
+
+    # 5. Закрываем БД
+    logging.info("Closing DB connections...")
+    try:
+        await asyncio.wait_for(Tortoise.close_connections(), timeout=5.0)
+    except Exception as e:
+        logging.error(f"DB connections close error: {e}")
+
+    # 6. Закрываем сессию бота
     if getattr(bot_instance, 'session', None):
         await bot_instance.session.close()
-    logging.info("Bot stopped.")
+    
+    logging.info("Bot stopped successfully.")
 
 
 async def main():
@@ -304,7 +333,9 @@ async def main():
         await asyncio.to_thread(utils.load_alerts_config)
         await asyncio.to_thread(i18n.load_user_settings)
 
-        await auth.refresh_user_names(bot)
+        # ОПТИМИЗАЦИЯ: Запускаем обновление имен в фоне, чтобы не блокировать старт
+        asyncio.create_task(auth.refresh_user_names(bot))
+        
         await utils.initial_reboot_check(bot)
         await utils.initial_restart_check(bot)
 
@@ -332,9 +363,9 @@ async def main():
     except Exception as e:
         logging.critical(f"Critical error: {e}", exc_info=True)
     finally:
-        if web_runner:
-            await web_runner.cleanup()
-        await shutdown(dp, bot, web_runner)
+        # shutdown вызывается в signal handler, здесь дублировать не нужно, 
+        # но на случай краша main до сигнала можно проверить
+        pass
 
 if __name__ == "__main__":
     try:

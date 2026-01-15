@@ -1280,6 +1280,252 @@ async def handle_reset_confirm(request):
 async def handle_api_root(request): return web.Response(text="VPS Bot API")
 
 
+async def handle_sse_stream(request):
+    user = get_current_user(request)
+    if not user:
+        return web.Response(status=401)
+    resp = web.StreamResponse(status=200, reason='OK')
+    resp.headers['Content-Type'] = 'text/event-stream'
+    resp.headers['Cache-Control'] = 'no-cache'
+    resp.headers['Connection'] = 'keep-alive'
+    await resp.prepare(request)
+    
+    # Get the shutdown event from app if available
+    shutdown_event = request.app.get('shutdown_event')
+    
+    import psutil
+    uid = user['id']
+    try:
+        while True:
+            # Check for closed connection (safely)
+            try:
+                if request.transport is None or request.transport.is_closing():
+                    break
+            except Exception:
+                break
+                
+            current_stats = {
+                "cpu": 0, "ram": 0, "disk": 0, "ip": AGENT_IP_CACHE,
+                "net_sent": 0, "net_recv": 0, "boot_time": 0}
+            try:
+                net = psutil.net_io_counters()
+                mem = psutil.virtual_memory()
+                disk = psutil.disk_usage(get_host_path('/'))
+                freq = psutil.cpu_freq()
+                proc_cpu = await asyncio.to_thread(_get_top_processes, 'cpu')
+                proc_ram = await asyncio.to_thread(_get_top_processes, 'ram')
+                proc_disk = await asyncio.to_thread(_get_top_processes, 'disk')
+                current_stats.update({
+                    "net_sent": net.bytes_sent, "net_recv": net.bytes_recv, "boot_time": psutil.boot_time(),
+                    "ram_total": mem.total, "ram_free": mem.available, "disk_total": disk.total, "disk_free": disk.free,
+                    "cpu_freq": freq.current if freq else 0, "process_cpu": proc_cpu, "process_ram": proc_ram, "process_disk": proc_disk
+                })
+            except Exception:
+                pass
+            if AGENT_HISTORY:
+                latest = AGENT_HISTORY[-1]
+                current_stats.update({"cpu": latest["c"], "ram": latest["r"]})
+                try:
+                    current_stats["disk"] = psutil.disk_usage(get_host_path('/')).percent
+                except Exception:
+                    pass
+            payload_stats = {"stats": current_stats, "history": AGENT_HISTORY}
+            
+            try:
+                await resp.write(f"event: agent_stats\ndata: {json.dumps(payload_stats)}\n\n".encode('utf-8'))
+            except (ConnectionResetError, BrokenPipeError, ConnectionError):
+                break
+
+            all_nodes = await nodes_db.get_all_nodes()
+            nodes_data = []
+            now = time.time()
+            for token, node in all_nodes.items():
+                last_seen = node.get("last_seen", 0)
+                is_restarting = node.get("is_restarting", False)
+                status = "offline"
+                if is_restarting:
+                    status = "restarting"
+                elif now - last_seen < NODE_OFFLINE_TIMEOUT:
+                    status = "online"
+                stats = node.get("stats", {})
+                nodes_data.append({
+                    "token": token, "name": node.get("name", "Unknown"),
+                    "ip": node.get("ip", "Unknown"), "status": status,
+                    "cpu": stats.get("cpu", 0), "ram": stats.get("ram", 0),
+                    "disk": stats.get("disk", 0)})
+            
+            try:
+                await resp.write(f"event: nodes_list\ndata: {json.dumps({'nodes': nodes_data})}\n\n".encode('utf-8'))
+            except (ConnectionResetError, BrokenPipeError, ConnectionError):
+                break
+
+            user_alerts = ALERTS_CONFIG.get(uid, {})
+            filtered = [
+                n for n in list(shared_state.WEB_NOTIFICATIONS)
+                if user_alerts.get(n['type'], False)]
+            last_read = shared_state.WEB_USER_LAST_READ.get(uid, 0)
+            unread_count = sum(1 for n in filtered if n['time'] > last_read)
+            notif_payload = {"notifications": filtered, "unread_count": unread_count}
+            
+            try:
+                await resp.write(f"event: notifications\ndata: {json.dumps(notif_payload)}\n\n".encode('utf-8'))
+            except (ConnectionResetError, BrokenPipeError, ConnectionError):
+                break
+            
+            # Wait for shutdown signal or timeout
+            if shutdown_event:
+                try:
+                    await asyncio.wait_for(shutdown_event.wait(), timeout=3.0)
+                    break # Shutdown signal received
+                except asyncio.TimeoutError:
+                    pass # Timeout passed, continue loop
+            else:
+                await asyncio.sleep(3)
+
+    except asyncio.CancelledError:
+        pass
+    except Exception as e:
+        # Silently ignore transport closing issues
+        if "closing transport" not in str(e) and "'NoneType' object" not in str(e):
+             logging.error(f"SSE Stream Error: {e}")
+    return resp
+
+
+async def handle_sse_logs(request):
+    user = get_current_user(request)
+    if not user or user['role'] != 'admins':
+        return web.Response(status=403)
+    
+    log_type = request.query.get('type', 'bot')
+    
+    resp = web.StreamResponse(status=200, reason='OK')
+    resp.headers['Content-Type'] = 'text/event-stream'
+    resp.headers['Cache-Control'] = 'no-cache'
+    resp.headers['Connection'] = 'keep-alive'
+    await resp.prepare(request)
+
+    shutdown_event = request.app.get('shutdown_event')
+
+    try:
+        while True:
+            try:
+                if request.transport is None or request.transport.is_closing():
+                    break
+            except Exception:
+                break
+
+            lines = []
+            if log_type == 'bot':
+                log_path = os.path.join(BASE_DIR, "logs", "bot", "bot.log")
+                if os.path.exists(log_path):
+                    try:
+                        with open(log_path, "r", encoding="utf-8", errors="ignore") as f:
+                            lines = list(deque(f, 300))
+                    except Exception:
+                        lines = ["Error reading logs"]
+                else:
+                    lines = ["Log file not found"]
+            elif log_type == 'sys':
+                cmd = ["journalctl", "-n", "100", "--no-pager"]
+                if DEPLOY_MODE == "docker" and current_config.INSTALL_MODE == "root":
+                    if os.path.exists("/host/usr/bin/journalctl"):
+                        cmd = ["chroot", "/host", "/usr/bin/journalctl", "-n", "100", "--no-pager"]
+                try:
+                    proc = await asyncio.create_subprocess_exec(*cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+                    stdout, stderr = await proc.communicate()
+                    if proc.returncode == 0:
+                        lines = stdout.decode('utf-8', errors='ignore').strip().split('\n')
+                    else:
+                        lines = [f"Error: {stderr.decode()}"]
+                except Exception as e:
+                    lines = [f"Error: {str(e)}"]
+            
+            try:
+                await resp.write(f"event: logs\ndata: {json.dumps({'logs': lines})}\n\n".encode('utf-8'))
+            except (ConnectionResetError, BrokenPipeError, ConnectionError):
+                break
+                
+            if shutdown_event:
+                try:
+                    await asyncio.wait_for(shutdown_event.wait(), timeout=3.0)
+                    break
+                except asyncio.TimeoutError:
+                    pass
+            else:
+                await asyncio.sleep(3)
+
+    except asyncio.CancelledError:
+        pass
+    except Exception as e:
+        if "closing transport" not in str(e) and "'NoneType' object" not in str(e):
+            logging.error(f"SSE Logs Error: {e}")
+    return resp
+
+
+async def handle_sse_node_details(request):
+    user = get_current_user(request)
+    if not user:
+        return web.Response(status=401)
+    
+    token = request.query.get('token')
+    if not token:
+        return web.Response(status=400)
+    
+    resp = web.StreamResponse(status=200, reason='OK')
+    resp.headers['Content-Type'] = 'text/event-stream'
+    resp.headers['Cache-Control'] = 'no-cache'
+    resp.headers['Connection'] = 'keep-alive'
+    await resp.prepare(request)
+    
+    shutdown_event = request.app.get('shutdown_event')
+
+    try:
+        while True:
+            try:
+                if request.transport is None or request.transport.is_closing():
+                    break
+            except Exception:
+                break
+
+            node = await nodes_db.get_node_by_token(token)
+            if node:
+               payload = {
+                   "name": node.get("name"),
+                   "ip": node.get("ip"),
+                   "stats": node.get("stats"),
+                   "history": node.get("history", []),
+                   "token": token,
+                   "last_seen": node.get("last_seen", 0),
+                   "is_restarting": node.get("is_restarting", False)
+               }
+               try:
+                   await resp.write(f"event: node_details\ndata: {json.dumps(payload)}\n\n".encode('utf-8'))
+               except (ConnectionResetError, BrokenPipeError, ConnectionError):
+                   break
+            else:
+               try:
+                   await resp.write(f"event: error\ndata: {json.dumps({'error': 'Node not found'})}\n\n".encode('utf-8'))
+               except (ConnectionResetError, BrokenPipeError, ConnectionError):
+                   pass
+               break
+            
+            if shutdown_event:
+                try:
+                    await asyncio.wait_for(shutdown_event.wait(), timeout=3.0)
+                    break
+                except asyncio.TimeoutError:
+                    pass
+            else:
+                await asyncio.sleep(3)
+
+    except asyncio.CancelledError:
+        pass
+    except Exception as e:
+        if "closing transport" not in str(e) and "'NoneType' object" not in str(e):
+            logging.error(f"SSE Node Details Error: {e}")
+    return resp
+
+
 async def cleanup_server():
     global AGENT_TASK
     if AGENT_TASK and not AGENT_TASK.done():
@@ -1294,6 +1540,13 @@ async def start_web_server(bot_instance: Bot):
     global AGENT_FLAG, AGENT_TASK
     app = web.Application()
     app['bot'] = bot_instance
+    
+    # 1. Register Shutdown Event
+    app['shutdown_event'] = asyncio.Event()
+    async def on_shutdown(app):
+        app['shutdown_event'].set()
+    app.on_shutdown.append(on_shutdown)
+
     app.router.add_post('/api/heartbeat', handle_heartbeat)
     if ENABLE_WEB_UI:
         logging.info("Web UI ENABLED.")
@@ -1326,6 +1579,9 @@ async def start_web_server(bot_instance: Bot):
         app.router.add_post('/api/users/action', handle_user_action)
         app.router.add_post('/api/nodes/add', handle_node_add)
         app.router.add_post('/api/nodes/delete', handle_node_delete)
+        app.router.add_get('/api/events', handle_sse_stream)
+        app.router.add_get('/api/events/logs', handle_sse_logs)
+        app.router.add_get('/api/events/node', handle_sse_node_details)
         app.router.add_get('/api/update/check', api_check_update)
         app.router.add_post('/api/update/run', api_run_update)
         app.router.add_get('/api/notifications/list', api_get_notifications)
