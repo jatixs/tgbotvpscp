@@ -644,10 +644,12 @@ update_bot() {
     if [ -f "${ENV_FILE}" ] && grep -q "INSTALL_MODE=secure" "${ENV_FILE}"; then exec_cmd="sudo -u ${SERVICE_USER}"; fi
 
     cd "${BOT_INSTALL_PATH}"
-    if ! run_with_spinner "Git fetch" $exec_cmd git fetch origin; then return 1; fi
+    if ! run_with_spinner "Git fetch" $exec_cmd git fetch origin --tags; then return 1; fi
     
-    if ! run_with_spinner "Git reset" $exec_cmd git reset --hard "origin/${GIT_BRANCH}" 2>/dev/null || ! run_with_spinner "Git checkout" $exec_cmd git checkout "${GIT_BRANCH}"; then 
-         $exec_cmd git checkout "${GIT_BRANCH}" || return 1
+    if $exec_cmd git rev-parse --verify "origin/${GIT_BRANCH}" &>/dev/null; then
+         if ! run_with_spinner "Git reset" $exec_cmd git reset --hard "origin/${GIT_BRANCH}"; then return 1; fi
+    else
+         if ! run_with_spinner "Git checkout" $exec_cmd git checkout --force "${GIT_BRANCH}"; then return 1; fi
     fi
     
     cleanup_agent_files
