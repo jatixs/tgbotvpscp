@@ -465,11 +465,48 @@ EOF
     sudo systemctl daemon-reload; sudo systemctl enable ${svc} &> /dev/null; sudo systemctl restart ${svc}
 }
 
+create_fix_script() {
+    # Создаем скрипт для "лечения" базы данных
+    cat > "${BOT_INSTALL_PATH}/fix_db_auto.py" <<'EOF'
+import sqlite3, os
+DB = "config/nodes.db"
+if os.path.exists(DB):
+    try:
+        conn = sqlite3.connect(DB)
+        c = conn.cursor()
+        try: c.execute("ALTER TABLE nodes ADD COLUMN token_safe TEXT")
+        except: pass
+        try: c.execute("ALTER TABLE nodes ADD COLUMN token_hash VARCHAR(64)")
+        except: pass
+        try: c.execute("CREATE UNIQUE INDEX IF NOT EXISTS uid_nodes_token_h_a1b2c3 ON nodes (token_hash)")
+        except: pass
+        try: c.execute("DELETE FROM aerich")
+        except: pass
+        conn.commit()
+        conn.close()
+        print("DB Schema patched.")
+    except Exception as e:
+        print(f"DB Patch error: {e}")
+EOF
+}
+
 run_db_migrations() {
     local exec_user=$1
     msg_info "Проверка и миграция базы данных..."
     cd "${BOT_INSTALL_PATH}" || return 1
     if [ -f "${ENV_FILE}" ]; then set -a; source "${ENV_FILE}"; set +a; fi
+    
+    # --- AUTO FIX DB ---
+    create_fix_script
+    msg_info "Запуск предварительного лечения БД..."
+    if [ -n "$exec_user" ]; then 
+        $exec_user "${VENV_PATH}/bin/python" fix_db_auto.py >/dev/null 2>&1
+    else
+        "${VENV_PATH}/bin/python" fix_db_auto.py >/dev/null 2>&1
+    fi
+    rm -f fix_db_auto.py
+    # -------------------
+
     local cmd_prefix=""; if [ -n "$exec_user" ]; then cmd_prefix="sudo -E -u ${SERVICE_USER}"; fi
     if [ ! -f "${BOT_INSTALL_PATH}/aerich.ini" ]; then $cmd_prefix ${VENV_PATH}/bin/aerich init -t core.config.TORTOISE_ORM >/dev/null 2>&1; fi
     if [ ! -d "${BOT_INSTALL_PATH}/migrations" ]; then
@@ -559,6 +596,11 @@ install_docker_logic() {
     run_with_spinner "Запуск Docker" sudo $dc_cmd --profile "${mode}" up -d --remove-orphans
 
     msg_info "Попытка настройки БД в контейнере..."
+    # AUTO FIX FOR DOCKER
+    create_fix_script
+    sudo $dc_cmd --profile "${mode}" exec -T ${container_name} python fix_db_auto.py >/dev/null 2>&1
+    rm -f fix_db_auto.py
+    
     sudo $dc_cmd --profile "${mode}" exec -T ${container_name} aerich init -t core.config.TORTOISE_ORM >/dev/null 2>&1
     sudo $dc_cmd --profile "${mode}" exec -T ${container_name} aerich init-db >/dev/null 2>&1
     sudo $dc_cmd --profile "${mode}" exec -T ${container_name} aerich upgrade >/dev/null 2>&1
@@ -661,6 +703,12 @@ update_bot() {
             if ! run_with_spinner "Docker Up" sudo $dc_cmd up -d --build; then msg_error "Ошибка Docker."; return 1; fi
             local mode=$(grep '^INSTALL_MODE=' "${ENV_FILE}" | cut -d'=' -f2 | tr -d '"')
             local cn="tg-bot-${mode}"
+            
+            # AUTO FIX FOR DOCKER UPDATE
+            create_fix_script
+            sudo $dc_cmd --profile "${mode}" exec -T ${cn} python fix_db_auto.py >/dev/null 2>&1
+            rm -f fix_db_auto.py
+            
             sudo $dc_cmd --profile "${mode}" exec -T ${cn} aerich upgrade >/dev/null 2>&1
             sudo $dc_cmd --profile "${mode}" exec -T ${cn} python migrate.py >/dev/null 2>&1
         else msg_error "Нет docker-compose.yml"; return 1; fi
