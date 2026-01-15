@@ -466,22 +466,48 @@ EOF
 }
 
 create_fix_script() {
-    # Создаем скрипт для "лечения" базы данных
     cat > "${BOT_INSTALL_PATH}/fix_db_auto.py" <<'EOF'
-import sqlite3, os
+import sqlite3, os, hashlib
 DB = "config/nodes.db"
 if os.path.exists(DB):
     try:
         conn = sqlite3.connect(DB)
+        conn.row_factory = sqlite3.Row
         c = conn.cursor()
+        
+        # 1. Add columns if missing
         try: c.execute("ALTER TABLE nodes ADD COLUMN token_safe TEXT")
         except: pass
         try: c.execute("ALTER TABLE nodes ADD COLUMN token_hash VARCHAR(64)")
         except: pass
         try: c.execute("CREATE UNIQUE INDEX IF NOT EXISTS uid_nodes_token_h_a1b2c3 ON nodes (token_hash)")
         except: pass
+        
+        # 2. Fix missing hashes (Critical for migration)
+        try:
+            c.execute("PRAGMA table_info(nodes)")
+            cols = [row['name'] for row in c.fetchall()]
+            src_col = 'token' if 'token' in cols else 'token_safe'
+            
+            if 'token_hash' in cols:
+                c.execute(f"SELECT id, {src_col}, token_hash FROM nodes")
+                rows = c.fetchall()
+                for row in rows:
+                    uid = row['id']
+                    val = row[src_col]
+                    curr_hash = row['token_hash']
+                    
+                    if val and not curr_hash:
+                        new_hash = hashlib.sha256(val.encode()).hexdigest()
+                        c.execute("UPDATE nodes SET token_hash = ?, token_safe = ? WHERE id = ?", (new_hash, val, uid))
+                        print(f"Fixed hash for node {uid}")
+        except Exception as e:
+            print(f"Hash fix warn: {e}")
+
+        # 3. Clean aerich history
         try: c.execute("DELETE FROM aerich")
         except: pass
+        
         conn.commit()
         conn.close()
         print("DB Schema patched.")
@@ -496,16 +522,14 @@ run_db_migrations() {
     cd "${BOT_INSTALL_PATH}" || return 1
     if [ -f "${ENV_FILE}" ]; then set -a; source "${ENV_FILE}"; set +a; fi
     
-    # --- AUTO FIX DB ---
     create_fix_script
-    msg_info "Запуск предварительного лечения БД..."
+    msg_info "Запуск лечения БД..."
     if [ -n "$exec_user" ]; then 
         $exec_user "${VENV_PATH}/bin/python" fix_db_auto.py >/dev/null 2>&1
     else
         "${VENV_PATH}/bin/python" fix_db_auto.py >/dev/null 2>&1
     fi
     rm -f fix_db_auto.py
-    # -------------------
 
     local cmd_prefix=""; if [ -n "$exec_user" ]; then cmd_prefix="sudo -E -u ${SERVICE_USER}"; fi
     if [ ! -f "${BOT_INSTALL_PATH}/aerich.ini" ]; then $cmd_prefix ${VENV_PATH}/bin/aerich init -t core.config.TORTOISE_ORM >/dev/null 2>&1; fi
@@ -596,6 +620,7 @@ install_docker_logic() {
     run_with_spinner "Запуск Docker" sudo $dc_cmd --profile "${mode}" up -d --remove-orphans
 
     msg_info "Попытка настройки БД в контейнере..."
+    
     # AUTO FIX FOR DOCKER
     create_fix_script
     sudo $dc_cmd --profile "${mode}" exec -T ${container_name} python fix_db_auto.py >/dev/null 2>&1

@@ -248,6 +248,52 @@ EOF
     fi
 }
 
+create_fix_script() {
+    cat > "${BOT_INSTALL_PATH}/fix_db_auto.py" <<'EOF'
+import sqlite3, os, hashlib
+DB = "config/nodes.db"
+if os.path.exists(DB):
+    try:
+        conn = sqlite3.connect(DB)
+        conn.row_factory = sqlite3.Row
+        c = conn.cursor()
+        
+        try: c.execute("ALTER TABLE nodes ADD COLUMN token_safe TEXT")
+        except: pass
+        try: c.execute("ALTER TABLE nodes ADD COLUMN token_hash VARCHAR(64)")
+        except: pass
+        try: c.execute("CREATE UNIQUE INDEX IF NOT EXISTS uid_nodes_token_h_a1b2c3 ON nodes (token_hash)")
+        except: pass
+        
+        try:
+            c.execute("PRAGMA table_info(nodes)")
+            cols = [row['name'] for row in c.fetchall()]
+            src_col = 'token' if 'token' in cols else 'token_safe'
+            if 'token_hash' in cols:
+                c.execute(f"SELECT id, {src_col}, token_hash FROM nodes")
+                rows = c.fetchall()
+                for row in rows:
+                    uid = row['id']
+                    val = row[src_col]
+                    curr_hash = row['token_hash']
+                    if val and not curr_hash:
+                        new_hash = hashlib.sha256(val.encode()).hexdigest()
+                        c.execute("UPDATE nodes SET token_hash = ?, token_safe = ? WHERE id = ?", (new_hash, val, uid))
+                        print(f"Fixed hash for node {uid}")
+        except Exception as e:
+            print(f"Hash fix warn: {e}")
+
+        try: c.execute("DELETE FROM aerich")
+        except: pass
+        
+        conn.commit()
+        conn.close()
+        print("DB Schema patched.")
+    except Exception as e:
+        print(f"DB Patch error: {e}")
+EOF
+}
+
 common_install_steps() {
     echo "" > /tmp/${SERVICE_NAME}_install.log
     
@@ -470,6 +516,16 @@ run_db_migrations() {
     msg_info "Checking and migrating database..."
     cd "${BOT_INSTALL_PATH}" || return 1
     if [ -f "${ENV_FILE}" ]; then set -a; source "${ENV_FILE}"; set +a; fi
+    
+    create_fix_script
+    msg_info "Running DB patch..."
+    if [ -n "$exec_user" ]; then 
+        $exec_user "${VENV_PATH}/bin/python" fix_db_auto.py >/dev/null 2>&1
+    else
+        "${VENV_PATH}/bin/python" fix_db_auto.py >/dev/null 2>&1
+    fi
+    rm -f fix_db_auto.py
+
     local cmd_prefix=""; if [ -n "$exec_user" ]; then cmd_prefix="sudo -E -u ${SERVICE_USER}"; fi
     if [ ! -f "${BOT_INSTALL_PATH}/aerich.ini" ]; then $cmd_prefix ${VENV_PATH}/bin/aerich init -t core.config.TORTOISE_ORM >/dev/null 2>&1; fi
     if [ ! -d "${BOT_INSTALL_PATH}/migrations" ]; then
@@ -559,6 +615,12 @@ install_docker_logic() {
     run_with_spinner "Starting Docker" sudo $dc_cmd --profile "${mode}" up -d --remove-orphans
 
     msg_info "Attempting DB setup in container..."
+    
+    # AUTO FIX FOR DOCKER
+    create_fix_script
+    sudo $dc_cmd --profile "${mode}" exec -T ${container_name} python fix_db_auto.py >/dev/null 2>&1
+    rm -f fix_db_auto.py
+    
     sudo $dc_cmd --profile "${mode}" exec -T ${container_name} aerich init -t core.config.TORTOISE_ORM >/dev/null 2>&1
     sudo $dc_cmd --profile "${mode}" exec -T ${container_name} aerich init-db >/dev/null 2>&1
     sudo $dc_cmd --profile "${mode}" exec -T ${container_name} aerich upgrade >/dev/null 2>&1
@@ -661,6 +723,12 @@ update_bot() {
             if ! run_with_spinner "Docker Up" sudo $dc_cmd up -d --build; then msg_error "Docker Error."; return 1; fi
             local mode=$(grep '^INSTALL_MODE=' "${ENV_FILE}" | cut -d'=' -f2 | tr -d '"')
             local cn="tg-bot-${mode}"
+            
+            # AUTO FIX FOR DOCKER UPDATE
+            create_fix_script
+            sudo $dc_cmd --profile "${mode}" exec -T ${cn} python fix_db_auto.py >/dev/null 2>&1
+            rm -f fix_db_auto.py
+            
             sudo $dc_cmd --profile "${mode}" exec -T ${cn} aerich upgrade >/dev/null 2>&1
             sudo $dc_cmd --profile "${mode}" exec -T ${cn} python migrate.py >/dev/null 2>&1
         else msg_error "No docker-compose.yml"; return 1; fi
