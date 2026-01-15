@@ -107,7 +107,7 @@ cleanup_files_silent() {
 ask_for_version() {
     echo ""
     msg_info "Выбор версии для установки..."
-    echo "  1) Последняя стабильная (main) - по умолчанию"
+    echo "  1) Последняя версия из ветки '${GIT_BRANCH}' (по умолчанию)"
     echo "  2) Выбрать конкретную версию (из тегов)"
     read -p "$(echo -e "${C_BOLD}Ваш выбор [1]: ${C_RESET}")" v_mode
     v_mode=${v_mode:-1}
@@ -119,8 +119,7 @@ ask_for_version() {
         local tags=$(git ls-remote --tags --refs "${GITHUB_REPO_URL}" | cut -d/ -f3 | sort -V -r)
         
         if [ -z "$tags" ]; then
-            msg_warning "Теги не найдены. Будет использована ветка main."
-            GIT_BRANCH="main"
+            msg_warning "Теги не найдены. Будет использована ветка ${GIT_BRANCH}."
             return
         fi
 
@@ -140,12 +139,10 @@ ask_for_version() {
             GIT_BRANCH="${version_map[$tag_num]}"
             msg_success "Выбрана версия: ${GIT_BRANCH}"
         else
-            msg_error "Неверный номер. Используется main."
-            GIT_BRANCH="main"
+            msg_error "Неверный номер. Остаемся на ${GIT_BRANCH}."
         fi
     else
-        GIT_BRANCH="main"
-        msg_info "Используется ветка: main"
+        msg_info "Используется ветка: ${GIT_BRANCH}"
     fi
 }
 
