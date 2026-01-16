@@ -540,6 +540,9 @@ async def handle_dashboard(request):
             "web_top_disk": _("web_top_disk", lang),
             "web_log_connecting": _("web_log_connecting", lang),
             "web_status_restart": _("web_status_restart", lang),
+            "web_session_expired": _("web_session_expired", lang),
+            "web_please_relogin": _("web_please_relogin", lang),
+            "web_login_btn": _("web_login_btn", lang),
         })
     }
 
@@ -746,7 +749,7 @@ async def handle_nodes_list_json(request):
     return web.json_response({"nodes": nodes_data})
 
 
-async def handle_settings_page(request):
+async def async def handle_settings_page(request):
     user = get_current_user(request)
     if not user:
         raise web.HTTPFound('/login')
@@ -784,6 +787,7 @@ async def handle_settings_page(request):
         "web_no_notifications": _("web_no_notifications", lang), "web_clear_notifications": _("web_clear_notifications", lang), "web_sessions_title": _("web_sessions_title", lang), "web_session_current": _("web_session_current", lang), "web_session_revoke": _("web_session_revoke", lang), "web_logout": _("web_logout", lang), "web_ip": _("web_ip", lang), "web_device": _("web_device", lang), "web_last_active": _("web_last_active", lang), "web_sessions_revoked_alert": _("web_sessions_revoked_alert", lang), "web_session_current_label": _("web_session_current_label", lang), "web_sessions_revoke_all": _("web_sessions_revoke_all", lang),
         "web_update_placeholder": _("web_update_placeholder", lang), "web_update_check_btn": _("web_update_check_btn", lang), "web_update_do_btn": _("web_update_do_btn", lang), "web_notifications_title": _("web_notifications_title", lang), "web_clear_notifications": _("web_clear_notifications", lang), "web_logout": _("web_logout", lang),
         "web_fill_field": _("web_fill_field", lang), "web_conn_error_short": _("web_conn_error_short", lang), "web_error_short": _("web_error_short", lang), "web_success": _("web_success", lang), "web_no_sessions": _("web_no_sessions", lang), "web_error_loading_sessions": _("web_error_loading_sessions", lang), "web_kb_enable_all": _("web_kb_enable_all", lang), "web_kb_disable_all": _("web_kb_disable_all", lang), "web_click_copy": _("web_click_copy", lang), "web_server_name_placeholder": _("web_server_name_placeholder", lang),
+        "web_session_expired": _("web_session_expired", lang), "web_please_relogin": _("web_please_relogin", lang), "web_login_btn": _("web_login_btn", lang),
     }
     for btn_key, conf_key in BTN_CONFIG_MAP.items():
         i18n_data[f"lbl_{conf_key}"] = _(btn_key, lang)
@@ -873,7 +877,6 @@ async def handle_settings_page(request):
     template = JINJA_ENV.get_template("settings.html")
     html = template.render(**context)
     return web.Response(text=html, content_type='text/html')
-
 
 async def handle_save_notifications(request):
     user = get_current_user(request)
@@ -1303,6 +1306,7 @@ async def handle_sse_stream(request):
     user = get_current_user(request)
     if not user:
         return web.Response(status=401)
+    current_token = request.cookies.get(COOKIE_NAME)
     resp = web.StreamResponse(status=200, reason='OK')
     resp.headers['Content-Type'] = 'text/event-stream'
     resp.headers['Cache-Control'] = 'no-cache'
@@ -1323,6 +1327,13 @@ async def handle_sse_stream(request):
             except Exception:
                 break
                 
+            if current_token and current_token not in SERVER_SESSIONS:
+                try:
+                    await resp.write(b"event: session_status\ndata: expired\n\n")
+                except Exception:
+                    pass
+                break
+
             current_stats = {
                 "cpu": 0, "ram": 0, "disk": 0, "ip": AGENT_IP_CACHE,
                 "net_sent": 0, "net_recv": 0, "boot_time": 0}
@@ -1408,7 +1419,6 @@ async def handle_sse_stream(request):
         if "closing transport" not in str(e) and "'NoneType' object" not in str(e):
              logging.error(f"SSE Stream Error: {e}")
     return resp
-
 
 async def handle_sse_logs(request):
     user = get_current_user(request)

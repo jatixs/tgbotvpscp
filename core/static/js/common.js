@@ -15,7 +15,7 @@ document.addEventListener("DOMContentLoaded", () => {
     if (typeof window.parsePageEmojis === 'function') { window.parsePageEmojis(); } else { parsePageEmojis(); }
     initNotifications(); 
     initSSE();
-    initSessionSync(); // Запуск синхронизации сессий
+    initSessionSync(); // Включаем синхронизацию сессии и Ping
     initHolidayMood(); 
     initAddNodeLogic();
     if (document.getElementById('logsContainer')) {
@@ -214,13 +214,18 @@ function initSSE() {
         }
     });
 
+    sseSource.addEventListener('session_status', (e) => {
+        if (e.data === 'expired') {
+            handleSessionExpired();
+        }
+    });
+
     sseSource.onerror = () => {
         checkSessionStatus();
     };
 
     window.sseSource = sseSource;
 }
-
 // --- LOGIC: Cross-Tab Session Sync & Expiry Check ---
 function initSessionSync() {
     // 1. Слушаем события из других вкладок (выход из аккаунта)
