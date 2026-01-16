@@ -213,6 +213,15 @@ function initSSE() {
         }
     });
 
+    sseSource.onerror = () => {
+        fetch('/api/settings/language', {method: 'HEAD'}).then(res => {
+            if (res.status === 401 || res.status === 403) {
+                handleSessionExpired();
+                if (sseSource) { sseSource.close(); sseSource = null; }
+            }
+        }).catch(()=>{});
+    };
+
     window.sseSource = sseSource;
 }
 
