@@ -184,7 +184,7 @@ function renderNodesList(nodes) {
 
     const html = nodes.map(node => {
         let statusColor = node.status === 'online' ? "bg-green-500" : (node.status === 'restarting' ? "bg-blue-500" : "bg-red-500");
-        let statusText = node.status === 'restarting' ? "RESTART" : node.status.toUpperCase();
+        let statusText = node.status === 'restarting' ? (typeof I18N !== 'undefined' && I18N.web_status_restart ? I18N.web_status_restart : "RESTART") : node.status.toUpperCase();
         let statusTextClass = node.status === 'online' ? "text-green-500" : (node.status === 'restarting' ? "text-blue-500" : "text-red-500");
         let statusBg = node.status === 'online' ? "bg-green-500/10 text-green-600 dark:text-green-400" : (node.status === 'restarting' ? "bg-blue-500/10 text-blue-600 dark:text-blue-400" : "bg-red-500/10 text-red-600 dark:text-red-400");
         
@@ -259,7 +259,8 @@ function updateAgentStatsUI(data) {
                 cpuEl.innerHTML = html;
                 const hintCpu = document.getElementById('hint-cpu');
                 if (hintCpu) {
-                    hintCpu.innerHTML = formatProcessList(data.stats.process_cpu, "Top CPU Consumers", "text-blue-500");
+                    const title = (typeof I18N !== 'undefined' && I18N.web_top_cpu) ? I18N.web_top_cpu : "Top CPU Consumers";
+                    hintCpu.innerHTML = formatProcessList(data.stats.process_cpu, title, "text-blue-500");
                 }
             }
             if (progCpu) progCpu.style.width = data.stats.cpu + "%";
@@ -274,7 +275,8 @@ function updateAgentStatsUI(data) {
                 ramEl.innerHTML = html;
                 const hintRam = document.getElementById('hint-ram');
                 if (hintRam) {
-                    hintRam.innerHTML = formatProcessList(data.stats.process_ram, "Top Memory Consumers", "text-purple-500");
+                    const title = (typeof I18N !== 'undefined' && I18N.web_top_ram) ? I18N.web_top_ram : "Top Memory Consumers";
+                    hintRam.innerHTML = formatProcessList(data.stats.process_ram, title, "text-purple-500");
                 }
             }
             if (progRam) progRam.style.width = data.stats.ram + "%";
@@ -289,7 +291,8 @@ function updateAgentStatsUI(data) {
                 diskEl.innerHTML = html;
                 const hintDisk = document.getElementById('hint-disk');
                 if (hintDisk) {
-                    hintDisk.innerHTML = formatProcessList(data.stats.process_disk, "Top I/O Usage (Total)", "text-emerald-500");
+                    const title = (typeof I18N !== 'undefined' && I18N.web_top_disk) ? I18N.web_top_disk : "Top I/O Usage";
+                    hintDisk.innerHTML = formatProcessList(data.stats.process_disk, title, "text-emerald-500");
                 }
             }
             if (progDisk) progDisk.style.width = data.stats.disk + "%";
@@ -513,7 +516,8 @@ window.switchLogType = function(type) {
     
     // Показываем заглушку пока соединяемся
     if (container.innerHTML === "") {
-       container.innerHTML = `<div class="text-gray-400 text-center mt-10">Connecting...</div>`;
+       const connectingText = (typeof I18N !== 'undefined' && I18N.web_log_connecting) ? I18N.web_log_connecting : "Connecting...";
+       container.innerHTML = `<div class="text-gray-400 text-center mt-10">${connectingText}</div>`;
     }
 
     logSSESource.addEventListener('logs', (e) => {

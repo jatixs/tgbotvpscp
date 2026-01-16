@@ -534,7 +534,12 @@ async def handle_dashboard(request):
             "web_label_disk": _("web_label_disk", lang),
             "web_label_status": _("web_label_status", lang),
             "modal_title_info": _("web_node_details_title", lang),
-            "web_click_copy": "Click to copy" if lang == 'en' else "Нажмите, чтобы скопировать"
+            "web_click_copy": _("web_click_copy", lang),
+            "web_top_cpu": _("web_top_cpu", lang),
+            "web_top_ram": _("web_top_ram", lang),
+            "web_top_disk": _("web_top_disk", lang),
+            "web_log_connecting": _("web_log_connecting", lang),
+            "web_status_restart": _("web_status_restart", lang),
         })
     }
 
@@ -778,6 +783,7 @@ async def handle_settings_page(request):
         "web_update_checking": _("web_update_checking", lang), "web_update_available_title": _("web_update_available_title", lang), "web_update_info": _("web_update_info", lang), "web_update_uptodate": _("web_update_uptodate", lang), "web_update_started": _("web_update_started", lang), "web_update_error": _("web_update_error", lang),
         "web_no_notifications": _("web_no_notifications", lang), "web_clear_notifications": _("web_clear_notifications", lang), "web_sessions_title": _("web_sessions_title", lang), "web_session_current": _("web_session_current", lang), "web_session_revoke": _("web_session_revoke", lang), "web_logout": _("web_logout", lang), "web_ip": _("web_ip", lang), "web_device": _("web_device", lang), "web_last_active": _("web_last_active", lang), "web_sessions_revoked_alert": _("web_sessions_revoked_alert", lang), "web_session_current_label": _("web_session_current_label", lang), "web_sessions_revoke_all": _("web_sessions_revoke_all", lang),
         "web_update_placeholder": _("web_update_placeholder", lang), "web_update_check_btn": _("web_update_check_btn", lang), "web_update_do_btn": _("web_update_do_btn", lang), "web_notifications_title": _("web_notifications_title", lang), "web_clear_notifications": _("web_clear_notifications", lang), "web_logout": _("web_logout", lang),
+        "web_fill_field": _("web_fill_field", lang), "web_conn_error_short": _("web_conn_error_short", lang), "web_error_short": _("web_error_short", lang), "web_success": _("web_success", lang), "web_no_sessions": _("web_no_sessions", lang), "web_error_loading_sessions": _("web_error_loading_sessions", lang), "web_kb_enable_all": _("web_kb_enable_all", lang), "web_kb_disable_all": _("web_kb_disable_all", lang), "web_click_copy": _("web_click_copy", lang), "web_server_name_placeholder": _("web_server_name_placeholder", lang),
     }
     for btn_key, conf_key in BTN_CONFIG_MAP.items():
         i18n_data[f"lbl_{conf_key}"] = _(btn_key, lang)
@@ -1051,7 +1057,8 @@ async def handle_login_page(request):
         "login_back_magic", "login_or", "login_reset_title", "login_reset_desc",
         "login_btn_send_link", "login_btn_back", "btn_back", "login_support_btn_pay",
         "login_link_sent_title", "login_link_sent_desc", "reset_success_title",
-        "reset_success_desc", "login_error_user_not_found", "web_default_pass_alert"
+        "reset_success_desc", "login_error_user_not_found", "web_default_pass_alert",
+        "web_brand_name", "login_secure_gateway"
     ]
     i18n_all = {}
     for l in ['ru', 'en']:
@@ -1244,6 +1251,11 @@ async def handle_reset_page_render(request):
     lang = DEFAULT_LANGUAGE
     i18n_data = {
         "web_error": _("web_error", lang, error=""), "web_conn_error": _("web_conn_error", lang, error=""), "modal_title_alert": _("modal_title_alert", lang), "modal_title_confirm": _("modal_title_confirm", lang), "modal_title_prompt": _("modal_title_prompt", lang), "modal_btn_ok": _("modal_btn_ok", lang), "modal_btn_cancel": _("modal_btn_cancel", lang),
+        "web_brand_name": _("web_brand_name", lang),
+        "reset_page_title": _("login_reset_title", lang),
+        "web_new_password": _("web_new_password", lang),
+        "web_confirm_password": _("web_confirm_password", lang),
+        "web_save_btn": _("web_save_btn", lang),
     }
 
     context = {
