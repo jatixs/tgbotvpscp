@@ -749,7 +749,7 @@ async def handle_nodes_list_json(request):
     return web.json_response({"nodes": nodes_data})
 
 
-async def async def handle_settings_page(request):
+async def handle_settings_page(request):
     user = get_current_user(request)
     if not user:
         raise web.HTTPFound('/login')
@@ -877,6 +877,7 @@ async def async def handle_settings_page(request):
     template = JINJA_ENV.get_template("settings.html")
     html = template.render(**context)
     return web.Response(text=html, content_type='text/html')
+
 
 async def handle_save_notifications(request):
     user = get_current_user(request)
@@ -1306,7 +1307,9 @@ async def handle_sse_stream(request):
     user = get_current_user(request)
     if not user:
         return web.Response(status=401)
+    
     current_token = request.cookies.get(COOKIE_NAME)
+
     resp = web.StreamResponse(status=200, reason='OK')
     resp.headers['Content-Type'] = 'text/event-stream'
     resp.headers['Cache-Control'] = 'no-cache'
@@ -1326,14 +1329,16 @@ async def handle_sse_stream(request):
                     break
             except Exception:
                 break
-                
+            
+            # --- ПРОВЕРКА ВАЛИДНОСТИ СЕССИИ ---
             if current_token and current_token not in SERVER_SESSIONS:
                 try:
                     await resp.write(b"event: session_status\ndata: expired\n\n")
                 except Exception:
                     pass
                 break
-
+            # ----------------------------------
+                
             current_stats = {
                 "cpu": 0, "ram": 0, "disk": 0, "ip": AGENT_IP_CACHE,
                 "net_sent": 0, "net_recv": 0, "boot_time": 0}
@@ -1419,6 +1424,7 @@ async def handle_sse_stream(request):
         if "closing transport" not in str(e) and "'NoneType' object" not in str(e):
              logging.error(f"SSE Stream Error: {e}")
     return resp
+
 
 async def handle_sse_logs(request):
     user = get_current_user(request)
