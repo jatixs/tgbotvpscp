@@ -1275,7 +1275,9 @@ async def handle_reset_page_render(request):
         "pass_req_length": _("pass_req_length", lang),
         "pass_req_num": _("pass_req_num", lang),
         "pass_match_error": _("pass_match_error", lang),
-        "pass_is_empty": _("pass_is_empty", lang)
+        "pass_is_empty": _("pass_is_empty", lang),
+        "web_redirecting": _("web_redirecting", lang),
+        "web_logging_in": _("web_logging_in", lang)
     }
 
     context = {

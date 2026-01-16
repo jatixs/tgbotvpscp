@@ -118,6 +118,15 @@ document.addEventListener('DOMContentLoaded', () => {
     if (passInput) passInput.addEventListener('input', updateState);
     if (confirmInput) confirmInput.addEventListener('input', updateState);
 
+    // Добавляем обработку Enter
+    const handleEnter = (e) => {
+        if (e.key === 'Enter' && !submitBtn.disabled) {
+            resetConfirm();
+        }
+    };
+    passInput.addEventListener('keydown', handleEnter);
+    confirmInput.addEventListener('keydown', handleEnter);
+
     // --- Модальное окно ---
     const modal = document.getElementById('systemModal');
     const modalTitle = document.getElementById('sysModalTitle');
@@ -171,8 +180,13 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
+        // Анимация загрузки
         const originalText = document.getElementById('btn-text').innerText;
-        document.getElementById('btn-text').innerText = "...";
+        
+        // Спиннер SVG
+        const spinner = `<svg class="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>`;
+        
+        document.getElementById('btn-text').innerHTML = spinner + (I18N.web_saving_btn || "Saving...");
         submitBtn.disabled = true;
 
         try {
@@ -188,8 +202,18 @@ document.addEventListener('DOMContentLoaded', () => {
             const data = await res.json();
             
             if (res.ok) {
-                await showAlert(I18N.web_pass_changed || "Password changed!");
-                window.location.href = '/login';
+                // Успех - меняем кнопку на зеленый и редиректим
+                submitBtn.classList.remove('from-blue-600', 'to-purple-600', 'hover:from-blue-500', 'hover:to-purple-500');
+                submitBtn.classList.add('bg-green-600', 'hover:bg-green-500');
+                
+                // Иконка галочки
+                const checkIcon = `<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg>`;
+                
+                document.getElementById('btn-text').innerHTML = checkIcon + (I18N.web_redirecting || "Redirecting...");
+                
+                setTimeout(() => {
+                    window.location.href = '/login';
+                }, 1000);
             } else {
                 await showAlert(I18N.web_error + ": " + (data.error || "Unknown"));
                 document.getElementById('btn-text').innerText = originalText;
