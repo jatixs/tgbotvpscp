@@ -228,6 +228,9 @@ function initSSE() {
 }
 // --- LOGIC: Cross-Tab Session Sync & Expiry Check ---
 function initSessionSync() {
+    // FIX: Do not run session sync on login or reset pages
+    if (window.location.pathname === '/login' || window.location.pathname.startsWith('/reset_password')) return;
+
     // 1. Слушаем события из других вкладок (выход из аккаунта)
     window.addEventListener('storage', (e) => {
         if (e.key === 'session_status' && e.newValue && e.newValue.startsWith('logged_out')) {
