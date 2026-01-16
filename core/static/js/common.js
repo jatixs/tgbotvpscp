@@ -15,6 +15,7 @@ document.addEventListener("DOMContentLoaded", () => {
     if (typeof window.parsePageEmojis === 'function') { window.parsePageEmojis(); } else { parsePageEmojis(); }
     initNotifications(); 
     initSSE();
+    initSessionSync(); // Инициализация синхронизации сессии между вкладками
     initHolidayMood(); 
     initAddNodeLogic();
     if (document.getElementById('logsContainer')) {
@@ -214,15 +215,46 @@ function initSSE() {
     });
 
     sseSource.onerror = () => {
-        fetch('/api/settings/language', {method: 'HEAD'}).then(res => {
-            if (res.status === 401 || res.status === 403) {
-                handleSessionExpired();
-                if (sseSource) { sseSource.close(); sseSource = null; }
-            }
-        }).catch(()=>{});
+        // Дополнительная проверка на случай ошибок соединения
+        checkSessionStatus();
     };
 
     window.sseSource = sseSource;
+}
+
+// --- LOGIC: Cross-Tab Session Sync & Expiry Check ---
+function initSessionSync() {
+    // 1. Слушаем события из других вкладок (выход из аккаунта)
+    window.addEventListener('storage', (e) => {
+        if (e.key === 'session_status' && e.newValue && e.newValue.startsWith('logged_out')) {
+            handleSessionExpired();
+        }
+    });
+
+    // 2. Периодически проверяем валидность сессии (на случай таймаута на сервере)
+    // Каждые 10 секунд
+    setInterval(checkSessionStatus, 10000);
+
+    // 3. Перехватываем локальный выход, чтобы уведомить другие вкладки
+    const logoutForms = document.querySelectorAll('form[action="/logout"]');
+    logoutForms.forEach(form => {
+        form.addEventListener('submit', () => {
+            // Устанавливаем флаг с timestamp, чтобы событие точно сработало
+            localStorage.setItem('session_status', 'logged_out_' + Date.now());
+        });
+    });
+}
+
+function checkSessionStatus() {
+    if (document.getElementById('session-expired-overlay')) return; // Уже показываем
+    
+    fetch('/api/settings/language', { method: 'HEAD' })
+        .then(res => {
+            if (res.status === 401 || res.status === 403) {
+                handleSessionExpired();
+            }
+        })
+        .catch(() => {});
 }
 
 let lastUnreadCount = -1;
@@ -245,6 +277,13 @@ function initNotifications() {
 
 function handleSessionExpired() {
     if (document.getElementById('session-expired-overlay')) return;
+    
+    // Закрываем SSE соединение, чтобы остановить обновление данных
+    if (window.sseSource) {
+        window.sseSource.close();
+        window.sseSource = null;
+    }
+
     const title = (typeof I18N !== 'undefined' && I18N.web_session_expired) ? I18N.web_session_expired : "Session expired";
     const msg = (typeof I18N !== 'undefined' && I18N.web_please_relogin) ? I18N.web_please_relogin : "Please login again";
     const btnText = (typeof I18N !== 'undefined' && I18N.web_login_btn) ? I18N.web_login_btn : "Login";
