@@ -15,7 +15,7 @@ document.addEventListener("DOMContentLoaded", () => {
     if (typeof window.parsePageEmojis === 'function') { window.parsePageEmojis(); } else { parsePageEmojis(); }
     initNotifications(); 
     initSSE();
-    initSessionSync(); // Инициализация синхронизации сессии между вкладками
+    initSessionSync(); // Запуск синхронизации сессий
     initHolidayMood(); 
     initAddNodeLogic();
     if (document.getElementById('logsContainer')) {
@@ -215,7 +215,6 @@ function initSSE() {
     });
 
     sseSource.onerror = () => {
-        // Дополнительная проверка на случай ошибок соединения
         checkSessionStatus();
     };
 
@@ -231,7 +230,7 @@ function initSessionSync() {
         }
     });
 
-    // 2. Периодически проверяем валидность сессии (на случай таймаута на сервере)
+    // 2. Периодически проверяем валидность сессии (на случай таймаута на сервере или отзыва)
     // Каждые 10 секунд
     setInterval(checkSessionStatus, 10000);
 
@@ -246,9 +245,10 @@ function initSessionSync() {
 }
 
 function checkSessionStatus() {
-    if (document.getElementById('session-expired-overlay')) return; // Уже показываем
+    if (document.getElementById('session-expired-overlay')) return;
     
-    fetch('/api/settings/language', { method: 'HEAD' })
+    // Добавляем timestamp для обхода кеша
+    fetch('/api/settings/language?_=' + Date.now(), { method: 'HEAD' })
         .then(res => {
             if (res.status === 401 || res.status === 403) {
                 handleSessionExpired();
@@ -278,7 +278,7 @@ function initNotifications() {
 function handleSessionExpired() {
     if (document.getElementById('session-expired-overlay')) return;
     
-    // Закрываем SSE соединение, чтобы остановить обновление данных
+    // Закрываем SSE соединение, чтобы остановить получение данных
     if (window.sseSource) {
         window.sseSource.close();
         window.sseSource = null;
