@@ -489,6 +489,18 @@ STRINGS = {
         "web_error_loading_sessions": "Ошибка загрузки сессий",
         "web_status_restart": "ПЕРЕЗАГРУЗКА",
         "web_click_copy": "Нажмите на текст, чтобы скопировать",
+        "web_server_name_placeholder": "Имя сервера",
+        
+        "pass_strength_weak": "Слабый",
+        "pass_strength_fair": "Нормальный",
+        "pass_strength_good": "Хороший",
+        "pass_strength_strong": "Надежный",
+        "pass_hint_title": "Требования к паролю:",
+        "pass_req_length": "Минимум 8 символов",
+        "pass_req_num": "Минимум одна цифра",
+        "pass_req_spec": "Спец. символ (необязательно)",
+        "pass_match_error": "Пароли не совпадают",
+        "pass_is_empty": "Заполните все поля"
     },
     'en': {
         "btn_back": "🔙 Back",
@@ -970,6 +982,17 @@ STRINGS = {
         "web_error_loading_sessions": "Error loading sessions",
         "web_status_restart": "RESTARTING",
         "web_click_copy": "Click text to copy",
+        
+        "pass_strength_weak": "Weak",
+        "pass_strength_fair": "Fair",
+        "pass_strength_good": "Good",
+        "pass_strength_strong": "Strong",
+        "pass_hint_title": "Password requirements:",
+        "pass_req_length": "Minimum 8 characters",
+        "pass_req_num": "Minimum one number",
+        "pass_req_spec": "Special char (optional)",
+        "pass_match_error": "Passwords do not match",
+        "pass_is_empty": "Fill in all fields"
     }
 }
 

@@ -1253,17 +1253,34 @@ async def handle_reset_page_render(request):
         return web.Response(text="Expired", status=403)
 
     lang = DEFAULT_LANGUAGE
+    # Обновленный список ключей локализации для страницы сброса
     i18n_data = {
-        "web_error": _("web_error", lang, error=""), "web_conn_error": _("web_conn_error", lang, error=""), "modal_title_alert": _("modal_title_alert", lang), "modal_title_confirm": _("modal_title_confirm", lang), "modal_title_prompt": _("modal_title_prompt", lang), "modal_btn_ok": _("modal_btn_ok", lang), "modal_btn_cancel": _("modal_btn_cancel", lang),
+        "web_error": _("web_error", lang, error=""), 
+        "web_conn_error": _("web_conn_error", lang, error=""), 
+        "modal_title_alert": _("modal_title_alert", lang), 
+        "modal_title_confirm": _("modal_title_confirm", lang), 
+        "modal_title_prompt": _("modal_title_prompt", lang), 
+        "modal_btn_ok": _("modal_btn_ok", lang), 
+        "modal_btn_cancel": _("modal_btn_cancel", lang),
         "web_brand_name": _("web_brand_name", lang),
         "reset_page_title": _("login_reset_title", lang),
         "web_new_password": _("web_new_password", lang),
         "web_confirm_password": _("web_confirm_password", lang),
         "web_save_btn": _("web_save_btn", lang),
+        "pass_strength_weak": _("pass_strength_weak", lang),
+        "pass_strength_fair": _("pass_strength_fair", lang),
+        "pass_strength_good": _("pass_strength_good", lang),
+        "pass_strength_strong": _("pass_strength_strong", lang),
+        "pass_hint_title": _("pass_hint_title", lang),
+        "pass_req_length": _("pass_req_length", lang),
+        "pass_req_num": _("pass_req_num", lang),
+        "pass_match_error": _("pass_match_error", lang),
+        "pass_is_empty": _("pass_is_empty", lang)
     }
 
     context = {
         "web_version": CACHE_VER,
+        "token": token,  # Передаем токен для использования в JS
         "i18n_json": json.dumps(i18n_data)
     }
 
