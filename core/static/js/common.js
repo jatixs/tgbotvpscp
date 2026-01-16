@@ -619,6 +619,36 @@ document.addEventListener('click', async (e) => {
                 currentMain.className = newMain.className;
                 currentNav.innerHTML = newNav.innerHTML;
                 currentNav.className = newNav.className;
+
+                // --- SCRIPT INJECTION START ---
+                // Извлекаем и выполняем скрипты из нового документа для обновления глобальных переменных (I18N, DATA, etc.)
+                // Поскольку SPA просто заменяет DOM, теги script не выполняются автоматически.
+                const scripts = doc.querySelectorAll('script');
+                scripts.forEach(s => {
+                    const content = s.innerText || s.textContent;
+                    if (content && (
+                        content.includes('const I18N') || 
+                        content.includes('const USERS_DATA') || 
+                        content.includes('const NODES_DATA') || 
+                        content.includes('const KEYBOARD_CONFIG') ||
+                        content.includes('const USER_ROLE')
+                    )) {
+                        try {
+                            // Заменяем const на window. assignment, чтобы избежать ошибок повторного объявления
+                            // и гарантировать обновление глобальных переменных
+                            const patched = content
+                                .replace(/const\s+I18N\s*=/g, 'window.I18N =')
+                                .replace(/const\s+USERS_DATA\s*=/g, 'window.USERS_DATA =')
+                                .replace(/const\s+NODES_DATA\s*=/g, 'window.NODES_DATA =')
+                                .replace(/const\s+KEYBOARD_CONFIG\s*=/g, 'window.KEYBOARD_CONFIG =')
+                                .replace(/const\s+USER_ROLE\s*=/g, 'window.USER_ROLE =');
+                            (1, eval)(patched);
+                        } catch (err) {
+                            console.error("Error evaluating injected script:", err);
+                        }
+                    }
+                });
+                // --- SCRIPT INJECTION END ---
                 
                 window.scrollTo(0, 0);
                 window.history.pushState({}, '', url);
