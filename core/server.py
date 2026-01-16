@@ -1552,6 +1552,8 @@ async def start_web_server(bot_instance: Bot):
     app['shutdown_event'] = asyncio.Event()
     async def on_shutdown(app):
         app['shutdown_event'].set()
+        # Принудительно даем сигнал всем SSE хендлерам (если они ждут)
+        # В текущей реализации они проверяют флаг в цикле, это ок.
     app.on_shutdown.append(on_shutdown)
 
     app.router.add_post('/api/heartbeat', handle_heartbeat)
@@ -1605,13 +1607,15 @@ async def start_web_server(bot_instance: Bot):
         logging.info("Web UI DISABLED.")
         app.router.add_get('/', handle_api_root)
     AGENT_TASK = asyncio.create_task(agent_monitor())
-    runner = web.AppRunner(app, access_log=None)
+    
+    # ВАЖНО: shutdown_timeout=1.0 решает проблему долгого висения при рестарте с SSE
+    runner = web.AppRunner(app, access_log=None, shutdown_timeout=1.0)
+    
     await runner.setup()
     site = web.TCPSite(runner, WEB_SERVER_HOST, WEB_SERVER_PORT)
     try:
         await site.start()
-        logging.info(f"Web Server started on {
-                     WEB_SERVER_HOST}:{WEB_SERVER_PORT}")
+        logging.info(f"Web Server started on {WEB_SERVER_HOST}:{WEB_SERVER_PORT}")
         return runner
     except Exception as e:
         logging.error(f"Failed to start Web Server: {e}")
