@@ -502,7 +502,8 @@ STRINGS = {
         "pass_match_error": "Пароли не совпадают",
         "pass_is_empty": "Заполните все поля",
         "web_redirecting": "Перенаправление...",
-        "web_logging_in": "Вход в систему..."
+        "web_logging_in": "Вход в систему...",
+        "login_go_to_bot": "Перейти в бот"
     },
     'en': {
         "btn_back": "🔙 Back",
@@ -996,7 +997,8 @@ STRINGS = {
         "pass_match_error": "Passwords do not match",
         "pass_is_empty": "Fill in all fields",
         "web_redirecting": "Redirecting...",
-        "web_logging_in": "Logging in..."
+        "web_logging_in": "Logging in...",
+        "login_go_to_bot": "Go to Bot"
     }
 }
 

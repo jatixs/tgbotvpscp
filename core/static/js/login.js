@@ -29,19 +29,15 @@ async function onTelegramAuth(user) {
 
 // --- UI Logic: Language & Slider ---
 
-// Функция обновления позиции слайдера и стилей кнопок (Liquid Glass Spring Animation)
 function updateLangSlider(lang) {
     const slider = document.getElementById('lang-slider-bg');
     const btnRu = document.getElementById('btn-ru');
     const btnEn = document.getElementById('btn-en');
 
     if (slider) {
-        // [LIQUID ANIMATION] Использование Spring Physics (пружина)
-        // cubic-bezier(0.34, 1.56, 0.64, 1) создает эффект "выстреливания" и мягкого возврата (bounciness)
         slider.style.transition = 'transform 0.6s cubic-bezier(0.34, 1.56, 0.64, 1)';
         slider.style.willChange = 'transform';
         
-        // Сдвиг на 100% ширины + небольшая коррекция, если нужно (здесь 100% идеально для flex/relative верстки)
         if (lang === 'en') {
             slider.style.transform = 'translate3d(100%, 0, 0)';
         } else {
@@ -50,36 +46,29 @@ function updateLangSlider(lang) {
     }
 
     if (btnRu && btnEn) {
-        // Убираем обводку
         btnRu.style.outline = 'none';
         btnEn.style.outline = 'none';
         
-        // Плавная смена стилей текста
         const transition = 'all 0.4s ease';
         btnRu.style.transition = transition;
         btnEn.style.transition = transition;
 
         if (lang === 'ru') {
-            // RU Active
             btnRu.style.opacity = '1';
-            btnRu.style.transform = 'scale(1.1)'; // Активный элемент чуть больше (Liquid Pop)
-            btnRu.style.filter = 'drop-shadow(0 0 8px rgba(255,255,255,0.3))'; // Свечение
+            btnRu.style.transform = 'scale(1.1)';
+            btnRu.style.filter = 'drop-shadow(0 0 8px rgba(255,255,255,0.3))';
             
-            // EN Inactive
             btnEn.style.opacity = '0.4';
             btnEn.style.transform = 'scale(0.9)';
             btnEn.style.filter = 'none';
             
-            // Font weight hack via classList usually safer, but inline for force
             btnRu.querySelector('span')?.classList.add('font-bold');
             btnEn.querySelector('span')?.classList.remove('font-bold');
         } else {
-            // EN Active
             btnEn.style.opacity = '1';
             btnEn.style.transform = 'scale(1.1)';
             btnEn.style.filter = 'drop-shadow(0 0 8px rgba(255,255,255,0.3))';
             
-            // RU Inactive
             btnRu.style.opacity = '0.4';
             btnRu.style.transform = 'scale(0.9)';
             btnRu.style.filter = 'none';
@@ -91,20 +80,14 @@ function updateLangSlider(lang) {
 }
 window.updateLangSlider = updateLangSlider;
 
-// Основная функция переключения языка (БЕЗ ПЕРЕЗАГРУЗКИ)
 function setLoginLanguage(lang) {
-    // 1. Сохраняем куки
     document.cookie = "guest_lang=" + lang + "; path=/; max-age=31536000";
-    
-    // 2. Анимация
     updateLangSlider(lang);
 
-    // 3. Динамическая смена текста
     if (typeof I18N_ALL !== 'undefined' && I18N_ALL[lang]) {
         const dict = I18N_ALL[lang];
         window.I18N = dict; 
 
-        // Анимированная смена текста
         const elements = document.querySelectorAll('[data-i18n]');
         elements.forEach(el => {
             el.style.transition = 'opacity 0.2s ease';
@@ -166,6 +149,7 @@ function toggleForms(target) {
     const reset = document.getElementById('reset-form');
     const setPass = document.getElementById('set-password-form');
     const errorBlock = document.getElementById('reset-error-block');
+    const backArrow = document.getElementById('back-arrow');
     
     [magic, password, reset, setPass].forEach(el => el?.classList.add('hidden'));
     if (errorBlock) errorBlock.classList.add('hidden');
@@ -177,6 +161,19 @@ function toggleForms(target) {
         void el.offsetWidth; // trigger reflow
         el.classList.add('animate-fade-in-up');
     };
+
+    // Show/Hide Back Arrow based on context
+    if (backArrow) {
+        if (target === 'password') {
+            backArrow.classList.remove('hidden');
+            backArrow.onclick = () => toggleForms('magic');
+        } else if (target === 'reset') {
+            backArrow.classList.remove('hidden');
+            backArrow.onclick = () => toggleForms('password');
+        } else {
+            backArrow.classList.add('hidden');
+        }
+    }
 
     if (target === 'password') show(password);
     else if (target === 'reset') show(reset);
@@ -191,6 +188,7 @@ async function requestPasswordReset() {
     const errorBlock = document.getElementById('reset-error-block');
     const adminLinkBtn = document.getElementById('admin-link-btn');
     const container = document.getElementById('forms-container');
+    const backArrow = document.getElementById('back-arrow');
 
     if (!userIdInput || !btn) return;
 
@@ -215,18 +213,25 @@ async function requestPasswordReset() {
         const data = await response.json();
 
         if (response.ok) {
+            // Hide back arrow on success screen
+            if (backArrow) backArrow.classList.add('hidden');
+
             const title = (I18N && I18N.login_link_sent_title) || "Link Sent!";
             const desc = (I18N && I18N.login_link_sent_desc) || "Check your Telegram messages.";
-            const btnText = (I18N && I18N.login_btn_back) || "Back";
+            const btnText = (I18N && I18N.login_go_to_bot) || "Go to Bot";
+            const botLink = (typeof BOT_USERNAME !== 'undefined' && BOT_USERNAME) ? `https://t.me/${BOT_USERNAME}` : "#";
 
+            // ИСПРАВЛЕНО: Кнопка "Перейти в бот" вместо назад
             container.innerHTML = `
                 <div class="text-center py-8 animate-fade-in-up">
                     <div class="w-16 h-16 bg-yellow-500/20 rounded-full flex items-center justify-center mx-auto mb-4 border border-yellow-500/30">
-                        <svg class="w-8 h-8 text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 00-2-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path></svg>
+                        <svg class="w-8 h-8 text-yellow-400 transform rotate-45 -ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"></path>
+                        </svg>
                     </div>
                     <h3 class="text-lg font-bold text-white mb-2">${title}</h3>
                     <p class="text-sm text-gray-300">${desc}</p>
-                    <a href="/login" class="inline-block mt-6 px-6 py-2 bg-white/10 hover:bg-white/20 rounded-lg text-sm font-bold transition">${btnText}</a>
+                    <a href="${botLink}" target="_blank" class="inline-block mt-6 px-6 py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-xl font-bold transition shadow-lg shadow-blue-500/20">${btnText}</a>
                 </div>
             `;
         } else {
@@ -313,20 +318,16 @@ async function submitNewPassword() {
 
 // --- Initialization ---
 document.addEventListener("DOMContentLoaded", () => {
-    // --- НОВАЯ ЛОГИКА: Инициализация слайдера языка ---
     if (typeof CURRENT_LANG !== 'undefined' && typeof updateLangSlider === 'function') {
         updateLangSlider(CURRENT_LANG);
     }
 
-    // 1. Fix Title
     if (typeof I18N !== 'undefined' && I18N.web_title) {
         document.title = I18N.web_title;
     }
 
-    // 2. Parse Emojis
     if (window.twemoji) window.twemoji.parse(document.body, { folder: 'svg', ext: '.svg' });
 
-    // 3. I18N Initial Apply
     if (typeof I18N !== 'undefined') {
         document.querySelectorAll('[data-i18n]').forEach(el => {
             const key = el.getAttribute('data-i18n');
@@ -346,20 +347,27 @@ document.addEventListener("DOMContentLoaded", () => {
     // 4. Handle URL Params
     const urlParams = new URLSearchParams(window.location.search);
     const formsContainer = document.getElementById('forms-container');
+    const backArrow = document.getElementById('back-arrow');
     
     if (urlParams.get('sent') === 'true' && formsContainer) {
+        if (backArrow) backArrow.classList.add('hidden'); // Hide arrow on success
+
         const title = (I18N && I18N.login_link_sent_title) || "Magic Link Sent!";
         const desc = (I18N && I18N.login_link_sent_desc) || "Check your Telegram messages.";
-        const btnText = (I18N && I18N.login_btn_back) || "Return";
+        const btnText = (I18N && I18N.login_go_to_bot) || "Go to Bot";
+        const botLink = (typeof BOT_USERNAME !== 'undefined' && BOT_USERNAME) ? `https://t.me/${BOT_USERNAME}` : "#";
 
+        // ИСПРАВЛЕНО: Кнопка "Перейти в бот" вместо назад
         formsContainer.innerHTML = `
             <div class="text-center py-8 animate-fade-in-up">
                 <div class="w-16 h-16 bg-blue-500/20 rounded-full flex items-center justify-center mx-auto mb-4 border border-blue-500/30">
-                    <svg class="w-8 h-8 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 00-2-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path></svg>
+                    <svg class="w-8 h-8 text-blue-400 transform rotate-45 -ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"></path>
+                    </svg>
                 </div>
                 <h3 class="text-lg font-bold text-white mb-2">${title}</h3>
                 <p class="text-sm text-gray-300">${desc}</p>
-                <a href="/login" class="inline-block mt-6 px-6 py-2 bg-white/10 hover:bg-white/20 rounded-lg text-sm font-bold transition">${btnText}</a>
+                <a href="${botLink}" target="_blank" class="inline-block mt-6 px-6 py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-xl font-bold transition shadow-lg shadow-blue-500/20">${btnText}</a>
             </div>
         `;
     } else if (urlParams.get('token')) {

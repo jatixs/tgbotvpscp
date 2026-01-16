@@ -20,14 +20,11 @@
 
     <div class="absolute top-6 right-6 z-50">
         <div class="relative bg-white/30 dark:bg-black/30 backdrop-blur-md border border-white/20 dark:border-white/10 rounded-full p-1 shadow-xl flex items-center w-[140px] h-[46px] select-none transition-transform hover:scale-105">
-            
             <div id="lang-slider-bg" class="absolute left-1 top-1 bottom-1 w-[calc(50%-4px)] bg-white dark:bg-gray-700 rounded-full shadow-md transform transition-transform duration-300 ease-out will-change-transform"></div>
-
             <button onclick="setLoginLanguage('ru')" id="btn-ru" class="relative z-10 w-1/2 h-full flex items-center justify-center gap-2 rounded-full focus:outline-none transition-colors duration-200 group">
                 <img src="https://flagcdn.com/ru.svg" alt="RU" class="w-5 h-auto rounded-[2px] filter drop-shadow-sm object-cover">
                 <span class="text-xs font-bold tracking-wider uppercase font-mono mt-0.5 group-hover:opacity-100 opacity-80 transition-opacity">RU</span>
             </button>
-
             <button onclick="setLoginLanguage('en')" id="btn-en" class="relative z-10 w-1/2 h-full flex items-center justify-center gap-2 rounded-full focus:outline-none transition-colors duration-200 group">
                 <img src="https://flagcdn.com/gb.svg" alt="EN" class="w-5 h-auto rounded-[2px] filter drop-shadow-sm object-cover">
                 <span class="text-xs font-bold tracking-wider uppercase font-mono mt-0.5 group-hover:opacity-100 opacity-80 transition-opacity">EN</span>
@@ -42,8 +39,14 @@
 
     <div class="min-h-screen flex flex-col items-center justify-center p-4 relative z-10">
         
-        <div class="w-full max-w-md bg-white/70 dark:bg-gray-800/60 backdrop-blur-xl border border-white/20 dark:border-white/10 rounded-3xl shadow-2xl p-8 transform transition-all hover:scale-[1.01] duration-500 opacity-0 animate-fade-in-up" id="main-card">
+        <div class="w-full max-w-md bg-white/70 dark:bg-gray-800/60 backdrop-blur-xl border border-white/20 dark:border-white/10 rounded-3xl shadow-2xl p-8 transform transition-all hover:scale-[1.01] duration-500 opacity-0 animate-fade-in-up relative" id="main-card">
             
+            <button id="back-arrow" class="absolute top-6 left-6 p-2 -ml-2 rounded-full text-gray-400 hover:text-gray-700 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/10 transition hidden z-20 group" aria-label="Back">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 transform group-hover:-translate-x-1 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+                </svg>
+            </button>
+
             <div class="text-center mb-8">
                 <div class="w-20 h-20 bg-gradient-to-tr from-blue-500 to-purple-600 rounded-2xl mx-auto flex items-center justify-center shadow-lg mb-4">
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-10 w-10 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -118,11 +121,7 @@
                         </button>
                     </form>
                     
-                    <button onclick="toggleForms('magic')" class="mt-6 w-full text-center text-sm text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 transition flex items-center justify-center gap-2">
-                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path></svg> 
-                        <span data-i18n="login_back_magic">Back to Magic Link</span>
-                    </button>
-                </div>
+                    </div>
 
                 <div id="reset-form" class="hidden">
                     <div class="text-center mb-6">
@@ -151,11 +150,7 @@
                         </a>
                     </div>
 
-                    <button onclick="toggleForms('password')" class="mt-6 w-full text-center text-sm text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 transition flex items-center justify-center gap-2">
-                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m7 7h18"></path></svg> 
-                        <span data-i18n="login_btn_back">Back</span>
-                    </button>
-                </div>
+                    </div>
 
                 <div id="set-password-form" class="hidden">
                     <div class="text-center mb-6">
