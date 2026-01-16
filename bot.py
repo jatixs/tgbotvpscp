@@ -271,13 +271,11 @@ def load_modules():
 async def shutdown(dispatcher: Dispatcher, bot_instance: Bot, web_runner=None):
     logging.info("Shutdown signal received. Stopping services...")
     
-    # 1. Stop Polling
     try:
         await dispatcher.stop_polling()
     except Exception:
         pass
 
-    # 2. Stop Web Server (with timeout to ensure SSE loops exit)
     if web_runner:
         try:
             # This triggers app['shutdown_event'] via on_shutdown signal we added
@@ -290,7 +288,6 @@ async def shutdown(dispatcher: Dispatcher, bot_instance: Bot, web_runner=None):
 
     await server.cleanup_server()
 
-    # 4. Отменяем фоновые задачи (с таймаутом)
     cancelled_tasks = []
     for task in list(background_tasks):
         if task and not task.done():
@@ -300,21 +297,17 @@ async def shutdown(dispatcher: Dispatcher, bot_instance: Bot, web_runner=None):
     if cancelled_tasks:
         logging.info(f"Cancelling {len(cancelled_tasks)} background tasks...")
         try:
-            # Ждем завершения/отмены задач не более 5 секунд
             await asyncio.wait_for(asyncio.gather(*cancelled_tasks, return_exceptions=True), timeout=5.0)
         except asyncio.TimeoutError:
             logging.warning("Background tasks cancellation timed out.")
         except Exception as e:
             logging.error(f"Error during tasks cancellation: {e}")
 
-    # 5. Закрываем БД
     logging.info("Closing DB connections...")
     try:
         await asyncio.wait_for(Tortoise.close_connections(), timeout=5.0)
     except Exception as e:
         logging.error(f"DB connections close error: {e}")
-
-    # 6. Закрываем сессию бота
     if getattr(bot_instance, 'session', None):
         await bot_instance.session.close()
     
@@ -332,8 +325,6 @@ async def main():
         await asyncio.to_thread(auth.load_users)
         await asyncio.to_thread(utils.load_alerts_config)
         await asyncio.to_thread(i18n.load_user_settings)
-
-        # ОПТИМИЗАЦИЯ: Запускаем обновление имен в фоне, чтобы не блокировать старт
         asyncio.create_task(auth.refresh_user_names(bot))
         
         await utils.initial_reboot_check(bot)
@@ -345,16 +336,6 @@ async def main():
         web_runner = await server.start_web_server(bot)
         if not web_runner:
             logging.warning("Web Server NOT started.")
-
-        try:
-            for s in (signal.SIGINT, signal.SIGTERM):
-                loop.add_signal_handler(
-                    s, lambda s=s: asyncio.create_task(
-                        shutdown(
-                            dp, bot, web_runner)))
-        except NotImplementedError:
-            pass
-
         logging.info("Starting polling...")
         await bot.delete_webhook(drop_pending_updates=True)
         await dp.start_polling(bot, allowed_updates=dp.resolve_used_update_types())
@@ -363,9 +344,7 @@ async def main():
     except Exception as e:
         logging.critical(f"Critical error: {e}", exc_info=True)
     finally:
-        # shutdown вызывается в signal handler, здесь дублировать не нужно, 
-        # но на случай краша main до сигнала можно проверить
-        pass
+        await shutdown(dp, bot, web_runner)
 
 if __name__ == "__main__":
     try:
