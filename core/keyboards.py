@@ -293,21 +293,37 @@ def get_node_management_keyboard(
     layout = [
         [
             InlineKeyboardButton(
-                text=_(
-                    "btn_selftest", lang), callback_data=f"node_cmd_{token}_selftest"), InlineKeyboardButton(
-                text=_(
-                    "btn_uptime", lang), callback_data=f"node_cmd_{token}_uptime")], [
+                text=_("btn_selftest", lang),
+                callback_data=f"node_cmd_{token}_selftest"),
             InlineKeyboardButton(
-                text=_(
-                    "btn_traffic", lang), callback_data=f"node_cmd_{token}_traffic"), InlineKeyboardButton(
-                text=_(
-                    "btn_top", lang), callback_data=f"node_cmd_{token}_top")], [
+                text=_("btn_uptime", lang),
+                callback_data=f"node_cmd_{token}_uptime")
+        ],
+        [
             InlineKeyboardButton(
-                text=_(
-                    "btn_speedtest", lang), callback_data=f"node_cmd_{token}_speedtest"), InlineKeyboardButton(
-                text=_(
-                    "btn_reboot", lang), callback_data=f"node_cmd_{token}_reboot")], [
+                text=_("btn_traffic", lang),
+                callback_data=f"node_cmd_{token}_traffic"),
             InlineKeyboardButton(
-                text=_(
-                    "btn_back", lang), callback_data="nodes_list_refresh")]]
+                text=_("btn_top", lang),
+                callback_data=f"node_cmd_{token}_top")
+        ],
+        [
+            InlineKeyboardButton(
+                text=_("btn_speedtest", lang),
+                callback_data=f"node_cmd_{token}_speedtest")
+        ],
+        [
+            InlineKeyboardButton(
+                text=_("node_btn_rename", lang),
+                callback_data=f"node_rename_{token}"),
+            InlineKeyboardButton(
+                text=_("btn_reboot", lang),
+                callback_data=f"node_cmd_{token}_reboot")
+        ],
+        [
+            InlineKeyboardButton(
+                text=_("btn_back", lang),
+                callback_data="nodes_list_refresh")
+        ]
+    ]
     return InlineKeyboardMarkup(inline_keyboard=layout)

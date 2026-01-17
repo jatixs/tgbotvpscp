@@ -8,7 +8,7 @@ window.initSettings = function() {
     updateBulkButtonsUI();
     initChangePasswordUI();
     fetchSessions();
-    initInputScrollLogic(); // Добавлена инициализация скролла
+    initInputScrollLogic();
 
     const input = document.getElementById('newNodeNameDash');
     if (input) {
@@ -489,8 +489,20 @@ function renderNodes() {
 
     if (NODES_DATA.length > 0) {
         tbody.innerHTML = NODES_DATA.map(n => `
-        <tr class="border-b border-gray-100 dark:border-white/5 hover:bg-gray-50 dark:hover:bg-white/5 transition">
-            <td class="px-2 sm:px-4 py-3 font-medium text-sm text-gray-900 dark:text-white break-all max-w-[100px] sm:max-w-none">${n.name}</td>
+        <tr class="border-b border-gray-100 dark:border-white/5 hover:bg-gray-50 dark:hover:bg-white/5 transition group">
+            <td class="px-2 sm:px-4 py-3 font-medium text-sm text-gray-900 dark:text-white break-all max-w-[150px] sm:max-w-none">
+                <div id="disp_name_${n.token}" class="flex items-center gap-2">
+                    <span>${escapeHtml(n.name)}</span>
+                    <button onclick="startNodeRename('${n.token}')" class="opacity-0 group-hover:opacity-100 transition-opacity text-gray-400 hover:text-blue-500 p-1">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
+                    </button>
+                </div>
+                <div id="edit_name_${n.token}" class="hidden flex items-center gap-1">
+                    <input type="text" id="input_name_${n.token}" value="${escapeHtml(n.name)}" class="bg-white dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded px-2 py-1 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-blue-500 w-32 sm:w-48" onkeydown="handleSettingsRenameKeydown(event, '${n.token}')">
+                    <button onclick="saveNodeRename('${n.token}')" class="text-green-500 hover:text-green-600 p-1"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg></button>
+                    <button onclick="cancelNodeRename('${n.token}')" class="text-red-500 hover:text-red-600 p-1"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg></button>
+                </div>
+            </td>
             <td class="px-2 sm:px-4 py-3 text-xs text-gray-500 dark:text-gray-400">${n.ip || 'Unknown'}</td>
             <td class="px-2 sm:px-4 py-3 font-mono text-[10px] text-gray-400 dark:text-gray-500 truncate max-w-[80px]" title="${n.token}">${n.token.substring(0, 8)}...</td>
             <td class="px-2 sm:px-4 py-3 text-right">
@@ -504,6 +516,75 @@ function renderNodes() {
         tbody.innerHTML = `<tr><td colspan="4" class="px-4 py-3 text-center text-gray-500 text-xs">${I18N.web_no_nodes}</td></tr>`;
     }
 }
+
+window.startNodeRename = function(token) {
+    document.getElementById(`disp_name_${token}`).classList.add('hidden');
+    document.getElementById(`edit_name_${token}`).classList.remove('hidden');
+    const input = document.getElementById(`input_name_${token}`);
+    input.focus();
+    // Reset value to current name
+    const node = NODES_DATA.find(n => n.token === token);
+    if (node) input.value = node.name;
+};
+
+window.cancelNodeRename = function(token) {
+    document.getElementById(`disp_name_${token}`).classList.remove('hidden');
+    document.getElementById(`edit_name_${token}`).classList.add('hidden');
+};
+
+window.saveNodeRename = async function(token) {
+    const input = document.getElementById(`input_name_${token}`);
+    const newName = input.value.trim();
+    if (!newName) return;
+
+    // Optimistic update
+    const nodeIndex = NODES_DATA.findIndex(n => n.token === token);
+    const oldName = NODES_DATA[nodeIndex].name;
+    if (nodeIndex > -1) {
+        NODES_DATA[nodeIndex].name = newName;
+        renderNodes();
+    }
+
+    try {
+        const res = await fetch('/api/nodes/rename', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ token: token, name: newName })
+        });
+        
+        if (res.ok) {
+            if (window.showToast) {
+                const msg = (typeof I18N !== 'undefined' && I18N.web_node_rename_success) ? I18N.web_node_rename_success : "Name updated";
+                window.showToast(msg);
+            }
+        } else {
+            const data = await res.json();
+            // Revert
+            if (nodeIndex > -1) {
+                NODES_DATA[nodeIndex].name = oldName;
+                renderNodes();
+            }
+            const errorMsg = (typeof I18N !== 'undefined' && I18N.web_node_rename_error) ? I18N.web_node_rename_error : "Error updating name";
+            if (window.showModalAlert) await window.showModalAlert(data.error || errorMsg, "Error");
+        }
+    } catch (e) {
+        console.error(e);
+        // Revert
+        if (nodeIndex > -1) {
+            NODES_DATA[nodeIndex].name = oldName;
+            renderNodes();
+        }
+        if (window.showModalAlert) await window.showModalAlert(String(e), "Error");
+    }
+};
+
+window.handleSettingsRenameKeydown = function(event, token) {
+    if (event.key === 'Enter') {
+        saveNodeRename(token);
+    } else if (event.key === 'Escape') {
+        cancelNodeRename(token);
+    }
+};
 
 async function deleteNode(token) {
     if (!await window.showModalConfirm(I18N.node_delete_select || "Удалить эту ноду?", I18N.modal_title_confirm)) return;

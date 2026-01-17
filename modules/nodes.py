@@ -24,6 +24,10 @@ class AddNodeStates(StatesGroup):
     waiting_for_name = State()
 
 
+class RenameNodeStates(StatesGroup):
+    waiting_for_new_name = State()
+
+
 def get_button() -> KeyboardButton:
     return KeyboardButton(text=_(BUTTON_KEY, config.DEFAULT_LANGUAGE))
 
@@ -37,6 +41,8 @@ def register_handlers(dp: Dispatcher):
     dp.callback_query(F.data.startswith("node_delete_confirm_"))(
         cq_node_delete_confirm)
     dp.callback_query(F.data.startswith("node_select_"))(cq_node_select)
+    dp.callback_query(F.data.startswith("node_rename_"))(cq_node_rename)
+    dp.message(StateFilter(RenameNodeStates.waiting_for_new_name))(process_node_rename)
     dp.callback_query(F.data.startswith(
         "node_stop_traffic_"))(cq_node_stop_traffic)
     dp.callback_query(F.data.startswith("node_cmd_"))(cq_node_command)
@@ -158,6 +164,71 @@ async def process_node_name(message: types.Message, state: FSMContext):
     token = await nodes_db.create_node(name)
     await message.answer(_("node_add_success_token", lang, name=name, token=token), parse_mode="HTML")
     await state.clear()
+
+
+async def cq_node_rename(callback: types.CallbackQuery, state: FSMContext):
+    user_id = callback.from_user.id
+    lang = get_user_lang(user_id)
+    token = callback.data.replace("node_rename_", "")
+
+    node = await nodes_db.get_node_by_token(token)
+    if not node:
+        await callback.answer("Node not found", show_alert=True)
+        return
+
+    await state.update_data(rename_token=token)
+    await state.set_state(RenameNodeStates.waiting_for_new_name)
+
+    # Используем get_back_keyboard для отмены и возврата к управлению нодой
+    back_kb = get_back_keyboard(lang, f"node_select_{token}")
+    
+    await callback.message.answer(
+        _("node_rename_prompt", lang, name=node.get("name")), 
+        parse_mode="HTML", 
+        reply_markup=back_kb
+    )
+    await callback.answer()
+
+
+async def process_node_rename(message: types.Message, state: FSMContext):
+    user_id = message.from_user.id
+    lang = get_user_lang(user_id)
+    data = await state.get_data()
+    token = data.get("rename_token")
+
+    if not token:
+        await state.clear()
+        await message.answer("Error: Token not found in state.")
+        return
+
+    new_name = message.text.strip()
+    if not new_name:
+        return
+
+    success = await nodes_db.update_node_name(token, new_name)
+    if success:
+        await message.answer(_("node_rename_success", lang, name=new_name), parse_mode="HTML")
+    else:
+        await message.answer("Error updating node name.")
+        
+    await state.clear()
+
+    # Показываем меню ноды с обновленным именем
+    node = await nodes_db.get_node_by_token(token)
+    if node:
+        stats = node.get("stats", {})
+        raw_uptime = stats.get("uptime", 0)
+        formatted_uptime = format_uptime(raw_uptime, lang)
+
+        text = _(
+            "node_management_menu",
+            lang,
+            name=node.get("name"),
+            ip=node.get("ip", "?"),
+            uptime=formatted_uptime
+        )
+        keyboard = get_node_management_keyboard(token, lang)
+        await message.answer(text, reply_markup=keyboard, parse_mode="HTML")
 
 
 async def cq_node_delete_menu(callback: types.CallbackQuery):

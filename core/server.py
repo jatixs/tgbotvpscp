@@ -557,6 +557,8 @@ async def handle_dashboard(request):
             "web_fatal_conn": _("web_fatal_conn", lang),
             "web_server_rebooting": _("web_server_rebooting", lang),
             "web_reloading_page": _("web_reloading_page", lang),
+            "web_node_rename_success": _("web_node_rename_success", lang),
+            "web_node_rename_error": _("web_node_rename_error", lang),
         })
     }
 
@@ -737,6 +739,26 @@ async def handle_node_delete(request):
         return web.json_response({"error": str(e)}, status=500)
 
 
+async def handle_node_rename(request):
+    user = get_current_user(request)
+    if not user or user['role'] != 'admins':
+        return web.json_response({"error": "Admin required"}, status=403)
+    try:
+        data = await request.json()
+        token = data.get("token")
+        new_name = data.get("name")
+        if not token or not new_name:
+            return web.json_response({"error": "Token and name required"}, status=400)
+        
+        success = await nodes_db.update_node_name(token, new_name.strip())
+        if success:
+            return web.json_response({"status": "ok"})
+        else:
+            return web.json_response({"error": "Node not found"}, status=404)
+    except Exception as e:
+        return web.json_response({"error": str(e)}, status=500)
+
+
 async def handle_nodes_list_json(request):
     user = get_current_user(request)
     if not user:
@@ -805,6 +827,8 @@ async def handle_settings_page(request):
         "web_session_expired": _("web_session_expired", lang), "web_please_relogin": _("web_please_relogin", lang), "web_login_btn": _("web_login_btn", lang),
         "web_add_user_prompt": _("web_add_user_prompt", lang), 
         "web_weak_conn": _("web_weak_conn", lang), "web_conn_problem": _("web_conn_problem", lang), "web_refresh_stream": _("web_refresh_stream", lang), "web_fatal_conn": _("web_fatal_conn", lang), "web_server_rebooting": _("web_server_rebooting", lang), "web_reloading_page": _("web_reloading_page", lang),
+        "web_node_rename_success": _("web_node_rename_success", lang),
+        "web_node_rename_error": _("web_node_rename_error", lang),
     }
     for btn_key, conf_key in BTN_CONFIG_MAP.items():
         i18n_data[f"lbl_{conf_key}"] = _(btn_key, lang)
@@ -1676,6 +1700,7 @@ async def start_web_server(bot_instance: Bot):
         app.router.add_post('/api/users/action', handle_user_action)
         app.router.add_post('/api/nodes/add', handle_node_add)
         app.router.add_post('/api/nodes/delete', handle_node_delete)
+        app.router.add_post('/api/nodes/rename', handle_node_rename)
         app.router.add_get('/api/events', handle_sse_stream)
         app.router.add_get('/api/events/logs', handle_sse_logs)
         app.router.add_get('/api/events/node', handle_sse_node_details)

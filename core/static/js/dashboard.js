@@ -9,6 +9,7 @@ let logSSESource = null;  // Для логов
 
 let agentChart = null;
 let allNodesData = [];
+let currentNodeToken = null; // Хранит токен открытой в модалке ноды
 
 window.addEventListener('themeChanged', () => {
     updateChartsColors();
@@ -645,6 +646,8 @@ async function openNodeDetails(token, color) {
     if (modal) {
         setModalLoading(); // Apply blur overlay immediately
         animateModalOpen(modal); 
+        currentNodeToken = token; // Сохраняем токен для переименования
+        cancelNodeRename(); // Сбрасываем состояние переименования при открытии
     }
 
     if (chartRes) chartRes.destroy();
@@ -692,7 +695,12 @@ function updateNodeDetailsUI(data) {
     // Remove loading overlay as soon as we have data
     removeModalLoading();
 
-    document.getElementById('modalNodeName').innerText = data.name;
+    // Обновляем имя только если мы НЕ в режиме редактирования
+    const inputContainer = document.getElementById('nodeNameInputContainer');
+    if (inputContainer && inputContainer.classList.contains('hidden')) {
+        document.getElementById('modalNodeName').innerText = data.name;
+    }
+    
     document.getElementById('modalNodeIp').innerText = data.ip;
     document.getElementById('modalToken').innerText = data.token;
 
@@ -753,6 +761,71 @@ function closeNodeModal() {
     if (nodeSSESource) {
         nodeSSESource.close();
         nodeSSESource = null;
+    }
+}
+
+// Функции переименования ноды
+function startNodeRename() {
+    const nameDisplay = document.getElementById('nodeNameContainer');
+    const nameInputContainer = document.getElementById('nodeNameInputContainer');
+    const nameInput = document.getElementById('modalNodeNameInput');
+    const currentName = document.getElementById('modalNodeName').innerText;
+
+    if (nameDisplay && nameInputContainer && nameInput) {
+        nameDisplay.classList.add('hidden');
+        nameInputContainer.classList.remove('hidden');
+        nameInput.value = currentName;
+        nameInput.focus();
+    }
+}
+
+function cancelNodeRename() {
+    const nameDisplay = document.getElementById('nodeNameContainer');
+    const nameInputContainer = document.getElementById('nodeNameInputContainer');
+
+    if (nameDisplay && nameInputContainer) {
+        nameDisplay.classList.remove('hidden');
+        nameInputContainer.classList.add('hidden');
+    }
+}
+
+async function saveNodeRename() {
+    const nameInput = document.getElementById('modalNodeNameInput');
+    const newName = nameInput.value.trim();
+    if (!newName || !currentNodeToken) return;
+
+    // Оптимистичное обновление UI
+    document.getElementById('modalNodeName').innerText = newName;
+    cancelNodeRename();
+
+    try {
+        const res = await fetch('/api/nodes/rename', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ token: currentNodeToken, name: newName })
+        });
+        
+        if (res.ok) {
+            if (window.showToast) {
+                const msg = (typeof I18N !== 'undefined' && I18N.web_node_rename_success) ? I18N.web_node_rename_success : "Name updated";
+                window.showToast(msg);
+            }
+        } else {
+            const data = await res.json();
+            const errorMsg = (typeof I18N !== 'undefined' && I18N.web_node_rename_error) ? I18N.web_node_rename_error : "Error updating name";
+            if (window.showModalAlert) await window.showModalAlert(data.error || errorMsg, "Error");
+        }
+    } catch (e) {
+        console.error(e);
+        if (window.showModalAlert) await window.showModalAlert(String(e), "Error");
+    }
+}
+
+function handleRenameKeydown(event) {
+    if (event.key === 'Enter') {
+        saveNodeRename();
+    } else if (event.key === 'Escape') {
+        cancelNodeRename();
     }
 }
 
