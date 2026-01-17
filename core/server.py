@@ -19,7 +19,7 @@ from .config import (
     WEB_SERVER_HOST, WEB_SERVER_PORT, NODE_OFFLINE_TIMEOUT, BASE_DIR,
     ADMIN_USER_ID, ENABLE_WEB_UI, save_system_config, BOT_LOG_DIR,
     WATCHDOG_LOG_DIR, NODE_LOG_DIR, WEB_AUTH_FILE, ADMIN_USERNAME, TOKEN,
-    save_keyboard_config, KEYBOARD_CONFIG, DEPLOY_MODE
+    save_keyboard_config, KEYBOARD_CONFIG, DEPLOY_MODE, TG_BOT_NAME
 )
 from . import config as current_config
 from .shared_state import NODE_TRAFFIC_MONITORS, ALLOWED_USERS, USER_NAMES, AUTH_TOKENS, ALERTS_CONFIG, AGENT_HISTORY, WEB_NOTIFICATIONS
@@ -47,8 +47,7 @@ MAX_LOGIN_ATTEMPTS = 5
 LOGIN_BLOCK_TIME = 300
 BOT_USERNAME_CACHE = None
 
-# Версия инициализируется здесь, используя обновленный utils.get_app_version()
-APP_VERSION = get_app_version() 
+APP_VERSION = get_app_version()
 CACHE_VER = str(int(time.time()))
 AGENT_TASK = None
 
@@ -434,8 +433,9 @@ async def handle_dashboard(request):
             0) < NODE_OFFLINE_TIMEOUT)
     role = user.get('role', 'users')
     role_color = "green" if role == "admins" else "gray"
-    role_badge_html = f'<span class="ml-2 px-1.5 py-0.5 rounded text-[10px] border border-{role_color}-500/30 bg-{role_color}-100 dark:bg-{
-        role_color}-500/20 text-{role_color}-600 dark:text-{role_color}-400 uppercase font-bold align-middle">{role}</span>'
+    
+    # --- БЕЙДЖ РОЛИ ---
+    role_badge_html = f'<span class="ml-2 px-2 py-0.5 rounded text-[10px] border border-{role_color}-500/30 bg-{role_color}-100 dark:bg-{role_color}-500/20 text-{role_color}-600 dark:text-{role_color}-400 uppercase font-bold align-middle">{role}</span>'
 
     node_action_btn = ""
     settings_btn = ""
@@ -445,12 +445,16 @@ async def handle_dashboard(request):
         settings_btn = f"""<a href="/settings" class="flex items-center justify-center w-8 h-8 rounded-lg hover:bg-black/5 dark:hover:bg-white/10 transition text-gray-600 dark:text-gray-400" title="{
             _("web_settings_button", lang)}"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg></a>"""
 
+    clean_version = APP_VERSION.lstrip('v')
+    display_version = f"v{clean_version}"
+
     context = {
-        "web_title": f"{_('web_dashboard_title', lang)} - VPS Bot",
-        "web_version": APP_VERSION.lstrip('v'),
+        "web_title": f"{_('web_dashboard_title', lang)} - {TG_BOT_NAME}",
+        "web_brand_name": TG_BOT_NAME,
+        "web_version": display_version,
+        "role_badge": role_badge_html,
         "cache_ver": CACHE_VER,
         "web_dashboard_title": _("web_dashboard_title", lang),
-        "role_badge": role_badge_html,
         "user_avatar": _get_avatar_html(user),
         "user_name": user.get('first_name', 'User'),
         "nodes_count": str(nodes_count),
@@ -777,7 +781,7 @@ async def handle_settings_page(request):
         i18n_data[f"lbl_{conf_key}"] = _(btn_key, lang)
 
     context = {
-        "web_title": f"{_('web_settings_page_title', lang)} - Web Bot",
+        "web_title": f"{_('web_settings_page_title', lang)} - {TG_BOT_NAME}",
         "user_name": user.get('first_name'),
         "user_avatar": _get_avatar_html(user),
         "users_data_json": users_json,
@@ -838,8 +842,8 @@ async def handle_settings_page(request):
         "web_kb_disable_all": _("web_kb_disable_all", lang),
         "web_kb_modal_title": _("web_kb_modal_title", lang),
         "web_kb_done": _("web_kb_done", lang),
-        "web_version": APP_VERSION.lstrip('v'), # ИСПРАВЛЕНО
-        "cache_ver": CACHE_VER, # ДОБАВЛЕНО
+        "web_version": APP_VERSION.lstrip('v'),
+        "cache_ver": CACHE_VER,
         "web_update_section": _("web_update_section", lang),
         "web_update_placeholder": _("web_update_placeholder", lang),
         "web_update_check_btn": _("web_update_check_btn", lang),
@@ -1069,8 +1073,8 @@ async def handle_login_page(request):
         "default_pass_alert": alert,
         "error_block": "",
         "bot_username": BOT_USERNAME_CACHE or "",
-        "web_version": APP_VERSION.lstrip('v'), # ИСПРАВЛЕНО
-        "cache_ver": CACHE_VER, # ДОБАВЛЕНО
+        "web_version": APP_VERSION.lstrip('v'),
+        "cache_ver": CACHE_VER,
         "current_lang": lang,
         "i18n_json": injection
     }
@@ -1243,8 +1247,8 @@ async def handle_reset_page_render(request):
     }
 
     context = {
-        "web_version": APP_VERSION.lstrip('v'), # ИСПРАВЛЕНО
-        "cache_ver": CACHE_VER, # ДОБАВЛЕНО
+        "web_version": APP_VERSION.lstrip('v'),
+        "cache_ver": CACHE_VER,
         "i18n_json": json.dumps(i18n_data)
     }
 

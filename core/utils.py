@@ -309,7 +309,7 @@ async def initial_reboot_check(bot: Bot):
 def get_app_version() -> str:
     # 1. Приоритет: Переменная окружения (установленная через .env)
     if config.INSTALLED_VERSION:
-        ver = config.INSTALLED_VERSION
+        ver = config.INSTALLED_VERSION.strip()
         return ver if ver.startswith('v') else f"v{ver}"
 
     # 2. Фолбек: Чтение из CHANGELOG.md (если файл существует)
