@@ -521,18 +521,26 @@ function renderNodes() {
         tbody.innerHTML = `<tr><td colspan="4" class="px-4 py-3 text-center text-gray-500 text-xs">${I18N.web_no_nodes}</td></tr>`;
     }
 }
-
-// Глобальные функции переименования
 window.startNodeRename = function(token) {
     document.getElementById(`disp_name_${token}`).classList.add('hidden');
     document.getElementById(`edit_name_${token}`).classList.remove('hidden');
     const input = document.getElementById(`input_name_${token}`);
     input.focus();
-    // Reset value to current name
     const node = NODES_DATA.find(n => n.token === token);
     if (node) input.value = node.name;
-};
 
+    const scrollToInput = () => {
+        input.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    };
+    setTimeout(scrollToInput, 50);
+    if (window.visualViewport) {
+        window.visualViewport.addEventListener('resize', () => {
+            setTimeout(scrollToInput, 50); 
+        }, { once: true });
+    } else {
+        setTimeout(scrollToInput, 300);
+    }
+};
 window.cancelNodeRename = function(token) {
     document.getElementById(`disp_name_${token}`).classList.remove('hidden');
     document.getElementById(`edit_name_${token}`).classList.add('hidden');
