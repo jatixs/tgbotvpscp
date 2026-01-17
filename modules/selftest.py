@@ -12,14 +12,7 @@ from core import config
 from core.auth import is_allowed, send_access_denied_message
 from core.messaging import delete_previous_message
 from core.shared_state import LAST_MESSAGE_IDS
-from core.utils import (
-    format_uptime,
-    format_traffic,
-    get_country_flag,
-    get_server_timezone_label,
-    escape_html,
-    get_host_path,
-)
+from core.utils import format_uptime, format_traffic, get_country_flag, get_server_timezone_label, escape_html, get_host_path
 from core.config import INSTALL_MODE
 
 BUTTON_KEY = "btn_selftest"
@@ -27,7 +20,6 @@ BUTTON_KEY = "btn_selftest"
 
 def get_button() -> KeyboardButton:
     from core.i18n import _
-
     return KeyboardButton(text=_(BUTTON_KEY, config.DEFAULT_LANGUAGE))
 
 
@@ -37,7 +29,6 @@ def register_handlers(dp: Dispatcher):
 
 async def selftest_handler(message: types.Message):
     from core.i18n import _
-
     user_id = message.from_user.id
     chat_id = message.chat.id
     lang = get_user_lang(user_id)
@@ -58,7 +49,7 @@ async def selftest_handler(message: types.Message):
         cpu = psutil.cpu_percent(interval=None)
         mem = psutil.virtual_memory().percent
         try:
-            disk = psutil.disk_usage(get_host_path("/")).percent
+            disk = psutil.disk_usage(get_host_path('/')).percent
         except Exception as e:
             logging.debug(f"Disk usage check failed: {e}")
             disk = 0
@@ -71,31 +62,25 @@ async def selftest_handler(message: types.Message):
         conn_proc = await asyncio.create_subprocess_shell(
             "curl -I -s --max-time 3 https://www.google.com/",
             stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE
         )
         c_out, c_err = await conn_proc.communicate()
 
-        conn_ok = conn_proc.returncode == 0 and b"HTTP/" in c_out.upper()
+        conn_ok = conn_proc.returncode == 0 and b'HTTP/' in c_out.upper()
 
-        inet_status = (
-            _("selftest_inet_ok", lang) if conn_ok else _("selftest_inet_fail", lang)
-        )
+        inet_status = _(
+            "selftest_inet_ok",
+            lang) if conn_ok else _(
+            "selftest_inet_fail",
+            lang)
 
-        ping_proc = await asyncio.create_subprocess_shell(
-            "ping -c 1 -W 1 8.8.8.8",
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-        )
+        ping_proc = await asyncio.create_subprocess_shell("ping -c 1 -W 1 8.8.8.8", stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
 
         p_out, stderr_dummy = await ping_proc.communicate()
         p_match = re.search(r"time=([\d\.]+) ms", p_out.decode())
         ping_time = p_match.group(1) if p_match else "N/A"
 
-        ip_proc = await asyncio.create_subprocess_shell(
-            "curl -4 -s --max-time 2 ifconfig.me",
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-        )
+        ip_proc = await asyncio.create_subprocess_shell("curl -4 -s --max-time 2 ifconfig.me", stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
 
         ip_out, stderr_dummy = await ip_proc.communicate()
         ext_ip = ip_out.decode().strip() or _("selftest_ip_fail", lang)
@@ -112,28 +97,23 @@ async def selftest_handler(message: types.Message):
             src = ""
 
             if log_file:
-                src = _("selftest_ssh_source", lang, source=os.path.basename(log_file))
-                proc = await asyncio.create_subprocess_shell(
-                    f"tail -n 50 {log_file}",
-                    stdout=asyncio.subprocess.PIPE,
-                    stderr=asyncio.subprocess.PIPE,
-                )
+                src = _(
+                    "selftest_ssh_source",
+                    lang,
+                    source=os.path.basename(log_file))
+                proc = await asyncio.create_subprocess_shell(f"tail -n 50 {log_file}", stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
 
                 l_out, stderr_dummy = await proc.communicate()
-                for l in reversed(l_out.decode("utf-8", "ignore").split("\n")):
+                for l in reversed(l_out.decode('utf-8', 'ignore').split('\n')):
                     if "Accepted" in l and "sshd" in l:
                         line = l.strip()
                         break
             else:
                 src = _("selftest_ssh_source_journal", lang)
-                proc = await asyncio.create_subprocess_shell(
-                    "journalctl -u ssh --no-pager -n 50",
-                    stdout=asyncio.subprocess.PIPE,
-                    stderr=asyncio.subprocess.PIPE,
-                )
+                proc = await asyncio.create_subprocess_shell("journalctl -u ssh --no-pager -n 50", stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
 
                 j_out, stderr_dummy = await proc.communicate()
-                for l in reversed(j_out.decode("utf-8", "ignore").split("\n")):
+                for l in reversed(j_out.decode('utf-8', 'ignore').split('\n')):
                     if "Accepted" in l:
                         line = l.strip()
                         break
@@ -142,8 +122,7 @@ async def selftest_handler(message: types.Message):
 
             if line:
                 match = re.search(
-                    r"Accepted\s+(?:\S+)\s+for\s+(\S+)\s+from\s+(\S+)", line
-                )
+                    r"Accepted\s+(?:\S+)\s+for\s+(\S+)\s+from\s+(\S+)", line)
 
                 if match:
                     u = escape_html(match.group(1))
@@ -154,37 +133,28 @@ async def selftest_handler(message: types.Message):
                     dt = None
 
                     match_iso = re.search(
-                        r"(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})", line
-                    )
+                        r"(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})", line)
                     match_sys = re.search(
-                        r"(\w{3}\s+\d{1,2}\s+\d{2}:\d{2}:\d{2})", line
-                    )
+                        r"(\w{3}\s+\d{1,2}\s+\d{2}:\d{2}:\d{2})", line)
 
                     try:
                         if match_iso:
                             dt = datetime.strptime(
-                                match_iso.group(1), "%Y-%m-%dT%H:%M:%S"
-                            )
+                                match_iso.group(1), "%Y-%m-%dT%H:%M:%S")
                         elif match_sys:
-                            dt = datetime.strptime(match_sys.group(1), "%b %d %H:%M:%S")
+                            dt = datetime.strptime(
+                                match_sys.group(1), "%b %d %H:%M:%S")
                             dt = dt.replace(year=datetime.now().year)
                     except Exception as e:
                         logging.debug(f"Date parse error in selftest: {e}")
                         pass
 
-                    time_str = dt.strftime("%H:%M:%S") if dt else "?"
-                    date_str = dt.strftime("%d.%m.%Y") if dt else "?"
+                    time_str = dt.strftime('%H:%M:%S') if dt else "?"
+                    date_str = dt.strftime('%d.%m.%Y') if dt else "?"
 
-                    ssh_info = ssh_header + _(
-                        "selftest_ssh_entry",
-                        lang,
-                        user=u,
-                        flag=fl,
-                        ip=ip,
-                        time=time_str,
-                        tz=tz,
-                        date=date_str,
-                    )
+                    ssh_info = ssh_header + \
+                        _("selftest_ssh_entry", lang, user=u, flag=fl,
+                          ip=ip, time=time_str, tz=tz, date=date_str)
                 else:
                     ssh_info = ssh_header + _("selftest_ssh_parse_fail", lang)
             else:
@@ -202,20 +172,14 @@ async def selftest_handler(message: types.Message):
             inet_status=inet_status,
             ping=ping_time,
             ip=ext_ip,
-            rx=format_traffic(net.bytes_recv, lang),
-            tx=format_traffic(net.bytes_sent, lang),
-        )
-        await message.bot.edit_message_text(
-            _("selftest_results_header", lang) + body + ssh_info,
-            chat_id=chat_id,
-            message_id=sent_msg.message_id,
-            parse_mode="HTML",
-        )
+            rx=format_traffic(
+                net.bytes_recv,
+                lang),
+            tx=format_traffic(
+                net.bytes_sent,
+                lang))
+        await message.bot.edit_message_text(_("selftest_results_header", lang) + body + ssh_info, chat_id=chat_id, message_id=sent_msg.message_id, parse_mode="HTML")
 
     except Exception as e:
         logging.error(f"Error in selftest: {e}")
-        await message.bot.edit_message_text(
-            _("selftest_error", lang, error=str(e)),
-            chat_id=chat_id,
-            message_id=sent_msg.message_id,
-        )
+        await message.bot.edit_message_text(_("selftest_error", lang, error=str(e)), chat_id=chat_id, message_id=sent_msg.message_id)

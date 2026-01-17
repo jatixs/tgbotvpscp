@@ -52,26 +52,25 @@ async def traffic_handler(message: types.Message):
             except Exception as e:
                 logging.debug(f"Failed to delete old traffic message: {e}")
 
-    await delete_previous_message(
-        user_id,
-        list(shared_state.LAST_MESSAGE_IDS.get(user_id, {}).keys()),
-        chat_id,
-        message.bot,
-    )
+    await delete_previous_message(user_id, list(shared_state.LAST_MESSAGE_IDS.get(user_id, {}).keys()), chat_id, message.bot)
 
     try:
         counters = await asyncio.to_thread(psutil.net_io_counters)
-        shared_state.TRAFFIC_PREV[user_id] = (counters.bytes_recv, counters.bytes_sent)
+        shared_state.TRAFFIC_PREV[user_id] = (
+            counters.bytes_recv, counters.bytes_sent)
 
         stop_button = InlineKeyboardButton(
-            text=get_text("btn_stop_traffic", lang), callback_data="stop_traffic"
-        )
+            text=get_text(
+                "btn_stop_traffic",
+                lang),
+            callback_data="stop_traffic")
         keyboard = InlineKeyboardMarkup(inline_keyboard=[[stop_button]])
 
-        msg_text = get_text("traffic_start", lang, interval=config.TRAFFIC_INTERVAL)
-        sent_message = await message.answer(
-            msg_text, reply_markup=keyboard, parse_mode="HTML"
-        )
+        msg_text = get_text(
+            "traffic_start",
+            lang,
+            interval=config.TRAFFIC_INTERVAL)
+        sent_message = await message.answer(msg_text, reply_markup=keyboard, parse_mode="HTML")
 
         shared_state.TRAFFIC_MESSAGE_IDS[user_id] = sent_message.message_id
         MESSAGE_EDIT_THROTTLE[sent_message.message_id] = time.time()
@@ -96,12 +95,9 @@ async def stop_traffic_handler(callback: types.CallbackQuery):
             await callback.answer(get_text("traffic_stopped_alert", lang))
 
             reply_markup = get_main_reply_keyboard(user_id)
-            sent_menu_message = await callback.message.answer(
-                get_text("traffic_menu_return", lang), reply_markup=reply_markup
-            )
-            shared_state.LAST_MESSAGE_IDS.setdefault(user_id, {})[
-                "menu"
-            ] = sent_menu_message.message_id
+            sent_menu_message = await callback.message.answer(get_text("traffic_menu_return", lang), reply_markup=reply_markup)
+            shared_state.LAST_MESSAGE_IDS.setdefault(
+                user_id, {})["menu"] = sent_menu_message.message_id
 
         except Exception as e:
             logging.debug(f"Error stopping traffic (delete msg): {e}")
@@ -127,7 +123,9 @@ async def traffic_monitor(bot: Bot):
 
             now = time.time()
             last_update = MESSAGE_EDIT_THROTTLE.get(message_id, 0)
-            effective_interval = max(config.TRAFFIC_INTERVAL, MIN_UPDATE_INTERVAL)
+            effective_interval = max(
+                config.TRAFFIC_INTERVAL,
+                MIN_UPDATE_INTERVAL)
 
             if (now - last_update) < effective_interval:
                 continue
@@ -135,14 +133,12 @@ async def traffic_monitor(bot: Bot):
             lang = get_user_lang(user_id)
 
             try:
-
                 def get_traffic_update():
                     counters_now = psutil.net_io_counters()
                     rx_now = counters_now.bytes_recv
                     tx_now = counters_now.bytes_sent
                     prev_rx, prev_tx = shared_state.TRAFFIC_PREV.get(
-                        user_id, (rx_now, tx_now)
-                    )
+                        user_id, (rx_now, tx_now))
                     rx_delta = rx_now - prev_rx if rx_now >= prev_rx else rx_now
                     tx_delta = tx_now - prev_tx if tx_now >= prev_tx else tx_now
                     interval = max(effective_interval, 1)
@@ -154,10 +150,12 @@ async def traffic_monitor(bot: Bot):
                 shared_state.TRAFFIC_PREV[user_id] = (rx, tx)
 
                 stop_button = InlineKeyboardButton(
-                    text=get_text("btn_stop_traffic", lang),
-                    callback_data="stop_traffic",
-                )
-                keyboard = InlineKeyboardMarkup(inline_keyboard=[[stop_button]])
+                    text=get_text(
+                        "btn_stop_traffic",
+                        lang),
+                    callback_data="stop_traffic")
+                keyboard = InlineKeyboardMarkup(
+                    inline_keyboard=[[stop_button]])
 
                 msg_text = (
                     f"{get_text('traffic_update_total', lang)}\n"
@@ -169,15 +167,9 @@ async def traffic_monitor(bot: Bot):
                     f"{get_text('traffic_update_speed', lang)}\n"
                     f"=========================\n"
                     f"{get_text('traffic_speed_rx', lang, speed=rx_speed)}\n"
-                    f"{get_text('traffic_speed_tx', lang, speed=tx_speed)}"
-                )
+                    f"{get_text('traffic_speed_tx', lang, speed=tx_speed)}")
 
-                await bot.edit_message_text(
-                    chat_id=user_id,
-                    message_id=message_id,
-                    text=msg_text,
-                    reply_markup=keyboard,
-                )
+                await bot.edit_message_text(chat_id=user_id, message_id=message_id, text=msg_text, reply_markup=keyboard)
                 MESSAGE_EDIT_THROTTLE[message_id] = now
 
             except TelegramRetryAfter as e:

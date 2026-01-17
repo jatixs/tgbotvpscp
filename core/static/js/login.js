@@ -1,37 +1,33 @@
 /* /core/static/js/login.js */
 
-
+// --- Cookie Management ---
 function acceptCookies() {
     localStorage.setItem('cookie_consent', 'true');
     const banner = document.getElementById('cookieConsent');
     if (banner) banner.classList.add('translate-y-full');
 }
 
-
+// --- Telegram Auth Widget ---
 async function onTelegramAuth(user) {
     console.log("Telegram Auth", user);
     acceptCookies();
     try {
         const response = await fetch('/api/auth/telegram', {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
+            headers: {'Content-Type': 'application/json'},
             body: JSON.stringify(user)
         });
         if (response.ok) {
             window.location.reload();
         } else {
             const d = await response.json();
-            if (window.showModalAlert) await window.showModalAlert("Error: " + (d.error || "Unknown"), "Auth Error");
+            if(window.showModalAlert) await window.showModalAlert("Error: " + (d.error || "Unknown"), "Auth Error");
             else alert("Auth Error: " + (d.error || "Unknown"));
         }
-    } catch (e) {
-        console.error(e);
-    }
+    } catch (e) { console.error(e); }
 }
 
-
+// --- UI Logic: Language & Slider ---
 
 function updateLangSlider(lang) {
     const slider = document.getElementById('lang-slider-bg');
@@ -41,7 +37,7 @@ function updateLangSlider(lang) {
     if (slider) {
         slider.style.transition = 'transform 0.6s cubic-bezier(0.34, 1.56, 0.64, 1)';
         slider.style.willChange = 'transform';
-
+        
         if (lang === 'en') {
             slider.style.transform = 'translate3d(100%, 0, 0)';
         } else {
@@ -52,7 +48,7 @@ function updateLangSlider(lang) {
     if (btnRu && btnEn) {
         btnRu.style.outline = 'none';
         btnEn.style.outline = 'none';
-
+        
         const transition = 'all 0.4s ease';
         btnRu.style.transition = transition;
         btnEn.style.transition = transition;
@@ -61,22 +57,22 @@ function updateLangSlider(lang) {
             btnRu.style.opacity = '1';
             btnRu.style.transform = 'scale(1.1)';
             btnRu.style.filter = 'drop-shadow(0 0 8px rgba(255,255,255,0.3))';
-
+            
             btnEn.style.opacity = '0.4';
             btnEn.style.transform = 'scale(0.9)';
             btnEn.style.filter = 'none';
-
+            
             btnRu.querySelector('span')?.classList.add('font-bold');
             btnEn.querySelector('span')?.classList.remove('font-bold');
         } else {
             btnEn.style.opacity = '1';
             btnEn.style.transform = 'scale(1.1)';
             btnEn.style.filter = 'drop-shadow(0 0 8px rgba(255,255,255,0.3))';
-
+            
             btnRu.style.opacity = '0.4';
             btnRu.style.transform = 'scale(0.9)';
             btnRu.style.filter = 'none';
-
+            
             btnEn.querySelector('span')?.classList.add('font-bold');
             btnRu.querySelector('span')?.classList.remove('font-bold');
         }
@@ -90,7 +86,7 @@ function setLoginLanguage(lang) {
 
     if (typeof I18N_ALL !== 'undefined' && I18N_ALL[lang]) {
         const dict = I18N_ALL[lang];
-        window.I18N = dict;
+        window.I18N = dict; 
 
         const elements = document.querySelectorAll('[data-i18n]');
         elements.forEach(el => {
@@ -107,14 +103,14 @@ function setLoginLanguage(lang) {
                 }
                 el.style.opacity = '1';
             });
-
+            
             if (dict.web_title) document.title = dict.web_title;
-
+            
             const gh = document.querySelector('a[title="GitHub"]');
-            if (gh && dict['login_github_tooltip']) gh.title = dict['login_github_tooltip'];
-
+            if(gh && dict['login_github_tooltip']) gh.title = dict['login_github_tooltip'];
+            
             const sp = document.querySelector('button[title="Support"]');
-            if (sp && dict['login_support_tooltip']) sp.title = dict['login_support_tooltip'];
+            if(sp && dict['login_support_tooltip']) sp.title = dict['login_support_tooltip'];
         }, 200);
     }
 }
@@ -125,7 +121,7 @@ function toggleLoginLanguage(checkbox) {
     setLoginLanguage(lang);
 }
 
-
+// --- UI Logic: Modals ---
 function openSupportModal() {
     const modal = document.getElementById('support-modal');
     if (modal) {
@@ -146,7 +142,7 @@ function closeSupportModal() {
 window.openSupportModal = openSupportModal;
 window.closeSupportModal = closeSupportModal;
 
-
+// --- UI Logic: Forms Switcher ---
 function toggleForms(target) {
     const magic = document.getElementById('magic-form');
     const password = document.getElementById('password-form');
@@ -154,7 +150,7 @@ function toggleForms(target) {
     const setPass = document.getElementById('set-password-form');
     const errorBlock = document.getElementById('reset-error-block');
     const backArrow = document.getElementById('back-arrow');
-
+    
     [magic, password, reset, setPass].forEach(el => el?.classList.add('hidden'));
     if (errorBlock) errorBlock.classList.add('hidden');
 
@@ -162,11 +158,11 @@ function toggleForms(target) {
         if (!el) return;
         el.classList.remove('hidden');
         el.classList.remove('animate-fade-in-up');
-        void el.offsetWidth;
+        void el.offsetWidth; // trigger reflow
         el.classList.add('animate-fade-in-up');
     };
 
-
+    // Show/Hide Back Arrow based on context
     if (backArrow) {
         if (target === 'password') {
             backArrow.classList.remove('hidden');
@@ -185,7 +181,7 @@ function toggleForms(target) {
     else show(magic);
 }
 
-
+// --- API: Reset Password Request ---
 async function requestPasswordReset() {
     const userIdInput = document.getElementById('reset_user_id');
     const btn = document.getElementById('btn-reset-send');
@@ -210,18 +206,14 @@ async function requestPasswordReset() {
     try {
         const response = await fetch('/api/login/reset', {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                user_id: userId
-            })
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ user_id: userId })
         });
 
         const data = await response.json();
 
         if (response.ok) {
-
+            // Hide back arrow on success screen
             if (backArrow) backArrow.classList.add('hidden');
 
             const title = (I18N && I18N.login_link_sent_title) || "Link Sent!";
@@ -229,7 +221,7 @@ async function requestPasswordReset() {
             const btnText = (I18N && I18N.login_go_to_bot) || "Go to Bot";
             const botLink = (typeof BOT_USERNAME !== 'undefined' && BOT_USERNAME) ? `https://t.me/${BOT_USERNAME}` : "#";
 
-
+            // ИСПРАВЛЕНО: Иконка "Синий самолетик" (Telegram) + Кнопка "Перейти в бот"
             container.innerHTML = `
                 <div class="text-center py-8 animate-fade-in-up">
                     <div class="w-16 h-16 bg-blue-500/10 rounded-full flex items-center justify-center mx-auto mb-4 border border-blue-500/20">
@@ -246,8 +238,8 @@ async function requestPasswordReset() {
             if (data.error === 'not_found' && errorBlock) {
                 const errMsg = (I18N && I18N.login_error_user_not_found) || "User not found.";
                 const errP = errorBlock.querySelector('p');
-                if (errP) errP.textContent = errMsg;
-
+                if(errP) errP.textContent = errMsg;
+                
                 errorBlock.classList.remove('hidden');
                 if (data.admin_url && adminLinkBtn) {
                     adminLinkBtn.href = data.admin_url;
@@ -267,7 +259,7 @@ async function requestPasswordReset() {
     }
 }
 
-
+// --- API: Submit New Password (Reset) ---
 async function submitNewPassword() {
     const p1 = document.getElementById('new_pass').value;
     const p2 = document.getElementById('confirm_pass').value;
@@ -277,11 +269,11 @@ async function submitNewPassword() {
     const token = urlParams.get('token');
 
     if (!p1 || p1.length < 4) {
-        if (window.showModalAlert) await window.showModalAlert("Password too short (min 4 chars).", 'Error');
+        if(window.showModalAlert) await window.showModalAlert("Password too short (min 4 chars).", 'Error');
         return;
     }
     if (p1 !== p2) {
-        if (window.showModalAlert) await window.showModalAlert("Passwords do not match.", 'Error');
+        if(window.showModalAlert) await window.showModalAlert("Passwords do not match.", 'Error');
         return;
     }
 
@@ -291,15 +283,10 @@ async function submitNewPassword() {
     try {
         const res = await fetch('/api/reset/confirm', {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                token: token,
-                password: p1
-            })
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ token: token, password: p1 })
         });
-
+        
         const data = await res.json();
         if (res.ok) {
             const title = (I18N && I18N.reset_success_title) || "Success!";
@@ -318,18 +305,18 @@ async function submitNewPassword() {
             `;
             window.history.replaceState({}, document.title, "/login");
         } else {
-            if (window.showModalAlert) await window.showModalAlert("Error: " + data.error, 'Error');
+            if(window.showModalAlert) await window.showModalAlert("Error: " + data.error, 'Error');
             btn.disabled = false;
             btn.innerText = "Save Password";
         }
     } catch (e) {
-        if (window.showModalAlert) await window.showModalAlert("Network Error: " + e, 'Error');
+        if(window.showModalAlert) await window.showModalAlert("Network Error: " + e, 'Error');
         btn.disabled = false;
         btn.innerText = "Save Password";
     }
 }
 
-
+// --- Initialization ---
 document.addEventListener("DOMContentLoaded", () => {
     if (typeof CURRENT_LANG !== 'undefined' && typeof updateLangSlider === 'function') {
         updateLangSlider(CURRENT_LANG);
@@ -339,10 +326,7 @@ document.addEventListener("DOMContentLoaded", () => {
         document.title = I18N.web_title;
     }
 
-    if (window.twemoji) window.twemoji.parse(document.body, {
-        folder: 'svg',
-        ext: '.svg'
-    });
+    if (window.twemoji) window.twemoji.parse(document.body, { folder: 'svg', ext: '.svg' });
 
     if (typeof I18N !== 'undefined') {
         document.querySelectorAll('[data-i18n]').forEach(el => {
@@ -353,27 +337,27 @@ document.addEventListener("DOMContentLoaded", () => {
             }
             if (el.title && I18N[key]) el.title = I18N[key];
         });
-
+        
         const gh = document.querySelector('a[title="GitHub"]');
-        if (gh && I18N['login_github_tooltip']) gh.title = I18N['login_github_tooltip'];
+        if(gh && I18N['login_github_tooltip']) gh.title = I18N['login_github_tooltip'];
         const sp = document.querySelector('button[title="Support"]');
-        if (sp && I18N['login_support_tooltip']) sp.title = I18N['login_support_tooltip'];
+        if(sp && I18N['login_support_tooltip']) sp.title = I18N['login_support_tooltip'];
     }
 
-
+    // 4. Handle URL Params
     const urlParams = new URLSearchParams(window.location.search);
     const formsContainer = document.getElementById('forms-container');
     const backArrow = document.getElementById('back-arrow');
-
+    
     if (urlParams.get('sent') === 'true' && formsContainer) {
-        if (backArrow) backArrow.classList.add('hidden');
+        if (backArrow) backArrow.classList.add('hidden'); // Hide arrow on success
 
         const title = (I18N && I18N.login_link_sent_title) || "Magic Link Sent!";
         const desc = (I18N && I18N.login_link_sent_desc) || "Check your Telegram messages.";
         const btnText = (I18N && I18N.login_go_to_bot) || "Go to Bot";
         const botLink = (typeof BOT_USERNAME !== 'undefined' && BOT_USERNAME) ? `https://t.me/${BOT_USERNAME}` : "#";
 
-
+        // ИСПРАВЛЕНО: Иконка "Синий самолетик" и для Magic Link тоже
         container.innerHTML = `
             <div class="text-center py-8 animate-fade-in-up">
                 <div class="w-16 h-16 bg-blue-500/10 rounded-full flex items-center justify-center mx-auto mb-4 border border-blue-500/20">
@@ -390,23 +374,23 @@ document.addEventListener("DOMContentLoaded", () => {
         toggleForms('set-password');
     }
 
-
+    // 5. Check Cookie Consent
     if (!localStorage.getItem('cookie_consent')) {
         setTimeout(() => {
             const banner = document.getElementById('cookieConsent');
-            if (banner) banner.classList.remove('translate-y-full');
+            if(banner) banner.classList.remove('translate-y-full');
         }, 1000);
     }
-
-
+    
+    // 6. Init Telegram Widget
     const botUsername = (typeof BOT_USERNAME !== 'undefined') ? BOT_USERNAME : "";
     const container = document.getElementById('telegram-widget-container');
     const magicForm = document.getElementById('magic-link-form');
-
+    
     const isIp = /^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$/.test(window.location.hostname);
     const isLocalhost = window.location.hostname === 'localhost';
     const isHttps = window.location.protocol === 'https:';
-
+    
     if (botUsername && !isIp && !isLocalhost && isHttps && container && magicForm) {
         const script = document.createElement('script');
         script.async = true;

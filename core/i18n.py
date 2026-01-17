@@ -10,7 +10,7 @@ from functools import lru_cache
 from .config import load_encrypted_json, save_encrypted_json
 
 STRINGS = {
-    "ru": {
+    'ru': {
         "btn_back": "🔙 Назад",
         "btn_cancel": "❌ Отмена",
         "btn_back_to_menu": "🔙 Назад в меню",
@@ -302,7 +302,7 @@ STRINGS = {
         "unit_hour_short": "ч",
         "unit_minute_short": "м",
         "unit_second_short": "с",
-        "start_support_message": 'Это open-source проект, автор проекта <a href="https://t.me/faridshykhaliev">@faridshykhaliev</a>. При желании вы можете поддержать автора. Это мотивирует автора продолжать развивать проект.',
+        "start_support_message": "Это open-source проект, автор проекта <a href=\"https://t.me/faridshykhaliev\">@faridshykhaliev</a>. При желании вы можете поддержать автора. Это мотивирует автора продолжать развивать проект.",
         "start_support_button": " ❤️ Поддержать разработчика",
         "web_title": "Web-агент Бота",
         "web_dashboard_title": "Панель управления",
@@ -490,6 +490,7 @@ STRINGS = {
         "web_status_restart": "ПЕРЕЗАГРУЗКА",
         "web_click_copy": "Нажмите на текст, чтобы скопировать",
         "web_server_name_placeholder": "Имя сервера",
+        
         "pass_strength_weak": "Слабый",
         "pass_strength_fair": "Нормальный",
         "pass_strength_good": "Хороший",
@@ -502,9 +503,9 @@ STRINGS = {
         "pass_is_empty": "Заполните все поля",
         "web_redirecting": "Перенаправление...",
         "web_logging_in": "Вход в систему...",
-        "login_go_to_bot": "Перейти в бот",
+        "login_go_to_bot": "Перейти в бот"
     },
-    "en": {
+    'en': {
         "btn_back": "🔙 Back",
         "btn_cancel": "❌ Cancel",
         "btn_back_to_menu": "🔙 Back to menu",
@@ -790,7 +791,7 @@ STRINGS = {
         "unit_hour_short": "h",
         "unit_minute_short": "m",
         "unit_second_short": "s",
-        "start_support_message": 'This is an open-source project, the author is <a href="https://t.me/faridshykhaliev">@faridshykhaliev</a>. If you wish, you can support the author. This motivates the author to continue developing the project.',
+        "start_support_message": "This is an open-source project, the author is <a href=\"https://t.me/faridshykhaliev\">@faridshykhaliev</a>. If you wish, you can support the author. This motivates the author to continue developing the project.",
         "start_support_button": " ❤️ Support the developer",
         "web_title": "Bot Web-agent",
         "web_dashboard_title": "Dashboard",
@@ -971,8 +972,8 @@ STRINGS = {
         "login_or": "OR",
         "login_btn_back": "Back",
         "login_support_btn_pay": "Go to support (YooMoney)",
-        "web_brand_name": core_config.TG_BOT_NAME,
-        "web_fill_field": "Fill in the field",
+        "web_brand_name": core_config.TG_BOT_NAME,        
+         "web_fill_field": "Fill in the field",
         "web_conn_error_short": "Conn Error",
         "web_error_short": "Error",
         "web_success": "Success",
@@ -984,6 +985,7 @@ STRINGS = {
         "web_error_loading_sessions": "Error loading sessions",
         "web_status_restart": "RESTARTING",
         "web_click_copy": "Click text to copy",
+        
         "pass_strength_weak": "Weak",
         "pass_strength_fair": "Fair",
         "pass_strength_good": "Good",
@@ -996,8 +998,8 @@ STRINGS = {
         "pass_is_empty": "Fill in all fields",
         "web_redirecting": "Redirecting...",
         "web_logging_in": "Logging in...",
-        "login_go_to_bot": "Go to Bot",
-    },
+        "login_go_to_bot": "Go to Bot"
+    }
 }
 
 
@@ -1013,28 +1015,32 @@ def load_user_settings():
             shared_state.USER_SETTINGS.clear()
             logging.info("Файл user_settings.json не найден или пуст.")
     except Exception as e:
-        safe_e = str(e).replace("\n", " ").replace("\r", "")
+        safe_e = str(e).replace('\n', ' ').replace('\r', '')
         logging.error(f"Ошибка загрузки user_settings.json: {safe_e}")
         shared_state.USER_SETTINGS.clear()
 
 
 def save_user_settings():
     try:
-        os.makedirs(os.path.dirname(core_config.USER_SETTINGS_FILE), exist_ok=True)
-        settings_to_save = {str(k): v for k, v in shared_state.USER_SETTINGS.items()}
+        os.makedirs(
+            os.path.dirname(
+                core_config.USER_SETTINGS_FILE),
+            exist_ok=True)
+        settings_to_save = {str(k): v for k,
+                            v in shared_state.USER_SETTINGS.items()}
 
         save_encrypted_json(core_config.USER_SETTINGS_FILE, settings_to_save)
         logging.debug("Настройки пользователей (языки) сохранены.")
     except Exception as e:
-        safe_e = str(e).replace("\n", " ").replace("\r", "")
+        safe_e = str(e).replace('\n', ' ').replace('\r', '')
         logging.error(f"Ошибка сохранения user_settings.json: {safe_e}")
 
 
 def get_user_lang(user_id: int | str | None) -> str:
     if isinstance(user_id, int):
-        return shared_state.USER_SETTINGS.get(user_id, {}).get(
-            "lang", core_config.DEFAULT_LANGUAGE
-        )
+        return shared_state.USER_SETTINGS.get(
+            user_id, {}).get(
+            "lang", core_config.DEFAULT_LANGUAGE)
     elif isinstance(user_id, str):
         if user_id in STRINGS:
             return user_id
@@ -1043,22 +1049,21 @@ def get_user_lang(user_id: int | str | None) -> str:
     else:
         if user_id is not None:
             logging.warning(
-                f"get_user_lang вызван с неожиданным типом user_id: {type(user_id)}. Возвращаю язык по умолчанию."
-            )
+                f"get_user_lang вызван с неожиданным типом user_id: {type(user_id)}. Возвращаю язык по умолчанию.")
         return core_config.DEFAULT_LANGUAGE
 
 
 def set_user_lang(user_id: int | str | None, lang: str):
     if user_id is None:
-        logging.warning("set_user_lang вызван с user_id=None. Сохранение отменено.")
+        logging.warning(
+            "set_user_lang вызван с user_id=None. Сохранение отменено.")
         return
     if not isinstance(user_id, int):
         try:
             user_id = int(user_id)
         except (ValueError, TypeError):
             logging.error(
-                f"set_user_lang вызван с нечисловым user_id: {user_id}. Сохранение отменено."
-            )
+                f"set_user_lang вызван с нечисловым user_id: {user_id}. Сохранение отменено.")
             return
 
     if user_id not in shared_state.USER_SETTINGS:
@@ -1066,7 +1071,8 @@ def set_user_lang(user_id: int | str | None, lang: str):
     shared_state.USER_SETTINGS[user_id]["lang"] = lang
 
     save_user_settings()
-    logging.info(f"Язык для пользователя {user_id} изменен на '{lang}' и сохранен.")
+    logging.info(
+        f"Язык для пользователя {user_id} изменен на '{lang}' и сохранен.")
 
 
 def get_text(key: str, user_id_or_lang: int | str | None, **kwargs) -> str:
@@ -1077,9 +1083,15 @@ def get_text(key: str, user_id_or_lang: int | str | None, **kwargs) -> str:
     elif isinstance(user_id_or_lang, str) and user_id_or_lang in STRINGS:
         lang = user_id_or_lang
 
-    string_template = STRINGS.get(lang, {}).get(
-        key, STRINGS.get(core_config.DEFAULT_LANGUAGE, {}).get(key, f"[{key}]")
-    )
+    string_template = STRINGS.get(
+        lang,
+        {}).get(
+        key,
+        STRINGS.get(
+            core_config.DEFAULT_LANGUAGE,
+            {}).get(
+                key,
+            f"[{key}]"))
 
     try:
         if kwargs:
@@ -1087,12 +1099,11 @@ def get_text(key: str, user_id_or_lang: int | str | None, **kwargs) -> str:
         else:
             return string_template
     except (KeyError, TypeError, ValueError) as e:
-        safe_key = key.replace("\n", "").replace("\r", "")
-        safe_lang = lang.replace("\n", "").replace("\r", "")
-        safe_e = str(e).replace("\n", " ").replace("\r", "")
+        safe_key = key.replace('\n', '').replace('\r', '')
+        safe_lang = lang.replace('\n', '').replace('\r', '')
+        safe_e = str(e).replace('\n', ' ').replace('\r', '')
         logging.warning(
-            f"Ошибка форматирования для ключа '{safe_key}' языка '{safe_lang}'. Ошибка: {safe_e}"
-        )
+            f"Ошибка форматирования для ключа '{safe_key}' языка '{safe_lang}'. Ошибка: {safe_e}")
         return string_template
 
 
@@ -1107,8 +1118,9 @@ def get_all_translations(key: str) -> list[str]:
             translations.append(lang_strings[key])
     unique_translations = list(set(translations))
     if not unique_translations:
-        safe_key = key.replace("\n", "").replace("\r", "")
-        logging.error(f"Ключ перевода '{safe_key}' не найден ни в одном языке!")
+        safe_key = key.replace('\n', '').replace('\r', '')
+        logging.error(
+            f"Ключ перевода '{safe_key}' не найден ни в одном языке!")
         return [f"[{key}]"]
     return unique_translations
 
@@ -1121,9 +1133,10 @@ def get_language_keyboard() -> InlineKeyboardMarkup:
     keyboard = InlineKeyboardMarkup(
         inline_keyboard=[
             [
-                InlineKeyboardButton(text="🇷🇺 Русский", callback_data="set_lang_ru"),
-                InlineKeyboardButton(text="🇬🇧 English", callback_data="set_lang_en"),
-            ]
-        ]
-    )
+                InlineKeyboardButton(
+                    text="🇷🇺 Русский",
+                    callback_data="set_lang_ru"),
+                InlineKeyboardButton(
+                    text="🇬🇧 English",
+                    callback_data="set_lang_en")]])
     return keyboard

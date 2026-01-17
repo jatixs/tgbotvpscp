@@ -131,7 +131,7 @@ DEFAULT_CONFIG = {
     "RAM_THRESHOLD": 90.0,
     "DISK_THRESHOLD": 95.0,
     "RESOURCE_ALERT_COOLDOWN": 1800,
-    "NODE_OFFLINE_TIMEOUT": 20,
+    "NODE_OFFLINE_TIMEOUT": 20
 }
 
 DEFAULT_KEYBOARD_CONFIG = {
@@ -151,7 +151,7 @@ DEFAULT_KEYBOARD_CONFIG = {
     "enable_notifications": True,
     "enable_users": True,
     "enable_nodes": True,
-    "enable_optimize": True,
+    "enable_optimize": True
 }
 
 TRAFFIC_INTERVAL = DEFAULT_CONFIG["TRAFFIC_INTERVAL"]
@@ -172,26 +172,21 @@ def load_system_config():
             with open(SYSTEM_CONFIG_FILE, "r", encoding="utf-8") as f:
                 data = json.load(f)
                 TRAFFIC_INTERVAL = data.get(
-                    "TRAFFIC_INTERVAL", DEFAULT_CONFIG["TRAFFIC_INTERVAL"]
-                )
+                    "TRAFFIC_INTERVAL", DEFAULT_CONFIG["TRAFFIC_INTERVAL"])
                 RESOURCE_CHECK_INTERVAL = data.get(
-                    "RESOURCE_CHECK_INTERVAL", DEFAULT_CONFIG["RESOURCE_CHECK_INTERVAL"]
-                )
+                    "RESOURCE_CHECK_INTERVAL",
+                    DEFAULT_CONFIG["RESOURCE_CHECK_INTERVAL"])
                 CPU_THRESHOLD = data.get(
-                    "CPU_THRESHOLD", DEFAULT_CONFIG["CPU_THRESHOLD"]
-                )
+                    "CPU_THRESHOLD", DEFAULT_CONFIG["CPU_THRESHOLD"])
                 RAM_THRESHOLD = data.get(
-                    "RAM_THRESHOLD", DEFAULT_CONFIG["RAM_THRESHOLD"]
-                )
+                    "RAM_THRESHOLD", DEFAULT_CONFIG["RAM_THRESHOLD"])
                 DISK_THRESHOLD = data.get(
-                    "DISK_THRESHOLD", DEFAULT_CONFIG["DISK_THRESHOLD"]
-                )
+                    "DISK_THRESHOLD", DEFAULT_CONFIG["DISK_THRESHOLD"])
                 RESOURCE_ALERT_COOLDOWN = data.get(
-                    "RESOURCE_ALERT_COOLDOWN", DEFAULT_CONFIG["RESOURCE_ALERT_COOLDOWN"]
-                )
+                    "RESOURCE_ALERT_COOLDOWN",
+                    DEFAULT_CONFIG["RESOURCE_ALERT_COOLDOWN"])
                 NODE_OFFLINE_TIMEOUT = data.get(
-                    "NODE_OFFLINE_TIMEOUT", DEFAULT_CONFIG["NODE_OFFLINE_TIMEOUT"]
-                )
+                    "NODE_OFFLINE_TIMEOUT", DEFAULT_CONFIG["NODE_OFFLINE_TIMEOUT"])
                 logging.info("System config loaded successfully.")
     except Exception as e:
         logging.error(f"Error loading system config: {e}")
@@ -218,7 +213,7 @@ def save_system_config(new_config: dict):
             "RAM_THRESHOLD": RAM_THRESHOLD,
             "DISK_THRESHOLD": DISK_THRESHOLD,
             "RESOURCE_ALERT_COOLDOWN": RESOURCE_ALERT_COOLDOWN,
-            "NODE_OFFLINE_TIMEOUT": NODE_OFFLINE_TIMEOUT,
+            "NODE_OFFLINE_TIMEOUT": NODE_OFFLINE_TIMEOUT
         }
 
         with open(SYSTEM_CONFIG_FILE, "w", encoding="utf-8") as f:
@@ -271,14 +266,15 @@ class RedactingFormatter(logging.Formatter):
         if DEBUG_MODE:
             return msg
 
-        msg = re.sub(r"\d{8,10}:[\w-]{35}", "[TOKEN_REDACTED]", msg)
-        ip_pattern = (
-            r"\b(?!(?:127\.0\.0\.1|0\.0\.0\.0|localhost))(?:\d{1,3}\.){3}\d{1,3}\b"
-        )
-        msg = re.sub(ip_pattern, "[IP_REDACTED]", msg)
-        msg = re.sub(r"\b[a-fA-F0-9]{32,64}\b", "[HASH_REDACTED]", msg)
-        msg = re.sub(r"\b(id|user_id|chat_id|user)=(\d+)\b", r"\1=[ID_REDACTED]", msg)
-        msg = re.sub(r"@[\w_]{5,}", "@[USERNAME_REDACTED]", msg)
+        msg = re.sub(r'\d{8,10}:[\w-]{35}', '[TOKEN_REDACTED]', msg)
+        ip_pattern = r'\b(?!(?:127\.0\.0\.1|0\.0\.0\.0|localhost))(?:\d{1,3}\.){3}\d{1,3}\b'
+        msg = re.sub(ip_pattern, '[IP_REDACTED]', msg)
+        msg = re.sub(r'\b[a-fA-F0-9]{32,64}\b', '[HASH_REDACTED]', msg)
+        msg = re.sub(
+            r'\b(id|user_id|chat_id|user)=(\d+)\b',
+            r'\1=[ID_REDACTED]',
+            msg)
+        msg = re.sub(r'@[\w_]{5,}', '@[USERNAME_REDACTED]', msg)
 
         return msg
 
@@ -287,7 +283,7 @@ class RedactingFormatter(logging.Formatter):
 
 
 def setup_logging(log_directory, log_filename_prefix):
-    log_format_str = "%(asctime)s - %(levelname)s - %(name)s - %(message)s"
+    log_format_str = '%(asctime)s - %(levelname)s - %(name)s - %(message)s'
     base_formatter = logging.Formatter(log_format_str)
 
     secure_formatter = RedactingFormatter(base_formatter)
@@ -295,7 +291,7 @@ def setup_logging(log_directory, log_filename_prefix):
     log_file_path = os.path.join(log_directory, f"{log_filename_prefix}.log")
 
     rotating_handler = logging.handlers.TimedRotatingFileHandler(
-        log_file_path, when="midnight", interval=1, backupCount=30, encoding="utf-8"
+        log_file_path, when="midnight", interval=1, backupCount=30, encoding='utf-8'
     )
     rotating_handler.suffix = "%Y-%m-%d"
     rotating_handler.setFormatter(secure_formatter)

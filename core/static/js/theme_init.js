@@ -36,7 +36,5 @@ window.tailwind.config = {
         } else {
             document.documentElement.classList.remove('dark');
         }
-    } catch (e) {
-        console.error(e);
-    }
+    } catch (e) { console.error(e); }
 })();
