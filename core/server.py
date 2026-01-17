@@ -551,6 +551,12 @@ async def handle_dashboard(request):
             "web_session_expired": _("web_session_expired", lang),
             "web_please_relogin": _("web_please_relogin", lang),
             "web_login_btn": _("web_login_btn", lang),
+            "web_weak_conn": _("web_weak_conn", lang),
+            "web_conn_problem": _("web_conn_problem", lang),
+            "web_refresh_stream": _("web_refresh_stream", lang),
+            "web_fatal_conn": _("web_fatal_conn", lang),
+            "web_server_rebooting": _("web_server_rebooting", lang),
+            "web_reloading_page": _("web_reloading_page", lang),
         })
     }
 
@@ -798,6 +804,7 @@ async def handle_settings_page(request):
         "web_fill_field": _("web_fill_field", lang), "web_conn_error_short": _("web_conn_error_short", lang), "web_error_short": _("web_error_short", lang), "web_success": _("web_success", lang), "web_no_sessions": _("web_no_sessions", lang), "web_error_loading_sessions": _("web_error_loading_sessions", lang), "web_kb_enable_all": _("web_kb_enable_all", lang), "web_kb_disable_all": _("web_kb_disable_all", lang), "web_click_copy": _("web_click_copy", lang), "web_server_name_placeholder": _("web_server_name_placeholder", lang),
         "web_session_expired": _("web_session_expired", lang), "web_please_relogin": _("web_please_relogin", lang), "web_login_btn": _("web_login_btn", lang),
         "web_add_user_prompt": _("web_add_user_prompt", lang), 
+        "web_weak_conn": _("web_weak_conn", lang), "web_conn_problem": _("web_conn_problem", lang), "web_refresh_stream": _("web_refresh_stream", lang), "web_fatal_conn": _("web_fatal_conn", lang), "web_server_rebooting": _("web_server_rebooting", lang), "web_reloading_page": _("web_reloading_page", lang),
     }
     for btn_key, conf_key in BTN_CONFIG_MAP.items():
         i18n_data[f"lbl_{conf_key}"] = _(btn_key, lang)
@@ -1360,6 +1367,13 @@ async def handle_sse_stream(request):
     uid = user['id']
     try:
         while True:
+            if shared_state.IS_RESTARTING:
+                try:
+                    await resp.write(b"event: shutdown\ndata: restarting\n\n")
+                except Exception:
+                    pass
+                break
+
             try:
                 if request.transport is None or request.transport.is_closing():
                     break
@@ -1442,8 +1456,9 @@ async def handle_sse_stream(request):
             
             if shutdown_event:
                 try:
-                    await asyncio.wait_for(shutdown_event.wait(), timeout=3.0)
-                    break 
+                    if not shared_state.IS_RESTARTING:
+                        await asyncio.wait_for(shutdown_event.wait(), timeout=3.0)
+                        break 
                 except asyncio.TimeoutError:
                     pass
             else:
@@ -1474,6 +1489,13 @@ async def handle_sse_logs(request):
 
     try:
         while True:
+            if shared_state.IS_RESTARTING:
+                try:
+                    await resp.write(b"event: shutdown\ndata: restarting\n\n")
+                except Exception:
+                    pass
+                break
+
             try:
                 if request.transport is None or request.transport.is_closing():
                     break
@@ -1513,8 +1535,9 @@ async def handle_sse_logs(request):
                 
             if shutdown_event:
                 try:
-                    await asyncio.wait_for(shutdown_event.wait(), timeout=3.0)
-                    break
+                    if not shared_state.IS_RESTARTING:
+                        await asyncio.wait_for(shutdown_event.wait(), timeout=3.0)
+                        break
                 except asyncio.TimeoutError:
                     pass
             else:
@@ -1547,6 +1570,13 @@ async def handle_sse_node_details(request):
 
     try:
         while True:
+            if shared_state.IS_RESTARTING:
+                try:
+                    await resp.write(b"event: shutdown\ndata: restarting\n\n")
+                except Exception:
+                    pass
+                break
+
             try:
                 if request.transport is None or request.transport.is_closing():
                     break
@@ -1577,8 +1607,9 @@ async def handle_sse_node_details(request):
             
             if shutdown_event:
                 try:
-                    await asyncio.wait_for(shutdown_event.wait(), timeout=3.0)
-                    break
+                    if not shared_state.IS_RESTARTING:
+                        await asyncio.wait_for(shutdown_event.wait(), timeout=3.0)
+                        break
                 except asyncio.TimeoutError:
                     pass
             else:
