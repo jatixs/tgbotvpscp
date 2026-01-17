@@ -147,7 +147,7 @@ async def cq_node_select(callback: types.CallbackQuery):
             "?"),
         uptime=formatted_uptime)
 
-    keyboard = get_node_management_keyboard(token, lang)
+    keyboard = get_node_management_keyboard(token, lang, user_id)
     await callback.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
 
 
@@ -179,7 +179,6 @@ async def cq_node_rename(callback: types.CallbackQuery, state: FSMContext):
     await state.update_data(rename_token=token)
     await state.set_state(RenameNodeStates.waiting_for_new_name)
 
-    # Используем get_back_keyboard для отмены и возврата к управлению нодой
     back_kb = get_back_keyboard(lang, f"node_select_{token}")
     
     await callback.message.answer(
@@ -213,7 +212,6 @@ async def process_node_rename(message: types.Message, state: FSMContext):
         
     await state.clear()
 
-    # Показываем меню ноды с обновленным именем
     node = await nodes_db.get_node_by_token(token)
     if node:
         stats = node.get("stats", {})
@@ -227,7 +225,7 @@ async def process_node_rename(message: types.Message, state: FSMContext):
             ip=node.get("ip", "?"),
             uptime=formatted_uptime
         )
-        keyboard = get_node_management_keyboard(token, lang)
+        keyboard = get_node_management_keyboard(token, lang, user_id)
         await message.answer(text, reply_markup=keyboard, parse_mode="HTML")
 
 
@@ -316,7 +314,7 @@ async def cq_node_stop_traffic(callback: types.CallbackQuery):
                     "node_management_menu", lang, name=node.get("name"), ip=node.get(
                         "ip", "?"), uptime=formatted_uptime)
 
-                keyboard = get_node_management_keyboard(token, lang)
+                keyboard = get_node_management_keyboard(token, lang, user_id)
                 await callback.message.answer(text, reply_markup=keyboard, parse_mode="HTML")
         except Exception as e:
             logging.debug(f"cq_node_stop_traffic delete/answer error: {e}")
