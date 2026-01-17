@@ -8,6 +8,7 @@ from core import config
 from core.auth import is_allowed, send_access_denied_message
 from core.messaging import delete_previous_message
 from core.shared_state import LAST_MESSAGE_IDS
+from core import shared_state # Импорт
 
 BUTTON_KEY = "btn_reboot"
 
@@ -75,8 +76,8 @@ async def reboot_execute_handler(callback: types.CallbackQuery):
     await callback.message.edit_text(_("reboot_confirmed", lang), parse_mode="HTML")
 
     try:
-
-        cmd = "nohup sh -c 'sleep 2 && /sbin/reboot' >/dev/null 2>&1 &"
+        shared_state.IS_RESTARTING = True
+        cmd = "nohup sh -c 'sleep 5 && /sbin/reboot' >/dev/null 2>&1 &"
         await asyncio.create_subprocess_shell(cmd)
     except Exception as e:
         logging.error(f"Reboot command failed: {e}")

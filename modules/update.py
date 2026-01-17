@@ -16,6 +16,7 @@ from core.messaging import delete_previous_message, send_alert
 from core.shared_state import LAST_MESSAGE_IDS
 from core.utils import escape_html
 from core.config import RESTART_FLAG_FILE, DEPLOY_MODE
+from core import shared_state
 
 BUTTON_KEY = "btn_update"
 CHECK_INTERVAL = 21600
@@ -230,7 +231,8 @@ async def execute_bot_update(branch: str, restart_source: str = "unknown"):
 
 
 async def self_terminate():
-    await asyncio.sleep(1)
+    shared_state.IS_RESTARTING = True
+    await asyncio.sleep(5)
     os.kill(os.getpid(), signal.SIGTERM)
 
 

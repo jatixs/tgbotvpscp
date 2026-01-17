@@ -551,6 +551,12 @@ async def handle_dashboard(request):
             "web_session_expired": _("web_session_expired", lang),
             "web_please_relogin": _("web_please_relogin", lang),
             "web_login_btn": _("web_login_btn", lang),
+            "web_weak_conn": _("web_weak_conn", lang),
+            "web_conn_problem": _("web_conn_problem", lang),
+            "web_refresh_stream": _("web_refresh_stream", lang),
+            "web_fatal_conn": _("web_fatal_conn", lang),
+            "web_server_rebooting": _("web_server_rebooting", lang),
+            "web_reloading_page": _("web_reloading_page", lang),
         })
     }
 
@@ -1360,6 +1366,13 @@ async def handle_sse_stream(request):
     uid = user['id']
     try:
         while True:
+            if shared_state.IS_RESTARTING:
+                try:
+                    await resp.write(b"event: shutdown\ndata: restarting\n\n")
+                except Exception:
+                    pass
+                break
+
             try:
                 if request.transport is None or request.transport.is_closing():
                     break
@@ -1442,8 +1455,9 @@ async def handle_sse_stream(request):
             
             if shutdown_event:
                 try:
-                    await asyncio.wait_for(shutdown_event.wait(), timeout=3.0)
-                    break 
+                    if not shared_state.IS_RESTARTING:
+                        await asyncio.wait_for(shutdown_event.wait(), timeout=3.0)
+                        break 
                 except asyncio.TimeoutError:
                     pass
             else:
@@ -1474,6 +1488,13 @@ async def handle_sse_logs(request):
 
     try:
         while True:
+            if shared_state.IS_RESTARTING:
+                try:
+                    await resp.write(b"event: shutdown\ndata: restarting\n\n")
+                except Exception:
+                    pass
+                break
+
             try:
                 if request.transport is None or request.transport.is_closing():
                     break
@@ -1513,8 +1534,9 @@ async def handle_sse_logs(request):
                 
             if shutdown_event:
                 try:
-                    await asyncio.wait_for(shutdown_event.wait(), timeout=3.0)
-                    break
+                    if not shared_state.IS_RESTARTING:
+                        await asyncio.wait_for(shutdown_event.wait(), timeout=3.0)
+                        break
                 except asyncio.TimeoutError:
                     pass
             else:
@@ -1547,6 +1569,13 @@ async def handle_sse_node_details(request):
 
     try:
         while True:
+            if shared_state.IS_RESTARTING:
+                try:
+                    await resp.write(b"event: shutdown\ndata: restarting\n\n")
+                except Exception:
+                    pass
+                break
+
             try:
                 if request.transport is None or request.transport.is_closing():
                     break
@@ -1577,8 +1606,9 @@ async def handle_sse_node_details(request):
             
             if shutdown_event:
                 try:
-                    await asyncio.wait_for(shutdown_event.wait(), timeout=3.0)
-                    break
+                    if not shared_state.IS_RESTARTING:
+                        await asyncio.wait_for(shutdown_event.wait(), timeout=3.0)
+                        break
                 except asyncio.TimeoutError:
                     pass
             else:

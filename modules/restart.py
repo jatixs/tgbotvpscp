@@ -11,6 +11,7 @@ from core.auth import is_allowed, send_access_denied_message
 from core.messaging import delete_previous_message
 from core.shared_state import LAST_MESSAGE_IDS
 from core.config import RESTART_FLAG_FILE
+from core import shared_state
 
 BUTTON_KEY = "btn_restart"
 
@@ -91,5 +92,6 @@ async def restart_execute_handler(callback: types.CallbackQuery):
 
 
 async def self_terminate():
-    await asyncio.sleep(1)
+    shared_state.IS_RESTARTING = True
+    await asyncio.sleep(5)
     os.kill(os.getpid(), signal.SIGTERM)

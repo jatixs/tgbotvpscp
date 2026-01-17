@@ -6,6 +6,9 @@ let latestNotificationTime = Math.floor(Date.now() / 1000);
 const pageCache = new Map();
 let sseSource = null;
 
+let connectionTimer = null; 
+let isSseConnected = false;
+
 let modalCloseTimer = null;
 let activeMobileModal = null;
 let bodyScrollTop = 0;
@@ -191,9 +194,37 @@ function stopSnow() { clearInterval(snowInterval); snowInterval = null; if (docu
 function initSSE() {
     if (window.location.pathname === '/login' || window.location.pathname.startsWith('/reset_password')) return;
     
-    if (sseSource) return;
+    if (sseSource) {
+        sseSource.close();
+    }
+
+    isSseConnected = false;
+    if (connectionTimer) clearTimeout(connectionTimer);
+
+    connectionTimer = setTimeout(() => {
+        if (!isSseConnected) {
+            if (navigator.onLine) {
+                const weakText = (typeof I18N !== 'undefined' && I18N.web_weak_conn) ? I18N.web_weak_conn : "Weak internet connection...";
+                showToast(weakText);
+            } else {
+                handleConnectionError();
+            }
+        }
+    }, 10000);
 
     sseSource = new EventSource('/api/events');
+
+    sseSource.onopen = () => {
+        isSseConnected = true;
+        if (connectionTimer) clearTimeout(connectionTimer);
+        const errToast = document.getElementById('conn-error-toast');
+        if (errToast) errToast.remove();
+    };
+
+    sseSource.addEventListener('agent_stats', () => {
+        isSseConnected = true;
+        if (connectionTimer) clearTimeout(connectionTimer);
+    });
 
     sseSource.addEventListener('notifications', (e) => {
         try {
@@ -220,33 +251,34 @@ function initSSE() {
         }
     });
 
+    sseSource.addEventListener('shutdown', (e) => {
+        sseSource.close();
+        handleServerRestart();
+    });
+
     sseSource.onerror = () => {
-        checkSessionStatus();
+        if (isSseConnected) {
+            handleConnectionError();
+        }
     };
 
     window.sseSource = sseSource;
 }
-// --- LOGIC: Cross-Tab Session Sync & Expiry Check ---
+
 function initSessionSync() {
-    // FIX: Do not run session sync on login or reset pages
     if (window.location.pathname === '/login' || window.location.pathname.startsWith('/reset_password')) return;
 
-    // 1. Слушаем события из других вкладок (выход из аккаунта)
     window.addEventListener('storage', (e) => {
         if (e.key === 'session_status' && e.newValue && e.newValue.startsWith('logged_out')) {
             handleSessionExpired();
         }
     });
 
-    // 2. Периодически проверяем валидность сессии (на случай таймаута на сервере или отзыва)
-    // Каждые 10 секунд
     setInterval(checkSessionStatus, 10000);
 
-    // 3. Перехватываем локальный выход, чтобы уведомить другие вкладки
     const logoutForms = document.querySelectorAll('form[action="/logout"]');
     logoutForms.forEach(form => {
         form.addEventListener('submit', () => {
-            // Устанавливаем флаг с timestamp, чтобы событие точно сработало
             localStorage.setItem('session_status', 'logged_out_' + Date.now());
         });
     });
@@ -255,7 +287,6 @@ function initSessionSync() {
 function checkSessionStatus() {
     if (document.getElementById('session-expired-overlay')) return;
     
-    // Добавляем timestamp для обхода кеша
     fetch('/api/settings/language?_=' + Date.now(), { method: 'HEAD' })
         .then(res => {
             if (res.status === 401 || res.status === 403) {
@@ -286,7 +317,6 @@ function initNotifications() {
 function handleSessionExpired() {
     if (document.getElementById('session-expired-overlay')) return;
     
-    // Закрываем SSE соединение, чтобы остановить получение данных
     if (window.sseSource) {
         window.sseSource.close();
         window.sseSource = null;
@@ -324,6 +354,106 @@ function handleSessionExpired() {
         overlay.classList.remove('opacity-0');
         overlay.querySelector('div').classList.remove('scale-95');
         overlay.querySelector('div').classList.add('scale-100');
+    });
+}
+
+function handleConnectionError() {
+    if (document.getElementById('connection-error-overlay')) return;
+
+    const msg = (typeof I18N !== 'undefined' && I18N.web_conn_problem) ? I18N.web_conn_problem : "Possible internet connection problems";
+    const btnText = (typeof I18N !== 'undefined' && I18N.web_refresh_stream) ? I18N.web_refresh_stream : "Refresh";
+
+    const toastContainer = getToastContainer();
+    const existing = document.getElementById('conn-error-toast');
+    if (existing) return;
+
+    const toast = document.createElement('div');
+    toast.id = 'conn-error-toast';
+    toast.className = 'pointer-events-auto flex flex-col gap-2 px-4 py-3 rounded-2xl shadow-xl backdrop-blur-md border bg-red-50/90 dark:bg-red-900/90 border-red-200 dark:border-red-800 w-auto max-w-sm transition-all duration-300 transform translate-y-0 opacity-100 mb-2';
+    
+    toast.innerHTML = `
+        <div class="flex items-center gap-2">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-red-600 dark:text-red-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+            <span class="text-sm font-bold text-red-900 dark:text-red-100">${msg}</span>
+        </div>
+        <button onclick="retrySSEStream()" class="w-full py-1.5 px-3 bg-red-200 hover:bg-red-300 dark:bg-red-800 dark:hover:bg-red-700 text-red-900 dark:text-red-100 rounded-lg text-xs font-bold transition flex items-center justify-center gap-2">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+            ${btnText}
+        </button>
+    `;
+    
+    toastContainer.appendChild(toast);
+}
+
+function retrySSEStream() {
+    const toast = document.getElementById('conn-error-toast');
+    if (toast) toast.remove();
+    
+    if (sseSource) {
+        sseSource.close();
+        sseSource = null;
+    }
+    
+    initSSE();
+    
+    setTimeout(() => {
+        if (!isSseConnected) {
+            handleFatalConnectionError();
+        }
+    }, 5000);
+}
+
+function handleFatalConnectionError() {
+    if (document.getElementById('fatal-error-overlay')) return;
+    
+    const msg = (typeof I18N !== 'undefined' && I18N.web_fatal_conn) ? I18N.web_fatal_conn : "Internet connection problems...";
+    const reloadMsg = (typeof I18N !== 'undefined' && I18N.web_reloading_page) ? I18N.web_reloading_page : "Reloading page...";
+
+    createBlurOverlay('fatal-error-overlay', `
+        <div class="text-red-500 mb-4 animate-bounce">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 5.636a9 9 0 010 12.728m0 0l-2.829-2.829m2.829 2.829L21 21M15.536 8.464a5 5 0 010 7.072m0 0l-2.829-2.829m-4.243 2.829a4.978 4.978 0 01-1.414-2.83m-1.414 5.658a9 9 0 01-2.167-9.238m7.824 2.167a1 1 0 111.414 1.414m-1.414-1.414L3 3m8.293 8.293l1.414 1.414" />
+            </svg>
+        </div>
+        <h2 class="text-xl font-bold text-gray-900 dark:text-white mb-2">${msg}</h2>
+        <p class="text-gray-500 dark:text-gray-400 text-sm">${reloadMsg}</p>
+    `);
+
+    setTimeout(() => {
+        window.location.reload();
+    }, 5000);
+}
+
+function handleServerRestart() {
+    if (document.getElementById('server-restart-overlay')) return;
+    
+    const msg = (typeof I18N !== 'undefined' && I18N.web_server_rebooting) ? I18N.web_server_rebooting : "Server/bot went into reboot.";
+
+    createBlurOverlay('server-restart-overlay', `
+        <div class="text-blue-500 mb-4 animate-spin">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+        </div>
+        <h2 class="text-xl font-bold text-gray-900 dark:text-white">${msg}</h2>
+    `);
+}
+
+function createBlurOverlay(id, content) {
+    const overlay = document.createElement('div');
+    overlay.id = id;
+    overlay.className = 'fixed inset-0 z-[10000] bg-white/60 dark:bg-gray-900/80 backdrop-blur-lg flex items-center justify-center p-4 transition-opacity duration-500 opacity-0';
+    overlay.innerHTML = `<div class="text-center">${content}</div>`;
+    
+    document.body.appendChild(overlay);
+    document.body.style.overflow = 'hidden';
+    
+    requestAnimationFrame(() => {
+        overlay.classList.remove('opacity-0');
     });
 }
 
