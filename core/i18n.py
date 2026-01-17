@@ -1140,4 +1140,3 @@ def get_language_keyboard() -> InlineKeyboardMarkup:
                     text="🇬🇧 English",
                     callback_data="set_lang_en")]])
     return keyboard
-}
