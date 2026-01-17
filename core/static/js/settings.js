@@ -8,7 +8,7 @@ window.initSettings = function() {
     updateBulkButtonsUI();
     initChangePasswordUI();
     fetchSessions();
-    initInputScrollLogic(); // Добавлена инициализация скролла
+    initInputScrollLogic();
 
     const input = document.getElementById('newNodeNameDash');
     if (input) {
@@ -80,8 +80,12 @@ window.initSettings = function() {
             try {
                 const response = await fetch('/api/update/run', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ branch: targetBranch })
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        branch: targetBranch
+                    })
                 });
                 const data = await response.json();
                 if (data.error) throw new Error(data.error);
@@ -101,14 +105,17 @@ window.initSettings = function() {
 
 function initInputScrollLogic() {
     const isTouchDevice = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
-    if (!isTouchDevice) return; 
+    if (!isTouchDevice) return;
 
     const ids = ['conf_traffic', 'conf_timeout', 'pass_current', 'pass_new', 'pass_confirm'];
     ids.forEach(id => {
         const el = document.getElementById(id);
         if (el) {
             const scrollFn = (e) => {
-                e.target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                e.target.scrollIntoView({
+                    behavior: 'smooth',
+                    block: 'center'
+                });
             };
             el.addEventListener('click', scrollFn);
             el.addEventListener('focus', scrollFn);
@@ -321,7 +328,9 @@ async function saveSystemConfig(groupName) {
     try {
         const res = await fetch('/api/settings/system', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+                'Content-Type': 'application/json'
+            },
             body: JSON.stringify(data)
         });
         if (res.ok) {
@@ -368,8 +377,12 @@ async function clearLogs() {
     try {
         const res = await fetch('/api/logs/clear', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ type: 'all' })
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                type: 'all'
+            })
         });
         if (res.ok) {
             btn.classList.remove(...redClasses);
@@ -437,8 +450,13 @@ async function deleteUser(id, name) {
     try {
         const res = await fetch('/api/users/action', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'delete', id: id })
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                action: 'delete',
+                id: id
+            })
         });
         if (res.ok) {
             const idx = USERS_DATA.findIndex(u => u.id == id);
@@ -461,12 +479,22 @@ async function openAddUserModal() {
     try {
         const res = await fetch('/api/users/action', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'add', id: id, role: 'users' })
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                action: 'add',
+                id: id,
+                role: 'users'
+            })
         });
         const data = await res.json();
         if (res.ok) {
-            USERS_DATA.push({ id: id, name: data.name || `ID: ${id}`, role: 'users' });
+            USERS_DATA.push({
+                id: id,
+                name: data.name || `ID: ${id}`,
+                role: 'users'
+            });
             renderUsers();
         } else {
             const errorShort = (typeof I18N !== 'undefined' && I18N.web_error_short) ? I18N.web_error_short : "Error";
@@ -492,7 +520,7 @@ function renderNodes() {
             <td class="px-2 sm:px-4 py-3 font-mono text-[10px] text-gray-400 dark:text-gray-500 truncate max-w-[80px]" title="${n.token}">${n.token.substring(0, 8)}...</td>
             <td class="px-2 sm:px-4 py-3 text-right">
                 <button onclick="deleteNode('${n.token}')" class="text-red-500 hover:text-red-700 dark:hover:text-red-300 transition p-1" title="Delete">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                    <svg xmlns="http:
                 </button>
             </td>
         </tr>`).join('');
@@ -508,8 +536,12 @@ async function deleteNode(token) {
     try {
         const res = await fetch('/api/nodes/delete', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ token: token })
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                token: token
+            })
         });
         if (res.ok) {
             const idx = NODES_DATA.findIndex(n => n.token === token);
@@ -559,8 +591,13 @@ async function changePassword() {
     try {
         const res = await fetch('/api/settings/password', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ current_password: current, new_password: newPass })
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                current_password: current,
+                new_password: newPass
+            })
         });
         const data = await res.json();
 
@@ -604,7 +641,9 @@ async function triggerAutoSave() {
     try {
         const res = await fetch('/api/settings/save', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+                'Content-Type': 'application/json'
+            },
             body: JSON.stringify(data)
         });
         if (statusEl) {
@@ -793,7 +832,9 @@ async function triggerKeyboardSave(skipPreviewUpdate = false) {
         try {
             const res = await fetch('/api/settings/keyboard', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: {
+                    'Content-Type': 'application/json'
+                },
                 body: JSON.stringify(data)
             });
             if (res.ok) {
@@ -1087,8 +1128,12 @@ async function revokeSession(token) {
     try {
         const res = await fetch('/api/sessions/revoke', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ token: token })
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                token: token
+            })
         });
         if (res.ok) {
             await fetchSessions();
@@ -1124,7 +1169,12 @@ async function revokeAllSessions() {
     }
 
     try {
-        const res = await fetch('/api/sessions/revoke_all', { method: 'POST', headers: { 'Content-Type': 'application/json' } });
+        const res = await fetch('/api/sessions/revoke_all', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
         if (res.ok) {
             if (btn) {
                 btn.className = "w-full py-3 bg-green-600 text-white rounded-xl font-bold shadow-lg shadow-green-500/20 transition-all duration-300 flex items-center justify-center gap-2";

@@ -1,4 +1,3 @@
-
 import asyncio
 from aiogram import Dispatcher, types
 from aiogram.types import KeyboardButton
@@ -35,7 +34,9 @@ async def top_handler(message: types.Message):
     await delete_previous_message(user_id, command, chat_id, message.bot)
 
     cmd = "ps aux --sort=-%cpu | head -n 11"
-    process = await asyncio.create_subprocess_shell(cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+    process = await asyncio.create_subprocess_shell(
+        cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
+    )
     stdout, stderr = await process.communicate()
 
     if process.returncode == 0:

@@ -3,9 +3,9 @@
 let chartRes = null;
 let chartNet = null;
 
-// SSE Sources для специфических задач
-let nodeSSESource = null; // Для деталей ноды
-let logSSESource = null;  // Для логов
+
+let nodeSSESource = null;
+let logSSESource = null;
 
 let agentChart = null;
 let allNodesData = [];
@@ -15,19 +15,19 @@ window.addEventListener('themeChanged', () => {
 });
 
 window.initDashboard = function() {
-    // Очистка всех старых источников и интервалов при инициализации
+
     cleanupDashboardSources();
 
-    // Подключаемся к глобальному SSE источнику (уведомления, список нод, статистика агента)
+
     if (window.sseSource) {
         window.sseSource.removeEventListener('agent_stats', handleSSEAgentStats);
         window.sseSource.removeEventListener('nodes_list', handleSSENodesList);
-        
+
         window.sseSource.addEventListener('agent_stats', handleSSEAgentStats);
         window.sseSource.addEventListener('nodes_list', handleSSENodesList);
     }
 
-    // Инициализация поиска
+
     if (document.getElementById('nodesList')) {
         const searchInput = document.getElementById('nodeSearch');
         if (searchInput) {
@@ -39,13 +39,13 @@ window.initDashboard = function() {
         }
     }
 
-    // Инициализация логов (теперь через SSE)
+
     if (document.getElementById('logsContainer')) {
         switchLogType('bot');
     }
 };
 
-// Функция очистки ресурсов при уходе со страницы или реинициализации
+
 function cleanupDashboardSources() {
     if (nodeSSESource) {
         nodeSSESource.close();
@@ -55,19 +55,21 @@ function cleanupDashboardSources() {
         logSSESource.close();
         logSSESource = null;
     }
-    // Интервалы больше не используются, но на всякий случай очищаем legacy
+
     if (window.nodesPollInterval) clearInterval(window.nodesPollInterval);
     if (window.agentPollInterval) clearInterval(window.agentPollInterval);
 }
 
-// --- ОБРАБОТЧИКИ ГЛОБАЛЬНЫХ SSE СОБЫТИЙ ---
+
 
 const handleSSEAgentStats = (e) => {
     if (!document.getElementById('agentChart')) return;
     try {
         const data = JSON.parse(e.data);
         updateAgentStatsUI(data);
-    } catch (err) { console.error("Agent stats parse error", err); }
+    } catch (err) {
+        console.error("Agent stats parse error", err);
+    }
 };
 
 const handleSSENodesList = (e) => {
@@ -75,7 +77,9 @@ const handleSSENodesList = (e) => {
     try {
         const data = JSON.parse(e.data);
         updateNodesListUI(data);
-    } catch (err) { console.error("Nodes list parse error", err); }
+    } catch (err) {
+        console.error("Nodes list parse error", err);
+    }
 };
 
 document.addEventListener("DOMContentLoaded", () => {
@@ -84,7 +88,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 });
 
-// --- ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ---
+
 
 function escapeHtml(text) {
     if (!text) return text;
@@ -102,7 +106,7 @@ function formatProcessList(procList, title, colorClass = "text-gray-500") {
         const match = procStr.match(/^(.*)\s\((.*)\)$/);
         let name = procStr;
         let value = "";
-        
+
         if (match) {
             name = match[1];
             value = match[2];
@@ -187,7 +191,7 @@ function renderNodesList(nodes) {
         let statusText = node.status === 'restarting' ? (typeof I18N !== 'undefined' && I18N.web_status_restart ? I18N.web_status_restart : "RESTART") : node.status.toUpperCase();
         let statusTextClass = node.status === 'online' ? "text-green-500" : (node.status === 'restarting' ? "text-blue-500" : "text-red-500");
         let statusBg = node.status === 'online' ? "bg-green-500/10 text-green-600 dark:text-green-400" : (node.status === 'restarting' ? "bg-blue-500/10 text-blue-600 dark:text-blue-400" : "bg-red-500/10 text-red-600 dark:text-red-400");
-        
+
         const cpu = Math.round(node.cpu || 0);
         const ram = Math.round(node.ram || 0);
         const disk = Math.round(node.disk || 0);
@@ -246,15 +250,18 @@ function renderNodesList(nodes) {
 
 function updateAgentStatsUI(data) {
     try {
-        const freeIcon = `<svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 inline mb-0.5 opacity-60" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>`;
+        const freeIcon = `<svg xmlns="http:
 
         if (data.stats) {
             const cpuEl = document.getElementById('stat_cpu');
             const progCpu = document.getElementById('prog_cpu');
             if (cpuEl) {
-                let html = `${Math.round(data.stats.cpu)}%`;
+                let html = `
+        $ {
+            Math.round(data.stats.cpu)
+        } % `;
                 if (data.stats.cpu_freq) {
-                    html += ` <span class="text-xs font-normal opacity-60">/ ${formatHz(data.stats.cpu_freq)}</span>`;
+                    html += ` < span class = "text-xs font-normal opacity-60" > / ${formatHz(data.stats.cpu_freq)}</span > `;
                 }
                 cpuEl.innerHTML = html;
                 const hintCpu = document.getElementById('hint-cpu');
@@ -268,9 +275,12 @@ function updateAgentStatsUI(data) {
             const ramEl = document.getElementById('stat_ram');
             const progRam = document.getElementById('prog_ram');
             if (ramEl) {
-                let html = `${Math.round(data.stats.ram)}%`;
+                let html = `
+        $ {
+            Math.round(data.stats.ram)
+        } % `;
                 if (data.stats.ram_free) {
-                    html += ` <span class="text-xs font-normal opacity-60">/ ${formatBytes(data.stats.ram_free)} ${freeIcon}</span>`;
+                    html += ` < span class = "text-xs font-normal opacity-60" > / ${formatBytes(data.stats.ram_free)} ${freeIcon}</span > `;
                 }
                 ramEl.innerHTML = html;
                 const hintRam = document.getElementById('hint-ram');
@@ -284,9 +294,12 @@ function updateAgentStatsUI(data) {
             const diskEl = document.getElementById('stat_disk');
             const progDisk = document.getElementById('prog_disk');
             if (diskEl) {
-                let html = `${Math.round(data.stats.disk)}%`;
+                let html = `
+        $ {
+            Math.round(data.stats.disk)
+        } % `;
                 if (data.stats.disk_free) {
-                    html += ` <span class="text-xs font-normal opacity-60">/ ${formatBytes(data.stats.disk_free)} ${freeIcon}</span>`;
+                    html += ` < span class = "text-xs font-normal opacity-60" > / ${formatBytes(data.stats.disk_free)} ${freeIcon}</span > `;
                 }
                 diskEl.innerHTML = html;
                 const hintDisk = document.getElementById('hint-disk');
@@ -310,36 +323,41 @@ function updateAgentStatsUI(data) {
 
             const speedStyle = "text-xs text-gray-400 font-normal ml-2 pl-2 border-l border-gray-300 dark:border-white/20";
             const rxEl = document.getElementById('stat_net_recv');
-            if (rxEl) rxEl.innerHTML = `${formatBytes(data.stats.net_recv)} <span class="${speedStyle}">${formatSpeed(rxSpeed)}</span>`;
+            if (rxEl) rxEl.innerHTML = `
+        $ {
+            formatBytes(data.stats.net_recv)
+        } < span class = "${speedStyle}" > $ {
+            formatSpeed(rxSpeed)
+        } < /span>`;
 
-            const txEl = document.getElementById('stat_net_sent');
-            if (txEl) txEl.innerHTML = `${formatBytes(data.stats.net_sent)} <span class="${speedStyle}">${formatSpeed(txSpeed)}</span>`;
+        const txEl = document.getElementById('stat_net_sent');
+        if (txEl) txEl.innerHTML = `${formatBytes(data.stats.net_sent)} <span class="${speedStyle}">${formatSpeed(txSpeed)}</span>`;
 
-            const rxTotal = data.stats.net_recv || 0;
-            const txTotal = data.stats.net_sent || 0;
-            const totalNet = rxTotal + txTotal;
-            if (totalNet > 0) {
-                const rxPercent = (rxTotal / totalNet) * 100;
-                const txPercent = 100 - rxPercent;
-                const barRx = document.getElementById('trafficBarRx');
-                const barTx = document.getElementById('trafficBarTx');
-                if (barRx) barRx.style.width = rxPercent + '%';
-                if (barTx) barTx.style.width = txPercent + '%';
-            }
-
-            const uptimeEl = document.getElementById('stat_uptime');
-            if (uptimeEl) uptimeEl.innerText = formatUptime(data.stats.boot_time);
-
-            const ipEl = document.getElementById('agentIp');
-            if (ipEl && data.stats.ip) ipEl.innerText = data.stats.ip;
+        const rxTotal = data.stats.net_recv || 0;
+        const txTotal = data.stats.net_sent || 0;
+        const totalNet = rxTotal + txTotal;
+        if (totalNet > 0) {
+            const rxPercent = (rxTotal / totalNet) * 100;
+            const txPercent = 100 - rxPercent;
+            const barRx = document.getElementById('trafficBarRx');
+            const barTx = document.getElementById('trafficBarTx');
+            if (barRx) barRx.style.width = rxPercent + '%';
+            if (barTx) barTx.style.width = txPercent + '%';
         }
-        renderAgentChart(data.history);
-    } catch (e) {
-        console.error("Agent stats UI error:", e);
+
+        const uptimeEl = document.getElementById('stat_uptime');
+        if (uptimeEl) uptimeEl.innerText = formatUptime(data.stats.boot_time);
+
+        const ipEl = document.getElementById('agentIp');
+        if (ipEl && data.stats.ip) ipEl.innerText = data.stats.ip;
     }
+    renderAgentChart(data.history);
+} catch (e) {
+    console.error("Agent stats UI error:", e);
+}
 }
 
-// ... вспомогательные функции для графиков остаются те же ...
+
 function updateChartsColors() {
     const isDark = document.documentElement.classList.contains('dark');
     const gridColor = isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.05)';
@@ -378,7 +396,11 @@ function renderAgentChart(history) {
             netRx.push(null);
             netTx.push(null);
         }
-        labels.push(new Date(history[i].t * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
+        labels.push(new Date(history[i].t * 1000).toLocaleTimeString([], {
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit'
+        }));
         netRx.push((Math.max(0, history[i].rx - history[i - 1].rx) * 8 / dt / 1024));
         netTx.push((Math.max(0, history[i].tx - history[i - 1].tx) * 8 / dt / 1024));
     }
@@ -393,26 +415,57 @@ function renderAgentChart(history) {
         responsive: true,
         maintainAspectRatio: false,
         animation: false,
-        interaction: { mode: 'index', intersect: false },
+        interaction: {
+            mode: 'index',
+            intersect: false
+        },
         scales: {
             x: {
-                grid: { display: false },
-                ticks: { color: tickColor, maxTicksLimit: maxTicks, maxRotation: 0 }
+                grid: {
+                    display: false
+                },
+                ticks: {
+                    color: tickColor,
+                    maxTicksLimit: maxTicks,
+                    maxRotation: 0
+                }
             },
             y: {
                 position: 'right',
-                grid: { color: gridColor },
-                ticks: { color: tickColor, callback: (v) => formatSpeed(v) },
+                grid: {
+                    color: gridColor
+                },
+                ticks: {
+                    color: tickColor,
+                    callback: (v) => formatSpeed(v)
+                },
                 beginAtZero: true
             }
         },
         plugins: {
-            legend: { labels: { color: tickColor, usePointStyle: true } },
-            tooltip: { mode: 'index', intersect: false, callbacks: { label: (c) => c.dataset.label + ': ' + formatSpeed(c.raw) } }
+            legend: {
+                labels: {
+                    color: tickColor,
+                    usePointStyle: true
+                }
+            },
+            tooltip: {
+                mode: 'index',
+                intersect: false,
+                callbacks: {
+                    label: (c) => c.dataset.label + ': ' + formatSpeed(c.raw)
+                }
+            }
         },
         elements: {
-            line: { tension: 0.4 },
-            point: { radius: 0, hitRadius: 20, hoverRadius: 4 }
+            line: {
+                tension: 0.4
+            },
+            point: {
+                radius: 0,
+                hitRadius: 20,
+                hoverRadius: 4
+            }
         }
     };
 
@@ -430,10 +483,21 @@ function renderAgentChart(history) {
             type: 'line',
             data: {
                 labels,
-                datasets: [
-                    { label: 'RX', data: netRx, borderColor: '#22c55e', borderWidth: 2, backgroundColor: rxGrad, fill: true },
-                    { label: 'TX', data: netTx, borderColor: '#3b82f6', borderWidth: 2, backgroundColor: txGrad, fill: true }
-                ]
+                datasets: [{
+                    label: 'RX',
+                    data: netRx,
+                    borderColor: '#22c55e',
+                    borderWidth: 2,
+                    backgroundColor: rxGrad,
+                    fill: true
+                }, {
+                    label: 'TX',
+                    data: netTx,
+                    borderColor: '#3b82f6',
+                    borderWidth: 2,
+                    backgroundColor: txGrad,
+                    fill: true
+                }]
             },
             options: opts
         });
@@ -480,7 +544,7 @@ function formatUptime(bt) {
     return `${m}${unitM}`;
 }
 
-// --- LOGS LOGIC (SSE) ---
+
 
 window.switchLogType = function(type) {
     ['btnLogBot', 'btnLogSys'].forEach(id => {
@@ -492,7 +556,7 @@ window.switchLogType = function(type) {
         el.classList.toggle('text-gray-500', !isActive);
     });
 
-    // Закрываем предыдущий стрим
+
     if (logSSESource) {
         logSSESource.close();
         logSSESource = null;
@@ -501,7 +565,7 @@ window.switchLogType = function(type) {
     const container = document.getElementById('logsContainer');
     const overlay = document.getElementById('logsOverlay');
 
-    // Проверка прав (если это нужно на клиенте, сервер тоже отклонит 403)
+
     if (typeof USER_ROLE !== 'undefined' && USER_ROLE !== 'admins') {
         if (overlay) overlay.classList.remove('hidden');
         if (!container.innerHTML.includes('blur')) {
@@ -511,13 +575,13 @@ window.switchLogType = function(type) {
         return;
     }
 
-    // Открываем новый стрим для логов
+
     logSSESource = new EventSource(`/api/events/logs?type=${type}`);
-    
-    // Показываем заглушку пока соединяемся
+
+
     if (container.innerHTML === "") {
-       const connectingText = (typeof I18N !== 'undefined' && I18N.web_log_connecting) ? I18N.web_log_connecting : "Connecting...";
-       container.innerHTML = `<div class="text-gray-400 text-center mt-10">${connectingText}</div>`;
+        const connectingText = (typeof I18N !== 'undefined' && I18N.web_log_connecting) ? I18N.web_log_connecting : "Connecting...";
+        container.innerHTML = `<div class="text-gray-400 text-center mt-10">${connectingText}</div>`;
     }
 
     logSSESource.addEventListener('logs', (e) => {
@@ -525,7 +589,7 @@ window.switchLogType = function(type) {
         try {
             const data = JSON.parse(e.data);
             const logs = data.logs || [];
-            
+
             if (logs.length === 0) {
                 container.innerHTML = `<div class="text-gray-600 text-center mt-10">${typeof I18N !== 'undefined' && I18N.web_log_empty ? I18N.web_log_empty : "Log empty"}</div>`;
                 return;
@@ -540,21 +604,21 @@ window.switchLogType = function(type) {
             }).join('');
 
             const isBottom = container.scrollHeight - container.scrollTop <= container.clientHeight + 100;
-            
-            // Обновляем только если изменилось
+
+
             if (container.innerHTML !== html) {
                 container.innerHTML = html;
                 if (isBottom) container.scrollTop = container.scrollHeight;
             }
-        } catch(err) {
+        } catch (err) {
             console.error("Logs parse error", err);
         }
     });
 
     logSSESource.onerror = () => {
         if (overlay) overlay.classList.add('hidden');
-        // SSE сам попытается переподключиться
-        // Можно показать статус, если нужно
+
+
     };
 };
 
@@ -580,13 +644,13 @@ function generateDummyLogs() {
 }
 
 
-// --- NODE DETAILS LOGIC (SSE) ---
+
 
 function setModalLoading() {
     const modal = document.getElementById('nodeModal');
     if (!modal) return;
-    
-    // 1. Reset fields to avoid showing old data (clean state)
+
+
     const fields = ['modalNodeName', 'modalNodeIp', 'modalToken', 'modalNodeUptime', 'modalNodeRam', 'modalNodeDisk', 'modalNodeTraffic'];
     fields.forEach(id => {
         const el = document.getElementById(id);
@@ -598,15 +662,15 @@ function setModalLoading() {
         lastSeen.className = 'text-gray-400 text-xs';
     }
 
-    // 2. Add Blur Overlay with Spinner
-    // Find the content card (first child of modal container)
+
+
     const card = modal.firstElementChild;
     if (!card) return;
-    
-    // Ensure relative positioning for absolute overlay
+
+
     if (!card.classList.contains('relative')) card.classList.add('relative');
-    
-    // Remove existing loader if any (cleanup)
+
+
     const existing = document.getElementById('node-modal-loader');
     if (existing) existing.remove();
 
@@ -622,10 +686,10 @@ function setModalLoading() {
         </svg>
         <span class="text-sm font-medium text-gray-600 dark:text-gray-300 animate-pulse">${escapeHtml(loadingText)}</span>
     `;
-    
+
     card.appendChild(loader);
-    
-    // Force reflow to enable transition
+
+
     void loader.offsetWidth;
     loader.classList.remove('opacity-0');
 }
@@ -633,7 +697,7 @@ function setModalLoading() {
 function removeModalLoading() {
     const loader = document.getElementById('node-modal-loader');
     if (!loader) return;
-    
+
     loader.classList.add('opacity-0');
     setTimeout(() => {
         if (loader.parentElement) loader.remove();
@@ -643,8 +707,8 @@ function removeModalLoading() {
 async function openNodeDetails(token, color) {
     const modal = document.getElementById('nodeModal');
     if (modal) {
-        setModalLoading(); // Apply blur overlay immediately
-        animateModalOpen(modal); 
+        setModalLoading();
+        animateModalOpen(modal);
     }
 
     if (chartRes) chartRes.destroy();
@@ -652,15 +716,15 @@ async function openNodeDetails(token, color) {
     chartRes = null;
     chartNet = null;
 
-    // Закрываем старый стрим
+
     if (nodeSSESource) {
         nodeSSESource.close();
         nodeSSESource = null;
     }
 
-    // Открываем новый стрим для деталей ноды
+
     nodeSSESource = new EventSource(`/api/events/node?token=${token}`);
-    
+
     nodeSSESource.addEventListener('node_details', (e) => {
         try {
             const data = JSON.parse(e.data);
@@ -669,27 +733,27 @@ async function openNodeDetails(token, color) {
             console.error("Node details parse error", err);
         }
     });
-    
+
     nodeSSESource.addEventListener('error', (e) => {
-         // Обработка ошибок
-         try {
-             // Если это кастомное событие error от сервера (json)
-             if (e.data) {
-                 const errData = JSON.parse(e.data);
-                 if (errData.error) {
-                     // Можно показать ошибку прямо в модалке
-                     console.warn("Node SSE Error:", errData.error);
-                 }
-             }
-         } catch(ex) {}
-         // В случае сетевой ошибки браузер сам реконнектится, лоадер можно не убирать, пока данные не придут
+
+        try {
+
+            if (e.data) {
+                const errData = JSON.parse(e.data);
+                if (errData.error) {
+
+                    console.warn("Node SSE Error:", errData.error);
+                }
+            }
+        } catch (ex) {}
+
     });
 }
 
 function updateNodeDetailsUI(data) {
     if (data.error) return;
 
-    // Remove loading overlay as soon as we have data
+
     removeModalLoading();
 
     document.getElementById('modalNodeName').innerText = data.name;
@@ -697,7 +761,7 @@ function updateNodeDetailsUI(data) {
     document.getElementById('modalToken').innerText = data.token;
 
     const stats = data.stats || {};
-    
+
     if (stats.uptime) {
         const bootTimestamp = (Date.now() / 1000) - stats.uptime;
         document.getElementById('modalNodeUptime').innerText = formatUptime(bootTimestamp);
@@ -745,18 +809,18 @@ function closeNodeModal() {
     if (modal) {
         animateModalClose(modal);
     }
-    
-    // Удаляем лоадер (на всякий случай, чтобы при следующем открытии анимация была с нуля)
+
+
     removeModalLoading();
 
-    // Закрываем SSE соединение при закрытии модалки
+
     if (nodeSSESource) {
         nodeSSESource.close();
         nodeSSESource = null;
     }
 }
 
-// ...renderCharts и остальные функции рендеринга остаются без изменений...
+
 function renderCharts(history) {
     if (!history || history.length < 2) return;
 
@@ -770,7 +834,11 @@ function renderCharts(history) {
     const netRx = [];
     const netTx = [];
 
-    labels.push(new Date(history[0].t * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
+    labels.push(new Date(history[0].t * 1000).toLocaleTimeString([], {
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit'
+    }));
     cpuData.push(history[0].c);
     ramData.push(history[0].r);
     netRx.push(0);
@@ -785,7 +853,11 @@ function renderCharts(history) {
             netRx.push(null);
             netTx.push(null);
         }
-        labels.push(new Date(history[i].t * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
+        labels.push(new Date(history[i].t * 1000).toLocaleTimeString([], {
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit'
+        }));
         cpuData.push(history[i].c);
         ramData.push(history[i].r);
         netRx.push((Math.max(0, history[i].rx - history[i - 1].rx) * 8 / dt / 1024));
@@ -804,13 +876,51 @@ function renderCharts(history) {
         responsive: true,
         maintainAspectRatio: false,
         animation: false,
-        interaction: { mode: 'index', intersect: false },
-        scales: {
-            y: { beginAtZero: true, grid: { color: gridColor }, ticks: { color: tickColor, font: { size: 10 } } },
-            x: { grid: { display: false }, ticks: { display: !isMobile, maxTicksLimit: isMobile ? 3 : 6 } }
+        interaction: {
+            mode: 'index',
+            intersect: false
         },
-        plugins: { legend: { labels: { color: tickColor, boxWidth: 10, usePointStyle: true } } },
-        elements: { line: { tension: 0.4 }, point: { radius: 0, hitRadius: 10 } }
+        scales: {
+            y: {
+                beginAtZero: true,
+                grid: {
+                    color: gridColor
+                },
+                ticks: {
+                    color: tickColor,
+                    font: {
+                        size: 10
+                    }
+                }
+            },
+            x: {
+                grid: {
+                    display: false
+                },
+                ticks: {
+                    display: !isMobile,
+                    maxTicksLimit: isMobile ? 3 : 6
+                }
+            }
+        },
+        plugins: {
+            legend: {
+                labels: {
+                    color: tickColor,
+                    boxWidth: 10,
+                    usePointStyle: true
+                }
+            }
+        },
+        elements: {
+            line: {
+                tension: 0.4
+            },
+            point: {
+                radius: 0,
+                hitRadius: 10
+            }
+        }
     };
 
     if (chartRes) {
@@ -825,12 +935,32 @@ function renderCharts(history) {
             type: 'line',
             data: {
                 labels,
-                datasets: [
-                    { label: `${lblCpu} (%)`, data: cpuData, borderColor: '#3b82f6', borderWidth: 2, backgroundColor: cpuGrad, fill: true },
-                    { label: `${lblRam} (%)`, data: ramData, borderColor: '#a855f7', borderWidth: 2, backgroundColor: ramGrad, fill: true }
-                ]
+                datasets: [{
+                    label: `${lblCpu} (%)`,
+                    data: cpuData,
+                    borderColor: '#3b82f6',
+                    borderWidth: 2,
+                    backgroundColor: cpuGrad,
+                    fill: true
+                }, {
+                    label: `${lblRam} (%)`,
+                    data: ramData,
+                    borderColor: '#a855f7',
+                    borderWidth: 2,
+                    backgroundColor: ramGrad,
+                    fill: true
+                }]
             },
-            options: { ...commonOptions, scales: { ...commonOptions.scales, y: { ...commonOptions.scales.y, max: 100 } } }
+            options: {
+                ...commonOptions,
+                scales: {
+                    ...commonOptions.scales,
+                    y: {
+                        ...commonOptions.scales.y,
+                        max: 100
+                    }
+                }
+            }
         });
     }
 
@@ -848,10 +978,21 @@ function renderCharts(history) {
             type: 'line',
             data: {
                 labels,
-                datasets: [
-                    { label: 'RX', data: netRx, borderColor: '#22c55e', borderWidth: 2, backgroundColor: rxGrad, fill: true },
-                    { label: 'TX', data: netTx, borderColor: '#ef4444', borderWidth: 2, backgroundColor: txGrad, fill: true }
-                ]
+                datasets: [{
+                    label: 'RX',
+                    data: netRx,
+                    borderColor: '#22c55e',
+                    borderWidth: 2,
+                    backgroundColor: rxGrad,
+                    fill: true
+                }, {
+                    label: 'TX',
+                    data: netTx,
+                    borderColor: '#ef4444',
+                    borderWidth: 2,
+                    backgroundColor: txGrad,
+                    fill: true
+                }]
             },
             options: netOpts
         });

@@ -25,7 +25,8 @@ async def init_db():
     await Tortoise.generate_schemas()
     logging.info(
         f"ORM initialized. DB: {
-            TORTOISE_ORM['connections']['default']}")
+            TORTOISE_ORM['connections']['default']}"
+    )
     await _migrate_from_json_if_needed()
 
 
@@ -36,7 +37,7 @@ async def _migrate_from_json_if_needed():
 
     logging.info("♻️ Starting migration from nodes.json to Encrypted DB...")
     try:
-        with open(LEGACY_JSON_PATH, 'r', encoding='utf-8') as f:
+        with open(LEGACY_JSON_PATH, "r", encoding="utf-8") as f:
             data = json.load(f)
 
         if not data:
@@ -59,13 +60,12 @@ async def _migrate_from_json_if_needed():
                 stats=node_data.get("stats", {}),
                 history=node_data.get("history", []),
                 tasks=node_data.get("tasks", []),
-                extra_state={}
+                extra_state={},
             )
             count += 1
 
         os.rename(LEGACY_JSON_PATH, LEGACY_JSON_PATH + ".bak")
-        logging.info(
-            f"✅ Migration successful! Securely imported {count} nodes.")
+        logging.info(f"✅ Migration successful! Securely imported {count} nodes.")
 
     except Exception as e:
         logging.error(f"❌ CRITICAL: Migration failed: {e}", exc_info=True)
@@ -88,7 +88,7 @@ async def get_all_nodes():
             "stats": node.stats,
             "tasks": node.tasks,
             "history": node.history,
-            **node.extra_state
+            **node.extra_state,
         }
     return result
 
@@ -108,7 +108,7 @@ async def get_node_by_token(token: str):
             "ip": node.ip,
             "stats": node.stats,
             "tasks": node.tasks,
-            "history": node.history
+            "history": node.history,
         }
         return {**base, **node.extra_state}
     return None
@@ -122,7 +122,7 @@ async def create_node(name: str) -> str:
         token_hash=_get_token_hash(raw_token),
         token_safe=raw_token,
         name=name,
-        ip="Unknown"
+        ip="Unknown",
     )
     logging.info(f"Created new encrypted node: {name}")
     return raw_token
@@ -146,7 +146,7 @@ async def update_node_heartbeat(token: str, ip: str, stats: dict):
         "c": stats.get("cpu", 0),
         "r": stats.get("ram", 0),
         "rx": stats.get("net_rx", 0),
-        "tx": stats.get("net_tx", 0)
+        "tx": stats.get("net_tx", 0),
     }
     history.append(point)
     if len(history) > 60:

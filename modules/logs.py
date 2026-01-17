@@ -1,4 +1,3 @@
-
 import asyncio
 import logging
 import os
@@ -36,8 +35,7 @@ async def logs_handler(message: types.Message, state: FSMContext):
 
     if DEPLOY_MODE == "docker" and INSTALL_MODE == "secure":
         await message.answer(
-            _("logs_docker_secure_not_available", user_id),
-            reply_markup=main_keyboard
+            _("logs_docker_secure_not_available", user_id), reply_markup=main_keyboard
         )
         return
 
@@ -45,25 +43,13 @@ async def logs_handler(message: types.Message, state: FSMContext):
     if DEPLOY_MODE == "docker" and INSTALL_MODE == "root":
 
         if os.path.exists("/host/usr/bin/journalctl"):
-            cmd = [
-                "chroot",
-                "/host",
-                "/usr/bin/journalctl",
-                "-n",
-                "20",
-                "--no-pager"]
+            cmd = ["chroot", "/host", "/usr/bin/journalctl", "-n", "20", "--no-pager"]
         elif os.path.exists("/host/bin/journalctl"):
-            cmd = [
-                "chroot",
-                "/host",
-                "/bin/journalctl",
-                "-n",
-                "20",
-                "--no-pager"]
+            cmd = ["chroot", "/host", "/bin/journalctl", "-n", "20", "--no-pager"]
         else:
             await message.answer(
                 _("logs_journalctl_not_found_in_host", user_id),
-                reply_markup=main_keyboard
+                reply_markup=main_keyboard,
             )
             return
     else:
@@ -72,9 +58,7 @@ async def logs_handler(message: types.Message, state: FSMContext):
 
     try:
         process = await asyncio.create_subprocess_exec(
-            *cmd,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE
+            *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
         )
         stdout, stderr = await process.communicate()
 
@@ -91,20 +75,14 @@ async def logs_handler(message: types.Message, state: FSMContext):
             response_text = _("logs_read_error", user_id, error=error_message)
 
         await message.answer(
-            response_text,
-            reply_markup=main_keyboard,
-            parse_mode="HTML"
+            response_text, reply_markup=main_keyboard, parse_mode="HTML"
         )
 
     except FileNotFoundError:
         logging.error(f"Команда '{cmd[0]}' не найдена.")
         await message.answer(
-            _("logs_journalctl_not_found", user_id),
-            reply_markup=main_keyboard
+            _("logs_journalctl_not_found", user_id), reply_markup=main_keyboard
         )
     except Exception as e:
         logging.error(f"Ошибка при выполнении logs_handler: {e}")
-        await message.answer(
-            _("error_unexpected", user_id),
-            reply_markup=main_keyboard
-        )
+        await message.answer(_("error_unexpected", user_id), reply_markup=main_keyboard)

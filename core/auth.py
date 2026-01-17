@@ -33,10 +33,7 @@ def load_users():
                 group = user.get("group", "users")
                 password_hash = user.get("password_hash", None)
 
-                ALLOWED_USERS[uid] = {
-                    "group": group,
-                    "password_hash": password_hash
-                }
+                ALLOWED_USERS[uid] = {"group": group, "password_hash": password_hash}
 
             USER_NAMES.update(data.get("user_names", {}))
         else:
@@ -46,8 +43,7 @@ def load_users():
                 logging.info(f"Файл {USERS_FILE} не найден. Инициализация.")
 
         if ADMIN_USER_ID not in ALLOWED_USERS:
-            logging.info(
-                f"Главный админ ID {ADMIN_USER_ID} не найден, добавляю.")
+            logging.info(f"Главный админ ID {ADMIN_USER_ID} не найден, добавляю.")
 
             initial_pass = os.environ.get("TG_WEB_INITIAL_PASSWORD")
             if initial_pass:
@@ -56,29 +52,26 @@ def load_users():
                 p_hash = ph.hash(initial_pass)
             else:
                 logging.warning(
-                    "Случайный пароль не найден. Использую дефолтный ('admin').")
-                p_hash = "8c6976e5b5410415bde908bd4dee15dfb167a9c873fc4bb8a81f6f2ab448a918"
+                    "Случайный пароль не найден. Использую дефолтный ('admin')."
+                )
+                p_hash = (
+                    "8c6976e5b5410415bde908bd4dee15dfb167a9c873fc4bb8a81f6f2ab448a918"
+                )
 
-            ALLOWED_USERS[ADMIN_USER_ID] = {
-                "group": "admins",
-                "password_hash": p_hash
-            }
+            ALLOWED_USERS[ADMIN_USER_ID] = {"group": "admins", "password_hash": p_hash}
             USER_NAMES[str(ADMIN_USER_ID)] = _(
-                "default_admin_name", config.DEFAULT_LANGUAGE)
+                "default_admin_name", config.DEFAULT_LANGUAGE
+            )
             save_users()
 
         elif isinstance(ALLOWED_USERS[ADMIN_USER_ID], str):
-            ALLOWED_USERS[ADMIN_USER_ID] = {
-                "group": "admins", "password_hash": None}
+            ALLOWED_USERS[ADMIN_USER_ID] = {"group": "admins", "password_hash": None}
 
         logging.info(f"Пользователи загружены: {len(ALLOWED_USERS)}")
 
     except Exception as e:
-        logging.error(
-            f"Критическая ошибка загрузки users.json: {e}",
-            exc_info=True)
-        ALLOWED_USERS[ADMIN_USER_ID] = {
-            "group": "admins", "password_hash": None}
+        logging.error(f"Критическая ошибка загрузки users.json: {e}", exc_info=True)
+        ALLOWED_USERS[ADMIN_USER_ID] = {"group": "admins", "password_hash": None}
         save_users()
 
 
@@ -96,15 +89,13 @@ def save_users():
                 group = data.get("group", "users")
                 p_hash = data.get("password_hash")
 
-            allowed_users_to_save.append({
-                "id": int(uid),
-                "group": group,
-                "password_hash": p_hash
-            })
+            allowed_users_to_save.append(
+                {"id": int(uid), "group": group, "password_hash": p_hash}
+            )
 
         data = {
             "allowed_users": allowed_users_to_save,
-            "user_names": user_names_to_save
+            "user_names": user_names_to_save,
         }
         os.makedirs(os.path.dirname(USERS_FILE), exist_ok=True)
 
@@ -118,24 +109,52 @@ def is_allowed(user_id, command=None):
         return False
 
     user_data = ALLOWED_USERS[user_id]
-    user_group = user_data if isinstance(
-        user_data, str) else user_data.get(
-        "group", "users")
+    user_group = (
+        user_data if isinstance(user_data, str) else user_data.get("group", "users")
+    )
 
     user_commands = [
-        "start", "menu", "back_to_menu", "uptime", "traffic",
-        "selftest", "get_id", "get_id_inline", "notifications_menu",
-        "toggle_alert_resources", "toggle_alert_logins",
-        "toggle_alert_bans", "alert_downtime_stub", "language"]
+        "start",
+        "menu",
+        "back_to_menu",
+        "uptime",
+        "traffic",
+        "selftest",
+        "get_id",
+        "get_id_inline",
+        "notifications_menu",
+        "toggle_alert_resources",
+        "toggle_alert_logins",
+        "toggle_alert_bans",
+        "alert_downtime_stub",
+        "language",
+    ]
     admin_only_commands = [
-        "manage_users", "generate_vless", "speedtest", "top", "updatexray",
-        "adduser", "add_user", "delete_user", "set_group", "change_group",
-        "back_to_manage_users", "back_to_delete_users",
-        "nodes", "node_add_new", "nodes_list_refresh"
+        "manage_users",
+        "generate_vless",
+        "speedtest",
+        "top",
+        "updatexray",
+        "adduser",
+        "add_user",
+        "delete_user",
+        "set_group",
+        "change_group",
+        "back_to_manage_users",
+        "back_to_delete_users",
+        "nodes",
+        "node_add_new",
+        "nodes_list_refresh",
     ]
     root_only_commands = [
-        "reboot_confirm", "reboot", "fall2ban", "sshlog", "logs",
-        "restart", "update", "optimize"
+        "reboot_confirm",
+        "reboot",
+        "fall2ban",
+        "sshlog",
+        "logs",
+        "restart",
+        "update",
+        "optimize",
     ]
 
     if command in user_commands:
@@ -151,14 +170,16 @@ def is_allowed(user_id, command=None):
             return True
         return False
 
-    if command and (command.startswith("delete_user_") or
-                    command.startswith("request_self_delete_") or
-                    command.startswith("confirm_self_delete_") or
-                    command.startswith("select_user_change_group_") or
-                    command.startswith("set_group_") or
-                    command.startswith("node_select_") or
-                    command.startswith("node_delete_") or
-                    command.startswith("node_cmd_")):
+    if command and (
+        command.startswith("delete_user_")
+        or command.startswith("request_self_delete_")
+        or command.startswith("confirm_self_delete_")
+        or command.startswith("select_user_change_group_")
+        or command.startswith("set_group_")
+        or command.startswith("node_select_")
+        or command.startswith("node_delete_")
+        or command.startswith("node_cmd_")
+    ):
         return is_admin_group
 
     return True
@@ -169,8 +190,8 @@ async def refresh_user_names(bot: Bot):
     user_ids_to_check = list(ALLOWED_USERS.keys())
 
     lang = config.DEFAULT_LANGUAGE
-    new_user_prefix = _("default_new_user_name", lang, uid="").split('_')[0]
-    id_user_prefix = _("default_id_user_name", lang, uid="").split(' ')[0]
+    new_user_prefix = _("default_new_user_name", lang, uid="").split("_")[0]
+    id_user_prefix = _("default_id_user_name", lang, uid="").split(" ")[0]
     admin_name_default = _("default_admin_name", lang)
 
     for uid in user_ids_to_check:
@@ -197,14 +218,15 @@ async def refresh_user_names(bot: Bot):
                     needs_save = True
 
             except TelegramBadRequest as e:
-                if "chat not found" in str(e).lower(
-                ) or "bot was blocked by the user" in str(e).lower():
+                if (
+                    "chat not found" in str(e).lower()
+                    or "bot was blocked by the user" in str(e).lower()
+                ):
                     if current_name != new_name:
                         USER_NAMES[uid_str] = new_name
                         needs_save = True
                 else:
-                    logging.error(
-                        f"Ошибка API при обновлении имени {uid}: {e}")
+                    logging.error(f"Ошибка API при обновлении имени {uid}: {e}")
             except Exception as e:
                 logging.error(f"Ошибка при обновлении имени {uid}: {e}")
 
@@ -219,17 +241,21 @@ async def get_user_name(bot: Bot, user_id: int) -> str:
     lang = config.DEFAULT_LANGUAGE
     try:
         from .i18n import get_user_lang
+
         lang = get_user_lang(user_id)
     except ImportError:
         pass
     except Exception:
         pass
 
-    new_user_prefix = _("default_new_user_name", lang, uid="").split('_')[0]
-    id_user_prefix = _("default_id_user_name", lang, uid="").split(' ')[0]
+    new_user_prefix = _("default_new_user_name", lang, uid="").split("_")[0]
+    id_user_prefix = _("default_id_user_name", lang, uid="").split(" ")[0]
 
-    if cached_name and not cached_name.startswith(
-            new_user_prefix) and not cached_name.startswith(id_user_prefix):
+    if (
+        cached_name
+        and not cached_name.startswith(new_user_prefix)
+        and not cached_name.startswith(id_user_prefix)
+    ):
         return cached_name
 
     new_name = _("default_id_user_name", lang, uid=user_id)
@@ -255,15 +281,14 @@ async def get_user_name(bot: Bot, user_id: int) -> str:
 
 
 async def send_access_denied_message(
-        bot: Bot,
-        user_id: int,
-        chat_id: int,
-        command: str):
+    bot: Bot, user_id: int, chat_id: int, command: str
+):
     await delete_previous_message(user_id, command, chat_id, bot)
 
     lang = config.DEFAULT_LANGUAGE
     try:
         from .i18n import get_user_lang
+
         lang = get_user_lang(user_id)
     except Exception:
         pass
@@ -280,13 +305,13 @@ async def send_access_denied_message(
     button_text = _("access_denied_button", lang)
     message_text = _("access_denied_message", lang, user_id=user_id)
 
-    keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text=button_text, url=admin_link)]
-    ])
+    keyboard = InlineKeyboardMarkup(
+        inline_keyboard=[[InlineKeyboardButton(text=button_text, url=admin_link)]]
+    )
     try:
-        sent_message = await bot.send_message(chat_id, message_text, reply_markup=keyboard, parse_mode="HTML")
-        LAST_MESSAGE_IDS.setdefault(
-            user_id, {})[command] = sent_message.message_id
+        sent_message = await bot.send_message(
+            chat_id, message_text, reply_markup=keyboard, parse_mode="HTML"
+        )
+        LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = sent_message.message_id
     except Exception as e:
-        logging.error(
-            f"Не удалось отправить отказ пользователю {user_id}: {e}")
+        logging.error(f"Не удалось отправить отказ пользователю {user_id}: {e}")

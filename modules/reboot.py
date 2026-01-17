@@ -34,25 +34,21 @@ async def reboot_confirm_handler(message: types.Message):
 
     await delete_previous_message(user_id, command, chat_id, message.bot)
 
-    keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [
-            InlineKeyboardButton(
-                text=_(
-                    "btn_reboot_confirm",
-                    lang),
-                callback_data="reboot_confirm"),
-            InlineKeyboardButton(
-                text=_(
-                    "btn_reboot_cancel",
-                    lang),
-                callback_data="reboot_cancel")
+    keyboard = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text=_("btn_reboot_confirm", lang), callback_data="reboot_confirm"
+                ),
+                InlineKeyboardButton(
+                    text=_("btn_reboot_cancel", lang), callback_data="reboot_cancel"
+                ),
+            ]
         ]
-    ])
+    )
 
     sent_message = await message.answer(
-        _("reboot_confirm_prompt", lang),
-        reply_markup=keyboard,
-        parse_mode="HTML"
+        _("reboot_confirm_prompt", lang), reply_markup=keyboard, parse_mode="HTML"
     )
     LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = sent_message.message_id
 

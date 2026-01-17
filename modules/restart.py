@@ -37,25 +37,21 @@ async def restart_confirm_handler(message: types.Message):
 
     await delete_previous_message(user_id, command, chat_id, message.bot)
 
-    keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [
-            InlineKeyboardButton(
-                text=_(
-                    "btn_confirm",
-                    lang),
-                callback_data="restart_confirm"),
-            InlineKeyboardButton(
-                text=_(
-                    "btn_cancel",
-                    lang),
-                callback_data="restart_cancel")
+    keyboard = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text=_("btn_confirm", lang), callback_data="restart_confirm"
+                ),
+                InlineKeyboardButton(
+                    text=_("btn_cancel", lang), callback_data="restart_cancel"
+                ),
+            ]
         ]
-    ])
+    )
 
     sent_message = await message.answer(
-        _("restart_start", lang),
-        reply_markup=keyboard,
-        parse_mode="HTML"
+        _("restart_start", lang), reply_markup=keyboard, parse_mode="HTML"
     )
     LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = sent_message.message_id
 

@@ -1,4 +1,4 @@
-#!/bin/bash
+
 
 GIT_BRANCH="main"
 AUTO_AGENT_URL=""
@@ -115,9 +115,9 @@ ask_for_version() {
     if [ "$v_mode" == "2" ]; then
         msg_info "Загрузка списка версий с GitHub..."
         if ! command -v git &> /dev/null; then sudo apt-get install -y git; fi
-        
+
         local tags=$(git ls-remote --tags --refs "${GITHUB_REPO_URL}" | cut -d/ -f3 | sort -V -r)
-        
+
         if [ -z "$tags" ]; then
             msg_warning "Теги не найдены. Будет использована ветка ${GIT_BRANCH}."
             return
@@ -126,7 +126,7 @@ ask_for_version() {
         echo -e "${C_BLUE}Доступные версии:${C_RESET}"
         local i=1
         declare -A version_map
-        
+
         while read -r tag; do
             echo "  $i) $tag"
             version_map[$i]="$tag"
@@ -149,8 +149,8 @@ ask_for_version() {
 ensure_latest_python() {
     msg_info "Проверка версии Python..."
     local TARGET_VERSION="3.12"
-    local TARGET_BIN="python${TARGET_VERSION}" 
-    
+    local TARGET_BIN="python${TARGET_VERSION}"
+
     if command -v $TARGET_BIN &>/dev/null; then
         PYTHON_BIN=$(which $TARGET_BIN)
         msg_success "Найден целевой Python: $PYTHON_BIN"
@@ -250,9 +250,9 @@ EOF
 
 common_install_steps() {
     echo "" > /tmp/${SERVICE_NAME}_install.log
-    
+
     cleanup_files_silent
-    
+
     msg_info "1. Обновление системы..."
     run_with_spinner "Apt update" sudo apt-get update -y -q
     ensure_latest_python
@@ -474,7 +474,7 @@ if os.path.exists(DB):
         conn = sqlite3.connect(DB)
         conn.row_factory = sqlite3.Row
         c = conn.cursor()
-        
+
         # 1. Add columns if missing
         try: c.execute("ALTER TABLE nodes ADD COLUMN token_safe TEXT")
         except: pass
@@ -482,13 +482,13 @@ if os.path.exists(DB):
         except: pass
         try: c.execute("CREATE UNIQUE INDEX IF NOT EXISTS uid_nodes_token_h_a1b2c3 ON nodes (token_hash)")
         except: pass
-        
+
         # 2. Fix missing hashes (Critical for migration)
         try:
             c.execute("PRAGMA table_info(nodes)")
             cols = [row['name'] for row in c.fetchall()]
             src_col = 'token' if 'token' in cols else 'token_safe'
-            
+
             if 'token_hash' in cols:
                 c.execute(f"SELECT id, {src_col}, token_hash FROM nodes")
                 rows = c.fetchall()
@@ -496,7 +496,7 @@ if os.path.exists(DB):
                     uid = row['id']
                     val = row[src_col]
                     curr_hash = row['token_hash']
-                    
+
                     if val and not curr_hash:
                         new_hash = hashlib.sha256(val.encode()).hexdigest()
                         c.execute("UPDATE nodes SET token_hash = ?, token_safe = ? WHERE id = ?", (new_hash, val, uid))
@@ -507,7 +507,7 @@ if os.path.exists(DB):
         # 3. Clean aerich history
         try: c.execute("DELETE FROM aerich")
         except: pass
-        
+
         conn.commit()
         conn.close()
         print("DB Schema patched.")
@@ -521,10 +521,10 @@ run_db_migrations() {
     msg_info "Проверка и миграция базы данных..."
     cd "${BOT_INSTALL_PATH}" || return 1
     if [ -f "${ENV_FILE}" ]; then set -a; source "${ENV_FILE}"; set +a; fi
-    
+
     create_fix_script
     msg_info "Запуск лечения БД..."
-    if [ -n "$exec_user" ]; then 
+    if [ -n "$exec_user" ]; then
         $exec_user "${VENV_PATH}/bin/python" fix_db_auto.py >/dev/null 2>&1
     else
         "${VENV_PATH}/bin/python" fix_db_auto.py >/dev/null 2>&1
@@ -598,7 +598,7 @@ install_docker_logic() {
     local mode=$1
     common_install_steps
     install_extras
-    
+
     ask_for_version
 
     setup_repo_and_dirs "root"
@@ -610,27 +610,27 @@ install_docker_logic() {
     create_docker_compose_yml
     local container_name="tg-bot-${mode}"
     write_env_file "docker" "$mode" "${container_name}"
-    
+
     cleanup_files_silent
     cleanup_agent_files
-    
+
     cd ${BOT_INSTALL_PATH}
     local dc_cmd=""; if sudo docker compose version &>/dev/null; then dc_cmd="docker compose"; elif command -v docker-compose &>/dev/null; then dc_cmd="docker-compose"; else msg_error "Docker Compose не найден."; return 1; fi
     run_with_spinner "Сборка Docker" sudo $dc_cmd build
     run_with_spinner "Запуск Docker" sudo $dc_cmd --profile "${mode}" up -d --remove-orphans
 
     msg_info "Попытка настройки БД в контейнере..."
-    
+
     # AUTO FIX FOR DOCKER
     create_fix_script
     sudo $dc_cmd --profile "${mode}" exec -T ${container_name} python fix_db_auto.py >/dev/null 2>&1
     rm -f fix_db_auto.py
-    
+
     sudo $dc_cmd --profile "${mode}" exec -T ${container_name} aerich init -t core.config.TORTOISE_ORM >/dev/null 2>&1
     sudo $dc_cmd --profile "${mode}" exec -T ${container_name} aerich init-db >/dev/null 2>&1
     sudo $dc_cmd --profile "${mode}" exec -T ${container_name} aerich upgrade >/dev/null 2>&1
     sudo $dc_cmd --profile "${mode}" exec -T ${container_name} python migrate.py >/dev/null 2>&1
-    
+
     sudo bash -c "cat > /usr/local/bin/tgcp-bot" <<EOF
 #!/bin/bash
 cd ${BOT_INSTALL_PATH}
@@ -704,7 +704,7 @@ update_bot() {
     echo -e "\n${C_BOLD}=== Обновление ===${C_RESET}"
     if [ -f "${ENV_FILE}" ] && grep -q "MODE=node" "${ENV_FILE}"; then msg_info "Обновление Ноды..."; install_node_logic; return; fi
     if [ ! -d "${BOT_INSTALL_PATH}/.git" ]; then msg_error "Git не найден. Переустановите."; return 1; fi
-    
+
     ask_for_version
 
     local exec_cmd=""
@@ -712,13 +712,13 @@ update_bot() {
 
     cd "${BOT_INSTALL_PATH}"
     if ! run_with_spinner "Git fetch" $exec_cmd git fetch origin --tags; then return 1; fi
-    
+
     if $exec_cmd git rev-parse --verify "origin/${GIT_BRANCH}" &>/dev/null; then
          if ! run_with_spinner "Git reset" $exec_cmd git reset --hard "origin/${GIT_BRANCH}"; then return 1; fi
     else
          if ! run_with_spinner "Git checkout" $exec_cmd git checkout --force "${GIT_BRANCH}"; then return 1; fi
     fi
-    
+
     cleanup_agent_files
     cleanup_files_silent
 
@@ -728,12 +728,12 @@ update_bot() {
             if ! run_with_spinner "Docker Up" sudo $dc_cmd up -d --build; then msg_error "Ошибка Docker."; return 1; fi
             local mode=$(grep '^INSTALL_MODE=' "${ENV_FILE}" | cut -d'=' -f2 | tr -d '"')
             local cn="tg-bot-${mode}"
-            
+
             # AUTO FIX FOR DOCKER UPDATE
             create_fix_script
             sudo $dc_cmd --profile "${mode}" exec -T ${cn} python fix_db_auto.py >/dev/null 2>&1
             rm -f fix_db_auto.py
-            
+
             sudo $dc_cmd --profile "${mode}" exec -T ${cn} aerich upgrade >/dev/null 2>&1
             sudo $dc_cmd --profile "${mode}" exec -T ${cn} python migrate.py >/dev/null 2>&1
         else msg_error "Нет docker-compose.yml"; return 1; fi

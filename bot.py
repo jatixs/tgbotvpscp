@@ -1,8 +1,22 @@
 from core.middlewares import SpamThrottleMiddleware
 from modules import (
-    selftest, traffic, uptime, notifications, users, vless,
-    speedtest, top, xray, sshlog, fail2ban, logs, update, reboot, restart,
-    optimize, nodes
+    selftest,
+    traffic,
+    uptime,
+    notifications,
+    users,
+    vless,
+    speedtest,
+    top,
+    xray,
+    sshlog,
+    fail2ban,
+    logs,
+    update,
+    reboot,
+    restart,
+    optimize,
+    nodes,
 )
 from core.i18n import _, I18nFilter, get_language_keyboard
 from core import i18n
@@ -53,13 +67,12 @@ background_tasks = set()
 
 def register_module(module, admin_only=False, root_only=False):
     try:
-        if hasattr(module, 'register_handlers'):
+        if hasattr(module, "register_handlers"):
             module.register_handlers(dp)
         else:
-            logging.warning(
-                f"Module '{module.__name__}' has no register_handlers().")
+            logging.warning(f"Module '{module.__name__}' has no register_handlers().")
 
-        if hasattr(module, 'start_background_tasks'):
+        if hasattr(module, "start_background_tasks"):
             tasks = module.start_background_tasks(bot)
             for task in tasks:
                 background_tasks.add(task)
@@ -68,27 +81,34 @@ def register_module(module, admin_only=False, root_only=False):
 
     except Exception as e:
         logging.error(
-            f"Error registering module '{module.__name__}': {e}",
-            exc_info=True)
+            f"Error registering module '{module.__name__}': {e}", exc_info=True
+        )
 
 
 async def show_main_menu(
-        user_id: int,
-        chat_id: int,
-        state: FSMContext,
-        message_id_to_delete: int = None,
-        is_start_command: bool = False):
+    user_id: int,
+    chat_id: int,
+    state: FSMContext,
+    message_id_to_delete: int = None,
+    is_start_command: bool = False,
+):
     command = "menu"
     await state.clear()
     lang = i18n.get_user_lang(user_id)
-    is_first_start = (
-        is_start_command and user_id not in i18n.shared_state.USER_SETTINGS)
+    is_first_start = is_start_command and user_id not in i18n.shared_state.USER_SETTINGS
 
     if not auth.is_allowed(user_id, command):
         if is_first_start:
             await messaging.send_support_message(bot, user_id, lang)
-        if lang == config.DEFAULT_LANGUAGE and user_id not in i18n.shared_state.USER_SETTINGS:
-            await bot.send_message(chat_id, _("language_select", 'ru'), reply_markup=get_language_keyboard())
+        if (
+            lang == config.DEFAULT_LANGUAGE
+            and user_id not in i18n.shared_state.USER_SETTINGS
+        ):
+            await bot.send_message(
+                chat_id,
+                _("language_select", "ru"),
+                reply_markup=get_language_keyboard(),
+            )
             await auth.send_access_denied_message(bot, user_id, chat_id, command)
             return
         await auth.send_access_denied_message(bot, user_id, chat_id, command)
@@ -100,41 +120,53 @@ async def show_main_menu(
         except TelegramBadRequest:
             pass
 
-    await messaging.delete_previous_message(user_id, list(shared_state.LAST_MESSAGE_IDS.get(user_id, {}).keys()), chat_id, bot)
+    await messaging.delete_previous_message(
+        user_id,
+        list(shared_state.LAST_MESSAGE_IDS.get(user_id, {}).keys()),
+        chat_id,
+        bot,
+    )
 
     if is_first_start:
         await messaging.send_support_message(bot, user_id, lang)
         i18n.set_user_lang(user_id, lang)
 
     if str(user_id) not in shared_state.USER_NAMES:
-        # Оптимизация: запускаем в фоне, чтобы не тормозить меню
+
         asyncio.create_task(auth.refresh_user_names(bot))
 
     menu_text = _("main_menu_welcome", user_id)
     reply_markup = keyboards.get_main_reply_keyboard(user_id)
 
     try:
-        sent_message = await bot.send_message(chat_id, menu_text, reply_markup=reply_markup)
-        shared_state.LAST_MESSAGE_IDS.setdefault(
-            user_id, {})[command] = sent_message.message_id
+        sent_message = await bot.send_message(
+            chat_id, menu_text, reply_markup=reply_markup
+        )
+        shared_state.LAST_MESSAGE_IDS.setdefault(user_id, {})[
+            command
+        ] = sent_message.message_id
     except Exception as e:
         logging.error(f"Failed to send main menu to user {user_id}: {e}")
 
 
 @dp.message(Command("start", "menu"))
 @dp.message(I18nFilter("btn_back_to_menu"))
-async def start_or_menu_handler_message(
-        message: types.Message,
-        state: FSMContext):
+async def start_or_menu_handler_message(message: types.Message, state: FSMContext):
     is_start_command = message.text == "/start"
-    await show_main_menu(message.from_user.id, message.chat.id, state, is_start_command=is_start_command)
+    await show_main_menu(
+        message.from_user.id, message.chat.id, state, is_start_command=is_start_command
+    )
 
 
 @dp.callback_query(F.data == "back_to_menu")
-async def back_to_menu_callback(
-        callback: types.CallbackQuery,
-        state: FSMContext):
-    await show_main_menu(callback.from_user.id, callback.message.chat.id, state, callback.message.message_id, is_start_command=False)
+async def back_to_menu_callback(callback: types.CallbackQuery, state: FSMContext):
+    await show_main_menu(
+        callback.from_user.id,
+        callback.message.chat.id,
+        state,
+        callback.message.message_id,
+        is_start_command=False,
+    )
     await callback.answer()
 
 
@@ -175,8 +207,9 @@ async def _show_subcategory(message: types.Message, category_key: str):
     text = _("cat_choose_action", lang, category=cat_name)
 
     sent = await message.answer(text, reply_markup=markup, parse_mode="HTML")
-    shared_state.LAST_MESSAGE_IDS.setdefault(
-        user_id, {})["subcategory"] = sent.message_id
+    shared_state.LAST_MESSAGE_IDS.setdefault(user_id, {})[
+        "subcategory"
+    ] = sent.message_id
 
 
 @dp.message(I18nFilter("btn_configure_menu"))
@@ -230,20 +263,22 @@ async def language_handler(message: types.Message):
     if not auth.is_allowed(user_id, "start"):
         await auth.send_access_denied_message(bot, user_id, message.chat.id, "start")
         return
-    await message.answer(_("language_select", user_id), reply_markup=get_language_keyboard())
+    await message.answer(
+        _("language_select", user_id), reply_markup=get_language_keyboard()
+    )
 
 
 @dp.callback_query(F.data.startswith("set_lang_"))
-async def set_language_callback(
-        callback: types.CallbackQuery,
-        state: FSMContext):
+async def set_language_callback(callback: types.CallbackQuery, state: FSMContext):
     user_id = callback.from_user.id
-    lang = callback.data.split('_')[-1]
+    lang = callback.data.split("_")[-1]
     if lang not in i18n.STRINGS:
         lang = config.DEFAULT_LANGUAGE
     i18n.set_user_lang(user_id, lang)
     await callback.answer(_("language_selected", lang))
-    await show_main_menu(user_id, callback.message.chat.id, state, callback.message.message_id)
+    await show_main_menu(
+        user_id, callback.message.chat.id, state, callback.message.message_id
+    )
 
 
 def load_modules():
@@ -270,7 +305,7 @@ def load_modules():
 
 async def shutdown(dispatcher: Dispatcher, bot_instance: Bot, web_runner=None):
     logging.info("Shutdown signal received. Stopping services...")
-    
+
     try:
         await dispatcher.stop_polling()
     except Exception:
@@ -278,7 +313,7 @@ async def shutdown(dispatcher: Dispatcher, bot_instance: Bot, web_runner=None):
 
     if web_runner:
         try:
-            # This triggers app['shutdown_event'] via on_shutdown signal we added
+
             await asyncio.wait_for(web_runner.cleanup(), timeout=5.0)
             logging.info("Web server stopped.")
         except asyncio.TimeoutError:
@@ -293,11 +328,13 @@ async def shutdown(dispatcher: Dispatcher, bot_instance: Bot, web_runner=None):
         if task and not task.done():
             task.cancel()
             cancelled_tasks.append(task)
-            
+
     if cancelled_tasks:
         logging.info(f"Cancelling {len(cancelled_tasks)} background tasks...")
         try:
-            await asyncio.wait_for(asyncio.gather(*cancelled_tasks, return_exceptions=True), timeout=5.0)
+            await asyncio.wait_for(
+                asyncio.gather(*cancelled_tasks, return_exceptions=True), timeout=5.0
+            )
         except asyncio.TimeoutError:
             logging.warning("Background tasks cancellation timed out.")
         except Exception as e:
@@ -308,9 +345,9 @@ async def shutdown(dispatcher: Dispatcher, bot_instance: Bot, web_runner=None):
         await asyncio.wait_for(Tortoise.close_connections(), timeout=5.0)
     except Exception as e:
         logging.error(f"DB connections close error: {e}")
-    if getattr(bot_instance, 'session', None):
+    if getattr(bot_instance, "session", None):
         await bot_instance.session.close()
-    
+
     logging.info("Bot stopped successfully.")
 
 
@@ -326,7 +363,7 @@ async def main():
         await asyncio.to_thread(utils.load_alerts_config)
         await asyncio.to_thread(i18n.load_user_settings)
         asyncio.create_task(auth.refresh_user_names(bot))
-        
+
         await utils.initial_reboot_check(bot)
         await utils.initial_restart_check(bot)
 
@@ -345,6 +382,7 @@ async def main():
         logging.critical(f"Critical error: {e}", exc_info=True)
     finally:
         await shutdown(dp, bot, web_runner)
+
 
 if __name__ == "__main__":
     try:
