@@ -432,6 +432,7 @@ async def handle_dashboard(request):
             "last_seen",
             0) < NODE_OFFLINE_TIMEOUT)
     role = user.get('role', 'users')
+    is_main_admin = (user_id == ADMIN_USER_ID)
     role_color = "green" if role == "admins" else "gray"
     
     role_badge_html = f'<span class="ml-2 px-2 py-0.5 rounded text-[10px] border border-{role_color}-500/30 bg-{role_color}-100 dark:bg-{role_color}-500/20 text-{role_color}-600 dark:text-{role_color}-400 uppercase font-bold align-middle">{role}</span>'
@@ -504,7 +505,8 @@ async def handle_dashboard(request):
         "web_logs_protected_desc": _("web_logs_protected_desc", lang),    
         "web_node_last_seen_label": _("web_node_last_seen", lang),
         "web_node_traffic": _("web_node_traffic", lang),
-        "user_role_js": f"const USER_ROLE = '{role}';",
+        "user_role_js": f"const USER_ROLE = '{role}'; const IS_MAIN_ADMIN = {str(is_main_admin).lower()};",
+        "is_main_admin": is_main_admin,
         "web_search_placeholder": _("web_search_placeholder", lang),
         "i18n_json": json.dumps({
             "web_cpu": _("web_cpu", lang),
@@ -794,6 +796,7 @@ async def handle_settings_page(request):
     user_id = user['id']
     role = user.get('role', 'users')
     is_admin = role == 'admins'
+    is_main_admin = (user_id == ADMIN_USER_ID)
     lang = get_user_lang(user_id)
     user_alerts = ALERTS_CONFIG.get(user_id, {})
     users_json = "null"
@@ -909,7 +912,8 @@ async def handle_settings_page(request):
         "web_sessions_view_all": _("web_sessions_view_all", lang),
         "web_sessions_revoke_all": _("web_sessions_revoke_all", lang),
         "web_sessions_modal_title": _("web_sessions_modal_title", lang),
-        "user_role_js": f"const USER_ROLE = '{role}';",
+        "user_role_js": f"const USER_ROLE = '{role}'; const IS_MAIN_ADMIN = {str(is_main_admin).lower()};",
+        "is_main_admin": is_main_admin,
         "check_resources": "checked" if user_alerts.get("resources", False) else "",
         "check_logins": "checked" if user_alerts.get("logins", False) else "",
         "check_bans": "checked" if user_alerts.get("bans", False) else "",

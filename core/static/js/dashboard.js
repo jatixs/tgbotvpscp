@@ -765,7 +765,7 @@ function closeNodeModal() {
 }
 
 // Функции переименования ноды
-function startNodeRename() {
+window.startNodeRename = function() {
     const nameDisplay = document.getElementById('nodeNameContainer');
     const nameInputContainer = document.getElementById('nodeNameInputContainer');
     const nameInput = document.getElementById('modalNodeNameInput');
@@ -777,9 +777,9 @@ function startNodeRename() {
         nameInput.value = currentName;
         nameInput.focus();
     }
-}
+};
 
-function cancelNodeRename() {
+window.cancelNodeRename = function() {
     const nameDisplay = document.getElementById('nodeNameContainer');
     const nameInputContainer = document.getElementById('nodeNameInputContainer');
 
@@ -787,9 +787,9 @@ function cancelNodeRename() {
         nameDisplay.classList.remove('hidden');
         nameInputContainer.classList.add('hidden');
     }
-}
+};
 
-async function saveNodeRename() {
+window.saveNodeRename = async function() {
     const nameInput = document.getElementById('modalNodeNameInput');
     const newName = nameInput.value.trim();
     if (!newName || !currentNodeToken) return;
@@ -819,15 +819,15 @@ async function saveNodeRename() {
         console.error(e);
         if (window.showModalAlert) await window.showModalAlert(String(e), "Error");
     }
-}
+};
 
-function handleRenameKeydown(event) {
+window.handleRenameKeydown = function(event) {
     if (event.key === 'Enter') {
         saveNodeRename();
     } else if (event.key === 'Escape') {
         cancelNodeRename();
     }
-}
+};
 
 // ...renderCharts и остальные функции рендеринга остаются без изменений...
 function renderCharts(history) {
