@@ -18,7 +18,6 @@ document.addEventListener("DOMContentLoaded", () => {
     if (typeof window.parsePageEmojis === 'function') { window.parsePageEmojis(); } else { parsePageEmojis(); }
     initNotifications(); 
     initSSE();
-    initSessionSync(); // Включаем синхронизацию сессии и Ping
     initHolidayMood(); 
     initAddNodeLogic();
     if (document.getElementById('logsContainer')) {
@@ -274,7 +273,6 @@ function initSessionSync() {
         }
     });
 
-    setInterval(checkSessionStatus, 10000);
 
     const logoutForms = document.querySelectorAll('form[action="/logout"]');
     logoutForms.forEach(form => {
@@ -287,7 +285,7 @@ function initSessionSync() {
 function checkSessionStatus() {
     if (document.getElementById('session-expired-overlay')) return;
     
-    fetch('/api/settings/language?_=' + Date.now(), { method: 'HEAD' })
+    fetch('/api/settings/language', { method: 'HEAD', cache: 'no-store' })
         .then(res => {
             if (res.status === 401 || res.status === 403) {
                 handleSessionExpired();
