@@ -18,6 +18,7 @@ document.addEventListener("DOMContentLoaded", () => {
     if (typeof window.parsePageEmojis === 'function') { window.parsePageEmojis(); } else { parsePageEmojis(); }
     initNotifications(); 
     initSSE();
+    initSessionSync(); 
     initHolidayMood(); 
     initAddNodeLogic();
     if (document.getElementById('logsContainer')) {
@@ -439,6 +440,22 @@ function handleServerRestart() {
         </div>
         <h2 class="text-xl font-bold text-gray-900 dark:text-white">${msg}</h2>
     `);
+
+    const checkServer = () => {
+        fetch('/api/settings/language', { method: 'HEAD', cache: 'no-store' })
+            .then(res => {
+                if (res.status === 200 || res.status === 401 || res.status === 403) {
+                    window.location.reload();
+                } else {
+                    setTimeout(checkServer, 2000);
+                }
+            })
+            .catch(() => {
+                setTimeout(checkServer, 2000);
+            });
+    };
+
+    setTimeout(checkServer, 3000);
 }
 
 function createBlurOverlay(id, content) {
