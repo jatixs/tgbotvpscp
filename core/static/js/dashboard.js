@@ -2,13 +2,12 @@
 
 let chartRes = null;
 let chartNet = null;
-let pollInterval = null;
+
+// SSE Sources для специфических задач
+let nodeSSESource = null; // Для деталей ноды
+let logSSESource = null;  // Для логов
 
 let agentChart = null;
-let agentPollInterval = null;
-let nodesPollInterval = null;
-let logPollInterval = null;
-
 let allNodesData = [];
 
 window.addEventListener('themeChanged', () => {
@@ -16,19 +15,20 @@ window.addEventListener('themeChanged', () => {
 });
 
 window.initDashboard = function() {
-    if (agentPollInterval) clearInterval(agentPollInterval);
-    if (nodesPollInterval) clearInterval(nodesPollInterval);
-    if (logPollInterval) clearInterval(logPollInterval);
+    // Очистка всех старых источников и интервалов при инициализации
+    cleanupDashboardSources();
 
-    if (document.getElementById('agentChart')) {
-        fetchAgentStats();
-        agentPollInterval = setInterval(fetchAgentStats, 3000);
+    // Подключаемся к глобальному SSE источнику (уведомления, список нод, статистика агента)
+    if (window.sseSource) {
+        window.sseSource.removeEventListener('agent_stats', handleSSEAgentStats);
+        window.sseSource.removeEventListener('nodes_list', handleSSENodesList);
+        
+        window.sseSource.addEventListener('agent_stats', handleSSEAgentStats);
+        window.sseSource.addEventListener('nodes_list', handleSSENodesList);
     }
 
+    // Инициализация поиска
     if (document.getElementById('nodesList')) {
-        fetchNodesList();
-        nodesPollInterval = setInterval(fetchNodesList, 3000);
-
         const searchInput = document.getElementById('nodeSearch');
         if (searchInput) {
             const newSearch = searchInput.cloneNode(true);
@@ -39,9 +39,43 @@ window.initDashboard = function() {
         }
     }
 
+    // Инициализация логов (теперь через SSE)
     if (document.getElementById('logsContainer')) {
         switchLogType('bot');
     }
+};
+
+// Функция очистки ресурсов при уходе со страницы или реинициализации
+function cleanupDashboardSources() {
+    if (nodeSSESource) {
+        nodeSSESource.close();
+        nodeSSESource = null;
+    }
+    if (logSSESource) {
+        logSSESource.close();
+        logSSESource = null;
+    }
+    // Интервалы больше не используются, но на всякий случай очищаем legacy
+    if (window.nodesPollInterval) clearInterval(window.nodesPollInterval);
+    if (window.agentPollInterval) clearInterval(window.agentPollInterval);
+}
+
+// --- ОБРАБОТЧИКИ ГЛОБАЛЬНЫХ SSE СОБЫТИЙ ---
+
+const handleSSEAgentStats = (e) => {
+    if (!document.getElementById('agentChart')) return;
+    try {
+        const data = JSON.parse(e.data);
+        updateAgentStatsUI(data);
+    } catch (err) { console.error("Agent stats parse error", err); }
+};
+
+const handleSSENodesList = (e) => {
+    if (!document.getElementById('nodesList')) return;
+    try {
+        const data = JSON.parse(e.data);
+        updateNodesListUI(data);
+    } catch (err) { console.error("Nodes list parse error", err); }
 };
 
 document.addEventListener("DOMContentLoaded", () => {
@@ -49,6 +83,8 @@ document.addEventListener("DOMContentLoaded", () => {
         window.initDashboard();
     }
 });
+
+// --- ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ---
 
 function escapeHtml(text) {
     if (!text) return text;
@@ -94,12 +130,11 @@ function formatProcessList(procList, title, colorClass = "text-gray-500") {
     `;
 }
 
-async function fetchNodesList() {
-    try {
-        const response = await fetch('/api/nodes/list');
-        const data = await response.json();
-        allNodesData = data.nodes || [];
+// --- UI UPDATERS ---
 
+function updateNodesListUI(data) {
+    try {
+        allNodesData = data.nodes || [];
         filterAndRenderNodes();
 
         if (document.getElementById('nodesTotal')) {
@@ -109,7 +144,7 @@ async function fetchNodesList() {
             document.getElementById('nodesActive').innerText = allNodesData.filter(n => n.status === 'online').length;
         }
     } catch (e) {
-        console.error("Nodes list error:", e);
+        console.error("Nodes UI update error:", e);
     }
 }
 
@@ -142,9 +177,14 @@ function renderNodesList(nodes) {
         return;
     }
 
+    const lblCpu = (typeof I18N !== 'undefined' && I18N.web_label_cpu) ? I18N.web_label_cpu : "CPU";
+    const lblRam = (typeof I18N !== 'undefined' && I18N.web_label_ram) ? I18N.web_label_ram : "RAM";
+    const lblDisk = (typeof I18N !== 'undefined' && I18N.web_label_disk) ? I18N.web_label_disk : "DISK";
+    const lblStatus = (typeof I18N !== 'undefined' && I18N.web_label_status) ? I18N.web_label_status : "STATUS";
+
     const html = nodes.map(node => {
         let statusColor = node.status === 'online' ? "bg-green-500" : (node.status === 'restarting' ? "bg-blue-500" : "bg-red-500");
-        let statusText = node.status === 'restarting' ? "RESTART" : node.status.toUpperCase();
+        let statusText = node.status === 'restarting' ? (typeof I18N !== 'undefined' && I18N.web_status_restart ? I18N.web_status_restart : "RESTART") : node.status.toUpperCase();
         let statusTextClass = node.status === 'online' ? "text-green-500" : (node.status === 'restarting' ? "text-blue-500" : "text-red-500");
         let statusBg = node.status === 'online' ? "bg-green-500/10 text-green-600 dark:text-green-400" : (node.status === 'restarting' ? "bg-blue-500/10 text-blue-600 dark:text-blue-400" : "bg-red-500/10 text-red-600 dark:text-red-400");
         
@@ -178,23 +218,23 @@ function renderNodesList(nodes) {
                 <div class="flex items-center justify-between sm:justify-end gap-1 sm:gap-6 mt-1 sm:mt-0 pt-3 sm:pt-0 border-t border-gray-100 dark:border-white/5 sm:border-0">
                     
                     <div class="text-center sm:text-right flex-1 sm:flex-none">
-                        <div class="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">CPU</div>
+                        <div class="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">${lblCpu}</div>
                         <div class="text-xs font-mono font-bold ${cpuColor}">${cpu}%</div>
                     </div>
 
                     <div class="text-center sm:text-right flex-1 sm:flex-none">
-                        <div class="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">RAM</div>
+                        <div class="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">${lblRam}</div>
                         <div class="text-xs font-mono font-bold ${ramColor}">${ram}%</div>
                     </div>
 
                     <div class="text-center sm:text-right flex-1 sm:flex-none">
-                        <div class="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">DISK</div>
+                        <div class="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">${lblDisk}</div>
                         <div class="text-xs font-mono font-bold ${diskColor}">${disk}%</div>
                     </div>
 
                     <div class="hidden sm:block text-right ml-2 pl-3 border-l border-gray-200 dark:border-white/10 min-w-[70px]">
                         <div class="text-[10px] font-bold ${statusTextClass} mb-0.5">${statusText}</div>
-                        <div class="text-[9px] text-gray-300 dark:text-gray-600">STATUS</div>
+                        <div class="text-[9px] text-gray-300 dark:text-gray-600">${lblStatus}</div>
                     </div>
                 </div>
             </div>
@@ -204,10 +244,8 @@ function renderNodesList(nodes) {
     container.innerHTML = html;
 }
 
-async function fetchAgentStats() {
+function updateAgentStatsUI(data) {
     try {
-        const response = await fetch('/api/agent/stats');
-        const data = await response.json();
         const freeIcon = `<svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 inline mb-0.5 opacity-60" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>`;
 
         if (data.stats) {
@@ -221,7 +259,8 @@ async function fetchAgentStats() {
                 cpuEl.innerHTML = html;
                 const hintCpu = document.getElementById('hint-cpu');
                 if (hintCpu) {
-                    hintCpu.innerHTML = formatProcessList(data.stats.process_cpu, "Top CPU Consumers", "text-blue-500");
+                    const title = (typeof I18N !== 'undefined' && I18N.web_top_cpu) ? I18N.web_top_cpu : "Top CPU Consumers";
+                    hintCpu.innerHTML = formatProcessList(data.stats.process_cpu, title, "text-blue-500");
                 }
             }
             if (progCpu) progCpu.style.width = data.stats.cpu + "%";
@@ -236,7 +275,8 @@ async function fetchAgentStats() {
                 ramEl.innerHTML = html;
                 const hintRam = document.getElementById('hint-ram');
                 if (hintRam) {
-                    hintRam.innerHTML = formatProcessList(data.stats.process_ram, "Top Memory Consumers", "text-purple-500");
+                    const title = (typeof I18N !== 'undefined' && I18N.web_top_ram) ? I18N.web_top_ram : "Top Memory Consumers";
+                    hintRam.innerHTML = formatProcessList(data.stats.process_ram, title, "text-purple-500");
                 }
             }
             if (progRam) progRam.style.width = data.stats.ram + "%";
@@ -251,7 +291,8 @@ async function fetchAgentStats() {
                 diskEl.innerHTML = html;
                 const hintDisk = document.getElementById('hint-disk');
                 if (hintDisk) {
-                    hintDisk.innerHTML = formatProcessList(data.stats.process_disk, "Top I/O Usage (Total)", "text-emerald-500");
+                    const title = (typeof I18N !== 'undefined' && I18N.web_top_disk) ? I18N.web_top_disk : "Top I/O Usage";
+                    hintDisk.innerHTML = formatProcessList(data.stats.process_disk, title, "text-emerald-500");
                 }
             }
             if (progDisk) progDisk.style.width = data.stats.disk + "%";
@@ -294,10 +335,11 @@ async function fetchAgentStats() {
         }
         renderAgentChart(data.history);
     } catch (e) {
-        console.error("Agent stats error:", e);
+        console.error("Agent stats UI error:", e);
     }
 }
 
+// ... вспомогательные функции для графиков остаются те же ...
 function updateChartsColors() {
     const isDark = document.documentElement.classList.contains('dark');
     const gridColor = isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.05)';
@@ -438,9 +480,170 @@ function formatUptime(bt) {
     return `${m}${unitM}`;
 }
 
+// --- LOGS LOGIC (SSE) ---
+
+window.switchLogType = function(type) {
+    ['btnLogBot', 'btnLogSys'].forEach(id => {
+        const el = document.getElementById(id);
+        const isActive = (id === 'btnLogBot' && type === 'bot') || (id === 'btnLogSys' && type === 'sys');
+        el.classList.toggle('bg-white', isActive);
+        el.classList.toggle('dark:bg-gray-700', isActive);
+        el.classList.toggle('text-gray-900', isActive);
+        el.classList.toggle('text-gray-500', !isActive);
+    });
+
+    // Закрываем предыдущий стрим
+    if (logSSESource) {
+        logSSESource.close();
+        logSSESource = null;
+    }
+
+    const container = document.getElementById('logsContainer');
+    const overlay = document.getElementById('logsOverlay');
+
+    // Проверка прав (если это нужно на клиенте, сервер тоже отклонит 403)
+    if (typeof USER_ROLE !== 'undefined' && USER_ROLE !== 'admins') {
+        if (overlay) overlay.classList.remove('hidden');
+        if (!container.innerHTML.includes('blur')) {
+            container.innerHTML = generateDummyLogs();
+            container.scrollTop = 0;
+        }
+        return;
+    }
+
+    // Открываем новый стрим для логов
+    logSSESource = new EventSource(`/api/events/logs?type=${type}`);
+    
+    // Показываем заглушку пока соединяемся
+    if (container.innerHTML === "") {
+       const connectingText = (typeof I18N !== 'undefined' && I18N.web_log_connecting) ? I18N.web_log_connecting : "Connecting...";
+       container.innerHTML = `<div class="text-gray-400 text-center mt-10">${connectingText}</div>`;
+    }
+
+    logSSESource.addEventListener('logs', (e) => {
+        if (overlay) overlay.classList.add('hidden');
+        try {
+            const data = JSON.parse(e.data);
+            const logs = data.logs || [];
+            
+            if (logs.length === 0) {
+                container.innerHTML = `<div class="text-gray-600 text-center mt-10">${typeof I18N !== 'undefined' && I18N.web_log_empty ? I18N.web_log_empty : "Log empty"}</div>`;
+                return;
+            }
+
+            const html = logs.map(line => {
+                let cls = "text-gray-500";
+                if (line.includes("INFO")) cls = "text-blue-400";
+                else if (line.includes("WARNING")) cls = "text-yellow-400";
+                else if (line.includes("ERROR") || line.includes("CRITICAL")) cls = "text-red-500 font-bold";
+                return `<div class="${cls}">${escapeHtml(line)}</div>`;
+            }).join('');
+
+            const isBottom = container.scrollHeight - container.scrollTop <= container.clientHeight + 100;
+            
+            // Обновляем только если изменилось
+            if (container.innerHTML !== html) {
+                container.innerHTML = html;
+                if (isBottom) container.scrollTop = container.scrollHeight;
+            }
+        } catch(err) {
+            console.error("Logs parse error", err);
+        }
+    });
+
+    logSSESource.onerror = () => {
+        if (overlay) overlay.classList.add('hidden');
+        // SSE сам попытается переподключиться
+        // Можно показать статус, если нужно
+    };
+};
+
+function generateDummyLogs() {
+    const lines = [
+        "INFO:system:Starting background service monitoring...",
+        "DEBUG:core.utils:Connection established with remote node",
+        "INFO:modules.traffic:Traffic metrics updated successfully",
+        "WARNING:network:Latency spike detected (150ms)",
+        "INFO:auth:User session verified securely",
+        "DEBUG:database:Query executed in 0.02s",
+        "INFO:system:System resources check passed",
+        "INFO:bot:Webhook set successfully",
+        "DEBUG:asyncio:Event loop running...",
+        "INFO:server:Web server listening on port 8080"
+    ];
+    let html = '';
+    for (let i = 0; i < 30; i++) {
+        const line = lines[Math.floor(Math.random() * lines.length)];
+        html += `<div class="text-gray-400 dark:text-gray-600 select-none filter blur-[3px] opacity-50">${line}</div>`;
+    }
+    return html;
+}
+
+
+// --- NODE DETAILS LOGIC (SSE) ---
+
+function setModalLoading() {
+    const modal = document.getElementById('nodeModal');
+    if (!modal) return;
+    
+    // 1. Reset fields to avoid showing old data (clean state)
+    const fields = ['modalNodeName', 'modalNodeIp', 'modalToken', 'modalNodeUptime', 'modalNodeRam', 'modalNodeDisk', 'modalNodeTraffic'];
+    fields.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.innerText = '...';
+    });
+    const lastSeen = document.getElementById('modalNodeLastSeen');
+    if (lastSeen) {
+        lastSeen.innerText = '...';
+        lastSeen.className = 'text-gray-400 text-xs';
+    }
+
+    // 2. Add Blur Overlay with Spinner
+    // Find the content card (first child of modal container)
+    const card = modal.firstElementChild;
+    if (!card) return;
+    
+    // Ensure relative positioning for absolute overlay
+    if (!card.classList.contains('relative')) card.classList.add('relative');
+    
+    // Remove existing loader if any (cleanup)
+    const existing = document.getElementById('node-modal-loader');
+    if (existing) existing.remove();
+
+    const loadingText = (typeof I18N !== 'undefined' && I18N.web_node_modal_loading) ? I18N.web_node_modal_loading : "Loading node data...";
+
+    const loader = document.createElement('div');
+    loader.id = 'node-modal-loader';
+    loader.className = 'absolute inset-0 z-50 flex flex-col items-center justify-center bg-white/60 dark:bg-gray-900/60 backdrop-blur-md rounded-2xl transition-opacity duration-300 opacity-0';
+    loader.innerHTML = `
+        <svg class="animate-spin h-10 w-10 text-blue-600 dark:text-blue-400 mb-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+        </svg>
+        <span class="text-sm font-medium text-gray-600 dark:text-gray-300 animate-pulse">${escapeHtml(loadingText)}</span>
+    `;
+    
+    card.appendChild(loader);
+    
+    // Force reflow to enable transition
+    void loader.offsetWidth;
+    loader.classList.remove('opacity-0');
+}
+
+function removeModalLoading() {
+    const loader = document.getElementById('node-modal-loader');
+    if (!loader) return;
+    
+    loader.classList.add('opacity-0');
+    setTimeout(() => {
+        if (loader.parentElement) loader.remove();
+    }, 300);
+}
+
 async function openNodeDetails(token, color) {
     const modal = document.getElementById('nodeModal');
     if (modal) {
+        setModalLoading(); // Apply blur overlay immediately
         animateModalOpen(modal); 
     }
 
@@ -449,67 +652,92 @@ async function openNodeDetails(token, color) {
     chartRes = null;
     chartNet = null;
 
-    await fetchAndRender(token);
-    if (pollInterval) clearInterval(pollInterval);
-    pollInterval = setInterval(() => fetchAndRender(token), 3000);
+    // Закрываем старый стрим
+    if (nodeSSESource) {
+        nodeSSESource.close();
+        nodeSSESource = null;
+    }
+
+    // Открываем новый стрим для деталей ноды
+    nodeSSESource = new EventSource(`/api/events/node?token=${token}`);
+    
+    nodeSSESource.addEventListener('node_details', (e) => {
+        try {
+            const data = JSON.parse(e.data);
+            updateNodeDetailsUI(data);
+        } catch (err) {
+            console.error("Node details parse error", err);
+        }
+    });
+    
+    nodeSSESource.addEventListener('error', (e) => {
+         // Обработка ошибок
+         try {
+             // Если это кастомное событие error от сервера (json)
+             if (e.data) {
+                 const errData = JSON.parse(e.data);
+                 if (errData.error) {
+                     // Можно показать ошибку прямо в модалке
+                     console.warn("Node SSE Error:", errData.error);
+                 }
+             }
+         } catch(ex) {}
+         // В случае сетевой ошибки браузер сам реконнектится, лоадер можно не убирать, пока данные не придут
+    });
 }
 
-async function fetchAndRender(token) {
-    try {
-        const res = await fetch(`/api/node/details?token=${token}`);
-        const data = await res.json();
+function updateNodeDetailsUI(data) {
+    if (data.error) return;
 
-        if (data.error) {
-            clearInterval(pollInterval);
-            return;
-        }
+    // Remove loading overlay as soon as we have data
+    removeModalLoading();
 
-        document.getElementById('modalNodeName').innerText = data.name;
-        document.getElementById('modalNodeIp').innerText = data.ip;
-        document.getElementById('modalToken').innerText = data.token;
+    document.getElementById('modalNodeName').innerText = data.name;
+    document.getElementById('modalNodeIp').innerText = data.ip;
+    document.getElementById('modalToken').innerText = data.token;
 
-        const stats = data.stats || {};
-        
-        if (stats.uptime) {
-            const bootTimestamp = (Date.now() / 1000) - stats.uptime;
-            document.getElementById('modalNodeUptime').innerText = formatUptime(bootTimestamp);
-        } else {
-            document.getElementById('modalNodeUptime').innerText = "-";
-        }
-
-        if (stats.ram_total) {
-            const ramUsed = stats.ram_total - (stats.ram_free || 0);
-            document.getElementById('modalNodeRam').innerText = `${formatBytes(ramUsed)} / ${formatBytes(stats.ram_total)}`;
-        } else {
-            document.getElementById('modalNodeRam').innerText = "-";
-        }
-
-        if (stats.disk_total) {
-            const diskUsed = stats.disk_total - (stats.disk_free || 0);
-            document.getElementById('modalNodeDisk').innerText = `${formatBytes(diskUsed)} / ${formatBytes(stats.disk_total)}`;
-        } else {
-            document.getElementById('modalNodeDisk').innerText = "-";
-        }
-
-        if (stats.net_rx !== undefined) {
-            document.getElementById('modalNodeTraffic').innerText = `⬇${formatBytes(stats.net_rx)} ⬆${formatBytes(stats.net_tx)}`;
-        } else {
-            document.getElementById('modalNodeTraffic').innerText = "-";
-        }
-
-        const lastSeen = data.last_seen || 0;
-        const now = Math.floor(Date.now() / 1000);
-        const diff = now - lastSeen;
-        const lsEl = document.getElementById('modalNodeLastSeen');
-
-        if (lsEl) {
-            lsEl.innerText = diff < 60 ? "Online" : `Last seen: ${new Date(lastSeen * 1000).toLocaleString()}`;
-            lsEl.className = diff < 60 ? "text-green-500 font-bold text-xs" : "text-red-500 font-bold text-xs";
-        }
-        renderCharts(data.history);
-    } catch (e) {
-        console.error("Node detail error:", e);
+    const stats = data.stats || {};
+    
+    if (stats.uptime) {
+        const bootTimestamp = (Date.now() / 1000) - stats.uptime;
+        document.getElementById('modalNodeUptime').innerText = formatUptime(bootTimestamp);
+    } else {
+        document.getElementById('modalNodeUptime').innerText = "-";
     }
+
+    if (stats.ram_total) {
+        const ramUsed = stats.ram_total - (stats.ram_free || 0);
+        document.getElementById('modalNodeRam').innerText = `${formatBytes(ramUsed)} / ${formatBytes(stats.ram_total)}`;
+    } else {
+        document.getElementById('modalNodeRam').innerText = "-";
+    }
+
+    if (stats.disk_total) {
+        const diskUsed = stats.disk_total - (stats.disk_free || 0);
+        document.getElementById('modalNodeDisk').innerText = `${formatBytes(diskUsed)} / ${formatBytes(stats.disk_total)}`;
+    } else {
+        document.getElementById('modalNodeDisk').innerText = "-";
+    }
+
+    if (stats.net_rx !== undefined) {
+        document.getElementById('modalNodeTraffic').innerText = `⬇${formatBytes(stats.net_rx)} ⬆${formatBytes(stats.net_tx)}`;
+    } else {
+        document.getElementById('modalNodeTraffic').innerText = "-";
+    }
+
+    const lastSeen = data.last_seen || 0;
+    const now = Math.floor(Date.now() / 1000);
+    const diff = now - lastSeen;
+    const lsEl = document.getElementById('modalNodeLastSeen');
+
+    const statusOnline = (typeof I18N !== 'undefined' && I18N.web_node_status_online) ? I18N.web_node_status_online : "Online";
+    const statusLastSeen = (typeof I18N !== 'undefined' && I18N.web_node_last_seen) ? I18N.web_node_last_seen : "Last seen: ";
+
+    if (lsEl) {
+        lsEl.innerText = diff < 60 ? statusOnline : `${statusLastSeen}${new Date(lastSeen * 1000).toLocaleString()}`;
+        lsEl.className = diff < 60 ? "text-green-500 font-bold text-xs" : "text-red-500 font-bold text-xs";
+    }
+    renderCharts(data.history);
 }
 
 function closeNodeModal() {
@@ -517,9 +745,18 @@ function closeNodeModal() {
     if (modal) {
         animateModalClose(modal);
     }
-    if (pollInterval) clearInterval(pollInterval);
+    
+    // Удаляем лоадер (на всякий случай, чтобы при следующем открытии анимация была с нуля)
+    removeModalLoading();
+
+    // Закрываем SSE соединение при закрытии модалки
+    if (nodeSSESource) {
+        nodeSSESource.close();
+        nodeSSESource = null;
+    }
 }
 
+// ...renderCharts и остальные функции рендеринга остаются без изменений...
 function renderCharts(history) {
     if (!history || history.length < 2) return;
 
@@ -560,6 +797,9 @@ function renderCharts(history) {
     const tickColor = isDark ? '#9ca3af' : '#6b7280';
     const isMobile = window.innerWidth < 640;
 
+    const lblCpu = (typeof I18N !== 'undefined' && I18N.web_label_cpu) ? I18N.web_label_cpu : "CPU";
+    const lblRam = (typeof I18N !== 'undefined' && I18N.web_label_ram) ? I18N.web_label_ram : "RAM";
+
     const commonOptions = {
         responsive: true,
         maintainAspectRatio: false,
@@ -586,8 +826,8 @@ function renderCharts(history) {
             data: {
                 labels,
                 datasets: [
-                    { label: 'CPU (%)', data: cpuData, borderColor: '#3b82f6', borderWidth: 2, backgroundColor: cpuGrad, fill: true },
-                    { label: 'RAM (%)', data: ramData, borderColor: '#a855f7', borderWidth: 2, backgroundColor: ramGrad, fill: true }
+                    { label: `${lblCpu} (%)`, data: cpuData, borderColor: '#3b82f6', borderWidth: 2, backgroundColor: cpuGrad, fill: true },
+                    { label: `${lblRam} (%)`, data: ramData, borderColor: '#a855f7', borderWidth: 2, backgroundColor: ramGrad, fill: true }
                 ]
             },
             options: { ...commonOptions, scales: { ...commonOptions.scales, y: { ...commonOptions.scales.y, max: 100 } } }
@@ -615,98 +855,5 @@ function renderCharts(history) {
             },
             options: netOpts
         });
-    }
-}
-
-function generateDummyLogs() {
-    const lines = [
-        "INFO:system:Starting background service monitoring...",
-        "DEBUG:core.utils:Connection established with remote node",
-        "INFO:modules.traffic:Traffic metrics updated successfully",
-        "WARNING:network:Latency spike detected (150ms)",
-        "INFO:auth:User session verified securely",
-        "DEBUG:database:Query executed in 0.02s",
-        "INFO:system:System resources check passed",
-        "INFO:bot:Webhook set successfully",
-        "DEBUG:asyncio:Event loop running...",
-        "INFO:server:Web server listening on port 8080"
-    ];
-    let html = '';
-    for (let i = 0; i < 30; i++) {
-        const line = lines[Math.floor(Math.random() * lines.length)];
-        html += `<div class="text-gray-400 dark:text-gray-600 select-none filter blur-[3px] opacity-50">${line}</div>`;
-    }
-    return html;
-}
-
-window.switchLogType = function(type) {
-    ['btnLogBot', 'btnLogSys'].forEach(id => {
-        const el = document.getElementById(id);
-        const isActive = (id === 'btnLogBot' && type === 'bot') || (id === 'btnLogSys' && type === 'sys');
-        el.classList.toggle('bg-white', isActive);
-        el.classList.toggle('dark:bg-gray-700', isActive);
-        el.classList.toggle('text-gray-900', isActive);
-        el.classList.toggle('text-gray-500', !isActive);
-    });
-    loadLogs(type);
-    if (logPollInterval) clearInterval(logPollInterval);
-    logPollInterval = setInterval(() => loadLogs(type), 5000);
-};
-
-async function loadLogs(type = 'bot') {
-    const container = document.getElementById('logsContainer');
-    const overlay = document.getElementById('logsOverlay');
-    const url = type === 'sys' ? '/api/logs/system' : '/api/logs';
-
-    if (typeof USER_ROLE !== 'undefined' && USER_ROLE !== 'admins') {
-        if (overlay) overlay.classList.remove('hidden');
-        if (!container.innerHTML.includes('blur')) {
-            container.innerHTML = generateDummyLogs();
-            container.scrollTop = 0;
-        }
-        return;
-    }
-
-    try {
-        const res = await fetch(url);
-        if (res.status === 403) {
-            if (overlay) overlay.classList.remove('hidden');
-            if (!container.innerHTML.includes('blur')) {
-                container.innerHTML = generateDummyLogs();
-                container.scrollTop = 0;
-            }
-            return;
-        }
-
-        if (overlay) overlay.classList.add('hidden');
-        const data = await res.json();
-
-        if (data.error) {
-            container.innerHTML = `<div class="text-red-400 p-4 font-mono">${escapeHtml(data.error)}</div>`;
-        } else {
-            const logs = data.logs || [];
-            if (logs.length === 0) {
-                container.innerHTML = `<div class="text-gray-600 text-center mt-10">${typeof I18N !== 'undefined' ? I18N.web_log_empty : "Log empty"}</div>`;
-                return;
-            }
-
-            const html = logs.map(line => {
-                let cls = "text-gray-500";
-                if (line.includes("INFO")) cls = "text-blue-400";
-                else if (line.includes("WARNING")) cls = "text-yellow-400";
-                else if (line.includes("ERROR") || line.includes("CRITICAL")) cls = "text-red-500 font-bold";
-                return `<div class="${cls}">${escapeHtml(line)}</div>`;
-            }).join('');
-
-            const isBottom = container.scrollHeight - container.scrollTop <= container.clientHeight + 100;
-
-            if (container.innerHTML !== html) {
-                container.innerHTML = html;
-                if (isBottom) container.scrollTop = container.scrollHeight;
-            }
-        }
-    } catch (e) {
-        if (overlay) overlay.classList.add('hidden');
-        container.innerHTML = `<div class="text-red-400 text-center mt-10">Connection error</div>`;
     }
 }

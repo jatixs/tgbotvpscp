@@ -70,7 +70,20 @@ run_with_spinner() {
     return $exit_code
 }
 
-get_local_version() { if [ -f "$README_FILE" ]; then grep -oP 'img\.shields\.io/badge/version-v\K[\d\.]+' "$README_FILE" || echo "Не найдена"; else echo "Не установлен"; fi; }
+# --- Работа с версиями ---
+
+get_remote_version() {
+    local remote_ver=$(curl -s "https://raw.githubusercontent.com/${GITHUB_REPO}/${GIT_BRANCH}/README.md" | grep -oP 'img\.shields\.io/badge/version-v\K[\d\.]+')
+    if [ -z "$remote_ver" ]; then echo "Не удалось получить"; else echo "$remote_ver"; fi
+}
+
+get_local_version() { 
+    if [ -f "$README_FILE" ]; then 
+        grep -oP 'img\.shields\.io/badge/version-v\K[\d\.]+' "$README_FILE" || echo "Не найдена"
+    else 
+        echo "Не установлен"
+    fi
+}
 
 INSTALL_TYPE="НЕТ"; STATUS_MESSAGE="Проверка не проводилась."
 check_integrity() {
@@ -215,7 +228,16 @@ load_cached_env() {
 
 cleanup_node_files() {
     cd ${BOT_INSTALL_PATH}
-    sudo rm -rf core modules bot.py watchdog.py Dockerfile docker-compose.yml .git .github config/users.json config/alerts_config.json deploy.sh deploy_en.sh requirements.txt README* LICENSE CHANGELOG* .gitignore aerich.ini
+    # Удаляем всё лишнее для режима Ноды (Клиента)
+    # README НЕ удаляем, чтобы видеть версию
+    sudo rm -rf core modules bot.py watchdog.py Dockerfile docker-compose.yml .git .github config/users.json config/alerts_config.json deploy.sh deploy_en.sh requirements.txt LICENSE CHANGELOG* .gitignore aerich.ini
+    
+    # Дополнительная очистка
+    sudo rm -f .env.example
+    sudo rm -f migrate.py
+    sudo rm -f manage.py
+    sudo rm -f ARCHITECTURE*
+    sudo rm -f custom_module*
 }
 
 cleanup_agent_files() {
@@ -225,26 +247,41 @@ cleanup_agent_files() {
 
 # --- ОЧИСТКА МУСОРА ПОСЛЕ УСТАНОВКИ ---
 cleanup_files() {
-    msg_info "🧹 Запуск очистки ненужных файлов..."
+    msg_info "🧹 Запуск финальной очистки..."
 
-    # Удаляем папки, не влияющие на работу
+    # 1. Удаляем папки, не влияющие на работу
     if [ -d "$BOT_INSTALL_PATH/.github" ]; then sudo rm -rf "$BOT_INSTALL_PATH/.github"; fi
     if [ -d "$BOT_INSTALL_PATH/assets" ]; then sudo rm -rf "$BOT_INSTALL_PATH/assets"; fi
 
-    # Удаляем документацию разработчика и лицензии
-    sudo rm -f "$BOT_INSTALL_PATH/custom_module.md"
-    sudo rm -f "$BOT_INSTALL_PATH/custom_module_en.md"
-    sudo rm -f "$BOT_INSTALL_PATH/.gitignore"
-    sudo rm -f "$BOT_INSTALL_PATH/LICENSE"
+    # 2. Удаляем документацию и лишние файлы
+    sudo rm -f "$BOT_INSTALL_PATH/custom_module.md" "$BOT_INSTALL_PATH/custom_module_en.md"
+    sudo rm -f "$BOT_INSTALL_PATH/.gitignore" "$BOT_INSTALL_PATH/LICENSE"
     
-    # README тоже не нужен для работы
-    sudo rm -f "$BOT_INSTALL_PATH/README.md"
-    sudo rm -f "$BOT_INSTALL_PATH/README.en.md"
+    # --- ИЗМЕНЕНИЕ: Оставляем README для корректного отображения версии ---
+    # sudo rm -f "$BOT_INSTALL_PATH/README.md" "$BOT_INSTALL_PATH/README.en.md"
+    
+    sudo rm -f "$BOT_INSTALL_PATH/ARCHITECTURE.md" "$BOT_INSTALL_PATH/ARCHITECTURE.en.md"
+    sudo rm -f "$BOT_INSTALL_PATH/CHANGELOG.md" "$BOT_INSTALL_PATH/CHANGELOG.en.md"
+    sudo rm -f "$BOT_INSTALL_PATH/.env.example"
 
-    # Очистка кэша Python (__pycache__), чтобы освободить место
-    sudo find "$BOT_INSTALL_PATH" -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null
+    # 3. Удаляем файлы, нужные только для установки
+    sudo rm -f "$BOT_INSTALL_PATH/migrate.py"
+    sudo rm -f "$BOT_INSTALL_PATH/requirements.txt"
+    sudo rm -f "$BOT_INSTALL_PATH/aerich.ini"
     
-    # ВАЖНО: deploy.sh и deploy_en.sh НЕ удаляем, они нужны для меню управления.
+    # ПРИМЕЧАНИЕ: manage.py НЕ удаляем, он нужен для CLI-утилиты tgcp-bot.
+
+    # 4. Специфичная очистка для Docker/Systemd
+    if [ -f "${ENV_FILE}" ]; then
+        DEPLOY_MODE_VAL=$(grep '^DEPLOY_MODE=' "${ENV_FILE}" | cut -d'=' -f2 | tr -d '"')
+        if [ "$DEPLOY_MODE_VAL" != "docker" ]; then
+             sudo rm -f "$BOT_INSTALL_PATH/Dockerfile"
+             sudo rm -f "$BOT_INSTALL_PATH/docker-compose.yml"
+        fi
+    fi
+
+    # 5. Чистка кэша Python
+    sudo find "$BOT_INSTALL_PATH" -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null
 
     msg_success "Очистка завершена."
 }
@@ -436,14 +473,12 @@ run_db_migrations() {
     fi
 
     # 4. Инициализация aerich
-    # Добавлено: Сообщение о процессе и || true для обработки ошибок
     if [ ! -f "${BOT_INSTALL_PATH}/aerich.ini" ]; then
         msg_info "Инициализация конфигурации Aerich..."
         $cmd_prefix ${VENV_PATH}/bin/aerich init -t core.config.TORTOISE_ORM >/dev/null 2>&1 || msg_warning "Предупреждение при aerich init (возможно, уже настроено)."
     fi
 
     # 5. Запуск миграций БД
-    # Исправлено: Убрано агрессивное подавление ошибок, добавлены сообщения
     if [ ! -d "${BOT_INSTALL_PATH}/migrations" ]; then
         msg_info "Создание базы данных..."
         if ! $cmd_prefix ${VENV_PATH}/bin/aerich init-db; then
@@ -454,7 +489,7 @@ run_db_migrations() {
         $cmd_prefix ${VENV_PATH}/bin/aerich upgrade >/dev/null 2>&1 || msg_info "База данных уже обновлена."
     fi
 
-    # 6. Запуск БЕЗОПАСНОЙ миграции JSON -> Encrypted (Backup -> Re-encrypt -> Replace)
+    # 6. Запуск БЕЗОПАСНОЙ миграции JSON -> Encrypted
     msg_info "Безопасная миграция конфигурации..."
     if [ -f "${BOT_INSTALL_PATH}/migrate.py" ]; then
         $cmd_prefix ${VENV_PATH}/bin/python "${BOT_INSTALL_PATH}/migrate.py"
@@ -475,14 +510,12 @@ install_systemd_logic() {
         setup_repo_and_dirs "${SERVICE_USER}"
         sudo -u ${SERVICE_USER} ${PYTHON_BIN} -m venv "${VENV_PATH}"
         run_with_spinner "Установка зависимостей" sudo -u ${SERVICE_USER} "${VENV_PATH}/bin/pip" install -r "${BOT_INSTALL_PATH}/requirements.txt"
-        # ДОБАВЛЕНО: Установка tomlkit
         run_with_spinner "Установка доп. пакетов (tomlkit)" sudo -u ${SERVICE_USER} "${VENV_PATH}/bin/pip" install tomlkit
         exec_cmd="sudo -u ${SERVICE_USER}"
     else
         setup_repo_and_dirs "root"
         ${PYTHON_BIN} -m venv "${VENV_PATH}"
         run_with_spinner "Установка зависимостей" "${VENV_PATH}/bin/pip" install -r "${BOT_INSTALL_PATH}/requirements.txt"
-        # ДОБАВЛЕНО: Установка tomlkit
         run_with_spinner "Установка доп. пакетов (tomlkit)" "${VENV_PATH}/bin/pip" install tomlkit
         exec_cmd=""
     fi
@@ -491,26 +524,20 @@ install_systemd_logic() {
     ask_env_details
     write_env_file "systemd" "$mode" ""
 
-    # Запуск миграций (включая JSON)
-    # run_with_spinner здесь может скрывать ошибки интерактивного вывода Aerich, 
-    # но run_db_migrations мы адаптировали.
+    # Запуск миграций (нужен migrate.py и aerich.ini)
     run_db_migrations "$exec_cmd"
 
-    cleanup_files
     create_and_start_service "${SERVICE_NAME}" "${BOT_INSTALL_PATH}/bot.py" "$mode" "Telegram Bot"
     create_and_start_service "${WATCHDOG_SERVICE_NAME}" "${BOT_INSTALL_PATH}/watchdog.py" "root" "Наблюдатель"
-    cleanup_agent_files
 
     # --- CLI UTILS ---
     msg_info "Создание команды 'tgcp-bot'..."
     if [ ! -f "${BOT_INSTALL_PATH}/manage.py" ]; then
-       # Если файла manage.py нет, просто создаем заглушку, но мы его уже создали ранее
        true
     else
        chmod +x "${BOT_INSTALL_PATH}/manage.py"
     fi
     
-    # FIX: Добавлено чтение .env перед запуском
     sudo bash -c "cat > /usr/local/bin/tgcp-bot" <<EOF
 #!/bin/bash
 cd ${BOT_INSTALL_PATH}
@@ -523,12 +550,16 @@ ${VENV_PATH}/bin/python manage.py "\$@"
 EOF
     sudo chmod +x /usr/local/bin/tgcp-bot
 
-    # Проверка создания
     if [ -f "/usr/local/bin/tgcp-bot" ] && [ -x "/usr/local/bin/tgcp-bot" ]; then
         msg_success "Команда 'tgcp-bot' успешно создана!"
     else
         msg_error "Не удалось создать команду 'tgcp-bot'."
     fi
+
+    # === ФИНАЛЬНАЯ ОЧИСТКА ===
+    cleanup_agent_files
+    cleanup_files
+    # =========================
 
     local ip=$(curl -s ipinfo.io/ip)
     echo ""; msg_success "Установка завершена! Агент доступен: http://${ip}:${WEB_PORT}"
@@ -556,8 +587,7 @@ install_docker_logic() {
     create_docker_compose_yml
     local container_name="tg-bot-${mode}"
     write_env_file "docker" "$mode" "${container_name}"
-    cleanup_agent_files
-    cleanup_files
+    
     cd ${BOT_INSTALL_PATH}
     local dc_cmd=""
     if sudo docker compose version &>/dev/null; then dc_cmd="docker compose"; elif command -v docker-compose &>/dev/null; then dc_cmd="docker-compose"; else msg_error "Docker Compose не найден."; return 1; fi
@@ -576,7 +606,6 @@ install_docker_logic() {
     
     # --- CLI UTILS ---
     msg_info "Создание команды 'tgcp-bot' (Docker Wrapper)..."
-    # FIX: Передаем переменные, но в Docker они уже в контейнере
     sudo bash -c "cat > /usr/local/bin/tgcp-bot" <<EOF
 #!/bin/bash
 cd ${BOT_INSTALL_PATH}
@@ -586,12 +615,16 @@ sudo $dc_cmd --profile "\$MODE" exec -T \$CONTAINER python manage.py "\$@"
 EOF
     sudo chmod +x /usr/local/bin/tgcp-bot
 
-    # Проверка создания
     if [ -f "/usr/local/bin/tgcp-bot" ] && [ -x "/usr/local/bin/tgcp-bot" ]; then
         msg_success "Команда 'tgcp-bot' (Docker) успешно создана!"
     else
         msg_error "Не удалось создать команду 'tgcp-bot'."
     fi
+
+    # === ФИНАЛЬНАЯ ОЧИСТКА ===
+    cleanup_agent_files
+    cleanup_files
+    # =========================
 
     msg_success "Установка Docker завершена!"
     echo -e "💡 Используйте команду ${C_BOLD}tgcp-bot${C_RESET} для управления."
@@ -644,8 +677,12 @@ RestartSec=10
 WantedBy=multi-user.target
 EOF
     sudo systemctl daemon-reload; sudo systemctl enable ${NODE_SERVICE_NAME}
-    cleanup_node_files
     run_with_spinner "Запуск Ноды" sudo systemctl restart ${NODE_SERVICE_NAME}
+    
+    # === ФИНАЛЬНАЯ ОЧИСТКА ===
+    cleanup_node_files
+    # =========================
+    
     msg_success "Нода установлена!"
 }
 
@@ -676,22 +713,20 @@ update_bot() {
     cd "${BOT_INSTALL_PATH}"
     if ! run_with_spinner "Git fetch" $exec_cmd git fetch origin; then return 1; fi
     if ! run_with_spinner "Git reset" $exec_cmd git reset --hard "origin/${GIT_BRANCH}"; then return 1; fi
-    cleanup_agent_files
-    cleanup_files
+    
+    # ПРИМЕЧАНИЕ: Здесь очистку НЕ запускаем, так как восстановленные файлы нужны ниже для pip/docker
 
     if [ -f "${ENV_FILE}" ] && grep -q "DEPLOY_MODE=docker" "${ENV_FILE}"; then
         if [ -f "docker-compose.yml" ]; then
             local dc_cmd=""; if sudo docker compose version &>/dev/null; then dc_cmd="docker compose"; else dc_cmd="docker-compose"; fi
             if ! run_with_spinner "Docker Up" sudo $dc_cmd up -d --build; then msg_error "Ошибка Docker."; return 1; fi
-            # Миграция в докере после обновления
+            
             local mode=$(grep '^INSTALL_MODE=' "${ENV_FILE}" | cut -d'=' -f2 | tr -d '"')
             local cn="tg-bot-${mode}"
             sudo $dc_cmd --profile "${mode}" exec -T ${cn} aerich upgrade >/dev/null 2>&1
-
-            msg_info "Миграция JSON файлов в Docker..."
             sudo $dc_cmd --profile "${mode}" exec -T ${cn} python migrate.py >/dev/null 2>&1
             
-            # Обновление CLI wrapper для докера (на всякий случай)
+            # Обновление CLI wrapper для докера
             msg_info "Обновление CLI 'tgcp-bot'..."
             sudo bash -c "cat > /usr/local/bin/tgcp-bot" <<EOF
 #!/bin/bash
@@ -702,7 +737,6 @@ sudo $dc_cmd --profile "\$MODE" exec -T \$CONTAINER python manage.py "\$@"
 EOF
             sudo chmod +x /usr/local/bin/tgcp-bot
             
-            # Проверка создания
             if [ -f "/usr/local/bin/tgcp-bot" ] && [ -x "/usr/local/bin/tgcp-bot" ]; then
                 msg_success "CLI 'tgcp-bot' обновлен."
             fi
@@ -710,14 +744,11 @@ EOF
         else msg_error "Нет docker-compose.yml"; return 1; fi
     else
         run_with_spinner "Обновление pip" $exec_cmd "${VENV_PATH}/bin/pip" install -r "${BOT_INSTALL_PATH}/requirements.txt" --upgrade
-        # ДОБАВЛЕНО: Установка tomlkit при обновлении
         run_with_spinner "Обновление tomlkit" $exec_cmd "${VENV_PATH}/bin/pip" install tomlkit
 
         run_db_migrations "$exec_cmd"
         
-        # Обновление CLI wrapper для systemd
         msg_info "Обновление CLI 'tgcp-bot'..."
-        # FIX: Добавлено чтение .env
         sudo bash -c "cat > /usr/local/bin/tgcp-bot" <<EOF
 #!/bin/bash
 cd ${BOT_INSTALL_PATH}
@@ -730,7 +761,6 @@ ${VENV_PATH}/bin/python manage.py "\$@"
 EOF
         sudo chmod +x /usr/local/bin/tgcp-bot
         
-        # Проверка создания
         if [ -f "/usr/local/bin/tgcp-bot" ] && [ -x "/usr/local/bin/tgcp-bot" ]; then
             msg_success "CLI 'tgcp-bot' обновлен."
         fi
@@ -738,19 +768,41 @@ EOF
         if systemctl list-unit-files | grep -q "^${SERVICE_NAME}.service"; then sudo systemctl restart ${SERVICE_NAME}; fi
         if systemctl list-unit-files | grep -q "^${WATCHDOG_SERVICE_NAME}.service"; then sudo systemctl restart ${WATCHDOG_SERVICE_NAME}; fi
     fi
+
+    # === ФИНАЛЬНАЯ ОЧИСТКА ===
+    cleanup_agent_files
+    cleanup_files
+    # =========================
+
     msg_success "Обновлено."
 }
 
 main_menu() {
-    local local_version=$(get_local_version "$README_FILE")
+    local local_version=$(get_local_version)
+    local remote_version=""
+    
     while true; do
         clear
         echo -e "${C_BLUE}${C_BOLD}╔═══════════════════════════════════╗${C_RESET}"
         echo -e "${C_BLUE}${C_BOLD}║    Менеджер VPS Telegram Бот      ║${C_RESET}"
         echo -e "${C_BLUE}${C_BOLD}╚═══════════════════════════════════╝${C_RESET}"
         check_integrity
-        echo -e "  Ветка: ${GIT_BRANCH} | Версия: ${local_version}"
+        
+        # Запрашиваем remote версию только если еще не получали, чтобы не тупило меню
+        if [ -z "$remote_version" ]; then
+            remote_version=$(get_remote_version)
+        fi
+
+        echo -e "  Ветка: ${GIT_BRANCH}"
         echo -e "  Тип: ${INSTALL_TYPE} | Статус: ${STATUS_MESSAGE}"
+        
+        # Сравнение версий
+        if [ "$local_version" != "$remote_version" ] && [ "$remote_version" != "Не удалось получить" ] && [ "$local_version" != "Не установлен" ] && [ "$local_version" != "Не найдена" ]; then
+             echo -e "  Версия: ${C_YELLOW}Локальная: $local_version (Доступна: $remote_version)${C_RESET}"
+        else
+             echo -e "  Версия: ${C_GREEN}$local_version${C_RESET}"
+        fi
+
         echo "--------------------------------------------------------"
         echo "  1) Обновить бота"
         echo "  2) Удалить бота"

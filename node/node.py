@@ -35,13 +35,9 @@ class RedactingFormatter(logging.Formatter):
         if DEBUG_MODE:
             return msg
         
-        # 1. Tokens
         msg = re.sub(r'\b[a-fA-F0-9]{32,64}\b', '[TOKEN_REDACTED]', msg)
-        # 2. IPs
         msg = re.sub(r'\b(?!(?:127\.0\.0\.1|0\.0\.0\.0|localhost))(?:\d{1,3}\.){3}\d{1,3}\b', '[IP_REDACTED]', msg)
-        # 3. IDs (System/Agent logs might contain IDs)
         msg = re.sub(r'\b(id|user_id|chat_id|user)=(\d+)\b', r'\1=[ID_REDACTED]', msg)
-        # 4. Usernames (rare in node, but consistent)
         msg = re.sub(r'@[\w_]{5,}', '@[USERNAME_REDACTED]', msg)
         
         return msg
@@ -74,14 +70,12 @@ PENDING_RESULTS = []
 LAST_TRAFFIC_STATS = {}
 
 EXTERNAL_IP_CACHE = None 
-LAST_IP_CHECK = 0
-IP_CHECK_INTERVAL = 300 
 
 def get_external_ip():
-    global EXTERNAL_IP_CACHE, LAST_IP_CHECK
-    now = time.time()
+    global EXTERNAL_IP_CACHE
     
-    if EXTERNAL_IP_CACHE and (now - LAST_IP_CHECK < IP_CHECK_INTERVAL):
+    # ИЗМЕНЕНИЕ: Если IP уже получен, просто возвращаем его (кэшируем навсегда пока скрипт работает)
+    if EXTERNAL_IP_CACHE:
         return EXTERNAL_IP_CACHE
 
     services = [
@@ -99,7 +93,6 @@ def get_external_ip():
                 ip = response.text.strip()
                 if re.match(r"^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$", ip):
                     EXTERNAL_IP_CACHE = ip
-                    LAST_IP_CHECK = now
                     logging.info(f"External IP updated: {ip}")
                     return ip
         except Exception:
@@ -109,7 +102,6 @@ def get_external_ip():
         res = subprocess.check_output("curl -4 -s --max-time 5 ifconfig.me", shell=True).decode().strip()
         if re.match(r"^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$", res):
             EXTERNAL_IP_CACHE = res
-            LAST_IP_CHECK = now
             logging.info(f"External IP updated (curl): {res}")
             return res
     except Exception:

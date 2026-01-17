@@ -33,7 +33,8 @@ window.initSettings = function() {
         newBtn.addEventListener('click', async function() {
             newBtn.disabled = true;
             const spinner = '<svg class="animate-spin h-4 w-4 text-gray-500 inline-block mr-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>';
-            updateStatusArea.innerHTML = `${spinner} <span class="text-gray-500">${I18N.web_update_checking || "Checking..."}</span>`;
+            const checkingText = (typeof I18N !== 'undefined' && I18N.web_update_checking) ? I18N.web_update_checking : "Checking...";
+            updateStatusArea.innerHTML = `${spinner} <span class="text-gray-500">${checkingText}</span>`;
             if (btnDoUpdate) btnDoUpdate.classList.add('d-none');
 
             try {
@@ -43,7 +44,8 @@ window.initSettings = function() {
 
                 if (data.update_available) {
                     const infoText = (I18N.web_update_info || "Current: {local} -> New: {remote}").replace('{local}', 'v' + data.local_version).replace('{remote}', 'v' + data.remote_version);
-                    updateStatusArea.innerHTML = `<div><div class="font-bold text-green-600 dark:text-green-400">${I18N.web_update_available_title || "Update Available!"}</div><div class="text-xs text-gray-500 dark:text-gray-400 mt-1">${infoText}</div></div>`;
+                    const updateAvailTitle = (typeof I18N !== 'undefined' && I18N.web_update_available_title) ? I18N.web_update_available_title : "Update Available!";
+                    updateStatusArea.innerHTML = `<div><div class="font-bold text-green-600 dark:text-green-400">${updateAvailTitle}</div><div class="text-xs text-gray-500 dark:text-gray-400 mt-1">${infoText}</div></div>`;
                     targetBranch = data.target_branch;
                     if (btnDoUpdate) btnDoUpdate.classList.remove('d-none');
                 } else {
@@ -72,7 +74,8 @@ window.initSettings = function() {
             newBtnDo.disabled = true;
             if (updateProgress) updateProgress.classList.remove('d-none');
 
-            updateStatusArea.innerHTML = `<span class="text-blue-600 dark:text-blue-400 font-medium animate-pulse">${I18N.web_update_started || "Updating..."}</span>`;
+            const updatingText = (typeof I18N !== 'undefined' && I18N.web_update_started) ? I18N.web_update_started : "Updating...";
+            updateStatusArea.innerHTML = `<span class="text-blue-600 dark:text-blue-400 font-medium animate-pulse">${updatingText}</span>`;
 
             try {
                 const response = await fetch('/api/update/run', {
@@ -222,7 +225,7 @@ function showInputError(el) {
     if (!errorMsg) {
         errorMsg = document.createElement('div');
         errorMsg.className = 'pass-error-msg text-[10px] text-red-500 mt-1 ml-1 font-medium animate-pulse';
-        errorMsg.innerText = 'Заполните поле';
+        errorMsg.innerText = (typeof I18N !== 'undefined' && I18N.web_fill_field) ? I18N.web_fill_field : 'Fill in the field';
         el.parentNode.appendChild(errorMsg);
     }
 }
@@ -338,12 +341,14 @@ async function saveSystemConfig(groupName) {
             }, 2000);
         } else {
             const json = await res.json();
-            await window.showModalAlert(I18N.web_error.replace('{error}', json.error || 'Save failed'), 'Ошибка');
+            const errorShort = (typeof I18N !== 'undefined' && I18N.web_error_short) ? I18N.web_error_short : "Error";
+            await window.showModalAlert(I18N.web_error.replace('{error}', json.error || 'Save failed'), errorShort);
             btn.innerText = originalText;
             toggleSaveButton(config.btnId, true);
         }
     } catch (e) {
-        await window.showModalAlert(I18N.web_conn_error.replace('{error}', e), 'Ошибка соединения');
+        const errorShort = (typeof I18N !== 'undefined' && I18N.web_conn_error_short) ? I18N.web_conn_error_short : "Conn Error";
+        await window.showModalAlert(I18N.web_conn_error.replace('{error}', e), errorShort);
         btn.innerText = originalText;
         toggleSaveButton(config.btnId, true);
     }
@@ -378,12 +383,14 @@ async function clearLogs() {
             }, 2000);
         } else {
             const data = await res.json();
-            await window.showModalAlert(I18N.web_error.replace('{error}', data.error || "Failed"), 'Ошибка');
+            const errorShort = (typeof I18N !== 'undefined' && I18N.web_error_short) ? I18N.web_error_short : "Error";
+            await window.showModalAlert(I18N.web_error.replace('{error}', data.error || "Failed"), errorShort);
             btn.disabled = false;
             btn.innerHTML = originalHTML;
         }
     } catch (e) {
-        await window.showModalAlert(I18N.web_conn_error.replace('{error}', e), 'Ошибка соединения');
+        const errorShort = (typeof I18N !== 'undefined' && I18N.web_conn_error_short) ? I18N.web_conn_error_short : "Conn Error";
+        await window.showModalAlert(I18N.web_conn_error.replace('{error}', e), errorShort);
         btn.disabled = false;
         btn.innerHTML = originalHTML;
     }
@@ -413,7 +420,8 @@ function renderUsers() {
         }).join('');
         if (typeof window.parsePageEmojis === 'function') window.parsePageEmojis();
     } else {
-        tbody.innerHTML = `<tr><td colspan="4" class="px-4 py-3 text-center text-gray-500 text-xs">${(typeof I18N !== 'undefined' && I18N.web_no_users) ? I18N.web_no_users : "No users"}</td></tr>`;
+        const noUsers = (typeof I18N !== 'undefined' && I18N.web_no_users) ? I18N.web_no_users : "No users";
+        tbody.innerHTML = `<tr><td colspan="4" class="px-4 py-3 text-center text-gray-500 text-xs">${noUsers}</td></tr>`;
     }
 }
 
@@ -437,15 +445,17 @@ async function deleteUser(id, name) {
             if (idx > -1) USERS_DATA.splice(idx, 1);
             renderUsers();
         } else {
-            await window.showModalAlert(I18N.web_error.replace('{error}', 'Delete failed'), 'Ошибка');
+            const errorShort = (typeof I18N !== 'undefined' && I18N.web_error_short) ? I18N.web_error_short : "Error";
+            await window.showModalAlert(I18N.web_error.replace('{error}', 'Delete failed'), errorShort);
         }
     } catch (e) {
-        await window.showModalAlert(I18N.web_conn_error.replace('{error}', e), 'Ошибка соединения');
+        const errorShort = (typeof I18N !== 'undefined' && I18N.web_conn_error_short) ? I18N.web_conn_error_short : "Conn Error";
+        await window.showModalAlert(I18N.web_conn_error.replace('{error}', e), errorShort);
     }
 }
 
 async function openAddUserModal() {
-    const id = await window.showModalPrompt("Введите Telegram ID пользователя:", I18N.modal_title_prompt, "123456789");
+    const id = await window.showModalPrompt(I18N.users_add_title || "Введите Telegram ID пользователя:", I18N.modal_title_prompt, "123456789");
     if (!id) return;
 
     try {
@@ -459,10 +469,12 @@ async function openAddUserModal() {
             USERS_DATA.push({ id: id, name: data.name || `ID: ${id}`, role: 'users' });
             renderUsers();
         } else {
-            await window.showModalAlert(I18N.web_error.replace('{error}', data.error || "Unknown"), 'Ошибка');
+            const errorShort = (typeof I18N !== 'undefined' && I18N.web_error_short) ? I18N.web_error_short : "Error";
+            await window.showModalAlert(I18N.web_error.replace('{error}', data.error || "Unknown"), errorShort);
         }
     } catch (e) {
-        await window.showModalAlert(I18N.web_conn_error.replace('{error}', e), 'Ошибка соединения');
+        const errorShort = (typeof I18N !== 'undefined' && I18N.web_conn_error_short) ? I18N.web_conn_error_short : "Conn Error";
+        await window.showModalAlert(I18N.web_conn_error.replace('{error}', e), errorShort);
     }
 }
 
@@ -491,7 +503,7 @@ function renderNodes() {
 }
 
 async function deleteNode(token) {
-    if (!await window.showModalConfirm("Удалить эту ноду?", I18N.modal_title_confirm)) return;
+    if (!await window.showModalConfirm(I18N.node_delete_select || "Удалить эту ноду?", I18N.modal_title_confirm)) return;
 
     try {
         const res = await fetch('/api/nodes/delete', {
@@ -505,10 +517,12 @@ async function deleteNode(token) {
             renderNodes();
         } else {
             const data = await res.json();
-            await window.showModalAlert(I18N.web_error.replace('{error}', data.error || 'Delete failed'), 'Ошибка');
+            const errorShort = (typeof I18N !== 'undefined' && I18N.web_error_short) ? I18N.web_error_short : "Error";
+            await window.showModalAlert(I18N.web_error.replace('{error}', data.error || 'Delete failed'), errorShort);
         }
     } catch (e) {
-        await window.showModalAlert(I18N.web_conn_error.replace('{error}', e), 'Ошибка соединения');
+        const errorShort = (typeof I18N !== 'undefined' && I18N.web_conn_error_short) ? I18N.web_conn_error_short : "Conn Error";
+        await window.showModalAlert(I18N.web_conn_error.replace('{error}', e), errorShort);
     }
 }
 
@@ -533,7 +547,8 @@ async function changePassword() {
     const btn = document.getElementById('btnChangePass');
 
     if (newPass !== confirm) {
-        await window.showModalAlert(I18N.web_pass_mismatch, 'Ошибка');
+        const errorShort = (typeof I18N !== 'undefined' && I18N.web_error_short) ? I18N.web_error_short : "Error";
+        await window.showModalAlert(I18N.web_pass_mismatch, errorShort);
         return;
     }
 
@@ -550,7 +565,8 @@ async function changePassword() {
         const data = await res.json();
 
         if (res.ok) {
-            await window.showModalAlert(I18N.web_pass_changed, 'Успех');
+            const successText = (typeof I18N !== 'undefined' && I18N.web_success) ? I18N.web_success : "Success";
+            await window.showModalAlert(I18N.web_pass_changed, successText);
             currentEl.value = "";
             newPassEl.value = "";
             confirmEl.value = "";
@@ -559,10 +575,12 @@ async function changePassword() {
                 currentEl.dispatchEvent(dummyEvent);
             }
         } else {
-            await window.showModalAlert(I18N.web_error.replace('{error}', data.error), 'Ошибка');
+            const errorShort = (typeof I18N !== 'undefined' && I18N.web_error_short) ? I18N.web_error_short : "Error";
+            await window.showModalAlert(I18N.web_error.replace('{error}', data.error), errorShort);
         }
     } catch (e) {
-        await window.showModalAlert(I18N.web_conn_error.replace('{error}', e), 'Ошибка соединения');
+        const errorShort = (typeof I18N !== 'undefined' && I18N.web_conn_error_short) ? I18N.web_conn_error_short : "Conn Error";
+        await window.showModalAlert(I18N.web_conn_error.replace('{error}', e), errorShort);
     }
     btn.disabled = false;
     btn.innerText = origText;
@@ -598,14 +616,14 @@ async function triggerAutoSave() {
                     statusEl.classList.add('opacity-0');
                 }, 2000);
             } else {
-                statusEl.innerText = "Error";
+                statusEl.innerText = (typeof I18N !== 'undefined' && I18N.web_error_short) ? I18N.web_error_short : "Error";
                 statusEl.classList.add('text-red-500');
             }
         }
     } catch (e) {
         console.error(e);
         if (statusEl) {
-            statusEl.innerText = "Conn Error";
+            statusEl.innerText = (typeof I18N !== 'undefined' && I18N.web_conn_error_short) ? I18N.web_conn_error_short : "Conn Error";
             statusEl.classList.add('text-red-500');
         }
     }
@@ -849,7 +867,7 @@ window.enableAllKeyboard = async function() {
         return;
     }
 
-    const originalText = btn ? btn.innerText : 'Enable All';
+    const originalText = btn ? btn.innerText : (typeof I18N !== 'undefined' && I18N.web_kb_enable_all) ? I18N.web_kb_enable_all : 'Enable All';
     animateBulkButton(btnId, 'loading', originalText);
 
     let changed = false;
@@ -884,7 +902,7 @@ window.disableAllKeyboard = async function() {
         return;
     }
 
-    const originalText = btn ? btn.innerText : 'Disable All';
+    const originalText = btn ? btn.innerText : (typeof I18N !== 'undefined' && I18N.web_kb_disable_all) ? I18N.web_kb_disable_all : 'Disable All';
     animateBulkButton(btnId, 'loading', originalText);
 
     let changed = false;
@@ -922,7 +940,8 @@ async function fetchSessions() {
             renderSessionsMainWidget(data.sessions);
         }
     } catch (e) {
-        container.innerHTML = `<div class="text-red-500 text-sm text-center">Error loading sessions</div>`;
+        const errorLoading = (typeof I18N !== 'undefined' && I18N.web_error_loading_sessions) ? I18N.web_error_loading_sessions : "Error loading sessions";
+        container.innerHTML = `<div class="text-red-500 text-sm text-center">${errorLoading}</div>`;
     }
 }
 
@@ -934,7 +953,8 @@ function renderSessionsMainWidget(sessions) {
     if (currentSession) {
         container.innerHTML = `${renderSessionItem(currentSession)}`;
     } else {
-        container.innerHTML = `<div class="text-gray-500 text-sm text-center">No active sessions</div>`;
+        const noSessions = (typeof I18N !== 'undefined' && I18N.web_no_sessions) ? I18N.web_no_sessions : "No active sessions";
+        container.innerHTML = `<div class="text-gray-500 text-sm text-center">${noSessions}</div>`;
     }
 }
 
@@ -1081,10 +1101,11 @@ async function revokeSession(token) {
                     btnRevokeAll.classList.add('opacity-50', 'cursor-not-allowed');
                 }
             }
-            if (window.showToast) window.showToast("Сессия завершена");
+            if (window.showToast) window.showToast((typeof I18N !== 'undefined' && I18N.web_success) ? I18N.web_success : "Success");
         } else {
             const data = await res.json();
-            await window.showModalAlert(data.error || "Failed", "Error");
+            const errorShort = (typeof I18N !== 'undefined' && I18N.web_error_short) ? I18N.web_error_short : "Error";
+            await window.showModalAlert(data.error || "Failed", errorShort);
         }
     } catch (e) {
         console.error(e);
@@ -1122,7 +1143,8 @@ async function revokeAllSessions() {
             }, 2000);
         } else {
             const data = await res.json();
-            await window.showModalAlert(data.error || "Failed", "Error");
+            const errorShort = (typeof I18N !== 'undefined' && I18N.web_error_short) ? I18N.web_error_short : "Error";
+            await window.showModalAlert(data.error || "Failed", errorShort);
             if (btn) {
                 btn.disabled = false;
                 btn.innerHTML = originalText;

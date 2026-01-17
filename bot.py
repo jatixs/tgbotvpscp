@@ -107,7 +107,8 @@ async def show_main_menu(
         i18n.set_user_lang(user_id, lang)
 
     if str(user_id) not in shared_state.USER_NAMES:
-        await auth.refresh_user_names(bot)
+        # Оптимизация: запускаем в фоне, чтобы не тормозить меню
+        asyncio.create_task(auth.refresh_user_names(bot))
 
     menu_text = _("main_menu_welcome", user_id)
     reply_markup = keyboards.get_main_reply_keyboard(user_id)
@@ -268,28 +269,49 @@ def load_modules():
 
 
 async def shutdown(dispatcher: Dispatcher, bot_instance: Bot, web_runner=None):
-    logging.info("Shutdown signal received.")
-    if web_runner:
-        await web_runner.cleanup()
-
-    await server.cleanup_server()
-
-    await Tortoise.close_connections()
-
+    logging.info("Shutdown signal received. Stopping services...")
+    
     try:
         await dispatcher.stop_polling()
     except Exception:
         pass
+
+    if web_runner:
+        try:
+            # This triggers app['shutdown_event'] via on_shutdown signal we added
+            await asyncio.wait_for(web_runner.cleanup(), timeout=5.0)
+            logging.info("Web server stopped.")
+        except asyncio.TimeoutError:
+            logging.warning("Web server cleanup timed out.")
+        except Exception as e:
+            logging.error(f"Web server cleanup error: {e}")
+
+    await server.cleanup_server()
+
     cancelled_tasks = []
     for task in list(background_tasks):
         if task and not task.done():
             task.cancel()
             cancelled_tasks.append(task)
+            
     if cancelled_tasks:
-        await asyncio.gather(*cancelled_tasks, return_exceptions=True)
+        logging.info(f"Cancelling {len(cancelled_tasks)} background tasks...")
+        try:
+            await asyncio.wait_for(asyncio.gather(*cancelled_tasks, return_exceptions=True), timeout=5.0)
+        except asyncio.TimeoutError:
+            logging.warning("Background tasks cancellation timed out.")
+        except Exception as e:
+            logging.error(f"Error during tasks cancellation: {e}")
+
+    logging.info("Closing DB connections...")
+    try:
+        await asyncio.wait_for(Tortoise.close_connections(), timeout=5.0)
+    except Exception as e:
+        logging.error(f"DB connections close error: {e}")
     if getattr(bot_instance, 'session', None):
         await bot_instance.session.close()
-    logging.info("Bot stopped.")
+    
+    logging.info("Bot stopped successfully.")
 
 
 async def main():
@@ -303,8 +325,8 @@ async def main():
         await asyncio.to_thread(auth.load_users)
         await asyncio.to_thread(utils.load_alerts_config)
         await asyncio.to_thread(i18n.load_user_settings)
-
-        await auth.refresh_user_names(bot)
+        asyncio.create_task(auth.refresh_user_names(bot))
+        
         await utils.initial_reboot_check(bot)
         await utils.initial_restart_check(bot)
 
@@ -314,16 +336,6 @@ async def main():
         web_runner = await server.start_web_server(bot)
         if not web_runner:
             logging.warning("Web Server NOT started.")
-
-        try:
-            for s in (signal.SIGINT, signal.SIGTERM):
-                loop.add_signal_handler(
-                    s, lambda s=s: asyncio.create_task(
-                        shutdown(
-                            dp, bot, web_runner)))
-        except NotImplementedError:
-            pass
-
         logging.info("Starting polling...")
         await bot.delete_webhook(drop_pending_updates=True)
         await dp.start_polling(bot, allowed_updates=dp.resolve_used_update_types())
@@ -332,8 +344,6 @@ async def main():
     except Exception as e:
         logging.critical(f"Critical error: {e}", exc_info=True)
     finally:
-        if web_runner:
-            await web_runner.cleanup()
         await shutdown(dp, bot, web_runner)
 
 if __name__ == "__main__":

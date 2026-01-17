@@ -1,39 +1,29 @@
 /* /core/static/js/common.js */
 
-// --- GLOBAL VARIABLES ---
 const themes = ['dark', 'light', 'system'];
 let currentTheme = localStorage.getItem('theme') || 'system';
 let latestNotificationTime = Math.floor(Date.now() / 1000);
 const pageCache = new Map();
+let sseSource = null;
 
-// --- MODAL STATE VARIABLES ---
-let modalCloseTimer = null;    // Таймер для предотвращения мерцания
-let activeMobileModal = null;  // Активная модалка (для Viewport API)
-let bodyScrollTop = 0;         // Позиция скролла для фиксации body
+let modalCloseTimer = null;
+let activeMobileModal = null;
+let bodyScrollTop = 0;
 
-// --- INITIALIZATION ---
 document.addEventListener("DOMContentLoaded", () => {
     applyThemeUI(currentTheme);
     if (typeof window.parsePageEmojis === 'function') { window.parsePageEmojis(); } else { parsePageEmojis(); }
     initNotifications(); 
+    initSSE();
+    initSessionSync(); // Включаем синхронизацию сессии и Ping
     initHolidayMood(); 
     initAddNodeLogic();
     if (document.getElementById('logsContainer')) {
         if (typeof window.switchLogType === 'function') { window.switchLogType('bot'); }
     }
     pageCache.set(window.location.href, document.documentElement.outerHTML);
-    
-    // Check session on tab focus (except login/reset pages)
-    if (!['/login', '/reset_password'].includes(window.location.pathname)) {
-        document.addEventListener('visibilitychange', () => {
-            if (document.visibilityState === 'visible') {
-                pollNotifications();
-            }
-        });
-    }
 });
 
-// --- HELPER FUNCTIONS ---
 function parsePageEmojis() {
     if (window.twemoji) {
         window.twemoji.parse(document.body, { folder: 'svg', ext: '.svg', base: 'https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/' });
@@ -54,10 +44,9 @@ function copyTextToClipboard(text) {
     else { const t = document.createElement("textarea"); t.value = text; t.style.position = "fixed"; document.body.appendChild(t); t.focus(); t.select(); try { document.execCommand('copy'); showCopyFeedback(); } catch (e) {} document.body.removeChild(t); }
 }
 window.copyTextToClipboard = copyTextToClipboard;
-function showCopyFeedback() { if (window.showToast) window.showToast(typeof I18N !== 'undefined' ? I18N.web_copied : "Скопировано!"); }
+function showCopyFeedback() { if (window.showToast) window.showToast((typeof I18N !== 'undefined' && I18N.web_copied) ? I18N.web_copied : "Copied!"); }
 window.copyToken = copyToken;
 
-// --- TOASTS ---
 let toastContainer = null;
 function getToastContainer() {
     if (!toastContainer) {
@@ -84,7 +73,6 @@ function closeToast(el) { if (!el) return; el.classList.add('opacity-0', 'transl
 window.showToast = showToast;
 window.closeToast = closeToast;
 
-// --- MODALS BASE ---
 function toggleHint(e, id) { 
     if(e) e.stopPropagation(); 
     const el = document.getElementById(id); 
@@ -139,9 +127,8 @@ function validateNodeInput() {
 }
 
 window.openAddNodeModal=openAddNodeModal; window.closeAddNodeModal=closeAddNodeModal; window.validateNodeInput=validateNodeInput;
-async function addNodeDash() { const i = document.getElementById('newNodeNameDash'); const n = i.value.trim(); if(!n) return; try { const r = await fetch('/api/nodes/add', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:n})}); const d = await r.json(); if(r.ok) { document.getElementById('nodeResultDash').classList.remove('hidden'); document.getElementById('newNodeTokenDash').innerText = d.token; document.getElementById('newNodeCmdDash').innerText = d.command; if(typeof NODES_DATA!=='undefined') NODES_DATA.push({token:d.token,name:n,ip:'Unknown'}); if(typeof renderNodes==='function') renderNodes(); if(typeof fetchNodesList==='function') fetchNodesList(); i.value=''; validateNodeInput(); } else { window.showModalAlert(d.error, 'Error'); } } catch(e) { window.showModalAlert(e, 'Error'); } }
+async function addNodeDash() { const i = document.getElementById('newNodeNameDash'); const n = i.value.trim(); if(!n) return; try { const r = await fetch('/api/nodes/add', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:n})}); const d = await r.json(); if(r.ok) { document.getElementById('nodeResultDash').classList.remove('hidden'); document.getElementById('newNodeTokenDash').innerText = d.token; document.getElementById('newNodeCmdDash').innerText = d.command; if(typeof NODES_DATA!=='undefined') NODES_DATA.push({token:d.token,name:n,ip:'Unknown'}); if(typeof renderNodes==='function') renderNodes(); if(typeof fetchNodesList==='function') fetchNodesList(); i.value=''; validateNodeInput(); } else { const errTxt = (typeof I18N !== 'undefined' && I18N.web_error_short) ? I18N.web_error_short : 'Error'; window.showModalAlert(d.error, errTxt); } } catch(e) { const errTxt = (typeof I18N !== 'undefined' && I18N.web_error_short) ? I18N.web_error_short : 'Error'; window.showModalAlert(e, errTxt); } }
 
-// --- HOLIDAY ---
 function isHolidayPeriod() { const now = new Date(); return (now.getMonth() === 11 && now.getDate() === 31) || (now.getMonth() === 0 && now.getDate() <= 14); }
 let snowInterval = null;
 function initHolidayMood() {
@@ -201,7 +188,83 @@ function startSnow() {
 }
 function stopSnow() { clearInterval(snowInterval); snowInterval = null; if (document.getElementById('snow-container')) document.getElementById('snow-container').innerHTML = ''; }
 
-// --- NOTIFICATIONS & SESSION CHECK ---
+function initSSE() {
+    if (window.location.pathname === '/login' || window.location.pathname.startsWith('/reset_password')) return;
+    
+    if (sseSource) return;
+
+    sseSource = new EventSource('/api/events');
+
+    sseSource.addEventListener('notifications', (e) => {
+        try {
+            const data = JSON.parse(e.data);
+            if (data.notifications && data.notifications.length > 0) {
+                let maxTime = latestNotificationTime;
+                data.notifications.forEach(notif => {
+                    if (notif.time > latestNotificationTime) {
+                        showToast(notif.text);
+                        if (notif.time > maxTime) maxTime = notif.time;
+                    }
+                });
+                latestNotificationTime = maxTime;
+            }
+            updateNotifUI(data.notifications, data.unread_count);
+        } catch (err) {
+            console.error("Error parsing notification event", err);
+        }
+    });
+
+    sseSource.addEventListener('session_status', (e) => {
+        if (e.data === 'expired') {
+            handleSessionExpired();
+        }
+    });
+
+    sseSource.onerror = () => {
+        checkSessionStatus();
+    };
+
+    window.sseSource = sseSource;
+}
+// --- LOGIC: Cross-Tab Session Sync & Expiry Check ---
+function initSessionSync() {
+    // FIX: Do not run session sync on login or reset pages
+    if (window.location.pathname === '/login' || window.location.pathname.startsWith('/reset_password')) return;
+
+    // 1. Слушаем события из других вкладок (выход из аккаунта)
+    window.addEventListener('storage', (e) => {
+        if (e.key === 'session_status' && e.newValue && e.newValue.startsWith('logged_out')) {
+            handleSessionExpired();
+        }
+    });
+
+    // 2. Периодически проверяем валидность сессии (на случай таймаута на сервере или отзыва)
+    // Каждые 10 секунд
+    setInterval(checkSessionStatus, 10000);
+
+    // 3. Перехватываем локальный выход, чтобы уведомить другие вкладки
+    const logoutForms = document.querySelectorAll('form[action="/logout"]');
+    logoutForms.forEach(form => {
+        form.addEventListener('submit', () => {
+            // Устанавливаем флаг с timestamp, чтобы событие точно сработало
+            localStorage.setItem('session_status', 'logged_out_' + Date.now());
+        });
+    });
+}
+
+function checkSessionStatus() {
+    if (document.getElementById('session-expired-overlay')) return;
+    
+    // Добавляем timestamp для обхода кеша
+    fetch('/api/settings/language?_=' + Date.now(), { method: 'HEAD' })
+        .then(res => {
+            if (res.status === 401 || res.status === 403) {
+                handleSessionExpired();
+            }
+        })
+        .catch(() => {});
+}
+
 let lastUnreadCount = -1;
 function initNotifications() {
     if (window.location.pathname === '/login' || window.location.pathname.startsWith('/reset_password')) return;
@@ -218,15 +281,20 @@ function initNotifications() {
         newClearBtn.addEventListener('click', clearNotifications);
     }
     document.addEventListener('click', (e) => { if (!e.target.closest('#notifDropdown') && !e.target.closest('#notifBtn')) closeNotifications(); });
-    pollNotifications();
-    setInterval(pollNotifications, 3000);
 }
 
 function handleSessionExpired() {
     if (document.getElementById('session-expired-overlay')) return;
-    const title = (typeof I18N !== 'undefined' && I18N.web_session_expired) ? I18N.web_session_expired : "Сессия истекла";
-    const msg = (typeof I18N !== 'undefined' && I18N.web_please_relogin) ? I18N.web_please_relogin : "Пожалуйста, авторизуйтесь заново";
-    const btnText = (typeof I18N !== 'undefined' && I18N.web_login_btn) ? I18N.web_login_btn : "Войти";
+    
+    // Закрываем SSE соединение, чтобы остановить получение данных
+    if (window.sseSource) {
+        window.sseSource.close();
+        window.sseSource = null;
+    }
+
+    const title = (typeof I18N !== 'undefined' && I18N.web_session_expired) ? I18N.web_session_expired : "Session expired";
+    const msg = (typeof I18N !== 'undefined' && I18N.web_please_relogin) ? I18N.web_please_relogin : "Please login again";
+    const btnText = (typeof I18N !== 'undefined' && I18N.web_login_btn) ? I18N.web_login_btn : "Login";
 
     const overlay = document.createElement('div');
     overlay.id = 'session-expired-overlay';
@@ -259,37 +327,14 @@ function handleSessionExpired() {
     });
 }
 
-async function pollNotifications() {
-    if (window.location.pathname === '/login' || window.location.pathname.startsWith('/reset_password')) return;
-    try {
-        const res = await fetch('/api/notifications/list');
-        if (res.status === 401) {
-            handleSessionExpired();
-            return;
-        }
-        if (!res.ok) return;
-        const data = await res.json();
-        if (data.notifications && data.notifications.length > 0) {
-            let maxTime = latestNotificationTime;
-            data.notifications.forEach(notif => {
-                if (notif.time > latestNotificationTime) {
-                    showToast(notif.text);
-                    if (notif.time > maxTime) maxTime = notif.time;
-                }
-            });
-            latestNotificationTime = maxTime;
-        }
-        updateNotifUI(data.notifications, data.unread_count);
-    } catch (e) {}
-}
 async function clearNotifications(e) {
     if (e) e.stopPropagation();
-    const msg = (typeof I18N !== 'undefined' && I18N.web_clear_notif_confirm) ? I18N.web_clear_notif_confirm : "Очистить все уведомления?";
-    const title = (typeof I18N !== 'undefined' && I18N.modal_title_confirm) ? I18N.modal_title_confirm : "Подтверждение";
+    const msg = (typeof I18N !== 'undefined' && I18N.web_clear_notif_confirm) ? I18N.web_clear_notif_confirm : "Clear all notifications?";
+    const title = (typeof I18N !== 'undefined' && I18N.modal_title_confirm) ? I18N.modal_title_confirm : "Confirmation";
     if (!await window.showModalConfirm(msg, title)) return;
     try { 
         const res = await fetch('/api/notifications/clear', { method: 'POST' }); 
-        if (res.ok) { updateNotifUI([], 0); if (window.showToast) window.showToast((typeof I18N !== 'undefined' && I18N.web_logs_cleared_alert) ? I18N.web_logs_cleared_alert : "Очищено!"); }
+        if (res.ok) { updateNotifUI([], 0); if (window.showToast) window.showToast((typeof I18N !== 'undefined' && I18N.web_logs_cleared_alert) ? I18N.web_logs_cleared_alert : "Cleared!"); }
     } catch (e) { console.error("Clear notifications error:", e); }
 }
 function updateNotifUI(list, count) {
@@ -307,7 +352,7 @@ function updateNotifUI(list, count) {
     lastUnreadCount = count;
     const clearBtn = document.getElementById('notifClearBtn');
     if (clearBtn) { if (list.length > 0) clearBtn.classList.remove('hidden'); else clearBtn.classList.add('hidden'); }
-    if (list.length === 0) { listContainer.innerHTML = `<div class="p-4 text-center text-gray-500 text-sm">${(typeof I18N !== 'undefined' ? I18N.web_no_notifications : "Нет уведомлений")}</div>`; } 
+    if (list.length === 0) { listContainer.innerHTML = `<div class="p-4 text-center text-gray-500 text-sm">${(typeof I18N !== 'undefined' ? I18N.web_no_notifications : "No notifications")}</div>`; } 
     else { listContainer.innerHTML = list.map(n => `<div class="notif-item"><div class="text-sm text-gray-800 dark:text-gray-200 leading-snug">${n.text}</div><div class="notif-time">${new Date(n.time * 1000).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</div></div>`).join(''); }
 }
 function toggleNotifications() {
@@ -325,15 +370,10 @@ function toggleTheme() {
     applyThemeUI(currentTheme); 
     document.documentElement.classList.toggle('dark', currentTheme==='dark'||(currentTheme==='system'&&window.matchMedia('(prefers-color-scheme: dark)').matches)); 
     
-    // --- ДОБАВЛЕНО: Диспатч события для обновления графиков ---
     window.dispatchEvent(new Event('themeChanged'));
 }
 
 function applyThemeUI(t) { ['iconMoon','iconSun','iconSystem'].forEach(id=>document.getElementById(id)?.classList.add('hidden')); if(t==='dark') document.getElementById('iconMoon')?.classList.remove('hidden'); else if(t==='light') document.getElementById('iconSun')?.classList.remove('hidden'); else document.getElementById('iconSystem')?.classList.remove('hidden'); }
-
-// ======================================================================
-// === MODAL ANIMATIONS & VISUAL VIEWPORT LOGIC ===
-// ======================================================================
 
 function handleVisualViewportResize() {
     if (!activeMobileModal) return;
@@ -507,7 +547,8 @@ function _showSystemModalBase(title, message, type = 'alert', placeholder = '', 
             if (btnOk && I18N.modal_btn_ok) btnOk.innerText = I18N.modal_btn_ok;
         }
 
-        document.getElementById('sysModalTitle').innerText = title;
+        const t = (typeof I18N !== 'undefined' && I18N['modal_title_' + type]) ? I18N['modal_title_' + type] : (title || 'Alert');
+        document.getElementById('sysModalTitle').innerText = t;
         document.getElementById('sysModalMessage').innerHTML = message ? String(message).replace(/\n/g, '<br>') : "";
         
         const input = document.getElementById('sysModalInput');
@@ -542,10 +583,6 @@ function _showSystemModalBase(title, message, type = 'alert', placeholder = '', 
 window.showModalAlert = (m, t) => _showSystemModalBase(t || 'Alert', m, 'alert');
 window.showModalConfirm = (m, t) => _showSystemModalBase(t || 'Confirm', m, 'confirm');
 window.showModalPrompt = (m, t, p, it) => _showSystemModalBase(t || 'Prompt', m, 'prompt', p, it);
-
-// ======================================================================
-// === SPA PAGE TRANSITIONS ===
-// ======================================================================
 
 function prefetchUrl(url) {
     if (pageCache.has(url)) return; 
@@ -619,6 +656,30 @@ document.addEventListener('click', async (e) => {
                 currentMain.className = newMain.className;
                 currentNav.innerHTML = newNav.innerHTML;
                 currentNav.className = newNav.className;
+
+                const scripts = doc.querySelectorAll('script');
+                scripts.forEach(s => {
+                    const content = s.innerText || s.textContent;
+                    if (content && (
+                        content.includes('const I18N') || 
+                        content.includes('const USERS_DATA') || 
+                        content.includes('const NODES_DATA') || 
+                        content.includes('const KEYBOARD_CONFIG') ||
+                        content.includes('const USER_ROLE')
+                    )) {
+                        try {
+                            const patched = content
+                                .replace(/const\s+I18N\s*=/g, 'window.I18N =')
+                                .replace(/const\s+USERS_DATA\s*=/g, 'window.USERS_DATA =')
+                                .replace(/const\s+NODES_DATA\s*=/g, 'window.NODES_DATA =')
+                                .replace(/const\s+KEYBOARD_CONFIG\s*=/g, 'window.KEYBOARD_CONFIG =')
+                                .replace(/const\s+USER_ROLE\s*=/g, 'window.USER_ROLE =');
+                            (1, eval)(patched);
+                        } catch (err) {
+                            console.error("Error evaluating injected script:", err);
+                        }
+                    }
+                });
                 
                 window.scrollTo(0, 0);
                 window.history.pushState({}, '', url);
@@ -653,6 +714,5 @@ window.addEventListener('popstate', async () => {
     window.location.reload(); 
 });
 
-// Экспорт функций анимации для использования в других скриптах (например, settings.js)
 window.animateModalOpen = animateModalOpen;
 window.animateModalClose = animateModalClose;
