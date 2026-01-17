@@ -743,8 +743,8 @@ async def handle_node_delete(request):
 
 async def handle_node_rename(request):
     user = get_current_user(request)
-    if not user or user['role'] != 'admins':
-        return web.json_response({"error": "Admin required"}, status=403)
+    if not user or user['id'] != ADMIN_USER_ID:
+        return web.json_response({"error": "Only Main Admin required"}, status=403)
     try:
         data = await request.json()
         token = data.get("token")
@@ -759,7 +759,6 @@ async def handle_node_rename(request):
             return web.json_response({"error": "Node not found"}, status=404)
     except Exception as e:
         return web.json_response({"error": str(e)}, status=500)
-
 
 async def handle_nodes_list_json(request):
     user = get_current_user(request)

@@ -493,9 +493,11 @@ function renderNodes() {
             <td class="px-2 sm:px-4 py-3 font-medium text-sm text-gray-900 dark:text-white w-full sm:w-auto">
                 <div id="disp_name_${n.token}" class="flex items-center gap-2 max-w-[120px] sm:max-w-none">
                     <span class="truncate block" title="${escapeHtml(n.name)}">${escapeHtml(n.name)}</span>
+                    ${IS_MAIN_ADMIN ? `
                     <button onclick="startNodeRename('${n.token}')" class="text-gray-400 hover:text-blue-500 p-1 flex-shrink-0 transition-colors">
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
                     </button>
+                    ` : ''}
                 </div>
                 <div id="edit_name_${n.token}" class="hidden flex items-center gap-1">
                     <input type="text" id="input_name_${n.token}" value="${escapeHtml(n.name)}" class="bg-white dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded px-2 py-1 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-blue-500 w-24 sm:w-48 transition-all" onkeydown="handleSettingsRenameKeydown(event, '${n.token}')">
@@ -505,7 +507,7 @@ function renderNodes() {
                     </div>
                 </div>
             </td>
-            <td class="px-2 sm:px-4 py-3 text-xs text-gray-500 dark:text-gray-400">${n.ip || 'Unknown'}</td>
+            <td class="px-2 sm:px-4 py-3 text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">${n.ip || 'Unknown'}</td>
             <td class="px-2 sm:px-4 py-3 font-mono text-[10px] text-gray-400 dark:text-gray-500 truncate max-w-[80px]" title="${n.token}">${n.token.substring(0, 8)}...</td>
             <td class="px-2 sm:px-4 py-3 text-right">
                 <button onclick="deleteNode('${n.token}')" class="text-red-500 hover:text-red-700 dark:hover:text-red-300 transition p-1" title="Delete">
@@ -519,6 +521,7 @@ function renderNodes() {
     }
 }
 
+// Глобальные функции переименования
 window.startNodeRename = function(token) {
     document.getElementById(`disp_name_${token}`).classList.add('hidden');
     document.getElementById(`edit_name_${token}`).classList.remove('hidden');
