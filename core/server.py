@@ -797,6 +797,7 @@ async def handle_settings_page(request):
         "web_update_placeholder": _("web_update_placeholder", lang), "web_update_check_btn": _("web_update_check_btn", lang), "web_update_do_btn": _("web_update_do_btn", lang), "web_notifications_title": _("web_notifications_title", lang), "web_clear_notifications": _("web_clear_notifications", lang), "web_logout": _("web_logout", lang),
         "web_fill_field": _("web_fill_field", lang), "web_conn_error_short": _("web_conn_error_short", lang), "web_error_short": _("web_error_short", lang), "web_success": _("web_success", lang), "web_no_sessions": _("web_no_sessions", lang), "web_error_loading_sessions": _("web_error_loading_sessions", lang), "web_kb_enable_all": _("web_kb_enable_all", lang), "web_kb_disable_all": _("web_kb_disable_all", lang), "web_click_copy": _("web_click_copy", lang), "web_server_name_placeholder": _("web_server_name_placeholder", lang),
         "web_session_expired": _("web_session_expired", lang), "web_please_relogin": _("web_please_relogin", lang), "web_login_btn": _("web_login_btn", lang),
+        "web_add_user_prompt": _("web_add_user_prompt", lang), 
     }
     for btn_key, conf_key in BTN_CONFIG_MAP.items():
         i18n_data[f"lbl_{conf_key}"] = _(btn_key, lang)
