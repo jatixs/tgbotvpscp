@@ -455,7 +455,10 @@ async function deleteUser(id, name) {
 }
 
 async function openAddUserModal() {
-    const id = await window.showModalPrompt(I18N.users_add_title || "Введите Telegram ID пользователя:", I18N.modal_title_prompt, "123456789");
+	const promptText = (typeof I18N !== 'undefined' && I18N.web_add_user_prompt) ? I18N.web_add_user_prompt : "Введите Telegram ID пользователя:";
+    const titleText = (typeof I18N !== 'undefined' && I18N.modal_title_prompt) ? I18N.modal_title_prompt : "Ввод данных";
+    const id = await window.showModalPrompt(promptText, titleText, "123456789");
+    
     if (!id) return;
 
     try {
