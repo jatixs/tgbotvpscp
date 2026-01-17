@@ -169,6 +169,11 @@ async def process_node_name(message: types.Message, state: FSMContext):
 async def cq_node_rename(callback: types.CallbackQuery, state: FSMContext):
     user_id = callback.from_user.id
     lang = get_user_lang(user_id)
+    
+    if user_id != config.ADMIN_USER_ID:
+        await callback.answer(_("access_denied_no_rights", lang), show_alert=True)
+        return
+
     token = callback.data.replace("node_rename_", "")
 
     node = await nodes_db.get_node_by_token(token)
@@ -192,6 +197,12 @@ async def cq_node_rename(callback: types.CallbackQuery, state: FSMContext):
 async def process_node_rename(message: types.Message, state: FSMContext):
     user_id = message.from_user.id
     lang = get_user_lang(user_id)
+    
+    if user_id != config.ADMIN_USER_ID:
+        await state.clear()
+        await message.answer(_("access_denied_no_rights", lang))
+        return
+
     data = await state.get_data()
     token = data.get("rename_token")
 
