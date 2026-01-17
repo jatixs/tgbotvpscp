@@ -490,17 +490,19 @@ function renderNodes() {
     if (NODES_DATA.length > 0) {
         tbody.innerHTML = NODES_DATA.map(n => `
         <tr class="border-b border-gray-100 dark:border-white/5 hover:bg-gray-50 dark:hover:bg-white/5 transition group">
-            <td class="px-2 sm:px-4 py-3 font-medium text-sm text-gray-900 dark:text-white break-all max-w-[150px] sm:max-w-none">
-                <div id="disp_name_${n.token}" class="flex items-center gap-2">
-                    <span>${escapeHtml(n.name)}</span>
-                    <button onclick="startNodeRename('${n.token}')" class="text-gray-400 hover:text-blue-500 p-1">
+            <td class="px-2 sm:px-4 py-3 font-medium text-sm text-gray-900 dark:text-white w-full sm:w-auto">
+                <div id="disp_name_${n.token}" class="flex items-center gap-2 max-w-[120px] sm:max-w-none">
+                    <span class="truncate block" title="${escapeHtml(n.name)}">${escapeHtml(n.name)}</span>
+                    <button onclick="startNodeRename('${n.token}')" class="text-gray-400 hover:text-blue-500 p-1 flex-shrink-0 transition-colors">
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
                     </button>
                 </div>
                 <div id="edit_name_${n.token}" class="hidden flex items-center gap-1">
-                    <input type="text" id="input_name_${n.token}" value="${escapeHtml(n.name)}" class="bg-white dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded px-2 py-1 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-blue-500 w-32 sm:w-48" onkeydown="handleSettingsRenameKeydown(event, '${n.token}')">
-                    <button onclick="saveNodeRename('${n.token}')" class="text-green-500 hover:text-green-600 p-1"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg></button>
-                    <button onclick="cancelNodeRename('${n.token}')" class="text-red-500 hover:text-red-600 p-1"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg></button>
+                    <input type="text" id="input_name_${n.token}" value="${escapeHtml(n.name)}" class="bg-white dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded px-2 py-1 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-blue-500 w-24 sm:w-48 transition-all" onkeydown="handleSettingsRenameKeydown(event, '${n.token}')">
+                    <div class="flex items-center flex-shrink-0">
+                        <button onclick="saveNodeRename('${n.token}')" class="text-green-500 hover:text-green-600 p-1"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg></button>
+                        <button onclick="cancelNodeRename('${n.token}')" class="text-red-500 hover:text-red-600 p-1"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg></button>
+                    </div>
                 </div>
             </td>
             <td class="px-2 sm:px-4 py-3 text-xs text-gray-500 dark:text-gray-400">${n.ip || 'Unknown'}</td>
