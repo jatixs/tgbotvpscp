@@ -70,7 +70,20 @@ run_with_spinner() {
     return $exit_code
 }
 
-get_local_version() { if [ -f "$README_FILE" ]; then grep -oP 'img\.shields\.io/badge/version-v\K[\d\.]+' "$README_FILE" || echo "Не найдена"; else echo "Не установлен"; fi; }
+# --- Работа с версиями ---
+
+get_remote_version() {
+    local remote_ver=$(curl -s "https://raw.githubusercontent.com/${GITHUB_REPO}/${GIT_BRANCH}/README.md" | grep -oP 'img\.shields\.io/badge/version-v\K[\d\.]+')
+    if [ -z "$remote_ver" ]; then echo "Не удалось получить"; else echo "$remote_ver"; fi
+}
+
+get_local_version() { 
+    if [ -f "$README_FILE" ]; then 
+        grep -oP 'img\.shields\.io/badge/version-v\K[\d\.]+' "$README_FILE" || echo "Не найдена"
+    else 
+        echo "Не установлен"
+    fi
+}
 
 INSTALL_TYPE="НЕТ"; STATUS_MESSAGE="Проверка не проводилась."
 check_integrity() {
@@ -216,9 +229,10 @@ load_cached_env() {
 cleanup_node_files() {
     cd ${BOT_INSTALL_PATH}
     # Удаляем всё лишнее для режима Ноды (Клиента)
-    sudo rm -rf core modules bot.py watchdog.py Dockerfile docker-compose.yml .git .github config/users.json config/alerts_config.json deploy.sh deploy_en.sh requirements.txt README* LICENSE CHANGELOG* .gitignore aerich.ini
+    # README НЕ удаляем, чтобы видеть версию
+    sudo rm -rf core modules bot.py watchdog.py Dockerfile docker-compose.yml .git .github config/users.json config/alerts_config.json deploy.sh deploy_en.sh requirements.txt LICENSE CHANGELOG* .gitignore aerich.ini
     
-    # Дополнительная очистка для Ноды
+    # Дополнительная очистка
     sudo rm -f .env.example
     sudo rm -f migrate.py
     sudo rm -f manage.py
@@ -242,7 +256,10 @@ cleanup_files() {
     # 2. Удаляем документацию и лишние файлы
     sudo rm -f "$BOT_INSTALL_PATH/custom_module.md" "$BOT_INSTALL_PATH/custom_module_en.md"
     sudo rm -f "$BOT_INSTALL_PATH/.gitignore" "$BOT_INSTALL_PATH/LICENSE"
-    sudo rm -f "$BOT_INSTALL_PATH/README.md" "$BOT_INSTALL_PATH/README.en.md"
+    
+    # --- ИЗМЕНЕНИЕ: Оставляем README для корректного отображения версии ---
+    # sudo rm -f "$BOT_INSTALL_PATH/README.md" "$BOT_INSTALL_PATH/README.en.md"
+    
     sudo rm -f "$BOT_INSTALL_PATH/ARCHITECTURE.md" "$BOT_INSTALL_PATH/ARCHITECTURE.en.md"
     sudo rm -f "$BOT_INSTALL_PATH/CHANGELOG.md" "$BOT_INSTALL_PATH/CHANGELOG.en.md"
     sudo rm -f "$BOT_INSTALL_PATH/.env.example"
@@ -761,15 +778,31 @@ EOF
 }
 
 main_menu() {
-    local local_version=$(get_local_version "$README_FILE")
+    local local_version=$(get_local_version)
+    local remote_version=""
+    
     while true; do
         clear
         echo -e "${C_BLUE}${C_BOLD}╔═══════════════════════════════════╗${C_RESET}"
         echo -e "${C_BLUE}${C_BOLD}║    Менеджер VPS Telegram Бот      ║${C_RESET}"
         echo -e "${C_BLUE}${C_BOLD}╚═══════════════════════════════════╝${C_RESET}"
         check_integrity
-        echo -e "  Ветка: ${GIT_BRANCH} | Версия: ${local_version}"
+        
+        # Запрашиваем remote версию только если еще не получали, чтобы не тупило меню
+        if [ -z "$remote_version" ]; then
+            remote_version=$(get_remote_version)
+        fi
+
+        echo -e "  Ветка: ${GIT_BRANCH}"
         echo -e "  Тип: ${INSTALL_TYPE} | Статус: ${STATUS_MESSAGE}"
+        
+        # Сравнение версий
+        if [ "$local_version" != "$remote_version" ] && [ "$remote_version" != "Не удалось получить" ] && [ "$local_version" != "Не установлен" ] && [ "$local_version" != "Не найдена" ]; then
+             echo -e "  Версия: ${C_YELLOW}Локальная: $local_version (Доступна: $remote_version)${C_RESET}"
+        else
+             echo -e "  Версия: ${C_GREEN}$local_version${C_RESET}"
+        fi
+
         echo "--------------------------------------------------------"
         echo "  1) Обновить бота"
         echo "  2) Удалить бота"
