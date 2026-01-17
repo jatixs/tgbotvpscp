@@ -22,7 +22,7 @@ from .config import (
     save_keyboard_config, KEYBOARD_CONFIG, DEPLOY_MODE, TG_BOT_NAME
 )
 from . import config as current_config
-from .shared_state import NODE_TRAFFIC_MONITORS, ALLOWED_USERS, USER_NAMES, AUTH_TOKENS, ALERTS_CONFIG, AGENT_HISTORY, WEB_NOTIFICATIONS
+from .shared_state import NODE_TRAFFIC_MONITORS, ALLOWED_USERS, USER_NAMES, AUTH_TOKENS, ALERTS_CONFIG, AGENT_HISTORY, WEB_NOTIFICATIONS, WEB_USER_LAST_READ
 from .i18n import STRINGS, get_user_lang, set_user_lang, get_text as _
 from .config import DEFAULT_LANGUAGE
 from .utils import get_country_flag, save_alerts_config, get_host_path, get_app_version
@@ -196,7 +196,8 @@ def get_current_user(request):
 def _get_avatar_html(user):
     raw = user.get('photo_url', '')
     if raw.startswith('http'):
-        return f'<img src="{raw}" alt="ava" class="w-6 h-6 rounded-full flex-shrink-0">'
+        return f'<img src="{
+            raw}" alt="ava" class="w-6 h-6 rounded-full flex-shrink-0">'
     return f'<span class="text-lg leading-none select-none">{raw}</span>'
 
 
@@ -432,21 +433,27 @@ async def handle_dashboard(request):
             0) < NODE_OFFLINE_TIMEOUT)
     role = user.get('role', 'users')
     role_color = "green" if role == "admins" else "gray"
-    role_badge_html = f'<span class="ml-2 px-1.5 py-0.5 rounded text-[10px] border border-{role_color}-500/30 bg-{role_color}-100 dark:bg-{role_color}-500/20 text-{role_color}-600 dark:text-{role_color}-400 uppercase font-bold align-middle">{role}</span>'
+    
+    role_badge_html = f'<span class="ml-2 px-2 py-0.5 rounded text-[10px] border border-{role_color}-500/30 bg-{role_color}-100 dark:bg-{role_color}-500/20 text-{role_color}-600 dark:text-{role_color}-400 uppercase font-bold align-middle">{role}</span>'
 
     node_action_btn = ""
     settings_btn = ""
     if user_id == ADMIN_USER_ID:
-        node_action_btn = f"""<button onclick="openAddNodeModal()" class="inline-flex items-center gap-1.5 py-1.5 px-3 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold transition shadow-lg shadow-blue-500/20"><svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path></svg>{_("web_add_node_section", lang)}</button>"""
-        settings_btn = f"""<a href="/settings" class="flex items-center justify-center w-8 h-8 rounded-lg hover:bg-black/5 dark:hover:bg-white/10 transition text-gray-600 dark:text-gray-400" title="{_("web_settings_button", lang)}"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg></a>"""
+        node_action_btn = f"""<button onclick="openAddNodeModal()" class="inline-flex items-center gap-1.5 py-1.5 px-3 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold transition shadow-lg shadow-blue-500/20"><svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path></svg>{
+            _("web_add_node_section", lang)}</button>"""
+        settings_btn = f"""<a href="/settings" class="flex items-center justify-center w-8 h-8 rounded-lg hover:bg-black/5 dark:hover:bg-white/10 transition text-gray-600 dark:text-gray-400" title="{
+            _("web_settings_button", lang)}"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg></a>"""
+
+    clean_version = APP_VERSION.lstrip('v')
+    display_version = f"v{clean_version}"
 
     context = {
         "web_title": f"{_('web_dashboard_title', lang)} - {TG_BOT_NAME}",
-        "web_brand_name": _("web_brand_name", lang),
-        "web_version": APP_VERSION.lstrip('v'),
+        "web_brand_name": TG_BOT_NAME,
+        "web_version": display_version,
+        "role_badge": role_badge_html,
         "cache_ver": CACHE_VER,
         "web_dashboard_title": _("web_dashboard_title", lang),
-        "role_badge": role_badge_html,
         "user_avatar": _get_avatar_html(user),
         "user_name": user.get('first_name', 'User'),
         "nodes_count": str(nodes_count),
@@ -494,7 +501,7 @@ async def handle_dashboard(request):
         "web_clear_logs_btn": _("web_clear_logs_btn", lang),
         "web_logout": _("web_logout", lang),
         "web_access_denied": _("web_access_denied", lang),
-        "web_logs_protected_desc": _("web_logs_protected_desc", lang),
+        "web_logs_protected_desc": _("web_logs_protected_desc", lang),    
         "web_node_last_seen_label": _("web_node_last_seen", lang),
         "web_node_traffic": _("web_node_traffic", lang),
         "user_role_js": f"const USER_ROLE = '{role}';",
@@ -701,7 +708,8 @@ async def handle_node_add(request):
             'X-Forwarded-Proto') == "https" else "http"
         lang = get_user_lang(user['id'])
         script = "deploy_en.sh" if lang == "en" else "deploy.sh"
-        cmd = f"bash <(wget -qO- https://raw.githubusercontent.com/jatixs/tgbotvpscp/main/{script}) --agent={proto}://{host} --token={token}"
+        cmd = f"bash <(wget -qO- https://raw.githubusercontent.com/jatixs/tgbotvpscp/main/{
+            script}) --agent={proto}://{host} --token={token}"
         return web.json_response(
             {"status": "ok", "token": token, "command": cmd})
     except Exception as e:
@@ -795,7 +803,7 @@ async def handle_settings_page(request):
 
     context = {
         "web_title": f"{_('web_settings_page_title', lang)} - {TG_BOT_NAME}",
-        "web_brand_name": _("web_brand_name", lang),
+        "web_brand_name": TG_BOT_NAME,
         "user_name": user.get('first_name'),
         "user_avatar": _get_avatar_html(user),
         "users_data_json": users_json,
@@ -856,7 +864,8 @@ async def handle_settings_page(request):
         "web_kb_disable_all": _("web_kb_disable_all", lang),
         "web_kb_modal_title": _("web_kb_modal_title", lang),
         "web_kb_done": _("web_kb_done", lang),
-        "web_version": CACHE_VER,
+        "web_version": APP_VERSION.lstrip('v'),
+        "cache_ver": CACHE_VER,
         "web_update_section": _("web_update_section", lang),
         "web_update_placeholder": _("web_update_placeholder", lang),
         "web_update_check_btn": _("web_update_check_btn", lang),
@@ -1262,7 +1271,6 @@ async def handle_reset_page_render(request):
         return web.Response(text="Expired", status=403)
 
     lang = DEFAULT_LANGUAGE
-    # Обновленный список ключей локализации для страницы сброса
     i18n_data = {
         "web_error": _("web_error", lang, error=""), 
         "web_conn_error": _("web_conn_error", lang, error=""), 
@@ -1292,7 +1300,7 @@ async def handle_reset_page_render(request):
     context = {
         "web_title": f"Reset Password - {TG_BOT_NAME}",
         "web_version": CACHE_VER,
-        "token": token,  # Передаем токен для использования в JS
+        "token": token,
         "i18n_json": json.dumps(i18n_data)
     }
 
@@ -1345,29 +1353,24 @@ async def handle_sse_stream(request):
     resp.headers['Connection'] = 'keep-alive'
     await resp.prepare(request)
     
-    # Get the shutdown event from app if available
     shutdown_event = request.app.get('shutdown_event')
     
     import psutil
     uid = user['id']
     try:
         while True:
-            # Check for closed connection (safely)
             try:
                 if request.transport is None or request.transport.is_closing():
                     break
             except Exception:
-                break
-            
-            # --- ПРОВЕРКА ВАЛИДНОСТИ СЕССИИ ---
+                break          
             if current_token and current_token not in SERVER_SESSIONS:
                 try:
                     await resp.write(b"event: session_status\ndata: expired\n\n")
                 except Exception:
                     pass
                 break
-            # ----------------------------------
-                
+          
             current_stats = {
                 "cpu": 0, "ram": 0, "disk": 0, "ip": AGENT_IP_CACHE,
                 "net_sent": 0, "net_recv": 0, "boot_time": 0}
@@ -1436,20 +1439,18 @@ async def handle_sse_stream(request):
             except (ConnectionResetError, BrokenPipeError, ConnectionError):
                 break
             
-            # Wait for shutdown signal or timeout
             if shutdown_event:
                 try:
                     await asyncio.wait_for(shutdown_event.wait(), timeout=3.0)
-                    break # Shutdown signal received
+                    break 
                 except asyncio.TimeoutError:
-                    pass # Timeout passed, continue loop
+                    pass
             else:
                 await asyncio.sleep(3)
 
     except asyncio.CancelledError:
         pass
     except Exception as e:
-        # Silently ignore transport closing issues
         if "closing transport" not in str(e) and "'NoneType' object" not in str(e):
              logging.error(f"SSE Stream Error: {e}")
     return resp
@@ -1605,12 +1606,9 @@ async def start_web_server(bot_instance: Bot):
     app = web.Application()
     app['bot'] = bot_instance
     
-    # 1. Register Shutdown Event
     app['shutdown_event'] = asyncio.Event()
     async def on_shutdown(app):
         app['shutdown_event'].set()
-        # Принудительно даем сигнал всем SSE хендлерам (если они ждут)
-        # В текущей реализации они проверяют флаг в цикле, это ок.
     app.on_shutdown.append(on_shutdown)
 
     app.router.add_post('/api/heartbeat', handle_heartbeat)
@@ -1665,8 +1663,6 @@ async def start_web_server(bot_instance: Bot):
         logging.info("Web UI DISABLED.")
         app.router.add_get('/', handle_api_root)
     AGENT_TASK = asyncio.create_task(agent_monitor())
-    
-    # ВАЖНО: shutdown_timeout=1.0 решает проблему долгого висения при рестарте с SSE
     runner = web.AppRunner(app, access_log=None, shutdown_timeout=1.0)
     
     await runner.setup()
