@@ -13,6 +13,7 @@
         const USERS_DATA = {{ users_data_json | safe }};
         const NODES_DATA = {{ nodes_data_json | safe }};
         const KEYBOARD_CONFIG = {{ keyboard_config_json | safe }};
+		{{ user_role_js | safe }}
     </script>
     
     <script src="https://unpkg.com/twemoji@latest/dist/twemoji.min.js" crossorigin="anonymous"></script>
