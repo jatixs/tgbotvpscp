@@ -70,18 +70,48 @@ run_with_spinner() {
     return $exit_code
 }
 
-# --- Работа с версиями ---
+# --- РАБОТА С ВЕРСИЯМИ ---
 
+# 1. Получает версию из GitHub (Remote)
 get_remote_version() {
     local remote_ver=$(curl -s "https://raw.githubusercontent.com/${GITHUB_REPO}/${GIT_BRANCH}/README.md" | grep -oP 'img\.shields\.io/badge/version-v\K[\d\.]+')
     if [ -z "$remote_ver" ]; then echo "Не удалось получить"; else echo "$remote_ver"; fi
 }
 
+# 2. Сохраняет текущую версию из README в .env (вызывать ДО cleanup)
+save_current_version() {
+    if [ -f "$README_FILE" ]; then
+        local ver=$(grep -oP 'img\.shields\.io/badge/version-v\K[\d\.]+' "$README_FILE")
+        if [ -n "$ver" ]; then
+            # Если .env существует
+            if [ -f "${ENV_FILE}" ]; then
+                if grep -q "^INSTALLED_VERSION=" "${ENV_FILE}"; then
+                    sudo sed -i "s/^INSTALLED_VERSION=.*/INSTALLED_VERSION=$ver/" "${ENV_FILE}"
+                else
+                    echo "INSTALLED_VERSION=$ver" | sudo tee -a "${ENV_FILE}" > /dev/null
+                fi
+            fi
+        fi
+    fi
+}
+
+# 3. Читает локальную версию (Сначала из .env, если нет - из README)
 get_local_version() { 
-    if [ -f "$README_FILE" ]; then 
-        grep -oP 'img\.shields\.io/badge/version-v\K[\d\.]+' "$README_FILE" || echo "Не найдена"
-    else 
-        echo "Не установлен"
+    local ver=""
+    # 1. Ищем в .env (так как README будет удален)
+    if [ -f "${ENV_FILE}" ]; then
+        ver=$(grep '^INSTALLED_VERSION=' "${ENV_FILE}" | cut -d'=' -f2)
+    fi
+    
+    # 2. Если в .env пусто, пробуем README (до очистки)
+    if [ -z "$ver" ] && [ -f "$README_FILE" ]; then
+        ver=$(grep -oP 'img\.shields\.io/badge/version-v\K[\d\.]+' "$README_FILE")
+    fi
+
+    if [ -z "$ver" ]; then
+        echo "Не определена"
+    else
+        echo "$ver"
     fi
 }
 
@@ -229,7 +259,6 @@ load_cached_env() {
 cleanup_node_files() {
     cd ${BOT_INSTALL_PATH}
     # Удаляем всё лишнее для режима Ноды (Клиента)
-    # README НЕ удаляем, чтобы видеть версию
     sudo rm -rf core modules bot.py watchdog.py Dockerfile docker-compose.yml .git .github config/users.json config/alerts_config.json deploy.sh deploy_en.sh requirements.txt LICENSE CHANGELOG* .gitignore aerich.ini
     
     # Дополнительная очистка
@@ -238,6 +267,9 @@ cleanup_node_files() {
     sudo rm -f manage.py
     sudo rm -f ARCHITECTURE*
     sudo rm -f custom_module*
+    
+    # Удаление README, но перед этим мы сохранили версию
+    sudo rm -f README*
 }
 
 cleanup_agent_files() {
@@ -257,8 +289,8 @@ cleanup_files() {
     sudo rm -f "$BOT_INSTALL_PATH/custom_module.md" "$BOT_INSTALL_PATH/custom_module_en.md"
     sudo rm -f "$BOT_INSTALL_PATH/.gitignore" "$BOT_INSTALL_PATH/LICENSE"
     
-    # --- ИЗМЕНЕНИЕ: Оставляем README для корректного отображения версии ---
-    # sudo rm -f "$BOT_INSTALL_PATH/README.md" "$BOT_INSTALL_PATH/README.en.md"
+    # Удаляем README (версия уже сохранена в .env)
+    sudo rm -f "$BOT_INSTALL_PATH/README.md" "$BOT_INSTALL_PATH/README.en.md"
     
     sudo rm -f "$BOT_INSTALL_PATH/ARCHITECTURE.md" "$BOT_INSTALL_PATH/ARCHITECTURE.en.md"
     sudo rm -f "$BOT_INSTALL_PATH/CHANGELOG.md" "$BOT_INSTALL_PATH/CHANGELOG.en.md"
@@ -557,8 +589,9 @@ EOF
     fi
 
     # === ФИНАЛЬНАЯ ОЧИСТКА ===
+    save_current_version  # Сохраняем версию перед удалением
     cleanup_agent_files
-    cleanup_files
+    cleanup_files         # Удаляет README
     # =========================
 
     local ip=$(curl -s ipinfo.io/ip)
@@ -622,6 +655,7 @@ EOF
     fi
 
     # === ФИНАЛЬНАЯ ОЧИСТКА ===
+    save_current_version  # Сохраняем версию
     cleanup_agent_files
     cleanup_files
     # =========================
@@ -680,6 +714,7 @@ EOF
     run_with_spinner "Запуск Ноды" sudo systemctl restart ${NODE_SERVICE_NAME}
     
     # === ФИНАЛЬНАЯ ОЧИСТКА ===
+    save_current_version # Сохраняем версию перед удалением
     cleanup_node_files
     # =========================
     
@@ -770,6 +805,7 @@ EOF
     fi
 
     # === ФИНАЛЬНАЯ ОЧИСТКА ===
+    save_current_version  # Сохраняем версию перед повторным удалением
     cleanup_agent_files
     cleanup_files
     # =========================
@@ -778,7 +814,6 @@ EOF
 }
 
 main_menu() {
-    local local_version=$(get_local_version)
     local remote_version=""
     
     while true; do
@@ -788,6 +823,9 @@ main_menu() {
         echo -e "${C_BLUE}${C_BOLD}╚═══════════════════════════════════╝${C_RESET}"
         check_integrity
         
+        # Получаем версию локальную (из .env или README)
+        local local_version=$(get_local_version)
+
         # Запрашиваем remote версию только если еще не получали, чтобы не тупило меню
         if [ -z "$remote_version" ]; then
             remote_version=$(get_remote_version)
@@ -796,8 +834,8 @@ main_menu() {
         echo -e "  Ветка: ${GIT_BRANCH}"
         echo -e "  Тип: ${INSTALL_TYPE} | Статус: ${STATUS_MESSAGE}"
         
-        # Сравнение версий
-        if [ "$local_version" != "$remote_version" ] && [ "$remote_version" != "Не удалось получить" ] && [ "$local_version" != "Не установлен" ] && [ "$local_version" != "Не найдена" ]; then
+        # Сравнение версий и раскраска
+        if [ "$local_version" != "$remote_version" ] && [ "$remote_version" != "Не удалось получить" ] && [ "$local_version" != "Не установлен" ] && [ "$local_version" != "Не определена" ]; then
              echo -e "  Версия: ${C_YELLOW}Локальная: $local_version (Доступна: $remote_version)${C_RESET}"
         else
              echo -e "  Версия: ${C_GREEN}$local_version${C_RESET}"

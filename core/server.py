@@ -19,7 +19,7 @@ from .config import (
     WEB_SERVER_HOST, WEB_SERVER_PORT, NODE_OFFLINE_TIMEOUT, BASE_DIR,
     ADMIN_USER_ID, ENABLE_WEB_UI, save_system_config, BOT_LOG_DIR,
     WATCHDOG_LOG_DIR, NODE_LOG_DIR, WEB_AUTH_FILE, ADMIN_USERNAME, TOKEN,
-    save_keyboard_config, KEYBOARD_CONFIG, DEPLOY_MODE, TG_BOT_NAME
+    save_keyboard_config, KEYBOARD_CONFIG, DEPLOY_MODE
 )
 from . import config as current_config
 from .shared_state import NODE_TRAFFIC_MONITORS, ALLOWED_USERS, USER_NAMES, AUTH_TOKENS, ALERTS_CONFIG, AGENT_HISTORY, WEB_NOTIFICATIONS
@@ -47,7 +47,8 @@ MAX_LOGIN_ATTEMPTS = 5
 LOGIN_BLOCK_TIME = 300
 BOT_USERNAME_CACHE = None
 
-APP_VERSION = get_app_version()
+# Версия инициализируется здесь, используя обновленный utils.get_app_version()
+APP_VERSION = get_app_version() 
 CACHE_VER = str(int(time.time()))
 AGENT_TASK = None
 
@@ -196,7 +197,8 @@ def get_current_user(request):
 def _get_avatar_html(user):
     raw = user.get('photo_url', '')
     if raw.startswith('http'):
-        return f'<img src="{raw}" alt="ava" class="w-6 h-6 rounded-full flex-shrink-0">'
+        return f'<img src="{
+            raw}" alt="ava" class="w-6 h-6 rounded-full flex-shrink-0">'
     return f'<span class="text-lg leading-none select-none">{raw}</span>'
 
 
@@ -432,17 +434,19 @@ async def handle_dashboard(request):
             0) < NODE_OFFLINE_TIMEOUT)
     role = user.get('role', 'users')
     role_color = "green" if role == "admins" else "gray"
-    role_badge_html = f'<span class="ml-2 px-1.5 py-0.5 rounded text-[10px] border border-{role_color}-500/30 bg-{role_color}-100 dark:bg-{role_color}-500/20 text-{role_color}-600 dark:text-{role_color}-400 uppercase font-bold align-middle">{role}</span>'
+    role_badge_html = f'<span class="ml-2 px-1.5 py-0.5 rounded text-[10px] border border-{role_color}-500/30 bg-{role_color}-100 dark:bg-{
+        role_color}-500/20 text-{role_color}-600 dark:text-{role_color}-400 uppercase font-bold align-middle">{role}</span>'
 
     node_action_btn = ""
     settings_btn = ""
     if user_id == ADMIN_USER_ID:
-        node_action_btn = f"""<button onclick="openAddNodeModal()" class="inline-flex items-center gap-1.5 py-1.5 px-3 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold transition shadow-lg shadow-blue-500/20"><svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path></svg>{_("web_add_node_section", lang)}</button>"""
-        settings_btn = f"""<a href="/settings" class="flex items-center justify-center w-8 h-8 rounded-lg hover:bg-black/5 dark:hover:bg-white/10 transition text-gray-600 dark:text-gray-400" title="{_("web_settings_button", lang)}"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg></a>"""
+        node_action_btn = f"""<button onclick="openAddNodeModal()" class="inline-flex items-center gap-1.5 py-1.5 px-3 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold transition shadow-lg shadow-blue-500/20"><svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path></svg>{
+            _("web_add_node_section", lang)}</button>"""
+        settings_btn = f"""<a href="/settings" class="flex items-center justify-center w-8 h-8 rounded-lg hover:bg-black/5 dark:hover:bg-white/10 transition text-gray-600 dark:text-gray-400" title="{
+            _("web_settings_button", lang)}"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg></a>"""
 
     context = {
-        "web_title": f"{_('web_dashboard_title', lang)} - {TG_BOT_NAME}",
-        "web_brand_name": _("web_brand_name", lang),
+        "web_title": f"{_('web_dashboard_title', lang)} - VPS Bot",
         "web_version": APP_VERSION.lstrip('v'),
         "cache_ver": CACHE_VER,
         "web_dashboard_title": _("web_dashboard_title", lang),
@@ -495,8 +499,6 @@ async def handle_dashboard(request):
         "web_logout": _("web_logout", lang),
         "web_access_denied": _("web_access_denied", lang),
         "web_logs_protected_desc": _("web_logs_protected_desc", lang),
-        "web_node_last_seen_label": _("web_node_last_seen", lang),
-        "web_node_traffic": _("web_node_traffic", lang),
         "user_role_js": f"const USER_ROLE = '{role}';",
         "web_search_placeholder": _("web_search_placeholder", lang),
         "i18n_json": json.dumps({
@@ -526,24 +528,6 @@ async def handle_dashboard(request):
             "unit_tb": _("unit_tb", lang),
             "unit_pb": _("unit_pb", lang),
             "web_search_nothing_found": _("web_search_nothing_found", lang),
-            "web_node_modal_loading": _("web_node_modal_loading", lang),
-            "web_node_status_online": _("web_node_status_online", lang),
-            "web_node_last_seen": _("web_node_last_seen", lang),
-            "web_node_traffic": _("web_node_traffic", lang),
-            "web_label_cpu": _("web_label_cpu", lang),
-            "web_label_ram": _("web_label_ram", lang),
-            "web_label_disk": _("web_label_disk", lang),
-            "web_label_status": _("web_label_status", lang),
-            "modal_title_info": _("web_node_details_title", lang),
-            "web_click_copy": _("web_click_copy", lang),
-            "web_top_cpu": _("web_top_cpu", lang),
-            "web_top_ram": _("web_top_ram", lang),
-            "web_top_disk": _("web_top_disk", lang),
-            "web_log_connecting": _("web_log_connecting", lang),
-            "web_status_restart": _("web_status_restart", lang),
-            "web_session_expired": _("web_session_expired", lang),
-            "web_please_relogin": _("web_please_relogin", lang),
-            "web_login_btn": _("web_login_btn", lang),
         })
     }
 
@@ -701,7 +685,8 @@ async def handle_node_add(request):
             'X-Forwarded-Proto') == "https" else "http"
         lang = get_user_lang(user['id'])
         script = "deploy_en.sh" if lang == "en" else "deploy.sh"
-        cmd = f"bash <(wget -qO- https://raw.githubusercontent.com/jatixs/tgbotvpscp/main/{script}) --agent={proto}://{host} --token={token}"
+        cmd = f"bash <(wget -qO- https://raw.githubusercontent.com/jatixs/tgbotvpscp/main/{
+            script}) --agent={proto}://{host} --token={token}"
         return web.json_response(
             {"status": "ok", "token": token, "command": cmd})
     except Exception as e:
@@ -787,15 +772,12 @@ async def handle_settings_page(request):
         "web_update_checking": _("web_update_checking", lang), "web_update_available_title": _("web_update_available_title", lang), "web_update_info": _("web_update_info", lang), "web_update_uptodate": _("web_update_uptodate", lang), "web_update_started": _("web_update_started", lang), "web_update_error": _("web_update_error", lang),
         "web_no_notifications": _("web_no_notifications", lang), "web_clear_notifications": _("web_clear_notifications", lang), "web_sessions_title": _("web_sessions_title", lang), "web_session_current": _("web_session_current", lang), "web_session_revoke": _("web_session_revoke", lang), "web_logout": _("web_logout", lang), "web_ip": _("web_ip", lang), "web_device": _("web_device", lang), "web_last_active": _("web_last_active", lang), "web_sessions_revoked_alert": _("web_sessions_revoked_alert", lang), "web_session_current_label": _("web_session_current_label", lang), "web_sessions_revoke_all": _("web_sessions_revoke_all", lang),
         "web_update_placeholder": _("web_update_placeholder", lang), "web_update_check_btn": _("web_update_check_btn", lang), "web_update_do_btn": _("web_update_do_btn", lang), "web_notifications_title": _("web_notifications_title", lang), "web_clear_notifications": _("web_clear_notifications", lang), "web_logout": _("web_logout", lang),
-        "web_fill_field": _("web_fill_field", lang), "web_conn_error_short": _("web_conn_error_short", lang), "web_error_short": _("web_error_short", lang), "web_success": _("web_success", lang), "web_no_sessions": _("web_no_sessions", lang), "web_error_loading_sessions": _("web_error_loading_sessions", lang), "web_kb_enable_all": _("web_kb_enable_all", lang), "web_kb_disable_all": _("web_kb_disable_all", lang), "web_click_copy": _("web_click_copy", lang), "web_server_name_placeholder": _("web_server_name_placeholder", lang),
-        "web_session_expired": _("web_session_expired", lang), "web_please_relogin": _("web_please_relogin", lang), "web_login_btn": _("web_login_btn", lang),
     }
     for btn_key, conf_key in BTN_CONFIG_MAP.items():
         i18n_data[f"lbl_{conf_key}"] = _(btn_key, lang)
 
     context = {
-        "web_title": f"{_('web_settings_page_title', lang)} - {TG_BOT_NAME}",
-        "web_brand_name": _("web_brand_name", lang),
+        "web_title": f"{_('web_settings_page_title', lang)} - Web Bot",
         "user_name": user.get('first_name'),
         "user_avatar": _get_avatar_html(user),
         "users_data_json": users_json,
@@ -856,7 +838,8 @@ async def handle_settings_page(request):
         "web_kb_disable_all": _("web_kb_disable_all", lang),
         "web_kb_modal_title": _("web_kb_modal_title", lang),
         "web_kb_done": _("web_kb_done", lang),
-        "web_version": CACHE_VER,
+        "web_version": APP_VERSION.lstrip('v'), # ИСПРАВЛЕНО
+        "cache_ver": CACHE_VER, # ДОБАВЛЕНО
         "web_update_section": _("web_update_section", lang),
         "web_update_placeholder": _("web_update_placeholder", lang),
         "web_update_check_btn": _("web_update_check_btn", lang),
@@ -1037,12 +1020,6 @@ async def handle_set_language(request):
         return web.json_response({"error": str(e)}, status=500)
 
 
-async def handle_session_check_head(request):
-    if not get_current_user(request):
-        return web.Response(status=401)
-    return web.Response(status=200)
-
-
 async def handle_login_page(request):
     if get_current_user(request):
         raise web.HTTPFound('/')
@@ -1069,8 +1046,7 @@ async def handle_login_page(request):
         "login_back_magic", "login_or", "login_reset_title", "login_reset_desc",
         "login_btn_send_link", "login_btn_back", "btn_back", "login_support_btn_pay",
         "login_link_sent_title", "login_link_sent_desc", "reset_success_title",
-        "reset_success_desc", "login_error_user_not_found", "web_default_pass_alert",
-        "web_brand_name", "login_secure_gateway"
+        "reset_success_desc", "login_error_user_not_found", "web_default_pass_alert"
     ]
     i18n_all = {}
     for l in ['ru', 'en']:
@@ -1090,11 +1066,11 @@ async def handle_login_page(request):
             _("web_default_pass_alert", lang)}</span></div>"""
 
     context = {
-        "web_title": TG_BOT_NAME,
         "default_pass_alert": alert,
         "error_block": "",
         "bot_username": BOT_USERNAME_CACHE or "",
-        "web_version": CACHE_VER,
+        "web_version": APP_VERSION.lstrip('v'), # ИСПРАВЛЕНО
+        "cache_ver": CACHE_VER, # ДОБАВЛЕНО
         "current_lang": lang,
         "i18n_json": injection
     }
@@ -1262,37 +1238,13 @@ async def handle_reset_page_render(request):
         return web.Response(text="Expired", status=403)
 
     lang = DEFAULT_LANGUAGE
-    # Обновленный список ключей локализации для страницы сброса
     i18n_data = {
-        "web_error": _("web_error", lang, error=""), 
-        "web_conn_error": _("web_conn_error", lang, error=""), 
-        "modal_title_alert": _("modal_title_alert", lang), 
-        "modal_title_confirm": _("modal_title_confirm", lang), 
-        "modal_title_prompt": _("modal_title_prompt", lang), 
-        "modal_btn_ok": _("modal_btn_ok", lang), 
-        "modal_btn_cancel": _("modal_btn_cancel", lang),
-        "web_brand_name": _("web_brand_name", lang),
-        "reset_page_title": _("login_reset_title", lang),
-        "web_new_password": _("web_new_password", lang),
-        "web_confirm_password": _("web_confirm_password", lang),
-        "web_save_btn": _("web_save_btn", lang),
-        "pass_strength_weak": _("pass_strength_weak", lang),
-        "pass_strength_fair": _("pass_strength_fair", lang),
-        "pass_strength_good": _("pass_strength_good", lang),
-        "pass_strength_strong": _("pass_strength_strong", lang),
-        "pass_hint_title": _("pass_hint_title", lang),
-        "pass_req_length": _("pass_req_length", lang),
-        "pass_req_num": _("pass_req_num", lang),
-        "pass_match_error": _("pass_match_error", lang),
-        "pass_is_empty": _("pass_is_empty", lang),
-        "web_redirecting": _("web_redirecting", lang),
-        "web_logging_in": _("web_logging_in", lang)
+        "web_error": _("web_error", lang, error=""), "web_conn_error": _("web_conn_error", lang, error=""), "modal_title_alert": _("modal_title_alert", lang), "modal_title_confirm": _("modal_title_confirm", lang), "modal_title_prompt": _("modal_title_prompt", lang), "modal_btn_ok": _("modal_btn_ok", lang), "modal_btn_cancel": _("modal_btn_cancel", lang),
     }
 
     context = {
-        "web_title": f"Reset Password - {TG_BOT_NAME}",
-        "web_version": CACHE_VER,
-        "token": token,  # Передаем токен для использования в JS
+        "web_version": APP_VERSION.lstrip('v'), # ИСПРАВЛЕНО
+        "cache_ver": CACHE_VER, # ДОБАВЛЕНО
         "i18n_json": json.dumps(i18n_data)
     }
 
@@ -1332,264 +1284,6 @@ async def handle_reset_confirm(request):
 async def handle_api_root(request): return web.Response(text="VPS Bot API")
 
 
-async def handle_sse_stream(request):
-    user = get_current_user(request)
-    if not user:
-        return web.Response(status=401)
-    
-    current_token = request.cookies.get(COOKIE_NAME)
-
-    resp = web.StreamResponse(status=200, reason='OK')
-    resp.headers['Content-Type'] = 'text/event-stream'
-    resp.headers['Cache-Control'] = 'no-cache'
-    resp.headers['Connection'] = 'keep-alive'
-    await resp.prepare(request)
-    
-    # Get the shutdown event from app if available
-    shutdown_event = request.app.get('shutdown_event')
-    
-    import psutil
-    uid = user['id']
-    try:
-        while True:
-            # Check for closed connection (safely)
-            try:
-                if request.transport is None or request.transport.is_closing():
-                    break
-            except Exception:
-                break
-            
-            # --- ПРОВЕРКА ВАЛИДНОСТИ СЕССИИ ---
-            if current_token and current_token not in SERVER_SESSIONS:
-                try:
-                    await resp.write(b"event: session_status\ndata: expired\n\n")
-                except Exception:
-                    pass
-                break
-            # ----------------------------------
-                
-            current_stats = {
-                "cpu": 0, "ram": 0, "disk": 0, "ip": AGENT_IP_CACHE,
-                "net_sent": 0, "net_recv": 0, "boot_time": 0}
-            try:
-                net = psutil.net_io_counters()
-                mem = psutil.virtual_memory()
-                disk = psutil.disk_usage(get_host_path('/'))
-                freq = psutil.cpu_freq()
-                proc_cpu = await asyncio.to_thread(_get_top_processes, 'cpu')
-                proc_ram = await asyncio.to_thread(_get_top_processes, 'ram')
-                proc_disk = await asyncio.to_thread(_get_top_processes, 'disk')
-                current_stats.update({
-                    "net_sent": net.bytes_sent, "net_recv": net.bytes_recv, "boot_time": psutil.boot_time(),
-                    "ram_total": mem.total, "ram_free": mem.available, "disk_total": disk.total, "disk_free": disk.free,
-                    "cpu_freq": freq.current if freq else 0, "process_cpu": proc_cpu, "process_ram": proc_ram, "process_disk": proc_disk
-                })
-            except Exception:
-                pass
-            if AGENT_HISTORY:
-                latest = AGENT_HISTORY[-1]
-                current_stats.update({"cpu": latest["c"], "ram": latest["r"]})
-                try:
-                    current_stats["disk"] = psutil.disk_usage(get_host_path('/')).percent
-                except Exception:
-                    pass
-            payload_stats = {"stats": current_stats, "history": AGENT_HISTORY}
-            
-            try:
-                await resp.write(f"event: agent_stats\ndata: {json.dumps(payload_stats)}\n\n".encode('utf-8'))
-            except (ConnectionResetError, BrokenPipeError, ConnectionError):
-                break
-
-            all_nodes = await nodes_db.get_all_nodes()
-            nodes_data = []
-            now = time.time()
-            for token, node in all_nodes.items():
-                last_seen = node.get("last_seen", 0)
-                is_restarting = node.get("is_restarting", False)
-                status = "offline"
-                if is_restarting:
-                    status = "restarting"
-                elif now - last_seen < NODE_OFFLINE_TIMEOUT:
-                    status = "online"
-                stats = node.get("stats", {})
-                nodes_data.append({
-                    "token": token, "name": node.get("name", "Unknown"),
-                    "ip": node.get("ip", "Unknown"), "status": status,
-                    "cpu": stats.get("cpu", 0), "ram": stats.get("ram", 0),
-                    "disk": stats.get("disk", 0)})
-            
-            try:
-                await resp.write(f"event: nodes_list\ndata: {json.dumps({'nodes': nodes_data})}\n\n".encode('utf-8'))
-            except (ConnectionResetError, BrokenPipeError, ConnectionError):
-                break
-
-            user_alerts = ALERTS_CONFIG.get(uid, {})
-            filtered = [
-                n for n in list(shared_state.WEB_NOTIFICATIONS)
-                if user_alerts.get(n['type'], False)]
-            last_read = shared_state.WEB_USER_LAST_READ.get(uid, 0)
-            unread_count = sum(1 for n in filtered if n['time'] > last_read)
-            notif_payload = {"notifications": filtered, "unread_count": unread_count}
-            
-            try:
-                await resp.write(f"event: notifications\ndata: {json.dumps(notif_payload)}\n\n".encode('utf-8'))
-            except (ConnectionResetError, BrokenPipeError, ConnectionError):
-                break
-            
-            # Wait for shutdown signal or timeout
-            if shutdown_event:
-                try:
-                    await asyncio.wait_for(shutdown_event.wait(), timeout=3.0)
-                    break # Shutdown signal received
-                except asyncio.TimeoutError:
-                    pass # Timeout passed, continue loop
-            else:
-                await asyncio.sleep(3)
-
-    except asyncio.CancelledError:
-        pass
-    except Exception as e:
-        # Silently ignore transport closing issues
-        if "closing transport" not in str(e) and "'NoneType' object" not in str(e):
-             logging.error(f"SSE Stream Error: {e}")
-    return resp
-
-
-async def handle_sse_logs(request):
-    user = get_current_user(request)
-    if not user or user['role'] != 'admins':
-        return web.Response(status=403)
-    
-    log_type = request.query.get('type', 'bot')
-    
-    resp = web.StreamResponse(status=200, reason='OK')
-    resp.headers['Content-Type'] = 'text/event-stream'
-    resp.headers['Cache-Control'] = 'no-cache'
-    resp.headers['Connection'] = 'keep-alive'
-    await resp.prepare(request)
-
-    shutdown_event = request.app.get('shutdown_event')
-
-    try:
-        while True:
-            try:
-                if request.transport is None or request.transport.is_closing():
-                    break
-            except Exception:
-                break
-
-            lines = []
-            if log_type == 'bot':
-                log_path = os.path.join(BASE_DIR, "logs", "bot", "bot.log")
-                if os.path.exists(log_path):
-                    try:
-                        with open(log_path, "r", encoding="utf-8", errors="ignore") as f:
-                            lines = list(deque(f, 300))
-                    except Exception:
-                        lines = ["Error reading logs"]
-                else:
-                    lines = ["Log file not found"]
-            elif log_type == 'sys':
-                cmd = ["journalctl", "-n", "100", "--no-pager"]
-                if DEPLOY_MODE == "docker" and current_config.INSTALL_MODE == "root":
-                    if os.path.exists("/host/usr/bin/journalctl"):
-                        cmd = ["chroot", "/host", "/usr/bin/journalctl", "-n", "100", "--no-pager"]
-                try:
-                    proc = await asyncio.create_subprocess_exec(*cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
-                    stdout, stderr = await proc.communicate()
-                    if proc.returncode == 0:
-                        lines = stdout.decode('utf-8', errors='ignore').strip().split('\n')
-                    else:
-                        lines = [f"Error: {stderr.decode()}"]
-                except Exception as e:
-                    lines = [f"Error: {str(e)}"]
-            
-            try:
-                await resp.write(f"event: logs\ndata: {json.dumps({'logs': lines})}\n\n".encode('utf-8'))
-            except (ConnectionResetError, BrokenPipeError, ConnectionError):
-                break
-                
-            if shutdown_event:
-                try:
-                    await asyncio.wait_for(shutdown_event.wait(), timeout=3.0)
-                    break
-                except asyncio.TimeoutError:
-                    pass
-            else:
-                await asyncio.sleep(3)
-
-    except asyncio.CancelledError:
-        pass
-    except Exception as e:
-        if "closing transport" not in str(e) and "'NoneType' object" not in str(e):
-            logging.error(f"SSE Logs Error: {e}")
-    return resp
-
-
-async def handle_sse_node_details(request):
-    user = get_current_user(request)
-    if not user:
-        return web.Response(status=401)
-    
-    token = request.query.get('token')
-    if not token:
-        return web.Response(status=400)
-    
-    resp = web.StreamResponse(status=200, reason='OK')
-    resp.headers['Content-Type'] = 'text/event-stream'
-    resp.headers['Cache-Control'] = 'no-cache'
-    resp.headers['Connection'] = 'keep-alive'
-    await resp.prepare(request)
-    
-    shutdown_event = request.app.get('shutdown_event')
-
-    try:
-        while True:
-            try:
-                if request.transport is None or request.transport.is_closing():
-                    break
-            except Exception:
-                break
-
-            node = await nodes_db.get_node_by_token(token)
-            if node:
-               payload = {
-                   "name": node.get("name"),
-                   "ip": node.get("ip"),
-                   "stats": node.get("stats"),
-                   "history": node.get("history", []),
-                   "token": token,
-                   "last_seen": node.get("last_seen", 0),
-                   "is_restarting": node.get("is_restarting", False)
-               }
-               try:
-                   await resp.write(f"event: node_details\ndata: {json.dumps(payload)}\n\n".encode('utf-8'))
-               except (ConnectionResetError, BrokenPipeError, ConnectionError):
-                   break
-            else:
-               try:
-                   await resp.write(f"event: error\ndata: {json.dumps({'error': 'Node not found'})}\n\n".encode('utf-8'))
-               except (ConnectionResetError, BrokenPipeError, ConnectionError):
-                   pass
-               break
-            
-            if shutdown_event:
-                try:
-                    await asyncio.wait_for(shutdown_event.wait(), timeout=3.0)
-                    break
-                except asyncio.TimeoutError:
-                    pass
-            else:
-                await asyncio.sleep(3)
-
-    except asyncio.CancelledError:
-        pass
-    except Exception as e:
-        if "closing transport" not in str(e) and "'NoneType' object" not in str(e):
-            logging.error(f"SSE Node Details Error: {e}")
-    return resp
-
-
 async def cleanup_server():
     global AGENT_TASK
     if AGENT_TASK and not AGENT_TASK.done():
@@ -1604,15 +1298,6 @@ async def start_web_server(bot_instance: Bot):
     global AGENT_FLAG, AGENT_TASK
     app = web.Application()
     app['bot'] = bot_instance
-    
-    # 1. Register Shutdown Event
-    app['shutdown_event'] = asyncio.Event()
-    async def on_shutdown(app):
-        app['shutdown_event'].set()
-        # Принудительно даем сигнал всем SSE хендлерам (если они ждут)
-        # В текущей реализации они проверяют флаг в цикле, это ок.
-    app.on_shutdown.append(on_shutdown)
-
     app.router.add_post('/api/heartbeat', handle_heartbeat)
     if ENABLE_WEB_UI:
         logging.info("Web UI ENABLED.")
@@ -1636,7 +1321,6 @@ async def start_web_server(bot_instance: Bot):
         app.router.add_get('/api/logs/system', handle_get_sys_logs)
         app.router.add_post('/api/settings/save', handle_save_notifications)
         app.router.add_post('/api/settings/language', handle_set_language)
-        app.router.add_head('/api/settings/language', handle_session_check_head)
         app.router.add_post('/api/settings/system', handle_save_system_config)
         app.router.add_post('/api/settings/password', handle_change_password)
         app.router.add_post(
@@ -1646,9 +1330,6 @@ async def start_web_server(bot_instance: Bot):
         app.router.add_post('/api/users/action', handle_user_action)
         app.router.add_post('/api/nodes/add', handle_node_add)
         app.router.add_post('/api/nodes/delete', handle_node_delete)
-        app.router.add_get('/api/events', handle_sse_stream)
-        app.router.add_get('/api/events/logs', handle_sse_logs)
-        app.router.add_get('/api/events/node', handle_sse_node_details)
         app.router.add_get('/api/update/check', api_check_update)
         app.router.add_post('/api/update/run', api_run_update)
         app.router.add_get('/api/notifications/list', api_get_notifications)
@@ -1665,15 +1346,13 @@ async def start_web_server(bot_instance: Bot):
         logging.info("Web UI DISABLED.")
         app.router.add_get('/', handle_api_root)
     AGENT_TASK = asyncio.create_task(agent_monitor())
-    
-    # ВАЖНО: shutdown_timeout=1.0 решает проблему долгого висения при рестарте с SSE
-    runner = web.AppRunner(app, access_log=None, shutdown_timeout=1.0)
-    
+    runner = web.AppRunner(app, access_log=None)
     await runner.setup()
     site = web.TCPSite(runner, WEB_SERVER_HOST, WEB_SERVER_PORT)
     try:
         await site.start()
-        logging.info(f"Web Server started on {WEB_SERVER_HOST}:{WEB_SERVER_PORT}")
+        logging.info(f"Web Server started on {
+                     WEB_SERVER_HOST}:{WEB_SERVER_PORT}")
         return runner
     except Exception as e:
         logging.error(f"Failed to start Web Server: {e}")
