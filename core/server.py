@@ -1572,6 +1572,7 @@ async def handle_sse_logs(request):
     bot_log_path = os.path.join(BASE_DIR, "logs", "bot", "bot.log")
     last_pos = 0     # Для bot logs (позиция в файле)
     sys_cursor = None # Для sys logs (курсор journalctl)
+    last_sent_lines_hash = None # Для дедупликации при fallback
 
     # --- ФАЗА 1: Загрузка истории (300 строк) ---
     
@@ -1645,6 +1646,15 @@ async def handle_sse_logs(request):
                     new_lines, sys_cursor = await fetch_sys_logs(cursor=sys_cursor)
                 else:
                     new_lines, sys_cursor = await fetch_sys_logs(lines=10)
+                
+                # Доп. логика дедупликации, если мы в режиме fallback (нет курсора)
+                # Это предотвращает бесконечную отправку одних и тех же 10 строк
+                if not sys_cursor and new_lines:
+                    current_hash = hash(tuple(new_lines))
+                    if current_hash == last_sent_lines_hash:
+                        new_lines = []
+                    else:
+                        last_sent_lines_hash = current_hash
                 
                 if new_lines:
                     await resp.write(f"event: logs\ndata: {json.dumps({'logs': new_lines})}\n\n".encode('utf-8'))
