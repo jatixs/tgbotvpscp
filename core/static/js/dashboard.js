@@ -9,6 +9,43 @@ let agentChart = null;
 let allNodesData = [];
 let currentNodeToken = null; 
 
+// --- CRYPTO FUNCTIONS (XOR + Base64) ---
+// WEB_KEY is injected in dashboard.html by server
+
+function decryptData(text) {
+    if (!text) return "";
+    if (typeof WEB_KEY === 'undefined' || !WEB_KEY) return text;
+    try {
+        const decoded = atob(text);
+        let result = "";
+        for (let i = 0; i < decoded.length; i++) {
+            const keyChar = WEB_KEY[i % WEB_KEY.length];
+            result += String.fromCharCode(decoded.charCodeAt(i) ^ keyChar.charCodeAt(0));
+        }
+        return result;
+    } catch (e) {
+        console.error("Decryption error:", e);
+        return text;
+    }
+}
+
+function encryptData(text) {
+    if (!text) return "";
+    if (typeof WEB_KEY === 'undefined' || !WEB_KEY) return text;
+    try {
+        let result = "";
+        for (let i = 0; i < text.length; i++) {
+            const keyChar = WEB_KEY[i % WEB_KEY.length];
+            result += String.fromCharCode(text.charCodeAt(i) ^ keyChar.charCodeAt(0));
+        }
+        return btoa(result);
+    } catch (e) {
+        console.error("Encryption error:", e);
+        return text;
+    }
+}
+// ----------------------------------------
+
 window.addEventListener('themeChanged', () => {
     updateChartsColors();
 });
@@ -138,7 +175,8 @@ function filterAndRenderNodes() {
     if (query) {
         filteredNodes = allNodesData.filter(node => {
             const name = (node.name || "").toLowerCase();
-            const ip = (node.ip || "").toLowerCase();
+            // Decrypt IP for search
+            const ip = (decryptData(node.ip) || "").toLowerCase();
             return name.includes(query) || ip.includes(query);
         });
     }
@@ -178,6 +216,12 @@ function renderNodesList(nodes) {
         const ramColor = ram > 80 ? 'text-red-500' : 'text-gray-600 dark:text-gray-300';
         const diskColor = disk > 90 ? 'text-red-500' : 'text-gray-600 dark:text-gray-300';
 
+        // Decrypt IP for display
+        const displayIp = decryptData(node.ip);
+
+        // We pass encrypted token to openNodeDetails because API expects it encrypted or handles decryption
+        // Actually handle_node_details expects ENCRYPTED token in query param if we decrypt it there.
+        // But logic is: Server sends Encrypted. JS sends Encrypted. Server Decrypts.
         return `
         <div class="bg-white dark:bg-white/5 hover:bg-gray-50 dark:hover:bg-white/10 transition-all duration-200 rounded-xl border border-gray-100 dark:border-white/5 cursor-pointer shadow-sm hover:shadow-md overflow-hidden group mb-2" onclick="openNodeDetails('${escapeHtml(node.token)}', '${statusColor}')">
             
@@ -193,7 +237,7 @@ function renderNodesList(nodes) {
                             <div class="font-bold text-sm text-gray-900 dark:text-white truncate group-hover:text-blue-600 dark:group-hover:text-blue-400 transition">${escapeHtml(node.name)}</div>
                             <div class="sm:hidden px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider ${statusBg}">${statusText}</div>
                         </div>
-                        <div class="text-[10px] sm:text-xs font-mono text-gray-400 truncate">${escapeHtml(node.ip)}</div>
+                        <div class="text-[10px] sm:text-xs font-mono text-gray-400 truncate">${escapeHtml(displayIp)}</div>
                     </div>
                 </div>
 
@@ -313,7 +357,7 @@ function updateAgentStatsUI(data) {
             if (uptimeEl) uptimeEl.innerText = formatUptime(data.stats.boot_time);
 
             const ipEl = document.getElementById('agentIp');
-            if (ipEl && data.stats.ip) ipEl.innerText = data.stats.ip;
+            if (ipEl && data.stats.ip) ipEl.innerText = decryptData(data.stats.ip); // Decrypt Agent IP
         }
         renderAgentChart(data.history);
     } catch (e) {
@@ -459,29 +503,18 @@ function formatUptime(bt) {
     if (h > 0) return `${h}${unitH} ${m}${unitM}`;
     return `${m}${unitM}`;
 }
-
-// --- LOGS LOGIC (SSE) ---
-
 function setLogLoading() {
     const container = document.getElementById('logsContainer');
     if (!container) return;
-    
-    // Блокируем прокрутку, чтобы не было видно дерганий
     container.classList.add('overflow-hidden');
-    
-    // Делаем контейнер relative, чтобы спиннер перекрывал его
     if (!container.classList.contains('relative')) container.classList.add('relative');
 
     const loadingText = (typeof I18N !== 'undefined' && I18N.web_log_connecting) ? I18N.web_log_connecting : "Connecting...";
-    
-    // Удаляем предыдущий спиннер, если есть
     const existing = document.getElementById('log-loader');
     if (existing) existing.remove();
 
     const loader = document.createElement('div');
     loader.id = 'log-loader';
-    // Используем bg-white/90 (90% непрозрачности), чтобы скрыть контент под спиннером,
-    // но оставляем backdrop-blur для красоты по краям.
     loader.className = 'absolute inset-0 z-50 flex flex-col items-center justify-center bg-white/90 dark:bg-gray-900/90 backdrop-blur-sm transition-opacity duration-300 opacity-0';
     
     loader.innerHTML = `
@@ -492,9 +525,7 @@ function setLogLoading() {
         <span class="text-sm font-medium text-gray-600 dark:text-gray-300 animate-pulse">${escapeHtml(loadingText)}</span>
     `;
     
-    container.appendChild(loader);
-    
-    // Форсируем reflow для анимации появления
+    container.appendChild(loader);    
     void loader.offsetWidth;
     loader.classList.remove('opacity-0');
 }
@@ -518,8 +549,6 @@ window.switchLogType = function(type) {
         el.classList.toggle('text-gray-900', isActive);
         el.classList.toggle('text-gray-500', !isActive);
     });
-
-    // Закрываем предыдущий стрим
     if (logSSESource) {
         logSSESource.close();
         logSSESource = null;
@@ -527,8 +556,6 @@ window.switchLogType = function(type) {
 
     const container = document.getElementById('logsContainer');
     const overlay = document.getElementById('logsOverlay');
-
-    // Проверка прав (если это нужно на клиенте, сервер тоже отклонит 403)
     if (typeof USER_ROLE !== 'undefined' && USER_ROLE !== 'admins') {
         if (overlay) overlay.classList.remove('hidden');
         if (!container.innerHTML.includes('blur')) {
@@ -537,14 +564,9 @@ window.switchLogType = function(type) {
         }
         return;
     }
-
-    // 1. Очищаем контейнер
     container.innerHTML = '';
     
-    // 2. Показываем непрозрачный спиннер и блокируем скролл
     setLogLoading();
-
-    // 3. Открываем новый стрим
     logSSESource = new EventSource(`/api/events/logs?type=${type}`);
 
     logSSESource.addEventListener('logs', (e) => {
@@ -555,7 +577,6 @@ window.switchLogType = function(type) {
             const logs = data.logs || [];
             
             if (logs.length === 0) {
-                 // Если логов нет, просто убираем загрузку (включаем обратно скролл)
                  if (document.getElementById('log-loader')) {
                     container.classList.remove('overflow-hidden');
                     removeLogLoading();
@@ -570,20 +591,11 @@ window.switchLogType = function(type) {
                 else if (line.includes("ERROR") || line.includes("CRITICAL")) cls = "text-red-500 font-bold";
                 return `<div class="${cls} font-mono text-xs break-all py-[1px]">${escapeHtml(line)}</div>`;
             }).join('');
-
-            // Определяем состояние скролла ДО вставки
             const loader = document.getElementById('log-loader');
-            // Считаем, что это начальная загрузка, только если лоадер есть и он еще не исчезает
             const isInitialLoad = loader && !loader.classList.contains('opacity-0');
-            
-            // Исправление: Уменьшаем порог "прилипания" до 5px (было 50px)
-            // Это позволяет пользователю спокойно скроллить вверх, не будучи "притянутым" обратно
             const isAtBottom = (container.scrollHeight - container.scrollTop) <= (container.clientHeight + 5);
             
-            // Добавляем контент
             container.insertAdjacentHTML('beforeend', html);
-
-            // Ограничиваем количество строк в DOM
             if (container.children.length > 1000) {
                  const toRemove = container.children.length - 1000;
                  for(let i=0; i<toRemove; i++) {
@@ -592,20 +604,13 @@ window.switchLogType = function(type) {
                      }
                  }
             }
-
-            // Всегда разблокируем скролл при получении данных
             container.classList.remove('overflow-hidden');
-
-            // Скроллим вниз только при начальной загрузке или если пользователь был внизу
             if (isInitialLoad) {
-                // При первой загрузке скроллим мгновенно (auto), чтобы сразу показать последние логи
                 container.scrollTo({ top: container.scrollHeight, behavior: 'auto' });
             } else if (isAtBottom) {
-                // При обновлении используем плавный скролл (smooth), как титры
                 container.scrollTo({ top: container.scrollHeight, behavior: 'smooth' });
             }
 
-            // И только потом убираем спиннер (плавное исчезновение поверх уже готового контента)
             if (loader) {
                 removeLogLoading();
             }
@@ -621,16 +626,10 @@ window.switchLogType = function(type) {
         if (overlay) overlay.classList.add('hidden');
     };
 };
-
-// ... остальные функции (node details и т.д.) ...
-
-// --- NODE DETAILS LOGIC (SSE) ---
-
 function setModalLoading() {
     const modal = document.getElementById('nodeModal');
     if (!modal) return;
     
-    // 1. Reset fields to avoid showing old data (clean state)
     const fields = ['modalNodeName', 'modalNodeIp', 'modalToken', 'modalNodeUptime', 'modalNodeRam', 'modalNodeDisk', 'modalNodeTraffic'];
     fields.forEach(id => {
         const el = document.getElementById(id);
@@ -641,16 +640,9 @@ function setModalLoading() {
         lastSeen.innerText = '...';
         lastSeen.className = 'text-gray-400 text-xs';
     }
-
-    // 2. Add Blur Overlay with Spinner
-    // Find the content card (first child of modal container)
     const card = modal.firstElementChild;
-    if (!card) return;
-    
-    // Ensure relative positioning for absolute overlay
-    if (!card.classList.contains('relative')) card.classList.add('relative');
-    
-    // Remove existing loader if any (cleanup)
+    if (!card) return;    
+    if (!card.classList.contains('relative')) card.classList.add('relative');    
     const existing = document.getElementById('node-modal-loader');
     if (existing) existing.remove();
 
@@ -667,9 +659,7 @@ function setModalLoading() {
         <span class="text-sm font-medium text-gray-600 dark:text-gray-300 animate-pulse">${escapeHtml(loadingText)}</span>
     `;
     
-    card.appendChild(loader);
-    
-    // Force reflow to enable transition
+    card.appendChild(loader);    
     void loader.offsetWidth;
     loader.classList.remove('opacity-0');
 }
@@ -687,24 +677,21 @@ function removeModalLoading() {
 async function openNodeDetails(token, color) {
     const modal = document.getElementById('nodeModal');
     if (modal) {
-        setModalLoading(); // Apply blur overlay immediately
+        setModalLoading();
         animateModalOpen(modal); 
-        currentNodeToken = token; // Сохраняем токен для переименования
-        cancelNodeRename(); // Сбрасываем состояние переименования при открытии
+        currentNodeToken = token; // Contains Encrypted Token from renderNodesList
+        cancelNodeRename();
     }
 
     if (chartRes) chartRes.destroy();
     if (chartNet) chartNet.destroy();
     chartRes = null;
     chartNet = null;
-
-    // Закрываем старый стрим
     if (nodeSSESource) {
         nodeSSESource.close();
         nodeSSESource = null;
     }
-
-    // Открываем новый стрим для деталей ноды
+    // Token is already encrypted, send as is
     nodeSSESource = new EventSource(`/api/events/node?token=${token}`);
     
     nodeSSESource.addEventListener('node_details', (e) => {
@@ -717,35 +704,27 @@ async function openNodeDetails(token, color) {
     });
     
     nodeSSESource.addEventListener('error', (e) => {
-         // Обработка ошибок
          try {
-             // Если это кастомное событие error от сервера (json)
              if (e.data) {
                  const errData = JSON.parse(e.data);
                  if (errData.error) {
-                     // Можно показать ошибку прямо в модалке
                      console.warn("Node SSE Error:", errData.error);
                  }
              }
          } catch(ex) {}
-         // В случае сетевой ошибки браузер сам реконнектится, лоадер можно не убирать, пока данные не придут
     });
 }
 
 function updateNodeDetailsUI(data) {
     if (data.error) return;
-
-    // Remove loading overlay as soon as we have data
     removeModalLoading();
-
-    // Обновляем имя только если мы НЕ в режиме редактирования
     const inputContainer = document.getElementById('nodeNameInputContainer');
     if (inputContainer && inputContainer.classList.contains('hidden')) {
         document.getElementById('modalNodeName').innerText = data.name;
     }
     
-    document.getElementById('modalNodeIp').innerText = data.ip;
-    document.getElementById('modalToken').innerText = data.token;
+    document.getElementById('modalNodeIp').innerText = decryptData(data.ip);
+    document.getElementById('modalToken').innerText = decryptData(data.token);
 
     const stats = data.stats || {};
     
@@ -796,18 +775,13 @@ function closeNodeModal() {
     if (modal) {
         animateModalClose(modal);
     }
-    
-    // Удаляем лоадер (на всякий случай, чтобы при следующем открытии анимация была с нуля)
     removeModalLoading();
-
-    // Закрываем SSE соединение при закрытии модалки
     if (nodeSSESource) {
         nodeSSESource.close();
         nodeSSESource = null;
     }
 }
 
-// Функции переименования ноды
 window.startNodeRename = function() {
     const nameDisplay = document.getElementById('nodeNameContainer');
     const nameInputContainer = document.getElementById('nodeNameInputContainer');
@@ -836,8 +810,6 @@ window.saveNodeRename = async function() {
     const nameInput = document.getElementById('modalNodeNameInput');
     const newName = nameInput.value.trim();
     if (!newName || !currentNodeToken) return;
-
-    // Оптимистичное обновление UI
     document.getElementById('modalNodeName').innerText = newName;
     cancelNodeRename();
 
@@ -845,7 +817,7 @@ window.saveNodeRename = async function() {
         const res = await fetch('/api/nodes/rename', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ token: currentNodeToken, name: newName })
+            body: JSON.stringify({ token: currentNodeToken, name: newName }) // Token is already encrypted
         });
         
         if (res.ok) {

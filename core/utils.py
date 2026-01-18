@@ -6,6 +6,8 @@ import asyncio
 import urllib.parse
 import time
 import aiohttp
+import base64
+import hashlib
 from datetime import datetime
 from aiogram import Bot
 from aiogram.exceptions import TelegramBadRequest
@@ -14,7 +16,7 @@ from . import config
 from . import shared_state
 from .i18n import get_text, get_user_lang
 from .config import INSTALL_MODE, DEPLOY_MODE, DEBUG_MODE
-from .config import ALERTS_CONFIG_FILE, REBOOT_FLAG_FILE, RESTART_FLAG_FILE, CIPHER_SUITE
+from .config import ALERTS_CONFIG_FILE, REBOOT_FLAG_FILE, RESTART_FLAG_FILE, CIPHER_SUITE, DATA_ENCRYPTION_KEY
 from .config import load_encrypted_json, save_encrypted_json
 
 
@@ -29,6 +31,7 @@ def anonymize_user(user_id: int, username: str = None) -> str:
 
 
 def encrypt_data(data: str) -> str:
+    """Шифрование Fernet (для базы данных и конфигов)"""
     if not data:
         return ""
     try:
@@ -39,12 +42,54 @@ def encrypt_data(data: str) -> str:
 
 
 def decrypt_data(data: str) -> str:
+    """Дешифровка Fernet (для базы данных и конфигов)"""
     if not data:
         return ""
     try:
         return CIPHER_SUITE.decrypt(data.encode()).decode()
     except Exception:
         return data
+
+
+def get_web_key() -> str:
+    """Генерирует ключ для веб-обфускации на основе серверного ключа"""
+    return hashlib.sha256(DATA_ENCRYPTION_KEY).hexdigest()[:32]
+
+
+def encrypt_for_web(text: str) -> str:
+    """XOR + Base64 шифрование для передачи в Web UI"""
+    if not text:
+        return ""
+    try:
+        key = get_web_key()
+        text_str = str(text)
+        encrypted_chars = []
+        for i in range(len(text_str)):
+            key_char = key[i % len(key)]
+            encrypted_char = chr(ord(text_str[i]) ^ ord(key_char))
+            encrypted_chars.append(encrypted_char)
+        return base64.b64encode("".join(encrypted_chars).encode()).decode()
+    except Exception as e:
+        logging.error(f"Web encrypt error: {e}")
+        return str(text)
+
+
+def decrypt_for_web(text: str) -> str:
+    """XOR + Base64 дешифровка от Web UI"""
+    if not text:
+        return ""
+    try:
+        key = get_web_key()
+        decoded_str = base64.b64decode(text).decode()
+        decrypted_chars = []
+        for i in range(len(decoded_str)):
+            key_char = key[i % len(key)]
+            decrypted_char = chr(ord(decoded_str[i]) ^ ord(key_char))
+            decrypted_chars.append(decrypted_char)
+        return "".join(decrypted_chars)
+    except Exception as e:
+        logging.error(f"Web decrypt error: {e}")
+        return text
 
 
 def get_host_path(path: str) -> str:

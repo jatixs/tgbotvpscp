@@ -25,7 +25,7 @@ from . import config as current_config
 from .shared_state import NODE_TRAFFIC_MONITORS, ALLOWED_USERS, USER_NAMES, AUTH_TOKENS, ALERTS_CONFIG, AGENT_HISTORY, WEB_NOTIFICATIONS, WEB_USER_LAST_READ
 from .i18n import STRINGS, get_user_lang, set_user_lang, get_text as _
 from .config import DEFAULT_LANGUAGE
-from .utils import get_country_flag, save_alerts_config, get_host_path, get_app_version
+from .utils import get_country_flag, save_alerts_config, get_host_path, get_app_version, encrypt_for_web, decrypt_for_web, get_web_key
 from .auth import save_users, get_user_name
 from .keyboards import BTN_CONFIG_MAP
 from modules import update as update_module
@@ -433,6 +433,7 @@ async def handle_dashboard(request):
             0) < NODE_OFFLINE_TIMEOUT)
     role = user.get('role', 'users')
     is_main_admin = (user_id == ADMIN_USER_ID)
+    is_admin = (role == 'admins') or is_main_admin  # <--- ДОБАВЛЕНО ОПРЕДЕЛЕНИЕ
     role_color = "green" if role == "admins" else "gray"
     
     role_badge_html = f'<span class="ml-2 px-2 py-0.5 rounded text-[10px] border border-{role_color}-500/30 bg-{role_color}-100 dark:bg-{role_color}-500/20 text-{role_color}-600 dark:text-{role_color}-400 uppercase font-bold align-middle">{role}</span>'
@@ -448,6 +449,25 @@ async def handle_dashboard(request):
     clean_version = APP_VERSION.lstrip('v')
     display_version = f"v{clean_version}"
 
+    users_json = "null"
+    nodes_json = "null"
+    if is_admin:
+        ulist = [
+            {
+                "id": uid,
+                "name": USER_NAMES.get(
+                    str(uid),
+                    f"ID: {uid}"),
+                "role": ALLOWED_USERS[uid].get(
+                    "group",
+                    "users") if isinstance(
+                    ALLOWED_USERS[uid],
+                    dict) else ALLOWED_USERS[uid]} for uid in ALLOWED_USERS if uid != ADMIN_USER_ID]
+        users_json = json.dumps(ulist)
+        # Encrypt tokens and IPs for initial JSON load
+        nlist = [{"token": encrypt_for_web(t), "name": n.get("name", "Unknown"), "ip": encrypt_for_web(n.get("ip", "Unknown"))} for t, n in all_nodes.items()]
+        nodes_json = json.dumps(nlist)
+
     context = {
         "web_title": f"{_('web_dashboard_title', lang)} - {TG_BOT_NAME}",
         "web_brand_name": TG_BOT_NAME,
@@ -460,7 +480,7 @@ async def handle_dashboard(request):
         "nodes_count": str(nodes_count),
         "active_nodes": str(active_nodes),
         "web_agent_stats_title": _("web_agent_stats_title", lang),
-        "agent_ip": AGENT_IP_CACHE,
+        "agent_ip": encrypt_for_web(AGENT_IP_CACHE), # Encrypt Agent IP
         "web_traffic_total": _("web_traffic_total", lang),
         "web_uptime": _("web_uptime", lang),
         "web_cpu": _("web_cpu", lang),
@@ -505,7 +525,7 @@ async def handle_dashboard(request):
         "web_logs_protected_desc": _("web_logs_protected_desc", lang),    
         "web_node_last_seen_label": _("web_node_last_seen", lang),
         "web_node_traffic": _("web_node_traffic", lang),
-        "user_role_js": f"const USER_ROLE = '{role}'; const IS_MAIN_ADMIN = {str(is_main_admin).lower()};",
+        "user_role_js": f"const USER_ROLE = '{role}'; const IS_MAIN_ADMIN = {str(is_main_admin).lower()}; const WEB_KEY = '{get_web_key()}';",
         "is_main_admin": is_main_admin,
         "web_search_placeholder": _("web_search_placeholder", lang),
         "i18n_json": json.dumps({
@@ -655,12 +675,26 @@ async def process_node_result_background(bot, user_id, cmd, text, token, node_na
 async def handle_node_details(request):
     if not get_current_user(request):
         return web.json_response({"error": "Unauthorized"}, status=401)
-    token = request.query.get("token")
+    
+    # Decrypt Request (Query Param)
+    token = decrypt_for_web(request.query.get('token'))
+    
+    if not token:
+        return web.json_response({"error": "Token required"}, status=400)
+    
     node = await nodes_db.get_node_by_token(token)
     if not node:
         return web.json_response({"error": "Node not found"}, status=404)
-    return web.json_response({"name": node.get("name"), "ip": node.get("ip"), "stats": node.get("stats"), "history": node.get(
-        "history", []), "token": token, "last_seen": node.get("last_seen", 0), "is_restarting": node.get("is_restarting", False)})
+        
+    return web.json_response({
+        "name": node.get("name"),
+        "ip": encrypt_for_web(node.get("ip")), # Encrypt Response
+        "stats": node.get("stats"),
+        "history": node.get("history", []),
+        "token": encrypt_for_web(token),       # Encrypt Response
+        "last_seen": node.get("last_seen", 0),
+        "is_restarting": node.get("is_restarting", False)
+    })
 
 
 async def handle_agent_stats(request):
@@ -671,7 +705,7 @@ async def handle_agent_stats(request):
         "cpu": 0,
         "ram": 0,
         "disk": 0,
-        "ip": AGENT_IP_CACHE,
+        "ip": encrypt_for_web(AGENT_IP_CACHE), # Encrypt Response
         "net_sent": 0,
         "net_recv": 0,
         "boot_time": 0}
@@ -720,8 +754,13 @@ async def handle_node_add(request):
         script = "deploy_en.sh" if lang == "en" else "deploy.sh"
         cmd = f"bash <(wget -qO- https://raw.githubusercontent.com/jatixs/tgbotvpscp/main/{
             script}) --agent={proto}://{host} --token={token}"
+        
         return web.json_response(
-            {"status": "ok", "token": token, "command": cmd})
+            {
+                "status": "ok", 
+                "token": encrypt_for_web(token), # Encrypt Response
+                "command": encrypt_for_web(cmd)  # Encrypt Response
+            })
     except Exception as e:
         return web.json_response({"error": str(e)}, status=500)
 
@@ -732,7 +771,10 @@ async def handle_node_delete(request):
         return web.json_response({"error": "Admin required"}, status=403)
     try:
         data = await request.json()
-        token = data.get("token")
+        
+        # Decrypt Request
+        token = decrypt_for_web(data.get("token"))
+        
         if not token:
             return web.json_response({"error": "Token required"}, status=400)
         await nodes_db.delete_node(token)
@@ -747,8 +789,11 @@ async def handle_node_rename(request):
         return web.json_response({"error": "Only Main Admin required"}, status=403)
     try:
         data = await request.json()
-        token = data.get("token")
+        
+        # Decrypt Request
+        token = decrypt_for_web(data.get("token"))
         new_name = data.get("name")
+        
         if not token or not new_name:
             return web.json_response({"error": "Token and name required"}, status=400)
         
@@ -778,9 +823,10 @@ async def handle_nodes_list_json(request):
         stats = node.get("stats", {})
         nodes_data.append(
             {
-                "token": token, "name": node.get(
-                    "name", "Unknown"), "ip": node.get(
-                    "ip", "Unknown"), "status": status, "cpu": stats.get(
+                "token": encrypt_for_web(token), # Encrypt Response
+                "name": node.get("name", "Unknown"), 
+                "ip": encrypt_for_web(node.get("ip", "Unknown")), # Encrypt Response
+                "status": status, "cpu": stats.get(
                     "cpu", 0), "ram": stats.get(
                         "ram", 0), "disk": stats.get(
                             "disk", 0)})
@@ -814,8 +860,8 @@ async def handle_settings_page(request):
                     dict) else ALLOWED_USERS[uid]} for uid in ALLOWED_USERS if uid != ADMIN_USER_ID]
         users_json = json.dumps(ulist)
         all_nodes = await nodes_db.get_all_nodes()
-        nlist = [{"token": t, "name": n.get("name", "Unknown"), "ip": n.get(
-            "ip", "Unknown")} for t, n in all_nodes.items()]
+        # Encrypt embedded JSON
+        nlist = [{"token": encrypt_for_web(t), "name": n.get("name", "Unknown"), "ip": encrypt_for_web(n.get("ip", "Unknown"))} for t, n in all_nodes.items()]
         nodes_json = json.dumps(nlist)
     keyboard_config_json = json.dumps(KEYBOARD_CONFIG)
 
@@ -1414,7 +1460,7 @@ async def handle_sse_stream(request):
                 break
           
             current_stats = {
-                "cpu": 0, "ram": 0, "disk": 0, "ip": AGENT_IP_CACHE,
+                "cpu": 0, "ram": 0, "disk": 0, "ip": encrypt_for_web(AGENT_IP_CACHE),
                 "net_sent": 0, "net_recv": 0, "boot_time": 0}
             try:
                 net = psutil.net_io_counters()
@@ -1458,8 +1504,10 @@ async def handle_sse_stream(request):
                     status = "online"
                 stats = node.get("stats", {})
                 nodes_data.append({
-                    "token": token, "name": node.get("name", "Unknown"),
-                    "ip": node.get("ip", "Unknown"), "status": status,
+                    "token": encrypt_for_web(token),
+                    "name": node.get("name", "Unknown"),
+                    "ip": encrypt_for_web(node.get("ip", "Unknown")),
+                    "status": status,
                     "cpu": stats.get("cpu", 0), "ram": stats.get("ram", 0),
                     "disk": stats.get("disk", 0)})
             
@@ -1506,7 +1554,6 @@ async def handle_sse_logs(request):
     
     log_type = request.query.get('type', 'bot')
     
-    # Подготовка ответа
     resp = web.StreamResponse(status=200, reason='OK')
     resp.headers['Content-Type'] = 'text/event-stream'
     resp.headers['Cache-Control'] = 'no-cache'
@@ -1518,9 +1565,6 @@ async def handle_sse_logs(request):
 
     shutdown_event = request.app.get('shutdown_event')
 
-    # --- ХЕЛПЕРЫ ---
-    
-    # Определяем команду journalctl один раз
     journal_bin = ["journalctl"]
     if DEPLOY_MODE == "docker" and current_config.INSTALL_MODE == "root":
         if os.path.exists("/host/usr/bin/journalctl"):
@@ -1529,19 +1573,13 @@ async def handle_sse_logs(request):
             journal_bin = ["chroot", "/host", "/bin/journalctl"]
 
     async def fetch_sys_logs(cursor=None, lines=None):
-        """
-        Читает системные логи.
-        Если передан cursor -> читает --after-cursor
-        Если передан lines -> читает -n lines
-        Возвращает: (список_строк, новый_курсор)
-        """
         cmd = journal_bin + ["--no-pager", "--show-cursor"]
         if cursor:
             cmd.extend(["--after-cursor", cursor])
         elif lines:
             cmd.extend(["-n", str(lines)])
         else:
-            cmd.extend(["-n", "300"]) # Default history
+            cmd.extend(["-n", "300"])
 
         try:
             proc = await asyncio.create_subprocess_exec(
@@ -1568,15 +1606,11 @@ async def handle_sse_logs(request):
         except Exception as e:
             return [f"Error executing journalctl: {str(e)}"], cursor
 
-    # Переменные состояния
     bot_log_path = os.path.join(BASE_DIR, "logs", "bot", "bot.log")
-    last_pos = 0     # Для bot logs (позиция в файле)
-    sys_cursor = None # Для sys logs (курсор journalctl)
-    last_sent_lines_hash = None # Для дедупликации при fallback
+    last_pos = 0
+    sys_cursor = None
+    last_sent_lines_hash = None
 
-    # --- ФАЗА 1: Загрузка истории (300 строк) ---
-    
-    # 1.1 BOT LOGS History
     if log_type == 'bot' and os.path.exists(bot_log_path):
         try:
             def read_history():
@@ -1593,27 +1627,22 @@ async def handle_sse_logs(request):
         except Exception as e:
             logging.error(f"Error reading bot history: {e}")
 
-    # 1.2 SYS LOGS History
     elif log_type == 'sys':
         history_lines, sys_cursor = await fetch_sys_logs(lines=300)
         if history_lines:
             await resp.write(f"event: logs\ndata: {json.dumps({'logs': history_lines})}\n\n".encode('utf-8'))
             await resp.drain()
 
-    # --- ФАЗА 2: Цикл обновлений (Tail) ---
     try:
         while True:
-            # Проверка на перезагрузку
             if shared_state.IS_RESTARTING:
                 await resp.write(b"event: shutdown\ndata: restarting\n\n")
                 await resp.drain()
                 break
 
-            # Проверка соединения
             if request.transport is None or request.transport.is_closing():
                 break
 
-            # --- BOT LOGS UPDATE ---
             if log_type == 'bot':
                 if os.path.exists(bot_log_path):
                     def read_updates(cursor):
@@ -1621,7 +1650,7 @@ async def handle_sse_logs(request):
                         new_cursor = cursor
                         try:
                             current_size = os.path.getsize(bot_log_path)
-                            if current_size < cursor: cursor = 0 # Ротация логов
+                            if current_size < cursor: cursor = 0 
                             
                             if current_size > cursor:
                                 with open(bot_log_path, "r", encoding="utf-8", errors="ignore") as f:
@@ -1638,17 +1667,12 @@ async def handle_sse_logs(request):
                         await resp.write(f"event: logs\ndata: {json.dumps({'logs': clean_lines})}\n\n".encode('utf-8'))
                         await resp.drain()
 
-            # --- SYS LOGS UPDATE ---
             elif log_type == 'sys':
-                # Читаем все, что появилось ПОСЛЕ последнего курсора
-                # Если курсора нет (ошибка в фазе 1), пробуем получить последние 10 строк как фолбэк
                 if sys_cursor:
                     new_lines, sys_cursor = await fetch_sys_logs(cursor=sys_cursor)
                 else:
                     new_lines, sys_cursor = await fetch_sys_logs(lines=10)
                 
-                # Доп. логика дедупликации, если мы в режиме fallback (нет курсора)
-                # Это предотвращает бесконечную отправку одних и тех же 10 строк
                 if not sys_cursor and new_lines:
                     current_hash = hash(tuple(new_lines))
                     if current_hash == last_sent_lines_hash:
@@ -1660,7 +1684,6 @@ async def handle_sse_logs(request):
                     await resp.write(f"event: logs\ndata: {json.dumps({'logs': new_lines})}\n\n".encode('utf-8'))
                     await resp.drain()
             
-            # Ожидание перед следующей проверкой
             if shutdown_event:
                 try:
                     if not shared_state.IS_RESTARTING:
@@ -1685,7 +1708,7 @@ async def handle_sse_node_details(request):
     if not user:
         return web.Response(status=401)
     
-    token = request.query.get('token')
+    token = decrypt_for_web(request.query.get('token'))
     if not token:
         return web.Response(status=400)
     
@@ -1716,10 +1739,10 @@ async def handle_sse_node_details(request):
             if node:
                payload = {
                    "name": node.get("name"),
-                   "ip": node.get("ip"),
+                   "ip": encrypt_for_web(node.get("ip")),
                    "stats": node.get("stats"),
                    "history": node.get("history", []),
-                   "token": token,
+                   "token": encrypt_for_web(token),
                    "last_seen": node.get("last_seen", 0),
                    "is_restarting": node.get("is_restarting", False)
                }
