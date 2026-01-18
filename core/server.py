@@ -25,7 +25,7 @@ from . import config as current_config
 from .shared_state import NODE_TRAFFIC_MONITORS, ALLOWED_USERS, USER_NAMES, AUTH_TOKENS, ALERTS_CONFIG, AGENT_HISTORY, WEB_NOTIFICATIONS, WEB_USER_LAST_READ
 from .i18n import STRINGS, get_user_lang, set_user_lang, get_text as _
 from .config import DEFAULT_LANGUAGE
-from .utils import get_country_flag, save_alerts_config, get_host_path, get_app_version, encrypt_data, decrypt_data
+from .utils import get_country_flag, save_alerts_config, get_host_path, get_app_version
 from .auth import save_users, get_user_name
 from .keyboards import BTN_CONFIG_MAP
 from modules import update as update_module
@@ -460,7 +460,7 @@ async def handle_dashboard(request):
         "nodes_count": str(nodes_count),
         "active_nodes": str(active_nodes),
         "web_agent_stats_title": _("web_agent_stats_title", lang),
-        "agent_ip": encrypt_data(AGENT_IP_CACHE), # Encrypt Response
+        "agent_ip": AGENT_IP_CACHE,
         "web_traffic_total": _("web_traffic_total", lang),
         "web_uptime": _("web_uptime", lang),
         "web_cpu": _("web_cpu", lang),
@@ -655,23 +655,12 @@ async def process_node_result_background(bot, user_id, cmd, text, token, node_na
 async def handle_node_details(request):
     if not get_current_user(request):
         return web.json_response({"error": "Unauthorized"}, status=401)
-    
-    # Decrypt Request (Query Param)
-    token = decrypt_data(request.query.get("token"))
-    
+    token = request.query.get("token")
     node = await nodes_db.get_node_by_token(token)
     if not node:
         return web.json_response({"error": "Node not found"}, status=404)
-        
-    return web.json_response({
-        "name": node.get("name"),
-        "ip": encrypt_data(node.get("ip")), # Encrypt Response
-        "stats": node.get("stats"),
-        "history": node.get("history", []),
-        "token": encrypt_data(token),       # Encrypt Response
-        "last_seen": node.get("last_seen", 0),
-        "is_restarting": node.get("is_restarting", False)
-    })
+    return web.json_response({"name": node.get("name"), "ip": node.get("ip"), "stats": node.get("stats"), "history": node.get(
+        "history", []), "token": token, "last_seen": node.get("last_seen", 0), "is_restarting": node.get("is_restarting", False)})
 
 
 async def handle_agent_stats(request):
@@ -682,7 +671,7 @@ async def handle_agent_stats(request):
         "cpu": 0,
         "ram": 0,
         "disk": 0,
-        "ip": encrypt_data(AGENT_IP_CACHE), # Encrypt Response
+        "ip": AGENT_IP_CACHE,
         "net_sent": 0,
         "net_recv": 0,
         "boot_time": 0}
@@ -731,13 +720,8 @@ async def handle_node_add(request):
         script = "deploy_en.sh" if lang == "en" else "deploy.sh"
         cmd = f"bash <(wget -qO- https://raw.githubusercontent.com/jatixs/tgbotvpscp/main/{
             script}) --agent={proto}://{host} --token={token}"
-        
         return web.json_response(
-            {
-                "status": "ok", 
-                "token": encrypt_data(token), # Encrypt Response
-                "command": encrypt_data(cmd)  # Encrypt Response
-            })
+            {"status": "ok", "token": token, "command": cmd})
     except Exception as e:
         return web.json_response({"error": str(e)}, status=500)
 
@@ -748,10 +732,7 @@ async def handle_node_delete(request):
         return web.json_response({"error": "Admin required"}, status=403)
     try:
         data = await request.json()
-        
-        # Decrypt Request
-        token = decrypt_data(data.get("token"))
-        
+        token = data.get("token")
         if not token:
             return web.json_response({"error": "Token required"}, status=400)
         await nodes_db.delete_node(token)
@@ -766,11 +747,8 @@ async def handle_node_rename(request):
         return web.json_response({"error": "Only Main Admin required"}, status=403)
     try:
         data = await request.json()
-        
-        # Decrypt Request
-        token = decrypt_data(data.get("token"))
+        token = data.get("token")
         new_name = data.get("name")
-        
         if not token or not new_name:
             return web.json_response({"error": "Token and name required"}, status=400)
         
@@ -800,10 +778,9 @@ async def handle_nodes_list_json(request):
         stats = node.get("stats", {})
         nodes_data.append(
             {
-                "token": encrypt_data(token), # Encrypt Response
-                "name": node.get("name", "Unknown"), 
-                "ip": encrypt_data(node.get("ip", "Unknown")), # Encrypt Response
-                "status": status, "cpu": stats.get(
+                "token": token, "name": node.get(
+                    "name", "Unknown"), "ip": node.get(
+                    "ip", "Unknown"), "status": status, "cpu": stats.get(
                     "cpu", 0), "ram": stats.get(
                         "ram", 0), "disk": stats.get(
                             "disk", 0)})
@@ -837,8 +814,8 @@ async def handle_settings_page(request):
                     dict) else ALLOWED_USERS[uid]} for uid in ALLOWED_USERS if uid != ADMIN_USER_ID]
         users_json = json.dumps(ulist)
         all_nodes = await nodes_db.get_all_nodes()
-        # Encrypt embedded JSON
-        nlist = [{"token": encrypt_data(t), "name": n.get("name", "Unknown"), "ip": encrypt_data(n.get("ip", "Unknown"))} for t, n in all_nodes.items()]
+        nlist = [{"token": t, "name": n.get("name", "Unknown"), "ip": n.get(
+            "ip", "Unknown")} for t, n in all_nodes.items()]
         nodes_json = json.dumps(nlist)
     keyboard_config_json = json.dumps(KEYBOARD_CONFIG)
 
@@ -1437,7 +1414,7 @@ async def handle_sse_stream(request):
                 break
           
             current_stats = {
-                "cpu": 0, "ram": 0, "disk": 0, "ip": encrypt_data(AGENT_IP_CACHE), # Encrypt Response
+                "cpu": 0, "ram": 0, "disk": 0, "ip": AGENT_IP_CACHE,
                 "net_sent": 0, "net_recv": 0, "boot_time": 0}
             try:
                 net = psutil.net_io_counters()
@@ -1481,10 +1458,8 @@ async def handle_sse_stream(request):
                     status = "online"
                 stats = node.get("stats", {})
                 nodes_data.append({
-                    "token": encrypt_data(token), # Encrypt Response
-                    "name": node.get("name", "Unknown"),
-                    "ip": encrypt_data(node.get("ip", "Unknown")), # Encrypt Response
-                    "status": status,
+                    "token": token, "name": node.get("name", "Unknown"),
+                    "ip": node.get("ip", "Unknown"), "status": status,
                     "cpu": stats.get("cpu", 0), "ram": stats.get("ram", 0),
                     "disk": stats.get("disk", 0)})
             
@@ -1710,9 +1685,7 @@ async def handle_sse_node_details(request):
     if not user:
         return web.Response(status=401)
     
-    # Decrypt Request (Query Param)
-    token = decrypt_data(request.query.get('token'))
-    
+    token = request.query.get('token')
     if not token:
         return web.Response(status=400)
     
@@ -1743,10 +1716,10 @@ async def handle_sse_node_details(request):
             if node:
                payload = {
                    "name": node.get("name"),
-                   "ip": encrypt_data(node.get("ip")), # Encrypt Response
+                   "ip": node.get("ip"),
                    "stats": node.get("stats"),
                    "history": node.get("history", []),
-                   "token": encrypt_data(token),       # Encrypt Response
+                   "token": token,
                    "last_seen": node.get("last_seen", 0),
                    "is_restarting": node.get("is_restarting", False)
                }
