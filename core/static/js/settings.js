@@ -2,9 +2,6 @@
 
 const isMainAdmin = (typeof IS_MAIN_ADMIN !== 'undefined') ? IS_MAIN_ADMIN : false;
 
-// --- CRYPTO FUNCTIONS (XOR + Base64) ---
-// WEB_KEY is injected in settings.html by server
-
 function decryptData(text) {
     if (!text) return "";
     if (typeof WEB_KEY === 'undefined' || !WEB_KEY) return text;
@@ -37,7 +34,7 @@ function encryptData(text) {
         return text;
     }
 }
-// ----------------------------------------
+
 
 window.initSettings = function() {
     renderUsers();
@@ -1170,7 +1167,7 @@ function renderSessionItem(s) {
                 ${userBadge}
                 <div class="text-sm font-bold text-gray-900 dark:text-white truncate" title="${s.ua}">${deviceText}</div>
                 <div class="text-xs text-gray-500 dark:text-gray-400 flex items-center gap-2">
-                    <span class="font-mono">${s.ip}</span>
+                    <span class="font-mono">${escapeHtml(decryptData(s.ip))}</span>
                     <span>•</span>
                     <span>${date}</span>
                 </div>

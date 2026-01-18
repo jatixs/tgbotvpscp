@@ -354,10 +354,12 @@ async def api_get_sessions(request):
             is_current = (token == current_token)
             s_uid = session['id']
             user_name = USER_NAMES.get(str(s_uid), f"ID: {s_uid}")
+            ip_raw = session.get("ip", "Unknown")
+            ip_enc = encrypt_for_web(ip_raw)
+
             user_sessions.append({"token_prefix": token[:6] + "...",
                                   "id": token,
-                                  "ip": session.get("ip",
-                                                    "Unknown"),
+                                  "ip": ip_enc,
                                   "ua": session.get("ua",
                                                     "Unknown"),
                                   "created": session.get("created",
@@ -433,7 +435,7 @@ async def handle_dashboard(request):
             0) < NODE_OFFLINE_TIMEOUT)
     role = user.get('role', 'users')
     is_main_admin = (user_id == ADMIN_USER_ID)
-    is_admin = (role == 'admins') or is_main_admin  # <--- ДОБАВЛЕНО ОПРЕДЕЛЕНИЕ
+    is_admin = (role == 'admins') or is_main_admin
     role_color = "green" if role == "admins" else "gray"
     
     role_badge_html = f'<span class="ml-2 px-2 py-0.5 rounded text-[10px] border border-{role_color}-500/30 bg-{role_color}-100 dark:bg-{role_color}-500/20 text-{role_color}-600 dark:text-{role_color}-400 uppercase font-bold align-middle">{role}</span>'
@@ -957,7 +959,7 @@ async def handle_settings_page(request):
         "web_sessions_view_all": _("web_sessions_view_all", lang),
         "web_sessions_revoke_all": _("web_sessions_revoke_all", lang),
         "web_sessions_modal_title": _("web_sessions_modal_title", lang),
-        "user_role_js": f"const USER_ROLE = '{role}'; const IS_MAIN_ADMIN = {str(is_main_admin).lower()};",
+        "user_role_js": f"const USER_ROLE = '{role}'; const IS_MAIN_ADMIN = {str(is_main_admin).lower()}; const WEB_KEY = '{get_web_key()}';",
         "is_main_admin": is_main_admin,
         "check_resources": "checked" if user_alerts.get("resources", False) else "",
         "check_logins": "checked" if user_alerts.get("logins", False) else "",
