@@ -196,8 +196,7 @@ def get_current_user(request):
 def _get_avatar_html(user):
     raw = user.get('photo_url', '')
     if raw.startswith('http'):
-        return f'<img src="{
-            raw}" alt="ava" class="w-6 h-6 rounded-full flex-shrink-0">'
+        return f'<img src="{raw}" alt="ava" class="w-6 h-6 rounded-full flex-shrink-0">'
     return f'<span class="text-lg leading-none select-none">{raw}</span>'
 
 
@@ -573,6 +572,8 @@ async def handle_dashboard(request):
             "web_top_cpu": _("web_top_cpu", lang),
             "web_top_ram": _("web_top_ram", lang),
             "web_top_disk": _("web_top_disk", lang),
+            "web_hint_traffic_in": _("web_hint_traffic_in", lang),
+            "web_hint_traffic_out": _("web_hint_traffic_out", lang),
             "web_log_connecting": _("web_log_connecting", lang),
             "web_status_restart": _("web_status_restart", lang),
             "web_session_expired": _("web_session_expired", lang),
@@ -716,6 +717,7 @@ async def handle_agent_stats(request):
         "boot_time": 0}
     try:
         net = psutil.net_io_counters()
+        net_if = psutil.net_io_counters(pernic=True)
         mem = psutil.virtual_memory()
         disk = psutil.disk_usage(get_host_path('/'))
         freq = psutil.cpu_freq()
@@ -725,7 +727,8 @@ async def handle_agent_stats(request):
         current_stats.update({
             "net_sent": net.bytes_sent, "net_recv": net.bytes_recv, "boot_time": psutil.boot_time(),
             "ram_total": mem.total, "ram_free": mem.available, "disk_total": disk.total, "disk_free": disk.free,
-            "cpu_freq": freq.current if freq else 0, "process_cpu": proc_cpu, "process_ram": proc_ram, "process_disk": proc_disk
+            "cpu_freq": freq.current if freq else 0, "process_cpu": proc_cpu, "process_ram": proc_ram, "process_disk": proc_disk,
+            "interfaces": {k: v._asdict() for k, v in net_if.items()}
         })
     except Exception:
         pass
@@ -1469,6 +1472,7 @@ async def handle_sse_stream(request):
                 "net_sent": 0, "net_recv": 0, "boot_time": 0}
             try:
                 net = psutil.net_io_counters()
+                net_if = psutil.net_io_counters(pernic=True)
                 mem = psutil.virtual_memory()
                 disk = psutil.disk_usage(get_host_path('/'))
                 freq = psutil.cpu_freq()
@@ -1478,7 +1482,8 @@ async def handle_sse_stream(request):
                 current_stats.update({
                     "net_sent": net.bytes_sent, "net_recv": net.bytes_recv, "boot_time": psutil.boot_time(),
                     "ram_total": mem.total, "ram_free": mem.available, "disk_total": disk.total, "disk_free": disk.free,
-                    "cpu_freq": freq.current if freq else 0, "process_cpu": proc_cpu, "process_ram": proc_ram, "process_disk": proc_disk
+                    "cpu_freq": freq.current if freq else 0, "process_cpu": proc_cpu, "process_ram": proc_ram, "process_disk": proc_disk,
+                    "interfaces": {k: v._asdict() for k, v in net_if.items()}
                 })
             except Exception:
                 pass
