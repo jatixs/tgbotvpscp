@@ -1,6 +1,41 @@
 /* /core/static/js/settings.js */
 
 const isMainAdmin = (typeof IS_MAIN_ADMIN !== 'undefined') ? IS_MAIN_ADMIN : false;
+
+function decryptData(text) {
+    if (!text) return "";
+    if (typeof WEB_KEY === 'undefined' || !WEB_KEY) return text;
+    try {
+        const decoded = atob(text);
+        let result = "";
+        for (let i = 0; i < decoded.length; i++) {
+            const keyChar = WEB_KEY[i % WEB_KEY.length];
+            result += String.fromCharCode(decoded.charCodeAt(i) ^ keyChar.charCodeAt(0));
+        }
+        return result;
+    } catch (e) {
+        console.error("Decryption error:", e);
+        return text;
+    }
+}
+
+function encryptData(text) {
+    if (!text) return "";
+    if (typeof WEB_KEY === 'undefined' || !WEB_KEY) return text;
+    try {
+        let result = "";
+        for (let i = 0; i < text.length; i++) {
+            const keyChar = WEB_KEY[i % WEB_KEY.length];
+            result += String.fromCharCode(text.charCodeAt(i) ^ keyChar.charCodeAt(0));
+        }
+        return btoa(result);
+    } catch (e) {
+        console.error("Encryption error:", e);
+        return text;
+    }
+}
+
+
 window.initSettings = function() {
     renderUsers();
     renderNodes();
@@ -489,7 +524,11 @@ function renderNodes() {
     section.classList.remove('hidden');
 
     if (NODES_DATA.length > 0) {
-        tbody.innerHTML = NODES_DATA.map(n => `
+        tbody.innerHTML = NODES_DATA.map(n => {
+            const decryptedIp = decryptData(n.ip);
+            const decryptedToken = decryptData(n.token);
+            
+            return `
         <tr class="border-b border-gray-100 dark:border-white/5 hover:bg-gray-50 dark:hover:bg-white/5 transition group">
             <td class="px-2 sm:px-4 py-3 font-medium text-sm text-gray-900 dark:text-white w-full sm:w-auto">
                 <div id="disp_name_${n.token}" class="flex items-center gap-2 max-w-[120px] sm:max-w-none">
@@ -508,14 +547,15 @@ function renderNodes() {
                     </div>
                 </div>
             </td>
-            <td class="px-2 sm:px-4 py-3 text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">${n.ip || 'Unknown'}</td>
-            <td class="px-2 sm:px-4 py-3 font-mono text-[10px] text-gray-400 dark:text-gray-500 truncate max-w-[80px]" title="${n.token}">${n.token.substring(0, 8)}...</td>
+            <td class="px-2 sm:px-4 py-3 text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">${escapeHtml(decryptedIp) || 'Unknown'}</td>
+            <td class="px-2 sm:px-4 py-3 font-mono text-[10px] text-gray-400 dark:text-gray-500 truncate max-w-[80px]" title="${escapeHtml(decryptedToken)}">${escapeHtml(decryptedToken).substring(0, 8)}...</td>
             <td class="px-2 sm:px-4 py-3 text-right">
                 <button onclick="deleteNode('${n.token}')" class="text-red-500 hover:text-red-700 dark:hover:text-red-300 transition p-1" title="Delete">
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
                 </button>
             </td>
-        </tr>`).join('');
+        </tr>`;
+        }).join('');
         if (typeof window.parsePageEmojis === 'function') window.parsePageEmojis();
     } else {
         tbody.innerHTML = `<tr><td colspan="4" class="px-4 py-3 text-center text-gray-500 text-xs">${I18N.web_no_nodes}</td></tr>`;
@@ -1127,7 +1167,7 @@ function renderSessionItem(s) {
                 ${userBadge}
                 <div class="text-sm font-bold text-gray-900 dark:text-white truncate" title="${s.ua}">${deviceText}</div>
                 <div class="text-xs text-gray-500 dark:text-gray-400 flex items-center gap-2">
-                    <span class="font-mono">${s.ip}</span>
+                    <span class="font-mono">${escapeHtml(decryptData(s.ip))}</span>
                     <span>•</span>
                     <span>${date}</span>
                 </div>
