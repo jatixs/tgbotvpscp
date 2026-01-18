@@ -354,8 +354,11 @@ async def api_get_sessions(request):
             is_current = (token == current_token)
             s_uid = session['id']
             user_name = USER_NAMES.get(str(s_uid), f"ID: {s_uid}")
+            
+            # --- Encrypt IP address for web ---
             ip_raw = session.get("ip", "Unknown")
             ip_enc = encrypt_for_web(ip_raw)
+            # --------------------------------------------
 
             user_sessions.append({"token_prefix": token[:6] + "...",
                                   "id": token,
@@ -1686,6 +1689,13 @@ async def handle_sse_logs(request):
                     await resp.write(f"event: logs\ndata: {json.dumps({'logs': new_lines})}\n\n".encode('utf-8'))
                     await resp.drain()
             
+            # Send keep-alive comment to prevent idle timeouts (Nginx/Cloudflare)
+            try:
+                await resp.write(b": keepalive\n\n")
+                await resp.drain()
+            except Exception:
+                break
+
             if shutdown_event:
                 try:
                     if not shared_state.IS_RESTARTING:
