@@ -14,6 +14,25 @@
 ---
 ## [1.15.3] - 2026-01-17
 
+### 🚀 Added (WebUI):
+
+* **SSE (Real-time):** Complete transition to **Server-Sent Events** technology. Dashboard data, logs, and node statuses now update in real-time without delays or redundant requests.
+* **Node Editing:** Implemented the ability to **rename nodes** directly from the web interface.
+* **Interactive Logs:**
+* Instant log streaming via SSE.
+* Smart auto-scroll (pauses when viewing history).
+* Visual loading indicators (spinners).
+
+### 🛡️ Security:
+
+* **Config Encryption:** Integrated **Fernet encryption** (AES) for on-disk configuration files. Sensitive data (`nodes.json`, `users.json`) is now protected from direct reading.
+* **Web Data Obfuscation:** IP addresses and tokens are now transmitted to the web interface in an encrypted format, preventing leakage via browser developer tools.
+
+### ✨ Improved:
+
+* **UI/UX:** Added **Blur effects** to hide content (e.g., logs) from users without access rights.
+* **Performance:** Reduced network and processor load by eliminating constant API polling.
+
 ---
 ## [1.15.2] - 2026-01-10
 
