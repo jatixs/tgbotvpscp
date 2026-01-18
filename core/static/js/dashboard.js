@@ -151,6 +151,40 @@ function formatProcessList(procList, title, colorClass = "text-gray-500") {
         </div>
     `;
 }
+
+// --- NEW FUNCTION ---
+function formatInterfaceList(interfaces, type, title, colorClass = "text-gray-500") {
+    if (!interfaces) return '';
+
+    const keys = Object.keys(interfaces).sort();
+
+    const rows = keys.map(name => {
+        const val = type === 'rx' ? interfaces[name].bytes_recv : interfaces[name].bytes_sent;
+        const hoverColor = colorClass.replace('text-', 'bg-');
+        
+        return `
+        <div class="flex justify-between items-center py-1.5 border-b border-gray-500/10 last:border-0 group">
+            <div class="flex items-center gap-2 overflow-hidden">
+                <div class="w-1 h-1 rounded-full bg-gray-300 dark:bg-gray-600 group-hover:${hoverColor} transition-colors"></div>
+                <span class="text-xs font-medium text-gray-700 dark:text-gray-200 truncate" title="${escapeHtml(name)}">${escapeHtml(name)}</span>
+            </div>
+            <span class="text-[10px] font-mono font-bold bg-gray-100 dark:bg-white/10 px-1.5 py-0.5 rounded ml-2 text-gray-600 dark:text-gray-300 whitespace-nowrap">${formatBytes(val)}</span>
+        </div>`;
+    }).join('');
+
+    return `
+        <div class="min-w-[180px]">
+            <div class="text-[10px] uppercase tracking-wider font-bold mb-2 pb-1 border-b border-gray-500/20 ${colorClass}">
+                ${title}
+            </div>
+            <div class="flex flex-col max-h-[200px] overflow-y-auto custom-scrollbar">
+                ${rows}
+            </div>
+        </div>
+    `;
+}
+// --------------------
+
 function updateNodesListUI(data) {
     try {
         allNodesData = data.nodes || [];
@@ -340,6 +374,21 @@ function updateAgentStatsUI(data) {
 
             const txEl = document.getElementById('stat_net_sent');
             if (txEl) txEl.innerHTML = `${formatBytes(data.stats.net_sent)} <span class="${speedStyle}">${formatSpeed(txSpeed)}</span>`;
+
+            // --- CHANGED: Interfaces in Hints ---
+            if (data.stats.interfaces) {
+                 const hintRx = document.getElementById('hint-rx');
+                 if (hintRx) {
+                     const title = (typeof I18N !== 'undefined' && I18N.web_hint_traffic_in) ? I18N.web_hint_traffic_in : "Inbound Traffic";
+                     hintRx.innerHTML = formatInterfaceList(data.stats.interfaces, 'rx', title, "text-cyan-500");
+                 }
+                 const hintTx = document.getElementById('hint-tx');
+                 if (hintTx) {
+                     const title = (typeof I18N !== 'undefined' && I18N.web_hint_traffic_out) ? I18N.web_hint_traffic_out : "Outbound Traffic";
+                     hintTx.innerHTML = formatInterfaceList(data.stats.interfaces, 'tx', title, "text-orange-500");
+                 }
+            }
+            // ------------------------------------
 
             const rxTotal = data.stats.net_recv || 0;
             const txTotal = data.stats.net_sent || 0;
