@@ -289,25 +289,29 @@ def get_nodes_delete_keyboard(
 
 
 def get_node_management_keyboard(
-        token: str, lang: str) -> InlineKeyboardMarkup:
-    layout = [
-        [
-            InlineKeyboardButton(
-                text=_(
-                    "btn_selftest", lang), callback_data=f"node_cmd_{token}_selftest"), InlineKeyboardButton(
-                text=_(
-                    "btn_uptime", lang), callback_data=f"node_cmd_{token}_uptime")], [
-            InlineKeyboardButton(
-                text=_(
-                    "btn_traffic", lang), callback_data=f"node_cmd_{token}_traffic"), InlineKeyboardButton(
-                text=_(
-                    "btn_top", lang), callback_data=f"node_cmd_{token}_top")], [
-            InlineKeyboardButton(
-                text=_(
-                    "btn_speedtest", lang), callback_data=f"node_cmd_{token}_speedtest"), InlineKeyboardButton(
-                text=_(
-                    "btn_reboot", lang), callback_data=f"node_cmd_{token}_reboot")], [
-            InlineKeyboardButton(
-                text=_(
-                    "btn_back", lang), callback_data="nodes_list_refresh")]]
+        token: str, lang: str, user_id: int) -> InlineKeyboardMarkup:
+    
+    row1 = [
+        InlineKeyboardButton(text=_("btn_selftest", lang), callback_data=f"node_cmd_{token}_selftest"),
+        InlineKeyboardButton(text=_("btn_uptime", lang), callback_data=f"node_cmd_{token}_uptime")
+    ]
+    row2 = [
+        InlineKeyboardButton(text=_("btn_traffic", lang), callback_data=f"node_cmd_{token}_traffic"),
+        InlineKeyboardButton(text=_("btn_top", lang), callback_data=f"node_cmd_{token}_top")
+    ]
+    row3 = [
+        InlineKeyboardButton(text=_("btn_speedtest", lang), callback_data=f"node_cmd_{token}_speedtest")
+    ]
+    
+    row4 = []
+    if user_id == ADMIN_USER_ID:
+        row4.append(InlineKeyboardButton(text=_("node_btn_rename", lang), callback_data=f"node_rename_{token}"))
+    
+    row4.append(InlineKeyboardButton(text=_("btn_reboot", lang), callback_data=f"node_cmd_{token}_reboot"))
+
+    row5 = [
+        InlineKeyboardButton(text=_("btn_back", lang), callback_data="nodes_list_refresh")
+    ]
+
+    layout = [row1, row2, row3, row4, row5]
     return InlineKeyboardMarkup(inline_keyboard=layout)

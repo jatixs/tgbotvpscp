@@ -128,6 +128,18 @@ async def create_node(name: str) -> str:
     return raw_token
 
 
+async def update_node_name(token: str, new_name: str):
+    """Обновляет имя ноды."""
+    t_hash = _get_token_hash(token)
+    node = await Node.get_or_none(token_hash=t_hash)
+    if node:
+        node.name = new_name
+        await node.save()
+        logging.info(f"Node renamed to: {new_name}")
+        return True
+    return False
+
+
 async def delete_node(token: str):
     t_hash = _get_token_hash(token)
     await Node.filter(token_hash=t_hash).delete()

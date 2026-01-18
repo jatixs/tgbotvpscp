@@ -432,6 +432,7 @@ async def handle_dashboard(request):
             "last_seen",
             0) < NODE_OFFLINE_TIMEOUT)
     role = user.get('role', 'users')
+    is_main_admin = (user_id == ADMIN_USER_ID)
     role_color = "green" if role == "admins" else "gray"
     
     role_badge_html = f'<span class="ml-2 px-2 py-0.5 rounded text-[10px] border border-{role_color}-500/30 bg-{role_color}-100 dark:bg-{role_color}-500/20 text-{role_color}-600 dark:text-{role_color}-400 uppercase font-bold align-middle">{role}</span>'
@@ -504,7 +505,8 @@ async def handle_dashboard(request):
         "web_logs_protected_desc": _("web_logs_protected_desc", lang),    
         "web_node_last_seen_label": _("web_node_last_seen", lang),
         "web_node_traffic": _("web_node_traffic", lang),
-        "user_role_js": f"const USER_ROLE = '{role}';",
+        "user_role_js": f"const USER_ROLE = '{role}'; const IS_MAIN_ADMIN = {str(is_main_admin).lower()};",
+        "is_main_admin": is_main_admin,
         "web_search_placeholder": _("web_search_placeholder", lang),
         "i18n_json": json.dumps({
             "web_cpu": _("web_cpu", lang),
@@ -557,6 +559,8 @@ async def handle_dashboard(request):
             "web_fatal_conn": _("web_fatal_conn", lang),
             "web_server_rebooting": _("web_server_rebooting", lang),
             "web_reloading_page": _("web_reloading_page", lang),
+            "web_node_rename_success": _("web_node_rename_success", lang),
+            "web_node_rename_error": _("web_node_rename_error", lang),
         })
     }
 
@@ -737,6 +741,25 @@ async def handle_node_delete(request):
         return web.json_response({"error": str(e)}, status=500)
 
 
+async def handle_node_rename(request):
+    user = get_current_user(request)
+    if not user or user['id'] != ADMIN_USER_ID:
+        return web.json_response({"error": "Only Main Admin required"}, status=403)
+    try:
+        data = await request.json()
+        token = data.get("token")
+        new_name = data.get("name")
+        if not token or not new_name:
+            return web.json_response({"error": "Token and name required"}, status=400)
+        
+        success = await nodes_db.update_node_name(token, new_name.strip())
+        if success:
+            return web.json_response({"status": "ok"})
+        else:
+            return web.json_response({"error": "Node not found"}, status=404)
+    except Exception as e:
+        return web.json_response({"error": str(e)}, status=500)
+
 async def handle_nodes_list_json(request):
     user = get_current_user(request)
     if not user:
@@ -772,6 +795,7 @@ async def handle_settings_page(request):
     user_id = user['id']
     role = user.get('role', 'users')
     is_admin = role == 'admins'
+    is_main_admin = (user_id == ADMIN_USER_ID)
     lang = get_user_lang(user_id)
     user_alerts = ALERTS_CONFIG.get(user_id, {})
     users_json = "null"
@@ -805,6 +829,8 @@ async def handle_settings_page(request):
         "web_session_expired": _("web_session_expired", lang), "web_please_relogin": _("web_please_relogin", lang), "web_login_btn": _("web_login_btn", lang),
         "web_add_user_prompt": _("web_add_user_prompt", lang), 
         "web_weak_conn": _("web_weak_conn", lang), "web_conn_problem": _("web_conn_problem", lang), "web_refresh_stream": _("web_refresh_stream", lang), "web_fatal_conn": _("web_fatal_conn", lang), "web_server_rebooting": _("web_server_rebooting", lang), "web_reloading_page": _("web_reloading_page", lang),
+        "web_node_rename_success": _("web_node_rename_success", lang),
+        "web_node_rename_error": _("web_node_rename_error", lang),
     }
     for btn_key, conf_key in BTN_CONFIG_MAP.items():
         i18n_data[f"lbl_{conf_key}"] = _(btn_key, lang)
@@ -885,7 +911,8 @@ async def handle_settings_page(request):
         "web_sessions_view_all": _("web_sessions_view_all", lang),
         "web_sessions_revoke_all": _("web_sessions_revoke_all", lang),
         "web_sessions_modal_title": _("web_sessions_modal_title", lang),
-        "user_role_js": f"const USER_ROLE = '{role}';",
+        "user_role_js": f"const USER_ROLE = '{role}'; const IS_MAIN_ADMIN = {str(is_main_admin).lower()};",
+        "is_main_admin": is_main_admin,
         "check_resources": "checked" if user_alerts.get("resources", False) else "",
         "check_logins": "checked" if user_alerts.get("logins", False) else "",
         "check_bans": "checked" if user_alerts.get("bans", False) else "",
@@ -1479,75 +1506,167 @@ async def handle_sse_logs(request):
     
     log_type = request.query.get('type', 'bot')
     
+    # Подготовка ответа
     resp = web.StreamResponse(status=200, reason='OK')
     resp.headers['Content-Type'] = 'text/event-stream'
     resp.headers['Cache-Control'] = 'no-cache'
     resp.headers['Connection'] = 'keep-alive'
+    resp.headers['X-Accel-Buffering'] = 'no'
+    resp.enable_compression(False)
+    
     await resp.prepare(request)
 
     shutdown_event = request.app.get('shutdown_event')
 
+    # --- ХЕЛПЕРЫ ---
+    
+    # Определяем команду journalctl один раз
+    journal_bin = ["journalctl"]
+    if DEPLOY_MODE == "docker" and current_config.INSTALL_MODE == "root":
+        if os.path.exists("/host/usr/bin/journalctl"):
+            journal_bin = ["chroot", "/host", "/usr/bin/journalctl"]
+        elif os.path.exists("/host/bin/journalctl"):
+            journal_bin = ["chroot", "/host", "/bin/journalctl"]
+
+    async def fetch_sys_logs(cursor=None, lines=None):
+        """
+        Читает системные логи.
+        Если передан cursor -> читает --after-cursor
+        Если передан lines -> читает -n lines
+        Возвращает: (список_строк, новый_курсор)
+        """
+        cmd = journal_bin + ["--no-pager", "--show-cursor"]
+        if cursor:
+            cmd.extend(["--after-cursor", cursor])
+        elif lines:
+            cmd.extend(["-n", str(lines)])
+        else:
+            cmd.extend(["-n", "300"]) # Default history
+
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                *cmd, 
+                stdout=asyncio.subprocess.PIPE, 
+                stderr=asyncio.subprocess.PIPE
+            )
+            stdout, stderr = await proc.communicate()
+            
+            if proc.returncode != 0:
+                return [f"Error: {stderr.decode('utf-8', errors='ignore')}"], cursor
+
+            raw_output = stdout.decode('utf-8', errors='ignore').strip().split('\n')
+            log_lines = []
+            new_cursor = cursor
+
+            for line in raw_output:
+                if line.startswith("__CURSOR="):
+                    new_cursor = line.split("=", 1)[1]
+                elif line:
+                    log_lines.append(line)
+            
+            return log_lines, new_cursor
+        except Exception as e:
+            return [f"Error executing journalctl: {str(e)}"], cursor
+
+    # Переменные состояния
+    bot_log_path = os.path.join(BASE_DIR, "logs", "bot", "bot.log")
+    last_pos = 0     # Для bot logs (позиция в файле)
+    sys_cursor = None # Для sys logs (курсор journalctl)
+
+    # --- ФАЗА 1: Загрузка истории (300 строк) ---
+    
+    # 1.1 BOT LOGS History
+    if log_type == 'bot' and os.path.exists(bot_log_path):
+        try:
+            def read_history():
+                with open(bot_log_path, "r", encoding="utf-8", errors="ignore") as f:
+                    lines = list(deque(f, 300))
+                    f.seek(0, 2)
+                    return lines, f.tell()
+            
+            history_lines, last_pos = await asyncio.to_thread(read_history)
+            if history_lines:
+                clean_lines = [l.rstrip() for l in history_lines]
+                await resp.write(f"event: logs\ndata: {json.dumps({'logs': clean_lines})}\n\n".encode('utf-8'))
+                await resp.drain()
+        except Exception as e:
+            logging.error(f"Error reading bot history: {e}")
+
+    # 1.2 SYS LOGS History
+    elif log_type == 'sys':
+        history_lines, sys_cursor = await fetch_sys_logs(lines=300)
+        if history_lines:
+            await resp.write(f"event: logs\ndata: {json.dumps({'logs': history_lines})}\n\n".encode('utf-8'))
+            await resp.drain()
+
+    # --- ФАЗА 2: Цикл обновлений (Tail) ---
     try:
         while True:
+            # Проверка на перезагрузку
             if shared_state.IS_RESTARTING:
-                try:
-                    await resp.write(b"event: shutdown\ndata: restarting\n\n")
-                except Exception:
-                    pass
+                await resp.write(b"event: shutdown\ndata: restarting\n\n")
+                await resp.drain()
                 break
 
-            try:
-                if request.transport is None or request.transport.is_closing():
-                    break
-            except Exception:
+            # Проверка соединения
+            if request.transport is None or request.transport.is_closing():
                 break
 
-            lines = []
+            # --- BOT LOGS UPDATE ---
             if log_type == 'bot':
-                log_path = os.path.join(BASE_DIR, "logs", "bot", "bot.log")
-                if os.path.exists(log_path):
-                    try:
-                        with open(log_path, "r", encoding="utf-8", errors="ignore") as f:
-                            lines = list(deque(f, 300))
-                    except Exception:
-                        lines = ["Error reading logs"]
-                else:
-                    lines = ["Log file not found"]
+                if os.path.exists(bot_log_path):
+                    def read_updates(cursor):
+                        new_data = []
+                        new_cursor = cursor
+                        try:
+                            current_size = os.path.getsize(bot_log_path)
+                            if current_size < cursor: cursor = 0 # Ротация логов
+                            
+                            if current_size > cursor:
+                                with open(bot_log_path, "r", encoding="utf-8", errors="ignore") as f:
+                                    f.seek(cursor)
+                                    new_data = f.readlines()
+                                    new_cursor = f.tell()
+                        except Exception:
+                            pass
+                        return new_data, new_cursor
+
+                    new_lines, last_pos = await asyncio.to_thread(read_updates, last_pos)
+                    if new_lines:
+                        clean_lines = [l.rstrip() for l in new_lines]
+                        await resp.write(f"event: logs\ndata: {json.dumps({'logs': clean_lines})}\n\n".encode('utf-8'))
+                        await resp.drain()
+
+            # --- SYS LOGS UPDATE ---
             elif log_type == 'sys':
-                cmd = ["journalctl", "-n", "100", "--no-pager"]
-                if DEPLOY_MODE == "docker" and current_config.INSTALL_MODE == "root":
-                    if os.path.exists("/host/usr/bin/journalctl"):
-                        cmd = ["chroot", "/host", "/usr/bin/journalctl", "-n", "100", "--no-pager"]
-                try:
-                    proc = await asyncio.create_subprocess_exec(*cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
-                    stdout, stderr = await proc.communicate()
-                    if proc.returncode == 0:
-                        lines = stdout.decode('utf-8', errors='ignore').strip().split('\n')
-                    else:
-                        lines = [f"Error: {stderr.decode()}"]
-                except Exception as e:
-                    lines = [f"Error: {str(e)}"]
-            
-            try:
-                await resp.write(f"event: logs\ndata: {json.dumps({'logs': lines})}\n\n".encode('utf-8'))
-            except (ConnectionResetError, BrokenPipeError, ConnectionError):
-                break
+                # Читаем все, что появилось ПОСЛЕ последнего курсора
+                # Если курсора нет (ошибка в фазе 1), пробуем получить последние 10 строк как фолбэк
+                if sys_cursor:
+                    new_lines, sys_cursor = await fetch_sys_logs(cursor=sys_cursor)
+                else:
+                    new_lines, sys_cursor = await fetch_sys_logs(lines=10)
                 
+                if new_lines:
+                    await resp.write(f"event: logs\ndata: {json.dumps({'logs': new_lines})}\n\n".encode('utf-8'))
+                    await resp.drain()
+            
+            # Ожидание перед следующей проверкой
             if shutdown_event:
                 try:
                     if not shared_state.IS_RESTARTING:
-                        await asyncio.wait_for(shutdown_event.wait(), timeout=3.0)
+                        await asyncio.wait_for(shutdown_event.wait(), timeout=1.0)
                         break
                 except asyncio.TimeoutError:
                     pass
             else:
-                await asyncio.sleep(3)
+                await asyncio.sleep(1.0)
 
     except asyncio.CancelledError:
         pass
     except Exception as e:
         if "closing transport" not in str(e) and "'NoneType' object" not in str(e):
             logging.error(f"SSE Logs Error: {e}")
+            
     return resp
 
 
@@ -1676,6 +1795,7 @@ async def start_web_server(bot_instance: Bot):
         app.router.add_post('/api/users/action', handle_user_action)
         app.router.add_post('/api/nodes/add', handle_node_add)
         app.router.add_post('/api/nodes/delete', handle_node_delete)
+        app.router.add_post('/api/nodes/rename', handle_node_rename)
         app.router.add_get('/api/events', handle_sse_stream)
         app.router.add_get('/api/events/logs', handle_sse_logs)
         app.router.add_get('/api/events/node', handle_sse_node_details)
