@@ -11,7 +11,7 @@ from core import config
 from core.auth import is_allowed, send_access_denied_message
 from core.messaging import delete_previous_message
 from core.shared_state import LAST_MESSAGE_IDS
-from core.utils import get_country_flag, get_server_timezone_label, escape_html, get_host_path, encrypt_data
+from core.utils import get_country_flag, get_server_timezone_label, escape_html, get_host_path
 
 BUTTON_KEY = "btn_sshlog"
 
@@ -105,7 +105,7 @@ async def sshlog_handler(message: types.Message):
                 fl = await get_country_flag(ip)
                 data = {
                     "user": escape_html(u),
-                    "ip": encrypt_data(ip), # Encrypt
+                    "ip": escape_html(ip),
                     "flag": fl}
 
             if not key:
@@ -117,7 +117,7 @@ async def sshlog_handler(message: types.Message):
                     fl = await get_country_flag(ip)
                     data = {
                         "user": escape_html(u),
-                        "ip": encrypt_data(ip), # Encrypt
+                        "ip": escape_html(ip),
                         "flag": fl}
 
             if not key:
@@ -128,7 +128,7 @@ async def sshlog_handler(message: types.Message):
                     fl = await get_country_flag(ip)
                     data = {
                         "user": escape_html(u),
-                        "ip": encrypt_data(ip), # Encrypt
+                        "ip": escape_html(ip),
                         "flag": fl}
 
             if key:

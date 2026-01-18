@@ -25,7 +25,7 @@ from . import config as current_config
 from .shared_state import NODE_TRAFFIC_MONITORS, ALLOWED_USERS, USER_NAMES, AUTH_TOKENS, ALERTS_CONFIG, AGENT_HISTORY, WEB_NOTIFICATIONS, WEB_USER_LAST_READ
 from .i18n import STRINGS, get_user_lang, set_user_lang, get_text as _
 from .config import DEFAULT_LANGUAGE
-from .utils import get_country_flag, save_alerts_config, get_host_path, get_app_version, encrypt_data
+from .utils import get_country_flag, save_alerts_config, get_host_path, get_app_version
 from .auth import save_users, get_user_name
 from .keyboards import BTN_CONFIG_MAP
 from modules import update as update_module
@@ -460,7 +460,7 @@ async def handle_dashboard(request):
         "nodes_count": str(nodes_count),
         "active_nodes": str(active_nodes),
         "web_agent_stats_title": _("web_agent_stats_title", lang),
-        "agent_ip": encrypt_data(AGENT_IP_CACHE), # Encrypt
+        "agent_ip": AGENT_IP_CACHE,
         "web_traffic_total": _("web_traffic_total", lang),
         "web_uptime": _("web_uptime", lang),
         "web_cpu": _("web_cpu", lang),
@@ -659,15 +659,8 @@ async def handle_node_details(request):
     node = await nodes_db.get_node_by_token(token)
     if not node:
         return web.json_response({"error": "Node not found"}, status=404)
-    return web.json_response({
-        "name": node.get("name"),
-        "ip": encrypt_data(node.get("ip")), # Encrypt
-        "stats": node.get("stats"),
-        "history": node.get("history", []),
-        "token": encrypt_data(token),       # Encrypt
-        "last_seen": node.get("last_seen", 0),
-        "is_restarting": node.get("is_restarting", False)
-    })
+    return web.json_response({"name": node.get("name"), "ip": node.get("ip"), "stats": node.get("stats"), "history": node.get(
+        "history", []), "token": token, "last_seen": node.get("last_seen", 0), "is_restarting": node.get("is_restarting", False)})
 
 
 async def handle_agent_stats(request):
@@ -678,7 +671,7 @@ async def handle_agent_stats(request):
         "cpu": 0,
         "ram": 0,
         "disk": 0,
-        "ip": encrypt_data(AGENT_IP_CACHE), # Encrypt
+        "ip": AGENT_IP_CACHE,
         "net_sent": 0,
         "net_recv": 0,
         "boot_time": 0}
@@ -728,7 +721,7 @@ async def handle_node_add(request):
         cmd = f"bash <(wget -qO- https://raw.githubusercontent.com/jatixs/tgbotvpscp/main/{
             script}) --agent={proto}://{host} --token={token}"
         return web.json_response(
-            {"status": "ok", "token": encrypt_data(token), "command": cmd}) # Encrypt
+            {"status": "ok", "token": token, "command": cmd})
     except Exception as e:
         return web.json_response({"error": str(e)}, status=500)
 
@@ -785,11 +778,9 @@ async def handle_nodes_list_json(request):
         stats = node.get("stats", {})
         nodes_data.append(
             {
-                "token": encrypt_data(token), # Encrypt
-                "name": node.get(
-                    "name", "Unknown"), 
-                "ip": encrypt_data(node.get("ip", "Unknown")), # Encrypt
-                "status": status, "cpu": stats.get(
+                "token": token, "name": node.get(
+                    "name", "Unknown"), "ip": node.get(
+                    "ip", "Unknown"), "status": status, "cpu": stats.get(
                     "cpu", 0), "ram": stats.get(
                         "ram", 0), "disk": stats.get(
                             "disk", 0)})
@@ -823,7 +814,8 @@ async def handle_settings_page(request):
                     dict) else ALLOWED_USERS[uid]} for uid in ALLOWED_USERS if uid != ADMIN_USER_ID]
         users_json = json.dumps(ulist)
         all_nodes = await nodes_db.get_all_nodes()
-        nlist = [{"token": encrypt_data(t), "name": n.get("name", "Unknown"), "ip": encrypt_data(n.get("ip", "Unknown"))} for t, n in all_nodes.items()] # Encrypt
+        nlist = [{"token": t, "name": n.get("name", "Unknown"), "ip": n.get(
+            "ip", "Unknown")} for t, n in all_nodes.items()]
         nodes_json = json.dumps(nlist)
     keyboard_config_json = json.dumps(KEYBOARD_CONFIG)
 
@@ -1422,7 +1414,7 @@ async def handle_sse_stream(request):
                 break
           
             current_stats = {
-                "cpu": 0, "ram": 0, "disk": 0, "ip": encrypt_data(AGENT_IP_CACHE), # Encrypt
+                "cpu": 0, "ram": 0, "disk": 0, "ip": AGENT_IP_CACHE,
                 "net_sent": 0, "net_recv": 0, "boot_time": 0}
             try:
                 net = psutil.net_io_counters()
@@ -1466,10 +1458,8 @@ async def handle_sse_stream(request):
                     status = "online"
                 stats = node.get("stats", {})
                 nodes_data.append({
-                    "token": encrypt_data(token), # Encrypt
-                    "name": node.get("name", "Unknown"),
-                    "ip": encrypt_data(node.get("ip", "Unknown")), # Encrypt
-                    "status": status,
+                    "token": token, "name": node.get("name", "Unknown"),
+                    "ip": node.get("ip", "Unknown"), "status": status,
                     "cpu": stats.get("cpu", 0), "ram": stats.get("ram", 0),
                     "disk": stats.get("disk", 0)})
             
@@ -1726,10 +1716,10 @@ async def handle_sse_node_details(request):
             if node:
                payload = {
                    "name": node.get("name"),
-                   "ip": encrypt_data(node.get("ip")), # Encrypt
+                   "ip": node.get("ip"),
                    "stats": node.get("stats"),
                    "history": node.get("history", []),
-                   "token": encrypt_data(token),       # Encrypt
+                   "token": token,
                    "last_seen": node.get("last_seen", 0),
                    "is_restarting": node.get("is_restarting", False)
                }

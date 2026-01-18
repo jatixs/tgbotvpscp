@@ -16,7 +16,7 @@ from core.messaging import delete_previous_message, send_alert
 from core.shared_state import LAST_MESSAGE_IDS, NODE_TRAFFIC_MONITORS
 from core import nodes_db
 from core.keyboards import get_nodes_list_keyboard, get_node_management_keyboard, get_nodes_delete_keyboard, get_back_keyboard
-from core.utils import format_uptime, encrypt_data
+from core.utils import format_uptime
 
 BUTTON_KEY = "btn_nodes"
 
@@ -117,8 +117,7 @@ async def cq_node_select(callback: types.CallbackQuery):
 
     now = time.time()
     last_seen = node.get("last_seen", 0)
-    is_restarting = node.get("is_restarting", False)
-    
+    is_restarting = node.get("is_restarting", False)  
     node_name = html.escape(node.get("name", "Unknown"))
 
     if is_restarting:
@@ -128,12 +127,9 @@ async def cq_node_select(callback: types.CallbackQuery):
         stats = node.get("stats", {})
         fmt_time = datetime.fromtimestamp(last_seen).strftime(
             '%Y-%m-%d %H:%M:%S') if last_seen > 0 else "Never"
-        
-        # Encrypt IP
-        enc_ip = encrypt_data(node.get("ip", "?"))
-        
         text = _(
-            "node_details_offline", lang, name=node_name, last_seen=fmt_time, ip=enc_ip, cpu=stats.get(
+            "node_details_offline", lang, name=node_name, last_seen=fmt_time, ip=node.get(
+                "ip", "?"), cpu=stats.get(
                 "cpu", "?"), ram=stats.get(
                 "ram", "?"), disk=stats.get(
                     "disk", "?"))
@@ -144,14 +140,13 @@ async def cq_node_select(callback: types.CallbackQuery):
     raw_uptime = stats.get("uptime", 0)
     formatted_uptime = format_uptime(raw_uptime, lang)
 
-    # Encrypt IP
-    enc_ip = encrypt_data(node.get("ip", "?"))
-
     text = _(
         "node_management_menu",
         lang,
         name=node_name,
-        ip=enc_ip,
+        ip=node.get(
+            "ip",
+            "?"),
         uptime=formatted_uptime)
 
     keyboard = get_node_management_keyboard(token, lang, user_id)
@@ -169,11 +164,7 @@ async def process_node_name(message: types.Message, state: FSMContext):
     lang = get_user_lang(message.from_user.id)
     name = message.text.strip()
     token = await nodes_db.create_node(name)
-    
-    # Encrypt Token
-    enc_token = encrypt_data(token)
-    
-    await message.answer(_("node_add_success_token", lang, name=html.escape(name), token=enc_token), parse_mode="HTML")
+    await message.answer(_("node_add_success_token", lang, name=html.escape(name), token=token), parse_mode="HTML")
     await state.clear()
 
 
@@ -197,6 +188,7 @@ async def cq_node_rename(callback: types.CallbackQuery, state: FSMContext):
 
     back_kb = get_back_keyboard(lang, f"node_select_{token}")
     
+    # Экранируем имя при запросе нового имени (на случай если старое уже "сломано")
     node_name = html.escape(node.get("name", "Unknown"))
     
     await callback.message.answer(
@@ -241,16 +233,13 @@ async def process_node_rename(message: types.Message, state: FSMContext):
         stats = node.get("stats", {})
         raw_uptime = stats.get("uptime", 0)
         formatted_uptime = format_uptime(raw_uptime, lang)
-        
         node_name = html.escape(node.get("name", "Unknown"))
-        # Encrypt IP
-        enc_ip = encrypt_data(node.get("ip", "?"))
 
         text = _(
             "node_management_menu",
             lang,
             name=node_name,
-            ip=enc_ip,
+            ip=node.get("ip", "?"),
             uptime=formatted_uptime
         )
         keyboard = get_node_management_keyboard(token, lang, user_id)
@@ -319,7 +308,6 @@ async def cq_node_command(callback: types.CallbackQuery):
         "speedtest": "btn_speedtest",
         "reboot": "btn_reboot"}
     cmd_name = _(cmd_map.get(cmd, cmd), lang)
-    
     node_name = html.escape(node.get("name", "Unknown"))
     await callback.answer(_("node_cmd_sent", lang, cmd=cmd_name, name=node_name), show_alert=False)
 
@@ -339,12 +327,10 @@ async def cq_node_stop_traffic(callback: types.CallbackQuery):
                 stats = node.get("stats", {})
                 raw_uptime = stats.get("uptime", 0)
                 formatted_uptime = format_uptime(raw_uptime, lang)
-                
-                # Encrypt IP
-                enc_ip = encrypt_data(node.get("ip", "?"))
 
                 text = _(
-                    "node_management_menu", lang, name=node_name, ip=enc_ip, uptime=formatted_uptime)
+                    "node_management_menu", lang, name=node_name, ip=node.get(
+                        "ip", "?"), uptime=formatted_uptime)
 
                 keyboard = get_node_management_keyboard(token, lang, user_id)
                 await callback.message.answer(text, reply_markup=keyboard, parse_mode="HTML")
@@ -383,6 +369,7 @@ async def nodes_monitor(bot: Bot):
             nodes = await nodes_db.get_all_nodes()
 
             for token, node in nodes.items():
+                # Экранируем имя для алертов
                 name = html.escape(node.get("name", "Unknown"))
                 last_seen = node.get("last_seen", 0)
                 is_restarting = node.get("is_restarting", False)
