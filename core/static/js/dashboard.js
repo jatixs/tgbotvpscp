@@ -1,25 +1,18 @@
-/* /core/static/js/dashboard.js */
-
 let chartRes = null;
 let chartNet = null;
-
-// SSE Sources для специфических задач
-let nodeSSESource = null; // Для деталей ноды
-let logSSESource = null;  // Для логов
+let nodeSSESource = null; 
+let logSSESource = null;  
 
 let agentChart = null;
 let allNodesData = [];
-let currentNodeToken = null; // Хранит токен открытой в модалке ноды
+let currentNodeToken = null; 
 
 window.addEventListener('themeChanged', () => {
     updateChartsColors();
 });
 
 window.initDashboard = function() {
-    // Очистка всех старых источников и интервалов при инициализации
     cleanupDashboardSources();
-
-    // Подключаемся к глобальному SSE источнику (уведомления, список нод, статистика агента)
     if (window.sseSource) {
         window.sseSource.removeEventListener('agent_stats', handleSSEAgentStats);
         window.sseSource.removeEventListener('nodes_list', handleSSENodesList);
@@ -28,7 +21,6 @@ window.initDashboard = function() {
         window.sseSource.addEventListener('nodes_list', handleSSENodesList);
     }
 
-    // Инициализация поиска
     if (document.getElementById('nodesList')) {
         const searchInput = document.getElementById('nodeSearch');
         if (searchInput) {
@@ -39,14 +31,11 @@ window.initDashboard = function() {
             });
         }
     }
-
-    // Инициализация логов (теперь через SSE)
     if (document.getElementById('logsContainer')) {
         switchLogType('bot');
     }
 };
 
-// Функция очистки ресурсов при уходе со страницы или реинициализации
 function cleanupDashboardSources() {
     if (nodeSSESource) {
         nodeSSESource.close();
@@ -56,13 +45,9 @@ function cleanupDashboardSources() {
         logSSESource.close();
         logSSESource = null;
     }
-    // Интервалы больше не используются, но на всякий случай очищаем legacy
     if (window.nodesPollInterval) clearInterval(window.nodesPollInterval);
     if (window.agentPollInterval) clearInterval(window.agentPollInterval);
 }
-
-// --- ОБРАБОТЧИКИ ГЛОБАЛЬНЫХ SSE СОБЫТИЙ ---
-
 const handleSSEAgentStats = (e) => {
     if (!document.getElementById('agentChart')) return;
     try {
@@ -84,9 +69,6 @@ document.addEventListener("DOMContentLoaded", () => {
         window.initDashboard();
     }
 });
-
-// --- ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ---
-
 function escapeHtml(text) {
     if (!text) return text;
     return text.replace(/&/g, "&amp;")
@@ -130,9 +112,6 @@ function formatProcessList(procList, title, colorClass = "text-gray-500") {
         </div>
     `;
 }
-
-// --- UI UPDATERS ---
-
 function updateNodesListUI(data) {
     try {
         allNodesData = data.nodes || [];
@@ -339,8 +318,6 @@ function updateAgentStatsUI(data) {
         console.error("Agent stats UI error:", e);
     }
 }
-
-// ... вспомогательные функции для графиков остаются те же ...
 function updateChartsColors() {
     const isDark = document.documentElement.classList.contains('dark');
     const gridColor = isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.05)';
@@ -480,29 +457,18 @@ function formatUptime(bt) {
     if (h > 0) return `${h}${unitH} ${m}${unitM}`;
     return `${m}${unitM}`;
 }
-
-// --- LOGS LOGIC (SSE) ---
-
 function setLogLoading() {
     const container = document.getElementById('logsContainer');
     if (!container) return;
-    
-    // Блокируем прокрутку, чтобы не было видно дерганий
     container.classList.add('overflow-hidden');
-    
-    // Делаем контейнер relative, чтобы спиннер перекрывал его
     if (!container.classList.contains('relative')) container.classList.add('relative');
 
     const loadingText = (typeof I18N !== 'undefined' && I18N.web_log_connecting) ? I18N.web_log_connecting : "Connecting...";
-    
-    // Удаляем предыдущий спиннер, если есть
     const existing = document.getElementById('log-loader');
     if (existing) existing.remove();
 
     const loader = document.createElement('div');
     loader.id = 'log-loader';
-    // Используем bg-white/90 (90% непрозрачности), чтобы скрыть контент под спиннером,
-    // но оставляем backdrop-blur для красоты по краям.
     loader.className = 'absolute inset-0 z-50 flex flex-col items-center justify-center bg-white/90 dark:bg-gray-900/90 backdrop-blur-sm transition-opacity duration-300 opacity-0';
     
     loader.innerHTML = `
@@ -539,8 +505,6 @@ window.switchLogType = function(type) {
         el.classList.toggle('text-gray-900', isActive);
         el.classList.toggle('text-gray-500', !isActive);
     });
-
-    // Закрываем предыдущий стрим
     if (logSSESource) {
         logSSESource.close();
         logSSESource = null;
@@ -548,8 +512,6 @@ window.switchLogType = function(type) {
 
     const container = document.getElementById('logsContainer');
     const overlay = document.getElementById('logsOverlay');
-
-    // Проверка прав (если это нужно на клиенте, сервер тоже отклонит 403)
     if (typeof USER_ROLE !== 'undefined' && USER_ROLE !== 'admins') {
         if (overlay) overlay.classList.remove('hidden');
         if (!container.innerHTML.includes('blur')) {
@@ -558,14 +520,9 @@ window.switchLogType = function(type) {
         }
         return;
     }
-
-    // 1. Очищаем контейнер
     container.innerHTML = '';
     
-    // 2. Показываем непрозрачный спиннер и блокируем скролл
     setLogLoading();
-
-    // 3. Открываем новый стрим
     logSSESource = new EventSource(`/api/events/logs?type=${type}`);
 
     logSSESource.addEventListener('logs', (e) => {
@@ -576,7 +533,6 @@ window.switchLogType = function(type) {
             const logs = data.logs || [];
             
             if (logs.length === 0) {
-                 // Если логов нет, просто убираем загрузку (включаем обратно скролл)
                  if (document.getElementById('log-loader')) {
                     container.classList.remove('overflow-hidden');
                     removeLogLoading();
@@ -591,13 +547,10 @@ window.switchLogType = function(type) {
                 else if (line.includes("ERROR") || line.includes("CRITICAL")) cls = "text-red-500 font-bold";
                 return `<div class="${cls} font-mono text-xs break-all py-[1px]">${escapeHtml(line)}</div>`;
             }).join('');
-
-            const isBottom = container.scrollHeight - container.scrollTop <= container.clientHeight + 150;
-            
-            // Добавляем контент
+            const loader = document.getElementById('log-loader');
+            const isInitialLoad = loader && !loader.classList.contains('opacity-0');
+            const isAtBottom = (container.scrollHeight - container.scrollTop) <= (container.clientHeight + 50);
             container.insertAdjacentHTML('beforeend', html);
-
-            // Ограничиваем количество строк в DOM
             if (container.children.length > 1000) {
                  const toRemove = container.children.length - 1000;
                  for(let i=0; i<toRemove; i++) {
@@ -606,16 +559,11 @@ window.switchLogType = function(type) {
                      }
                  }
             }
-
-            const loader = document.getElementById('log-loader');
-
-            // 4. Сначала разрешаем прокрутку, затем прокручиваем
-            if (loader || isBottom) {
-                container.classList.remove('overflow-hidden'); // Включаем скроллбар обратно
-                container.scrollTop = container.scrollHeight;  // Мгновенная прокрутка
+            container.classList.remove('overflow-hidden');
+            if (isInitialLoad || isAtBottom) {
+                container.scrollTop = container.scrollHeight;
             }
 
-            // 5. И только потом убираем спиннер (плавное исчезновение поверх уже готового контента)
             if (loader) {
                 removeLogLoading();
             }
@@ -631,16 +579,10 @@ window.switchLogType = function(type) {
         if (overlay) overlay.classList.add('hidden');
     };
 };
-
-// ... остальные функции (node details и т.д.) ...
-
-// --- NODE DETAILS LOGIC (SSE) ---
-
 function setModalLoading() {
     const modal = document.getElementById('nodeModal');
     if (!modal) return;
     
-    // 1. Reset fields to avoid showing old data (clean state)
     const fields = ['modalNodeName', 'modalNodeIp', 'modalToken', 'modalNodeUptime', 'modalNodeRam', 'modalNodeDisk', 'modalNodeTraffic'];
     fields.forEach(id => {
         const el = document.getElementById(id);
@@ -651,16 +593,9 @@ function setModalLoading() {
         lastSeen.innerText = '...';
         lastSeen.className = 'text-gray-400 text-xs';
     }
-
-    // 2. Add Blur Overlay with Spinner
-    // Find the content card (first child of modal container)
     const card = modal.firstElementChild;
-    if (!card) return;
-    
-    // Ensure relative positioning for absolute overlay
-    if (!card.classList.contains('relative')) card.classList.add('relative');
-    
-    // Remove existing loader if any (cleanup)
+    if (!card) return;    
+    if (!card.classList.contains('relative')) card.classList.add('relative');    
     const existing = document.getElementById('node-modal-loader');
     if (existing) existing.remove();
 
@@ -677,9 +612,7 @@ function setModalLoading() {
         <span class="text-sm font-medium text-gray-600 dark:text-gray-300 animate-pulse">${escapeHtml(loadingText)}</span>
     `;
     
-    card.appendChild(loader);
-    
-    // Force reflow to enable transition
+    card.appendChild(loader);    
     void loader.offsetWidth;
     loader.classList.remove('opacity-0');
 }
@@ -697,24 +630,20 @@ function removeModalLoading() {
 async function openNodeDetails(token, color) {
     const modal = document.getElementById('nodeModal');
     if (modal) {
-        setModalLoading(); // Apply blur overlay immediately
+        setModalLoading();
         animateModalOpen(modal); 
-        currentNodeToken = token; // Сохраняем токен для переименования
-        cancelNodeRename(); // Сбрасываем состояние переименования при открытии
+        currentNodeToken = token;
+        cancelNodeRename();
     }
 
     if (chartRes) chartRes.destroy();
     if (chartNet) chartNet.destroy();
     chartRes = null;
     chartNet = null;
-
-    // Закрываем старый стрим
     if (nodeSSESource) {
         nodeSSESource.close();
         nodeSSESource = null;
     }
-
-    // Открываем новый стрим для деталей ноды
     nodeSSESource = new EventSource(`/api/events/node?token=${token}`);
     
     nodeSSESource.addEventListener('node_details', (e) => {
@@ -727,28 +656,20 @@ async function openNodeDetails(token, color) {
     });
     
     nodeSSESource.addEventListener('error', (e) => {
-         // Обработка ошибок
          try {
-             // Если это кастомное событие error от сервера (json)
              if (e.data) {
                  const errData = JSON.parse(e.data);
                  if (errData.error) {
-                     // Можно показать ошибку прямо в модалке
                      console.warn("Node SSE Error:", errData.error);
                  }
              }
          } catch(ex) {}
-         // В случае сетевой ошибки браузер сам реконнектится, лоадер можно не убирать, пока данные не придут
     });
 }
 
 function updateNodeDetailsUI(data) {
     if (data.error) return;
-
-    // Remove loading overlay as soon as we have data
     removeModalLoading();
-
-    // Обновляем имя только если мы НЕ в режиме редактирования
     const inputContainer = document.getElementById('nodeNameInputContainer');
     if (inputContainer && inputContainer.classList.contains('hidden')) {
         document.getElementById('modalNodeName').innerText = data.name;
@@ -806,18 +727,13 @@ function closeNodeModal() {
     if (modal) {
         animateModalClose(modal);
     }
-    
-    // Удаляем лоадер (на всякий случай, чтобы при следующем открытии анимация была с нуля)
     removeModalLoading();
-
-    // Закрываем SSE соединение при закрытии модалки
     if (nodeSSESource) {
         nodeSSESource.close();
         nodeSSESource = null;
     }
 }
 
-// Функции переименования ноды
 window.startNodeRename = function() {
     const nameDisplay = document.getElementById('nodeNameContainer');
     const nameInputContainer = document.getElementById('nodeNameInputContainer');
@@ -846,8 +762,6 @@ window.saveNodeRename = async function() {
     const nameInput = document.getElementById('modalNodeNameInput');
     const newName = nameInput.value.trim();
     if (!newName || !currentNodeToken) return;
-
-    // Оптимистичное обновление UI
     document.getElementById('modalNodeName').innerText = newName;
     cancelNodeRename();
 

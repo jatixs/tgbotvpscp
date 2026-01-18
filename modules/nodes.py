@@ -1,6 +1,7 @@
 import time
 import asyncio
 import logging
+import html
 from datetime import datetime
 from aiogram import F, Dispatcher, types, Bot
 from aiogram.types import KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
@@ -116,17 +117,18 @@ async def cq_node_select(callback: types.CallbackQuery):
 
     now = time.time()
     last_seen = node.get("last_seen", 0)
-    is_restarting = node.get("is_restarting", False)
+    is_restarting = node.get("is_restarting", False)  
+    node_name = html.escape(node.get("name", "Unknown"))
 
     if is_restarting:
-        await callback.answer(_("node_restarting_alert", lang, name=node.get("name")), show_alert=True)
+        await callback.answer(_("node_restarting_alert", lang, name=node_name), show_alert=True)
         return
     if now - last_seen >= config.NODE_OFFLINE_TIMEOUT:
         stats = node.get("stats", {})
         fmt_time = datetime.fromtimestamp(last_seen).strftime(
             '%Y-%m-%d %H:%M:%S') if last_seen > 0 else "Never"
         text = _(
-            "node_details_offline", lang, name=node.get("name"), last_seen=fmt_time, ip=node.get(
+            "node_details_offline", lang, name=node_name, last_seen=fmt_time, ip=node.get(
                 "ip", "?"), cpu=stats.get(
                 "cpu", "?"), ram=stats.get(
                 "ram", "?"), disk=stats.get(
@@ -141,7 +143,7 @@ async def cq_node_select(callback: types.CallbackQuery):
     text = _(
         "node_management_menu",
         lang,
-        name=node.get("name"),
+        name=node_name,
         ip=node.get(
             "ip",
             "?"),
@@ -162,7 +164,7 @@ async def process_node_name(message: types.Message, state: FSMContext):
     lang = get_user_lang(message.from_user.id)
     name = message.text.strip()
     token = await nodes_db.create_node(name)
-    await message.answer(_("node_add_success_token", lang, name=name, token=token), parse_mode="HTML")
+    await message.answer(_("node_add_success_token", lang, name=html.escape(name), token=token), parse_mode="HTML")
     await state.clear()
 
 
@@ -186,8 +188,11 @@ async def cq_node_rename(callback: types.CallbackQuery, state: FSMContext):
 
     back_kb = get_back_keyboard(lang, f"node_select_{token}")
     
+    # Экранируем имя при запросе нового имени (на случай если старое уже "сломано")
+    node_name = html.escape(node.get("name", "Unknown"))
+    
     await callback.message.answer(
-        _("node_rename_prompt", lang, name=node.get("name")), 
+        _("node_rename_prompt", lang, name=node_name), 
         parse_mode="HTML", 
         reply_markup=back_kb
     )
@@ -217,7 +222,7 @@ async def process_node_rename(message: types.Message, state: FSMContext):
 
     success = await nodes_db.update_node_name(token, new_name)
     if success:
-        await message.answer(_("node_rename_success", lang, name=new_name), parse_mode="HTML")
+        await message.answer(_("node_rename_success", lang, name=html.escape(new_name)), parse_mode="HTML")
     else:
         await message.answer("Error updating node name.")
         
@@ -228,11 +233,12 @@ async def process_node_rename(message: types.Message, state: FSMContext):
         stats = node.get("stats", {})
         raw_uptime = stats.get("uptime", 0)
         formatted_uptime = format_uptime(raw_uptime, lang)
+        node_name = html.escape(node.get("name", "Unknown"))
 
         text = _(
             "node_management_menu",
             lang,
-            name=node.get("name"),
+            name=node_name,
             ip=node.get("ip", "?"),
             uptime=formatted_uptime
         )
@@ -302,7 +308,8 @@ async def cq_node_command(callback: types.CallbackQuery):
         "speedtest": "btn_speedtest",
         "reboot": "btn_reboot"}
     cmd_name = _(cmd_map.get(cmd, cmd), lang)
-    await callback.answer(_("node_cmd_sent", lang, cmd=cmd_name, name=node.get("name")), show_alert=False)
+    node_name = html.escape(node.get("name", "Unknown"))
+    await callback.answer(_("node_cmd_sent", lang, cmd=cmd_name, name=node_name), show_alert=False)
 
 
 async def cq_node_stop_traffic(callback: types.CallbackQuery):
@@ -310,7 +317,7 @@ async def cq_node_stop_traffic(callback: types.CallbackQuery):
     lang = get_user_lang(user_id)
     token = callback.data.replace("node_stop_traffic_", "")
     node = await nodes_db.get_node_by_token(token)
-    node_name = node.get("name", "Unknown") if node else "Unknown"
+    node_name = html.escape(node.get("name", "Unknown")) if node else "Unknown"
 
     if user_id in NODE_TRAFFIC_MONITORS:
         del NODE_TRAFFIC_MONITORS[user_id]
@@ -322,7 +329,7 @@ async def cq_node_stop_traffic(callback: types.CallbackQuery):
                 formatted_uptime = format_uptime(raw_uptime, lang)
 
                 text = _(
-                    "node_management_menu", lang, name=node.get("name"), ip=node.get(
+                    "node_management_menu", lang, name=node_name, ip=node.get(
                         "ip", "?"), uptime=formatted_uptime)
 
                 keyboard = get_node_management_keyboard(token, lang, user_id)
@@ -362,7 +369,8 @@ async def nodes_monitor(bot: Bot):
             nodes = await nodes_db.get_all_nodes()
 
             for token, node in nodes.items():
-                name = node.get("name", "Unknown")
+                # Экранируем имя для алертов
+                name = html.escape(node.get("name", "Unknown"))
                 last_seen = node.get("last_seen", 0)
                 is_restarting = node.get("is_restarting", False)
 
