@@ -57,7 +57,8 @@ def load_users():
             else:
                 logging.warning(
                     "Случайный пароль не найден. Использую дефолтный ('admin').")
-                p_hash = "8c6976e5b5410415bde908bd4dee15dfb167a9c873fc4bb8a81f6f2ab448a918"
+                ph = PasswordHasher()
+                p_hash = ph.hash("admin")
 
             ALLOWED_USERS[ADMIN_USER_ID] = {
                 "group": "admins",

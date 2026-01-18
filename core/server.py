@@ -119,10 +119,23 @@ def is_default_password_active(user_id):
     if user_id not in ALLOWED_USERS:
         return False
     user_data = ALLOWED_USERS[user_id]
-    default_hash = "8c6976e5b5410415bde908bd4dee15dfb167a9c873fc4bb8a81f6f2ab448a918"
+    
     if isinstance(user_data, dict):
         p_hash = user_data.get("password_hash")
-        return p_hash == default_hash or p_hash is None
+        if p_hash is None:
+            return True
+            
+        # Legacy SHA-256 check (для совместимости)
+        if p_hash == "8c6976e5b5410415bde908bd4dee15dfb167a9c873fc4bb8a81f6f2ab448a918":
+            return True
+            
+        # Argon2 verify
+        try:
+            ph = PasswordHasher()
+            return ph.verify(p_hash, "admin")
+        except Exception:
+            return False
+            
     return True
 
 
@@ -615,7 +628,8 @@ async def handle_heartbeat(request):
         hashlib.sha256).hexdigest()
 
     if not hmac.compare_digest(expected_signature, signature):
-        logging.warning(f"Invalid signature from {request.remote}")
+        safe_ip = str(request.remote).replace('\n', '').replace('\r', '')
+        logging.warning(f"Invalid signature from {safe_ip}")
         return web.json_response({"error": "Invalid signature"}, status=403)
 
     node = await nodes_db.get_node_by_token(token)
@@ -1620,28 +1634,40 @@ async def handle_sse_logs(request):
     last_pos = 0
     sys_cursor = None
     last_sent_lines_hash = None
+    
+    # --- Keepalive tracking ---
+    last_activity = time.time()
+    KEEPALIVE_INTERVAL = 25 # Seconds
 
-    if log_type == 'bot' and os.path.exists(bot_log_path):
-        try:
-            def read_history():
-                with open(bot_log_path, "r", encoding="utf-8", errors="ignore") as f:
-                    lines = list(deque(f, 300))
-                    f.seek(0, 2)
-                    return lines, f.tell()
-            
-            history_lines, last_pos = await asyncio.to_thread(read_history)
-            if history_lines:
-                clean_lines = [l.rstrip() for l in history_lines]
-                await resp.write(f"event: logs\ndata: {json.dumps({'logs': clean_lines})}\n\n".encode('utf-8'))
-                await resp.drain()
-        except Exception as e:
-            logging.error(f"Error reading bot history: {e}")
+    if log_type == 'bot':
+        clean_lines = []
+        if os.path.exists(bot_log_path):
+            try:
+                def read_history():
+                    with open(bot_log_path, "r", encoding="utf-8", errors="ignore") as f:
+                        lines = list(deque(f, 300))
+                        f.seek(0, 2)
+                        return lines, f.tell()
+                
+                history_lines, last_pos = await asyncio.to_thread(read_history)
+                if history_lines:
+                    clean_lines = [l.rstrip() for l in history_lines]
+            except Exception as e:
+                logging.error(f"Error reading bot history: {e}")
+        
+        # Send logs (or empty list) to clear loading state on client
+        await resp.write(f"event: logs\ndata: {json.dumps({'logs': clean_lines})}\n\n".encode('utf-8'))
+        await resp.drain()
+        last_activity = time.time()
 
     elif log_type == 'sys':
         history_lines, sys_cursor = await fetch_sys_logs(lines=300)
-        if history_lines:
-            await resp.write(f"event: logs\ndata: {json.dumps({'logs': history_lines})}\n\n".encode('utf-8'))
-            await resp.drain()
+        logs_to_send = history_lines if history_lines else []
+        
+        # Send logs (or empty list) to clear loading state on client
+        await resp.write(f"event: logs\ndata: {json.dumps({'logs': logs_to_send})}\n\n".encode('utf-8'))
+        await resp.drain()
+        last_activity = time.time()
 
     try:
         while True:
@@ -1652,6 +1678,8 @@ async def handle_sse_logs(request):
 
             if request.transport is None or request.transport.is_closing():
                 break
+
+            data_sent = False
 
             if log_type == 'bot':
                 if os.path.exists(bot_log_path):
@@ -1676,6 +1704,7 @@ async def handle_sse_logs(request):
                         clean_lines = [l.rstrip() for l in new_lines]
                         await resp.write(f"event: logs\ndata: {json.dumps({'logs': clean_lines})}\n\n".encode('utf-8'))
                         await resp.drain()
+                        data_sent = True
 
             elif log_type == 'sys':
                 if sys_cursor:
@@ -1693,13 +1722,18 @@ async def handle_sse_logs(request):
                 if new_lines:
                     await resp.write(f"event: logs\ndata: {json.dumps({'logs': new_lines})}\n\n".encode('utf-8'))
                     await resp.drain()
+                    data_sent = True
             
-            # Send keep-alive comment to prevent idle timeouts (Nginx/Cloudflare)
-            try:
-                await resp.write(b": keepalive\n\n")
-                await resp.drain()
-            except Exception:
-                break
+            # Smart Keepalive
+            if data_sent:
+                last_activity = time.time()
+            elif time.time() - last_activity > KEEPALIVE_INTERVAL:
+                try:
+                    await resp.write(b": keepalive\n\n")
+                    await resp.drain()
+                    last_activity = time.time()
+                except Exception:
+                    break
 
             if shutdown_event:
                 try:

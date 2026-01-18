@@ -408,5 +408,10 @@ def update_env_variable(key: str, value: str, env_path: str = None):
 
         with open(env_path, "w") as f:
             f.writelines(new_lines)
+        try:
+            os.chmod(env_path, 0o600)
+        except Exception:
+            pass
+
     except Exception as e:
         logging.error(f"Error updating env variable {key}: {e}")
