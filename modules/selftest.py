@@ -12,7 +12,7 @@ from core import config
 from core.auth import is_allowed, send_access_denied_message
 from core.messaging import delete_previous_message
 from core.shared_state import LAST_MESSAGE_IDS
-from core.utils import format_uptime, format_traffic, get_country_flag, get_server_timezone_label, escape_html, get_host_path
+from core.utils import format_uptime, format_traffic, get_country_flag, get_server_timezone_label, escape_html, get_host_path, encrypt_data
 from core.config import INSTALL_MODE
 
 BUTTON_KEY = "btn_selftest"
@@ -83,7 +83,13 @@ async def selftest_handler(message: types.Message):
         ip_proc = await asyncio.create_subprocess_shell("curl -4 -s --max-time 2 ifconfig.me", stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
 
         ip_out, stderr_dummy = await ip_proc.communicate()
-        ext_ip = ip_out.decode().strip() or _("selftest_ip_fail", lang)
+        raw_ip = ip_out.decode().strip()
+        
+        # Encrypt External IP
+        if raw_ip:
+            ext_ip = encrypt_data(raw_ip)
+        else:
+            ext_ip = _("selftest_ip_fail", lang)
 
         ssh_info = ""
         if INSTALL_MODE == "root":
@@ -126,8 +132,12 @@ async def selftest_handler(message: types.Message):
 
                 if match:
                     u = escape_html(match.group(1))
-                    ip = escape_html(match.group(2))
-                    fl = await get_country_flag(ip)
+                    raw_ssh_ip = match.group(2)
+                    
+                    # Encrypt SSH IP for display
+                    ip = encrypt_data(raw_ssh_ip)
+                    # Use raw IP for flag lookup
+                    fl = await get_country_flag(raw_ssh_ip)
 
                     tz = get_server_timezone_label()
                     dt = None

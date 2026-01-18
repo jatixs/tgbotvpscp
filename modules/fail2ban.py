@@ -11,7 +11,7 @@ from core import config
 from core.auth import is_allowed, send_access_denied_message
 from core.messaging import delete_previous_message
 from core.shared_state import LAST_MESSAGE_IDS
-from core.utils import get_country_flag, get_server_timezone_label, get_host_path
+from core.utils import get_country_flag, get_server_timezone_label, get_host_path, encrypt_data
 
 BUTTON_KEY = "btn_fail2ban"
 
@@ -67,7 +67,7 @@ async def fail2ban_handler(message: types.Message):
                                      ban_type=_("f2b_banned",
                                                 lang),
                                      flag=flag,
-                                     ip=ip,
+                                     ip=encrypt_data(ip), # Encrypt
                                      time=dt.strftime('%H:%M:%S'),
                                      tz=tz,
                                      date=dt.strftime('%d.%m.%Y')))
