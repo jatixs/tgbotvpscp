@@ -483,6 +483,53 @@ function formatUptime(bt) {
 
 // --- LOGS LOGIC (SSE) ---
 
+function setLogLoading() {
+    const container = document.getElementById('logsContainer');
+    if (!container) return;
+    
+    // Блокируем прокрутку, чтобы не было видно дерганий
+    container.classList.add('overflow-hidden');
+    
+    // Делаем контейнер relative, чтобы спиннер перекрывал его
+    if (!container.classList.contains('relative')) container.classList.add('relative');
+
+    const loadingText = (typeof I18N !== 'undefined' && I18N.web_log_connecting) ? I18N.web_log_connecting : "Connecting...";
+    
+    // Удаляем предыдущий спиннер, если есть
+    const existing = document.getElementById('log-loader');
+    if (existing) existing.remove();
+
+    const loader = document.createElement('div');
+    loader.id = 'log-loader';
+    // Используем bg-white/90 (90% непрозрачности), чтобы скрыть контент под спиннером,
+    // но оставляем backdrop-blur для красоты по краям.
+    loader.className = 'absolute inset-0 z-50 flex flex-col items-center justify-center bg-white/90 dark:bg-gray-900/90 backdrop-blur-sm transition-opacity duration-300 opacity-0';
+    
+    loader.innerHTML = `
+        <svg class="animate-spin h-10 w-10 text-blue-600 dark:text-blue-400 mb-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+        </svg>
+        <span class="text-sm font-medium text-gray-600 dark:text-gray-300 animate-pulse">${escapeHtml(loadingText)}</span>
+    `;
+    
+    container.appendChild(loader);
+    
+    // Форсируем reflow для анимации появления
+    void loader.offsetWidth;
+    loader.classList.remove('opacity-0');
+}
+
+function removeLogLoading() {
+    const loader = document.getElementById('log-loader');
+    if (!loader) return;
+    
+    loader.classList.add('opacity-0');
+    setTimeout(() => {
+        if(loader.parentElement) loader.remove();
+    }, 300);
+}
+
 window.switchLogType = function(type) {
     ['btnLogBot', 'btnLogSys'].forEach(id => {
         const el = document.getElementById(id);
@@ -512,24 +559,29 @@ window.switchLogType = function(type) {
         return;
     }
 
-    // Открываем новый стрим для логов
-    logSSESource = new EventSource(`/api/events/logs?type=${type}`);
+    // 1. Очищаем контейнер
+    container.innerHTML = '';
     
-    // Показываем заглушку пока соединяемся
-    if (container.innerHTML === "") {
-       const connectingText = (typeof I18N !== 'undefined' && I18N.web_log_connecting) ? I18N.web_log_connecting : "Connecting...";
-       container.innerHTML = `<div class="text-gray-400 text-center mt-10">${connectingText}</div>`;
-    }
+    // 2. Показываем непрозрачный спиннер и блокируем скролл
+    setLogLoading();
+
+    // 3. Открываем новый стрим
+    logSSESource = new EventSource(`/api/events/logs?type=${type}`);
 
     logSSESource.addEventListener('logs', (e) => {
         if (overlay) overlay.classList.add('hidden');
+        
         try {
             const data = JSON.parse(e.data);
             const logs = data.logs || [];
             
             if (logs.length === 0) {
-                container.innerHTML = `<div class="text-gray-600 text-center mt-10">${typeof I18N !== 'undefined' && I18N.web_log_empty ? I18N.web_log_empty : "Log empty"}</div>`;
-                return;
+                 // Если логов нет, просто убираем загрузку (включаем обратно скролл)
+                 if (document.getElementById('log-loader')) {
+                    container.classList.remove('overflow-hidden');
+                    removeLogLoading();
+                 }
+                 return;
             }
 
             const html = logs.map(line => {
@@ -537,49 +589,50 @@ window.switchLogType = function(type) {
                 if (line.includes("INFO")) cls = "text-blue-400";
                 else if (line.includes("WARNING")) cls = "text-yellow-400";
                 else if (line.includes("ERROR") || line.includes("CRITICAL")) cls = "text-red-500 font-bold";
-                return `<div class="${cls}">${escapeHtml(line)}</div>`;
+                return `<div class="${cls} font-mono text-xs break-all py-[1px]">${escapeHtml(line)}</div>`;
             }).join('');
 
-            const isBottom = container.scrollHeight - container.scrollTop <= container.clientHeight + 100;
+            const isBottom = container.scrollHeight - container.scrollTop <= container.clientHeight + 150;
             
-            // Обновляем только если изменилось
-            if (container.innerHTML !== html) {
-                container.innerHTML = html;
-                if (isBottom) container.scrollTop = container.scrollHeight;
+            // Добавляем контент
+            container.insertAdjacentHTML('beforeend', html);
+
+            // Ограничиваем количество строк в DOM
+            if (container.children.length > 1000) {
+                 const toRemove = container.children.length - 1000;
+                 for(let i=0; i<toRemove; i++) {
+                     if(container.firstChild && container.firstChild.id !== 'log-loader') {
+                         container.firstChild.remove();
+                     }
+                 }
             }
+
+            const loader = document.getElementById('log-loader');
+
+            // 4. Сначала разрешаем прокрутку, затем прокручиваем
+            if (loader || isBottom) {
+                container.classList.remove('overflow-hidden'); // Включаем скроллбар обратно
+                container.scrollTop = container.scrollHeight;  // Мгновенная прокрутка
+            }
+
+            // 5. И только потом убираем спиннер (плавное исчезновение поверх уже готового контента)
+            if (loader) {
+                removeLogLoading();
+            }
+
         } catch(err) {
             console.error("Logs parse error", err);
+            container.classList.remove('overflow-hidden');
+            removeLogLoading();
         }
     });
 
     logSSESource.onerror = () => {
         if (overlay) overlay.classList.add('hidden');
-        // SSE сам попытается переподключиться
-        // Можно показать статус, если нужно
     };
 };
 
-function generateDummyLogs() {
-    const lines = [
-        "INFO:system:Starting background service monitoring...",
-        "DEBUG:core.utils:Connection established with remote node",
-        "INFO:modules.traffic:Traffic metrics updated successfully",
-        "WARNING:network:Latency spike detected (150ms)",
-        "INFO:auth:User session verified securely",
-        "DEBUG:database:Query executed in 0.02s",
-        "INFO:system:System resources check passed",
-        "INFO:bot:Webhook set successfully",
-        "DEBUG:asyncio:Event loop running...",
-        "INFO:server:Web server listening on port 8080"
-    ];
-    let html = '';
-    for (let i = 0; i < 30; i++) {
-        const line = lines[Math.floor(Math.random() * lines.length)];
-        html += `<div class="text-gray-400 dark:text-gray-600 select-none filter blur-[3px] opacity-50">${line}</div>`;
-    }
-    return html;
-}
-
+// ... остальные функции (node details и т.д.) ...
 
 // --- NODE DETAILS LOGIC (SSE) ---
 
@@ -829,7 +882,6 @@ window.handleRenameKeydown = function(event) {
     }
 };
 
-// ...renderCharts и остальные функции рендеринга остаются без изменений...
 function renderCharts(history) {
     if (!history || history.length < 2) return;
 
