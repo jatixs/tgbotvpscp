@@ -1,5 +1,6 @@
 import time
 from collections import deque
+
 ALLOWED_USERS = {}
 USER_NAMES = {}
 TRAFFIC_PREV = {}
