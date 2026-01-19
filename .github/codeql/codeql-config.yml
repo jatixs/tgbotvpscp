@@ -1,0 +1,7 @@
+name: "My CodeQL Config"
+
+disable-default-queries: false
+
+query-filters:
+  - exclude:
+      id: py/duplicate-key-dict-literal

@@ -89,19 +89,10 @@ def check_user_password(user_id, input_pass):
     stored_hash = user_data.get("password_hash")
     if not stored_hash:
         return user_id == ADMIN_USER_ID and input_pass == "admin"
-
-    if len(stored_hash) == 64 and all(
-            c in "0123456789abcdef" for c in stored_hash):
-        input_pass_sha256 = hashlib.sha256(input_pass.encode()).hexdigest()
-        if hmac.compare_digest(stored_hash, input_pass_sha256):
-            try:
-                ph = PasswordHasher()
-                new_hash = ph.hash(input_pass)
-                user_data["password_hash"] = new_hash
-                save_users()
-                return True
-            except Exception:
-                return True
+    ph = PasswordHasher()
+    try:
+        return ph.verify(stored_hash, input_pass)
+    except Exception:
         return False
 
     ph = PasswordHasher()
@@ -119,10 +110,23 @@ def is_default_password_active(user_id):
     if user_id not in ALLOWED_USERS:
         return False
     user_data = ALLOWED_USERS[user_id]
-    default_hash = "8c6976e5b5410415bde908bd4dee15dfb167a9c873fc4bb8a81f6f2ab448a918"
+    
     if isinstance(user_data, dict):
         p_hash = user_data.get("password_hash")
-        return p_hash == default_hash or p_hash is None
+        if p_hash is None:
+            return True
+            
+        # Legacy SHA-256 check (для совместимости)
+        if p_hash == "8c6976e5b5410415bde908bd4dee15dfb167a9c873fc4bb8a81f6f2ab448a918":
+            return True
+            
+        # Argon2 verify
+        try:
+            ph = PasswordHasher()
+            return ph.verify(p_hash, "admin")
+        except Exception:
+            return False
+            
     return True
 
 
@@ -615,7 +619,8 @@ async def handle_heartbeat(request):
         hashlib.sha256).hexdigest()
 
     if not hmac.compare_digest(expected_signature, signature):
-        logging.warning(f"Invalid signature from {request.remote}")
+        safe_ip = str(request.remote).replace('\n', '').replace('\r', '')
+        logging.warning(f"Invalid signature from {safe_ip}")
         return web.json_response({"error": "Invalid signature"}, status=403)
 
     node = await nodes_db.get_node_by_token(token)
@@ -878,7 +883,7 @@ async def handle_settings_page(request):
         "web_clear_bot_confirm": _("web_clear_bot_confirm", lang), "web_clear_node_confirm": _("web_clear_node_confirm", lang), "web_clear_all_confirm": _("web_clear_all_confirm", lang), "web_logs_cleared_bot": _("web_logs_cleared_bot", lang), "web_logs_cleared_node": _("web_logs_cleared_node", lang), "web_logs_cleared_all": _("web_logs_cleared_all", lang), "modal_title_alert": _("modal_title_alert", lang), "modal_title_confirm": _("modal_title_confirm", lang), "modal_title_prompt": _("modal_title_prompt", lang), "modal_btn_ok": _("modal_btn_ok", lang), "modal_btn_cancel": _("modal_btn_cancel", lang), "web_kb_active": _("web_kb_active", lang), "web_kb_all_on_alert": _("web_kb_all_on_alert", lang), "web_kb_all_off_alert": _("web_kb_all_off_alert", lang), "web_no_nodes": _("web_no_nodes", lang), "web_copied": _("web_copied", lang), "web_kb_cat_monitoring": _("web_kb_cat_monitoring", lang), "web_kb_cat_security": _("web_kb_cat_security", lang), "web_kb_cat_management": _("web_kb_cat_management", lang), "web_kb_cat_system": _("web_kb_cat_system", lang), "web_kb_cat_tools": _("web_kb_cat_tools", lang),
         "web_update_checking": _("web_update_checking", lang), "web_update_available_title": _("web_update_available_title", lang), "web_update_info": _("web_update_info", lang), "web_update_uptodate": _("web_update_uptodate", lang), "web_update_started": _("web_update_started", lang), "web_update_error": _("web_update_error", lang),
         "web_no_notifications": _("web_no_notifications", lang), "web_clear_notifications": _("web_clear_notifications", lang), "web_sessions_title": _("web_sessions_title", lang), "web_session_current": _("web_session_current", lang), "web_session_revoke": _("web_session_revoke", lang), "web_logout": _("web_logout", lang), "web_ip": _("web_ip", lang), "web_device": _("web_device", lang), "web_last_active": _("web_last_active", lang), "web_sessions_revoked_alert": _("web_sessions_revoked_alert", lang), "web_session_current_label": _("web_session_current_label", lang), "web_sessions_revoke_all": _("web_sessions_revoke_all", lang),
-        "web_update_placeholder": _("web_update_placeholder", lang), "web_update_check_btn": _("web_update_check_btn", lang), "web_update_do_btn": _("web_update_do_btn", lang), "web_notifications_title": _("web_notifications_title", lang), "web_clear_notifications": _("web_clear_notifications", lang), "web_logout": _("web_logout", lang),
+        "web_update_placeholder": _("web_update_placeholder", lang), "web_update_check_btn": _("web_update_check_btn", lang), "web_update_do_btn": _("web_update_do_btn", lang), "web_notifications_title": _("web_notifications_title", lang),
         "web_fill_field": _("web_fill_field", lang), "web_conn_error_short": _("web_conn_error_short", lang), "web_error_short": _("web_error_short", lang), "web_success": _("web_success", lang), "web_no_sessions": _("web_no_sessions", lang), "web_error_loading_sessions": _("web_error_loading_sessions", lang), "web_kb_enable_all": _("web_kb_enable_all", lang), "web_kb_disable_all": _("web_kb_disable_all", lang), "web_click_copy": _("web_click_copy", lang), "web_server_name_placeholder": _("web_server_name_placeholder", lang),
         "web_session_expired": _("web_session_expired", lang), "web_please_relogin": _("web_please_relogin", lang), "web_login_btn": _("web_login_btn", lang),
         "web_add_user_prompt": _("web_add_user_prompt", lang), 
@@ -1620,28 +1625,41 @@ async def handle_sse_logs(request):
     last_pos = 0
     sys_cursor = None
     last_sent_lines_hash = None
+    
+# --- Keepalive tracking ---
+    last_activity = time.time()
+    KEEPALIVE_INTERVAL = 25 # Seconds
 
-    if log_type == 'bot' and os.path.exists(bot_log_path):
-        try:
-            def read_history():
-                with open(bot_log_path, "r", encoding="utf-8", errors="ignore") as f:
-                    lines = list(deque(f, 300))
-                    f.seek(0, 2)
-                    return lines, f.tell()
-            
-            history_lines, last_pos = await asyncio.to_thread(read_history)
-            if history_lines:
-                clean_lines = [l.rstrip() for l in history_lines]
-                await resp.write(f"event: logs\ndata: {json.dumps({'logs': clean_lines})}\n\n".encode('utf-8'))
-                await resp.drain()
-        except Exception as e:
-            logging.error(f"Error reading bot history: {e}")
+    if log_type == 'bot':
+        clean_lines = []
+        if os.path.exists(bot_log_path):
+            try:
+                def read_history():
+                    with open(bot_log_path, "r", encoding="utf-8", errors="ignore") as f:
+                        lines = list(deque(f, 300))
+                        f.seek(0, 2)
+                        return lines, f.tell()
+                
+                history_lines, last_pos = await asyncio.to_thread(read_history)
+                if history_lines:
+                    clean_lines = [l.rstrip() for l in history_lines]
+            except Exception as e:
+                logging.error(f"Error reading bot history: {e}")
+        await resp.write(f"event: logs\ndata: {json.dumps({'logs': clean_lines})}\n\n".encode('utf-8'))
+        await resp.drain()
+        last_activity = time.time()
 
     elif log_type == 'sys':
-        history_lines, sys_cursor = await fetch_sys_logs(lines=300)
-        if history_lines:
-            await resp.write(f"event: logs\ndata: {json.dumps({'logs': history_lines})}\n\n".encode('utf-8'))
-            await resp.drain()
+        history_lines = []
+        sys_cursor = None
+        try:
+            history_lines, sys_cursor = await fetch_sys_logs(lines=300)
+        except Exception as e:
+            logging.error(f"Error fetching sys logs: {e}")
+        logs_to_send = history_lines if history_lines else []
+        await resp.write(f"event: logs\ndata: {json.dumps({'logs': logs_to_send})}\n\n".encode('utf-8'))
+        await resp.drain()
+        last_activity = time.time()
 
     try:
         while True:
@@ -1652,6 +1670,8 @@ async def handle_sse_logs(request):
 
             if request.transport is None or request.transport.is_closing():
                 break
+
+            data_sent = False
 
             if log_type == 'bot':
                 if os.path.exists(bot_log_path):
@@ -1676,13 +1696,17 @@ async def handle_sse_logs(request):
                         clean_lines = [l.rstrip() for l in new_lines]
                         await resp.write(f"event: logs\ndata: {json.dumps({'logs': clean_lines})}\n\n".encode('utf-8'))
                         await resp.drain()
+                        data_sent = True
 
             elif log_type == 'sys':
-                if sys_cursor:
-                    new_lines, sys_cursor = await fetch_sys_logs(cursor=sys_cursor)
-                else:
-                    new_lines, sys_cursor = await fetch_sys_logs(lines=10)
-                
+                new_lines = []
+                try:
+                    if sys_cursor:
+                        new_lines, sys_cursor = await fetch_sys_logs(cursor=sys_cursor)
+                    else:
+                        new_lines, sys_cursor = await fetch_sys_logs(lines=10)
+                except Exception as e:
+                    logging.error(f"Error streaming sys logs: {e}")
                 if not sys_cursor and new_lines:
                     current_hash = hash(tuple(new_lines))
                     if current_hash == last_sent_lines_hash:
@@ -1693,13 +1717,17 @@ async def handle_sse_logs(request):
                 if new_lines:
                     await resp.write(f"event: logs\ndata: {json.dumps({'logs': new_lines})}\n\n".encode('utf-8'))
                     await resp.drain()
+                    data_sent = True
             
-            # Send keep-alive comment to prevent idle timeouts (Nginx/Cloudflare)
-            try:
-                await resp.write(b": keepalive\n\n")
-                await resp.drain()
-            except Exception:
-                break
+            if data_sent:
+                last_activity = time.time()
+            elif time.time() - last_activity > KEEPALIVE_INTERVAL:
+                try:
+                    await resp.write(b": keepalive\n\n")
+                    await resp.drain()
+                    last_activity = time.time()
+                except Exception:
+                    break
 
             if shutdown_event:
                 try:
@@ -1716,6 +1744,11 @@ async def handle_sse_logs(request):
     except Exception as e:
         if "closing transport" not in str(e) and "'NoneType' object" not in str(e):
             logging.error(f"SSE Logs Error: {e}")
+            try:
+                safe_msg = json.dumps({'error': 'Internal Server Error'})
+                await resp.write(f"event: error\ndata: {safe_msg}\n\n".encode('utf-8'))
+            except Exception:
+                pass 
             
     return resp
 

@@ -47,10 +47,10 @@ def validate_branch_name(branch: str) -> str:
     return branch
 
 
-async def run_command(cmd: str):
+async def run_command(*args):
     try:
-        proc = await asyncio.create_subprocess_shell(
-            cmd,
+        proc = await asyncio.create_subprocess_exec(
+            *args,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE
         )
@@ -61,7 +61,7 @@ async def run_command(cmd: str):
 
 
 async def get_current_branch():
-    code, out, err = await run_command("git rev-parse --abbrev-ref HEAD")
+    code, out, err = await run_command("git", "rev-parse", "--abbrev-ref", "HEAD")
     if code == 0 and out:
         return out.strip()
     return "main"
@@ -119,11 +119,7 @@ async def get_changelog_entry(branch: str, lang: str) -> str:
     Получает описание последнего обновления из CHANGELOG.md через Git (так надежнее).
     """
     filename = "CHANGELOG.en.md" if lang == "en" else "CHANGELOG.md"
-    
-    # Сначала пробуем получить через git show origin/...
-    # Это требует git fetch, который делается в get_update_info
-    cmd = f"git show origin/{branch}:{filename}"
-    code, out, err = await run_command(cmd)
+    code, out, err = await run_command("git", "show", f"origin/{branch}:{filename}")
 
     if code != 0 or not out:
         # Если git не сработал, попробуем через HTTP (фоллбек)
@@ -171,14 +167,14 @@ async def get_update_info():
         
         # 2. Обновляем инфу о ветках, чтобы git show работал корректно
         # Но версию берем через HTTP для надежности
-        await run_command("git fetch origin") 
+        await run_command("git", "fetch", "origin") 
 
         # 3. Удаленная версия (GitHub RAW)
         remote_ver = await get_remote_version_github(branch)
         
         if not remote_ver:
             # Фолбек на git hash, если github недоступен
-            code, out, _ = await run_command(f"git rev-parse origin/{branch}")
+            code, out, _ = await run_command("git", "rev-parse", f"origin/{branch}")
             if code == 0:
                 remote_ver = out.strip()[:7]
             else:
@@ -206,16 +202,15 @@ async def execute_bot_update(branch: str, restart_source: str = "unknown"):
         branch = validate_branch_name(branch)
         logging.info(f"Starting bot update on branch '{branch}'...")
 
-        code, _, err = await run_command("git fetch origin")
+        code, _, err = await run_command("git", "fetch", "origin")
         
         # Жесткий сброс на origin ветку
-        code, _, err = await run_command(f"git reset --hard origin/{branch}")
+        code, _, err = await run_command("git", "reset", "--hard", f"origin/{branch}")
         if code != 0:
             raise Exception(f"Git reset failed: {err}")
 
         # Обновление зависимостей
-        pip_cmd = f"{sys.executable} -m pip install -r requirements.txt"
-        await run_command(pip_cmd)
+        await run_command(sys.executable, "-m", "pip", "install", "-r", "requirements.txt")
 
         # Флаг рестарта
         os.makedirs(os.path.dirname(RESTART_FLAG_FILE), exist_ok=True)

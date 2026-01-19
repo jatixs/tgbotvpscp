@@ -152,7 +152,6 @@ function formatProcessList(procList, title, colorClass = "text-gray-500") {
     `;
 }
 
-// --- NEW FUNCTION ---
 function formatInterfaceList(interfaces, type, title, colorClass = "text-gray-500") {
     if (!interfaces) return '';
 
@@ -183,7 +182,6 @@ function formatInterfaceList(interfaces, type, title, colorClass = "text-gray-50
         </div>
     `;
 }
-// --------------------
 
 function updateNodesListUI(data) {
     try {
@@ -253,9 +251,6 @@ function renderNodesList(nodes) {
         // Decrypt IP for display
         const displayIp = decryptData(node.ip);
 
-        // We pass encrypted token to openNodeDetails because API expects it encrypted or handles decryption
-        // Actually handle_node_details expects ENCRYPTED token in query param if we decrypt it there.
-        // But logic is: Server sends Encrypted. JS sends Encrypted. Server Decrypts.
         return `
         <div class="bg-white dark:bg-white/5 hover:bg-gray-50 dark:hover:bg-white/10 transition-all duration-200 rounded-xl border border-gray-100 dark:border-white/5 cursor-pointer shadow-sm hover:shadow-md overflow-hidden group mb-2" onclick="openNodeDetails('${escapeHtml(node.token)}', '${statusColor}')">
             
@@ -375,7 +370,6 @@ function updateAgentStatsUI(data) {
             const txEl = document.getElementById('stat_net_sent');
             if (txEl) txEl.innerHTML = `${formatBytes(data.stats.net_sent)} <span class="${speedStyle}">${formatSpeed(txSpeed)}</span>`;
 
-            // --- CHANGED: Interfaces in Hints ---
             if (data.stats.interfaces) {
                  const hintRx = document.getElementById('hint-rx');
                  if (hintRx) {
@@ -388,7 +382,6 @@ function updateAgentStatsUI(data) {
                      hintTx.innerHTML = formatInterfaceList(data.stats.interfaces, 'tx', title, "text-orange-500");
                  }
             }
-            // ------------------------------------
 
             const rxTotal = data.stats.net_recv || 0;
             const txTotal = data.stats.net_sent || 0;
@@ -615,6 +608,9 @@ window.switchLogType = function(type) {
     }
     container.innerHTML = '';
     
+    const oldEmpty = document.getElementById('empty-logs-state');
+    if (oldEmpty) oldEmpty.remove();
+
     setLogLoading();
     logSSESource = new EventSource(`/api/events/logs?type=${type}`);
 
@@ -624,14 +620,36 @@ window.switchLogType = function(type) {
         try {
             const data = JSON.parse(e.data);
             const logs = data.logs || [];
-            
+            const container = document.getElementById('logsContainer');
+
+            // --- EMPTY LOGS HANDLING ---
             if (logs.length === 0) {
                  if (document.getElementById('log-loader')) {
                     container.classList.remove('overflow-hidden');
                     removeLogLoading();
+                    
+                    if (!document.getElementById('empty-logs-state')) {
+                        const emptyHtml = `
+                        <div id="empty-logs-state" class="flex flex-col items-center justify-center h-full min-h-[200px] text-gray-400 dark:text-gray-600 animate-fade-in-up select-none opacity-80">
+                            <div class="bg-gray-100 dark:bg-white/5 p-4 rounded-full mb-3">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
+                                </svg>
+                            </div>
+                            <span class="text-sm font-bold text-gray-500 dark:text-gray-400">В логах тишина</span>
+                            <span class="text-[10px] uppercase tracking-wider opacity-60 mt-1">Новых записей не найдено</span>
+                        </div>`;
+                        container.insertAdjacentHTML('beforeend', emptyHtml);
+                    }
                  }
                  return;
             }
+
+            const emptyState = document.getElementById('empty-logs-state');
+            if (emptyState) {
+                emptyState.remove();
+            }
+            // ---------------------------
 
             const html = logs.map(line => {
                 let cls = "text-gray-500";
@@ -640,19 +658,25 @@ window.switchLogType = function(type) {
                 else if (line.includes("ERROR") || line.includes("CRITICAL")) cls = "text-red-500 font-bold";
                 return `<div class="${cls} font-mono text-xs break-all py-[1px]">${escapeHtml(line)}</div>`;
             }).join('');
+
             const loader = document.getElementById('log-loader');
             const isInitialLoad = loader && !loader.classList.contains('opacity-0');
             const isAtBottom = (container.scrollHeight - container.scrollTop) <= (container.clientHeight + 5);
             
             container.insertAdjacentHTML('beforeend', html);
+            
             if (container.children.length > 1000) {
-                 const toRemove = container.children.length - 1000;
-                 for(let i=0; i<toRemove; i++) {
-                     if(container.firstChild && container.firstChild.id !== 'log-loader') {
-                         container.firstChild.remove();
+                 while (container.children.length > 1000) {
+                     const first = container.firstChild;
+                     if (first && first.id !== 'log-loader' && first.id !== 'empty-logs-state') {
+                         first.remove();
+                     } else {
+                         if (container.children[1]) container.children[1].remove();
+                         else break;
                      }
                  }
             }
+            
             container.classList.remove('overflow-hidden');
             if (isInitialLoad) {
                 container.scrollTo({ top: container.scrollHeight, behavior: 'auto' });

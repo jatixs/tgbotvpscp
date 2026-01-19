@@ -147,7 +147,6 @@ async def selftest_handler(message: types.Message):
                             dt = dt.replace(year=datetime.now().year)
                     except Exception as e:
                         logging.debug(f"Date parse error in selftest: {e}")
-                        pass
 
                     time_str = dt.strftime('%H:%M:%S') if dt else "?"
                     date_str = dt.strftime('%d.%m.%Y') if dt else "?"

@@ -406,7 +406,9 @@ def update_env_variable(key: str, value: str, env_path: str = None):
         if not found:
             new_lines.append(f'{key}="{value_str}"\n')
 
-        with open(env_path, "w") as f:
+        fd = os.open(env_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(fd, 'w') as f:
             f.writelines(new_lines)
+
     except Exception as e:
         logging.error(f"Error updating env variable {key}: {e}")
