@@ -89,19 +89,10 @@ def check_user_password(user_id, input_pass):
     stored_hash = user_data.get("password_hash")
     if not stored_hash:
         return user_id == ADMIN_USER_ID and input_pass == "admin"
-
-    if len(stored_hash) == 64 and all(
-            c in "0123456789abcdef" for c in stored_hash):
-        input_pass_sha256 = hashlib.sha256(input_pass.encode()).hexdigest()
-        if hmac.compare_digest(stored_hash, input_pass_sha256):
-            try:
-                ph = PasswordHasher()
-                new_hash = ph.hash(input_pass)
-                user_data["password_hash"] = new_hash
-                save_users()
-                return True
-            except Exception:
-                return True
+    ph = PasswordHasher()
+    try:
+        return ph.verify(stored_hash, input_pass)
+    except Exception:
         return False
 
     ph = PasswordHasher()
@@ -1635,7 +1626,7 @@ async def handle_sse_logs(request):
     sys_cursor = None
     last_sent_lines_hash = None
     
-    # --- Keepalive tracking ---
+# --- Keepalive tracking ---
     last_activity = time.time()
     KEEPALIVE_INTERVAL = 25 # Seconds
 
@@ -1654,8 +1645,6 @@ async def handle_sse_logs(request):
                     clean_lines = [l.rstrip() for l in history_lines]
             except Exception as e:
                 logging.error(f"Error reading bot history: {e}")
-        
-        # Send logs (or empty list) to clear loading state on client
         await resp.write(f"event: logs\ndata: {json.dumps({'logs': clean_lines})}\n\n".encode('utf-8'))
         await resp.drain()
         last_activity = time.time()
@@ -1663,8 +1652,6 @@ async def handle_sse_logs(request):
     elif log_type == 'sys':
         history_lines, sys_cursor = await fetch_sys_logs(lines=300)
         logs_to_send = history_lines if history_lines else []
-        
-        # Send logs (or empty list) to clear loading state on client
         await resp.write(f"event: logs\ndata: {json.dumps({'logs': logs_to_send})}\n\n".encode('utf-8'))
         await resp.drain()
         last_activity = time.time()
@@ -1724,7 +1711,6 @@ async def handle_sse_logs(request):
                     await resp.drain()
                     data_sent = True
             
-            # Smart Keepalive
             if data_sent:
                 last_activity = time.time()
             elif time.time() - last_activity > KEEPALIVE_INTERVAL:
@@ -1750,6 +1736,11 @@ async def handle_sse_logs(request):
     except Exception as e:
         if "closing transport" not in str(e) and "'NoneType' object" not in str(e):
             logging.error(f"SSE Logs Error: {e}")
+            try:
+                safe_msg = json.dumps({'error': 'Internal Server Error'})
+                await resp.write(f"event: error\ndata: {safe_msg}\n\n".encode('utf-8'))
+            except Exception:
+                pass 
             
     return resp
 
