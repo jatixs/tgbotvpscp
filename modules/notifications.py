@@ -73,21 +73,18 @@ def get_top_processes_info(metric: str) -> str:
                 procs.append(p.info)
             except (psutil.NoSuchProcess, psutil.AccessDenied):
                 pass
+        info_list = []
         if metric == "cpu":
-            sorted_procs = sorted(procs, key=lambda p: p["cpu_percent"], reverse=True)[
-                :3
-            ]
-            info_list = [f"{p['name']} ({p['cpu_percent']}%)" for p in sorted_procs]
+            sorted_procs = sorted(procs, key=lambda p: p["cpu_percent"], reverse=True)[:5]
+            for p in sorted_procs:
+                info_list.append(f"• <b>{p['name']}</b>: {p['cpu_percent']}%")
         elif metric == "ram":
-            sorted_procs = sorted(
-                procs, key=lambda p: p["memory_percent"], reverse=True
-            )[:3]
-            info_list = [
-                f"{p['name']} ({p['memory_percent']:.1f}%)" for p in sorted_procs
-            ]
+            sorted_procs = sorted(procs, key=lambda p: p["memory_percent"], reverse=True)[:5]
+            for p in sorted_procs:
+                info_list.append(f"• <b>{p['name']}</b>: {p['memory_percent']:.1f}%")
         else:
             return ""
-        return ", ".join(info_list)
+        return "\n".join(info_list)
     except Exception as e:
         logging.error(f"Error getting top processes: {e}")
         return "n/a"
@@ -142,12 +139,19 @@ async def cq_toggle_alert(callback: types.CallbackQuery):
 
 
 async def parse_ssh_log_line(line: str) -> dict | None:
-    match = re.search("Accepted\\s+(?:\\S+)\\s+for\\s+(\\S+)\\s+from\\s+(\\S+)", line)
+    match = re.search("Accepted\\s+(\\S+)\\s+for\\s+(\\S+)\\s+from\\s+(\\S+)", line)
     if match:
         try:
-            user = escape_html(match.group(1))
-            ip = escape_html(match.group(2))
+            method_raw = match.group(1).lower()
+            user = escape_html(match.group(2))
+            ip = escape_html(match.group(3))
             flag = await get_country_flag(ip)
+            method_key = "auth_method_unknown"
+            if "publickey" in method_raw:
+                method_key = "auth_method_key"
+            elif "password" in method_raw:
+                method_key = "auth_method_password"
+
             return {
                 "key": "alert_ssh_login_detected",
                 "params": {
@@ -156,6 +160,7 @@ async def parse_ssh_log_line(line: str) -> dict | None:
                     "ip": ip,
                     "time": datetime.now().strftime("%H:%M:%S"),
                     "tz": get_server_timezone_label(),
+                    "method_key": method_key,
                 },
             }
         except Exception as e:
@@ -318,9 +323,18 @@ async def reliable_tail_log_monitor(bot, path, alert_type, parser):
                 if l:
                     data = await parser(l)
                     if data:
+                        def msg_gen(lang):
+                            params = data["params"].copy()
+                            if "method_key" in params:
+                                m_key = params.pop("method_key")
+                                params["method"] = _(m_key, lang)
+                            if "method" not in params:
+                                params["method"] = ""
+                            return _(data["key"], lang, **params)
+
                         await send_alert(
                             bot,
-                            lambda lang: _(data["key"], lang, **data["params"]),
+                            msg_gen,
                             alert_type,
                         )
         except asyncio.CancelledError:

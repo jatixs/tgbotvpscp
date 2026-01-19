@@ -10,6 +10,9 @@ from .config import load_encrypted_json, save_encrypted_json
 
 STRINGS = {
     "ru": {
+        "auth_method_key": "🔑 По ключу",
+        "auth_method_password": "⌨️ По паролю",
+        "auth_method_unknown": "❓ Неизвестно",
         "btn_back": "🔙 Назад",
         "btn_cancel": "❌ Отмена",
         "btn_back_to_menu": "🔙 Назад в меню",
@@ -136,7 +139,7 @@ STRINGS = {
         "alert_node_ram_normal": "✅ <b>Нода '{name}': RAM в норме.</b>\nЗанято: <b>{usage}%</b>",
         "alert_node_disk_high": "⚠️ <b>Нода '{name}': Мало места (Disk)!</b>\nЗанято: <b>{usage}%</b> (Порог: {threshold}%)",
         "alert_node_disk_normal": "✅ <b>Нода '{name}': Место на диске в норме.</b>\nЗанято: <b>{usage}%</b>",
-        "alert_ssh_login_detected": "🔔 <b>Обнаружен вход SSH</b>\n\n👤 Пользователь: <b>{user}</b>\n🌍 IP: <b>{flag} {ip}</b>\n⏰ Время: <b>{time}</b>{tz}",
+        "alert_ssh_login_detected": "🔔 <b>Обнаружен вход SSH</b>\n\n👤 Пользователь: <b>{user}</b>\n🛡 Способ: <b>{method}</b>\n🌍 IP: <b>{flag} {ip}</b>\n⏰ Время: <b>{time}</b>{tz}",
         "alert_f2b_ban_detected": "🛡️ <b>Fail2Ban забанил IP</b>\n\n🌍 IP: <b>{flag} {ip}</b>\n⏰ Время: <b>{time}</b>{tz}",
         "alert_cpu_high": "⚠️ <b>Превышен порог CPU!</b>\nТекущее использование: <b>{usage:.1f}%</b> (Порог: {threshold}%)\n\n🔥 <b>Нагрузка:</b>\n{processes}",
         "alert_cpu_high_repeat": "‼️ <b>CPU все еще ВЫСОКИЙ!</b>\nТекущее использование: <b>{usage:.1f}%</b> (Порог: {threshold}%)\n\n🔥 <b>Нагрузка:</b>\n{processes}",
@@ -516,6 +519,9 @@ STRINGS = {
         "login_go_to_bot": "Перейти в бот",
     },
     "en": {
+        "auth_method_key": "🔑 Public Key",
+        "auth_method_password": "⌨️ Password",
+        "auth_method_unknown": "❓ Unknown",
         "btn_back": "🔙 Back",
         "btn_cancel": "❌ Cancel",
         "btn_back_to_menu": "🔙 Back to menu",
@@ -636,7 +642,7 @@ STRINGS = {
         "alert_node_ram_normal": "✅ <b>Node '{name}': RAM normal.</b>\nUsage: <b>{usage}%</b>",
         "alert_node_disk_high": "⚠️ <b>Node '{name}': High Disk!</b>\nUsage: <b>{usage}%</b> (Threshold: {threshold}%)",
         "alert_node_disk_normal": "✅ <b>Node '{name}': Disk usage normal.</b>\nUsage: <b>{usage}%</b>",
-        "alert_ssh_login_detected": "🔔 <b>SSH Login Detected</b>\n\n👤 User: <b>{user}</b>\n🌍 IP: <b>{flag} {ip}</b>\n⏰ Time: <b>{time}</b>{tz}",
+        "alert_ssh_login_detected": "🔔 <b>SSH Login Detected</b>\n\n👤 User: <b>{user}</b>\n🛡 Method: <b>{method}</b>\n🌍 IP: <b>{flag} {ip}</b>\n⏰ Time: <b>{time}</b>{tz}",
         "alert_f2b_ban_detected": "🛡️ <b>Fail2Ban Banned IP</b>\n\n🌍 IP: <b>{flag} {ip}</b>\n⏰ Time: <b>{time}</b>{tz}",
         "alert_cpu_high": "‼️ <b>CPU Still HIGH!</b>\nCurrent usage: <b>{usage:.1f}%</b> (Threshold: {threshold}%)\n\n🔥 <b>Top processes:</b>\n{processes}",
         "alert_cpu_high_repeat": "‼️ <b>CPU Still HIGH!</b>\nCurrent usage: <b>{usage:.1f}%</b> (Threshold: {threshold}%)",
