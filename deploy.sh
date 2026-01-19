@@ -298,6 +298,10 @@ load_cached_env() {
             [ -z "$NODE_TOKEN" ] && NODE_TOKEN=$(get_env_val "AGENT_TOKEN")
         else
             msg_info "Восстановление пропущено. Введите данные заново."
+            # СБРОС ПЕРЕМЕННЫХ, чтобы точно запросить ввод
+            T=""; A=""; U=""; N=""; P=""; SENTRY_DSN=""
+            ENABLE_WEB=""; SETUP_HTTPS=""; HTTPS_DOMAIN=""; HTTPS_EMAIL=""; HTTPS_PORT=""
+            AGENT_URL=""; NODE_TOKEN=""
         fi
     fi
 }
@@ -755,7 +759,15 @@ install_node_logic() {
     if [ -n "$AUTO_NODE_TOKEN" ]; then NODE_TOKEN="$AUTO_NODE_TOKEN"; fi
 
     common_install_steps
-    install_extras
+    # install_extras НЕ вызываем здесь, чтобы не ставить fail2ban
+    
+    # Проверка iperf3 (только)
+    if command -v iperf3 &> /dev/null; then
+        msg_success "iperf3 уже установлен."
+    else
+        msg_question "iperf3 не найден. Установить? (y/n): " I
+        if [[ "$I" =~ ^[Yy]$ ]]; then run_with_spinner "Установка iperf3" sudo apt-get install -y -q -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" iperf3; fi
+    fi
 
     setup_repo_and_dirs "root"
     
