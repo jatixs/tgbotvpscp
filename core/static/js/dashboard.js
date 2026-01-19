@@ -2,12 +2,12 @@
 
 let chartRes = null;
 let chartNet = null;
-let nodeSSESource = null; 
-let logSSESource = null;  
+let nodeSSESource = null;
+let logSSESource = null;
 
 let agentChart = null;
 let allNodesData = [];
-let currentNodeToken = null; 
+let currentNodeToken = null;
 
 // --- CRYPTO FUNCTIONS (XOR + Base64) ---
 // WEB_KEY is injected in dashboard.html by server
@@ -55,7 +55,7 @@ window.initDashboard = function() {
     if (window.sseSource) {
         window.sseSource.removeEventListener('agent_stats', handleSSEAgentStats);
         window.sseSource.removeEventListener('nodes_list', handleSSENodesList);
-        
+
         window.sseSource.addEventListener('agent_stats', handleSSEAgentStats);
         window.sseSource.addEventListener('nodes_list', handleSSENodesList);
     }
@@ -92,7 +92,9 @@ const handleSSEAgentStats = (e) => {
     try {
         const data = JSON.parse(e.data);
         updateAgentStatsUI(data);
-    } catch (err) { console.error("Agent stats parse error", err); }
+    } catch (err) {
+        console.error("Agent stats parse error", err);
+    }
 };
 
 const handleSSENodesList = (e) => {
@@ -100,7 +102,9 @@ const handleSSENodesList = (e) => {
     try {
         const data = JSON.parse(e.data);
         updateNodesListUI(data);
-    } catch (err) { console.error("Nodes list parse error", err); }
+    } catch (err) {
+        console.error("Nodes list parse error", err);
+    }
 };
 
 document.addEventListener("DOMContentLoaded", () => {
@@ -108,6 +112,7 @@ document.addEventListener("DOMContentLoaded", () => {
         window.initDashboard();
     }
 });
+
 function escapeHtml(text) {
     if (!text) return text;
     return text.replace(/&/g, "&amp;")
@@ -124,7 +129,7 @@ function formatProcessList(procList, title, colorClass = "text-gray-500") {
         const match = procStr.match(/^(.*)\s\((.*)\)$/);
         let name = procStr;
         let value = "";
-        
+
         if (match) {
             name = match[1];
             value = match[2];
@@ -160,7 +165,7 @@ function formatInterfaceList(interfaces, type, title, colorClass = "text-gray-50
     const rows = keys.map(name => {
         const val = type === 'rx' ? interfaces[name].bytes_recv : interfaces[name].bytes_sent;
         const hoverColor = colorClass.replace('text-', 'bg-');
-        
+
         return `
         <div class="flex justify-between items-center py-1.5 border-b border-gray-500/10 last:border-0 group">
             <div class="flex items-center gap-2 overflow-hidden">
@@ -239,7 +244,7 @@ function renderNodesList(nodes) {
         let statusText = node.status === 'restarting' ? (typeof I18N !== 'undefined' && I18N.web_status_restart ? I18N.web_status_restart : "RESTART") : node.status.toUpperCase();
         let statusTextClass = node.status === 'online' ? "text-green-500" : (node.status === 'restarting' ? "text-blue-500" : "text-red-500");
         let statusBg = node.status === 'online' ? "bg-green-500/10 text-green-600 dark:text-green-400" : (node.status === 'restarting' ? "bg-blue-500/10 text-blue-600 dark:text-blue-400" : "bg-red-500/10 text-red-600 dark:text-red-400");
-        
+
         const cpu = Math.round(node.cpu || 0);
         const ram = Math.round(node.ram || 0);
         const disk = Math.round(node.disk || 0);
@@ -352,7 +357,8 @@ function updateAgentStatsUI(data) {
             }
             if (progDisk) progDisk.style.width = data.stats.disk + "%";
 
-            let rxSpeed = 0, txSpeed = 0;
+            let rxSpeed = 0,
+                txSpeed = 0;
             if (data.history && data.history.length >= 2) {
                 const last = data.history[data.history.length - 1];
                 const prev = data.history[data.history.length - 2];
@@ -371,16 +377,16 @@ function updateAgentStatsUI(data) {
             if (txEl) txEl.innerHTML = `${formatBytes(data.stats.net_sent)} <span class="${speedStyle}">${formatSpeed(txSpeed)}</span>`;
 
             if (data.stats.interfaces) {
-                 const hintRx = document.getElementById('hint-rx');
-                 if (hintRx) {
-                     const title = (typeof I18N !== 'undefined' && I18N.web_hint_traffic_in) ? I18N.web_hint_traffic_in : "Inbound Traffic";
-                     hintRx.innerHTML = formatInterfaceList(data.stats.interfaces, 'rx', title, "text-cyan-500");
-                 }
-                 const hintTx = document.getElementById('hint-tx');
-                 if (hintTx) {
-                     const title = (typeof I18N !== 'undefined' && I18N.web_hint_traffic_out) ? I18N.web_hint_traffic_out : "Outbound Traffic";
-                     hintTx.innerHTML = formatInterfaceList(data.stats.interfaces, 'tx', title, "text-orange-500");
-                 }
+                const hintRx = document.getElementById('hint-rx');
+                if (hintRx) {
+                    const title = (typeof I18N !== 'undefined' && I18N.web_hint_traffic_in) ? I18N.web_hint_traffic_in : "Inbound Traffic";
+                    hintRx.innerHTML = formatInterfaceList(data.stats.interfaces, 'rx', title, "text-cyan-500");
+                }
+                const hintTx = document.getElementById('hint-tx');
+                if (hintTx) {
+                    const title = (typeof I18N !== 'undefined' && I18N.web_hint_traffic_out) ? I18N.web_hint_traffic_out : "Outbound Traffic";
+                    hintTx.innerHTML = formatInterfaceList(data.stats.interfaces, 'tx', title, "text-orange-500");
+                }
             }
 
             const rxTotal = data.stats.net_recv || 0;
@@ -406,6 +412,7 @@ function updateAgentStatsUI(data) {
         console.error("Agent stats UI error:", e);
     }
 }
+
 function updateChartsColors() {
     const isDark = document.documentElement.classList.contains('dark');
     const gridColor = isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.05)';
@@ -444,7 +451,11 @@ function renderAgentChart(history) {
             netRx.push(null);
             netTx.push(null);
         }
-        labels.push(new Date(history[i].t * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
+        labels.push(new Date(history[i].t * 1000).toLocaleTimeString([], {
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit'
+        }));
         netRx.push((Math.max(0, history[i].rx - history[i - 1].rx) * 8 / dt / 1024));
         netTx.push((Math.max(0, history[i].tx - history[i - 1].tx) * 8 / dt / 1024));
     }
@@ -459,26 +470,57 @@ function renderAgentChart(history) {
         responsive: true,
         maintainAspectRatio: false,
         animation: false,
-        interaction: { mode: 'index', intersect: false },
+        interaction: {
+            mode: 'index',
+            intersect: false
+        },
         scales: {
             x: {
-                grid: { display: false },
-                ticks: { color: tickColor, maxTicksLimit: maxTicks, maxRotation: 0 }
+                grid: {
+                    display: false
+                },
+                ticks: {
+                    color: tickColor,
+                    maxTicksLimit: maxTicks,
+                    maxRotation: 0
+                }
             },
             y: {
                 position: 'right',
-                grid: { color: gridColor },
-                ticks: { color: tickColor, callback: (v) => formatSpeed(v) },
+                grid: {
+                    color: gridColor
+                },
+                ticks: {
+                    color: tickColor,
+                    callback: (v) => formatSpeed(v)
+                },
                 beginAtZero: true
             }
         },
         plugins: {
-            legend: { labels: { color: tickColor, usePointStyle: true } },
-            tooltip: { mode: 'index', intersect: false, callbacks: { label: (c) => c.dataset.label + ': ' + formatSpeed(c.raw) } }
+            legend: {
+                labels: {
+                    color: tickColor,
+                    usePointStyle: true
+                }
+            },
+            tooltip: {
+                mode: 'index',
+                intersect: false,
+                callbacks: {
+                    label: (c) => c.dataset.label + ': ' + formatSpeed(c.raw)
+                }
+            }
         },
         elements: {
-            line: { tension: 0.4 },
-            point: { radius: 0, hitRadius: 20, hoverRadius: 4 }
+            line: {
+                tension: 0.4
+            },
+            point: {
+                radius: 0,
+                hitRadius: 20,
+                hoverRadius: 4
+            }
         }
     };
 
@@ -496,10 +538,21 @@ function renderAgentChart(history) {
             type: 'line',
             data: {
                 labels,
-                datasets: [
-                    { label: 'RX', data: netRx, borderColor: '#22c55e', borderWidth: 2, backgroundColor: rxGrad, fill: true },
-                    { label: 'TX', data: netTx, borderColor: '#3b82f6', borderWidth: 2, backgroundColor: txGrad, fill: true }
-                ]
+                datasets: [{
+                    label: 'RX',
+                    data: netRx,
+                    borderColor: '#22c55e',
+                    borderWidth: 2,
+                    backgroundColor: rxGrad,
+                    fill: true
+                }, {
+                    label: 'TX',
+                    data: netTx,
+                    borderColor: '#3b82f6',
+                    borderWidth: 2,
+                    backgroundColor: txGrad,
+                    fill: true
+                }]
             },
             options: opts
         });
@@ -545,6 +598,7 @@ function formatUptime(bt) {
     if (h > 0) return `${h}${unitH} ${m}${unitM}`;
     return `${m}${unitM}`;
 }
+
 function setLogLoading() {
     const container = document.getElementById('logsContainer');
     if (!container) return;
@@ -558,7 +612,7 @@ function setLogLoading() {
     const loader = document.createElement('div');
     loader.id = 'log-loader';
     loader.className = 'absolute inset-0 z-50 flex flex-col items-center justify-center bg-white/90 dark:bg-gray-900/90 backdrop-blur-sm transition-opacity duration-300 opacity-0';
-    
+
     loader.innerHTML = `
         <svg class="animate-spin h-10 w-10 text-blue-600 dark:text-blue-400 mb-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
             <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
@@ -566,8 +620,8 @@ function setLogLoading() {
         </svg>
         <span class="text-sm font-medium text-gray-600 dark:text-gray-300 animate-pulse">${escapeHtml(loadingText)}</span>
     `;
-    
-    container.appendChild(loader);    
+
+    container.appendChild(loader);
     void loader.offsetWidth;
     loader.classList.remove('opacity-0');
 }
@@ -575,10 +629,10 @@ function setLogLoading() {
 function removeLogLoading() {
     const loader = document.getElementById('log-loader');
     if (!loader) return;
-    
+
     loader.classList.add('opacity-0');
     setTimeout(() => {
-        if(loader.parentElement) loader.remove();
+        if (loader.parentElement) loader.remove();
     }, 300);
 }
 
@@ -607,7 +661,7 @@ window.switchLogType = function(type) {
         return;
     }
     container.innerHTML = '';
-    
+
     const oldEmpty = document.getElementById('empty-logs-state');
     if (oldEmpty) oldEmpty.remove();
 
@@ -616,7 +670,7 @@ window.switchLogType = function(type) {
 
     logSSESource.addEventListener('logs', (e) => {
         if (overlay) overlay.classList.add('hidden');
-        
+
         try {
             const data = JSON.parse(e.data);
             const logs = data.logs || [];
@@ -624,10 +678,10 @@ window.switchLogType = function(type) {
 
             // --- EMPTY LOGS HANDLING ---
             if (logs.length === 0) {
-                 if (document.getElementById('log-loader')) {
+                if (document.getElementById('log-loader')) {
                     container.classList.remove('overflow-hidden');
                     removeLogLoading();
-                    
+
                     if (!document.getElementById('empty-logs-state')) {
                         const emptyHtml = `
                         <div id="empty-logs-state" class="flex flex-col items-center justify-center h-full min-h-[200px] text-gray-400 dark:text-gray-600 animate-fade-in-up select-none opacity-80">
@@ -641,8 +695,8 @@ window.switchLogType = function(type) {
                         </div>`;
                         container.insertAdjacentHTML('beforeend', emptyHtml);
                     }
-                 }
-                 return;
+                }
+                return;
             }
 
             const emptyState = document.getElementById('empty-logs-state');
@@ -662,33 +716,39 @@ window.switchLogType = function(type) {
             const loader = document.getElementById('log-loader');
             const isInitialLoad = loader && !loader.classList.contains('opacity-0');
             const isAtBottom = (container.scrollHeight - container.scrollTop) <= (container.clientHeight + 5);
-            
+
             container.insertAdjacentHTML('beforeend', html);
-            
+
             if (container.children.length > 1000) {
-                 while (container.children.length > 1000) {
-                     const first = container.firstChild;
-                     if (first && first.id !== 'log-loader' && first.id !== 'empty-logs-state') {
-                         first.remove();
-                     } else {
-                         if (container.children[1]) container.children[1].remove();
-                         else break;
-                     }
-                 }
+                while (container.children.length > 1000) {
+                    const first = container.firstChild;
+                    if (first && first.id !== 'log-loader' && first.id !== 'empty-logs-state') {
+                        first.remove();
+                    } else {
+                        if (container.children[1]) container.children[1].remove();
+                        else break;
+                    }
+                }
             }
-            
+
             container.classList.remove('overflow-hidden');
             if (isInitialLoad) {
-                container.scrollTo({ top: container.scrollHeight, behavior: 'auto' });
+                container.scrollTo({
+                    top: container.scrollHeight,
+                    behavior: 'auto'
+                });
             } else if (isAtBottom) {
-                container.scrollTo({ top: container.scrollHeight, behavior: 'smooth' });
+                container.scrollTo({
+                    top: container.scrollHeight,
+                    behavior: 'smooth'
+                });
             }
 
             if (loader) {
                 removeLogLoading();
             }
 
-        } catch(err) {
+        } catch (err) {
             console.error("Logs parse error", err);
             container.classList.remove('overflow-hidden');
             removeLogLoading();
@@ -699,10 +759,11 @@ window.switchLogType = function(type) {
         if (overlay) overlay.classList.add('hidden');
     };
 };
+
 function setModalLoading() {
     const modal = document.getElementById('nodeModal');
     if (!modal) return;
-    
+
     const fields = ['modalNodeName', 'modalNodeIp', 'modalToken', 'modalNodeUptime', 'modalNodeRam', 'modalNodeDisk', 'modalNodeTraffic'];
     fields.forEach(id => {
         const el = document.getElementById(id);
@@ -714,8 +775,8 @@ function setModalLoading() {
         lastSeen.className = 'text-gray-400 text-xs';
     }
     const card = modal.firstElementChild;
-    if (!card) return;    
-    if (!card.classList.contains('relative')) card.classList.add('relative');    
+    if (!card) return;
+    if (!card.classList.contains('relative')) card.classList.add('relative');
     const existing = document.getElementById('node-modal-loader');
     if (existing) existing.remove();
 
@@ -731,8 +792,8 @@ function setModalLoading() {
         </svg>
         <span class="text-sm font-medium text-gray-600 dark:text-gray-300 animate-pulse">${escapeHtml(loadingText)}</span>
     `;
-    
-    card.appendChild(loader);    
+
+    card.appendChild(loader);
     void loader.offsetWidth;
     loader.classList.remove('opacity-0');
 }
@@ -740,7 +801,7 @@ function setModalLoading() {
 function removeModalLoading() {
     const loader = document.getElementById('node-modal-loader');
     if (!loader) return;
-    
+
     loader.classList.add('opacity-0');
     setTimeout(() => {
         if (loader.parentElement) loader.remove();
@@ -751,7 +812,7 @@ async function openNodeDetails(token, color) {
     const modal = document.getElementById('nodeModal');
     if (modal) {
         setModalLoading();
-        animateModalOpen(modal); 
+        animateModalOpen(modal);
         currentNodeToken = token; // Contains Encrypted Token from renderNodesList
         cancelNodeRename();
     }
@@ -766,7 +827,7 @@ async function openNodeDetails(token, color) {
     }
     // Token is already encrypted, send as is
     nodeSSESource = new EventSource(`/api/events/node?token=${token}`);
-    
+
     nodeSSESource.addEventListener('node_details', (e) => {
         try {
             const data = JSON.parse(e.data);
@@ -775,16 +836,16 @@ async function openNodeDetails(token, color) {
             console.error("Node details parse error", err);
         }
     });
-    
+
     nodeSSESource.addEventListener('error', (e) => {
-         try {
-             if (e.data) {
-                 const errData = JSON.parse(e.data);
-                 if (errData.error) {
-                     console.warn("Node SSE Error:", errData.error);
-                 }
-             }
-         } catch(ex) {}
+        try {
+            if (e.data) {
+                const errData = JSON.parse(e.data);
+                if (errData.error) {
+                    console.warn("Node SSE Error:", errData.error);
+                }
+            }
+        } catch (ex) {}
     });
 }
 
@@ -795,12 +856,12 @@ function updateNodeDetailsUI(data) {
     if (inputContainer && inputContainer.classList.contains('hidden')) {
         document.getElementById('modalNodeName').innerText = data.name;
     }
-    
+
     document.getElementById('modalNodeIp').innerText = decryptData(data.ip);
     document.getElementById('modalToken').innerText = decryptData(data.token);
 
     const stats = data.stats || {};
-    
+
     if (stats.uptime) {
         const bootTimestamp = (Date.now() / 1000) - stats.uptime;
         document.getElementById('modalNodeUptime').innerText = formatUptime(bootTimestamp);
@@ -889,10 +950,15 @@ window.saveNodeRename = async function() {
     try {
         const res = await fetch('/api/nodes/rename', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ token: currentNodeToken, name: newName }) // Token is already encrypted
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                token: currentNodeToken,
+                name: newName
+            }) // Token is already encrypted
         });
-        
+
         if (res.ok) {
             if (window.showToast) {
                 const msg = (typeof I18N !== 'undefined' && I18N.web_node_rename_success) ? I18N.web_node_rename_success : "Name updated";
@@ -930,7 +996,11 @@ function renderCharts(history) {
     const netRx = [];
     const netTx = [];
 
-    labels.push(new Date(history[0].t * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
+    labels.push(new Date(history[0].t * 1000).toLocaleTimeString([], {
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit'
+    }));
     cpuData.push(history[0].c);
     ramData.push(history[0].r);
     netRx.push(0);
@@ -945,7 +1015,11 @@ function renderCharts(history) {
             netRx.push(null);
             netTx.push(null);
         }
-        labels.push(new Date(history[i].t * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
+        labels.push(new Date(history[i].t * 1000).toLocaleTimeString([], {
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit'
+        }));
         cpuData.push(history[i].c);
         ramData.push(history[i].r);
         netRx.push((Math.max(0, history[i].rx - history[i - 1].rx) * 8 / dt / 1024));
@@ -964,13 +1038,51 @@ function renderCharts(history) {
         responsive: true,
         maintainAspectRatio: false,
         animation: false,
-        interaction: { mode: 'index', intersect: false },
-        scales: {
-            y: { beginAtZero: true, grid: { color: gridColor }, ticks: { color: tickColor, font: { size: 10 } } },
-            x: { grid: { display: false }, ticks: { display: !isMobile, maxTicksLimit: isMobile ? 3 : 6 } }
+        interaction: {
+            mode: 'index',
+            intersect: false
         },
-        plugins: { legend: { labels: { color: tickColor, boxWidth: 10, usePointStyle: true } } },
-        elements: { line: { tension: 0.4 }, point: { radius: 0, hitRadius: 10 } }
+        scales: {
+            y: {
+                beginAtZero: true,
+                grid: {
+                    color: gridColor
+                },
+                ticks: {
+                    color: tickColor,
+                    font: {
+                        size: 10
+                    }
+                }
+            },
+            x: {
+                grid: {
+                    display: false
+                },
+                ticks: {
+                    display: !isMobile,
+                    maxTicksLimit: isMobile ? 3 : 6
+                }
+            }
+        },
+        plugins: {
+            legend: {
+                labels: {
+                    color: tickColor,
+                    boxWidth: 10,
+                    usePointStyle: true
+                }
+            }
+        },
+        elements: {
+            line: {
+                tension: 0.4
+            },
+            point: {
+                radius: 0,
+                hitRadius: 10
+            }
+        }
     };
 
     if (chartRes) {
@@ -985,12 +1097,32 @@ function renderCharts(history) {
             type: 'line',
             data: {
                 labels,
-                datasets: [
-                    { label: `${lblCpu} (%)`, data: cpuData, borderColor: '#3b82f6', borderWidth: 2, backgroundColor: cpuGrad, fill: true },
-                    { label: `${lblRam} (%)`, data: ramData, borderColor: '#a855f7', borderWidth: 2, backgroundColor: ramGrad, fill: true }
-                ]
+                datasets: [{
+                    label: `${lblCpu} (%)`,
+                    data: cpuData,
+                    borderColor: '#3b82f6',
+                    borderWidth: 2,
+                    backgroundColor: cpuGrad,
+                    fill: true
+                }, {
+                    label: `${lblRam} (%)`,
+                    data: ramData,
+                    borderColor: '#a855f7',
+                    borderWidth: 2,
+                    backgroundColor: ramGrad,
+                    fill: true
+                }]
             },
-            options: { ...commonOptions, scales: { ...commonOptions.scales, y: { ...commonOptions.scales.y, max: 100 } } }
+            options: {
+                ...commonOptions,
+                scales: {
+                    ...commonOptions.scales,
+                    y: {
+                        ...commonOptions.scales.y,
+                        max: 100
+                    }
+                }
+            }
         });
     }
 
@@ -1008,10 +1140,21 @@ function renderCharts(history) {
             type: 'line',
             data: {
                 labels,
-                datasets: [
-                    { label: 'RX', data: netRx, borderColor: '#22c55e', borderWidth: 2, backgroundColor: rxGrad, fill: true },
-                    { label: 'TX', data: netTx, borderColor: '#ef4444', borderWidth: 2, backgroundColor: txGrad, fill: true }
-                ]
+                datasets: [{
+                    label: 'RX',
+                    data: netRx,
+                    borderColor: '#22c55e',
+                    borderWidth: 2,
+                    backgroundColor: rxGrad,
+                    fill: true
+                }, {
+                    label: 'TX',
+                    data: netTx,
+                    borderColor: '#ef4444',
+                    borderWidth: 2,
+                    backgroundColor: txGrad,
+                    fill: true
+                }]
             },
             options: netOpts
         });

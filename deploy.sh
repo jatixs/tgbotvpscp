@@ -26,6 +26,7 @@ VENV_PATH="${BOT_INSTALL_PATH}/venv"
 README_FILE="${BOT_INSTALL_PATH}/README.md"
 DOCKER_COMPOSE_FILE="${BOT_INSTALL_PATH}/docker-compose.yml"
 ENV_FILE="${BOT_INSTALL_PATH}/.env"
+STATE_FILE="${BOT_INSTALL_PATH}/.install_state"
 
 GITHUB_REPO="jatixs/tgbotvpscp"
 GITHUB_REPO_URL="https://github.com/${GITHUB_REPO}.git"
@@ -70,6 +71,37 @@ run_with_spinner() {
     return $exit_code
 }
 
+# --- ХЕЛПЕРЫ ДЛЯ ХЕШЕЙ ---
+get_file_hash() {
+    local file_path=$1
+    if [ -f "$file_path" ]; then
+        sha256sum "$file_path" | awk '{print $1}'
+    else
+        echo "none"
+    fi
+}
+
+update_state_hash() {
+    local key=$1
+    local hash=$2
+    if [ ! -f "$STATE_FILE" ]; then touch "$STATE_FILE"; fi
+    # Удаляем старую запись и добавляем новую
+    sed -i "/^$key=/d" "$STATE_FILE"
+    echo "$key=$hash" >> "$STATE_FILE"
+}
+
+check_hash_match() {
+    local key=$1
+    local current_hash=$2
+    if [ -f "$STATE_FILE" ]; then
+        local stored_hash=$(grep "^$key=" "$STATE_FILE" | cut -d'=' -f2)
+        if [ "$stored_hash" == "$current_hash" ]; then
+            return 0 # True (совпадает)
+        fi
+    fi
+    return 1 # False (не совпадает или нет записи)
+}
+
 # --- РАБОТА С ВЕРСИЯМИ ---
 
 # 1. Получает версию из GitHub (Remote)
@@ -83,7 +115,6 @@ save_current_version() {
     if [ -f "$README_FILE" ]; then
         local ver=$(grep -oP 'img\.shields\.io/badge/version-v\K[\d\.]+' "$README_FILE")
         if [ -n "$ver" ]; then
-            # Если .env существует
             if [ -f "${ENV_FILE}" ]; then
                 if grep -q "^INSTALLED_VERSION=" "${ENV_FILE}"; then
                     sudo sed -i "s/^INSTALLED_VERSION=.*/INSTALLED_VERSION=$ver/" "${ENV_FILE}"
@@ -95,24 +126,16 @@ save_current_version() {
     fi
 }
 
-# 3. Читает локальную версию (Сначала из .env, если нет - из README)
+# 3. Читает локальную версию
 get_local_version() { 
     local ver=""
-    # 1. Ищем в .env (так как README будет удален)
     if [ -f "${ENV_FILE}" ]; then
         ver=$(grep '^INSTALLED_VERSION=' "${ENV_FILE}" | cut -d'=' -f2)
     fi
-    
-    # 2. Если в .env пусто, пробуем README (до очистки)
     if [ -z "$ver" ] && [ -f "$README_FILE" ]; then
         ver=$(grep -oP 'img\.shields\.io/badge/version-v\K[\d\.]+' "$README_FILE")
     fi
-
-    if [ -z "$ver" ]; then
-        echo "Не определена"
-    else
-        echo "$ver"
-    fi
+    if [ -z "$ver" ]; then echo "Не определена"; else echo "$ver"; fi
 }
 
 INSTALL_TYPE="НЕТ"; STATUS_MESSAGE="Проверка не проводилась."
@@ -198,20 +221,43 @@ EOF
 # --- ФУНКЦИИ УСТАНОВКИ ---
 common_install_steps() {
     echo "" > /tmp/${SERVICE_NAME}_install.log
-    msg_info "1. Обновление системы..."
-    run_with_spinner "Apt update" sudo apt-get update -y -q
-    run_with_spinner "Установка системных пакетов" sudo apt-get install -y -q -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" python3 python3-pip python3-venv git curl wget sudo python3-yaml
+    # Проверка: если базовые пакеты есть, пропускаем apt update для скорости
+    if command -v python3 >/dev/null && command -v git >/dev/null && command -v pip3 >/dev/null; then
+        msg_success "Базовые пакеты (Python/Git) уже установлены. Пропуск apt update."
+    else
+        msg_info "1. Обновление системы..."
+        run_with_spinner "Apt update" sudo apt-get update -y -q
+        run_with_spinner "Установка системных пакетов" sudo apt-get install -y -q -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" python3 python3-pip python3-venv git curl wget sudo python3-yaml
+    fi
 }
 
 setup_repo_and_dirs() {
     local owner_user=$1; if [ -z "$owner_user" ]; then owner_user="root"; fi
     cd /
     msg_info "Подготовка файлов (Ветка: ${GIT_BRANCH})..."
+    
+    # Сохраняем важные файлы перед очисткой
     if [ -f "${ENV_FILE}" ]; then cp "${ENV_FILE}" /tmp/tgbot_env.bak; fi
+    if [ -f "${STATE_FILE}" ]; then cp "${STATE_FILE}" /tmp/tgbot_state.bak; fi
+    # ВАЖНО: Сохраняем venv, чтобы не переустанавливать зависимости при повторном запуске
+    if [ -d "${VENV_PATH}" ]; then 
+        msg_info "Сохранение venv..."
+        sudo mv "${VENV_PATH}" /tmp/tgbot_venv.bak
+    fi
+
     if [ -d "${BOT_INSTALL_PATH}" ]; then run_with_spinner "Удаление старых файлов" sudo rm -rf "${BOT_INSTALL_PATH}"; fi
     sudo mkdir -p ${BOT_INSTALL_PATH}
     run_with_spinner "Клонирование репозитория" sudo git clone --branch "${GIT_BRANCH}" "${GITHUB_REPO_URL}" "${BOT_INSTALL_PATH}" || exit 1
+    
+    # Восстанавливаем файлы
     if [ -f "/tmp/tgbot_env.bak" ]; then sudo mv /tmp/tgbot_env.bak "${ENV_FILE}"; fi
+    if [ -f "/tmp/tgbot_state.bak" ]; then sudo mv /tmp/tgbot_state.bak "${STATE_FILE}"; fi
+    # Восстанавливаем venv
+    if [ -d "/tmp/tgbot_venv.bak" ]; then 
+        sudo mv /tmp/tgbot_venv.bak "${VENV_PATH}"
+        msg_success "Venv восстановлен."
+    fi
+
     sudo mkdir -p "${BOT_INSTALL_PATH}/logs/bot" "${BOT_INSTALL_PATH}/logs/watchdog" "${BOT_INSTALL_PATH}/logs/node" "${BOT_INSTALL_PATH}/config"
     sudo chown -R ${owner_user}:${owner_user} ${BOT_INSTALL_PATH}
 }
@@ -252,6 +298,10 @@ load_cached_env() {
             [ -z "$NODE_TOKEN" ] && NODE_TOKEN=$(get_env_val "AGENT_TOKEN")
         else
             msg_info "Восстановление пропущено. Введите данные заново."
+            # СБРОС ПЕРЕМЕННЫХ, чтобы точно запросить ввод
+            T=""; A=""; U=""; N=""; P=""; SENTRY_DSN=""
+            ENABLE_WEB=""; SETUP_HTTPS=""; HTTPS_DOMAIN=""; HTTPS_EMAIL=""; HTTPS_PORT=""
+            AGENT_URL=""; NODE_TOKEN=""
         fi
     fi
 }
@@ -260,15 +310,7 @@ cleanup_node_files() {
     cd ${BOT_INSTALL_PATH}
     # Удаляем всё лишнее для режима Ноды (Клиента)
     sudo rm -rf core modules bot.py watchdog.py Dockerfile docker-compose.yml .git .github config/users.json config/alerts_config.json deploy.sh deploy_en.sh requirements.txt LICENSE CHANGELOG* .gitignore aerich.ini
-    
-    # Дополнительная очистка
-    sudo rm -f .env.example
-    sudo rm -f migrate.py
-    sudo rm -f manage.py
-    sudo rm -f ARCHITECTURE*
-    sudo rm -f custom_module*
-    
-    # Удаление README, но перед этим мы сохранили версию
+    sudo rm -f .env.example migrate.py manage.py ARCHITECTURE* custom_module*
     sudo rm -f README*
 }
 
@@ -281,29 +323,19 @@ cleanup_agent_files() {
 cleanup_files() {
     msg_info "🧹 Запуск финальной очистки..."
 
-    # 1. Удаляем папки, не влияющие на работу
     if [ -d "$BOT_INSTALL_PATH/.github" ]; then sudo rm -rf "$BOT_INSTALL_PATH/.github"; fi
     if [ -d "$BOT_INSTALL_PATH/assets" ]; then sudo rm -rf "$BOT_INSTALL_PATH/assets"; fi
 
-    # 2. Удаляем документацию и лишние файлы
     sudo rm -f "$BOT_INSTALL_PATH/custom_module.md" "$BOT_INSTALL_PATH/custom_module_en.md"
     sudo rm -f "$BOT_INSTALL_PATH/.gitignore" "$BOT_INSTALL_PATH/LICENSE"
-    
-    # Удаляем README (версия уже сохранена в .env)
+    sudo rm -f "$BOT_INSTALL_PATH/aerich.ini"
     sudo rm -f "$BOT_INSTALL_PATH/README.md" "$BOT_INSTALL_PATH/README.en.md"
-    
     sudo rm -f "$BOT_INSTALL_PATH/ARCHITECTURE.md" "$BOT_INSTALL_PATH/ARCHITECTURE.en.md"
     sudo rm -f "$BOT_INSTALL_PATH/CHANGELOG.md" "$BOT_INSTALL_PATH/CHANGELOG.en.md"
     sudo rm -f "$BOT_INSTALL_PATH/.env.example"
-
-    # 3. Удаляем файлы, нужные только для установки
     sudo rm -f "$BOT_INSTALL_PATH/migrate.py"
     sudo rm -f "$BOT_INSTALL_PATH/requirements.txt"
-    sudo rm -f "$BOT_INSTALL_PATH/aerich.ini"
-    
-    # ПРИМЕЧАНИЕ: manage.py НЕ удаляем, он нужен для CLI-утилиты tgcp-bot.
 
-    # 4. Специфичная очистка для Docker/Systemd
     if [ -f "${ENV_FILE}" ]; then
         DEPLOY_MODE_VAL=$(grep '^DEPLOY_MODE=' "${ENV_FILE}" | cut -d'=' -f2 | tr -d '"')
         if [ "$DEPLOY_MODE_VAL" != "docker" ]; then
@@ -312,18 +344,25 @@ cleanup_files() {
         fi
     fi
 
-    # 5. Чистка кэша Python
     sudo find "$BOT_INSTALL_PATH" -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null
-
     msg_success "Очистка завершена."
 }
 
 install_extras() {
-    if ! command -v fail2ban-client &> /dev/null; then
-        msg_question "Fail2Ban не найден. Установить? (y/n): " I; if [[ "$I" =~ ^[Yy]$ ]]; then run_with_spinner "Установка Fail2ban" sudo apt-get install -y -q -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" fail2ban; fi
+    # Проверка fail2ban
+    if command -v fail2ban-client &> /dev/null; then
+        msg_success "Fail2Ban уже установлен."
+    else
+        msg_question "Fail2Ban не найден. Установить? (y/n): " I
+        if [[ "$I" =~ ^[Yy]$ ]]; then run_with_spinner "Установка Fail2ban" sudo apt-get install -y -q -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" fail2ban; fi
     fi
-    if ! command -v iperf3 &> /dev/null; then
-        msg_question "iperf3 не найден. Установить? (y/n): " I; if [[ "$I" =~ ^[Yy]$ ]]; then run_with_spinner "Установка iperf3" sudo apt-get install -y -q -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" iperf3; fi
+    
+    # Проверка iperf3
+    if command -v iperf3 &> /dev/null; then
+        msg_success "iperf3 уже установлен."
+    else
+        msg_question "iperf3 не найден. Установить? (y/n): " I
+        if [[ "$I" =~ ^[Yy]$ ]]; then run_with_spinner "Установка iperf3" sudo apt-get install -y -q -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" iperf3; fi
     fi
 }
 
@@ -504,22 +543,44 @@ run_db_migrations() {
         cmd_prefix="sudo -E -u ${SERVICE_USER}"
     fi
 
-    # 4. Инициализация aerich
-    if [ ! -f "${BOT_INSTALL_PATH}/aerich.ini" ]; then
-        msg_info "Инициализация конфигурации Aerich..."
-        $cmd_prefix ${VENV_PATH}/bin/aerich init -t core.config.TORTOISE_ORM >/dev/null 2>&1 || msg_warning "Предупреждение при aerich init (возможно, уже настроено)."
-    fi
+    # --- ПРОВЕРКА НА ПРОПУСК МИГРАЦИИ ---
+    local db_models_hash=$(get_file_hash "${BOT_INSTALL_PATH}/core/models.py")
+    local db_exists=false
+    if [ -f "${BOT_INSTALL_PATH}/config/nodes.db" ]; then db_exists=true; fi
 
-    # 5. Запуск миграций БД
-    if [ ! -d "${BOT_INSTALL_PATH}/migrations" ]; then
-        msg_info "Создание базы данных..."
-        if ! $cmd_prefix ${VENV_PATH}/bin/aerich init-db; then
-             msg_warning "init-db вернул ошибку. Возможно, база уже существует. Пропускаем..."
+    if $db_exists && check_hash_match "DB_HASH" "$db_models_hash"; then
+        msg_success "Структура БД не менялась. Пропуск миграций."
+        return
+    fi
+    # ------------------------------------
+
+    # Генерация aerich.ini
+    if [ -f "${BOT_INSTALL_PATH}/aerich.ini" ]; then rm -f "${BOT_INSTALL_PATH}/aerich.ini"; fi
+    $cmd_prefix ${VENV_PATH}/bin/aerich init -t core.config.TORTOISE_ORM >/dev/null 2>&1
+
+    # Запуск миграций
+    if $db_exists; then
+        if [ -d "${BOT_INSTALL_PATH}/migrations" ]; then
+            msg_info "Применение обновлений базы данных..."
+            $cmd_prefix ${VENV_PATH}/bin/aerich upgrade >/dev/null 2>&1
+        else
+            msg_info "База данных найдена, папки миграций нет (пропуск)."
         fi
     else
-        msg_info "Проверка обновлений базы данных..."
-        $cmd_prefix ${VENV_PATH}/bin/aerich upgrade >/dev/null 2>&1 || msg_info "База данных уже обновлена."
+        # Базы нет
+        if [ ! -d "${BOT_INSTALL_PATH}/migrations" ]; then
+            msg_info "Создание базы данных..."
+            if ! $cmd_prefix ${VENV_PATH}/bin/aerich init-db >/dev/null 2>&1; then
+                 msg_warning "Ошибка при создании БД (init-db)."
+            fi
+        else
+            msg_info "Применение миграций (создание БД)..."
+            $cmd_prefix ${VENV_PATH}/bin/aerich upgrade >/dev/null 2>&1
+        fi
     fi
+
+    # Обновляем хеш после успешной миграции
+    update_state_hash "DB_HASH" "$db_models_hash"
 
     # 6. Запуск БЕЗОПАСНОЙ миграции JSON -> Encrypted
     msg_info "Безопасная миграция конфигурации..."
@@ -536,19 +597,40 @@ install_systemd_logic() {
     install_extras
 
     local exec_cmd=""
+    local req_hash=$(get_file_hash "${BOT_INSTALL_PATH}/requirements.txt")
+    local install_pip=true
+
+    # Проверка, нужно ли ставить зависимости
+    if [ -d "${VENV_PATH}" ] && [ -f "${VENV_PATH}/bin/python" ]; then
+        if check_hash_match "REQ_HASH" "$req_hash"; then
+            install_pip=false
+            msg_success "Зависимости (Venv) актуальны. Пропуск установки."
+        fi
+    fi
 
     if [ "$mode" == "secure" ]; then
         if ! id "${SERVICE_USER}" &>/dev/null; then sudo useradd -r -s /bin/false -d ${BOT_INSTALL_PATH} ${SERVICE_USER}; fi
         setup_repo_and_dirs "${SERVICE_USER}"
-        sudo -u ${SERVICE_USER} ${PYTHON_BIN} -m venv "${VENV_PATH}"
-        run_with_spinner "Установка зависимостей" sudo -u ${SERVICE_USER} "${VENV_PATH}/bin/pip" install -r "${BOT_INSTALL_PATH}/requirements.txt"
-        run_with_spinner "Установка доп. пакетов (tomlkit)" sudo -u ${SERVICE_USER} "${VENV_PATH}/bin/pip" install tomlkit
+        
+        # Если venv нет, создаем
+        if [ ! -d "${VENV_PATH}" ]; then sudo -u ${SERVICE_USER} ${PYTHON_BIN} -m venv "${VENV_PATH}"; fi
+        
+        if $install_pip; then
+            run_with_spinner "Установка зависимостей" sudo -u ${SERVICE_USER} "${VENV_PATH}/bin/pip" install -r "${BOT_INSTALL_PATH}/requirements.txt"
+            run_with_spinner "Установка доп. пакетов (tomlkit)" sudo -u ${SERVICE_USER} "${VENV_PATH}/bin/pip" install tomlkit
+            update_state_hash "REQ_HASH" "$req_hash"
+        fi
         exec_cmd="sudo -u ${SERVICE_USER}"
     else
         setup_repo_and_dirs "root"
-        ${PYTHON_BIN} -m venv "${VENV_PATH}"
-        run_with_spinner "Установка зависимостей" "${VENV_PATH}/bin/pip" install -r "${BOT_INSTALL_PATH}/requirements.txt"
-        run_with_spinner "Установка доп. пакетов (tomlkit)" "${VENV_PATH}/bin/pip" install tomlkit
+        
+        if [ ! -d "${VENV_PATH}" ]; then ${PYTHON_BIN} -m venv "${VENV_PATH}"; fi
+
+        if $install_pip; then
+            run_with_spinner "Установка зависимостей" "${VENV_PATH}/bin/pip" install -r "${BOT_INSTALL_PATH}/requirements.txt"
+            run_with_spinner "Установка доп. пакетов (tomlkit)" "${VENV_PATH}/bin/pip" install tomlkit
+            update_state_hash "REQ_HASH" "$req_hash"
+        fi
         exec_cmd=""
     fi
 
@@ -556,7 +638,7 @@ install_systemd_logic() {
     ask_env_details
     write_env_file "systemd" "$mode" ""
 
-    # Запуск миграций (нужен migrate.py и aerich.ini)
+    # Запуск миграций (с проверкой хешей)
     run_db_migrations "$exec_cmd"
 
     create_and_start_service "${SERVICE_NAME}" "${BOT_INSTALL_PATH}/bot.py" "$mode" "Telegram Bot"
@@ -677,11 +759,37 @@ install_node_logic() {
     if [ -n "$AUTO_NODE_TOKEN" ]; then NODE_TOKEN="$AUTO_NODE_TOKEN"; fi
 
     common_install_steps
-    run_with_spinner "Установка iperf3" sudo apt-get install -y -q -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" iperf3
+    # install_extras НЕ вызываем здесь, чтобы не ставить fail2ban
+    
+    # Проверка iperf3 (только)
+    if command -v iperf3 &> /dev/null; then
+        msg_success "iperf3 уже установлен."
+    else
+        msg_question "iperf3 не найден. Установить? (y/n): " I
+        if [[ "$I" =~ ^[Yy]$ ]]; then run_with_spinner "Установка iperf3" sudo apt-get install -y -q -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" iperf3; fi
+    fi
+
     setup_repo_and_dirs "root"
+    
+    # Расчет хеша зависимостей ноды
+    local node_deps_hash=$(echo "psutil requests" | sha256sum | awk '{print $1}')
+    local install_pip=true
+
     msg_info "Настройка venv..."
-    if [ ! -d "${VENV_PATH}" ]; then run_with_spinner "Создание venv" ${PYTHON_BIN} -m venv "${VENV_PATH}"; fi
-    run_with_spinner "Установка зависимостей" "${VENV_PATH}/bin/pip" install psutil requests
+    if [ ! -d "${VENV_PATH}" ]; then 
+        run_with_spinner "Создание venv" ${PYTHON_BIN} -m venv "${VENV_PATH}"
+    else
+        # Если venv есть, проверяем хеш
+        if check_hash_match "NODE_REQ_HASH" "$node_deps_hash"; then
+            install_pip=false
+            msg_success "Зависимости (Venv) актуальны. Пропуск установки."
+        fi
+    fi
+
+    if $install_pip; then
+        run_with_spinner "Установка зависимостей" "${VENV_PATH}/bin/pip" install psutil requests
+        update_state_hash "NODE_REQ_HASH" "$node_deps_hash"
+    fi
 
     load_cached_env
     echo ""; msg_info "Подключение:"
@@ -778,8 +886,15 @@ EOF
 
         else msg_error "Нет docker-compose.yml"; return 1; fi
     else
-        run_with_spinner "Обновление pip" $exec_cmd "${VENV_PATH}/bin/pip" install -r "${BOT_INSTALL_PATH}/requirements.txt" --upgrade
-        run_with_spinner "Обновление tomlkit" $exec_cmd "${VENV_PATH}/bin/pip" install tomlkit
+        # Обновление PIP только если изменился requirements.txt (через хеш)
+        local req_hash=$(get_file_hash "${BOT_INSTALL_PATH}/requirements.txt")
+        if check_hash_match "REQ_HASH" "$req_hash"; then
+             msg_success "Зависимости не менялись. Пропуск обновления PIP."
+        else
+             run_with_spinner "Обновление pip" $exec_cmd "${VENV_PATH}/bin/pip" install -r "${BOT_INSTALL_PATH}/requirements.txt" --upgrade
+             run_with_spinner "Обновление tomlkit" $exec_cmd "${VENV_PATH}/bin/pip" install tomlkit
+             update_state_hash "REQ_HASH" "$req_hash"
+        fi
 
         run_db_migrations "$exec_cmd"
         

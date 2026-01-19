@@ -6,11 +6,13 @@ from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from . import config as core_config
 from . import shared_state
 from functools import lru_cache
-
 from .config import load_encrypted_json, save_encrypted_json
 
 STRINGS = {
-    'ru': {
+    "ru": {
+        "auth_method_key": "🔑 По ключу",
+        "auth_method_password": "⌨️ По паролю",
+        "auth_method_unknown": "❓ Неизвестно",
         "btn_back": "🔙 Назад",
         "btn_cancel": "❌ Отмена",
         "btn_back_to_menu": "🔙 Назад в меню",
@@ -137,7 +139,7 @@ STRINGS = {
         "alert_node_ram_normal": "✅ <b>Нода '{name}': RAM в норме.</b>\nЗанято: <b>{usage}%</b>",
         "alert_node_disk_high": "⚠️ <b>Нода '{name}': Мало места (Disk)!</b>\nЗанято: <b>{usage}%</b> (Порог: {threshold}%)",
         "alert_node_disk_normal": "✅ <b>Нода '{name}': Место на диске в норме.</b>\nЗанято: <b>{usage}%</b>",
-        "alert_ssh_login_detected": "🔔 <b>Обнаружен вход SSH</b>\n\n👤 Пользователь: <b>{user}</b>\n🌍 IP: <b>{flag} {ip}</b>\n⏰ Время: <b>{time}</b>{tz}",
+        "alert_ssh_login_detected": "🔔 <b>Обнаружен вход SSH</b>\n\n👤 Пользователь: <b>{user}</b>\n🛡 Способ: <b>{method}</b>\n🌍 IP: <b>{flag} {ip}</b>\n⏰ Время: <b>{time}</b>{tz}",
         "alert_f2b_ban_detected": "🛡️ <b>Fail2Ban забанил IP</b>\n\n🌍 IP: <b>{flag} {ip}</b>\n⏰ Время: <b>{time}</b>{tz}",
         "alert_cpu_high": "⚠️ <b>Превышен порог CPU!</b>\nТекущее использование: <b>{usage:.1f}%</b> (Порог: {threshold}%)\n\n🔥 <b>Нагрузка:</b>\n{processes}",
         "alert_cpu_high_repeat": "‼️ <b>CPU все еще ВЫСОКИЙ!</b>\nТекущее использование: <b>{usage:.1f}%</b> (Порог: {threshold}%)\n\n🔥 <b>Нагрузка:</b>\n{processes}",
@@ -307,7 +309,7 @@ STRINGS = {
         "unit_hour_short": "ч",
         "unit_minute_short": "м",
         "unit_second_short": "с",
-        "start_support_message": "Это open-source проект, автор проекта <a href=\"https://t.me/faridshykhaliev\">@faridshykhaliev</a>. При желании вы можете поддержать автора. Это мотивирует автора продолжать развивать проект.",
+        "start_support_message": 'Это open-source проект, автор проекта <a href="https://t.me/faridshykhaliev">@faridshykhaliev</a>. При желании вы можете поддержать автора. Это мотивирует автора продолжать развивать проект.',
         "start_support_button": " ❤️ Поддержать разработчика",
         "web_add_user_prompt": "Введите Telegram ID пользователя:",
         "web_title": "Web-агент Бота",
@@ -502,7 +504,6 @@ STRINGS = {
         "web_fatal_conn": "Проблемы с интернет соединением...",
         "web_server_rebooting": "Сервер/бот ушел в перезагрузку.",
         "web_reloading_page": "Перезагрузка страницы...",
-        
         "pass_strength_weak": "Слабый",
         "pass_strength_fair": "Нормальный",
         "pass_strength_good": "Хороший",
@@ -515,9 +516,12 @@ STRINGS = {
         "pass_is_empty": "Заполните все поля",
         "web_redirecting": "Перенаправление...",
         "web_logging_in": "Вход в систему...",
-        "login_go_to_bot": "Перейти в бот"
+        "login_go_to_bot": "Перейти в бот",
     },
-    'en': {
+    "en": {
+        "auth_method_key": "🔑 Public Key",
+        "auth_method_password": "⌨️ Password",
+        "auth_method_unknown": "❓ Unknown",
         "btn_back": "🔙 Back",
         "btn_cancel": "❌ Cancel",
         "btn_back_to_menu": "🔙 Back to menu",
@@ -638,7 +642,7 @@ STRINGS = {
         "alert_node_ram_normal": "✅ <b>Node '{name}': RAM normal.</b>\nUsage: <b>{usage}%</b>",
         "alert_node_disk_high": "⚠️ <b>Node '{name}': High Disk!</b>\nUsage: <b>{usage}%</b> (Threshold: {threshold}%)",
         "alert_node_disk_normal": "✅ <b>Node '{name}': Disk usage normal.</b>\nUsage: <b>{usage}%</b>",
-        "alert_ssh_login_detected": "🔔 <b>SSH Login Detected</b>\n\n👤 User: <b>{user}</b>\n🌍 IP: <b>{flag} {ip}</b>\n⏰ Time: <b>{time}</b>{tz}",
+        "alert_ssh_login_detected": "🔔 <b>SSH Login Detected</b>\n\n👤 User: <b>{user}</b>\n🛡 Method: <b>{method}</b>\n🌍 IP: <b>{flag} {ip}</b>\n⏰ Time: <b>{time}</b>{tz}",
         "alert_f2b_ban_detected": "🛡️ <b>Fail2Ban Banned IP</b>\n\n🌍 IP: <b>{flag} {ip}</b>\n⏰ Time: <b>{time}</b>{tz}",
         "alert_cpu_high": "‼️ <b>CPU Still HIGH!</b>\nCurrent usage: <b>{usage:.1f}%</b> (Threshold: {threshold}%)\n\n🔥 <b>Top processes:</b>\n{processes}",
         "alert_cpu_high_repeat": "‼️ <b>CPU Still HIGH!</b>\nCurrent usage: <b>{usage:.1f}%</b> (Threshold: {threshold}%)",
@@ -808,7 +812,7 @@ STRINGS = {
         "unit_hour_short": "h",
         "unit_minute_short": "m",
         "unit_second_short": "s",
-        "start_support_message": "This is an open-source project, the author is <a href=\"https://t.me/faridshykhaliev\">@faridshykhaliev</a>. If you wish, you can support the author. This motivates the author to continue developing the project.",
+        "start_support_message": 'This is an open-source project, the author is <a href="https://t.me/faridshykhaliev">@faridshykhaliev</a>. If you wish, you can support the author. This motivates the author to continue developing the project.',
         "start_support_button": " ❤️ Support the developer",
         "web_add_user_prompt": "Enter User Telegram ID:",
         "web_title": "Bot Web-agent",
@@ -990,7 +994,7 @@ STRINGS = {
         "login_or": "OR",
         "login_btn_back": "Back",
         "login_support_btn_pay": "Go to support (YooMoney)",
-        "web_brand_name": core_config.TG_BOT_NAME,        
+        "web_brand_name": core_config.TG_BOT_NAME,
         "web_fill_field": "Fill in the field",
         "web_conn_error_short": "Conn Error",
         "web_error_short": "Error",
@@ -1009,7 +1013,6 @@ STRINGS = {
         "web_fatal_conn": "Internet connection problems...",
         "web_server_rebooting": "Server/bot went into reboot.",
         "web_reloading_page": "Reloading page...",
-        
         "pass_strength_weak": "Weak",
         "pass_strength_fair": "Fair",
         "pass_strength_good": "Good",
@@ -1022,8 +1025,8 @@ STRINGS = {
         "pass_is_empty": "Fill in all fields",
         "web_redirecting": "Redirecting...",
         "web_logging_in": "Logging in...",
-        "login_go_to_bot": "Go to Bot"
-    }
+        "login_go_to_bot": "Go to Bot",
+    },
 }
 
 
@@ -1039,32 +1042,27 @@ def load_user_settings():
             shared_state.USER_SETTINGS.clear()
             logging.info("Файл user_settings.json не найден или пуст.")
     except Exception as e:
-        safe_e = str(e).replace('\n', ' ').replace('\r', '')
+        safe_e = str(e).replace("\n", " ").replace("\r", "")
         logging.error(f"Ошибка загрузки user_settings.json: {safe_e}")
         shared_state.USER_SETTINGS.clear()
 
 
 def save_user_settings():
     try:
-        os.makedirs(
-            os.path.dirname(
-                core_config.USER_SETTINGS_FILE),
-            exist_ok=True)
-        settings_to_save = {str(k): v for k,
-                            v in shared_state.USER_SETTINGS.items()}
-
+        os.makedirs(os.path.dirname(core_config.USER_SETTINGS_FILE), exist_ok=True)
+        settings_to_save = {str(k): v for k, v in shared_state.USER_SETTINGS.items()}
         save_encrypted_json(core_config.USER_SETTINGS_FILE, settings_to_save)
         logging.debug("Настройки пользователей (языки) сохранены.")
     except Exception as e:
-        safe_e = str(e).replace('\n', ' ').replace('\r', '')
+        safe_e = str(e).replace("\n", " ").replace("\r", "")
         logging.error(f"Ошибка сохранения user_settings.json: {safe_e}")
 
 
 def get_user_lang(user_id: int | str | None) -> str:
     if isinstance(user_id, int):
-        return shared_state.USER_SETTINGS.get(
-            user_id, {}).get(
-            "lang", core_config.DEFAULT_LANGUAGE)
+        return shared_state.USER_SETTINGS.get(user_id, {}).get(
+            "lang", core_config.DEFAULT_LANGUAGE
+        )
     elif isinstance(user_id, str):
         if user_id in STRINGS:
             return user_id
@@ -1073,61 +1071,51 @@ def get_user_lang(user_id: int | str | None) -> str:
     else:
         if user_id is not None:
             logging.warning(
-                f"get_user_lang вызван с неожиданным типом user_id: {type(user_id)}. Возвращаю язык по умолчанию.")
+                f"get_user_lang вызван с неожиданным типом user_id: {type(user_id)}. Возвращаю язык по умолчанию."
+            )
         return core_config.DEFAULT_LANGUAGE
 
 
 def set_user_lang(user_id: int | str | None, lang: str):
     if user_id is None:
-        logging.warning(
-            "set_user_lang вызван с user_id=None. Сохранение отменено.")
+        logging.warning("set_user_lang вызван с user_id=None. Сохранение отменено.")
         return
     if not isinstance(user_id, int):
         try:
             user_id = int(user_id)
         except (ValueError, TypeError):
             logging.error(
-                f"set_user_lang вызван с нечисловым user_id: {user_id}. Сохранение отменено.")
+                f"set_user_lang вызван с нечисловым user_id: {user_id}. Сохранение отменено."
+            )
             return
-
     if user_id not in shared_state.USER_SETTINGS:
         shared_state.USER_SETTINGS[user_id] = {}
     shared_state.USER_SETTINGS[user_id]["lang"] = lang
-
     save_user_settings()
-    logging.info(
-        f"Язык для пользователя {user_id} изменен на '{lang}' и сохранен.")
+    logging.info(f"Язык для пользователя {user_id} изменен на '{lang}' и сохранен.")
 
 
 def get_text(key: str, user_id_or_lang: int | str | None, **kwargs) -> str:
     lang = core_config.DEFAULT_LANGUAGE
-
     if isinstance(user_id_or_lang, int):
         lang = get_user_lang(user_id_or_lang)
     elif isinstance(user_id_or_lang, str) and user_id_or_lang in STRINGS:
         lang = user_id_or_lang
-
-    string_template = STRINGS.get(
-        lang,
-        {}).get(
-        key,
-        STRINGS.get(
-            core_config.DEFAULT_LANGUAGE,
-            {}).get(
-                key,
-            f"[{key}]"))
-
+    string_template = STRINGS.get(lang, {}).get(
+        key, STRINGS.get(core_config.DEFAULT_LANGUAGE, {}).get(key, f"[{key}]")
+    )
     try:
         if kwargs:
             return string_template.format(**kwargs)
         else:
             return string_template
     except (KeyError, TypeError, ValueError) as e:
-        safe_key = key.replace('\n', '').replace('\r', '')
-        safe_lang = lang.replace('\n', '').replace('\r', '')
-        safe_e = str(e).replace('\n', ' ').replace('\r', '')
+        safe_key = key.replace("\n", "").replace("\r", "")
+        safe_lang = lang.replace("\n", "").replace("\r", "")
+        safe_e = str(e).replace("\n", " ").replace("\r", "")
         logging.warning(
-            f"Ошибка форматирования для ключа '{safe_key}' языка '{safe_lang}'. Ошибка: {safe_e}")
+            f"Ошибка форматирования для ключа '{safe_key}' языка '{safe_lang}'. Ошибка: {safe_e}"
+        )
         return string_template
 
 
@@ -1142,9 +1130,8 @@ def get_all_translations(key: str) -> list[str]:
             translations.append(lang_strings[key])
     unique_translations = list(set(translations))
     if not unique_translations:
-        safe_key = key.replace('\n', '').replace('\r', '')
-        logging.error(
-            f"Ключ перевода '{safe_key}' не найден ни в одном языке!")
+        safe_key = key.replace("\n", "").replace("\r", "")
+        logging.error(f"Ключ перевода '{safe_key}' не найден ни в одном языке!")
         return [f"[{key}]"]
     return unique_translations
 
@@ -1157,10 +1144,9 @@ def get_language_keyboard() -> InlineKeyboardMarkup:
     keyboard = InlineKeyboardMarkup(
         inline_keyboard=[
             [
-                InlineKeyboardButton(
-                    text="🇷🇺 Русский",
-                    callback_data="set_lang_ru"),
-                InlineKeyboardButton(
-                    text="🇬🇧 English",
-                    callback_data="set_lang_en")]])
+                InlineKeyboardButton(text="🇷🇺 Русский", callback_data="set_lang_ru"),
+                InlineKeyboardButton(text="🇬🇧 English", callback_data="set_lang_en"),
+            ]
+        ]
+    )
     return keyboard

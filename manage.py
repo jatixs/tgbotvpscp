@@ -4,6 +4,7 @@ import argparse
 import sys
 import os
 import logging
+
 base_dir = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(base_dir)
 env_file = os.path.join(base_dir, ".env")
@@ -19,15 +20,17 @@ if os.path.exists(env_file):
                     os.environ.setdefault(key, val.strip('"').strip("'"))
     except Exception as e:
         print(f"⚠️ Ошибка чтения .env: {e}")
-logging.basicConfig(format='%(message)s', level=logging.INFO)
+logging.basicConfig(format="%(message)s", level=logging.INFO)
 
 from tortoise import Tortoise
 from core import config, auth, models, utils
 from core.nodes_db import init_db
 
+
 async def init_services():
     """Инициализация БД"""
     await init_db()
+
 
 async def close_services():
     """Закрытие соединений"""
@@ -39,21 +42,23 @@ async def cmd_adduser(args):
     auth.load_users()
     # Предполагаем, что add_user работает с текущим хранилищем (JSON или БД)
     if auth.add_user(args.id, "admins", args.name):
-        if hasattr(auth, 'save_users'):
+        if hasattr(auth, "save_users"):
             auth.save_users()
         print(f"✅ Администратор {args.name} (ID: {args.id}) добавлен.")
     else:
         print(f"⚠️ Пользователь {args.id} уже существует.")
 
+
 async def cmd_webpass(args):
     new_pass = args.password
     if not new_pass:
         new_pass = utils.generate_random_string(12)
-    
+
     utils.update_env_variable("TG_WEB_INITIAL_PASSWORD", new_pass)
     print(f"✅ Пароль Web-панели изменен.")
     print(f"🔑 Новый пароль: {new_pass}")
     print("ℹ️  Перезапустите бота для применения: tgcp-bot restart")
+
 
 async def cmd_stats(args):
     await init_services()
@@ -65,6 +70,7 @@ async def cmd_stats(args):
         print(f"   Активных: {active}")
     finally:
         await close_services()
+
 
 async def cmd_cleanlogs(args):
     log_dirs = ["logs/bot", "logs/watchdog", "logs/node"]
@@ -83,13 +89,14 @@ async def cmd_cleanlogs(args):
                         pass
     print(f"✅ Удалено файлов: {count}")
 
+
 async def cmd_restart(args):
     print("♻️  Перезапуск службы бота...")
     is_docker = os.environ.get("DEPLOY_MODE") == "docker"
-    
+
     if is_docker:
         # Для Docker нужно знать имя контейнера или использовать docker compose
-        os.system("docker compose restart") # Запуск из папки проекта должен сработать
+        os.system("docker compose restart")  # Запуск из папки проекта должен сработать
     else:
         os.system("sudo systemctl restart tg-bot")
     print("✅ Команда отправлена.")
@@ -99,9 +106,9 @@ def main():
     parser = argparse.ArgumentParser(
         prog="tgcp-bot",
         description="CLI утилита управления Telegram VPS Bot",
-        formatter_class=argparse.RawTextHelpFormatter
+        formatter_class=argparse.RawTextHelpFormatter,
     )
-    
+
     subparsers = parser.add_subparsers(dest="command", title="Доступные команды")
 
     # Команда: adduser
@@ -143,6 +150,7 @@ def main():
         print("\n⛔ Отменено.")
     except Exception as e:
         print(f"❌ Произошла ошибка: {e}")
+
 
 if __name__ == "__main__":
     main()

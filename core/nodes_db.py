@@ -8,47 +8,36 @@ from tortoise import Tortoise
 from .models import Node
 from .config import CONFIG_DIR, TORTOISE_ORM
 
-
 LEGACY_JSON_PATH = os.path.join(CONFIG_DIR, "nodes.json")
 
 
 def _get_token_hash(token: str) -> str:
-    """Генерирует SHA-256 хеш токена для поиска в БД."""
     if not token:
         return ""
     return hashlib.sha256(token.encode()).hexdigest()
 
 
 async def init_db():
-    """Инициализация БД и запуск миграции."""
     await Tortoise.init(config=TORTOISE_ORM)
     await Tortoise.generate_schemas()
-    logging.info(
-        f"ORM initialized. DB: {
-            TORTOISE_ORM['connections']['default']}")
+    logging.info(f"ORM initialized. DB: {TORTOISE_ORM['connections']['default']}")
     await _migrate_from_json_if_needed()
 
 
 async def _migrate_from_json_if_needed():
-    """Переносит данные из незашифрованного JSON в зашифрованную БД."""
     if not os.path.exists(LEGACY_JSON_PATH):
         return
-
     logging.info("♻️ Starting migration from nodes.json to Encrypted DB...")
     try:
-        with open(LEGACY_JSON_PATH, 'r', encoding='utf-8') as f:
+        with open(LEGACY_JSON_PATH, "r", encoding="utf-8") as f:
             data = json.load(f)
-
         if not data:
             return
-
         count = 0
         for token, node_data in data.items():
             t_hash = _get_token_hash(token)
-
             if await Node.exists(token_hash=t_hash):
                 continue
-
             await Node.create(
                 token_hash=t_hash,
                 token_safe=token,
@@ -59,26 +48,20 @@ async def _migrate_from_json_if_needed():
                 stats=node_data.get("stats", {}),
                 history=node_data.get("history", []),
                 tasks=node_data.get("tasks", []),
-                extra_state={}
+                extra_state={},
             )
             count += 1
-
         os.rename(LEGACY_JSON_PATH, LEGACY_JSON_PATH + ".bak")
-        logging.info(
-            f"✅ Migration successful! Securely imported {count} nodes.")
-
+        logging.info(f"✅ Migration successful! Securely imported {count} nodes.")
     except Exception as e:
         logging.error(f"❌ CRITICAL: Migration failed: {e}", exc_info=True)
 
 
 async def get_all_nodes():
-    """Возвращает все ноды с РАСШИФРОВАННЫМИ данными."""
     nodes = await Node.all()
     result = {}
     for node in nodes:
-
         real_token = node.token_safe or "ErrorDecryption"
-
         result[real_token] = {
             "token": real_token,
             "name": node.name,
@@ -88,17 +71,14 @@ async def get_all_nodes():
             "stats": node.stats,
             "tasks": node.tasks,
             "history": node.history,
-            **node.extra_state
+            **node.extra_state,
         }
     return result
 
 
 async def get_node_by_token(token: str):
-    """Ищет ноду по хешу токена, возвращает расшифрованные данные."""
     t_hash = _get_token_hash(token)
-
     node = await Node.get_or_none(token_hash=t_hash)
-
     if node:
         base = {
             "token": node.token_safe,
@@ -108,28 +88,25 @@ async def get_node_by_token(token: str):
             "ip": node.ip,
             "stats": node.stats,
             "tasks": node.tasks,
-            "history": node.history
+            "history": node.history,
         }
         return {**base, **node.extra_state}
     return None
 
 
 async def create_node(name: str) -> str:
-    """Создает новую ноду с шифрованием токена и имени."""
     raw_token = secrets.token_hex(16)
-
     await Node.create(
         token_hash=_get_token_hash(raw_token),
         token_safe=raw_token,
         name=name,
-        ip="Unknown"
+        ip="Unknown",
     )
     logging.info(f"Created new encrypted node: {name}")
     return raw_token
 
 
 async def update_node_name(token: str, new_name: str):
-    """Обновляет имя ноды."""
     t_hash = _get_token_hash(token)
     node = await Node.get_or_none(token_hash=t_hash)
     if node:
@@ -151,19 +128,17 @@ async def update_node_heartbeat(token: str, ip: str, stats: dict):
     node = await Node.get_or_none(token_hash=t_hash)
     if not node:
         return
-
     history = node.history or []
     point = {
         "t": int(time.time()),
         "c": stats.get("cpu", 0),
         "r": stats.get("ram", 0),
         "rx": stats.get("net_rx", 0),
-        "tx": stats.get("net_tx", 0)
+        "tx": stats.get("net_tx", 0),
     }
     history.append(point)
     if len(history) > 60:
         history = history[-60:]
-
     node.last_seen = time.time()
     node.ip = ip
     node.stats = stats

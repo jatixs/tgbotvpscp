@@ -116,8 +116,12 @@ window.initSettings = function() {
             try {
                 const response = await fetch('/api/update/run', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ branch: targetBranch })
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        branch: targetBranch
+                    })
                 });
                 const data = await response.json();
                 if (data.error) throw new Error(data.error);
@@ -137,14 +141,17 @@ window.initSettings = function() {
 
 function initInputScrollLogic() {
     const isTouchDevice = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
-    if (!isTouchDevice) return; 
+    if (!isTouchDevice) return;
 
     const ids = ['conf_traffic', 'conf_timeout', 'pass_current', 'pass_new', 'pass_confirm'];
     ids.forEach(id => {
         const el = document.getElementById(id);
         if (el) {
             const scrollFn = (e) => {
-                e.target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                e.target.scrollIntoView({
+                    behavior: 'smooth',
+                    block: 'center'
+                });
             };
             el.addEventListener('click', scrollFn);
             el.addEventListener('focus', scrollFn);
@@ -357,7 +364,9 @@ async function saveSystemConfig(groupName) {
     try {
         const res = await fetch('/api/settings/system', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+                'Content-Type': 'application/json'
+            },
             body: JSON.stringify(data)
         });
         if (res.ok) {
@@ -404,8 +413,12 @@ async function clearLogs() {
     try {
         const res = await fetch('/api/logs/clear', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ type: 'all' })
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                type: 'all'
+            })
         });
         if (res.ok) {
             btn.classList.remove(...redClasses);
@@ -473,8 +486,13 @@ async function deleteUser(id, name) {
     try {
         const res = await fetch('/api/users/action', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'delete', id: id })
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                action: 'delete',
+                id: id
+            })
         });
         if (res.ok) {
             const idx = USERS_DATA.findIndex(u => u.id == id);
@@ -491,21 +509,31 @@ async function deleteUser(id, name) {
 }
 
 async function openAddUserModal() {
-	const promptText = (typeof I18N !== 'undefined' && I18N.web_add_user_prompt) ? I18N.web_add_user_prompt : "Введите Telegram ID пользователя:";
+    const promptText = (typeof I18N !== 'undefined' && I18N.web_add_user_prompt) ? I18N.web_add_user_prompt : "Введите Telegram ID пользователя:";
     const titleText = (typeof I18N !== 'undefined' && I18N.modal_title_prompt) ? I18N.modal_title_prompt : "Ввод данных";
     const id = await window.showModalPrompt(promptText, titleText, "123456789");
-    
+
     if (!id) return;
 
     try {
         const res = await fetch('/api/users/action', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'add', id: id, role: 'users' })
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                action: 'add',
+                id: id,
+                role: 'users'
+            })
         });
         const data = await res.json();
         if (res.ok) {
-            USERS_DATA.push({ id: id, name: data.name || `ID: ${id}`, role: 'users' });
+            USERS_DATA.push({
+                id: id,
+                name: data.name || `ID: ${id}`,
+                role: 'users'
+            });
             renderUsers();
         } else {
             const errorShort = (typeof I18N !== 'undefined' && I18N.web_error_short) ? I18N.web_error_short : "Error";
@@ -527,7 +555,7 @@ function renderNodes() {
         tbody.innerHTML = NODES_DATA.map(n => {
             const decryptedIp = decryptData(n.ip);
             const decryptedToken = decryptData(n.token);
-            
+
             return `
         <tr class="border-b border-gray-100 dark:border-white/5 hover:bg-gray-50 dark:hover:bg-white/5 transition group">
             <td class="px-2 sm:px-4 py-3 font-medium text-sm text-gray-900 dark:text-white w-full sm:w-auto">
@@ -570,13 +598,18 @@ window.startNodeRename = function(token) {
     if (node) input.value = node.name;
 
     const scrollToInput = () => {
-        input.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        input.scrollIntoView({
+            behavior: 'smooth',
+            block: 'center'
+        });
     };
     setTimeout(scrollToInput, 50);
     if (window.visualViewport) {
         window.visualViewport.addEventListener('resize', () => {
-            setTimeout(scrollToInput, 50); 
-        }, { once: true });
+            setTimeout(scrollToInput, 50);
+        }, {
+            once: true
+        });
     } else {
         setTimeout(scrollToInput, 300);
     }
@@ -602,10 +635,15 @@ window.saveNodeRename = async function(token) {
     try {
         const res = await fetch('/api/nodes/rename', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ token: token, name: newName })
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                token: token,
+                name: newName
+            })
         });
-        
+
         if (res.ok) {
             if (window.showToast) {
                 const msg = (typeof I18N !== 'undefined' && I18N.web_node_rename_success) ? I18N.web_node_rename_success : "Name updated";
@@ -646,8 +684,12 @@ async function deleteNode(token) {
     try {
         const res = await fetch('/api/nodes/delete', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ token: token })
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                token: token
+            })
         });
         if (res.ok) {
             const idx = NODES_DATA.findIndex(n => n.token === token);
@@ -697,8 +739,13 @@ async function changePassword() {
     try {
         const res = await fetch('/api/settings/password', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ current_password: current, new_password: newPass })
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                current_password: current,
+                new_password: newPass
+            })
         });
         const data = await res.json();
 
@@ -742,7 +789,9 @@ async function triggerAutoSave() {
     try {
         const res = await fetch('/api/settings/save', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+                'Content-Type': 'application/json'
+            },
             body: JSON.stringify(data)
         });
         if (statusEl) {
@@ -931,7 +980,9 @@ async function triggerKeyboardSave(skipPreviewUpdate = false) {
         try {
             const res = await fetch('/api/settings/keyboard', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: {
+                    'Content-Type': 'application/json'
+                },
                 body: JSON.stringify(data)
             });
             if (res.ok) {
@@ -1225,8 +1276,12 @@ async function revokeSession(token) {
     try {
         const res = await fetch('/api/sessions/revoke', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ token: token })
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                token: token
+            })
         });
         if (res.ok) {
             await fetchSessions();
@@ -1262,7 +1317,12 @@ async function revokeAllSessions() {
     }
 
     try {
-        const res = await fetch('/api/sessions/revoke_all', { method: 'POST', headers: { 'Content-Type': 'application/json' } });
+        const res = await fetch('/api/sessions/revoke_all', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
         if (res.ok) {
             if (btn) {
                 btn.className = "w-full py-3 bg-green-600 text-white rounded-xl font-bold shadow-lg shadow-green-500/20 transition-all duration-300 flex items-center justify-center gap-2";

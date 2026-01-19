@@ -4,22 +4,22 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- Локализация ---
     const pageTitle = document.getElementById('page-title');
     if (pageTitle) pageTitle.innerText = I18N.reset_page_title || "Reset Password";
-    
+
     const brandName = document.getElementById('brand-name');
     if (brandName) brandName.innerText = I18N.web_brand_name || "VPS Manager";
-    
+
     const lblNew = document.getElementById('lbl-new-pass');
     if (lblNew) lblNew.innerText = I18N.web_new_password || "New Password";
-    
+
     const lblConfirm = document.getElementById('lbl-confirm-pass');
     if (lblConfirm) lblConfirm.innerText = I18N.web_confirm_password || "Confirm Password";
-    
+
     const btnText = document.getElementById('btn-text');
     if (btnText) btnText.innerText = I18N.web_save_btn || "Save";
-    
+
     const txtHintLen = document.getElementById('txt-hint-len');
     if (txtHintLen) txtHintLen.innerText = I18N.pass_req_length || "Min 8 chars";
-    
+
     const txtHintNum = document.getElementById('txt-hint-num');
     if (txtHintNum) txtHintNum.innerText = I18N.pass_req_num || "Min 1 digit";
 
@@ -28,7 +28,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const confirmInput = document.getElementById('confirm_pass');
     const submitBtn = document.getElementById('btn-save');
     const matchError = document.getElementById('match-error');
-    
+
     // --- Индикаторы ---
     const strengthBar = document.getElementById('strength-bar');
     const strengthText = document.getElementById('strength-text');
@@ -47,7 +47,7 @@ document.addEventListener('DOMContentLoaded', () => {
             hintLen.classList.remove('text-green-400');
             hintLen.classList.add('text-gray-500');
         }
-        
+
         // 2. Цифры
         if (/\d/.test(password)) {
             score += 1;
@@ -109,7 +109,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const isStrong = checkStrength(passInput.value);
         const isMatch = validateMatch();
         const isFilled = passInput.value.length > 0 && confirmInput.value.length > 0;
-        
+
         if (submitBtn) {
             submitBtn.disabled = !(isStrong && isMatch && isFilled);
         }
@@ -140,7 +140,7 @@ document.addEventListener('DOMContentLoaded', () => {
             modalTitle.innerText = I18N.modal_title_alert || "Alert";
             modalMsg.innerText = msg;
             modalOk.innerText = I18N.modal_btn_ok || "OK";
-            
+
             modal.classList.remove('hidden');
             requestAnimationFrame(() => {
                 modal.classList.remove('opacity-0');
@@ -182,10 +182,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // Анимация загрузки
         const originalText = document.getElementById('btn-text').innerText;
-        
+
         // Спиннер SVG
         const spinner = `<svg class="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>`;
-        
+
         document.getElementById('btn-text').innerHTML = spinner + (I18N.web_saving_btn || "Saving...");
         submitBtn.disabled = true;
 
@@ -195,22 +195,27 @@ document.addEventListener('DOMContentLoaded', () => {
 
             const res = await fetch('/api/reset/confirm', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ token: token, password: pwd })
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    token: token,
+                    password: pwd
+                })
             });
-            
+
             const data = await res.json();
-            
+
             if (res.ok) {
                 // Успех - меняем кнопку на зеленый и редиректим
                 submitBtn.classList.remove('from-blue-600', 'to-purple-600', 'hover:from-blue-500', 'hover:to-purple-500');
                 submitBtn.classList.add('bg-green-600', 'hover:bg-green-500');
-                
+
                 // Иконка галочки
                 const checkIcon = `<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg>`;
-                
+
                 document.getElementById('btn-text').innerHTML = checkIcon + (I18N.web_redirecting || "Redirecting...");
-                
+
                 setTimeout(() => {
                     window.location.href = '/login';
                 }, 1000);
