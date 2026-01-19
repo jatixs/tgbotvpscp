@@ -1650,7 +1650,12 @@ async def handle_sse_logs(request):
         last_activity = time.time()
 
     elif log_type == 'sys':
-        history_lines, sys_cursor = await fetch_sys_logs(lines=300)
+        history_lines = []
+        sys_cursor = None
+        try:
+            history_lines, sys_cursor = await fetch_sys_logs(lines=300)
+        except Exception as e:
+            logging.error(f"Error fetching sys logs: {e}")
         logs_to_send = history_lines if history_lines else []
         await resp.write(f"event: logs\ndata: {json.dumps({'logs': logs_to_send})}\n\n".encode('utf-8'))
         await resp.drain()
@@ -1694,11 +1699,14 @@ async def handle_sse_logs(request):
                         data_sent = True
 
             elif log_type == 'sys':
-                if sys_cursor:
-                    new_lines, sys_cursor = await fetch_sys_logs(cursor=sys_cursor)
-                else:
-                    new_lines, sys_cursor = await fetch_sys_logs(lines=10)
-                
+                new_lines = []
+                try:
+                    if sys_cursor:
+                        new_lines, sys_cursor = await fetch_sys_logs(cursor=sys_cursor)
+                    else:
+                        new_lines, sys_cursor = await fetch_sys_logs(lines=10)
+                except Exception as e:
+                    logging.error(f"Error streaming sys logs: {e}")
                 if not sys_cursor and new_lines:
                     current_hash = hash(tuple(new_lines))
                     if current_hash == last_sent_lines_hash:
