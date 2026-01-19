@@ -229,8 +229,10 @@ async function addNodeDash() {
         const d = await r.json();
         if (r.ok) {
             document.getElementById('nodeResultDash').classList.remove('hidden');
-            document.getElementById('newNodeTokenDash').innerText = d.token;
-            document.getElementById('newNodeCmdDash').innerText = d.command;
+			const tokenVal = (typeof decryptData === 'function') ? decryptData(d.token) : d.token;
+            const cmdVal = (typeof decryptData === 'function') ? decryptData(d.command) : d.command;
+            document.getElementById('newNodeTokenDash').innerText = tokenVal;
+            document.getElementById('newNodeCmdDash').innerText = cmdVal;
             if (typeof NODES_DATA !== 'undefined') NODES_DATA.push({
                 token: d.token,
                 name: n,

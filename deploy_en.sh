@@ -1,5 +1,6 @@
 #!/bin/bash
 
+cd ~
 GIT_BRANCH="main"
 AUTO_AGENT_URL=""
 AUTO_NODE_TOKEN=""
@@ -527,7 +528,19 @@ run_db_migrations() {
     rm -f fix_db_auto.py
 
     local cmd_prefix=""; if [ -n "$exec_user" ]; then cmd_prefix="sudo -E -u ${SERVICE_USER}"; fi
-    if [ ! -f "${BOT_INSTALL_PATH}/aerich.ini" ]; then $cmd_prefix ${VENV_PATH}/bin/aerich init -t core.config.TORTOISE_ORM >/dev/null 2>&1; fi
+
+    # Force creation of aerich.ini to avoid missing file issues
+    msg_info "Configuring Aerich..."
+    cat > "${BOT_INSTALL_PATH}/aerich.ini" <<EOF
+[aerich]
+tortoise_orm = core.config.TORTOISE_ORM
+location = ./migrations
+src_folder = .
+EOF
+
+    if [ -n "$exec_user" ]; then
+        chown ${SERVICE_USER}:${SERVICE_USER} "${BOT_INSTALL_PATH}/aerich.ini"
+    fi
     if [ ! -d "${BOT_INSTALL_PATH}/migrations" ]; then
         if ! $cmd_prefix ${VENV_PATH}/bin/aerich init-db; then msg_warning "init-db skipped (DB might exist)."; fi
     else

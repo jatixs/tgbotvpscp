@@ -1,4 +1,5 @@
 #!/bin/bash
+cd ~
 
 GIT_BRANCH="main"
 AUTO_AGENT_URL=""
@@ -504,12 +505,19 @@ run_db_migrations() {
         cmd_prefix="sudo -E -u ${SERVICE_USER}"
     fi
 
-    # 4. Инициализация aerich
-    if [ ! -f "${BOT_INSTALL_PATH}/aerich.ini" ]; then
-        msg_info "Инициализация конфигурации Aerich..."
-        $cmd_prefix ${VENV_PATH}/bin/aerich init -t core.config.TORTOISE_ORM >/dev/null 2>&1 || msg_warning "Предупреждение при aerich init (возможно, уже настроено)."
-    fi
+# 4. Настройка конфигурации Aerich (Принудительное создание)
+    msg_info "Настройка конфигурации Aerich..."
+    cat > "${BOT_INSTALL_PATH}/aerich.ini" <<EOF
+[aerich]
+tortoise_orm = core.config.TORTOISE_ORM
+location = ./migrations
+src_folder = .
+EOF
 
+    # Если установка в режиме secure, нужно поправить права на созданный файл
+    if [ -n "$exec_user" ]; then
+        chown ${SERVICE_USER}:${SERVICE_USER} "${BOT_INSTALL_PATH}/aerich.ini"
+    fi
     # 5. Запуск миграций БД
     if [ ! -d "${BOT_INSTALL_PATH}/migrations" ]; then
         msg_info "Создание базы данных..."
