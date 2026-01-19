@@ -1,7 +1,7 @@
-name: "🛡️ Safe Refactor & Cleanup"
+name: "Safe Refactor and Cleanup"
 
 on:
-  workflow_dispatch: # Запуск только вручную кнопкой
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -22,54 +22,44 @@ jobs:
       - name: Install Dependencies
         run: |
           pip install black isort pytest pytest-asyncio
-          # Если у вас есть requirements.txt, раскомментируйте строку ниже:
-          # pip install -r requirements.txt
 
-      - name: 🧪 Run Tests (Pre-check)
+      - name: Run Tests (Pre-check)
         run: |
-          # Если тесты упадут тут - значит код был сломан еще ДО чистки
-          # Создайте папку tests если её нет, чтобы pytest не ругался
-          mkdir -path tests
-          pytest || echo "⚠️ Warning: Initial tests failed or no tests found"
+          mkdir -p tests
+          pytest || echo "Warning: Initial tests failed or no tests found"
 
-      - name: 🧹 Import Sort (Isort)
+      - name: Import Sort (Isort)
         run: isort .
 
-      - name: 🎨 Code Format (Black)
+      - name: Code Format (Black)
         run: black .
 
-      - name: 🗑️ Remove Comments
+      - name: Remove Comments
         run: |
-          # Запускаем наш скрипт чистки
           python .github/scripts/clean_code.py
 
-      - name: 🎨 Code Format Again (Black)
+      - name: Code Format Again
         run: |
-          # После удаления комментов могут остаться лишние отступы, black это поправит
           black .
 
-      - name: 🧪 Run Tests (Post-check)
+      - name: Run Tests (Post-check)
         run: |
-          # Если тесты упадут тут - значит чистка сломала логику
           pytest
 
-      - name: 📨 Create Pull Request
+      - name: Create Pull Request
         uses: peter-evans/create-pull-request@v6
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           commit-message: "Refactor: remove comments, format code"
-          title: "🤖 Auto-Refactor: Cleanup & Format"
+          title: "Auto-Refactor: Cleanup and Format"
           body: |
             This PR was automatically created by GitHub Actions.
             
-            **Changes:**
-            - 🧹 Removed comments and docstrings
-            - 🎨 Formatted code with `black`
-            - 📋 Sorted imports with `isort`
-            - ✅ Verified with `pytest`
-            
-            **Instruction:**
-            Please review the changes carefully before merging!
+            Changes:
+            - Removed comments and docstrings
+            - Formatted code with black
+            - Sorted imports with isort
+            - Verified with pytest
           branch: "refactor/auto-cleanup"
           delete-branch: true
-          base: "feature/1.15.3" # Укажите вашу текущую ветку, куда вливать
+          base: "feature/1.15.3"

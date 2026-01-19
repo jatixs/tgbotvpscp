@@ -5,10 +5,9 @@ on:
     branches: [ "main", "develop", "feature/**" ]
   pull_request:
     branches: [ "main" ]
-schedule:
+  schedule:
     - cron: '30 1 * * 0'
-  
-  workflow_dispatch:    
+  workflow_dispatch:
 
 jobs:
   analyze:
