@@ -358,29 +358,32 @@ function initSSE() {
     isSseConnected = false;
     if (connectionTimer) clearTimeout(connectionTimer);
 
-    connectionTimer = setTimeout(() => {
-        if (!isSseConnected) {
+    const resetConnectionWatchdog = () => {
+        if (connectionTimer) clearTimeout(connectionTimer);
+        connectionTimer = setTimeout(() => {
             if (navigator.onLine) {
                 const weakText = (typeof I18N !== 'undefined' && I18N.web_weak_conn) ? I18N.web_weak_conn : "Weak internet connection...";
                 showToast(weakText);
             } else {
                 handleConnectionError();
             }
-        }
-    }, 10000);
+        }, 15000);
+    };
+
+    resetConnectionWatchdog();
 
     sseSource = new EventSource('/api/events');
 
     sseSource.onopen = () => {
         isSseConnected = true;
-        if (connectionTimer) clearTimeout(connectionTimer);
+        resetConnectionWatchdog();
         const errToast = document.getElementById('conn-error-toast');
         if (errToast) errToast.remove();
     };
 
     sseSource.addEventListener('agent_stats', () => {
         isSseConnected = true;
-        if (connectionTimer) clearTimeout(connectionTimer);
+        resetConnectionWatchdog();
     });
 
     sseSource.addEventListener('notifications', (e) => {
