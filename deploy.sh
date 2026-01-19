@@ -299,7 +299,6 @@ cleanup_files() {
     # 3. Удаляем файлы, нужные только для установки
     sudo rm -f "$BOT_INSTALL_PATH/migrate.py"
     sudo rm -f "$BOT_INSTALL_PATH/requirements.txt"
-    sudo rm -f "$BOT_INSTALL_PATH/aerich.ini"
     
     # ПРИМЕЧАНИЕ: manage.py НЕ удаляем, он нужен для CLI-утилиты tgcp-bot.
 
