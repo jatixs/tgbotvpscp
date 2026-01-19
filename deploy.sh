@@ -289,6 +289,9 @@ cleanup_files() {
     sudo rm -f "$BOT_INSTALL_PATH/custom_module.md" "$BOT_INSTALL_PATH/custom_module_en.md"
     sudo rm -f "$BOT_INSTALL_PATH/.gitignore" "$BOT_INSTALL_PATH/LICENSE"
     
+    # Удаляем aerich.ini, так как миграции завершены
+    sudo rm -f "$BOT_INSTALL_PATH/aerich.ini"
+    
     # Удаляем README (версия уже сохранена в .env)
     sudo rm -f "$BOT_INSTALL_PATH/README.md" "$BOT_INSTALL_PATH/README.en.md"
     
@@ -504,20 +507,38 @@ run_db_migrations() {
     fi
 
     # 4. Инициализация aerich
-    if [ ! -f "${BOT_INSTALL_PATH}/aerich.ini" ]; then
-        msg_info "Инициализация конфигурации Aerich..."
-        $cmd_prefix ${VENV_PATH}/bin/aerich init -t core.config.TORTOISE_ORM >/dev/null 2>&1 || msg_warning "Предупреждение при aerich init (возможно, уже настроено)."
+    # Всегда создаем конфиг перед работой, так как он удаляется в cleanup.
+    # Если файл вдруг остался с прошлого раза (сбой), удаляем его.
+    if [ -f "${BOT_INSTALL_PATH}/aerich.ini" ]; then
+        rm -f "${BOT_INSTALL_PATH}/aerich.ini"
     fi
+    
+    # Генерируем aerich.ini
+    $cmd_prefix ${VENV_PATH}/bin/aerich init -t core.config.TORTOISE_ORM >/dev/null 2>&1
 
     # 5. Запуск миграций БД
-    if [ ! -d "${BOT_INSTALL_PATH}/migrations" ]; then
-        msg_info "Создание базы данных..."
-        if ! $cmd_prefix ${VENV_PATH}/bin/aerich init-db; then
-             msg_warning "init-db вернул ошибку. Возможно, база уже существует. Пропускаем..."
+    # Проверяем наличие файла БД
+    if [ -f "${BOT_INSTALL_PATH}/config/nodes.db" ]; then
+        # Если база есть, init-db делать нельзя.
+        # Пробуем обновить (upgrade), если есть миграции
+        if [ -d "${BOT_INSTALL_PATH}/migrations" ]; then
+            msg_info "Проверка обновлений базы данных..."
+            $cmd_prefix ${VENV_PATH}/bin/aerich upgrade >/dev/null 2>&1
+        else
+            msg_info "База данных найдена, миграции пропущены (папка migrations отсутствует)."
         fi
     else
-        msg_info "Проверка обновлений базы данных..."
-        $cmd_prefix ${VENV_PATH}/bin/aerich upgrade >/dev/null 2>&1 || msg_info "База данных уже обновлена."
+        # Базы нет. Если и папки миграций нет - создаем всё с нуля.
+        if [ ! -d "${BOT_INSTALL_PATH}/migrations" ]; then
+            msg_info "Создание базы данных..."
+            if ! $cmd_prefix ${VENV_PATH}/bin/aerich init-db >/dev/null 2>&1; then
+                 msg_warning "Ошибка при создании БД (init-db)."
+            fi
+        else
+            # Миграции есть, базы нет -> upgrade создаст таблицы
+            msg_info "Применение миграций..."
+            $cmd_prefix ${VENV_PATH}/bin/aerich upgrade >/dev/null 2>&1
+        fi
     fi
 
     # 6. Запуск БЕЗОПАСНОЙ миграции JSON -> Encrypted
