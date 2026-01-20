@@ -362,7 +362,10 @@ install_extras() {
         msg_success "iperf3 is already installed."
     else
         msg_question "iperf3 not found. Install? (y/n): " I
-        if [[ "$I" =~ ^[Yy]$ ]]; then run_with_spinner "Installing iperf3" sudo apt-get install -y -q -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" iperf3; fi
+        if [[ "$I" =~ ^[Yy]$ ]]; then 
+            echo "iperf3 iperf3/start_daemon boolean true" | sudo debconf-set-selections
+            run_with_spinner "Installing iperf3" sudo apt-get install -y -q -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" iperf3
+        fi
     fi
 }
 
@@ -766,7 +769,10 @@ install_node_logic() {
         msg_success "iperf3 is already installed."
     else
         msg_question "iperf3 not found. Install? (y/n): " I
-        if [[ "$I" =~ ^[Yy]$ ]]; then run_with_spinner "Installing iperf3" sudo apt-get install -y -q -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" iperf3; fi
+        if [[ "$I" =~ ^[Yy]$ ]]; then 
+            echo "iperf3 iperf3/start_daemon boolean true" | sudo debconf-set-selections
+            run_with_spinner "Installing iperf3" sudo apt-get install -y -q -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" iperf3
+        fi
     fi
 
     setup_repo_and_dirs "root"
