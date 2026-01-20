@@ -1,10 +1,11 @@
-version: '3.8'
-
 x-bot-base: &bot-base
   build: .
   image: tg-vps-bot:latest
   restart: always
   env_file: .env
+  labels:
+    - "org.opencontainers.image.source=https://github.com/jatixs/tgbotvpscp"
+    - "com.docker.compose.project=tgbotvpscp"
 
 services:
   bot-secure:
@@ -13,7 +14,7 @@ services:
     profiles: ["secure"]
     user: "tgbot"
     ports:
-      - "${WEB_SERVER_PORT}:${WEB_SERVER_PORT}"
+      - "${WEB_PORT}:${WEB_PORT}"
     environment:
       - INSTALL_MODE=secure
       - DEPLOY_MODE=docker
@@ -28,6 +29,9 @@ services:
       - /proc/net/dev:/proc_host/net/dev:ro
     cap_drop: [ALL]
     cap_add: [NET_RAW]
+    labels:
+      - "role=bot"
+      - "mode=secure"
 
   bot-root:
     <<: *bot-base
@@ -35,7 +39,7 @@ services:
     profiles: ["root"]
     user: "root"
     ports:
-      - "${WEB_SERVER_PORT}:${WEB_SERVER_PORT}"
+      - "${WEB_PORT}:${WEB_PORT}"
     environment:
       - INSTALL_MODE=root
       - DEPLOY_MODE=docker
@@ -49,6 +53,9 @@ services:
       - ./logs/bot:/opt/tg-bot/logs/bot
       - /:/host
       - /var/run/docker.sock:/var/run/docker.sock:ro
+    labels:
+      - "role=bot"
+      - "mode=root"
 
   watchdog:
     <<: *bot-base
@@ -60,3 +67,5 @@ services:
       - ./config:/opt/tg-bot/config
       - ./logs/watchdog:/opt/tg-bot/logs/watchdog
       - /var/run/docker.sock:/var/run/docker.sock:ro
+    labels:
+      - "role=watchdog"
