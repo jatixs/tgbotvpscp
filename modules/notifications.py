@@ -28,7 +28,7 @@ from core.utils import (
 from core.keyboards import get_alerts_menu_keyboard
 
 BUTTON_KEY = "btn_notifications"
-
+RECENT_NOTIFIED_LOGINS = {}
 
 def get_button() -> KeyboardButton:
     return KeyboardButton(text=_(BUTTON_KEY, config.DEFAULT_LANGUAGE))
@@ -41,18 +41,28 @@ def register_handlers(dp: Dispatcher):
 
 def start_background_tasks(bot: Bot) -> list[asyncio.Task]:
     tasks = [asyncio.create_task(resource_monitor(bot), name="ResourceMonitor")]
+    ssh_cmd = "journalctl -n 0 -f -o cat _COMM=sshd"
+    tasks.append(
+        asyncio.create_task(
+            reliable_command_monitor(bot, ssh_cmd, "logins", parse_ssh_log_line),
+            name="LoginsMonitor_Journal",
+        )
+    )
+
     ssh_log = None
     if os.path.exists(get_host_path("/var/log/secure")):
         ssh_log = get_host_path("/var/log/secure")
     elif os.path.exists(get_host_path("/var/log/auth.log")):
         ssh_log = get_host_path("/var/log/auth.log")
+        
     if ssh_log:
         tasks.append(
             asyncio.create_task(
                 reliable_tail_log_monitor(bot, ssh_log, "logins", parse_ssh_log_line),
-                name="LoginsMonitor",
+                name="LoginsMonitor_File",
             )
         )
+
     tasks.append(
         asyncio.create_task(
             reliable_tail_log_monitor(
@@ -139,19 +149,32 @@ async def cq_toggle_alert(callback: types.CallbackQuery):
 
 
 async def parse_ssh_log_line(line: str) -> dict | None:
-    match = re.search("Accepted\\s+(\\S+)\\s+for\\s+(\\S+)\\s+from\\s+(\\S+)", line)
-    if match:
-        try:
-            method_raw = match.group(1).lower()
-            user = escape_html(match.group(2))
-            ip = escape_html(match.group(3))
-            flag = await get_country_flag(ip)
-            method_key = "auth_method_unknown"
-            if "publickey" in method_raw:
-                method_key = "auth_method_key"
-            elif "password" in method_raw:
-                method_key = "auth_method_password"
+    now = time.time()
+    sshd_match = re.search(r"Accepted\s+(\S+)\s+for\s+(\S+)\s+from\s+(\S+)", line)
+    
+    user, ip, method_key = None, None, "auth_method_unknown"
 
+    if sshd_match:
+        method_raw = sshd_match.group(1).lower()
+        user = escape_html(sshd_match.group(2))
+        ip = escape_html(sshd_match.group(3))
+        if "publickey" in method_raw:
+            method_key = "auth_method_key"
+        elif "password" in method_raw:
+            method_key = "auth_method_password"
+            
+    if user and ip:
+        last_time = RECENT_NOTIFIED_LOGINS.get((user, ip), 0)
+        if now - last_time < 10:
+            return None 
+            
+        RECENT_NOTIFIED_LOGINS[(user, ip)] = now
+        
+        if len(RECENT_NOTIFIED_LOGINS) > 100:
+            RECENT_NOTIFIED_LOGINS.clear()
+
+        try:
+            flag = await get_country_flag(ip)
             return {
                 "key": "alert_ssh_login_detected",
                 "params": {
@@ -303,6 +326,56 @@ async def resource_monitor(bot: Bot):
         except Exception as e:
             logging.error(f"ResMonitor error: {e}")
         await asyncio.sleep(config.RESOURCE_CHECK_INTERVAL)
+
+
+async def reliable_command_monitor(bot, cmd, alert_type, parser):
+    while True:
+        proc = None
+        try:
+            proc = await asyncio.create_subprocess_shell(
+                cmd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+                start_new_session=True,
+            )
+            async for line in proc.stdout:
+                l = line.decode("utf-8", "ignore").strip()
+                if l:
+                    data = await parser(l)
+                    if data:
+                        def msg_gen(lang):
+                            params = data["params"].copy()
+                            if "method_key" in params:
+                                m_key = params.pop("method_key")
+                                params["method"] = _(m_key, lang)
+                            if "method" not in params:
+                                params["method"] = ""
+                            return _(data["key"], lang, **params)
+
+                        await send_alert(
+                            bot,
+                            msg_gen,
+                            alert_type,
+                        )
+        except asyncio.CancelledError:
+             if proc:
+                try:
+                    os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
+                    try:
+                        await asyncio.wait_for(proc.wait(), timeout=2.0)
+                    except asyncio.TimeoutError:
+                        os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+                except Exception as e:
+                    logging.error(f"Error killing process group: {e}")
+             raise
+        except Exception as e:
+            logging.error(f"Command monitor error ({cmd}): {e}")
+            if proc:
+                 try:
+                    os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
+                 except Exception:
+                     pass
+            await asyncio.sleep(10)
 
 
 async def reliable_tail_log_monitor(bot, path, alert_type, parser):
