@@ -860,7 +860,73 @@ EOF
     msg_success "Обновлено."
 }
 
-# --- Main Entry ---
+# --- MENU FUNCTIONS ---
+main_menu() {
+    while true; do
+        clear
+        echo -e "${C_BLUE}${C_BOLD}╔═══════════════════════════════════╗${C_RESET}"
+        echo -e "${C_BLUE}${C_BOLD}║      Установка VPS Manager Bot    ║${C_RESET}"
+        echo -e "${C_BLUE}${C_BOLD}╚═══════════════════════════════════╝${C_RESET}"
+        
+        check_integrity
+        
+        local local_ver=$(get_local_version)
+        local remote_ver=$(get_remote_version)
+        
+        echo -e "  Ветка: ${GIT_BRANCH}"
+        echo -e "  Тип: ${INSTALL_TYPE} | Статус: ${STATUS_MESSAGE}"
+        
+        if [ "$local_ver" != "$remote_ver" ] && [ "$remote_ver" != "Не удалось получить" ] && [ "$local_ver" != "Не определена" ] && [ "$INSTALL_TYPE" != "НЕТ" ]; then
+             echo -e "  Версия: ${C_YELLOW}Локальная: $local_ver (Доступна: $remote_ver)${C_RESET}"
+        else
+             echo -e "  Версия: ${C_GREEN}$local_ver${C_RESET}"
+        fi
+
+        echo "--------------------------------------------------------"
+        
+        if [ "$INSTALL_TYPE" == "НЕТ" ]; then
+            echo -e "  Выберите режим установки:"
+            echo "--------------------------------------------------------"
+            echo "  1) АГЕНТ (Systemd - Secure)  [Рекомендуется]"
+            echo "  2) АГЕНТ (Systemd - Root)    [Полный доступ]"
+            echo "  3) АГЕНТ (Docker - Secure)   [Изоляция]"
+            echo "  4) АГЕНТ (Docker - Root)     [Docker + Host]"
+            echo -e "${C_GREEN}  8) НОДА (Клиент)${C_RESET}"
+            echo "  0) Выход"
+            echo "--------------------------------------------------------"
+            read -p "$(echo -e "${C_BOLD}Ваш выбор: ${C_RESET}")" ch
+            case $ch in
+                1) uninstall_bot; install_systemd_logic "secure"; read -p "Нажмите Enter..." ;;
+                2) uninstall_bot; install_systemd_logic "root"; read -p "Нажмите Enter..." ;;
+                3) uninstall_bot; install_docker_logic "secure"; read -p "Нажмите Enter..." ;;
+                4) uninstall_bot; install_docker_logic "root"; read -p "Нажмите Enter..." ;;
+                8) uninstall_bot; install_node_logic; read -p "Нажмите Enter..." ;;
+                0) break ;;
+            esac
+        else
+            echo "  1) Обновить бота"
+            echo "  2) Удалить бота"
+            echo "  3) Переустановить (Systemd - Secure)"
+            echo "  4) Переустановить (Systemd - Root)"
+            echo "  5) Переустановить (Docker - Secure)"
+            echo "  6) Переустановить (Docker - Root)"
+            echo -e "${C_GREEN}  8) Установить НОДУ (Клиент)${C_RESET}"
+            echo "  0) Выход"
+            echo "--------------------------------------------------------"
+            read -p "$(echo -e "${C_BOLD}Ваш выбор: ${C_RESET}")" ch
+            case $ch in
+                1) update_bot; read -p "Нажмите Enter..." ;;
+                2) msg_question "Удалить? (y/n): " c; if [[ "$c" =~ ^[Yy]$ ]]; then uninstall_bot; return; fi ;;
+                3) uninstall_bot; install_systemd_logic "secure"; read -p "Нажмите Enter..." ;;
+                4) uninstall_bot; install_systemd_logic "root"; read -p "Нажмите Enter..." ;;
+                5) uninstall_bot; install_docker_logic "secure"; read -p "Нажмите Enter..." ;;
+                6) uninstall_bot; install_docker_logic "root"; read -p "Нажмите Enter..." ;;
+                8) uninstall_bot; install_node_logic; read -p "Нажмите Enter..." ;;
+                0) break ;;
+            esac
+        fi
+    done
+}
 if [ "$(id -u)" -ne 0 ]; then msg_error "Нужен root."; exit 1; fi
 
 if [ "$AUTO_MODE" = true ] && [ -n "$AUTO_AGENT_URL" ] && [ -n "$AUTO_NODE_TOKEN" ]; then
