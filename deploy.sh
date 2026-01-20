@@ -782,12 +782,26 @@ update_bot() {
     if [ -f "${ENV_FILE}" ] && grep -q "INSTALL_MODE=secure" "${ENV_FILE}"; then
         exec_cmd="sudo -u ${SERVICE_USER}"
     fi
+
+    # --- FIX START: ROBUST DOCKER DETECTION & PERMISSIONS ---
+    local IS_DOCKER=false
+    if ([ -f "${ENV_FILE}" ] && grep -q "DEPLOY_MODE=docker" "${ENV_FILE}") || [ -f "${DOCKER_COMPOSE_FILE}" ]; then
+        IS_DOCKER=true
+    fi
+
+    # Если Docker: временно забираем права себе (root), чтобы git не ругался
+    if [ "$IS_DOCKER" = true ]; then
+        exec_cmd=""
+        sudo chown -R $(id -u):$(id -g) "${BOT_INSTALL_PATH}"
+    fi
+    # --- FIX END ---
     
     cd "${BOT_INSTALL_PATH}"
     run_with_spinner "Git fetch" $exec_cmd git fetch origin
     run_with_spinner "Git reset" $exec_cmd git reset --hard "origin/${GIT_BRANCH}"
     
-    if [ -f "${ENV_FILE}" ] && grep -q "DEPLOY_MODE=docker" "${ENV_FILE}"; then
+    # Используем наш флаг вместо ненадежного grep
+    if [ "$IS_DOCKER" = true ]; then
         local dc_cmd=""
         if sudo docker compose version &>/dev/null; then dc_cmd="docker compose"; else dc_cmd="docker-compose"; fi
         
