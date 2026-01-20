@@ -75,7 +75,8 @@ spinner() {
 run_with_spinner() {
     local msg=$1
     shift
-    ( "$@" >> /tmp/${SERVICE_NAME}_install.log 2>&1 ) &
+    local log_file="/tmp/${SERVICE_NAME}_install.log"
+    ( "$@" >> "$log_file" 2>&1 ) &
     local pid=$!
     spinner "$pid" "$msg"
     wait $pid
@@ -83,7 +84,8 @@ run_with_spinner() {
     echo -ne "\033[2K\r"
     if [ $exit_code -ne 0 ]; then
         msg_error "Ошибка во время '$msg'. Код: $exit_code"
-        msg_error "Подробности в логе: /tmp/${SERVICE_NAME}_install.log"
+        echo -e "${C_RED}Последние строки лога ($log_file):${C_RESET}"
+        tail -n 10 "$log_file"
     fi
     return $exit_code
 }
@@ -422,6 +424,10 @@ EOF
 }
 
 create_docker_compose_yml() {
+    # Port variable MUST NOT BE EMPTY, otherwise Docker errors out with [":"]
+    # We default to 8080 if WEB_PORT is empty in the environment
+    local WP="${WEB_PORT:-8080}"
+    
     sudo tee "${BOT_INSTALL_PATH}/docker-compose.yml" > /dev/null <<EOF
 x-bot-base: &bot-base
   build: .
@@ -435,7 +441,7 @@ services:
     container_name: tg-bot-secure
     profiles: ["secure"]
     user: "tgbot"
-    ports: ["${WEB_PORT}:${WEB_PORT}"]
+    ports: ["${WP}:${WP}"]
     environment: [INSTALL_MODE=secure, DEPLOY_MODE=docker, TG_BOT_CONTAINER_NAME=tg-bot-secure]
     volumes: ["./config:/opt/tg-bot/config", "./logs/bot:/opt/tg-bot/logs/bot", "/var/run/docker.sock:/var/run/docker.sock:ro", "/proc/uptime:/proc_host/uptime:ro", "/proc/stat:/proc_host/stat:ro", "/proc/meminfo:/proc_host/meminfo:ro", "/proc/net/dev:/proc_host/net/dev:ro"]
     cap_drop: [ALL]
@@ -446,7 +452,7 @@ services:
     container_name: tg-bot-root
     profiles: ["root"]
     user: "root"
-    ports: ["${WEB_PORT}:${WEB_PORT}"]
+    # Ports removed for host network mode compatibility
     environment: [INSTALL_MODE=root, DEPLOY_MODE=docker, TG_BOT_CONTAINER_NAME=tg-bot-root]
     privileged: true
     network_mode: "host"
@@ -677,8 +683,11 @@ install_docker_logic() {
     msg_info "Настройка прав доступа для Docker..."
     sudo chown -R 1001:1001 "${BOT_INSTALL_PATH}"
     # ------------------------------------------------------
+    
+    # --- FIX: AGGRESSIVELY REMOVE OLD CONTAINERS TO PREVENT CONFLICTS ---
     msg_info "Остановка старых контейнеров..."
     sudo docker rm -f tg-bot-secure tg-bot-root 2>/dev/null
+    # --------------------------------------------------------------------
 
     run_with_spinner "Запуск Docker" sudo $dc_cmd --profile "${mode}" up -d --remove-orphans
     
@@ -812,7 +821,7 @@ update_bot() {
         # --- FIX: REGENERATE DOCKER-COMPOSE.YML (ADD PID/IPC HOST + REMOVE OBSOLETE) ---
         if [ -f "${ENV_FILE}" ]; then
             source "${ENV_FILE}"
-            export WEB_PORT="${WEB_SERVER_PORT}"
+            export WEB_PORT="${WEB_SERVER_PORT:-8080}" # Default if empty
             create_docker_compose_yml
         fi
 
@@ -829,6 +838,7 @@ update_bot() {
         # --- FIX: AGGRESSIVELY REMOVE OLD CONTAINERS TO PREVENT CONFLICTS ---
         msg_info "Остановка старых контейнеров..."
         sudo docker rm -f tg-bot-secure tg-bot-root 2>/dev/null
+        # --------------------------------------------------------------------
         
         run_with_spinner "Docker Up" sudo $dc_cmd --profile "${mode}" up -d --build --pull --no-cache --remove-orphans
         
