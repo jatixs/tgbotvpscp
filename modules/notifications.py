@@ -30,6 +30,7 @@ from core.keyboards import get_alerts_menu_keyboard
 BUTTON_KEY = "btn_notifications"
 RECENT_NOTIFIED_LOGINS = {}
 
+
 def get_button() -> KeyboardButton:
     return KeyboardButton(text=_(BUTTON_KEY, config.DEFAULT_LANGUAGE))
 
@@ -54,7 +55,7 @@ def start_background_tasks(bot: Bot) -> list[asyncio.Task]:
         ssh_log = get_host_path("/var/log/secure")
     elif os.path.exists(get_host_path("/var/log/auth.log")):
         ssh_log = get_host_path("/var/log/auth.log")
-        
+
     if ssh_log:
         tasks.append(
             asyncio.create_task(
@@ -85,11 +86,15 @@ def get_top_processes_info(metric: str) -> str:
                 pass
         info_list = []
         if metric == "cpu":
-            sorted_procs = sorted(procs, key=lambda p: p["cpu_percent"], reverse=True)[:5]
+            sorted_procs = sorted(
+                procs, key=lambda p: p["cpu_percent"], reverse=True
+            )[:5]
             for p in sorted_procs:
                 info_list.append(f"• <b>{p['name']}</b>: {p['cpu_percent']}%")
         elif metric == "ram":
-            sorted_procs = sorted(procs, key=lambda p: p["memory_percent"], reverse=True)[:5]
+            sorted_procs = sorted(
+                procs, key=lambda p: p["memory_percent"], reverse=True
+            )[:5]
             for p in sorted_procs:
                 info_list.append(f"• <b>{p['name']}</b>: {p['memory_percent']:.1f}%")
         else:
@@ -151,7 +156,7 @@ async def cq_toggle_alert(callback: types.CallbackQuery):
 async def parse_ssh_log_line(line: str) -> dict | None:
     now = time.time()
     sshd_match = re.search(r"Accepted\s+(\S+)\s+for\s+(\S+)\s+from\s+(\S+)", line)
-    
+
     user, ip, method_key = None, None, "auth_method_unknown"
 
     if sshd_match:
@@ -162,26 +167,29 @@ async def parse_ssh_log_line(line: str) -> dict | None:
             method_key = "auth_method_key"
         elif "password" in method_raw:
             method_key = "auth_method_password"
-            
+
     if user and ip:
         last_time = RECENT_NOTIFIED_LOGINS.get((user, ip), 0)
         if now - last_time < 10:
-            return None 
-            
+            return None
+
         RECENT_NOTIFIED_LOGINS[(user, ip)] = now
-        
+
         if len(RECENT_NOTIFIED_LOGINS) > 100:
             RECENT_NOTIFIED_LOGINS.clear()
 
         try:
             flag = await get_country_flag(ip)
+            time_str = (
+                f"{datetime.now().strftime('%H:%M:%S')}{get_server_timezone_label()}"
+            )
             return {
                 "key": "alert_ssh_login_detected",
                 "params": {
                     "user": user,
                     "flag": flag,
                     "ip": ip,
-                    "time": datetime.now().strftime("%H:%M:%S"),
+                    "time": time_str,
                     "tz": get_server_timezone_label(),
                     "method_key": method_key,
                 },
@@ -198,12 +206,15 @@ async def parse_f2b_log_line(line: str) -> dict | None:
         try:
             ip = escape_html(match.group(1).strip())
             flag = await get_country_flag(ip)
+            time_str = (
+                f"{datetime.now().strftime('%H:%M:%S')}{get_server_timezone_label()}"
+            )
             return {
                 "key": "alert_f2b_ban_detected",
                 "params": {
                     "flag": flag,
                     "ip": ip,
-                    "time": datetime.now().strftime("%H:%M:%S"),
+                    "time": time_str,
                     "tz": get_server_timezone_label(),
                 },
             }
@@ -343,6 +354,7 @@ async def reliable_command_monitor(bot, cmd, alert_type, parser):
                 if l:
                     data = await parser(l)
                     if data:
+
                         def msg_gen(lang):
                             params = data["params"].copy()
                             if "method_key" in params:
@@ -358,7 +370,7 @@ async def reliable_command_monitor(bot, cmd, alert_type, parser):
                             alert_type,
                         )
         except asyncio.CancelledError:
-             if proc:
+            if proc:
                 try:
                     os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
                     try:
@@ -367,14 +379,14 @@ async def reliable_command_monitor(bot, cmd, alert_type, parser):
                         os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
                 except Exception as e:
                     logging.error(f"Error killing process group: {e}")
-             raise
+            raise
         except Exception as e:
             logging.error(f"Command monitor error ({cmd}): {e}")
             if proc:
-                 try:
+                try:
                     os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
-                 except Exception:
-                     pass
+                except Exception:
+                    pass
             await asyncio.sleep(10)
 
 
@@ -396,6 +408,7 @@ async def reliable_tail_log_monitor(bot, path, alert_type, parser):
                 if l:
                     data = await parser(l)
                     if data:
+
                         def msg_gen(lang):
                             params = data["params"].copy()
                             if "method_key" in params:
