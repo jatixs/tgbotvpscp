@@ -23,7 +23,7 @@ WATCHDOG_SERVICE_NAME="tg-watchdog"
 NODE_SERVICE_NAME="tg-node"
 SERVICE_USER="tgbot"
 
-# --- ИЗОЛЯЦИЯ: Python 3.12 только для venv ---
+# --- ИЗОЛЯЦИЯ: Строго Python 3.12 ---
 PYTHON_FOR_VENV="/usr/bin/python3.12"
 VENV_PATH="${BOT_INSTALL_PATH}/venv"
 README_FILE="${BOT_INSTALL_PATH}/README.md"
@@ -52,6 +52,7 @@ msg_error() { echo -e "${C_RED}❌ $1${C_RESET}"; }
 msg_question() {
     local prompt="$1"
     local var_name="$2"
+    # Сбрасываем переменную перед вопросом
     eval $var_name=""
     if [ -z "${!var_name}" ]; then
         read -p "$(echo -e "${C_YELLOW}❓ $prompt${C_RESET}")" $var_name
@@ -85,51 +86,6 @@ run_with_spinner() {
         msg_error "Подробности в логе: /tmp/${SERVICE_NAME}_install.log"
     fi
     return $exit_code
-}
-
-# --- ФИКСАТОР СОВМЕСТИМОСТИ (ИГНОРИРУЕТ VENV) ---
-apply_python_compat_fixes() {
-    msg_info "Применение патчей совместимости кода..."
-    local fix_script="${BOT_INSTALL_PATH}/fix_compat.py"
-    
-    cat > "$fix_script" <<EOF
-import os
-import re
-
-def fix_fstring_content(content):
-    pattern = re.compile(r'f(\'\'\'|\"\"\"|\'|\")(.*?)\1', re.DOTALL)
-    def replacement(match):
-        quotes = match.group(1)
-        body = match.group(2)
-        new_quotes = quotes
-        if '\n' in body and len(quotes) == 1:
-            new_quotes = quotes * 3
-        def fix_braces(br_match):
-            inner = br_match.group(0)
-            if '\n' in inner:
-                return re.sub(r'\s+', ' ', inner)
-            return inner
-        fixed_body = re.sub(r'\{.*?\}', fix_braces, body, flags=re.DOTALL)
-        return f'f{new_quotes}{fixed_body}{new_quotes}'
-    return pattern.sub(replacement, content)
-
-# Исключаем venv из сканирования!
-for root, dirs, files in os.walk("${BOT_INSTALL_PATH}"):
-    dirs[:] = [d for d in dirs if d not in ["venv", ".git", "__pycache__"]]
-    for file in files:
-        if file.endswith('.py') and file != 'fix_compat.py':
-            path = os.path.join(root, file)
-            try:
-                with open(path, 'r', encoding='utf-8') as f:
-                    old_content = f.read()
-                new_content = fix_fstring_content(old_content)
-                if old_content != new_content:
-                    with open(path, 'w', encoding='utf-8') as f:
-                        f.write(new_content)
-            except Exception:
-                pass
-EOF
-    python3 "$fix_script" > /dev/null 2>&1
 }
 
 # --- Хелперы ---
@@ -211,21 +167,19 @@ EOF
 common_install_steps() {
     echo "" > /tmp/${SERVICE_NAME}_install.log
     
-    msg_info "1. Подготовка системы..."
-    # Обязательно обновляем список пакетов
+    msg_info "1. Подготовка системы (Python 3.12)..."
     run_with_spinner "Apt update" sudo apt-get update -y -q
     
-    # Исправляем dpkg если надо
+    # Лечим dpkg
     sudo dpkg --configure -a >/dev/null 2>&1
 
-    # Debconf utils для автоматизации iperf3
+    # Утилиты для iperf3
     if ! command -v debconf-set-selections &> /dev/null; then
         run_with_spinner "Установка utils" sudo apt-get install -y -q debconf-utils
     fi
 
-    # ПРИНУДИТЕЛЬНАЯ установка зависимостей, даже если Python есть (нужен dev и venv)
-    msg_info "Установка зависимостей (Python 3.12, venv, dev)..."
-    run_with_spinner "Установка пакетов" sudo apt-get install -y -q -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" \
+    # Гарантируем установку Python 3.12 и dev-tools
+    run_with_spinner "Установка Python 3.12 и зависимостей" sudo apt-get install -y -q -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" \
         python3.12 python3.12-venv python3.12-dev git curl wget sudo python3-pip build-essential
 }
 
@@ -478,7 +432,6 @@ install_systemd_logic() {
         ! id "${SERVICE_USER}" &>/dev/null && sudo useradd -r -s /bin/false -d ${BOT_INSTALL_PATH} ${SERVICE_USER}
         setup_repo_and_dirs "${SERVICE_USER}"; exec_cmd="sudo -u ${SERVICE_USER}"
         [ ! -d "${VENV_PATH}" ] && run_with_spinner "Создание venv (Python 3.12)" sudo -u ${SERVICE_USER} ${PYTHON_FOR_VENV} -m venv "${VENV_PATH}"
-        apply_python_compat_fixes
         if $install_pip; then
             run_with_spinner "Установка зависимостей" sudo -u ${SERVICE_USER} "${VENV_PATH}/bin/pip" install --no-cache-dir -r "${BOT_INSTALL_PATH}/requirements.txt"
             run_with_spinner "Установка tomlkit" sudo -u ${SERVICE_USER} "${VENV_PATH}/bin/pip" install --no-cache-dir tomlkit
@@ -487,7 +440,6 @@ install_systemd_logic() {
     else
         setup_repo_and_dirs "root"; exec_cmd=""
         [ ! -d "${VENV_PATH}" ] && run_with_spinner "Создание venv (Python 3.12)" ${PYTHON_FOR_VENV} -m venv "${VENV_PATH}"
-        apply_python_compat_fixes
         if $install_pip; then
             run_with_spinner "Установка зависимостей" "${VENV_PATH}/bin/pip" install --no-cache-dir -r "${BOT_INSTALL_PATH}/requirements.txt"
             run_with_spinner "Установка tomlkit" "${VENV_PATH}/bin/pip" install --no-cache-dir tomlkit
@@ -509,7 +461,7 @@ EOF
 
 install_docker_logic() {
     local mode=$1; common_install_steps; install_extras; setup_repo_and_dirs "root"; check_docker_deps
-    apply_python_compat_fixes; load_cached_env; ask_env_details; create_dockerfile; create_docker_compose_yml
+    load_cached_env; ask_env_details; create_dockerfile; create_docker_compose_yml
     local container_name="tg-bot-${mode}"; write_env_file "docker" "$mode" "${container_name}"
     cd ${BOT_INSTALL_PATH}; local dc_cmd=""; if sudo docker compose version &>/dev/null; then dc_cmd="docker compose"; else dc_cmd="docker-compose"; fi
     run_with_spinner "Сборка Docker" sudo $dc_cmd build --no-cache
@@ -536,7 +488,6 @@ install_node_logic() {
     common_install_steps; if ! command -v iperf3 &>/dev/null; then echo "iperf3 true" | sudo debconf-set-selections; run_with_spinner "Установка iperf3" sudo apt-get install -y -q iperf3; fi
     setup_repo_and_dirs "root"; local h=$(echo "psutil requests" | sha256sum | awk '{print $1}')
     [ ! -d "${VENV_PATH}" ] && run_with_spinner "Создание venv" ${PYTHON_FOR_VENV} -m venv "${VENV_PATH}"
-    apply_python_compat_fixes
     if ! check_hash_match "NODE_REQ_HASH" "$h"; then run_with_spinner "Deps" "${VENV_PATH}/bin/pip" install --no-cache-dir psutil requests; update_state_hash "NODE_REQ_HASH" "$h"; fi
     load_cached_env; echo ""; msg_info "Подключение:"
     msg_question "Agent URL: " AGENT_URL; msg_question "Token: " NODE_TOKEN
@@ -568,14 +519,12 @@ update_bot() {
     cd "${BOT_INSTALL_PATH}"; run_with_spinner "Git fetch" $exec_cmd git fetch origin; run_with_spinner "Git reset" $exec_cmd git reset --hard "origin/${GIT_BRANCH}"
     if [ -f "${ENV_FILE}" ] && grep -q "DEPLOY_MODE=docker" "${ENV_FILE}"; then
         local dc_cmd=""; if sudo docker compose version &>/dev/null; then dc_cmd="docker compose"; else dc_cmd="docker-compose"; fi
-        apply_python_compat_fixes
         sudo chown -R 1001:1001 "${BOT_INSTALL_PATH}"
         run_with_spinner "Docker Up" sudo $dc_cmd up -d --build --no-cache
         local m=$(grep '^INSTALL_MODE=' "${ENV_FILE}" | cut -d'=' -f2 | tr -d '"')
         sudo $dc_cmd --profile "$m" exec -T "tg-bot-$m" aerich upgrade >/dev/null 2>&1
         sudo $dc_cmd --profile "$m" exec -T "tg-bot-$m" python migrate.py >/dev/null 2>&1
     else
-        apply_python_compat_fixes
         local h=$(get_file_hash "${BOT_INSTALL_PATH}/requirements.txt")
         if ! check_hash_match "REQ_HASH" "$h"; then run_with_spinner "Pip" $exec_cmd "${VENV_PATH}/bin/pip" install --no-cache-dir -r requirements.txt --upgrade; update_state_hash "REQ_HASH" "$h"; fi
         run_db_migrations "$exec_cmd"; if systemctl list-unit-files | grep -q "^${SERVICE_NAME}"; then sudo systemctl restart ${SERVICE_NAME} ${WATCHDOG_SERVICE_NAME}; fi
