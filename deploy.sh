@@ -52,7 +52,6 @@ msg_error() { echo -e "${C_RED}❌ $1${C_RESET}"; }
 msg_question() {
     local prompt="$1"
     local var_name="$2"
-    eval $var_name=""
     if [ -z "${!var_name}" ]; then
         read -p "$(echo -e "${C_YELLOW}❓ $prompt${C_RESET}")" $var_name
     fi
@@ -268,9 +267,13 @@ load_cached_env() {
     [ ! -f "$env_file" ] && [ -f "/tmp/tgbot_env.bak" ] && env_file="/tmp/tgbot_env.bak"
     
     if [ -f "$env_file" ]; then
-        echo -e "${C_YELLOW}⚠️  Обнаружена сохраненная конфигурация.${C_RESET}"
-        read -p "$(echo -e "${C_CYAN}❓ Восстановить настройки? (y/n) [y]: ${C_RESET}")" RESTORE_CHOICE
-        RESTORE_CHOICE=${RESTORE_CHOICE:-y}
+        if [ "$AUTO_MODE" = true ]; then
+            RESTORE_CHOICE="y"
+        else
+            echo -e "${C_YELLOW}⚠️  Обнаружена сохраненная конфигурация.${C_RESET}"
+            read -p "$(echo -e "${C_CYAN}❓ Восстановить настройки? (y/n) [y]: ${C_RESET}")" RESTORE_CHOICE
+            RESTORE_CHOICE=${RESTORE_CHOICE:-y}
+        fi
         
         if [[ "$RESTORE_CHOICE" =~ ^[Yy]$ ]]; then
             msg_info "Загружаю данные..."
@@ -764,7 +767,9 @@ install_node_logic() {
         update_state_hash "NODE_REQ_HASH" "$node_deps_hash"
     fi
     load_cached_env
-    echo ""; msg_info "Подключение:"
+    if [ "$AUTO_MODE" != true ]; then
+        echo ""; msg_info "Подключение:"
+    fi
     msg_question "Agent URL (http://IP:8080): " AGENT_URL
     msg_question "Token: " NODE_TOKEN
     sudo bash -c "cat > ${ENV_FILE}" <<EOF
