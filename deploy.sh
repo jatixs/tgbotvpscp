@@ -52,6 +52,8 @@ msg_error() { echo -e "${C_RED}❌ $1${C_RESET}"; }
 msg_question() {
     local prompt="$1"
     local var_name="$2"
+    # Сбрасываем переменную перед вопросом
+    eval $var_name=""
     if [ -z "${!var_name}" ]; then
         read -p "$(echo -e "${C_YELLOW}❓ $prompt${C_RESET}")" $var_name
     fi
@@ -73,7 +75,8 @@ spinner() {
 run_with_spinner() {
     local msg=$1
     shift
-    ( "$@" >> /tmp/${SERVICE_NAME}_install.log 2>&1 ) &
+    local log_file="/tmp/${SERVICE_NAME}_install.log"
+    ( "$@" >> "$log_file" 2>&1 ) &
     local pid=$!
     spinner "$pid" "$msg"
     wait $pid
@@ -81,59 +84,13 @@ run_with_spinner() {
     echo -ne "\033[2K\r"
     if [ $exit_code -ne 0 ]; then
         msg_error "Ошибка во время '$msg'. Код: $exit_code"
-        msg_error "Подробности в логе: /tmp/${SERVICE_NAME}_install.log"
+        echo -e "${C_RED}Последние строки лога ($log_file):${C_RESET}"
+        tail -n 10 "$log_file"
     fi
     return $exit_code
 }
 
-# --- ФИКСАТОР СОВМЕСТИМОСТИ (Python 3.10 f-strings) ---
-apply_python_compat_fixes() {
-    msg_info "Применение патчей совместимости кода..."
-    local fix_script="${BOT_INSTALL_PATH}/fix_compat.py"
-    
-    cat > "$fix_script" <<EOF
-import os
-import re
-
-def fix_fstring_content(content):
-    pattern = re.compile(r'f(\'\'\'|\"\"\"|\'|\")(.*?)\1', re.DOTALL)
-    
-    def replacement(match):
-        quotes = match.group(1)
-        body = match.group(2)
-        new_quotes = quotes
-        if '\n' in body and len(quotes) == 1:
-            new_quotes = quotes * 3
-            
-        def fix_braces(br_match):
-            inner = br_match.group(0)
-            if '\n' in inner:
-                return re.sub(r'\s+', ' ', inner)
-            return inner
-            
-        fixed_body = re.sub(r'\{.*?\}', fix_braces, body, flags=re.DOTALL)
-        return f'f{new_quotes}{fixed_body}{new_quotes}'
-
-    return pattern.sub(replacement, content)
-
-for root, _, files in os.walk("${BOT_INSTALL_PATH}"):
-    for file in files:
-        if file.endswith('.py') and file != 'fix_compat.py':
-            path = os.path.join(root, file)
-            try:
-                with open(path, 'r', encoding='utf-8') as f:
-                    old_content = f.read()
-                new_content = fix_fstring_content(old_content)
-                if old_content != new_content:
-                    with open(path, 'w', encoding='utf-8') as f:
-                        f.write(new_content)
-            except Exception:
-                pass
-EOF
-    python3 "$fix_script" > /dev/null 2>&1
-}
-
-# --- Хелперы для хешей и версий ---
+# --- Хелперы ---
 get_file_hash() {
     [ -f "$1" ] && sha256sum "$1" | awk '{print $1}' || echo "none"
 }
@@ -179,7 +136,6 @@ check_integrity() {
         STATUS_MESSAGE="Бот не установлен."
         return
     fi
-    
     if grep -q "MODE=node" "${ENV_FILE}"; then
         INSTALL_TYPE="НОДА (Клиент)"
         if systemctl is-active --quiet ${NODE_SERVICE_NAME}.service; then
@@ -189,9 +145,7 @@ check_integrity() {
         fi
         return
     fi
-    
     DEPLOY_MODE_FROM_ENV=$(grep '^DEPLOY_MODE=' "${ENV_FILE}" | cut -d'=' -f2 | tr -d '"' || echo "systemd")
-    
     if [ "$DEPLOY_MODE_FROM_ENV" == "docker" ]; then
         INSTALL_TYPE="АГЕНТ (Docker)"
         if command -v docker &> /dev/null && docker ps | grep -q "tg-bot"; then
@@ -213,7 +167,6 @@ setup_nginx_proxy() {
     echo -e "\n${C_CYAN}🔒 Настройка HTTPS (Nginx + Certbot)${C_RESET}"
     run_with_spinner "Установка Nginx и Certbot" sudo apt-get install -y -q nginx certbot python3-certbot-nginx psmisc
     
-    # Освобождение порта 80
     sudo fuser -k 80/tcp 2>/dev/null
     sudo systemctl stop nginx 2>/dev/null
     
@@ -249,22 +202,31 @@ EOF
     if sudo nginx -t; then
         sudo systemctl restart nginx
         msg_success "HTTPS настроен успешно!"
+        return 0
     else
         msg_error "Ошибка Nginx."
+        return 1
     fi
 }
 
 common_install_steps() {
     echo "" > /tmp/${SERVICE_NAME}_install.log
-    if command -v python3.12 >/dev/null && command -v git >/dev/null; then
-        msg_success "Python 3.12 и Git уже установлены."
-    else
-        msg_info "1. Обновление системы и установка Python 3.12..."
-        run_with_spinner "Apt update" sudo apt-get update -y -q
-        # Устанавливаем python3.12 отдельно
-        run_with_spinner "Установка пакетов" sudo apt-get install -y -q -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" \
-            python3.12 python3.12-venv python3.12-dev git curl wget sudo python3-pip
+    
+    msg_info "1. Подготовка системы (Python 3.12)..."
+    # Обязательно обновляем список пакетов
+    run_with_spinner "Apt update" sudo apt-get update -y -q
+    
+    # Лечим dpkg
+    sudo dpkg --configure -a >/dev/null 2>&1
+
+    # Утилиты для iperf3
+    if ! command -v debconf-set-selections &> /dev/null; then
+        run_with_spinner "Установка utils" sudo apt-get install -y -q debconf-utils
     fi
+
+    # Гарантируем установку Python 3.12 и dev-tools (для сборки зависимостей)
+    run_with_spinner "Установка Python 3.12 и зависимостей" sudo apt-get install -y -q -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" \
+        python3.12 python3.12-venv python3.12-dev git curl wget sudo python3-pip build-essential
 }
 
 setup_repo_and_dirs() {
@@ -272,7 +234,6 @@ setup_repo_and_dirs() {
     cd /
     msg_info "Подготовка файлов (Ветка: ${GIT_BRANCH})..."
     
-    # Бэкап
     [ -f "${ENV_FILE}" ] && cp "${ENV_FILE}" /tmp/tgbot_env.bak
     [ -f "${STATE_FILE}" ] && cp "${STATE_FILE}" /tmp/tgbot_state.bak
     [ -d "${VENV_PATH}" ] && sudo mv "${VENV_PATH}" /tmp/tgbot_venv.bak
@@ -282,7 +243,6 @@ setup_repo_and_dirs() {
     
     run_with_spinner "Клонирование репозитория" sudo git clone --branch "${GIT_BRANCH}" "${GITHUB_REPO_URL}" "${BOT_INSTALL_PATH}"
     
-    # Восстановление
     [ -f "/tmp/tgbot_env.bak" ] && sudo mv /tmp/tgbot_env.bak "${ENV_FILE}"
     [ -f "/tmp/tgbot_state.bak" ] && sudo mv /tmp/tgbot_state.bak "${STATE_FILE}"
     [ -d "/tmp/tgbot_venv.bak" ] && sudo mv /tmp/tgbot_venv.bak "${VENV_PATH}"
@@ -344,7 +304,11 @@ cleanup_agent_files() {
 
 cleanup_files() {
     msg_info "🧹 Финальная очистка..."
-    sudo rm -f "${BOT_INSTALL_PATH}/fix_compat.py"
+    
+    # Удаляем фикс скрипт если он был (хотя мы его больше не создаем, но на всякий случай)
+    if [ -f "${BOT_INSTALL_PATH}/fix_compat.py" ]; then
+        sudo rm -f "${BOT_INSTALL_PATH}/fix_compat.py"
+    fi
     
     if [ -d "$BOT_INSTALL_PATH/.github" ]; then sudo rm -rf "$BOT_INSTALL_PATH/.github"; fi
     if [ -d "$BOT_INSTALL_PATH/assets" ]; then sudo rm -rf "$BOT_INSTALL_PATH/assets"; fi
@@ -364,6 +328,7 @@ cleanup_files() {
 }
 
 install_extras() {
+    local I=""
     if ! command -v fail2ban-client &>/dev/null; then
         msg_question "Fail2Ban не найден. Установить? (y/n): " I
         if [[ "$I" =~ ^[Yy]$ ]]; then
@@ -373,10 +338,10 @@ install_extras() {
         msg_success "Fail2Ban уже установлен."
     fi
     
+    local J=""
     if ! command -v iperf3 &>/dev/null; then
-        msg_question "iperf3 не найден. Установить? (y/n): " I
-        if [[ "$I" =~ ^[Yy]$ ]]; then
-            # Автоматизация iperf3 (без вопроса демона)
+        msg_question "iperf3 не найден. Установить? (y/n): " J
+        if [[ "$J" =~ ^[Yy]$ ]]; then
             echo "iperf3 iperf3/start_daemon boolean true" | sudo debconf-set-selections
             run_with_spinner "Установка iperf3" sudo apt-get install -y -q iperf3
         fi
@@ -393,25 +358,17 @@ ask_env_details() {
     if [ -z "$P" ]; then WEB_PORT="8080"; else WEB_PORT="$P"; fi
     msg_question "Sentry DSN (opt): " SENTRY_DSN
     
+    local W=""
     msg_question "Включить Web-UI (Дашборд)? (y/n) [y]: " W
+    
     if [[ "$W" =~ ^[Nn]$ ]]; then
         ENABLE_WEB="false"
         SETUP_HTTPS="false"
     else
         ENABLE_WEB="true"
         GEN_PASS=$(tr -dc A-Za-z0-9 </dev/urandom | head -c 12)
-        msg_question "Настроить HTTPS (Nginx Proxy)? (y/n): " H
-        if [[ "$H" =~ ^[Yy]$ ]]; then
-            SETUP_HTTPS="true"
-            msg_question "Домен: " HTTPS_DOMAIN
-            msg_question "Email: " HTTPS_EMAIL
-            msg_question "Внешний HTTPS порт [8443]: " HP
-            if [ -z "$HP" ]; then HTTPS_PORT="8443"; else HTTPS_PORT="$HP"; fi
-        else
-            SETUP_HTTPS="false"
-        fi
     fi
-    export T A U N WEB_PORT ENABLE_WEB SETUP_HTTPS HTTPS_DOMAIN HTTPS_EMAIL HTTPS_PORT GEN_PASS SENTRY_DSN
+    export T A U N WEB_PORT ENABLE_WEB GEN_PASS SENTRY_DSN
 }
 
 write_env_file() {
@@ -440,6 +397,13 @@ EOF
     sudo chmod 600 "${ENV_FILE}"
 }
 
+check_docker_deps() {
+    if ! command -v docker &> /dev/null; then
+        curl -sSL https://get.docker.com -o /tmp/get-docker.sh
+        run_with_spinner "Установка Docker" sudo sh /tmp/get-docker.sh
+    fi
+}
+
 create_dockerfile() {
     sudo tee "${BOT_INSTALL_PATH}/Dockerfile" > /dev/null <<'EOF'
 FROM python:3.12-slim-bookworm
@@ -460,6 +424,10 @@ EOF
 }
 
 create_docker_compose_yml() {
+    # Default to 8080 if WEB_PORT is not set or empty to prevent syntax errors
+    local WP="${WEB_PORT:-8080}"
+    
+    # Note: 'version' attribute removed as it is obsolete in recent Docker Compose
     sudo tee "${BOT_INSTALL_PATH}/docker-compose.yml" > /dev/null <<EOF
 x-bot-base: &bot-base
   build: .
@@ -473,7 +441,7 @@ services:
     container_name: tg-bot-secure
     profiles: ["secure"]
     user: "tgbot"
-    ports: ["${WEB_PORT}:${WEB_PORT}"]
+    ports: ["${WP}:${WP}"]
     environment: [INSTALL_MODE=secure, DEPLOY_MODE=docker, TG_BOT_CONTAINER_NAME=tg-bot-secure]
     volumes: ["./config:/opt/tg-bot/config", "./logs/bot:/opt/tg-bot/logs/bot", "/var/run/docker.sock:/var/run/docker.sock:ro", "/proc/uptime:/proc_host/uptime:ro", "/proc/stat:/proc_host/stat:ro", "/proc/meminfo:/proc_host/meminfo:ro", "/proc/net/dev:/proc_host/net/dev:ro"]
     cap_drop: [ALL]
@@ -484,10 +452,12 @@ services:
     container_name: tg-bot-root
     profiles: ["root"]
     user: "root"
-    ports: ["${WEB_PORT}:${WEB_PORT}"]
+    # PORTS REMOVED for host network compatibility
     environment: [INSTALL_MODE=root, DEPLOY_MODE=docker, TG_BOT_CONTAINER_NAME=tg-bot-root]
     privileged: true
     network_mode: "host"
+    pid: "host"
+    ipc: "host"
     volumes: ["./config:/opt/tg-bot/config", "./logs/bot:/opt/tg-bot/logs/bot", "/:/host", "/var/run/docker.sock:/var/run/docker.sock:ro"]
     labels: ["role=bot", "mode=root"]
   watchdog:
@@ -572,6 +542,43 @@ run_db_migrations() {
     fi
 }
 
+# --- ФИНАЛЬНАЯ НАСТРОЙКА WEB ---
+configure_web_final() {
+    if [ "$ENABLE_WEB" == "true" ]; then
+        local H=""
+        echo ""
+        msg_question "Настроить HTTPS (Nginx Proxy)? (y/n): " H
+        
+        if [[ "$H" =~ ^[Yy]$ ]]; then
+            msg_question "Домен (напр. bot.example.com): " HTTPS_DOMAIN
+            msg_question "Email для SSL: " HTTPS_EMAIL
+            msg_question "Внешний HTTPS порт [8443]: " HP
+            if [ -z "$HP" ]; then HTTPS_PORT="8443"; else HTTPS_PORT="$HP"; fi
+            
+            export HTTPS_DOMAIN HTTPS_EMAIL HTTPS_PORT WEB_PORT
+            
+            if setup_nginx_proxy; then
+                echo ""
+                msg_success "Установка завершена! Web-UI доступен (HTTPS): https://${HTTPS_DOMAIN}:${HTTPS_PORT}/"
+                echo -e "🔑 ВАШ ПАРОЛЬ: ${C_BOLD}${GEN_PASS}${C_RESET}"
+            else
+                msg_error "Не удалось настроить HTTPS."
+                local ip=$(curl -s ipinfo.io/ip)
+                msg_success "Доступен через HTTP: http://${ip}:${WEB_PORT}/"
+                echo -e "🔑 ВАШ ПАРОЛЬ: ${C_BOLD}${GEN_PASS}${C_RESET}"
+            fi
+        else
+            local ip=$(curl -s ipinfo.io/ip)
+            echo ""
+            msg_success "Установка завершена! Web-UI доступен (HTTP): http://${ip}:${WEB_PORT}/"
+            echo -e "🔑 ВАШ ПАРОЛЬ: ${C_BOLD}${GEN_PASS}${C_RESET}"
+        fi
+    else
+        echo ""
+        msg_success "Установка завершена! Web-UI отключен."
+    fi
+}
+
 install_systemd_logic() {
     local mode=$1
     common_install_steps
@@ -600,11 +607,9 @@ install_systemd_logic() {
             run_with_spinner "Создание venv (Python 3.12)" sudo -u ${SERVICE_USER} ${PYTHON_FOR_VENV} -m venv "${VENV_PATH}"
         fi
         
-        apply_python_compat_fixes
-        
         if $install_pip; then
-            run_with_spinner "Установка зависимостей" sudo -u ${SERVICE_USER} "${VENV_PATH}/bin/pip" install -r "${BOT_INSTALL_PATH}/requirements.txt"
-            run_with_spinner "Установка tomlkit" sudo -u ${SERVICE_USER} "${VENV_PATH}/bin/pip" install tomlkit
+            run_with_spinner "Установка зависимостей" sudo -u ${SERVICE_USER} "${VENV_PATH}/bin/pip" install --no-cache-dir -r "${BOT_INSTALL_PATH}/requirements.txt"
+            run_with_spinner "Установка tomlkit" sudo -u ${SERVICE_USER} "${VENV_PATH}/bin/pip" install --no-cache-dir tomlkit
             update_state_hash "REQ_HASH" "$req_hash"
         fi
     else
@@ -615,11 +620,9 @@ install_systemd_logic() {
             run_with_spinner "Создание venv (Python 3.12)" ${PYTHON_FOR_VENV} -m venv "${VENV_PATH}"
         fi
         
-        apply_python_compat_fixes
-        
         if $install_pip; then
-            run_with_spinner "Установка зависимостей" "${VENV_PATH}/bin/pip" install -r "${BOT_INSTALL_PATH}/requirements.txt"
-            run_with_spinner "Установка tomlkit" "${VENV_PATH}/bin/pip" install tomlkit
+            run_with_spinner "Установка зависимостей" "${VENV_PATH}/bin/pip" install --no-cache-dir -r "${BOT_INSTALL_PATH}/requirements.txt"
+            run_with_spinner "Установка tomlkit" "${VENV_PATH}/bin/pip" install --no-cache-dir tomlkit
             update_state_hash "REQ_HASH" "$req_hash"
         fi
     fi
@@ -650,14 +653,7 @@ EOF
     cleanup_agent_files
     cleanup_files
     
-    local ip=$(curl -s ipinfo.io/ip)
-    echo ""; msg_success "Установка завершена! Агент: http://${ip}:${WEB_PORT}"
-    
-    if [ "${ENABLE_WEB}" == "true" ]; then
-        echo -e "${C_CYAN}🔑 ВАШ ПАРОЛЬ: ${C_BOLD}${GEN_PASS}${C_RESET}"
-    fi
-    
-    if [ "$SETUP_HTTPS" == "true" ]; then setup_nginx_proxy; fi
+    configure_web_final
 }
 
 install_docker_logic() {
@@ -666,8 +662,6 @@ install_docker_logic() {
     install_extras
     setup_repo_and_dirs "root"
     check_docker_deps
-    
-    apply_python_compat_fixes
     
     load_cached_env
     ask_env_details
@@ -681,7 +675,18 @@ install_docker_logic() {
     local dc_cmd=""
     if sudo docker compose version &>/dev/null; then dc_cmd="docker compose"; else dc_cmd="docker-compose"; fi
     
-    run_with_spinner "Сборка Docker" sudo $dc_cmd build --no-cache
+    run_with_spinner "Сборка Docker" sudo $dc_cmd --profile "${mode}" build --no-cache
+    
+    # --- ФИКС ПРАВ ДОСТУПА ДЛЯ DOCKER (UID 1001) ---
+    msg_info "Настройка прав доступа для Docker..."
+    sudo chown -R 1001:1001 "${BOT_INSTALL_PATH}"
+    # ------------------------------------------------------
+    
+    # --- FIX: AGGRESSIVELY REMOVE OLD CONTAINERS TO PREVENT CONFLICTS ---
+    msg_info "Остановка старых контейнеров..."
+    sudo docker rm -f tg-bot-secure tg-bot-root 2>/dev/null
+    # --------------------------------------------------------------------
+
     run_with_spinner "Запуск Docker" sudo $dc_cmd --profile "${mode}" up -d --remove-orphans
     
     msg_info "Настройка БД в контейнере..."
@@ -702,12 +707,8 @@ EOF
     cleanup_agent_files
     cleanup_files
     
-    msg_success "Docker установка завершена!"
-    if [ "${ENABLE_WEB}" == "true" ]; then
-        echo -e "${C_CYAN}🔑 ВАШ ПАРОЛЬ: ${C_BOLD}${GEN_PASS}${C_RESET}"
-    fi
-    
-    if [ "$SETUP_HTTPS" == "true" ]; then setup_nginx_proxy; fi
+    # ФИНАЛЬНАЯ НАСТРОЙКА WEB
+    configure_web_final
 }
 
 install_node_logic() {
@@ -735,8 +736,6 @@ install_node_logic() {
             msg_success "Venv актуален."
         fi
     fi
-    
-    apply_python_compat_fixes
     
     if $install_pip; then
         run_with_spinner "Установка зависимостей" "${VENV_PATH}/bin/pip" install psutil requests
@@ -796,26 +795,61 @@ update_bot() {
     if [ -f "${ENV_FILE}" ] && grep -q "INSTALL_MODE=secure" "${ENV_FILE}"; then
         exec_cmd="sudo -u ${SERVICE_USER}"
     fi
+
+    # --- FIX: ROBUST DOCKER DETECTION ---
+    local IS_DOCKER=false
+    if ([ -f "${ENV_FILE}" ] && grep -q "DEPLOY_MODE=docker" "${ENV_FILE}") || [ -f "${DOCKER_COMPOSE_FILE}" ]; then
+        IS_DOCKER=true
+    fi
+
+    if [ "$IS_DOCKER" = true ]; then
+        exec_cmd=""
+        # Временно берем права root, чтобы Git работал корректно
+        sudo chown -R $(id -u):$(id -g) "${BOT_INSTALL_PATH}"
+    fi
     
     cd "${BOT_INSTALL_PATH}"
     run_with_spinner "Git fetch" $exec_cmd git fetch origin
     run_with_spinner "Git reset" $exec_cmd git reset --hard "origin/${GIT_BRANCH}"
     
-    if [ -f "${ENV_FILE}" ] && grep -q "DEPLOY_MODE=docker" "${ENV_FILE}"; then
+    if [ "$IS_DOCKER" = true ]; then
         local dc_cmd=""
         if sudo docker compose version &>/dev/null; then dc_cmd="docker compose"; else dc_cmd="docker-compose"; fi
         
-        apply_python_compat_fixes
+        # --- FIX: REGENERATE DOCKER-COMPOSE.YML (ADD PID/IPC HOST + REMOVE OBSOLETE) ---
+        if [ -f "${ENV_FILE}" ]; then
+            set -a
+            source "${ENV_FILE}"
+            set +a
+            # Set default port if missing to prevent "Code 1" syntax error
+            if [ -z "$WEB_SERVER_PORT" ]; then WEB_SERVER_PORT=8080; fi
+            export WEB_PORT=$WEB_SERVER_PORT
+            
+            # Regenerate correct compose file
+            create_docker_compose_yml
+        fi
+
+        # FIX PERMISSIONS FOR DOCKER
+        sudo chown -R 1001:1001 "${BOT_INSTALL_PATH}"
         
-        run_with_spinner "Docker Up" sudo $dc_cmd up -d --build --no-cache
-        
+        # --- FIX: READ MODE AND USE PROFILE + PULL NEW IMAGES ---
         local mode=$(grep '^INSTALL_MODE=' "${ENV_FILE}" | cut -d'=' -f2 | tr -d '"')
         local cn="tg-bot-${mode}"
+        
+        # Explicit directory set just in case
+        cd "${BOT_INSTALL_PATH}"
+        
+        # --- FIX: AGGRESSIVELY REMOVE OLD CONTAINERS TO PREVENT CONFLICTS ---
+        msg_info "Остановка старых контейнеров..."
+        sudo docker rm -f tg-bot-secure tg-bot-root 2>/dev/null
+        # --------------------------------------------------------------------
+        
+        run_with_spinner "Сборка Docker" sudo $dc_cmd --profile "${mode}" build --pull --no-cache
+        run_with_spinner "Запуск Docker" sudo $dc_cmd --profile "${mode}" up -d --remove-orphans
         
         sudo $dc_cmd --profile "${mode}" exec -T ${cn} aerich upgrade >/dev/null 2>&1
         sudo $dc_cmd --profile "${mode}" exec -T ${cn} python migrate.py >/dev/null 2>&1
         
-        # Обновление CLI wrapper
         sudo bash -c "cat > /usr/local/bin/tgcp-bot" <<EOF
 #!/bin/bash
 cd ${BOT_INSTALL_PATH}
@@ -824,8 +858,6 @@ CONTAINER="tg-bot-\$MODE"
 sudo $dc_cmd --profile "\$MODE" exec -T \$CONTAINER python manage.py "\$@"
 EOF
     else
-        apply_python_compat_fixes
-        
         local req_hash=$(get_file_hash "${BOT_INSTALL_PATH}/requirements.txt")
         if ! check_hash_match "REQ_HASH" "$req_hash"; then
              run_with_spinner "Обновление pip" $exec_cmd "${VENV_PATH}/bin/pip" install -r "${BOT_INSTALL_PATH}/requirements.txt" --upgrade
@@ -860,6 +892,74 @@ EOF
     msg_success "Обновлено."
 }
 
+# --- MENU FUNCTIONS ---
+main_menu() {
+    while true; do
+        clear
+        echo -e "${C_BLUE}${C_BOLD}╔═══════════════════════════════════╗${C_RESET}"
+        echo -e "${C_BLUE}${C_BOLD}║      Установка VPS Manager Bot    ║${C_RESET}"
+        echo -e "${C_BLUE}${C_BOLD}╚═══════════════════════════════════╝${C_RESET}"
+        
+        check_integrity
+        
+        local local_ver=$(get_local_version)
+        local remote_ver=$(get_remote_version)
+        
+        echo -e "  Ветка: ${GIT_BRANCH}"
+        echo -e "  Тип: ${INSTALL_TYPE} | Статус: ${STATUS_MESSAGE}"
+        
+        if [ "$local_ver" != "$remote_ver" ] && [ "$remote_ver" != "Не удалось получить" ] && [ "$local_ver" != "Не определена" ] && [ "$INSTALL_TYPE" != "НЕТ" ]; then
+             echo -e "  Версия: ${C_YELLOW}Локальная: $local_ver (Доступна: $remote_ver)${C_RESET}"
+        else
+             echo -e "  Версия: ${C_GREEN}$local_ver${C_RESET}"
+        fi
+
+        echo "--------------------------------------------------------"
+        
+        if [ "$INSTALL_TYPE" == "НЕТ" ]; then
+            echo -e "  Выберите режим установки:"
+            echo "--------------------------------------------------------"
+            echo "  1) АГЕНТ (Systemd - Secure)  [Рекомендуется]"
+            echo "  2) АГЕНТ (Systemd - Root)    [Полный доступ]"
+            echo "  3) АГЕНТ (Docker - Secure)   [Изоляция]"
+            echo "  4) АГЕНТ (Docker - Root)     [Docker + Host]"
+            echo -e "${C_GREEN}  8) НОДА (Клиент)${C_RESET}"
+            echo "  0) Выход"
+            echo "--------------------------------------------------------"
+            read -p "$(echo -e "${C_BOLD}Ваш выбор: ${C_RESET}")" ch
+            case $ch in
+                1) uninstall_bot; install_systemd_logic "secure"; read -p "Нажмите Enter..." ;;
+                2) uninstall_bot; install_systemd_logic "root"; read -p "Нажмите Enter..." ;;
+                3) uninstall_bot; install_docker_logic "secure"; read -p "Нажмите Enter..." ;;
+                4) uninstall_bot; install_docker_logic "root"; read -p "Нажмите Enter..." ;;
+                8) uninstall_bot; install_node_logic; read -p "Нажмите Enter..." ;;
+                0) break ;;
+            esac
+        else
+            echo "  1) Обновить бота"
+            echo "  2) Удалить бота"
+            echo "  3) Переустановить (Systemd - Secure)"
+            echo "  4) Переустановить (Systemd - Root)"
+            echo "  5) Переустановить (Docker - Secure)"
+            echo "  6) Переустановить (Docker - Root)"
+            echo -e "${C_GREEN}  8) Установить НОДУ (Клиент)${C_RESET}"
+            echo "  0) Выход"
+            echo "--------------------------------------------------------"
+            read -p "$(echo -e "${C_BOLD}Ваш выбор: ${C_RESET}")" ch
+            case $ch in
+                1) update_bot; read -p "Нажмите Enter..." ;;
+                2) msg_question "Удалить? (y/n): " c; if [[ "$c" =~ ^[Yy]$ ]]; then uninstall_bot; return; fi ;;
+                3) uninstall_bot; install_systemd_logic "secure"; read -p "Нажмите Enter..." ;;
+                4) uninstall_bot; install_systemd_logic "root"; read -p "Нажмите Enter..." ;;
+                5) uninstall_bot; install_docker_logic "secure"; read -p "Нажмите Enter..." ;;
+                6) uninstall_bot; install_docker_logic "root"; read -p "Нажмите Enter..." ;;
+                8) uninstall_bot; install_node_logic; read -p "Нажмите Enter..." ;;
+                0) break ;;
+            esac
+        fi
+    done
+}
+
 # --- Main Entry ---
 if [ "$(id -u)" -ne 0 ]; then msg_error "Нужен root."; exit 1; fi
 
@@ -868,65 +968,4 @@ if [ "$AUTO_MODE" = true ] && [ -n "$AUTO_AGENT_URL" ] && [ -n "$AUTO_NODE_TOKEN
     exit 0
 fi
 
-check_integrity
-while true; do
-    clear
-    echo -e "${C_BLUE}${C_BOLD}╔═══════════════════════════════════╗${C_RESET}"
-    echo -e "${C_BLUE}${C_BOLD}║      Установка VPS Manager Bot    ║${C_RESET}"
-    echo -e "${C_BLUE}${C_BOLD}╚═══════════════════════════════════╝${C_RESET}"
-    
-    local local_ver=$(get_local_version)
-    local remote_ver=$(get_remote_version)
-    
-    echo -e "  Ветка: ${GIT_BRANCH}"
-    echo -e "  Тип: ${INSTALL_TYPE} | Статус: ${STATUS_MESSAGE}"
-    
-    if [ "$local_ver" != "$remote_ver" ] && [ "$remote_ver" != "Не удалось получить" ] && [ "$local_ver" != "Не определена" ] && [ "$INSTALL_TYPE" != "НЕТ" ]; then
-         echo -e "  Версия: ${C_YELLOW}Локальная: $local_ver (Доступна: $remote_ver)${C_RESET}"
-    else
-         echo -e "  Версия: ${C_GREEN}$local_ver${C_RESET}"
-    fi
-
-    echo "--------------------------------------------------------"
-    
-    if [ "$INSTALL_TYPE" == "НЕТ" ]; then
-        echo -e "  Выберите режим установки:"
-        echo "  1) АГЕНТ (Systemd - Secure)  [Рекомендуется]"
-        echo "  2) АГЕНТ (Systemd - Root)    [Полный доступ]"
-        echo "  3) АГЕНТ (Docker - Secure)   [Изоляция]"
-        echo "  4) АГЕНТ (Docker - Root)     [Docker + Host]"
-        echo -e "${C_GREEN}  8) НОДА (Клиент)${C_RESET}"
-        echo "  0) Выход"
-        echo "--------------------------------------------------------"
-        read -p "$(echo -e "${C_BOLD}Ваш выбор: ${C_RESET}")" ch
-        case $ch in
-            1) uninstall_bot; install_systemd_logic "secure"; read -p "Нажмите Enter..." ;;
-            2) uninstall_bot; install_systemd_logic "root"; read -p "Нажмите Enter..." ;;
-            3) uninstall_bot; install_docker_logic "secure"; read -p "Нажмите Enter..." ;;
-            4) uninstall_bot; install_docker_logic "root"; read -p "Нажмите Enter..." ;;
-            8) uninstall_bot; install_node_logic; read -p "Нажмите Enter..." ;;
-            0) break ;;
-        esac
-    else
-        echo "  1) Обновить бота"
-        echo "  2) Удалить бота"
-        echo "  3) Переустановить (Systemd - Secure)"
-        echo "  4) Переустановить (Systemd - Root)"
-        echo "  5) Переустановить (Docker - Secure)"
-        echo "  6) Переустановить (Docker - Root)"
-        echo -e "${C_GREEN}  8) Установить НОДУ (Клиент)${C_RESET}"
-        echo "  0) Выход"
-        echo "--------------------------------------------------------"
-        read -p "$(echo -e "${C_BOLD}Ваш выбор: ${C_RESET}")" ch
-        case $ch in
-            1) update_bot; read -p "Нажмите Enter..." ;;
-            2) msg_question "Удалить? (y/n): " c; if [[ "$c" =~ ^[Yy]$ ]]; then uninstall_bot; return; fi ;;
-            3) uninstall_bot; install_systemd_logic "secure"; read -p "Нажмите Enter..." ;;
-            4) uninstall_bot; install_systemd_logic "root"; read -p "Нажмите Enter..." ;;
-            5) uninstall_bot; install_docker_logic "secure"; read -p "Нажмите Enter..." ;;
-            6) uninstall_bot; install_docker_logic "root"; read -p "Нажмите Enter..." ;;
-            8) uninstall_bot; install_node_logic; read -p "Нажмите Enter..." ;;
-            0) break ;;
-        esac
-    fi
-done
+main_menu

@@ -257,8 +257,15 @@ async def run_system_update(callback: types.CallbackQuery):
     user_id = callback.from_user.id
     lang = get_user_lang(user_id)
     await callback.message.edit_text(_("update_start", lang), parse_mode="HTML")
-    cmd = "sudo DEBIAN_FRONTEND=noninteractive apt update && sudo DEBIAN_FRONTEND=noninteractive apt upgrade -y && sudo apt autoremove -y"
-    code, out, err = await run_command(cmd)
+
+    if DEPLOY_MODE == "docker":
+        base_cmd = "DEBIAN_FRONTEND=noninteractive apt update && DEBIAN_FRONTEND=noninteractive apt upgrade -y && apt autoremove -y"
+        cmd_args = ["nsenter", "-t", "1", "-m", "-u", "-i", "-n", "-p", "--", "bash", "-c", base_cmd]
+    else:
+        base_cmd = "sudo DEBIAN_FRONTEND=noninteractive apt update && sudo DEBIAN_FRONTEND=noninteractive apt upgrade -y && sudo apt autoremove -y"
+        cmd_args = ["bash", "-c", base_cmd]
+
+    code, out, err = await run_command(*cmd_args)
     if code == 0:
         text = _("update_success", lang, output=escape_html(out[-2000:]))
     else:
