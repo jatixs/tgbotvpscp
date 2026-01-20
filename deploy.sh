@@ -52,7 +52,6 @@ msg_error() { echo -e "${C_RED}❌ $1${C_RESET}"; }
 msg_question() {
     local prompt="$1"
     local var_name="$2"
-    # Сбрасываем переменную перед вопросом
     eval $var_name=""
     if [ -z "${!var_name}" ]; then
         read -p "$(echo -e "${C_YELLOW}❓ $prompt${C_RESET}")" $var_name
@@ -88,7 +87,7 @@ run_with_spinner() {
     return $exit_code
 }
 
-# --- ФИКСАТОР СОВМЕСТИМОСТИ (Python 3.10 f-strings) ---
+# --- ФИКСАТОР СОВМЕСТИМОСТИ (ИСПРАВЛЕН: ИГНОРИРУЕТ VENV) ---
 apply_python_compat_fixes() {
     msg_info "Применение патчей совместимости кода..."
     local fix_script="${BOT_INSTALL_PATH}/fix_compat.py"
@@ -99,26 +98,25 @@ import re
 
 def fix_fstring_content(content):
     pattern = re.compile(r'f(\'\'\'|\"\"\"|\'|\")(.*?)\1', re.DOTALL)
-    
     def replacement(match):
         quotes = match.group(1)
         body = match.group(2)
         new_quotes = quotes
         if '\n' in body and len(quotes) == 1:
             new_quotes = quotes * 3
-            
         def fix_braces(br_match):
             inner = br_match.group(0)
             if '\n' in inner:
                 return re.sub(r'\s+', ' ', inner)
             return inner
-            
         fixed_body = re.sub(r'\{.*?\}', fix_braces, body, flags=re.DOTALL)
         return f'f{new_quotes}{fixed_body}{new_quotes}'
-
     return pattern.sub(replacement, content)
 
-for root, _, files in os.walk("${BOT_INSTALL_PATH}"):
+for root, dirs, files in os.walk("${BOT_INSTALL_PATH}"):
+    # Исключаем venv, .git и __pycache__ из обхода
+    dirs[:] = [d for d in dirs if d not in ["venv", ".git", "__pycache__"]]
+    
     for file in files:
         if file.endswith('.py') and file != 'fix_compat.py':
             path = os.path.join(root, file)
@@ -257,14 +255,11 @@ EOF
 common_install_steps() {
     echo "" > /tmp/${SERVICE_NAME}_install.log
     
-    # 1. ОБЯЗАТЕЛЬНО обновляем списки пакетов, иначе последующие установки (iperf3, docker) упадут с кодом 100
     msg_info "1. Обновление списков пакетов..."
     run_with_spinner "Apt update" sudo apt-get update -y -q
     
-    # Лечим возможные блокировки dpkg
     sudo dpkg --configure -a >/dev/null 2>&1
 
-    # Ставим утилиты для debconf, чтобы iperf3 не задавал вопросы
     if ! command -v debconf-set-selections &> /dev/null; then
         run_with_spinner "Установка utils" sudo apt-get install -y -q debconf-utils
     fi
@@ -412,7 +407,6 @@ ask_env_details() {
     else
         ENABLE_WEB="true"
         GEN_PASS=$(tr -dc A-Za-z0-9 </dev/urandom | head -c 12)
-        # ВОПРОСЫ ПРО HTTPS ПЕРЕНЕСЕНЫ В ФИНАЛ
     fi
     export T A U N WEB_PORT ENABLE_WEB GEN_PASS SENTRY_DSN
 }
@@ -582,7 +576,7 @@ run_db_migrations() {
     fi
 }
 
-# --- ФИНАЛЬНАЯ НАСТРОЙКА WEB (В САМОМ КОНЦЕ) ---
+# --- ФИНАЛЬНАЯ НАСТРОЙКА WEB ---
 configure_web_final() {
     if [ "$ENABLE_WEB" == "true" ]; then
         local H=""
@@ -723,7 +717,7 @@ install_docker_logic() {
     
     run_with_spinner "Сборка Docker" sudo $dc_cmd build --no-cache
     
-    # --- ФИКС ПРАВ ДОСТУПА ДЛЯ DOCKER (UID 1001) ---
+    # --- ИСПРАВЛЕНИЕ ПРАВ ДОСТУПА ДЛЯ DOCKER (UID 1001) ---
     msg_info "Настройка прав доступа для Docker..."
     sudo chown -R 1001:1001 "${BOT_INSTALL_PATH}"
     # ------------------------------------------------------
@@ -848,10 +842,10 @@ update_bot() {
         
         apply_python_compat_fixes
         
-        run_with_spinner "Docker Up" sudo $dc_cmd up -d --build --no-cache
-        
-        # FIX PERMISSIONS FOR DOCKER UPDATE
+        # FIX PERMISSIONS BEFORE START
         sudo chown -R 1001:1001 "${BOT_INSTALL_PATH}"
+        
+        run_with_spinner "Docker Up" sudo $dc_cmd up -d --build --no-cache
         
         local mode=$(grep '^INSTALL_MODE=' "${ENV_FILE}" | cut -d'=' -f2 | tr -d '"')
         local cn="tg-bot-${mode}"
