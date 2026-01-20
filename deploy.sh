@@ -713,7 +713,15 @@ install_docker_logic() {
     sudo docker rm -f tg-bot-secure tg-bot-root 2>/dev/null
     # --------------------------------------------------------------------
 
-    run_with_spinner "Запуск Docker" sudo $dc_cmd --profile "${mode}" up -d --remove-orphans
+    # --- [FIX] RACE CONDITION: START BOT FIRST, THEN WATCHDOG ---
+    local service_name="bot-${mode}"
+    run_with_spinner "Запуск Бота" sudo $dc_cmd --profile "${mode}" up -d "${service_name}"
+    
+    msg_info "Ожидание запуска контейнера (5 сек)..."
+    sleep 5
+    
+    run_with_spinner "Запуск Watchdog" sudo $dc_cmd --profile "${mode}" up -d --remove-orphans
+    # --------------------------------------------------------------------
     
     msg_info "Настройка БД в контейнере..."
     sudo $dc_cmd --profile "${mode}" exec -T ${container_name} aerich upgrade >/dev/null 2>&1
