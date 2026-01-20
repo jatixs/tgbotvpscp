@@ -424,10 +424,10 @@ EOF
 }
 
 create_docker_compose_yml() {
-    # Port variable MUST NOT BE EMPTY, otherwise Docker errors out with [":"]
-    # We default to 8080 if WEB_PORT is empty in the environment
+    # Default to 8080 if WEB_PORT is not set or empty to prevent syntax errors
     local WP="${WEB_PORT:-8080}"
     
+    # Note: 'version' attribute removed as it is obsolete in recent Docker Compose
     sudo tee "${BOT_INSTALL_PATH}/docker-compose.yml" > /dev/null <<EOF
 x-bot-base: &bot-base
   build: .
@@ -452,7 +452,7 @@ services:
     container_name: tg-bot-root
     profiles: ["root"]
     user: "root"
-    # Ports removed for host network mode compatibility
+    # PORTS REMOVED for host network compatibility
     environment: [INSTALL_MODE=root, DEPLOY_MODE=docker, TG_BOT_CONTAINER_NAME=tg-bot-root]
     privileged: true
     network_mode: "host"
@@ -675,9 +675,7 @@ install_docker_logic() {
     local dc_cmd=""
     if sudo docker compose version &>/dev/null; then dc_cmd="docker compose"; else dc_cmd="docker-compose"; fi
     
-    # --- FIX START: SPECIFY PROFILE FOR BUILD ---
     run_with_spinner "Сборка Docker" sudo $dc_cmd --profile "${mode}" build --no-cache
-    # --- FIX END ---
     
     # --- ФИКС ПРАВ ДОСТУПА ДЛЯ DOCKER (UID 1001) ---
     msg_info "Настройка прав доступа для Docker..."
@@ -820,8 +818,14 @@ update_bot() {
         
         # --- FIX: REGENERATE DOCKER-COMPOSE.YML (ADD PID/IPC HOST + REMOVE OBSOLETE) ---
         if [ -f "${ENV_FILE}" ]; then
+            set -a
             source "${ENV_FILE}"
-            export WEB_PORT="${WEB_SERVER_PORT:-8080}" # Default if empty
+            set +a
+            # Set default port if missing to prevent "Code 1" syntax error
+            if [ -z "$WEB_SERVER_PORT" ]; then WEB_SERVER_PORT=8080; fi
+            export WEB_PORT=$WEB_SERVER_PORT
+            
+            # Regenerate correct compose file
             create_docker_compose_yml
         fi
 
