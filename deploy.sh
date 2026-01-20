@@ -560,11 +560,25 @@ configure_web_final() {
         msg_question "Настроить HTTPS (Nginx Proxy)? (y/n): " H
         if [[ "$H" =~ ^[Yy]$ ]]; then
             msg_question "Домен (напр. bot.example.com): " HTTPS_DOMAIN
+            if [ -f "${ENV_FILE}" ]; then
+                sudo sed -i "/^WEB_DOMAIN=/d" "${ENV_FILE}"
+                echo "WEB_DOMAIN=\"${HTTPS_DOMAIN}\"" | sudo tee -a "${ENV_FILE}" > /dev/null
+            fi
             msg_question "Email для SSL: " HTTPS_EMAIL
             msg_question "Внешний HTTPS порт [8443]: " HP
             if [ -z "$HP" ]; then HTTPS_PORT="8443"; else HTTPS_PORT="$HP"; fi
             export HTTPS_DOMAIN HTTPS_EMAIL HTTPS_PORT WEB_PORT
             if setup_nginx_proxy; then
+                msg_info "Перезапуск бота для применения настроек домена..."
+                if grep -q "DEPLOY_MODE=docker" "${ENV_FILE}"; then
+                     local cn=$(grep '^TG_BOT_CONTAINER_NAME=' "${ENV_FILE}" | cut -d'=' -f2 | tr -d '"')
+                     if command -v docker &>/dev/null; then
+                         sudo docker restart "$cn" &>/dev/null
+                     fi
+                else
+                     sudo systemctl restart "${SERVICE_NAME}"
+                fi
+
                 echo ""
                 msg_success "Установка завершена! Web-UI доступен (HTTPS): https://${HTTPS_DOMAIN}:${HTTPS_PORT}/"
                 echo -e "🔑 ВАШ ПАРОЛЬ: ${C_BOLD}${GEN_PASS}${C_RESET}"
