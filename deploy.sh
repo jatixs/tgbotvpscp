@@ -600,6 +600,26 @@ configure_web_final() {
     fi
 }
 
+setup_ssh_pam_hook() {
+    local pam_sshd="/etc/pam.d/sshd"
+    local hook_line='session optional pam_exec.so /usr/bin/logger -t TGBOT_SSH_EVENT "PAM_TYPE=$PAM_TYPE USER=$PAM_USER IP=$PAM_RHOST"'
+
+    if [ ! -f "$pam_sshd" ]; then
+        msg_warning "Файл $pam_sshd не найден. Пропуск настройки PAM-хука."
+        return
+    fi
+
+    if grep -qF "TGBOT_SSH_EVENT" "$pam_sshd"; then
+        msg_success "PAM-хук для SSH уже настроен."
+    else
+        msg_info "Настройка PAM-хука для мгновенных SSH уведомлений..."
+        echo "" | sudo tee -a "$pam_sshd" > /dev/null
+        echo "# TG-Bot SSH Hook" | sudo tee -a "$pam_sshd" > /dev/null
+        echo "$hook_line" | sudo tee -a "$pam_sshd" > /dev/null
+        msg_success "PAM-хук успешно добавлен в $pam_sshd"
+    fi
+}
+
 install_systemd_logic() {
     local mode=$1
     common_install_steps
@@ -642,6 +662,7 @@ install_systemd_logic() {
     load_cached_env
     ask_env_details
     write_env_file "systemd" "$mode" ""
+    setup_ssh_pam_hook
     run_db_migrations "$exec_cmd"
     create_and_start_service "${SERVICE_NAME}" "${BOT_INSTALL_PATH}/bot.py" "$mode" "Telegram Bot"
     create_and_start_service "${WATCHDOG_SERVICE_NAME}" "${BOT_INSTALL_PATH}/watchdog.py" "root" "Наблюдатель"
@@ -657,6 +678,7 @@ ${VENV_PATH}/bin/python manage.py "\$@"
 EOF
     sudo chmod +x /usr/local/bin/tgcp-bot
     save_current_version
+    setup_ssh_pam_hook
     cleanup_agent_files
     cleanup_files
     configure_web_final
@@ -677,6 +699,7 @@ install_docker_logic() {
     # --- [FIX] FORCE FILE OVERWRITE ---
     sudo rm -f "${ENV_FILE}"
     write_env_file "docker" "$mode" "${container_name}"
+    setup_ssh_pam_hook
     # ----------------------------------
     
     cd ${BOT_INSTALL_PATH}
@@ -710,6 +733,7 @@ sudo $dc_cmd --profile "\$MODE" exec -T \$CONTAINER python manage.py "\$@"
 EOF
     sudo chmod +x /usr/local/bin/tgcp-bot
     save_current_version
+    setup_ssh_pam_hook
     cleanup_agent_files
     cleanup_files
     configure_web_final
@@ -871,6 +895,7 @@ EOF
     fi
     sudo chmod +x /usr/local/bin/tgcp-bot
     save_current_version
+    setup_ssh_pam_hook
     cleanup_agent_files
     cleanup_files
     msg_success "Обновлено."
