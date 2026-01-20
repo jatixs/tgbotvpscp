@@ -410,8 +410,14 @@ ENABLE_WEB_UI="${ENABLE_WEB}"
 TG_WEB_INITIAL_PASSWORD="${GEN_PASS}"
 DEBUG="${debug_setting}"
 SENTRY_DSN="${SENTRY_DSN}"
-COMPOSE_PROFILES="${im}"
 EOF
+    
+    # --- [FIX] ДОБАВЛЯЕМ COMPOSE_PROFILES ТОЛЬКО ДЛЯ DOCKER ---
+    if [ "$dm" == "docker" ]; then
+        echo "COMPOSE_PROFILES=\"${im}\"" | sudo tee -a "${ENV_FILE}" > /dev/null
+    fi
+    # ----------------------------------------------------------
+
     sudo chmod 600 "${ENV_FILE}"
 }
 
@@ -800,6 +806,13 @@ update_bot() {
             if [ -z "$WEB_SERVER_PORT" ]; then WEB_SERVER_PORT=8080; fi
             export WEB_PORT=$WEB_SERVER_PORT
             create_docker_compose_yml
+            
+            # --- [FIX] ADD COMPOSE_PROFILES IF MISSING DURING UPDATE ---
+            if ! grep -q "^COMPOSE_PROFILES=" "${ENV_FILE}"; then
+                local current_mode=$(grep '^INSTALL_MODE=' "${ENV_FILE}" | cut -d'=' -f2 | tr -d '"')
+                echo "COMPOSE_PROFILES=${current_mode}" | sudo tee -a "${ENV_FILE}" > /dev/null
+            fi
+            # -----------------------------------------------------------
         fi
         sudo chown -R 1001:1001 "${BOT_INSTALL_PATH}"
         local mode=$(grep '^INSTALL_MODE=' "${ENV_FILE}" | cut -d'=' -f2 | tr -d '"')
