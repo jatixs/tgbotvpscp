@@ -423,6 +423,7 @@ EOF
 
 create_docker_compose_yml() {
     # Removed obsolete 'version' attribute to fix warning
+    # Added pid: "host" and ipc: "host" to bot-root to ensure host commands work
     sudo tee "${BOT_INSTALL_PATH}/docker-compose.yml" > /dev/null <<EOF
 x-bot-base: &bot-base
   build: .
@@ -451,6 +452,8 @@ services:
     environment: [INSTALL_MODE=root, DEPLOY_MODE=docker, TG_BOT_CONTAINER_NAME=tg-bot-root]
     privileged: true
     network_mode: "host"
+    pid: "host"
+    ipc: "host"
     volumes: ["./config:/opt/tg-bot/config", "./logs/bot:/opt/tg-bot/logs/bot", "/:/host", "/var/run/docker.sock:/var/run/docker.sock:ro"]
     labels: ["role=bot", "mode=root"]
   watchdog:
@@ -806,7 +809,7 @@ update_bot() {
         local dc_cmd=""
         if sudo docker compose version &>/dev/null; then dc_cmd="docker compose"; else dc_cmd="docker-compose"; fi
         
-        # --- FIX: REGENERATE DOCKER-COMPOSE.YML (REMOVE OBSOLETE VERSION) ---
+        # --- FIX: REGENERATE DOCKER-COMPOSE.YML (ADD PID/IPC HOST + REMOVE OBSOLETE) ---
         if [ -f "${ENV_FILE}" ]; then
             source "${ENV_FILE}"
             export WEB_PORT="${WEB_SERVER_PORT}"
@@ -816,13 +819,13 @@ update_bot() {
         # FIX PERMISSIONS FOR DOCKER
         sudo chown -R 1001:1001 "${BOT_INSTALL_PATH}"
         
-        # --- FIX: READ MODE AND USE PROFILE ---
+        # --- FIX: READ MODE AND USE PROFILE + PULL NEW IMAGES ---
         local mode=$(grep '^INSTALL_MODE=' "${ENV_FILE}" | cut -d'=' -f2 | tr -d '"')
         local cn="tg-bot-${mode}"
         
         # Explicit directory set just in case
         cd "${BOT_INSTALL_PATH}"
-        run_with_spinner "Docker Up" sudo $dc_cmd --profile "${mode}" up -d --build --no-cache --remove-orphans
+        run_with_spinner "Docker Up" sudo $dc_cmd --profile "${mode}" up -d --build --pull --no-cache --remove-orphans
         
         sudo $dc_cmd --profile "${mode}" exec -T ${cn} aerich upgrade >/dev/null 2>&1
         sudo $dc_cmd --profile "${mode}" exec -T ${cn} python migrate.py >/dev/null 2>&1
