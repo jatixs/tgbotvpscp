@@ -5,6 +5,8 @@ import time
 import re
 import os
 import signal
+import aiohttp
+import pytz
 from datetime import datetime
 from aiogram import F, Dispatcher, types, Bot
 from aiogram.types import KeyboardButton
@@ -20,7 +22,6 @@ from core.shared_state import (
 )
 from core.utils import (
     save_alerts_config,
-    get_country_flag,
     get_server_timezone_label,
     escape_html,
     get_host_path,
@@ -153,6 +154,50 @@ async def cq_toggle_alert(callback: types.CallbackQuery):
     )
 
 
+async def get_ip_extended_info(ip: str):
+    if not ip or ip in ["localhost", "127.0.0.1", "::1"]:
+        return "🏠", None
+
+    flag = "❓"
+    tz_name = None
+
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(
+                f"http://ip-api.com/json/{ip}?fields=countryCode,timezone,status",
+                timeout=2,
+            ) as response:
+                if response.status == 200:
+                    data = await response.json()
+                    if data.get("status") == "success":
+                        cc = data.get("countryCode")
+                        if cc and len(cc) == 2:
+                            flag = "".join(
+                                (chr(ord(char.upper()) - 65 + 127462) for char in cc)
+                            )
+                        tz_name = data.get("timezone")
+    except Exception as e:
+        logging.warning(f"Error getting IP info for {ip}: {e}")
+
+    return flag, tz_name
+
+
+def format_alert_time(server_now: datetime, ip_tz_name: str | None) -> str:
+    server_time_str = server_now.strftime("%H:%M:%S")
+    time_str = server_time_str
+
+    if ip_tz_name:
+        try:
+            target_tz = pytz.timezone(ip_tz_name)
+            target_now = datetime.now(target_tz)
+
+            if server_now.strftime("%H:%M") != target_now.strftime("%H:%M"):
+                time_str += f" (📍 {target_now.strftime('%H:%M')})"
+        except Exception:
+            pass
+    return time_str
+
+
 async def parse_ssh_log_line(line: str) -> dict | None:
     now = time.time()
     sshd_match = re.search(r"Accepted\s+(\S+)\s+for\s+(\S+)\s+from\s+(\S+)", line)
@@ -179,14 +224,16 @@ async def parse_ssh_log_line(line: str) -> dict | None:
             RECENT_NOTIFIED_LOGINS.clear()
 
         try:
-            flag = await get_country_flag(ip)
+            flag, ip_tz = await get_ip_extended_info(ip)
+            time_str = format_alert_time(datetime.now(), ip_tz)
+
             return {
                 "key": "alert_ssh_login_detected",
                 "params": {
                     "user": user,
                     "flag": flag,
                     "ip": ip,
-                    "time": datetime.now().strftime("%H:%M:%S"),
+                    "time": time_str,
                     "tz": get_server_timezone_label(),
                     "method_key": method_key,
                 },
@@ -202,13 +249,15 @@ async def parse_f2b_log_line(line: str) -> dict | None:
     if match:
         try:
             ip = escape_html(match.group(1).strip())
-            flag = await get_country_flag(ip)
+            flag, ip_tz = await get_ip_extended_info(ip)
+            time_str = format_alert_time(datetime.now(), ip_tz)
+
             return {
                 "key": "alert_f2b_ban_detected",
                 "params": {
                     "flag": flag,
                     "ip": ip,
-                    "time": datetime.now().strftime("%H:%M:%S"),
+                    "time": time_str,
                     "tz": get_server_timezone_label(),
                 },
             }
