@@ -2,7 +2,6 @@ version: '3.8'
 
 x-bot-base: &bot-base
   build: .
-  image: tg-vps-bot:latest
   restart: always
   env_file: .env
 

@@ -224,6 +224,26 @@ common_install_steps() {
         run_with_spinner "Установка utils" sudo apt-get install -y -q debconf-utils
     fi
 
+    # --- [FIX] АВТО-ДОБАВЛЕНИЕ PYTHON 3.12 ДЛЯ UBUNTU < 24 ---
+    if [ -f /etc/os-release ]; then
+        . /etc/os-release
+        if [ "$ID" = "ubuntu" ]; then
+            # Берем только число до точки (22 из 22.04)
+            UBUNTU_MAJOR=$(echo "$VERSION_ID" | cut -d. -f1)
+            
+            if [ "$UBUNTU_MAJOR" -lt 24 ]; then
+                msg_info "Обнаружена Ubuntu $VERSION_ID. Подключаю PPA для Python 3.12..."
+                run_with_spinner "Установка soft-props" sudo apt-get install -y -q software-properties-common
+                
+                # Добавляем репозиторий
+                sudo add-apt-repository ppa:deadsnakes/ppa -y >> /tmp/${SERVICE_NAME}_install.log 2>&1
+                
+                run_with_spinner "Обновление списков" sudo apt-get update -y -q
+            fi
+        fi
+    fi
+    # ---------------------------------------------------------
+
     # Гарантируем установку Python 3.12 и dev-tools (для сборки зависимостей)
     run_with_spinner "Установка Python 3.12 и зависимостей" sudo apt-get install -y -q -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" \
         python3.12 python3.12-venv python3.12-dev git curl wget sudo python3-pip build-essential
@@ -354,6 +374,11 @@ ask_env_details() {
     msg_info "Ввод данных .env..."
     msg_question "Токен Ботa: " T; msg_question "ID Админа: " A
     msg_question "Username (opt): " U; msg_question "Bot Name (opt): " N
+    
+    # --- [FIX] ИМЯ ПО УМОЛЧАНИЮ ---
+    if [ -z "$N" ]; then N="My TG Bot by Jatix"; fi
+    # ------------------------------
+
     msg_question "Внутренний Web Port [8080]: " P
     if [ -z "$P" ]; then WEB_PORT="8080"; else WEB_PORT="$P"; fi
     msg_question "Sentry DSN (opt): " SENTRY_DSN
@@ -393,6 +418,7 @@ ENABLE_WEB_UI="${ENABLE_WEB}"
 TG_WEB_INITIAL_PASSWORD="${GEN_PASS}"
 DEBUG="${debug_setting}"
 SENTRY_DSN="${SENTRY_DSN}"
+COMPOSE_PROFILES="${im}"
 EOF
     sudo chmod 600 "${ENV_FILE}"
 }
@@ -431,7 +457,7 @@ create_docker_compose_yml() {
     sudo tee "${BOT_INSTALL_PATH}/docker-compose.yml" > /dev/null <<EOF
 x-bot-base: &bot-base
   build: .
-  image: tg-vps-bot:latest
+  # image: tg-vps-bot:latest  <-- [FIX] REMOVED TO PREVENT BUILD CONFLICTS
   restart: always
   env_file: .env
   labels: ["org.opencontainers.image.source=https://github.com/jatixs/tgbotvpscp"]
@@ -687,7 +713,15 @@ install_docker_logic() {
     sudo docker rm -f tg-bot-secure tg-bot-root 2>/dev/null
     # --------------------------------------------------------------------
 
-    run_with_spinner "Запуск Docker" sudo $dc_cmd --profile "${mode}" up -d --remove-orphans
+    # --- [FIX] RACE CONDITION: START BOT FIRST, THEN WATCHDOG ---
+    local service_name="bot-${mode}"
+    run_with_spinner "Запуск Бота" sudo $dc_cmd --profile "${mode}" up -d "${service_name}"
+    
+    msg_info "Ожидание запуска контейнера (5 сек)..."
+    sleep 5
+    
+    run_with_spinner "Запуск Watchdog" sudo $dc_cmd --profile "${mode}" up -d --remove-orphans
+    # --------------------------------------------------------------------
     
     msg_info "Настройка БД в контейнере..."
     sudo $dc_cmd --profile "${mode}" exec -T ${container_name} aerich upgrade >/dev/null 2>&1
