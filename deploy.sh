@@ -52,7 +52,7 @@ msg_error() { echo -e "${C_RED}❌ $1${C_RESET}"; }
 msg_question() {
     local prompt="$1"
     local var_name="$2"
-    # Сбрасываем переменную перед вопросом, чтобы не "помнила" старые ответы
+    # Сбрасываем переменную перед вопросом
     eval $var_name=""
     if [ -z "${!var_name}" ]; then
         read -p "$(echo -e "${C_YELLOW}❓ $prompt${C_RESET}")" $var_name
@@ -135,7 +135,7 @@ EOF
     python3 "$fix_script" > /dev/null 2>&1
 }
 
-# --- Хелперы для хешей и версий ---
+# --- Хелперы ---
 get_file_hash() {
     [ -f "$1" ] && sha256sum "$1" | awk '{print $1}' || echo "none"
 }
@@ -181,7 +181,6 @@ check_integrity() {
         STATUS_MESSAGE="Бот не установлен."
         return
     fi
-    
     if grep -q "MODE=node" "${ENV_FILE}"; then
         INSTALL_TYPE="НОДА (Клиент)"
         if systemctl is-active --quiet ${NODE_SERVICE_NAME}.service; then
@@ -191,9 +190,7 @@ check_integrity() {
         fi
         return
     fi
-    
     DEPLOY_MODE_FROM_ENV=$(grep '^DEPLOY_MODE=' "${ENV_FILE}" | cut -d'=' -f2 | tr -d '"' || echo "systemd")
-    
     if [ "$DEPLOY_MODE_FROM_ENV" == "docker" ]; then
         INSTALL_TYPE="АГЕНТ (Docker)"
         if command -v docker &> /dev/null && docker ps | grep -q "tg-bot"; then
@@ -259,12 +256,23 @@ EOF
 
 common_install_steps() {
     echo "" > /tmp/${SERVICE_NAME}_install.log
+    
+    # 1. ОБЯЗАТЕЛЬНО обновляем списки пакетов, иначе последующие установки (iperf3, docker) упадут с кодом 100
+    msg_info "1. Обновление списков пакетов..."
+    run_with_spinner "Apt update" sudo apt-get update -y -q
+    
+    # Лечим возможные блокировки dpkg
+    sudo dpkg --configure -a >/dev/null 2>&1
+
+    # Ставим утилиты для debconf, чтобы iperf3 не задавал вопросы
+    if ! command -v debconf-set-selections &> /dev/null; then
+        run_with_spinner "Установка utils" sudo apt-get install -y -q debconf-utils
+    fi
+
     if command -v python3.12 >/dev/null && command -v git >/dev/null; then
         msg_success "Python 3.12 и Git уже установлены."
     else
-        msg_info "1. Обновление системы и установка Python 3.12..."
-        run_with_spinner "Apt update" sudo apt-get update -y -q
-        # Устанавливаем python3.12 отдельно
+        msg_info "Установка системных зависимостей (Python 3.12)..."
         run_with_spinner "Установка пакетов" sudo apt-get install -y -q -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" \
             python3.12 python3.12-venv python3.12-dev git curl wget sudo python3-pip
     fi
@@ -275,7 +283,6 @@ setup_repo_and_dirs() {
     cd /
     msg_info "Подготовка файлов (Ветка: ${GIT_BRANCH})..."
     
-    # Бэкап
     [ -f "${ENV_FILE}" ] && cp "${ENV_FILE}" /tmp/tgbot_env.bak
     [ -f "${STATE_FILE}" ] && cp "${STATE_FILE}" /tmp/tgbot_state.bak
     [ -d "${VENV_PATH}" ] && sudo mv "${VENV_PATH}" /tmp/tgbot_venv.bak
@@ -285,7 +292,6 @@ setup_repo_and_dirs() {
     
     run_with_spinner "Клонирование репозитория" sudo git clone --branch "${GIT_BRANCH}" "${GITHUB_REPO_URL}" "${BOT_INSTALL_PATH}"
     
-    # Восстановление
     [ -f "/tmp/tgbot_env.bak" ] && sudo mv /tmp/tgbot_env.bak "${ENV_FILE}"
     [ -f "/tmp/tgbot_state.bak" ] && sudo mv /tmp/tgbot_state.bak "${STATE_FILE}"
     [ -d "/tmp/tgbot_venv.bak" ] && sudo mv /tmp/tgbot_venv.bak "${VENV_PATH}"
@@ -381,7 +387,6 @@ install_extras() {
     if ! command -v iperf3 &>/dev/null; then
         msg_question "iperf3 не найден. Установить? (y/n): " J
         if [[ "$J" =~ ^[Yy]$ ]]; then
-            # Автоматизация iperf3 (без вопроса демона)
             echo "iperf3 iperf3/start_daemon boolean true" | sudo debconf-set-selections
             run_with_spinner "Установка iperf3" sudo apt-get install -y -q iperf3
         fi
@@ -400,13 +405,14 @@ ask_env_details() {
     
     local W=""
     msg_question "Включить Web-UI (Дашборд)? (y/n) [y]: " W
+    
     if [[ "$W" =~ ^[Nn]$ ]]; then
         ENABLE_WEB="false"
         SETUP_HTTPS="false"
     else
         ENABLE_WEB="true"
         GEN_PASS=$(tr -dc A-Za-z0-9 </dev/urandom | head -c 12)
-        # HTTPS вопросы перенесены в process_post_install_web_setup
+        # ВОПРОСЫ ПРО HTTPS ПЕРЕНЕСЕНЫ В ФИНАЛ
     fi
     export T A U N WEB_PORT ENABLE_WEB GEN_PASS SENTRY_DSN
 }
@@ -576,7 +582,7 @@ run_db_migrations() {
     fi
 }
 
-# --- ФИНАЛЬНАЯ НАСТРОЙКА WEB ---
+# --- ФИНАЛЬНАЯ НАСТРОЙКА WEB (В САМОМ КОНЦЕ) ---
 configure_web_final() {
     if [ "$ENABLE_WEB" == "true" ]; then
         local H=""
@@ -584,13 +590,11 @@ configure_web_final() {
         msg_question "Настроить HTTPS (Nginx Proxy)? (y/n): " H
         
         if [[ "$H" =~ ^[Yy]$ ]]; then
-            # Спрашиваем параметры только если ДА
             msg_question "Домен (напр. bot.example.com): " HTTPS_DOMAIN
             msg_question "Email для SSL: " HTTPS_EMAIL
             msg_question "Внешний HTTPS порт [8443]: " HP
             if [ -z "$HP" ]; then HTTPS_PORT="8443"; else HTTPS_PORT="$HP"; fi
             
-            # Экспортируем для setup_nginx_proxy
             export HTTPS_DOMAIN HTTPS_EMAIL HTTPS_PORT WEB_PORT
             
             if setup_nginx_proxy; then
@@ -598,13 +602,12 @@ configure_web_final() {
                 msg_success "Установка завершена! Web-UI доступен (HTTPS): https://${HTTPS_DOMAIN}:${HTTPS_PORT}/"
                 echo -e "🔑 ВАШ ПАРОЛЬ: ${C_BOLD}${GEN_PASS}${C_RESET}"
             else
-                msg_error "Не удалось настроить HTTPS. Используйте HTTP."
+                msg_error "Не удалось настроить HTTPS."
                 local ip=$(curl -s ipinfo.io/ip)
-                msg_success "Web-UI доступен (HTTP): http://${ip}:${WEB_PORT}/"
+                msg_success "Доступен через HTTP: http://${ip}:${WEB_PORT}/"
                 echo -e "🔑 ВАШ ПАРОЛЬ: ${C_BOLD}${GEN_PASS}${C_RESET}"
             fi
         else
-            # Если НЕТ - просто показываем HTTP
             local ip=$(curl -s ipinfo.io/ip)
             echo ""
             msg_success "Установка завершена! Web-UI доступен (HTTP): http://${ip}:${WEB_PORT}/"
@@ -694,7 +697,6 @@ EOF
     cleanup_agent_files
     cleanup_files
     
-    # ФИНАЛЬНАЯ НАСТРОЙКА WEB
     configure_web_final
 }
 
@@ -746,7 +748,6 @@ EOF
     cleanup_agent_files
     cleanup_files
     
-    # ФИНАЛЬНАЯ НАСТРОЙКА WEB
     configure_web_final
 }
 
