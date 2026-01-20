@@ -440,6 +440,13 @@ EOF
     sudo chmod 600 "${ENV_FILE}"
 }
 
+check_docker_deps() {
+    if ! command -v docker &> /dev/null; then
+        curl -sSL https://get.docker.com -o /tmp/get-docker.sh
+        run_with_spinner "Установка Docker" sudo sh /tmp/get-docker.sh
+    fi
+}
+
 create_dockerfile() {
     sudo tee "${BOT_INSTALL_PATH}/Dockerfile" > /dev/null <<'EOF'
 FROM python:3.12-slim-bookworm
