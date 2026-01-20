@@ -29,7 +29,6 @@ from core.keyboards import get_alerts_menu_keyboard
 
 BUTTON_KEY = "btn_notifications"
 
-RECENT_NOTIFIED_LOGINS = {}
 
 def get_button() -> KeyboardButton:
     return KeyboardButton(text=_(BUTTON_KEY, config.DEFAULT_LANGUAGE))
@@ -140,33 +139,19 @@ async def cq_toggle_alert(callback: types.CallbackQuery):
 
 
 async def parse_ssh_log_line(line: str) -> dict | None:
-    now = time.time()
-    pam_match = re.search(r"TGBOT_SSH_EVENT.*USER=(\S+)\s+IP=(\S+)", line)
-    sshd_match = re.search(r"Accepted\s+(\S+)\s+for\s+(\S+)\s+from\s+(\S+)", line)
-    
-    user, ip, method_key = None, None, "auth_method_unknown"
-
-    if pam_match:
-        user = escape_html(pam_match.group(1))
-        ip = escape_html(pam_match.group(2))
-    elif sshd_match:
-        method_raw = sshd_match.group(1).lower()
-        user = escape_html(sshd_match.group(2))
-        ip = escape_html(sshd_match.group(3))
-        if "publickey" in method_raw:
-            method_key = "auth_method_key"
-        elif "password" in method_raw:
-            method_key = "auth_method_password"
-    if user and ip:
-        last_time = RECENT_NOTIFIED_LOGINS.get((user, ip), 0)
-        if now - last_time < 10:
-            return None 
-        RECENT_NOTIFIED_LOGINS[(user, ip)] = now
-        if len(RECENT_NOTIFIED_LOGINS) > 100:
-            RECENT_NOTIFIED_LOGINS.clear()
-
+    match = re.search("Accepted\\s+(\\S+)\\s+for\\s+(\\S+)\\s+from\\s+(\\S+)", line)
+    if match:
         try:
+            method_raw = match.group(1).lower()
+            user = escape_html(match.group(2))
+            ip = escape_html(match.group(3))
             flag = await get_country_flag(ip)
+            method_key = "auth_method_unknown"
+            if "publickey" in method_raw:
+                method_key = "auth_method_key"
+            elif "password" in method_raw:
+                method_key = "auth_method_password"
+
             return {
                 "key": "alert_ssh_login_detected",
                 "params": {
