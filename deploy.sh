@@ -52,6 +52,8 @@ msg_error() { echo -e "${C_RED}❌ $1${C_RESET}"; }
 msg_question() {
     local prompt="$1"
     local var_name="$2"
+    # Сбрасываем переменную перед вопросом, чтобы не "помнила" старые ответы
+    eval $var_name=""
     if [ -z "${!var_name}" ]; then
         read -p "$(echo -e "${C_YELLOW}❓ $prompt${C_RESET}")" $var_name
     fi
@@ -213,7 +215,6 @@ setup_nginx_proxy() {
     echo -e "\n${C_CYAN}🔒 Настройка HTTPS (Nginx + Certbot)${C_RESET}"
     run_with_spinner "Установка Nginx и Certbot" sudo apt-get install -y -q nginx certbot python3-certbot-nginx psmisc
     
-    # Освобождение порта 80
     sudo fuser -k 80/tcp 2>/dev/null
     sudo systemctl stop nginx 2>/dev/null
     
@@ -249,8 +250,10 @@ EOF
     if sudo nginx -t; then
         sudo systemctl restart nginx
         msg_success "HTTPS настроен успешно!"
+        return 0
     else
         msg_error "Ошибка Nginx."
+        return 1
     fi
 }
 
@@ -364,6 +367,7 @@ cleanup_files() {
 }
 
 install_extras() {
+    local I=""
     if ! command -v fail2ban-client &>/dev/null; then
         msg_question "Fail2Ban не найден. Установить? (y/n): " I
         if [[ "$I" =~ ^[Yy]$ ]]; then
@@ -373,9 +377,10 @@ install_extras() {
         msg_success "Fail2Ban уже установлен."
     fi
     
+    local J=""
     if ! command -v iperf3 &>/dev/null; then
-        msg_question "iperf3 не найден. Установить? (y/n): " I
-        if [[ "$I" =~ ^[Yy]$ ]]; then
+        msg_question "iperf3 не найден. Установить? (y/n): " J
+        if [[ "$J" =~ ^[Yy]$ ]]; then
             # Автоматизация iperf3 (без вопроса демона)
             echo "iperf3 iperf3/start_daemon boolean true" | sudo debconf-set-selections
             run_with_spinner "Установка iperf3" sudo apt-get install -y -q iperf3
@@ -393,6 +398,7 @@ ask_env_details() {
     if [ -z "$P" ]; then WEB_PORT="8080"; else WEB_PORT="$P"; fi
     msg_question "Sentry DSN (opt): " SENTRY_DSN
     
+    local W=""
     msg_question "Включить Web-UI (Дашборд)? (y/n) [y]: " W
     if [[ "$W" =~ ^[Nn]$ ]]; then
         ENABLE_WEB="false"
@@ -400,18 +406,9 @@ ask_env_details() {
     else
         ENABLE_WEB="true"
         GEN_PASS=$(tr -dc A-Za-z0-9 </dev/urandom | head -c 12)
-        msg_question "Настроить HTTPS (Nginx Proxy)? (y/n): " H
-        if [[ "$H" =~ ^[Yy]$ ]]; then
-            SETUP_HTTPS="true"
-            msg_question "Домен: " HTTPS_DOMAIN
-            msg_question "Email: " HTTPS_EMAIL
-            msg_question "Внешний HTTPS порт [8443]: " HP
-            if [ -z "$HP" ]; then HTTPS_PORT="8443"; else HTTPS_PORT="$HP"; fi
-        else
-            SETUP_HTTPS="false"
-        fi
+        # HTTPS вопросы перенесены в process_post_install_web_setup
     fi
-    export T A U N WEB_PORT ENABLE_WEB SETUP_HTTPS HTTPS_DOMAIN HTTPS_EMAIL HTTPS_PORT GEN_PASS SENTRY_DSN
+    export T A U N WEB_PORT ENABLE_WEB GEN_PASS SENTRY_DSN
 }
 
 write_env_file() {
@@ -579,6 +576,46 @@ run_db_migrations() {
     fi
 }
 
+# --- ФИНАЛЬНАЯ НАСТРОЙКА WEB ---
+configure_web_final() {
+    if [ "$ENABLE_WEB" == "true" ]; then
+        local H=""
+        echo ""
+        msg_question "Настроить HTTPS (Nginx Proxy)? (y/n): " H
+        
+        if [[ "$H" =~ ^[Yy]$ ]]; then
+            # Спрашиваем параметры только если ДА
+            msg_question "Домен (напр. bot.example.com): " HTTPS_DOMAIN
+            msg_question "Email для SSL: " HTTPS_EMAIL
+            msg_question "Внешний HTTPS порт [8443]: " HP
+            if [ -z "$HP" ]; then HTTPS_PORT="8443"; else HTTPS_PORT="$HP"; fi
+            
+            # Экспортируем для setup_nginx_proxy
+            export HTTPS_DOMAIN HTTPS_EMAIL HTTPS_PORT WEB_PORT
+            
+            if setup_nginx_proxy; then
+                echo ""
+                msg_success "Установка завершена! Web-UI доступен (HTTPS): https://${HTTPS_DOMAIN}:${HTTPS_PORT}/"
+                echo -e "🔑 ВАШ ПАРОЛЬ: ${C_BOLD}${GEN_PASS}${C_RESET}"
+            else
+                msg_error "Не удалось настроить HTTPS. Используйте HTTP."
+                local ip=$(curl -s ipinfo.io/ip)
+                msg_success "Web-UI доступен (HTTP): http://${ip}:${WEB_PORT}/"
+                echo -e "🔑 ВАШ ПАРОЛЬ: ${C_BOLD}${GEN_PASS}${C_RESET}"
+            fi
+        else
+            # Если НЕТ - просто показываем HTTP
+            local ip=$(curl -s ipinfo.io/ip)
+            echo ""
+            msg_success "Установка завершена! Web-UI доступен (HTTP): http://${ip}:${WEB_PORT}/"
+            echo -e "🔑 ВАШ ПАРОЛЬ: ${C_BOLD}${GEN_PASS}${C_RESET}"
+        fi
+    else
+        echo ""
+        msg_success "Установка завершена! Web-UI отключен."
+    fi
+}
+
 install_systemd_logic() {
     local mode=$1
     common_install_steps
@@ -657,14 +694,8 @@ EOF
     cleanup_agent_files
     cleanup_files
     
-    local ip=$(curl -s ipinfo.io/ip)
-    echo ""; msg_success "Установка завершена! Агент: http://${ip}:${WEB_PORT}"
-    
-    if [ "${ENABLE_WEB}" == "true" ]; then
-        echo -e "${C_CYAN}🔑 ВАШ ПАРОЛЬ: ${C_BOLD}${GEN_PASS}${C_RESET}"
-    fi
-    
-    if [ "$SETUP_HTTPS" == "true" ]; then setup_nginx_proxy; fi
+    # ФИНАЛЬНАЯ НАСТРОЙКА WEB
+    configure_web_final
 }
 
 install_docker_logic() {
@@ -689,6 +720,12 @@ install_docker_logic() {
     if sudo docker compose version &>/dev/null; then dc_cmd="docker compose"; else dc_cmd="docker-compose"; fi
     
     run_with_spinner "Сборка Docker" sudo $dc_cmd build --no-cache
+    
+    # --- ФИКС ПРАВ ДОСТУПА ДЛЯ DOCKER (UID 1001) ---
+    msg_info "Настройка прав доступа для Docker..."
+    sudo chown -R 1001:1001 "${BOT_INSTALL_PATH}"
+    # ------------------------------------------------------
+
     run_with_spinner "Запуск Docker" sudo $dc_cmd --profile "${mode}" up -d --remove-orphans
     
     msg_info "Настройка БД в контейнере..."
@@ -709,12 +746,8 @@ EOF
     cleanup_agent_files
     cleanup_files
     
-    msg_success "Docker установка завершена!"
-    if [ "${ENABLE_WEB}" == "true" ]; then
-        echo -e "${C_CYAN}🔑 ВАШ ПАРОЛЬ: ${C_BOLD}${GEN_PASS}${C_RESET}"
-    fi
-    
-    if [ "$SETUP_HTTPS" == "true" ]; then setup_nginx_proxy; fi
+    # ФИНАЛЬНАЯ НАСТРОЙКА WEB
+    configure_web_final
 }
 
 install_node_logic() {
@@ -815,6 +848,9 @@ update_bot() {
         apply_python_compat_fixes
         
         run_with_spinner "Docker Up" sudo $dc_cmd up -d --build --no-cache
+        
+        # FIX PERMISSIONS FOR DOCKER UPDATE
+        sudo chown -R 1001:1001 "${BOT_INSTALL_PATH}"
         
         local mode=$(grep '^INSTALL_MODE=' "${ENV_FILE}" | cut -d'=' -f2 | tr -d '"')
         local cn="tg-bot-${mode}"
