@@ -429,7 +429,6 @@ create_docker_compose_yml() {
     sudo tee "${BOT_INSTALL_PATH}/docker-compose.yml" > /dev/null <<EOF
 x-bot-base: &bot-base
   build: .
-  image: tg-vps-bot:latest
   restart: always
   env_file: .env
   labels: ["org.opencontainers.image.source=https://github.com/jatixs/tgbotvpscp"]
