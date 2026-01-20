@@ -212,7 +212,7 @@ EOF
 common_install_steps() {
     echo "" > /tmp/${SERVICE_NAME}_install.log
     
-    msg_info "1. Подготовка системы (Python 3.12)..."
+    msg_info "1. Подготовка установки"
     # Обязательно обновляем список пакетов
     run_with_spinner "Apt update" sudo apt-get update -y -q
     
@@ -223,8 +223,6 @@ common_install_steps() {
     if ! command -v debconf-set-selections &> /dev/null; then
         run_with_spinner "Установка utils" sudo apt-get install -y -q debconf-utils
     fi
-
-    # Гарантируем установку Python 3.12 и dev-tools (для сборки зависимостей)
     run_with_spinner "Установка Python 3.12 и зависимостей" sudo apt-get install -y -q -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" \
         python3.12 python3.12-venv python3.12-dev git curl wget sudo python3-pip build-essential
 }
