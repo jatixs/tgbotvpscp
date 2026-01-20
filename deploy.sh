@@ -292,7 +292,6 @@ load_cached_env() {
             [ -z "$NODE_TOKEN" ] && NODE_TOKEN=$(get_env_val "AGENT_TOKEN")
             
             # --- ЧИСТКА МУСОРА ОТ СТАРОГО РЕЖИМА ---
-            # Удаляем старые профили из восстановленного файла, чтобы они не мешали
             if [ -f "${ENV_FILE}" ]; then
                 sudo sed -i "/^COMPOSE_PROFILES=/d" "${ENV_FILE}"
                 sudo sed -i "/^INSTALL_MODE=/d" "${ENV_FILE}"
@@ -745,10 +744,24 @@ uninstall_bot() {
                /etc/systemd/system/${WATCHDOG_SERVICE_NAME}.service \
                /etc/systemd/system/${NODE_SERVICE_NAME}.service
     sudo systemctl daemon-reload
+    
+    # --- [FIX] ROBUST DOCKER REMOVAL ---
     if [ -f "${DOCKER_COMPOSE_FILE}" ]; then
-        cd ${BOT_INSTALL_PATH} && sudo docker-compose down -v --remove-orphans &> /dev/null
+        cd ${BOT_INSTALL_PATH}
+        local dc_cmd=""
+        if command -v docker &>/dev/null && docker compose version &>/dev/null; then
+            dc_cmd="docker compose"
+        else
+            dc_cmd="docker-compose"
+        fi
+        sudo $dc_cmd down -v --remove-orphans &> /dev/null
     fi
+    # Force removal of containers by name just in case 'down' failed or profile issues
+    sudo docker rm -f tg-bot-secure tg-bot-root tg-watchdog &> /dev/null
+    # -----------------------------------
+    
     sudo rm -rf "${BOT_INSTALL_PATH}" /usr/local/bin/tgcp-bot
+    
     if id "${SERVICE_USER}" &>/dev/null; then
         sudo userdel -r "${SERVICE_USER}" &> /dev/null
     fi
