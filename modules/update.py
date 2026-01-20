@@ -258,7 +258,8 @@ async def run_system_update(callback: types.CallbackQuery):
     lang = get_user_lang(user_id)
     await callback.message.edit_text(_("update_start", lang), parse_mode="HTML")
     cmd = "sudo DEBIAN_FRONTEND=noninteractive apt update && sudo DEBIAN_FRONTEND=noninteractive apt upgrade -y && sudo apt autoremove -y"
-    code, out, err = await run_command(cmd)
+    # FIX: Use 'bash -c' to properly execute the command string with arguments
+    code, out, err = await run_command("bash", "-c", cmd)
     if code == 0:
         text = _("update_success", lang, output=escape_html(out[-2000:]))
     else:
