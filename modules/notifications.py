@@ -180,16 +180,13 @@ async def parse_ssh_log_line(line: str) -> dict | None:
 
         try:
             flag = await get_country_flag(ip)
-            time_str = (
-                f"{datetime.now().strftime('%H:%M:%S')}{get_server_timezone_label()}"
-            )
             return {
                 "key": "alert_ssh_login_detected",
                 "params": {
                     "user": user,
                     "flag": flag,
                     "ip": ip,
-                    "time": time_str,
+                    "time": datetime.now().strftime("%H:%M:%S"),
                     "tz": get_server_timezone_label(),
                     "method_key": method_key,
                 },
@@ -206,15 +203,12 @@ async def parse_f2b_log_line(line: str) -> dict | None:
         try:
             ip = escape_html(match.group(1).strip())
             flag = await get_country_flag(ip)
-            time_str = (
-                f"{datetime.now().strftime('%H:%M:%S')}{get_server_timezone_label()}"
-            )
             return {
                 "key": "alert_f2b_ban_detected",
                 "params": {
                     "flag": flag,
                     "ip": ip,
-                    "time": time_str,
+                    "time": datetime.now().strftime("%H:%M:%S"),
                     "tz": get_server_timezone_label(),
                 },
             }
