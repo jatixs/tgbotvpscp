@@ -422,6 +422,7 @@ EOF
 }
 
 create_docker_compose_yml() {
+    # Removed obsolete 'version' attribute to fix warning
     sudo tee "${BOT_INSTALL_PATH}/docker-compose.yml" > /dev/null <<EOF
 x-bot-base: &bot-base
   build: .
@@ -667,7 +668,9 @@ install_docker_logic() {
     local dc_cmd=""
     if sudo docker compose version &>/dev/null; then dc_cmd="docker compose"; else dc_cmd="docker-compose"; fi
     
-    run_with_spinner "Сборка Docker" sudo $dc_cmd build --no-cache
+    # --- FIX START: SPECIFY PROFILE FOR BUILD ---
+    run_with_spinner "Сборка Docker" sudo $dc_cmd --profile "${mode}" build --no-cache
+    # --- FIX END ---
     
     # --- ФИКС ПРАВ ДОСТУПА ДЛЯ DOCKER (UID 1001) ---
     msg_info "Настройка прав доступа для Docker..."
@@ -783,40 +786,47 @@ update_bot() {
         exec_cmd="sudo -u ${SERVICE_USER}"
     fi
 
-    # --- FIX START: ROBUST DOCKER DETECTION & PERMISSIONS ---
+    # --- FIX: ROBUST DOCKER DETECTION ---
     local IS_DOCKER=false
     if ([ -f "${ENV_FILE}" ] && grep -q "DEPLOY_MODE=docker" "${ENV_FILE}") || [ -f "${DOCKER_COMPOSE_FILE}" ]; then
         IS_DOCKER=true
     fi
 
-    # Если Docker: временно забираем права себе (root), чтобы git не ругался
     if [ "$IS_DOCKER" = true ]; then
         exec_cmd=""
+        # Временно берем права root, чтобы Git работал корректно
         sudo chown -R $(id -u):$(id -g) "${BOT_INSTALL_PATH}"
     fi
-    # --- FIX END ---
     
     cd "${BOT_INSTALL_PATH}"
     run_with_spinner "Git fetch" $exec_cmd git fetch origin
     run_with_spinner "Git reset" $exec_cmd git reset --hard "origin/${GIT_BRANCH}"
     
-    # Используем наш флаг вместо ненадежного grep
     if [ "$IS_DOCKER" = true ]; then
         local dc_cmd=""
         if sudo docker compose version &>/dev/null; then dc_cmd="docker compose"; else dc_cmd="docker-compose"; fi
         
-        # FIX PERMISSIONS FOR DOCKER UPDATE
+        # --- FIX: REGENERATE DOCKER-COMPOSE.YML (REMOVE OBSOLETE VERSION) ---
+        if [ -f "${ENV_FILE}" ]; then
+            source "${ENV_FILE}"
+            export WEB_PORT="${WEB_SERVER_PORT}"
+            create_docker_compose_yml
+        fi
+
+        # FIX PERMISSIONS FOR DOCKER
         sudo chown -R 1001:1001 "${BOT_INSTALL_PATH}"
         
-        run_with_spinner "Docker Up" sudo $dc_cmd up -d --build --no-cache
-        
+        # --- FIX: READ MODE AND USE PROFILE ---
         local mode=$(grep '^INSTALL_MODE=' "${ENV_FILE}" | cut -d'=' -f2 | tr -d '"')
         local cn="tg-bot-${mode}"
+        
+        # Explicit directory set just in case
+        cd "${BOT_INSTALL_PATH}"
+        run_with_spinner "Docker Up" sudo $dc_cmd --profile "${mode}" up -d --build --no-cache --remove-orphans
         
         sudo $dc_cmd --profile "${mode}" exec -T ${cn} aerich upgrade >/dev/null 2>&1
         sudo $dc_cmd --profile "${mode}" exec -T ${cn} python migrate.py >/dev/null 2>&1
         
-        # Обновление CLI wrapper
         sudo bash -c "cat > /usr/local/bin/tgcp-bot" <<EOF
 #!/bin/bash
 cd ${BOT_INSTALL_PATH}
