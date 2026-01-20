@@ -422,8 +422,6 @@ EOF
 }
 
 create_docker_compose_yml() {
-    # Removed obsolete 'version' attribute to fix warning
-    # Added pid: "host" and ipc: "host" to bot-root to ensure host commands work
     sudo tee "${BOT_INSTALL_PATH}/docker-compose.yml" > /dev/null <<EOF
 x-bot-base: &bot-base
   build: .
@@ -679,6 +677,8 @@ install_docker_logic() {
     msg_info "Настройка прав доступа для Docker..."
     sudo chown -R 1001:1001 "${BOT_INSTALL_PATH}"
     # ------------------------------------------------------
+    msg_info "Остановка старых контейнеров..."
+    sudo docker rm -f tg-bot-secure tg-bot-root 2>/dev/null
 
     run_with_spinner "Запуск Docker" sudo $dc_cmd --profile "${mode}" up -d --remove-orphans
     
@@ -825,6 +825,11 @@ update_bot() {
         
         # Explicit directory set just in case
         cd "${BOT_INSTALL_PATH}"
+        
+        # --- FIX: AGGRESSIVELY REMOVE OLD CONTAINERS TO PREVENT CONFLICTS ---
+        msg_info "Остановка старых контейнеров..."
+        sudo docker rm -f tg-bot-secure tg-bot-root 2>/dev/null
+        
         run_with_spinner "Docker Up" sudo $dc_cmd --profile "${mode}" up -d --build --pull --no-cache --remove-orphans
         
         sudo $dc_cmd --profile "${mode}" exec -T ${cn} aerich upgrade >/dev/null 2>&1
