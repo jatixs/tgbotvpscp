@@ -5,7 +5,6 @@ AUTO_AGENT_URL=""
 AUTO_NODE_TOKEN=""
 AUTO_MODE=false
 
-# --- Парсинг аргументов ---
 for arg in "$@"; do
     case $arg in
         --agent=*) AUTO_AGENT_URL="${arg#*=}"; AUTO_MODE=true ;;
@@ -22,9 +21,7 @@ SERVICE_NAME="tg-bot"
 WATCHDOG_SERVICE_NAME="tg-watchdog"
 NODE_SERVICE_NAME="tg-node"
 SERVICE_USER="tgbot"
-
-# --- ИЗОЛЯЦИЯ: Python 3.12 только для venv ---
-PYTHON_FOR_VENV="/usr/bin/python3.12"
+PYTHON_BIN="/usr/bin/python3"
 VENV_PATH="${BOT_INSTALL_PATH}/venv"
 README_FILE="${BOT_INSTALL_PATH}/README.md"
 DOCKER_COMPOSE_FILE="${BOT_INSTALL_PATH}/docker-compose.yml"
@@ -34,20 +31,8 @@ STATE_FILE="${BOT_INSTALL_PATH}/.install_state"
 GITHUB_REPO="jatixs/tgbotvpscp"
 GITHUB_REPO_URL="https://github.com/${GITHUB_REPO}.git"
 
-# --- Цвета ---
-C_RESET='\033[0m'
-C_RED='\033[0;31m'
-C_GREEN='\033[0;32m'
-C_YELLOW='\033[0;33m'
-C_BLUE='\033[0;34m'
-C_CYAN='\033[0;36m'
-C_BOLD='\033[1m'
-
-# --- Функции вывода ---
-msg_info() { echo -e "${C_CYAN}🔵 $1${C_RESET}"; }
-msg_success() { echo -e "${C_GREEN}✅ $1${C_RESET}"; }
-msg_warning() { echo -e "${C_YELLOW}⚠️  $1${C_RESET}"; }
-msg_error() { echo -e "${C_RED}❌ $1${C_RESET}"; }
+C_RESET='\033[0m'; C_RED='\033[0;31m'; C_GREEN='\033[0;32m'; C_YELLOW='\033[0;33m'; C_BLUE='\033[0;34m'; C_CYAN='\033[0;36m'; C_BOLD='\033[1m'
+msg_info() { echo -e "${C_CYAN}🔵 $1${C_RESET}"; }; msg_success() { echo -e "${C_GREEN}✅ $1${C_RESET}"; }; msg_warning() { echo -e "${C_YELLOW}⚠️  $1${C_RESET}"; }; msg_error() { echo -e "${C_RED}❌ $1${C_RESET}"; };
 
 msg_question() {
     local prompt="$1"
@@ -86,151 +71,130 @@ run_with_spinner() {
     return $exit_code
 }
 
-# --- ФИКСАТОР СОВМЕСТИМОСТИ (Python 3.10 f-strings) ---
-apply_python_compat_fixes() {
-    msg_info "Применение патчей совместимости кода..."
-    local fix_script="${BOT_INSTALL_PATH}/fix_compat.py"
-    
-    cat > "$fix_script" <<EOF
-import os
-import re
-
-def fix_fstring_content(content):
-    pattern = re.compile(r'f(\'\'\'|\"\"\"|\'|\")(.*?)\1', re.DOTALL)
-    
-    def replacement(match):
-        quotes = match.group(1)
-        body = match.group(2)
-        new_quotes = quotes
-        if '\n' in body and len(quotes) == 1:
-            new_quotes = quotes * 3
-            
-        def fix_braces(br_match):
-            inner = br_match.group(0)
-            if '\n' in inner:
-                return re.sub(r'\s+', ' ', inner)
-            return inner
-            
-        fixed_body = re.sub(r'\{.*?\}', fix_braces, body, flags=re.DOTALL)
-        return f'f{new_quotes}{fixed_body}{new_quotes}'
-
-    return pattern.sub(replacement, content)
-
-for root, _, files in os.walk("${BOT_INSTALL_PATH}"):
-    for file in files:
-        if file.endswith('.py') and file != 'fix_compat.py':
-            path = os.path.join(root, file)
-            try:
-                with open(path, 'r', encoding='utf-8') as f:
-                    old_content = f.read()
-                new_content = fix_fstring_content(old_content)
-                if old_content != new_content:
-                    with open(path, 'w', encoding='utf-8') as f:
-                        f.write(new_content)
-            except Exception:
-                pass
-EOF
-    python3 "$fix_script" > /dev/null 2>&1
-}
-
-# --- Хелперы для хешей и версий ---
+# --- ХЕЛПЕРЫ ДЛЯ ХЕШЕЙ ---
 get_file_hash() {
-    [ -f "$1" ] && sha256sum "$1" | awk '{print $1}' || echo "none"
+    local file_path=$1
+    if [ -f "$file_path" ]; then
+        sha256sum "$file_path" | awk '{print $1}'
+    else
+        echo "none"
+    fi
 }
 
 update_state_hash() {
-    [ ! -f "$STATE_FILE" ] && touch "$STATE_FILE"
-    sed -i "/^$1=/d" "$STATE_FILE"
-    echo "$1=$2" >> "$STATE_FILE"
+    local key=$1
+    local hash=$2
+    if [ ! -f "$STATE_FILE" ]; then touch "$STATE_FILE"; fi
+    # Удаляем старую запись и добавляем новую
+    sed -i "/^$key=/d" "$STATE_FILE"
+    echo "$key=$hash" >> "$STATE_FILE"
 }
 
 check_hash_match() {
-    [ -f "$STATE_FILE" ] && [ "$(grep "^$1=" "$STATE_FILE" | cut -d'=' -f2)" == "$2" ] && return 0 || return 1
+    local key=$1
+    local current_hash=$2
+    if [ -f "$STATE_FILE" ]; then
+        local stored_hash=$(grep "^$key=" "$STATE_FILE" | cut -d'=' -f2)
+        if [ "$stored_hash" == "$current_hash" ]; then
+            return 0 # True (совпадает)
+        fi
+    fi
+    return 1 # False (не совпадает или нет записи)
 }
 
+# --- РАБОТА С ВЕРСИЯМИ ---
+
+# 1. Получает версию из GitHub (Remote)
 get_remote_version() {
-    local v=$(curl -s "https://raw.githubusercontent.com/${GITHUB_REPO}/${GIT_BRANCH}/README.md" | grep -oP 'img\.shields\.io/badge/version-v\K[\d\.]+')
-    [ -z "$v" ] && echo "Не удалось получить" || echo "$v"
+    local remote_ver=$(curl -s "https://raw.githubusercontent.com/${GITHUB_REPO}/${GIT_BRANCH}/README.md" | grep -oP 'img\.shields\.io/badge/version-v\K[\d\.]+')
+    if [ -z "$remote_ver" ]; then echo "Не удалось получить"; else echo "$remote_ver"; fi
 }
 
+# 2. Сохраняет текущую версию из README в .env (вызывать ДО cleanup)
 save_current_version() {
     if [ -f "$README_FILE" ]; then
-        local v=$(grep -oP 'img\.shields\.io/badge/version-v\K[\d\.]+' "$README_FILE")
-        if [ -n "$v" ] && [ -f "${ENV_FILE}" ]; then
-            if grep -q "^INSTALLED_VERSION=" "${ENV_FILE}"; then
-                sudo sed -i "s/^INSTALLED_VERSION=.*/INSTALLED_VERSION=$v/" "${ENV_FILE}"
-            else
-                echo "INSTALLED_VERSION=$v" | sudo tee -a "${ENV_FILE}" > /dev/null
+        local ver=$(grep -oP 'img\.shields\.io/badge/version-v\K[\d\.]+' "$README_FILE")
+        if [ -n "$ver" ]; then
+            if [ -f "${ENV_FILE}" ]; then
+                if grep -q "^INSTALLED_VERSION=" "${ENV_FILE}"; then
+                    sudo sed -i "s/^INSTALLED_VERSION=.*/INSTALLED_VERSION=$ver/" "${ENV_FILE}"
+                else
+                    echo "INSTALLED_VERSION=$ver" | sudo tee -a "${ENV_FILE}" > /dev/null
+                fi
             fi
         fi
     fi
 }
 
+# 3. Читает локальную версию
 get_local_version() { 
-    local v=""
-    [ -f "${ENV_FILE}" ] && v=$(grep '^INSTALLED_VERSION=' "${ENV_FILE}" | cut -d'=' -f2)
-    [ -z "$v" ] && [ -f "$README_FILE" ] && v=$(grep -oP 'img\.shields\.io/badge/version-v\K[\d\.]+' "$README_FILE")
-    [ -z "$v" ] && echo "Не определена" || echo "$v"
+    local ver=""
+    if [ -f "${ENV_FILE}" ]; then
+        ver=$(grep '^INSTALLED_VERSION=' "${ENV_FILE}" | cut -d'=' -f2)
+    fi
+    if [ -z "$ver" ] && [ -f "$README_FILE" ]; then
+        ver=$(grep -oP 'img\.shields\.io/badge/version-v\K[\d\.]+' "$README_FILE")
+    fi
+    if [ -z "$ver" ]; then echo "Не определена"; else echo "$ver"; fi
 }
 
+INSTALL_TYPE="НЕТ"; STATUS_MESSAGE="Проверка не проводилась."
 check_integrity() {
     if [ ! -d "${BOT_INSTALL_PATH}" ] || [ ! -f "${ENV_FILE}" ]; then
-        INSTALL_TYPE="НЕТ"
-        STATUS_MESSAGE="Бот не установлен."
-        return
+        INSTALL_TYPE="НЕТ"; STATUS_MESSAGE="Бот не установлен."; return;
     fi
-    
     if grep -q "MODE=node" "${ENV_FILE}"; then
         INSTALL_TYPE="НОДА (Клиент)"
-        if systemctl is-active --quiet ${NODE_SERVICE_NAME}.service; then
-            STATUS_MESSAGE="${C_GREEN}Активен${C_RESET}"
-        else
-            STATUS_MESSAGE="${C_RED}Неактивен${C_RESET}"
-        fi
+        if systemctl is-active --quiet ${NODE_SERVICE_NAME}.service; then STATUS_MESSAGE="${C_GREEN}Активен${C_RESET}"; else STATUS_MESSAGE="${C_RED}Неактивен${C_RESET}"; fi
         return
     fi
-    
     DEPLOY_MODE_FROM_ENV=$(grep '^DEPLOY_MODE=' "${ENV_FILE}" | cut -d'=' -f2 | tr -d '"' || echo "systemd")
-    
     if [ "$DEPLOY_MODE_FROM_ENV" == "docker" ]; then
         INSTALL_TYPE="АГЕНТ (Docker)"
-        if command -v docker &> /dev/null && docker ps | grep -q "tg-bot"; then
-            STATUS_MESSAGE="${C_GREEN}Docker OK${C_RESET}"
-        else
-            STATUS_MESSAGE="${C_RED}Docker Stop${C_RESET}"
-        fi
+        if command -v docker &> /dev/null && docker ps | grep -q "tg-bot"; then STATUS_MESSAGE="${C_GREEN}Docker OK${C_RESET}"; else STATUS_MESSAGE="${C_RED}Docker Stop${C_RESET}"; fi
     else
         INSTALL_TYPE="АГЕНТ (Systemd)"
-        if systemctl is-active --quiet ${SERVICE_NAME}.service; then
-            STATUS_MESSAGE="${C_GREEN}Systemd OK${C_RESET}"
-        else
-            STATUS_MESSAGE="${C_RED}Systemd Stop${C_RESET}"
-        fi
+        if systemctl is-active --quiet ${SERVICE_NAME}.service; then STATUS_MESSAGE="${C_GREEN}Systemd OK${C_RESET}"; else STATUS_MESSAGE="${C_RED}Systemd Stop${C_RESET}"; fi
     fi
 }
 
+# --- Настройка HTTPS ---
 setup_nginx_proxy() {
     echo -e "\n${C_CYAN}🔒 Настройка HTTPS (Nginx + Certbot)${C_RESET}"
     run_with_spinner "Установка Nginx и Certbot" sudo apt-get install -y -q nginx certbot python3-certbot-nginx psmisc
-    
-    # Освобождение порта 80
-    sudo fuser -k 80/tcp 2>/dev/null
-    sudo systemctl stop nginx 2>/dev/null
-    
+
+    if command -v lsof &> /dev/null && lsof -Pi :80 -sTCP:LISTEN -t >/dev/null ; then
+        msg_warning "Порт 80 занят. Пытаюсь освободить..."
+        sudo fuser -k 80/tcp 2>/dev/null
+        sudo systemctl stop nginx 2>/dev/null
+    elif command -v fuser &> /dev/null && sudo fuser 80/tcp >/dev/null; then
+         msg_warning "Порт 80 занят. Пытаюсь освободить..."
+         sudo fuser -k 80/tcp
+         sudo systemctl stop nginx 2>/dev/null
+    fi
+
+    msg_info "Получение SSL сертификата для ${HTTPS_DOMAIN}..."
     if sudo certbot certonly --standalone --non-interactive --agree-tos --email "${HTTPS_EMAIL}" -d "${HTTPS_DOMAIN}"; then
         msg_success "Сертификат получен!"
     else
-        msg_error "Ошибка получения сертификата."
+        msg_error "Ошибка получения сертификата. Проверьте DNS A-запись и открыт ли порт 80."
         sudo systemctl start nginx
         return 1
     fi
-    
-    sudo bash -c "cat > /etc/nginx/sites-available/${HTTPS_DOMAIN}" <<EOF
+
+    msg_info "Создание конфигурации Nginx..."
+    NGINX_CONF="/etc/nginx/sites-available/${HTTPS_DOMAIN}"
+    NGINX_LINK="/etc/nginx/sites-enabled/${HTTPS_DOMAIN}"
+    if [ -f "/etc/nginx/sites-enabled/default" ]; then sudo rm -f "/etc/nginx/sites-enabled/default"; fi
+
+    sudo bash -c "cat > ${NGINX_CONF}" <<EOF
 server {
     listen ${HTTPS_PORT} ssl;
     server_name ${HTTPS_DOMAIN};
     ssl_certificate /etc/letsencrypt/live/${HTTPS_DOMAIN}/fullchain.pem;
     ssl_certificate_key /etc/letsencrypt/live/${HTTPS_DOMAIN}/privkey.pem;
+    access_log /var/log/nginx/${HTTPS_DOMAIN}_access.log;
+    error_log /var/log/nginx/${HTTPS_DOMAIN}_error.log;
     location / {
         proxy_pass http://127.0.0.1:${WEB_PORT};
         proxy_http_version 1.1;
@@ -243,156 +207,171 @@ server {
     }
 }
 EOF
-    sudo ln -sf "/etc/nginx/sites-available/${HTTPS_DOMAIN}" "/etc/nginx/sites-enabled/${HTTPS_DOMAIN}"
-    sudo rm -f /etc/nginx/sites-enabled/default
-    
+    sudo ln -sf "${NGINX_CONF}" "${NGINX_LINK}"
     if sudo nginx -t; then
         sudo systemctl restart nginx
-        msg_success "HTTPS настроен успешно!"
+        if command -v ufw &> /dev/null; then sudo ufw allow ${HTTPS_PORT}/tcp >/dev/null; fi
+        echo ""; msg_success "HTTPS настроен успешно!"
+        echo -e "Веб-панель доступна: https://${HTTPS_DOMAIN}:${HTTPS_PORT}/"
     else
-        msg_error "Ошибка Nginx."
+        msg_error "Ошибка в конфиге Nginx."
     fi
 }
 
+# --- ФУНКЦИИ УСТАНОВКИ ---
 common_install_steps() {
     echo "" > /tmp/${SERVICE_NAME}_install.log
-    if command -v python3.12 >/dev/null && command -v git >/dev/null; then
-        msg_success "Python 3.12 и Git уже установлены."
+    # Проверка: если базовые пакеты есть, пропускаем apt update для скорости
+    if command -v python3 >/dev/null && command -v git >/dev/null && command -v pip3 >/dev/null; then
+        msg_success "Базовые пакеты (Python/Git) уже установлены. Пропуск apt update."
     else
-        msg_info "1. Обновление системы и установка Python 3.12..."
+        msg_info "1. Обновление системы..."
         run_with_spinner "Apt update" sudo apt-get update -y -q
-        # Устанавливаем python3.12 отдельно
-        run_with_spinner "Установка пакетов" sudo apt-get install -y -q -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" \
-            python3.12 python3.12-venv python3.12-dev git curl wget sudo python3-pip
+        run_with_spinner "Установка системных пакетов" sudo apt-get install -y -q -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" python3 python3-pip python3-venv git curl wget sudo python3-yaml
     fi
 }
 
 setup_repo_and_dirs() {
-    local owner_user=${1:-root}
+    local owner_user=$1; if [ -z "$owner_user" ]; then owner_user="root"; fi
     cd /
     msg_info "Подготовка файлов (Ветка: ${GIT_BRANCH})..."
     
-    # Бэкап
-    [ -f "${ENV_FILE}" ] && cp "${ENV_FILE}" /tmp/tgbot_env.bak
-    [ -f "${STATE_FILE}" ] && cp "${STATE_FILE}" /tmp/tgbot_state.bak
-    [ -d "${VENV_PATH}" ] && sudo mv "${VENV_PATH}" /tmp/tgbot_venv.bak
+    # Сохраняем важные файлы перед очисткой
+    if [ -f "${ENV_FILE}" ]; then cp "${ENV_FILE}" /tmp/tgbot_env.bak; fi
+    if [ -f "${STATE_FILE}" ]; then cp "${STATE_FILE}" /tmp/tgbot_state.bak; fi
+    # ВАЖНО: Сохраняем venv, чтобы не переустанавливать зависимости при повторном запуске
+    if [ -d "${VENV_PATH}" ]; then 
+        msg_info "Сохранение venv..."
+        sudo mv "${VENV_PATH}" /tmp/tgbot_venv.bak
+    fi
+
+    if [ -d "${BOT_INSTALL_PATH}" ]; then run_with_spinner "Удаление старых файлов" sudo rm -rf "${BOT_INSTALL_PATH}"; fi
+    sudo mkdir -p ${BOT_INSTALL_PATH}
+    run_with_spinner "Клонирование репозитория" sudo git clone --branch "${GIT_BRANCH}" "${GITHUB_REPO_URL}" "${BOT_INSTALL_PATH}" || exit 1
     
-    [ -d "${BOT_INSTALL_PATH}" ] && sudo rm -rf "${BOT_INSTALL_PATH}"
-    sudo mkdir -p "${BOT_INSTALL_PATH}"
-    
-    run_with_spinner "Клонирование репозитория" sudo git clone --branch "${GIT_BRANCH}" "${GITHUB_REPO_URL}" "${BOT_INSTALL_PATH}"
-    
-    # Восстановление
-    [ -f "/tmp/tgbot_env.bak" ] && sudo mv /tmp/tgbot_env.bak "${ENV_FILE}"
-    [ -f "/tmp/tgbot_state.bak" ] && sudo mv /tmp/tgbot_state.bak "${STATE_FILE}"
-    [ -d "/tmp/tgbot_venv.bak" ] && sudo mv /tmp/tgbot_venv.bak "${VENV_PATH}"
-    
-    sudo mkdir -p "${BOT_INSTALL_PATH}/logs/bot" \
-                  "${BOT_INSTALL_PATH}/logs/watchdog" \
-                  "${BOT_INSTALL_PATH}/logs/node" \
-                  "${BOT_INSTALL_PATH}/config"
-                  
+    # Восстанавливаем файлы
+    if [ -f "/tmp/tgbot_env.bak" ]; then sudo mv /tmp/tgbot_env.bak "${ENV_FILE}"; fi
+    if [ -f "/tmp/tgbot_state.bak" ]; then sudo mv /tmp/tgbot_state.bak "${STATE_FILE}"; fi
+    # Восстанавливаем venv
+    if [ -d "/tmp/tgbot_venv.bak" ]; then 
+        sudo mv /tmp/tgbot_venv.bak "${VENV_PATH}"
+        msg_success "Venv восстановлен."
+    fi
+
+    sudo mkdir -p "${BOT_INSTALL_PATH}/logs/bot" "${BOT_INSTALL_PATH}/logs/watchdog" "${BOT_INSTALL_PATH}/logs/node" "${BOT_INSTALL_PATH}/config"
     sudo chown -R ${owner_user}:${owner_user} ${BOT_INSTALL_PATH}
 }
 
+# --- Загрузка переменных из .env ---
 load_cached_env() {
     local env_file="${ENV_FILE}"
-    [ ! -f "$env_file" ] && [ -f "/tmp/tgbot_env.bak" ] && env_file="/tmp/tgbot_env.bak"
-    
+
+    if [ ! -f "$env_file" ] && [ -f "/tmp/tgbot_env.bak" ]; then
+        env_file="/tmp/tgbot_env.bak"
+    fi
+
     if [ -f "$env_file" ]; then
-        echo -e "${C_YELLOW}⚠️  Обнаружена сохраненная конфигурация.${C_RESET}"
-        read -p "$(echo -e "${C_CYAN}❓ Восстановить настройки? (y/n) [y]: ${C_RESET}")" RESTORE_CHOICE
+        echo -e "${C_YELLOW}⚠️  Обнаружена сохраненная конфигурация от предыдущей установки.${C_RESET}"
+        read -p "$(echo -e "${C_CYAN}❓ Восстановить настройки (Токен, ID, Порт, Sentry)? (y/n) [y]: ${C_RESET}")" RESTORE_CHOICE
         RESTORE_CHOICE=${RESTORE_CHOICE:-y}
-        
+
         if [[ "$RESTORE_CHOICE" =~ ^[Yy]$ ]]; then
-            msg_info "Загружаю данные..."
-            get_env_val() { grep "^$1=" "$env_file" | cut -d'=' -f2- | sed 's/^"//;s/"$//' | sed "s/^'//;s/'$//"; }
-            
+            msg_info "Загружаю сохраненные данные..."
+
+            get_env_val() {
+                grep "^$1=" "$env_file" | cut -d'=' -f2- | sed 's/^"//;s/"$//' | sed "s/^'//;s/'$//"
+            }
+
             [ -z "$T" ] && T=$(get_env_val "TG_BOT_TOKEN")
             [ -z "$A" ] && A=$(get_env_val "TG_ADMIN_ID")
             [ -z "$U" ] && U=$(get_env_val "TG_ADMIN_USERNAME")
             [ -z "$N" ] && N=$(get_env_val "TG_BOT_NAME")
             [ -z "$P" ] && P=$(get_env_val "WEB_SERVER_PORT")
             [ -z "$SENTRY_DSN" ] && SENTRY_DSN=$(get_env_val "SENTRY_DSN")
-            
+
             if [ -z "$W" ]; then
                 local val=$(get_env_val "ENABLE_WEB_UI")
                 if [[ "$val" == "false" ]]; then W="n"; else W="y"; fi
             fi
-            
+
             [ -z "$AGENT_URL" ] && AGENT_URL=$(get_env_val "AGENT_BASE_URL")
             [ -z "$NODE_TOKEN" ] && NODE_TOKEN=$(get_env_val "AGENT_TOKEN")
         else
+            msg_info "Восстановление пропущено. Введите данные заново."
+            # СБРОС ПЕРЕМЕННЫХ, чтобы точно запросить ввод
             T=""; A=""; U=""; N=""; P=""; SENTRY_DSN=""
-            ENABLE_WEB=""; SETUP_HTTPS=""; AGENT_URL=""; NODE_TOKEN=""
+            ENABLE_WEB=""; SETUP_HTTPS=""; HTTPS_DOMAIN=""; HTTPS_EMAIL=""; HTTPS_PORT=""
+            AGENT_URL=""; NODE_TOKEN=""
         fi
     fi
 }
 
 cleanup_node_files() {
     cd ${BOT_INSTALL_PATH}
-    sudo rm -rf core modules bot.py watchdog.py Dockerfile docker-compose.yml \
-                .git .github config/users.json config/alerts_config.json \
-                deploy.sh deploy_en.sh requirements.txt LICENSE CHANGELOG* \
-                .gitignore aerich.ini .env.example migrate.py manage.py \
-                ARCHITECTURE* custom_module* README*
+    # Удаляем всё лишнее для режима Ноды (Клиента)
+    sudo rm -rf core modules bot.py watchdog.py Dockerfile docker-compose.yml .git .github config/users.json config/alerts_config.json deploy.sh deploy_en.sh requirements.txt LICENSE CHANGELOG* .gitignore aerich.ini
+    sudo rm -f .env.example migrate.py manage.py ARCHITECTURE* custom_module*
+    sudo rm -f README*
 }
 
 cleanup_agent_files() {
-    cd ${BOT_INSTALL_PATH} && sudo rm -rf node
+    cd ${BOT_INSTALL_PATH}
+    sudo rm -rf node
 }
 
+# --- ОЧИСТКА МУСОРА ПОСЛЕ УСТАНОВКИ ---
 cleanup_files() {
-    msg_info "🧹 Финальная очистка..."
-    sudo rm -f "${BOT_INSTALL_PATH}/fix_compat.py"
-    
+    msg_info "🧹 Запуск финальной очистки..."
+
     if [ -d "$BOT_INSTALL_PATH/.github" ]; then sudo rm -rf "$BOT_INSTALL_PATH/.github"; fi
     if [ -d "$BOT_INSTALL_PATH/assets" ]; then sudo rm -rf "$BOT_INSTALL_PATH/assets"; fi
-    
-    sudo rm -f "$BOT_INSTALL_PATH/custom_module"* "$BOT_INSTALL_PATH/.gitignore" \
-               "$BOT_INSTALL_PATH/LICENSE" "$BOT_INSTALL_PATH/aerich.ini" \
-               "$BOT_INSTALL_PATH/README"* "$BOT_INSTALL_PATH/ARCHITECTURE"* \
-               "$BOT_INSTALL_PATH/CHANGELOG"* "$BOT_INSTALL_PATH/.env.example" \
-               "$BOT_INSTALL_PATH/migrate.py" "$BOT_INSTALL_PATH/requirements.txt"
-               
-    DEPLOY_MODE_VAL=$(grep '^DEPLOY_MODE=' "${ENV_FILE}" | cut -d'=' -f2 | tr -d '"' 2>/dev/null)
-    if [ "$DEPLOY_MODE_VAL" != "docker" ]; then
-        sudo rm -f "$BOT_INSTALL_PATH/Dockerfile" "$BOT_INSTALL_PATH/docker-compose.yml"
+
+    sudo rm -f "$BOT_INSTALL_PATH/custom_module.md" "$BOT_INSTALL_PATH/custom_module_en.md"
+    sudo rm -f "$BOT_INSTALL_PATH/.gitignore" "$BOT_INSTALL_PATH/LICENSE"
+    sudo rm -f "$BOT_INSTALL_PATH/aerich.ini"
+    sudo rm -f "$BOT_INSTALL_PATH/README.md" "$BOT_INSTALL_PATH/README.en.md"
+    sudo rm -f "$BOT_INSTALL_PATH/ARCHITECTURE.md" "$BOT_INSTALL_PATH/ARCHITECTURE.en.md"
+    sudo rm -f "$BOT_INSTALL_PATH/CHANGELOG.md" "$BOT_INSTALL_PATH/CHANGELOG.en.md"
+    sudo rm -f "$BOT_INSTALL_PATH/.env.example"
+    sudo rm -f "$BOT_INSTALL_PATH/migrate.py"
+    sudo rm -f "$BOT_INSTALL_PATH/requirements.txt"
+
+    if [ -f "${ENV_FILE}" ]; then
+        DEPLOY_MODE_VAL=$(grep '^DEPLOY_MODE=' "${ENV_FILE}" | cut -d'=' -f2 | tr -d '"')
+        if [ "$DEPLOY_MODE_VAL" != "docker" ]; then
+             sudo rm -f "$BOT_INSTALL_PATH/Dockerfile"
+             sudo rm -f "$BOT_INSTALL_PATH/docker-compose.yml"
+        fi
     fi
+
     sudo find "$BOT_INSTALL_PATH" -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null
     msg_success "Очистка завершена."
 }
 
 install_extras() {
-    if ! command -v fail2ban-client &>/dev/null; then
-        msg_question "Fail2Ban не найден. Установить? (y/n): " I
-        if [[ "$I" =~ ^[Yy]$ ]]; then
-            run_with_spinner "Установка Fail2ban" sudo apt-get install -y -q fail2ban
-        fi
-    else
+    # Проверка fail2ban
+    if command -v fail2ban-client &> /dev/null; then
         msg_success "Fail2Ban уже установлен."
+    else
+        msg_question "Fail2Ban не найден. Установить? (y/n): " I
+        if [[ "$I" =~ ^[Yy]$ ]]; then run_with_spinner "Установка Fail2ban" sudo apt-get install -y -q -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" fail2ban; fi
     fi
     
-    if ! command -v iperf3 &>/dev/null; then
-        msg_question "iperf3 не найден. Установить? (y/n): " I
-        if [[ "$I" =~ ^[Yy]$ ]]; then
-            # Автоматизация iperf3 (без вопроса демона)
-            echo "iperf3 iperf3/start_daemon boolean true" | sudo debconf-set-selections
-            run_with_spinner "Установка iperf3" sudo apt-get install -y -q iperf3
-        fi
-    else
+    # Проверка iperf3
+    if command -v iperf3 &> /dev/null; then
         msg_success "iperf3 уже установлен."
+    else
+        msg_question "iperf3 не найден. Установить? (y/n): " I
+        if [[ "$I" =~ ^[Yy]$ ]]; then run_with_spinner "Установка iperf3" sudo apt-get install -y -q -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" iperf3; fi
     fi
 }
 
 ask_env_details() {
     msg_info "Ввод данных .env..."
-    msg_question "Токен Ботa: " T; msg_question "ID Админа: " A
-    msg_question "Username (opt): " U; msg_question "Bot Name (opt): " N
-    msg_question "Внутренний Web Port [8080]: " P
-    if [ -z "$P" ]; then WEB_PORT="8080"; else WEB_PORT="$P"; fi
+    msg_question "Токен Ботa: " T; msg_question "ID Админа: " A; msg_question "Username (opt): " U; msg_question "Bot Name (opt): " N
+    msg_question "Внутренний Web Port [8080]: " P; if [ -z "$P" ]; then WEB_PORT="8080"; else WEB_PORT="$P"; fi
     msg_question "Sentry DSN (opt): " SENTRY_DSN
-    
+
     msg_question "Включить Web-UI (Дашборд)? (y/n) [y]: " W
     if [[ "$W" =~ ^[Nn]$ ]]; then
         ENABLE_WEB="false"
@@ -403,8 +382,8 @@ ask_env_details() {
         msg_question "Настроить HTTPS (Nginx Proxy)? (y/n): " H
         if [[ "$H" =~ ^[Yy]$ ]]; then
             SETUP_HTTPS="true"
-            msg_question "Домен: " HTTPS_DOMAIN
-            msg_question "Email: " HTTPS_EMAIL
+            msg_question "Домен (напр. bot.site.com): " HTTPS_DOMAIN
+            msg_question "Email для SSL: " HTTPS_EMAIL
             msg_question "Внешний HTTPS порт [8443]: " HP
             if [ -z "$HP" ]; then HTTPS_PORT="8443"; else HTTPS_PORT="$HP"; fi
         else
@@ -415,13 +394,13 @@ ask_env_details() {
 }
 
 write_env_file() {
-    local dm=$1
-    local im=$2
-    local cn=$3
+    local dm=$1; local im=$2; local cn=$3
+
     local debug_setting="true"
-    
-    if [ "$GIT_BRANCH" == "main" ]; then debug_setting="false"; fi
-    
+    if [ "$GIT_BRANCH" == "main" ]; then
+        debug_setting="false"
+    fi
+
     sudo bash -c "cat > ${ENV_FILE}" <<EOF
 TG_BOT_TOKEN="${T}"
 TG_ADMIN_ID="${A}"
@@ -440,12 +419,14 @@ EOF
     sudo chmod 600 "${ENV_FILE}"
 }
 
+check_docker_deps() {
+    if ! command -v docker &> /dev/null; then curl -sSL https://get.docker.com -o /tmp/get-docker.sh; run_with_spinner "Установка Docker" sudo sh /tmp/get-docker.sh; fi
+    if command -v docker-compose &> /dev/null; then sudo rm -f $(which docker-compose); fi
+}
+
 create_dockerfile() {
     sudo tee "${BOT_INSTALL_PATH}/Dockerfile" > /dev/null <<'EOF'
-FROM python:3.12-slim-bookworm
-LABEL maintainer="Jatixs"
-LABEL org.opencontainers.image.source="https://github.com/jatixs/tgbotvpscp"
-LABEL org.opencontainers.image.description="VPS Manager Telegram Bot"
+FROM python:3.10-slim-bookworm
 RUN apt-get update && apt-get install -y python3-yaml iperf3 git curl wget sudo procps iputils-ping net-tools gnupg docker.io coreutils && rm -rf /var/lib/apt/lists/*
 RUN pip install --no-cache-dir docker aiohttp aiosqlite argon2-cffi sentry-sdk tortoise-orm aerich cryptography tomlkit
 RUN groupadd -g 1001 tgbot && useradd -u 1001 -g 1001 -m -s /bin/bash tgbot && echo "tgbot ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
@@ -461,56 +442,70 @@ EOF
 
 create_docker_compose_yml() {
     sudo tee "${BOT_INSTALL_PATH}/docker-compose.yml" > /dev/null <<EOF
+version: '3.8'
 x-bot-base: &bot-base
   build: .
   image: tg-vps-bot:latest
   restart: always
   env_file: .env
-  labels: ["org.opencontainers.image.source=https://github.com/jatixs/tgbotvpscp"]
 services:
   bot-secure:
     <<: *bot-base
     container_name: tg-bot-secure
     profiles: ["secure"]
     user: "tgbot"
-    ports: ["${WEB_PORT}:${WEB_PORT}"]
-    environment: [INSTALL_MODE=secure, DEPLOY_MODE=docker, TG_BOT_CONTAINER_NAME=tg-bot-secure]
-    volumes: ["./config:/opt/tg-bot/config", "./logs/bot:/opt/tg-bot/logs/bot", "/var/run/docker.sock:/var/run/docker.sock:ro", "/proc/uptime:/proc_host/uptime:ro", "/proc/stat:/proc_host/stat:ro", "/proc/meminfo:/proc_host/meminfo:ro", "/proc/net/dev:/proc_host/net/dev:ro"]
+    ports:
+      - "${WEB_PORT}:${WEB_PORT}"
+    environment:
+      - INSTALL_MODE=secure
+      - DEPLOY_MODE=docker
+      - TG_BOT_CONTAINER_NAME=tg-bot-secure
+    volumes:
+      - ./config:/opt/tg-bot/config
+      - ./logs/bot:/opt/tg-bot/logs/bot
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /proc/uptime:/proc_host/uptime:ro
+      - /proc/stat:/proc_host/stat:ro
+      - /proc/meminfo:/proc_host/meminfo:ro
+      - /proc/net/dev:/proc_host/net/dev:ro
     cap_drop: [ALL]
     cap_add: [NET_RAW]
-    labels: ["role=bot", "mode=secure"]
   bot-root:
     <<: *bot-base
     container_name: tg-bot-root
     profiles: ["root"]
     user: "root"
-    ports: ["${WEB_PORT}:${WEB_PORT}"]
-    environment: [INSTALL_MODE=root, DEPLOY_MODE=docker, TG_BOT_CONTAINER_NAME=tg-bot-root]
+    ports:
+      - "${WEB_PORT}:${WEB_PORT}"
+    environment:
+      - INSTALL_MODE=root
+      - DEPLOY_MODE=docker
+      - TG_BOT_CONTAINER_NAME=tg-bot-root
     privileged: true
+    pid: "host"
     network_mode: "host"
-    volumes: ["./config:/opt/tg-bot/config", "./logs/bot:/opt/tg-bot/logs/bot", "/:/host", "/var/run/docker.sock:/var/run/docker.sock:ro"]
-    labels: ["role=bot", "mode=root"]
+    ipc: "host"
+    volumes:
+      - ./config:/opt/tg-bot/config
+      - ./logs/bot:/opt/tg-bot/logs/bot
+      - /:/host
+      - /var/run/docker.sock:/var/run/docker.sock:ro
   watchdog:
     <<: *bot-base
     container_name: tg-watchdog
     command: python watchdog.py
     user: "root"
-    volumes: ["./config:/opt/tg-bot/config", "./logs/watchdog:/opt/tg-bot/logs/watchdog", "/var/run/docker.sock:/var/run/docker.sock:ro"]
-    labels: ["role=watchdog"]
+    restart: always
+    volumes:
+      - ./config:/opt/tg-bot/config
+      - ./logs/watchdog:/opt/tg-bot/logs/watchdog
+      - /var/run/docker.sock:/var/run/docker.sock:ro
 EOF
 }
 
 create_and_start_service() {
-    local svc=$1
-    local script=$2
-    local mode=$3
-    local desc=$4
-    local user="root"
-    
-    if [ "$mode" == "secure" ] && [ "$svc" == "$SERVICE_NAME" ]; then
-        user=${SERVICE_USER}
-    fi
-    
+    local svc=$1; local script=$2; local mode=$3; local desc=$4
+    local user="root"; if [ "$mode" == "secure" ] && [ "$svc" == "$SERVICE_NAME" ]; then user=${SERVICE_USER}; fi
     sudo tee "/etc/systemd/system/${svc}.service" > /dev/null <<EOF
 [Unit]
 Description=${desc}
@@ -526,49 +521,73 @@ RestartSec=10
 [Install]
 WantedBy=multi-user.target
 EOF
-    sudo systemctl daemon-reload
-    sudo systemctl enable ${svc} &> /dev/null
-    sudo systemctl restart ${svc}
+    sudo systemctl daemon-reload; sudo systemctl enable ${svc} &> /dev/null; sudo systemctl restart ${svc}
 }
 
+# --- Логика миграции БД (Aerich) и JSON ---
 run_db_migrations() {
-    local exec_user=$1
+    local exec_user=$1 # "sudo -u tgbot" или пустая строка для root
+
     msg_info "Проверка и миграция базы данных..."
-    
     cd "${BOT_INSTALL_PATH}" || return 1
-    if [ -f "${ENV_FILE}" ]; then set -a; source "${ENV_FILE}"; set +a; fi
-    
+
+    # Экспорт переменных
+    if [ -f "${ENV_FILE}" ]; then
+        set -a
+        source "${ENV_FILE}"
+        set +a
+    fi
+
     local cmd_prefix=""
-    if [ -n "$exec_user" ]; then cmd_prefix="sudo -E -u ${SERVICE_USER}"; fi
-    
+    if [ -n "$exec_user" ]; then
+        cmd_prefix="sudo -E -u ${SERVICE_USER}"
+    fi
+
+    # --- ПРОВЕРКА НА ПРОПУСК МИГРАЦИИ ---
     local db_models_hash=$(get_file_hash "${BOT_INSTALL_PATH}/core/models.py")
     local db_exists=false
     if [ -f "${BOT_INSTALL_PATH}/config/nodes.db" ]; then db_exists=true; fi
-    
+
     if $db_exists && check_hash_match "DB_HASH" "$db_models_hash"; then
         msg_success "Структура БД не менялась. Пропуск миграций."
         return
     fi
-    
+    # ------------------------------------
+
+    # Генерация aerich.ini
     if [ -f "${BOT_INSTALL_PATH}/aerich.ini" ]; then rm -f "${BOT_INSTALL_PATH}/aerich.ini"; fi
     $cmd_prefix ${VENV_PATH}/bin/aerich init -t core.config.TORTOISE_ORM >/dev/null 2>&1
-    
+
+    # Запуск миграций
     if $db_exists; then
         if [ -d "${BOT_INSTALL_PATH}/migrations" ]; then
             msg_info "Применение обновлений базы данных..."
             $cmd_prefix ${VENV_PATH}/bin/aerich upgrade >/dev/null 2>&1
+        else
+            msg_info "База данных найдена, папки миграций нет (пропуск)."
         fi
     else
-        msg_info "Создание базы данных..."
-        if ! $cmd_prefix ${VENV_PATH}/bin/aerich init-db >/dev/null 2>&1; then
-             $cmd_prefix ${VENV_PATH}/bin/aerich upgrade >/dev/null 2>&1
+        # Базы нет
+        if [ ! -d "${BOT_INSTALL_PATH}/migrations" ]; then
+            msg_info "Создание базы данных..."
+            if ! $cmd_prefix ${VENV_PATH}/bin/aerich init-db >/dev/null 2>&1; then
+                 msg_warning "Ошибка при создании БД (init-db)."
+            fi
+        else
+            msg_info "Применение миграций (создание БД)..."
+            $cmd_prefix ${VENV_PATH}/bin/aerich upgrade >/dev/null 2>&1
         fi
     fi
+
+    # Обновляем хеш после успешной миграции
     update_state_hash "DB_HASH" "$db_models_hash"
-    
+
+    # 6. Запуск БЕЗОПАСНОЙ миграции JSON -> Encrypted
+    msg_info "Безопасная миграция конфигурации..."
     if [ -f "${BOT_INSTALL_PATH}/migrate.py" ]; then
-        msg_info "Миграция конфигурации..."
         $cmd_prefix ${VENV_PATH}/bin/python "${BOT_INSTALL_PATH}/migrate.py"
+    else
+        msg_warning "Скрипт migrate.py не найден, пропускаем шифрование JSON."
     fi
 }
 
@@ -576,64 +595,63 @@ install_systemd_logic() {
     local mode=$1
     common_install_steps
     install_extras
-    
+
     local exec_cmd=""
     local req_hash=$(get_file_hash "${BOT_INSTALL_PATH}/requirements.txt")
     local install_pip=true
-    
+
+    # Проверка, нужно ли ставить зависимости
     if [ -d "${VENV_PATH}" ] && [ -f "${VENV_PATH}/bin/python" ]; then
         if check_hash_match "REQ_HASH" "$req_hash"; then
             install_pip=false
-            msg_success "Venv актуален."
+            msg_success "Зависимости (Venv) актуальны. Пропуск установки."
         fi
     fi
-    
+
     if [ "$mode" == "secure" ]; then
-        if ! id "${SERVICE_USER}" &>/dev/null; then
-            sudo useradd -r -s /bin/false -d ${BOT_INSTALL_PATH} ${SERVICE_USER}
-        fi
+        if ! id "${SERVICE_USER}" &>/dev/null; then sudo useradd -r -s /bin/false -d ${BOT_INSTALL_PATH} ${SERVICE_USER}; fi
         setup_repo_and_dirs "${SERVICE_USER}"
-        exec_cmd="sudo -u ${SERVICE_USER}"
         
-        # ИЗОЛЯЦИЯ: Создаем venv
-        if [ ! -d "${VENV_PATH}" ]; then
-            run_with_spinner "Создание venv (Python 3.12)" sudo -u ${SERVICE_USER} ${PYTHON_FOR_VENV} -m venv "${VENV_PATH}"
-        fi
-        
-        apply_python_compat_fixes
+        # Если venv нет, создаем
+        if [ ! -d "${VENV_PATH}" ]; then sudo -u ${SERVICE_USER} ${PYTHON_BIN} -m venv "${VENV_PATH}"; fi
         
         if $install_pip; then
             run_with_spinner "Установка зависимостей" sudo -u ${SERVICE_USER} "${VENV_PATH}/bin/pip" install -r "${BOT_INSTALL_PATH}/requirements.txt"
-            run_with_spinner "Установка tomlkit" sudo -u ${SERVICE_USER} "${VENV_PATH}/bin/pip" install tomlkit
+            run_with_spinner "Установка доп. пакетов (tomlkit)" sudo -u ${SERVICE_USER} "${VENV_PATH}/bin/pip" install tomlkit
             update_state_hash "REQ_HASH" "$req_hash"
         fi
+        exec_cmd="sudo -u ${SERVICE_USER}"
     else
         setup_repo_and_dirs "root"
-        exec_cmd=""
         
-        if [ ! -d "${VENV_PATH}" ]; then
-            run_with_spinner "Создание venv (Python 3.12)" ${PYTHON_FOR_VENV} -m venv "${VENV_PATH}"
-        fi
-        
-        apply_python_compat_fixes
-        
+        if [ ! -d "${VENV_PATH}" ]; then ${PYTHON_BIN} -m venv "${VENV_PATH}"; fi
+
         if $install_pip; then
             run_with_spinner "Установка зависимостей" "${VENV_PATH}/bin/pip" install -r "${BOT_INSTALL_PATH}/requirements.txt"
-            run_with_spinner "Установка tomlkit" "${VENV_PATH}/bin/pip" install tomlkit
+            run_with_spinner "Установка доп. пакетов (tomlkit)" "${VENV_PATH}/bin/pip" install tomlkit
             update_state_hash "REQ_HASH" "$req_hash"
         fi
+        exec_cmd=""
     fi
-    
+
     load_cached_env
     ask_env_details
     write_env_file "systemd" "$mode" ""
-    
+
+    # Запуск миграций (с проверкой хешей)
     run_db_migrations "$exec_cmd"
-    
+
     create_and_start_service "${SERVICE_NAME}" "${BOT_INSTALL_PATH}/bot.py" "$mode" "Telegram Bot"
     create_and_start_service "${WATCHDOG_SERVICE_NAME}" "${BOT_INSTALL_PATH}/watchdog.py" "root" "Наблюдатель"
-    
+
+    # --- CLI UTILS ---
     msg_info "Создание команды 'tgcp-bot'..."
+    if [ ! -f "${BOT_INSTALL_PATH}/manage.py" ]; then
+       true
+    else
+       chmod +x "${BOT_INSTALL_PATH}/manage.py"
+    fi
+    
     sudo bash -c "cat > /usr/local/bin/tgcp-bot" <<EOF
 #!/bin/bash
 cd ${BOT_INSTALL_PATH}
@@ -645,18 +663,28 @@ fi
 ${VENV_PATH}/bin/python manage.py "\$@"
 EOF
     sudo chmod +x /usr/local/bin/tgcp-bot
-    
-    save_current_version
-    cleanup_agent_files
-    cleanup_files
-    
-    local ip=$(curl -s ipinfo.io/ip)
-    echo ""; msg_success "Установка завершена! Агент: http://${ip}:${WEB_PORT}"
-    
-    if [ "${ENABLE_WEB}" == "true" ]; then
-        echo -e "${C_CYAN}🔑 ВАШ ПАРОЛЬ: ${C_BOLD}${GEN_PASS}${C_RESET}"
+
+    if [ -f "/usr/local/bin/tgcp-bot" ] && [ -x "/usr/local/bin/tgcp-bot" ]; then
+        msg_success "Команда 'tgcp-bot' успешно создана!"
+    else
+        msg_error "Не удалось создать команду 'tgcp-bot'."
     fi
-    
+
+    # === ФИНАЛЬНАЯ ОЧИСТКА ===
+    save_current_version  # Сохраняем версию перед удалением
+    cleanup_agent_files
+    cleanup_files         # Удаляет README
+    # =========================
+
+    local ip=$(curl -s ipinfo.io/ip)
+    echo ""; msg_success "Установка завершена! Агент доступен: http://${ip}:${WEB_PORT}"
+    echo -e "💡 Используйте команду ${C_BOLD}tgcp-bot${C_RESET} для управления (сброс пароля и др.)."
+
+    if [ "${ENABLE_WEB}" == "true" ]; then
+        echo -e "${C_CYAN}🔑 ВАШ ПАРОЛЬ ОТ WEB-ПАНЕЛИ: ${C_BOLD}${GEN_PASS}${C_RESET}"
+        echo -e "Сохраните его! Он необходим для входа."
+    fi
+
     if [ "$SETUP_HTTPS" == "true" ]; then setup_nginx_proxy; fi
 }
 
@@ -666,12 +694,10 @@ install_docker_logic() {
     install_extras
     setup_repo_and_dirs "root"
     check_docker_deps
-    
-    apply_python_compat_fixes
-    
+
     load_cached_env
     ask_env_details
-    
+
     create_dockerfile
     create_docker_compose_yml
     local container_name="tg-bot-${mode}"
@@ -679,16 +705,22 @@ install_docker_logic() {
     
     cd ${BOT_INSTALL_PATH}
     local dc_cmd=""
-    if sudo docker compose version &>/dev/null; then dc_cmd="docker compose"; else dc_cmd="docker-compose"; fi
-    
-    run_with_spinner "Сборка Docker" sudo $dc_cmd build --no-cache
+    if sudo docker compose version &>/dev/null; then dc_cmd="docker compose"; elif command -v docker-compose &>/dev/null; then dc_cmd="docker-compose"; else msg_error "Docker Compose не найден."; return 1; fi
+    run_with_spinner "Сборка Docker" sudo $dc_cmd build
     run_with_spinner "Запуск Docker" sudo $dc_cmd --profile "${mode}" up -d --remove-orphans
-    
-    msg_info "Настройка БД в контейнере..."
+
+    # Попытка запустить миграции внутри контейнера
+    msg_info "Попытка настройки БД в контейнере..."
+    sudo $dc_cmd --profile "${mode}" exec -T ${container_name} aerich init -t core.config.TORTOISE_ORM >/dev/null 2>&1
+    sudo $dc_cmd --profile "${mode}" exec -T ${container_name} aerich init-db >/dev/null 2>&1
     sudo $dc_cmd --profile "${mode}" exec -T ${container_name} aerich upgrade >/dev/null 2>&1
+
+    # Миграция JSON
+    msg_info "Миграция JSON файлов в контейнере..."
     sudo $dc_cmd --profile "${mode}" exec -T ${container_name} python migrate.py >/dev/null 2>&1
     
-    msg_info "Создание команды 'tgcp-bot'..."
+    # --- CLI UTILS ---
+    msg_info "Создание команды 'tgcp-bot' (Docker Wrapper)..."
     sudo bash -c "cat > /usr/local/bin/tgcp-bot" <<EOF
 #!/bin/bash
 cd ${BOT_INSTALL_PATH}
@@ -697,16 +729,27 @@ CONTAINER="tg-bot-\$MODE"
 sudo $dc_cmd --profile "\$MODE" exec -T \$CONTAINER python manage.py "\$@"
 EOF
     sudo chmod +x /usr/local/bin/tgcp-bot
-    
-    save_current_version
+
+    if [ -f "/usr/local/bin/tgcp-bot" ] && [ -x "/usr/local/bin/tgcp-bot" ]; then
+        msg_success "Команда 'tgcp-bot' (Docker) успешно создана!"
+    else
+        msg_error "Не удалось создать команду 'tgcp-bot'."
+    fi
+
+    # === ФИНАЛЬНАЯ ОЧИСТКА ===
+    save_current_version  # Сохраняем версию
     cleanup_agent_files
     cleanup_files
-    
-    msg_success "Docker установка завершена!"
+    # =========================
+
+    msg_success "Установка Docker завершена!"
+    echo -e "💡 Используйте команду ${C_BOLD}tgcp-bot${C_RESET} для управления."
+
     if [ "${ENABLE_WEB}" == "true" ]; then
-        echo -e "${C_CYAN}🔑 ВАШ ПАРОЛЬ: ${C_BOLD}${GEN_PASS}${C_RESET}"
+        echo -e "${C_CYAN}🔑 ВАШ ПАРОЛЬ ОТ WEB-ПАНЕЛИ: ${C_BOLD}${GEN_PASS}${C_RESET}"
+        echo -e "Сохраните его! Он необходим для входа."
     fi
-    
+
     if [ "$SETUP_HTTPS" == "true" ]; then setup_nginx_proxy; fi
 }
 
@@ -714,40 +757,45 @@ install_node_logic() {
     echo -e "\n${C_BOLD}=== Установка НОДЫ (Клиент) ===${C_RESET}"
     if [ -n "$AUTO_AGENT_URL" ]; then AGENT_URL="$AUTO_AGENT_URL"; fi
     if [ -n "$AUTO_NODE_TOKEN" ]; then NODE_TOKEN="$AUTO_NODE_TOKEN"; fi
-    
+
     common_install_steps
+    # install_extras НЕ вызываем здесь, чтобы не ставить fail2ban
     
-    if ! command -v iperf3 &>/dev/null; then
-        echo "iperf3 iperf3/start_daemon boolean true" | sudo debconf-set-selections
-        run_with_spinner "Установка iperf3" sudo apt-get install -y -q iperf3
+    # Проверка iperf3 (только)
+    if command -v iperf3 &> /dev/null; then
+        msg_success "iperf3 уже установлен."
+    else
+        msg_question "iperf3 не найден. Установить? (y/n): " I
+        if [[ "$I" =~ ^[Yy]$ ]]; then run_with_spinner "Установка iperf3" sudo apt-get install -y -q -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" iperf3; fi
     fi
-    
+
     setup_repo_and_dirs "root"
+    
+    # Расчет хеша зависимостей ноды
     local node_deps_hash=$(echo "psutil requests" | sha256sum | awk '{print $1}')
     local install_pip=true
-    
-    # ИЗОЛЯЦИЯ: Venv
-    if [ ! -d "${VENV_PATH}" ]; then
-        run_with_spinner "Создание venv (Python 3.12)" ${PYTHON_FOR_VENV} -m venv "${VENV_PATH}"
+
+    msg_info "Настройка venv..."
+    if [ ! -d "${VENV_PATH}" ]; then 
+        run_with_spinner "Создание venv" ${PYTHON_BIN} -m venv "${VENV_PATH}"
     else
+        # Если venv есть, проверяем хеш
         if check_hash_match "NODE_REQ_HASH" "$node_deps_hash"; then
             install_pip=false
-            msg_success "Venv актуален."
+            msg_success "Зависимости (Venv) актуальны. Пропуск установки."
         fi
     fi
-    
-    apply_python_compat_fixes
-    
+
     if $install_pip; then
         run_with_spinner "Установка зависимостей" "${VENV_PATH}/bin/pip" install psutil requests
         update_state_hash "NODE_REQ_HASH" "$node_deps_hash"
     fi
-    
+
     load_cached_env
     echo ""; msg_info "Подключение:"
     msg_question "Agent URL (http://IP:8080): " AGENT_URL
     msg_question "Token: " NODE_TOKEN
-    
+
     sudo bash -c "cat > ${ENV_FILE}" <<EOF
 MODE=node
 AGENT_BASE_URL="${AGENT_URL}"
@@ -755,85 +803,102 @@ AGENT_TOKEN="${NODE_TOKEN}"
 NODE_UPDATE_INTERVAL=5
 EOF
     sudo chmod 600 "${ENV_FILE}"
+    sudo tee "/etc/systemd/system/${NODE_SERVICE_NAME}.service" > /dev/null <<EOF
+[Unit]
+Description=Telegram Bot Node Client
+After=network.target
+[Service]
+Type=simple
+User=root
+WorkingDirectory=${BOT_INSTALL_PATH}
+EnvironmentFile=${BOT_INSTALL_PATH}/.env
+ExecStart=${VENV_PATH}/bin/python node/node.py
+Restart=always
+RestartSec=10
+[Install]
+WantedBy=multi-user.target
+EOF
+    sudo systemctl daemon-reload; sudo systemctl enable ${NODE_SERVICE_NAME}
+    run_with_spinner "Запуск Ноды" sudo systemctl restart ${NODE_SERVICE_NAME}
     
-    create_and_start_service "${NODE_SERVICE_NAME}" "node/node.py" "root" "Telegram Bot Node Client"
-    
-    save_current_version
+    # === ФИНАЛЬНАЯ ОЧИСТКА ===
+    save_current_version # Сохраняем версию перед удалением
     cleanup_node_files
+    # =========================
+    
     msg_success "Нода установлена!"
 }
 
 uninstall_bot() {
     echo -e "\n${C_BOLD}=== Удаление ===${C_RESET}"
+    cd /
     sudo systemctl stop ${SERVICE_NAME} ${WATCHDOG_SERVICE_NAME} ${NODE_SERVICE_NAME} &> /dev/null
     sudo systemctl disable ${SERVICE_NAME} ${WATCHDOG_SERVICE_NAME} ${NODE_SERVICE_NAME} &> /dev/null
-    sudo rm -f /etc/systemd/system/${SERVICE_NAME}.service \
-               /etc/systemd/system/${WATCHDOG_SERVICE_NAME}.service \
-               /etc/systemd/system/${NODE_SERVICE_NAME}.service
+    sudo rm -f /etc/systemd/system/${SERVICE_NAME}.service /etc/systemd/system/${WATCHDOG_SERVICE_NAME}.service /etc/systemd/system/${NODE_SERVICE_NAME}.service
     sudo systemctl daemon-reload
+    if [ -f "${DOCKER_COMPOSE_FILE}" ]; then cd ${BOT_INSTALL_PATH} && sudo docker-compose down -v --remove-orphans &> /dev/null; fi
+    sudo rm -rf "${BOT_INSTALL_PATH}"
+    # Удаляем CLI утилиту
+    sudo rm -f /usr/local/bin/tgcp-bot
     
-    if [ -f "${DOCKER_COMPOSE_FILE}" ]; then
-        cd ${BOT_INSTALL_PATH} && sudo docker-compose down -v --remove-orphans &> /dev/null
-    fi
-    
-    sudo rm -rf "${BOT_INSTALL_PATH}" /usr/local/bin/tgcp-bot
-    
-    if id "${SERVICE_USER}" &>/dev/null; then
-        sudo userdel -r "${SERVICE_USER}" &> /dev/null
-    fi
+    if id "${SERVICE_USER}" &>/dev/null; then sudo userdel -r "${SERVICE_USER}" &> /dev/null; fi
     msg_success "Удалено."
 }
 
 update_bot() {
     echo -e "\n${C_BOLD}=== Обновление ===${C_RESET}"
-    if [ -f "${ENV_FILE}" ] && grep -q "MODE=node" "${ENV_FILE}"; then
-        msg_info "Обновление Ноды..."
-        install_node_logic
-        return
-    fi
-    
+    if [ -f "${ENV_FILE}" ] && grep -q "MODE=node" "${ENV_FILE}"; then msg_info "Обновление Ноды..."; install_node_logic; return; fi
+    if [ ! -d "${BOT_INSTALL_PATH}/.git" ]; then msg_error "Git не найден. Переустановите."; return 1; fi
+
     local exec_cmd=""
-    if [ -f "${ENV_FILE}" ] && grep -q "INSTALL_MODE=secure" "${ENV_FILE}"; then
-        exec_cmd="sudo -u ${SERVICE_USER}"
-    fi
-    
+    if [ -f "${ENV_FILE}" ] && grep -q "INSTALL_MODE=secure" "${ENV_FILE}"; then exec_cmd="sudo -u ${SERVICE_USER}"; fi
+
     cd "${BOT_INSTALL_PATH}"
-    run_with_spinner "Git fetch" $exec_cmd git fetch origin
-    run_with_spinner "Git reset" $exec_cmd git reset --hard "origin/${GIT_BRANCH}"
+    if ! run_with_spinner "Git fetch" $exec_cmd git fetch origin; then return 1; fi
+    if ! run_with_spinner "Git reset" $exec_cmd git reset --hard "origin/${GIT_BRANCH}"; then return 1; fi
     
+    # ПРИМЕЧАНИЕ: Здесь очистку НЕ запускаем, так как восстановленные файлы нужны ниже для pip/docker
+
     if [ -f "${ENV_FILE}" ] && grep -q "DEPLOY_MODE=docker" "${ENV_FILE}"; then
-        local dc_cmd=""
-        if sudo docker compose version &>/dev/null; then dc_cmd="docker compose"; else dc_cmd="docker-compose"; fi
-        
-        apply_python_compat_fixes
-        
-        run_with_spinner "Docker Up" sudo $dc_cmd up -d --build --no-cache
-        
-        local mode=$(grep '^INSTALL_MODE=' "${ENV_FILE}" | cut -d'=' -f2 | tr -d '"')
-        local cn="tg-bot-${mode}"
-        
-        sudo $dc_cmd --profile "${mode}" exec -T ${cn} aerich upgrade >/dev/null 2>&1
-        sudo $dc_cmd --profile "${mode}" exec -T ${cn} python migrate.py >/dev/null 2>&1
-        
-        # Обновление CLI wrapper
-        sudo bash -c "cat > /usr/local/bin/tgcp-bot" <<EOF
+        if [ -f "docker-compose.yml" ]; then
+            local dc_cmd=""; if sudo docker compose version &>/dev/null; then dc_cmd="docker compose"; else dc_cmd="docker-compose"; fi
+            if ! run_with_spinner "Docker Up" sudo $dc_cmd up -d --build; then msg_error "Ошибка Docker."; return 1; fi
+            
+            local mode=$(grep '^INSTALL_MODE=' "${ENV_FILE}" | cut -d'=' -f2 | tr -d '"')
+            local cn="tg-bot-${mode}"
+            sudo $dc_cmd --profile "${mode}" exec -T ${cn} aerich upgrade >/dev/null 2>&1
+            sudo $dc_cmd --profile "${mode}" exec -T ${cn} python migrate.py >/dev/null 2>&1
+            
+            # Обновление CLI wrapper для докера
+            msg_info "Обновление CLI 'tgcp-bot'..."
+            sudo bash -c "cat > /usr/local/bin/tgcp-bot" <<EOF
 #!/bin/bash
 cd ${BOT_INSTALL_PATH}
 MODE=\$(grep '^INSTALL_MODE=' .env | cut -d'=' -f2 | tr -d '"')
 CONTAINER="tg-bot-\$MODE"
 sudo $dc_cmd --profile "\$MODE" exec -T \$CONTAINER python manage.py "\$@"
 EOF
+            sudo chmod +x /usr/local/bin/tgcp-bot
+            
+            if [ -f "/usr/local/bin/tgcp-bot" ] && [ -x "/usr/local/bin/tgcp-bot" ]; then
+                msg_success "CLI 'tgcp-bot' обновлен."
+            fi
+
+        else msg_error "Нет docker-compose.yml"; return 1; fi
     else
-        apply_python_compat_fixes
-        
+        # Обновление PIP только если изменился requirements.txt (через хеш)
         local req_hash=$(get_file_hash "${BOT_INSTALL_PATH}/requirements.txt")
-        if ! check_hash_match "REQ_HASH" "$req_hash"; then
+        if check_hash_match "REQ_HASH" "$req_hash"; then
+             msg_success "Зависимости не менялись. Пропуск обновления PIP."
+        else
              run_with_spinner "Обновление pip" $exec_cmd "${VENV_PATH}/bin/pip" install -r "${BOT_INSTALL_PATH}/requirements.txt" --upgrade
+             run_with_spinner "Обновление tomlkit" $exec_cmd "${VENV_PATH}/bin/pip" install tomlkit
              update_state_hash "REQ_HASH" "$req_hash"
         fi
-        
+
         run_db_migrations "$exec_cmd"
         
+        msg_info "Обновление CLI 'tgcp-bot'..."
         sudo bash -c "cat > /usr/local/bin/tgcp-bot" <<EOF
 #!/bin/bash
 cd ${BOT_INSTALL_PATH}
@@ -844,70 +909,54 @@ if [ -f .env ]; then
 fi
 ${VENV_PATH}/bin/python manage.py "\$@"
 EOF
-        if systemctl list-unit-files | grep -q "^${SERVICE_NAME}.service"; then
-            sudo systemctl restart ${SERVICE_NAME}
+        sudo chmod +x /usr/local/bin/tgcp-bot
+        
+        if [ -f "/usr/local/bin/tgcp-bot" ] && [ -x "/usr/local/bin/tgcp-bot" ]; then
+            msg_success "CLI 'tgcp-bot' обновлен."
         fi
-        if systemctl list-unit-files | grep -q "^${WATCHDOG_SERVICE_NAME}.service"; then
-            sudo systemctl restart ${WATCHDOG_SERVICE_NAME}
-        fi
+
+        if systemctl list-unit-files | grep -q "^${SERVICE_NAME}.service"; then sudo systemctl restart ${SERVICE_NAME}; fi
+        if systemctl list-unit-files | grep -q "^${WATCHDOG_SERVICE_NAME}.service"; then sudo systemctl restart ${WATCHDOG_SERVICE_NAME}; fi
     fi
-    
-    sudo chmod +x /usr/local/bin/tgcp-bot
-    save_current_version
+
+    # === ФИНАЛЬНАЯ ОЧИСТКА ===
+    save_current_version  # Сохраняем версию перед повторным удалением
     cleanup_agent_files
     cleanup_files
-    
+    # =========================
+
     msg_success "Обновлено."
 }
 
-# --- Main Entry ---
-if [ "$(id -u)" -ne 0 ]; then msg_error "Нужен root."; exit 1; fi
+main_menu() {
+    local remote_version=""
+    
+    while true; do
+        clear
+        echo -e "${C_BLUE}${C_BOLD}╔═══════════════════════════════════╗${C_RESET}"
+        echo -e "${C_BLUE}${C_BOLD}║    Менеджер VPS Telegram Бот      ║${C_RESET}"
+        echo -e "${C_BLUE}${C_BOLD}╚═══════════════════════════════════╝${C_RESET}"
+        check_integrity
+        
+        # Получаем версию локальную (из .env или README)
+        local local_version=$(get_local_version)
 
-if [ "$AUTO_MODE" = true ] && [ -n "$AUTO_AGENT_URL" ] && [ -n "$AUTO_NODE_TOKEN" ]; then
-    install_node_logic
-    exit 0
-fi
+        # Запрашиваем remote версию только если еще не получали, чтобы не тупило меню
+        if [ -z "$remote_version" ]; then
+            remote_version=$(get_remote_version)
+        fi
 
-check_integrity
-while true; do
-    clear
-    echo -e "${C_BLUE}${C_BOLD}╔═══════════════════════════════════╗${C_RESET}"
-    echo -e "${C_BLUE}${C_BOLD}║      Установка VPS Manager Bot    ║${C_RESET}"
-    echo -e "${C_BLUE}${C_BOLD}╚═══════════════════════════════════╝${C_RESET}"
-    
-    local local_ver=$(get_local_version)
-    local remote_ver=$(get_remote_version)
-    
-    echo -e "  Ветка: ${GIT_BRANCH}"
-    echo -e "  Тип: ${INSTALL_TYPE} | Статус: ${STATUS_MESSAGE}"
-    
-    if [ "$local_ver" != "$remote_ver" ] && [ "$remote_ver" != "Не удалось получить" ] && [ "$local_ver" != "Не определена" ] && [ "$INSTALL_TYPE" != "НЕТ" ]; then
-         echo -e "  Версия: ${C_YELLOW}Локальная: $local_ver (Доступна: $remote_ver)${C_RESET}"
-    else
-         echo -e "  Версия: ${C_GREEN}$local_ver${C_RESET}"
-    fi
+        echo -e "  Ветка: ${GIT_BRANCH}"
+        echo -e "  Тип: ${INSTALL_TYPE} | Статус: ${STATUS_MESSAGE}"
+        
+        # Сравнение версий и раскраска
+        if [ "$local_version" != "$remote_version" ] && [ "$remote_version" != "Не удалось получить" ] && [ "$local_version" != "Не установлен" ] && [ "$local_version" != "Не определена" ]; then
+             echo -e "  Версия: ${C_YELLOW}Локальная: $local_version (Доступна: $remote_version)${C_RESET}"
+        else
+             echo -e "  Версия: ${C_GREEN}$local_version${C_RESET}"
+        fi
 
-    echo "--------------------------------------------------------"
-    
-    if [ "$INSTALL_TYPE" == "НЕТ" ]; then
-        echo -e "  Выберите режим установки:"
-        echo "  1) АГЕНТ (Systemd - Secure)  [Рекомендуется]"
-        echo "  2) АГЕНТ (Systemd - Root)    [Полный доступ]"
-        echo "  3) АГЕНТ (Docker - Secure)   [Изоляция]"
-        echo "  4) АГЕНТ (Docker - Root)     [Docker + Host]"
-        echo -e "${C_GREEN}  8) НОДА (Клиент)${C_RESET}"
-        echo "  0) Выход"
         echo "--------------------------------------------------------"
-        read -p "$(echo -e "${C_BOLD}Ваш выбор: ${C_RESET}")" ch
-        case $ch in
-            1) uninstall_bot; install_systemd_logic "secure"; read -p "Нажмите Enter..." ;;
-            2) uninstall_bot; install_systemd_logic "root"; read -p "Нажмите Enter..." ;;
-            3) uninstall_bot; install_docker_logic "secure"; read -p "Нажмите Enter..." ;;
-            4) uninstall_bot; install_docker_logic "root"; read -p "Нажмите Enter..." ;;
-            8) uninstall_bot; install_node_logic; read -p "Нажмите Enter..." ;;
-            0) break ;;
-        esac
-    else
         echo "  1) Обновить бота"
         echo "  2) Удалить бота"
         echo "  3) Переустановить (Systemd - Secure)"
@@ -917,8 +966,8 @@ while true; do
         echo -e "${C_GREEN}  8) Установить НОДУ (Клиент)${C_RESET}"
         echo "  0) Выход"
         echo "--------------------------------------------------------"
-        read -p "$(echo -e "${C_BOLD}Ваш выбор: ${C_RESET}")" ch
-        case $ch in
+        read -p "$(echo -e "${C_BOLD}Ваш выбор: ${C_RESET}")" choice
+        case $choice in
             1) update_bot; read -p "Нажмите Enter..." ;;
             2) msg_question "Удалить? (y/n): " c; if [[ "$c" =~ ^[Yy]$ ]]; then uninstall_bot; return; fi ;;
             3) uninstall_bot; install_systemd_logic "secure"; read -p "Нажмите Enter..." ;;
@@ -928,5 +977,42 @@ while true; do
             8) uninstall_bot; install_node_logic; read -p "Нажмите Enter..." ;;
             0) break ;;
         esac
-    fi
-done
+    done
+}
+
+if [ "$(id -u)" -ne 0 ]; then msg_error "Нужен root."; exit 1; fi
+
+if [ "$AUTO_MODE" = true ] && [ -n "$AUTO_AGENT_URL" ] && [ -n "$AUTO_NODE_TOKEN" ]; then
+    install_node_logic
+    exit 0
+fi
+
+check_integrity
+if [ "$INSTALL_TYPE" == "НЕТ" ]; then
+    clear
+    echo -e "${C_BLUE}${C_BOLD}╔═══════════════════════════════════╗${C_RESET}"
+    echo -e "${C_BLUE}${C_BOLD}║      Установка VPS Manager Bot    ║${C_RESET}"
+    echo -e "${C_BLUE}${C_BOLD}╚═══════════════════════════════════╝${C_RESET}"
+    echo -e "  Выберите режим установки:"
+    echo "--------------------------------------------------------"
+    echo "  1) АГЕНТ (Systemd - Secure)  [Рекомендуется]"
+    echo "  2) АГЕНТ (Systemd - Root)    [Полный доступ]"
+    echo "  3) АГЕНТ (Docker - Secure)   [Изоляция]"
+    echo "  4) АГЕНТ (Docker - Root)     [Docker + Host]"
+    echo -e "${C_GREEN}  8) НОДА (Клиент)${C_RESET}"
+    echo "  0) Выход"
+    echo "--------------------------------------------------------"
+    read -p "$(echo -e "${C_BOLD}Ваш выбор: ${C_RESET}")" ch
+    case $ch in
+        1) uninstall_bot; install_systemd_logic "secure"; read -p "Нажмите Enter..." ;;
+        2) uninstall_bot; install_systemd_logic "root"; read -p "Нажмите Enter..." ;;
+        3) uninstall_bot; install_docker_logic "secure"; read -p "Нажмите Enter..." ;;
+        4) uninstall_bot; install_docker_logic "root"; read -p "Нажмите Enter..." ;;
+        8) uninstall_bot; install_node_logic; read -p "Нажмите Enter..." ;;
+        0) exit 0 ;;
+        *) msg_error "Неверный выбор."; sleep 2 ;;
+    esac
+    main_menu
+else
+    main_menu
+fi
