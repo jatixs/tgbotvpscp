@@ -844,7 +844,8 @@ update_bot() {
         sudo docker rm -f tg-bot-secure tg-bot-root 2>/dev/null
         # --------------------------------------------------------------------
         
-        run_with_spinner "Docker Up" sudo $dc_cmd --profile "${mode}" up -d --build --pull --no-cache --remove-orphans
+        run_with_spinner "Сборка Docker" sudo $dc_cmd --profile "${mode}" build --pull --no-cache
+        run_with_spinner "Запуск Docker" sudo $dc_cmd --profile "${mode}" up -d --remove-orphans
         
         sudo $dc_cmd --profile "${mode}" exec -T ${cn} aerich upgrade >/dev/null 2>&1
         sudo $dc_cmd --profile "${mode}" exec -T ${cn} python migrate.py >/dev/null 2>&1
