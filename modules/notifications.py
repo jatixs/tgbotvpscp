@@ -6,8 +6,7 @@ import re
 import os
 import signal
 import aiohttp
-import pytz
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from aiogram import F, Dispatcher, types, Bot
 from aiogram.types import KeyboardButton
 from core.i18n import _, I18nFilter, get_user_lang
@@ -154,48 +153,36 @@ async def cq_toggle_alert(callback: types.CallbackQuery):
     )
 
 
-async def get_ip_extended_info(ip: str):
+async def get_ip_data(ip: str):
+    """
+    Получает флаг страны и смещение часового пояса (в секундах) для IP.
+    """
     if not ip or ip in ["localhost", "127.0.0.1", "::1"]:
         return "🏠", None
-
-    flag = "❓"
-    tz_name = None
-
     try:
         async with aiohttp.ClientSession() as session:
             async with session.get(
-                f"http://ip-api.com/json/{ip}?fields=countryCode,timezone,status",
+                f"http://ip-api.com/json/{ip}?fields=status,countryCode,offset",
                 timeout=2,
             ) as response:
                 if response.status == 200:
                     data = await response.json()
                     if data.get("status") == "success":
-                        cc = data.get("countryCode")
-                        if cc and len(cc) == 2:
+                        country_code = data.get("countryCode")
+                        flag = "❓"
+                        if country_code and len(country_code) == 2:
                             flag = "".join(
-                                (chr(ord(char.upper()) - 65 + 127462) for char in cc)
+                                (
+                                    chr(ord(char.upper()) - 65 + 127462)
+                                    for char in country_code
+                                )
                             )
-                        tz_name = data.get("timezone")
+                        offset = data.get("offset")
+                        return flag, offset
     except Exception as e:
-        logging.warning(f"Error getting IP info for {ip}: {e}")
-
-    return flag, tz_name
-
-
-def format_alert_time(server_now: datetime, ip_tz_name: str | None) -> str:
-    server_time_str = server_now.strftime("%H:%M:%S")
-    time_str = server_time_str
-
-    if ip_tz_name:
-        try:
-            target_tz = pytz.timezone(ip_tz_name)
-            target_now = datetime.now(target_tz)
-
-            if server_now.strftime("%H:%M") != target_now.strftime("%H:%M"):
-                time_str += f" (📍 {target_now.strftime('%H:%M')})"
-        except Exception:
-            pass
-    return time_str
+        logging.warning(f"Error getting IP data for {ip}: {e}")
+    
+    return "❓", None
 
 
 async def parse_ssh_log_line(line: str) -> dict | None:
@@ -224,8 +211,23 @@ async def parse_ssh_log_line(line: str) -> dict | None:
             RECENT_NOTIFIED_LOGINS.clear()
 
         try:
-            flag, ip_tz = await get_ip_extended_info(ip)
-            time_str = format_alert_time(datetime.now(), ip_tz)
+            flag, offset = await get_ip_data(ip)
+            s_now = datetime.now()
+            s_tz_label = get_server_timezone_label() 
+            
+            time_str = f"{s_now.strftime('%H:%M:%S')}{s_tz_label}"         
+            if offset is not None:
+                try:
+                    utc_now = datetime.now(timezone.utc)
+                    ip_dt = utc_now + timedelta(seconds=offset)
+                    
+                    off_h = int(offset / 3600)
+                    sign = "+" if off_h >= 0 else ""
+                    ip_tz_label = f"GMT{sign}{off_h}"
+                    
+                    time_str += f" / 📍 {ip_dt.strftime('%H:%M')} ({ip_tz_label})"
+                except Exception:
+                    pass
 
             return {
                 "key": "alert_ssh_login_detected",
@@ -234,7 +236,7 @@ async def parse_ssh_log_line(line: str) -> dict | None:
                     "flag": flag,
                     "ip": ip,
                     "time": time_str,
-                    "tz": get_server_timezone_label(),
+                    "tz": "",  
                     "method_key": method_key,
                 },
             }
@@ -248,9 +250,23 @@ async def parse_f2b_log_line(line: str) -> dict | None:
     match = re.search("fail2ban\\.actions.* Ban\\s+(\\S+)", line)
     if match:
         try:
-            ip = escape_html(match.group(1).strip())
-            flag, ip_tz = await get_ip_extended_info(ip)
-            time_str = format_alert_time(datetime.now(), ip_tz)
+            ip = escape_html(match.group(1).strip())            
+            flag, offset = await get_ip_data(ip)            
+            s_now = datetime.now()
+            s_tz_label = get_server_timezone_label()
+            time_str = f"⏰ Время: {s_now.strftime('%H:%M:%S')}{s_tz_label}"
+            if offset is not None:
+                try:
+                    utc_now = datetime.now(timezone.utc)
+                    ip_dt = utc_now + timedelta(seconds=offset)
+                    
+                    off_h = int(offset / 3600)
+                    sign = "+" if off_h >= 0 else ""
+                    ip_tz_label = f"GMT{sign}{off_h}"
+                    
+                    time_str += f" / 📍 {ip_dt.strftime('%H:%M')} ({ip_tz_label})"
+                except Exception:
+                    pass
 
             return {
                 "key": "alert_f2b_ban_detected",
@@ -258,7 +274,7 @@ async def parse_f2b_log_line(line: str) -> dict | None:
                     "flag": flag,
                     "ip": ip,
                     "time": time_str,
-                    "tz": get_server_timezone_label(),
+                    "tz": "",
                 },
             }
         except Exception as e:
