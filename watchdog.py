@@ -119,6 +119,8 @@ def get_last_backup_info() -> str:
         latest_file = max(files, key=os.path.getmtime)
         mod_time = os.path.getmtime(latest_file)
         dt = datetime.fromtimestamp(mod_time)
+        
+        # Формируем строку: "Категория (Дата Время)"
         return f"Traffic ({dt.strftime('%Y-%m-%d %H:%M')})"
     except Exception as e:
         return f"Error: {str(e)}"
@@ -138,9 +140,6 @@ def process_startup_flags():
                 chat_id = int(chat_id_str)
                 message_id = int(message_id_str)
                 
-                # Текст сообщения берем хардкодом или можно добавить в i18n watchdog, 
-                # но для простоты используем универсальный.
-                # Пытаемся отредактировать сообщение "Restarting..." на "Restarted"
                 text = f"✅ {get_text('utils_bot_restarted', WD_LANG)}"
                 
                 url = f"https://api.telegram.org/bot{ALERT_BOT_TOKEN}/editMessageText"
@@ -148,6 +147,8 @@ def process_startup_flags():
                     "chat_id": chat_id,
                     "message_id": message_id,
                     "text": text,
+                    # Пустая клавиатура, чтобы убрать кнопки если они были
+                    "reply_markup": json.dumps({"inline_keyboard": []})
                 }
                 requests.post(url, data=payload, timeout=5)
                 logging.info(f"Processed restart flag for chat {chat_id}")
@@ -203,7 +204,13 @@ def send_or_edit_telegram_alert(
     ):
         logging.warning(f"Активен кулдаун для '{alert_type}', пропуск уведомления.")
         return message_id_to_edit
-    alert_prefix = get_text("watchdog_alert_prefix", WD_LANG)
+    
+    # Определяем префикс. Для сообщения о запуске бота убираем префикс.
+    if alert_type == "bot_service_up_ok":
+        alert_prefix = ""
+    else:
+        alert_prefix = get_text("watchdog_alert_prefix", WD_LANG) + "\n\n"
+
     if not message_key:
         logging.error(
             f"send_or_edit_telegram_alert вызван с пустым message_key для alert_type '{alert_type}'"
@@ -212,11 +219,12 @@ def send_or_edit_telegram_alert(
     else:
         message_body = get_text(message_key, WD_LANG, **kwargs)
     
-    text_to_send = f"{alert_prefix}\n\n{message_body}"
+    # Формируем основной текст
+    text_to_send = f"{alert_prefix}{message_body}"
 
     # Добавляем доп. информацию (Uptime, Downtime, Backup) если она передана
     extra_info = []
-    if kwargs.get("downtime"):
+    if kwargs.get("downtime") and kwargs.get("downtime") != "N/A":
         extra_info.append(f"⏱ <b>Downtime:</b> {kwargs['downtime']}")
     if kwargs.get("uptime"):
         extra_info.append(f"⚡ <b>Uptime:</b> {kwargs['uptime']}")
@@ -228,6 +236,10 @@ def send_or_edit_telegram_alert(
 
     message_sent_or_edited = False
     new_message_id = message_id_to_edit
+    
+    # Явно указываем пустую клавиатуру, чтобы кнопок точно не было
+    empty_kb = json.dumps({"inline_keyboard": []})
+
     if message_id_to_edit:
         url = f"https://api.telegram.org/bot{ALERT_BOT_TOKEN}/editMessageText"
         payload = {
@@ -235,6 +247,7 @@ def send_or_edit_telegram_alert(
             "message_id": message_id_to_edit,
             "text": text_to_send,
             "parse_mode": "HTML",
+            "reply_markup": empty_kb 
         }
         try:
             response = requests.post(url, data=payload, timeout=10)
@@ -285,6 +298,7 @@ def send_or_edit_telegram_alert(
             "chat_id": ALERT_ADMIN_ID,
             "text": text_to_send,
             "parse_mode": "HTML",
+            "reply_markup": empty_kb
         }
         try:
             response = requests.post(url, data=payload, timeout=10)
@@ -593,10 +607,10 @@ def process_service_state(
             if log_status_key == "OK":
                 logging.info("Проверка лога: OK.")
                 state_to_report = "active_ok"
+                # Используем новый ключ для чистого сообщения
                 alert_type = "bot_service_up_ok"
                 message_key = "watchdog_status_active_ok"
                 
-                # Собираем данные для отчета
                 downtime_str = "N/A"
                 if down_time_start:
                     d_seconds = int(time.time() - down_time_start)
@@ -607,7 +621,6 @@ def process_service_state(
                 message_kwargs["uptime"] = get_system_uptime()
                 message_kwargs["last_backup"] = get_last_backup_info()
 
-                # Обрабатываем флаги ручного перезапуска (уведомляем пользователя и удаляем флаги)
                 process_startup_flags()
                 
             elif log_status_key is not None:
@@ -617,8 +630,6 @@ def process_service_state(
                 alert_type = "bot_service_up_error"
                 message_key = "watchdog_status_active_error"
                 message_kwargs["details"] = log_details
-                
-                # Даже с ошибкой, если он активен, стоит почистить флаги, чтобы они не висели
                 process_startup_flags()
 
             else:

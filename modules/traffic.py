@@ -38,17 +38,16 @@ def register_handlers(dp: Dispatcher):
     # Callback-хендлеры для управления мониторингом
     dp.callback_query(F.data == "stop_traffic")(stop_traffic_handler)
     
-    # Технические хендлеры (сброс и обновление уведомления о старте)
+    # Технические хендлеры (сброс статистики)
     dp.callback_query(F.data == "reset_traffic_stats")(reset_stats_handler)
-    dp.callback_query(F.data == "refresh_traffic_stats")(refresh_stats_handler)
 
 
 def start_background_tasks(bot: Bot) -> list[asyncio.Task]:
     load_traffic_state()
     monitor_task = asyncio.create_task(traffic_monitor(bot), name="TrafficMonitor")
     backup_task = asyncio.create_task(periodic_backup_task(), name="TrafficBackup")
-    notify_task = asyncio.create_task(send_startup_notification(bot), name="TrafficStartupNotify")
-    return [monitor_task, backup_task, notify_task]
+    # Уведомление о старте удалено, так как теперь это делает Watchdog
+    return [monitor_task, backup_task]
 
 
 def get_current_traffic_total():
@@ -136,41 +135,6 @@ async def periodic_backup_task():
         await asyncio.to_thread(save_backup_file, rx, tx)
 
 
-async def send_startup_notification(bot: Bot):
-    """Отправляет уведомление админу при старте."""
-    await asyncio.sleep(5)
-    try:
-        admin_id = config.ADMIN_USER_ID
-        lang = get_user_lang(admin_id)
-        
-        backups = sorted(glob.glob(os.path.join(config.TRAFFIC_BACKUP_DIR, "traffic_backup_*.json")))
-        last_backup_info = get_text("no_backups", lang)
-        if backups:
-            try:
-                with open(backups[-1], "r", encoding="utf-8") as f:
-                    data = json.load(f)
-                    last_backup_info = data.get("date", "Unknown")
-            except:
-                pass
-
-        # Текст без текущего трафика (rx/tx убраны)
-        msg_text = get_text(
-            "traffic_startup_alert", 
-            lang, 
-            last_backup=last_backup_info
-        )
-        
-        kb = [
-            [InlineKeyboardButton(text=get_text("btn_refresh", lang), callback_data="refresh_traffic_stats")],
-            [InlineKeyboardButton(text=get_text("btn_reset_traffic", lang), callback_data="reset_traffic_stats")]
-        ]
-        keyboard = InlineKeyboardMarkup(inline_keyboard=kb)
-        
-        await bot.send_message(admin_id, msg_text, reply_markup=keyboard, parse_mode="HTML")
-    except Exception as e:
-        logging.error(f"Failed to send startup traffic notification: {e}")
-
-
 async def traffic_handler(message: types.Message):
     """Запуск активного монитора трафика."""
     user_id = message.from_user.id
@@ -203,7 +167,6 @@ async def traffic_handler(message: types.Message):
         
         can_reset = (time.time() - STARTUP_TIME) < 600
         
-        # Кнопка "Меню бэкапов" убрана отсюда
         row_actions = [InlineKeyboardButton(text=get_text("btn_stop_traffic", lang), callback_data="stop_traffic")]
         if can_reset:
             row_actions.append(InlineKeyboardButton(text=get_text("btn_reset_traffic", lang), callback_data="reset_traffic_stats"))
@@ -340,43 +303,3 @@ async def reset_stats_handler(callback: types.CallbackQuery):
         pass
     
     await callback.answer(get_text("traffic_reset_done", get_user_lang(callback.from_user.id)))
-    
-    # Обновляем сообщение, если сброс вызван из Startup Alert или монитора
-    if "traffic_startup_alert" in callback.message.text or "Traffic" in callback.message.text:
-         await refresh_stats_handler(callback)
-
-
-async def refresh_stats_handler(callback: types.CallbackQuery):
-    """Обновляет сообщение Startup Alert."""
-    lang = get_user_lang(callback.from_user.id)
-    backups = sorted(glob.glob(os.path.join(config.TRAFFIC_BACKUP_DIR, "traffic_backup_*.json")))
-    last_backup_info = get_text("no_backups", lang)
-    if backups:
-        try:
-            with open(backups[-1], "r", encoding="utf-8") as f:
-                data = json.load(f)
-                last_backup_info = data.get("date", "Unknown")
-        except:
-            pass
-            
-    msg_text = get_text(
-        "traffic_startup_alert", 
-        lang, 
-        last_backup=last_backup_info
-    )
-    
-    kb = [
-        [InlineKeyboardButton(text=get_text("btn_refresh", lang), callback_data="refresh_traffic_stats")],
-        [InlineKeyboardButton(text=get_text("btn_reset_traffic", lang), callback_data="reset_traffic_stats")]
-    ]
-    # Убираем кнопку сброса если прошло > 10 минут
-    if (time.time() - STARTUP_TIME) > 600:
-        kb.pop(1)
-        
-    kb.append([InlineKeyboardButton(text=get_text("btn_back_to_menu", lang), callback_data="back_to_menu")])
-
-    try:
-        await callback.message.edit_text(msg_text, reply_markup=InlineKeyboardMarkup(inline_keyboard=kb), parse_mode="HTML")
-    except TelegramBadRequest:
-        pass
-    await callback.answer()
