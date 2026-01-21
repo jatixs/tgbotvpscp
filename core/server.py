@@ -58,6 +58,7 @@ from .utils import (
 from .auth import save_users, get_user_name
 from .keyboards import BTN_CONFIG_MAP
 from modules import update as update_module
+from modules import traffic as traffic_module
 from . import shared_state
 
 COOKIE_NAME = "vps_agent_session"
@@ -503,6 +504,9 @@ async def handle_dashboard(request):
             for t, n in all_nodes.items()
         ]
         nodes_json = json.dumps(nlist)
+    
+    can_reset = (time.time() - traffic_module.STARTUP_TIME) < 600
+    
     context = {
         "web_title": f"{_('web_dashboard_title', lang)} - {TG_BOT_NAME}",
         "web_brand_name": TG_BOT_NAME,
@@ -560,8 +564,10 @@ async def handle_dashboard(request):
         "web_logs_protected_desc": _("web_logs_protected_desc", lang),
         "web_node_last_seen_label": _("web_node_last_seen", lang),
         "web_node_traffic": _("web_node_traffic", lang),
+        "web_reset_traffic_btn": _("web_reset_traffic_btn", lang),
         "user_role_js": f"const USER_ROLE = '{role}'; const IS_MAIN_ADMIN = {str(is_main_admin).lower()}; const WEB_KEY = '{get_web_key()}';",
         "is_main_admin": is_main_admin,
+        "reset_allowed": can_reset,
         "web_search_placeholder": _("web_search_placeholder", lang),
         "i18n_json": json.dumps(
             {
@@ -619,6 +625,8 @@ async def handle_dashboard(request):
                 "web_reloading_page": _("web_reloading_page", lang),
                 "web_node_rename_success": _("web_node_rename_success", lang),
                 "web_node_rename_error": _("web_node_rename_error", lang),
+                "web_traffic_reset_confirm": _("web_traffic_reset_confirm", lang),
+                "traffic_reset_done": _("traffic_reset_done", lang),
             }
         ),
     }
@@ -764,6 +772,9 @@ async def handle_agent_stats(request):
     }
     try:
         net = psutil.net_io_counters()
+        # ИСПОЛЬЗУЕМ СКОРРЕКТИРОВАННЫЙ ТРАФИК
+        rx_total, tx_total = traffic_module.get_current_traffic_total()
+        
         net_if = psutil.net_io_counters(pernic=True)
         mem = psutil.virtual_memory()
         disk = psutil.disk_usage(get_host_path("/"))
@@ -773,8 +784,8 @@ async def handle_agent_stats(request):
         proc_disk = await asyncio.to_thread(_get_top_processes, "disk")
         current_stats.update(
             {
-                "net_sent": net.bytes_sent,
-                "net_recv": net.bytes_recv,
+                "net_sent": tx_total, # Используем скорректированное значение
+                "net_recv": rx_total, # Используем скорректированное значение
                 "boot_time": psutil.boot_time(),
                 "ram_total": mem.total,
                 "ram_free": mem.available,
@@ -797,6 +808,33 @@ async def handle_agent_stats(request):
         except Exception:
             pass
     return web.json_response({"stats": current_stats, "history": AGENT_HISTORY})
+
+
+async def handle_reset_traffic(request):
+    user = get_current_user(request)
+    if not user or user["role"] != "admins":
+        return web.json_response({"error": "Admin required"}, status=403)
+    try:
+        # Проверка времени с момента старта
+        if (time.time() - traffic_module.STARTUP_TIME) > 600:
+             return web.json_response({"error": "Time expired"}, status=403)
+             
+        # Сброс к системным значениям (как в selftest), убираем оффсет
+        traffic_module.TRAFFIC_OFFSET["rx"] = 0
+        traffic_module.TRAFFIC_OFFSET["tx"] = 0
+        
+        # Удаляем бэкапы
+        try:
+            import glob
+            files = glob.glob(os.path.join(traffic_module.config.TRAFFIC_BACKUP_DIR, "traffic_backup_*.json"))
+            for f in files:
+                os.remove(f)
+        except Exception:
+            pass
+            
+        return web.json_response({"status": "ok"})
+    except Exception as e:
+        return web.json_response({"error": str(e)}, status=500)
 
 
 async def handle_node_add(request):
@@ -928,7 +966,10 @@ async def handle_settings_page(request):
             for t, n in all_nodes.items()
         ]
         nodes_json = json.dumps(nlist)
+    
+    can_reset = (time.time() - traffic_module.STARTUP_TIME) < 600
     keyboard_config_json = json.dumps(KEYBOARD_CONFIG)
+    
     i18n_data = {
         "web_saving_btn": _("web_saving_btn", lang),
         "web_saved_btn": _("web_saved_btn", lang),
@@ -1011,6 +1052,8 @@ async def handle_settings_page(request):
         "web_reloading_page": _("web_reloading_page", lang),
         "web_node_rename_success": _("web_node_rename_success", lang),
         "web_node_rename_error": _("web_node_rename_error", lang),
+        "web_traffic_reset_confirm": _("web_traffic_reset_confirm", lang),
+        "traffic_reset_done": _("traffic_reset_done", lang),
     }
     for btn_key, conf_key in BTN_CONFIG_MAP.items():
         i18n_data[f"lbl_{conf_key}"] = _(btn_key, lang)
@@ -1094,6 +1137,7 @@ async def handle_settings_page(request):
         "web_sessions_modal_title": _("web_sessions_modal_title", lang),
         "user_role_js": f"const USER_ROLE = '{role}'; const IS_MAIN_ADMIN = {str(is_main_admin).lower()}; const WEB_KEY = '{get_web_key()}';",
         "is_main_admin": is_main_admin,
+        "reset_allowed": can_reset,
         "check_resources": "checked" if user_alerts.get("resources", False) else "",
         "check_logins": "checked" if user_alerts.get("logins", False) else "",
         "check_bans": "checked" if user_alerts.get("bans", False) else "",
@@ -1625,6 +1669,9 @@ async def handle_sse_stream(request):
             }
             try:
                 net = psutil.net_io_counters()
+                # ИСПОЛЬЗУЕМ СКОРРЕКТИРОВАННЫЙ ТРАФИК И ТУТ
+                rx_total, tx_total = traffic_module.get_current_traffic_total()
+                
                 net_if = psutil.net_io_counters(pernic=True)
                 mem = psutil.virtual_memory()
                 disk = psutil.disk_usage(get_host_path("/"))
@@ -1634,8 +1681,8 @@ async def handle_sse_stream(request):
                 proc_disk = await asyncio.to_thread(_get_top_processes, "disk")
                 current_stats.update(
                     {
-                        "net_sent": net.bytes_sent,
-                        "net_recv": net.bytes_recv,
+                        "net_sent": tx_total, # Используем скорректированное значение
+                        "net_recv": rx_total, # Используем скорректированное значение
                         "boot_time": psutil.boot_time(),
                         "ram_total": mem.total,
                         "ram_free": mem.available,
@@ -2042,6 +2089,8 @@ async def start_web_server(bot_instance: Bot):
         app.router.add_post("/api/settings/password", handle_change_password)
         app.router.add_post("/api/settings/keyboard", handle_save_keyboard_config)
         app.router.add_post("/api/logs/clear", handle_clear_logs)
+        # НОВЫЙ ЭНДПОИНТ ДЛЯ СБРОСА ТРАФИКА
+        app.router.add_post("/api/traffic/reset", handle_reset_traffic)
         app.router.add_post("/api/users/action", handle_user_action)
         app.router.add_post("/api/nodes/add", handle_node_add)
         app.router.add_post("/api/nodes/delete", handle_node_delete)

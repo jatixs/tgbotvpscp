@@ -17,6 +17,7 @@ from modules import (
     restart,
     optimize,
     nodes,
+    backups,  # <--- Добавлен новый модуль
 )
 from core.i18n import _, I18nFilter, get_language_keyboard
 from core import i18n
@@ -48,6 +49,7 @@ if config.SENTRY_DSN and config.SENTRY_DSN.strip().startswith("http"):
         logging.error(f"Failed to initialize Sentry: {e}")
 else:
     logging.info("Sentry disabled (DSN not set or invalid).")
+
 config.setup_logging(config.BOT_LOG_DIR, "bot")
 bot = Bot(token=config.TOKEN)
 storage = MemoryStorage()
@@ -273,6 +275,7 @@ def load_modules():
     register_module(restart, root_only=True)
     register_module(reboot, root_only=True)
     register_module(optimize, root_only=True)
+    register_module(backups)  # <--- Регистрация нового модуля
     logging.info("All modules loaded.")
 
 

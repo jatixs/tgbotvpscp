@@ -46,7 +46,7 @@ CATEGORY_MAP = {
     ],
     "cat_security": ["btn_sshlog", "btn_fail2ban", "btn_logs"],
     "cat_tools": ["btn_xray", "btn_vless", "btn_notifications"],
-    "cat_settings": ["btn_language", "btn_configure_menu"],
+    "cat_settings": ["btn_language", "btn_configure_menu", "btn_backups"],
 }
 
 
@@ -479,3 +479,21 @@ def get_node_management_keyboard(
     ]
     layout = [row1, row2, row3, row4, row5]
     return InlineKeyboardMarkup(inline_keyboard=layout)
+    
+def get_backups_menu_keyboard(lang: str) -> InlineKeyboardMarkup:
+    """Клавиатура главного меню бэкапов"""
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(text=_("btn_backup_traffic", lang), callback_data="open_traffic_backups"),
+                InlineKeyboardButton(text=_("btn_backup_config", lang), callback_data="backup_in_dev"),
+            ],
+            [
+                InlineKeyboardButton(text=_("btn_backup_logs", lang), callback_data="backup_in_dev"),
+                InlineKeyboardButton(text=_("btn_backup_nodes", lang), callback_data="backup_in_dev"),
+            ],
+            [
+                InlineKeyboardButton(text=_("btn_close", lang), callback_data="close_backups_menu")
+            ]
+        ]
+    )

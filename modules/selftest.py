@@ -60,7 +60,11 @@ async def selftest_handler(message: types.Message):
             disk = 0
         with open(get_host_path("/proc/uptime")) as f:
             uptime_sec = float(f.readline().split()[0])
-        net = psutil.net_io_counters()
+        
+        # Получаем данные трафика через модуль traffic для учета бэкапов
+        from modules import traffic as traffic_module
+        rx_total, tx_total = traffic_module.get_current_traffic_total()
+        
         uptime_str = format_uptime(uptime_sec, lang)
         conn_proc = await asyncio.create_subprocess_shell(
             "curl -I -s --max-time 3 https://www.google.com/",
@@ -175,8 +179,8 @@ async def selftest_handler(message: types.Message):
             inet_status=inet_status,
             ping=ping_time,
             ip=ext_ip,
-            rx=format_traffic(net.bytes_recv, lang),
-            tx=format_traffic(net.bytes_sent, lang),
+            rx=format_traffic(rx_total, lang),
+            tx=format_traffic(tx_total, lang),
         )
         await message.bot.edit_message_text(
             _("selftest_results_header", lang) + body + ssh_info,
