@@ -1,6 +1,7 @@
 import os
 import glob
 import json
+import asyncio
 from aiogram import Dispatcher, types, F
 from aiogram.types import KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
 from core.i18n import I18nFilter, get_user_lang, get_text
@@ -10,8 +11,6 @@ from core.messaging import delete_previous_message
 from core.shared_state import LAST_MESSAGE_IDS
 from core.keyboards import get_backups_menu_keyboard
 from core.utils import format_traffic
-
-# Импортируем функционал из модуля трафика
 from modules import traffic as traffic_module
 
 BUTTON_KEY = "btn_backups"
@@ -20,13 +19,10 @@ def get_button() -> KeyboardButton:
     return KeyboardButton(text=get_text(BUTTON_KEY, config.DEFAULT_LANGUAGE))
 
 def register_handlers(dp: Dispatcher):
-    # Главное меню бэкапов
     dp.message(I18nFilter(BUTTON_KEY))(backups_main_menu_handler)
     dp.callback_query(F.data == "back_to_backups_main")(backups_main_menu_callback)
     dp.callback_query(F.data == "backup_in_dev")(backup_in_dev_handler)
     dp.callback_query(F.data == "close_backups_menu")(close_menu_handler)
-    
-    # Меню бэкапов ТРАФИКА (перенесено сюда из модуля traffic)
     dp.callback_query(F.data == "open_traffic_backups")(traffic_backup_ui_handler)
     dp.callback_query(F.data == "create_traffic_backup")(create_traffic_backup_handler)
     dp.callback_query(F.data.startswith("delete_backup_"))(delete_traffic_backup_handler)
@@ -69,11 +65,7 @@ async def traffic_backup_ui_handler(callback: types.CallbackQuery):
     """Меню управления бэкапами трафика (с пояснением)"""
     user_id = callback.from_user.id
     lang = get_user_lang(user_id)
-    
-    # Получаем список файлов (логика чтения остается простой, можно оставить тут)
     backups = sorted(glob.glob(os.path.join(config.TRAFFIC_BACKUP_DIR, "traffic_backup_*.json")), reverse=True)
-    
-    # Формируем текст с пояснением
     explanation = get_text("traffic_backup_explanation", lang)
     header = get_text("traffic_backup_menu_title", lang)
     text = f"{explanation}\n{header}\n"
@@ -95,7 +87,7 @@ async def traffic_backup_ui_handler(callback: types.CallbackQuery):
                     
                     text += f"📂 <b>{date_str}</b>\n└ ⬇️{rx} | ⬆️{tx}\n"
                     
-                    if idx < 3: # Кнопки удаления для первых 3
+                    if idx < 3:
                         buttons.append([InlineKeyboardButton(text=f"🗑 {get_text('btn_delete', lang)} {date_str}", callback_data=f"delete_backup_{filename}")])
             except:
                 pass
@@ -107,7 +99,6 @@ async def traffic_backup_ui_handler(callback: types.CallbackQuery):
 
 
 async def create_traffic_backup_handler(callback: types.CallbackQuery):
-    # Вызываем логику сохранения из модуля traffic
     rx, tx = traffic_module.get_current_traffic_total()
     await asyncio.to_thread(traffic_module.save_backup_file, rx, tx)
     
