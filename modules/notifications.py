@@ -5,7 +5,8 @@ import time
 import re
 import os
 import signal
-from datetime import datetime
+import aiohttp
+from datetime import datetime, timedelta, timezone
 from aiogram import F, Dispatcher, types, Bot
 from aiogram.types import KeyboardButton
 from core.i18n import _, I18nFilter, get_user_lang
@@ -20,7 +21,6 @@ from core.shared_state import (
 )
 from core.utils import (
     save_alerts_config,
-    get_country_flag,
     get_server_timezone_label,
     escape_html,
     get_host_path,
@@ -28,6 +28,7 @@ from core.utils import (
 from core.keyboards import get_alerts_menu_keyboard
 
 BUTTON_KEY = "btn_notifications"
+RECENT_NOTIFIED_LOGINS = {}
 
 
 def get_button() -> KeyboardButton:
@@ -41,18 +42,28 @@ def register_handlers(dp: Dispatcher):
 
 def start_background_tasks(bot: Bot) -> list[asyncio.Task]:
     tasks = [asyncio.create_task(resource_monitor(bot), name="ResourceMonitor")]
+    ssh_cmd = "journalctl -n 0 -f -o cat _COMM=sshd"
+    tasks.append(
+        asyncio.create_task(
+            reliable_command_monitor(bot, ssh_cmd, "logins", parse_ssh_log_line),
+            name="LoginsMonitor_Journal",
+        )
+    )
+
     ssh_log = None
     if os.path.exists(get_host_path("/var/log/secure")):
         ssh_log = get_host_path("/var/log/secure")
     elif os.path.exists(get_host_path("/var/log/auth.log")):
         ssh_log = get_host_path("/var/log/auth.log")
+
     if ssh_log:
         tasks.append(
             asyncio.create_task(
                 reliable_tail_log_monitor(bot, ssh_log, "logins", parse_ssh_log_line),
-                name="LoginsMonitor",
+                name="LoginsMonitor_File",
             )
         )
+
     tasks.append(
         asyncio.create_task(
             reliable_tail_log_monitor(
@@ -75,11 +86,15 @@ def get_top_processes_info(metric: str) -> str:
                 pass
         info_list = []
         if metric == "cpu":
-            sorted_procs = sorted(procs, key=lambda p: p["cpu_percent"], reverse=True)[:5]
+            sorted_procs = sorted(
+                procs, key=lambda p: p["cpu_percent"], reverse=True
+            )[:5]
             for p in sorted_procs:
                 info_list.append(f"• <b>{p['name']}</b>: {p['cpu_percent']}%")
         elif metric == "ram":
-            sorted_procs = sorted(procs, key=lambda p: p["memory_percent"], reverse=True)[:5]
+            sorted_procs = sorted(
+                procs, key=lambda p: p["memory_percent"], reverse=True
+            )[:5]
             for p in sorted_procs:
                 info_list.append(f"• <b>{p['name']}</b>: {p['memory_percent']:.1f}%")
         else:
@@ -138,19 +153,81 @@ async def cq_toggle_alert(callback: types.CallbackQuery):
     )
 
 
+async def get_ip_data(ip: str):
+    """
+    Получает флаг страны и смещение часового пояса (в секундах) для IP.
+    """
+    if not ip or ip in ["localhost", "127.0.0.1", "::1"]:
+        return "🏠", None
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(
+                f"http://ip-api.com/json/{ip}?fields=status,countryCode,offset",
+                timeout=2,
+            ) as response:
+                if response.status == 200:
+                    data = await response.json()
+                    if data.get("status") == "success":
+                        country_code = data.get("countryCode")
+                        flag = "❓"
+                        if country_code and len(country_code) == 2:
+                            flag = "".join(
+                                (
+                                    chr(ord(char.upper()) - 65 + 127462)
+                                    for char in country_code
+                                )
+                            )
+                        offset = data.get("offset")
+                        return flag, offset
+    except Exception as e:
+        logging.warning(f"Error getting IP data for {ip}: {e}")
+    
+    return "❓", None
+
+
 async def parse_ssh_log_line(line: str) -> dict | None:
-    match = re.search("Accepted\\s+(\\S+)\\s+for\\s+(\\S+)\\s+from\\s+(\\S+)", line)
-    if match:
+    now = time.time()
+    sshd_match = re.search(r"Accepted\s+(\S+)\s+for\s+(\S+)\s+from\s+(\S+)", line)
+
+    user, ip, method_key = None, None, "auth_method_unknown"
+
+    if sshd_match:
+        method_raw = sshd_match.group(1).lower()
+        user = escape_html(sshd_match.group(2))
+        ip = escape_html(sshd_match.group(3))
+        if "publickey" in method_raw:
+            method_key = "auth_method_key"
+        elif "password" in method_raw:
+            method_key = "auth_method_password"
+
+    if user and ip:
+        last_time = RECENT_NOTIFIED_LOGINS.get((user, ip), 0)
+        if now - last_time < 10:
+            return None
+
+        RECENT_NOTIFIED_LOGINS[(user, ip)] = now
+
+        if len(RECENT_NOTIFIED_LOGINS) > 100:
+            RECENT_NOTIFIED_LOGINS.clear()
+
         try:
-            method_raw = match.group(1).lower()
-            user = escape_html(match.group(2))
-            ip = escape_html(match.group(3))
-            flag = await get_country_flag(ip)
-            method_key = "auth_method_unknown"
-            if "publickey" in method_raw:
-                method_key = "auth_method_key"
-            elif "password" in method_raw:
-                method_key = "auth_method_password"
+            flag, offset = await get_ip_data(ip)
+            s_now = datetime.now()
+            s_tz_label = get_server_timezone_label() 
+            
+            time_str = f"{s_now.strftime('%H:%M:%S')}{s_tz_label}"         
+            if offset is not None:
+                try:
+                    utc_now = datetime.now(timezone.utc)
+                    ip_dt = utc_now + timedelta(seconds=offset)
+                    
+                    off_h = int(offset / 3600)
+                    sign = "+" if off_h >= 0 else ""
+                    ip_tz_label = f"GMT{sign}{off_h}"
+                    
+                    time_str += f" / 📍 {ip_dt.strftime('%H:%M')} ({ip_tz_label})"
+                except Exception:
+                    pass
 
             return {
                 "key": "alert_ssh_login_detected",
@@ -158,8 +235,8 @@ async def parse_ssh_log_line(line: str) -> dict | None:
                     "user": user,
                     "flag": flag,
                     "ip": ip,
-                    "time": datetime.now().strftime("%H:%M:%S"),
-                    "tz": get_server_timezone_label(),
+                    "time": time_str,
+                    "tz": "",  
                     "method_key": method_key,
                 },
             }
@@ -173,15 +250,31 @@ async def parse_f2b_log_line(line: str) -> dict | None:
     match = re.search("fail2ban\\.actions.* Ban\\s+(\\S+)", line)
     if match:
         try:
-            ip = escape_html(match.group(1).strip())
-            flag = await get_country_flag(ip)
+            ip = escape_html(match.group(1).strip())            
+            flag, offset = await get_ip_data(ip)            
+            s_now = datetime.now()
+            s_tz_label = get_server_timezone_label()
+            time_str = f"⏰ Время: {s_now.strftime('%H:%M:%S')}{s_tz_label}"
+            if offset is not None:
+                try:
+                    utc_now = datetime.now(timezone.utc)
+                    ip_dt = utc_now + timedelta(seconds=offset)
+                    
+                    off_h = int(offset / 3600)
+                    sign = "+" if off_h >= 0 else ""
+                    ip_tz_label = f"GMT{sign}{off_h}"
+                    
+                    time_str += f" / 📍 {ip_dt.strftime('%H:%M')} ({ip_tz_label})"
+                except Exception:
+                    pass
+
             return {
                 "key": "alert_f2b_ban_detected",
                 "params": {
                     "flag": flag,
                     "ip": ip,
-                    "time": datetime.now().strftime("%H:%M:%S"),
-                    "tz": get_server_timezone_label(),
+                    "time": time_str,
+                    "tz": "",
                 },
             }
         except Exception as e:
@@ -305,6 +398,57 @@ async def resource_monitor(bot: Bot):
         await asyncio.sleep(config.RESOURCE_CHECK_INTERVAL)
 
 
+async def reliable_command_monitor(bot, cmd, alert_type, parser):
+    while True:
+        proc = None
+        try:
+            proc = await asyncio.create_subprocess_shell(
+                cmd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+                start_new_session=True,
+            )
+            async for line in proc.stdout:
+                l = line.decode("utf-8", "ignore").strip()
+                if l:
+                    data = await parser(l)
+                    if data:
+
+                        def msg_gen(lang):
+                            params = data["params"].copy()
+                            if "method_key" in params:
+                                m_key = params.pop("method_key")
+                                params["method"] = _(m_key, lang)
+                            if "method" not in params:
+                                params["method"] = ""
+                            return _(data["key"], lang, **params)
+
+                        await send_alert(
+                            bot,
+                            msg_gen,
+                            alert_type,
+                        )
+        except asyncio.CancelledError:
+            if proc:
+                try:
+                    os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
+                    try:
+                        await asyncio.wait_for(proc.wait(), timeout=2.0)
+                    except asyncio.TimeoutError:
+                        os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+                except Exception as e:
+                    logging.error(f"Error killing process group: {e}")
+            raise
+        except Exception as e:
+            logging.error(f"Command monitor error ({cmd}): {e}")
+            if proc:
+                try:
+                    os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
+                except Exception:
+                    pass
+            await asyncio.sleep(10)
+
+
 async def reliable_tail_log_monitor(bot, path, alert_type, parser):
     while True:
         if not os.path.exists(path):
@@ -323,6 +467,7 @@ async def reliable_tail_log_monitor(bot, path, alert_type, parser):
                 if l:
                     data = await parser(l)
                     if data:
+
                         def msg_gen(lang):
                             params = data["params"].copy()
                             if "method_key" in params:
