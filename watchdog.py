@@ -6,6 +6,7 @@ import logging
 import re
 import json
 import sys
+import glob
 from datetime import datetime, timedelta
 from typing import Optional, Callable
 
@@ -57,6 +58,7 @@ else:
 WATCHDOG_SERVICE_NAME = "tg-watchdog.service"
 CONFIG_DIR = config.CONFIG_DIR
 RESTART_FLAG_FILE = config.RESTART_FLAG_FILE
+REBOOT_FLAG_FILE = config.REBOOT_FLAG_FILE
 BOT_LOG_DIR = config.BOT_LOG_DIR
 WATCHDOG_LOG_DIR = config.WATCHDOG_LOG_DIR
 CHECK_INTERVAL_SECONDS = 5
@@ -66,6 +68,7 @@ last_alert_times = {}
 bot_service_was_down_or_activating = False
 status_alert_message_id = None
 current_reported_state = None
+down_time_start = None
 WD_LANG = config.DEFAULT_LANGUAGE
 docker_client: Optional[DockerClient] = None
 if DEPLOY_MODE == "docker":
@@ -88,6 +91,99 @@ if DEPLOY_MODE == "docker":
         logging.critical(
             "Режим Docker, но библиотека 'docker' не установлена! Watchdog не сможет работать."
         )
+
+
+def get_system_uptime() -> str:
+    """Получает аптайм системы из /proc/uptime"""
+    try:
+        with open("/proc/uptime", "r") as f:
+            uptime_seconds = float(f.readline().split()[0])
+        return str(timedelta(seconds=int(uptime_seconds)))
+    except Exception:
+        return "N/A"
+
+
+def get_last_backup_info() -> str:
+    """Находит последний бэкап и возвращает категорию и дату"""
+    try:
+        traffic_dir = getattr(config, 'TRAFFIC_BACKUP_DIR', None)
+        if not traffic_dir or not os.path.exists(traffic_dir):
+            return "Traffic: Directory not found"
+        
+        # Ищем файлы бэкапов трафика
+        files = glob.glob(os.path.join(traffic_dir, "traffic_backup_*.json"))
+        if not files:
+            return "Traffic: None"
+            
+        # Находим самый свежий файл
+        latest_file = max(files, key=os.path.getmtime)
+        mod_time = os.path.getmtime(latest_file)
+        dt = datetime.fromtimestamp(mod_time)
+        return f"Traffic ({dt.strftime('%Y-%m-%d %H:%M')})"
+    except Exception as e:
+        return f"Error: {str(e)}"
+
+
+def process_startup_flags():
+    """Проверяет флаги перезагрузки/рестарта и уведомляет пользователей, если бот поднялся"""
+    
+    # Обработка флага Restart (перезапуск бота)
+    if os.path.exists(RESTART_FLAG_FILE):
+        try:
+            with open(RESTART_FLAG_FILE, "r") as f:
+                content = f.read().strip()
+            
+            if ":" in content:
+                chat_id_str, message_id_str = content.split(":", 1)
+                chat_id = int(chat_id_str)
+                message_id = int(message_id_str)
+                
+                # Текст сообщения берем хардкодом или можно добавить в i18n watchdog, 
+                # но для простоты используем универсальный.
+                # Пытаемся отредактировать сообщение "Restarting..." на "Restarted"
+                text = f"✅ {get_text('utils_bot_restarted', WD_LANG)}"
+                
+                url = f"https://api.telegram.org/bot{ALERT_BOT_TOKEN}/editMessageText"
+                payload = {
+                    "chat_id": chat_id,
+                    "message_id": message_id,
+                    "text": text,
+                }
+                requests.post(url, data=payload, timeout=5)
+                logging.info(f"Processed restart flag for chat {chat_id}")
+        except Exception as e:
+            logging.error(f"Error processing restart flag: {e}")
+        finally:
+            try:
+                os.remove(RESTART_FLAG_FILE)
+            except Exception:
+                pass
+
+    # Обработка флага Reboot (перезагрузка сервера)
+    if os.path.exists(REBOOT_FLAG_FILE):
+        try:
+            with open(REBOOT_FLAG_FILE, "r") as f:
+                uid_str = f.read().strip()
+            
+            if uid_str.isdigit():
+                chat_id = int(uid_str)
+                text = f"✅ {get_text('utils_server_rebooted', WD_LANG)}"
+                
+                url = f"https://api.telegram.org/bot{ALERT_BOT_TOKEN}/sendMessage"
+                payload = {
+                    "chat_id": chat_id,
+                    "text": text,
+                    "parse_mode": "HTML"
+                }
+                requests.post(url, data=payload, timeout=5)
+                logging.info(f"Processed reboot flag for chat {chat_id}")
+        except Exception as e:
+            logging.error(f"Error processing reboot flag: {e}")
+        finally:
+            try:
+                os.remove(REBOOT_FLAG_FILE)
+            except Exception:
+                pass
 
 
 def send_or_edit_telegram_alert(
@@ -115,7 +211,21 @@ def send_or_edit_telegram_alert(
         message_body = get_text("error_internal", WD_LANG)
     else:
         message_body = get_text(message_key, WD_LANG, **kwargs)
+    
     text_to_send = f"{alert_prefix}\n\n{message_body}"
+
+    # Добавляем доп. информацию (Uptime, Downtime, Backup) если она передана
+    extra_info = []
+    if kwargs.get("downtime"):
+        extra_info.append(f"⏱ <b>Downtime:</b> {kwargs['downtime']}")
+    if kwargs.get("uptime"):
+        extra_info.append(f"⚡ <b>Uptime:</b> {kwargs['uptime']}")
+    if kwargs.get("last_backup"):
+        extra_info.append(f"📦 <b>Last Backup:</b> {kwargs['last_backup']}")
+    
+    if extra_info:
+        text_to_send += "\n\n" + "\n".join(extra_info)
+
     message_sent_or_edited = False
     new_message_id = message_id_to_edit
     if message_id_to_edit:
@@ -449,7 +559,7 @@ def check_bot_service_docker():
 def process_service_state(
     actual_state: str, status_output_full: str, restart_function: Callable[[], None]
 ):
-    global bot_service_was_down_or_activating, status_alert_message_id, current_reported_state
+    global bot_service_was_down_or_activating, status_alert_message_id, current_reported_state, down_time_start
     state_to_report = None
     alert_type = None
     message_key = None
@@ -466,8 +576,12 @@ def process_service_state(
         alert_type = "bot_service_restarting"
         message_key = "watchdog_status_restarting_bot"
         bot_service_was_down_or_activating = True
+        if down_time_start is None:
+            down_time_start = time.time()
+            
     elif restart_flag_exists and actual_state == "active":
-        logging.debug("Флаг перезапуска найден, но бот активен. Игнорирую флаг.")
+        logging.debug("Флаг перезапуска найден, но бот активен. Игнорирую флаг (будет обработан в active_ok).")
+    
     elif actual_state == "active":
         logging.debug(f"Сервис/контейнер '{BOT_SERVICE_NAME}' активен.")
         if bot_service_was_down_or_activating:
@@ -481,6 +595,21 @@ def process_service_state(
                 state_to_report = "active_ok"
                 alert_type = "bot_service_up_ok"
                 message_key = "watchdog_status_active_ok"
+                
+                # Собираем данные для отчета
+                downtime_str = "N/A"
+                if down_time_start:
+                    d_seconds = int(time.time() - down_time_start)
+                    downtime_str = str(timedelta(seconds=d_seconds))
+                    down_time_start = None
+                
+                message_kwargs["downtime"] = downtime_str
+                message_kwargs["uptime"] = get_system_uptime()
+                message_kwargs["last_backup"] = get_last_backup_info()
+
+                # Обрабатываем флаги ручного перезапуска (уведомляем пользователя и удаляем флаги)
+                process_startup_flags()
+                
             elif log_status_key is not None:
                 log_details = get_text(log_status_key, WD_LANG, **log_kwargs)
                 logging.warning(f"Проверка лога: ОБНАРУЖЕНЫ ОШИБКИ ({log_details}).")
@@ -488,11 +617,17 @@ def process_service_state(
                 alert_type = "bot_service_up_error"
                 message_key = "watchdog_status_active_error"
                 message_kwargs["details"] = log_details
+                
+                # Даже с ошибкой, если он активен, стоит почистить флаги, чтобы они не висели
+                process_startup_flags()
+
             else:
                 logging.warning("Файл лога бота не найден.")
                 state_to_report = "active_ok"
                 alert_type = "bot_service_up_no_log_file"
                 message_key = "watchdog_status_active_log_fail"
+                process_startup_flags()
+
             bot_service_was_down_or_activating = False
     elif actual_state == "activating" and (not restart_flag_exists):
         logging.info(f"Сервис/контейнер '{BOT_SERVICE_NAME}' активируется...")
@@ -500,6 +635,9 @@ def process_service_state(
         alert_type = "bot_service_activating"
         message_key = "watchdog_status_activating"
         bot_service_was_down_or_activating = True
+        if down_time_start is None:
+            down_time_start = time.time()
+            
     elif actual_state in ["inactive", "failed", "unknown"] and (
         not restart_flag_exists
     ):
@@ -510,6 +648,9 @@ def process_service_state(
         state_to_report = "down"
         alert_type = "bot_service_down"
         message_key = "watchdog_status_down"
+        if down_time_start is None:
+            down_time_start = time.time()
+            
         if actual_state == "failed":
             fail_reason_match = re.search(
                 "Failed with result '([^']*)'", status_output_full
