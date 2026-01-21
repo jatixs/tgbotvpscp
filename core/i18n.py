@@ -519,6 +519,8 @@ STRINGS = {
         "login_go_to_bot": "Перейти в бот",
         # --- БЭКАПЫ (НОВОЕ) ---
         "btn_backups": "💾 Бэкапы",
+        "btn_delete": "Удалить",
+        "btn_close": "Закрыть",
         "backups_menu_title": "<b>💾 Меню резервного копирования</b>\n\nВыберите категорию данных:",
         "btn_backup_traffic": "📶 Трафик",
         "btn_backup_config": "⚙️ Конфиг",
@@ -1044,6 +1046,8 @@ STRINGS = {
         "login_go_to_bot": "Go to Bot",
         # --- БЭКАПЫ (НОВОЕ) ---
         "btn_backups": "💾 Backups",
+        "btn_delete": "Delete",
+        "btn_close": "Close",
         "backups_menu_title": "<b>💾 Backup Menu</b>\n\nSelect data category:",
         "btn_backup_traffic": "📶 Traffic",
         "btn_backup_config": "⚙️ Config",
