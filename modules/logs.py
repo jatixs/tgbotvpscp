@@ -53,8 +53,12 @@ async def logs_handler(message: types.Message, state: FSMContext):
         )
         stdout, stderr = await process.communicate()
         if process.returncode == 0:
-            log_output = escape_html(stdout.decode().strip())
-            response_text = _("logs_header", user_id, log_output=log_output)
+            log_output = stdout.decode().strip()
+            escaped_output = escape_html(log_output)
+            MAX_LENGTH = 3900
+            if len(escaped_output) > MAX_LENGTH:
+                escaped_output = escaped_output[:MAX_LENGTH] + "\n...(обрезано)"
+            response_text = _("logs_header", user_id, log_output=escaped_output)
         else:
             error_message = escape_html(stderr.decode().strip())
             logging.error(f"Ошибка при чтении журналов: {error_message}")
