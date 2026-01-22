@@ -544,7 +544,7 @@ STRINGS = {
         "web_traffic_reset_confirm": "Вы уверены, что хотите сбросить статистику трафика?",
         "btn_reset_traffic": "🗑 Сброс",
         "traffic_reset_done": "✅ Статистика трафика успешно сброшена.",
-        "web_traffic_reset_no_emoji": "Трафик сброшен",
+        "web_traffic_reset_no_emoji": "Готово!",
         "btn_refresh": "🔄 Обновить",
     },
     "en": {
@@ -1081,7 +1081,7 @@ STRINGS = {
         "traffic_startup_alert": "🚀 <b>Bot started!</b>\n\n💾 <b>Last backup:</b> {last_backup}",
         "web_traffic_reset_confirm": "Are you sure you want to reset traffic statistics?",
         "btn_reset_traffic": "🗑 Reset",
-        "web_traffic_reset_no_emoji": "Traffic reset",
+        "web_traffic_reset_no_emoji": "Done!",
         "traffic_reset_done": "✅ Traffic statistics reset successfully.",
         "btn_refresh": "🔄 Refresh",
     },
