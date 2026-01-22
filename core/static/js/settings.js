@@ -405,7 +405,10 @@ async function clearLogs() {
     const btn = document.getElementById('clearLogsBtn');
     const originalHTML = btn.innerHTML;
     const redClasses = ['bg-red-50', 'dark:bg-red-900/10', 'border-red-200', 'dark:border-red-800', 'text-red-600', 'dark:text-red-400', 'hover:bg-red-100', 'dark:hover:bg-red-900/30', 'active:bg-red-200'];
-    const greenClasses = ['bg-green-600', 'text-white', 'border-transparent', 'hover:bg-green-500'];
+    const greenClasses = ['bg-green-600', 'text-white', 'border-transparent', 'hover:bg-green-500', 'px-3', 'py-2'];
+    
+    // Classes that cause hover expansion - remove them temporarily to avoid ghost sizing
+    const hoverClasses = ['hover:pr-4', 'group'];
 
     btn.disabled = true;
     btn.innerHTML = `<svg class="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> ${I18N.web_logs_clearing}`;
@@ -422,12 +425,16 @@ async function clearLogs() {
         });
         if (res.ok) {
             btn.classList.remove(...redClasses);
+            btn.classList.remove(...hoverClasses); // Disable hover expansion
             btn.classList.add(...greenClasses);
-            btn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg> ${I18N.web_logs_cleared_alert}`;
+            const doneText = (typeof I18N !== 'undefined' && I18N.web_logs_cleared_alert) ? I18N.web_logs_cleared_alert : "Cleared!";
+            btn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg> <span class="font-bold text-xs uppercase ml-1">${doneText}</span>`;
+            
             setTimeout(() => {
                 btn.innerHTML = originalHTML;
                 btn.classList.remove(...greenClasses);
                 btn.classList.add(...redClasses);
+                btn.classList.add(...hoverClasses); // Restore hover expansion
                 btn.disabled = false;
             }, 2000);
         } else {
@@ -452,7 +459,10 @@ async function resetTrafficSettings() {
     const originalHTML = btn.innerHTML;
     
     const redClasses = ['bg-red-50', 'dark:bg-red-900/10', 'border-red-200', 'dark:border-red-800', 'text-red-600', 'dark:text-red-400', 'hover:bg-red-100', 'dark:hover:bg-red-900/30', 'active:bg-red-200'];
-    const greenClasses = ['bg-green-600', 'text-white', 'border-transparent', 'hover:bg-green-500'];
+    const greenClasses = ['bg-green-600', 'text-white', 'border-transparent', 'hover:bg-green-500', 'px-3', 'py-2'];
+
+    // Classes that cause hover expansion
+    const hoverClasses = ['hover:pr-4', 'group'];
 
     btn.disabled = true;
     btn.innerHTML = `<svg class="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>`;
@@ -461,12 +471,16 @@ async function resetTrafficSettings() {
         const res = await fetch('/api/traffic/reset', { method: 'POST' });
         if (res.ok) {
             btn.classList.remove(...redClasses);
+            btn.classList.remove(...hoverClasses); // Disable hover expansion
             btn.classList.add(...greenClasses);
-            btn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg> ${I18N.traffic_reset_done || "Done"}`;
+            const doneText = (typeof I18N !== 'undefined' && I18N.web_traffic_reset_no_emoji) ? I18N.web_traffic_reset_no_emoji : "Done!";
+            btn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg> <span class="font-bold text-xs uppercase ml-1">${doneText}</span>`;
+            
             setTimeout(() => {
                 btn.innerHTML = originalHTML;
                 btn.classList.remove(...greenClasses);
                 btn.classList.add(...redClasses);
+                btn.classList.add(...hoverClasses); // Restore hover expansion
                 btn.disabled = false;
             }, 2000);
         } else {
@@ -1403,7 +1417,10 @@ async function resetTrafficSettings() {
     const originalHTML = btn.innerHTML;
     
     const redClasses = ['bg-red-50', 'dark:bg-red-900/10', 'border-red-200', 'dark:border-red-800', 'text-red-600', 'dark:text-red-400', 'hover:bg-red-100', 'dark:hover:bg-red-900/30', 'active:bg-red-200'];
-    const greenClasses = ['bg-green-600', 'text-white', 'border-transparent', 'hover:bg-green-500'];
+    const greenClasses = ['bg-green-600', 'text-white', 'border-transparent', 'hover:bg-green-500', 'px-3', 'py-2'];
+
+    // Classes that cause hover expansion
+    const hoverClasses = ['hover:pr-4', 'group'];
 
     btn.disabled = true;
     btn.innerHTML = `<svg class="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>`;
@@ -1412,12 +1429,16 @@ async function resetTrafficSettings() {
         const res = await fetch('/api/traffic/reset', { method: 'POST' });
         if (res.ok) {
             btn.classList.remove(...redClasses);
+            btn.classList.remove(...hoverClasses); // Disable hover expansion
             btn.classList.add(...greenClasses);
-            btn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg> ${I18N.traffic_reset_done || "Done"}`;
+            const doneText = (typeof I18N !== 'undefined' && I18N.web_traffic_reset_no_emoji) ? I18N.web_traffic_reset_no_emoji : "Done!";
+            btn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg> <span class="font-bold text-xs uppercase ml-1">${doneText}</span>`;
+            
             setTimeout(() => {
                 btn.innerHTML = originalHTML;
                 btn.classList.remove(...greenClasses);
                 btn.classList.add(...redClasses);
+                btn.classList.add(...hoverClasses); // Restore hover expansion
                 btn.disabled = false;
             }, 2000);
         } else {

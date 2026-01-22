@@ -546,6 +546,9 @@ STRINGS = {
         "traffic_reset_done": "✅ Статистика трафика успешно сброшена.",
         "web_traffic_reset_no_emoji": "Готово!",
         "btn_refresh": "🔄 Обновить",
+        "web_clear_notif_confirm": "Очистить все уведомления?",
+        "web_logs_cleared_alert": "Логи очищены",
+        "web_traffic_reset_no_emoji": "Готово",
     },
     "en": {
         "auth_method_key": "🔑 Public Key",
@@ -1084,6 +1087,9 @@ STRINGS = {
         "web_traffic_reset_no_emoji": "Done!",
         "traffic_reset_done": "✅ Traffic statistics reset successfully.",
         "btn_refresh": "🔄 Refresh",
+        "web_clear_notif_confirm": "Clear all notifications?",
+        "web_logs_cleared_alert": "Logs cleared",
+        "web_traffic_reset_no_emoji": "Done",
     },
 }
 
