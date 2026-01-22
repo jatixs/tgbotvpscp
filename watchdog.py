@@ -9,8 +9,6 @@ import sys
 import glob
 from datetime import datetime, timedelta
 from typing import Optional, Callable
-from dateutil import parser as date_parser
-
 try:
     import docker
     import docker.errors
@@ -71,7 +69,7 @@ status_alert_message_id = None
 current_reported_state = None
 down_time_start = None
 WD_LANG = config.DEFAULT_LANGUAGE
-last_service_start_time = None
+last_service_start_dt = None
 
 docker_client: Optional[DockerClient] = None
 if DEPLOY_MODE == "docker":
@@ -202,7 +200,7 @@ def send_or_edit_telegram_alert(
         logging.warning(f"Активен кулдаун для '{alert_type}', пропуск уведомления.")
         return message_id_to_edit
     
-    if alert_type == "bot_service_up_ok":
+    if alert_type in ["bot_service_up_ok", "watchdog_start"]:
         alert_prefix = ""
     else:
         alert_prefix = get_text("watchdog_alert_prefix", WD_LANG) + "\n\n"
@@ -217,7 +215,6 @@ def send_or_edit_telegram_alert(
     
     text_to_send = f"{alert_prefix}{message_body}"
 
-    # Добавляем доп. информацию (локализованную)
     extra_info = []
     if kwargs.get("downtime") and kwargs.get("downtime") != "N/A":
         extra_info.append(get_text("wd_downtime", WD_LANG, value=kwargs['downtime']))
@@ -317,12 +314,33 @@ def check_bot_log_for_errors():
     except Exception as e:
         return ("watchdog_log_exception", {"error": escape_html(str(e))})
 
+def parse_docker_timestamp(ts_str):
+    try:
+        ts = ts_str.replace("Z", "")
+        if "." in ts:
+            main, frac = ts.split(".", 1)
+            ts = f"{main}.{frac[:6]}" 
+        return datetime.fromisoformat(ts)
+    except:
+        return None
+
+def parse_systemd_timestamp(ts_str):
+    try:
+        parts = ts_str.split()
+        date_part = next((p for p in parts if p.count("-") == 2), None)
+        time_part = next((p for p in parts if p.count(":") == 2), None)
+        if date_part and time_part:
+            return datetime.strptime(f"{date_part} {time_part}", "%Y-%m-%d %H:%M:%S")
+    except:
+        return None
+
 
 def check_bot_service_systemd():
-    global bot_service_was_down_or_activating, status_alert_message_id, current_reported_state, last_service_start_time
+    global bot_service_was_down_or_activating, status_alert_message_id, current_reported_state, last_service_start_dt
     actual_state = "unknown"
     status_output_full = "N/A"
-    current_start_timestamp = None
+    current_start_dt = None
+    is_utc = False 
     
     try:
         cmd = ["systemctl", "show", BOT_SERVICE_NAME, "-p", "ActiveState,SubState,ActiveEnterTimestamp"]
@@ -339,7 +357,7 @@ def check_bot_service_systemd():
         
         if active_state == "active" and sub_state == "running":
             actual_state = "active"
-            current_start_timestamp = timestamp_str
+            current_start_dt = parse_systemd_timestamp(timestamp_str)
         elif active_state == "activating":
             actual_state = "activating"
         elif active_state == "inactive" or active_state == "failed":
@@ -358,7 +376,7 @@ def check_bot_service_systemd():
         except Exception as e:
             send_or_edit_telegram_alert("watchdog_restart_fail", "bot_restart_fail", None, service_name=BOT_SERVICE_NAME, error=str(e))
 
-    process_service_state(actual_state, status_output_full, restart_service_systemd, current_start_timestamp)
+    process_service_state(actual_state, status_output_full, restart_service_systemd, current_start_dt, is_utc)
 
 
 def check_bot_service_docker():
@@ -367,7 +385,8 @@ def check_bot_service_docker():
         return
     actual_state = "unknown"
     container_status = "not_found"
-    current_start_timestamp = None
+    current_start_dt = None
+    is_utc = True 
     container = None
     
     try:
@@ -375,7 +394,8 @@ def check_bot_service_docker():
         container_status = container.status
         if container_status == "running":
             actual_state = "active"
-            current_start_timestamp = container.attrs['State']['StartedAt']
+            ts_str = container.attrs['State']['StartedAt']
+            current_start_dt = parse_docker_timestamp(ts_str)
         elif container_status == "restarting":
             actual_state = "activating"
         elif container_status in ["exited", "dead"]:
@@ -396,16 +416,17 @@ def check_bot_service_docker():
             except Exception as e:
                 send_or_edit_telegram_alert("watchdog_restart_fail", "bot_restart_fail", None, service_name=BOT_SERVICE_NAME, error=str(e))
 
-    process_service_state(actual_state, f"Docker status: {container_status}", restart_service_docker, current_start_timestamp)
+    process_service_state(actual_state, f"Docker status: {container_status}", restart_service_docker, current_start_dt, is_utc)
 
 
 def process_service_state(
     actual_state: str, 
     status_output_full: str, 
     restart_function: Callable[[], None],
-    current_start_time: str = None
+    current_start_dt: Optional[datetime] = None,
+    is_utc: bool = False
 ):
-    global bot_service_was_down_or_activating, status_alert_message_id, current_reported_state, down_time_start, last_service_start_time
+    global bot_service_was_down_or_activating, status_alert_message_id, current_reported_state, down_time_start, last_service_start_dt
     state_to_report = None
     alert_type = None
     message_key = None
@@ -413,25 +434,20 @@ def process_service_state(
     
     is_restart_detected = False
     
-    if actual_state == "active" and current_start_time:
-        if last_service_start_time is None:
-            last_service_start_time = current_start_time
+    if actual_state == "active" and current_start_dt:
+        if last_service_start_dt is None:
+            last_service_start_dt = current_start_dt
+            now = datetime.utcnow() if is_utc else datetime.now()
             try:
-                if "T" in current_start_time:
-                     start_dt = date_parser.parse(current_start_time).replace(tzinfo=None)
-                else:
-                     start_dt = date_parser.parse(current_start_time).replace(tzinfo=None)
-                
-                now = datetime.utcnow()
-                if (now - start_dt).total_seconds() < 120:
+                if (now - current_start_dt).total_seconds() < 120:
                     logging.info("Обнаружен свежий запуск бота.")
                     is_restart_detected = True
             except Exception as e:
-                logging.warning(f"Ошибка парсинга даты: {e}")
+                logging.warning(f"Ошибка сравнения времени: {e}")
                 
-        elif current_start_time != last_service_start_time:
+        elif current_start_dt != last_service_start_dt:
             logging.info(f"Обнаружено изменение времени запуска.")
-            last_service_start_time = current_start_time
+            last_service_start_dt = current_start_dt
             is_restart_detected = True
 
     if is_restart_detected:
