@@ -505,7 +505,7 @@ async def handle_dashboard(request):
         ]
         nodes_json = json.dumps(nlist)
     
-    can_reset = (time.time() - traffic_module.STARTUP_TIME) < 600
+    can_reset = traffic_module.can_reset_traffic()
     
     context = {
         "web_title": f"{_('web_dashboard_title', lang)} - {TG_BOT_NAME}",
@@ -815,10 +815,6 @@ async def handle_reset_traffic(request):
     if not user or user["role"] != "admins":
         return web.json_response({"error": "Admin required"}, status=403)
     try:
-        # Проверка условия сброса (ребут сервера + таймер)
-        if not traffic_module.can_reset_traffic():
-             return web.json_response({"error": "Reset not allowed or time expired"}, status=403)
-             
         # Сброс к системным значениям (как в selftest), убираем оффсет
         traffic_module.TRAFFIC_OFFSET["rx"] = 0
         traffic_module.TRAFFIC_OFFSET["tx"] = 0
@@ -967,7 +963,7 @@ async def handle_settings_page(request):
         ]
         nodes_json = json.dumps(nlist)
     
-    can_reset = traffic_module.can_reset_traffic()
+    can_reset = True
     
     keyboard_config_json = json.dumps(KEYBOARD_CONFIG)
     
