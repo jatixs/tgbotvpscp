@@ -404,14 +404,20 @@ async function clearLogs() {
 
     const btn = document.getElementById('clearLogsBtn');
     const originalHTML = btn.innerHTML;
+    
+    // 1. Фиксируем ширину
+    btn.style.width = getComputedStyle(btn).width;
+
+    // 2. Убираем классы, которые могут вызывать анимацию (hover)
+    const hoverClasses = ['hover:pr-4', 'group'];
     const redClasses = ['bg-red-50', 'dark:bg-red-900/10', 'border-red-200', 'dark:border-red-800', 'text-red-600', 'dark:text-red-400', 'hover:bg-red-100', 'dark:hover:bg-red-900/30', 'active:bg-red-200'];
     const greenClasses = ['bg-green-600', 'text-white', 'border-transparent', 'hover:bg-green-500', 'px-3', 'py-2'];
-    
-    // Classes that cause hover expansion - remove them temporarily to avoid ghost sizing
-    const hoverClasses = ['hover:pr-4', 'group'];
 
+    btn.classList.remove(...hoverClasses); 
     btn.disabled = true;
-    btn.innerHTML = `<svg class="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> ${I18N.web_logs_clearing}`;
+    
+    // Спиннер при загрузке
+    btn.innerHTML = `<svg class="animate-spin h-4 w-4 mx-auto" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>`;
 
     try {
         const res = await fetch('/api/logs/clear', {
@@ -425,76 +431,97 @@ async function clearLogs() {
         });
         if (res.ok) {
             btn.classList.remove(...redClasses);
-            btn.classList.remove(...hoverClasses); // Disable hover expansion
             btn.classList.add(...greenClasses);
-            const doneText = (typeof I18N !== 'undefined' && I18N.web_logs_cleared_alert) ? I18N.web_logs_cleared_alert : "Cleared!";
-            btn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg> <span class="font-bold text-xs uppercase ml-1">${doneText}</span>`;
+            
+            // Используем текст из I18N
+            const doneText = I18N.web_logs_cleared_alert;
+            btn.innerHTML = `<div class="flex items-center justify-center gap-2"><svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg> <span class="text-[10px] font-bold uppercase tracking-wider">${doneText}</span></div>`;
             
             setTimeout(() => {
                 btn.innerHTML = originalHTML;
                 btn.classList.remove(...greenClasses);
                 btn.classList.add(...redClasses);
-                btn.classList.add(...hoverClasses); // Restore hover expansion
+                btn.classList.add(...hoverClasses); // Возвращаем hover эффект
+                btn.style.width = ''; // Сбрасываем ширину
                 btn.disabled = false;
             }, 2000);
         } else {
             const data = await res.json();
             const errorShort = (typeof I18N !== 'undefined' && I18N.web_error_short) ? I18N.web_error_short : "Error";
             await window.showModalAlert(I18N.web_error.replace('{error}', data.error || "Failed"), errorShort);
+            
+            // Возврат состояния при ошибке
             btn.disabled = false;
             btn.innerHTML = originalHTML;
+            btn.classList.add(...hoverClasses);
+            btn.style.width = '';
         }
     } catch (e) {
         const errorShort = (typeof I18N !== 'undefined' && I18N.web_conn_error_short) ? I18N.web_conn_error_short : "Conn Error";
         await window.showModalAlert(I18N.web_conn_error.replace('{error}', e), errorShort);
+        
+        // Возврат состояния при ошибке
         btn.disabled = false;
         btn.innerHTML = originalHTML;
+        btn.classList.add(...hoverClasses);
+        btn.style.width = '';
     }
 }
 
 async function resetTrafficSettings() {
-    if (!await window.showModalConfirm(I18N.web_traffic_reset_confirm || "Are you sure? This will zero out the counters.", I18N.modal_title_confirm)) return;
+    if (!await window.showModalConfirm(I18N.web_traffic_reset_confirm, I18N.modal_title_confirm)) return;
 
     const btn = document.getElementById('resetTrafficBtn');
     const originalHTML = btn.innerHTML;
     
+    // 1. Фиксируем ширину
+    btn.style.width = getComputedStyle(btn).width;
+    
+    // 2. Убираем классы hover
+    const hoverClasses = ['hover:pr-4', 'group'];
     const redClasses = ['bg-red-50', 'dark:bg-red-900/10', 'border-red-200', 'dark:border-red-800', 'text-red-600', 'dark:text-red-400', 'hover:bg-red-100', 'dark:hover:bg-red-900/30', 'active:bg-red-200'];
     const greenClasses = ['bg-green-600', 'text-white', 'border-transparent', 'hover:bg-green-500', 'px-3', 'py-2'];
 
-    // Classes that cause hover expansion
-    const hoverClasses = ['hover:pr-4', 'group'];
-
+    btn.classList.remove(...hoverClasses);
     btn.disabled = true;
-    btn.innerHTML = `<svg class="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>`;
+    
+    btn.innerHTML = `<svg class="animate-spin h-4 w-4 mx-auto" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>`;
 
     try {
         const res = await fetch('/api/traffic/reset', { method: 'POST' });
         if (res.ok) {
             btn.classList.remove(...redClasses);
-            btn.classList.remove(...hoverClasses); // Disable hover expansion
             btn.classList.add(...greenClasses);
-            const doneText = (typeof I18N !== 'undefined' && I18N.web_traffic_reset_no_emoji) ? I18N.web_traffic_reset_no_emoji : "Done!";
-            btn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg> <span class="font-bold text-xs uppercase ml-1">${doneText}</span>`;
+            
+            const doneText = I18N.web_traffic_reset_no_emoji;
+            btn.innerHTML = `<div class="flex items-center justify-center gap-2"><svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg> <span class="text-[10px] font-bold uppercase tracking-wider">${doneText}</span></div>`;
             
             setTimeout(() => {
                 btn.innerHTML = originalHTML;
                 btn.classList.remove(...greenClasses);
                 btn.classList.add(...redClasses);
-                btn.classList.add(...hoverClasses); // Restore hover expansion
+                btn.classList.add(...hoverClasses);
+                btn.style.width = '';
                 btn.disabled = false;
             }, 2000);
         } else {
             const data = await res.json();
             const errorShort = (typeof I18N !== 'undefined' && I18N.web_error_short) ? I18N.web_error_short : "Error";
             await window.showModalAlert(I18N.web_error.replace('{error}', data.error || "Failed"), errorShort);
+            
             btn.disabled = false;
             btn.innerHTML = originalHTML;
+            btn.classList.add(...hoverClasses);
+            btn.style.width = '';
         }
     } catch (e) {
         const errorShort = (typeof I18N !== 'undefined' && I18N.web_conn_error_short) ? I18N.web_conn_error_short : "Conn Error";
         await window.showModalAlert(I18N.web_conn_error.replace('{error}', e), errorShort);
+        
         btn.disabled = false;
         btn.innerHTML = originalHTML;
+        btn.classList.add(...hoverClasses);
+        btn.style.width = '';
     }
 }
 
@@ -732,7 +759,7 @@ window.handleSettingsRenameKeydown = function(event, token) {
 };
 
 async function deleteNode(token) {
-    if (!await window.showModalConfirm(I18N.node_delete_select || "Удалить эту ноду?", I18N.modal_title_confirm)) return;
+    if (!await window.showModalConfirm(I18N.node_delete_select || "Delete this node?", I18N.modal_title_confirm)) return;
 
     try {
         const res = await fetch('/api/nodes/delete', {
