@@ -9,6 +9,7 @@ import sys
 import glob
 from datetime import datetime, timedelta
 from typing import Optional, Callable
+from dateutil import parser as date_parser
 
 try:
     import docker
@@ -70,6 +71,8 @@ status_alert_message_id = None
 current_reported_state = None
 down_time_start = None
 WD_LANG = config.DEFAULT_LANGUAGE
+last_service_start_time = None
+
 docker_client: Optional[DockerClient] = None
 if DEPLOY_MODE == "docker":
     if DOCKER_AVAILABLE:
@@ -104,32 +107,28 @@ def get_system_uptime() -> str:
 
 
 def get_last_backup_info() -> str:
-    """Находит последний бэкап и возвращает категорию и дату"""
+    """Находит последний бэкап и возвращает локализованную строку статуса"""
     try:
         traffic_dir = getattr(config, 'TRAFFIC_BACKUP_DIR', None)
         if not traffic_dir or not os.path.exists(traffic_dir):
-            return "Traffic: Directory not found"
+            return get_text("wd_backup_dir_not_found", WD_LANG)
         
-        # Ищем файлы бэкапов трафика
         files = glob.glob(os.path.join(traffic_dir, "traffic_backup_*.json"))
         if not files:
-            return "Traffic: None"
+            return get_text("wd_backup_traffic_none", WD_LANG)
             
-        # Находим самый свежий файл
         latest_file = max(files, key=os.path.getmtime)
         mod_time = os.path.getmtime(latest_file)
         dt = datetime.fromtimestamp(mod_time)
         
-        # Формируем строку: "Категория (Дата Время)"
-        return f"Traffic ({dt.strftime('%Y-%m-%d %H:%M')})"
+        return get_text("wd_backup_traffic_found", WD_LANG, date=dt.strftime('%Y-%m-%d %H:%M'))
     except Exception as e:
-        return f"Error: {str(e)}"
+        return get_text("wd_backup_error", WD_LANG, error=str(e))
 
 
 def process_startup_flags():
-    """Проверяет флаги перезагрузки/рестарта и уведомляет пользователей, если бот поднялся"""
+    """Проверяет флаги перезагрузки/рестарта и уведомляет пользователей"""
     
-    # Обработка флага Restart (перезапуск бота)
     if os.path.exists(RESTART_FLAG_FILE):
         try:
             with open(RESTART_FLAG_FILE, "r") as f:
@@ -147,7 +146,6 @@ def process_startup_flags():
                     "chat_id": chat_id,
                     "message_id": message_id,
                     "text": text,
-                    # Пустая клавиатура, чтобы убрать кнопки если они были
                     "reply_markup": json.dumps({"inline_keyboard": []})
                 }
                 requests.post(url, data=payload, timeout=5)
@@ -160,7 +158,6 @@ def process_startup_flags():
             except Exception:
                 pass
 
-    # Обработка флага Reboot (перезагрузка сервера)
     if os.path.exists(REBOOT_FLAG_FILE):
         try:
             with open(REBOOT_FLAG_FILE, "r") as f:
@@ -205,7 +202,6 @@ def send_or_edit_telegram_alert(
         logging.warning(f"Активен кулдаун для '{alert_type}', пропуск уведомления.")
         return message_id_to_edit
     
-    # Определяем префикс. Для сообщения о запуске бота убираем префикс.
     if alert_type == "bot_service_up_ok":
         alert_prefix = ""
     else:
@@ -219,25 +215,22 @@ def send_or_edit_telegram_alert(
     else:
         message_body = get_text(message_key, WD_LANG, **kwargs)
     
-    # Формируем основной текст
     text_to_send = f"{alert_prefix}{message_body}"
 
-    # Добавляем доп. информацию (Uptime, Downtime, Backup) если она передана
+    # Добавляем доп. информацию (локализованную)
     extra_info = []
     if kwargs.get("downtime") and kwargs.get("downtime") != "N/A":
-        extra_info.append(f"⏱ <b>Downtime:</b> {kwargs['downtime']}")
+        extra_info.append(get_text("wd_downtime", WD_LANG, value=kwargs['downtime']))
     if kwargs.get("uptime"):
-        extra_info.append(f"⚡ <b>Uptime:</b> {kwargs['uptime']}")
+        extra_info.append(get_text("wd_uptime", WD_LANG, value=kwargs['uptime']))
     if kwargs.get("last_backup"):
-        extra_info.append(f"📦 <b>Last Backup:</b> {kwargs['last_backup']}")
+        extra_info.append(get_text("wd_last_backup", WD_LANG, value=kwargs['last_backup']))
     
     if extra_info:
         text_to_send += "\n\n" + "\n".join(extra_info)
 
     message_sent_or_edited = False
     new_message_id = message_id_to_edit
-    
-    # Явно указываем пустую клавиатуру, чтобы кнопок точно не было
     empty_kb = json.dumps({"inline_keyboard": []})
 
     if message_id_to_edit:
@@ -251,47 +244,23 @@ def send_or_edit_telegram_alert(
         }
         try:
             response = requests.post(url, data=payload, timeout=10)
-            response_data = {}
-            try:
-                response_data = response.json()
-            except json.JSONDecodeError:
-                logging.warning(
-                    f"Не удалось декодировать JSON из ответа Telegram (edit): {response.text}"
-                )
             if response.status_code == 200:
-                logging.info(
-                    f"Telegram-сообщение ID {message_id_to_edit} успешно отредактировано (тип '{alert_type}')."
-                )
+                logging.info(f"Telegram-сообщение ID {message_id_to_edit} отредактировано ('{alert_type}').")
                 message_sent_or_edited = True
                 if apply_cooldown:
                     last_alert_times[alert_type] = current_time
-            elif (
-                response.status_code == 400
-                and "message is not modified"
-                in response_data.get("description", "").lower()
-            ):
-                logging.debug(
-                    f"Сообщение ID {message_id_to_edit} не изменено (текст совпадает)."
-                )
+            elif response.status_code == 400:
+                logging.debug(f"Сообщение ID {message_id_to_edit} не изменено.")
                 message_sent_or_edited = True
             else:
-                logging.warning(
-                    f"Не удалось отредактировать сообщение ID {message_id_to_edit}. Статус: {response.status_code}, Ответ: {response.text}. Попытка отправить новое."
-                )
+                logging.warning(f"Ошибка редактирования {message_id_to_edit}: {response.text}")
                 status_alert_message_id = None
                 new_message_id = None
-        except requests.exceptions.RequestException as e:
-            logging.error(
-                f"Ошибка сети при редактировании Telegram-сообщения ID {message_id_to_edit}: {e}. Попытка отправить новое."
-            )
-            status_alert_message_id = None
-            new_message_id = None
         except Exception as e:
-            logging.error(
-                f"Неожиданное исключение при редактировании Telegram-сообщения ID {message_id_to_edit}: {e}. Попытка отправить новое."
-            )
+            logging.error(f"Ошибка при редактировании: {e}")
             status_alert_message_id = None
             new_message_id = None
+            
     if not message_sent_or_edited:
         url = f"https://api.telegram.org/bot{ALERT_BOT_TOKEN}/sendMessage"
         payload = {
@@ -303,28 +272,18 @@ def send_or_edit_telegram_alert(
         try:
             response = requests.post(url, data=payload, timeout=10)
             if response.status_code == 200:
-                sent_message_data = response.json()
-                new_message_id = sent_message_data.get("result", {}).get("message_id")
-                logging.info(
-                    f"Telegram-оповещение '{alert_type}' успешно отправлено (новое сообщение ID {new_message_id})."
-                )
+                sent_data = response.json()
+                new_message_id = sent_data.get("result", {}).get("message_id")
+                logging.info(f"Telegram-оповещение '{alert_type}' отправлено (ID {new_message_id}).")
                 if apply_cooldown:
                     last_alert_times[alert_type] = current_time
             else:
-                logging.error(
-                    f"Не удалось отправить Telegram-оповещение '{alert_type}'. Статус: {response.status_code}, Ответ: {response.text}"
-                )
+                logging.error(f"Ошибка отправки '{alert_type}': {response.text}")
                 new_message_id = None
-        except requests.exceptions.RequestException as e:
-            logging.error(
-                f"Ошибка сети при отправке Telegram-оповещения '{alert_type}': {e}"
-            )
-            new_message_id = None
         except Exception as e:
-            logging.error(
-                f"Неожиданное исключение при отправке Telegram-оповещения '{alert_type}': {e}"
-            )
+            logging.error(f"Ошибка при отправке '{alert_type}': {e}")
             new_message_id = None
+            
     return new_message_id
 
 
@@ -332,165 +291,91 @@ def check_bot_log_for_errors():
     current_bot_log_file = os.path.join(BOT_LOG_DIR, "bot.log")
     try:
         if not os.path.exists(current_bot_log_file):
-            yesterday_str = (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d")
-            yesterday_log_file = os.path.join(BOT_LOG_DIR, f"bot.log.{yesterday_str}")
-            if os.path.exists(yesterday_log_file):
-                current_bot_log_file = yesterday_log_file
-                logging.info(
-                    f"Основной лог-файл {os.path.basename(current_bot_log_file)} не найден, проверяю вчерашний: {os.path.basename(yesterday_log_file)}"
-                )
+            yesterday = (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d")
+            yesterday_log = os.path.join(BOT_LOG_DIR, f"bot.log.{yesterday}")
+            if os.path.exists(yesterday_log):
+                current_bot_log_file = yesterday_log
             else:
-                logging.warning(
-                    f"Лог-файл бота {os.path.basename(current_bot_log_file)} (и вчерашний) не найден. Не могу проверить на ошибки."
-                )
                 return (None, {})
         result = subprocess.run(
             ["tail", "-n", "20", current_bot_log_file],
-            capture_output=True,
-            text=True,
-            check=False,
-            encoding="utf-8",
-            errors="ignore",
+            capture_output=True, text=True, check=False, encoding="utf-8", errors="ignore",
         )
         if result.returncode != 0:
-            logging.error(
-                f"Не удалось прочитать {os.path.basename(current_bot_log_file)} через tail: {result.stderr}"
-            )
-            return (
-                "watchdog_log_read_error",
-                {"error": result.stderr or "Unknown error"},
-            )
+            return ("watchdog_log_read_error", {"error": result.stderr or "Unknown error"})
+            
         log_content = result.stdout
-        log_content_lower = log_content.lower()
-        if "critical" in log_content_lower or "error" in log_content_lower:
+        if "critical" in log_content.lower() or "error" in log_content.lower():
             last_error_line = ""
             for line in log_content.splitlines():
                 if "ERROR" in line or "CRITICAL" in line:
                     last_error_line = line
             if last_error_line:
-                last_error_safe = escape_html(last_error_line)
-                return (
-                    "watchdog_log_error_found_details",
-                    {"details": f"...{last_error_safe[-150:]}"},
-                )
+                return ("watchdog_log_error_found_details", {"details": f"...{escape_html(last_error_line)[-150:]}"})
             return ("watchdog_log_error_found_generic", {})
         return ("OK", {})
     except Exception as e:
-        logging.error(f"Исключение в check_bot_log_for_errors: {e}", exc_info=True)
-        error_safe = escape_html(str(e))
-        return ("watchdog_log_exception", {"error": error_safe})
+        return ("watchdog_log_exception", {"error": escape_html(str(e))})
 
 
 def check_bot_service_systemd():
-    global bot_service_was_down_or_activating, status_alert_message_id, current_reported_state
+    global bot_service_was_down_or_activating, status_alert_message_id, current_reported_state, last_service_start_time
     actual_state = "unknown"
     status_output_full = "N/A"
+    current_start_timestamp = None
+    
     try:
-        status_result = subprocess.run(
-            ["systemctl", "status", BOT_SERVICE_NAME],
-            capture_output=True,
-            text=True,
-            check=True,
-            encoding="utf-8",
-            errors="ignore",
-        )
-        status_output_full = status_result.stdout.strip()
-        if "Active: active (running)" in status_output_full:
+        cmd = ["systemctl", "show", BOT_SERVICE_NAME, "-p", "ActiveState,SubState,ActiveEnterTimestamp"]
+        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+        props = {}
+        for line in result.stdout.splitlines():
+            if "=" in line:
+                k, v = line.split("=", 1)
+                props[k] = v.strip()
+        
+        active_state = props.get("ActiveState", "unknown")
+        sub_state = props.get("SubState", "unknown")
+        timestamp_str = props.get("ActiveEnterTimestamp", "")
+        
+        if active_state == "active" and sub_state == "running":
             actual_state = "active"
-        elif "Active: activating" in status_output_full:
+            current_start_timestamp = timestamp_str
+        elif active_state == "activating":
             actual_state = "activating"
-    except subprocess.CalledProcessError as e:
-        status_output_full = e.stdout.strip() if e.stdout else e.stderr.strip()
-        if "inactive (dead)" in status_output_full:
-            actual_state = "inactive"
-        elif "failed" in status_output_full:
-            actual_state = "failed"
-        else:
-            logging.error(f"Ошибка выполнения systemctl status: {e.stderr or e.stdout}")
-            actual_state = "unknown"
-            status_output_full = e.stderr or e.stdout
-    except FileNotFoundError:
-        logging.error("Команда systemctl не найдена. Не могу проверить статус сервиса.")
-        if current_reported_state != "systemctl_error":
-            send_or_edit_telegram_alert(
-                "watchdog_systemctl_not_found", "watchdog_config_error", None
-            )
-            current_reported_state = "systemctl_error"
-            status_alert_message_id = None
-        time.sleep(CHECK_INTERVAL_SECONDS * 5)
-        return
+        elif active_state == "inactive" or active_state == "failed":
+            actual_state = "inactive" if active_state == "inactive" else "failed"
+            status_res = subprocess.run(["systemctl", "status", BOT_SERVICE_NAME], capture_output=True, text=True)
+            status_output_full = status_res.stdout.strip()
+            
     except Exception as e:
-        logging.error(
-            f"Неожиданная ошибка при вызове systemctl status: {e}", exc_info=True
-        )
-        if current_reported_state != "check_error":
-            error_safe = escape_html(str(e))
-            send_or_edit_telegram_alert(
-                "watchdog_check_error", "watchdog_error", None, error=error_safe
-            )
-            current_reported_state = "check_error"
-            status_alert_message_id = None
+        logging.error(f"Systemd check error: {e}")
         time.sleep(CHECK_INTERVAL_SECONDS)
         return
 
     def restart_service_systemd():
         try:
-            subprocess.run(
-                ["sudo", "systemctl", "restart", BOT_SERVICE_NAME],
-                capture_output=True,
-                text=True,
-                check=True,
-                encoding="utf-8",
-                errors="ignore",
-            )
-            logging.info(
-                f"Команда перезапуска (systemd) для {BOT_SERVICE_NAME} отправлена успешно."
-            )
-        except subprocess.CalledProcessError as e:
-            error_msg = escape_html((e.stderr or e.stdout or str(e)).strip())
-            logging.error(
-                f"Не удалось отправить команду перезапуска (systemd) для {BOT_SERVICE_NAME}. Ошибка: {error_msg}"
-            )
-            send_or_edit_telegram_alert(
-                "watchdog_restart_fail",
-                "bot_restart_fail",
-                None,
-                service_name=BOT_SERVICE_NAME,
-                error=error_msg,
-            )
+            subprocess.run(["sudo", "systemctl", "restart", BOT_SERVICE_NAME], check=True)
         except Exception as e:
-            error_msg = escape_html(str(e))
-            logging.error(
-                f"Неожиданная ошибка при попытке перезапуска (systemd) {BOT_SERVICE_NAME}: {error_msg}"
-            )
-            send_or_edit_telegram_alert(
-                "watchdog_restart_fail",
-                "bot_restart_fail",
-                None,
-                service_name=BOT_SERVICE_NAME,
-                error=f"Unexpected error: {error_msg}",
-            )
+            send_or_edit_telegram_alert("watchdog_restart_fail", "bot_restart_fail", None, service_name=BOT_SERVICE_NAME, error=str(e))
 
-    process_service_state(actual_state, status_output_full, restart_service_systemd)
+    process_service_state(actual_state, status_output_full, restart_service_systemd, current_start_timestamp)
 
 
 def check_bot_service_docker():
     global bot_service_was_down_or_activating, status_alert_message_id, current_reported_state
     if not docker_client:
-        logging.error("Docker клиент не инициализирован. Пропуск проверки.")
-        time.sleep(CHECK_INTERVAL_SECONDS * 5)
         return
     actual_state = "unknown"
     container_status = "not_found"
+    current_start_timestamp = None
     container = None
+    
     try:
         container = docker_client.containers.get(BOT_SERVICE_NAME)
         container_status = container.status
-        logging.debug(
-            f"Контейнер {BOT_SERVICE_NAME} найден. Статус: {container_status}"
-        )
         if container_status == "running":
             actual_state = "active"
+            current_start_timestamp = container.attrs['State']['StartedAt']
         elif container_status == "restarting":
             actual_state = "activating"
         elif container_status in ["exited", "dead"]:
@@ -498,116 +383,81 @@ def check_bot_service_docker():
         else:
             actual_state = "inactive"
     except docker.errors.NotFound:
-        logging.warning(f"Контейнер {BOT_SERVICE_NAME} не найден.")
         actual_state = "inactive"
-    except requests.exceptions.ConnectionError as e:
-        logging.error(
-            f"Ошибка подключения к Docker socket: {e}. Проверьте права и монтирование /var/run/docker.sock."
-        )
-        if current_reported_state != "docker_socket_error":
-            send_or_edit_telegram_alert(
-                "watchdog_check_error",
-                "watchdog_config_error",
-                None,
-                error="Docker Socket Connection Error",
-            )
-            current_reported_state = "docker_socket_error"
-            status_alert_message_id = None
-        time.sleep(CHECK_INTERVAL_SECONDS * 5)
-        return
     except Exception as e:
-        logging.error(
-            f"Неожиданная ошибка при проверке статуса контейнера: {e}", exc_info=True
-        )
-        if current_reported_state != "check_error":
-            error_safe = escape_html(str(e))
-            send_or_edit_telegram_alert(
-                "watchdog_check_error", "watchdog_error", None, error=error_safe
-            )
-            current_reported_state = "check_error"
-            status_alert_message_id = None
+        logging.error(f"Docker check error: {e}")
         time.sleep(CHECK_INTERVAL_SECONDS)
         return
 
     def restart_service_docker():
-        if not container:
-            logging.error(
-                f"Контейнер {BOT_SERVICE_NAME} не найден, не могу перезапустить."
-            )
-            return
-        try:
-            container.restart(timeout=10)
-            logging.info(
-                f"Команда перезапуска (docker) для {BOT_SERVICE_NAME} отправлена успешно."
-            )
-        except docker.errors.APIError as e:
-            error_msg = escape_html(str(e))
-            logging.error(
-                f"Не удалось отправить команду перезапуска (docker) для {BOT_SERVICE_NAME}. Ошибка Docker API: {error_msg}"
-            )
-            send_or_edit_telegram_alert(
-                "watchdog_restart_fail",
-                "bot_restart_fail",
-                None,
-                service_name=BOT_SERVICE_NAME,
-                error=error_msg,
-            )
-        except Exception as e:
-            error_msg = escape_html(str(e))
-            logging.error(
-                f"Неожиданная ошибка при попытке перезапуска (docker) {BOT_SERVICE_NAME}: {error_msg}"
-            )
-            send_or_edit_telegram_alert(
-                "watchdog_restart_fail",
-                "bot_restart_fail",
-                None,
-                service_name=BOT_SERVICE_NAME,
-                error=f"Unexpected error: {error_msg}",
-            )
+        if container:
+            try:
+                container.restart(timeout=10)
+            except Exception as e:
+                send_or_edit_telegram_alert("watchdog_restart_fail", "bot_restart_fail", None, service_name=BOT_SERVICE_NAME, error=str(e))
 
-    process_service_state(
-        actual_state, f"Docker status: {container_status}", restart_service_docker
-    )
+    process_service_state(actual_state, f"Docker status: {container_status}", restart_service_docker, current_start_timestamp)
 
 
 def process_service_state(
-    actual_state: str, status_output_full: str, restart_function: Callable[[], None]
+    actual_state: str, 
+    status_output_full: str, 
+    restart_function: Callable[[], None],
+    current_start_time: str = None
 ):
-    global bot_service_was_down_or_activating, status_alert_message_id, current_reported_state, down_time_start
+    global bot_service_was_down_or_activating, status_alert_message_id, current_reported_state, down_time_start, last_service_start_time
     state_to_report = None
     alert_type = None
     message_key = None
     message_kwargs = {"bot_name": BOT_NAME}
+    
+    is_restart_detected = False
+    
+    if actual_state == "active" and current_start_time:
+        if last_service_start_time is None:
+            last_service_start_time = current_start_time
+            try:
+                if "T" in current_start_time:
+                     start_dt = date_parser.parse(current_start_time).replace(tzinfo=None)
+                else:
+                     start_dt = date_parser.parse(current_start_time).replace(tzinfo=None)
+                
+                now = datetime.utcnow()
+                if (now - start_dt).total_seconds() < 120:
+                    logging.info("Обнаружен свежий запуск бота.")
+                    is_restart_detected = True
+            except Exception as e:
+                logging.warning(f"Ошибка парсинга даты: {e}")
+                
+        elif current_start_time != last_service_start_time:
+            logging.info(f"Обнаружено изменение времени запуска.")
+            last_service_start_time = current_start_time
+            is_restart_detected = True
+
+    if is_restart_detected:
+        bot_service_was_down_or_activating = True
+        if down_time_start is None:
+             down_time_start = time.time()
+
     restart_flag_exists = os.path.exists(RESTART_FLAG_FILE)
-    logging.debug(
-        f"Проверка флага перезапуска ({RESTART_FLAG_FILE}): {('Найден' if restart_flag_exists else 'Не найден')}"
-    )
+
     if restart_flag_exists and actual_state != "active":
-        logging.info(
-            f"Обнаружен плановый перезапуск. Отправка/обновление алерта о перезапуске бота..."
-        )
         state_to_report = "restarting"
         alert_type = "bot_service_restarting"
         message_key = "watchdog_status_restarting_bot"
         bot_service_was_down_or_activating = True
-        if down_time_start is None:
-            down_time_start = time.time()
+        if down_time_start is None: down_time_start = time.time()
             
     elif restart_flag_exists and actual_state == "active":
-        logging.debug("Флаг перезапуска найден, но бот активен. Игнорирую флаг (будет обработан в active_ok).")
+        pass
     
     elif actual_state == "active":
-        logging.debug(f"Сервис/контейнер '{BOT_SERVICE_NAME}' активен.")
         if bot_service_was_down_or_activating:
-            logging.info(
-                "Сервис перешел в состояние 'active'. Проверка лога через 3 секунды..."
-            )
-            time.sleep(3)
+            time.sleep(2)
             log_status_key, log_kwargs = check_bot_log_for_errors()
+            
             if log_status_key == "OK":
-                logging.info("Проверка лога: OK.")
                 state_to_report = "active_ok"
-                # Используем новый ключ для чистого сообщения
                 alert_type = "bot_service_up_ok"
                 message_key = "watchdog_status_active_ok"
                 
@@ -620,157 +470,67 @@ def process_service_state(
                 message_kwargs["downtime"] = downtime_str
                 message_kwargs["uptime"] = get_system_uptime()
                 message_kwargs["last_backup"] = get_last_backup_info()
-
                 process_startup_flags()
                 
-            elif log_status_key is not None:
-                log_details = get_text(log_status_key, WD_LANG, **log_kwargs)
-                logging.warning(f"Проверка лога: ОБНАРУЖЕНЫ ОШИБКИ ({log_details}).")
+            elif log_status_key:
                 state_to_report = "active_error"
                 alert_type = "bot_service_up_error"
                 message_key = "watchdog_status_active_error"
-                message_kwargs["details"] = log_details
+                message_kwargs["details"] = get_text(log_status_key, WD_LANG, **log_kwargs)
                 process_startup_flags()
-
             else:
-                logging.warning("Файл лога бота не найден.")
                 state_to_report = "active_ok"
                 alert_type = "bot_service_up_no_log_file"
                 message_key = "watchdog_status_active_log_fail"
                 process_startup_flags()
 
             bot_service_was_down_or_activating = False
+
     elif actual_state == "activating" and (not restart_flag_exists):
-        logging.info(f"Сервис/контейнер '{BOT_SERVICE_NAME}' активируется...")
         state_to_report = "activating"
         alert_type = "bot_service_activating"
         message_key = "watchdog_status_activating"
         bot_service_was_down_or_activating = True
-        if down_time_start is None:
-            down_time_start = time.time()
+        if down_time_start is None: down_time_start = time.time()
             
-    elif actual_state in ["inactive", "failed", "unknown"] and (
-        not restart_flag_exists
-    ):
-        logging.warning(
-            f"Сервис/контейнер '{BOT_SERVICE_NAME}' НЕАКТИВЕН. Фактическое состояние: '{actual_state}'."
-        )
-        logging.debug(f"Вывод статуса:\n{status_output_full}")
+    elif actual_state in ["inactive", "failed", "unknown"] and (not restart_flag_exists):
         state_to_report = "down"
         alert_type = "bot_service_down"
         message_key = "watchdog_status_down"
-        if down_time_start is None:
-            down_time_start = time.time()
-            
+        if down_time_start is None: down_time_start = time.time()
+        
         if actual_state == "failed":
-            fail_reason_match = re.search(
-                "Failed with result '([^']*)'", status_output_full
-            )
-            if fail_reason_match:
-                reason = fail_reason_match.group(1)
-                message_kwargs["reason"] = (
-                    f" ({get_text('watchdog_status_down_reason', WD_LANG)}: {reason})"
-                )
-            else:
-                message_kwargs["reason"] = (
-                    f" ({get_text('watchdog_status_down_failed', WD_LANG)})"
-                )
-        elif DEPLOY_MODE == "docker":
-            message_kwargs["reason"] = f" (Status: {status_output_full})"
+            message_kwargs["reason"] = f" ({get_text('watchdog_status_down_failed', WD_LANG)})"
         else:
             message_kwargs["reason"] = ""
+            
         if not bot_service_was_down_or_activating:
-            logging.info(
-                f"Первое обнаружение сбоя (флаг не найден). Вызов функции перезапуска..."
-            )
             restart_function()
         bot_service_was_down_or_activating = True
+
     try:
-        logging.debug(
-            f"Перед отправкой: state_to_report='{state_to_report}', current_reported_state='{current_reported_state}', message_key='{message_key}'"
-        )
         if state_to_report and state_to_report != current_reported_state:
-            logging.info(
-                f"Состояние изменилось: '{current_reported_state}' -> '{state_to_report}'. Отправка/редактирование сообщения (ключ: '{message_key}')..."
-            )
-            message_id_for_operation = (
-                status_alert_message_id
-                if state_to_report not in ["down", "restarting"]
-                else None
-            )
-            if message_id_for_operation:
-                logging.debug(
-                    f"Попытка редактировать сообщение ID: {message_id_for_operation}"
-                )
-            else:
-                logging.debug("Попытка отправить новое сообщение.")
-            new_id = send_or_edit_telegram_alert(
-                message_key, alert_type, message_id_for_operation, **message_kwargs
-            )
-            if new_id is not None:
-                logging.debug(
-                    f"Операция с сообщением успешна. Новый ID: {new_id}. Обновляю состояние."
-                )
+            msg_id = status_alert_message_id if state_to_report not in ["down", "restarting"] else None
+            new_id = send_or_edit_telegram_alert(message_key, alert_type, msg_id, **message_kwargs)
+            if new_id:
                 status_alert_message_id = new_id
                 current_reported_state = state_to_report
-            else:
-                logging.error(
-                    f"Не удалось отправить/отредактировать сообщение для состояния '{state_to_report}'. Предыдущее состояние '{current_reported_state}' сохранено."
-                )
-        elif state_to_report and state_to_report == current_reported_state:
-            logging.debug(
-                f"Состояние '{state_to_report}' не изменилось с последней отправки. Пропуск."
-            )
-        elif (
-            not state_to_report
-            and current_reported_state
-            and current_reported_state.startswith("active")
-        ):
-            logging.debug(
-                f"Сервис продолжает работать в состоянии '{current_reported_state}'. Пропуск."
-            )
     except Exception as e:
-        logging.error(
-            f"Ошибка при отправке/редактировании уведомления о статусе: {e}",
-            exc_info=True,
-        )
-        status_alert_message_id = None
+        logging.error(f"Alert error: {e}")
 
 
 if __name__ == "__main__":
-    if not ALERT_BOT_TOKEN:
-        print("FATAL: Telegram Bot Token (TG_BOT_TOKEN) not found or empty.")
+    if not ALERT_BOT_TOKEN or not ALERT_ADMIN_ID:
         sys.exit(1)
-    if not ALERT_ADMIN_ID:
-        print("FATAL: Telegram Admin ID (TG_ADMIN_ID) not found or empty.")
-        sys.exit(1)
-    try:
-        int(ALERT_ADMIN_ID)
-    except ValueError:
-        print(f"FATAL: TG_ADMIN_ID ('{ALERT_ADMIN_ID}') is not a valid integer.")
-        sys.exit(1)
-    logging.info(
-        f"Система оповещений (Alert) запущена. Режим: {DEPLOY_MODE.upper()}. Отслеживание: {BOT_SERVICE_NAME}"
-    )
-    send_or_edit_telegram_alert(
-        "watchdog_status_restarting_wd", "watchdog_start", None, bot_name=BOT_NAME
-    )
+    
+    logging.info(f"Watchdog started. Mode: {DEPLOY_MODE}. Service: {BOT_SERVICE_NAME}")
+    send_or_edit_telegram_alert("watchdog_status_restarting_wd", "watchdog_start", None, bot_name=BOT_NAME)
+    
     while True:
         if DEPLOY_MODE == "docker":
             if DOCKER_AVAILABLE and docker_client:
                 check_bot_service_docker()
             else:
-                logging.critical(
-                    "Режим Docker, но клиент не инициализирован или недоступен. Watchdog не может работать."
-                )
-                if current_reported_state != "docker_lib_error":
-                    send_or_edit_telegram_alert(
-                        "watchdog_check_error",
-                        "watchdog_error",
-                        None,
-                        error="Docker client not available or not installed",
-                    )
-                    current_reported_state = "docker_lib_error"
                 time.sleep(60)
         else:
             check_bot_service_systemd()

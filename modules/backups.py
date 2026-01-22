@@ -93,7 +93,7 @@ async def traffic_backup_ui_handler(callback: types.CallbackQuery):
                 pass
     
     buttons.insert(0, [InlineKeyboardButton(text=get_text("btn_create_backup", lang), callback_data="create_traffic_backup")])
-    buttons.append([InlineKeyboardButton(text=f"🔙 {get_text('btn_back', lang)}", callback_data="back_to_backups_main")])
+    buttons.append([InlineKeyboardButton(text=f"{get_text('btn_back', lang)}", callback_data="back_to_backups_main")])
     
     await callback.message.edit_text(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons), parse_mode="HTML")
 
