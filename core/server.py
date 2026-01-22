@@ -1138,6 +1138,7 @@ async def handle_settings_page(request):
         "web_update_do_btn": _("web_update_do_btn", lang),
         "web_notifications_title": _("web_notifications_title", lang),
         "web_clear_notifications": _("web_clear_notifications", lang),
+        "web_notifications_cleared": _("web_notifications_cleared", lang),
         "web_logout": _("web_logout", lang),
         "web_sessions_title": _("web_sessions_title", lang),
         "web_sessions_view_all": _("web_sessions_view_all", lang),
