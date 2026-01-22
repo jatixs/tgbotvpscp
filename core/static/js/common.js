@@ -147,7 +147,8 @@ function toggleHint(e, id) {
         if (!titleEl) {
             titleEl = el.parentElement?.parentElement?.querySelector('span, label, p, h3');
         }
-        document.getElementById('hintModalTitle').innerText = titleEl ? titleEl.innerText : 'Info';
+        const defaultTitle = (typeof I18N !== 'undefined' && I18N.modal_title_info) ? I18N.modal_title_info : 'Info';
+        document.getElementById('hintModalTitle').innerText = titleEl ? titleEl.innerText : defaultTitle;
 
         animateModalOpen(m, false);
     }
