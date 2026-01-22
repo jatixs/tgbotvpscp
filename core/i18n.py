@@ -524,7 +524,6 @@ STRINGS = {
         "web_redirecting": "Перенаправление...",
         "web_logging_in": "Вход в систему...",
         "login_go_to_bot": "Перейти в бот",
-        # --- БЭКАПЫ (НОВОЕ) ---
         "btn_backups": "💾 Бэкапы",
         "btn_delete": "Удалить",
         "btn_close": "Закрыть",
@@ -540,8 +539,11 @@ STRINGS = {
         "btn_create_backup": "➕ Создать бэкап",
         "backup_created": "✅ Бэкап успешно создан.",
         "backup_deleted": "🗑 Бэкап удален.",
-        # Исправлено: убраны {rx} и {tx}
         "traffic_startup_alert": "🚀 <b>Бот запущен!</b>\n\n💾 <b>Последний бэкап:</b> {last_backup}",
+        "web_traffic_reset_confirm": "Вы уверены, что хотите сбросить статистику трафика?",
+        "btn_reset_traffic": "🗑 Сбросить статистику",
+        "traffic_reset_done": "✅ Статистика трафика успешно сброшена.",
+        "btn_refresh": "🔄 Обновить",
     },
     "en": {
         "auth_method_key": "🔑 Public Key",
@@ -1058,7 +1060,6 @@ STRINGS = {
         "web_redirecting": "Redirecting...",
         "web_logging_in": "Logging in...",
         "login_go_to_bot": "Go to Bot",
-        # --- БЭКАПЫ (НОВОЕ) ---
         "btn_backups": "💾 Backups",
         "btn_delete": "Delete",
         "btn_close": "Close",
@@ -1074,8 +1075,11 @@ STRINGS = {
         "btn_create_backup": "➕ Create Backup",
         "backup_created": "✅ Backup created successfully.",
         "backup_deleted": "🗑 Backup deleted.",
-        # Исправлено: убраны {rx} и {tx}
         "traffic_startup_alert": "🚀 <b>Bot started!</b>\n\n💾 <b>Last backup:</b> {last_backup}",
+        "web_traffic_reset_confirm": "Are you sure you want to reset traffic statistics?",
+        "btn_reset_traffic": "🗑 Reset Statistics",
+        "traffic_reset_done": "✅ Traffic statistics reset successfully.",
+        "btn_refresh": "🔄 Refresh",
     },
 }
 
