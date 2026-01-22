@@ -1459,7 +1459,7 @@ async function resetTrafficSettings() {
             btn.classList.remove(...redClasses);
             btn.classList.add(...greenClasses);
             
-            const doneText = (typeof I18N !== 'undefined' && I18N.web_traffic_reset_no_emoji) ? I18N.web_traffic_reset_no_emoji : "ХУЙ!";
+            const doneText = (typeof I18N !== 'undefined' && I18N.web_traffic_reset_no_emoji) ? I18N.web_traffic_reset_no_emoji : "Done!";
             btn.innerHTML = `<div class="flex items-center justify-center gap-2"><svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg> <span class="text-[10px] font-bold uppercase tracking-wider">${doneText}</span></div>`;
             
             setTimeout(() => {
