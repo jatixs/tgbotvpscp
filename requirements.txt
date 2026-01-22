@@ -14,3 +14,4 @@ sentry-sdk
 tortoise-orm
 aerich
 tomlkit
+python-dateutil

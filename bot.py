@@ -17,6 +17,7 @@ from modules import (
     restart,
     optimize,
     nodes,
+    backups,
 )
 from core.i18n import _, I18nFilter, get_language_keyboard
 from core import i18n
@@ -48,6 +49,7 @@ if config.SENTRY_DSN and config.SENTRY_DSN.strip().startswith("http"):
         logging.error(f"Failed to initialize Sentry: {e}")
 else:
     logging.info("Sentry disabled (DSN not set or invalid).")
+
 config.setup_logging(config.BOT_LOG_DIR, "bot")
 bot = Bot(token=config.TOKEN)
 storage = MemoryStorage()
@@ -273,6 +275,7 @@ def load_modules():
     register_module(restart, root_only=True)
     register_module(reboot, root_only=True)
     register_module(optimize, root_only=True)
+    register_module(backups)
     logging.info("All modules loaded.")
 
 
@@ -326,8 +329,8 @@ async def main():
         await asyncio.to_thread(utils.load_alerts_config)
         await asyncio.to_thread(i18n.load_user_settings)
         asyncio.create_task(auth.refresh_user_names(bot))
-        await utils.initial_reboot_check(bot)
-        await utils.initial_restart_check(bot)
+        # Убраны вызовы utils.initial_reboot_check и utils.initial_restart_check
+        # Теперь эта логика обрабатывается в watchdog.py
         load_modules()
         logging.info("Starting Agent Web Server...")
         web_runner = await server.start_web_server(bot)

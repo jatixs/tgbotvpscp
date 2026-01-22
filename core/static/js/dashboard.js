@@ -10,8 +10,6 @@ let allNodesData = [];
 let currentNodeToken = null;
 
 // --- CRYPTO FUNCTIONS (XOR + Base64) ---
-// WEB_KEY is injected in dashboard.html by server
-
 function decryptData(text) {
     if (!text) return "";
     if (typeof WEB_KEY === 'undefined' || !WEB_KEY) return text;
@@ -1160,3 +1158,26 @@ function renderCharts(history) {
         });
     }
 }
+
+window.resetTrafficDashboard = async function() {
+    if (!await window.showModalConfirm(I18N.web_traffic_reset_confirm, I18N.modal_title_confirm)) return;
+
+    try {
+        const res = await fetch('/api/traffic/reset', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
+        if (res.ok) {
+            if (window.showToast) window.showToast(I18N.traffic_reset_done);
+        } else {
+            const data = await res.json();
+            const errorShort = (typeof I18N !== 'undefined' && I18N.web_error_short) ? I18N.web_error_short : "Error";
+            await window.showModalAlert(data.error || "Failed", errorShort);
+        }
+    } catch (e) {
+        const errorShort = (typeof I18N !== 'undefined' && I18N.web_conn_error_short) ? I18N.web_conn_error_short : "Conn Error";
+        await window.showModalAlert(String(e), errorShort);
+    }
+};
