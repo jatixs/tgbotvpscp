@@ -126,7 +126,9 @@ window.initSettings = function() {
                 const data = await response.json();
                 if (data.error) throw new Error(data.error);
 
-                await window.showModalAlert("Update started! Page will reload in 15 seconds.", "Info");
+                const alertMsg = (typeof I18N !== 'undefined' && I18N.web_update_started_alert) ? I18N.web_update_started_alert : "Обновление запущено! Страница перезагрузится через 15 секунд.";
+				const alertTitle = (typeof I18N !== 'undefined' && I18N.modal_title_info) ? I18N.modal_title_info : "Info";
+				await window.showModalAlert(alertMsg, alertTitle);
                 setTimeout(() => location.reload(), 15000);
             } catch (error) {
                 const errorText = (I18N.web_update_error || "Error: {error}").replace('{error}', error.message);
@@ -737,7 +739,8 @@ window.saveNodeRename = async function(token) {
                 renderNodes();
             }
             const errorMsg = (typeof I18N !== 'undefined' && I18N.web_node_rename_error) ? I18N.web_node_rename_error : "Error updating name";
-            if (window.showModalAlert) await window.showModalAlert(data.error || errorMsg, "Error");
+            const errTitle = (typeof I18N !== 'undefined' && I18N.web_error_short) ? I18N.web_error_short : "Ошибка";
+			if (window.showModalAlert) await window.showModalAlert(data.error || errorMsg, errTitle);
         }
     } catch (e) {
         console.error(e);

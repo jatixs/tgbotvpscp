@@ -548,7 +548,10 @@ STRINGS = {
         "btn_refresh": "🔄 Обновить",
         "web_clear_notif_confirm": "Очистить все уведомления?",
         "web_logs_cleared_alert": "Логи очищены",
-        "web_traffic_reset_no_emoji": "Готово",
+        "modal_title_info": "Информация",
+        "web_logs_empty_title": "В логах тишина",
+        "web_logs_empty_desc": "Новых записей не найдено",
+        "web_update_started_alert": "Обновление запущено! Страница перезагрузится через 15 секунд.",
     },
     "en": {
         "auth_method_key": "🔑 Public Key",
@@ -896,7 +899,6 @@ STRINGS = {
         "web_conn_error": "Connection error: {error}",
         "web_settings_page_title": "Settings",
         "web_back": "Back",
-        "web_notif_section": "Notifications",
         "web_users_section": "Users",
         "web_add_user_btn": "Add",
         "web_add_node_section": "Add Node",
@@ -1089,7 +1091,10 @@ STRINGS = {
         "btn_refresh": "🔄 Refresh",
         "web_clear_notif_confirm": "Clear all notifications?",
         "web_logs_cleared_alert": "Logs cleared",
-        "web_traffic_reset_no_emoji": "Done",
+        "modal_title_info": "Info",
+        "web_logs_empty_title": "Logs are empty",
+        "web_logs_empty_desc": "No new entries found",
+        "web_update_started_alert": "Update started! Page will reload in 15 seconds.",
     },
 }
 

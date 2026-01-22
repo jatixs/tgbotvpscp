@@ -660,32 +660,53 @@ function createBlurOverlay(id, content) {
 
 async function clearNotifications(e) {
     if (e) e.stopPropagation();
-    const msg = (typeof I18N !== 'undefined' && I18N.web_clear_notif_confirm) 
-        ? I18N.web_clear_notif_confirm 
-    const title = (typeof I18N !== 'undefined' && I18N.modal_title_confirm) 
-        ? I18N.modal_title_confirm 
-        : "Confirmation";
+
+    // 1. Fallback text (English default)
+    let msg = "Clear all notifications?";
+    let title = "Confirmation";
+    let successMsg = "Success";
+
+    // 2. Try to get translated text from I18N
+    if (typeof I18N !== 'undefined') {
+        if (I18N.web_clear_notif_confirm) {
+            msg = I18N.web_clear_notif_confirm;
+        } else if (I18N.web_clear_notifications) {
+            // Partial fallback: "Clear notifications" + "?"
+            msg = I18N.web_clear_notifications + "?";
+        }
+
+        if (I18N.modal_title_confirm) {
+            title = I18N.modal_title_confirm;
+        }
+        
+        if (I18N.web_success) {
+            successMsg = I18N.web_success;
+        }
+    }
+
     if (!await window.showModalConfirm(msg, title)) return;
 
     try {
         const res = await fetch('/api/notifications/clear', {
             method: 'POST'
         });
-        
+
         if (res.ok) {
             updateNotifUI([], 0);
-            const successMsg = (typeof I18N !== 'undefined' && I18N.web_success) 
-                ? I18N.web_success 
-                : "Success";
-                
             if (window.showToast) window.showToast(successMsg);
         }
     } catch (e) {
         console.error("Clear notifications error:", e);
-        const errorShort = (typeof I18N !== 'undefined' && I18N.web_error_short) ? I18N.web_error_short : "Error";
+        
+        let errorShort = "Error";
+        if (typeof I18N !== 'undefined' && I18N.web_error_short) {
+            errorShort = I18N.web_error_short;
+        }
+        
         if (window.showModalAlert) window.showModalAlert(String(e), errorShort);
     }
 }
+window.clearNotifications = clearNotifications;
 
 function updateNotifUI(list, count) {
     const badge = document.getElementById('notifBadge');
@@ -1100,6 +1121,7 @@ document.addEventListener('click', async (e) => {
                         if (window.initDashboard) window.initDashboard();
                         else window.location.reload();
                     }
+                    initNotifications();
                 } catch (e) {
                     window.location.reload();
                 }
