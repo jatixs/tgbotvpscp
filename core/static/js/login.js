@@ -23,8 +23,9 @@ async function onTelegramAuth(user) {
             window.location.reload();
         } else {
             const d = await response.json();
-            if (window.showModalAlert) await window.showModalAlert("Error: " + (d.error || "Unknown"), "Auth Error");
-            else alert("Auth Error: " + (d.error || "Unknown"));
+            const errTitle = (typeof I18N !== 'undefined' && I18N.web_error_short) ? I18N.web_error_short : "Auth Error";
+            if (window.showModalAlert) await window.showModalAlert("Error: " + (d.error || "Unknown"), errTitle);
+            else alert(errTitle + ": " + (d.error || "Unknown"));
         }
     } catch (e) {
         console.error(e);
@@ -253,12 +254,14 @@ async function requestPasswordReset() {
                     adminLinkBtn.href = data.admin_url;
                 }
             } else {
-                if (window.showModalAlert) await window.showModalAlert("Error: " + (data.error || "Unknown"), 'Error');
-                else alert("Error: " + (data.error || "Unknown"));
+                const errTitle = (typeof I18N !== 'undefined' && I18N.web_error_short) ? I18N.web_error_short : "Error";
+                if (window.showModalAlert) await window.showModalAlert("Error: " + (data.error || "Unknown"), errTitle);
+                else alert(errTitle + ": " + (data.error || "Unknown"));
             }
         }
     } catch (e) {
-        if (window.showModalAlert) await window.showModalAlert("Connection Error: " + e, 'Network Error');
+        const netErrTitle = (typeof I18N !== 'undefined' && I18N.web_conn_error_short) ? I18N.web_conn_error_short : "Network Error";
+        if (window.showModalAlert) await window.showModalAlert("Connection Error: " + e, netErrTitle);
     } finally {
         if (btn) {
             btn.disabled = false;
@@ -276,12 +279,16 @@ async function submitNewPassword() {
     const urlParams = new URLSearchParams(window.location.search);
     const token = urlParams.get('token');
 
+    const errTitle = (typeof I18N !== 'undefined' && I18N.web_error_short) ? I18N.web_error_short : "Error";
+
     if (!p1 || p1.length < 4) {
-        if (window.showModalAlert) await window.showModalAlert("Password too short (min 4 chars).", 'Error');
+        const msg = (typeof I18N !== 'undefined' && I18N.pass_req_length) ? I18N.pass_req_length : "Password too short (min 4 chars).";
+        if (window.showModalAlert) await window.showModalAlert(msg, errTitle);
         return;
     }
     if (p1 !== p2) {
-        if (window.showModalAlert) await window.showModalAlert("Passwords do not match.", 'Error');
+        const msg = (typeof I18N !== 'undefined' && I18N.pass_match_error) ? I18N.pass_match_error : "Passwords do not match.";
+        if (window.showModalAlert) await window.showModalAlert(msg, errTitle);
         return;
     }
 
@@ -318,12 +325,12 @@ async function submitNewPassword() {
             `;
             window.history.replaceState({}, document.title, "/login");
         } else {
-            if (window.showModalAlert) await window.showModalAlert("Error: " + data.error, 'Error');
+            if (window.showModalAlert) await window.showModalAlert("Error: " + data.error, errTitle);
             btn.disabled = false;
             btn.innerText = "Save Password";
         }
     } catch (e) {
-        if (window.showModalAlert) await window.showModalAlert("Network Error: " + e, 'Error');
+        if (window.showModalAlert) await window.showModalAlert("Network Error: " + e, errTitle);
         btn.disabled = false;
         btn.innerText = "Save Password";
     }

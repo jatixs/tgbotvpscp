@@ -3,25 +3,25 @@
 document.addEventListener('DOMContentLoaded', () => {
     // --- Локализация ---
     const pageTitle = document.getElementById('page-title');
-    if (pageTitle) pageTitle.innerText = I18N.reset_page_title || "Reset Password";
+    if (pageTitle) pageTitle.innerText = (typeof I18N !== 'undefined' && I18N.reset_page_title) ? I18N.reset_page_title : "Reset Password";
 
     const brandName = document.getElementById('brand-name');
-    if (brandName) brandName.innerText = I18N.web_brand_name || "VPS Manager";
+    if (brandName) brandName.innerText = (typeof I18N !== 'undefined' && I18N.web_brand_name) ? I18N.web_brand_name : "VPS Manager";
 
     const lblNew = document.getElementById('lbl-new-pass');
-    if (lblNew) lblNew.innerText = I18N.web_new_password || "New Password";
+    if (lblNew) lblNew.innerText = (typeof I18N !== 'undefined' && I18N.web_new_password) ? I18N.web_new_password : "New Password";
 
     const lblConfirm = document.getElementById('lbl-confirm-pass');
-    if (lblConfirm) lblConfirm.innerText = I18N.web_confirm_password || "Confirm Password";
+    if (lblConfirm) lblConfirm.innerText = (typeof I18N !== 'undefined' && I18N.web_confirm_password) ? I18N.web_confirm_password : "Confirm Password";
 
     const btnText = document.getElementById('btn-text');
-    if (btnText) btnText.innerText = I18N.web_save_btn || "Save";
+    if (btnText) btnText.innerText = (typeof I18N !== 'undefined' && I18N.web_save_btn) ? I18N.web_save_btn : "Save";
 
     const txtHintLen = document.getElementById('txt-hint-len');
-    if (txtHintLen) txtHintLen.innerText = I18N.pass_req_length || "Min 8 chars";
+    if (txtHintLen) txtHintLen.innerText = (typeof I18N !== 'undefined' && I18N.pass_req_length) ? I18N.pass_req_length : "Min 8 chars";
 
     const txtHintNum = document.getElementById('txt-hint-num');
-    if (txtHintNum) txtHintNum.innerText = I18N.pass_req_num || "Min 1 digit";
+    if (txtHintNum) txtHintNum.innerText = (typeof I18N !== 'undefined' && I18N.pass_req_num) ? I18N.pass_req_num : "Min 1 digit";
 
     // --- Элементы формы ---
     const passInput = document.getElementById('new_pass');
@@ -67,20 +67,25 @@ document.addEventListener('DOMContentLoaded', () => {
         let color = 'bg-red-500';
         let label = "";
 
+        // Safe access to I18N
+        const txtWeak = (typeof I18N !== 'undefined' && I18N.pass_strength_weak) ? I18N.pass_strength_weak : "Weak";
+        const txtFair = (typeof I18N !== 'undefined' && I18N.pass_strength_fair) ? I18N.pass_strength_fair : "Normal";
+        const txtStrong = (typeof I18N !== 'undefined' && I18N.pass_strength_strong) ? I18N.pass_strength_strong : "Strong";
+
         if (password.length === 0) {
             width = '0%';
         } else if (score < 2) {
             width = '33%';
             color = 'bg-red-500';
-            label = I18N.pass_strength_weak || "Weak";
+            label = txtWeak;
         } else if (score < 3) {
             width = '66%';
             color = 'bg-yellow-500';
-            label = I18N.pass_strength_fair || "Normal";
+            label = txtFair;
         } else {
             width = '100%';
             color = 'bg-green-500';
-            label = I18N.pass_strength_strong || "Strong";
+            label = txtStrong;
         }
 
         strengthBar.style.width = width;
@@ -92,7 +97,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function validateMatch() {
         if (confirmInput.value && passInput.value !== confirmInput.value) {
-            matchError.innerText = I18N.pass_match_error || "Passwords do not match";
+            const errText = (typeof I18N !== 'undefined' && I18N.pass_match_error) ? I18N.pass_match_error : "Passwords do not match";
+            matchError.innerText = errText;
             matchError.classList.remove('hidden');
             confirmInput.classList.add('border-red-500');
             confirmInput.classList.remove('border-white/10');
@@ -137,9 +143,12 @@ document.addEventListener('DOMContentLoaded', () => {
     window.showAlert = function(msg) {
         return new Promise(resolve => {
             modalResolve = resolve;
-            modalTitle.innerText = I18N.modal_title_alert || "Alert";
+            const titleTxt = (typeof I18N !== 'undefined' && I18N.modal_title_alert) ? I18N.modal_title_alert : "Alert";
+            const btnTxt = (typeof I18N !== 'undefined' && I18N.modal_btn_ok) ? I18N.modal_btn_ok : "OK";
+            
+            modalTitle.innerText = titleTxt;
             modalMsg.innerText = msg;
-            modalOk.innerText = I18N.modal_btn_ok || "OK";
+            modalOk.innerText = btnTxt;
 
             modal.classList.remove('hidden');
             requestAnimationFrame(() => {
@@ -167,26 +176,31 @@ document.addEventListener('DOMContentLoaded', () => {
         const pwd = passInput.value;
         const confirm = confirmInput.value;
 
+        const msgEmpty = (typeof I18N !== 'undefined' && I18N.pass_is_empty) ? I18N.pass_is_empty : "Fill all fields";
+        const msgMismatch = (typeof I18N !== 'undefined' && I18N.pass_match_error) ? I18N.pass_match_error : "Mismatch";
+        const msgWeak = (typeof I18N !== 'undefined' && I18N.pass_hint_title) ? I18N.pass_hint_title + " " + ((I18N.pass_req_length || "") + ", " + (I18N.pass_req_num || "")) : "Password is too weak";
+
         if (!pwd || !confirm) {
-            await showAlert(I18N.pass_is_empty || "Fill all fields");
+            await showAlert(msgEmpty);
             return;
         }
         if (pwd !== confirm) {
-            await showAlert(I18N.pass_match_error || "Mismatch");
+            await showAlert(msgMismatch);
             return;
         }
         if (!checkStrength(pwd)) {
-            await showAlert("Password is too weak");
+            await showAlert(msgWeak);
             return;
         }
 
         // Анимация загрузки
         const originalText = document.getElementById('btn-text').innerText;
+        const saveText = (typeof I18N !== 'undefined' && I18N.web_saving_btn) ? I18N.web_saving_btn : "Saving...";
 
         // Спиннер SVG
         const spinner = `<svg class="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>`;
 
-        document.getElementById('btn-text').innerHTML = spinner + (I18N.web_saving_btn || "Saving...");
+        document.getElementById('btn-text').innerHTML = spinner + saveText;
         submitBtn.disabled = true;
 
         try {
@@ -213,19 +227,22 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 // Иконка галочки
                 const checkIcon = `<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg>`;
+                const redirText = (typeof I18N !== 'undefined' && I18N.web_redirecting) ? I18N.web_redirecting : "Redirecting...";
 
-                document.getElementById('btn-text').innerHTML = checkIcon + (I18N.web_redirecting || "Redirecting...");
+                document.getElementById('btn-text').innerHTML = checkIcon + redirText;
 
                 setTimeout(() => {
                     window.location.href = '/login';
                 }, 1000);
             } else {
-                await showAlert(I18N.web_error + ": " + (data.error || "Unknown"));
+                const errPrefix = (typeof I18N !== 'undefined' && I18N.web_error) ? I18N.web_error : "Error";
+                await showAlert(errPrefix + ": " + (data.error || "Unknown"));
                 document.getElementById('btn-text').innerText = originalText;
                 submitBtn.disabled = false;
             }
         } catch (e) {
-            await showAlert(I18N.web_conn_error || "Connection error");
+            const connErr = (typeof I18N !== 'undefined' && I18N.web_conn_error) ? I18N.web_conn_error : "Connection error";
+            await showAlert(connErr);
             document.getElementById('btn-text').innerText = originalText;
             submitBtn.disabled = false;
         }

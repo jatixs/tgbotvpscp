@@ -681,6 +681,10 @@ window.switchLogType = function(type) {
                     removeLogLoading();
 
                     if (!document.getElementById('empty-logs-state')) {
+                        // FIX: Use localized strings for empty logs
+                        const emptyTitle = (typeof I18N !== 'undefined' && I18N.web_logs_empty_title) ? I18N.web_logs_empty_title : "Logs are empty";
+                        const emptyDesc = (typeof I18N !== 'undefined' && I18N.web_logs_empty_desc) ? I18N.web_logs_empty_desc : "No new entries found";
+
                         const emptyHtml = `
                         <div id="empty-logs-state" class="flex flex-col items-center justify-center h-full min-h-[200px] text-gray-400 dark:text-gray-600 animate-fade-in-up select-none opacity-80">
                             <div class="bg-gray-100 dark:bg-white/5 p-4 rounded-full mb-3">
@@ -688,8 +692,8 @@ window.switchLogType = function(type) {
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
                                 </svg>
                             </div>
-                            <span class="text-sm font-bold text-gray-500 dark:text-gray-400">В логах тишина</span>
-                            <span class="text-[10px] uppercase tracking-wider opacity-60 mt-1">Новых записей не найдено</span>
+                            <span class="text-sm font-bold text-gray-500 dark:text-gray-400">${escapeHtml(emptyTitle)}</span>
+                            <span class="text-[10px] uppercase tracking-wider opacity-60 mt-1">${escapeHtml(emptyDesc)}</span>
                         </div>`;
                         container.insertAdjacentHTML('beforeend', emptyHtml);
                     }
@@ -965,11 +969,13 @@ window.saveNodeRename = async function() {
         } else {
             const data = await res.json();
             const errorMsg = (typeof I18N !== 'undefined' && I18N.web_node_rename_error) ? I18N.web_node_rename_error : "Error updating name";
-            if (window.showModalAlert) await window.showModalAlert(data.error || errorMsg, "Error");
+            const errTitle = (typeof I18N !== 'undefined' && I18N.web_error_short) ? I18N.web_error_short : "Error"; // FIX: Localized title
+            if (window.showModalAlert) await window.showModalAlert(data.error || errorMsg, errTitle);
         }
     } catch (e) {
         console.error(e);
-        if (window.showModalAlert) await window.showModalAlert(String(e), "Error");
+        const errTitle = (typeof I18N !== 'undefined' && I18N.web_error_short) ? I18N.web_error_short : "Error"; // FIX: Localized title
+        if (window.showModalAlert) await window.showModalAlert(String(e), errTitle);
     }
 };
 
