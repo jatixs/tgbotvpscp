@@ -5,7 +5,7 @@ import uuid
 from typing import Union, Callable
 from aiogram import Bot
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-from .i18n import _, get_user_lang
+from .i18n import _, get_user_lang, STRINGS
 from . import config
 from .shared_state import LAST_MESSAGE_IDS, ALERTS_CONFIG
 from . import shared_state
@@ -52,20 +52,32 @@ async def send_alert(
     if not users_to_alert:
         return
     try:
+        web_text_default = ""
+        text_map = {}
+
         if callable(message_or_func):
-            web_text = message_or_func(config.DEFAULT_LANGUAGE)
+            for lang_code in STRINGS.keys():
+                try:
+                    text_map[lang_code] = message_or_func(lang_code)
+                except Exception:
+                    pass
+            web_text_default = text_map.get(config.DEFAULT_LANGUAGE, "")
+            if not web_text_default and text_map:
+                web_text_default = list(text_map.values())[0]
         else:
-            web_text = message_or_func
-        if web_text:
-            try:
-                if kwargs:
-                    web_text = web_text.format(**kwargs)
-            except Exception:
-                pass
+            web_text_default = message_or_func
+            if kwargs:
+                try:
+                    web_text_default = web_text_default.format(**kwargs)
+                except Exception:
+                    pass
+            
+        if web_text_default or text_map:
             shared_state.WEB_NOTIFICATIONS.appendleft(
                 {
                     "id": str(uuid.uuid4()),
-                    "text": web_text,
+                    "text": web_text_default,
+                    "text_map": text_map,
                     "time": time.time(),
                     "type": alert_type,
                 }

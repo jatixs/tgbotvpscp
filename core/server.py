@@ -295,12 +295,21 @@ async def api_get_notifications(request):
     if not user:
         return web.json_response({"error": "Unauthorized"}, status=401)
     uid = user["id"]
+    lang = get_user_lang(uid)
     user_alerts = ALERTS_CONFIG.get(uid, {})
-    filtered = [
-        n
-        for n in list(shared_state.WEB_NOTIFICATIONS)
-        if user_alerts.get(n["type"], False)
-    ]
+    
+    filtered = []
+    for n in list(shared_state.WEB_NOTIFICATIONS):
+        if user_alerts.get(n["type"], False):
+            n_copy = n.copy()
+            if "text_map" in n_copy and isinstance(n_copy["text_map"], dict):
+                text_map = n_copy["text_map"]
+                localized_text = text_map.get(lang) or text_map.get(DEFAULT_LANGUAGE)
+                if localized_text:
+                    n_copy["text"] = localized_text
+                del n_copy["text_map"]
+            filtered.append(n_copy)
+
     last_read = shared_state.WEB_USER_LAST_READ.get(uid, 0)
     unread_count = sum((1 for n in filtered if n["time"] > last_read))
     return web.json_response({"notifications": filtered, "unread_count": unread_count})
@@ -1744,11 +1753,20 @@ async def handle_sse_stream(request):
             except (ConnectionResetError, BrokenPipeError, ConnectionError):
                 break
             user_alerts = ALERTS_CONFIG.get(uid, {})
-            filtered = [
-                n
-                for n in list(shared_state.WEB_NOTIFICATIONS)
-                if user_alerts.get(n["type"], False)
-            ]
+            user_lang = get_user_lang(uid)
+            
+            filtered = []
+            for n in list(shared_state.WEB_NOTIFICATIONS):
+                if user_alerts.get(n["type"], False):
+                    n_copy = n.copy()
+                    if "text_map" in n_copy and isinstance(n_copy["text_map"], dict):
+                        text_map = n_copy["text_map"]
+                        localized_text = text_map.get(user_lang) or text_map.get(DEFAULT_LANGUAGE)
+                        if localized_text:
+                            n_copy["text"] = localized_text
+                        del n_copy["text_map"]
+                    filtered.append(n_copy)
+
             last_read = shared_state.WEB_USER_LAST_READ.get(uid, 0)
             unread_count = sum((1 for n in filtered if n["time"] > last_read))
             notif_payload = {"notifications": filtered, "unread_count": unread_count}
