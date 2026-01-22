@@ -124,7 +124,7 @@ STRINGS = {
         "alerts_menu_downtime": "{status} Даунтайм Нод (Offline)",
         "notifications_alert_name_downtime": "Даунтайм Нод",
         "notifications_alert_name_res": "Ресурсы",
-        "notifications_alert_name_logins": "Входы/Выходы SSH",
+        "notifications_alert_name_logins": "Авторизации SSH",
         "notifications_alert_name_bans": "Баны",
         "notifications_menu_title": "🔔 <b>Настройка уведомлений</b>\n\nВыберите, какие оповещения вы хотите получать.",
         "notifications_toggle_alert": "Уведомления '{alert_name}' {status}",
