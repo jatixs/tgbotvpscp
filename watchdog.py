@@ -9,6 +9,7 @@ import sys
 import glob
 from datetime import datetime, timedelta
 from typing import Optional, Callable
+
 try:
     import docker
     import docker.errors
@@ -23,7 +24,7 @@ if CORE_DIR_WATCHDOG not in sys.path:
     sys.path.insert(0, BASE_DIR_WATCHDOG)
 try:
     from core import config
-    from core.i18n import get_text
+    from core.i18n import get_text, load_user_settings
     from core.utils import escape_html
 except ImportError as e:
     print(f"FATAL: Could not import core modules: {e}")
@@ -68,7 +69,6 @@ bot_service_was_down_or_activating = False
 status_alert_message_id = None
 current_reported_state = None
 down_time_start = None
-WD_LANG = config.DEFAULT_LANGUAGE
 last_service_start_dt = None
 
 docker_client: Optional[DockerClient] = None
@@ -106,26 +106,29 @@ def get_system_uptime() -> str:
 
 def get_last_backup_info() -> str:
     """Находит последний бэкап и возвращает локализованную строку статуса"""
+    load_user_settings()
     try:
         traffic_dir = getattr(config, 'TRAFFIC_BACKUP_DIR', None)
         if not traffic_dir or not os.path.exists(traffic_dir):
-            return get_text("wd_backup_dir_not_found", WD_LANG)
+            return get_text("wd_backup_dir_not_found", ALERT_ADMIN_ID)
         
         files = glob.glob(os.path.join(traffic_dir, "traffic_backup_*.json"))
         if not files:
-            return get_text("wd_backup_traffic_none", WD_LANG)
+            return get_text("wd_backup_traffic_none", ALERT_ADMIN_ID)
             
         latest_file = max(files, key=os.path.getmtime)
         mod_time = os.path.getmtime(latest_file)
         dt = datetime.fromtimestamp(mod_time)
         
-        return get_text("wd_backup_traffic_found", WD_LANG, date=dt.strftime('%Y-%m-%d %H:%M'))
+        return get_text("wd_backup_traffic_found", ALERT_ADMIN_ID, date=dt.strftime('%Y-%m-%d %H:%M'))
     except Exception as e:
-        return get_text("wd_backup_error", WD_LANG, error=str(e))
+        return get_text("wd_backup_error", ALERT_ADMIN_ID, error=str(e))
 
 
 def process_startup_flags():
     """Проверяет флаги перезагрузки/рестарта и уведомляет пользователей"""
+    
+    load_user_settings() 
     
     if os.path.exists(RESTART_FLAG_FILE):
         try:
@@ -136,8 +139,7 @@ def process_startup_flags():
                 chat_id_str, message_id_str = content.split(":", 1)
                 chat_id = int(chat_id_str)
                 message_id = int(message_id_str)
-                
-                text = f"✅ {get_text('utils_bot_restarted', WD_LANG)}"
+                text = f"✅ {get_text('utils_bot_restarted', chat_id)}"
                 
                 url = f"https://api.telegram.org/bot{ALERT_BOT_TOKEN}/editMessageText"
                 payload = {
@@ -163,7 +165,7 @@ def process_startup_flags():
             
             if uid_str.isdigit():
                 chat_id = int(uid_str)
-                text = f"✅ {get_text('utils_server_rebooted', WD_LANG)}"
+                text = f"✅ {get_text('utils_server_rebooted', chat_id)}"
                 
                 url = f"https://api.telegram.org/bot{ALERT_BOT_TOKEN}/sendMessage"
                 payload = {
@@ -186,6 +188,8 @@ def send_or_edit_telegram_alert(
     message_key: str, alert_type: str, message_id_to_edit=None, **kwargs
 ):
     global last_alert_times, status_alert_message_id
+    load_user_settings()
+    
     current_time = time.time()
     apply_cooldown = alert_type in [
         "bot_restart_fail",
@@ -203,25 +207,25 @@ def send_or_edit_telegram_alert(
     if alert_type in ["bot_service_up_ok", "watchdog_start"]:
         alert_prefix = ""
     else:
-        alert_prefix = get_text("watchdog_alert_prefix", WD_LANG) + "\n\n"
+        alert_prefix = get_text("watchdog_alert_prefix", ALERT_ADMIN_ID) + "\n\n"
 
     if not message_key:
         logging.error(
             f"send_or_edit_telegram_alert вызван с пустым message_key для alert_type '{alert_type}'"
         )
-        message_body = get_text("error_internal", WD_LANG)
+        message_body = get_text("error_internal", ALERT_ADMIN_ID)
     else:
-        message_body = get_text(message_key, WD_LANG, **kwargs)
+        message_body = get_text(message_key, ALERT_ADMIN_ID, **kwargs)
     
     text_to_send = f"{alert_prefix}{message_body}"
 
     extra_info = []
     if kwargs.get("downtime") and kwargs.get("downtime") != "N/A":
-        extra_info.append(get_text("wd_downtime", WD_LANG, value=kwargs['downtime']))
+        extra_info.append(get_text("wd_downtime", ALERT_ADMIN_ID, value=kwargs['downtime']))
     if kwargs.get("uptime"):
-        extra_info.append(get_text("wd_uptime", WD_LANG, value=kwargs['uptime']))
+        extra_info.append(get_text("wd_uptime", ALERT_ADMIN_ID, value=kwargs['uptime']))
     if kwargs.get("last_backup"):
-        extra_info.append(get_text("wd_last_backup", WD_LANG, value=kwargs['last_backup']))
+        extra_info.append(get_text("wd_last_backup", ALERT_ADMIN_ID, value=kwargs['last_backup']))
     
     if extra_info:
         text_to_send += "\n\n" + "\n".join(extra_info)
@@ -319,7 +323,7 @@ def parse_docker_timestamp(ts_str):
         ts = ts_str.replace("Z", "")
         if "." in ts:
             main, frac = ts.split(".", 1)
-            ts = f"{main}.{frac[:6]}" 
+            ts = f"{main}.{frac[:6]}"
         return datetime.fromisoformat(ts)
     except:
         return None
@@ -340,7 +344,7 @@ def check_bot_service_systemd():
     actual_state = "unknown"
     status_output_full = "N/A"
     current_start_dt = None
-    is_utc = False 
+    is_utc = False
     
     try:
         cmd = ["systemctl", "show", BOT_SERVICE_NAME, "-p", "ActiveState,SubState,ActiveEnterTimestamp"]
@@ -492,7 +496,7 @@ def process_service_state(
                 state_to_report = "active_error"
                 alert_type = "bot_service_up_error"
                 message_key = "watchdog_status_active_error"
-                message_kwargs["details"] = get_text(log_status_key, WD_LANG, **log_kwargs)
+                message_kwargs["details"] = get_text(log_status_key, ALERT_ADMIN_ID, **log_kwargs)
                 process_startup_flags()
             else:
                 state_to_report = "active_ok"
@@ -516,7 +520,7 @@ def process_service_state(
         if down_time_start is None: down_time_start = time.time()
         
         if actual_state == "failed":
-            message_kwargs["reason"] = f" ({get_text('watchdog_status_down_failed', WD_LANG)})"
+            message_kwargs["reason"] = f" ({get_text('watchdog_status_down_failed', ALERT_ADMIN_ID)})"
         else:
             message_kwargs["reason"] = ""
             
@@ -538,6 +542,7 @@ def process_service_state(
 if __name__ == "__main__":
     if not ALERT_BOT_TOKEN or not ALERT_ADMIN_ID:
         sys.exit(1)
+    load_user_settings()
     
     logging.info(f"Watchdog started. Mode: {DEPLOY_MODE}. Service: {BOT_SERVICE_NAME}")
     send_or_edit_telegram_alert("watchdog_status_restarting_wd", "watchdog_start", None, bot_name=BOT_NAME)
