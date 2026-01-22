@@ -5,33 +5,48 @@
 <h1 align="center">📝 Telegram VPS Management Bot — Changelog</h1>
 
 <p align="center">
-	<img src="https://img.shields.io/badge/version-v1.15.3-blue?style=flat-square " alt="Version 1.15.3"/>
-	<img src="https://img.shields.io/badge/build-59-purple?style=flat-square " alt="Build 59"/>
+	<img src="https://img.shields.io/badge/version-v1.16.0-blue?style=flat-square " alt="Version 1.16.0"/>
+	<img src="https://img.shields.io/badge/build-60-purple?style=flat-square " alt="Build 59"/>
 	<img src="https://img.shields.io/badge/date-January%2026-green?style=flat-square " alt="Date January 2026"/>
 	<img src="https://img.shields.io/badge/status-stable-green?style=flat-square " alt="Status Stable"/>
 </p>
 
 ---
-## [1.15.3] - 2026-01-17
+## [1.16.0] - 2026-01-22
 
-### 🚀 Added (WebUI):
+### 🚀 Node Management (Multi-Interface):
 
-* **SSE (Real-time):** Complete transition to **Server-Sent Events** technology. Dashboard data, logs, and node statuses now update in real-time without delays or redundant requests.
-* **Node Editing:** Implemented the ability to **rename nodes** directly from the web interface.
-* **Interactive Logs:**
-* Instant log streaming via SSE.
-* Smart auto-scroll (pauses when viewing history).
-* Visual loading indicators (spinners).
+* **Node Renaming:** You can now change a server's name either through the web interface or directly using Telegram bot commands.
+* **SSE (Real-time):** The web interface has fully transitioned to **Server-Sent Events** technology. Server statuses, charts, and logs now update instantly without delays.
+* **Interactive Logs:** Real-time log streaming with smart auto-scroll and visual loading indicators (spinners).
 
-### 🛡️ Security:
+### 📦 Backup & Traffic Module:
 
-* **Config Encryption:** Integrated **Fernet encryption** (AES) for on-disk configuration files. Sensitive data (`nodes.json`, `users.json`) is now protected from direct reading.
-* **Web Data Obfuscation:** IP addresses and tokens are now transmitted to the web interface in an encrypted format, preventing leakage via browser developer tools.
+* **Traffic Data Protection:** Statistics are no longer lost during **server shutdowns** or **internet connection outages**. Data is saved automatically and restored as soon as the server is back online.
+* **New Backup Module:** A dedicated module (`backups.py`) allows you to manage traffic backups (manual creation and deletion) directly through the bot.
+* **Automatic Saving:** The system takes a "snapshot" of traffic data every 5 minutes.
+* **Smart Reboot Recognition:** The bot automatically detects whether it was a simple script restart or a full server reboot (via `boot_time`), ensuring continuous and accurate traffic calculation.
+* **State Synchronization:** Full real-time synchronization of backup states between the backend and the web interface.
 
-### ✨ Improved:
+### 🛡️ Security & Monitoring:
 
-* **UI/UX:** Added **Blur effects** to hide content (e.g., logs) from users without access rights.
-* **Performance:** Reduced network and processor load by eliminating constant API polling.
+* **SSH Monitoring:** Added recognition of **SSH key** logins (in addition to password logins) with instant notifications to the administrator.
+* **Config Encryption:** Sensitive data on disk is now protected with **Fernet encryption** (AES), and passwords use the modern **Argon2** algorithm.
+* **Web Data Obfuscation:** IP addresses and session tokens are transmitted to the browser in an encrypted format to prevent interception.
+
+### 👷 System & Deployment (deploy.sh):
+
+* **Environment Isolation:** Python and Docker updates to the latest versions now occur strictly within the isolated bot environment (`venv`), keeping the host system clean.
+* **Accelerated Updates:** Implemented SHA-256 hash checks—the script skips dependency and database migration steps if no changes are detected.
+* **CLI Utility `tgcp-bot`:** A system-wide command is automatically created for managing the bot and its database directly from the terminal.
+* **Watchdog Refactoring:** The "observer" system has been completely redesigned to eliminate freezes and improve overall stability.
+
+### ✨ UI/UX & Performance:
+
+* **Visual Feedback:** Added clear indicators for connection quality and current server states (Online, Offline, or Restarting).
+* **Blur Effects:** Private content in the web interface is now hidden from users without appropriate access rights.
+* **Performance:** Significantly reduced network and CPU load by eliminating constant API polling in favor of SSE.
+* **Code Cleanup:** Performed global project refactoring, formatting, and architectural improvements.
 
 ---
 ## [1.15.2] - 2026-01-10
