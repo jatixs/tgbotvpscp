@@ -414,3 +414,8 @@ button {
 .items-start {
     align-items: flex-start;
 }
+button.force-expanded .btn-text {
+    max-width: 200px !important;
+    opacity: 1 !important;
+    margin-left: 0.5rem !important; /* ml-2 */
+}
