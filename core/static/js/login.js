@@ -14,34 +14,34 @@ async function onTelegramAuth(user) {
     try {
         const response = await fetch('/api/auth/telegram', {
             method: 'POST',
-            headers: {'Content-Type': 'application/json'},
+            headers: {
+                'Content-Type': 'application/json'
+            },
             body: JSON.stringify(user)
         });
         if (response.ok) {
             window.location.reload();
         } else {
             const d = await response.json();
-            if(window.showModalAlert) await window.showModalAlert("Error: " + (d.error || "Unknown"), "Auth Error");
+            if (window.showModalAlert) await window.showModalAlert("Error: " + (d.error || "Unknown"), "Auth Error");
             else alert("Auth Error: " + (d.error || "Unknown"));
         }
-    } catch (e) { console.error(e); }
+    } catch (e) {
+        console.error(e);
+    }
 }
 
 // --- UI Logic: Language & Slider ---
 
-// Функция обновления позиции слайдера и стилей кнопок (Liquid Glass Spring Animation)
 function updateLangSlider(lang) {
     const slider = document.getElementById('lang-slider-bg');
     const btnRu = document.getElementById('btn-ru');
     const btnEn = document.getElementById('btn-en');
 
     if (slider) {
-        // [LIQUID ANIMATION] Использование Spring Physics (пружина)
-        // cubic-bezier(0.34, 1.56, 0.64, 1) создает эффект "выстреливания" и мягкого возврата (bounciness)
         slider.style.transition = 'transform 0.6s cubic-bezier(0.34, 1.56, 0.64, 1)';
         slider.style.willChange = 'transform';
-        
-        // Сдвиг на 100% ширины + небольшая коррекция, если нужно (здесь 100% идеально для flex/relative верстки)
+
         if (lang === 'en') {
             slider.style.transform = 'translate3d(100%, 0, 0)';
         } else {
@@ -50,40 +50,33 @@ function updateLangSlider(lang) {
     }
 
     if (btnRu && btnEn) {
-        // Убираем обводку
         btnRu.style.outline = 'none';
         btnEn.style.outline = 'none';
-        
-        // Плавная смена стилей текста
+
         const transition = 'all 0.4s ease';
         btnRu.style.transition = transition;
         btnEn.style.transition = transition;
 
         if (lang === 'ru') {
-            // RU Active
             btnRu.style.opacity = '1';
-            btnRu.style.transform = 'scale(1.1)'; // Активный элемент чуть больше (Liquid Pop)
-            btnRu.style.filter = 'drop-shadow(0 0 8px rgba(255,255,255,0.3))'; // Свечение
-            
-            // EN Inactive
+            btnRu.style.transform = 'scale(1.1)';
+            btnRu.style.filter = 'drop-shadow(0 0 8px rgba(255,255,255,0.3))';
+
             btnEn.style.opacity = '0.4';
             btnEn.style.transform = 'scale(0.9)';
             btnEn.style.filter = 'none';
-            
-            // Font weight hack via classList usually safer, but inline for force
+
             btnRu.querySelector('span')?.classList.add('font-bold');
             btnEn.querySelector('span')?.classList.remove('font-bold');
         } else {
-            // EN Active
             btnEn.style.opacity = '1';
             btnEn.style.transform = 'scale(1.1)';
             btnEn.style.filter = 'drop-shadow(0 0 8px rgba(255,255,255,0.3))';
-            
-            // RU Inactive
+
             btnRu.style.opacity = '0.4';
             btnRu.style.transform = 'scale(0.9)';
             btnRu.style.filter = 'none';
-            
+
             btnEn.querySelector('span')?.classList.add('font-bold');
             btnRu.querySelector('span')?.classList.remove('font-bold');
         }
@@ -91,20 +84,14 @@ function updateLangSlider(lang) {
 }
 window.updateLangSlider = updateLangSlider;
 
-// Основная функция переключения языка (БЕЗ ПЕРЕЗАГРУЗКИ)
 function setLoginLanguage(lang) {
-    // 1. Сохраняем куки
     document.cookie = "guest_lang=" + lang + "; path=/; max-age=31536000";
-    
-    // 2. Анимация
     updateLangSlider(lang);
 
-    // 3. Динамическая смена текста
     if (typeof I18N_ALL !== 'undefined' && I18N_ALL[lang]) {
         const dict = I18N_ALL[lang];
-        window.I18N = dict; 
+        window.I18N = dict;
 
-        // Анимированная смена текста
         const elements = document.querySelectorAll('[data-i18n]');
         elements.forEach(el => {
             el.style.transition = 'opacity 0.2s ease';
@@ -120,14 +107,14 @@ function setLoginLanguage(lang) {
                 }
                 el.style.opacity = '1';
             });
-            
+
             if (dict.web_title) document.title = dict.web_title;
-            
+
             const gh = document.querySelector('a[title="GitHub"]');
-            if(gh && dict['login_github_tooltip']) gh.title = dict['login_github_tooltip'];
-            
+            if (gh && dict['login_github_tooltip']) gh.title = dict['login_github_tooltip'];
+
             const sp = document.querySelector('button[title="Support"]');
-            if(sp && dict['login_support_tooltip']) sp.title = dict['login_support_tooltip'];
+            if (sp && dict['login_support_tooltip']) sp.title = dict['login_support_tooltip'];
         }, 200);
     }
 }
@@ -166,7 +153,8 @@ function toggleForms(target) {
     const reset = document.getElementById('reset-form');
     const setPass = document.getElementById('set-password-form');
     const errorBlock = document.getElementById('reset-error-block');
-    
+    const backArrow = document.getElementById('back-arrow');
+
     [magic, password, reset, setPass].forEach(el => el?.classList.add('hidden'));
     if (errorBlock) errorBlock.classList.add('hidden');
 
@@ -177,6 +165,19 @@ function toggleForms(target) {
         void el.offsetWidth; // trigger reflow
         el.classList.add('animate-fade-in-up');
     };
+
+    // Show/Hide Back Arrow based on context
+    if (backArrow) {
+        if (target === 'password') {
+            backArrow.classList.remove('hidden');
+            backArrow.onclick = () => toggleForms('magic');
+        } else if (target === 'reset') {
+            backArrow.classList.remove('hidden');
+            backArrow.onclick = () => toggleForms('password');
+        } else {
+            backArrow.classList.add('hidden');
+        }
+    }
 
     if (target === 'password') show(password);
     else if (target === 'reset') show(reset);
@@ -191,6 +192,7 @@ async function requestPasswordReset() {
     const errorBlock = document.getElementById('reset-error-block');
     const adminLinkBtn = document.getElementById('admin-link-btn');
     const container = document.getElementById('forms-container');
+    const backArrow = document.getElementById('back-arrow');
 
     if (!userIdInput || !btn) return;
 
@@ -208,33 +210,44 @@ async function requestPasswordReset() {
     try {
         const response = await fetch('/api/login/reset', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ user_id: userId })
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                user_id: userId
+            })
         });
 
         const data = await response.json();
 
         if (response.ok) {
+            // Hide back arrow on success screen
+            if (backArrow) backArrow.classList.add('hidden');
+
             const title = (I18N && I18N.login_link_sent_title) || "Link Sent!";
             const desc = (I18N && I18N.login_link_sent_desc) || "Check your Telegram messages.";
-            const btnText = (I18N && I18N.login_btn_back) || "Back";
+            const btnText = (I18N && I18N.login_go_to_bot) || "Go to Bot";
+            const botLink = (typeof BOT_USERNAME !== 'undefined' && BOT_USERNAME) ? `https://t.me/${BOT_USERNAME}` : "#";
 
+            // ИСПРАВЛЕНО: Иконка "Синий самолетик" (Telegram) + Кнопка "Перейти в бот"
             container.innerHTML = `
                 <div class="text-center py-8 animate-fade-in-up">
-                    <div class="w-16 h-16 bg-yellow-500/20 rounded-full flex items-center justify-center mx-auto mb-4 border border-yellow-500/30">
-                        <svg class="w-8 h-8 text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 00-2-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path></svg>
+                    <div class="w-16 h-16 bg-blue-500/10 rounded-full flex items-center justify-center mx-auto mb-4 border border-blue-500/20">
+                        <svg class="w-8 h-8 text-blue-500 ml-[-2px] mt-[2px]" fill="currentColor" viewBox="0 0 24 24">
+                            <path d="M20.665 3.717l-17.73 6.837c-1.21.486-1.203 1.161-.222 1.462l4.552 1.42 10.532-6.645c.498-.303.953-.14.579.192l-8.533 7.701h-.002l.002.001-.314 4.692c.46 0 .663-.211.921-.46l2.211-2.15 4.599 3.397c.848.467 1.457.227 1.668-.785l3.019-14.228c.309-1.239-.473-1.8-1.282-1.434z"></path>
+                        </svg>
                     </div>
-                    <h3 class="text-lg font-bold text-white mb-2">${title}</h3>
-                    <p class="text-sm text-gray-300">${desc}</p>
-                    <a href="/login" class="inline-block mt-6 px-6 py-2 bg-white/10 hover:bg-white/20 rounded-lg text-sm font-bold transition">${btnText}</a>
+                    <h3 class="text-lg font-bold text-gray-900 dark:text-white mb-2">${title}</h3>
+                    <p class="text-sm text-gray-500 dark:text-gray-400">${desc}</p>
+                    <a href="${botLink}" target="_blank" class="inline-block mt-6 px-6 py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-xl font-bold transition shadow-lg shadow-blue-500/20">${btnText}</a>
                 </div>
             `;
         } else {
             if (data.error === 'not_found' && errorBlock) {
                 const errMsg = (I18N && I18N.login_error_user_not_found) || "User not found.";
                 const errP = errorBlock.querySelector('p');
-                if(errP) errP.textContent = errMsg;
-                
+                if (errP) errP.textContent = errMsg;
+
                 errorBlock.classList.remove('hidden');
                 if (data.admin_url && adminLinkBtn) {
                     adminLinkBtn.href = data.admin_url;
@@ -264,11 +277,11 @@ async function submitNewPassword() {
     const token = urlParams.get('token');
 
     if (!p1 || p1.length < 4) {
-        if(window.showModalAlert) await window.showModalAlert("Password too short (min 4 chars).", 'Error');
+        if (window.showModalAlert) await window.showModalAlert("Password too short (min 4 chars).", 'Error');
         return;
     }
     if (p1 !== p2) {
-        if(window.showModalAlert) await window.showModalAlert("Passwords do not match.", 'Error');
+        if (window.showModalAlert) await window.showModalAlert("Passwords do not match.", 'Error');
         return;
     }
 
@@ -278,10 +291,15 @@ async function submitNewPassword() {
     try {
         const res = await fetch('/api/reset/confirm', {
             method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({ token: token, password: p1 })
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                token: token,
+                password: p1
+            })
         });
-        
+
         const data = await res.json();
         if (res.ok) {
             const title = (I18N && I18N.reset_success_title) || "Success!";
@@ -300,12 +318,12 @@ async function submitNewPassword() {
             `;
             window.history.replaceState({}, document.title, "/login");
         } else {
-            if(window.showModalAlert) await window.showModalAlert("Error: " + data.error, 'Error');
+            if (window.showModalAlert) await window.showModalAlert("Error: " + data.error, 'Error');
             btn.disabled = false;
             btn.innerText = "Save Password";
         }
     } catch (e) {
-        if(window.showModalAlert) await window.showModalAlert("Network Error: " + e, 'Error');
+        if (window.showModalAlert) await window.showModalAlert("Network Error: " + e, 'Error');
         btn.disabled = false;
         btn.innerText = "Save Password";
     }
@@ -313,20 +331,19 @@ async function submitNewPassword() {
 
 // --- Initialization ---
 document.addEventListener("DOMContentLoaded", () => {
-    // --- НОВАЯ ЛОГИКА: Инициализация слайдера языка ---
     if (typeof CURRENT_LANG !== 'undefined' && typeof updateLangSlider === 'function') {
         updateLangSlider(CURRENT_LANG);
     }
 
-    // 1. Fix Title
     if (typeof I18N !== 'undefined' && I18N.web_title) {
         document.title = I18N.web_title;
     }
 
-    // 2. Parse Emojis
-    if (window.twemoji) window.twemoji.parse(document.body, { folder: 'svg', ext: '.svg' });
+    if (window.twemoji) window.twemoji.parse(document.body, {
+        folder: 'svg',
+        ext: '.svg'
+    });
 
-    // 3. I18N Initial Apply
     if (typeof I18N !== 'undefined') {
         document.querySelectorAll('[data-i18n]').forEach(el => {
             const key = el.getAttribute('data-i18n');
@@ -336,30 +353,37 @@ document.addEventListener("DOMContentLoaded", () => {
             }
             if (el.title && I18N[key]) el.title = I18N[key];
         });
-        
+
         const gh = document.querySelector('a[title="GitHub"]');
-        if(gh && I18N['login_github_tooltip']) gh.title = I18N['login_github_tooltip'];
+        if (gh && I18N['login_github_tooltip']) gh.title = I18N['login_github_tooltip'];
         const sp = document.querySelector('button[title="Support"]');
-        if(sp && I18N['login_support_tooltip']) sp.title = I18N['login_support_tooltip'];
+        if (sp && I18N['login_support_tooltip']) sp.title = I18N['login_support_tooltip'];
     }
 
     // 4. Handle URL Params
     const urlParams = new URLSearchParams(window.location.search);
     const formsContainer = document.getElementById('forms-container');
-    
+    const backArrow = document.getElementById('back-arrow');
+
     if (urlParams.get('sent') === 'true' && formsContainer) {
+        if (backArrow) backArrow.classList.add('hidden'); // Hide arrow on success
+
         const title = (I18N && I18N.login_link_sent_title) || "Magic Link Sent!";
         const desc = (I18N && I18N.login_link_sent_desc) || "Check your Telegram messages.";
-        const btnText = (I18N && I18N.login_btn_back) || "Return";
+        const btnText = (I18N && I18N.login_go_to_bot) || "Go to Bot";
+        const botLink = (typeof BOT_USERNAME !== 'undefined' && BOT_USERNAME) ? `https://t.me/${BOT_USERNAME}` : "#";
 
-        formsContainer.innerHTML = `
+        // ИСПРАВЛЕНО: Иконка "Синий самолетик" и для Magic Link тоже
+        container.innerHTML = `
             <div class="text-center py-8 animate-fade-in-up">
-                <div class="w-16 h-16 bg-blue-500/20 rounded-full flex items-center justify-center mx-auto mb-4 border border-blue-500/30">
-                    <svg class="w-8 h-8 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 00-2-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path></svg>
+                <div class="w-16 h-16 bg-blue-500/10 rounded-full flex items-center justify-center mx-auto mb-4 border border-blue-500/20">
+                    <svg class="w-8 h-8 text-blue-500 ml-[-2px] mt-[2px]" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M20.665 3.717l-17.73 6.837c-1.21.486-1.203 1.161-.222 1.462l4.552 1.42 10.532-6.645c.498-.303.953-.14.579.192l-8.533 7.701h-.002l.002.001-.314 4.692c.46 0 .663-.211.921-.46l2.211-2.15 4.599 3.397c.848.467 1.457.227 1.668-.785l3.019-14.228c.309-1.239-.473-1.8-1.282-1.434z"></path>
+                    </svg>
                 </div>
-                <h3 class="text-lg font-bold text-white mb-2">${title}</h3>
-                <p class="text-sm text-gray-300">${desc}</p>
-                <a href="/login" class="inline-block mt-6 px-6 py-2 bg-white/10 hover:bg-white/20 rounded-lg text-sm font-bold transition">${btnText}</a>
+                <h3 class="text-lg font-bold text-gray-900 dark:text-white mb-2">${title}</h3>
+                <p class="text-sm text-gray-500 dark:text-gray-400">${desc}</p>
+                <a href="${botLink}" target="_blank" class="inline-block mt-6 px-6 py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-xl font-bold transition shadow-lg shadow-blue-500/20">${btnText}</a>
             </div>
         `;
     } else if (urlParams.get('token')) {
@@ -370,19 +394,19 @@ document.addEventListener("DOMContentLoaded", () => {
     if (!localStorage.getItem('cookie_consent')) {
         setTimeout(() => {
             const banner = document.getElementById('cookieConsent');
-            if(banner) banner.classList.remove('translate-y-full');
+            if (banner) banner.classList.remove('translate-y-full');
         }, 1000);
     }
-    
+
     // 6. Init Telegram Widget
     const botUsername = (typeof BOT_USERNAME !== 'undefined') ? BOT_USERNAME : "";
     const container = document.getElementById('telegram-widget-container');
     const magicForm = document.getElementById('magic-link-form');
-    
+
     const isIp = /^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$/.test(window.location.hostname);
     const isLocalhost = window.location.hostname === 'localhost';
     const isHttps = window.location.protocol === 'https:';
-    
+
     if (botUsername && !isIp && !isLocalhost && isHttps && container && magicForm) {
         const script = document.createElement('script');
         script.async = true;

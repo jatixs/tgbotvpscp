@@ -2,33 +2,63 @@
 
 let chartRes = null;
 let chartNet = null;
-let pollInterval = null;
+let nodeSSESource = null;
+let logSSESource = null;
 
 let agentChart = null;
-let agentPollInterval = null;
-let nodesPollInterval = null;
-let logPollInterval = null;
-
 let allNodesData = [];
+let currentNodeToken = null;
+
+// --- CRYPTO FUNCTIONS (XOR + Base64) ---
+function decryptData(text) {
+    if (!text) return "";
+    if (typeof WEB_KEY === 'undefined' || !WEB_KEY) return text;
+    try {
+        const decoded = atob(text);
+        let result = "";
+        for (let i = 0; i < decoded.length; i++) {
+            const keyChar = WEB_KEY[i % WEB_KEY.length];
+            result += String.fromCharCode(decoded.charCodeAt(i) ^ keyChar.charCodeAt(0));
+        }
+        return result;
+    } catch (e) {
+        console.error("Decryption error:", e);
+        return text;
+    }
+}
+
+function encryptData(text) {
+    if (!text) return "";
+    if (typeof WEB_KEY === 'undefined' || !WEB_KEY) return text;
+    try {
+        let result = "";
+        for (let i = 0; i < text.length; i++) {
+            const keyChar = WEB_KEY[i % WEB_KEY.length];
+            result += String.fromCharCode(text.charCodeAt(i) ^ keyChar.charCodeAt(0));
+        }
+        return btoa(result);
+    } catch (e) {
+        console.error("Encryption error:", e);
+        return text;
+    }
+}
+// ----------------------------------------
 
 window.addEventListener('themeChanged', () => {
     updateChartsColors();
 });
 
 window.initDashboard = function() {
-    if (agentPollInterval) clearInterval(agentPollInterval);
-    if (nodesPollInterval) clearInterval(nodesPollInterval);
-    if (logPollInterval) clearInterval(logPollInterval);
+    cleanupDashboardSources();
+    if (window.sseSource) {
+        window.sseSource.removeEventListener('agent_stats', handleSSEAgentStats);
+        window.sseSource.removeEventListener('nodes_list', handleSSENodesList);
 
-    if (document.getElementById('agentChart')) {
-        fetchAgentStats();
-        agentPollInterval = setInterval(fetchAgentStats, 3000);
+        window.sseSource.addEventListener('agent_stats', handleSSEAgentStats);
+        window.sseSource.addEventListener('nodes_list', handleSSENodesList);
     }
 
     if (document.getElementById('nodesList')) {
-        fetchNodesList();
-        nodesPollInterval = setInterval(fetchNodesList, 3000);
-
         const searchInput = document.getElementById('nodeSearch');
         if (searchInput) {
             const newSearch = searchInput.cloneNode(true);
@@ -38,9 +68,40 @@ window.initDashboard = function() {
             });
         }
     }
-
     if (document.getElementById('logsContainer')) {
         switchLogType('bot');
+    }
+};
+
+function cleanupDashboardSources() {
+    if (nodeSSESource) {
+        nodeSSESource.close();
+        nodeSSESource = null;
+    }
+    if (logSSESource) {
+        logSSESource.close();
+        logSSESource = null;
+    }
+    if (window.nodesPollInterval) clearInterval(window.nodesPollInterval);
+    if (window.agentPollInterval) clearInterval(window.agentPollInterval);
+}
+const handleSSEAgentStats = (e) => {
+    if (!document.getElementById('agentChart')) return;
+    try {
+        const data = JSON.parse(e.data);
+        updateAgentStatsUI(data);
+    } catch (err) {
+        console.error("Agent stats parse error", err);
+    }
+};
+
+const handleSSENodesList = (e) => {
+    if (!document.getElementById('nodesList')) return;
+    try {
+        const data = JSON.parse(e.data);
+        updateNodesListUI(data);
+    } catch (err) {
+        console.error("Nodes list parse error", err);
     }
 };
 
@@ -66,7 +127,7 @@ function formatProcessList(procList, title, colorClass = "text-gray-500") {
         const match = procStr.match(/^(.*)\s\((.*)\)$/);
         let name = procStr;
         let value = "";
-        
+
         if (match) {
             name = match[1];
             value = match[2];
@@ -94,12 +155,40 @@ function formatProcessList(procList, title, colorClass = "text-gray-500") {
     `;
 }
 
-async function fetchNodesList() {
-    try {
-        const response = await fetch('/api/nodes/list');
-        const data = await response.json();
-        allNodesData = data.nodes || [];
+function formatInterfaceList(interfaces, type, title, colorClass = "text-gray-500") {
+    if (!interfaces) return '';
 
+    const keys = Object.keys(interfaces).sort();
+
+    const rows = keys.map(name => {
+        const val = type === 'rx' ? interfaces[name].bytes_recv : interfaces[name].bytes_sent;
+        const hoverColor = colorClass.replace('text-', 'bg-');
+
+        return `
+        <div class="flex justify-between items-center py-1.5 border-b border-gray-500/10 last:border-0 group">
+            <div class="flex items-center gap-2 overflow-hidden">
+                <div class="w-1 h-1 rounded-full bg-gray-300 dark:bg-gray-600 group-hover:${hoverColor} transition-colors"></div>
+                <span class="text-xs font-medium text-gray-700 dark:text-gray-200 truncate" title="${escapeHtml(name)}">${escapeHtml(name)}</span>
+            </div>
+            <span class="text-[10px] font-mono font-bold bg-gray-100 dark:bg-white/10 px-1.5 py-0.5 rounded ml-2 text-gray-600 dark:text-gray-300 whitespace-nowrap">${formatBytes(val)}</span>
+        </div>`;
+    }).join('');
+
+    return `
+        <div class="min-w-[180px]">
+            <div class="text-[10px] uppercase tracking-wider font-bold mb-2 pb-1 border-b border-gray-500/20 ${colorClass}">
+                ${title}
+            </div>
+            <div class="flex flex-col max-h-[200px] overflow-y-auto custom-scrollbar">
+                ${rows}
+            </div>
+        </div>
+    `;
+}
+
+function updateNodesListUI(data) {
+    try {
+        allNodesData = data.nodes || [];
         filterAndRenderNodes();
 
         if (document.getElementById('nodesTotal')) {
@@ -109,7 +198,7 @@ async function fetchNodesList() {
             document.getElementById('nodesActive').innerText = allNodesData.filter(n => n.status === 'online').length;
         }
     } catch (e) {
-        console.error("Nodes list error:", e);
+        console.error("Nodes UI update error:", e);
     }
 }
 
@@ -121,7 +210,8 @@ function filterAndRenderNodes() {
     if (query) {
         filteredNodes = allNodesData.filter(node => {
             const name = (node.name || "").toLowerCase();
-            const ip = (node.ip || "").toLowerCase();
+            // Decrypt IP for search
+            const ip = (decryptData(node.ip) || "").toLowerCase();
             return name.includes(query) || ip.includes(query);
         });
     }
@@ -142,12 +232,17 @@ function renderNodesList(nodes) {
         return;
     }
 
+    const lblCpu = (typeof I18N !== 'undefined' && I18N.web_label_cpu) ? I18N.web_label_cpu : "CPU";
+    const lblRam = (typeof I18N !== 'undefined' && I18N.web_label_ram) ? I18N.web_label_ram : "RAM";
+    const lblDisk = (typeof I18N !== 'undefined' && I18N.web_label_disk) ? I18N.web_label_disk : "DISK";
+    const lblStatus = (typeof I18N !== 'undefined' && I18N.web_label_status) ? I18N.web_label_status : "STATUS";
+
     const html = nodes.map(node => {
         let statusColor = node.status === 'online' ? "bg-green-500" : (node.status === 'restarting' ? "bg-blue-500" : "bg-red-500");
-        let statusText = node.status === 'restarting' ? "RESTART" : node.status.toUpperCase();
+        let statusText = node.status === 'restarting' ? (typeof I18N !== 'undefined' && I18N.web_status_restart ? I18N.web_status_restart : "RESTART") : node.status.toUpperCase();
         let statusTextClass = node.status === 'online' ? "text-green-500" : (node.status === 'restarting' ? "text-blue-500" : "text-red-500");
         let statusBg = node.status === 'online' ? "bg-green-500/10 text-green-600 dark:text-green-400" : (node.status === 'restarting' ? "bg-blue-500/10 text-blue-600 dark:text-blue-400" : "bg-red-500/10 text-red-600 dark:text-red-400");
-        
+
         const cpu = Math.round(node.cpu || 0);
         const ram = Math.round(node.ram || 0);
         const disk = Math.round(node.disk || 0);
@@ -155,6 +250,9 @@ function renderNodesList(nodes) {
         const cpuColor = cpu > 80 ? 'text-red-500' : 'text-gray-600 dark:text-gray-300';
         const ramColor = ram > 80 ? 'text-red-500' : 'text-gray-600 dark:text-gray-300';
         const diskColor = disk > 90 ? 'text-red-500' : 'text-gray-600 dark:text-gray-300';
+
+        // Decrypt IP for display
+        const displayIp = decryptData(node.ip);
 
         return `
         <div class="bg-white dark:bg-white/5 hover:bg-gray-50 dark:hover:bg-white/10 transition-all duration-200 rounded-xl border border-gray-100 dark:border-white/5 cursor-pointer shadow-sm hover:shadow-md overflow-hidden group mb-2" onclick="openNodeDetails('${escapeHtml(node.token)}', '${statusColor}')">
@@ -171,30 +269,30 @@ function renderNodesList(nodes) {
                             <div class="font-bold text-sm text-gray-900 dark:text-white truncate group-hover:text-blue-600 dark:group-hover:text-blue-400 transition">${escapeHtml(node.name)}</div>
                             <div class="sm:hidden px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider ${statusBg}">${statusText}</div>
                         </div>
-                        <div class="text-[10px] sm:text-xs font-mono text-gray-400 truncate">${escapeHtml(node.ip)}</div>
+                        <div class="text-[10px] sm:text-xs font-mono text-gray-400 truncate">${escapeHtml(displayIp)}</div>
                     </div>
                 </div>
 
                 <div class="flex items-center justify-between sm:justify-end gap-1 sm:gap-6 mt-1 sm:mt-0 pt-3 sm:pt-0 border-t border-gray-100 dark:border-white/5 sm:border-0">
                     
                     <div class="text-center sm:text-right flex-1 sm:flex-none">
-                        <div class="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">CPU</div>
+                        <div class="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">${lblCpu}</div>
                         <div class="text-xs font-mono font-bold ${cpuColor}">${cpu}%</div>
                     </div>
 
                     <div class="text-center sm:text-right flex-1 sm:flex-none">
-                        <div class="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">RAM</div>
+                        <div class="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">${lblRam}</div>
                         <div class="text-xs font-mono font-bold ${ramColor}">${ram}%</div>
                     </div>
 
                     <div class="text-center sm:text-right flex-1 sm:flex-none">
-                        <div class="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">DISK</div>
+                        <div class="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">${lblDisk}</div>
                         <div class="text-xs font-mono font-bold ${diskColor}">${disk}%</div>
                     </div>
 
                     <div class="hidden sm:block text-right ml-2 pl-3 border-l border-gray-200 dark:border-white/10 min-w-[70px]">
                         <div class="text-[10px] font-bold ${statusTextClass} mb-0.5">${statusText}</div>
-                        <div class="text-[9px] text-gray-300 dark:text-gray-600">STATUS</div>
+                        <div class="text-[9px] text-gray-300 dark:text-gray-600">${lblStatus}</div>
                     </div>
                 </div>
             </div>
@@ -204,10 +302,8 @@ function renderNodesList(nodes) {
     container.innerHTML = html;
 }
 
-async function fetchAgentStats() {
+function updateAgentStatsUI(data) {
     try {
-        const response = await fetch('/api/agent/stats');
-        const data = await response.json();
         const freeIcon = `<svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 inline mb-0.5 opacity-60" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>`;
 
         if (data.stats) {
@@ -221,7 +317,8 @@ async function fetchAgentStats() {
                 cpuEl.innerHTML = html;
                 const hintCpu = document.getElementById('hint-cpu');
                 if (hintCpu) {
-                    hintCpu.innerHTML = formatProcessList(data.stats.process_cpu, "Top CPU Consumers", "text-blue-500");
+                    const title = (typeof I18N !== 'undefined' && I18N.web_top_cpu) ? I18N.web_top_cpu : "Top CPU Consumers";
+                    hintCpu.innerHTML = formatProcessList(data.stats.process_cpu, title, "text-blue-500");
                 }
             }
             if (progCpu) progCpu.style.width = data.stats.cpu + "%";
@@ -236,7 +333,8 @@ async function fetchAgentStats() {
                 ramEl.innerHTML = html;
                 const hintRam = document.getElementById('hint-ram');
                 if (hintRam) {
-                    hintRam.innerHTML = formatProcessList(data.stats.process_ram, "Top Memory Consumers", "text-purple-500");
+                    const title = (typeof I18N !== 'undefined' && I18N.web_top_ram) ? I18N.web_top_ram : "Top Memory Consumers";
+                    hintRam.innerHTML = formatProcessList(data.stats.process_ram, title, "text-purple-500");
                 }
             }
             if (progRam) progRam.style.width = data.stats.ram + "%";
@@ -251,12 +349,14 @@ async function fetchAgentStats() {
                 diskEl.innerHTML = html;
                 const hintDisk = document.getElementById('hint-disk');
                 if (hintDisk) {
-                    hintDisk.innerHTML = formatProcessList(data.stats.process_disk, "Top I/O Usage (Total)", "text-emerald-500");
+                    const title = (typeof I18N !== 'undefined' && I18N.web_top_disk) ? I18N.web_top_disk : "Top I/O Usage";
+                    hintDisk.innerHTML = formatProcessList(data.stats.process_disk, title, "text-emerald-500");
                 }
             }
             if (progDisk) progDisk.style.width = data.stats.disk + "%";
 
-            let rxSpeed = 0, txSpeed = 0;
+            let rxSpeed = 0,
+                txSpeed = 0;
             if (data.history && data.history.length >= 2) {
                 const last = data.history[data.history.length - 1];
                 const prev = data.history[data.history.length - 2];
@@ -274,6 +374,19 @@ async function fetchAgentStats() {
             const txEl = document.getElementById('stat_net_sent');
             if (txEl) txEl.innerHTML = `${formatBytes(data.stats.net_sent)} <span class="${speedStyle}">${formatSpeed(txSpeed)}</span>`;
 
+            if (data.stats.interfaces) {
+                const hintRx = document.getElementById('hint-rx');
+                if (hintRx) {
+                    const title = (typeof I18N !== 'undefined' && I18N.web_hint_traffic_in) ? I18N.web_hint_traffic_in : "Inbound Traffic";
+                    hintRx.innerHTML = formatInterfaceList(data.stats.interfaces, 'rx', title, "text-cyan-500");
+                }
+                const hintTx = document.getElementById('hint-tx');
+                if (hintTx) {
+                    const title = (typeof I18N !== 'undefined' && I18N.web_hint_traffic_out) ? I18N.web_hint_traffic_out : "Outbound Traffic";
+                    hintTx.innerHTML = formatInterfaceList(data.stats.interfaces, 'tx', title, "text-orange-500");
+                }
+            }
+
             const rxTotal = data.stats.net_recv || 0;
             const txTotal = data.stats.net_sent || 0;
             const totalNet = rxTotal + txTotal;
@@ -290,11 +403,11 @@ async function fetchAgentStats() {
             if (uptimeEl) uptimeEl.innerText = formatUptime(data.stats.boot_time);
 
             const ipEl = document.getElementById('agentIp');
-            if (ipEl && data.stats.ip) ipEl.innerText = data.stats.ip;
+            if (ipEl && data.stats.ip) ipEl.innerText = decryptData(data.stats.ip); // Decrypt Agent IP
         }
         renderAgentChart(data.history);
     } catch (e) {
-        console.error("Agent stats error:", e);
+        console.error("Agent stats UI error:", e);
     }
 }
 
@@ -336,7 +449,11 @@ function renderAgentChart(history) {
             netRx.push(null);
             netTx.push(null);
         }
-        labels.push(new Date(history[i].t * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
+        labels.push(new Date(history[i].t * 1000).toLocaleTimeString([], {
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit'
+        }));
         netRx.push((Math.max(0, history[i].rx - history[i - 1].rx) * 8 / dt / 1024));
         netTx.push((Math.max(0, history[i].tx - history[i - 1].tx) * 8 / dt / 1024));
     }
@@ -351,26 +468,57 @@ function renderAgentChart(history) {
         responsive: true,
         maintainAspectRatio: false,
         animation: false,
-        interaction: { mode: 'index', intersect: false },
+        interaction: {
+            mode: 'index',
+            intersect: false
+        },
         scales: {
             x: {
-                grid: { display: false },
-                ticks: { color: tickColor, maxTicksLimit: maxTicks, maxRotation: 0 }
+                grid: {
+                    display: false
+                },
+                ticks: {
+                    color: tickColor,
+                    maxTicksLimit: maxTicks,
+                    maxRotation: 0
+                }
             },
             y: {
                 position: 'right',
-                grid: { color: gridColor },
-                ticks: { color: tickColor, callback: (v) => formatSpeed(v) },
+                grid: {
+                    color: gridColor
+                },
+                ticks: {
+                    color: tickColor,
+                    callback: (v) => formatSpeed(v)
+                },
                 beginAtZero: true
             }
         },
         plugins: {
-            legend: { labels: { color: tickColor, usePointStyle: true } },
-            tooltip: { mode: 'index', intersect: false, callbacks: { label: (c) => c.dataset.label + ': ' + formatSpeed(c.raw) } }
+            legend: {
+                labels: {
+                    color: tickColor,
+                    usePointStyle: true
+                }
+            },
+            tooltip: {
+                mode: 'index',
+                intersect: false,
+                callbacks: {
+                    label: (c) => c.dataset.label + ': ' + formatSpeed(c.raw)
+                }
+            }
         },
         elements: {
-            line: { tension: 0.4 },
-            point: { radius: 0, hitRadius: 20, hoverRadius: 4 }
+            line: {
+                tension: 0.4
+            },
+            point: {
+                radius: 0,
+                hitRadius: 20,
+                hoverRadius: 4
+            }
         }
     };
 
@@ -388,10 +536,21 @@ function renderAgentChart(history) {
             type: 'line',
             data: {
                 labels,
-                datasets: [
-                    { label: 'RX', data: netRx, borderColor: '#22c55e', borderWidth: 2, backgroundColor: rxGrad, fill: true },
-                    { label: 'TX', data: netTx, borderColor: '#3b82f6', borderWidth: 2, backgroundColor: txGrad, fill: true }
-                ]
+                datasets: [{
+                    label: 'RX',
+                    data: netRx,
+                    borderColor: '#22c55e',
+                    borderWidth: 2,
+                    backgroundColor: rxGrad,
+                    fill: true
+                }, {
+                    label: 'TX',
+                    data: netTx,
+                    borderColor: '#3b82f6',
+                    borderWidth: 2,
+                    backgroundColor: txGrad,
+                    fill: true
+                }]
             },
             options: opts
         });
@@ -438,78 +597,309 @@ function formatUptime(bt) {
     return `${m}${unitM}`;
 }
 
+function setLogLoading() {
+    const container = document.getElementById('logsContainer');
+    if (!container) return;
+    container.classList.add('overflow-hidden');
+    if (!container.classList.contains('relative')) container.classList.add('relative');
+
+    const loadingText = (typeof I18N !== 'undefined' && I18N.web_log_connecting) ? I18N.web_log_connecting : "Connecting...";
+    const existing = document.getElementById('log-loader');
+    if (existing) existing.remove();
+
+    const loader = document.createElement('div');
+    loader.id = 'log-loader';
+    loader.className = 'absolute inset-0 z-50 flex flex-col items-center justify-center bg-white/90 dark:bg-gray-900/90 backdrop-blur-sm transition-opacity duration-300 opacity-0';
+
+    loader.innerHTML = `
+        <svg class="animate-spin h-10 w-10 text-blue-600 dark:text-blue-400 mb-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+        </svg>
+        <span class="text-sm font-medium text-gray-600 dark:text-gray-300 animate-pulse">${escapeHtml(loadingText)}</span>
+    `;
+
+    container.appendChild(loader);
+    void loader.offsetWidth;
+    loader.classList.remove('opacity-0');
+}
+
+function removeLogLoading() {
+    const loader = document.getElementById('log-loader');
+    if (!loader) return;
+
+    loader.classList.add('opacity-0');
+    setTimeout(() => {
+        if (loader.parentElement) loader.remove();
+    }, 300);
+}
+
+window.switchLogType = function(type) {
+    ['btnLogBot', 'btnLogSys'].forEach(id => {
+        const el = document.getElementById(id);
+        const isActive = (id === 'btnLogBot' && type === 'bot') || (id === 'btnLogSys' && type === 'sys');
+        el.classList.toggle('bg-white', isActive);
+        el.classList.toggle('dark:bg-gray-700', isActive);
+        el.classList.toggle('text-gray-900', isActive);
+        el.classList.toggle('text-gray-500', !isActive);
+    });
+    if (logSSESource) {
+        logSSESource.close();
+        logSSESource = null;
+    }
+
+    const container = document.getElementById('logsContainer');
+    const overlay = document.getElementById('logsOverlay');
+    if (typeof USER_ROLE !== 'undefined' && USER_ROLE !== 'admins') {
+        if (overlay) overlay.classList.remove('hidden');
+        if (!container.innerHTML.includes('blur')) {
+            container.innerHTML = generateDummyLogs();
+            container.scrollTop = 0;
+        }
+        return;
+    }
+    container.innerHTML = '';
+
+    const oldEmpty = document.getElementById('empty-logs-state');
+    if (oldEmpty) oldEmpty.remove();
+
+    setLogLoading();
+    logSSESource = new EventSource(`/api/events/logs?type=${type}`);
+
+    logSSESource.addEventListener('logs', (e) => {
+        if (overlay) overlay.classList.add('hidden');
+
+        try {
+            const data = JSON.parse(e.data);
+            const logs = data.logs || [];
+            const container = document.getElementById('logsContainer');
+
+            // --- EMPTY LOGS HANDLING ---
+            if (logs.length === 0) {
+                if (document.getElementById('log-loader')) {
+                    container.classList.remove('overflow-hidden');
+                    removeLogLoading();
+
+                    if (!document.getElementById('empty-logs-state')) {
+                        const emptyHtml = `
+                        <div id="empty-logs-state" class="flex flex-col items-center justify-center h-full min-h-[200px] text-gray-400 dark:text-gray-600 animate-fade-in-up select-none opacity-80">
+                            <div class="bg-gray-100 dark:bg-white/5 p-4 rounded-full mb-3">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
+                                </svg>
+                            </div>
+                            <span class="text-sm font-bold text-gray-500 dark:text-gray-400">В логах тишина</span>
+                            <span class="text-[10px] uppercase tracking-wider opacity-60 mt-1">Новых записей не найдено</span>
+                        </div>`;
+                        container.insertAdjacentHTML('beforeend', emptyHtml);
+                    }
+                }
+                return;
+            }
+
+            const emptyState = document.getElementById('empty-logs-state');
+            if (emptyState) {
+                emptyState.remove();
+            }
+            // ---------------------------
+
+            const html = logs.map(line => {
+                let cls = "text-gray-500";
+                if (line.includes("INFO")) cls = "text-blue-400";
+                else if (line.includes("WARNING")) cls = "text-yellow-400";
+                else if (line.includes("ERROR") || line.includes("CRITICAL")) cls = "text-red-500 font-bold";
+                return `<div class="${cls} font-mono text-xs break-all py-[1px]">${escapeHtml(line)}</div>`;
+            }).join('');
+
+            const loader = document.getElementById('log-loader');
+            const isInitialLoad = loader && !loader.classList.contains('opacity-0');
+            const isAtBottom = (container.scrollHeight - container.scrollTop) <= (container.clientHeight + 5);
+
+            container.insertAdjacentHTML('beforeend', html);
+
+            if (container.children.length > 1000) {
+                while (container.children.length > 1000) {
+                    const first = container.firstChild;
+                    if (first && first.id !== 'log-loader' && first.id !== 'empty-logs-state') {
+                        first.remove();
+                    } else {
+                        if (container.children[1]) container.children[1].remove();
+                        else break;
+                    }
+                }
+            }
+
+            container.classList.remove('overflow-hidden');
+            if (isInitialLoad) {
+                container.scrollTo({
+                    top: container.scrollHeight,
+                    behavior: 'auto'
+                });
+            } else if (isAtBottom) {
+                container.scrollTo({
+                    top: container.scrollHeight,
+                    behavior: 'smooth'
+                });
+            }
+
+            if (loader) {
+                removeLogLoading();
+            }
+
+        } catch (err) {
+            console.error("Logs parse error", err);
+            container.classList.remove('overflow-hidden');
+            removeLogLoading();
+        }
+    });
+
+    logSSESource.onerror = () => {
+        if (overlay) overlay.classList.add('hidden');
+    };
+};
+
+function setModalLoading() {
+    const modal = document.getElementById('nodeModal');
+    if (!modal) return;
+
+    const fields = ['modalNodeName', 'modalNodeIp', 'modalToken', 'modalNodeUptime', 'modalNodeRam', 'modalNodeDisk', 'modalNodeTraffic'];
+    fields.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.innerText = '...';
+    });
+    const lastSeen = document.getElementById('modalNodeLastSeen');
+    if (lastSeen) {
+        lastSeen.innerText = '...';
+        lastSeen.className = 'text-gray-400 text-xs';
+    }
+    const card = modal.firstElementChild;
+    if (!card) return;
+    if (!card.classList.contains('relative')) card.classList.add('relative');
+    const existing = document.getElementById('node-modal-loader');
+    if (existing) existing.remove();
+
+    const loadingText = (typeof I18N !== 'undefined' && I18N.web_node_modal_loading) ? I18N.web_node_modal_loading : "Loading node data...";
+
+    const loader = document.createElement('div');
+    loader.id = 'node-modal-loader';
+    loader.className = 'absolute inset-0 z-50 flex flex-col items-center justify-center bg-white/60 dark:bg-gray-900/60 backdrop-blur-md rounded-2xl transition-opacity duration-300 opacity-0';
+    loader.innerHTML = `
+        <svg class="animate-spin h-10 w-10 text-blue-600 dark:text-blue-400 mb-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+        </svg>
+        <span class="text-sm font-medium text-gray-600 dark:text-gray-300 animate-pulse">${escapeHtml(loadingText)}</span>
+    `;
+
+    card.appendChild(loader);
+    void loader.offsetWidth;
+    loader.classList.remove('opacity-0');
+}
+
+function removeModalLoading() {
+    const loader = document.getElementById('node-modal-loader');
+    if (!loader) return;
+
+    loader.classList.add('opacity-0');
+    setTimeout(() => {
+        if (loader.parentElement) loader.remove();
+    }, 300);
+}
+
 async function openNodeDetails(token, color) {
     const modal = document.getElementById('nodeModal');
     if (modal) {
-        animateModalOpen(modal); 
+        setModalLoading();
+        animateModalOpen(modal);
+        currentNodeToken = token; // Contains Encrypted Token from renderNodesList
+        cancelNodeRename();
     }
 
     if (chartRes) chartRes.destroy();
     if (chartNet) chartNet.destroy();
     chartRes = null;
     chartNet = null;
+    if (nodeSSESource) {
+        nodeSSESource.close();
+        nodeSSESource = null;
+    }
+    // Token is already encrypted, send as is
+    nodeSSESource = new EventSource(`/api/events/node?token=${token}`);
 
-    await fetchAndRender(token);
-    if (pollInterval) clearInterval(pollInterval);
-    pollInterval = setInterval(() => fetchAndRender(token), 3000);
+    nodeSSESource.addEventListener('node_details', (e) => {
+        try {
+            const data = JSON.parse(e.data);
+            updateNodeDetailsUI(data);
+        } catch (err) {
+            console.error("Node details parse error", err);
+        }
+    });
+
+    nodeSSESource.addEventListener('error', (e) => {
+        try {
+            if (e.data) {
+                const errData = JSON.parse(e.data);
+                if (errData.error) {
+                    console.warn("Node SSE Error:", errData.error);
+                }
+            }
+        } catch (ex) {}
+    });
 }
 
-async function fetchAndRender(token) {
-    try {
-        const res = await fetch(`/api/node/details?token=${token}`);
-        const data = await res.json();
-
-        if (data.error) {
-            clearInterval(pollInterval);
-            return;
-        }
-
+function updateNodeDetailsUI(data) {
+    if (data.error) return;
+    removeModalLoading();
+    const inputContainer = document.getElementById('nodeNameInputContainer');
+    if (inputContainer && inputContainer.classList.contains('hidden')) {
         document.getElementById('modalNodeName').innerText = data.name;
-        document.getElementById('modalNodeIp').innerText = data.ip;
-        document.getElementById('modalToken').innerText = data.token;
-
-        const stats = data.stats || {};
-        
-        if (stats.uptime) {
-            const bootTimestamp = (Date.now() / 1000) - stats.uptime;
-            document.getElementById('modalNodeUptime').innerText = formatUptime(bootTimestamp);
-        } else {
-            document.getElementById('modalNodeUptime').innerText = "-";
-        }
-
-        if (stats.ram_total) {
-            const ramUsed = stats.ram_total - (stats.ram_free || 0);
-            document.getElementById('modalNodeRam').innerText = `${formatBytes(ramUsed)} / ${formatBytes(stats.ram_total)}`;
-        } else {
-            document.getElementById('modalNodeRam').innerText = "-";
-        }
-
-        if (stats.disk_total) {
-            const diskUsed = stats.disk_total - (stats.disk_free || 0);
-            document.getElementById('modalNodeDisk').innerText = `${formatBytes(diskUsed)} / ${formatBytes(stats.disk_total)}`;
-        } else {
-            document.getElementById('modalNodeDisk').innerText = "-";
-        }
-
-        if (stats.net_rx !== undefined) {
-            document.getElementById('modalNodeTraffic').innerText = `⬇${formatBytes(stats.net_rx)} ⬆${formatBytes(stats.net_tx)}`;
-        } else {
-            document.getElementById('modalNodeTraffic').innerText = "-";
-        }
-
-        const lastSeen = data.last_seen || 0;
-        const now = Math.floor(Date.now() / 1000);
-        const diff = now - lastSeen;
-        const lsEl = document.getElementById('modalNodeLastSeen');
-
-        if (lsEl) {
-            lsEl.innerText = diff < 60 ? "Online" : `Last seen: ${new Date(lastSeen * 1000).toLocaleString()}`;
-            lsEl.className = diff < 60 ? "text-green-500 font-bold text-xs" : "text-red-500 font-bold text-xs";
-        }
-        renderCharts(data.history);
-    } catch (e) {
-        console.error("Node detail error:", e);
     }
+
+    document.getElementById('modalNodeIp').innerText = decryptData(data.ip);
+    document.getElementById('modalToken').innerText = decryptData(data.token);
+
+    const stats = data.stats || {};
+
+    if (stats.uptime) {
+        const bootTimestamp = (Date.now() / 1000) - stats.uptime;
+        document.getElementById('modalNodeUptime').innerText = formatUptime(bootTimestamp);
+    } else {
+        document.getElementById('modalNodeUptime').innerText = "-";
+    }
+
+    if (stats.ram_total) {
+        const ramUsed = stats.ram_total - (stats.ram_free || 0);
+        document.getElementById('modalNodeRam').innerText = `${formatBytes(ramUsed)} / ${formatBytes(stats.ram_total)}`;
+    } else {
+        document.getElementById('modalNodeRam').innerText = "-";
+    }
+
+    if (stats.disk_total) {
+        const diskUsed = stats.disk_total - (stats.disk_free || 0);
+        document.getElementById('modalNodeDisk').innerText = `${formatBytes(diskUsed)} / ${formatBytes(stats.disk_total)}`;
+    } else {
+        document.getElementById('modalNodeDisk').innerText = "-";
+    }
+
+    if (stats.net_rx !== undefined) {
+        document.getElementById('modalNodeTraffic').innerText = `⬇${formatBytes(stats.net_rx)} ⬆${formatBytes(stats.net_tx)}`;
+    } else {
+        document.getElementById('modalNodeTraffic').innerText = "-";
+    }
+
+    const lastSeen = data.last_seen || 0;
+    const now = Math.floor(Date.now() / 1000);
+    const diff = now - lastSeen;
+    const lsEl = document.getElementById('modalNodeLastSeen');
+
+    const statusOnline = (typeof I18N !== 'undefined' && I18N.web_node_status_online) ? I18N.web_node_status_online : "Online";
+    const statusLastSeen = (typeof I18N !== 'undefined' && I18N.web_node_last_seen) ? I18N.web_node_last_seen : "Last seen: ";
+
+    if (lsEl) {
+        lsEl.innerText = diff < 60 ? statusOnline : `${statusLastSeen}${new Date(lastSeen * 1000).toLocaleString()}`;
+        lsEl.className = diff < 60 ? "text-green-500 font-bold text-xs" : "text-red-500 font-bold text-xs";
+    }
+    renderCharts(data.history);
 }
 
 function closeNodeModal() {
@@ -517,8 +907,79 @@ function closeNodeModal() {
     if (modal) {
         animateModalClose(modal);
     }
-    if (pollInterval) clearInterval(pollInterval);
+    removeModalLoading();
+    if (nodeSSESource) {
+        nodeSSESource.close();
+        nodeSSESource = null;
+    }
 }
+
+window.startNodeRename = function() {
+    const nameDisplay = document.getElementById('nodeNameContainer');
+    const nameInputContainer = document.getElementById('nodeNameInputContainer');
+    const nameInput = document.getElementById('modalNodeNameInput');
+    const currentName = document.getElementById('modalNodeName').innerText;
+
+    if (nameDisplay && nameInputContainer && nameInput) {
+        nameDisplay.classList.add('hidden');
+        nameInputContainer.classList.remove('hidden');
+        nameInput.value = currentName;
+        nameInput.focus();
+    }
+};
+
+window.cancelNodeRename = function() {
+    const nameDisplay = document.getElementById('nodeNameContainer');
+    const nameInputContainer = document.getElementById('nodeNameInputContainer');
+
+    if (nameDisplay && nameInputContainer) {
+        nameDisplay.classList.remove('hidden');
+        nameInputContainer.classList.add('hidden');
+    }
+};
+
+window.saveNodeRename = async function() {
+    const nameInput = document.getElementById('modalNodeNameInput');
+    const newName = nameInput.value.trim();
+    if (!newName || !currentNodeToken) return;
+    document.getElementById('modalNodeName').innerText = newName;
+    cancelNodeRename();
+
+    try {
+        const res = await fetch('/api/nodes/rename', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                token: currentNodeToken,
+                name: newName
+            }) // Token is already encrypted
+        });
+
+        if (res.ok) {
+            if (window.showToast) {
+                const msg = (typeof I18N !== 'undefined' && I18N.web_node_rename_success) ? I18N.web_node_rename_success : "Name updated";
+                window.showToast(msg);
+            }
+        } else {
+            const data = await res.json();
+            const errorMsg = (typeof I18N !== 'undefined' && I18N.web_node_rename_error) ? I18N.web_node_rename_error : "Error updating name";
+            if (window.showModalAlert) await window.showModalAlert(data.error || errorMsg, "Error");
+        }
+    } catch (e) {
+        console.error(e);
+        if (window.showModalAlert) await window.showModalAlert(String(e), "Error");
+    }
+};
+
+window.handleRenameKeydown = function(event) {
+    if (event.key === 'Enter') {
+        saveNodeRename();
+    } else if (event.key === 'Escape') {
+        cancelNodeRename();
+    }
+};
 
 function renderCharts(history) {
     if (!history || history.length < 2) return;
@@ -533,7 +994,11 @@ function renderCharts(history) {
     const netRx = [];
     const netTx = [];
 
-    labels.push(new Date(history[0].t * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
+    labels.push(new Date(history[0].t * 1000).toLocaleTimeString([], {
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit'
+    }));
     cpuData.push(history[0].c);
     ramData.push(history[0].r);
     netRx.push(0);
@@ -548,7 +1013,11 @@ function renderCharts(history) {
             netRx.push(null);
             netTx.push(null);
         }
-        labels.push(new Date(history[i].t * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
+        labels.push(new Date(history[i].t * 1000).toLocaleTimeString([], {
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit'
+        }));
         cpuData.push(history[i].c);
         ramData.push(history[i].r);
         netRx.push((Math.max(0, history[i].rx - history[i - 1].rx) * 8 / dt / 1024));
@@ -560,17 +1029,58 @@ function renderCharts(history) {
     const tickColor = isDark ? '#9ca3af' : '#6b7280';
     const isMobile = window.innerWidth < 640;
 
+    const lblCpu = (typeof I18N !== 'undefined' && I18N.web_label_cpu) ? I18N.web_label_cpu : "CPU";
+    const lblRam = (typeof I18N !== 'undefined' && I18N.web_label_ram) ? I18N.web_label_ram : "RAM";
+
     const commonOptions = {
         responsive: true,
         maintainAspectRatio: false,
         animation: false,
-        interaction: { mode: 'index', intersect: false },
-        scales: {
-            y: { beginAtZero: true, grid: { color: gridColor }, ticks: { color: tickColor, font: { size: 10 } } },
-            x: { grid: { display: false }, ticks: { display: !isMobile, maxTicksLimit: isMobile ? 3 : 6 } }
+        interaction: {
+            mode: 'index',
+            intersect: false
         },
-        plugins: { legend: { labels: { color: tickColor, boxWidth: 10, usePointStyle: true } } },
-        elements: { line: { tension: 0.4 }, point: { radius: 0, hitRadius: 10 } }
+        scales: {
+            y: {
+                beginAtZero: true,
+                grid: {
+                    color: gridColor
+                },
+                ticks: {
+                    color: tickColor,
+                    font: {
+                        size: 10
+                    }
+                }
+            },
+            x: {
+                grid: {
+                    display: false
+                },
+                ticks: {
+                    display: !isMobile,
+                    maxTicksLimit: isMobile ? 3 : 6
+                }
+            }
+        },
+        plugins: {
+            legend: {
+                labels: {
+                    color: tickColor,
+                    boxWidth: 10,
+                    usePointStyle: true
+                }
+            }
+        },
+        elements: {
+            line: {
+                tension: 0.4
+            },
+            point: {
+                radius: 0,
+                hitRadius: 10
+            }
+        }
     };
 
     if (chartRes) {
@@ -585,12 +1095,32 @@ function renderCharts(history) {
             type: 'line',
             data: {
                 labels,
-                datasets: [
-                    { label: 'CPU (%)', data: cpuData, borderColor: '#3b82f6', borderWidth: 2, backgroundColor: cpuGrad, fill: true },
-                    { label: 'RAM (%)', data: ramData, borderColor: '#a855f7', borderWidth: 2, backgroundColor: ramGrad, fill: true }
-                ]
+                datasets: [{
+                    label: `${lblCpu} (%)`,
+                    data: cpuData,
+                    borderColor: '#3b82f6',
+                    borderWidth: 2,
+                    backgroundColor: cpuGrad,
+                    fill: true
+                }, {
+                    label: `${lblRam} (%)`,
+                    data: ramData,
+                    borderColor: '#a855f7',
+                    borderWidth: 2,
+                    backgroundColor: ramGrad,
+                    fill: true
+                }]
             },
-            options: { ...commonOptions, scales: { ...commonOptions.scales, y: { ...commonOptions.scales.y, max: 100 } } }
+            options: {
+                ...commonOptions,
+                scales: {
+                    ...commonOptions.scales,
+                    y: {
+                        ...commonOptions.scales.y,
+                        max: 100
+                    }
+                }
+            }
         });
     }
 
@@ -608,105 +1138,46 @@ function renderCharts(history) {
             type: 'line',
             data: {
                 labels,
-                datasets: [
-                    { label: 'RX', data: netRx, borderColor: '#22c55e', borderWidth: 2, backgroundColor: rxGrad, fill: true },
-                    { label: 'TX', data: netTx, borderColor: '#ef4444', borderWidth: 2, backgroundColor: txGrad, fill: true }
-                ]
+                datasets: [{
+                    label: 'RX',
+                    data: netRx,
+                    borderColor: '#22c55e',
+                    borderWidth: 2,
+                    backgroundColor: rxGrad,
+                    fill: true
+                }, {
+                    label: 'TX',
+                    data: netTx,
+                    borderColor: '#ef4444',
+                    borderWidth: 2,
+                    backgroundColor: txGrad,
+                    fill: true
+                }]
             },
             options: netOpts
         });
     }
 }
 
-function generateDummyLogs() {
-    const lines = [
-        "INFO:system:Starting background service monitoring...",
-        "DEBUG:core.utils:Connection established with remote node",
-        "INFO:modules.traffic:Traffic metrics updated successfully",
-        "WARNING:network:Latency spike detected (150ms)",
-        "INFO:auth:User session verified securely",
-        "DEBUG:database:Query executed in 0.02s",
-        "INFO:system:System resources check passed",
-        "INFO:bot:Webhook set successfully",
-        "DEBUG:asyncio:Event loop running...",
-        "INFO:server:Web server listening on port 8080"
-    ];
-    let html = '';
-    for (let i = 0; i < 30; i++) {
-        const line = lines[Math.floor(Math.random() * lines.length)];
-        html += `<div class="text-gray-400 dark:text-gray-600 select-none filter blur-[3px] opacity-50">${line}</div>`;
-    }
-    return html;
-}
-
-window.switchLogType = function(type) {
-    ['btnLogBot', 'btnLogSys'].forEach(id => {
-        const el = document.getElementById(id);
-        const isActive = (id === 'btnLogBot' && type === 'bot') || (id === 'btnLogSys' && type === 'sys');
-        el.classList.toggle('bg-white', isActive);
-        el.classList.toggle('dark:bg-gray-700', isActive);
-        el.classList.toggle('text-gray-900', isActive);
-        el.classList.toggle('text-gray-500', !isActive);
-    });
-    loadLogs(type);
-    if (logPollInterval) clearInterval(logPollInterval);
-    logPollInterval = setInterval(() => loadLogs(type), 5000);
-};
-
-async function loadLogs(type = 'bot') {
-    const container = document.getElementById('logsContainer');
-    const overlay = document.getElementById('logsOverlay');
-    const url = type === 'sys' ? '/api/logs/system' : '/api/logs';
-
-    if (typeof USER_ROLE !== 'undefined' && USER_ROLE !== 'admins') {
-        if (overlay) overlay.classList.remove('hidden');
-        if (!container.innerHTML.includes('blur')) {
-            container.innerHTML = generateDummyLogs();
-            container.scrollTop = 0;
-        }
-        return;
-    }
+window.resetTrafficDashboard = async function() {
+    if (!await window.showModalConfirm(I18N.web_traffic_reset_confirm, I18N.modal_title_confirm)) return;
 
     try {
-        const res = await fetch(url);
-        if (res.status === 403) {
-            if (overlay) overlay.classList.remove('hidden');
-            if (!container.innerHTML.includes('blur')) {
-                container.innerHTML = generateDummyLogs();
-                container.scrollTop = 0;
+        const res = await fetch('/api/traffic/reset', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
             }
-            return;
-        }
-
-        if (overlay) overlay.classList.add('hidden');
-        const data = await res.json();
-
-        if (data.error) {
-            container.innerHTML = `<div class="text-red-400 p-4 font-mono">${escapeHtml(data.error)}</div>`;
+        });
+        if (res.ok) {
+            if (window.showToast) window.showToast(I18N.traffic_reset_done);
         } else {
-            const logs = data.logs || [];
-            if (logs.length === 0) {
-                container.innerHTML = `<div class="text-gray-600 text-center mt-10">${typeof I18N !== 'undefined' ? I18N.web_log_empty : "Log empty"}</div>`;
-                return;
-            }
-
-            const html = logs.map(line => {
-                let cls = "text-gray-500";
-                if (line.includes("INFO")) cls = "text-blue-400";
-                else if (line.includes("WARNING")) cls = "text-yellow-400";
-                else if (line.includes("ERROR") || line.includes("CRITICAL")) cls = "text-red-500 font-bold";
-                return `<div class="${cls}">${escapeHtml(line)}</div>`;
-            }).join('');
-
-            const isBottom = container.scrollHeight - container.scrollTop <= container.clientHeight + 100;
-
-            if (container.innerHTML !== html) {
-                container.innerHTML = html;
-                if (isBottom) container.scrollTop = container.scrollHeight;
-            }
+            const data = await res.json();
+            const errorShort = (typeof I18N !== 'undefined' && I18N.web_error_short) ? I18N.web_error_short : "Error";
+            await window.showModalAlert(data.error || "Failed", errorShort);
         }
     } catch (e) {
-        if (overlay) overlay.classList.add('hidden');
-        container.innerHTML = `<div class="text-red-400 text-center mt-10">Connection error</div>`;
+        const errorShort = (typeof I18N !== 'undefined' && I18N.web_conn_error_short) ? I18N.web_conn_error_short : "Conn Error";
+        await window.showModalAlert(String(e), errorShort);
     }
-}
+};

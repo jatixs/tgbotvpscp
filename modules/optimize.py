@@ -3,10 +3,8 @@ import logging
 from aiogram import F, Dispatcher, types
 from aiogram.types import KeyboardButton
 from aiogram.exceptions import TelegramNetworkError
-
 from core.i18n import _, I18nFilter, get_user_lang
 from core import config
-
 from core.auth import is_allowed, send_access_denied_message
 from core.messaging import delete_previous_message
 from core.shared_state import LAST_MESSAGE_IDS
@@ -28,61 +26,43 @@ async def optimize_handler(message: types.Message):
     chat_id = message.chat.id
     lang = get_user_lang(user_id)
     command = "optimize"
-
     if not is_allowed(user_id, command):
         await send_access_denied_message(message.bot, user_id, chat_id, command)
         return
-
     await message.bot.send_chat_action(chat_id=chat_id, action="typing")
     await delete_previous_message(user_id, command, chat_id, message.bot)
-
-    sent_message = await message.answer(
-        _("optimize_start", lang),
-        parse_mode="HTML"
-    )
+    sent_message = await message.answer(_("optimize_start", lang), parse_mode="HTML")
     LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = sent_message.message_id
-
-    cmd = (
-        "bash -c \""
-        "apt update && apt full-upgrade -y && apt autoremove --purge -y && "
-        "apt autoclean -y && journalctl --vacuum-time=2d && "
-        "rm -rf /var/tmp/* /tmp/* /root/.cache/* && "
-        "DEBIAN_FRONTEND=noninteractive apt install preload cpufrequtils zram-tools -y && "
-        "systemctl enable preload && systemctl start preload && "
-        "echo 'vm.swappiness=10' | tee -a /etc/sysctl.conf && "
-        "echo 'vm.vfs_cache_pressure=50' | tee -a /etc/sysctl.conf && "
-        "sysctl -p && systemctl restart systemd-journald && systemctl daemon-reexec"
-        "\"")
-
+    cmd = "bash -c \"apt update && apt full-upgrade -y && apt autoremove --purge -y && apt autoclean -y && journalctl --vacuum-time=2d && rm -rf /var/tmp/* /tmp/* /root/.cache/* && DEBIAN_FRONTEND=noninteractive apt install preload cpufrequtils zram-tools -y && systemctl enable preload && systemctl start preload && echo 'vm.swappiness=10' | tee -a /etc/sysctl.conf && echo 'vm.vfs_cache_pressure=50' | tee -a /etc/sysctl.conf && sysctl -p && systemctl restart systemd-journald && systemctl daemon-reexec\""
     process = await asyncio.create_subprocess_shell(
         cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
     )
     stdout, stderr = await process.communicate()
-
-    output = stdout.decode('utf-8', errors='ignore')
-    error_output = stderr.decode('utf-8', errors='ignore')
-
+    output = stdout.decode("utf-8", errors="ignore")
+    error_output = stderr.decode("utf-8", errors="ignore")
     try:
-        await message.bot.delete_message(chat_id=chat_id, message_id=sent_message.message_id)
+        await message.bot.delete_message(
+            chat_id=chat_id, message_id=sent_message.message_id
+        )
         LAST_MESSAGE_IDS.get(user_id, {}).pop(command, None)
     except Exception as e:
         logging.debug(f"Failed to delete optimize start message: {e}")
-
     if process.returncode == 0:
-        response_text = _("optimize_success", lang,
-                          output=escape_html(output[-1000:]))
+        response_text = _("optimize_success", lang, output=escape_html(output[-1000:]))
     else:
-        response_text = _("optimize_fail", lang,
-                          code=process.returncode,
-                          stdout=escape_html(output[-1000:]),
-                          stderr=escape_html(error_output[-2000:]))
-
+        response_text = _(
+            "optimize_fail",
+            lang,
+            code=process.returncode,
+            stdout=escape_html(output[-1000:]),
+            stderr=escape_html(error_output[-2000:]),
+        )
     try:
         sent_message_final = await message.answer(response_text, parse_mode="HTML")
-        LAST_MESSAGE_IDS.setdefault(
-            user_id, {})[command] = sent_message_final.message_id
+        LAST_MESSAGE_IDS.setdefault(user_id, {})[
+            command
+        ] = sent_message_final.message_id
     except (TelegramNetworkError, OSError):
-        logging.warning(
-            "Оптимизация: бот перезагружен системой, ответ не отправлен.")
+        logging.warning("Оптимизация: бот перезагружен системой, ответ не отправлен.")
     except Exception as e:
         logging.error(f"Ошибка отправки отчета оптимизации: {e}")
