@@ -659,7 +659,7 @@ STRINGS = {
         "alerts_menu_downtime": "{status} Downtime",
         "notifications_alert_name_downtime": "Node Downtime",
         "notifications_alert_name_res": "Resources",
-        "notifications_alert_name_logins": "SSH Logins/Logouts",
+        "notifications_alert_name_logins": "SSH Auth",
         "notifications_alert_name_bans": "Bans",
         "notifications_menu_title": "🔔 <b>Notification Settings</b>\n\nChoose which alerts you want to receive.",
         "notifications_toggle_alert": "Notifications '{alert_name}' {status}",
