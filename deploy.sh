@@ -813,8 +813,15 @@ update_bot() {
         sudo chown -R $(id -u):$(id -g) "${BOT_INSTALL_PATH}"
     fi
     cd "${BOT_INSTALL_PATH}"
+
+    # --- [FIX] Добавляем папку в безопасные, чтобы избежать ошибки ownership ---
+    git config --global --add safe.directory "${BOT_INSTALL_PATH}"
+    # -------------------------------------------------------------------------
+
     run_with_spinner "Git fetch" $exec_cmd git fetch origin
     run_with_spinner "Git reset" $exec_cmd git reset --hard "origin/${GIT_BRANCH}"
+    
+    # ... (далее код без изменений) ...
     if [ "$IS_DOCKER" = true ]; then
         local dc_cmd=""
         if sudo docker compose version &>/dev/null; then dc_cmd="docker compose"; else dc_cmd="docker-compose"; fi
