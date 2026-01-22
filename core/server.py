@@ -626,7 +626,7 @@ async def handle_dashboard(request):
                 "web_node_rename_success": _("web_node_rename_success", lang),
                 "web_node_rename_error": _("web_node_rename_error", lang),
                 "web_traffic_reset_confirm": _("web_traffic_reset_confirm", lang),
-                "traffic_reset_done": _("traffic_reset_done", lang),
+                "traffic_reset_done": _("web_traffic_reset_no_emoji", lang),
             }
         ),
     }
@@ -1050,7 +1050,7 @@ async def handle_settings_page(request):
         "web_node_rename_success": _("web_node_rename_success", lang),
         "web_node_rename_error": _("web_node_rename_error", lang),
         "web_traffic_reset_confirm": _("web_traffic_reset_confirm", lang),
-        "traffic_reset_done": _("traffic_reset_done", lang),
+        "traffic_reset_done": _("web_traffic_reset_no_emoji", lang),
     }
     for btn_key, conf_key in BTN_CONFIG_MAP.items():
         i18n_data[f"lbl_{conf_key}"] = _(btn_key, lang)
