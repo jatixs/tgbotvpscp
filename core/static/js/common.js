@@ -660,19 +660,30 @@ function createBlurOverlay(id, content) {
 
 async function clearNotifications(e) {
     if (e) e.stopPropagation();
-    const msg = (typeof I18N !== 'undefined' && I18N.web_clear_notif_confirm);
-    const title = (typeof I18N !== 'undefined' && I18N.modal_title_confirm);
+    const msg = (typeof I18N !== 'undefined' && I18N.web_clear_notif_confirm) 
+        ? I18N.web_clear_notif_confirm 
+    const title = (typeof I18N !== 'undefined' && I18N.modal_title_confirm) 
+        ? I18N.modal_title_confirm 
+        : "Confirmation";
     if (!await window.showModalConfirm(msg, title)) return;
+
     try {
         const res = await fetch('/api/notifications/clear', {
             method: 'POST'
         });
+        
         if (res.ok) {
             updateNotifUI([], 0);
-            if (window.showToast) window.showToast((typeof I18N !== 'undefined' && I18N.web_success);
+            const successMsg = (typeof I18N !== 'undefined' && I18N.web_success) 
+                ? I18N.web_success 
+                : "Success";
+                
+            if (window.showToast) window.showToast(successMsg);
         }
     } catch (e) {
         console.error("Clear notifications error:", e);
+        const errorShort = (typeof I18N !== 'undefined' && I18N.web_error_short) ? I18N.web_error_short : "Error";
+        if (window.showModalAlert) window.showModalAlert(String(e), errorShort);
     }
 }
 
