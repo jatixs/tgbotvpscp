@@ -1,8 +1,6 @@
 import asyncio
 import logging
 import psutil
-import platform
-import socket
 import aiohttp
 import os
 import re
@@ -19,7 +17,6 @@ from core.utils import (
     format_traffic,
     format_uptime,
     get_server_timezone_label,
-    get_country_flag,
     get_host_path,
     escape_html,
 )
@@ -36,9 +33,6 @@ def register_handlers(dp: Dispatcher):
 
 
 async def get_ip_data_full(ip: str):
-    """
-    Получает флаг и смещение времени (offset) для IP.
-    """
     if not ip or ip in ["localhost", "127.0.0.1", "::1"]:
         return "🏠", None
     try:
@@ -66,10 +60,6 @@ async def get_ip_data_full(ip: str):
 
 
 async def get_last_ssh_login(lang: str):
-    """
-    Парсит логи (auth.log / secure) или journalctl для поиска последнего входа
-    с определением метода авторизации и локального времени IP.
-    """
     log_files = [
         get_host_path("/var/log/auth.log"),
         get_host_path("/var/log/secure"),
@@ -83,14 +73,17 @@ async def get_last_ssh_login(lang: str):
                     stdout=asyncio.subprocess.PIPE,
                     stderr=asyncio.subprocess.PIPE,
                 )
-                stdout, _ = await proc.communicate()
+                stdout, stderr_data = await proc.communicate()
+                
                 lines = stdout.decode("utf-8", errors="ignore").splitlines()
+                
                 for line in reversed(lines):
                     match = re.search(r"Accepted\s+(\S+)\s+for\s+(\S+)\s+from\s+(\S+)", line)
                     if match:
                         method_raw = match.group(1).lower()
                         user = escape_html(match.group(2))
                         ip = escape_html(match.group(3))
+                        
                         method_key = "auth_method_unknown"
                         if "publickey" in method_raw:
                             method_key = "auth_method_key"
@@ -98,11 +91,13 @@ async def get_last_ssh_login(lang: str):
                             method_key = "auth_method_password"
                         
                         method_str = _(method_key, lang)
+
                         flag, offset = await get_ip_data_full(ip)
+                        
                         s_now = datetime.now()
                         s_tz_label = get_server_timezone_label()
-                        
                         time_str = f"{s_now.strftime('%H:%M:%S')}{s_tz_label}"
+                        
                         if offset is not None:
                             try:
                                 utc_now = datetime.now(timezone.utc)
@@ -115,6 +110,7 @@ async def get_last_ssh_login(lang: str):
                                 time_str += f" / 📍 {ip_dt.strftime('%H:%M')} ({ip_tz_label})"
                             except Exception:
                                 pass
+
                         return _(
                             "selftest_ssh_entry",
                             lang,
@@ -132,15 +128,14 @@ async def get_last_ssh_login(lang: str):
     if config.INSTALL_MODE == "root" or config.DEPLOY_MODE != "docker":
         try:
             cmd = "journalctl -u ssh -n 50 --no-pager -o cat"
-            if config.DEPLOY_MODE == "docker":
-                 pass 
             
             proc = await asyncio.create_subprocess_shell(
                 cmd,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE
             )
-            stdout, _ = await proc.communicate()
+            stdout, stderr_data = await proc.communicate()
+            
             if stdout:
                 lines = stdout.decode("utf-8", errors="ignore").splitlines()
                 for line in reversed(lines):
@@ -210,9 +205,11 @@ async def selftest_handler(message: types.Message):
         disk = psutil.disk_usage(get_host_path("/")).percent
         uptime_seconds = time.time() - psutil.boot_time()
         uptime_str = format_uptime(uptime_seconds, lang)
+
         counters = psutil.net_io_counters()
         rx_fmt = format_traffic(counters.bytes_recv, lang)
         tx_fmt = format_traffic(counters.bytes_sent, lang)
+
         ip = "n/a"
         ping = "n/a"
         inet_status = _("selftest_inet_fail", lang)
@@ -224,12 +221,14 @@ async def selftest_handler(message: types.Message):
                         ip = await resp.text()
                         ip = ip.strip()
                         inet_status = _("selftest_inet_ok", lang)
+                
                 t1 = time.time()
                 async with session.get("http://www.google.com", timeout=2) as resp:
                     if resp.status == 200:
                         ping = f"{int((time.time() - t1) * 1000)}"
         except Exception:
             pass
+
         ssh_info = ""
         if config.INSTALL_MODE == "root" or os.geteuid() == 0:
              ssh_entry = await get_last_ssh_login(lang)
