@@ -1099,6 +1099,7 @@ async def handle_settings_page(request):
         "web_traffic_interval": _("web_traffic_interval", lang),
         "web_node_timeout": _("web_node_timeout", lang),
         "web_clear_logs_btn": _("web_clear_logs_btn", lang),
+        "web_reset_traffic_btn": _("web_reset_traffic_btn", lang),
         "web_security_section": _("web_security_section", lang),
         "web_change_password_title": _("web_change_password_title", lang),
         "web_current_password": _("web_current_password", lang),
@@ -1144,7 +1145,6 @@ async def handle_settings_page(request):
     template = JINJA_ENV.get_template("settings.html")
     html = template.render(**context)
     return web.Response(text=html, content_type="text/html")
-
 
 async def handle_save_notifications(request):
     user = get_current_user(request)
