@@ -4,9 +4,9 @@
 
 <h1 align="center">🤖 VPS Manager Telegram Bot</h1>
 
-<p align="center">
-  <b >v1.16.0</b> — a powerful Telegram bot for monitoring and managing your <b>server network</b>. Now powered by <b>SQLite</b> and a fully <b>asynchronous core</b> (AsyncIO). Features <b>multi-node support</b>, a web interface, and full <b>Docker</b> integration.
-</p>
+<p align="center"> <b>v1.16.0</b> — a professional ecosystem for monitoring and managing your <b>server network</b>.
+The system is built on an <b>asynchronous core</b> (AsyncIO), <b>SQLite</b> database, and is fully integrated with <b>Docker</b>.
+Includes a modern <b>web interface</b> powered by <b>SSE</b> technology for instant monitoring and node management. </p>
 
 <p align="center">
   <a href="https://github.com/jatixs/tgbotvpscp/releases/latest"><img src="https://img.shields.io/badge/version-v1.16.0-blue?style=flat-square" alt="Version 1.16.0"/></a>
