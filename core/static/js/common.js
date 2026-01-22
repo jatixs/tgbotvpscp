@@ -680,7 +680,9 @@ async function clearNotifications(e) {
             title = I18N.modal_title_confirm;
         }
         
-        if (I18N.web_success) {
+        if (I18N.web_notifications_cleared) {
+            successMsg = I18N.web_notifications_cleared;
+        } else if (I18N.web_success) {
             successMsg = I18N.web_success;
         }
     }

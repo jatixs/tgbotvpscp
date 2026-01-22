@@ -591,6 +591,7 @@ async def handle_dashboard(request):
                 "web_copied": _("web_copied", lang),
                 "web_no_notifications": _("web_no_notifications", lang),
                 "web_clear_notifications": _("web_clear_notifications", lang),
+                "web_notifications_cleared": _("web_notifications_cleared", lang),
                 "modal_title_alert": _("modal_title_alert", lang),
                 "modal_title_confirm": _("modal_title_confirm", lang),
                 "web_clear_notif_confirm": _("web_clear_notifications", lang) + "?",
