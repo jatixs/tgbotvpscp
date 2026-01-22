@@ -25,6 +25,8 @@ MIN_UPDATE_INTERVAL = 2.0
 TRAFFIC_OFFSET = {"rx": 0, "tx": 0}
 # Время последнего восстановления (загрузки модуля)
 STARTUP_TIME = time.time()
+# Флаг: была ли перезагрузка сервера (True) или просто рестарт бота (False)
+IS_SERVER_REBOOT = True 
 
 
 def get_button() -> KeyboardButton:
@@ -46,7 +48,6 @@ def start_background_tasks(bot: Bot) -> list[asyncio.Task]:
     load_traffic_state()
     monitor_task = asyncio.create_task(traffic_monitor(bot), name="TrafficMonitor")
     backup_task = asyncio.create_task(periodic_backup_task(), name="TrafficBackup")
-    # Уведомление о старте удалено, так как теперь это делает Watchdog
     return [monitor_task, backup_task]
 
 
@@ -64,11 +65,12 @@ def get_current_traffic_total():
 
 def load_traffic_state():
     """Загружает последний бэкап и вычисляет смещение при старте."""
-    global TRAFFIC_OFFSET
+    global TRAFFIC_OFFSET, IS_SERVER_REBOOT
     try:
         backups = sorted(glob.glob(os.path.join(config.TRAFFIC_BACKUP_DIR, "traffic_backup_*.json")))
         if not backups:
             logging.info("No traffic backups found. Starting from scratch.")
+            IS_SERVER_REBOOT = True
             return
 
         last_backup_path = backups[-1]
@@ -86,15 +88,20 @@ def load_traffic_state():
             counters = psutil.net_io_counters()
             TRAFFIC_OFFSET["rx"] = backup_rx - counters.bytes_recv
             TRAFFIC_OFFSET["tx"] = backup_tx - counters.bytes_sent
-            logging.info(f"Traffic state restored (Bot restart). Offset updated.")
+            
+            IS_SERVER_REBOOT = False # Это просто рестарт бота
+            logging.info(f"Traffic state restored (Bot restart). Offset updated. Reset button hidden.")
         else:
             # Сервер был перезагружен (счетчики системы обнулились)
             TRAFFIC_OFFSET["rx"] = backup_rx
             TRAFFIC_OFFSET["tx"] = backup_tx
+            
+            IS_SERVER_REBOOT = True # Это ребут сервера
             logging.info(f"Traffic state restored (Server reboot). Offset set to last backup values.")
 
     except Exception as e:
         logging.error(f"Failed to load traffic state: {e}")
+        IS_SERVER_REBOOT = True # При ошибке считаем как чистый старт
 
 
 def save_backup_file(rx, tx):
@@ -125,6 +132,16 @@ def save_backup_file(rx, tx):
             backups.pop(0)
     except Exception as e:
         logging.error(f"Error saving traffic backup: {e}")
+
+
+def can_reset_traffic() -> bool:
+    """
+    Проверяет, можно ли показывать кнопку сброса трафика.
+    Возвращает True только если:
+    1. Произошла перезагрузка сервера (IS_SERVER_REBOOT = True)
+    2. Прошло меньше 10 минут с момента старта (600 сек)
+    """
+    return IS_SERVER_REBOOT and (time.time() - STARTUP_TIME) < 600
 
 
 async def periodic_backup_task():
@@ -165,10 +182,10 @@ async def traffic_handler(message: types.Message):
         counters = await asyncio.to_thread(psutil.net_io_counters)
         shared_state.TRAFFIC_PREV[user_id] = (counters.bytes_recv, counters.bytes_sent)
         
-        can_reset = (time.time() - STARTUP_TIME) < 600
-        
         row_actions = [InlineKeyboardButton(text=get_text("btn_stop_traffic", lang), callback_data="stop_traffic")]
-        if can_reset:
+        
+        # Проверяем условие показа кнопки сброса
+        if can_reset_traffic():
             row_actions.append(InlineKeyboardButton(text=get_text("btn_reset_traffic", lang), callback_data="reset_traffic_stats"))
             
         keyboard = InlineKeyboardMarkup(inline_keyboard=[row_actions])
@@ -194,7 +211,6 @@ async def stop_traffic_handler(callback: types.CallbackQuery):
     if message_id_to_delete:
         try:
             await bot.delete_message(chat_id=chat_id, message_id=message_id_to_delete)
-            # Итоговый отчет (summary) убран
             
             reply_markup = get_main_reply_keyboard(user_id)
             sent_menu_message = await callback.message.answer(
@@ -249,11 +265,11 @@ async def traffic_monitor(bot: Bot):
                 tx_speed = tx_delta * 8 / (1024 * 1024) / interval
                 
                 shared_state.TRAFFIC_PREV[user_id] = (rx_now, tx_now)
-
-                can_reset = (time.time() - STARTUP_TIME) < 600
                 
                 row_actions = [InlineKeyboardButton(text=get_text("btn_stop_traffic", lang), callback_data="stop_traffic")]
-                if can_reset:
+                
+                # Проверяем условие показа кнопки сброса в live-режиме
+                if can_reset_traffic():
                     row_actions.append(InlineKeyboardButton(text=get_text("btn_reset_traffic", lang), callback_data="reset_traffic_stats"))
                 
                 keyboard = InlineKeyboardMarkup(inline_keyboard=[row_actions])
@@ -285,16 +301,15 @@ async def traffic_monitor(bot: Bot):
 
 async def reset_stats_handler(callback: types.CallbackQuery):
     """Сброс статистики: удаляет файлы бэкапов и обнуляет оффсет."""
-    if (time.time() - STARTUP_TIME) > 600:
-        await callback.answer("Time expired", show_alert=True)
+    # Дополнительная проверка на сервере перед выполнением
+    if not can_reset_traffic():
+        await callback.answer("Reset not allowed or time expired", show_alert=True)
         return
         
     global TRAFFIC_OFFSET
-    # Сброс к системным значениям (как в selftest)
     TRAFFIC_OFFSET["rx"] = 0
     TRAFFIC_OFFSET["tx"] = 0
     
-    # Удаляем бэкапы
     try:
         files = glob.glob(os.path.join(config.TRAFFIC_BACKUP_DIR, "traffic_backup_*.json"))
         for f in files:
