@@ -5,13 +5,21 @@
 <h1 align="center">📝 Telegram VPS Management Bot — Список изменений</h1>
 
 <p align="center">
-	<img src="https://img.shields.io/badge/version-v1.16.0-blue?style=flat-square" alt="Version 1.16.0"/>
-	<img src="https://img.shields.io/badge/build-60-purple?style=flat-square" alt="Build 60"/>
+	<img src="https://img.shields.io/badge/version-v1.16.1-blue?style=flat-square" alt="Version 1.16.1"/>
+	<img src="https://img.shields.io/badge/build-61-purple?style=flat-square" alt="Build 61"/>
 	<img src="https://img.shields.io/badge/date-Январь%2026-green?style=flat-square" alt="Date January 2026"/>
 	<img src="https://img.shields.io/badge/status-stable-green?style=flat-square" alt="Status Stable"/>
 </p>
 
 ---
+## [1.16.1] - 2026-01-23
+
+### 🛡️ Безопасность:
+
+* **CodeQL Alerts:** Проведена работа по устранению уязвимостей и потенциальных ошибок в коде, выявленных системой статического анализа CodeQL.
+* **Оптимизация безопасности:** Исправлены критические замечания для повышения общей защищенности проекта.
+---
+
 ## [1.16.0] - 2026-01-22
 
 ### 🚀 Управление Нодами (Multi-Interface):
