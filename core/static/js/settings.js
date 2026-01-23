@@ -1630,12 +1630,19 @@ window.saveMetaData = async function() {
             body: JSON.stringify(data)
         });
 
-        if (res.ok) {
+if (res.ok) {
             // Успех
             const successTitle = (typeof I18N !== 'undefined' && I18N.web_success) ? I18N.web_success : "Success";
-            const successMsg = locked 
-                ? "Settings saved and LOCKED forever. Reloading..." 
+            
+            const msgNormal = (typeof I18N !== 'undefined' && I18N.web_meta_success) 
+                ? I18N.web_meta_success 
                 : "Metadata updated successfully.";
+                
+            const msgLocked = (typeof I18N !== 'undefined' && I18N.web_meta_locked_alert) 
+                ? I18N.web_meta_locked_alert 
+                : "Settings saved and LOCKED forever. Reloading...";
+
+            const successMsg = locked ? msgLocked : msgNormal;
                 
             await window.showModalAlert(successMsg, successTitle);
             

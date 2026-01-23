@@ -269,32 +269,55 @@ cleanup_agent_files() {
     sudo rm -rf node
 }
 
-# --- CLEANUP TRASH AFTER INSTALL ---
-cleanup_files() {
-    msg_info "🧹 Starting cleanup..."
+# --- CLEANUP FUNCTIONS ---
 
+# 1. Common cleanup
+cleanup_common_trash() {
+    msg_info "🧹 Starting cleanup..."
     if [ -d "$BOT_INSTALL_PATH/.github" ]; then sudo rm -rf "$BOT_INSTALL_PATH/.github"; fi
     if [ -d "$BOT_INSTALL_PATH/assets" ]; then sudo rm -rf "$BOT_INSTALL_PATH/assets"; fi
-
-    sudo rm -f "$BOT_INSTALL_PATH/custom_module.md"
-    sudo rm -f "$BOT_INSTALL_PATH/custom_module_en.md"
-    sudo rm -f "$BOT_INSTALL_PATH/.gitignore"
-    sudo rm -f "$BOT_INSTALL_PATH/LICENSE"
-    
-    sudo rm -f "$BOT_INSTALL_PATH/README.md"
-    sudo rm -f "$BOT_INSTALL_PATH/README.en.md"
-
+    sudo rm -f "$BOT_INSTALL_PATH/custom_module.md" "$BOT_INSTALL_PATH/custom_module_en.md"
+    sudo rm -f "$BOT_INSTALL_PATH/.gitignore" "$BOT_INSTALL_PATH/LICENSE"
+    sudo rm -f "$BOT_INSTALL_PATH/README.md" "$BOT_INSTALL_PATH/README.en.md"
     sudo find "$BOT_INSTALL_PATH" -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null
-    
-    msg_success "Cleanup complete."
+}
+
+# 2. Cleanup for Systemd (removes Docker files & Node)
+cleanup_for_systemd() {
+    cleanup_common_trash
+    msg_info "🧹 Removing Docker & Node files..."
+    sudo rm -rf "${BOT_INSTALL_PATH}/node"
+    sudo rm -f "${BOT_INSTALL_PATH}/Dockerfile" "${BOT_INSTALL_PATH}/docker-compose.yml"
+}
+
+# 3. Cleanup for Docker (removes source code & Node)
+cleanup_for_docker() {
+    cleanup_common_trash
+    msg_info "🧹 Removing source code (already in container)..."
+    cd "${BOT_INSTALL_PATH}"
+    # Remove Node
+    sudo rm -rf node
+    # Remove bot source (inside image)
+    sudo rm -rf core modules bot.py watchdog.py requirements.txt manage.py migrate.py aerich.ini
+    # Remove Dockerfile (image built)
+    sudo rm -f Dockerfile
+    # KEEP: docker-compose.yml, .env, config/, logs/, deploy.sh
+}
+
+# 4. Cleanup for Node (removes everything except node/)
+cleanup_for_node() {
+    cleanup_common_trash
+    msg_info "🧹 Removing Agent files..."
+    cd ${BOT_INSTALL_PATH}
+    sudo rm -rf core modules bot.py watchdog.py Dockerfile docker-compose.yml .git .github config/users.json config/alerts_config.json deploy.sh deploy_en.sh requirements.txt README* LICENSE CHANGELOG* .gitignore aerich.ini
 }
 
 install_extras() {
     if ! command -v fail2ban-client &> /dev/null; then
-        msg_question "Fail2Ban not found. Install? (y/n): " I; if [[ "$I" =~ ^[Yy]$ ]]; then run_with_spinner "Installing Fail2ban" sudo apt-get install -y -q -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" fail2ban; fi
+        msg_question "Fail2Ban not found. Install? (y/n): " I; if [[ "$I" =~ ^[Yy]$ ]]; then run_with_spinner "Installing Fail2ban" sudo apt-get install -y -q fail2ban; fi
     fi
     if ! command -v iperf3 &> /dev/null; then
-        msg_question "iperf3 not found. Install? (y/n): " I; if [[ "$I" =~ ^[Yy]$ ]]; then run_with_spinner "Installing iperf3" sudo apt-get install -y -q -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" iperf3; fi
+        msg_question "iperf3 not found. Install? (y/n): " I; if [[ "$I" =~ ^[Yy]$ ]]; then run_with_spinner "Installing iperf3" sudo apt-get install -y -q iperf3; fi
     fi
 }
 
@@ -533,8 +556,11 @@ install_systemd_logic() {
     write_env_file "systemd" "$mode" ""
 
     run_db_migrations "$exec_cmd"
+    
+    # --- CLEANUP SYSTEMD ---
+    cleanup_for_systemd
+    # -----------------------
 
-    cleanup_files
     create_and_start_service "${SERVICE_NAME}" "${BOT_INSTALL_PATH}/bot.py" "$mode" "Telegram Bot"
     create_and_start_service "${WATCHDOG_SERVICE_NAME}" "${BOT_INSTALL_PATH}/watchdog.py" "root" "Watchdog"
     cleanup_agent_files
@@ -602,6 +628,10 @@ install_docker_logic() {
     msg_info "Migrating JSON files in container..."
     # Pass MIGRATE_ARGS
     sudo $dc_cmd --profile "${mode}" exec -T ${container_name} python migrate.py $MIGRATE_ARGS >/dev/null 2>&1
+    
+    # --- CLEANUP DOCKER (AFTER BUILD) ---
+    cleanup_for_docker
+    # ------------------------------------
     
     # --- CLI UTILS ---
     msg_info "Creating 'tgcp-bot' command (Docker Wrapper)..."
@@ -678,6 +708,11 @@ RestartSec=10
 WantedBy=multi-user.target
 EOF
     sudo systemctl daemon-reload; sudo systemctl enable ${NODE_SERVICE_NAME}
+    
+    # --- CLEANUP NODE ---
+    cleanup_for_node
+    # --------------------
+    
     cleanup_node_files
     run_with_spinner "Starting Node" sudo systemctl restart ${NODE_SERVICE_NAME}
     msg_success "Node installed!"
@@ -738,11 +773,9 @@ update_bot() {
         fi
     fi
 
-    cleanup_agent_files
-    cleanup_files
+    # Cleanup before build is not needed, files already reset. Cleanup happens at the end.
 
     local current_mode=$(grep '^DEPLOY_MODE=' "${ENV_FILE}" | cut -d'=' -f2 | tr -d '"')
-    
     if [ "$current_mode" == "docker" ]; then
         if [ -f "docker-compose.yml" ]; then
             local dc_cmd=""; if sudo docker compose version &>/dev/null; then dc_cmd="docker compose"; else dc_cmd="docker-compose"; fi
@@ -750,12 +783,12 @@ update_bot() {
             local mode=$(grep '^INSTALL_MODE=' "${ENV_FILE}" | cut -d'=' -f2 | tr -d '"')
             local cn="tg-bot-${mode}"
             sudo $dc_cmd --profile "${mode}" exec -T ${cn} aerich upgrade >/dev/null 2>&1
-
-            msg_info "Migrating JSON files in Docker..."
-            # Pass MIGRATE_ARGS
             sudo $dc_cmd --profile "${mode}" exec -T ${cn} python migrate.py $MIGRATE_ARGS >/dev/null 2>&1
             
-            msg_info "Updating CLI 'tgcp-bot'..."
+            # --- CLEANUP DOCKER (AFTER UPDATE) ---
+            cleanup_for_docker
+            # -------------------------------------
+            
             sudo bash -c "cat > /usr/local/bin/tgcp-bot" <<EOF
 #!/bin/bash
 cd ${BOT_INSTALL_PATH}
@@ -775,9 +808,13 @@ EOF
         run_with_spinner "Updating pip" $exec_cmd "${VENV_PATH}/bin/pip" install -r "${BOT_INSTALL_PATH}/requirements.txt" --upgrade
         run_with_spinner "Updating tomlkit" $exec_cmd "${VENV_PATH}/bin/pip" install tomlkit
 
+        # Pass args to db_migration
         run_db_migrations "$exec_cmd"
         
-        msg_info "Updating CLI 'tgcp-bot'..."
+        # --- CLEANUP SYSTEMD (AFTER UPDATE) ---
+        cleanup_for_systemd
+        # --------------------------------------
+
         sudo bash -c "cat > /usr/local/bin/tgcp-bot" <<EOF
 #!/bin/bash
 cd ${BOT_INSTALL_PATH}

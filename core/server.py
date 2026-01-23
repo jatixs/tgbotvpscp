@@ -1078,6 +1078,8 @@ async def handle_settings_page(request):
         "web_seo_btn_default": _("web_seo_btn_default", lang),
         "web_seo_paste_help": _("web_seo_paste_help", lang),
         "web_image_pasted": _("web_image_pasted", lang),
+        "web_meta_success": _("web_meta_success", lang),
+        "web_meta_locked_alert": _("web_meta_locked_alert", lang),
 
     }
     for btn_key, conf_key in BTN_CONFIG_MAP.items():
