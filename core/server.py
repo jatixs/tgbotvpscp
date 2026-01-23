@@ -571,6 +571,8 @@ async def handle_dashboard(request):
         "web_logout": _("web_logout", lang),
         "web_access_denied": _("web_access_denied", lang),
         "web_logs_protected_desc": _("web_logs_protected_desc", lang),
+        "web_logs_empty_title": _("web_logs_empty_title", lang),
+        "web_logs_empty_desc": _("web_logs_empty_desc", lang),
         "web_node_last_seen_label": _("web_node_last_seen", lang),
         "web_node_traffic": _("web_node_traffic", lang),
         "web_reset_traffic_btn": _("web_reset_traffic_btn", lang),
