@@ -66,6 +66,9 @@ run_with_spinner() {
     if [ $exit_code -ne 0 ]; then
         msg_error "Ошибка во время '$msg'. Код: $exit_code"
         msg_error "Подробности в логе: /tmp/${SERVICE_NAME}_install.log"
+        # Выводим последние 10 строк лога для диагностики
+        echo -e "${C_YELLOW}Последние строки лога (/tmp/${SERVICE_NAME}_install.log):${C_RESET}"
+        tail -n 10 /tmp/${SERVICE_NAME}_install.log
     fi
     return $exit_code
 }
@@ -99,9 +102,8 @@ check_integrity() {
 
     # --- ПРОВЕРКА ЦЕЛОСТНОСТИ (Local vs Remote Branch) ---
     if [ -d "${BOT_INSTALL_PATH}/.git" ]; then
+        # Обновляем информацию о ветках (тихо) и проверяем, существует ли ветка
         cd "${BOT_INSTALL_PATH}" || return
-        
-        # Обновляем информацию о ветках (тихо)
         git fetch origin "$GIT_BRANCH" >/dev/null 2>&1
         
         # Сравниваем указанные папки/файлы с удаленной веткой
@@ -701,6 +703,9 @@ update_bot() {
     if [ -f "${ENV_FILE}" ] && grep -q "MODE=node" "${ENV_FILE}"; then msg_info "Обновление Ноды..."; install_node_logic; return; fi
     if [ ! -d "${BOT_INSTALL_PATH}/.git" ]; then msg_error "Git не найден. Переустановите."; return 1; fi
 
+    # Очистка лога перед началом, чтобы не путать пользователя старыми ошибками
+    echo "" > /tmp/${SERVICE_NAME}_install.log
+
     local exec_cmd=""
     if [ -f "${ENV_FILE}" ] && grep -q "INSTALL_MODE=secure" "${ENV_FILE}"; then exec_cmd="sudo -u ${SERVICE_USER}"; fi
 
@@ -725,7 +730,10 @@ update_bot() {
     cleanup_agent_files
     cleanup_files
 
-    if [ -f "${ENV_FILE}" ] && grep -q "DEPLOY_MODE=docker" "${ENV_FILE}"; then
+    # СТРОГАЯ ПРОВЕРКА РЕЖИМА (исправление бага "смешивания")
+    local current_mode=$(grep '^DEPLOY_MODE=' "${ENV_FILE}" | cut -d'=' -f2 | tr -d '"')
+    
+    if [ "$current_mode" == "docker" ]; then
         if [ -f "docker-compose.yml" ]; then
             local dc_cmd=""; if sudo docker compose version &>/dev/null; then dc_cmd="docker compose"; else dc_cmd="docker-compose"; fi
             if ! run_with_spinner "Docker Up" sudo $dc_cmd up -d --build; then msg_error "Ошибка Docker."; return 1; fi
@@ -754,6 +762,7 @@ EOF
 
         else msg_error "Нет docker-compose.yml"; return 1; fi
     else
+        # SYSTEMD (по умолчанию, если не docker)
         run_with_spinner "Обновление pip" $exec_cmd "${VENV_PATH}/bin/pip" install -r "${BOT_INSTALL_PATH}/requirements.txt" --upgrade
         run_with_spinner "Обновление tomlkit" $exec_cmd "${VENV_PATH}/bin/pip" install tomlkit
 
