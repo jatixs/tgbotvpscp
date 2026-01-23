@@ -616,6 +616,7 @@ install_systemd_logic() {
         if [ ! -d "${VENV_PATH}" ]; then sudo -u ${SERVICE_USER} ${PYTHON_BIN} -m venv "${VENV_PATH}"; fi
         
         if $install_pip; then
+            run_with_spinner "Updating pip" sudo -u ${SERVICE_USER} "${VENV_PATH}/bin/pip" install --upgrade pip
             run_with_spinner "Installing dependencies" sudo -u ${SERVICE_USER} "${VENV_PATH}/bin/pip" install -r "${BOT_INSTALL_PATH}/requirements.txt"
             run_with_spinner "Installing extra packages (tomlkit)" sudo -u ${SERVICE_USER} "${VENV_PATH}/bin/pip" install tomlkit
             update_state_hash "REQ_HASH" "$req_hash"
@@ -626,7 +627,8 @@ install_systemd_logic() {
         
         if [ ! -d "${VENV_PATH}" ]; then ${PYTHON_BIN} -m venv "${VENV_PATH}"; fi
 
-        if $install_pip; then
+	if $install_pip; then
+            run_with_spinner "Updating pip" "${VENV_PATH}/bin/pip" install --upgrade pip
             run_with_spinner "Installing dependencies" "${VENV_PATH}/bin/pip" install -r "${BOT_INSTALL_PATH}/requirements.txt"
             run_with_spinner "Installing extra packages (tomlkit)" "${VENV_PATH}/bin/pip" install tomlkit
             update_state_hash "REQ_HASH" "$req_hash"
@@ -787,6 +789,7 @@ install_node_logic() {
     fi
 
     if $install_pip; then
+        run_with_spinner "Updating pip" "${VENV_PATH}/bin/pip" install --upgrade pip
         run_with_spinner "Installing dependencies" "${VENV_PATH}/bin/pip" install psutil requests
         update_state_hash "NODE_REQ_HASH" "$node_deps_hash"
     fi
@@ -890,7 +893,8 @@ EOF
         if check_hash_match "REQ_HASH" "$req_hash"; then
              msg_success "Dependencies have not changed. Skipping PIP update."
         else
-             run_with_spinner "Updating pip" $exec_cmd "${VENV_PATH}/bin/pip" install -r "${BOT_INSTALL_PATH}/requirements.txt" --upgrade
+             run_with_spinner "Updating pip" $exec_cmd "${VENV_PATH}/bin/pip" install --upgrade pip
+             run_with_spinner "Updating dependencies" $exec_cmd "${VENV_PATH}/bin/pip" install -r "${BOT_INSTALL_PATH}/requirements.txt" --upgrade
              run_with_spinner "Updating tomlkit" $exec_cmd "${VENV_PATH}/bin/pip" install tomlkit
              update_state_hash "REQ_HASH" "$req_hash"
         fi

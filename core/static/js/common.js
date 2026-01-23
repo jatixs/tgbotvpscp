@@ -219,9 +219,8 @@ async function addNodeDash() {
     if (!n) return;
     
     const btn = document.getElementById('btnAddNodeDash');
-    const originalText = btn.innerText;
+    const originalHTML = btn.innerHTML;
     
-    // Fix width to prevent jumping
     if (btn) {
         btn.style.width = getComputedStyle(btn).width;
         btn.disabled = true;
@@ -263,13 +262,12 @@ async function addNodeDash() {
         window.showModalAlert(e, errTxt);
     } finally {
         if (btn) {
-            btn.innerHTML = originalText;
+            btn.innerHTML = originalHTML;
             btn.style.width = '';
-            validateNodeInput(); // Re-check validity
+            validateNodeInput();
         }
     }
 }
-
 function isHolidayPeriod() {
     const now = new Date();
     return (now.getMonth() === 11 && now.getDate() === 31) || (now.getMonth() === 0 && now.getDate() <= 14);

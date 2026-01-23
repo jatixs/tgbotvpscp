@@ -56,9 +56,9 @@ async def cmd_webpass(args):
 
     utils.update_env_variable("TG_WEB_INITIAL_PASSWORD", new_pass)
     print(f"✅ Пароль Web-панели изменен.")
-    print(f"🔑 Новый пароль: {new_pass}")
+    print(f"🔑 Новый пароль сохранен в файле .env")
     print("ℹ️  Перезапустите бота для применения: tgcp-bot restart")
-
+    
 
 async def cmd_stats(args):
     await init_services()
