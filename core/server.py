@@ -1082,6 +1082,7 @@ async def handle_settings_page(request):
         "web_image_pasted": _("web_image_pasted", lang),
         "web_meta_success": _("web_meta_success", lang),
         "web_meta_locked_alert": _("web_meta_locked_alert", lang),
+        "web_notifications_cleared": _("web_notifications_cleared", lang),
 
     }
     for btn_key, conf_key in BTN_CONFIG_MAP.items():
