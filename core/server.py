@@ -246,18 +246,24 @@ def check_telegram_auth(data, bot_token):
 
 async def handle_get_logs(request):
     user = get_current_user(request)
-    if not user or user["role"] != "admins":
+    if not user or user['role'] != 'admins':
         return web.json_response({"error": "Unauthorized"}, status=403)
+    lang = get_user_lang(user['id'])
+    
     log_path = os.path.join(BASE_DIR, "logs", "bot", "bot.log")
+    
     if not os.path.exists(log_path):
-        return web.json_response({"logs": ["Logs not found."]})
+        return web.json_response({"logs": [
+            _("web_logs_empty_title", lang),
+            _("web_logs_empty_desc", lang)
+        ]})
+        
     try:
         with open(log_path, "r", encoding="utf-8", errors="ignore") as f:
             lines = list(deque(f, 300))
         return web.json_response({"logs": lines})
     except Exception as e:
         return web.json_response({"error": str(e)}, status=500)
-
 
 async def handle_get_sys_logs(request):
     user = get_current_user(request)
@@ -571,8 +577,6 @@ async def handle_dashboard(request):
         "web_logout": _("web_logout", lang),
         "web_access_denied": _("web_access_denied", lang),
         "web_logs_protected_desc": _("web_logs_protected_desc", lang),
-        "web_logs_empty_title": _("web_logs_empty_title", lang),
-        "web_logs_empty_desc": _("web_logs_empty_desc", lang),
         "web_node_last_seen_label": _("web_node_last_seen", lang),
         "web_node_traffic": _("web_node_traffic", lang),
         "web_reset_traffic_btn": _("web_reset_traffic_btn", lang),
