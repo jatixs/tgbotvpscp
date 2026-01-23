@@ -409,84 +409,86 @@ async function clearLogs() {
     const btn = document.getElementById('clearLogsBtn');
     const originalHTML = btn.innerHTML;
     
-    // 1. Фиксируем ширину
+    // 1. Фиксируем и ШИРИНУ, и ВЫСОТУ перед изменениями
+    // Это гарантирует, что кнопка останется "каменной" и не дернется ни на пиксель
     btn.style.width = getComputedStyle(btn).width;
-
-    // 2. Убираем классы, которые могут вызывать анимацию (hover)
-    const hoverClasses = ['hover:pr-4', 'group'];
+    btn.style.height = getComputedStyle(btn).height;
+    
     const redClasses = ['bg-red-50', 'dark:bg-red-900/10', 'border-red-200', 'dark:border-red-800', 'text-red-600', 'dark:text-red-400', 'hover:bg-red-100', 'dark:hover:bg-red-900/30', 'active:bg-red-200'];
-    const greenClasses = ['bg-green-600', 'text-white', 'border-transparent', 'hover:bg-green-500', 'px-3', 'py-2'];
+    // Заменили border-transparent на border-green-600, чтобы сохранить толщину границы (обводку)
+    const greenClasses = ['bg-green-600', 'text-white', 'border-green-600', 'hover:bg-green-500'];
 
-    btn.classList.remove(...hoverClasses); 
     btn.disabled = true;
     
-    // Спиннер при загрузке
-    btn.innerHTML = `<svg class="animate-spin h-4 w-4 mx-auto" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>`;
+    // Центрируем спиннер
+    btn.innerHTML = `<div class="flex items-center justify-center w-full h-full"><svg class="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg></div>`;
 
     try {
         const res = await fetch('/api/logs/clear', {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                type: 'all'
-            })
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ type: 'all' })
         });
         if (res.ok) {
             btn.classList.remove(...redClasses);
             btn.classList.add(...greenClasses);
             
-            // Используем текст из I18N
-            const doneText = I18N.web_logs_cleared_alert;
-            btn.innerHTML = `<div class="flex items-center justify-center gap-2"><svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg> <span class="text-[10px] font-bold uppercase tracking-wider">${doneText}</span></div>`;
+            // 2. Добавлен класс leading-4 (высота строки 16px, как у text-xs)
+            // Это предотвращает визуальное "сплющивание" текста внутри кнопки
+            btn.innerHTML = `<div class="flex items-center justify-center gap-2 w-full h-full"><svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-white shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg> <span class="whitespace-nowrap text-[10px] font-bold uppercase tracking-wider leading-4">${I18N.web_logs_cleared_alert}</span></div>`;
             
             setTimeout(() => {
                 btn.innerHTML = originalHTML;
                 btn.classList.remove(...greenClasses);
                 btn.classList.add(...redClasses);
-                btn.classList.add(...hoverClasses); // Возвращаем hover эффект
-                btn.style.width = ''; // Сбрасываем ширину
+                
+                // 3. Сбрасываем фиксацию размеров
+                btn.style.width = ''; 
+                btn.style.height = ''; 
                 btn.disabled = false;
             }, 2000);
         } else {
             const data = await res.json();
-            const errorShort = (typeof I18N !== 'undefined' && I18N.web_error_short) ? I18N.web_error_short : "Error";
-            await window.showModalAlert(I18N.web_error.replace('{error}', data.error || "Failed"), errorShort);
+            await window.showModalAlert(I18N.web_error.replace('{error}', data.error || "Failed"), 'Ошибка');
             
-            // Возврат состояния при ошибке
+            // Сброс при ошибке
             btn.disabled = false;
             btn.innerHTML = originalHTML;
-            btn.classList.add(...hoverClasses);
-            btn.style.width = '';
+            btn.style.width = ''; 
+            btn.style.height = ''; 
         }
     } catch (e) {
-        const errorShort = (typeof I18N !== 'undefined' && I18N.web_conn_error_short) ? I18N.web_conn_error_short : "Conn Error";
-        await window.showModalAlert(I18N.web_conn_error.replace('{error}', e), errorShort);
+        await window.showModalAlert(I18N.web_conn_error.replace('{error}', e), 'Ошибка соединения');
         
-        // Возврат состояния при ошибке
+        // Сброс при ошибке
         btn.disabled = false;
         btn.innerHTML = originalHTML;
-        btn.classList.add(...hoverClasses);
-        btn.style.width = '';
+        btn.style.width = ''; 
+        btn.style.height = ''; 
     }
 }
 
 async function resetTrafficSettings() {
-    if (!await window.showModalConfirm(I18N.web_traffic_reset_confirm, I18N.modal_title_confirm)) return;
+    if (!await window.showModalConfirm(I18N.web_traffic_reset_confirm || "Are you sure? This will zero out the counters.", I18N.modal_title_confirm)) return;
 
     const btn = document.getElementById('resetTrafficBtn');
     const originalHTML = btn.innerHTML;
+    
+    // 1. Фиксируем ширину и высоту перед стартом ("замораживаем" размер)
     btn.style.width = getComputedStyle(btn).width;
+    btn.style.height = getComputedStyle(btn).height;
     
     const hoverClasses = ['hover:pr-4', 'group'];
     const redClasses = ['bg-red-50', 'dark:bg-red-900/10', 'border-red-200', 'dark:border-red-800', 'text-red-600', 'dark:text-red-400', 'hover:bg-red-100', 'dark:hover:bg-red-900/30', 'active:bg-red-200'];
-    const greenClasses = ['bg-green-600', 'text-white', 'border-transparent', 'hover:bg-green-500', 'px-3', 'py-2'];
+    
+    // Убрали px-3 py-2, чтобы не уменьшать кнопку. Добавили border-green-600 для сохранения толщины рамки.
+    const greenClasses = ['bg-green-600', 'text-white', 'border-green-600', 'hover:bg-green-500'];
+
     btn.classList.remove(...hoverClasses);
     btn.disabled = true;
     
-    // Показываем спиннер
-    btn.innerHTML = `<svg class="animate-spin h-4 w-4 mx-auto" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>`;
+    // Центрируем спиннер
+    btn.innerHTML = `<div class="flex items-center justify-center w-full h-full"><svg class="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg></div>`;
 
     try {
         const res = await fetch('/api/traffic/reset', { method: 'POST' });
@@ -494,32 +496,44 @@ async function resetTrafficSettings() {
             btn.classList.remove(...redClasses);
             btn.classList.add(...greenClasses);
             
-            const doneText = I18N.web_traffic_reset_no_emoji;
-            btn.innerHTML = `<div class="flex items-center justify-center gap-2"><svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg> <span class="text-[10px] font-bold uppercase tracking-wider">${doneText}</span></div>`;
+            const doneText = (typeof I18N !== 'undefined' && I18N.web_traffic_reset_no_emoji) ? I18N.web_traffic_reset_no_emoji : "Done!";
+            
+            // 2. Статус успеха:
+            // text-[10px] - уменьшенный шрифт
+            // leading-4 - высота строки 16px (стандартная), чтобы кнопка не сплющивалась
+            btn.innerHTML = `<div class="flex items-center justify-center gap-2 w-full h-full"><svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-white shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg> <span class="whitespace-nowrap text-[10px] font-bold uppercase tracking-wider leading-4">${doneText}</span></div>`;
+            
             setTimeout(() => {
                 btn.innerHTML = originalHTML;
                 btn.classList.remove(...greenClasses);
                 btn.classList.add(...redClasses);
                 btn.classList.add(...hoverClasses);
+                
+                // 3. Сбрасываем фиксацию размеров
                 btn.style.width = '';
+                btn.style.height = '';
                 btn.disabled = false;
             }, 2000);
         } else {
             const data = await res.json();
             const errorShort = (typeof I18N !== 'undefined' && I18N.web_error_short) ? I18N.web_error_short : "Error";
             await window.showModalAlert(I18N.web_error.replace('{error}', data.error || "Failed"), errorShort);
+            
             btn.disabled = false;
             btn.innerHTML = originalHTML;
             btn.classList.add(...hoverClasses);
             btn.style.width = '';
+            btn.style.height = '';
         }
     } catch (e) {
         const errorShort = (typeof I18N !== 'undefined' && I18N.web_conn_error_short) ? I18N.web_conn_error_short : "Conn Error";
         await window.showModalAlert(I18N.web_conn_error.replace('{error}', e), errorShort);
+        
         btn.disabled = false;
         btn.innerHTML = originalHTML;
         btn.classList.add(...hoverClasses);
         btn.style.width = '';
+        btn.style.height = '';
     }
 }
 function renderUsers() {
@@ -1442,6 +1456,7 @@ async function resetTrafficSettings() {
     const btn = document.getElementById('resetTrafficBtn');
     const originalHTML = btn.innerHTML;
     
+    // Фиксируем ширину, чтобы избежать скачков при загрузке
     btn.style.width = getComputedStyle(btn).width;
     
     const hoverClasses = ['hover:pr-4', 'group'];
@@ -1459,8 +1474,13 @@ async function resetTrafficSettings() {
             btn.classList.remove(...redClasses);
             btn.classList.add(...greenClasses);
             
+            // Если текст длиннее кнопки, убираем фиксацию ширины для статуса успеха
+            btn.style.width = ''; 
+            
             const doneText = (typeof I18N !== 'undefined' && I18N.web_traffic_reset_no_emoji) ? I18N.web_traffic_reset_no_emoji : "Done!";
-            btn.innerHTML = `<div class="flex items-center justify-center gap-2"><svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg> <span class="text-[10px] font-bold uppercase tracking-wider">${doneText}</span></div>`;
+            
+            // ДОБАВЛЕНО: whitespace-nowrap
+            btn.innerHTML = `<div class="flex items-center justify-center gap-2"><svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg> <span class="text-[10px] font-bold uppercase tracking-wider whitespace-nowrap">${doneText}</span></div>`;
             
             setTimeout(() => {
                 btn.innerHTML = originalHTML;
@@ -1490,6 +1510,7 @@ async function resetTrafficSettings() {
         btn.style.width = '';
     }
 }
+
 let settingsBtnTimer = null;
 
 async function handleSettingsBtnClick(btn, actionCallback) {
