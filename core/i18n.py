@@ -563,6 +563,9 @@ STRINGS = {
         "web_seo_lock_label": "Больше не редактировать",
         "web_seo_lock_desc": "Если отметить эту опцию, кнопка настроек исчезнет навсегда.",
         "web_meta_lock_confirm": "ВНИМАНИЕ: Вы собираетесь заблокировать SEO настройки навсегда. Кнопка SEO настроек исчезнет, и вы больше не сможете изменить эти данные. Продолжить?",
+        "web_seo_btn_default": "По умолчанию",
+        "web_seo_paste_help": "Можно вставить картинку (Ctrl+V)",
+        "web_image_pasted": "Изображение вставлено из буфера обмена!",
     },
     
     "en": {
@@ -1119,6 +1122,9 @@ STRINGS = {
         "web_seo_lock_label": "Lock Configuration Forever",
         "web_seo_lock_desc": "If checked, this button will disappear forever.",
         "web_meta_lock_confirm": "WARNING: You are about to lock SEO settings forever. The SEO Config button will disappear and you won't be able to change this data anymore. Continue?",
+        "web_seo_btn_default": "Default",
+        "web_seo_paste_help": "Paste image (Ctrl+V) supported",
+        "web_image_pasted": "Image pasted from clipboard!",
     },
 }
 

@@ -4,6 +4,7 @@ GIT_BRANCH="main"
 AUTO_AGENT_URL=""
 AUTO_NODE_TOKEN=""
 AUTO_MODE=false
+MIGRATE_ARGS=""
 
 for arg in "$@"; do
     case $arg in
@@ -511,7 +512,7 @@ run_db_migrations() {
     # 6. Запуск БЕЗОПАСНОЙ миграции JSON -> Encrypted (Backup -> Re-encrypt -> Replace)
     msg_info "Безопасная миграция конфигурации..."
     if [ -f "${BOT_INSTALL_PATH}/migrate.py" ]; then
-        $cmd_prefix ${VENV_PATH}/bin/python "${BOT_INSTALL_PATH}/migrate.py"
+        $cmd_prefix ${VENV_PATH}/bin/python "${BOT_INSTALL_PATH}/migrate.py" $MIGRATE_ARGS
     else
         msg_warning "Скрипт migrate.py не найден, пропускаем шифрование JSON."
     fi
@@ -613,7 +614,7 @@ install_docker_logic() {
     sudo $dc_cmd --profile "${mode}" exec -T ${container_name} aerich upgrade >/dev/null 2>&1
 
     msg_info "Миграция JSON файлов в контейнере..."
-    sudo $dc_cmd --profile "${mode}" exec -T ${container_name} python migrate.py >/dev/null 2>&1
+    sudo $dc_cmd --profile "${mode}" exec -T ${container_name} python migrate.py $MIGRATE_ARGS >/dev/null 2>&1
     
     # --- CLI UTILS ---
     msg_info "Создание команды 'tgcp-bot' (Docker Wrapper)..."
@@ -724,6 +725,18 @@ update_bot() {
     local exec_cmd=""
     if [ -f "${ENV_FILE}" ] && grep -q "INSTALL_MODE=secure" "${ENV_FILE}"; then exec_cmd="sudo -u ${SERVICE_USER}"; fi
 
+    MIGRATE_ARGS=""
+    if [ -f "${BOT_INSTALL_PATH}/config/system_config.json" ]; then
+        echo ""
+        echo -e "${C_CYAN}🔍 Проверка конфигурации...${C_RESET}"
+        echo "❓ Хотите сбросить мета-данные WebUI (заголовок, фавикон, SEO) до стандартных?"
+        read -p "Сбросить? (y/N): " reset_meta_answer
+        
+        if [[ "$reset_meta_answer" =~ ^[Yy]$ ]]; then
+            MIGRATE_ARGS="--reset-meta"
+            echo -e "${C_YELLOW}⚠️  Будет выполнен сброс мета-данных.${C_RESET}"
+        fi
+    fi
     cd "${BOT_INSTALL_PATH}"
     if ! run_with_spinner "Git fetch" $exec_cmd git fetch origin; then return 1; fi
     if ! run_with_spinner "Git reset" $exec_cmd git reset --hard "origin/${GIT_BRANCH}"; then return 1; fi
@@ -758,7 +771,7 @@ update_bot() {
             sudo $dc_cmd --profile "${mode}" exec -T ${cn} aerich upgrade >/dev/null 2>&1
 
             msg_info "Миграция JSON файлов в Docker..."
-            sudo $dc_cmd --profile "${mode}" exec -T ${cn} python migrate.py >/dev/null 2>&1
+            sudo $dc_cmd --profile "${mode}" exec -T ${cn} python migrate.py $MIGRATE_ARGS >/dev/null 2>&1
             
             # Обновление CLI wrapper для докера (на всякий случай)
             msg_info "Обновление CLI 'tgcp-bot'..."

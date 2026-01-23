@@ -167,13 +167,13 @@ document.addEventListener("DOMContentLoaded", () => {
         window.initSettings();
     }
     
-    // Favicon Preview Logic
+    // Favicon Preview & Paste Logic
     const favInput = document.getElementById('meta_favicon');
     const favImg = document.getElementById('faviconPreview');
     const favFallback = document.getElementById('faviconFallback');
     
     if (favInput && favImg) {
-        favInput.addEventListener('input', () => {
+        const updatePreview = () => {
             if (favInput.value.trim()) {
                 favImg.src = favInput.value.trim();
                 favImg.style.display = 'block';
@@ -182,14 +182,51 @@ document.addEventListener("DOMContentLoaded", () => {
                 favImg.style.display = 'none';
                 if(favFallback) favFallback.style.display = 'block';
             }
-        });
-        // Error handling
+        };
+
+        favInput.addEventListener('input', updatePreview);
+        
+        // Обработка ошибок загрузки картинки
         favImg.addEventListener('error', () => {
             favImg.style.display = 'none';
             if(favFallback) favFallback.style.display = 'block';
         });
+
+        // Paste (Ctrl+V) handler
+        favInput.addEventListener('paste', (e) => {
+            const items = (e.clipboardData || e.originalEvent.clipboardData).items;
+            let blob = null;
+            for (let i = 0; i < items.length; i++) {
+                if (items[i].type.indexOf("image") === 0) {
+                    blob = items[i].getAsFile();
+                    break;
+                }
+            }
+            if (blob !== null) {
+                e.preventDefault();
+                const reader = new FileReader();
+                reader.onload = function(event) {
+                    favInput.value = event.target.result;
+                    updatePreview();
+                    const msg = (typeof I18N !== 'undefined' && I18N.web_image_pasted) 
+                        ? I18N.web_image_pasted 
+                        : "Image pasted from clipboard!";
+                    if(window.showToast) window.showToast(msg);
+                };
+                reader.readAsDataURL(blob);
+            }
+        });
     }
 });
+
+// Функция установки иконки по умолчанию (добавить в любое место, например перед window.openMetaModal)
+window.setDefaultFavicon = function() {
+    const input = document.getElementById('meta_favicon');
+    if (input) {
+        input.value = '/static/favicon.ico';
+        input.dispatchEvent(new Event('input'));
+    }
+};
 
 let activeCounterRafId = null;
 

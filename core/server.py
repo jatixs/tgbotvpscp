@@ -1075,6 +1075,9 @@ async def handle_settings_page(request):
         "web_update_started_alert": _("web_update_started_alert", lang),
         "web_logs_cleared_alert": _("web_logs_cleared_alert", lang),
         "web_meta_lock_confirm": _("web_meta_lock_confirm", lang),
+        "web_seo_btn_default": _("web_seo_btn_default", lang),
+        "web_seo_paste_help": _("web_seo_paste_help", lang),
+        "web_image_pasted": _("web_image_pasted", lang),
 
     }
     for btn_key, conf_key in BTN_CONFIG_MAP.items():
@@ -1100,6 +1103,8 @@ async def handle_settings_page(request):
         "web_seo_keywords_label": _("web_seo_keywords_label", lang),
         "web_seo_lock_label": _("web_seo_lock_label", lang),
         "web_seo_lock_desc": _("web_seo_lock_desc", lang),
+        "txt_seo_default": _("web_seo_btn_default", lang),
+        "txt_seo_paste": _("web_seo_paste_help", lang),
         "web_brand_name": TG_BOT_NAME,
         "user_name": user.get("first_name"),
         "user_avatar": _get_avatar_html(user),
@@ -1118,8 +1123,7 @@ async def handle_settings_page(request):
         "notifications_alert_name_logins": _("notifications_alert_name_logins", lang),
         "notifications_alert_name_bans": _("notifications_alert_name_bans", lang),
         "notifications_alert_name_downtime": _(
-            "notifications_alert_name_downtime", lang
-        ),
+        "notifications_alert_name_downtime", lang),
         "web_save_btn": _("web_save_btn", lang),
         "web_users_section": _("web_users_section", lang),
         "web_add_user_btn": _("web_add_user_btn", lang),
