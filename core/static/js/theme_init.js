@@ -3,7 +3,7 @@
 (function() {
     const originalWarn = console.warn;
     console.warn = function(...args) {
-        if (args[0] && typeof args[0] === 'string' && args[0].includes('cdn.tailwindcss.com')) {
+        if (args[0] && typeof args[0] === 'string' && /\bcdn\.tailwindcss\.com\b/.test(args[0])) {
             return;
         }
         originalWarn.apply(console, args);
@@ -36,5 +36,7 @@ window.tailwind.config = {
         } else {
             document.documentElement.classList.remove('dark');
         }
-    } catch (e) { console.error(e); }
+    } catch (e) {
+        console.error(e);
+    }
 })();

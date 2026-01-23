@@ -1,4 +1,4 @@
-FROM python:3.10-slim-bookworm
+FROM python:3.12-slim-bookworm
 
 LABEL maintainer="Jatixs"
 LABEL description="Telegram VPS Bot"
@@ -25,7 +25,7 @@ RUN groupadd -g 1001 tgbot && \
 
     echo "tgbot ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
 
-WORKDIR /opt-tg-bot
+WORKDIR /opt/tg-bot
 
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
