@@ -6,7 +6,6 @@ from aiogram import F, Dispatcher, types
 from aiogram.types import KeyboardButton
 from aiogram.fsm.context import FSMContext
 from aiogram.exceptions import TelegramBadRequest
-
 from core.i18n import _, I18nFilter, get_user_lang
 from core import config
 from core.auth import is_allowed, send_access_denied_message
@@ -33,47 +32,41 @@ async def updatexray_handler(message: types.Message, state: FSMContext):
     if not is_allowed(user_id, command):
         await send_access_denied_message(message.bot, user_id, chat_id, command)
         return
-
     await message.bot.send_chat_action(chat_id=chat_id, action="typing")
     await delete_previous_message(user_id, command, chat_id, message.bot)
-
     sent_msg = await message.answer(_("xray_detecting", lang))
     LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = sent_msg.message_id
-
     try:
         client, container_name = await detect_xray_client()
-
         if not client:
             try:
                 await message.bot.edit_message_text(
                     _("xray_detect_fail", lang),
                     chat_id=chat_id,
-                    message_id=sent_msg.message_id
+                    message_id=sent_msg.message_id,
                 )
             except TelegramBadRequest:
                 pass
             return
-
         version = _("xray_version_unknown", lang)
         client_name_display = client.capitalize()
-
         try:
             await message.bot.edit_message_text(
-                _("xray_detected_start_update",
-                  lang,
-                  client=client_name_display,
-                  container=escape_html(container_name)),
+                _(
+                    "xray_detected_start_update",
+                    lang,
+                    client=client_name_display,
+                    container=escape_html(container_name),
+                ),
                 chat_id=chat_id,
                 message_id=sent_msg.message_id,
-                parse_mode="HTML"
+                parse_mode="HTML",
             )
         except TelegramBadRequest:
             pass
-
         update_cmd = ""
         version_cmd = ""
         safe_container = shlex.quote(container_name)
-
         if client == "amnezia":
             check_tools = "command -v wget >/dev/null && command -v unzip >/dev/null"
             try_apk = "command -v apk >/dev/null && apk add --no-cache wget unzip"
@@ -82,80 +75,64 @@ async def updatexray_handler(message: types.Message, state: FSMContext):
             clean_apk = "command -v apk >/dev/null && apk del wget unzip"
             clean_apt = "command -v apt-get >/dev/null && apt-get remove -y wget unzip"
             clean_chain = f"({clean_apk}) || ({clean_apt}) || true"
-
-            update_cmd = (
-                f'docker exec {safe_container} /bin/sh -c "'
-                f'{install_chain} && '
-                'rm -f Xray-linux-64.zip xray geoip.dat geosite.dat && '
-                'wget -q -O Xray-linux-64.zip https://github.com/XTLS/Xray-core/releases/latest/download/Xray-linux-64.zip && '
-                'wget -q -O geoip.dat https://github.com/v2fly/geoip/releases/latest/download/geoip.dat && '
-                'wget -q -O geosite.dat https://github.com/v2fly/domain-list-community/releases/latest/download/dlc.dat && '
-                'unzip -o Xray-linux-64.zip xray && '
-                'cp xray /usr/bin/xray && '
-                'cp geoip.dat /usr/bin/geoip.dat && '
-                'cp geosite.dat /usr/bin/geosite.dat && '
-                'rm Xray-linux-64.zip xray geoip.dat geosite.dat && '
-                f'{clean_chain}'
-                '" && '
-                f'docker restart {safe_container}')
+            update_cmd = f'docker exec {safe_container} /bin/sh -c "{install_chain} && rm -f Xray-linux-64.zip xray geoip.dat geosite.dat && wget -q -O Xray-linux-64.zip https://github.com/XTLS/Xray-core/releases/latest/download/Xray-linux-64.zip && wget -q -O geoip.dat https://github.com/v2fly/geoip/releases/latest/download/geoip.dat && wget -q -O geosite.dat https://github.com/v2fly/domain-list-community/releases/latest/download/dlc.dat && unzip -o Xray-linux-64.zip xray && cp xray /usr/bin/xray && cp geoip.dat /usr/bin/geoip.dat && cp geosite.dat /usr/bin/geosite.dat && rm Xray-linux-64.zip xray geoip.dat geosite.dat && {clean_chain}" && docker restart {safe_container}'
             version_cmd = f"docker exec {safe_container} /usr/bin/xray version"
-
         elif client == "marzban":
             check_deps = "command -v unzip >/dev/null 2>&1 || (DEBIAN_FRONTEND=noninteractive apt-get update -y && apt-get install -y unzip wget)"
-            dl_cmd = (
-                "mkdir -p /var/lib/marzban/xray-core && "
-                "cd /var/lib/marzban/xray-core && "
-                "wget -q -O Xray-linux-64.zip https://github.com/XTLS/Xray-core/releases/latest/download/Xray-linux-64.zip && "
-                "wget -q -O geoip.dat https://github.com/v2fly/geoip/releases/latest/download/geoip.dat && "
-                "wget -q -O geosite.dat https://github.com/v2fly/domain-list-community/releases/latest/download/dlc.dat && "
-                "unzip -o Xray-linux-64.zip xray && "
-                "rm Xray-linux-64.zip")
+            dl_cmd = "mkdir -p /var/lib/marzban/xray-core && cd /var/lib/marzban/xray-core && wget -q -O Xray-linux-64.zip https://github.com/XTLS/Xray-core/releases/latest/download/Xray-linux-64.zip && wget -q -O geoip.dat https://github.com/v2fly/geoip/releases/latest/download/geoip.dat && wget -q -O geosite.dat https://github.com/v2fly/domain-list-community/releases/latest/download/dlc.dat && unzip -o Xray-linux-64.zip xray && rm Xray-linux-64.zip"
             env_path = "/opt/marzban/.env"
-            update_env = f"if [ -f {env_path} ]; then if ! grep -q '^XRAY_EXECUTABLE_PATH=' {
-                env_path}; then echo 'XRAY_EXECUTABLE_PATH=/var/lib/marzban/xray-core/xray' >> {env_path}; fi; fi"
-
+            update_env = f"if [ -f {env_path} ]; then if ! grep -q '^XRAY_EXECUTABLE_PATH=' {env_path}; then echo 'XRAY_EXECUTABLE_PATH=/var/lib/marzban/xray-core/xray' >> {env_path}; fi; fi"
             restart_cmd = f"docker restart {safe_container}"
-            update_cmd = f"{check_deps} && {dl_cmd} && {
-                update_env} && {restart_cmd}"
-            version_cmd = f'docker exec {
-                safe_container} /var/lib/marzban/xray-core/xray version'
-
-        process_update = await asyncio.create_subprocess_shell(update_cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+            update_cmd = f"{check_deps} && {dl_cmd} && {update_env} && {restart_cmd}"
+            version_cmd = (
+                f"docker exec {safe_container} /var/lib/marzban/xray-core/xray version"
+            )
+        process_update = await asyncio.create_subprocess_shell(
+            update_cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
+        )
         stdout_update, stderr_update = await process_update.communicate()
-
         if process_update.returncode != 0:
             error_output = stderr_update.decode(
-                'utf-8',
-                'ignore') or stdout_update.decode(
-                'utf-8',
-                'ignore')
-            raise Exception(_("xray_update_error",
-                              lang,
-                              client=client_name_display,
-                              error=escape_html(error_output)))
-
-        process_version = await asyncio.create_subprocess_shell(version_cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+                "utf-8", "ignore"
+            ) or stdout_update.decode("utf-8", "ignore")
+            raise Exception(
+                _(
+                    "xray_update_error",
+                    lang,
+                    client=client_name_display,
+                    error=escape_html(error_output),
+                )
+            )
+        process_version = await asyncio.create_subprocess_shell(
+            version_cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
+        )
         stdout_version, stderr_dummy = await process_version.communicate()
-        version_output = stdout_version.decode('utf-8', 'ignore')
-        version_match = re.search(r'Xray\s+([\d\.]+)', version_output)
+        version_output = stdout_version.decode("utf-8", "ignore")
+        version_match = re.search("Xray\\s+([\\d\\.]+)", version_output)
         if version_match:
             version = version_match.group(1)
-
         final_message = _(
-            "xray_update_success",
-            lang,
-            client=client_name_display,
-            version=version)
+            "xray_update_success", lang, client=client_name_display, version=version
+        )
         try:
-            await message.bot.edit_message_text(final_message, chat_id=chat_id, message_id=sent_msg.message_id, parse_mode="HTML")
+            await message.bot.edit_message_text(
+                final_message,
+                chat_id=chat_id,
+                message_id=sent_msg.message_id,
+                parse_mode="HTML",
+            )
         except TelegramBadRequest:
             await message.answer(final_message, parse_mode="HTML")
-
     except Exception as e:
         logging.error(f"Error in updatexray_handler: {e}")
         error_msg = _("xray_error_generic", lang, error=str(e))
         try:
-            await message.bot.edit_message_text(error_msg, chat_id=chat_id, message_id=sent_msg.message_id, parse_mode="HTML")
+            await message.bot.edit_message_text(
+                error_msg,
+                chat_id=chat_id,
+                message_id=sent_msg.message_id,
+                parse_mode="HTML",
+            )
         except TelegramBadRequest:
             await message.answer(error_msg, parse_mode="HTML")
     finally:

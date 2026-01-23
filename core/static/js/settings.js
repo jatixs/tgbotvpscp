@@ -1,5 +1,41 @@
 /* /core/static/js/settings.js */
 
+const isMainAdmin = (typeof IS_MAIN_ADMIN !== 'undefined') ? IS_MAIN_ADMIN : false;
+
+function decryptData(text) {
+    if (!text) return "";
+    if (typeof WEB_KEY === 'undefined' || !WEB_KEY) return text;
+    try {
+        const decoded = atob(text);
+        let result = "";
+        for (let i = 0; i < decoded.length; i++) {
+            const keyChar = WEB_KEY[i % WEB_KEY.length];
+            result += String.fromCharCode(decoded.charCodeAt(i) ^ keyChar.charCodeAt(0));
+        }
+        return result;
+    } catch (e) {
+        console.error("Decryption error:", e);
+        return text;
+    }
+}
+
+function encryptData(text) {
+    if (!text) return "";
+    if (typeof WEB_KEY === 'undefined' || !WEB_KEY) return text;
+    try {
+        let result = "";
+        for (let i = 0; i < text.length; i++) {
+            const keyChar = WEB_KEY[i % WEB_KEY.length];
+            result += String.fromCharCode(text.charCodeAt(i) ^ keyChar.charCodeAt(0));
+        }
+        return btoa(result);
+    } catch (e) {
+        console.error("Encryption error:", e);
+        return text;
+    }
+}
+
+
 window.initSettings = function() {
     renderUsers();
     renderNodes();
@@ -8,7 +44,7 @@ window.initSettings = function() {
     updateBulkButtonsUI();
     initChangePasswordUI();
     fetchSessions();
-    initInputScrollLogic(); // Добавлена инициализация скролла
+    initInputScrollLogic();
 
     const input = document.getElementById('newNodeNameDash');
     if (input) {
@@ -33,7 +69,8 @@ window.initSettings = function() {
         newBtn.addEventListener('click', async function() {
             newBtn.disabled = true;
             const spinner = '<svg class="animate-spin h-4 w-4 text-gray-500 inline-block mr-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>';
-            updateStatusArea.innerHTML = `${spinner} <span class="text-gray-500">${I18N.web_update_checking || "Checking..."}</span>`;
+            const checkingText = (typeof I18N !== 'undefined' && I18N.web_update_checking) ? I18N.web_update_checking : "Checking...";
+            updateStatusArea.innerHTML = `${spinner} <span class="text-gray-500">${checkingText}</span>`;
             if (btnDoUpdate) btnDoUpdate.classList.add('d-none');
 
             try {
@@ -43,7 +80,8 @@ window.initSettings = function() {
 
                 if (data.update_available) {
                     const infoText = (I18N.web_update_info || "Current: {local} -> New: {remote}").replace('{local}', 'v' + data.local_version).replace('{remote}', 'v' + data.remote_version);
-                    updateStatusArea.innerHTML = `<div><div class="font-bold text-green-600 dark:text-green-400">${I18N.web_update_available_title || "Update Available!"}</div><div class="text-xs text-gray-500 dark:text-gray-400 mt-1">${infoText}</div></div>`;
+                    const updateAvailTitle = (typeof I18N !== 'undefined' && I18N.web_update_available_title) ? I18N.web_update_available_title : "Update Available!";
+                    updateStatusArea.innerHTML = `<div><div class="font-bold text-green-600 dark:text-green-400">${updateAvailTitle}</div><div class="text-xs text-gray-500 dark:text-gray-400 mt-1">${infoText}</div></div>`;
                     targetBranch = data.target_branch;
                     if (btnDoUpdate) btnDoUpdate.classList.remove('d-none');
                 } else {
@@ -72,18 +110,27 @@ window.initSettings = function() {
             newBtnDo.disabled = true;
             if (updateProgress) updateProgress.classList.remove('d-none');
 
-            updateStatusArea.innerHTML = `<span class="text-blue-600 dark:text-blue-400 font-medium animate-pulse">${I18N.web_update_started || "Updating..."}</span>`;
+            const updatingText = (typeof I18N !== 'undefined' && I18N.web_update_started) ? I18N.web_update_started : "Updating...";
+            updateStatusArea.innerHTML = `<span class="text-blue-600 dark:text-blue-400 font-medium animate-pulse">${updatingText}</span>`;
 
             try {
                 const response = await fetch('/api/update/run', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ branch: targetBranch })
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        branch: targetBranch
+                    })
                 });
                 const data = await response.json();
                 if (data.error) throw new Error(data.error);
 
-                await window.showModalAlert("Update started! Page will reload in 15 seconds.", "Info");
+                // FIX: Use localized alert messages
+                const alertMsg = (typeof I18N !== 'undefined' && I18N.web_update_started_alert) ? I18N.web_update_started_alert : "Update started! Page will reload in 15 seconds.";
+                const alertTitle = (typeof I18N !== 'undefined' && I18N.modal_title_info) ? I18N.modal_title_info : "Info";
+                
+                await window.showModalAlert(alertMsg, alertTitle);
                 setTimeout(() => location.reload(), 15000);
             } catch (error) {
                 const errorText = (I18N.web_update_error || "Error: {error}").replace('{error}', error.message);
@@ -98,14 +145,17 @@ window.initSettings = function() {
 
 function initInputScrollLogic() {
     const isTouchDevice = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
-    if (!isTouchDevice) return; 
+    if (!isTouchDevice) return;
 
     const ids = ['conf_traffic', 'conf_timeout', 'pass_current', 'pass_new', 'pass_confirm'];
     ids.forEach(id => {
         const el = document.getElementById(id);
         if (el) {
             const scrollFn = (e) => {
-                e.target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                e.target.scrollIntoView({
+                    behavior: 'smooth',
+                    block: 'center'
+                });
             };
             el.addEventListener('click', scrollFn);
             el.addEventListener('focus', scrollFn);
@@ -222,7 +272,7 @@ function showInputError(el) {
     if (!errorMsg) {
         errorMsg = document.createElement('div');
         errorMsg.className = 'pass-error-msg text-[10px] text-red-500 mt-1 ml-1 font-medium animate-pulse';
-        errorMsg.innerText = 'Заполните поле';
+        errorMsg.innerText = (typeof I18N !== 'undefined' && I18N.web_fill_field) ? I18N.web_fill_field : 'Fill in the field';
         el.parentNode.appendChild(errorMsg);
     }
 }
@@ -318,7 +368,9 @@ async function saveSystemConfig(groupName) {
     try {
         const res = await fetch('/api/settings/system', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+                'Content-Type': 'application/json'
+            },
             body: JSON.stringify(data)
         });
         if (res.ok) {
@@ -338,12 +390,14 @@ async function saveSystemConfig(groupName) {
             }, 2000);
         } else {
             const json = await res.json();
-            await window.showModalAlert(I18N.web_error.replace('{error}', json.error || 'Save failed'), 'Ошибка');
+            const errorShort = (typeof I18N !== 'undefined' && I18N.web_error_short) ? I18N.web_error_short : "Error";
+            await window.showModalAlert(I18N.web_error.replace('{error}', json.error || 'Save failed'), errorShort);
             btn.innerText = originalText;
             toggleSaveButton(config.btnId, true);
         }
     } catch (e) {
-        await window.showModalAlert(I18N.web_conn_error.replace('{error}', e), 'Ошибка соединения');
+        const errorShort = (typeof I18N !== 'undefined' && I18N.web_conn_error_short) ? I18N.web_conn_error_short : "Conn Error";
+        await window.showModalAlert(I18N.web_conn_error.replace('{error}', e), errorShort);
         btn.innerText = originalText;
         toggleSaveButton(config.btnId, true);
     }
@@ -354,11 +408,20 @@ async function clearLogs() {
 
     const btn = document.getElementById('clearLogsBtn');
     const originalHTML = btn.innerHTML;
+    
+    // 1. Фиксируем и ШИРИНУ, и ВЫСОТУ перед изменениями
+    // Это гарантирует, что кнопка останется "каменной" и не дернется ни на пиксель
+    btn.style.width = getComputedStyle(btn).width;
+    btn.style.height = getComputedStyle(btn).height;
+    
     const redClasses = ['bg-red-50', 'dark:bg-red-900/10', 'border-red-200', 'dark:border-red-800', 'text-red-600', 'dark:text-red-400', 'hover:bg-red-100', 'dark:hover:bg-red-900/30', 'active:bg-red-200'];
-    const greenClasses = ['bg-green-600', 'text-white', 'border-transparent', 'hover:bg-green-500'];
+    // Заменили border-transparent на border-green-600, чтобы сохранить толщину границы (обводку)
+    const greenClasses = ['bg-green-600', 'text-white', 'border-green-600', 'hover:bg-green-500'];
 
     btn.disabled = true;
-    btn.innerHTML = `<svg class="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> ${I18N.web_logs_clearing}`;
+    
+    // Центрируем спиннер
+    btn.innerHTML = `<div class="flex items-center justify-center w-full h-full"><svg class="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg></div>`;
 
     try {
         const res = await fetch('/api/logs/clear', {
@@ -369,26 +432,110 @@ async function clearLogs() {
         if (res.ok) {
             btn.classList.remove(...redClasses);
             btn.classList.add(...greenClasses);
-            btn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg> ${I18N.web_logs_cleared_alert}`;
+            
+            // 2. Добавлен класс leading-4 (высота строки 16px, как у text-xs)
+            // Это предотвращает визуальное "сплющивание" текста внутри кнопки
+            btn.innerHTML = `<div class="flex items-center justify-center gap-2 w-full h-full"><svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-white shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg> <span class="whitespace-nowrap text-[10px] font-bold uppercase tracking-wider leading-4">${I18N.web_logs_cleared_alert}</span></div>`;
+            
             setTimeout(() => {
                 btn.innerHTML = originalHTML;
                 btn.classList.remove(...greenClasses);
                 btn.classList.add(...redClasses);
+                
+                // 3. Сбрасываем фиксацию размеров
+                btn.style.width = ''; 
+                btn.style.height = ''; 
                 btn.disabled = false;
             }, 2000);
         } else {
             const data = await res.json();
             await window.showModalAlert(I18N.web_error.replace('{error}', data.error || "Failed"), 'Ошибка');
+            
+            // Сброс при ошибке
             btn.disabled = false;
             btn.innerHTML = originalHTML;
+            btn.style.width = ''; 
+            btn.style.height = ''; 
         }
     } catch (e) {
         await window.showModalAlert(I18N.web_conn_error.replace('{error}', e), 'Ошибка соединения');
+        
+        // Сброс при ошибке
         btn.disabled = false;
         btn.innerHTML = originalHTML;
+        btn.style.width = ''; 
+        btn.style.height = ''; 
     }
 }
 
+async function resetTrafficSettings() {
+    if (!await window.showModalConfirm(I18N.web_traffic_reset_confirm || "Are you sure? This will zero out the counters.", I18N.modal_title_confirm)) return;
+
+    const btn = document.getElementById('resetTrafficBtn');
+    const originalHTML = btn.innerHTML;
+    
+    // 1. Фиксируем ширину и высоту перед стартом ("замораживаем" размер)
+    btn.style.width = getComputedStyle(btn).width;
+    btn.style.height = getComputedStyle(btn).height;
+    
+    const hoverClasses = ['hover:pr-4', 'group'];
+    const redClasses = ['bg-red-50', 'dark:bg-red-900/10', 'border-red-200', 'dark:border-red-800', 'text-red-600', 'dark:text-red-400', 'hover:bg-red-100', 'dark:hover:bg-red-900/30', 'active:bg-red-200'];
+    
+    // Убрали px-3 py-2, чтобы не уменьшать кнопку. Добавили border-green-600 для сохранения толщины рамки.
+    const greenClasses = ['bg-green-600', 'text-white', 'border-green-600', 'hover:bg-green-500'];
+
+    btn.classList.remove(...hoverClasses);
+    btn.disabled = true;
+    
+    // Центрируем спиннер
+    btn.innerHTML = `<div class="flex items-center justify-center w-full h-full"><svg class="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg></div>`;
+
+    try {
+        const res = await fetch('/api/traffic/reset', { method: 'POST' });
+        if (res.ok) {
+            btn.classList.remove(...redClasses);
+            btn.classList.add(...greenClasses);
+            
+            const doneText = (typeof I18N !== 'undefined' && I18N.web_traffic_reset_no_emoji) ? I18N.web_traffic_reset_no_emoji : "Done!";
+            
+            // 2. Статус успеха:
+            // text-[10px] - уменьшенный шрифт
+            // leading-4 - высота строки 16px (стандартная), чтобы кнопка не сплющивалась
+            btn.innerHTML = `<div class="flex items-center justify-center gap-2 w-full h-full"><svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-white shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg> <span class="whitespace-nowrap text-[10px] font-bold uppercase tracking-wider leading-4">${doneText}</span></div>`;
+            
+            setTimeout(() => {
+                btn.innerHTML = originalHTML;
+                btn.classList.remove(...greenClasses);
+                btn.classList.add(...redClasses);
+                btn.classList.add(...hoverClasses);
+                
+                // 3. Сбрасываем фиксацию размеров
+                btn.style.width = '';
+                btn.style.height = '';
+                btn.disabled = false;
+            }, 2000);
+        } else {
+            const data = await res.json();
+            const errorShort = (typeof I18N !== 'undefined' && I18N.web_error_short) ? I18N.web_error_short : "Error";
+            await window.showModalAlert(I18N.web_error.replace('{error}', data.error || "Failed"), errorShort);
+            
+            btn.disabled = false;
+            btn.innerHTML = originalHTML;
+            btn.classList.add(...hoverClasses);
+            btn.style.width = '';
+            btn.style.height = '';
+        }
+    } catch (e) {
+        const errorShort = (typeof I18N !== 'undefined' && I18N.web_conn_error_short) ? I18N.web_conn_error_short : "Conn Error";
+        await window.showModalAlert(I18N.web_conn_error.replace('{error}', e), errorShort);
+        
+        btn.disabled = false;
+        btn.innerHTML = originalHTML;
+        btn.classList.add(...hoverClasses);
+        btn.style.width = '';
+        btn.style.height = '';
+    }
+}
 function renderUsers() {
     const tbody = document.getElementById('usersTableBody');
     const section = document.getElementById('usersSection');
@@ -413,7 +560,8 @@ function renderUsers() {
         }).join('');
         if (typeof window.parsePageEmojis === 'function') window.parsePageEmojis();
     } else {
-        tbody.innerHTML = `<tr><td colspan="4" class="px-4 py-3 text-center text-gray-500 text-xs">${(typeof I18N !== 'undefined' && I18N.web_no_users) ? I18N.web_no_users : "No users"}</td></tr>`;
+        const noUsers = (typeof I18N !== 'undefined' && I18N.web_no_users) ? I18N.web_no_users : "No users";
+        tbody.innerHTML = `<tr><td colspan="4" class="px-4 py-3 text-center text-gray-500 text-xs">${noUsers}</td></tr>`;
     }
 }
 
@@ -429,40 +577,62 @@ async function deleteUser(id, name) {
     try {
         const res = await fetch('/api/users/action', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'delete', id: id })
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                action: 'delete',
+                id: id
+            })
         });
         if (res.ok) {
             const idx = USERS_DATA.findIndex(u => u.id == id);
             if (idx > -1) USERS_DATA.splice(idx, 1);
             renderUsers();
         } else {
-            await window.showModalAlert(I18N.web_error.replace('{error}', 'Delete failed'), 'Ошибка');
+            const errorShort = (typeof I18N !== 'undefined' && I18N.web_error_short) ? I18N.web_error_short : "Error";
+            await window.showModalAlert(I18N.web_error.replace('{error}', 'Delete failed'), errorShort);
         }
     } catch (e) {
-        await window.showModalAlert(I18N.web_conn_error.replace('{error}', e), 'Ошибка соединения');
+        const errorShort = (typeof I18N !== 'undefined' && I18N.web_conn_error_short) ? I18N.web_conn_error_short : "Conn Error";
+        await window.showModalAlert(I18N.web_conn_error.replace('{error}', e), errorShort);
     }
 }
 
 async function openAddUserModal() {
-    const id = await window.showModalPrompt("Введите Telegram ID пользователя:", I18N.modal_title_prompt, "123456789");
+    const promptText = (typeof I18N !== 'undefined' && I18N.web_add_user_prompt) ? I18N.web_add_user_prompt : "Введите Telegram ID пользователя:";
+    const titleText = (typeof I18N !== 'undefined' && I18N.modal_title_prompt) ? I18N.modal_title_prompt : "Ввод данных";
+    const id = await window.showModalPrompt(promptText, titleText, "123456789");
+
     if (!id) return;
 
     try {
         const res = await fetch('/api/users/action', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'add', id: id, role: 'users' })
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                action: 'add',
+                id: id,
+                role: 'users'
+            })
         });
         const data = await res.json();
         if (res.ok) {
-            USERS_DATA.push({ id: id, name: data.name || `ID: ${id}`, role: 'users' });
+            USERS_DATA.push({
+                id: id,
+                name: data.name || `ID: ${id}`,
+                role: 'users'
+            });
             renderUsers();
         } else {
-            await window.showModalAlert(I18N.web_error.replace('{error}', data.error || "Unknown"), 'Ошибка');
+            const errorShort = (typeof I18N !== 'undefined' && I18N.web_error_short) ? I18N.web_error_short : "Error";
+            await window.showModalAlert(I18N.web_error.replace('{error}', data.error || "Unknown"), errorShort);
         }
     } catch (e) {
-        await window.showModalAlert(I18N.web_conn_error.replace('{error}', e), 'Ошибка соединения');
+        const errorShort = (typeof I18N !== 'undefined' && I18N.web_conn_error_short) ? I18N.web_conn_error_short : "Conn Error";
+        await window.showModalAlert(I18N.web_conn_error.replace('{error}', e), errorShort);
     }
 }
 
@@ -473,31 +643,146 @@ function renderNodes() {
     section.classList.remove('hidden');
 
     if (NODES_DATA.length > 0) {
-        tbody.innerHTML = NODES_DATA.map(n => `
-        <tr class="border-b border-gray-100 dark:border-white/5 hover:bg-gray-50 dark:hover:bg-white/5 transition">
-            <td class="px-2 sm:px-4 py-3 font-medium text-sm text-gray-900 dark:text-white break-all max-w-[100px] sm:max-w-none">${n.name}</td>
-            <td class="px-2 sm:px-4 py-3 text-xs text-gray-500 dark:text-gray-400">${n.ip || 'Unknown'}</td>
-            <td class="px-2 sm:px-4 py-3 font-mono text-[10px] text-gray-400 dark:text-gray-500 truncate max-w-[80px]" title="${n.token}">${n.token.substring(0, 8)}...</td>
+        tbody.innerHTML = NODES_DATA.map(n => {
+            const decryptedIp = decryptData(n.ip);
+            const decryptedToken = decryptData(n.token);
+
+            return `
+        <tr class="border-b border-gray-100 dark:border-white/5 hover:bg-gray-50 dark:hover:bg-white/5 transition group">
+            <td class="px-2 sm:px-4 py-3 font-medium text-sm text-gray-900 dark:text-white w-full sm:w-auto">
+                <div id="disp_name_${n.token}" class="flex items-center gap-2 max-w-[120px] sm:max-w-none">
+                    <span class="truncate block" title="${escapeHtml(n.name)}">${escapeHtml(n.name)}</span>
+                    ${isMainAdmin ? `
+                    <button onclick="startNodeRename('${n.token}')" class="text-gray-400 hover:text-blue-500 p-1 flex-shrink-0 transition-colors">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
+                    </button>
+                    ` : ''}
+                </div>
+                <div id="edit_name_${n.token}" class="hidden flex items-center gap-1">
+                    <input type="text" id="input_name_${n.token}" value="${escapeHtml(n.name)}" class="bg-white dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded px-2 py-1 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-blue-500 w-24 sm:w-48 transition-all" onkeydown="handleSettingsRenameKeydown(event, '${n.token}')">
+                    <div class="flex items-center flex-shrink-0">
+                        <button onclick="saveNodeRename('${n.token}')" class="text-green-500 hover:text-green-600 p-1"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg></button>
+                        <button onclick="cancelNodeRename('${n.token}')" class="text-red-500 hover:text-red-600 p-1"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg></button>
+                    </div>
+                </div>
+            </td>
+            <td class="px-2 sm:px-4 py-3 text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">${escapeHtml(decryptedIp) || 'Unknown'}</td>
+            <td class="px-2 sm:px-4 py-3 font-mono text-[10px] text-gray-400 dark:text-gray-500 truncate max-w-[80px]" title="${escapeHtml(decryptedToken)}">${escapeHtml(decryptedToken).substring(0, 8)}...</td>
             <td class="px-2 sm:px-4 py-3 text-right">
                 <button onclick="deleteNode('${n.token}')" class="text-red-500 hover:text-red-700 dark:hover:text-red-300 transition p-1" title="Delete">
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
                 </button>
             </td>
-        </tr>`).join('');
+        </tr>`;
+        }).join('');
         if (typeof window.parsePageEmojis === 'function') window.parsePageEmojis();
     } else {
         tbody.innerHTML = `<tr><td colspan="4" class="px-4 py-3 text-center text-gray-500 text-xs">${I18N.web_no_nodes}</td></tr>`;
     }
 }
+window.startNodeRename = function(token) {
+    document.getElementById(`disp_name_${token}`).classList.add('hidden');
+    document.getElementById(`edit_name_${token}`).classList.remove('hidden');
+    const input = document.getElementById(`input_name_${token}`);
+    input.focus();
+    const node = NODES_DATA.find(n => n.token === token);
+    if (node) input.value = node.name;
+
+    const scrollToInput = () => {
+        input.scrollIntoView({
+            behavior: 'smooth',
+            block: 'center'
+        });
+    };
+    setTimeout(scrollToInput, 50);
+    if (window.visualViewport) {
+        window.visualViewport.addEventListener('resize', () => {
+            setTimeout(scrollToInput, 50);
+        }, {
+            once: true
+        });
+    } else {
+        setTimeout(scrollToInput, 300);
+    }
+};
+window.cancelNodeRename = function(token) {
+    document.getElementById(`disp_name_${token}`).classList.remove('hidden');
+    document.getElementById(`edit_name_${token}`).classList.add('hidden');
+};
+
+window.saveNodeRename = async function(token) {
+    const input = document.getElementById(`input_name_${token}`);
+    const newName = input.value.trim();
+    if (!newName) return;
+
+    // Optimistic update
+    const nodeIndex = NODES_DATA.findIndex(n => n.token === token);
+    const oldName = NODES_DATA[nodeIndex].name;
+    if (nodeIndex > -1) {
+        NODES_DATA[nodeIndex].name = newName;
+        renderNodes();
+    }
+
+    try {
+        const res = await fetch('/api/nodes/rename', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                token: token,
+                name: newName
+            })
+        });
+
+        if (res.ok) {
+            if (window.showToast) {
+                const msg = (typeof I18N !== 'undefined' && I18N.web_node_rename_success) ? I18N.web_node_rename_success : "Name updated";
+                window.showToast(msg);
+            }
+        } else {
+            const data = await res.json();
+            // Revert
+            if (nodeIndex > -1) {
+                NODES_DATA[nodeIndex].name = oldName;
+                renderNodes();
+            }
+            const errorMsg = (typeof I18N !== 'undefined' && I18N.web_node_rename_error) ? I18N.web_node_rename_error : "Error updating name";
+            const errTitle = (typeof I18N !== 'undefined' && I18N.web_error_short) ? I18N.web_error_short : "Error"; // FIX: Localized title
+            if (window.showModalAlert) await window.showModalAlert(data.error || errorMsg, errTitle);
+        }
+    } catch (e) {
+        console.error(e);
+        // Revert
+        if (nodeIndex > -1) {
+            NODES_DATA[nodeIndex].name = oldName;
+            renderNodes();
+        }
+        const errTitle = (typeof I18N !== 'undefined' && I18N.web_error_short) ? I18N.web_error_short : "Error"; // FIX: Localized title
+        if (window.showModalAlert) await window.showModalAlert(String(e), errTitle);
+    }
+};
+
+window.handleSettingsRenameKeydown = function(event, token) {
+    if (event.key === 'Enter') {
+        saveNodeRename(token);
+    } else if (event.key === 'Escape') {
+        cancelNodeRename(token);
+    }
+};
 
 async function deleteNode(token) {
-    if (!await window.showModalConfirm("Удалить эту ноду?", I18N.modal_title_confirm)) return;
+    if (!await window.showModalConfirm(I18N.node_delete_select || "Delete this node?", I18N.modal_title_confirm)) return;
 
     try {
         const res = await fetch('/api/nodes/delete', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ token: token })
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                token: token
+            })
         });
         if (res.ok) {
             const idx = NODES_DATA.findIndex(n => n.token === token);
@@ -505,10 +790,12 @@ async function deleteNode(token) {
             renderNodes();
         } else {
             const data = await res.json();
-            await window.showModalAlert(I18N.web_error.replace('{error}', data.error || 'Delete failed'), 'Ошибка');
+            const errorShort = (typeof I18N !== 'undefined' && I18N.web_error_short) ? I18N.web_error_short : "Error";
+            await window.showModalAlert(I18N.web_error.replace('{error}', data.error || 'Delete failed'), errorShort);
         }
     } catch (e) {
-        await window.showModalAlert(I18N.web_conn_error.replace('{error}', e), 'Ошибка соединения');
+        const errorShort = (typeof I18N !== 'undefined' && I18N.web_conn_error_short) ? I18N.web_conn_error_short : "Conn Error";
+        await window.showModalAlert(I18N.web_conn_error.replace('{error}', e), errorShort);
     }
 }
 
@@ -533,7 +820,8 @@ async function changePassword() {
     const btn = document.getElementById('btnChangePass');
 
     if (newPass !== confirm) {
-        await window.showModalAlert(I18N.web_pass_mismatch, 'Ошибка');
+        const errorShort = (typeof I18N !== 'undefined' && I18N.web_error_short) ? I18N.web_error_short : "Error";
+        await window.showModalAlert(I18N.web_pass_mismatch, errorShort);
         return;
     }
 
@@ -544,13 +832,19 @@ async function changePassword() {
     try {
         const res = await fetch('/api/settings/password', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ current_password: current, new_password: newPass })
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                current_password: current,
+                new_password: newPass
+            })
         });
         const data = await res.json();
 
         if (res.ok) {
-            await window.showModalAlert(I18N.web_pass_changed, 'Успех');
+            const successText = (typeof I18N !== 'undefined' && I18N.web_success) ? I18N.web_success : "Success";
+            await window.showModalAlert(I18N.web_pass_changed, successText);
             currentEl.value = "";
             newPassEl.value = "";
             confirmEl.value = "";
@@ -559,10 +853,12 @@ async function changePassword() {
                 currentEl.dispatchEvent(dummyEvent);
             }
         } else {
-            await window.showModalAlert(I18N.web_error.replace('{error}', data.error), 'Ошибка');
+            const errorShort = (typeof I18N !== 'undefined' && I18N.web_error_short) ? I18N.web_error_short : "Error";
+            await window.showModalAlert(I18N.web_error.replace('{error}', data.error), errorShort);
         }
     } catch (e) {
-        await window.showModalAlert(I18N.web_conn_error.replace('{error}', e), 'Ошибка соединения');
+        const errorShort = (typeof I18N !== 'undefined' && I18N.web_conn_error_short) ? I18N.web_conn_error_short : "Conn Error";
+        await window.showModalAlert(I18N.web_conn_error.replace('{error}', e), errorShort);
     }
     btn.disabled = false;
     btn.innerText = origText;
@@ -586,7 +882,9 @@ async function triggerAutoSave() {
     try {
         const res = await fetch('/api/settings/save', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+                'Content-Type': 'application/json'
+            },
             body: JSON.stringify(data)
         });
         if (statusEl) {
@@ -598,14 +896,14 @@ async function triggerAutoSave() {
                     statusEl.classList.add('opacity-0');
                 }, 2000);
             } else {
-                statusEl.innerText = "Error";
+                statusEl.innerText = (typeof I18N !== 'undefined' && I18N.web_error_short) ? I18N.web_error_short : "Error";
                 statusEl.classList.add('text-red-500');
             }
         }
     } catch (e) {
         console.error(e);
         if (statusEl) {
-            statusEl.innerText = "Conn Error";
+            statusEl.innerText = (typeof I18N !== 'undefined' && I18N.web_conn_error_short) ? I18N.web_conn_error_short : "Conn Error";
             statusEl.classList.add('text-red-500');
         }
     }
@@ -775,7 +1073,9 @@ async function triggerKeyboardSave(skipPreviewUpdate = false) {
         try {
             const res = await fetch('/api/settings/keyboard', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: {
+                    'Content-Type': 'application/json'
+                },
                 body: JSON.stringify(data)
             });
             if (res.ok) {
@@ -833,7 +1133,7 @@ function animateBulkButton(btnId, state, originalText) {
         btn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg>`;
         btn.disabled = true;
     } else {
-        btn.innerHTML = originalText;
+        btn.textContent = originalText;
         btn.disabled = false;
     }
 }
@@ -849,7 +1149,7 @@ window.enableAllKeyboard = async function() {
         return;
     }
 
-    const originalText = btn ? btn.innerText : 'Enable All';
+    const originalText = btn ? btn.innerText : (typeof I18N !== 'undefined' && I18N.web_kb_enable_all) ? I18N.web_kb_enable_all : 'Enable All';
     animateBulkButton(btnId, 'loading', originalText);
 
     let changed = false;
@@ -884,7 +1184,7 @@ window.disableAllKeyboard = async function() {
         return;
     }
 
-    const originalText = btn ? btn.innerText : 'Disable All';
+    const originalText = btn ? btn.innerText : (typeof I18N !== 'undefined' && I18N.web_kb_disable_all) ? I18N.web_kb_disable_all : 'Disable All';
     animateBulkButton(btnId, 'loading', originalText);
 
     let changed = false;
@@ -922,7 +1222,8 @@ async function fetchSessions() {
             renderSessionsMainWidget(data.sessions);
         }
     } catch (e) {
-        container.innerHTML = `<div class="text-red-500 text-sm text-center">Error loading sessions</div>`;
+        const errorLoading = (typeof I18N !== 'undefined' && I18N.web_error_loading_sessions) ? I18N.web_error_loading_sessions : "Error loading sessions";
+        container.innerHTML = `<div class="text-red-500 text-sm text-center">${errorLoading}</div>`;
     }
 }
 
@@ -934,7 +1235,8 @@ function renderSessionsMainWidget(sessions) {
     if (currentSession) {
         container.innerHTML = `${renderSessionItem(currentSession)}`;
     } else {
-        container.innerHTML = `<div class="text-gray-500 text-sm text-center">No active sessions</div>`;
+        const noSessions = (typeof I18N !== 'undefined' && I18N.web_no_sessions) ? I18N.web_no_sessions : "No active sessions";
+        container.innerHTML = `<div class="text-gray-500 text-sm text-center">${noSessions}</div>`;
     }
 }
 
@@ -1009,7 +1311,7 @@ function renderSessionItem(s) {
                 ${userBadge}
                 <div class="text-sm font-bold text-gray-900 dark:text-white truncate" title="${s.ua}">${deviceText}</div>
                 <div class="text-xs text-gray-500 dark:text-gray-400 flex items-center gap-2">
-                    <span class="font-mono">${s.ip}</span>
+                    <span class="font-mono">${escapeHtml(decryptData(s.ip))}</span>
                     <span>•</span>
                     <span>${date}</span>
                 </div>
@@ -1067,8 +1369,12 @@ async function revokeSession(token) {
     try {
         const res = await fetch('/api/sessions/revoke', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ token: token })
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                token: token
+            })
         });
         if (res.ok) {
             await fetchSessions();
@@ -1081,10 +1387,11 @@ async function revokeSession(token) {
                     btnRevokeAll.classList.add('opacity-50', 'cursor-not-allowed');
                 }
             }
-            if (window.showToast) window.showToast("Сессия завершена");
+            if (window.showToast) window.showToast((typeof I18N !== 'undefined' && I18N.web_success) ? I18N.web_success : "Success");
         } else {
             const data = await res.json();
-            await window.showModalAlert(data.error || "Failed", "Error");
+            const errorShort = (typeof I18N !== 'undefined' && I18N.web_error_short) ? I18N.web_error_short : "Error";
+            await window.showModalAlert(data.error || "Failed", errorShort);
         }
     } catch (e) {
         console.error(e);
@@ -1103,7 +1410,12 @@ async function revokeAllSessions() {
     }
 
     try {
-        const res = await fetch('/api/sessions/revoke_all', { method: 'POST', headers: { 'Content-Type': 'application/json' } });
+        const res = await fetch('/api/sessions/revoke_all', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
         if (res.ok) {
             if (btn) {
                 btn.className = "w-full py-3 bg-green-600 text-white rounded-xl font-bold shadow-lg shadow-green-500/20 transition-all duration-300 flex items-center justify-center gap-2";
@@ -1122,7 +1434,8 @@ async function revokeAllSessions() {
             }, 2000);
         } else {
             const data = await res.json();
-            await window.showModalAlert(data.error || "Failed", "Error");
+            const errorShort = (typeof I18N !== 'undefined' && I18N.web_error_short) ? I18N.web_error_short : "Error";
+            await window.showModalAlert(data.error || "Failed", errorShort);
             if (btn) {
                 btn.disabled = false;
                 btn.innerHTML = originalText;
@@ -1134,5 +1447,89 @@ async function revokeAllSessions() {
             btn.disabled = false;
             btn.innerHTML = originalText;
         }
+    }
+}
+
+async function resetTrafficSettings() {
+    if (!await window.showModalConfirm(I18N.web_traffic_reset_confirm || "Are you sure? This will zero out the counters.", I18N.modal_title_confirm)) return;
+
+    const btn = document.getElementById('resetTrafficBtn');
+    const originalHTML = btn.innerHTML;
+    
+    // Фиксируем ширину, чтобы избежать скачков при загрузке
+    btn.style.width = getComputedStyle(btn).width;
+    
+    const hoverClasses = ['hover:pr-4', 'group'];
+    const redClasses = ['bg-red-50', 'dark:bg-red-900/10', 'border-red-200', 'dark:border-red-800', 'text-red-600', 'dark:text-red-400', 'hover:bg-red-100', 'dark:hover:bg-red-900/30', 'active:bg-red-200'];
+    const greenClasses = ['bg-green-600', 'text-white', 'border-transparent', 'hover:bg-green-500', 'px-3', 'py-2'];
+
+    btn.classList.remove(...hoverClasses);
+    btn.disabled = true;
+    
+    btn.innerHTML = `<svg class="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>`;
+
+    try {
+        const res = await fetch('/api/traffic/reset', { method: 'POST' });
+        if (res.ok) {
+            btn.classList.remove(...redClasses);
+            btn.classList.add(...greenClasses);
+            
+            // Если текст длиннее кнопки, убираем фиксацию ширины для статуса успеха
+            btn.style.width = ''; 
+            
+            const doneText = (typeof I18N !== 'undefined' && I18N.web_traffic_reset_no_emoji) ? I18N.web_traffic_reset_no_emoji : "Done!";
+            
+            // ДОБАВЛЕНО: whitespace-nowrap
+            btn.innerHTML = `<div class="flex items-center justify-center gap-2"><svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg> <span class="text-[10px] font-bold uppercase tracking-wider whitespace-nowrap">${doneText}</span></div>`;
+            
+            setTimeout(() => {
+                btn.innerHTML = originalHTML;
+                btn.classList.remove(...greenClasses);
+                btn.classList.add(...redClasses);
+                btn.classList.add(...hoverClasses);
+                btn.style.width = '';
+                btn.disabled = false;
+            }, 2000);
+        } else {
+            const data = await res.json();
+            const errorShort = (typeof I18N !== 'undefined' && I18N.web_error_short) ? I18N.web_error_short : "Error";
+            await window.showModalAlert(I18N.web_error.replace('{error}', data.error || "Failed"), errorShort);
+            
+            btn.disabled = false;
+            btn.innerHTML = originalHTML;
+            btn.classList.add(...hoverClasses);
+            btn.style.width = '';
+        }
+    } catch (e) {
+        const errorShort = (typeof I18N !== 'undefined' && I18N.web_conn_error_short) ? I18N.web_conn_error_short : "Conn Error";
+        await window.showModalAlert(I18N.web_conn_error.replace('{error}', e), errorShort);
+        
+        btn.disabled = false;
+        btn.innerHTML = originalHTML;
+        btn.classList.add(...hoverClasses);
+        btn.style.width = '';
+    }
+}
+
+let settingsBtnTimer = null;
+
+async function handleSettingsBtnClick(btn, actionCallback) {
+    const container = btn.closest('div');
+    if (container) {
+        const allBtns = container.querySelectorAll('button');
+        allBtns.forEach(b => b.classList.remove('force-expanded'));
+    }
+    if (settingsBtnTimer) clearTimeout(settingsBtnTimer);
+    btn.classList.add('force-expanded');
+
+    try {
+        if (typeof actionCallback === 'function') {
+            await actionCallback();
+        }
+    } finally {
+        settingsBtnTimer = setTimeout(() => {
+            btn.classList.remove('force-expanded');
+            btn.blur(); 
+        }, 2500);
     }
 }

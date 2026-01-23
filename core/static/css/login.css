@@ -1,11 +1,12 @@
-/* /core/static/css/login.css */
-
-/* Отключение переходов при загрузке для предотвращения мигания */
-body, div, nav, main, button {
+body,
+div,
+nav,
+main,
+button {
     transition-property: none !important;
 }
 
-/* Возвращаем плавность только для интерактивных элементов */
+
 .transition-all {
     transition-property: all !important;
     transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1) !important;

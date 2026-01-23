@@ -66,23 +66,72 @@ run_with_spinner() {
     if [ $exit_code -ne 0 ]; then
         msg_error "Ошибка во время '$msg'. Код: $exit_code"
         msg_error "Подробности в логе: /tmp/${SERVICE_NAME}_install.log"
+        echo -e "${C_YELLOW}Последние строки лога (/tmp/${SERVICE_NAME}_install.log):${C_RESET}"
+        tail -n 10 /tmp/${SERVICE_NAME}_install.log
     fi
     return $exit_code
 }
 
-get_local_version() { if [ -f "$README_FILE" ]; then grep -oP 'img\.shields\.io/badge/version-v\K[\d\.]+' "$README_FILE" || echo "Не найдена"; else echo "Не установлен"; fi; }
+get_local_version() { 
+    # Сначала пробуем взять из ENV (сохраненная версия)
+    if [ -f "${ENV_FILE}" ]; then
+        local ver_env=$(grep '^INSTALLED_VERSION=' "${ENV_FILE}" | cut -d'=' -f2 | tr -d '"')
+        if [ -n "$ver_env" ]; then
+            echo "$ver_env"
+            return
+        fi
+    fi
+    
+    # Если в ENV нет, пробуем из README
+    if [ -f "$README_FILE" ]; then 
+        grep -oP 'img\.shields\.io/badge/version-v\K[\d\.]+' "$README_FILE" || echo "Не найдена"
+    else 
+        echo "Не установлен"
+    fi 
+}
 
 INSTALL_TYPE="НЕТ"; STATUS_MESSAGE="Проверка не проводилась."
+INTEGRITY_STATUS=""
+
 check_integrity() {
+    INTEGRITY_STATUS=""
     if [ ! -d "${BOT_INSTALL_PATH}" ] || [ ! -f "${ENV_FILE}" ]; then
         INSTALL_TYPE="НЕТ"; STATUS_MESSAGE="Бот не установлен."; return;
     fi
-    if grep -q "MODE=node" "${ENV_FILE}"; then
+
+    # Определяем режим установки для корректной проверки
+    DEPLOY_MODE_FROM_ENV=$(grep '^DEPLOY_MODE=' "${ENV_FILE}" | cut -d'=' -f2 | tr -d '"' || echo "systemd")
+    IS_NODE=$(grep -q "MODE=node" "${ENV_FILE}" && echo "yes" || echo "no")
+
+    # --- ПРОВЕРКА ЦЕЛОСТНОСТИ ---
+    if [ "$IS_NODE" == "yes" ]; then
+        # В режиме ноды .git удаляется намеренно, пропускаем проверку git
+        INTEGRITY_STATUS="${C_GREEN}🛡️ Режим НОДЫ (Git не требуется)${C_RESET}"
+    elif [ -d "${BOT_INSTALL_PATH}/.git" ]; then
+        cd "${BOT_INSTALL_PATH}" || return
+        
+        git fetch origin "$GIT_BRANCH" >/dev/null 2>&1
+        
+        local FILES_TO_CHECK="core modules bot.py watchdog.py migrate.py manage.py"
+        local DIFF=$(git diff --name-only "origin/$GIT_BRANCH" -- $FILES_TO_CHECK 2>/dev/null)
+        
+        if [ -n "$DIFF" ]; then
+            INTEGRITY_STATUS="${C_RED}⚠️ ЦЕЛОСТНОСТЬ НАРУШЕНА (Файлы отличаются от origin/${GIT_BRANCH})${C_RESET}"
+        else
+            INTEGRITY_STATUS="${C_GREEN}🛡️ Код подтвержден (Совпадает с origin/${GIT_BRANCH})${C_RESET}"
+        fi
+        cd - >/dev/null
+    else
+        INTEGRITY_STATUS="${C_YELLOW}⚠️ Git не найден (Невозможно проверить)${C_RESET}"
+    fi
+    # ----------------------------
+
+    if [ "$IS_NODE" == "yes" ]; then
         INSTALL_TYPE="НОДА (Клиент)"
         if systemctl is-active --quiet ${NODE_SERVICE_NAME}.service; then STATUS_MESSAGE="${C_GREEN}Активен${C_RESET}"; else STATUS_MESSAGE="${C_RED}Неактивен${C_RESET}"; fi
         return
     fi
-    DEPLOY_MODE_FROM_ENV=$(grep '^DEPLOY_MODE=' "${ENV_FILE}" | cut -d'=' -f2 | tr -d '"' || echo "systemd")
+
     if [ "$DEPLOY_MODE_FROM_ENV" == "docker" ]; then
         INSTALL_TYPE="АГЕНТ (Docker)"
         if command -v docker &> /dev/null && docker ps | grep -q "tg-bot"; then STATUS_MESSAGE="${C_GREEN}Docker OK${C_RESET}"; else STATUS_MESSAGE="${C_RED}Docker Stop${C_RESET}"; fi
@@ -287,6 +336,12 @@ ask_env_details() {
 
 write_env_file() {
     local dm=$1; local im=$2; local cn=$3
+    # 1. Сначала пробуем сохранить текущую версию из README
+    local ver=""
+    if [ -f "$README_FILE" ]; then
+        ver=$(grep -oP 'img\.shields\.io/badge/version-v\K[\d\.]+' "$README_FILE")
+    fi
+    if [ -z "$ver" ]; then ver="Unknown"; fi
 
     local debug_setting="true"
     if [ "$GIT_BRANCH" == "main" ]; then
@@ -307,6 +362,7 @@ ENABLE_WEB_UI="${ENABLE_WEB}"
 TG_WEB_INITIAL_PASSWORD="${GEN_PASS}"
 DEBUG="${debug_setting}"
 SENTRY_DSN="${SENTRY_DSN}"
+INSTALLED_VERSION="${ver}"
 EOF
     sudo chmod 600 "${ENV_FILE}"
 }
@@ -436,14 +492,12 @@ run_db_migrations() {
     fi
 
     # 4. Инициализация aerich
-    # Добавлено: Сообщение о процессе и || true для обработки ошибок
     if [ ! -f "${BOT_INSTALL_PATH}/aerich.ini" ]; then
         msg_info "Инициализация конфигурации Aerich..."
         $cmd_prefix ${VENV_PATH}/bin/aerich init -t core.config.TORTOISE_ORM >/dev/null 2>&1 || msg_warning "Предупреждение при aerich init (возможно, уже настроено)."
     fi
 
     # 5. Запуск миграций БД
-    # Исправлено: Убрано агрессивное подавление ошибок, добавлены сообщения
     if [ ! -d "${BOT_INSTALL_PATH}/migrations" ]; then
         msg_info "Создание базы данных..."
         if ! $cmd_prefix ${VENV_PATH}/bin/aerich init-db; then
@@ -475,14 +529,12 @@ install_systemd_logic() {
         setup_repo_and_dirs "${SERVICE_USER}"
         sudo -u ${SERVICE_USER} ${PYTHON_BIN} -m venv "${VENV_PATH}"
         run_with_spinner "Установка зависимостей" sudo -u ${SERVICE_USER} "${VENV_PATH}/bin/pip" install -r "${BOT_INSTALL_PATH}/requirements.txt"
-        # ДОБАВЛЕНО: Установка tomlkit
         run_with_spinner "Установка доп. пакетов (tomlkit)" sudo -u ${SERVICE_USER} "${VENV_PATH}/bin/pip" install tomlkit
         exec_cmd="sudo -u ${SERVICE_USER}"
     else
         setup_repo_and_dirs "root"
         ${PYTHON_BIN} -m venv "${VENV_PATH}"
         run_with_spinner "Установка зависимостей" "${VENV_PATH}/bin/pip" install -r "${BOT_INSTALL_PATH}/requirements.txt"
-        # ДОБАВЛЕНО: Установка tomlkit
         run_with_spinner "Установка доп. пакетов (tomlkit)" "${VENV_PATH}/bin/pip" install tomlkit
         exec_cmd=""
     fi
@@ -491,9 +543,6 @@ install_systemd_logic() {
     ask_env_details
     write_env_file "systemd" "$mode" ""
 
-    # Запуск миграций (включая JSON)
-    # run_with_spinner здесь может скрывать ошибки интерактивного вывода Aerich, 
-    # но run_db_migrations мы адаптировали.
     run_db_migrations "$exec_cmd"
 
     cleanup_files
@@ -503,14 +552,7 @@ install_systemd_logic() {
 
     # --- CLI UTILS ---
     msg_info "Создание команды 'tgcp-bot'..."
-    if [ ! -f "${BOT_INSTALL_PATH}/manage.py" ]; then
-       # Если файла manage.py нет, просто создаем заглушку, но мы его уже создали ранее
-       true
-    else
-       chmod +x "${BOT_INSTALL_PATH}/manage.py"
-    fi
     
-    # FIX: Добавлено чтение .env перед запуском
     sudo bash -c "cat > /usr/local/bin/tgcp-bot" <<EOF
 #!/bin/bash
 cd ${BOT_INSTALL_PATH}
@@ -523,7 +565,6 @@ ${VENV_PATH}/bin/python manage.py "\$@"
 EOF
     sudo chmod +x /usr/local/bin/tgcp-bot
 
-    # Проверка создания
     if [ -f "/usr/local/bin/tgcp-bot" ] && [ -x "/usr/local/bin/tgcp-bot" ]; then
         msg_success "Команда 'tgcp-bot' успешно создана!"
     else
@@ -564,19 +605,16 @@ install_docker_logic() {
     run_with_spinner "Сборка Docker" sudo $dc_cmd build
     run_with_spinner "Запуск Docker" sudo $dc_cmd --profile "${mode}" up -d --remove-orphans
 
-    # Попытка запустить миграции внутри контейнера
     msg_info "Попытка настройки БД в контейнере..."
     sudo $dc_cmd --profile "${mode}" exec -T ${container_name} aerich init -t core.config.TORTOISE_ORM >/dev/null 2>&1
     sudo $dc_cmd --profile "${mode}" exec -T ${container_name} aerich init-db >/dev/null 2>&1
     sudo $dc_cmd --profile "${mode}" exec -T ${container_name} aerich upgrade >/dev/null 2>&1
 
-    # Миграция JSON
     msg_info "Миграция JSON файлов в контейнере..."
     sudo $dc_cmd --profile "${mode}" exec -T ${container_name} python migrate.py >/dev/null 2>&1
     
     # --- CLI UTILS ---
     msg_info "Создание команды 'tgcp-bot' (Docker Wrapper)..."
-    # FIX: Передаем переменные, но в Docker они уже в контейнере
     sudo bash -c "cat > /usr/local/bin/tgcp-bot" <<EOF
 #!/bin/bash
 cd ${BOT_INSTALL_PATH}
@@ -586,7 +624,6 @@ sudo $dc_cmd --profile "\$MODE" exec -T \$CONTAINER python manage.py "\$@"
 EOF
     sudo chmod +x /usr/local/bin/tgcp-bot
 
-    # Проверка создания
     if [ -f "/usr/local/bin/tgcp-bot" ] && [ -x "/usr/local/bin/tgcp-bot" ]; then
         msg_success "Команда 'tgcp-bot' (Docker) успешно создана!"
     else
@@ -621,11 +658,19 @@ install_node_logic() {
     msg_question "Agent URL (http://IP:8080): " AGENT_URL
     msg_question "Token: " NODE_TOKEN
 
+    # --- СОХРАНЕНИЕ ВЕРСИИ ДЛЯ НОДЫ ---
+    local ver="Unknown"
+    if [ -f "$README_FILE" ]; then
+        ver=$(grep -oP 'img\.shields\.io/badge/version-v\K[\d\.]+' "$README_FILE")
+    fi
+    # ----------------------------------
+
     sudo bash -c "cat > ${ENV_FILE}" <<EOF
 MODE=node
 AGENT_BASE_URL="${AGENT_URL}"
 AGENT_TOKEN="${NODE_TOKEN}"
 NODE_UPDATE_INTERVAL=5
+INSTALLED_VERSION="${ver}"
 EOF
     sudo chmod 600 "${ENV_FILE}"
     sudo tee "/etc/systemd/system/${NODE_SERVICE_NAME}.service" > /dev/null <<EOF
@@ -670,16 +715,37 @@ update_bot() {
     if [ -f "${ENV_FILE}" ] && grep -q "MODE=node" "${ENV_FILE}"; then msg_info "Обновление Ноды..."; install_node_logic; return; fi
     if [ ! -d "${BOT_INSTALL_PATH}/.git" ]; then msg_error "Git не найден. Переустановите."; return 1; fi
 
+    # Очистка лога перед началом, чтобы не путать пользователя старыми ошибками
+    echo "" > /tmp/${SERVICE_NAME}_install.log
+
     local exec_cmd=""
     if [ -f "${ENV_FILE}" ] && grep -q "INSTALL_MODE=secure" "${ENV_FILE}"; then exec_cmd="sudo -u ${SERVICE_USER}"; fi
 
     cd "${BOT_INSTALL_PATH}"
     if ! run_with_spinner "Git fetch" $exec_cmd git fetch origin; then return 1; fi
     if ! run_with_spinner "Git reset" $exec_cmd git reset --hard "origin/${GIT_BRANCH}"; then return 1; fi
+    
+    # ОБНОВЛЕНИЕ ВЕРСИИ В .ENV (чтобы она не потерялась при очистке)
+    if [ -f "$README_FILE" ]; then
+        local new_ver=$(grep -oP 'img\.shields\.io/badge/version-v\K[\d\.]+' "$README_FILE")
+        if [ -n "$new_ver" ] && [ -f "${ENV_FILE}" ]; then
+             # Если ключ уже есть, заменяем
+             if grep -q "^INSTALLED_VERSION=" "${ENV_FILE}"; then
+                 sudo sed -i "s/^INSTALLED_VERSION=.*/INSTALLED_VERSION=${new_ver}/" "${ENV_FILE}"
+             else
+                 # Иначе добавляем
+                 sudo bash -c "echo 'INSTALLED_VERSION=${new_ver}' >> ${ENV_FILE}"
+             fi
+        fi
+    fi
+
     cleanup_agent_files
     cleanup_files
 
-    if [ -f "${ENV_FILE}" ] && grep -q "DEPLOY_MODE=docker" "${ENV_FILE}"; then
+    # СТРОГАЯ ПРОВЕРКА РЕЖИМА
+    local current_mode=$(grep '^DEPLOY_MODE=' "${ENV_FILE}" | cut -d'=' -f2 | tr -d '"')
+    
+    if [ "$current_mode" == "docker" ]; then
         if [ -f "docker-compose.yml" ]; then
             local dc_cmd=""; if sudo docker compose version &>/dev/null; then dc_cmd="docker compose"; else dc_cmd="docker-compose"; fi
             if ! run_with_spinner "Docker Up" sudo $dc_cmd up -d --build; then msg_error "Ошибка Docker."; return 1; fi
@@ -702,22 +768,20 @@ sudo $dc_cmd --profile "\$MODE" exec -T \$CONTAINER python manage.py "\$@"
 EOF
             sudo chmod +x /usr/local/bin/tgcp-bot
             
-            # Проверка создания
             if [ -f "/usr/local/bin/tgcp-bot" ] && [ -x "/usr/local/bin/tgcp-bot" ]; then
                 msg_success "CLI 'tgcp-bot' обновлен."
             fi
 
         else msg_error "Нет docker-compose.yml"; return 1; fi
     else
+        # SYSTEMD (по умолчанию, если не docker)
         run_with_spinner "Обновление pip" $exec_cmd "${VENV_PATH}/bin/pip" install -r "${BOT_INSTALL_PATH}/requirements.txt" --upgrade
-        # ДОБАВЛЕНО: Установка tomlkit при обновлении
         run_with_spinner "Обновление tomlkit" $exec_cmd "${VENV_PATH}/bin/pip" install tomlkit
 
         run_db_migrations "$exec_cmd"
         
         # Обновление CLI wrapper для systemd
         msg_info "Обновление CLI 'tgcp-bot'..."
-        # FIX: Добавлено чтение .env
         sudo bash -c "cat > /usr/local/bin/tgcp-bot" <<EOF
 #!/bin/bash
 cd ${BOT_INSTALL_PATH}
@@ -730,7 +794,6 @@ ${VENV_PATH}/bin/python manage.py "\$@"
 EOF
         sudo chmod +x /usr/local/bin/tgcp-bot
         
-        # Проверка создания
         if [ -f "/usr/local/bin/tgcp-bot" ] && [ -x "/usr/local/bin/tgcp-bot" ]; then
             msg_success "CLI 'tgcp-bot' обновлен."
         fi
@@ -742,7 +805,7 @@ EOF
 }
 
 main_menu() {
-    local local_version=$(get_local_version "$README_FILE")
+    local local_version=$(get_local_version)
     while true; do
         clear
         echo -e "${C_BLUE}${C_BOLD}╔═══════════════════════════════════╗${C_RESET}"
@@ -751,6 +814,9 @@ main_menu() {
         check_integrity
         echo -e "  Ветка: ${GIT_BRANCH} | Версия: ${local_version}"
         echo -e "  Тип: ${INSTALL_TYPE} | Статус: ${STATUS_MESSAGE}"
+        if [ -n "$INTEGRITY_STATUS" ]; then
+            echo -e "  Интегритет: ${INTEGRITY_STATUS}"
+        fi
         echo "--------------------------------------------------------"
         echo "  1) Обновить бота"
         echo "  2) Удалить бота"
@@ -758,7 +824,7 @@ main_menu() {
         echo "  4) Переустановить (Systemd - Root)"
         echo "  5) Переустановить (Docker - Secure)"
         echo "  6) Переустановить (Docker - Root)"
-        echo -e "${C_GREEN}  8) Установить НОДУ (Клиент)${C_RESET}"
+        echo -e "${C_GREEN}  7) Установить НОДУ (Клиент)${C_RESET}"
         echo "  0) Выход"
         echo "--------------------------------------------------------"
         read -p "$(echo -e "${C_BOLD}Ваш выбор: ${C_RESET}")" choice
@@ -769,7 +835,7 @@ main_menu() {
             4) uninstall_bot; install_systemd_logic "root"; read -p "Нажмите Enter..." ;;
             5) uninstall_bot; install_docker_logic "secure"; read -p "Нажмите Enter..." ;;
             6) uninstall_bot; install_docker_logic "root"; read -p "Нажмите Enter..." ;;
-            8) uninstall_bot; install_node_logic; read -p "Нажмите Enter..." ;;
+            7) uninstall_bot; install_node_logic; read -p "Нажмите Enter..." ;;
             0) break ;;
         esac
     done
@@ -794,7 +860,7 @@ if [ "$INSTALL_TYPE" == "НЕТ" ]; then
     echo "  2) АГЕНТ (Systemd - Root)    [Полный доступ]"
     echo "  3) АГЕНТ (Docker - Secure)   [Изоляция]"
     echo "  4) АГЕНТ (Docker - Root)     [Docker + Host]"
-    echo -e "${C_GREEN}  8) НОДА (Клиент)${C_RESET}"
+    echo -e "${C_GREEN}  7) НОДА (Клиент)${C_RESET}"
     echo "  0) Выход"
     echo "--------------------------------------------------------"
     read -p "$(echo -e "${C_BOLD}Ваш выбор: ${C_RESET}")" ch
@@ -803,7 +869,7 @@ if [ "$INSTALL_TYPE" == "НЕТ" ]; then
         2) uninstall_bot; install_systemd_logic "root"; read -p "Нажмите Enter..." ;;
         3) uninstall_bot; install_docker_logic "secure"; read -p "Нажмите Enter..." ;;
         4) uninstall_bot; install_docker_logic "root"; read -p "Нажмите Enter..." ;;
-        8) uninstall_bot; install_node_logic; read -p "Нажмите Enter..." ;;
+        7) uninstall_bot; install_node_logic; read -p "Нажмите Enter..." ;;
         0) exit 0 ;;
         *) msg_error "Неверный выбор."; sleep 2 ;;
     esac
