@@ -1072,11 +1072,10 @@ async def handle_settings_page(request):
         "web_node_rename_error": _("web_node_rename_error", lang),
         "web_traffic_reset_confirm": _("web_traffic_reset_confirm", lang),
         "web_traffic_reset_no_emoji": _("web_traffic_reset_no_emoji", lang),
-        "web_meta_lock_confirm": (
-            "ВНИМАНИЕ: Вы собираетесь заблокировать SEO настройки навсегда. Кнопка SEO настроек исчезнет, и вы больше не сможете изменить эти данные. Продолжить?"
-            if lang == "ru"
-            else "WARNING: You are about to lock SEO settings forever. The SEO Config button will disappear and you won't be able to change this data anymore. Continue?"
-        ),
+        "web_update_started_alert": _("web_update_started_alert", lang),
+        "web_logs_cleared_alert": _("web_logs_cleared_alert", lang),
+        "web_meta_lock_confirm": _("web_meta_lock_confirm", lang),
+
     }
     for btn_key, conf_key in BTN_CONFIG_MAP.items():
         i18n_data[f"lbl_{conf_key}"] = _(btn_key, lang)
@@ -1092,15 +1091,15 @@ async def handle_settings_page(request):
         "web_meta_desc": web_meta.get("description", ""),
         "web_meta_keywords": web_meta.get("keywords", ""),
         "meta_locked": meta_locked,
-        "web_seo_btn_short": "SEO",
-        "web_seo_btn_long": "SEO Config",
-        "web_seo_modal_title": "SEO & Branding",
-        "web_seo_favicon_label": "Favicon URL (ICO/PNG)",
-        "web_seo_title_label": "WebUI Title",
-        "web_seo_desc_label": "Meta Description",
-        "web_seo_keywords_label": "Keywords",
-        "web_seo_lock_label": "Lock Configuration Forever" if lang != 'ru' else "Больше не редактировать",
-        "web_seo_lock_desc": "If checked, this button will disappear forever." if lang != 'ru' else "Если отметить эту опцию, кнопка настроек исчезнет навсегда.",
+        "web_seo_btn_short": _("web_seo_btn_short", lang),
+        "web_seo_btn_long": _("web_seo_btn_long", lang),
+        "web_seo_modal_title": _("web_seo_modal_title", lang),
+        "web_seo_favicon_label": _("web_seo_favicon_label", lang),
+        "web_seo_title_label": _("web_seo_title_label", lang),
+        "web_seo_desc_label": _("web_seo_desc_label", lang),
+        "web_seo_keywords_label": _("web_seo_keywords_label", lang),
+        "web_seo_lock_label": _("web_seo_lock_label", lang),
+        "web_seo_lock_desc": _("web_seo_lock_desc", lang),
         "web_brand_name": TG_BOT_NAME,
         "user_name": user.get("first_name"),
         "user_avatar": _get_avatar_html(user),
@@ -1119,7 +1118,8 @@ async def handle_settings_page(request):
         "notifications_alert_name_logins": _("notifications_alert_name_logins", lang),
         "notifications_alert_name_bans": _("notifications_alert_name_bans", lang),
         "notifications_alert_name_downtime": _(
-        "notifications_alert_name_downtime", lang),
+            "notifications_alert_name_downtime", lang
+        ),
         "web_save_btn": _("web_save_btn", lang),
         "web_users_section": _("web_users_section", lang),
         "web_add_user_btn": _("web_add_user_btn", lang),
@@ -1156,7 +1156,6 @@ async def handle_settings_page(request):
         "web_hint_traffic_interval": _("web_hint_traffic_interval", lang),
         "web_hint_node_timeout": _("web_hint_node_timeout", lang),
         "web_keyboard_title": _("web_keyboard_title", lang),
-        "web_soon_placeholder": _("web_soon_placeholder", lang),
         "web_node_mgmt_title": _("web_node_mgmt_title", lang),
         "web_kb_desc": _("web_kb_desc", lang),
         "web_kb_btn_config": _("web_kb_btn_config", lang),
@@ -1190,6 +1189,7 @@ async def handle_settings_page(request):
     template = JINJA_ENV.get_template("settings.html")
     html = template.render(**context)
     return web.Response(text=html, content_type="text/html")
+    
 async def handle_save_notifications(request):
     user = get_current_user(request)
     if not user:
@@ -2294,8 +2294,6 @@ async def handle_save_keyboard_config(request):
     except Exception as e:
         return web.json_response({"error": str(e)}, status=500)
 
-
-# --- NEW: METADATA SAVE HANDLER ---
 async def handle_save_metadata(request):
     user = get_current_user(request)
     if not user or user["role"] != "admins":
@@ -2303,8 +2301,6 @@ async def handle_save_metadata(request):
     
     try:
         data = await request.json()
-        
-        # Проверяем блокировку перед сохранением
         current_meta = getattr(current_config, "WEB_METADATA", {})
         if current_meta.get("locked", False):
              return web.json_response({"error": "Metadata is permanently locked"}, status=403)
@@ -2316,17 +2312,13 @@ async def handle_save_metadata(request):
             "keywords": str(data.get("keywords", "")).strip(),
             "locked": bool(data.get("locked", False))
         }
-
-        # Сохраняем в конфиг (в память и на диск)
         current_config.WEB_METADATA = new_meta
         save_system_config({"WEB_METADATA": new_meta})
 
         return web.json_response({"status": "ok"})
     except Exception as e:
         return web.json_response({"error": str(e)}, status=500)
-# ----------------------------------
-
-
+        
 async def handle_change_password(request):
     user = get_current_user(request)
     if not user:
@@ -2463,12 +2455,9 @@ async def handle_login_page(request):
             
     lang_cookie = request.cookies.get("guest_lang", DEFAULT_LANGUAGE)
     lang = lang_cookie if lang_cookie in ["ru", "en"] else DEFAULT_LANGUAGE
-    
-    # --- META DATA ---
     web_meta = getattr(current_config, "WEB_METADATA", {})
     custom_title = web_meta.get("title", "")
     page_title = custom_title if custom_title else TG_BOT_NAME
-    # -----------------
 
     keys = [
         "web_error", "web_conn_error", "modal_title_alert", "modal_title_confirm",
@@ -2498,11 +2487,9 @@ async def handle_login_page(request):
     
     context = {
         "web_title": page_title,
-        # --- SEO FIELDS ---
         "web_favicon": web_meta.get("favicon", "/static/favicon.ico"),
         "web_meta_desc": web_meta.get("description", ""),
         "web_meta_keywords": web_meta.get("keywords", ""),
-        # ------------------
         "default_pass_alert": alert,
         "error_block": "",
         "bot_username": BOT_USERNAME_CACHE or "",
@@ -2681,13 +2668,9 @@ async def handle_reset_page_render(request):
         return web.Response(text="Expired", status=403)
     
     lang = DEFAULT_LANGUAGE
-    
-    # --- META DATA ---
     web_meta = getattr(current_config, "WEB_METADATA", {})
     custom_title = web_meta.get("title", "")
     page_title = custom_title if custom_title else f"Reset Password - {TG_BOT_NAME}"
-    # -----------------
-
     i18n_data = {
         "web_error": _("web_error", lang, error=""),
         "web_conn_error": _("web_conn_error", lang, error=""),
@@ -2715,11 +2698,9 @@ async def handle_reset_page_render(request):
     }
     context = {
         "web_title": page_title,
-        # --- SEO FIELDS ---
         "web_favicon": web_meta.get("favicon", "/static/favicon.ico"),
         "web_meta_desc": web_meta.get("description", ""),
         "web_meta_keywords": web_meta.get("keywords", ""),
-        # ------------------
         "web_version": CACHE_VER,
         "token": token,
         "i18n_json": json.dumps(i18n_data),
@@ -3240,11 +3221,7 @@ async def start_web_server(bot_instance: Bot):
         app.router.add_post("/api/settings/system", handle_save_system_config)
         app.router.add_post("/api/settings/password", handle_change_password)
         app.router.add_post("/api/settings/keyboard", handle_save_keyboard_config)
-        
-        # --- NEW METADATA ROUTE ---
         app.router.add_post("/api/settings/metadata", handle_save_metadata)
-        # --------------------------
-        
         app.router.add_post("/api/logs/clear", handle_clear_logs)
         app.router.add_post("/api/traffic/reset", handle_reset_traffic)
         app.router.add_post("/api/users/action", handle_user_action)
