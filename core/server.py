@@ -1807,6 +1807,7 @@ async def handle_sse_logs(request):
     user = get_current_user(request)
     if not user or user["role"] != "admins":
         return web.Response(status=403)
+    
     log_type = request.query.get("type", "bot")
     resp = web.StreamResponse(status=200, reason="OK")
     resp.headers["Content-Type"] = "text/event-stream"
@@ -1815,8 +1816,10 @@ async def handle_sse_logs(request):
     resp.headers["X-Accel-Buffering"] = "no"
     resp.enable_compression(False)
     await resp.prepare(request)
+    
     shutdown_event = request.app.get("shutdown_event")
     journal_bin = ["journalctl"]
+    
     if DEPLOY_MODE == "docker" and current_config.INSTALL_MODE == "root":
         if os.path.exists("/host/usr/bin/journalctl"):
             journal_bin = ["chroot", "/host", "/usr/bin/journalctl"]
@@ -1831,13 +1834,17 @@ async def handle_sse_logs(request):
             cmd.extend(["-n", str(lines)])
         else:
             cmd.extend(["-n", "300"])
+        
         try:
             proc = await asyncio.create_subprocess_exec(
                 *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
             )
             stdout, stderr = await proc.communicate()
+            
             if proc.returncode != 0:
-                return ([f"Error: {stderr.decode('utf-8', errors='ignore')}"], cursor)
+                logging.error(f"Journalctl error: {stderr.decode('utf-8', errors='ignore')}")
+                return (["Error: Failed to fetch system logs"], cursor)
+            
             raw_output = stdout.decode("utf-8", errors="ignore").strip().split("\n")
             log_lines = []
             new_cursor = cursor
@@ -1848,7 +1855,8 @@ async def handle_sse_logs(request):
                     log_lines.append(line)
             return (log_lines, new_cursor)
         except Exception as e:
-            return ([f"Error executing journalctl: {str(e)}"], cursor)
+            logging.error(f"Exception in fetch_sys_logs: {e}")
+            return (["Error: Failed to execute log retrieval"], cursor)
 
     bot_log_path = os.path.join(BASE_DIR, "logs", "bot", "bot.log")
     last_pos = 0
@@ -1856,15 +1864,13 @@ async def handle_sse_logs(request):
     last_sent_lines_hash = None
     last_activity = time.time()
     KEEPALIVE_INTERVAL = 25
+
     if log_type == "bot":
         clean_lines = []
         if os.path.exists(bot_log_path):
             try:
-
                 def read_history():
-                    with open(
-                        bot_log_path, "r", encoding="utf-8", errors="ignore"
-                    ) as f:
+                    with open(bot_log_path, "r", encoding="utf-8", errors="ignore") as f:
                         lines = list(deque(f, 300))
                         f.seek(0, 2)
                         return (lines, f.tell())
@@ -1874,13 +1880,13 @@ async def handle_sse_logs(request):
                     clean_lines = [l.rstrip() for l in history_lines]
             except Exception as e:
                 logging.error(f"Error reading bot history: {e}")
+        
         await resp.write(
-            f"event: logs\ndata: {json.dumps({'logs': clean_lines})}\n\n".encode(
-                "utf-8"
-            )
+            f"event: logs\ndata: {json.dumps({'logs': clean_lines})}\n\n".encode("utf-8")
         )
         await resp.drain()
         last_activity = time.time()
+
     elif log_type == "sys":
         history_lines = []
         sys_cursor = None
@@ -1888,26 +1894,28 @@ async def handle_sse_logs(request):
             history_lines, sys_cursor = await fetch_sys_logs(lines=300)
         except Exception as e:
             logging.error(f"Error fetching sys logs: {e}")
+            history_lines = ["Error: System logs temporarily unavailable"]
+        
         logs_to_send = history_lines if history_lines else []
         await resp.write(
-            f"event: logs\ndata: {json.dumps({'logs': logs_to_send})}\n\n".encode(
-                "utf-8"
-            )
+            f"event: logs\ndata: {json.dumps({'logs': logs_to_send})}\n\n".encode("utf-8")
         )
         await resp.drain()
         last_activity = time.time()
+
     try:
         while True:
             if shared_state.IS_RESTARTING:
                 await resp.write(b"event: shutdown\ndata: restarting\n\n")
                 await resp.drain()
                 break
+            
             if request.transport is None or request.transport.is_closing():
                 break
+            
             data_sent = False
             if log_type == "bot":
                 if os.path.exists(bot_log_path):
-
                     def read_updates(cursor):
                         new_data = []
                         new_cursor = cursor
@@ -1916,9 +1924,7 @@ async def handle_sse_logs(request):
                             if current_size < cursor:
                                 cursor = 0
                             if current_size > cursor:
-                                with open(
-                                    bot_log_path, "r", encoding="utf-8", errors="ignore"
-                                ) as f:
+                                with open(bot_log_path, "r", encoding="utf-8", errors="ignore") as f:
                                     f.seek(cursor)
                                     new_data = f.readlines()
                                     new_cursor = f.tell()
@@ -1926,18 +1932,15 @@ async def handle_sse_logs(request):
                             pass
                         return (new_data, new_cursor)
 
-                    new_lines, last_pos = await asyncio.to_thread(
-                        read_updates, last_pos
-                    )
+                    new_lines, last_pos = await asyncio.to_thread(read_updates, last_pos)
                     if new_lines:
                         clean_lines = [l.rstrip() for l in new_lines]
                         await resp.write(
-                            f"event: logs\ndata: {json.dumps({'logs': clean_lines})}\n\n".encode(
-                                "utf-8"
-                            )
+                            f"event: logs\ndata: {json.dumps({'logs': clean_lines})}\n\n".encode("utf-8")
                         )
                         await resp.drain()
                         data_sent = True
+
             elif log_type == "sys":
                 new_lines = []
                 try:
@@ -1947,20 +1950,22 @@ async def handle_sse_logs(request):
                         new_lines, sys_cursor = await fetch_sys_logs(lines=10)
                 except Exception as e:
                     logging.error(f"Error streaming sys logs: {e}")
-                if not sys_cursor and new_lines:
+                    new_lines = ["Error: Connection to system logs lost"]
+                
+                if not sys_cursor and new_lines and "Error:" not in new_lines[0]:
                     current_hash = hash(tuple(new_lines))
                     if current_hash == last_sent_lines_hash:
                         new_lines = []
                     else:
                         last_sent_lines_hash = current_hash
+                
                 if new_lines:
                     await resp.write(
-                        f"event: logs\ndata: {json.dumps({'logs': new_lines})}\n\n".encode(
-                            "utf-8"
-                        )
+                        f"event: logs\ndata: {json.dumps({'logs': new_lines})}\n\n".encode("utf-8")
                     )
                     await resp.drain()
                     data_sent = True
+
             if data_sent:
                 last_activity = time.time()
             elif time.time() - last_activity > KEEPALIVE_INTERVAL:
@@ -1970,6 +1975,7 @@ async def handle_sse_logs(request):
                     last_activity = time.time()
                 except Exception:
                     break
+
             if shutdown_event:
                 try:
                     if not shared_state.IS_RESTARTING:
@@ -1979,6 +1985,7 @@ async def handle_sse_logs(request):
                     pass
             else:
                 await asyncio.sleep(1.0)
+
     except asyncio.CancelledError:
         pass
     except Exception as e:
@@ -1989,8 +1996,8 @@ async def handle_sse_logs(request):
                 await resp.write(f"event: error\ndata: {safe_msg}\n\n".encode("utf-8"))
             except Exception:
                 pass
+    
     return resp
-
 
 async def handle_sse_node_details(request):
     user = get_current_user(request)

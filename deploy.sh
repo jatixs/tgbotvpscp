@@ -528,12 +528,14 @@ install_systemd_logic() {
         if ! id "${SERVICE_USER}" &>/dev/null; then sudo useradd -r -s /bin/false -d ${BOT_INSTALL_PATH} ${SERVICE_USER}; fi
         setup_repo_and_dirs "${SERVICE_USER}"
         sudo -u ${SERVICE_USER} ${PYTHON_BIN} -m venv "${VENV_PATH}"
+        run_with_spinner "Обновление pip" sudo -u ${SERVICE_USER} "${VENV_PATH}/bin/pip" install --upgrade pip
         run_with_spinner "Установка зависимостей" sudo -u ${SERVICE_USER} "${VENV_PATH}/bin/pip" install -r "${BOT_INSTALL_PATH}/requirements.txt"
         run_with_spinner "Установка доп. пакетов (tomlkit)" sudo -u ${SERVICE_USER} "${VENV_PATH}/bin/pip" install tomlkit
         exec_cmd="sudo -u ${SERVICE_USER}"
     else
         setup_repo_and_dirs "root"
         ${PYTHON_BIN} -m venv "${VENV_PATH}"
+        run_with_spinner "Обновление pip" "${VENV_PATH}/bin/pip" install --upgrade pip
         run_with_spinner "Установка зависимостей" "${VENV_PATH}/bin/pip" install -r "${BOT_INSTALL_PATH}/requirements.txt"
         run_with_spinner "Установка доп. пакетов (tomlkit)" "${VENV_PATH}/bin/pip" install tomlkit
         exec_cmd=""
@@ -651,6 +653,7 @@ install_node_logic() {
     setup_repo_and_dirs "root"
     msg_info "Настройка venv..."
     if [ ! -d "${VENV_PATH}" ]; then run_with_spinner "Создание venv" ${PYTHON_BIN} -m venv "${VENV_PATH}"; fi
+    run_with_spinner "Обновление pip" "${VENV_PATH}/bin/pip" install --upgrade pip
     run_with_spinner "Установка зависимостей" "${VENV_PATH}/bin/pip" install psutil requests
 
     load_cached_env
