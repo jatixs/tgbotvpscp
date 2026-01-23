@@ -66,7 +66,6 @@ run_with_spinner() {
     if [ $exit_code -ne 0 ]; then
         msg_error "Ошибка во время '$msg'. Код: $exit_code"
         msg_error "Подробности в логе: /tmp/${SERVICE_NAME}_install.log"
-        # Выводим последние 10 строк лога для диагностики
         echo -e "${C_YELLOW}Последние строки лога (/tmp/${SERVICE_NAME}_install.log):${C_RESET}"
         tail -n 10 /tmp/${SERVICE_NAME}_install.log
     fi
@@ -83,7 +82,7 @@ get_local_version() {
         fi
     fi
     
-    # Если в ENV нет, пробуем из README (если файл еще существует)
+    # Если в ENV нет, пробуем из README
     if [ -f "$README_FILE" ]; then 
         grep -oP 'img\.shields\.io/badge/version-v\K[\d\.]+' "$README_FILE" || echo "Не найдена"
     else 
@@ -100,14 +99,19 @@ check_integrity() {
         INSTALL_TYPE="НЕТ"; STATUS_MESSAGE="Бот не установлен."; return;
     fi
 
-    # --- ПРОВЕРКА ЦЕЛОСТНОСТИ (Local vs Remote Branch) ---
-    if [ -d "${BOT_INSTALL_PATH}/.git" ]; then
-        # Обновляем информацию о ветках (тихо) и проверяем, существует ли ветка
+    # Определяем режим установки для корректной проверки
+    DEPLOY_MODE_FROM_ENV=$(grep '^DEPLOY_MODE=' "${ENV_FILE}" | cut -d'=' -f2 | tr -d '"' || echo "systemd")
+    IS_NODE=$(grep -q "MODE=node" "${ENV_FILE}" && echo "yes" || echo "no")
+
+    # --- ПРОВЕРКА ЦЕЛОСТНОСТИ ---
+    if [ "$IS_NODE" == "yes" ]; then
+        # В режиме ноды .git удаляется намеренно, пропускаем проверку git
+        INTEGRITY_STATUS="${C_GREEN}🛡️ Режим НОДЫ (Git не требуется)${C_RESET}"
+    elif [ -d "${BOT_INSTALL_PATH}/.git" ]; then
         cd "${BOT_INSTALL_PATH}" || return
+        
         git fetch origin "$GIT_BRANCH" >/dev/null 2>&1
         
-        # Сравниваем указанные папки/файлы с удаленной веткой
-        # Игнорируем права доступа (filemode)
         local FILES_TO_CHECK="core modules bot.py watchdog.py migrate.py manage.py"
         local DIFF=$(git diff --name-only "origin/$GIT_BRANCH" -- $FILES_TO_CHECK 2>/dev/null)
         
@@ -120,14 +124,14 @@ check_integrity() {
     else
         INTEGRITY_STATUS="${C_YELLOW}⚠️ Git не найден (Невозможно проверить)${C_RESET}"
     fi
-    # -----------------------------------------------------
+    # ----------------------------
 
-    if grep -q "MODE=node" "${ENV_FILE}"; then
+    if [ "$IS_NODE" == "yes" ]; then
         INSTALL_TYPE="НОДА (Клиент)"
         if systemctl is-active --quiet ${NODE_SERVICE_NAME}.service; then STATUS_MESSAGE="${C_GREEN}Активен${C_RESET}"; else STATUS_MESSAGE="${C_RED}Неактивен${C_RESET}"; fi
         return
     fi
-    DEPLOY_MODE_FROM_ENV=$(grep '^DEPLOY_MODE=' "${ENV_FILE}" | cut -d'=' -f2 | tr -d '"' || echo "systemd")
+
     if [ "$DEPLOY_MODE_FROM_ENV" == "docker" ]; then
         INSTALL_TYPE="АГЕНТ (Docker)"
         if command -v docker &> /dev/null && docker ps | grep -q "tg-bot"; then STATUS_MESSAGE="${C_GREEN}Docker OK${C_RESET}"; else STATUS_MESSAGE="${C_RED}Docker Stop${C_RESET}"; fi
@@ -282,7 +286,7 @@ cleanup_files() {
     sudo rm -f "$BOT_INSTALL_PATH/.gitignore"
     sudo rm -f "$BOT_INSTALL_PATH/LICENSE"
     
-    # README тоже не нужен для работы (но сначала версия должна быть сохранена)
+    # README тоже не нужен для работы
     sudo rm -f "$BOT_INSTALL_PATH/README.md"
     sudo rm -f "$BOT_INSTALL_PATH/README.en.md"
 
@@ -654,11 +658,19 @@ install_node_logic() {
     msg_question "Agent URL (http://IP:8080): " AGENT_URL
     msg_question "Token: " NODE_TOKEN
 
+    # --- СОХРАНЕНИЕ ВЕРСИИ ДЛЯ НОДЫ ---
+    local ver="Unknown"
+    if [ -f "$README_FILE" ]; then
+        ver=$(grep -oP 'img\.shields\.io/badge/version-v\K[\d\.]+' "$README_FILE")
+    fi
+    # ----------------------------------
+
     sudo bash -c "cat > ${ENV_FILE}" <<EOF
 MODE=node
 AGENT_BASE_URL="${AGENT_URL}"
 AGENT_TOKEN="${NODE_TOKEN}"
 NODE_UPDATE_INTERVAL=5
+INSTALLED_VERSION="${ver}"
 EOF
     sudo chmod 600 "${ENV_FILE}"
     sudo tee "/etc/systemd/system/${NODE_SERVICE_NAME}.service" > /dev/null <<EOF
@@ -730,7 +742,7 @@ update_bot() {
     cleanup_agent_files
     cleanup_files
 
-    # СТРОГАЯ ПРОВЕРКА РЕЖИМА (исправление бага "смешивания")
+    # СТРОГАЯ ПРОВЕРКА РЕЖИМА
     local current_mode=$(grep '^DEPLOY_MODE=' "${ENV_FILE}" | cut -d'=' -f2 | tr -d '"')
     
     if [ "$current_mode" == "docker" ]; then
@@ -812,7 +824,7 @@ main_menu() {
         echo "  4) Переустановить (Systemd - Root)"
         echo "  5) Переустановить (Docker - Secure)"
         echo "  6) Переустановить (Docker - Root)"
-        echo -e "${C_GREEN}  8) Установить НОДУ (Клиент)${C_RESET}"
+        echo -e "${C_GREEN}  7) Установить НОДУ (Клиент)${C_RESET}"
         echo "  0) Выход"
         echo "--------------------------------------------------------"
         read -p "$(echo -e "${C_BOLD}Ваш выбор: ${C_RESET}")" choice
@@ -823,7 +835,7 @@ main_menu() {
             4) uninstall_bot; install_systemd_logic "root"; read -p "Нажмите Enter..." ;;
             5) uninstall_bot; install_docker_logic "secure"; read -p "Нажмите Enter..." ;;
             6) uninstall_bot; install_docker_logic "root"; read -p "Нажмите Enter..." ;;
-            8) uninstall_bot; install_node_logic; read -p "Нажмите Enter..." ;;
+            7) uninstall_bot; install_node_logic; read -p "Нажмите Enter..." ;;
             0) break ;;
         esac
     done
@@ -848,7 +860,7 @@ if [ "$INSTALL_TYPE" == "НЕТ" ]; then
     echo "  2) АГЕНТ (Systemd - Root)    [Полный доступ]"
     echo "  3) АГЕНТ (Docker - Secure)   [Изоляция]"
     echo "  4) АГЕНТ (Docker - Root)     [Docker + Host]"
-    echo -e "${C_GREEN}  8) НОДА (Клиент)${C_RESET}"
+    echo -e "${C_GREEN}  7) НОДА (Клиент)${C_RESET}"
     echo "  0) Выход"
     echo "--------------------------------------------------------"
     read -p "$(echo -e "${C_BOLD}Ваш выбор: ${C_RESET}")" ch
@@ -857,7 +869,7 @@ if [ "$INSTALL_TYPE" == "НЕТ" ]; then
         2) uninstall_bot; install_systemd_logic "root"; read -p "Нажмите Enter..." ;;
         3) uninstall_bot; install_docker_logic "secure"; read -p "Нажмите Enter..." ;;
         4) uninstall_bot; install_docker_logic "root"; read -p "Нажмите Enter..." ;;
-        8) uninstall_bot; install_node_logic; read -p "Нажмите Enter..." ;;
+        7) uninstall_bot; install_node_logic; read -p "Нажмите Enter..." ;;
         0) exit 0 ;;
         *) msg_error "Неверный выбор."; sleep 2 ;;
     esac
