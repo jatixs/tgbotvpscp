@@ -291,6 +291,6 @@ bash <(wget -qO- https://raw.githubusercontent.com/jatixs/tgbotvpscp/main/deploy
 -----
 ## 👤 Автор
 
-**Версия:** 1.16.0 (Build 59) <br>
+**Версия:** 1.16.0 (Build 60) <br>
 **Автор:** Jatix <br>
 📜 **Лицензия:** GPL-3.0 <br>
