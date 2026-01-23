@@ -649,6 +649,8 @@ async def handle_dashboard(request):
                 "web_node_rename_error": _("web_node_rename_error", lang),
                 "web_traffic_reset_confirm": _("web_traffic_reset_confirm", lang),
                 "traffic_reset_done": _("web_traffic_reset_no_emoji", lang),
+                "web_logs_empty_title": _("web_logs_empty_title", lang),
+                "web_logs_empty_desc": _("web_logs_empty_desc", lang),
             }
         ),
     }
