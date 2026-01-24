@@ -54,6 +54,7 @@ from .utils import (
     encrypt_for_web,
     decrypt_for_web,
     get_web_key,
+    generate_favicons,
 )
 from .auth import save_users, get_user_name
 from .keyboards import BTN_CONFIG_MAP
@@ -2171,6 +2172,12 @@ async def start_web_server(bot_instance: Bot):
         logging.info("Web UI ENABLED.")
         if os.path.exists(STATIC_DIR):
             app.router.add_static("/static", STATIC_DIR)
+        async def handle_manifest(request):
+            manifest_path = os.path.join(STATIC_DIR, "favicons", "site.webmanifest")
+            if os.path.exists(manifest_path):
+                return web.FileResponse(manifest_path)
+            return web.Response(status=404)
+        app.router.add_get("/site.webmanifest", handle_manifest)
         app.router.add_get("/", handle_dashboard)
         app.router.add_get("/settings", handle_settings_page)
         app.router.add_get("/login", handle_login_page)
@@ -2314,13 +2321,18 @@ async def handle_save_metadata(request):
         if current_meta.get("locked", False):
              return web.json_response({"error": "Metadata is permanently locked"}, status=403)
 
+        new_favicon_url = str(data.get("favicon", "")).strip()
+
         new_meta = {
-            "favicon": str(data.get("favicon", "")).strip(),
+            "favicon": new_favicon_url,
             "title": str(data.get("title", "")).strip(),
             "description": str(data.get("description", "")).strip(),
             "keywords": str(data.get("keywords", "")).strip(),
             "locked": bool(data.get("locked", False))
         }
+        if new_favicon_url:
+            static_fav_dir = os.path.join(STATIC_DIR, "favicons")
+            await asyncio.to_thread(generate_favicons, new_favicon_url, static_fav_dir)
         current_config.WEB_METADATA = new_meta
         save_system_config({"WEB_METADATA": new_meta})
 
@@ -3208,6 +3220,16 @@ async def start_web_server(bot_instance: Bot):
         logging.info("Web UI ENABLED.")
         if os.path.exists(STATIC_DIR):
             app.router.add_static("/static", STATIC_DIR)
+        
+        # Добавляем маршрут для манифеста
+        async def handle_manifest(request):
+            manifest_path = os.path.join(STATIC_DIR, "favicons", "site.webmanifest")
+            if os.path.exists(manifest_path):
+                return web.FileResponse(manifest_path)
+            return web.Response(status=404)
+
+        app.router.add_get("/site.webmanifest", handle_manifest)
+
         app.router.add_get("/", handle_dashboard)
         app.router.add_get("/settings", handle_settings_page)
         app.router.add_get("/login", handle_login_page)

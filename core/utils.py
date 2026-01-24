@@ -8,9 +8,17 @@ import time
 import aiohttp
 import base64
 import hashlib
+import requests
+from io import BytesIO
 from datetime import datetime
 from aiogram import Bot
 from aiogram.exceptions import TelegramBadRequest
+try:
+    from PIL import Image, ImageStat
+except ImportError:
+    Image = None
+    ImageStat = None
+
 from . import config
 from . import shared_state
 from .i18n import get_text, get_user_lang
@@ -398,3 +406,99 @@ def update_env_variable(key: str, value: str, env_path: str = None):
             f.writelines(new_lines)
     except Exception as e:
         logging.error(f"Error updating env variable {key}: {e}")
+
+
+def generate_favicons(source_url_or_path: str, output_dir: str):
+    """
+    Генерирует набор фавиконок и манифест из исходного изображения.
+    Автоматически добавляет фон, если изображение прозрачное.
+    """
+    if not Image:
+        logging.error("Pillow not installed. Cannot generate favicons.")
+        return False
+
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir, exist_ok=True)
+
+    try:
+        img = None
+        if source_url_or_path.startswith('http'):
+            response = requests.get(source_url_or_path, timeout=10)
+            if response.status_code == 200:
+                img = Image.open(BytesIO(response.content))
+        elif os.path.exists(source_url_or_path):
+            img = Image.open(source_url_or_path)
+
+        if not img:
+            logging.error(f"Failed to load source image for favicon: {source_url_or_path}")
+            return False
+        img = img.convert("RGBA")
+        alpha = img.getchannel('A')
+        extrema = alpha.getextrema()
+        theme_color_hex = "#ffffff" # Default
+        
+        if extrema[0] < 255: 
+            logging.info("Transparency detected in favicon. Calculating background color...")
+            thumb = img.copy()
+            thumb.thumbnail((64, 64)) 
+            r, g, b, a_thumb = thumb.split()
+            stat = ImageStat.Stat(thumb, mask=a_thumb)
+            
+            if stat.count[0] > 0:
+                avg_r = int(stat.mean[0])
+                avg_g = int(stat.mean[1])
+                avg_b = int(stat.mean[2])
+                bg_color = (avg_r, avg_g, avg_b, 255)
+            else:
+                bg_color = (255, 255, 255, 255)
+            background = Image.new("RGBA", img.size, bg_color)
+            background.alpha_composite(img)
+            img = background.convert("RGB") # Убираем альфа-канал
+            
+            theme_color_hex = '#{:02x}{:02x}{:02x}'.format(*bg_color[:3])
+        else:
+            pass
+        icons_config = [
+            ("favicon-16x16.png", (16, 16)),
+            ("favicon-32x32.png", (32, 32)),
+            ("apple-touch-icon.png", (180, 180)),
+            ("android-chrome-192x192.png", (192, 192)),
+            ("android-chrome-512x512.png", (512, 512))
+        ]
+        for filename, size in icons_config:
+            resized_img = img.resize(size, Image.Resampling.LANCZOS)
+            resized_img.save(os.path.join(output_dir, filename), format="PNG")
+
+        # 4. Генерация favicon.ico (содержит 16x16, 32x32, 48x48)
+        img.save(os.path.join(output_dir, "favicon.ico"), format="ICO", sizes=[(16, 16), (32, 32), (48, 48)])
+
+        # 5. Генерация site.webmanifest
+        manifest_content = {
+            "name": "TG Bot Panel",
+            "short_name": "BotPanel",
+            "icons": [
+                {
+                    "src": "/static/favicons/android-chrome-192x192.png",
+                    "sizes": "192x192",
+                    "type": "image/png"
+                },
+                {
+                    "src": "/static/favicons/android-chrome-512x512.png",
+                    "sizes": "512x512",
+                    "type": "image/png"
+                }
+            ],
+            "theme_color": theme_color_hex,
+            "background_color": theme_color_hex,
+            "display": "standalone"
+        }
+        
+        with open(os.path.join(output_dir, "site.webmanifest"), "w", encoding="utf-8") as f:
+            json.dump(manifest_content, f, indent=2)
+
+        logging.info(f"Favicons generated. Theme color: {theme_color_hex}")
+        return True
+
+    except Exception as e:
+        logging.error(f"Error generating favicons: {e}")
+        return False
