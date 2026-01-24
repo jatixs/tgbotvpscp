@@ -235,48 +235,34 @@ load_cached_env() {
         fi
     fi
 }
-
-# --- ФУНКЦИИ ОЧИСТКИ (CLEANUP) ---
-
-# 1. Удаление мусора (общее)
 cleanup_common_trash() {
-    msg_info "🧹 Очистка временных файлов..."
     if [ -d "$BOT_INSTALL_PATH/.github" ]; then sudo rm -rf "$BOT_INSTALL_PATH/.github"; fi
     if [ -d "$BOT_INSTALL_PATH/assets" ]; then sudo rm -rf "$BOT_INSTALL_PATH/assets"; fi
-    sudo rm -f "$BOT_INSTALL_PATH/custom_module.md" "$BOT_INSTALL_PATH/custom_module_en.md"
-    sudo rm -f "$BOT_INSTALL_PATH/.gitignore" "$BOT_INSTALL_PATH/LICENSE"
-    sudo rm -f "$BOT_INSTALL_PATH/README.md" "$BOT_INSTALL_PATH/README.en.md"
+    sudo find "$BOT_INSTALL_PATH" -maxdepth 1 -type f \( -name "*.txt" -o -name "*.md" -o -name "*.ini" -o -name "*.sh" -o -name ".gitignore" -o -name "LICENSE" \) -delete
     sudo find "$BOT_INSTALL_PATH" -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null
 }
-
-# 2. Очистка для режима Systemd (удаляем Docker-файлы и Node)
 cleanup_for_systemd() {
+    local action_name=$1
+    msg_info "Завершение ${action_name}..."
     cleanup_common_trash
-    msg_info "🧹 Удаление файлов Docker и Node..."
     sudo rm -rf "${BOT_INSTALL_PATH}/node"
     sudo rm -f "${BOT_INSTALL_PATH}/Dockerfile" "${BOT_INSTALL_PATH}/docker-compose.yml"
 }
-
-# 3. Очистка для режима Docker (удаляем исходный код и Node)
 cleanup_for_docker() {
+    local action_name=$1
+    msg_info "Завершение ${action_name}..."
     cleanup_common_trash
-    msg_info "🧹 Удаление исходного кода (уже в контейнере)..."
     cd "${BOT_INSTALL_PATH}"
-    # Удаляем Node
     sudo rm -rf node
-    # Удаляем исходники бота (они внутри образа)
-    sudo rm -rf core modules bot.py watchdog.py requirements.txt manage.py migrate.py aerich.ini
-    # Удаляем Dockerfile (образ уже собран)
+    sudo rm -rf core modules bot.py watchdog.py manage.py migrate.py aerich.ini
     sudo rm -f Dockerfile
-    # ОСТАВЛЯЕМ: docker-compose.yml, .env, config/, logs/, deploy.sh
 }
-
-# 4. Очистка для режима Node (удаляем всё кроме node/)
 cleanup_for_node() {
+    local action_name=$1
+    msg_info "Завершение ${action_name}..."
     cleanup_common_trash
-    msg_info "🧹 Удаление файлов Агента..."
     cd ${BOT_INSTALL_PATH}
-    sudo rm -rf core modules bot.py watchdog.py Dockerfile docker-compose.yml .git .github config/users.json config/alerts_config.json deploy.sh deploy_en.sh requirements.txt README* LICENSE CHANGELOG* .gitignore aerich.ini
+    sudo rm -rf core modules bot.py watchdog.py Dockerfile docker-compose.yml .git config/users.json config/alerts_config.json
 }
 
 install_extras() {
@@ -492,11 +478,7 @@ install_systemd_logic() {
     ask_env_details
     write_env_file "systemd" "$mode" ""
     run_db_migrations "$exec_cmd"
-    
-    # --- CLEANUP SYSTEMD ---
-    cleanup_for_systemd
-    # -----------------------
-
+    cleanup_for_systemd "установки"
     create_and_start_service "${SERVICE_NAME}" "${BOT_INSTALL_PATH}/bot.py" "$mode" "Telegram Bot"
     create_and_start_service "${WATCHDOG_SERVICE_NAME}" "${BOT_INSTALL_PATH}/watchdog.py" "root" "Наблюдатель"
 
@@ -527,7 +509,6 @@ install_docker_logic() {
     create_docker_compose_yml
     local container_name="tg-bot-${mode}"
     write_env_file "docker" "$mode" "${container_name}"
-    
     cd ${BOT_INSTALL_PATH}
     local dc_cmd=""; if sudo docker compose version &>/dev/null; then dc_cmd="docker compose"; else dc_cmd="docker-compose"; fi
     run_with_spinner "Сборка Docker" sudo $dc_cmd build
@@ -538,10 +519,7 @@ install_docker_logic() {
     sudo $dc_cmd --profile "${mode}" exec -T ${container_name} aerich init-db >/dev/null 2>&1
     sudo $dc_cmd --profile "${mode}" exec -T ${container_name} aerich upgrade >/dev/null 2>&1
     sudo $dc_cmd --profile "${mode}" exec -T ${container_name} python migrate.py $MIGRATE_ARGS >/dev/null 2>&1
-    
-    # --- CLEANUP DOCKER (AFTER BUILD) ---
-    cleanup_for_docker
-    # ------------------------------------
+    cleanup_for_docker "установки"
 
     sudo bash -c "cat > /usr/local/bin/tgcp-bot" <<EOF
 #!/bin/bash
@@ -595,11 +573,7 @@ RestartSec=10
 WantedBy=multi-user.target
 EOF
     sudo systemctl daemon-reload; sudo systemctl enable ${NODE_SERVICE_NAME}
-    
-    # --- CLEANUP NODE ---
-    cleanup_for_node
-    # --------------------
-    
+    cleanup_for_node "установки"  
     run_with_spinner "Запуск Ноды" sudo systemctl restart ${NODE_SERVICE_NAME}
     msg_success "Нода установлена!"
 }
@@ -626,20 +600,6 @@ update_bot() {
     local exec_cmd=""
     if [ -f "${ENV_FILE}" ] && grep -q "INSTALL_MODE=secure" "${ENV_FILE}"; then exec_cmd="sudo -u ${SERVICE_USER}"; fi
 
-    # --- ЗАПРОС НА СБРОС МЕТАДАННЫХ ---
-    MIGRATE_ARGS=""
-    if [ -f "${BOT_INSTALL_PATH}/config/system_config.json" ]; then
-        echo ""
-        echo -e "${C_CYAN}🔍 Проверка конфигурации...${C_RESET}"
-        echo "❓ Хотите сбросить мета-данные WebUI (заголовок, фавикон, SEO) до стандартных?"
-        read -p "Сбросить? (y/N): " reset_meta_answer
-        if [[ "$reset_meta_answer" =~ ^[Yy]$ ]]; then
-            MIGRATE_ARGS="--reset-meta"
-            echo -e "${C_YELLOW}⚠️  Будет выполнен сброс мета-данных.${C_RESET}"
-        fi
-    fi
-    # ----------------------------------
-
     cd "${BOT_INSTALL_PATH}"
     if ! run_with_spinner "Git fetch" $exec_cmd git fetch origin; then return 1; fi
     if ! run_with_spinner "Git reset" $exec_cmd git reset --hard "origin/${GIT_BRANCH}"; then return 1; fi
@@ -655,22 +615,12 @@ update_bot() {
         fi
     fi
 
-    # Очистка перед пересборкой не нужна, файлы уже обновлены. Очистка будет в конце.
-
     local current_mode=$(grep '^DEPLOY_MODE=' "${ENV_FILE}" | cut -d'=' -f2 | tr -d '"')
+    
     if [ "$current_mode" == "docker" ]; then
         if [ -f "docker-compose.yml" ]; then
             local dc_cmd=""; if sudo docker compose version &>/dev/null; then dc_cmd="docker compose"; else dc_cmd="docker-compose"; fi
             if ! run_with_spinner "Docker Up" sudo $dc_cmd up -d --build; then msg_error "Ошибка Docker."; return 1; fi
-            local mode=$(grep '^INSTALL_MODE=' "${ENV_FILE}" | cut -d'=' -f2 | tr -d '"')
-            local cn="tg-bot-${mode}"
-            sudo $dc_cmd --profile "${mode}" exec -T ${cn} aerich upgrade >/dev/null 2>&1
-            sudo $dc_cmd --profile "${mode}" exec -T ${cn} python migrate.py $MIGRATE_ARGS >/dev/null 2>&1
-            
-            # --- CLEANUP DOCKER (AFTER UPDATE) ---
-            cleanup_for_docker
-            # -------------------------------------
-            
             sudo bash -c "cat > /usr/local/bin/tgcp-bot" <<EOF
 #!/bin/bash
 cd ${BOT_INSTALL_PATH}
@@ -681,15 +631,8 @@ EOF
             sudo chmod +x /usr/local/bin/tgcp-bot
         else msg_error "Нет docker-compose.yml"; return 1; fi
     else
-        # SYSTEMD
         run_with_spinner "Обновление pip" $exec_cmd "${VENV_PATH}/bin/pip" install -r "${BOT_INSTALL_PATH}/requirements.txt" --upgrade
         run_with_spinner "Обновление tomlkit" $exec_cmd "${VENV_PATH}/bin/pip" install tomlkit
-        run_db_migrations "$exec_cmd"
-        
-        # --- CLEANUP SYSTEMD (AFTER UPDATE) ---
-        cleanup_for_systemd
-        # --------------------------------------
-
         sudo bash -c "cat > /usr/local/bin/tgcp-bot" <<EOF
 #!/bin/bash
 cd ${BOT_INSTALL_PATH}
@@ -700,6 +643,31 @@ EOF
         if systemctl list-unit-files | grep -q "^${SERVICE_NAME}.service"; then sudo systemctl restart ${SERVICE_NAME}; fi
         if systemctl list-unit-files | grep -q "^${WATCHDOG_SERVICE_NAME}.service"; then sudo systemctl restart ${WATCHDOG_SERVICE_NAME}; fi
     fi
+	
+    MIGRATE_ARGS=""
+    if [ -f "${BOT_INSTALL_PATH}/config/system_config.json" ]; then
+        echo ""
+        echo -e "${C_CYAN}🔍 Проверка конфигурации...${C_RESET}"
+        echo "❓ Хотите сбросить мета-данные WebUI (заголовок, фавикон, SEO) до стандартных?"
+        read -p "Сбросить? (y/N): " reset_meta_answer
+        if [[ "$reset_meta_answer" =~ ^[Yy]$ ]]; then
+            MIGRATE_ARGS="--reset-meta"
+            echo -e "${C_YELLOW}⚠️  Будет выполнен сброс мета-данных.${C_RESET}"
+        fi
+    fi
+
+    if [ "$current_mode" == "docker" ]; then
+         local mode=$(grep '^INSTALL_MODE=' "${ENV_FILE}" | cut -d'=' -f2 | tr -d '"')
+         local cn="tg-bot-${mode}"
+         sudo $dc_cmd --profile "${mode}" exec -T ${cn} aerich upgrade >/dev/null 2>&1
+         sudo $dc_cmd --profile "${mode}" exec -T ${cn} python migrate.py $MIGRATE_ARGS >/dev/null 2>&1
+         
+         cleanup_for_docker "обновления"
+    else
+         run_db_migrations "$exec_cmd"
+         cleanup_for_systemd "обновления"
+    fi
+
     msg_success "Обновлено."
 }
 
