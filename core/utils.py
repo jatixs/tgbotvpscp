@@ -14,10 +14,9 @@ from datetime import datetime
 from aiogram import Bot
 from aiogram.exceptions import TelegramBadRequest
 try:
-    from PIL import Image, ImageStat
+    from PIL import Image
 except ImportError:
     Image = None
-    ImageStat = None
 
 from . import config
 from . import shared_state
@@ -411,61 +410,76 @@ def update_env_variable(key: str, value: str, env_path: str = None):
 def generate_favicons(source_url_or_path: str, output_dir: str):
     """
     Генерирует набор фавиконок и манифест из исходного изображения.
-    Автоматически добавляет фон, если изображение прозрачное.
+    Поддерживает ссылки (http), локальные пути и Base64 (data:image).
+    Перезаписывает содержимое целевой папки.
+    Не модифицирует изображение (оставляет прозрачность).
     """
     if not Image:
         logging.error("Pillow not installed. Cannot generate favicons.")
         return False
 
-    if not os.path.exists(output_dir):
+    # 0. Подготовка директории (Очистка)
+    if os.path.exists(output_dir):
+        try:
+            for filename in os.listdir(output_dir):
+                file_path = os.path.join(output_dir, filename)
+                try:
+                    if os.path.isfile(file_path):
+                        os.unlink(file_path)
+                except Exception as e:
+                    logging.warning(f"Failed to delete old file {file_path}: {e}")
+            logging.info(f"Favicon directory {output_dir} cleaned for overwrite.")
+        except Exception as e:
+            logging.error(f"Error cleaning favicon directory: {e}")
+    else:
         os.makedirs(output_dir, exist_ok=True)
 
     try:
+        # 1. Загрузка исходного изображения
         img = None
+        
+        # A. Обработка Base64 (вставка из буфера обмена)
         if source_url_or_path.startswith('data:image'):
             try:
-                # Обработка Base64 (data:image/png;base64,...)
-                header, encoded = source_url_or_path.split(",", 1)
+                # Отделяем заголовок (data:image/png;base64,) от данных
+                if "," in source_url_or_path:
+                    header, encoded = source_url_or_path.split(",", 1)
+                else:
+                    encoded = source_url_or_path
+                
                 img_data = base64.b64decode(encoded)
                 img = Image.open(BytesIO(img_data))
             except Exception as e:
                 logging.error(f"Failed to decode base64 image: {e}")
+                return False
+                
+        # B. Обработка URL
         elif source_url_or_path.startswith('http'):
-            response = requests.get(source_url_or_path, timeout=10)
-            if response.status_code == 200:
-                img = Image.open(BytesIO(response.content))
+            try:
+                response = requests.get(source_url_or_path, timeout=10)
+                if response.status_code == 200:
+                    img = Image.open(BytesIO(response.content))
+            except Exception as e:
+                logging.error(f"Failed to download image: {e}")
+                
+        # C. Обработка локального пути
         elif os.path.exists(source_url_or_path):
             img = Image.open(source_url_or_path)
 
         if not img:
-            logging.error(f"Failed to load source image for favicon: {source_url_or_path}")
+            log_source = source_url_or_path[:50] + "..." if len(source_url_or_path) > 50 else source_url_or_path
+            logging.error(f"Failed to load source image for favicon: {log_source}")
             return False
+
+        # Конвертируем в RGBA (чтобы сохранить прозрачность при ресайзе)
         img = img.convert("RGBA")
-        alpha = img.getchannel('A')
-        extrema = alpha.getextrema()
-        theme_color_hex = "#ffffff" # Default
-        
-        if extrema[0] < 255: 
-            logging.info("Transparency detected in favicon. Calculating background color...")
-            thumb = img.copy()
-            thumb.thumbnail((64, 64)) 
-            r, g, b, a_thumb = thumb.split()
-            stat = ImageStat.Stat(thumb, mask=a_thumb)
-            
-            if stat.count[0] > 0:
-                avg_r = int(stat.mean[0])
-                avg_g = int(stat.mean[1])
-                avg_b = int(stat.mean[2])
-                bg_color = (avg_r, avg_g, avg_b, 255)
-            else:
-                bg_color = (255, 255, 255, 255)
-            background = Image.new("RGBA", img.size, bg_color)
-            background.alpha_composite(img)
-            img = background.convert("RGB") # Убираем альфа-канал
-            
-            theme_color_hex = '#{:02x}{:02x}{:02x}'.format(*bg_color[:3])
-        else:
-            pass
+
+        # 2. Определение цвета темы
+        # "theme_color_hex исходит от системной темы" - используем нейтральный белый по умолчанию для манифеста.
+        # Мы НЕ заливаем этим цветом фон иконки, чтобы сохранить прозрачность.
+        theme_color_hex = "#ffffff"
+
+        # 3. Нарезка и сохранение (PNG) - С ПРОЗРАЧНОСТЬЮ
         icons_config = [
             ("favicon-16x16.png", (16, 16)),
             ("favicon-32x32.png", (32, 32)),
@@ -473,14 +487,16 @@ def generate_favicons(source_url_or_path: str, output_dir: str):
             ("android-chrome-192x192.png", (192, 192)),
             ("android-chrome-512x512.png", (512, 512))
         ]
+
         for filename, size in icons_config:
             resized_img = img.resize(size, Image.Resampling.LANCZOS)
             resized_img.save(os.path.join(output_dir, filename), format="PNG")
 
-        # 4. Генерация favicon.ico (содержит 16x16, 32x32, 48x48)
+        # 4. Сохранение ICO (мульти-размерный)
+        # ICO формат поддерживает прозрачность (в современных системах)
         img.save(os.path.join(output_dir, "favicon.ico"), format="ICO", sizes=[(16, 16), (32, 32), (48, 48)])
 
-        # 5. Генерация site.webmanifest
+        # 5. Генерация манифеста
         manifest_content = {
             "name": "TG Bot Panel",
             "short_name": "BotPanel",
@@ -504,7 +520,7 @@ def generate_favicons(source_url_or_path: str, output_dir: str):
         with open(os.path.join(output_dir, "site.webmanifest"), "w", encoding="utf-8") as f:
             json.dump(manifest_content, f, indent=2)
 
-        logging.info(f"Favicons generated. Theme color: {theme_color_hex}")
+        logging.info(f"Favicons generated successfully in {output_dir}. Theme: {theme_color_hex}")
         return True
 
     except Exception as e:
