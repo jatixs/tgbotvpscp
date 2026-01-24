@@ -420,9 +420,16 @@ def generate_favicons(source_url_or_path: str, output_dir: str):
     if not os.path.exists(output_dir):
         os.makedirs(output_dir, exist_ok=True)
 
-    try:
+try:
         img = None
-        if source_url_or_path.startswith('http'):
+        if source_url_or_path.startswith('data:image'):
+            try:
+                header, encoded = source_url_or_path.split(",", 1)
+                img_data = base64.b64decode(encoded)
+                img = Image.open(BytesIO(img_data))
+            except Exception as e:
+                logging.error(f"Failed to decode base64 image: {e}")
+        elif source_url_or_path.startswith('http'):
             response = requests.get(source_url_or_path, timeout=10)
             if response.status_code == 200:
                 img = Image.open(BytesIO(response.content))
