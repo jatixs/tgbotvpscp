@@ -139,9 +139,12 @@ RESOURCE_ALERT_COOLDOWN = DEFAULT_CONFIG["RESOURCE_ALERT_COOLDOWN"]
 NODE_OFFLINE_TIMEOUT = DEFAULT_CONFIG["NODE_OFFLINE_TIMEOUT"]
 KEYBOARD_CONFIG = DEFAULT_KEYBOARD_CONFIG.copy()
 
+# --- NEW: WEB METADATA STORAGE ---
+WEB_METADATA = {}
+# ---------------------------------
 
 def load_system_config():
-    global TRAFFIC_INTERVAL, RESOURCE_CHECK_INTERVAL, CPU_THRESHOLD, RAM_THRESHOLD, DISK_THRESHOLD, RESOURCE_ALERT_COOLDOWN, NODE_OFFLINE_TIMEOUT
+    global TRAFFIC_INTERVAL, RESOURCE_CHECK_INTERVAL, CPU_THRESHOLD, RAM_THRESHOLD, DISK_THRESHOLD, RESOURCE_ALERT_COOLDOWN, NODE_OFFLINE_TIMEOUT, WEB_METADATA
     try:
         if os.path.exists(SYSTEM_CONFIG_FILE):
             with open(SYSTEM_CONFIG_FILE, "r", encoding="utf-8") as f:
@@ -167,13 +170,16 @@ def load_system_config():
                 NODE_OFFLINE_TIMEOUT = data.get(
                     "NODE_OFFLINE_TIMEOUT", DEFAULT_CONFIG["NODE_OFFLINE_TIMEOUT"]
                 )
+                # --- LOAD METADATA ---
+                WEB_METADATA = data.get("WEB_METADATA", {})
+                # ---------------------
                 logging.info("System config loaded successfully.")
     except Exception as e:
         logging.error(f"Error loading system config: {e}")
 
 
 def save_system_config(new_config: dict):
-    global TRAFFIC_INTERVAL, RESOURCE_CHECK_INTERVAL, CPU_THRESHOLD, RAM_THRESHOLD, DISK_THRESHOLD, RESOURCE_ALERT_COOLDOWN, NODE_OFFLINE_TIMEOUT
+    global TRAFFIC_INTERVAL, RESOURCE_CHECK_INTERVAL, CPU_THRESHOLD, RAM_THRESHOLD, DISK_THRESHOLD, RESOURCE_ALERT_COOLDOWN, NODE_OFFLINE_TIMEOUT, WEB_METADATA
     try:
         if "TRAFFIC_INTERVAL" in new_config:
             TRAFFIC_INTERVAL = int(new_config["TRAFFIC_INTERVAL"])
@@ -185,6 +191,12 @@ def save_system_config(new_config: dict):
             RAM_THRESHOLD = float(new_config["RAM_THRESHOLD"])
         if "DISK_THRESHOLD" in new_config:
             DISK_THRESHOLD = float(new_config["DISK_THRESHOLD"])
+        
+        # --- UPDATE METADATA ---
+        if "WEB_METADATA" in new_config:
+            WEB_METADATA = new_config["WEB_METADATA"]
+        # -----------------------
+
         config_to_save = {
             "TRAFFIC_INTERVAL": TRAFFIC_INTERVAL,
             "RESOURCE_CHECK_INTERVAL": RESOURCE_CHECK_INTERVAL,
@@ -193,9 +205,10 @@ def save_system_config(new_config: dict):
             "DISK_THRESHOLD": DISK_THRESHOLD,
             "RESOURCE_ALERT_COOLDOWN": RESOURCE_ALERT_COOLDOWN,
             "NODE_OFFLINE_TIMEOUT": NODE_OFFLINE_TIMEOUT,
+            "WEB_METADATA": WEB_METADATA, # SAVE METADATA
         }
         with open(SYSTEM_CONFIG_FILE, "w", encoding="utf-8") as f:
-            json.dump(config_to_save, f, indent=4)
+            json.dump(config_to_save, f, indent=4, ensure_ascii=False)
         logging.info("System config saved.")
     except Exception as e:
         logging.error(f"Error saving system config: {e}")
