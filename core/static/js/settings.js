@@ -167,10 +167,11 @@ document.addEventListener("DOMContentLoaded", () => {
         window.initSettings();
     }
     
-    // Favicon Preview & Paste Logic
+    // Favicon Logic
     const favInput = document.getElementById('meta_favicon');
     const favImg = document.getElementById('faviconPreview');
     const favFallback = document.getElementById('faviconFallback');
+    const fileInput = document.getElementById('favFileInput'); 
     
     if (favInput && favImg) {
         const updatePreview = () => {
@@ -186,40 +187,82 @@ document.addEventListener("DOMContentLoaded", () => {
 
         favInput.addEventListener('input', updatePreview);
         
-        // Обработка ошибок загрузки картинки
         favImg.addEventListener('error', () => {
             favImg.style.display = 'none';
             if(favFallback) favFallback.style.display = 'block';
         });
 
-        // Paste (Ctrl+V) handler
+        // --- RESIZE LOGIC (Max 512x512) ---
+        const processAndResizeImage = (file) => {
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const img = new Image();
+                img.onload = function() {
+                    const canvas = document.createElement('canvas');
+                    let width = img.width;
+                    let height = img.height;
+                    const maxSize = 512;
+
+                    // Calculate aspect ratio
+                    if (width > height) {
+                        if (width > maxSize) {
+                            height = Math.round(height * (maxSize / width));
+                            width = maxSize;
+                        }
+                    } else {
+                        if (height > maxSize) {
+                            width = Math.round(width * (maxSize / height));
+                            height = maxSize;
+                        }
+                    }
+
+                    canvas.width = width;
+                    canvas.height = height;
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(img, 0, 0, width, height);
+
+                    // To Base64 (PNG)
+                    const dataUrl = canvas.toDataURL('image/png');
+                    
+                    // Insert into input
+                    favInput.value = dataUrl;
+                    updatePreview();
+                    
+                    const msg = (typeof I18N !== 'undefined' && I18N.web_image_uploaded) 
+                        ? I18N.web_image_uploaded 
+                        : "Image resized & loaded!";
+                    if(window.showToast) window.showToast(msg);
+                };
+                img.src = e.target.result;
+            };
+            reader.readAsDataURL(file);
+        };
+        // ----------------------------------
+
+        // Paste Handler
         favInput.addEventListener('paste', (e) => {
             const items = (e.clipboardData || e.originalEvent.clipboardData).items;
-            let blob = null;
             for (let i = 0; i < items.length; i++) {
                 if (items[i].type.indexOf("image") === 0) {
-                    blob = items[i].getAsFile();
+                    e.preventDefault();
+                    processAndResizeImage(items[i].getAsFile());
                     break;
                 }
             }
-            if (blob !== null) {
-                e.preventDefault();
-                const reader = new FileReader();
-                reader.onload = function(event) {
-                    favInput.value = event.target.result;
-                    updatePreview();
-                    const msg = (typeof I18N !== 'undefined' && I18N.web_image_pasted) 
-                        ? I18N.web_image_pasted 
-                        : "Image pasted from clipboard!";
-                    if(window.showToast) window.showToast(msg);
-                };
-                reader.readAsDataURL(blob);
-            }
         });
+
+        // File Input Handler
+        if (fileInput) {
+            fileInput.addEventListener('change', (e) => {
+                processAndResizeImage(e.target.files[0]);
+                e.target.value = ''; // Reset to allow re-selection
+            });
+        }
     }
 });
 
-// Функция установки иконки по умолчанию (добавить в любое место, например перед window.openMetaModal)
+// Default Favicon
 window.setDefaultFavicon = function() {
     const input = document.getElementById('meta_favicon');
     if (input) {
@@ -524,18 +567,14 @@ async function resetTrafficSettings() {
     const btn = document.getElementById('resetTrafficBtn');
     const originalHTML = btn.innerHTML;
     
-    // Фиксируем размеры как в clearLogs
     btn.style.width = getComputedStyle(btn).width;
     btn.style.height = getComputedStyle(btn).height;
     
-    // Используем те же классы, что и в clearLogs
     const redClasses = ['bg-red-50', 'dark:bg-red-900/10', 'border-red-200', 'dark:border-red-800', 'text-red-600', 'dark:text-red-400', 'hover:bg-red-100', 'dark:hover:bg-red-900/30', 'active:bg-red-200'];
     const greenClasses = ['bg-green-600', 'text-white', 'border-green-600', 'hover:bg-green-500'];
 
-    // НЕ удаляем классы hoverClasses (group, hover:pr-4), чтобы сохранить поведение как у clearLogs
     btn.disabled = true;
     
-    // Спиннер (w-full h-full для центрирования)
     btn.innerHTML = `<div class="flex items-center justify-center w-full h-full"><svg class="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg></div>`;
 
     try {
@@ -546,7 +585,6 @@ async function resetTrafficSettings() {
             
             const doneText = (typeof I18N !== 'undefined' && I18N.web_traffic_reset_no_emoji) ? I18N.web_traffic_reset_no_emoji : "Done!";
             
-            // Сообщение об успехе с w-full h-full
             btn.innerHTML = `<div class="flex items-center justify-center gap-2 w-full h-full"><svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-white shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg> <span class="whitespace-nowrap text-[10px] font-bold uppercase tracking-wider leading-4">${doneText}</span></div>`;
             
             setTimeout(() => {
@@ -554,7 +592,6 @@ async function resetTrafficSettings() {
                 btn.classList.remove(...greenClasses);
                 btn.classList.add(...redClasses);
                 
-                // Сбрасываем размеры только в конце
                 btn.style.width = '';
                 btn.style.height = '';
                 btn.disabled = false;
@@ -1569,14 +1606,22 @@ window.saveMetaData = async function() {
             body: JSON.stringify(data)
         });
 
-if (res.ok) {
+        // Читаем как текст, чтобы поймать HTML-ошибки (413, 500)
+        const responseText = await res.text();
+        let json;
+        try {
+            json = JSON.parse(responseText);
+        } catch (e) {
+            console.error("Server Response:", responseText);
+            throw new Error(`Server Error (${res.status}): ${responseText.substring(0, 150)}...`);
+        }
+
+        if (res.ok) {
             // Успех
             const successTitle = (typeof I18N !== 'undefined' && I18N.web_success) ? I18N.web_success : "Success";
-            
             const msgNormal = (typeof I18N !== 'undefined' && I18N.web_meta_success) 
                 ? I18N.web_meta_success 
                 : "Metadata updated successfully.";
-                
             const msgLocked = (typeof I18N !== 'undefined' && I18N.web_meta_locked_alert) 
                 ? I18N.web_meta_locked_alert 
                 : "Settings saved and LOCKED forever. Reloading...";
@@ -1586,7 +1631,7 @@ if (res.ok) {
             await window.showModalAlert(successMsg, successTitle);
             
             if (locked) {
-                location.reload(); // Перезагружаем, чтобы сервер убрал кнопку из HTML
+                location.reload(); 
             } else {
                 closeMetaModal();
                 btn.innerHTML = originalText;
@@ -1594,7 +1639,6 @@ if (res.ok) {
             }
         } else {
             // Ошибка API
-            const json = await res.json();
             const errorTitle = (typeof I18N !== 'undefined' && I18N.web_error_short) ? I18N.web_error_short : "Error";
             await window.showModalAlert(json.error || "Failed to save", errorTitle);
             btn.innerHTML = originalText;
@@ -1603,7 +1647,7 @@ if (res.ok) {
     } catch (e) {
         // Ошибка сети
         const errorTitle = (typeof I18N !== 'undefined' && I18N.web_conn_error_short) ? I18N.web_conn_error_short : "Conn Error";
-        await window.showModalAlert(e.toString(), errorTitle);
+        await window.showModalAlert(e.message || e.toString(), errorTitle);
         btn.innerHTML = originalText;
         btn.disabled = false;
     }

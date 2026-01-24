@@ -410,50 +410,43 @@ def update_env_variable(key: str, value: str, env_path: str = None):
 def generate_favicons(source_url_or_path: str, output_dir: str):
     """
     Генерирует набор фавиконок и манифест из исходного изображения.
-    Поддерживает ссылки (http), локальные пути и Base64 (data:image).
-    Перезаписывает содержимое целевой папки.
-    Не модифицирует изображение (оставляет прозрачность).
+    Поддерживает: URL (http), Локальный путь, Base64 (data:image).
+    Полностью перезаписывает содержимое целевой папки.
     """
     if not Image:
         logging.error("Pillow not installed. Cannot generate favicons.")
         return False
 
-    # 0. Подготовка директории (Очистка)
+    # 0. Очистка папки перед генерацией
     if os.path.exists(output_dir):
         try:
             for filename in os.listdir(output_dir):
                 file_path = os.path.join(output_dir, filename)
-                try:
-                    if os.path.isfile(file_path):
-                        os.unlink(file_path)
-                except Exception as e:
-                    logging.warning(f"Failed to delete old file {file_path}: {e}")
-            logging.info(f"Favicon directory {output_dir} cleaned for overwrite.")
+                if os.path.isfile(file_path):
+                    os.unlink(file_path)
+            logging.info(f"Favicon directory {output_dir} cleaned.")
         except Exception as e:
             logging.error(f"Error cleaning favicon directory: {e}")
     else:
         os.makedirs(output_dir, exist_ok=True)
 
     try:
-        # 1. Загрузка исходного изображения
         img = None
         
-        # A. Обработка Base64 (вставка из буфера обмена)
+        # 1. Загрузка изображения (Base64 / URL / Path)
         if source_url_or_path.startswith('data:image'):
             try:
-                # Отделяем заголовок (data:image/png;base64,) от данных
+                # Обработка Base64 (data:image/png;base64,...)
                 if "," in source_url_or_path:
                     header, encoded = source_url_or_path.split(",", 1)
                 else:
                     encoded = source_url_or_path
-                
                 img_data = base64.b64decode(encoded)
                 img = Image.open(BytesIO(img_data))
             except Exception as e:
                 logging.error(f"Failed to decode base64 image: {e}")
                 return False
                 
-        # B. Обработка URL
         elif source_url_or_path.startswith('http'):
             try:
                 response = requests.get(source_url_or_path, timeout=10)
@@ -462,7 +455,6 @@ def generate_favicons(source_url_or_path: str, output_dir: str):
             except Exception as e:
                 logging.error(f"Failed to download image: {e}")
                 
-        # C. Обработка локального пути
         elif os.path.exists(source_url_or_path):
             img = Image.open(source_url_or_path)
 
@@ -471,15 +463,13 @@ def generate_favicons(source_url_or_path: str, output_dir: str):
             logging.error(f"Failed to load source image for favicon: {log_source}")
             return False
 
-        # Конвертируем в RGBA (чтобы сохранить прозрачность при ресайзе)
+        # Конвертируем в RGBA для сохранения прозрачности
         img = img.convert("RGBA")
-
-        # 2. Определение цвета темы
-        # "theme_color_hex исходит от системной темы" - используем нейтральный белый по умолчанию для манифеста.
-        # Мы НЕ заливаем этим цветом фон иконки, чтобы сохранить прозрачность.
+        
+        # Тема по умолчанию для манифеста (белый)
         theme_color_hex = "#ffffff"
 
-        # 3. Нарезка и сохранение (PNG) - С ПРОЗРАЧНОСТЬЮ
+        # 2. Нарезка и сохранение PNG (с прозрачностью)
         icons_config = [
             ("favicon-16x16.png", (16, 16)),
             ("favicon-32x32.png", (32, 32)),
@@ -492,11 +482,10 @@ def generate_favicons(source_url_or_path: str, output_dir: str):
             resized_img = img.resize(size, Image.Resampling.LANCZOS)
             resized_img.save(os.path.join(output_dir, filename), format="PNG")
 
-        # 4. Сохранение ICO (мульти-размерный)
-        # ICO формат поддерживает прозрачность (в современных системах)
+        # 3. Сохранение ICO (мульти-размерный, поддерживает прозрачность)
         img.save(os.path.join(output_dir, "favicon.ico"), format="ICO", sizes=[(16, 16), (32, 32), (48, 48)])
 
-        # 5. Генерация манифеста
+        # 4. Генерация site.webmanifest
         manifest_content = {
             "name": "TG Bot Panel",
             "short_name": "BotPanel",

@@ -566,6 +566,7 @@ STRINGS = {
         "web_seo_btn_default": "По умолчанию",
         "web_seo_paste_help": "Можно вставить картинку (Ctrl+V)",
         "web_image_pasted": "Изображение вставлено из буфера обмена!",
+        "web_image_uploaded": "Изображение успешно загружено!",
         "web_meta_success": "Мета-данные успешно обновлены.",
         "web_meta_locked_alert": "Настройки сохранены и ЗАБЛОКИРОВАНЫ навсегда. Перезагрузка...",
     },
@@ -1129,6 +1130,7 @@ STRINGS = {
         "web_image_pasted": "Image pasted from clipboard!",
         "web_meta_success": "Metadata updated successfully.",
         "web_meta_locked_alert": "Settings saved and LOCKED forever. Reloading...",
+        "web_image_uploaded": "Image uploaded successfully!",
     },
 }
 
