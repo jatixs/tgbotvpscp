@@ -420,10 +420,11 @@ def generate_favicons(source_url_or_path: str, output_dir: str):
     if not os.path.exists(output_dir):
         os.makedirs(output_dir, exist_ok=True)
 
-try:
+    try:
         img = None
         if source_url_or_path.startswith('data:image'):
             try:
+                # Обработка Base64 (data:image/png;base64,...)
                 header, encoded = source_url_or_path.split(",", 1)
                 img_data = base64.b64decode(encoded)
                 img = Image.open(BytesIO(img_data))
