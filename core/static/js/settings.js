@@ -126,7 +126,6 @@ window.initSettings = function() {
                 const data = await response.json();
                 if (data.error) throw new Error(data.error);
 
-                // FIX: Use localized alert messages
                 const alertMsg = (typeof I18N !== 'undefined' && I18N.web_update_started_alert) ? I18N.web_update_started_alert : "Update started! Page will reload in 15 seconds.";
                 const alertTitle = (typeof I18N !== 'undefined' && I18N.modal_title_info) ? I18N.modal_title_info : "Info";
                 
@@ -147,7 +146,7 @@ function initInputScrollLogic() {
     const isTouchDevice = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
     if (!isTouchDevice) return;
 
-    const ids = ['conf_traffic', 'conf_timeout', 'pass_current', 'pass_new', 'pass_confirm'];
+    const ids = ['conf_traffic', 'conf_timeout', 'pass_current', 'pass_new', 'pass_confirm', 'meta_favicon', 'meta_title', 'meta_desc', 'meta_keywords'];
     ids.forEach(id => {
         const el = document.getElementById(id);
         if (el) {
@@ -167,7 +166,110 @@ document.addEventListener("DOMContentLoaded", () => {
     if (document.getElementById('usersSection')) {
         window.initSettings();
     }
+    
+    // Favicon Logic
+    const favInput = document.getElementById('meta_favicon');
+    const favImg = document.getElementById('faviconPreview');
+    const favFallback = document.getElementById('faviconFallback');
+    const fileInput = document.getElementById('favFileInput'); 
+    
+    if (favInput && favImg) {
+        const updatePreview = () => {
+            if (favInput.value.trim()) {
+                favImg.src = favInput.value.trim();
+                favImg.style.display = 'block';
+                if(favFallback) favFallback.style.display = 'none';
+            } else {
+                favImg.style.display = 'none';
+                if(favFallback) favFallback.style.display = 'block';
+            }
+        };
+
+        favInput.addEventListener('input', updatePreview);
+        
+        favImg.addEventListener('error', () => {
+            favImg.style.display = 'none';
+            if(favFallback) favFallback.style.display = 'block';
+        });
+
+        // --- RESIZE LOGIC (Max 512x512) ---
+        const processAndResizeImage = (file) => {
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const img = new Image();
+                img.onload = function() {
+                    const canvas = document.createElement('canvas');
+                    let width = img.width;
+                    let height = img.height;
+                    const maxSize = 512;
+
+                    // Calculate aspect ratio
+                    if (width > height) {
+                        if (width > maxSize) {
+                            height = Math.round(height * (maxSize / width));
+                            width = maxSize;
+                        }
+                    } else {
+                        if (height > maxSize) {
+                            width = Math.round(width * (maxSize / height));
+                            height = maxSize;
+                        }
+                    }
+
+                    canvas.width = width;
+                    canvas.height = height;
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(img, 0, 0, width, height);
+
+                    // To Base64 (PNG)
+                    const dataUrl = canvas.toDataURL('image/png');
+                    
+                    // Insert into input
+                    favInput.value = dataUrl;
+                    updatePreview();
+                    
+                    const msg = (typeof I18N !== 'undefined' && I18N.web_image_uploaded) 
+                        ? I18N.web_image_uploaded 
+                        : "Image resized & loaded!";
+                    if(window.showToast) window.showToast(msg);
+                };
+                img.src = e.target.result;
+            };
+            reader.readAsDataURL(file);
+        };
+        // ----------------------------------
+
+        // Paste Handler
+        favInput.addEventListener('paste', (e) => {
+            const items = (e.clipboardData || e.originalEvent.clipboardData).items;
+            for (let i = 0; i < items.length; i++) {
+                if (items[i].type.indexOf("image") === 0) {
+                    e.preventDefault();
+                    processAndResizeImage(items[i].getAsFile());
+                    break;
+                }
+            }
+        });
+
+        // File Input Handler
+        if (fileInput) {
+            fileInput.addEventListener('change', (e) => {
+                processAndResizeImage(e.target.files[0]);
+                e.target.value = ''; // Reset to allow re-selection
+            });
+        }
+    }
 });
+
+// Default Favicon
+window.setDefaultFavicon = function() {
+    const input = document.getElementById('meta_favicon');
+    if (input) {
+        input.value = '/static/favicon.ico';
+        input.dispatchEvent(new Event('input'));
+    }
+};
 
 let activeCounterRafId = null;
 
@@ -409,18 +511,14 @@ async function clearLogs() {
     const btn = document.getElementById('clearLogsBtn');
     const originalHTML = btn.innerHTML;
     
-    // 1. Фиксируем и ШИРИНУ, и ВЫСОТУ перед изменениями
-    // Это гарантирует, что кнопка останется "каменной" и не дернется ни на пиксель
     btn.style.width = getComputedStyle(btn).width;
     btn.style.height = getComputedStyle(btn).height;
     
     const redClasses = ['bg-red-50', 'dark:bg-red-900/10', 'border-red-200', 'dark:border-red-800', 'text-red-600', 'dark:text-red-400', 'hover:bg-red-100', 'dark:hover:bg-red-900/30', 'active:bg-red-200'];
-    // Заменили border-transparent на border-green-600, чтобы сохранить толщину границы (обводку)
     const greenClasses = ['bg-green-600', 'text-white', 'border-green-600', 'hover:bg-green-500'];
 
     btn.disabled = true;
     
-    // Центрируем спиннер
     btn.innerHTML = `<div class="flex items-center justify-center w-full h-full"><svg class="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg></div>`;
 
     try {
@@ -433,8 +531,6 @@ async function clearLogs() {
             btn.classList.remove(...redClasses);
             btn.classList.add(...greenClasses);
             
-            // 2. Добавлен класс leading-4 (высота строки 16px, как у text-xs)
-            // Это предотвращает визуальное "сплющивание" текста внутри кнопки
             btn.innerHTML = `<div class="flex items-center justify-center gap-2 w-full h-full"><svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-white shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg> <span class="whitespace-nowrap text-[10px] font-bold uppercase tracking-wider leading-4">${I18N.web_logs_cleared_alert}</span></div>`;
             
             setTimeout(() => {
@@ -442,7 +538,6 @@ async function clearLogs() {
                 btn.classList.remove(...greenClasses);
                 btn.classList.add(...redClasses);
                 
-                // 3. Сбрасываем фиксацию размеров
                 btn.style.width = ''; 
                 btn.style.height = ''; 
                 btn.disabled = false;
@@ -451,7 +546,6 @@ async function clearLogs() {
             const data = await res.json();
             await window.showModalAlert(I18N.web_error.replace('{error}', data.error || "Failed"), 'Ошибка');
             
-            // Сброс при ошибке
             btn.disabled = false;
             btn.innerHTML = originalHTML;
             btn.style.width = ''; 
@@ -460,7 +554,6 @@ async function clearLogs() {
     } catch (e) {
         await window.showModalAlert(I18N.web_conn_error.replace('{error}', e), 'Ошибка соединения');
         
-        // Сброс при ошибке
         btn.disabled = false;
         btn.innerHTML = originalHTML;
         btn.style.width = ''; 
@@ -474,20 +567,14 @@ async function resetTrafficSettings() {
     const btn = document.getElementById('resetTrafficBtn');
     const originalHTML = btn.innerHTML;
     
-    // 1. Фиксируем ширину и высоту перед стартом ("замораживаем" размер)
     btn.style.width = getComputedStyle(btn).width;
     btn.style.height = getComputedStyle(btn).height;
     
-    const hoverClasses = ['hover:pr-4', 'group'];
     const redClasses = ['bg-red-50', 'dark:bg-red-900/10', 'border-red-200', 'dark:border-red-800', 'text-red-600', 'dark:text-red-400', 'hover:bg-red-100', 'dark:hover:bg-red-900/30', 'active:bg-red-200'];
-    
-    // Убрали px-3 py-2, чтобы не уменьшать кнопку. Добавили border-green-600 для сохранения толщины рамки.
     const greenClasses = ['bg-green-600', 'text-white', 'border-green-600', 'hover:bg-green-500'];
 
-    btn.classList.remove(...hoverClasses);
     btn.disabled = true;
     
-    // Центрируем спиннер
     btn.innerHTML = `<div class="flex items-center justify-center w-full h-full"><svg class="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg></div>`;
 
     try {
@@ -498,18 +585,13 @@ async function resetTrafficSettings() {
             
             const doneText = (typeof I18N !== 'undefined' && I18N.web_traffic_reset_no_emoji) ? I18N.web_traffic_reset_no_emoji : "Done!";
             
-            // 2. Статус успеха:
-            // text-[10px] - уменьшенный шрифт
-            // leading-4 - высота строки 16px (стандартная), чтобы кнопка не сплющивалась
             btn.innerHTML = `<div class="flex items-center justify-center gap-2 w-full h-full"><svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-white shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg> <span class="whitespace-nowrap text-[10px] font-bold uppercase tracking-wider leading-4">${doneText}</span></div>`;
             
             setTimeout(() => {
                 btn.innerHTML = originalHTML;
                 btn.classList.remove(...greenClasses);
                 btn.classList.add(...redClasses);
-                btn.classList.add(...hoverClasses);
                 
-                // 3. Сбрасываем фиксацию размеров
                 btn.style.width = '';
                 btn.style.height = '';
                 btn.disabled = false;
@@ -521,7 +603,6 @@ async function resetTrafficSettings() {
             
             btn.disabled = false;
             btn.innerHTML = originalHTML;
-            btn.classList.add(...hoverClasses);
             btn.style.width = '';
             btn.style.height = '';
         }
@@ -531,7 +612,6 @@ async function resetTrafficSettings() {
         
         btn.disabled = false;
         btn.innerHTML = originalHTML;
-        btn.classList.add(...hoverClasses);
         btn.style.width = '';
         btn.style.height = '';
     }
@@ -1280,8 +1360,8 @@ function renderSessionItem(s) {
 
     const date = new Date(s.created * 1000).toLocaleString();
     let iconPath = "M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z";
-    if (iconType === "mobile") iconPath = "M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z";
-    else if (iconType === "terminal") iconPath = "M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z";
+    if (iconType === "mobile") iconPath = "M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z";
+    else if (iconType === "terminal") iconPath = "M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z";
 
     let userBadge = "";
     if (!isMine) {
@@ -1450,67 +1530,6 @@ async function revokeAllSessions() {
     }
 }
 
-async function resetTrafficSettings() {
-    if (!await window.showModalConfirm(I18N.web_traffic_reset_confirm || "Are you sure? This will zero out the counters.", I18N.modal_title_confirm)) return;
-
-    const btn = document.getElementById('resetTrafficBtn');
-    const originalHTML = btn.innerHTML;
-    
-    // Фиксируем ширину, чтобы избежать скачков при загрузке
-    btn.style.width = getComputedStyle(btn).width;
-    
-    const hoverClasses = ['hover:pr-4', 'group'];
-    const redClasses = ['bg-red-50', 'dark:bg-red-900/10', 'border-red-200', 'dark:border-red-800', 'text-red-600', 'dark:text-red-400', 'hover:bg-red-100', 'dark:hover:bg-red-900/30', 'active:bg-red-200'];
-    const greenClasses = ['bg-green-600', 'text-white', 'border-transparent', 'hover:bg-green-500', 'px-3', 'py-2'];
-
-    btn.classList.remove(...hoverClasses);
-    btn.disabled = true;
-    
-    btn.innerHTML = `<svg class="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>`;
-
-    try {
-        const res = await fetch('/api/traffic/reset', { method: 'POST' });
-        if (res.ok) {
-            btn.classList.remove(...redClasses);
-            btn.classList.add(...greenClasses);
-            
-            // Если текст длиннее кнопки, убираем фиксацию ширины для статуса успеха
-            btn.style.width = ''; 
-            
-            const doneText = (typeof I18N !== 'undefined' && I18N.web_traffic_reset_no_emoji) ? I18N.web_traffic_reset_no_emoji : "Done!";
-            
-            // ДОБАВЛЕНО: whitespace-nowrap
-            btn.innerHTML = `<div class="flex items-center justify-center gap-2"><svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg> <span class="text-[10px] font-bold uppercase tracking-wider whitespace-nowrap">${doneText}</span></div>`;
-            
-            setTimeout(() => {
-                btn.innerHTML = originalHTML;
-                btn.classList.remove(...greenClasses);
-                btn.classList.add(...redClasses);
-                btn.classList.add(...hoverClasses);
-                btn.style.width = '';
-                btn.disabled = false;
-            }, 2000);
-        } else {
-            const data = await res.json();
-            const errorShort = (typeof I18N !== 'undefined' && I18N.web_error_short) ? I18N.web_error_short : "Error";
-            await window.showModalAlert(I18N.web_error.replace('{error}', data.error || "Failed"), errorShort);
-            
-            btn.disabled = false;
-            btn.innerHTML = originalHTML;
-            btn.classList.add(...hoverClasses);
-            btn.style.width = '';
-        }
-    } catch (e) {
-        const errorShort = (typeof I18N !== 'undefined' && I18N.web_conn_error_short) ? I18N.web_conn_error_short : "Conn Error";
-        await window.showModalAlert(I18N.web_conn_error.replace('{error}', e), errorShort);
-        
-        btn.disabled = false;
-        btn.innerHTML = originalHTML;
-        btn.classList.add(...hoverClasses);
-        btn.style.width = '';
-    }
-}
-
 let settingsBtnTimer = null;
 
 async function handleSettingsBtnClick(btn, actionCallback) {
@@ -1533,3 +1552,103 @@ async function handleSettingsBtnClick(btn, actionCallback) {
         }, 2500);
     }
 }
+
+
+// --- Meta/SEO Modal Logic ---
+
+window.openMetaModal = function() {
+    const modal = document.getElementById('metaModal');
+    if (modal) {
+        animateModalOpen(modal);
+    }
+};
+
+window.closeMetaModal = function() {
+    const modal = document.getElementById('metaModal');
+    if (modal) {
+        animateModalClose(modal);
+    }
+};
+
+window.saveMetaData = async function() {
+    const btn = document.getElementById('btnSaveMeta');
+    const locked = document.getElementById('meta_lock_forever').checked;
+    
+    // 1. Предупреждение о вечной блокировке
+    if (locked) {
+        const confirmMsg = (typeof I18N !== 'undefined' && I18N.web_meta_lock_confirm) 
+            ? I18N.web_meta_lock_confirm 
+            : "ВНИМАНИЕ: Вы собираетесь заблокировать настройки навсегда. Кнопка настроек исчезнет, и вы больше не сможете изменить эти данные. Продолжить?";
+            
+        if (!await window.showModalConfirm(confirmMsg, "Irreversible Action")) {
+            return; 
+        }
+    }
+
+    // 2. Анимация кнопки (Loading)
+    const originalText = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = `<svg class="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>`;
+
+    // Сбор данных
+    const data = {
+        favicon: document.getElementById('meta_favicon').value.trim(),
+        title: document.getElementById('meta_title').value.trim(),
+        description: document.getElementById('meta_desc').value.trim(),
+        keywords: document.getElementById('meta_keywords').value.trim(),
+        locked: locked
+    };
+
+    try {
+        const res = await fetch('/api/settings/metadata', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        });
+
+        // Читаем как текст, чтобы поймать HTML-ошибки (413, 500)
+        const responseText = await res.text();
+        let json;
+        try {
+            json = JSON.parse(responseText);
+        } catch (e) {
+            console.error("Server Response:", responseText);
+            throw new Error(`Server Error (${res.status}): ${responseText.substring(0, 150)}...`);
+        }
+
+        if (res.ok) {
+            // Успех
+            const successTitle = (typeof I18N !== 'undefined' && I18N.web_success) ? I18N.web_success : "Success";
+            const msgNormal = (typeof I18N !== 'undefined' && I18N.web_meta_success) 
+                ? I18N.web_meta_success 
+                : "Metadata updated successfully.";
+            const msgLocked = (typeof I18N !== 'undefined' && I18N.web_meta_locked_alert) 
+                ? I18N.web_meta_locked_alert 
+                : "Settings saved and LOCKED forever. Reloading...";
+
+            const successMsg = locked ? msgLocked : msgNormal;
+                
+            await window.showModalAlert(successMsg, successTitle);
+            
+            if (locked) {
+                location.reload(); 
+            } else {
+                closeMetaModal();
+                btn.innerHTML = originalText;
+                btn.disabled = false;
+            }
+        } else {
+            // Ошибка API
+            const errorTitle = (typeof I18N !== 'undefined' && I18N.web_error_short) ? I18N.web_error_short : "Error";
+            await window.showModalAlert(json.error || "Failed to save", errorTitle);
+            btn.innerHTML = originalText;
+            btn.disabled = false;
+        }
+    } catch (e) {
+        // Ошибка сети
+        const errorTitle = (typeof I18N !== 'undefined' && I18N.web_conn_error_short) ? I18N.web_conn_error_short : "Conn Error";
+        await window.showModalAlert(e.message || e.toString(), errorTitle);
+        btn.innerHTML = originalText;
+        btn.disabled = false;
+    }
+};

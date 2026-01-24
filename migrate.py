@@ -1,9 +1,11 @@
 import os
 import json
 import logging
-from core.config import CIPHER_SUITE, CONFIG_DIR
+import sys
+import shutil
+from core import config  
+from core.config import CIPHER_SUITE, CONFIG_DIR  # Для шифрования
 
-# Настройка логирования
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
@@ -55,29 +57,21 @@ def migrate_file(filename: str):
     if not os.path.exists(file_path):
         return  # Файла нет, пропускаем
 
-    # Проверяем, зашифрован ли файл уже (пытаемся прочитать как JSON)
     try:
         with open(file_path, 'r', encoding='utf-8') as f:
             content = f.read().strip()
-            # Если файл пустой, игнорируем
             if not content:
                 return
-            # Если начинается не с { или [, скорее всего это уже шифрованные байты (или мусор)
             if not content.startswith('{') and not content.startswith('['):
-                logger.info(f"Файл {filename} уже зашифрован или имеет неверный формат. Пропуск.")
                 return
-            
-            # Пробуем распарсить JSON
             data = json.loads(content)
     except (json.JSONDecodeError, UnicodeDecodeError):
-        logger.info(f"Файл {filename} не является открытым JSON. Вероятно, уже зашифрован.")
         return
 
-    logger.info(f"🔄 Миграция {filename}...")
+    logger.info(f"🔄 Миграция (шифрование) {filename}...")
 
     # 1. Создаем бэкап
     try:
-        import shutil
         shutil.copy2(file_path, backup_path)
         logger.info(f"   Бэкап создан: {filename}.bak")
     except Exception as e:
@@ -96,18 +90,75 @@ def migrate_file(filename: str):
             logger.warning("   Файл восстановлен из бэкапа.")
         return
 
+def migrate_metadata():
+    """
+    Проверяет и восстанавливает WEB_METADATA в system_config.json.
+    Если структура нарушена или ключи отсутствуют - сбрасывает/дополняет до дефолтных.
+    Поддерживает флаг --reset-meta для принудительного сброса.
+    """
+    logger.info("🔍 Checking WebUI Metadata consistency...")
+    force_reset = "--reset-meta" in sys.argv
+    current_meta = getattr(config, "WEB_METADATA", {})
+    defaults = {
+        "favicon": "/static/favicon.ico",
+        "title": "",
+        "description": "",
+        "keywords": "",
+        "locked": False
+    }
+    
+    modified = False
+
+    if force_reset:
+        logger.warning("⚠️ FORCE RESET: Resetting WebUI Metadata to defaults by user request.")
+        current_meta = defaults.copy()
+        modified = True
+        
+    elif not isinstance(current_meta, dict):
+        logger.warning("WEB_METADATA is corrupted (not a dict). Resetting to defaults.")
+        current_meta = defaults.copy()
+        modified = True
+        
+    else:
+        for key, default_val in defaults.items():
+            if key not in current_meta:
+                logger.info(f"Missing key '{key}' in metadata. Adding default.")
+                current_meta[key] = default_val
+                modified = True
+            else:
+                val = current_meta[key]
+                expected_type = type(default_val)
+                if not isinstance(val, expected_type) and val is not None:
+                    try:
+                        if expected_type == bool:
+                            current_meta[key] = str(val).lower() in ("true", "1", "yes", "on")
+                        elif expected_type == str:
+                            current_meta[key] = str(val)
+                        elif expected_type == int:
+                            current_meta[key] = int(val)
+                        
+                        modified = True
+                        logger.warning(f"Fixed type for key '{key}': {val} -> {current_meta[key]}")
+                    except Exception:
+                        current_meta[key] = default_val
+                        modified = True
+                        logger.warning(f"Reset key '{key}' to default due to type error.")
+    if modified:
+        logger.info("Saving corrected Metadata to system configuration...")
+        config.WEB_METADATA = current_meta
+        config.save_system_config({"WEB_METADATA": current_meta})
+        logger.info("Migration completed: Metadata updated.")
+    else:
+        logger.info("WebUI Metadata is valid. No changes needed.")
+
 def main():
     logger.info("🚀 Запуск миграции конфигурации...")
     
     try:
-        # Проходимся по всем файлам
         for filename in FILES_TO_MIGRATE:
             migrate_file(filename)
-        
+        migrate_metadata()
         logger.info("✅ Все миграции выполнены успешно.")
-        
-        # --- ОЧИСТКА ---
-        # Удаляем бэкапы только если код дошел до этой строчки без критических ошибок
         cleanup_backups()
         
     except Exception as e:

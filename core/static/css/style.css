@@ -419,3 +419,27 @@ button.force-expanded .btn-text {
     opacity: 1 !important;
     margin-left: 0.5rem !important; /* ml-2 */
 }
+
+/* --- iOS Safe Area Adaptations (Safari Only) --- */
+@supports (-webkit-touch-callout: none) {
+    /* Отступ сверху для навигации (под чёлку) */
+    nav {
+        padding-top: env(safe-area-inset-top) !important;
+    }
+
+    /* Отступ снизу для body (под полоску Home) */
+    body {
+        padding-bottom: env(safe-area-inset-bottom) !important;
+    }
+
+    /* Если на странице нет навигации (логин/сброс), отступаем само тело от чёлки */
+    body:not(:has(nav)) {
+        padding-top: env(safe-area-inset-top) !important;
+    }
+
+    /* Корректировка для модальных окон на весь экран */
+    .fixed.inset-0 {
+        padding-top: env(safe-area-inset-top);
+        padding-bottom: env(safe-area-inset-bottom);
+    }
+}

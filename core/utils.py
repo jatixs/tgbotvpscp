@@ -8,9 +8,16 @@ import time
 import aiohttp
 import base64
 import hashlib
+import requests
+from io import BytesIO
 from datetime import datetime
 from aiogram import Bot
 from aiogram.exceptions import TelegramBadRequest
+try:
+    from PIL import Image
+except ImportError:
+    Image = None
+
 from . import config
 from . import shared_state
 from .i18n import get_text, get_user_lang
@@ -398,3 +405,113 @@ def update_env_variable(key: str, value: str, env_path: str = None):
             f.writelines(new_lines)
     except Exception as e:
         logging.error(f"Error updating env variable {key}: {e}")
+
+
+def generate_favicons(source_url_or_path: str, output_dir: str):
+    """
+    Генерирует набор фавиконок и манифест из исходного изображения.
+    Поддерживает: URL (http), Локальный путь, Base64 (data:image).
+    Полностью перезаписывает содержимое целевой папки.
+    """
+    if not Image:
+        logging.error("Pillow not installed. Cannot generate favicons.")
+        return False
+
+    # 0. Очистка папки перед генерацией
+    if os.path.exists(output_dir):
+        try:
+            for filename in os.listdir(output_dir):
+                file_path = os.path.join(output_dir, filename)
+                if os.path.isfile(file_path):
+                    os.unlink(file_path)
+            logging.info(f"Favicon directory {output_dir} cleaned.")
+        except Exception as e:
+            logging.error(f"Error cleaning favicon directory: {e}")
+    else:
+        os.makedirs(output_dir, exist_ok=True)
+
+    try:
+        img = None
+        
+        # 1. Загрузка изображения (Base64 / URL / Path)
+        if source_url_or_path.startswith('data:image'):
+            try:
+                # Обработка Base64 (data:image/png;base64,...)
+                if "," in source_url_or_path:
+                    header, encoded = source_url_or_path.split(",", 1)
+                else:
+                    encoded = source_url_or_path
+                img_data = base64.b64decode(encoded)
+                img = Image.open(BytesIO(img_data))
+            except Exception as e:
+                logging.error(f"Failed to decode base64 image: {e}")
+                return False
+                
+        elif source_url_or_path.startswith('http'):
+            try:
+                response = requests.get(source_url_or_path, timeout=10)
+                if response.status_code == 200:
+                    img = Image.open(BytesIO(response.content))
+            except Exception as e:
+                logging.error(f"Failed to download image: {e}")
+                
+        elif os.path.exists(source_url_or_path):
+            img = Image.open(source_url_or_path)
+
+        if not img:
+            log_source = source_url_or_path[:50] + "..." if len(source_url_or_path) > 50 else source_url_or_path
+            logging.error(f"Failed to load source image for favicon: {log_source}")
+            return False
+
+        # Конвертируем в RGBA для сохранения прозрачности
+        img = img.convert("RGBA")
+        
+        # Тема по умолчанию для манифеста (белый)
+        theme_color_hex = "#ffffff"
+
+        # 2. Нарезка и сохранение PNG (с прозрачностью)
+        icons_config = [
+            ("favicon-16x16.png", (16, 16)),
+            ("favicon-32x32.png", (32, 32)),
+            ("apple-touch-icon.png", (180, 180)),
+            ("android-chrome-192x192.png", (192, 192)),
+            ("android-chrome-512x512.png", (512, 512))
+        ]
+
+        for filename, size in icons_config:
+            resized_img = img.resize(size, Image.Resampling.LANCZOS)
+            resized_img.save(os.path.join(output_dir, filename), format="PNG")
+
+        # 3. Сохранение ICO (мульти-размерный, поддерживает прозрачность)
+        img.save(os.path.join(output_dir, "favicon.ico"), format="ICO", sizes=[(16, 16), (32, 32), (48, 48)])
+
+        # 4. Генерация site.webmanifest
+        manifest_content = {
+            "name": "TG Bot Panel",
+            "short_name": "BotPanel",
+            "icons": [
+                {
+                    "src": "/static/favicons/android-chrome-192x192.png",
+                    "sizes": "192x192",
+                    "type": "image/png"
+                },
+                {
+                    "src": "/static/favicons/android-chrome-512x512.png",
+                    "sizes": "512x512",
+                    "type": "image/png"
+                }
+            ],
+            "theme_color": theme_color_hex,
+            "background_color": theme_color_hex,
+            "display": "standalone"
+        }
+        
+        with open(os.path.join(output_dir, "site.webmanifest"), "w", encoding="utf-8") as f:
+            json.dump(manifest_content, f, indent=2)
+
+        logging.info(f"Favicons generated successfully in {output_dir}. Theme: {theme_color_hex}")
+        return True
+
+    except Exception as e:
+        logging.error(f"Error generating favicons: {e}")
+        return False

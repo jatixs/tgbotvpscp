@@ -15,3 +15,5 @@ tortoise-orm
 aerich
 tomlkit
 python-dateutil
+Pillow
+requests

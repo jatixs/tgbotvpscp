@@ -5,11 +5,33 @@
 <h1 align="center">📝 Telegram VPS Management Bot — Changelog</h1>
 
 <p align="center">
-	<img src="https://img.shields.io/badge/version-v1.16.1-blue?style=flat-square " alt="Version 1.16.1"/>
-	<img src="https://img.shields.io/badge/build-61-purple?style=flat-square " alt="Build 61"/>
+	<img src="https://img.shields.io/badge/version-v1.16.2-blue?style=flat-square " alt="Version 1.16.2"/>
+	<img src="https://img.shields.io/badge/build-62-purple?style=flat-square " alt="Build 62"/>
 	<img src="https://img.shields.io/badge/date-January%2026-green?style=flat-square " alt="Date January 2026"/>
 	<img src="https://img.shields.io/badge/status-stable-green?style=flat-square " alt="Status Stable"/>
 </p>
+
+---
+## [1.16.2] - 2026-01-24
+
+### 🚀 PWA & Mobile Adaptation:
+
+* **Progressive Web App (PWA):** The Web Panel now fully supports installation as an app on Android and iOS. Added `site.webmanifest` for proper Home Screen appearance.
+* **Adaptive iOS Design:** Introduced support for `viewport-fit=cover` and safe area CSS variables (`safe-area-inset`). The UI now correctly respects the "notch" and system home indicator on iPhones.
+* **Dynamic Status Bar:** The system bar color now automatically syncs with the current theme (Light/Dark) for a native app experience.
+
+### ✨ SEO & Personalization (WebUI):
+
+* **Metadata Builder:** Added a UI for configuring SEO tags (Title, Description, Keywords) without editing source code.
+* **Favicon Manager:** Implemented a flexible system for changing the panel logo:
+* **Smart Upload:** Upload files from your device or paste images from the clipboard (Ctrl+V).
+* **Auto-Optimization:** Client-side automatic resizing and compression to 512x512px to prevent upload errors and save bandwidth.
+
+### 🛡️ Security & Fixes:
+
+* **Client-Side Security:** Implemented browser-side validation and processing of media files to reduce server load and protect against buffer overflows.
+* **CI/CD Hardening:** Updated CodeQL and Trivy security configurations, resolved potential dependency vulnerabilities.
+* **Visual Fixes:** Corrected padding in modals and navigation for mobile devices, fixed artifacts in Dark Mode.
 
 ---
 ## [1.16.1] - 2026-01-23
