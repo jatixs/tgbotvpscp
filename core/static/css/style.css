@@ -1,6 +1,5 @@
 /* /core/static/css/style.css */
 
-/* --- Базовые стили и Эмодзи --- */
 img.emoji {
     height: 1em;
     width: 1em;
@@ -9,12 +8,10 @@ img.emoji {
     display: inline-block;
 }
 
-/* --- Оптимизация под Safari: Убираем системное выделение при тапе --- */
 * {
     -webkit-tap-highlight-color: transparent;
 }
 
-/* --- Стили автозаполнения форм --- */
 input:-webkit-autofill,
 input:-webkit-autofill:hover,
 input:-webkit-autofill:focus,
@@ -26,7 +23,6 @@ input:-webkit-autofill:active {
     border-radius: 0.75rem;
 }
 
-/* --- Убираем стрелочки у input type="number" --- */
 input::-webkit-outer-spin-button,
 input::-webkit-inner-spin-button {
     -webkit-appearance: none;
@@ -37,17 +33,17 @@ input[type=number] {
     -moz-appearance: textfield;
 }
 
-/* --- Структура страницы --- */
 html {
     background-color: #f3f4f6;
-    height: 100%;
-    overflow-y: scroll;
+    -webkit-text-size-adjust: 100%;
 }
 
 body {
-    min-height: 100%;
+    min-height: 100vh;
+    overflow-x: hidden;
     padding-top: env(safe-area-inset-top, 0px);
     padding-bottom: env(safe-area-inset-bottom, 0px);
+    overflow-anchor: auto; 
 }
 
 html.dark {
@@ -99,35 +95,29 @@ nav {
     animation: fadeInUp 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
-/* --- LAZY LOAD PAGE BLOCKS (MOBILE ONLY) --- */
-/* По умолчанию (Десктоп) - блоки видны сразу, без анимации скролла */
 .lazy-block {
     opacity: 1;
     transform: none;
     transition: none;
 }
 
-/* Только для мобильных и планшетов (< 1024px) */
 @media (max-width: 1023px) {
     .lazy-block {
         opacity: 0;
-        transform: translateY(30px);
-        transition: opacity 0.8s cubic-bezier(0.2, 0.8, 0.2, 1), transform 0.8s cubic-bezier(0.2, 0.8, 0.2, 1);
-        will-change: opacity, transform;
+        transform: none; 
+        transition: opacity 0.5s ease-out; 
+        will-change: opacity;
     }
 
     .lazy-block.is-visible {
         opacity: 1;
-        transform: translateY(0);
     }
 }
 
-/* Отключаем анимацию при настройках "reduced motion" */
 @media (prefers-reduced-motion: reduce) {
     .lazy-block {
         transition: none !important;
         opacity: 1 !important;
-        transform: none !important;
     }
 }
 
@@ -237,7 +227,7 @@ body, div, nav, main, button {
     animation: bell-shake 0.5s cubic-bezier(.36, .07, .19, .97) both;
 }
 
-/* --- Праздничные эффекты: Гирлянда --- */
+/* --- Гирлянда --- */
 .lights-garland {
     position: absolute;
     z-index: 40;
@@ -296,7 +286,7 @@ body, div, nav, main, button {
 @keyframes glow-yellow { 0%, 100% { background: #ffcc00; box-shadow: 0 0 10px #ffcc00; } 50% { background: #7a6200; box-shadow: none; } }
 @keyframes glow-green { 0%, 100% { background: #34c759; box-shadow: 0 0 10px #34c759; } 50% { background: #1a5e2b; box-shadow: none; } }
 
-/* --- Праздничные эффекты: Снег --- */
+/* --- Снег --- */
 #snow-container {
     position: fixed;
     top: 0;
@@ -360,7 +350,6 @@ button.force-expanded .btn-text {
         padding-top: env(safe-area-inset-top, 0px);
         padding-bottom: env(safe-area-inset-bottom, 0px);
     }
-    
     body:has(nav) {
         padding-top: 0;
     }

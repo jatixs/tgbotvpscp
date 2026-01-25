@@ -13,6 +13,29 @@ let modalCloseTimer = null;
 let activeMobileModal = null;
 let bodyScrollTop = 0;
 
+function initGlobalLazyLoad() {
+    if (window.innerWidth >= 1024) return;
+
+    const observerOptions = {
+        root: null,
+        rootMargin: '0px',
+        threshold: 0.1 // 10% видимости
+    };
+
+    const observer = new IntersectionObserver((entries, obs) => {
+        entries.forEach(entry => {
+            if (entry.isIntersecting) {
+                entry.target.classList.add('is-visible');
+                obs.unobserve(entry.target);
+            }
+        });
+    }, observerOptions);
+
+    const blocks = document.querySelectorAll('.lazy-block');
+    blocks.forEach(block => {
+        observer.observe(block);
+    });
+}
 document.addEventListener("DOMContentLoaded", () => {
     applyThemeUI(currentTheme);
     if (typeof window.parsePageEmojis === 'function') {
@@ -20,6 +43,7 @@ document.addEventListener("DOMContentLoaded", () => {
     } else {
         parsePageEmojis();
     }
+    initGlobalLazyLoad();
     initNotifications();
     initSSE();
     initSessionSync();
@@ -1113,6 +1137,7 @@ document.addEventListener('click', async (e) => {
                     if (typeof parsePageEmojis === 'function') parsePageEmojis();
                 } catch (e) {}
                 initHolidayMood();
+                initGlobalLazyLoad();
 
                 try {
                     if (url.includes('/settings')) {

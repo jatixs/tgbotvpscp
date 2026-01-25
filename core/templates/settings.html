@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <html lang="ru">
-	<head>
+    <head>
         <meta charset="UTF-8">
         <title>{{ web_title }}</title>
         <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0, viewport-fit=cover">
@@ -17,7 +17,7 @@
         <link rel="icon" type="image/x-icon" href="/static/favicons/favicon.ico?v={{ cache_ver }}">
         <meta name="description" content="{{ web_meta_desc }}">
         <meta name="keywords" content="{{ web_meta_keywords }}">
-        <script src="https://cdn.tailwindcss.com"></script>
+        <link rel="stylesheet" href="/static/css/main.css?v={{ web_version }}">
         <script src="/static/js/theme_init.js?v={{ web_version }}"></script>
         <script>
         const I18N = {{ i18n_json | safe }};
@@ -947,7 +947,7 @@
             </div>
 		</div>
 {% if not meta_locked %}
-<div class="fixed bottom-4 right-4 sm:bottom-8 sm:right-8 z-40 animate-fade-in-up">
+<div class="fixed bottom-4 right-4 sm:bottom-8 sm:right-8 z-40">
     <button onclick="openMetaModal()"
             class="group relative flex items-center justify-center overflow-hidden select-none
                    /* Glass Effect */
