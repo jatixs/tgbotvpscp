@@ -9,6 +9,12 @@ let agentChart = null;
 let allNodesData = [];
 let currentNodeToken = null;
 
+// --- LAZY LOAD VARIABLES ---
+let currentRenderList = [];   // Отфильтрованный список узлов
+let renderedCount = 0;        // Счетчик отрисованных
+const NODES_BATCH_SIZE = 15;  // Размер порции загрузки
+// ---------------------------
+
 // --- CRYPTO FUNCTIONS (XOR + Base64) ---
 function decryptData(text) {
     if (!text) return "";
@@ -48,8 +54,36 @@ window.addEventListener('themeChanged', () => {
     updateChartsColors();
 });
 
+// --- NEW: Scroll Animation Observer ---
+function initScrollAnimations() {
+    const observerOptions = {
+        root: null,
+        rootMargin: '0px',
+        threshold: 0.1 // Срабатывает, когда показано 10% элемента
+    };
+
+    const observer = new IntersectionObserver((entries, obs) => {
+        entries.forEach(entry => {
+            if (entry.isIntersecting) {
+                entry.target.classList.add('is-visible');
+                obs.unobserve(entry.target); // Анимируем только один раз
+            }
+        });
+    }, observerOptions);
+
+    const blocks = document.querySelectorAll('.lazy-block');
+    blocks.forEach(block => {
+        observer.observe(block);
+    });
+}
+// --------------------------------------
+
 window.initDashboard = function() {
     cleanupDashboardSources();
+    
+    // Запускаем анимацию блоков
+    initScrollAnimations();
+
     if (window.sseSource) {
         window.sseSource.removeEventListener('agent_stats', handleSSEAgentStats);
         window.sseSource.removeEventListener('nodes_list', handleSSENodesList);
@@ -66,6 +100,16 @@ window.initDashboard = function() {
             newSearch.addEventListener('input', () => {
                 filterAndRenderNodes();
             });
+        }
+        
+        // Lazy Load для списка узлов (Infinite Scroll)
+        const listContainer = document.getElementById('nodesList');
+        if (listContainer) {
+            listContainer.onscroll = function() {
+                if (listContainer.scrollTop + listContainer.clientHeight >= listContainer.scrollHeight - 100) {
+                    renderNextNodeBatch();
+                }
+            };
         }
     }
     if (document.getElementById('logsContainer')) {
@@ -108,6 +152,9 @@ const handleSSENodesList = (e) => {
 document.addEventListener("DOMContentLoaded", () => {
     if (document.getElementById('agentChart') || document.getElementById('nodesList')) {
         window.initDashboard();
+    } else {
+        // Даже если нет графиков (например, пустая страница), пробуем запустить анимации
+        initScrollAnimations();
     }
 });
 
@@ -205,24 +252,24 @@ function updateNodesListUI(data) {
 function filterAndRenderNodes() {
     const searchInput = document.getElementById('nodeSearch');
     const query = searchInput ? searchInput.value.trim().toLowerCase() : "";
-    let filteredNodes = allNodesData;
-
+    
     if (query) {
-        filteredNodes = allNodesData.filter(node => {
+        currentRenderList = allNodesData.filter(node => {
             const name = (node.name || "").toLowerCase();
-            // Decrypt IP for search
             const ip = (decryptData(node.ip) || "").toLowerCase();
             return name.includes(query) || ip.includes(query);
         });
+    } else {
+        currentRenderList = allNodesData;
     }
-    renderNodesList(filteredNodes);
+    renderNodesList();
 }
 
-function renderNodesList(nodes) {
+function renderNodesList() {
     const container = document.getElementById('nodesList');
     if (!container) return;
 
-    if (nodes.length === 0) {
+    if (currentRenderList.length === 0) {
         let emptyText = (typeof I18N !== 'undefined' && I18N.web_no_nodes) ? I18N.web_no_nodes : "No nodes connected";
         const searchInput = document.getElementById('nodeSearch');
         if (searchInput && searchInput.value.trim().length > 0 && allNodesData.length > 0) {
@@ -232,12 +279,25 @@ function renderNodesList(nodes) {
         return;
     }
 
+    container.innerHTML = '';
+    renderedCount = 0;
+    renderNextNodeBatch();
+}
+
+function renderNextNodeBatch() {
+    const container = document.getElementById('nodesList');
+    if (!container) return;
+    
+    if (renderedCount >= currentRenderList.length) return;
+
+    const batch = currentRenderList.slice(renderedCount, renderedCount + NODES_BATCH_SIZE);
+    
     const lblCpu = (typeof I18N !== 'undefined' && I18N.web_label_cpu) ? I18N.web_label_cpu : "CPU";
     const lblRam = (typeof I18N !== 'undefined' && I18N.web_label_ram) ? I18N.web_label_ram : "RAM";
     const lblDisk = (typeof I18N !== 'undefined' && I18N.web_label_disk) ? I18N.web_label_disk : "DISK";
     const lblStatus = (typeof I18N !== 'undefined' && I18N.web_label_status) ? I18N.web_label_status : "STATUS";
 
-    const html = nodes.map(node => {
+    const html = batch.map(node => {
         let statusColor = node.status === 'online' ? "bg-green-500" : (node.status === 'restarting' ? "bg-blue-500" : "bg-red-500");
         let statusText = node.status === 'restarting' ? (typeof I18N !== 'undefined' && I18N.web_status_restart ? I18N.web_status_restart : "RESTART") : node.status.toUpperCase();
         let statusTextClass = node.status === 'online' ? "text-green-500" : (node.status === 'restarting' ? "text-blue-500" : "text-red-500");
@@ -251,11 +311,10 @@ function renderNodesList(nodes) {
         const ramColor = ram > 80 ? 'text-red-500' : 'text-gray-600 dark:text-gray-300';
         const diskColor = disk > 90 ? 'text-red-500' : 'text-gray-600 dark:text-gray-300';
 
-        // Decrypt IP for display
         const displayIp = decryptData(node.ip);
 
         return `
-        <div class="bg-white dark:bg-white/5 hover:bg-gray-50 dark:hover:bg-white/10 transition-all duration-200 rounded-xl border border-gray-100 dark:border-white/5 cursor-pointer shadow-sm hover:shadow-md overflow-hidden group mb-2" onclick="openNodeDetails('${escapeHtml(node.token)}', '${statusColor}')">
+        <div class="bg-white dark:bg-white/5 hover:bg-gray-50 dark:hover:bg-white/10 transition-all duration-200 rounded-xl border border-gray-100 dark:border-white/5 cursor-pointer shadow-sm hover:shadow-md overflow-hidden group mb-2 animate-fade-in-up" onclick="openNodeDetails('${escapeHtml(node.token)}', '${statusColor}')">
             
             <div class="p-3 sm:p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
                 
@@ -299,7 +358,8 @@ function renderNodesList(nodes) {
         </div>`;
     }).join('');
 
-    container.innerHTML = html;
+    container.insertAdjacentHTML('beforeend', html);
+    renderedCount += batch.length;
 }
 
 function updateAgentStatsUI(data) {

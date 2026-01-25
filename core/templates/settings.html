@@ -1,23 +1,22 @@
 <!DOCTYPE html>
 <html lang="ru">
-    <head>
+	<head>
         <meta charset="UTF-8">
         <title>{{ web_title }}</title>
-		<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0, viewport-fit=cover">
-		<meta name="apple-mobile-web-app-capable" content="yes">
-		<meta name="apple-mobile-web-app-status-bar-style" content="default">
-		<meta name="apple-mobile-web-app-capable" content="yes">
-		<meta name="apple-mobile-web-app-status-bar-style" content="default">
-		<meta name="apple-mobile-web-app-title" content="TG Bot Panel">
-		<meta name="theme-color" content="#f3f4f6" media="(prefers-color-scheme: light)">
-		<meta name="theme-color" content="#111827" media="(prefers-color-scheme: dark)">
-		<link rel="apple-touch-icon" sizes="180x180" href="/static/favicons/apple-touch-icon.png?v={{ cache_ver }}">
-		<link rel="icon" type="image/png" sizes="32x32" href="/static/favicons/favicon-32x32.png?v={{ cache_ver }}">
-		<link rel="icon" type="image/png" sizes="16x16" href="/static/favicons/favicon-16x16.png?v={{ cache_ver }}">
-		<link rel="manifest" href="/site.webmanifest?v={{ cache_ver }}">
-		<link rel="icon" type="image/x-icon" href="/static/favicons/favicon.ico?v={{ cache_ver }}">		
-		<meta name="description" content="{{ web_meta_desc }}">
-		<meta name="keywords" content="{{ web_meta_keywords }}">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0, viewport-fit=cover">
+        <meta name="mobile-web-app-capable" content="yes">
+        <meta name="apple-mobile-web-app-capable" content="yes">
+        <meta name="apple-mobile-web-app-status-bar-style" content="default">
+        <meta name="apple-mobile-web-app-title" content="TG Bot Panel">
+        <meta name="theme-color" content="#f3f4f6" media="(prefers-color-scheme: light)">
+        <meta name="theme-color" content="#111827" media="(prefers-color-scheme: dark)">
+        <link rel="apple-touch-icon" sizes="180x180" href="/static/favicons/apple-touch-icon.png?v={{ cache_ver }}">
+        <link rel="icon" type="image/png" sizes="32x32" href="/static/favicons/favicon-32x32.png?v={{ cache_ver }}">
+        <link rel="icon" type="image/png" sizes="16x16" href="/static/favicons/favicon-16x16.png?v={{ cache_ver }}">
+        <link rel="manifest" href="/site.webmanifest?v={{ cache_ver }}">
+        <link rel="icon" type="image/x-icon" href="/static/favicons/favicon.ico?v={{ cache_ver }}">
+        <meta name="description" content="{{ web_meta_desc }}">
+        <meta name="keywords" content="{{ web_meta_keywords }}">
         <script src="https://cdn.tailwindcss.com"></script>
         <script src="/static/js/theme_init.js?v={{ web_version }}"></script>
         <script>
@@ -25,10 +24,9 @@
         const USERS_DATA = {{ users_data_json | safe }};
         const NODES_DATA = {{ nodes_data_json | safe }};
         const KEYBOARD_CONFIG = {{ keyboard_config_json | safe }};
-		{{ user_role_js | safe }}
+        {{ user_role_js | safe }}
         </script>
-        <script src="https://unpkg.com/twemoji@latest/dist/twemoji.min.js"
-                crossorigin="anonymous"></script>
+        <script src="https://unpkg.com/twemoji@latest/dist/twemoji.min.js" crossorigin="anonymous"></script>
         <link rel="stylesheet" href="/static/css/style.css?v={{ web_version }}">
     </head>
     <body class="bg-gray-100 text-gray-900 dark:bg-gray-900 dark:text-gray-100 font-sans selection:bg-green-500/30 pb-10 overflow-x-hidden">
@@ -154,7 +152,7 @@
         <main class="max-w-4xl mx-auto px-4 mt-6 sm:mt-8 relative z-10">
             <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div class="flex flex-col gap-6">
-                    <div class="bg-white/60 dark:bg-white/5 backdrop-blur-md border border-white/40 dark:border-white/10 rounded-2xl p-6 shadow-lg dark:shadow-none">
+                    <div class="bg-white/60 dark:bg-white/5 backdrop-blur-md border border-white/40 dark:border-white/10 rounded-2xl p-6 shadow-lg dark:shadow-none lazy-block">
                         <h2 class="text-xl font-bold text-gray-900 dark:text-white mb-6 flex items-center gap-2">
                             <svg xmlns="http://www.w3.org/2000/svg"
                                  class="h-6 w-6 text-blue-500 dark:text-blue-400"
@@ -263,7 +261,7 @@
                             </button>
                         </div>
                     </div>
-                    <div class="bg-white/60 dark:bg-white/5 backdrop-blur-md border border-white/40 dark:border-white/10 rounded-2xl p-6 shadow-lg dark:shadow-none">
+                    <div class="bg-white/60 dark:bg-white/5 backdrop-blur-md border border-white/40 dark:border-white/10 rounded-2xl p-6 shadow-lg dark:shadow-none lazy-block">
                         <h2 class="text-xl font-bold text-gray-900 dark:text-white mb-6 flex items-center gap-2">
                             <svg xmlns="http://www.w3.org/2000/svg"
                                  class="h-6 w-6 text-indigo-500 dark:text-indigo-400"
@@ -333,7 +331,7 @@
                             </button>
                         </div>
                     </div>
-                    <div class="bg-white/60 dark:bg-white/5 backdrop-blur-md border border-white/40 dark:border-white/10 rounded-2xl p-6 shadow-lg dark:shadow-none"
+                    <div class="bg-white/60 dark:bg-white/5 backdrop-blur-md border border-white/40 dark:border-white/10 rounded-2xl p-6 shadow-lg dark:shadow-none lazy-block"
                          id="sessionsSection">
                         <h2 class="text-xl font-bold text-gray-900 dark:text-white mb-6 flex items-center gap-2">
                             <svg xmlns="http://www.w3.org/2000/svg"
@@ -369,7 +367,7 @@
                             {{ web_sessions_view_all }}
                         </button>
                     </div>
-<div class="bg-white/60 dark:bg-white/5 backdrop-blur-md border border-white/40 dark:border-white/10 rounded-2xl p-6 shadow-lg dark:shadow-none flex flex-col md:flex-row items-center justify-between gap-4 overflow-hidden">
+<div class="bg-white/60 dark:bg-white/5 backdrop-blur-md border border-white/40 dark:border-white/10 rounded-2xl p-6 shadow-lg dark:shadow-none flex flex-col md:flex-row items-center justify-between gap-4 overflow-hidden lazy-block">
                         
                         <h2 class="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2 whitespace-nowrap min-w-0 flex-1 truncate self-start md:self-auto">
                             <svg xmlns="http://www.w3.org/2000/svg"
@@ -444,7 +442,7 @@
                     </div>
                 </div>
                 <div class="flex flex-col gap-6 h-full">
-                    <div class="bg-white/60 dark:bg-white/5 backdrop-blur-md border border-white/40 dark:border-white/10 rounded-2xl p-6 shadow-lg dark:shadow-none">
+                    <div class="bg-white/60 dark:bg-white/5 backdrop-blur-md border border-white/40 dark:border-white/10 rounded-2xl p-6 shadow-lg dark:shadow-none lazy-block">
                         <h2 class="text-xl font-bold text-gray-900 dark:text-white mb-6 flex items-center gap-2">
                             <svg xmlns="http://www.w3.org/2000/svg"
                                  class="h-6 w-6 text-blue-500 dark:text-blue-400"
@@ -494,7 +492,7 @@
                             </div>
                         </div>
                     </div>
-                    <div class="bg-white/60 dark:bg-white/5 backdrop-blur-md border border-white/40 dark:border-white/10 rounded-2xl p-6 shadow-lg dark:shadow-none">
+                    <div class="bg-white/60 dark:bg-white/5 backdrop-blur-md border border-white/40 dark:border-white/10 rounded-2xl p-6 shadow-lg dark:shadow-none lazy-block">
                         <div class="flex justify-between items-center mb-4">
                             <h2 class="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
                                 <svg xmlns="http://www.w3.org/2000/svg"
@@ -561,7 +559,7 @@
                             </div>
                         </div>
                     </div>
-                    <div class="bg-white/60 dark:bg-white/5 backdrop-blur-md border border-white/40 dark:border-white/10 rounded-2xl p-6 shadow-lg dark:shadow-none"
+                    <div class="bg-white/60 dark:bg-white/5 backdrop-blur-md border border-white/40 dark:border-white/10 rounded-2xl p-6 shadow-lg dark:shadow-none lazy-block"
                          id="securitySection">
                         <h2 class="text-xl font-bold text-gray-900 dark:text-white mb-6 flex items-center gap-2">
                             <svg xmlns="http://www.w3.org/2000/svg"
@@ -602,7 +600,7 @@
                             </div>
                         </div>
                     </div>
-                    <div class="bg-white/60 dark:bg-white/5 backdrop-blur-md border border-white/40 dark:border-white/10 rounded-2xl p-5 shadow-lg dark:shadow-none flex flex-col justify-between flex-1">
+                    <div class="bg-white/60 dark:bg-white/5 backdrop-blur-md border border-white/40 dark:border-white/10 rounded-2xl p-5 shadow-lg dark:shadow-none flex flex-col justify-between flex-1 lazy-block">
                         <div>
                             <div class="flex justify-between items-center mb-4">
                                 <h2 class="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
@@ -650,7 +648,7 @@
                     </div>
                 </div>
                 <div class="md:col-span-2 space-y-6">
-                    <div class="bg-white/60 dark:bg-white/5 backdrop-blur-md border border-white/40 dark:border-white/10 rounded-2xl p-6 shadow-lg dark:shadow-none"
+                    <div class="bg-white/60 dark:bg-white/5 backdrop-blur-md border border-white/40 dark:border-white/10 rounded-2xl p-6 shadow-lg dark:shadow-none lazy-block"
                          id="usersSection">
                         <h2 class="text-xl font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
                             <svg xmlns="http://www.w3.org/2000/svg"
@@ -705,7 +703,7 @@
                             </div>
                         </div>
                     </div>
-                    <div class="bg-white/60 dark:bg-white/5 backdrop-blur-md border border-white/40 dark:border-white/10 rounded-2xl p-6 shadow-lg dark:shadow-none"
+                    <div class="bg-white/60 dark:bg-white/5 backdrop-blur-md border border-white/40 dark:border-white/10 rounded-2xl p-6 shadow-lg dark:shadow-none lazy-block"
                          id="nodesSection">
                         <h2 class="text-xl font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
                             <svg xmlns="http://www.w3.org/2000/svg"

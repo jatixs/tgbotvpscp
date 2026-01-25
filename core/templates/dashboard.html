@@ -1,31 +1,29 @@
 <!DOCTYPE html>
 <html lang="ru">
-    <head>
+	<head>
         <meta charset="UTF-8">
         <title>{{ web_title }}</title>
-		<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0, viewport-fit=cover">
-		<meta name="apple-mobile-web-app-capable" content="yes">
-		<meta name="apple-mobile-web-app-status-bar-style" content="default">
-		<meta name="apple-mobile-web-app-capable" content="yes">
-		<meta name="apple-mobile-web-app-status-bar-style" content="default">
-		<meta name="apple-mobile-web-app-title" content="TG Bot Panel">
-		<meta name="theme-color" content="#f3f4f6" media="(prefers-color-scheme: light)">
-		<meta name="theme-color" content="#111827" media="(prefers-color-scheme: dark)">
-		<link rel="apple-touch-icon" sizes="180x180" href="/static/favicons/apple-touch-icon.png?v={{ cache_ver }}">
-		<link rel="icon" type="image/png" sizes="32x32" href="/static/favicons/favicon-32x32.png?v={{ cache_ver }}">
-		<link rel="icon" type="image/png" sizes="16x16" href="/static/favicons/favicon-16x16.png?v={{ cache_ver }}">
-		<link rel="manifest" href="/site.webmanifest?v={{ cache_ver }}">
-		<link rel="icon" type="image/x-icon" href="/static/favicons/favicon.ico?v={{ cache_ver }}">		
-		<meta name="description" content="{{ web_meta_desc }}">
-		<meta name="keywords" content="{{ web_meta_keywords }}">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0, viewport-fit=cover">
+        <meta name="mobile-web-app-capable" content="yes">
+        <meta name="apple-mobile-web-app-capable" content="yes">
+        <meta name="apple-mobile-web-app-status-bar-style" content="default">
+        <meta name="apple-mobile-web-app-title" content="TG Bot Panel">
+        <meta name="theme-color" content="#f3f4f6" media="(prefers-color-scheme: light)">
+        <meta name="theme-color" content="#111827" media="(prefers-color-scheme: dark)">
+        <link rel="apple-touch-icon" sizes="180x180" href="/static/favicons/apple-touch-icon.png?v={{ cache_ver }}">
+        <link rel="icon" type="image/png" sizes="32x32" href="/static/favicons/favicon-32x32.png?v={{ cache_ver }}">
+        <link rel="icon" type="image/png" sizes="16x16" href="/static/favicons/favicon-16x16.png?v={{ cache_ver }}">
+        <link rel="manifest" href="/site.webmanifest?v={{ cache_ver }}">
+        <link rel="icon" type="image/x-icon" href="/static/favicons/favicon.ico?v={{ cache_ver }}">
+        <meta name="description" content="{{ web_meta_desc }}">
+        <meta name="keywords" content="{{ web_meta_keywords }}">
         <script src="https://cdn.tailwindcss.com"></script>
         <script src="/static/js/theme_init.js?v={{ web_version }}"></script>
         <script>
         const I18N = {{ i18n_json | safe }};
         {{ user_role_js | safe }}
         </script>
-        <script src="https://unpkg.com/twemoji@latest/dist/twemoji.min.js"
-                crossorigin="anonymous"></script>
+        <script src="https://unpkg.com/twemoji@latest/dist/twemoji.min.js" crossorigin="anonymous"></script>
         <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
         <link rel="stylesheet" href="/static/css/style.css?v={{ web_version }}">
     </head>
@@ -144,7 +142,7 @@
         </nav>
         <main class="max-w-7xl mx-auto px-4 mt-4 sm:mt-8 relative z-10">
             <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6 sm:mb-8">
-                <div class="bg-white/60 dark:bg-white/5 backdrop-blur-md border border-white/40 dark:border-white/10 rounded-2xl p-5 shadow-lg dark:shadow-none flex flex-col justify-between h-32 relative overflow-hidden group hover:scale-[1.02] transition duration-300">
+                <div class="bg-white/60 dark:bg-white/5 backdrop-blur-md border border-white/40 dark:border-white/10 rounded-2xl p-5 shadow-lg dark:shadow-none flex flex-col justify-between h-32 relative overflow-hidden group hover:scale-[1.02] transition duration-300 lazy-block">
                     <div class="absolute right-[-20px] top-[-20px] w-24 h-24 bg-blue-500/10 rounded-full blur-2xl group-hover:bg-blue-500/20 transition">
                     </div>
                     <div class="flex justify-between items-start">
@@ -165,7 +163,7 @@
                     </div>
                     <div class="text-xs text-gray-400 dark:text-gray-500 font-mono mt-auto">{{ web_footer_powered }} Python</div>
                 </div>
-                <div class="bg-white/60 dark:bg-white/5 backdrop-blur-md border border-white/40 dark:border-white/10 rounded-2xl p-5 shadow-lg dark:shadow-none flex flex-col justify-between h-32 relative overflow-hidden group hover:scale-[1.02] transition duration-300 cursor-help"
+                <div class="bg-white/60 dark:bg-white/5 backdrop-blur-md border border-white/40 dark:border-white/10 rounded-2xl p-5 shadow-lg dark:shadow-none flex flex-col justify-between h-32 relative overflow-hidden group hover:scale-[1.02] transition duration-300 cursor-help lazy-block"
                      onclick="toggleHint(event, 'hint-cpu')">
                     <div class="absolute right-[-20px] top-[-20px] w-24 h-24 bg-indigo-500/10 rounded-full blur-2xl group-hover:bg-indigo-500/20 transition">
                     </div>
@@ -194,7 +192,7 @@
                              style="width: 0%"></div>
                     </div>
                 </div>
-                <div class="bg-white/60 dark:bg-white/5 backdrop-blur-md border border-white/40 dark:border-white/10 rounded-2xl p-5 shadow-lg dark:shadow-none flex flex-col justify-between h-32 relative overflow-hidden group hover:scale-[1.02] transition duration-300 cursor-help"
+                <div class="bg-white/60 dark:bg-white/5 backdrop-blur-md border border-white/40 dark:border-white/10 rounded-2xl p-5 shadow-lg dark:shadow-none flex flex-col justify-between h-32 relative overflow-hidden group hover:scale-[1.02] transition duration-300 cursor-help lazy-block"
                      onclick="toggleHint(event, 'hint-ram')">
                     <div class="absolute right-[-20px] top-[-20px] w-24 h-24 bg-purple-500/10 rounded-full blur-2xl group-hover:bg-purple-500/20 transition">
                     </div>
@@ -223,7 +221,7 @@
                              style="width: 0%"></div>
                     </div>
                 </div>
-                <div class="bg-white/60 dark:bg-white/5 backdrop-blur-md border border-white/40 dark:border-white/10 rounded-2xl p-5 shadow-lg dark:shadow-none flex flex-col justify-between h-32 relative overflow-hidden group hover:scale-[1.02] transition duration-300 cursor-help"
+                <div class="bg-white/60 dark:bg-white/5 backdrop-blur-md border border-white/40 dark:border-white/10 rounded-2xl p-5 shadow-lg dark:shadow-none flex flex-col justify-between h-32 relative overflow-hidden group hover:scale-[1.02] transition duration-300 cursor-help lazy-block"
                      onclick="toggleHint(event, 'hint-disk')">
                     <div class="absolute right-[-20px] top-[-20px] w-24 h-24 bg-green-500/10 rounded-full blur-2xl group-hover:bg-green-500/20 transition">
                     </div>
@@ -254,7 +252,7 @@
                 </div>
             </div>
             <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
-                <div class="lg:col-span-2 bg-white/60 dark:bg-white/5 backdrop-blur-md border border-white/40 dark:border-white/10 rounded-2xl p-6 shadow-lg dark:shadow-none">
+                <div class="lg:col-span-2 bg-white/60 dark:bg-white/5 backdrop-blur-md border border-white/40 dark:border-white/10 rounded-2xl p-6 shadow-lg dark:shadow-none lazy-block">
                     <div class="flex justify-between items-center mb-4 gap-2">
                         <h3 class="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2 min-w-0">
                             <svg xmlns="http://www.w3.org/2000/svg"
@@ -275,7 +273,7 @@
                         <canvas id="agentChart"></canvas>
                     </div>
                 </div>
-                <div class="bg-white/60 dark:bg-white/5 backdrop-blur-md border border-white/40 dark:border-white/10 rounded-2xl p-6 shadow-lg dark:shadow-none flex flex-col">
+                <div class="bg-white/60 dark:bg-white/5 backdrop-blur-md border border-white/40 dark:border-white/10 rounded-2xl p-6 shadow-lg dark:shadow-none flex flex-col lazy-block">
                     <div class="flex justify-between items-start mb-4">
                         <h3 class="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
                             <svg xmlns="http://www.w3.org/2000/svg"
@@ -346,7 +344,7 @@
                 </div>
             </div>
             <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <div class="bg-white/60 dark:bg-white/5 backdrop-blur-md border border-white/40 dark:border-white/10 rounded-2xl p-6 shadow-lg dark:shadow-none">
+                <div class="bg-white/60 dark:bg-white/5 backdrop-blur-md border border-white/40 dark:border-white/10 rounded-2xl p-6 shadow-lg dark:shadow-none lazy-block">
                     <div class="flex justify-between items-center mb-4 flex-wrap gap-2">
                         <h3 class="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
                             <svg xmlns="http://www.w3.org/2000/svg"
@@ -394,7 +392,7 @@
                     </div>
                     <div class="mt-4 pt-4 border-t border-gray-200 dark:border-white/5 flex justify-end">{{ node_action_btn | safe }}</div>
                 </div>
-                <div class="bg-white/60 dark:bg-white/5 backdrop-blur-md border border-white/40 dark:border-white/10 rounded-2xl p-6 shadow-lg dark:shadow-none flex flex-col relative overflow-hidden">
+                <div class="bg-white/60 dark:bg-white/5 backdrop-blur-md border border-white/40 dark:border-white/10 rounded-2xl p-6 shadow-lg dark:shadow-none flex flex-col relative overflow-hidden lazy-block">
                     <div class="flex justify-between items-center mb-4 flex-wrap gap-2 relative z-10">
                         <h3 class="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
                             <svg xmlns="http://www.w3.org/2000/svg"

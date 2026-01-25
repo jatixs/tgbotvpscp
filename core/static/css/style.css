@@ -1,3 +1,5 @@
+/* /core/static/css/style.css */
+
 /* --- Базовые стили и Эмодзи --- */
 img.emoji {
     height: 1em;
@@ -44,7 +46,6 @@ html {
 
 body {
     min-height: 100%;
-    /* Используем безопасные отступы для всего документа */
     padding-top: env(safe-area-inset-top, 0px);
     padding-bottom: env(safe-area-inset-bottom, 0px);
 }
@@ -60,7 +61,6 @@ html.dark body {
 
 nav {
     position: relative;
-    /* Гарантируем, что контент навигации не залезет под Dynamic Island */
     padding-top: max(0px, env(safe-area-inset-top, 0px)) !important;
 }
 
@@ -97,6 +97,38 @@ nav {
 
 .animate-fade-in-up {
     animation: fadeInUp 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* --- LAZY LOAD PAGE BLOCKS (MOBILE ONLY) --- */
+/* По умолчанию (Десктоп) - блоки видны сразу, без анимации скролла */
+.lazy-block {
+    opacity: 1;
+    transform: none;
+    transition: none;
+}
+
+/* Только для мобильных и планшетов (< 1024px) */
+@media (max-width: 1023px) {
+    .lazy-block {
+        opacity: 0;
+        transform: translateY(30px);
+        transition: opacity 0.8s cubic-bezier(0.2, 0.8, 0.2, 1), transform 0.8s cubic-bezier(0.2, 0.8, 0.2, 1);
+        will-change: opacity, transform;
+    }
+
+    .lazy-block.is-visible {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Отключаем анимацию при настройках "reduced motion" */
+@media (prefers-reduced-motion: reduce) {
+    .lazy-block {
+        transition: none !important;
+        opacity: 1 !important;
+        transform: none !important;
+    }
 }
 
 /* --- Вспомогательные классы --- */
