@@ -1,3 +1,4 @@
+/* --- Базовые стили и Эмодзи --- */
 img.emoji {
     height: 1em;
     width: 1em;
@@ -6,6 +7,12 @@ img.emoji {
     display: inline-block;
 }
 
+/* --- Оптимизация под Safari: Убираем системное выделение при тапе --- */
+* {
+    -webkit-tap-highlight-color: transparent;
+}
+
+/* --- Стили автозаполнения форм --- */
 input:-webkit-autofill,
 input:-webkit-autofill:hover,
 input:-webkit-autofill:focus,
@@ -17,6 +24,7 @@ input:-webkit-autofill:active {
     border-radius: 0.75rem;
 }
 
+/* --- Убираем стрелочки у input type="number" --- */
 input::-webkit-outer-spin-button,
 input::-webkit-inner-spin-button {
     -webkit-appearance: none;
@@ -27,6 +35,7 @@ input[type=number] {
     -moz-appearance: textfield;
 }
 
+/* --- Структура страницы --- */
 html {
     background-color: #f3f4f6;
     height: 100%;
@@ -35,6 +44,9 @@ html {
 
 body {
     min-height: 100%;
+    /* Используем безопасные отступы для всего документа */
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
 }
 
 html.dark {
@@ -48,20 +60,14 @@ html.dark body {
 
 nav {
     position: relative;
+    /* Гарантируем, что контент навигации не залезет под Dynamic Island */
+    padding-top: max(0px, env(safe-area-inset-top, 0px)) !important;
 }
 
+/* --- Анимации --- */
 @keyframes float {
-    0% {
-        transform: translateY(0px);
-    }
-
-    50% {
-        transform: translateY(-20px);
-    }
-
-    100% {
-        transform: translateY(0px);
-    }
+    0%, 100% { transform: translateY(0px); }
+    50% { transform: translateY(-20px); }
 }
 
 .animate-float {
@@ -69,21 +75,9 @@ nav {
 }
 
 @keyframes blob {
-    0% {
-        transform: translate(0px, 0px) scale(1);
-    }
-
-    33% {
-        transform: translate(30px, -50px) scale(1.1);
-    }
-
-    66% {
-        transform: translate(-20px, 20px) scale(0.9);
-    }
-
-    100% {
-        transform: translate(0px, 0px) scale(1);
-    }
+    0%, 100% { transform: translate(0px, 0px) scale(1); }
+    33% { transform: translate(30px, -50px) scale(1.1); }
+    66% { transform: translate(-20px, 20px) scale(0.9); }
 }
 
 .animate-blob {
@@ -95,7 +89,6 @@ nav {
         opacity: 0;
         transform: translateY(20px) scale(0.95);
     }
-
     100% {
         opacity: 1;
         transform: translateY(0) scale(1);
@@ -106,6 +99,7 @@ nav {
     animation: fadeInUp 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
+/* --- Вспомогательные классы --- */
 .modal-open {
     display: flex !important;
 }
@@ -119,16 +113,13 @@ nav {
     scrollbar-width: none;
 }
 
-body,
-div,
-nav,
-main,
-button {
+body, div, nav, main, button {
     transition-property: background-color, border-color, color, fill, stroke, opacity, box-shadow;
     transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
     transition-duration: 300ms;
 }
 
+/* --- Уведомления --- */
 .notif-btn {
     position: relative;
     cursor: pointer;
@@ -202,44 +193,19 @@ button {
     margin-top: 4px;
 }
 
+@keyframes bell-shake {
+    0%, 100% { transform: rotate(0); }
+    15% { transform: rotate(5deg); }
+    30% { transform: rotate(-5deg); }
+    45% { transform: rotate(4deg); }
+    60% { transform: rotate(-4deg); }
+}
+
 .notif-bell-shake {
     animation: bell-shake 0.5s cubic-bezier(.36, .07, .19, .97) both;
 }
 
-@keyframes bell-shake {
-    0% {
-        transform: rotate(0);
-    }
-
-    15% {
-        transform: rotate(5deg);
-    }
-
-    30% {
-        transform: rotate(-5deg);
-    }
-
-    45% {
-        transform: rotate(4deg);
-    }
-
-    60% {
-        transform: rotate(-4deg);
-    }
-
-    75% {
-        transform: rotate(2deg);
-    }
-
-    85% {
-        transform: rotate(-2deg);
-    }
-
-    100% {
-        transform: rotate(0);
-    }
-}
-
+/* --- Праздничные эффекты: Гирлянда --- */
 .lights-garland {
     position: absolute;
     z-index: 40;
@@ -288,81 +254,17 @@ button {
     border-radius: 1px;
 }
 
-.garland-on li:nth-child(4n+1) {
-    animation: glow-red 3s ease-in-out infinite;
-}
+.garland-on li:nth-child(4n+1) { animation: glow-red 3s ease-in-out infinite; }
+.garland-on li:nth-child(4n+2) { animation: glow-blue 3.5s ease-in-out infinite; animation-delay: 0.5s; }
+.garland-on li:nth-child(4n+3) { animation: glow-yellow 4s ease-in-out infinite; animation-delay: 1s; }
+.garland-on li:nth-child(4n+4) { animation: glow-green 3s ease-in-out infinite; animation-delay: 1.5s; }
 
-.garland-on li:nth-child(4n+2) {
-    animation: glow-blue 3.5s ease-in-out infinite;
-    animation-delay: 0.5s;
-}
+@keyframes glow-red { 0%, 100% { background: #ff2d55; box-shadow: 0 0 10px #ff2d55; } 50% { background: #7c1a2d; box-shadow: none; } }
+@keyframes glow-blue { 0%, 100% { background: #007aff; box-shadow: 0 0 10px #007aff; } 50% { background: #0a3a6b; box-shadow: none; } }
+@keyframes glow-yellow { 0%, 100% { background: #ffcc00; box-shadow: 0 0 10px #ffcc00; } 50% { background: #7a6200; box-shadow: none; } }
+@keyframes glow-green { 0%, 100% { background: #34c759; box-shadow: 0 0 10px #34c759; } 50% { background: #1a5e2b; box-shadow: none; } }
 
-.garland-on li:nth-child(4n+3) {
-    animation: glow-yellow 4s ease-in-out infinite;
-    animation-delay: 1s;
-}
-
-.garland-on li:nth-child(4n+4) {
-    animation: glow-green 3s ease-in-out infinite;
-    animation-delay: 1.5s;
-}
-
-@keyframes glow-red {
-
-    0%,
-    100% {
-        background: #ff2d55;
-        box-shadow: 0 0 10px #ff2d55;
-    }
-
-    50% {
-        background: #7c1a2d;
-        box-shadow: none;
-    }
-}
-
-@keyframes glow-blue {
-
-    0%,
-    100% {
-        background: #007aff;
-        box-shadow: 0 0 10px #007aff;
-    }
-
-    50% {
-        background: #0a3a6b;
-        box-shadow: none;
-    }
-}
-
-@keyframes glow-yellow {
-
-    0%,
-    100% {
-        background: #ffcc00;
-        box-shadow: 0 0 10px #ffcc00;
-    }
-
-    50% {
-        background: #7a6200;
-        box-shadow: none;
-    }
-}
-
-@keyframes glow-green {
-
-    0%,
-    100% {
-        background: #34c759;
-        box-shadow: 0 0 10px #34c759;
-    }
-
-    50% {
-        background: #1a5e2b;
-        box-shadow: none;
-    }
-}
-
+/* --- Праздничные эффекты: Снег --- */
 #snow-container {
     position: fixed;
     top: 0;
@@ -384,13 +286,8 @@ button {
 }
 
 @keyframes fall {
-    0% {
-        transform: translateY(-10vh) rotate(0deg);
-    }
-
-    100% {
-        transform: translateY(110vh) rotate(360deg);
-    }
+    0% { transform: translateY(-10vh) rotate(0deg); }
+    100% { transform: translateY(110vh) rotate(360deg); }
 }
 
 .holiday-btn-active svg {
@@ -398,6 +295,7 @@ button {
     filter: drop-shadow(0 0 5px rgba(96, 165, 250, 0.5));
 }
 
+/* --- Модальные окна --- */
 #systemModal>div,
 #addNodeModal>div,
 #keyboardModal>div,
@@ -407,39 +305,31 @@ button {
     transition: opacity 0.2s ease-out, transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
 }
 
-.pt-16 {
-    padding-top: 4rem;
-}
+.pt-16 { padding-top: 4rem; }
+.items-start { align-items: flex-start; }
 
-.items-start {
-    align-items: flex-start;
-}
 button.force-expanded .btn-text {
     max-width: 200px !important;
     opacity: 1 !important;
-    margin-left: 0.5rem !important; /* ml-2 */
+    margin-left: 0.5rem !important;
 }
 
-/* --- iOS Safe Area Adaptations (Safari Only) --- */
 @supports (-webkit-touch-callout: none) {
-    /* Отступ сверху для навигации (под чёлку) */
-    nav {
-        padding-top: env(safe-area-inset-top) !important;
-    }
-
-    /* Отступ снизу для body (под полоску Home) */
     body {
-        padding-bottom: env(safe-area-inset-bottom) !important;
+        padding-top: env(safe-area-inset-top, 0px);
     }
-
-    /* Если на странице нет навигации (логин/сброс), отступаем само тело от чёлки */
-    body:not(:has(nav)) {
-        padding-top: env(safe-area-inset-top) !important;
+    nav {
+        padding-top: env(safe-area-inset-top, 0px) !important;
     }
-
-    /* Корректировка для модальных окон на весь экран */
+    body, main {
+        padding-bottom: env(safe-area-inset-bottom, 20px) !important;
+    }
     .fixed.inset-0 {
-        padding-top: env(safe-area-inset-top);
-        padding-bottom: env(safe-area-inset-bottom);
+        padding-top: env(safe-area-inset-top, 0px);
+        padding-bottom: env(safe-area-inset-bottom, 0px);
+    }
+    
+    body:has(nav) {
+        padding-top: 0;
     }
 }
