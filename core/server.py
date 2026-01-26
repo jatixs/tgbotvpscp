@@ -700,21 +700,26 @@ async def handle_heartbeat(request):
             tz_label = login.get("tz_label", "")
             
             flag = await get_country_flag(ip)
-            method_display = method_raw
-            if "publickey" in method_raw:
-                method_display = f"🔑 By {method_raw}"
-            elif "password" in method_raw:
-                method_display = f"🔐 By {method_raw}"
-            
+            method_key = "auth_method_unknown"
+            if "publickey" in method_raw.lower():
+                method_key = "auth_method_key"
+            elif "password" in method_raw.lower():
+                method_key = "auth_method_password"
+
             await send_alert(
                 bot,
-                lambda lang: (
-                    f"🔔 <b>SSH login detected:</b>\n"
-                    f"🌐 <b>Node:</b> {node.get('name', 'Node')}\n"
-                    f"👤 <b>User:</b> {user_ssh}\n"
-                    f"🛡 <b>Entry method:</b> {method_display}\n"
-                    f"🌍 <b>IP:</b> {flag} {ip}\n"
-                    f"⏰ <b>Date and time:</b> {node_time_str} ({tz_label}) / 📍 {server_time} {server_tz}"
+                lambda lang: _(
+                    "alert_ssh_login_node",
+                    lang,
+                    node_name=node.get('name', 'Node'),
+                    user=user_ssh,
+                    method=_(method_key, lang),
+                    ip_flag=flag,
+                    ip=ip,
+                    node_time=node_time_str,
+                    node_tz=tz_label,
+                    server_time=server_time,
+                    server_tz=server_tz
                 ),
                 "node_logins",
                 node_token=token

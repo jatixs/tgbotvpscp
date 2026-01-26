@@ -124,7 +124,7 @@ STRINGS = {
         "alerts_menu_downtime": "{status} Даунтайм Нод (Offline)",
         "notifications_alert_name_downtime": "Даунтайм Нод",
         "notifications_alert_name_res": "Ресурсы",
-        "notifications_alert_name_logins": "Авторизации SSH",
+        "notifications_alert_name_logins": "Входы SSH",
         "notifications_alert_name_bans": "Баны",
         "notifications_menu_title": "🔔 <b>Настройка уведомлений</b>\n\nВыберите, какие оповещения вы хотите получать.",
         "notifications_toggle_alert": "Уведомления '{alert_name}' {status}",
@@ -584,6 +584,7 @@ STRINGS = {
         "notif_btn_toggle_all_nodes": "🌐 Вкл/Выкл все для Нод",
         "notif_all_agent_switched": "Уведомления Агента: {status}",
         "notif_all_nodes_switched": "Глобальные уведомления Нод: {status}",
+        "alert_ssh_login_node": "🔔 <b>Вход SSH на ноде</b>\n🌐 <b>Нода:</b> {node_name}\n👤 <b>Пользователь:</b> {user}\n🛡 <b>Способ:</b> {method}\n🌍 <b>IP:</b> {ip_flag} {ip}\n⏰ <b>Время:</b> {node_time} ({node_tz}) / 📍 {server_time} {server_tz}",
     },
     
     "en": {
@@ -1161,6 +1162,7 @@ STRINGS = {
         "notif_btn_toggle_all_nodes": "🌐 Toggle All Nodes",
         "notif_all_agent_switched": "Agent Notifications: {status}",
         "notif_all_nodes_switched": "Global Node Notifications: {status}",
+        "alert_ssh_login_node": "🔔 <b>SSH login on node</b>\n🌐 <b>Node:</b> {node_name}\n👤 <b>User:</b> {user}\n🛡 <b>Method:</b> {method}\n🌍 <b>IP:</b> {ip_flag} {ip}\n⏰ <b>Time:</b> {node_time} ({node_tz}) / 📍 {server_time} {server_tz}",
     },
 }
 

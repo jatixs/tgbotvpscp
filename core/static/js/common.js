@@ -731,15 +731,13 @@ function updateNotifUI(list, count) {
         listContainer.innerHTML = list.map(n => {
             const date = new Date(n.time * 1000).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
             let cleanText = n.text.replace(/<(?!\/?b\s*>)[^>]*>/g, "").replace(/\n/g, "<br>");
-            
-            // Badge Logic
             let badgeHtml = '';
             if (n.source === 'node') {
-                badgeHtml = `<span class="px-1.5 py-0.5 rounded text-[9px] font-bold bg-purple-100 text-purple-600 dark:bg-purple-900/30 dark:text-purple-300 border border-purple-200 dark:border-purple-800 mr-2 uppercase tracking-wider">NODE</span>`;
+                badgeHtml = `<span class="px-1.5 py-0.5 rounded text-[9px] font-bold bg-purple-100 text-purple-700 dark:bg-purple-500/20 dark:text-purple-200 mr-2 uppercase tracking-wider">NODE</span>`;
             } else {
-                badgeHtml = `<span class="px-1.5 py-0.5 rounded text-[9px] font-bold bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-300 border border-blue-200 dark:border-blue-800 mr-2 uppercase tracking-wider">AGENT</span>`;
+                badgeHtml = `<span class="px-1.5 py-0.5 rounded text-[9px] font-bold bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-200 mr-2 uppercase tracking-wider">AGENT</span>`;
             }
-
+			
             return `
             <div class="px-4 py-3 border-b border-gray-100 dark:border-white/5 hover:bg-gray-50 dark:hover:bg-white/5 transition last:border-0 group">
                 <div class="flex justify-between items-start mb-1">
