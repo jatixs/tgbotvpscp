@@ -10,6 +10,7 @@ import re
 import hmac
 import hashlib
 import json
+from datetime import datetime
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 ENV_FILE = os.path.join(BASE_DIR, '.env')
@@ -68,13 +69,89 @@ if not AGENT_BASE_URL or not AGENT_TOKEN:
 
 PENDING_RESULTS = []
 LAST_TRAFFIC_STATS = {}
+SSH_EVENTS = []
 
 EXTERNAL_IP_CACHE = None 
 
+class SSHMonitor:
+    def __init__(self):
+        self.log_files = ["/var/log/auth.log", "/var/log/secure"]
+        self.current_file = None
+        self.file_handle = None
+        self.inode = None
+        self._open_log_file()
+        if self.file_handle:
+            self.file_handle.seek(0, 2)
+
+    def _open_log_file(self):
+        for log_path in self.log_files:
+            if os.path.exists(log_path):
+                try:
+                    f = open(log_path, 'r', encoding='utf-8', errors='ignore')
+                    self.current_file = log_path
+                    self.file_handle = f
+                    st = os.fstat(f.fileno())
+                    self.inode = st.st_ino
+                    logging.info(f"SSH Monitor watching: {log_path}")
+                    return
+                except Exception as e:
+                    logging.error(f"Error opening SSH log {log_path}: {e}")
+        logging.warning("No SSH log files found (auth.log/secure).")
+
+    def check(self):
+        if not self.file_handle:
+            return []
+
+        try:
+            if not os.path.exists(self.current_file):
+                self.file_handle.close()
+                self._open_log_file()
+                return []
+            
+            st = os.stat(self.current_file)
+            if st.st_ino != self.inode or st.st_size < self.file_handle.tell():
+                logging.info("Log rotation detected. Reopening.")
+                self.file_handle.close()
+                self._open_log_file()
+                return []
+        except Exception:
+            pass
+
+        events = []
+        try:
+            while True:
+                line = self.file_handle.readline()
+                if not line:
+                    break
+                
+                if "Accepted" in line and "ssh" in line:
+                    match = re.search(r"Accepted\s+(password|publickey)\s+for\s+(\S+)\s+from\s+(\S+)", line)
+                    if match:
+                        method = match.group(1)
+                        user = match.group(2)
+                        ip = match.group(3)
+                        
+                        try:
+                            tz_offset = time.strftime('%z')
+                            tz_label = f"GMT{tz_offset[:3]}:{tz_offset[3:]}" if tz_offset else "GMT"
+                        except:
+                            tz_label = "GMT"
+
+                        events.append({
+                            "user": user,
+                            "ip": ip,
+                            "method": method,
+                            "timestamp": int(time.time()),
+                            "node_time_str": time.strftime('%H:%M:%S'),
+                            "tz_label": tz_label
+                        })
+        except Exception as e:
+            logging.error(f"Error parsing SSH log: {e}")
+        
+        return events
+
 def get_external_ip():
     global EXTERNAL_IP_CACHE
-    
-    # ИЗМЕНЕНИЕ: Если IP уже получен, просто возвращаем его (кэшируем навсегда пока скрипт работает)
     if EXTERNAL_IP_CACHE:
         return EXTERNAL_IP_CACHE
 
@@ -372,13 +449,16 @@ def execute_command(task):
         })
 
 def send_heartbeat():
-    global PENDING_RESULTS
+    global PENDING_RESULTS, SSH_EVENTS
     url = f"{AGENT_BASE_URL}/api/heartbeat"
+    
+    current_ssh_events = SSH_EVENTS[:]
     
     payload_dict = {
         "token": AGENT_TOKEN,
         "stats": get_system_stats(),
         "results": PENDING_RESULTS,
+        "ssh_logins": current_ssh_events,
         "timestamp": int(time.time())
     }
     
@@ -396,6 +476,9 @@ def send_heartbeat():
         if response.status_code == 200:
             data = response.json()
             PENDING_RESULTS = []
+            
+            if current_ssh_events:
+                 SSH_EVENTS = SSH_EVENTS[len(current_ssh_events):]
 
             tasks = data.get("tasks", [])
             for task in tasks:
@@ -409,8 +492,15 @@ def main():
     logging.info(f"Node Agent started. Target: {AGENT_BASE_URL}. Mode: {'DEBUG' if DEBUG_MODE else 'RELEASE'}")
     psutil.cpu_percent(interval=None)
     get_external_ip()
+    
+    ssh_monitor = SSHMonitor()
 
     while True:
+        new_events = ssh_monitor.check()
+        if new_events:
+            logging.info(f"Found {len(new_events)} SSH login events.")
+            SSH_EVENTS.extend(new_events)
+
         send_heartbeat()
         time.sleep(UPDATE_INTERVAL)
 

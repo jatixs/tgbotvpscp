@@ -55,8 +55,10 @@ from .utils import (
     decrypt_for_web,
     get_web_key,
     generate_favicons,
+    get_server_timezone_label,
 )
 from .auth import save_users, get_user_name
+from .messaging import send_alert 
 from .keyboards import BTN_CONFIG_MAP
 from modules import update as update_module
 from modules import traffic as traffic_module
@@ -682,9 +684,41 @@ async def handle_heartbeat(request):
     node = await nodes_db.get_node_by_token(token)
     if not node:
         return web.json_response({"error": "Auth fail"}, status=401)
+    ssh_logins = data.get("ssh_logins", [])
+    bot = request.app.get("bot")
+    
+    if ssh_logins and bot:
+        server_tz = get_server_timezone_label()
+        server_time = time.strftime("%H:%M")
+
+        for login in ssh_logins:
+            user_ssh = login.get("user", "unknown")
+            ip = login.get("ip", "unknown")
+            method_raw = login.get("method", "unknown")
+            node_time_str = login.get("node_time_str", "??:??")
+            tz_label = login.get("tz_label", "")
+            
+            flag = await get_country_flag(ip)
+            method_display = method_raw
+            if "publickey" in method_raw:
+                method_display = f"🔑 По ключу ({method_raw})"
+            elif "password" in method_raw:
+                method_display = f"🔐 По паролю ({method_raw})"
+            
+            await send_alert(
+                bot,
+                lambda lang: (
+                    f"🔔 <b>{_('sshlog_alert_title', lang) if _('sshlog_alert_title', lang) != 'sshlog_alert_title' else 'SSH login detected'}</b>\n"
+                    f"🌐 <b>Node:</b> {node.get('name', 'Node')}\n"
+                    f"👤 <b>User:</b> {user_ssh}\n"
+                    f"🛡 <b>Entry method:</b> {method_display}\n"
+                    f"🌍 <b>IP:</b> {flag} {ip}\n"
+                    f"⏰ <b>Date and time:</b> {node_time_str} ({tz_label}) / 📍 {server_time} {server_tz}"
+                ),
+                "logins"
+            )
     stats = data.get("stats", {})
     results = data.get("results", [])
-    bot = request.app.get("bot")
     if bot and results:
         for res in results:
             asyncio.create_task(
