@@ -29,26 +29,27 @@
         <script src="https://unpkg.com/twemoji@latest/dist/twemoji.min.js" crossorigin="anonymous"></script>
         <link rel="stylesheet" href="/static/css/style.css?v={{ web_version }}">
     </head>
+	
     <body class="bg-gray-100 text-gray-900 dark:bg-gray-900 dark:text-gray-100 font-sans selection:bg-green-500/30 pb-10 overflow-x-hidden">
-        <div class="fixed top-[-10%] left-[-10%] w-96 h-96 rounded-full mix-blend-multiply dark:mix-blend-screen filter blur-3xl animate-float pointer-events-none opacity-70 dark:opacity-100 bg-cyan-300 dark:bg-purple-600/20">
-        </div>
-        <div class="fixed bottom-[-10%] right-[-10%] w-96 h-96 rounded-full mix-blend-multiply dark:mix-blend-screen filter blur-3xl animate-float delay-2000 pointer-events-none opacity-70 dark:opacity-100 bg-rose-300 dark:bg-blue-600/20">
-        </div>
+		<div class="fixed top-[-10%] left-[-10%] w-96 h-96 rounded-full mix-blend-multiply dark:mix-blend-screen filter blur-3xl animate-float pointer-events-none opacity-70 dark:opacity-100 bg-blue-300 dark:bg-blue-600/20">
+			</div>
+		<div class="fixed bottom-[-10%] right-[-10%] w-96 h-96 rounded-full mix-blend-multiply dark:mix-blend-screen filter blur-3xl animate-float delay-2000 pointer-events-none opacity-70 dark:opacity-100 bg-purple-300 dark:bg-purple-600/20">
+			</div>
         <nav class="bg-white/70 dark:bg-black/40 backdrop-blur-xl border-b border-white/20 dark:border-white/5 sticky top-0 z-40 shadow-sm dark:shadow-none">
             <div class="max-w-7xl mx-auto px-3 py-2 sm:px-4 sm:py-3 flex flex-nowrap justify-between items-center gap-2">
-                <div class="flex items-center space-x-2 shrink-0">
+				<div class="flex items-center gap-3 min-w-0">
                     <a href="/"
-                       class="text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white transition flex items-center gap-2 text-sm font-medium whitespace-nowrap">
+                       class="group flex items-center justify-center w-8 h-8 sm:w-auto sm:h-auto sm:px-3 sm:py-2 rounded-lg sm:rounded-xl hover:bg-gray-100 sm:bg-gray-100/50 sm:hover:bg-gray-200/50 dark:hover:bg-white/10 sm:dark:bg-white/5 sm:dark:hover:bg-white/10 text-gray-600 dark:text-gray-400 sm:dark:text-gray-300 hover:text-gray-900 dark:hover:text-white transition-all duration-200 sm:border sm:border-transparent sm:hover:border-gray-200 sm:dark:hover:border-white/5 shrink-0">
                         <svg xmlns="http://www.w3.org/2000/svg"
-                             class="h-5 w-5"
+                             class="h-5 w-5 sm:group-hover:-translate-x-1 transition-transform duration-200"
                              fill="none"
                              viewBox="0 0 24 24"
                              stroke="currentColor">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
                         </svg>
-                        <span class="hidden sm:inline">{{ web_back }}</span>
+                        <span class="hidden sm:inline font-bold text-sm ml-1">{{ web_back }}</span>
                     </a>
-                    <span class="font-bold text-lg ml-2 whitespace-nowrap">{{ web_settings_page_title }}</span>
+                    <span class="font-bold text-lg whitespace-nowrap truncate">{{ web_settings_page_title }}</span>
                 </div>
                 <div class="flex items-center gap-1 sm:gap-4 shrink-0">
                     <div class="relative group">

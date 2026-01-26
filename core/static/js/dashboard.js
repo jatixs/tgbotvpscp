@@ -8,14 +8,10 @@ let logSSESource = null;
 let agentChart = null;
 let allNodesData = [];
 let currentNodeToken = null;
+let currentRenderList = [];   
+let renderedCount = 0; 
+const NODES_BATCH_SIZE = 15;
 
-// --- LAZY LOAD VARIABLES ---
-let currentRenderList = [];   // Список узлов, который мы сейчас отображаем (после фильтрации)
-let renderedCount = 0;        // Сколько уже отрисовано
-const NODES_BATCH_SIZE = 15;  // Сколько узлов добавлять за раз
-// ---------------------------
-
-// --- CRYPTO FUNCTIONS (XOR + Base64) ---
 function decryptData(text) {
     if (!text) return "";
     if (typeof WEB_KEY === 'undefined' || !WEB_KEY) return text;
@@ -48,19 +44,17 @@ function encryptData(text) {
         return text;
     }
 }
-// ----------------------------------------
 
 window.addEventListener('themeChanged', () => {
     updateChartsColors();
 });
 
-// --- NEW: Scroll Animation Observer ---
 function initScrollAnimations() {
     if (window.innerWidth >= 1024) return;
     const observerOptions = {
         root: null,
         rootMargin: '0px',
-        threshold: 0.1 // Срабатывает, когда показано 10% элемента
+        threshold: 0.1 
     };
 
     const observer = new IntersectionObserver((entries, obs) => {
@@ -77,7 +71,6 @@ function initScrollAnimations() {
         observer.observe(block);
     });
 }
-// --------------------------------------
 
 window.initDashboard = function() {
     cleanupDashboardSources();
@@ -302,57 +295,38 @@ function updateNodesListUI(data) {
 }
 
 function updateVisibleNodes(elements, dataList) {
-    // Обновляем только те элементы, которые уже есть в DOM
-    // (даже если в dataList больше записей, мы не добавляем новые здесь, это делает скролл)
     for (let i = 0; i < elements.length; i++) {
         const el = elements[i];
         const token = el.getAttribute('data-token');
-        const nodeData = dataList[i]; // Соответствующая нода из данных
-        
-        // Если данных нет или токены не совпадают -> структура изменилась -> нужен полный рендер
-        if (!nodeData || nodeData.token !== token) return false;
-        
-        // Вычисляем новые UI параметры
-        const ui = getNodeUiParams(nodeData);
-        
-        // --- Обновляем DOM точечно ---
-        
-        // CPU
+        const nodeData = dataList[i]; // Соответствующая нода из данных   
+        if (!nodeData || nodeData.token !== token) return false;   
+        const ui = getNodeUiParams(nodeData);     
         const cpuEl = el.querySelector('[data-ref="cpu-val"]');
         if (cpuEl) {
             cpuEl.innerText = ui.cpu + '%';
             cpuEl.className = `text-xs font-mono font-bold ${ui.cpuColor}`;
         }
-        
-        // RAM
         const ramEl = el.querySelector('[data-ref="ram-val"]');
         if (ramEl) {
             ramEl.innerText = ui.ram + '%';
             ramEl.className = `text-xs font-mono font-bold ${ui.ramColor}`;
         }
-        
-        // DISK
         const diskEl = el.querySelector('[data-ref="disk-val"]');
         if (diskEl) {
             diskEl.innerText = ui.disk + '%';
             diskEl.className = `text-xs font-mono font-bold ${ui.diskColor}`;
         }
-        
-        // Status Text (Desktop)
         const stText = el.querySelector('[data-ref="status-text"]');
         if (stText) {
             stText.innerText = ui.statusText;
             stText.className = `text-[10px] font-bold ${ui.statusTextClass} mb-0.5`;
         }
-        
-        // Status Badge (Mobile)
         const stBadge = el.querySelector('[data-ref="status-badge"]');
         if (stBadge) {
             stBadge.innerText = ui.statusText;
             stBadge.className = `sm:hidden px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider ${ui.statusBg}`;
         }
         
-        // Status Dot & Ping
         const stDot = el.querySelector('[data-ref="status-dot"]');
         if (stDot) {
             stDot.className = `w-2.5 h-2.5 rounded-full ${ui.statusColor}`;
@@ -366,9 +340,7 @@ function updateVisibleNodes(elements, dataList) {
             } else {
                 stPing.style.display = 'none';
             }
-        }
-        
-        // Обновляем аргументы onclick (на случай если цвет статуса изменился)
+        }    
         el.setAttribute('onclick', `openNodeDetails('${escapeHtml(nodeData.token)}', '${ui.statusColor}')`);
     }
     return true; // Успешно обновили все видимые элементы
