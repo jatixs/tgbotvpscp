@@ -816,9 +816,10 @@ async def process_node_result_background(bot, user_id, cmd, text, token, node_na
                 return
         await bot.send_message(
             chat_id=user_id,
-            text=f"🖥 <b>Ответ от {node_name}:</b>\n\n{final_text}",
+            text=_("node_response_template", user_id, name=node_name, text=final_text),
             parse_mode="HTML",
         )
+        
     except Exception as e:
         logging.error(f"Background send error: {e}")
         
