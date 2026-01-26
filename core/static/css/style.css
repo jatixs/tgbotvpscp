@@ -490,3 +490,62 @@ button.force-expanded .btn-text {
 		transform: translateY(0) !important;
 	}
 }
+
+/* --- Стилизация скроллбара (Только для внутренних блоков) --- */
+
+/* 1. Глобальная плавность и инерция */
+html {
+    scroll-behavior: smooth;
+}
+
+/* Инерция (импульсная прокрутка) для всех прокручиваемых блоков */
+.custom-scrollbar, .overflow-y-auto, .overflow-x-auto {
+    -webkit-overflow-scrolling: touch;
+}
+
+/* 2. Стилизация Webkit (Chrome, Safari, Edge) */
+/* Применяем ТОЛЬКО к элементам с классом .custom-scrollbar */
+
+.custom-scrollbar::-webkit-scrollbar {
+    width: 6px;       /* Тонкий вертикальный скролл */
+    height: 6px;      /* Тонкий горизонтальный скролл */
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+    background-color: rgba(156, 163, 175, 0.5); /* gray-400 полупрозрачный */
+    border-radius: 9999px;
+    border: 2px solid transparent; /* Отступ внутри */
+    background-clip: content-box;
+    transition: background-color 0.2s;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+    background-color: rgba(107, 114, 128, 0.8); /* gray-500 при наведении */
+}
+
+.custom-scrollbar::-webkit-scrollbar-corner {
+    background: transparent;
+}
+
+/* Адаптация под темную тему */
+.dark .custom-scrollbar::-webkit-scrollbar-thumb {
+    background-color: rgba(75, 85, 99, 0.5); /* gray-600 */
+}
+
+.dark .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+    background-color: rgba(156, 163, 175, 0.8); /* gray-400 */
+}
+
+/* 3. Стилизация Firefox */
+.custom-scrollbar {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(156, 163, 175, 0.5) transparent;
+}
+
+.dark .custom-scrollbar {
+    scrollbar-color: rgba(75, 85, 99, 0.5) transparent;
+}
