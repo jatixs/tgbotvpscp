@@ -47,7 +47,16 @@ class RedactingFormatter(logging.Formatter):
 logger = logging.getLogger()
 logger.setLevel(logging.DEBUG if DEBUG_MODE else logging.INFO)
 
-file_handler = logging.FileHandler("/opt/tg-bot/logs/node/node.log")
+# Путь к логам лучше брать относительно текущей директории или из конфига,
+# но оставим жесткий путь как в оригинале, если структура папок сохраняется.
+LOG_FILE_PATH = "/opt/tg-bot/logs/node/node.log"
+# Создаем директорию логов, если её нет (на случай ручного запуска)
+try:
+    os.makedirs(os.path.dirname(LOG_FILE_PATH), exist_ok=True)
+except Exception:
+    pass
+
+file_handler = logging.FileHandler(LOG_FILE_PATH)
 stream_handler = logging.StreamHandler()
 
 formatter = RedactingFormatter('%(asctime)s - %(levelname)s - %(message)s')
@@ -298,11 +307,17 @@ def execute_command(task):
     user_id = task.get("user_id")
     logging.info(f"Executing command: {cmd}")
 
-    result_text = ""
+    result_payload = None
     try:
         if cmd == "uptime":
             uptime_sec = int(time.time() - psutil.boot_time())
-            result_text = f"⏱ Uptime: {format_uptime_simple(uptime_sec)}"
+            result_payload = {
+                "type": "i18n",
+                "key": "uptime_text",
+                "params": {
+                    "uptime": format_uptime_simple(uptime_sec)
+                }
+            }
 
         elif cmd == "traffic":
             net = psutil.net_io_counters()
@@ -311,7 +326,8 @@ def execute_command(task):
             rx_total = format_bytes_simple(net.bytes_recv)
             tx_total = format_bytes_simple(net.bytes_sent)
             
-            speed_info = ""
+            speed_rx_val = "0.00"
+            speed_tx_val = "0.00"
             
             if LAST_TRAFFIC_STATS:
                 prev_rx = LAST_TRAFFIC_STATS.get('rx', 0)
@@ -322,7 +338,8 @@ def execute_command(task):
                 if dt > 0:
                     rx_speed = (net.bytes_recv - prev_rx) * 8 / (1024 * 1024) / dt
                     tx_speed = (net.bytes_sent - prev_tx) * 8 / (1024 * 1024) / dt
-                    speed_info = f"\n\n⚡️ <b>Speed:</b>\n⬇️ {rx_speed:.2f} Mbit/s\n⬆️ {tx_speed:.2f} Mbit/s"
+                    speed_rx_val = f"{rx_speed:.2f}"
+                    speed_tx_val = f"{tx_speed:.2f}"
 
             LAST_TRAFFIC_STATS = {
                 'rx': net.bytes_recv,
@@ -330,7 +347,16 @@ def execute_command(task):
                 'time': now
             }
             
-            result_text = f"📡 <b>Traffic:</b>\n⬇️ Total RX: {rx_total}\n⬆️ Total TX: {tx_total}{speed_info}"
+            result_payload = {
+                "type": "i18n",
+                "key": "traffic_report_node", 
+                "params": {
+                    "rx": rx_total,
+                    "tx": tx_total,
+                    "speed_rx": speed_rx_val,
+                    "speed_tx": speed_tx_val
+                }
+            }
 
         elif cmd == "top":
             try:
@@ -338,10 +364,21 @@ def execute_command(task):
                     "ps aux --sort=-%cpu | head -n 11", shell=True).decode()
                 
                 safe_res = res.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-                result_text = f"<pre>{safe_res}</pre>"
+                
+                result_payload = {
+                    "type": "i18n",
+                    "key": "top_header",
+                    "params": {
+                        "output": safe_res
+                    }
+                }
                 
             except Exception as e:
-                result_text = f"Error running top: {e}"
+                result_payload = {
+                    "type": "i18n", 
+                    "key": "error_with_details", 
+                    "params": {"error": str(e)}
+                }
 
         elif cmd == "selftest":
             stats = get_system_stats()
@@ -351,13 +388,17 @@ def execute_command(task):
                      ext_ip = subprocess.check_output("curl -4 -s --max-time 2 ifconfig.me", shell=True).decode().strip()
             except Exception:
                 ext_ip = "N/A"
-                
+            
+            ping_val = "0"
+            inet_ok = False
             try:
                 ping_res = subprocess.check_output("ping -c 1 -W 1 8.8.8.8", shell=True).decode()
                 ping_match = re.search(r"time=([\d\.]+) ms", ping_res)
-                ping_status = f"🔗 {ping_match.group(1)} ms" if ping_match else "🔗 ❌ Fail"
+                if ping_match:
+                    ping_val = ping_match.group(1)
+                    inet_ok = True
             except Exception:
-                ping_status = "🔗 ❌ Fail"
+                pass
 
             try:
                 kernel = subprocess.check_output("uname -r", shell=True).decode().strip()
@@ -368,21 +409,21 @@ def execute_command(task):
             rx_total = format_bytes_simple(stats.get('net_rx', 0))
             tx_total = format_bytes_simple(stats.get('net_tx', 0))
             
-            result_text = (
-                f"🛠 <b>Server Info:</b>\n\n"
-                f"✅ Node Status: <b>Active</b>\n"
-                f"⏱ Uptime: <b>{uptime_str}</b>\n"
-                f"📦 OS/Kernel: {kernel}\n"
-                f"🌐 External IP: <code>{ext_ip}</code>\n"
-                f"📡 {ping_status}\n\n"
-                f"📊 <b>Resources:</b>\n"
-                f"  CPU: <b>{stats.get('cpu', 0):.1f}%</b>\n"
-                f"  RAM: <b>{stats.get('ram', 0):.1f}%</b>\n"
-                f"  Disk: <b>{stats.get('disk', 0):.1f}%</b>\n\n"
-                f"📈 <b>Traffic (Total):</b>\n"
-                f"  ⬇️ RX: {rx_total}\n"
-                f"  ⬆️ TX: {tx_total}"
-            )
+            result_payload = {
+                "type": "i18n",
+                "key": "selftest_results_body",
+                "params": {
+                    "cpu": stats.get('cpu', 0),
+                    "mem": stats.get('ram', 0),
+                    "disk": stats.get('disk', 0),
+                    "uptime": uptime_str,
+                    "inet_status": {"key": "selftest_inet_ok"} if inet_ok else {"key": "selftest_inet_fail"},
+                    "ping": ping_val,
+                    "ip": ext_ip,
+                    "rx": rx_total,
+                    "tx": tx_total
+                }
+            }
 
         elif cmd == "speedtest":
             server = get_public_iperf_server()
@@ -417,40 +458,71 @@ def execute_command(task):
                 if dl_speed == 0.0 and ul_speed == 0.0:
                     raise Exception("iperf3 returned zero speed or failed to parse.")
                     
-                result_text = (f"🚀 <b>Speedtest (iperf3)</b>\n"
-                               f"🌍 Server: {city}, {country} ({host})\n"
-                               f"⬇️ <b>Download:</b> {dl_speed:.2f} Mbit/s\n"
-                               f"⬆️ <b>Upload:</b> {ul_speed:.2f} Mbit/s\n\n"
-                               f"iPerf Done.")
+                result_payload = {
+                    "type": "i18n",
+                    "key": "speedtest_results",
+                    "params": {
+                        "dl": dl_speed,
+                        "ul": ul_speed,
+                        "ping": 0,
+                        "flag": "",
+                        "server": f"{city}, {country}",
+                        "provider": host
+                    }
+                }
             else:
                 try:
                     res = subprocess.check_output("ping -c 3 8.8.8.8", shell=True).decode()
-                    result_text = f"⚠️ iperf3 servers unavailable. Ping check:\n<pre>{res}</pre>"
+                    result_payload = {
+                        "type": "i18n",
+                        "key": "error_with_details",
+                        "params": {"error": f"iperf3 unavailable. Ping check:\n{res}"}
+                    }
                 except Exception as e:
-                    result_text = f"Network check failed: {e}"
+                    result_payload = {
+                        "type": "i18n",
+                        "key": "error_with_details",
+                        "params": {"error": f"Network check failed: {e}"}
+                    }
 
         elif cmd == "reboot":
-            result_text = "🔄 Reboot command received. Rebooting..."
+            result_payload = {
+                "type": "i18n",
+                "key": "reboot_confirmed",
+                "params": {}
+            }
             PENDING_RESULTS.append(
-                {"command": cmd, "user_id": user_id, "result": result_text})
+                {"command": cmd, "user_id": user_id, "result": result_payload})
             send_heartbeat()
             os.system("reboot")
             return
 
         else:
-            result_text = f"Unknown command: {cmd}"
+            result_payload = {
+                "type": "i18n", 
+                "key": "error_with_details", 
+                "params": {"error": f"Unknown command: {cmd}"}
+            }
 
     except subprocess.TimeoutExpired:
-        result_text = "❌ Speedtest timed out (server busy or test too long)."
+        result_payload = {
+            "type": "i18n",
+            "key": "error_with_details",
+            "params": {"error": "Speedtest timed out."}
+        }
     except Exception as e:
         logging.error(f"Command execution failed: {e}")
-        result_text = f"❌ Error: {str(e)}"
+        result_payload = {
+            "type": "i18n",
+            "key": "error_with_details",
+            "params": {"error": str(e)}
+        }
 
-    if result_text:
+    if result_payload:
         PENDING_RESULTS.append({
             "command": cmd,
             "user_id": user_id,
-            "result": result_text
+            "result": result_payload
         })
 
 def send_heartbeat():

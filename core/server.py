@@ -755,10 +755,39 @@ async def handle_heartbeat(request):
         await nodes_db.clear_node_tasks(token)
     return web.json_response({"status": "ok", "tasks": tasks_to_send})
 
-
 async def process_node_result_background(bot, user_id, cmd, text, token, node_name):
-    if not user_id or not text:
+    if not user_id:
         return
+
+    # Обработка JSON-ответа с ключами локализации
+    final_text = text
+    if isinstance(text, dict) and text.get("type") == "i18n":
+        try:
+            lang = get_user_lang(user_id)
+            key = text.get("key")
+            params = text.get("params", {})
+            
+            # Рекурсивная обработка вложенных ключей (например, для inet_status)
+            resolved_params = {}
+            for k, v in params.items():
+                if isinstance(v, dict) and "key" in v:
+                    # Если параметр сам является объектом с ключом перевода
+                    resolved_params[k] = _(v["key"], lang, **v.get("params", {}))
+                else:
+                    resolved_params[k] = v
+            
+            # Формируем итоговый текст, используя язык пользователя
+            final_text = _(key, lang, **resolved_params)
+        except Exception as e:
+            logging.error(f"Error processing i18n node result: {e}")
+            final_text = str(text) # Возврат к исходному виду при ошибке
+    elif isinstance(text, dict):
+        # Если пришел словарь, но не i18n (на всякий случай)
+        final_text = str(text)
+
+    if not final_text:
+        return
+
     try:
         if cmd == "traffic" and user_id in NODE_TRAFFIC_MONITORS:
             monitor = NODE_TRAFFIC_MONITORS[user_id]
@@ -776,7 +805,7 @@ async def process_node_result_background(bot, user_id, cmd, text, token, node_na
                 )
                 try:
                     await bot.edit_message_text(
-                        text=text,
+                        text=final_text,
                         chat_id=user_id,
                         message_id=msg_id,
                         reply_markup=stop_kb,
@@ -787,13 +816,12 @@ async def process_node_result_background(bot, user_id, cmd, text, token, node_na
                 return
         await bot.send_message(
             chat_id=user_id,
-            text=f"🖥 <b>Ответ от {node_name}:</b>\n\n{text}",
+            text=f"🖥 <b>Ответ от {node_name}:</b>\n\n{final_text}",
             parse_mode="HTML",
         )
     except Exception as e:
         logging.error(f"Background send error: {e}")
-
-
+        
 async def handle_node_details(request):
     if not get_current_user(request):
         return web.json_response({"error": "Unauthorized"}, status=401)

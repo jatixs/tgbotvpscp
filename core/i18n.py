@@ -571,6 +571,8 @@ STRINGS = {
         "web_meta_locked_alert": "Настройки сохранены и ЗАБЛОКИРОВАНЫ навсегда. Перезагрузка...",
         "login_access_denied": "Доступ запрещен",
         "login_unauthorized": "Пользователь <b>@{username}</b> не авторизован.<br><br>Пожалуйста, попросите администратора добавить ваш ID: <b>{id}</b>",
+        "traffic_report_node": "📡 <b>Трафик:</b>\n⬇️ Всего RX: {rx}\n⬆️ Всего TX: {tx}\n\n⚡️ <b>Скорость:</b>\n⬇️ {speed_rx} Мбит/с\n⬆️ {speed_tx} Мбит/с",
+        "node_response_template": "🖥 <b>Ответ от {name}:</b>\n\n{text}",
     },
     
     "en": {
@@ -1135,6 +1137,8 @@ STRINGS = {
         "web_image_uploaded": "Image uploaded successfully!",
         "login_access_denied": "Access Denied",
         "login_unauthorized": "User <b>@{username}</b> is not authorized.<br><br>Please ask the administrator to add your ID: <b>{id}</b>",
+        "traffic_report_node": "📡 <b>Traffic:</b>\n⬇️ Total RX: {rx}\n⬆️ Total TX: {tx}\n\n⚡️ <b>Speed:</b>\n⬇️ {speed_rx} Mbit/s\n⬆️ {speed_tx} Mbit/s",
+        "node_response_template": "🖥 <b>Response from {name}:</b>\n\n{text}",
     },
 }
 
