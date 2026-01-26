@@ -35,8 +35,38 @@ function encryptData(text) {
     }
 }
 
+// --- LAZY LOAD ANIMATIONS ---
+function initScrollAnimations() {
+    // Запускаем Observer только если ширина экрана < 1024px (мобильные/планшеты)
+    // Это совпадает с медиа-запросом в CSS
+    if (window.innerWidth >= 1024) return;
+
+    const observerOptions = {
+        root: null,
+        rootMargin: '0px',
+        threshold: 0.1 // Срабатывает при появлении 10% блока
+    };
+
+    const observer = new IntersectionObserver((entries, obs) => {
+        entries.forEach(entry => {
+            if (entry.isIntersecting) {
+                entry.target.classList.add('is-visible');
+                obs.unobserve(entry.target); // Анимируем 1 раз
+            }
+        });
+    }, observerOptions);
+
+    const blocks = document.querySelectorAll('.lazy-block');
+    blocks.forEach(block => {
+        observer.observe(block);
+    });
+}
+// ----------------------------
 
 window.initSettings = function() {
+    // Инициализация анимаций скролла
+    initScrollAnimations();
+
     renderUsers();
     renderNodes();
     initSystemSettingsTracking();
@@ -163,8 +193,13 @@ function initInputScrollLogic() {
 }
 
 document.addEventListener("DOMContentLoaded", () => {
+    // Запускаем инициализацию, если есть секция пользователей (индикатор страницы настроек)
     if (document.getElementById('usersSection')) {
         window.initSettings();
+    } else {
+        // На случай, если что-то пошло не так, все равно пробуем запустить анимации
+        // для блоков, которые могли отрендериться статически
+        initScrollAnimations();
     }
     
     // Favicon Logic

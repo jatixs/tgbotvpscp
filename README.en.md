@@ -4,13 +4,13 @@
 
 <h1 align="center">🤖 VPS Manager Telegram Bot</h1>
 
-<p align="center"> <b>v1.16.2</b> — a professional ecosystem for monitoring and managing your <b>server network</b>.
+<p align="center"> <b>v1.16.3</b> — a professional ecosystem for monitoring and managing your <b>server network</b>.
 The system is built on an <b>asynchronous core</b> (AsyncIO), <b>SQLite</b> database, and is fully integrated with <b>Docker</b>.
 Includes a modern <b>web interface</b> powered by <b>SSE</b> technology for instant monitoring and node management. </p>
 
 <p align="center">
-  <a href="https://github.com/jatixs/tgbotvpscp/releases/latest"><img src="https://img.shields.io/badge/version-v1.16.2-blue?style=flat-square" alt="Version 1.16.2"/></a>
-  <a href="CHANGELOG.en.md"><img src="https://img.shields.io/badge/build-62-purple?style=flat-square" alt="Build 62"/></a>
+  <a href="https://github.com/jatixs/tgbotvpscp/releases/latest"><img src="https://img.shields.io/badge/version-v1.16.3-blue?style=flat-square" alt="Version 1.16.3"/></a>
+  <a href="CHANGELOG.en.md"><img src="https://img.shields.io/badge/build-63-purple?style=flat-square" alt="Build 63"/></a>
   <a href="https://www.python.org/"><img src="https://img.shields.io/badge/python-3.10%2B-green?style=flat-square" alt="Python 3.10+"/></a>
   <a href="https://choosealicense.com/licenses/gpl-3.0/"><img src="https://img.shields.io/badge/license-GPL--3.0-lightgrey?style=flat-square" alt="License GPL-3.0"/></a>
   <a href="https://github.com/aiogram/aiogram"><img src="https://img.shields.io/badge/aiogram-3.x-orange?style=flat-square" alt="Aiogram 3.x"/></a>
@@ -260,6 +260,6 @@ The agent will install as `tg-node` service and appear in your bot.
 
 ## 👤 Author
 
-**Version:** 1.16.2 (Build 62) <br>
+**Version:** 1.16.3 (Build 63) <br>
 **Author:** Jatix <br>
 📜 **License:** GPL-3.0 <br>

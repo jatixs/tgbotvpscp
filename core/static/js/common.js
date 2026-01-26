@@ -13,6 +13,29 @@ let modalCloseTimer = null;
 let activeMobileModal = null;
 let bodyScrollTop = 0;
 
+function initGlobalLazyLoad() {
+    if (window.innerWidth >= 1024) return;
+
+    const observerOptions = {
+        root: null,
+        rootMargin: '0px',
+        threshold: 0.1 // 10% видимости
+    };
+
+    const observer = new IntersectionObserver((entries, obs) => {
+        entries.forEach(entry => {
+            if (entry.isIntersecting) {
+                entry.target.classList.add('is-visible');
+                obs.unobserve(entry.target);
+            }
+        });
+    }, observerOptions);
+
+    const blocks = document.querySelectorAll('.lazy-block');
+    blocks.forEach(block => {
+        observer.observe(block);
+    });
+}
 document.addEventListener("DOMContentLoaded", () => {
     applyThemeUI(currentTheme);
     if (typeof window.parsePageEmojis === 'function') {
@@ -20,6 +43,7 @@ document.addEventListener("DOMContentLoaded", () => {
     } else {
         parsePageEmojis();
     }
+    initGlobalLazyLoad();
     initNotifications();
     initSSE();
     initSessionSync();
@@ -217,10 +241,10 @@ async function addNodeDash() {
     const i = document.getElementById('newNodeNameDash');
     const n = i.value.trim();
     if (!n) return;
-    
+
     const btn = document.getElementById('btnAddNodeDash');
     const originalHTML = btn.innerHTML;
-    
+
     if (btn) {
         btn.style.width = getComputedStyle(btn).width;
         btn.disabled = true;
@@ -240,7 +264,7 @@ async function addNodeDash() {
         const d = await r.json();
         if (r.ok) {
             document.getElementById('nodeResultDash').classList.remove('hidden');
-			const tokenVal = (typeof decryptData === 'function') ? decryptData(d.token) : d.token;
+            const tokenVal = (typeof decryptData === 'function') ? decryptData(d.token) : d.token;
             const cmdVal = (typeof decryptData === 'function') ? decryptData(d.command) : d.command;
             document.getElementById('newNodeTokenDash').innerText = tokenVal;
             document.getElementById('newNodeCmdDash').innerText = cmdVal;
@@ -268,6 +292,7 @@ async function addNodeDash() {
         }
     }
 }
+
 function isHolidayPeriod() {
     const now = new Date();
     return (now.getMonth() === 11 && now.getDate() === 31) || (now.getMonth() === 0 && now.getDate() <= 14);
@@ -677,7 +702,7 @@ async function clearNotifications(e) {
         if (I18N.modal_title_confirm) {
             title = I18N.modal_title_confirm;
         }
-        
+
         if (I18N.web_notifications_cleared) {
             successMsg = I18N.web_notifications_cleared;
         } else if (I18N.web_success) {
@@ -698,12 +723,12 @@ async function clearNotifications(e) {
         }
     } catch (e) {
         console.error("Clear notifications error:", e);
-        
+
         let errorShort = "Error";
         if (typeof I18N !== 'undefined' && I18N.web_error_short) {
             errorShort = I18N.web_error_short;
         }
-        
+
         if (window.showModalAlert) window.showModalAlert(String(e), errorShort);
     }
 }
@@ -1113,6 +1138,7 @@ document.addEventListener('click', async (e) => {
                     if (typeof parsePageEmojis === 'function') parsePageEmojis();
                 } catch (e) {}
                 initHolidayMood();
+                initGlobalLazyLoad();
 
                 try {
                     if (url.includes('/settings')) {
@@ -1152,7 +1178,7 @@ async function clearLogs() {
     const originalHTML = btn.innerHTML;
     const redClasses = ['bg-red-50', 'dark:bg-red-900/10', 'border-red-200', 'dark:border-red-800', 'text-red-600', 'dark:text-red-400', 'hover:bg-red-100', 'dark:hover:bg-red-900/30', 'active:bg-red-200'];
     const greenClasses = ['bg-green-600', 'text-white', 'border-transparent', 'hover:bg-green-500', 'px-3', 'py-2'];
-    
+
     // Classes that cause hover expansion
     const hoverClasses = ['hover:pr-4', 'group'];
 
@@ -1175,7 +1201,7 @@ async function clearLogs() {
             btn.classList.add(...greenClasses);
             const doneText = (typeof I18N !== 'undefined' && I18N.web_logs_cleared_alert) ? I18N.web_logs_cleared_alert : "Cleared!";
             btn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg> <span class="font-bold text-xs uppercase ml-1">${doneText}</span>`;
-            
+
             setTimeout(() => {
                 btn.innerHTML = originalHTML;
                 btn.classList.remove(...greenClasses);
@@ -1203,7 +1229,7 @@ async function resetTrafficSettings() {
 
     const btn = document.getElementById('resetTrafficBtn');
     const originalHTML = btn.innerHTML;
-    
+
     const redClasses = ['bg-red-50', 'dark:bg-red-900/10', 'border-red-200', 'dark:border-red-800', 'text-red-600', 'dark:text-red-400', 'hover:bg-red-100', 'dark:hover:bg-red-900/30', 'active:bg-red-200'];
     const greenClasses = ['bg-green-600', 'text-white', 'border-transparent', 'hover:bg-green-500', 'px-3', 'py-2'];
 
@@ -1213,14 +1239,16 @@ async function resetTrafficSettings() {
     btn.innerHTML = `<svg class="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>`;
 
     try {
-        const res = await fetch('/api/traffic/reset', { method: 'POST' });
+        const res = await fetch('/api/traffic/reset', {
+            method: 'POST'
+        });
         if (res.ok) {
             btn.classList.remove(...redClasses);
             btn.classList.remove(...hoverClasses);
             btn.classList.add(...greenClasses);
             const doneText = (typeof I18N !== 'undefined' && I18N.web_traffic_reset_no_emoji) ? I18N.web_traffic_reset_no_emoji : "Done!";
             btn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg> <span class="font-bold text-xs uppercase ml-1">${doneText}</span>`;
-            
+
             setTimeout(() => {
                 btn.innerHTML = originalHTML;
                 btn.classList.remove(...greenClasses);

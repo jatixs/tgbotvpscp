@@ -569,6 +569,8 @@ STRINGS = {
         "web_image_uploaded": "Изображение успешно загружено!",
         "web_meta_success": "Мета-данные успешно обновлены.",
         "web_meta_locked_alert": "Настройки сохранены и ЗАБЛОКИРОВАНЫ навсегда. Перезагрузка...",
+        "login_access_denied": "Доступ запрещен",
+        "login_unauthorized": "Пользователь <b>@{username}</b> не авторизован.<br><br>Пожалуйста, попросите администратора добавить ваш ID: <b>{id}</b>",
     },
     
     "en": {
@@ -1131,6 +1133,8 @@ STRINGS = {
         "web_meta_success": "Metadata updated successfully.",
         "web_meta_locked_alert": "Settings saved and LOCKED forever. Reloading...",
         "web_image_uploaded": "Image uploaded successfully!",
+        "login_access_denied": "Access Denied",
+        "login_unauthorized": "User <b>@{username}</b> is not authorized.<br><br>Please ask the administrator to add your ID: <b>{id}</b>",
     },
 }
 

@@ -1,23 +1,24 @@
 <!DOCTYPE html>
 <html lang="ru">
-    <head>
+	<head>
         <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0">
         <title>{{ web_title }}</title>
-		<meta name="apple-mobile-web-app-capable" content="yes">
-		<meta name="apple-mobile-web-app-status-bar-style" content="default">
-		<meta name="apple-mobile-web-app-title" content="TG Bot Panel">
-		<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0">
-		<meta name="theme-color" content="#f3f4f6" media="(prefers-color-scheme: light)">
-		<meta name="theme-color" content="#111827" media="(prefers-color-scheme: dark)">
-		<link rel="apple-touch-icon" sizes="180x180" href="/static/favicons/apple-touch-icon.png?v={{ cache_ver }}">
-		<link rel="icon" type="image/png" sizes="32x32" href="/static/favicons/favicon-32x32.png?v={{ cache_ver }}">
-		<link rel="icon" type="image/png" sizes="16x16" href="/static/favicons/favicon-16x16.png?v={{ cache_ver }}">
-		<link rel="manifest" href="/site.webmanifest?v={{ cache_ver }}">
-		<link rel="icon" type="image/x-icon" href="/static/favicons/favicon.ico?v={{ cache_ver }}">
-		<meta name="description" content="{{ web_meta_desc }}">
-		<meta name="keywords" content="{{ web_meta_keywords }}">
-        <script src="https://cdn.tailwindcss.com"></script>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0, viewport-fit=cover">
+        <meta name="mobile-web-app-capable" content="yes">
+        <meta name="apple-mobile-web-app-capable" content="yes">
+        <meta name="apple-mobile-web-app-status-bar-style" content="default">
+        <meta name="apple-mobile-web-app-title" content="TG Bot Panel">
+        <meta name="theme-color" content="#f3f4f6" media="(prefers-color-scheme: light)">
+        <meta name="theme-color" content="#111827" media="(prefers-color-scheme: dark)">
+        <link rel="apple-touch-icon" sizes="180x180" href="/static/favicons/apple-touch-icon.png?v={{ cache_ver }}">
+        <link rel="icon" type="image/png" sizes="32x32" href="/static/favicons/favicon-32x32.png?v={{ cache_ver }}">
+        <link rel="icon" type="image/png" sizes="16x16" href="/static/favicons/favicon-16x16.png?v={{ cache_ver }}">
+        <link rel="manifest" href="/site.webmanifest?v={{ cache_ver }}">
+        <link rel="icon" type="image/x-icon" href="/static/favicons/favicon.ico?v={{ cache_ver }}">
+        <meta name="description" content="{{ web_meta_desc }}">
+        <meta name="keywords" content="{{ web_meta_keywords }}">
+		<link rel="stylesheet" href="/static/css/main.css?v={{ web_version }}">
+        <script src="/static/js/theme_init.js?v={{ web_version }}"></script>
         <script>
         const I18N = {{ i18n_json | safe }};
         const BOT_USERNAME = "{{ bot_username }}";
@@ -25,7 +26,6 @@
         </script>
         <link rel="stylesheet" href="/static/css/style.css?v={{ web_version }}">
         <link rel="stylesheet" href="/static/css/login.css?v={{ web_version }}">
-        <script src="/static/js/theme_init.js?v={{ web_version }}"></script>
     </head>
     <body class="bg-gray-100 text-gray-900 dark:bg-gray-900 dark:text-gray-100 font-sans selection:bg-blue-500/30 overflow-hidden relative">
         <div class="absolute top-6 right-6 z-50">
@@ -347,18 +347,26 @@
                 </a>
             </div>
         </div>
+        
         <div id="systemModal"
              class="fixed inset-0 z-[200] hidden items-center justify-center bg-black/60 backdrop-blur-sm p-4"
              onclick="if(event.target === this) closeSystemModal(null)">
-            <div class="bg-white dark:bg-gray-800 border border-white/20 dark:border-white/10 rounded-2xl shadow-2xl w-[90%] sm:w-full sm:max-w-md transform transition-all scale-100 mx-auto">
+            <div class="bg-white dark:bg-gray-800 border border-white/20 dark:border-white/10 rounded-2xl shadow-2xl w-full max-w-sm transform transition-all scale-100">
                 <div class="p-6">
                     <h3 id="sysModalTitle"
                         class="text-lg font-bold text-gray-900 dark:text-white mb-2">Title</h3>
                     <p id="sysModalMessage"
-                       class="text-sm text-gray-600 dark:text-gray-300 mb-4 break-words whitespace-pre-wrap">
-                        Message
-                    </p>
+                       class="text-sm text-gray-600 dark:text-gray-300 mb-4 whitespace-pre-wrap break-words">Message</p>
+                    
+                    <input type="text"
+                           id="sysModalInput"
+                           class="hidden w-full bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-xl px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-white mb-4">
+                    
                     <div class="flex justify-end gap-3">
+                        <button id="sysModalCancel"
+                                class="hidden px-4 py-2 rounded-lg text-sm font-medium text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 transition">
+                            Cancel
+                        </button>
                         <button id="sysModalOk"
                                 class="px-4 py-2 rounded-lg text-sm font-bold bg-blue-600 text-white hover:bg-blue-500 transition shadow-lg shadow-blue-500/20">
                             OK
@@ -367,6 +375,7 @@
                 </div>
             </div>
         </div>
+        
         <script src="https://unpkg.com/twemoji@latest/dist/twemoji.min.js"
                 crossorigin="anonymous"></script>
         <script src="/static/js/common.js?v={{ web_version }}"></script>
