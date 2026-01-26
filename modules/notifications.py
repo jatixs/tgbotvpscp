@@ -216,6 +216,10 @@ async def cq_toggle_all_agent(callback: types.CallbackQuery):
 
 
 async def cq_toggle_all_nodes(callback: types.CallbackQuery):
+    """
+    Toggles GLOBAL settings for nodes AND clears individual overrides 
+    to ensure full synchronization.
+    """
     user_id = callback.from_user.id
     lang = get_user_lang(user_id)
     
@@ -223,12 +227,21 @@ async def cq_toggle_all_nodes(callback: types.CallbackQuery):
         ALERTS_CONFIG[user_id] = {}
         
     node_keys = ["downtime", "node_resources", "node_logins"]
+    user_conf = ALERTS_CONFIG[user_id]
     
-    all_enabled = all(ALERTS_CONFIG[user_id].get(k, False) for k in node_keys)
-    new_state = not all_enabled
+    # Check if all global settings are enabled
+    all_enabled_globally = all(user_conf.get(k, False) for k in node_keys)
+    new_state = not all_enabled_globally
+    
+    nodes = await nodes_db.get_all_nodes()
     
     for k in node_keys:
-        ALERTS_CONFIG[user_id][k] = new_state
+        user_conf[k] = new_state
+        
+        for token in nodes:
+            override_key = f"node_{token}_{k}"
+            if override_key in user_conf:
+                del user_conf[override_key]
         
     save_alerts_config()
     
@@ -281,6 +294,54 @@ async def cq_toggle_alert(callback: types.CallbackQuery):
     )
 
 
+async def sync_node_global_state(user_id: int, alert_type: str):
+    """
+    Checks if ALL nodes have the same state for a specific alert type.
+    If so, updates the global setting and removes overrides.
+    """
+    nodes = await nodes_db.get_all_nodes()
+    if not nodes:
+        return
+
+    user_conf = ALERTS_CONFIG.get(user_id, {})
+    
+    total_nodes = len(nodes)
+    enabled_count = 0
+    disabled_count = 0
+    
+    for token in nodes:
+        override_key = f"node_{token}_{alert_type}"
+        global_val = user_conf.get(alert_type, False)
+        
+        if override_key in user_conf:
+            is_on = user_conf[override_key]
+        else:
+            is_on = global_val
+            
+        if is_on:
+            enabled_count += 1
+        else:
+            disabled_count += 1
+            
+    if enabled_count == total_nodes:
+        # All nodes are ON -> Set Global ON, remove overrides
+        user_conf[alert_type] = True
+        for token in nodes:
+            k = f"node_{token}_{alert_type}"
+            if k in user_conf:
+                del user_conf[k]
+        save_alerts_config()
+        
+    elif disabled_count == total_nodes:
+        # All nodes are OFF -> Set Global OFF, remove overrides
+        user_conf[alert_type] = False
+        for token in nodes:
+            k = f"node_{token}_{alert_type}"
+            if k in user_conf:
+                del user_conf[k]
+        save_alerts_config()
+
+
 async def cq_toggle_node_alert(callback: types.CallbackQuery):
     """Toggles Specific Node Override"""
     user_id = callback.from_user.id
@@ -316,11 +377,6 @@ async def cq_toggle_node_alert(callback: types.CallbackQuery):
     global_key = alert_type
     global_val = user_conf.get(global_key, False)
     
-    # Logic: 
-    # If override exists: toggle it.
-    # If not exists: create override that is INVERSE of global (to effective toggle)
-    # Actually simpler: UI shows current effective. User wants to Toggle.
-    
     current_val = global_val
     if override_key in user_conf:
         current_val = user_conf[override_key]
@@ -329,6 +385,8 @@ async def cq_toggle_node_alert(callback: types.CallbackQuery):
     user_conf[override_key] = new_val
     
     save_alerts_config()
+    
+    await sync_node_global_state(user_id, alert_type)
     
     await callback.message.edit_reply_markup(
         reply_markup=get_notifications_node_settings_keyboard(token, node_name, user_id)
