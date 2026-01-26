@@ -535,6 +535,7 @@ async def handle_dashboard(request):
         "meta_locked": meta_locked,
         "web_brand_name": TG_BOT_NAME,
         "web_version": display_version,
+        "pwa_version": current_config.INSTALLED_VERSION or display_version,
         "role_badge": role_badge_html,
         "cache_ver": CACHE_VER,
         "web_dashboard_title": _("web_dashboard_title", lang),
