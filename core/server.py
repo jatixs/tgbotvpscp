@@ -701,9 +701,9 @@ async def handle_heartbeat(request):
             flag = await get_country_flag(ip)
             method_display = method_raw
             if "publickey" in method_raw:
-                method_display = f"🔑 ({method_raw})"
+                method_display = f"🔑 By {method_raw}"
             elif "password" in method_raw:
-                method_display = f"🔐 ({method_raw})"
+                method_display = f"🔐 By {method_raw}"
             
             await send_alert(
                 bot,
