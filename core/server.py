@@ -1928,6 +1928,8 @@ async def handle_sse_logs(request):
             for line in raw_output:
                 if line.startswith("__CURSOR="):
                     new_cursor = line.split("=", 1)[1]
+                elif line.strip().startswith("-- cursor:"):
+                    continue
                 elif line:
                     log_lines.append(line)
             return (log_lines, new_cursor)
