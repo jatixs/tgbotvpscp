@@ -5,11 +5,30 @@
 <h1 align="center">📝 Telegram VPS Management Bot — Changelog</h1>
 
 <p align="center">
-	<img src="https://img.shields.io/badge/version-v1.16.2-blue?style=flat-square " alt="Version 1.16.2"/>
-	<img src="https://img.shields.io/badge/build-62-purple?style=flat-square " alt="Build 62"/>
+	<img src="https://img.shields.io/badge/version-v1.16.3-blue?style=flat-square " alt="Version 1.16.3"/>
+	<img src="https://img.shields.io/badge/build-63-purple?style=flat-square " alt="Build 63"/>
 	<img src="https://img.shields.io/badge/date-January%2026-green?style=flat-square " alt="Date January 2026"/>
 	<img src="https://img.shields.io/badge/status-stable-green?style=flat-square " alt="Status Stable"/>
 </p>
+
+---
+## [1.16.3] - 2026-01-26
+
+### 🚀 WebUI & PWA:
+
+* **iOS/iPadOS Fix:** Fixed PWA display and behavior on Apple devices.
+* **Compatibility:** Improved UI stability and error visibility in mobile browsers.
+* **Navigation:** Adjusted the "Back" button for all screen sizes.
+
+### ✨ UI & UX:
+
+* **Bugfix:** Fixed issues with the notification dropdown.
+* **Scrollbar:** Updated scrollbar visual design.
+* **i18n:** Fixed localization and translation errors.
+
+### ⚡️ Optimization:
+
+* **Performance:** Faster page loading via Tailwind CSS compilation.
 
 ---
 ## [1.16.2] - 2026-01-24
