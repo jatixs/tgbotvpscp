@@ -10,6 +10,7 @@ import re
 import hmac
 import hashlib
 import json
+import collections
 from datetime import datetime
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -79,6 +80,7 @@ class SSHMonitor:
         self.current_file = None
         self.file_handle = None
         self.inode = None
+        self.processed_lines = collections.deque(maxlen=100)
         self._open_log_file()
         if self.file_handle:
             self.file_handle.seek(0, 2)
@@ -124,6 +126,9 @@ class SSHMonitor:
                 if not line:
                     break
                 
+                if line in self.processed_lines:
+                    continue
+                self.processed_lines.append(line)
                 if "Accepted" in line and "ssh" in line:
                     match = re.search(r"Accepted\s+(password|publickey)\s+for\s+(\S+)\s+from\s+(\S+)", line)
                     if match:

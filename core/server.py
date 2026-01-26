@@ -701,14 +701,14 @@ async def handle_heartbeat(request):
             flag = await get_country_flag(ip)
             method_display = method_raw
             if "publickey" in method_raw:
-                method_display = f"🔑 По ключу ({method_raw})"
+                method_display = f"🔑 ({method_raw})"
             elif "password" in method_raw:
-                method_display = f"🔐 По паролю ({method_raw})"
+                method_display = f"🔐 ({method_raw})"
             
             await send_alert(
                 bot,
                 lambda lang: (
-                    f"🔔 <b>{_('sshlog_alert_title', lang) if _('sshlog_alert_title', lang) != 'sshlog_alert_title' else 'SSH login detected'}</b>\n"
+                    f"🔔 <b>SSH login detected:</b>\n"
                     f"🌐 <b>Node:</b> {node.get('name', 'Node')}\n"
                     f"👤 <b>User:</b> {user_ssh}\n"
                     f"🛡 <b>Entry method:</b> {method_display}\n"
