@@ -716,7 +716,8 @@ async def handle_heartbeat(request):
                     f"🌍 <b>IP:</b> {flag} {ip}\n"
                     f"⏰ <b>Date and time:</b> {node_time_str} ({tz_label}) / 📍 {server_time} {server_tz}"
                 ),
-                "logins"
+                "node_logins",
+                node_token=token
             )
     stats = data.get("stats", {})
     results = data.get("results", [])

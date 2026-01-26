@@ -41,16 +41,32 @@ async def send_alert(
     bot: Bot,
     message_or_func: Union[str, Callable[[str], str]],
     alert_type: str,
+    node_token: str = None,
     **kwargs,
 ):
     if not alert_type:
         logging.warning("send_alert вызван без указания alert_type")
         return
-    users_to_alert = [
-        uid for uid, cfg in ALERTS_CONFIG.items() if cfg.get(alert_type, False)
-    ]
+
+    # Определяем пользователей, которым нужно отправить алерт
+    users_to_alert = []
+    for uid, cfg in ALERTS_CONFIG.items():
+        # 1. Проверяем глобальную настройку для этого типа алерта
+        is_enabled = cfg.get(alert_type, False)
+
+        # 2. Если указан токен ноды, проверяем наличие индивидуальной настройки (override)
+        if node_token:
+            # Формат ключа оверрайда: node_{token}_{alert_type}
+            override_key = f"node_{node_token}_{alert_type}"
+            if override_key in cfg:
+                is_enabled = cfg[override_key]
+
+        if is_enabled:
+            users_to_alert.append(uid)
+
     if not users_to_alert:
         return
+
     try:
         web_text_default = ""
         text_map = {}
@@ -84,6 +100,7 @@ async def send_alert(
             )
     except Exception as e:
         logging.error(f"Ошибка сохранения Web-уведомления: {e}")
+        
     for user_id in users_to_alert:
         try:
             lang = get_user_lang(user_id)

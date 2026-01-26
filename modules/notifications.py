@@ -6,11 +6,13 @@ import re
 import os
 import signal
 import aiohttp
+import html
 from datetime import datetime, timedelta, timezone
 from aiogram import F, Dispatcher, types, Bot
 from aiogram.types import KeyboardButton
 from core.i18n import _, I18nFilter, get_user_lang
 from core import config
+from core import nodes_db
 from core.auth import is_allowed, send_access_denied_message
 from core.messaging import delete_previous_message, send_alert
 from core.shared_state import (
@@ -25,7 +27,12 @@ from core.utils import (
     escape_html,
     get_host_path,
 )
-from core.keyboards import get_alerts_menu_keyboard
+from core.keyboards import (
+    get_notifications_start_keyboard,
+    get_notifications_global_keyboard,
+    get_notifications_nodes_list_keyboard,
+    get_notifications_node_settings_keyboard,
+)
 
 BUTTON_KEY = "btn_notifications"
 RECENT_NOTIFIED_LOGINS = {}
@@ -37,7 +44,14 @@ def get_button() -> KeyboardButton:
 
 def register_handlers(dp: Dispatcher):
     dp.message(I18nFilter(BUTTON_KEY))(notifications_menu_handler)
+    dp.callback_query(F.data == "back_to_notif_menu")(cq_back_to_notif_menu)
+    dp.callback_query(F.data == "notif_menu_global")(cq_notif_menu_global)
+    dp.callback_query(F.data == "notif_menu_nodes_list")(cq_notif_menu_nodes_list)
+    dp.callback_query(F.data.startswith("notif_select_node_"))(cq_notif_select_node)
     dp.callback_query(F.data.startswith("toggle_alert_"))(cq_toggle_alert)
+    dp.callback_query(F.data.startswith("toggle_node_"))(cq_toggle_node_alert)
+    dp.callback_query(F.data == "toggle_all_agent")(cq_toggle_all_agent)
+    dp.callback_query(F.data == "toggle_all_nodes")(cq_toggle_all_nodes)
 
 
 def start_background_tasks(bot: Bot) -> list[asyncio.Task]:
@@ -113,36 +127,150 @@ async def notifications_menu_handler(message: types.Message):
         await send_access_denied_message(message.bot, user_id, message.chat.id, command)
         return
     await delete_previous_message(user_id, command, message.chat.id, message.bot)
+    
+    # Use new Start Menu (Global / Nodes)
     sent = await message.answer(
-        _("notifications_menu_title", lang),
-        reply_markup=get_alerts_menu_keyboard(user_id),
+        _("notif_menu_title", lang),
+        reply_markup=get_notifications_start_keyboard(user_id),
         parse_mode="HTML",
     )
     LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = sent.message_id
 
 
+async def cq_back_to_notif_menu(callback: types.CallbackQuery):
+    user_id = callback.from_user.id
+    lang = get_user_lang(user_id)
+    await callback.message.edit_text(
+        _("notif_menu_title", lang),
+        reply_markup=get_notifications_start_keyboard(user_id),
+        parse_mode="HTML"
+    )
+    await callback.answer()
+
+
+async def cq_notif_menu_global(callback: types.CallbackQuery):
+    user_id = callback.from_user.id
+    lang = get_user_lang(user_id)
+    await callback.message.edit_text(
+        _("notif_global_title", lang),
+        reply_markup=get_notifications_global_keyboard(user_id),
+        parse_mode="HTML"
+    )
+    await callback.answer()
+
+
+async def cq_notif_menu_nodes_list(callback: types.CallbackQuery):
+    user_id = callback.from_user.id
+    lang = get_user_lang(user_id)
+    nodes = await nodes_db.get_all_nodes()
+    await callback.message.edit_text(
+        _("notif_nodes_list_title", lang),
+        reply_markup=get_notifications_nodes_list_keyboard(nodes, lang),
+        parse_mode="HTML"
+    )
+    await callback.answer()
+
+
+async def cq_notif_select_node(callback: types.CallbackQuery):
+    user_id = callback.from_user.id
+    lang = get_user_lang(user_id)
+    token = callback.data.replace("notif_select_node_", "")
+    node = await nodes_db.get_node_by_token(token)
+    if not node:
+        await callback.answer("Node not found", show_alert=True)
+        return
+    
+    node_name = html.escape(node.get("name", "Unknown"))
+    await callback.message.edit_text(
+        _("notif_node_settings_title", lang, name=node_name),
+        reply_markup=get_notifications_node_settings_keyboard(token, node_name, user_id),
+        parse_mode="HTML"
+    )
+    await callback.answer()
+
+
+async def cq_toggle_all_agent(callback: types.CallbackQuery):
+    user_id = callback.from_user.id
+    lang = get_user_lang(user_id)
+    
+    if user_id not in ALERTS_CONFIG:
+        ALERTS_CONFIG[user_id] = {}
+    
+    agent_keys = ["resources", "logins", "bans"]
+    
+    # Check if all are enabled
+    all_enabled = all(ALERTS_CONFIG[user_id].get(k, False) for k in agent_keys)
+    new_state = not all_enabled # If all on -> turn off. If any off -> turn all on.
+    
+    for k in agent_keys:
+        ALERTS_CONFIG[user_id][k] = new_state
+        
+    save_alerts_config()
+    
+    await callback.message.edit_reply_markup(
+        reply_markup=get_notifications_global_keyboard(user_id)
+    )
+    
+    status_text = _("notifications_status_on", lang) if new_state else _("notifications_status_off", lang)
+    await callback.answer(_("notif_all_agent_switched", lang, status=status_text))
+
+
+async def cq_toggle_all_nodes(callback: types.CallbackQuery):
+    user_id = callback.from_user.id
+    lang = get_user_lang(user_id)
+    
+    if user_id not in ALERTS_CONFIG:
+        ALERTS_CONFIG[user_id] = {}
+        
+    node_keys = ["downtime", "node_resources", "node_logins"]
+    
+    all_enabled = all(ALERTS_CONFIG[user_id].get(k, False) for k in node_keys)
+    new_state = not all_enabled
+    
+    for k in node_keys:
+        ALERTS_CONFIG[user_id][k] = new_state
+        
+    save_alerts_config()
+    
+    await callback.message.edit_reply_markup(
+        reply_markup=get_notifications_global_keyboard(user_id)
+    )
+    
+    status_text = _("notifications_status_on", lang) if new_state else _("notifications_status_off", lang)
+    await callback.answer(_("notif_all_nodes_switched", lang, status=status_text))
+
+
 async def cq_toggle_alert(callback: types.CallbackQuery):
+    """Toggles Global Settings"""
     user_id = callback.from_user.id
     lang = get_user_lang(user_id)
     if not is_allowed(user_id, "toggle_alert_resources"):
         await callback.answer(_("access_denied_generic", lang), show_alert=True)
         return
-    alert_type = callback.data.split("_", 2)[-1]
+    
+    alert_type = callback.data.replace("toggle_alert_", "")
     if user_id not in ALERTS_CONFIG:
         ALERTS_CONFIG[user_id] = {}
+        
+    # Toggle logic
     new_state = not ALERTS_CONFIG[user_id].get(alert_type, False)
     ALERTS_CONFIG[user_id][alert_type] = new_state
     save_alerts_config()
+    
+    # Refresh Global Menu
     await callback.message.edit_reply_markup(
-        reply_markup=get_alerts_menu_keyboard(user_id)
+        reply_markup=get_notifications_global_keyboard(user_id)
     )
+    
     map_name = {
         "resources": "notifications_alert_name_res",
         "logins": "notifications_alert_name_logins",
         "bans": "notifications_alert_name_bans",
         "downtime": "notifications_alert_name_downtime",
+        "node_resources": "notifications_alert_name_res",
+        "node_logins": "notifications_alert_name_logins",
     }
-    name = _(map_name.get(alert_type, "error"), lang)
+    name = _(map_name.get(alert_type, alert_type), lang)
     status = (
         _("notifications_status_on", lang)
         if new_state
@@ -150,6 +278,64 @@ async def cq_toggle_alert(callback: types.CallbackQuery):
     )
     await callback.answer(
         _("notifications_toggle_alert", lang, alert_name=name, status=status)
+    )
+
+
+async def cq_toggle_node_alert(callback: types.CallbackQuery):
+    """Toggles Specific Node Override"""
+    user_id = callback.from_user.id
+    lang = get_user_lang(user_id)
+    
+    # Format: toggle_node_{token}_{type}
+    data = callback.data.replace("toggle_node_", "")
+    
+    if "_downtime" in data:
+        token = data.replace("_downtime", "")
+        alert_type = "downtime"
+    elif "_node_resources" in data:
+        token = data.replace("_node_resources", "")
+        alert_type = "node_resources"
+    elif "_node_logins" in data:
+        token = data.replace("_node_logins", "")
+        alert_type = "node_logins"
+    else:
+        # Fallback
+        token, alert_type = data.split("_", 1)
+        
+    node = await nodes_db.get_node_by_token(token)
+    node_name = html.escape(node.get("name", "Unknown")) if node else "Unknown"
+
+    if user_id not in ALERTS_CONFIG:
+        ALERTS_CONFIG[user_id] = {}
+
+    user_conf = ALERTS_CONFIG[user_id]
+    
+    override_key = f"node_{token}_{alert_type}"
+    
+    # Current effective state
+    global_key = alert_type
+    global_val = user_conf.get(global_key, False)
+    
+    # Logic: 
+    # If override exists: toggle it.
+    # If not exists: create override that is INVERSE of global (to effective toggle)
+    # Actually simpler: UI shows current effective. User wants to Toggle.
+    
+    current_val = global_val
+    if override_key in user_conf:
+        current_val = user_conf[override_key]
+        
+    new_val = not current_val
+    user_conf[override_key] = new_val
+    
+    save_alerts_config()
+    
+    await callback.message.edit_reply_markup(
+        reply_markup=get_notifications_node_settings_keyboard(token, node_name, user_id)
+    )
+    
+    await callback.answer(
+        _("notif_override_on", lang, name=node_name)
     )
 
 
@@ -386,6 +572,7 @@ async def resource_monitor(bot: Bot):
                 RESOURCE_ALERT_STATE["disk"] = False
                 LAST_RESOURCE_ALERT_TIME["disk"] = 0
             if alerts:
+                # Агентские ресурсы (Agent)
                 await send_alert(
                     bot,
                     lambda lang: "\n\n".join([_(k, lang, **p) for k, p in alerts]),
