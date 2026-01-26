@@ -66,7 +66,8 @@ function initScrollAnimations() {
         });
     }, observerOptions);
 
-    const blocks = document.querySelectorAll('.lazy-block');
+    // ИСПРАВЛЕНИЕ: Выбираем только невидимые блоки, чтобы избежать повторной анимации
+    const blocks = document.querySelectorAll('.lazy-block:not(.is-visible)');
     blocks.forEach(block => {
         observer.observe(block);
     });
@@ -261,28 +262,21 @@ function updateNodesListUI(data) {
             newList = allNodesData;
         }
         
-        // 2. Check if we need full re-render or in-place update
         const container = document.getElementById('nodesList');
-        // Получаем только элементы-карточки (игнорируем loader или сообщение "нет данных")
         const currentElements = container ? Array.from(container.children).filter(el => el.hasAttribute('data-token')) : [];
         
-        // Если длина списка изменилась ИЛИ (если нет элементов, но данные есть) - рендерим полностью
         if (currentRenderList.length !== newList.length || (currentElements.length === 0 && newList.length > 0)) {
             currentRenderList = newList;
             renderNodesList();
         } else {
-            // Длина совпадает, пробуем обновить существующие элементы
             currentRenderList = newList;
             
-            // Пытаемся обновить только те, что сейчас отрисованы (Lazy Load учитывается, обновляем только первые N элементов)
             const success = updateVisibleNodes(currentElements, currentRenderList);
             if (!success) {
-                // Если токены не совпали (изменился порядок сортировки), делаем полный ререндер
                 renderNodesList();
             }
         }
 
-        // 3. Update totals
         if (document.getElementById('nodesTotal')) {
             document.getElementById('nodesTotal').innerText = allNodesData.length;
         }
@@ -298,7 +292,7 @@ function updateVisibleNodes(elements, dataList) {
     for (let i = 0; i < elements.length; i++) {
         const el = elements[i];
         const token = el.getAttribute('data-token');
-        const nodeData = dataList[i]; // Соответствующая нода из данных   
+        const nodeData = dataList[i];   
         if (!nodeData || nodeData.token !== token) return false;   
         const ui = getNodeUiParams(nodeData);     
         const cpuEl = el.querySelector('[data-ref="cpu-val"]');
@@ -343,7 +337,7 @@ function updateVisibleNodes(elements, dataList) {
         }    
         el.setAttribute('onclick', `openNodeDetails('${escapeHtml(nodeData.token)}', '${ui.statusColor}')`);
     }
-    return true; // Успешно обновили все видимые элементы
+    return true; 
 }
 
 function filterAndRenderNodes() {
@@ -398,7 +392,6 @@ function renderNextNodeBatch() {
         const ui = getNodeUiParams(node);
         const displayIp = decryptData(node.ip);
 
-        // ВАЖНО: Добавлены data-ref атрибуты для быстрого поиска элементов внутри updateVisibleNodes
         return `
         <div data-token="${escapeHtml(node.token)}" class="bg-white dark:bg-white/5 hover:bg-gray-50 dark:hover:bg-white/10 transition-all duration-200 rounded-xl border border-gray-100 dark:border-white/5 cursor-pointer shadow-sm hover:shadow-md overflow-hidden group mb-2 animate-fade-in-up" onclick="openNodeDetails('${escapeHtml(node.token)}', '${ui.statusColor}')">
             
@@ -549,7 +542,7 @@ function updateAgentStatsUI(data) {
             if (uptimeEl) uptimeEl.innerText = formatUptime(data.stats.boot_time);
 
             const ipEl = document.getElementById('agentIp');
-            if (ipEl && data.stats.ip) ipEl.innerText = decryptData(data.stats.ip); // Decrypt Agent IP
+            if (ipEl && data.stats.ip) ipEl.innerText = decryptData(data.stats.ip); 
         }
         renderAgentChart(data.history);
     } catch (e) {
@@ -1072,7 +1065,8 @@ window.startNodeRename = function() {
         nameDisplay.classList.add('hidden');
         nameInputContainer.classList.remove('hidden');
         nameInput.value = currentName;
-        nameInput.focus();
+        // ИСПРАВЛЕНИЕ: preventScroll: true
+        nameInput.focus({ preventScroll: true });
     }
 };
 
@@ -1330,4 +1324,72 @@ window.resetTrafficDashboard = async function() {
         const errorShort = (typeof I18N !== 'undefined' && I18N.web_conn_error_short) ? I18N.web_conn_error_short : "Conn Error";
         await window.showModalAlert(String(e), errorShort);
     }
+};
+
+window.openAddNodeModal = function() {
+    const m = document.getElementById('addNodeModal');
+    if (m) {
+        document.getElementById('nodeResultDash')?.classList.add('hidden');
+        const i = document.getElementById('newNodeNameDash');
+        if (i) {
+            i.value = '';
+            if (typeof validateNodeInput === 'function') validateNodeInput();
+        }
+        animateModalOpen(m, true);
+        if (i) {
+            setTimeout(() => {
+                i.focus({ preventScroll: true });
+            }, 150); // Чуть увеличили задержку для надежности на iOS
+        }
+    }
+};
+
+window.animateModalClose = function(modal) {
+    if (!modal) return;
+    const card = modal.firstElementChild;
+    if (card) {
+        card.style.opacity = '0';
+        card.style.transform = 'scale(0.95)';
+    }
+    if (typeof handleModalInputClick !== 'undefined') {
+        modal.removeEventListener('click', handleModalInputClick);
+    }
+
+    setTimeout(() => {
+        modal.classList.add('hidden');
+        modal.classList.remove('flex');
+        if (document.body.style.position === 'fixed') {
+            const scrollY = Math.abs(parseInt(document.body.style.top || '0'));
+            document.body.style.position = '';
+            document.body.style.top = '';
+            document.body.style.width = '';
+            document.body.style.overflow = '';
+
+            // 3. ВАЖНО: Отключаем плавную прокрутку на всем документе перед восстановлением
+            const html = document.documentElement;
+            const originalBehavior = html.style.scrollBehavior;
+            html.style.scrollBehavior = 'auto'; 
+
+            // 4. Мгновенно прыгаем на место
+            window.scrollTo(0, scrollY);
+
+            // 5. Возвращаем плавность (если была) через небольшой таймаут
+            setTimeout(() => {
+                html.style.scrollBehavior = originalBehavior;
+            }, 50);
+        } else {
+            document.body.style.overflow = '';
+        }
+        modal.style.height = '';
+        modal.style.top = '';
+        modal.style.paddingBottom = '';
+        
+        modal.classList.remove('items-start', 'pt-4', 'overflow-y-auto');
+        modal.classList.add('items-center');
+
+        if (card) {
+            card.classList.add('my-auto');
+            card.style.marginBottom = '';
+        }
+    }, 200);
 };

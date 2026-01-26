@@ -490,14 +490,6 @@ button.force-expanded .btn-text {
 		transform: translateY(0) !important;
 	}
 }
-
-/* --- Стилизация скроллбара (Только для внутренних блоков) --- */
-
-/* 1. Глобальная плавность и инерция */
-html {
-    scroll-behavior: smooth;
-}
-
 /* Инерция (импульсная прокрутка) для всех прокручиваемых блоков */
 .custom-scrollbar, .overflow-y-auto, .overflow-x-auto {
     -webkit-overflow-scrolling: touch;

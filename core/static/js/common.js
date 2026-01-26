@@ -31,7 +31,8 @@ function initGlobalLazyLoad() {
         });
     }, observerOptions);
 
-    const blocks = document.querySelectorAll('.lazy-block');
+    // ИСПРАВЛЕНИЕ: Выбираем только те блоки, которые еще НЕ анимированы
+    const blocks = document.querySelectorAll('.lazy-block:not(.is-visible)');
     blocks.forEach(block => {
         observer.observe(block);
     });
@@ -207,7 +208,8 @@ function openAddNodeModal() {
             validateNodeInput();
         }
         animateModalOpen(m, true);
-        if (i) setTimeout(() => i.focus(), 100);
+        // ИСПРАВЛЕНИЕ: preventScroll: true
+        if (i) setTimeout(() => i.focus({ preventScroll: true }), 100);
     }
 }
 
@@ -931,7 +933,11 @@ function animateModalClose(modal) {
             document.body.style.top = '';
             document.body.style.width = '';
             document.body.style.overflow = '';
-            window.scrollTo(0, bodyScrollTop);
+            // ИСПРАВЛЕНИЕ: Отключаем плавную прокрутку при восстановлении позиции
+            window.scrollTo({
+                top: bodyScrollTop,
+                behavior: 'auto'
+            });
         } else {
             document.body.style.overflow = '';
         }

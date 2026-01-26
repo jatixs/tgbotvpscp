@@ -74,7 +74,9 @@ window.initSettings = function() {
     updateBulkButtonsUI();
     initChangePasswordUI();
     fetchSessions();
-    initInputScrollLogic();
+    
+    // ИСПРАВЛЕНИЕ: Отключаем принудительный скролл к инпутам на мобильных
+    // initInputScrollLogic(); 
 
     const input = document.getElementById('newNodeNameDash');
     if (input) {
@@ -799,27 +801,16 @@ window.startNodeRename = function(token) {
     document.getElementById(`disp_name_${token}`).classList.add('hidden');
     document.getElementById(`edit_name_${token}`).classList.remove('hidden');
     const input = document.getElementById(`input_name_${token}`);
-    input.focus();
+    
+    // ИСПРАВЛЕНИЕ: Фокус без скролла
+    input.focus({ preventScroll: true });
+    
     const node = NODES_DATA.find(n => n.token === token);
     if (node) input.value = node.name;
 
-    const scrollToInput = () => {
-        input.scrollIntoView({
-            behavior: 'smooth',
-            block: 'center'
-        });
-    };
-    setTimeout(scrollToInput, 50);
-    if (window.visualViewport) {
-        window.visualViewport.addEventListener('resize', () => {
-            setTimeout(scrollToInput, 50);
-        }, {
-            once: true
-        });
-    } else {
-        setTimeout(scrollToInput, 300);
-    }
+    // ИСПРАВЛЕНИЕ: Мы убрали принудительный scrollIntoView
 };
+
 window.cancelNodeRename = function(token) {
     document.getElementById(`disp_name_${token}`).classList.remove('hidden');
     document.getElementById(`edit_name_${token}`).classList.add('hidden');
@@ -1395,7 +1386,7 @@ function renderSessionItem(s) {
 
     const date = new Date(s.created * 1000).toLocaleString();
     let iconPath = "M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z";
-    if (iconType === "mobile") iconPath = "M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z";
+    if (iconType === "mobile") iconPath = "M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2-2H8a2 2 0 00-2-2v14a2 2 0 002 2z";
     else if (iconType === "terminal") iconPath = "M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z";
 
     let userBadge = "";
@@ -1686,4 +1677,54 @@ window.saveMetaData = async function() {
         btn.innerHTML = originalText;
         btn.disabled = false;
     }
+};
+
+window.animateModalClose = function(modal) {
+    if (!modal) return;
+    const card = modal.firstElementChild;
+    if (card) {
+        card.style.opacity = '0';
+        card.style.transform = 'scale(0.95)';
+    }
+
+    if (typeof handleModalInputClick !== 'undefined') {
+        modal.removeEventListener('click', handleModalInputClick);
+    }
+
+    setTimeout(() => {
+        modal.classList.add('hidden');
+        modal.classList.remove('flex');
+
+        if (document.body.style.position === 'fixed') {
+            const scrollY = Math.abs(parseInt(document.body.style.top || '0'));
+
+            document.body.style.position = '';
+            document.body.style.top = '';
+            document.body.style.width = '';
+            document.body.style.overflow = '';
+            const html = document.documentElement;
+            const originalBehavior = html.style.scrollBehavior;
+            html.style.scrollBehavior = 'auto';
+
+            window.scrollTo(0, scrollY);
+
+            setTimeout(() => {
+                html.style.scrollBehavior = originalBehavior;
+            }, 50);
+        } else {
+            document.body.style.overflow = '';
+        }
+
+        modal.style.height = '';
+        modal.style.top = '';
+        modal.style.paddingBottom = '';
+        
+        modal.classList.remove('items-start', 'pt-4', 'overflow-y-auto');
+        modal.classList.add('items-center');
+
+        if (card) {
+            card.classList.add('my-auto');
+            card.style.marginBottom = '';
+        }
+    }, 200);
 };
