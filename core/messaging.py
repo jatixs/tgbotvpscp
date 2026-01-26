@@ -48,15 +48,11 @@ async def send_alert(
         logging.warning("send_alert вызван без указания alert_type")
         return
 
-    # Определяем пользователей, которым нужно отправить алерт
     users_to_alert = []
     for uid, cfg in ALERTS_CONFIG.items():
-        # 1. Проверяем глобальную настройку для этого типа алерта
         is_enabled = cfg.get(alert_type, False)
 
-        # 2. Если указан токен ноды, проверяем наличие индивидуальной настройки (override)
         if node_token:
-            # Формат ключа оверрайда: node_{token}_{alert_type}
             override_key = f"node_{node_token}_{alert_type}"
             if override_key in cfg:
                 is_enabled = cfg[override_key]
@@ -89,6 +85,7 @@ async def send_alert(
                     pass
             
         if web_text_default or text_map:
+            source = "node" if node_token else "agent"
             shared_state.WEB_NOTIFICATIONS.appendleft(
                 {
                     "id": str(uuid.uuid4()),
@@ -96,11 +93,11 @@ async def send_alert(
                     "text_map": text_map,
                     "time": time.time(),
                     "type": alert_type,
+                    "source": source, # Добавлено поле source
                 }
             )
     except Exception as e:
         logging.error(f"Ошибка сохранения Web-уведомления: {e}")
-        
     for user_id in users_to_alert:
         try:
             lang = get_user_lang(user_id)

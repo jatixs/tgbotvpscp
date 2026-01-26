@@ -31,7 +31,6 @@ function initGlobalLazyLoad() {
         });
     }, observerOptions);
 
-    // ИСПРАВЛЕНИЕ: Выбираем только те блоки, которые еще НЕ анимированы
     const blocks = document.querySelectorAll('.lazy-block:not(.is-visible)');
     blocks.forEach(block => {
         observer.observe(block);
@@ -208,7 +207,6 @@ function openAddNodeModal() {
             validateNodeInput();
         }
         animateModalOpen(m, true);
-        // ИСПРАВЛЕНИЕ: preventScroll: true
         if (i) setTimeout(() => i.focus({ preventScroll: true }), 100);
     }
 }
@@ -687,32 +685,7 @@ function createBlurOverlay(id, content) {
 async function clearNotifications(e) {
     if (e) e.stopPropagation();
 
-    // 1. Fallback text (English default)
-    let msg = "Clear all notifications?";
-    let title = "Confirmation";
-    let successMsg = "Success";
-
-    // 2. Try to get translated text from I18N
-    if (typeof I18N !== 'undefined') {
-        if (I18N.web_clear_notif_confirm) {
-            msg = I18N.web_clear_notif_confirm;
-        } else if (I18N.web_clear_notifications) {
-            // Partial fallback: "Clear notifications" + "?"
-            msg = I18N.web_clear_notifications + "?";
-        }
-
-        if (I18N.modal_title_confirm) {
-            title = I18N.modal_title_confirm;
-        }
-
-        if (I18N.web_notifications_cleared) {
-            successMsg = I18N.web_notifications_cleared;
-        } else if (I18N.web_success) {
-            successMsg = I18N.web_success;
-        }
-    }
-
-    if (!await window.showModalConfirm(msg, title)) return;
+    if (!await window.showModalConfirm(I18N.web_clear_notif_confirm || "Clear all notifications?", I18N.modal_title_confirm)) return;
 
     try {
         const res = await fetch('/api/notifications/clear', {
@@ -721,17 +694,11 @@ async function clearNotifications(e) {
 
         if (res.ok) {
             updateNotifUI([], 0);
-            if (window.showToast) window.showToast(successMsg);
+            if (window.showToast) window.showToast(I18N.web_notifications_cleared);
         }
     } catch (e) {
         console.error("Clear notifications error:", e);
-
-        let errorShort = "Error";
-        if (typeof I18N !== 'undefined' && I18N.web_error_short) {
-            errorShort = I18N.web_error_short;
-        }
-
-        if (window.showModalAlert) window.showModalAlert(String(e), errorShort);
+        if (window.showModalAlert) window.showModalAlert(String(e), I18N.web_error_short || "Error");
     }
 }
 window.clearNotifications = clearNotifications;
@@ -740,6 +707,7 @@ function updateNotifUI(list, count) {
     const badge = document.getElementById('notifBadge');
     const listContainer = document.getElementById('notifList');
     const bellIcon = document.querySelector('#notifBtn svg');
+    
     if (count > 0) {
         badge.innerText = count > 99 ? '99+' : count;
         badge.classList.remove('hidden');
@@ -748,16 +716,43 @@ function updateNotifUI(list, count) {
             setTimeout(() => bellIcon.classList.remove('notif-bell-shake'), 500);
         }
     } else badge.classList.add('hidden');
+    
     lastUnreadCount = count;
+    
     const clearBtn = document.getElementById('notifClearBtn');
     if (clearBtn) {
         if (list.length > 0) clearBtn.classList.remove('hidden');
         else clearBtn.classList.add('hidden');
     }
+    
     if (list.length === 0) {
         listContainer.innerHTML = `<div class="p-4 text-center text-gray-500 text-sm">${(typeof I18N !== 'undefined' ? I18N.web_no_notifications : "No notifications")}</div>`;
     } else {
-        listContainer.innerHTML = list.map(n => `<div class="notif-item"><div class="text-sm text-gray-800 dark:text-gray-200 leading-snug">${n.text}</div><div class="notif-time">${new Date(n.time * 1000).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</div></div>`).join('');
+        listContainer.innerHTML = list.map(n => {
+            const date = new Date(n.time * 1000).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+            let cleanText = n.text.replace(/<(?!\/?b\s*>)[^>]*>/g, "").replace(/\n/g, "<br>");
+            
+            // Badge Logic
+            let badgeHtml = '';
+            if (n.source === 'node') {
+                badgeHtml = `<span class="px-1.5 py-0.5 rounded text-[9px] font-bold bg-purple-100 text-purple-600 dark:bg-purple-900/30 dark:text-purple-300 border border-purple-200 dark:border-purple-800 mr-2 uppercase tracking-wider">NODE</span>`;
+            } else {
+                badgeHtml = `<span class="px-1.5 py-0.5 rounded text-[9px] font-bold bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-300 border border-blue-200 dark:border-blue-800 mr-2 uppercase tracking-wider">AGENT</span>`;
+            }
+
+            return `
+            <div class="px-4 py-3 border-b border-gray-100 dark:border-white/5 hover:bg-gray-50 dark:hover:bg-white/5 transition last:border-0 group">
+                <div class="flex justify-between items-start mb-1">
+                    <div class="flex items-center">
+                        ${badgeHtml}
+                        <span class="text-[10px] text-gray-400 font-mono">${date}</span>
+                    </div>
+                </div>
+                <div class="text-sm text-gray-700 dark:text-gray-300 leading-snug break-words group-hover:text-gray-900 dark:group-hover:text-white transition-colors">
+                    ${cleanText}
+                </div>
+            </div>`;
+        }).join('');
     }
 }
 
