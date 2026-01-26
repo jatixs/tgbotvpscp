@@ -532,7 +532,6 @@ button.force-expanded .btn-text {
     background-color: rgba(156, 163, 175, 0.8); /* gray-400 */
 }
 
-/* 3. Стилизация Firefox */
 .custom-scrollbar {
     scrollbar-width: thin;
     scrollbar-color: rgba(156, 163, 175, 0.5) transparent;
@@ -540,4 +539,47 @@ button.force-expanded .btn-text {
 
 .dark .custom-scrollbar {
     scrollbar-color: rgba(75, 85, 99, 0.5) transparent;
+}
+
+@media (max-width: 390px) {
+    nav > div {
+        padding-left: 0.5rem !important;  /* 8px */
+        padding-right: 0.5rem !important; /* 8px */
+        gap: 0.25rem !important;          /* Уменьшаем разрыв между левой и правой частью */
+    }
+
+    nav span.text-lg {
+        font-size: 0.95rem !important;    /* Чуть меньше стандарта */
+        max-width: 120px;                 /* Ограничиваем ширину, чтобы не толкал кнопки */
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    nav button.w-8.h-8, 
+    nav form button.w-8.h-8 {
+        width: 1.75rem !important;  /* 28px */
+        height: 1.75rem !important; /* 28px */
+        border-radius: 0.375rem !important; /* Чуть меньше скругление */
+    }
+    nav button svg, 
+    nav form button svg {
+        width: 1rem !important;   /* 16px */
+        height: 1rem !important;  /* 16px */
+    }
+    nav .gap-1 {
+        gap: 0.125rem !important; /* 2px */
+    }
+    
+    nav .gap-4 {
+        gap: 0.25rem !important;
+    }
+
+    nav .max-w-\[140px\] {
+        padding-left: 0.25rem !important;
+        padding-right: 0.25rem !important;
+    }
+    
+    nav .max-w-\[140px\] span {
+        font-size: 0.65rem !important;
+        max-width: 60px;
+    }
 }
