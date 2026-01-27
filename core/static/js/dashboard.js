@@ -4,6 +4,7 @@ let chartRes = null;
 let chartNet = null;
 let nodeSSESource = null;
 let logSSESource = null;
+let servicesSSESource = null;
 
 let agentChart = null;
 let allNodesData = [];
@@ -1393,3 +1394,815 @@ window.animateModalClose = function(modal) {
         }
     }, 200);
 };
+
+// --- Services Manager ---
+
+// Initialize SSE connection for services
+function initServicesSSE() {
+    const container = document.getElementById('services-container');
+    if (!container) return;
+    
+    // Close existing connection if any
+    if (servicesSSESource) {
+        servicesSSESource.close();
+        servicesSSESource = null;
+    }
+    
+    servicesSSESource = new EventSource('/api/events/services');
+    
+    servicesSSESource.addEventListener('services', (e) => {
+        try {
+            const data = JSON.parse(e.data);
+            const encryptedServices = data.services || [];
+            
+            // Decrypt each service
+            const services = encryptedServices.map(svc => ({
+                name: decryptData(svc.name),
+                type: decryptData(svc.type),
+                status: decryptData(svc.status)
+            }));
+            
+            renderServices(services);
+        } catch (err) {
+            console.error('SSE Services parse error:', err);
+        }
+    });
+    
+    servicesSSESource.addEventListener('session_status', (e) => {
+        if (e.data === 'expired') {
+            servicesSSESource.close();
+            window.location.reload();
+        }
+    });
+    
+    servicesSSESource.addEventListener('shutdown', () => {
+        servicesSSESource.close();
+    });
+    
+    servicesSSESource.onerror = (err) => {
+        console.error('SSE Services error:', err);
+        // Try to reconnect after 5 seconds
+        servicesSSESource.close();
+        servicesSSESource = null;
+        setTimeout(() => {
+            if (document.getElementById('services-container')) {
+                initServicesSSE();
+            }
+        }, 5000);
+    };
+}
+
+// Load services via fetch (used for initial load and manual refresh)
+function loadServices() {
+    const container = document.getElementById('services-container');
+    if (!container) return;
+
+    fetch('/api/services')
+        .then(res => {
+            if (res.status === 401) {
+                window.location.reload();
+                return;
+            }
+            const contentType = res.headers.get('content-type');
+            if (!contentType || !contentType.includes('application/json')) {
+                console.warn('Services API returned non-JSON response');
+                return null;
+            }
+            if (!res.ok) {
+                 return res.json().then(errData => {
+                     throw new Error(errData.error || 'Server Error ' + res.status);
+                 });
+            }
+            return res.json();
+        })
+        .then(data => {
+            if (!data) {
+                container.innerHTML = `<div class="col-span-full text-center text-gray-400 py-4">${window.i18n.services_empty || 'Services not available'}</div>`;
+                return;
+            }
+            if (data.error) {
+                 throw new Error(data.error);
+            }
+            renderServices(data);
+            
+            // Restart SSE connection after manual refresh
+            initServicesSSE();
+        })
+        .catch(err => {
+            console.error('Error loading services:', err);
+            container.innerHTML = `<div class="col-span-full text-center text-gray-400 py-4">${window.i18n.services_empty || 'Services not available'}</div>`;
+        });
+}
+
+function renderServices(services, forceRender = false) {
+    const container = document.getElementById('services-container');
+    
+    // Don't re-render if user is actively searching (unless forceRender is true)
+    const searchInput = document.getElementById('servicesSearchInput');
+    if (!forceRender && searchInput && searchInput.value.trim()) {
+        // Just update data cache - don't re-apply filter to avoid flicker
+        window._servicesData = services;
+        // Update only status of visible cards without re-rendering
+        const cards = container.querySelectorAll('.service-card');
+        services.forEach(svc => {
+            const card = Array.from(cards).find(c => c.dataset.name === svc.name);
+            if (card) {
+                const isRunning = svc.status === 'running' || svc.status === 'active';
+                const dot = card.querySelector('.rounded-full');
+                if (dot) {
+                    dot.className = `w-2.5 h-2.5 rounded-full bg-${isRunning ? 'green' : 'red'}-500 shadow-[0_0_6px_rgba(var(--color-${isRunning ? 'green' : 'red'}-500),0.6)] flex-shrink-0`;
+                }
+            }
+        });
+        return;
+    }
+    
+    container.innerHTML = '';
+    
+    // Store services for filtering
+    window._servicesData = services;
+    
+    if (!Array.isArray(services)) {
+        console.error("Services is not array:", services);
+        return;
+    }
+    
+    if (services.length === 0) {
+        container.innerHTML = `<div class="col-span-full text-center text-gray-500 py-4">${window.i18n.services_empty}</div>`;
+        return;
+    }
+    
+    const roleLevel = window.USER_ROLE_LEVEL || 0;
+    
+    services.forEach(item => {
+        const isRunning = item.status === 'running' || item.status === 'active';
+        const colorClass = isRunning ? 'green' : 'red';
+        
+        // Buttons Logic based on User Role Level
+        // Level 0: View Only (No buttons)
+        // Level 1: Start/Restart (Admins)
+        // Level 2: All (Main Admin)
+        
+        let buttonsHtml = '';
+        if (roleLevel >= 1) {
+            // Show Start only if NOT running
+            if (!isRunning) {
+                buttonsHtml += `
+                    <button onclick="event.stopPropagation(); controlService('${item.name}', '${item.type}', 'start')" class="group w-8 h-8 flex items-center justify-center rounded-lg bg-green-500/20 hover:bg-green-700 transition-all duration-200 hover:scale-110 hover:shadow-lg hover:shadow-green-500/30 active:scale-95" title="${window.i18n.btn_start}">
+                         <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-green-500 group-hover:text-white transition-colors" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+                    </button>
+                `;
+            }
+            // Show Restart only if running
+            if (isRunning) {
+                buttonsHtml += `
+                    <button onclick="event.stopPropagation(); controlService('${item.name}', '${item.type}', 'restart')" class="group w-8 h-8 flex items-center justify-center rounded-lg bg-blue-500/20 hover:bg-blue-700 transition-all duration-200 hover:scale-110 hover:shadow-lg hover:shadow-blue-500/30 active:scale-95" title="${window.i18n.btn_restart}">
+                         <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-blue-500 group-hover:text-white group-hover:animate-spin transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+                    </button>
+                `;
+            }
+        }
+        if (roleLevel >= 2 && isRunning) {
+            // Show Stop only if running
+            buttonsHtml += `
+                <button onclick="event.stopPropagation(); controlService('${item.name}', '${item.type}', 'stop')" class="group w-8 h-8 flex items-center justify-center rounded-lg bg-red-500/20 hover:bg-red-700 transition-all duration-200 hover:scale-110 hover:shadow-lg hover:shadow-red-500/30 active:scale-95" title="${window.i18n.btn_stop}">
+                     <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-red-500 group-hover:text-white transition-colors" fill="currentColor" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="1"/></svg>
+                </button>
+            `;
+        }
+
+        // Compact inline card for service - clickable for info
+        const card = document.createElement('div');
+        card.className = 'service-card w-fit bg-gray-50 dark:bg-black/20 rounded-xl px-4 py-3 flex items-center justify-between gap-3 transition hover:bg-gray-100 dark:hover:bg-white/5 cursor-pointer';
+        card.dataset.name = item.name;
+        card.dataset.type = item.type;
+        card.onclick = () => openServiceInfoModal(item.name, item.type);
+        
+        card.innerHTML = `
+            <div class="flex items-center gap-3 min-w-0">
+                <div class="w-2.5 h-2.5 rounded-full bg-${colorClass}-500 shadow-[0_0_6px_rgba(var(--color-${colorClass}-500),0.6)] flex-shrink-0"></div>
+                <div class="min-w-0">
+                    <h4 class="font-semibold text-sm text-gray-900 dark:text-white leading-tight truncate">${item.name}</h4>
+                    <span class="text-[10px] text-gray-500 dark:text-gray-400 uppercase tracking-wider">${item.type}</span>
+                </div>
+            </div>
+            <div class="flex items-center gap-1.5 flex-shrink-0">
+                ${buttonsHtml}
+            </div>
+        `;
+        container.appendChild(card);
+    });
+}
+
+// --- Services Search Filtering ---
+
+let _globalSearchTimeout = null;
+let _globalServicesCache = null;
+
+function filterServices(query) {
+    const container = document.getElementById('services-container');
+    const cards = container.querySelectorAll('.service-card');
+    const q = query.toLowerCase().trim();
+    
+    // Remove blur from all cards
+    cards.forEach(card => {
+        card.classList.remove('opacity-30', 'pointer-events-none');
+    });
+    
+    // If empty query, show all managed services and remove global results
+    if (!q) {
+        cards.forEach(card => card.style.display = '');
+        const noResults = container.querySelector('.no-search-results');
+        if (noResults) noResults.remove();
+        const globalResults = container.querySelectorAll('.global-search-result-card');
+        globalResults.forEach(card => card.remove());
+        const loadingEl = container.querySelector('.search-loading');
+        if (loadingEl) loadingEl.remove();
+        return;
+    }
+    
+    // Filter managed services (exclude global search result cards)
+    let visibleCount = 0;
+    cards.forEach(card => {
+        // Skip global search result cards
+        if (card.classList.contains('global-search-result-card')) return;
+        
+        const name = card.dataset.name?.toLowerCase() || '';
+        const type = card.dataset.type?.toLowerCase() || '';
+        if (name.includes(q) || type.includes(q)) {
+            card.style.display = '';
+            visibleCount++;
+        } else {
+            card.style.display = 'none';
+        }
+    });
+    
+    // Remove old "no results" message
+    const noResults = container.querySelector('.no-search-results');
+    if (noResults) noResults.remove();
+    
+    // Search globally with debounce - only for main admin (level 2) who can add services
+    const roleLevel = window.USER_ROLE_LEVEL || 0;
+    if (q.length >= 1 && roleLevel >= 2) {
+        // Remove old global results
+        const oldGlobalResults = container.querySelectorAll('.global-search-result-card');
+        oldGlobalResults.forEach(card => card.remove());
+        
+        // Show loading spinner
+        let loadingEl = container.querySelector('.search-loading');
+        if (!loadingEl) {
+            loadingEl = document.createElement('div');
+            loadingEl.className = 'search-loading col-span-full flex items-center justify-center gap-2 py-4 text-gray-400';
+            loadingEl.innerHTML = `
+                <svg class="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                <span>${I18N.web_searching || 'Поиск...'}</span>
+            `;
+            container.appendChild(loadingEl);
+        }
+        
+        clearTimeout(_globalSearchTimeout);
+        _globalSearchTimeout = setTimeout(() => {
+            searchGlobalServices(q, visibleCount);
+        }, 300);
+    } else if (visibleCount === 0 && q) {
+        // Show "no results" for non-admins
+        const globalResults = container.querySelectorAll('.global-search-result-card');
+        globalResults.forEach(card => card.remove());
+        const msg = document.createElement('div');
+        msg.className = 'no-search-results col-span-full text-center text-gray-400 py-4';
+        msg.textContent = I18N.web_services_none_found || 'No services found';
+        container.appendChild(msg);
+    }
+}
+
+async function searchGlobalServices(query, managedMatchCount) {
+    const container = document.getElementById('services-container');
+    const cards = container.querySelectorAll('.service-card:not(.global-search-result-card)');
+    
+    // Remove loading spinner
+    const loadingEl = container.querySelector('.search-loading');
+    if (loadingEl) loadingEl.remove();
+    
+    // Get managed service names to exclude from results
+    const managedNames = new Set();
+    cards.forEach(card => {
+        if (card.dataset.name) managedNames.add(card.dataset.name.toLowerCase());
+    });
+    
+    try {
+        // Use cache or fetch (with search=1 param for read-only access)
+        if (!_globalServicesCache) {
+            const res = await fetch('/api/services/available?search=1');
+            if (!res.ok) return;
+            _globalServicesCache = await res.json();
+            // Cache expires after 30 seconds
+            setTimeout(() => { _globalServicesCache = null; }, 30000);
+        }
+        
+        const q = query.toLowerCase();
+        
+        // Filter global services that match and are NOT already managed
+        const matches = _globalServicesCache.filter(s => {
+            const name = s.name.toLowerCase();
+            const isMatch = name.includes(q);
+            const isNotManaged = !managedNames.has(name);
+            return isMatch && isNotManaged && !s.managed;
+        }).slice(0, 6); // Limit to 6 results
+        
+        // Remove previous global results (already handled at the top of this section)
+        
+        if (matches.length === 0) {
+            // Remove blur if no global matches
+            cards.forEach(card => {
+                card.classList.remove('opacity-30', 'pointer-events-none');
+            });
+            // No global matches either
+            if (managedMatchCount === 0) {
+                const existingNoResults = container.querySelector('.no-search-results');
+                if (!existingNoResults) {
+                    const msg = document.createElement('div');
+                    msg.className = 'no-search-results col-span-full text-center text-gray-400 py-4';
+                    msg.textContent = I18N.web_services_none_found || 'No services found';
+                    container.appendChild(msg);
+                }
+            }
+            return;
+        }
+        
+        // Blur existing managed cards to focus on global results
+        cards.forEach(card => {
+            if (card.style.display !== 'none') {
+                card.classList.add('opacity-30', 'pointer-events-none');
+            }
+        });
+        
+        // Remove old global results first
+        const oldResults = container.querySelectorAll('.global-search-result-card');
+        oldResults.forEach(card => card.remove());
+        
+        matches.forEach(item => {
+            const isRunning = item.status === 'running' || item.status === 'active';
+            const colorClass = isRunning ? 'green' : 'red';
+            const typeIcon = item.type === 'docker' ? '🐳' : '⚙️';
+            const roleLevel = window.USER_ROLE_LEVEL || 0;
+            
+            // Card in same style as managed services but with Add button
+            const card = document.createElement('div');
+            card.className = 'global-search-result-card service-card w-fit bg-gray-50 dark:bg-black/20 rounded-xl px-4 py-3 flex items-center justify-between gap-3 transition hover:bg-gray-100 dark:hover:bg-white/5';
+            
+            // Build add button only for main admin
+            let addButtonHtml = '';
+            if (roleLevel >= 2) {
+                addButtonHtml = `
+                    <button onclick="addServiceFromSearch('${item.name}', '${item.type}')" 
+                            class="w-8 h-8 flex items-center justify-center rounded-lg bg-green-500/20 hover:bg-green-600 transition-all duration-200 hover:scale-110 active:scale-95"
+                            title="${I18N.web_services_btn_add || 'Добавить'}">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-green-500 hover:text-white transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
+                        </svg>
+                    </button>
+                `;
+            }
+            
+            card.innerHTML = `
+                <div class="flex items-center gap-3 min-w-0">
+                    <div class="w-2.5 h-2.5 rounded-full bg-${colorClass}-500 shadow-[0_0_6px_rgba(var(--color-${colorClass}-500),0.6)] flex-shrink-0"></div>
+                    <div class="min-w-0">
+                        <h4 class="font-semibold text-sm text-gray-900 dark:text-white leading-tight truncate">${item.name}</h4>
+                        <span class="text-[10px] text-gray-500 dark:text-gray-400 uppercase tracking-wider">${item.type}</span>
+                    </div>
+                </div>
+                <div class="flex items-center gap-1.5 flex-shrink-0">
+                    ${addButtonHtml}
+                </div>
+            `;
+            container.appendChild(card);
+        });
+        
+    } catch (err) {
+        console.error('Error searching global services:', err);
+    }
+}
+
+async function addServiceFromSearch(name, type) {
+    try {
+        const res = await fetch('/api/services/manage', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'add', name, type })
+        });
+        
+        if (res.ok) {
+            // Clear search field
+            const searchInput = document.getElementById('servicesSearchInput');
+            if (searchInput) searchInput.value = '';
+            
+            // Clear global results and caches
+            _globalServicesCache = null;
+            const container = document.getElementById('services-container');
+            const globalResults = container.querySelectorAll('.global-search-result-card');
+            globalResults.forEach(card => card.remove());
+            
+            // Remove blur from managed cards
+            container.querySelectorAll('.service-card').forEach(card => {
+                card.classList.remove('opacity-30', 'pointer-events-none');
+            });
+            
+            // Force full reload
+            loadServices();
+        } else {
+            const data = await res.json();
+            window.showModalAlert((I18N.web_services_error || 'Error') + ': ' + (data.error || 'Unknown'), I18N.modal_title_error);
+        }
+    } catch (err) {
+        console.error('Error adding service:', err);
+        window.showModalAlert(I18N.web_services_request_failed || 'Request failed', I18N.modal_title_error);
+    }
+}
+
+// --- Service Info Modal ---
+
+function openServiceInfoModal(name, type) {
+    const modal = document.getElementById('serviceInfoModal');
+    const content = document.getElementById('serviceInfoContent');
+    const title = document.getElementById('serviceInfoModalTitle');
+    
+    // Set title to service name
+    if (title) title.innerText = name;
+    
+    // Show loading
+    content.innerHTML = `<div class="text-center py-4 text-gray-400">
+        <svg class="animate-spin h-6 w-6 mx-auto mb-2 text-blue-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+        </svg>
+        ${I18N.web_services_info_loading || 'Loading...'}
+    </div>`;
+    
+    // Open modal with animation
+    if (typeof animateModalOpen === 'function') {
+        animateModalOpen(modal, false);
+    } else {
+        modal.classList.remove('hidden');
+        modal.classList.add('flex');
+        document.body.style.overflow = 'hidden';
+    }
+    
+    // Fetch service info
+    fetch(`/api/services/info/${encodeURIComponent(name)}?type=${type}`)
+        .then(res => res.json())
+        .then(info => {
+            renderServiceInfo(info);
+        })
+        .catch(err => {
+            console.error('Error fetching service info:', err);
+            content.innerHTML = `<div class="text-center py-4 text-red-500">${err.message}</div>`;
+        });
+}
+
+function closeServiceInfoModal() {
+    const modal = document.getElementById('serviceInfoModal');
+    if (typeof animateModalClose === 'function') {
+        animateModalClose(modal);
+    } else {
+        modal.classList.add('hidden');
+        modal.classList.remove('flex');
+        document.body.style.overflow = '';
+    }
+}
+
+function renderServiceInfo(info) {
+    const content = document.getElementById('serviceInfoContent');
+    
+    const statusColor = info.status === 'running' ? 'green' : info.status === 'stopped' ? 'red' : 'gray';
+    const statusText = info.status === 'running' 
+        ? (I18N.web_services_status_running || 'Running')
+        : info.status === 'stopped' 
+            ? (I18N.web_services_status_stopped || 'Stopped')
+            : (I18N.web_services_status_unknown || 'Unknown');
+    
+    const typeIcon = info.type === 'docker' ? '🐳' : '⚙️';
+    const typeLabel = info.type === 'docker' ? 'Docker' : 'Systemd';
+    const description = info.description || (I18N.web_services_info_no_desc || 'No description');
+    
+    // Build info items
+    let infoItems = [];
+    
+    // Status
+    infoItems.push(`<div class="flex items-center gap-2">
+        <span class="w-2 h-2 rounded-full bg-${statusColor}-500"></span>
+        <span class="text-${statusColor}-600 dark:text-${statusColor}-400 font-medium">${statusText}</span>
+    </div>`);
+    
+    // Type
+    infoItems.push(`<div class="flex items-center gap-1.5 text-gray-500 dark:text-gray-400">
+        <span>${typeIcon}</span>
+        <span class="uppercase text-xs">${typeLabel}</span>
+    </div>`);
+    
+    // Extra info items
+    let extraItems = [];
+    
+    // Docker specific
+    if (info.type === 'docker') {
+        if (info.image) {
+            extraItems.push(`<div class="flex justify-between py-1.5 border-b border-gray-100 dark:border-white/5">
+                <span class="text-gray-500 dark:text-gray-400">Image</span>
+                <span class="font-mono text-xs truncate max-w-[200px]" title="${info.image}">${info.image}</span>
+            </div>`);
+        }
+        if (info.ports) {
+            extraItems.push(`<div class="flex justify-between py-1.5 border-b border-gray-100 dark:border-white/5">
+                <span class="text-gray-500 dark:text-gray-400">Ports</span>
+                <span class="font-mono text-xs">${info.ports}</span>
+            </div>`);
+        }
+    }
+    
+    // Systemd specific
+    if (info.type === 'systemd') {
+        if (info.main_pid) {
+            extraItems.push(`<div class="flex justify-between py-1.5 border-b border-gray-100 dark:border-white/5">
+                <span class="text-gray-500 dark:text-gray-400">PID</span>
+                <span class="font-mono text-xs">${info.main_pid}</span>
+            </div>`);
+        }
+        if (info.memory) {
+            extraItems.push(`<div class="flex justify-between py-1.5 border-b border-gray-100 dark:border-white/5">
+                <span class="text-gray-500 dark:text-gray-400">Memory</span>
+                <span class="font-mono text-xs">${info.memory}</span>
+            </div>`);
+        }
+    }
+    
+    if (info.uptime) {
+        extraItems.push(`<div class="flex justify-between py-1.5">
+            <span class="text-gray-500 dark:text-gray-400">Uptime</span>
+            <span class="text-xs">${info.uptime}</span>
+        </div>`);
+    }
+    
+    content.innerHTML = `
+        <div class="space-y-3">
+            <!-- Status row -->
+            <div class="flex items-center justify-between">
+                ${infoItems.join('')}
+            </div>
+            
+            <!-- Description -->
+            <p class="text-gray-600 dark:text-gray-300 leading-relaxed">${description}</p>
+            
+            ${extraItems.length > 0 ? `
+            <!-- Extra info -->
+            <div class="pt-2 border-t border-gray-100 dark:border-white/5 text-sm">
+                ${extraItems.join('')}
+            </div>
+            ` : ''}
+        </div>
+    `;
+}
+
+async function controlService(name, type, action) {
+    const confirmKey = 'web_services_confirm_' + action;
+    const confirmMsg = (I18N[confirmKey] || 'Are you sure you want to {action} {name}?').replace('{name}', name).replace('{action}', action);
+    
+    if (!await window.showModalConfirm(confirmMsg, I18N.modal_title_confirm)) return;
+    
+    try {
+        const res = await fetch('/api/services/' + action, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ name: name, type: type })
+        });
+        const data = await res.json();
+        if (data.status === 'ok') {
+            loadServices(); // refresh
+        } else {
+            window.showModalAlert((I18N.web_services_error || 'Error') + ': ' + (data.error || 'Unknown error'), I18N.modal_title_error || 'Error');
+        }
+    } catch (err) {
+        console.error('Error:', err);
+        window.showModalAlert(I18N.web_services_request_failed || 'Request failed', I18N.modal_title_error || 'Error');
+    }
+}
+
+// --- Services Edit Modal ---
+
+function openServicesEditModal() {
+    const modal = document.getElementById('servicesEditModal');
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+    document.body.style.overflow = 'hidden';
+    // Clear search inputs
+    const searchInputDesktop = document.getElementById('servicesEditSearchInputDesktop');
+    const searchInputMobile = document.getElementById('servicesEditSearchInputMobile');
+    if (searchInputDesktop) searchInputDesktop.value = '';
+    if (searchInputMobile) searchInputMobile.value = '';
+    loadAvailableServices();
+}
+
+function closeServicesEditModal() {
+    const modal = document.getElementById('servicesEditModal');
+    modal.classList.add('hidden');
+    modal.classList.remove('flex');
+    document.body.style.overflow = '';
+}
+
+async function loadAvailableServices() {
+    const container = document.getElementById('servicesEditList');
+    container.innerHTML = `
+        <div class="flex items-center justify-center gap-2 py-8 text-gray-400">
+            <svg class="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+            <span>${I18N.web_loading || 'Loading...'}</span>
+        </div>`;
+    
+    try {
+        const res = await fetch('/api/services/available');
+        const data = await res.json();
+        
+        if (!res.ok) {
+            throw new Error(data.error || 'Error');
+        }
+        
+        renderServicesEditList(data);
+    } catch (err) {
+        console.error('Error loading available services:', err);
+        container.innerHTML = `<div class="text-center py-8 text-red-500">${err.message}</div>`;
+    }
+}
+
+function renderServicesEditList(services) {
+    const container = document.getElementById('servicesEditList');
+    
+    if (!services || services.length === 0) {
+        container.innerHTML = `<div class="text-center py-8 text-gray-400">${I18N.web_services_none_found || 'No services found'}</div>`;
+        return;
+    }
+    
+    // Grid: 1 col mobile, 2 cols sm, 3 cols md, 4 cols lg
+    let html = '<div id="servicesEditGrid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2">';
+    
+    for (const s of services) {
+        const isManaged = s.managed;
+        const statusIcon = s.status === 'running' ? '🟢' : '🔴';
+        const typeLabel = s.type === 'docker' ? '🐳' : '⚙️';
+        const safeId = s.name.replace(/[^a-zA-Z0-9]/g, '_');
+        
+        html += `
+            <div class="service-edit-card flex items-center justify-between p-2.5 bg-gray-50 dark:bg-black/20 rounded-xl gap-2" data-name="${s.name}" data-type="${s.type}">
+                <div class="flex items-center gap-2 min-w-0 flex-1">
+                    <span class="text-base flex-shrink-0">${typeLabel}</span>
+                    <div class="min-w-0 flex-1">
+                        <div class="font-medium text-sm text-gray-900 dark:text-white truncate" title="${s.name}">${s.name}</div>
+                        <div class="text-[10px] text-gray-500">${statusIcon} ${s.status}</div>
+                    </div>
+                </div>
+                <button id="srv-btn-${safeId}" 
+                        data-type="${s.type}"
+                        onclick="toggleServiceManaged('${s.name}', '${s.type}', ${isManaged}, this)" 
+                        class="srv-manage-btn px-2 py-1 rounded-lg text-xs font-medium transition min-w-[60px] flex items-center justify-center gap-1 flex-shrink-0 ${isManaged 
+                            ? 'bg-red-500/20 text-red-600 dark:text-red-400 hover:bg-red-500/30' 
+                            : 'bg-green-500/20 text-green-600 dark:text-green-400 hover:bg-green-500/30'}">
+                    <span class="btn-text">${isManaged ? (I18N.web_services_btn_remove || 'Remove') : (I18N.web_services_btn_add || 'Add')}</span>
+                    <svg class="btn-spinner hidden animate-spin h-3 w-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                </button>
+            </div>
+        `;
+    }
+    
+    html += '</div>';
+    container.innerHTML = html;
+}
+
+// Filter services in Edit modal
+function filterServicesEditList(query) {
+    const grid = document.getElementById('servicesEditGrid');
+    if (!grid) return;
+    
+    const cards = grid.querySelectorAll('.service-edit-card');
+    const q = (query || '').toLowerCase().trim();
+    
+    let visibleCount = 0;
+    cards.forEach(card => {
+        const name = (card.dataset.name || '').toLowerCase();
+        const type = (card.dataset.type || '').toLowerCase();
+        if (!q || name.includes(q) || type.includes(q)) {
+            card.classList.remove('hidden');
+            visibleCount++;
+        } else {
+            card.classList.add('hidden');
+        }
+    });
+    
+    // Show "no results" if nothing visible
+    let noResults = grid.parentElement.querySelector('.no-search-results-edit');
+    if (visibleCount === 0 && q) {
+        if (!noResults) {
+            const msg = document.createElement('div');
+            msg.className = 'no-search-results-edit text-center text-gray-400 py-4';
+            msg.textContent = I18N.web_services_none_found || 'No services found';
+            grid.parentElement.appendChild(msg);
+        }
+    } else if (noResults) {
+        noResults.remove();
+    }
+}
+
+async function toggleServiceManaged(name, type, isCurrentlyManaged, btnElement) {
+    const action = isCurrentlyManaged ? 'remove' : 'add';
+    
+    // Show spinner on button
+    if (btnElement) {
+        btnElement.disabled = true;
+        btnElement.classList.add('opacity-70', 'cursor-wait');
+        const textEl = btnElement.querySelector('.btn-text');
+        const spinnerEl = btnElement.querySelector('.btn-spinner');
+        if (textEl) textEl.classList.add('hidden');
+        if (spinnerEl) spinnerEl.classList.remove('hidden');
+    }
+    
+    try {
+        const res = await fetch('/api/services/manage', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action, name, type })
+        });
+        
+        const data = await res.json();
+        
+        if (data.status === 'ok') {
+            // Update just this item instead of reloading all
+            updateServiceItemState(name, !isCurrentlyManaged);
+            loadServices();
+        } else {
+            // Restore button state on error
+            restoreButtonState(btnElement, isCurrentlyManaged);
+            window.showModalAlert(data.error || 'Error', I18N.modal_title_error || 'Error');
+        }
+    } catch (err) {
+        console.error('Error toggling service:', err);
+        restoreButtonState(btnElement, isCurrentlyManaged);
+        window.showModalAlert(I18N.web_services_request_failed || 'Request failed', I18N.modal_title_error || 'Error');
+    }
+}
+
+function restoreButtonState(btnElement, isManaged) {
+    if (!btnElement) return;
+    btnElement.disabled = false;
+    btnElement.classList.remove('opacity-70', 'cursor-wait');
+    const textEl = btnElement.querySelector('.btn-text');
+    const spinnerEl = btnElement.querySelector('.btn-spinner');
+    if (textEl) textEl.classList.remove('hidden');
+    if (spinnerEl) spinnerEl.classList.add('hidden');
+}
+
+function updateServiceItemState(name, isNowManaged) {
+    // Find the button by sanitized name
+    const btnId = 'srv-btn-' + name.replace(/[^a-zA-Z0-9]/g, '_');
+    const btn = document.getElementById(btnId);
+    if (!btn) return;
+    
+    // Update button appearance
+    btn.disabled = false;
+    btn.classList.remove('opacity-70', 'cursor-wait');
+    
+    const textEl = btn.querySelector('.btn-text');
+    const spinnerEl = btn.querySelector('.btn-spinner');
+    
+    if (textEl) {
+        textEl.classList.remove('hidden');
+        textEl.textContent = isNowManaged 
+            ? (I18N.web_services_btn_remove || 'Remove') 
+            : (I18N.web_services_btn_add || 'Add');
+    }
+    if (spinnerEl) spinnerEl.classList.add('hidden');
+    
+    // Update button colors
+    if (isNowManaged) {
+        btn.classList.remove('bg-green-500/20', 'text-green-600', 'dark:text-green-400', 'hover:bg-green-500/30');
+        btn.classList.add('bg-red-500/20', 'text-red-600', 'dark:text-red-400', 'hover:bg-red-500/30');
+    } else {
+        btn.classList.remove('bg-red-500/20', 'text-red-600', 'dark:text-red-400', 'hover:bg-red-500/30');
+        btn.classList.add('bg-green-500/20', 'text-green-600', 'dark:text-green-400', 'hover:bg-green-500/30');
+    }
+    
+    // Update onclick handler
+    btn.onclick = function() { toggleServiceManaged(name, btn.dataset.type || 'systemd', isNowManaged, this); };
+}
+
+// Init when DOM loaded
+document.addEventListener('DOMContentLoaded', () => {
+   // Initial load via fetch, then SSE will be started automatically
+   loadServices();
+});

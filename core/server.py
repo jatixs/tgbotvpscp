@@ -60,6 +60,7 @@ from .utils import (
 from .auth import save_users, get_user_name
 from .messaging import send_alert 
 from .keyboards import BTN_CONFIG_MAP
+from modules.services import get_all_services_status, perform_service_action, get_user_role_level, get_all_available_services, add_managed_service, remove_managed_service
 from modules import update as update_module
 from modules import traffic as traffic_module
 from . import shared_state
@@ -638,8 +639,17 @@ async def handle_dashboard(request):
     role = user.get("role", "users")
     is_main_admin = user_id == ADMIN_USER_ID
     is_admin = role == "admins" or is_main_admin
-    role_color = "green" if role == "admins" else "gray"
-    role_badge_html = f'<span class="ml-2 px-2 py-0.5 rounded text-[10px] border border-{role_color}-500/30 bg-{role_color}-100 dark:bg-{role_color}-500/20 text-{role_color}-600 dark:text-{role_color}-400 uppercase font-bold align-middle">{role}</span>'
+    
+    # Badge colors: Owner (main admin) = red, Admins = green, Users = amber
+    if is_main_admin:
+        role_text = _("web_role_owner", lang)
+        role_badge_html = f'<span class="role-badge-owner hidden sm:inline-flex px-2 py-0.5 rounded text-[10px] border uppercase font-bold">{role_text}</span>'
+    elif role == "admins":
+        role_text = _("web_role_admins", lang)
+        role_badge_html = f'<span class="role-badge-admin hidden sm:inline-flex px-2 py-0.5 rounded text-[10px] border uppercase font-bold">{role_text}</span>'
+    else:
+        role_text = _("web_role_users", lang)
+        role_badge_html = f'<span class="role-badge-user hidden sm:inline-flex px-2 py-0.5 rounded text-[10px] border uppercase font-bold">{role_text}</span>'
     node_action_btn = ""
     settings_btn = ""
     if user_id == ADMIN_USER_ID:
@@ -697,6 +707,17 @@ async def handle_dashboard(request):
         "web_traffic_total": _("web_traffic_total", lang),
         "web_uptime": _("web_uptime", lang),
         "web_cpu": _("web_cpu", lang),
+        "web_ram": _("web_ram", lang),
+        "web_services_title": _("web_services_title", lang),
+        "web_services_empty": _("web_services_empty", lang),
+        "web_services_btn_start": _("web_services_btn_start", lang),
+        "web_services_btn_stop": _("web_services_btn_stop", lang),
+        "web_services_btn_restart": _("web_services_btn_restart", lang),
+        "web_services_edit_title": _("web_services_edit_title", lang),
+        "web_services_search": _("web_services_search", lang),
+        "web_services_info_title": _("web_services_info_title", lang),
+        "web_services_info_loading": _("web_services_info_loading", lang),
+        "user_role_level": get_user_role_level(user_id),
         "web_ram": _("web_ram", lang),
         "web_disk": _("web_disk", lang),
         "web_rx": _("web_rx", lang),
@@ -804,6 +825,26 @@ async def handle_dashboard(request):
                 "traffic_reset_done": _("web_traffic_reset_no_emoji", lang),
                 "web_logs_empty_title": _("web_logs_empty_title", lang),
                 "web_logs_empty_desc": _("web_logs_empty_desc", lang),
+                "web_services_confirm_start": _("web_services_confirm_start", lang),
+                "web_services_confirm_stop": _("web_services_confirm_stop", lang),
+                "web_services_confirm_restart": _("web_services_confirm_restart", lang),
+                "web_services_error": _("web_services_error", lang),
+                "web_services_request_failed": _("web_services_request_failed", lang),
+                "web_services_btn_add": _("web_services_btn_add", lang),
+                "web_services_btn_remove": _("web_services_btn_remove", lang),
+                "web_services_none_found": _("web_services_none_found", lang),
+                "web_services_global_results": _("web_services_global_results", lang),
+                "web_services_info_title": _("web_services_info_title", lang),
+                "web_services_info_name": _("web_services_info_name", lang),
+                "web_services_info_type": _("web_services_info_type", lang),
+                "web_services_info_status": _("web_services_info_status", lang),
+                "web_services_info_desc": _("web_services_info_desc", lang),
+                "web_services_info_loading": _("web_services_info_loading", lang),
+                "web_services_info_no_desc": _("web_services_info_no_desc", lang),
+                "web_services_status_running": _("web_services_status_running", lang),
+                "web_services_status_stopped": _("web_services_status_stopped", lang),
+                "web_services_status_unknown": _("web_services_status_unknown", lang),
+                "modal_title_error": _("modal_title_error", lang),
             }
         ),
     }
@@ -3518,6 +3559,221 @@ async def handle_sse_node_details(request):
     return resp
 
 
+async def handle_sse_services(request):
+    """SSE endpoint for services status updates"""
+    user = get_current_user(request)
+    if not user:
+        return web.Response(status=401)
+    
+    current_token = request.cookies.get(COOKIE_NAME)
+    resp = web.StreamResponse(status=200, reason="OK")
+    resp.headers["Content-Type"] = "text/event-stream"
+    resp.headers["Cache-Control"] = "no-cache"
+    resp.headers["Connection"] = "keep-alive"
+    resp.headers["X-Accel-Buffering"] = "no"
+    await resp.prepare(request)
+    
+    shutdown_event = request.app.get("shutdown_event")
+    
+    try:
+        while True:
+            if shared_state.IS_RESTARTING:
+                try:
+                    await resp.write(b"event: shutdown\ndata: restarting\n\n")
+                except Exception:
+                    pass
+                break
+            
+            try:
+                if request.transport is None or request.transport.is_closing():
+                    break
+            except Exception:
+                break
+            
+            # Check session validity
+            if current_token and current_token not in SERVER_SESSIONS:
+                try:
+                    await resp.write(b"event: session_status\ndata: expired\n\n")
+                except Exception:
+                    pass
+                break
+            
+            # Get services status
+            try:
+                services = get_all_services_status()
+                # Encrypt each service data
+                encrypted_services = []
+                for svc in services:
+                    encrypted_services.append({
+                        "name": encrypt_for_web(svc.get("name", "")),
+                        "type": encrypt_for_web(svc.get("type", "")),
+                        "status": encrypt_for_web(svc.get("status", ""))
+                    })
+                
+                payload = json.dumps({"services": encrypted_services})
+                await resp.write(f"event: services\ndata: {payload}\n\n".encode("utf-8"))
+            except (ConnectionResetError, BrokenPipeError, ConnectionError):
+                break
+            except Exception as e:
+                logging.error(f"SSE Services fetch error: {e}")
+            
+            # Wait before next update
+            if shutdown_event:
+                try:
+                    if not shared_state.IS_RESTARTING:
+                        await asyncio.wait_for(shutdown_event.wait(), timeout=5.0)
+                        break
+                except asyncio.TimeoutError:
+                    pass
+            else:
+                await asyncio.sleep(5)
+    except asyncio.CancelledError:
+        pass
+    except Exception as e:
+        if "closing transport" not in str(e) and "'NoneType' object" not in str(e):
+            logging.error(f"SSE Services Error: {e}")
+    return resp
+
+
+async def handle_services_list(request):
+    try:
+        user = get_current_user(request)
+        if not user:
+            return web.json_response({"error": "Unauthorized"}, status=401)
+        
+        services = get_all_services_status()
+        return web.json_response(services)
+    except Exception as e:
+         return web.json_response({"error": str(e)}, status=500)
+
+async def api_control_service(request):
+    try:
+        user = get_current_user(request)
+        if not user:
+            return web.json_response({"error": "Unauthorized"}, status=401)
+            
+        user_id = user["id"]
+        level = get_user_role_level(user_id)
+        
+        action = request.match_info["action"] # start, stop, restart
+        
+        # Permission check
+        if level == 0:
+            return web.json_response({"error": "Access Denied (View Only)"}, status=403)
+        if action == "stop" and level < 2:
+             return web.json_response({"error": "Access Denied (Stop not allowed)"}, status=403)
+            
+        data = await request.json()
+        name = data.get("name")
+        sType = data.get("type", "systemd")
+        
+        if not name:
+            return web.json_response({"error": "Name required"}, status=400)
+            
+        # Security: check if service is in config
+        found = False
+        for s in current_config.MANAGED_SERVICES:
+            if s["name"] == name:
+                found = True
+                break
+        if not found:
+             return web.json_response({"error": "Service not managed"}, status=403)
+
+        success, msg = await perform_service_action(name, sType, action)
+        if success:
+             return web.json_response({"status": "ok", "message": msg})
+        else:
+             return web.json_response({"error": msg}, status=500)
+
+    except Exception as e:
+        return web.json_response({"error": str(e)}, status=500)
+
+
+async def api_service_info(request):
+    """Get detailed information about a service"""
+    try:
+        user = get_current_user(request)
+        if not user:
+            return web.json_response({"error": "Unauthorized"}, status=401)
+        
+        name = request.match_info.get("name")
+        sType = request.query.get("type", "systemd")
+        
+        if not name:
+            return web.json_response({"error": "Name required"}, status=400)
+        
+        from modules.services import get_service_info
+        info = await get_service_info(name, sType)
+        return web.json_response(info)
+    except Exception as e:
+        logging.error(f"Error in api_service_info: {e}")
+        return web.json_response({"error": str(e)}, status=500)
+
+
+async def api_services_available(request):
+    """Get all available services/containers for editing"""
+    try:
+        user = get_current_user(request)
+        if not user:
+            return web.json_response({"error": "Unauthorized"}, status=401)
+        
+        user_id = user["id"]
+        level = get_user_role_level(user_id)
+        
+        # Check if this is a search request (read-only) vs edit request
+        search_only = request.query.get("search") == "1"
+        
+        # For search, allow all authenticated users (read-only)
+        # For edit (manage modal), only Main Admin
+        if not search_only and level < 2:
+            return web.json_response({"error": "Access Denied"}, status=403)
+        
+        services = get_all_available_services()
+        return web.json_response(services)
+    except Exception as e:
+        logging.error(f"Error in api_services_available: {e}")
+        return web.json_response({"error": str(e)}, status=500)
+
+
+async def api_services_manage(request):
+    """Add or remove service from managed list"""
+    try:
+        user = get_current_user(request)
+        if not user:
+            return web.json_response({"error": "Unauthorized"}, status=401)
+        
+        user_id = user["id"]
+        level = get_user_role_level(user_id)
+        
+        # Only Main Admin (level 2) can edit services list
+        if level < 2:
+            return web.json_response({"error": "Access Denied"}, status=403)
+        
+        data = await request.json()
+        action = data.get("action")  # "add" or "remove"
+        name = data.get("name")
+        sType = data.get("type", "systemd")
+        
+        if not name:
+            return web.json_response({"error": "Name required"}, status=400)
+        
+        if action == "add":
+            success, msg = add_managed_service(name, sType)
+        elif action == "remove":
+            success, msg = remove_managed_service(name)
+        else:
+            return web.json_response({"error": "Invalid action"}, status=400)
+        
+        if success:
+            return web.json_response({"status": "ok", "message": msg})
+        else:
+            return web.json_response({"error": msg}, status=400)
+            
+    except Exception as e:
+        logging.error(f"Error in api_services_manage: {e}")
+        return web.json_response({"error": str(e)}, status=500)
+
+
 async def cleanup_server():
     global AGENT_TASK  # noqa: F824
     if AGENT_TASK and (not AGENT_TASK.done()):
@@ -3585,6 +3841,7 @@ async def start_web_server(bot_instance: Bot):
         app.router.add_get("/api/events", handle_sse_stream)
         app.router.add_get("/api/events/logs", handle_sse_logs)
         app.router.add_get("/api/events/node", handle_sse_node_details)
+        app.router.add_get("/api/events/services", handle_sse_services)
         app.router.add_get("/api/update/check", api_check_update)
         app.router.add_post("/api/update/run", api_run_update)
         app.router.add_get("/api/notifications/list", api_get_notifications)
@@ -3593,6 +3850,11 @@ async def start_web_server(bot_instance: Bot):
         app.router.add_get("/api/sessions/list", api_get_sessions)
         app.router.add_post("/api/sessions/revoke", api_revoke_session)
         app.router.add_post("/api/sessions/revoke_all", api_revoke_all_sessions)
+        app.router.add_get("/api/services", handle_services_list)
+        app.router.add_get("/api/services/available", api_services_available)
+        app.router.add_get("/api/services/info/{name}", api_service_info)
+        app.router.add_post("/api/services/manage", api_services_manage)
+        app.router.add_post("/api/services/{action}", api_control_service)
     else:
         logging.info("Web UI DISABLED.")
         app.router.add_get("/", handle_api_root)

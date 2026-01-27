@@ -15,7 +15,8 @@ logger = logging.getLogger("Migration")
 FILES_TO_MIGRATE = [
     "users.json",
     "alerts_config.json",
-    "user_settings.json"
+    "user_settings.json",
+    "services.json"
 ]
 
 def load_json(path: str):

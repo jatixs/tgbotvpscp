@@ -27,6 +27,7 @@ BTN_CONFIG_MAP = {
     "btn_reboot": "enable_reboot",
     "btn_notifications": "enable_notifications",
     "btn_nodes": "enable_nodes",
+    "btn_services": "enable_services",
 }
 CATEGORY_MAP = {
     "cat_monitoring": [
@@ -39,6 +40,7 @@ CATEGORY_MAP = {
     "cat_management": [
         "btn_nodes",
         "btn_users",
+        "btn_services",
         "btn_update",
         "btn_optimize",
         "btn_restart",

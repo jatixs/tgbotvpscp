@@ -25,6 +25,7 @@ NODES_FILE = os.path.join(CONFIG_DIR, "nodes.json")
 REBOOT_FLAG_FILE = os.path.join(CONFIG_DIR, "reboot_flag.txt")
 RESTART_FLAG_FILE = os.path.join(CONFIG_DIR, "restart_flag.txt")
 ALERTS_CONFIG_FILE = os.path.join(CONFIG_DIR, "alerts_config.json")
+SERVICES_CONFIG_FILE = os.path.join(CONFIG_DIR, "services.json")
 USER_SETTINGS_FILE = os.path.join(CONFIG_DIR, "user_settings.json")
 SYSTEM_CONFIG_FILE = os.path.join(CONFIG_DIR, "system_config.json")
 KEYBOARD_CONFIG_FILE = os.path.join(CONFIG_DIR, "keyboard_config.json")
@@ -129,7 +130,50 @@ DEFAULT_KEYBOARD_CONFIG = {
     "enable_users": True,
     "enable_nodes": True,
     "enable_optimize": True,
+    "enable_services": True,
 }
+
+# --- MANAGED SERVICES CONFIG ---
+# This list acts as a whitelist of services to monitor.
+# Only services that physically exist (installed/loaded) on the system will be displayed.
+MANAGED_SERVICES = [
+    # Core Services
+    {"name": "ssh", "type": "systemd"},
+    {"name": "sshd", "type": "systemd"},
+    {"name": "cron", "type": "systemd"},
+    {"name": "docker", "type": "systemd"},
+    {"name": "ufw", "type": "systemd"},
+    {"name": "fail2ban", "type": "systemd"},
+    
+    # Web Servers
+    {"name": "nginx", "type": "systemd"},
+    {"name": "apache2", "type": "systemd"},
+    {"name": "httpd", "type": "systemd"},
+    {"name": "caddy", "type": "systemd"},
+    
+    # Databases
+    {"name": "mysql", "type": "systemd"},
+    {"name": "mariadb", "type": "systemd"},
+    {"name": "postgresql", "type": "systemd"},
+    {"name": "redis-server", "type": "systemd"},
+    {"name": "redis", "type": "systemd"},
+    {"name": "mongodb", "type": "systemd"},
+    {"name": "mongod", "type": "systemd"},
+    
+    # VPN / Proxy
+    {"name": "xray", "type": "systemd"},
+    {"name": "v2ray", "type": "systemd"},
+    {"name": "wg-quick@wg0", "type": "systemd"},
+    
+    # Docker Containers (Common)
+    {"name": "portainer", "type": "docker"},
+    {"name": "nginx-proxy-manager", "type": "docker"},
+    {"name": "watchtower", "type": "docker"},
+    
+    # Bot itself if in docker
+    {"name": "bot-core", "type": "docker"},
+]
+# ------------------------------
 TRAFFIC_INTERVAL = DEFAULT_CONFIG["TRAFFIC_INTERVAL"]
 RESOURCE_CHECK_INTERVAL = DEFAULT_CONFIG["RESOURCE_CHECK_INTERVAL"]
 CPU_THRESHOLD = DEFAULT_CONFIG["CPU_THRESHOLD"]

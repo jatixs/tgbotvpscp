@@ -1,186 +1,435 @@
 <p align="center">
   <a href="README.md">Русская Версия</a> | English Version
 </p>
++
++<h1 align="center">🤖 VPS Manager Telegram Bot</h1>
++
++<p align="center">
++  <b>v1.18.0</b> — enterprise-grade ecosystem for monitoring and managing server infrastructure<br>
++  Asynchronous architecture • Enterprise security • PWA web interface • Real-time SSE
++</p>
++
++<p align="center">
++  <a href="https://github.com/jatixs/tgbotvpscp/releases/latest"><img src="https://img.shields.io/badge/version-v1.18.0-blue?style=flat-square" alt="Version 1.18.0"/></a>
++  <a href="CHANGELOG.en.md"><img src="https://img.shields.io/badge/build-66-purple?style=flat-square" alt="Build 66"/></a>
++  <a href="https://www.python.org/"><img src="https://img.shields.io/badge/python-3.10%2B-green?style=flat-square" alt="Python 3.10+"/></a>
++  <a href="https://choosealicense.com/licenses/gpl-3.0/"><img src="https://img.shields.io/badge/license-GPL--3.0-lightgrey?style=flat-square" alt="License GPL-3.0"/></a>
++  <a href="https://github.com/aiogram/aiogram"><img src="https://img.shields.io/badge/aiogram-3.x-orange?style=flat-square" alt="Aiogram 3.x"/></a>
++  <a href="https://www.docker.com/"><img src="https://img.shields.io/badge/docker-ready-blueviolet?style=flat-square" alt="Docker"/></a>
++  <a href="https://releases.ubuntu.com/focal/"><img src="https://img.shields.io/badge/platform-Ubuntu%2020.04%2B-important?style=flat-square" alt="Platform Ubuntu 20.04+"/></a>
++</p>
++
++---
++
++## 📘 Table of Contents
++
++1. [About](#-about-the-project)
++2. [Key Features](#-key-features)
++3. [Architecture](#-architecture)
++4. [Quick Start](#-quick-start)
++5. [Web Interface](#-web-interface)
++6. [Security](#-security)
++7. [Project Structure](#️-project-structure)
++8. [Documentation](#-documentation)
++9. [License](#-license)
++
++---
++
++## 🧩 About the Project
++
++**VPS Manager Telegram Bot** is a comprehensive enterprise-class solution for managing server infrastructure via Telegram and web interface.
++
++### 🎯 Who is this for?
++
++- **System Administrators** — automate routine tasks
++- **DevOps Engineers** — monitor multiple servers from one place
++- **VPN Providers** — manage X-ray/VLESS panels
++- **Hosting Providers** — client monitoring
++
++### 💡 Problems this project solves
++
++✅ **Centralized Management** — one interface for all servers  
++✅ **Real-time Monitoring** — instant updates without reloading  
++✅ **Security** — enterprise-grade protection with WAF and audit logging  
++✅ **Scalability** — from 1 to 1000+ servers  
++✅ **Mobility** — manage from your phone via Telegram  
+## 🚀 Quick Start
++---
+### System Requirements
++## ⚡ Key Features
+**Minimum:**
+- Ubuntu 20.04+ / Debian 11+
+- Python 3.10+
+- 1 GB RAM
+- 10 GB Disk
 
-<h1 align="center">🤖 VPS Manager Telegram Bot</h1>
+**Recommended:**
+- 2 GB RAM
+- 20 GB SSD
+- 2 CPU cores
++### 🚀 Performance
+### 1️⃣ Preparation
 
-<p align="center"> <b>v1.17.0</b> — a professional ecosystem for monitoring and managing your <b>server network</b>.
-The system is built on an <b>asynchronous core</b> (AsyncIO), <b>SQLite</b> database, and is fully integrated with <b>Docker</b>.
-Includes a modern <b>web interface</b> powered by <b>SSE</b> technology for instant monitoring and node management. </p>
+1. Get a bot token from [@BotFather](https://t.me/BotFather)
+2. Find your Telegram ID via [@userinfobot](https://t.me/userinfobot)
+3. Ensure `curl` and `git` are installed:
+   ```bash
+   sudo apt update && sudo apt install -y curl git
+   ```
 
-<p align="center">
-  <a href="https://github.com/jatixs/tgbotvpscp/releases/latest"><img src="https://img.shields.io/badge/version-v1.17.0-blue?style=flat-square" alt="Version 1.17.0"/></a>
-  <a href="CHANGELOG.en.md"><img src="https://img.shields.io/badge/build-64-purple?style=flat-square" alt="Build 64"/></a>
-  <a href="https://www.python.org/"><img src="https://img.shields.io/badge/python-3.10%2B-green?style=flat-square" alt="Python 3.10+"/></a>
-  <a href="https://choosealicense.com/licenses/gpl-3.0/"><img src="https://img.shields.io/badge/license-GPL--3.0-lightgrey?style=flat-square" alt="License GPL-3.0"/></a>
-  <a href="https://github.com/aiogram/aiogram"><img src="https://img.shields.io/badge/aiogram-3.x-orange?style=flat-square" alt="Aiogram 3.x"/></a>
-  <a href="https://www.docker.com/"><img src="https://img.shields.io/badge/docker-required-blueviolet?style=flat-square" alt="Docker"/></a>
-  <a href="https://releases.ubuntu.com/focal/"><img src="https://img.shields.io/badge/platform-Ubuntu%2020.04%2B-important?style=flat-square" alt="Platform Ubuntu 20.04+"/></a>
-  <a href="https://github.com/jatixs/tgbotvpscp/actions/workflows/security.yml/"><img src="https://github.com/jatixs/tgbotvpscp/actions/workflows/security.yml/badge.svg" alt="Security Scan"/></a>
-</p>
-
----
-
-## 📘 Table of Contents
-1. [Description](#-description)
-2. [Key Features](#-key-features)
-3. [Deployment](#-deployment-quick-start)
-   - [Preparation](#1-preparation)
-   - [Install Agent (Master)](#2-installing-the-agent-main-bot)
-   - [Connect Nodes (Clients)](#3-connecting-nodes-clients)
-   - [Commands](#-useful-commands)
-4. [Project Structure](#️-project-structure)
-5. [Security](#-security)
-6. [Documentation](#-documentation)
-7. [Author](#-author)
-
----
-
-## 🧩 Description
-
-**VPS Manager Telegram Bot** is a comprehensive solution for server administration via Telegram. It has evolved into a professional infrastructure management system, allowing you to control both the main server (**Agent**) and a network of remote nodes (**Nodes**) via a single interface.
-
-The project operates in two modes:
-1.  **Agent (Bot):** The main control center with Telegram UI, async API, SQLite database, and Web Admin Panel.
-2.  **Node (Client):** A lightweight client (`tg-node`) for remote VPS. Transmits telemetry and executes commands.
-
----
-
-## ⚡ Key Features
-
-### 🚀 Performance & Reliability
-* **Async Core:** Fully powered by `aiohttp` and `aiosqlite`. No blocking operations during network requests or DB writes.
-* **SQLite Database:** Reliable storage for node configs, tasks, and metric history. Auto-migration from JSON included.
-* **Security:** Shell Injection protection (`shlex`), server-side sessions, Rate Limiter, and XSS escaping.
-
-### 🖥 Multi-server (Nodes)
-* **Unified Center:** Manage unlimited servers.
-* **Monitoring:** Status (Online/Offline), ping, uptime, and resources for all nodes.
-* **Remote Control:** `Reboot`, `Speedtest`, `Traffic`, `Top` on any node.
-* **Web Status Page:** HTML dashboard (`http://IP:8080`) with real-time monitoring.
-
-### 🛠 Core Functionality
-* 🐳 **Full Docker Support:** One-click install (`secure` and `root` modes).
-* 🌐 **Multilingual (i18n):** English and Russian support.
-* 💻 **Resources:** CPU, RAM, Disk, Uptime monitoring.
-* 📡 **Network:** Traffic and connection speed (iperf3) stats.
-* 🔔 **Smart Alerts:** Notifications for resources, SSH logins, Fail2Ban bans, and **Node Downtime**.
-* ✨ **Smart Installer:** Interactive `deploy.sh` script.
-* 🚀 **Diagnostics:** Ping, Speedtest, Top processes.
-* 🛡️ **Security:** SSH logs and Fail2Ban integration.
-* ⚙️ **X-ray:** Update cores for Marzban/Amnezia panels.
-
----
-
-## 🚀 Deployment (Quick Start)
-
-Requires **Ubuntu 20.04+** and `sudo` access.
-
-### 1. Preparation
-
-1.  Get a bot token from **[@BotFather](https://t.me/BotFather)**.
-2.  Get your **User ID** (e.g., via [@userinfobot](https://t.me/userinfobot)).
-3.  Ensure `curl` and `git` are installed.
-
----
-
-### 2. Installing the Agent (Main Bot)
-
-Run on your main server:
+### 2️⃣ Install Main Bot
 
 ```bash
 bash <(wget -qO- https://raw.githubusercontent.com/jatixs/tgbotvpscp/main/deploy_en.sh)
-````
+```
 
-1.  Select install mode (Recommended: **Docker - Secure**).
-2.  Enter **Bot Token** and **Admin ID**.
-3.  The bot will start the API server on port `8080`.
+**Choose installation mode:**
+- `1) Docker - Secure Mode` — **Recommended** (isolation, security)
+- `3) Docker - Root Mode` — Full access (for server reboot)
 
------
+**Enter credentials:**
+- Bot Token (from BotFather)
+- Admin User ID (your Telegram ID)
 
-### 3. Connecting Nodes (Clients)
+🎉 Bot started! API available at `http://YOUR_IP:8080`
 
-To connect a remote server:
+### 3️⃣ Connect Remote Servers (Nodes)
 
-1.  **In Telegram Bot (Master):**
-      * Go to **🖥 Nodes** -> **➕ Add Node**.
-      * Enter a name. Get the **Token**.
-2.  **On Remote Server:**
-      * Run the installer:
-        ```bash
-        bash <(wget -qO- https://raw.githubusercontent.com/jatixs/tgbotvpscp/main/deploy_en.sh)
-        ```
-      * Select **8) Install NODE (Client)**.
-      * Enter:
-          * **Agent URL:** Master bot address (e.g. `http://1.2.3.4:8080`).
-          * **Token:** The token from the bot.
+#### On main bot:
+1. Open Telegram → **🖥 Nodes**
+2. Click **➕ Add Node**
+3. Enter name → Copy **token**
 
-The agent will install as `tg-node` service and appear in your bot.
+#### On remote server:
+```bash
+bash <(wget -qO- https://raw.githubusercontent.com/jatixs/tgbotvpscp/main/deploy_en.sh)
+```
 
------
+Choose **8) Install NODE (Client)**
 
-### 🧰 Useful Commands
+Enter:
+- **Agent URL:** `http://MAIN_SERVER_IP:8080`
+- **Token:** received from bot
 
-#### 🕹 Process Management
+✅ Node will appear in the list within seconds!
++- ✅ **Ring Buffers** — memory optimization via deque
++- ✅ **Garbage Collection** — automatic cleanup
++
+## 💻 Web Interface
++
+### Access Dashboard
++- ✅ **Real-time Metrics** — CPU, RAM, Disk, Network
++
+http://YOUR_SERVER_IP:8080
+```
 
-| Action | Systemd (Classic) | Docker (Containers) |
-| :--- | :--- | :--- |
-| **Bot Status** | `sudo systemctl status tg-bot` | `docker compose -f /opt/tg-bot/docker-compose.yml ps` |
-| **Watchdog Status** | `sudo systemctl status tg-watchdog` | *Running inside watchdog container* |
-| **Restart Bot** | `sudo systemctl restart tg-bot` | `docker compose -f /opt/tg-bot/docker-compose.yml restart bot-secure` (or `bot-root`) |
-| **Stop** | `sudo systemctl stop tg-bot` | `docker compose -f /opt/tg-bot/docker-compose.yml stop` |
-| **Start** | `sudo systemctl start tg-bot` | `docker compose -f /opt/tg-bot/docker-compose.yml up -d` |
+**First login:**
+- Username: `admin`
+- Password: `admin` (change after login!)
 
-#### 📜 Logs & Debug
+### Main Features
 
-| Action | Systemd | Docker |
-| :--- | :--- | :--- |
-| **Bot Logs (Live)** | `sudo journalctl -u tg-bot -f` | `docker compose -f /opt/tg-bot/docker-compose.yml logs -f bot-secure` |
-| **Watchdog Logs** | `sudo journalctl -u tg-watchdog -f` | `docker compose -f /opt/tg-bot/docker-compose.yml logs -f watchdog` |
-| **Errors (grep)** | `grep "ERROR" /opt/tg-bot/logs/bot/bot.log` | *Same (log files are mounted to host)* |
+#### 📊 Dashboard
+- Real-time CPU/RAM/Disk charts
+- List of all nodes with statuses
+- Network traffic (current and historical)
+- Quick actions (reboot, update)
 
-#### 💾 Database & Maintenance
+#### ⚙️ Settings
+- **Alerts Config** — notification thresholds (CPU 80%, RAM 90%, Disk 85%)
+- **Keyboard Config** — button visibility in Telegram
+- **User Management** — add/remove users
+- **Language** — change interface language
 
-| Action | Command (Run in `/opt/tg-bot/`) |
-| :--- | :--- |
-| **Backup DB** | `cp config/nodes.db config/nodes.db.bak_$(date +%F)` |
-| **Manual Update** | `git pull && source venv/bin/activate && pip install -r requirements.txt && sudo systemctl restart tg-bot` |
-| **Reset Web Pass** | *Delete the `password_hash` line for the admin in `config/users.json` and restart the bot* |
+#### ⚙️ Service Manager <sup>NEW</sup>
+- Status of all systemd services
+- Control (Start/Stop/Restart)
+- Add to monitoring
+- Detailed info (PID, uptime, logs)
 
-#### 🖥 For Node (Client)
+#### 📜 Logs
+- Bot logs (real-time)
+- Watchdog logs
+- Node logs (separate for each node)
+- Audit logs (security events)
 
-| Action | Command |
-| :--- | :--- |
-| **Restart** | `sudo systemctl restart tg-node` |
-| **View Logs** | `sudo journalctl -u tg-node -f` |
-| **Check Config** | `cat /opt/tg-bot/.env` |
+### PWA Features
 
-*(Use `bot-secure` instead of `bot-root` for Docker Secure mode)*
+**Install as app:**
+1. Open Dashboard in browser
+2. Click "Install" (Chrome) or "Add to Home Screen" (Mobile)
+3. Use as native app
+
+**PWA Benefits:**
+- Works offline (caching)
+- Icon on desktop
+- Fullscreen mode
+- Push notifications (in development)
+
+---
+
+## 🔒 Security
+
+### Security Levels
+
+#### 🔹 Level 1: Telegram Bot
+- Whitelist — only authorized Telegram IDs
+- Role-Based Access Control (RBAC)
+- Anti-spam middleware (1 request/sec per user)
+
+#### 🔹 Level 2: Web Panel
+- **Argon2** — OWASP recommended password hashing
+- **Server-side sessions** — secure cookies
+- **CSRF Protection** — tokens for all POST requests
+- **Brute-force Protection** — block after 5 attempts for 5 minutes
+- **Rate Limiting** — 100 API requests/min per IP
+
+#### 🔹 Level 3: WAF (Web Application Firewall)
+
+Automatic detection:
+- ❌ SQL Injection (`UNION SELECT`, `OR 1=1`)
+- ❌ XSS (`<script>`, `javascript:`)
+- ❌ Path Traversal (`../`, `%2e%2e`)
+- ❌ Command Injection (`;`, `|`, `` ` ``)
+- ❌ LDAP Injection
+
+#### 🔹 Level 4: Data Encryption
+- **Fernet** — symmetric encryption for configs (`users.json`, `services.json`)
+- **XOR + Base64** — lightweight encryption for web client (SSE events)
+
+#### 🔹 Level 5: Audit Logging
+
+**Recorded:**
+- Login attempts (success/fail)
+- Password resets
+- User additions/deletions
+- Configuration changes
+- WAF triggers
+
+**Privacy:**
+- IPs masked (203.0.113.XXX)
+- Tokens hidden (abc123...)
+- GDPR compliant
+
+**File:** `logs/audit/audit.log`
++### 🛡️ Enterprise-Grade Security
+---
+
+## 🗂️ Project Structure
+
+```
+/opt/tg-bot/
+├── bot.py                    # Entry point
+├── watchdog.py              # Auto-restart
+├── migrate.py               # Data migration
+├── manage.py                # CLI management
+├── .env                     # Configuration
+├── requirements.txt         # Python dependencies
+├── docker-compose.yml       # Docker configuration
+├── Dockerfile               # Container image
+├── deploy_en.sh             # Installer
+├── core/                    # System core
++- ✅ **Brute-force Protection** — auto-block after 5 attempts
++- ✅ **Audit Logging** — detailed logs of all events
++- ✅ **E2E Encryption** — Fernet + XOR encryption
++- ✅ **RBAC** — Root/Admin/User roles
++
++### 🎨 Modern Web Interface
++
++- ✅ **PWA** — works like a native app
++- ✅ **SSE (Server-Sent Events)** — updates without reloading
++- ✅ **Dark Theme** — automatic switching
++- ✅ **Responsive Design** — mobile-first approach
++- ✅ **Real-time Charts** — Chart.js visualization
++
++### ⚙️ Service Manager <sup>NEW v1.18.0</sup>
++
++- ✅ **Real-time Status** — all systemd services
++- ✅ **SSE Streaming** — updates every 5 seconds
++- ✅ **Start/Stop/Restart** — one-button control
++- ✅ **Encrypted Storage** — persistent configuration
+```
+
+📖 Detailed documentation: [ARCHITECTURE.en.md](ARCHITECTURE.en.md)
++- ✅ **Detailed Info** — logs, uptime, PID
++
++### 🔔 Smart Notifications
+## 📚 Documentation
++- ✅ **Customizable Thresholds** — CPU/RAM/Disk by choice
+### Guides
++- ✅ **Downtime Alerts** — node unavailable > 60 sec
+- 📘 [**ARCHITECTURE.en.md**](ARCHITECTURE.en.md) — Complete project architecture
+- 🧩 [**custom_module_en.md**](custom_module_en.md) — Creating your own module
+- 📝 [**CHANGELOG.en.md**](CHANGELOG.en.md) — Change history
++- ✅ **Two Modes** — Root (full access) / Secure (isolation)
+### Useful Commands
++- ✅ **Watchdog** — auto-restart on crash
+#### Bot Management (Docker)
++
+```bash
+# Status
+docker compose -f /opt/tg-bot/docker-compose.yml ps
++
+# Restart
+docker compose -f /opt/tg-bot/docker-compose.yml restart bot-secure
++
+# Logs (real-time)
+docker compose -f /opt/tg-bot/docker-compose.yml logs -f bot-secure
++│  ├── 🔌 API Server (REST + Real-time)           │
+# Stop
+docker compose -f /opt/tg-bot/docker-compose.yml stop
++└─────────────────────────────────────────────────┘
+# Start
+docker compose -f /opt/tg-bot/docker-compose.yml up -d
+```
++│ (VPS)  │  │ (VPS)  │  │ (VPS)  │  │ (VPS)   │
+#### Bot Management (Systemd)
++```
+```bash
+# Status
+sudo systemctl status tg-bot
++- **Real-time:** Server-Sent Events (SSE)
+# Restart
+sudo systemctl restart tg-bot
++- **Infrastructure:** Docker, Docker Compose, Systemd
+# Logs
+sudo journalctl -u tg-bot -f
+## 🚀 Deployment (Quick Start)
+# Stop
+sudo systemctl stop tg-bot
+```
+Requires **Ubuntu 20.04+** and `sudo` access.
+#### Backup
+### 1. Preparation
+```bash
+# Database
+cp /opt/tg-bot/config/nodes.db /backup/nodes.db.$(date +%F)
+1.  Get a bot token from **[@BotFather](https://t.me/BotFather)**.
+# Configurations
+tar -czf /backup/tg-bot-config-$(date +%F).tar.gz /opt/tg-bot/config/
+
+# Logs
+tar -czf /backup/tg-bot-logs-$(date +%F).tar.gz /opt/tg-bot/logs/
+2.  Get your **User ID** (e.g., via [@userinfobot](https://t.me/userinfobot)).
+
+#### Update
+
+```bash
+# Automatic (via bot)
+# Telegram → 🔧 Utilities → 🔄 Update VPS → Update Bot
+
+# Manual
+cd /opt/tg-bot
+git pull
+source venv/bin/activate
+pip install -r requirements.txt --upgrade
+sudo systemctl restart tg-bot
 
 -----
 
 ## ⚙️ Project Structure
-
+## 📊 API Endpoints
 ```
-/opt/tg-bot/
-├── .github/
-│   └── workflows/
-│       ├── codeql.yml
+### Public Endpoints
+
+- `GET /` — Dashboard (authentication required)
+- `POST /api/login` — Login
+- `POST /api/logout` — Logout
+
+### Monitoring
+
+- `GET /api/dashboard_data` — Dashboard data
+- `GET /api/events` — SSE stream (notifications)
+- `GET /api/events/services` — SSE stream (services)
+
+### Node Management
+
+- `GET /api/nodes` — List all nodes
+- `POST /api/nodes/register` — Register node
+- `POST /api/nodes/{token}/metrics` — Submit metrics
+- `POST /api/nodes/{id}/delete` — Delete node
+
+### System
+
+- `GET /api/health` — Health check
+- `GET /api/logs/{type}` — Get logs
+- `POST /api/system_config` — Save configuration
+- `POST /api/alerts_config` — Alert settings
+
+📖 Full API documentation: [ARCHITECTURE.en.md#api](ARCHITECTURE.en.md)
 │       ├── gitleaks.yml
 │       ├── python-safety.yml
 │       ├── security.yml
-│       └── trivy.yml
+## 🤝 Contributing
+
+We welcome contributions to the project!
+
+### How to help:
+
+1. 🐛 **Report a bug** — [Issues](https://github.com/jatixs/tgbotvpscp/issues)
+2. 💡 **Suggest a feature** — [Discussions](https://github.com/jatixs/tgbotvpscp/discussions)
+3. 🔧 **Submit a Pull Request**
+4. 📖 **Improve documentation**
+5. ⭐ **Star the project** — it motivates!
+
+### Development
 ├── assets/                  # Images (for README)
-│   ├── bot_1.png ...
-│   └── web_1.png ...
+```bash
+# Clone
+git clone https://github.com/jatixs/tgbotvpscp.git
+cd tgbotvpscp
+
+# Create virtual environment
+python3 -m venv venv
+source venv/bin/activate
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Configure .env
+cp .env.example .env
+nano .env
+
+# Run
+python bot.py
+```
 ├── core/                    # Bot Core
 │   ├── static/              # Static files for Web Panel
 │   │   ├── css/
-│   │   │   ├── login.css
+## 📄 License
+
+This project is licensed under **GPL-3.0**. See [LICENSE](LICENSE) file for details.
+
+---
+
+## 👤 Author
+
+**Jatix**
+
+- 📧 Email: [Coming soon]
+- 💬 Telegram: [@jatix](https://t.me/jatix)
+- 🌐 GitHub: [@jatixs](https://github.com/jatixs)
+
+---
+
+## 🌟 Support the Project
+
+If you find this project useful, support it:
+
+- ⭐ **Star** on GitHub
+- 🔄 **Share** with friends
+- 💰 **Donate** (links coming soon)
+
+---
+
+<p align="center">
+  <b>Version:</b> 1.18.0 (Build 66)<br>
+  <b>Updated:</b> January 27, 2026<br>
+  <b>Status:</b> Stable<br>
+  <br>
+  Made with ❤️ for the DevOps community
+</p>
 │   │   │   └── style.css
-│   │   └── js/
-│   │       ├── common.js
-│   │       ├── dashboard.js
 │   │       ├── login.js
 │   │       ├── settings.js
 │   │       └── theme_init.js
@@ -260,6 +509,6 @@ The agent will install as `tg-node` service and appear in your bot.
 
 ## 👤 Author
 
-**Version:** 1.17.0 (Build 64) <br>
+**Version:** 1.18.0 (Build 66) <br>
 **Author:** Jatix <br>
 📜 **License:** GPL-3.0 <br>

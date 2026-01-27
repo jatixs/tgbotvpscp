@@ -20,6 +20,12 @@
 		<link rel="stylesheet" href="/static/css/main.css?v={{ web_version }}">
         <script src="/static/js/theme_init.js?v={{ web_version }}"></script>
         <script>
+        window.i18n = window.i18n || {};
+        window.i18n.services_empty = "{{ web_services_empty }}";
+        window.i18n.btn_start = "{{ web_services_btn_start }}";
+        window.i18n.btn_stop = "{{ web_services_btn_stop }}";
+        window.i18n.btn_restart = "{{ web_services_btn_restart }}";
+        window.USER_ROLE_LEVEL = {{ user_role_level }};
         const I18N = {{ i18n_json | safe }};
         {{ user_role_js | safe }}
         </script>
@@ -38,7 +44,7 @@
                     <span class="font-bold text-lg sm:text-xl bg-clip-text text-transparent bg-gradient-to-r from-blue-600 to-purple-600 dark:from-blue-400 dark:to-purple-400 whitespace-nowrap"
                           data-i18n="web_brand_name">{{ web_brand_name }}</span>
                     <span class="hidden sm:inline-flex px-2 py-0.5 rounded text-[10px] border border-blue-500/30 bg-blue-100 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400 uppercase font-bold">{{ web_version }}</span>
-                    <div class="scale-90 sm:scale-100 origin-left">{{ role_badge | safe }}</div>
+                    {{ role_badge | safe }}
                 </div>
                 <div class="flex items-center gap-1 sm:gap-4 shrink-0">
                     {{ settings_btn | safe }}
@@ -342,6 +348,51 @@
                     </div>
                 </div>
             </div>
+            <div class="grid grid-cols-1 lg:grid-cols-1 gap-6 mb-6">
+                <!-- SERVICES MANAGER -->
+                <div class="bg-white/60 dark:bg-white/5 backdrop-blur-md border border-white/40 dark:border-white/10 rounded-2xl p-6 shadow-lg dark:shadow-none lazy-block">
+                     <div class="flex justify-between items-center mb-4 flex-wrap gap-2">
+                        <h3 class="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                            </svg>
+                            {{ web_services_title }}
+                        </h3>
+                        <div class="flex items-center gap-2">
+                            <!-- Search Input -->
+                            <div class="relative group">
+                                <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                    <svg class="h-4 w-4 text-gray-400 group-focus-within:text-blue-500 transition-colors duration-300" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                                    </svg>
+                                </div>
+                                <input type="text" id="servicesSearchInput" 
+                                       oninput="filterServices(this.value)"
+                                       placeholder="{{ web_services_search }}"
+                                       class="w-full pl-10 pr-4 py-2 bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 transition-all duration-300 placeholder-gray-400 text-gray-900 dark:text-white">
+                            </div>
+                            {% if is_main_admin %}
+                            <button onclick="openServicesEditModal()" class="p-2 hover:bg-gray-100 dark:hover:bg-white/10 rounded-lg transition text-gray-500 dark:text-gray-400" title="{{ web_services_edit_title }}">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                </svg>
+                            </button>
+                            {% endif %}
+                            <button onclick="loadServices()" class="p-2 hover:bg-gray-100 dark:hover:bg-white/10 rounded-lg transition text-gray-500 dark:text-gray-400">
+                                 <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                  </svg>
+                            </button>
+                        </div>
+                    </div>
+                    <!-- Services Grid -->
+                    <div id="services-container" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        <div class="text-center w-full py-8 text-gray-400 text-sm">Loading services...</div>
+                    </div>
+                </div>
+            </div>
+
             <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 <div class="bg-white/60 dark:bg-white/5 backdrop-blur-md border border-white/40 dark:border-white/10 rounded-2xl p-6 shadow-lg dark:shadow-none lazy-block">
                     <div class="flex justify-between items-center mb-4 flex-wrap gap-2">
@@ -692,6 +743,73 @@
                             {{ modal_btn_ok }}
                         </button>
                     </div>
+                </div>
+            </div>
+        </div>
+        <!-- Services Edit Modal -->
+        <div id="servicesEditModal"
+             class="fixed inset-0 z-[150] hidden items-center justify-center bg-black/60 backdrop-blur-sm p-4 sm:p-6"
+             onclick="if(event.target === this) closeServicesEditModal()">
+            <div class="bg-white dark:bg-gray-800 border border-white/20 dark:border-white/10 rounded-2xl shadow-2xl w-full max-w-5xl mx-auto transform transition-all scale-100 flex flex-col" style="max-height: calc(100vh - 3rem);">
+                <div class="p-4 border-b border-gray-200 dark:border-white/10 flex-shrink-0">
+                    <div class="flex items-center justify-between gap-3 mb-3 sm:mb-0">
+                        <h3 class="text-lg font-bold text-gray-900 dark:text-white flex-shrink-0">{{ web_services_edit_title }}</h3>
+                        <!-- Search Input - hidden on mobile, shown on sm+ -->
+                        <div class="relative group hidden sm:block flex-1 max-w-xs">
+                            <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                <svg class="h-4 w-4 text-gray-400 group-focus-within:text-blue-500 transition-colors duration-300" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                                </svg>
+                            </div>
+                            <input type="text" id="servicesEditSearchInputDesktop" 
+                                   oninput="filterServicesEditList(this.value); document.getElementById('servicesEditSearchInputMobile').value = this.value;"
+                                   placeholder="{{ web_services_search }}"
+                                   class="w-full pl-10 pr-4 py-2 bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 transition-all duration-300 placeholder-gray-400 text-gray-900 dark:text-white">
+                        </div>
+                        <button onclick="closeServicesEditModal()" class="p-2 hover:bg-gray-100 dark:hover:bg-white/10 rounded-lg transition flex-shrink-0">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                        </button>
+                    </div>
+                    <!-- Search Input - shown on mobile only -->
+                    <div class="relative group sm:hidden">
+                        <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                            <svg class="h-4 w-4 text-gray-400 group-focus-within:text-blue-500 transition-colors duration-300" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                            </svg>
+                        </div>
+                        <input type="text" id="servicesEditSearchInputMobile" 
+                               oninput="filterServicesEditList(this.value); document.getElementById('servicesEditSearchInputDesktop').value = this.value;"
+                               placeholder="{{ web_services_search }}"
+                               class="w-full pl-10 pr-4 py-2 bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 transition-all duration-300 placeholder-gray-400 text-gray-900 dark:text-white">
+                    </div>
+                </div>
+                <div class="p-4 overflow-y-auto flex-1 custom-scrollbar" id="servicesEditList">
+                    <div class="text-center py-8 text-gray-400">{{ web_loading }}</div>
+                </div>
+            </div>
+        </div>
+        <!-- Service Info Modal -->
+        <div id="serviceInfoModal"
+             class="fixed inset-0 z-[100] hidden items-center justify-center bg-black/50 dark:bg-black/80 backdrop-blur-sm p-4"
+             onclick="if(event.target === this) closeServiceInfoModal()">
+            <div class="bg-white dark:bg-gray-800 border border-white/20 dark:border-white/10 rounded-2xl shadow-2xl w-full max-w-md relative flex flex-col backdrop-blur-xl">
+                <div class="p-4 border-b border-gray-200 dark:border-white/5 flex justify-between items-center rounded-t-2xl">
+                    <h3 id="serviceInfoModalTitle" class="text-lg font-bold text-gray-900 dark:text-white">{{ web_services_info_title }}</h3>
+                    <button onclick="closeServiceInfoModal()"
+                            class="text-gray-400 hover:text-gray-600 dark:hover:text-white transition p-1">
+                        <svg xmlns="http://www.w3.org/2000/svg"
+                             class="h-6 w-6"
+                             fill="none"
+                             viewBox="0 0 24 24"
+                             stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                    </button>
+                </div>
+                <div id="serviceInfoContent" class="p-4 text-sm text-gray-700 dark:text-gray-300">
+                    {{ web_services_info_loading }}
                 </div>
             </div>
         </div>

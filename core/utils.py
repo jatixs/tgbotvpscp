@@ -146,6 +146,37 @@ def save_alerts_config():
         logging.error(f"Error saving alerts_config.json: {e}")
 
 
+def load_services_config():
+    """Load managed services from encrypted config file"""
+    from core.config import SERVICES_CONFIG_FILE, MANAGED_SERVICES
+    from core import config as config_module
+    try:
+        loaded_data = load_encrypted_json(SERVICES_CONFIG_FILE)
+        if loaded_data and isinstance(loaded_data, list):
+            # Replace MANAGED_SERVICES with loaded data
+            config_module.MANAGED_SERVICES.clear()
+            config_module.MANAGED_SERVICES.extend(loaded_data)
+            logging.info(f"Services config loaded (secure): {len(loaded_data)} services.")
+        else:
+            logging.info("Services config empty or not found, using defaults.")
+    except Exception as e:
+        logging.error(f"Error loading services.json: {e}")
+
+
+def save_services_config():
+    """Save managed services to encrypted config file"""
+    from core.config import SERVICES_CONFIG_FILE
+    from core import config as config_module
+    try:
+        os.makedirs(os.path.dirname(SERVICES_CONFIG_FILE), exist_ok=True)
+        save_encrypted_json(SERVICES_CONFIG_FILE, config_module.MANAGED_SERVICES)
+        logging.info(f"Services config saved (secure): {len(config_module.MANAGED_SERVICES)} services.")
+        return True
+    except Exception as e:
+        logging.error(f"Error saving services.json: {e}")
+        return False
+
+
 async def get_country_flag(ip_or_code: str) -> str:
     if not ip_or_code or ip_or_code in ["localhost", "127.0.0.1", "::1"]:
         return "🏠"

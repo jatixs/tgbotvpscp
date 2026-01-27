@@ -5,16 +5,25 @@
 <h1 align="center">📝 Telegram VPS Management Bot — Changelog</h1>
 
 <p align="center">
-	<img src="https://img.shields.io/badge/version-v1.17.1-blue?style=flat-square " alt="Version 1.17.1"/>
-	<img src="https://img.shields.io/badge/build-65-purple?style=flat-square " alt="Build 65"/>
+	<img src="https://img.shields.io/badge/version-v1.18.0-blue?style=flat-square " alt="Version 1.18.0"/>
+	<img src="https://img.shields.io/badge/build-66-purple?style=flat-square " alt="Build 66"/>
 	<img src="https://img.shields.io/badge/date-January%2027-green?style=flat-square " alt="Date January 27"/>
 	<img src="https://img.shields.io/badge/status-stable-green?style=flat-square " alt="Status Stable"/>
 </p>
 
 ---
-## [1.17.1] - 2026-01-27
+## [1.18.0] - 2026-01-27
 
-### 🛡️ Security & Audit:
+### 🚀 Service Manager:
+
+* **SSE for Services:** Implemented Server-Sent Events stream for `/api/services` with automatic updates every 5 seconds.
+* **End-to-End Encryption:** Service data is encrypted on the backend (XOR + Base64) and decrypted on the frontend.
+* **Persistent Configuration:** Service Manager settings are saved to encrypted file `/opt/tg-bot/config/services.json` (Fernet encryption).
+* **Smart Reload:** The service refresh button restarts the SSE connection instead of creating new polling requests.
+* **Detailed Information:** Service info modal styled to match the hint system design.
+* **UI/UX:** Added colored user role badges: Owner (red), Admins (green), Users (orange/amber).
+
+### �️ Security & Audit:
 
 * **Comprehensive Protection:** Implemented WAF, Rate Limiting, and Brute-force protection for Web Panel and API.
 * **Audit System:** Added detailed security event logging to `logs/audit/audit.log`.
@@ -29,6 +38,12 @@
 * **Project Structure:** Audit module merged into `core/utils.py`, removed redundant `core/audit.py`.
 * **Code Localization:** All source code comments translated to English (International Standard).
 * **Fixes:** Optimized secure Docker command execution in `watchdog` and `manage.py`.
+
+### 🔧 Internal Improvements:
+
+* **Utilities Module:** Added `load_services_config()` and `save_services_config()` functions for encrypted configuration management.
+* **Data Migration:** `services.json` file added to the automatic migration list (`migrate.py`).
+* **Startup Loading:** Service configuration is automatically loaded on bot startup.
 
 ---
 ## [1.17.0] - 2026-01-27
