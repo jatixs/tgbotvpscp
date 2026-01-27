@@ -77,9 +77,9 @@ if not AGENT_BASE_URL or not AGENT_TOKEN:
     logging.error("CRITICAL: AGENT_BASE_URL or AGENT_TOKEN not found in .env")
     sys.exit(1)
 
-PENDING_RESULTS = []
+PENDING_RESULTS = collections.deque(maxlen=50)
 LAST_TRAFFIC_STATS = {}
-SSH_EVENTS = []
+SSH_EVENTS = collections.deque(maxlen=100)
 
 EXTERNAL_IP_CACHE = None 
 
@@ -528,13 +528,13 @@ def execute_command(task):
 def send_heartbeat():
     global PENDING_RESULTS, SSH_EVENTS
     url = f"{AGENT_BASE_URL}/api/heartbeat"
-    
-    current_ssh_events = SSH_EVENTS[:]
+    current_results = list(PENDING_RESULTS)
+    current_ssh_events = list(SSH_EVENTS)
     
     payload_dict = {
         "token": AGENT_TOKEN,
         "stats": get_system_stats(),
-        "results": PENDING_RESULTS,
+        "results": current_results,
         "ssh_logins": current_ssh_events,
         "timestamp": int(time.time())
     }
@@ -552,10 +552,8 @@ def send_heartbeat():
         response = requests.post(url, data=payload_bytes, headers=headers, timeout=5)
         if response.status_code == 200:
             data = response.json()
-            PENDING_RESULTS = []
-            
-            if current_ssh_events:
-                 SSH_EVENTS = SSH_EVENTS[len(current_ssh_events):]
+            PENDING_RESULTS.clear()
+            SSH_EVENTS.clear()
 
             tasks = data.get("tasks", [])
             for task in tasks:

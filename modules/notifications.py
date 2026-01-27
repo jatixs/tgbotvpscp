@@ -491,6 +491,9 @@ async def parse_ssh_log_line(line: str) -> dict | None:
 
 
 async def parse_f2b_log_line(line: str) -> dict | None:
+    if "Restore Ban" in line:
+        return None
+        
     match = re.search("fail2ban\\.actions.* Ban\\s+(\\S+)", line)
     if match:
         try:

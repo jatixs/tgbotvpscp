@@ -901,7 +901,7 @@ async def handle_agent_stats(request):
             current_stats["disk"] = psutil.disk_usage(get_host_path("/")).percent
         except Exception:
             pass
-    return web.json_response({"stats": current_stats, "history": AGENT_HISTORY})
+    return web.json_response({"stats": current_stats, "history": list(AGENT_HISTORY)})
 
 
 async def handle_reset_traffic(request):
@@ -1867,7 +1867,7 @@ async def handle_sse_stream(request):
                     ).percent
                 except Exception:
                     pass
-            payload_stats = {"stats": current_stats, "history": AGENT_HISTORY}
+            payload_stats = {"stats": current_stats, "history": list(AGENT_HISTORY)}
             try:
                 await resp.write(
                     f"event: agent_stats\ndata: {json.dumps(payload_stats)}\n\n".encode(
@@ -2229,6 +2229,28 @@ async def cleanup_server():
         except asyncio.CancelledError:
             pass
 
+async def cleanup_monitor():
+    """Периодическая очистка устаревших сессий и токенов для экономии памяти."""
+    while True:
+        try:
+            now = time.time()
+            expired_sessions = [token for token, sess in SERVER_SESSIONS.items() if now > sess["expires"]]
+            for token in expired_sessions:
+                del SERVER_SESSIONS[token]
+            expired_resets = [token for token, data in RESET_TOKENS.items() if now - data["ts"] > RESET_TOKEN_TTL]
+            for token in expired_resets:
+                del RESET_TOKENS[token]
+            expired_auth = [token for token, data in AUTH_TOKENS.items() if now - data["created_at"] > LOGIN_TOKEN_TTL]
+            for token in expired_auth:
+                del AUTH_TOKENS[token]
+            for ip in list(LOGIN_ATTEMPTS.keys()):
+                LOGIN_ATTEMPTS[ip] = [t for t in LOGIN_ATTEMPTS[ip] if now - t < LOGIN_BLOCK_TIME]
+                if not LOGIN_ATTEMPTS[ip]:
+                    del LOGIN_ATTEMPTS[ip]
+        except Exception as e:
+            logging.error(f"Cleanup task error: {e}")
+            
+        await asyncio.sleep(600)
 
 async def start_web_server(bot_instance: Bot):
     global AGENT_FLAG, AGENT_TASK
@@ -2295,6 +2317,7 @@ async def start_web_server(bot_instance: Bot):
         logging.info("Web UI DISABLED.")
         app.router.add_get("/", handle_api_root)
     AGENT_TASK = asyncio.create_task(agent_monitor())
+    asyncio.create_task(cleanup_monitor())
     runner = web.AppRunner(app, access_log=None, shutdown_timeout=1.0)
     await runner.setup()
     site = web.TCPSite(runner, WEB_SERVER_HOST, WEB_SERVER_PORT)
@@ -2335,9 +2358,8 @@ async def agent_monitor():
                 "tx": net.bytes_sent,
             }
             AGENT_HISTORY.append(point)
-            if len(AGENT_HISTORY) > 60:
-                AGENT_HISTORY.pop(0)
         except asyncio.CancelledError:
+            
             raise
         except Exception:
             pass
@@ -2917,7 +2939,7 @@ async def handle_sse_stream(request):
                     ).percent
                 except Exception:
                     pass
-            payload_stats = {"stats": current_stats, "history": AGENT_HISTORY}
+            payload_stats = {"stats": current_stats, "history": list(AGENT_HISTORY)}
             try:
                 await resp.write(
                     f"event: agent_stats\ndata: {json.dumps(payload_stats)}\n\n".encode(
