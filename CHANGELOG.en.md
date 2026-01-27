@@ -5,11 +5,37 @@
 <h1 align="center">📝 Telegram VPS Management Bot — Changelog</h1>
 
 <p align="center">
-	<img src="https://img.shields.io/badge/version-v1.16.2-blue?style=flat-square " alt="Version 1.16.2"/>
-	<img src="https://img.shields.io/badge/build-62-purple?style=flat-square " alt="Build 62"/>
+	<img src="https://img.shields.io/badge/version-v1.17.0-blue?style=flat-square " alt="Version 1.17.0"/>
+	<img src="https://img.shields.io/badge/build-64-purple?style=flat-square " alt="Build 64"/>
 	<img src="https://img.shields.io/badge/date-January%2026-green?style=flat-square " alt="Date January 2026"/>
 	<img src="https://img.shields.io/badge/status-stable-green?style=flat-square " alt="Status Stable"/>
 </p>
+
+---
+## [1.17.0] - 2026-01-27
+
+### 🚀 WebUI & PWA:
+
+* **PWA Scroll Fix:** Fixed an issue with "uncontrolled" inertial scrolling and scroll jumps after page reload or PWA restart.
+* **Lazy Load Logic:** Fixed the "lazy loading" behavior — content (lists, logs) now loads smoothly and correctly while scrolling.
+* **Notification Rotation:** Added visual indication of the event source. New **AGENT** and **NODE** badges (Dark Mode supported) allow you to instantly distinguish between alerts from the main server and remote nodes.
+* **Rendering Optimization:** Improved web app performance on mobile devices.
+
+### ⚙️ Core & Optimization:
+
+* **Memory Efficiency:** Deep resource consumption optimization. Implemented ring buffers (`deque`) and regular garbage collection tasks, significantly reducing RAM usage during long-term bot operation.
+* **Flexible Notifications:** The alerts section has been completely redesigned. Settings are now split into Global (for the Agent) and Individual (for each Node), with switch synchronization added.
+* **Fail2Ban Anti-Flood:** Fixed a bug that caused mass sending of old ban notifications (`Restore Ban`) immediately after a server reboot.
+
+### 🖥 Node Agent (Client):
+
+* **Full Localization (i18n):** Responses from remote nodes are now fully translated and delivered in the language selected by the user in the bot settings.
+* **SSH Monitoring:** Added support for tracking SSH logins on remote nodes with detailed notifications (IP, Country Flag, Auth Method).
+
+### ✨ Misc:
+
+* **UI/UX:** Updated the icon in the node details modal window.
+* **Visuals:** Minor layout fixes and improved text readability in Dark Mode.
 
 ---
 ## [1.16.2] - 2026-01-24

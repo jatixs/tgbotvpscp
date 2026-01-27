@@ -8,8 +8,10 @@ let logSSESource = null;
 let agentChart = null;
 let allNodesData = [];
 let currentNodeToken = null;
+let currentRenderList = [];   
+let renderedCount = 0; 
+const NODES_BATCH_SIZE = 15;
 
-// --- CRYPTO FUNCTIONS (XOR + Base64) ---
 function decryptData(text) {
     if (!text) return "";
     if (typeof WEB_KEY === 'undefined' || !WEB_KEY) return text;
@@ -42,14 +44,41 @@ function encryptData(text) {
         return text;
     }
 }
-// ----------------------------------------
 
 window.addEventListener('themeChanged', () => {
     updateChartsColors();
 });
 
+function initScrollAnimations() {
+    if (window.innerWidth >= 1024) return;
+    const observerOptions = {
+        root: null,
+        rootMargin: '0px',
+        threshold: 0.1 
+    };
+
+    const observer = new IntersectionObserver((entries, obs) => {
+        entries.forEach(entry => {
+            if (entry.isIntersecting) {
+                entry.target.classList.add('is-visible');
+                obs.unobserve(entry.target); // Анимируем только один раз
+            }
+        });
+    }, observerOptions);
+
+    // ИСПРАВЛЕНИЕ: Выбираем только невидимые блоки, чтобы избежать повторной анимации
+    const blocks = document.querySelectorAll('.lazy-block:not(.is-visible)');
+    blocks.forEach(block => {
+        observer.observe(block);
+    });
+}
+
 window.initDashboard = function() {
     cleanupDashboardSources();
+    
+    // Запускаем анимацию блоков
+    initScrollAnimations();
+
     if (window.sseSource) {
         window.sseSource.removeEventListener('agent_stats', handleSSEAgentStats);
         window.sseSource.removeEventListener('nodes_list', handleSSENodesList);
@@ -66,6 +95,16 @@ window.initDashboard = function() {
             newSearch.addEventListener('input', () => {
                 filterAndRenderNodes();
             });
+        }
+        
+        // Lazy Load для списка узлов (Infinite Scroll)
+        const listContainer = document.getElementById('nodesList');
+        if (listContainer) {
+            listContainer.onscroll = function() {
+                if (listContainer.scrollTop + listContainer.clientHeight >= listContainer.scrollHeight - 100) {
+                    renderNextNodeBatch();
+                }
+            };
         }
     }
     if (document.getElementById('logsContainer')) {
@@ -108,6 +147,9 @@ const handleSSENodesList = (e) => {
 document.addEventListener("DOMContentLoaded", () => {
     if (document.getElementById('agentChart') || document.getElementById('nodesList')) {
         window.initDashboard();
+    } else {
+        // Даже если нет графиков (например, пустая страница), пробуем запустить анимации
+        initScrollAnimations();
     }
 });
 
@@ -186,10 +228,54 @@ function formatInterfaceList(interfaces, type, title, colorClass = "text-gray-50
     `;
 }
 
+function getNodeUiParams(node) {
+    const statusColor = node.status === 'online' ? "bg-green-500" : (node.status === 'restarting' ? "bg-blue-500" : "bg-red-500");
+    const statusText = node.status === 'restarting' ? (typeof I18N !== 'undefined' && I18N.web_status_restart ? I18N.web_status_restart : "RESTART") : node.status.toUpperCase();
+    const statusTextClass = node.status === 'online' ? "text-green-500" : (node.status === 'restarting' ? "text-blue-500" : "text-red-500");
+    const statusBg = node.status === 'online' ? "bg-green-500/10 text-green-600 dark:text-green-400" : (node.status === 'restarting' ? "bg-blue-500/10 text-blue-600 dark:text-blue-400" : "bg-red-500/10 text-red-600 dark:text-red-400");
+
+    const cpu = Math.round(node.cpu || 0);
+    const ram = Math.round(node.ram || 0);
+    const disk = Math.round(node.disk || 0);
+
+    const cpuColor = cpu > 80 ? 'text-red-500' : 'text-gray-600 dark:text-gray-300';
+    const ramColor = ram > 80 ? 'text-red-500' : 'text-gray-600 dark:text-gray-300';
+    const diskColor = disk > 90 ? 'text-red-500' : 'text-gray-600 dark:text-gray-300';
+    
+    return { statusColor, statusText, statusTextClass, statusBg, cpu, ram, disk, cpuColor, ramColor, diskColor };
+}
+
 function updateNodesListUI(data) {
     try {
         allNodesData = data.nodes || [];
-        filterAndRenderNodes();
+        const searchInput = document.getElementById('nodeSearch');
+        const query = searchInput ? searchInput.value.trim().toLowerCase() : "";
+        
+        let newList = [];
+        if (query) {
+            newList = allNodesData.filter(node => {
+                const name = (node.name || "").toLowerCase();
+                const ip = (decryptData(node.ip) || "").toLowerCase();
+                return name.includes(query) || ip.includes(query);
+            });
+        } else {
+            newList = allNodesData;
+        }
+        
+        const container = document.getElementById('nodesList');
+        const currentElements = container ? Array.from(container.children).filter(el => el.hasAttribute('data-token')) : [];
+        
+        if (currentRenderList.length !== newList.length || (currentElements.length === 0 && newList.length > 0)) {
+            currentRenderList = newList;
+            renderNodesList();
+        } else {
+            currentRenderList = newList;
+            
+            const success = updateVisibleNodes(currentElements, currentRenderList);
+            if (!success) {
+                renderNodesList();
+            }
+        }
 
         if (document.getElementById('nodesTotal')) {
             document.getElementById('nodesTotal').innerText = allNodesData.length;
@@ -202,27 +288,79 @@ function updateNodesListUI(data) {
     }
 }
 
+function updateVisibleNodes(elements, dataList) {
+    for (let i = 0; i < elements.length; i++) {
+        const el = elements[i];
+        const token = el.getAttribute('data-token');
+        const nodeData = dataList[i];   
+        if (!nodeData || nodeData.token !== token) return false;   
+        const ui = getNodeUiParams(nodeData);     
+        const cpuEl = el.querySelector('[data-ref="cpu-val"]');
+        if (cpuEl) {
+            cpuEl.innerText = ui.cpu + '%';
+            cpuEl.className = `text-xs font-mono font-bold ${ui.cpuColor}`;
+        }
+        const ramEl = el.querySelector('[data-ref="ram-val"]');
+        if (ramEl) {
+            ramEl.innerText = ui.ram + '%';
+            ramEl.className = `text-xs font-mono font-bold ${ui.ramColor}`;
+        }
+        const diskEl = el.querySelector('[data-ref="disk-val"]');
+        if (diskEl) {
+            diskEl.innerText = ui.disk + '%';
+            diskEl.className = `text-xs font-mono font-bold ${ui.diskColor}`;
+        }
+        const stText = el.querySelector('[data-ref="status-text"]');
+        if (stText) {
+            stText.innerText = ui.statusText;
+            stText.className = `text-[10px] font-bold ${ui.statusTextClass} mb-0.5`;
+        }
+        const stBadge = el.querySelector('[data-ref="status-badge"]');
+        if (stBadge) {
+            stBadge.innerText = ui.statusText;
+            stBadge.className = `sm:hidden px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider ${ui.statusBg}`;
+        }
+        
+        const stDot = el.querySelector('[data-ref="status-dot"]');
+        if (stDot) {
+            stDot.className = `w-2.5 h-2.5 rounded-full ${ui.statusColor}`;
+        }
+        
+        const stPing = el.querySelector('[data-ref="status-ping"]');
+        if (stPing) {
+            if (nodeData.status === 'online') {
+                stPing.className = `absolute w-2.5 h-2.5 rounded-full ${ui.statusColor} animate-ping opacity-75`;
+                stPing.style.display = 'block';
+            } else {
+                stPing.style.display = 'none';
+            }
+        }    
+        el.setAttribute('onclick', `openNodeDetails('${escapeHtml(nodeData.token)}', '${ui.statusColor}')`);
+    }
+    return true; 
+}
+
 function filterAndRenderNodes() {
     const searchInput = document.getElementById('nodeSearch');
     const query = searchInput ? searchInput.value.trim().toLowerCase() : "";
-    let filteredNodes = allNodesData;
-
+    
     if (query) {
-        filteredNodes = allNodesData.filter(node => {
+        currentRenderList = allNodesData.filter(node => {
             const name = (node.name || "").toLowerCase();
-            // Decrypt IP for search
             const ip = (decryptData(node.ip) || "").toLowerCase();
             return name.includes(query) || ip.includes(query);
         });
+    } else {
+        currentRenderList = allNodesData;
     }
-    renderNodesList(filteredNodes);
+    renderNodesList();
 }
 
-function renderNodesList(nodes) {
+function renderNodesList() {
     const container = document.getElementById('nodesList');
     if (!container) return;
 
-    if (nodes.length === 0) {
+    if (currentRenderList.length === 0) {
         let emptyText = (typeof I18N !== 'undefined' && I18N.web_no_nodes) ? I18N.web_no_nodes : "No nodes connected";
         const searchInput = document.getElementById('nodeSearch');
         if (searchInput && searchInput.value.trim().length > 0 && allNodesData.length > 0) {
@@ -232,44 +370,44 @@ function renderNodesList(nodes) {
         return;
     }
 
+    container.innerHTML = '';
+    renderedCount = 0;
+    renderNextNodeBatch();
+}
+
+function renderNextNodeBatch() {
+    const container = document.getElementById('nodesList');
+    if (!container) return;
+    
+    if (renderedCount >= currentRenderList.length) return;
+
+    const batch = currentRenderList.slice(renderedCount, renderedCount + NODES_BATCH_SIZE);
+    
     const lblCpu = (typeof I18N !== 'undefined' && I18N.web_label_cpu) ? I18N.web_label_cpu : "CPU";
     const lblRam = (typeof I18N !== 'undefined' && I18N.web_label_ram) ? I18N.web_label_ram : "RAM";
     const lblDisk = (typeof I18N !== 'undefined' && I18N.web_label_disk) ? I18N.web_label_disk : "DISK";
     const lblStatus = (typeof I18N !== 'undefined' && I18N.web_label_status) ? I18N.web_label_status : "STATUS";
 
-    const html = nodes.map(node => {
-        let statusColor = node.status === 'online' ? "bg-green-500" : (node.status === 'restarting' ? "bg-blue-500" : "bg-red-500");
-        let statusText = node.status === 'restarting' ? (typeof I18N !== 'undefined' && I18N.web_status_restart ? I18N.web_status_restart : "RESTART") : node.status.toUpperCase();
-        let statusTextClass = node.status === 'online' ? "text-green-500" : (node.status === 'restarting' ? "text-blue-500" : "text-red-500");
-        let statusBg = node.status === 'online' ? "bg-green-500/10 text-green-600 dark:text-green-400" : (node.status === 'restarting' ? "bg-blue-500/10 text-blue-600 dark:text-blue-400" : "bg-red-500/10 text-red-600 dark:text-red-400");
-
-        const cpu = Math.round(node.cpu || 0);
-        const ram = Math.round(node.ram || 0);
-        const disk = Math.round(node.disk || 0);
-
-        const cpuColor = cpu > 80 ? 'text-red-500' : 'text-gray-600 dark:text-gray-300';
-        const ramColor = ram > 80 ? 'text-red-500' : 'text-gray-600 dark:text-gray-300';
-        const diskColor = disk > 90 ? 'text-red-500' : 'text-gray-600 dark:text-gray-300';
-
-        // Decrypt IP for display
+    const html = batch.map(node => {
+        const ui = getNodeUiParams(node);
         const displayIp = decryptData(node.ip);
 
         return `
-        <div class="bg-white dark:bg-white/5 hover:bg-gray-50 dark:hover:bg-white/10 transition-all duration-200 rounded-xl border border-gray-100 dark:border-white/5 cursor-pointer shadow-sm hover:shadow-md overflow-hidden group mb-2" onclick="openNodeDetails('${escapeHtml(node.token)}', '${statusColor}')">
+        <div data-token="${escapeHtml(node.token)}" class="bg-white dark:bg-white/5 hover:bg-gray-50 dark:hover:bg-white/10 transition-all duration-200 rounded-xl border border-gray-100 dark:border-white/5 cursor-pointer shadow-sm hover:shadow-md overflow-hidden group mb-2 animate-fade-in-up" onclick="openNodeDetails('${escapeHtml(node.token)}', '${ui.statusColor}')">
             
             <div class="p-3 sm:p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
                 
                 <div class="flex items-center gap-3 min-w-0">
                     <div class="relative shrink-0 flex items-center justify-center w-8 h-8 rounded-full bg-gray-100 dark:bg-black/20">
-                        <div class="w-2.5 h-2.5 rounded-full ${statusColor}"></div>
-                        ${node.status === 'online' ? `<div class="absolute w-2.5 h-2.5 rounded-full ${statusColor} animate-ping opacity-75"></div>` : ''}
+                        <div data-ref="status-dot" class="w-2.5 h-2.5 rounded-full ${ui.statusColor}"></div>
+                        <div data-ref="status-ping" class="absolute w-2.5 h-2.5 rounded-full ${ui.statusColor} animate-ping opacity-75" style="${node.status === 'online' ? '' : 'display:none'}"></div>
                     </div>
                     <div class="min-w-0 flex-1">
                         <div class="flex items-center gap-2">
-                            <div class="font-bold text-sm text-gray-900 dark:text-white truncate group-hover:text-blue-600 dark:group-hover:text-blue-400 transition">${escapeHtml(node.name)}</div>
-                            <div class="sm:hidden px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider ${statusBg}">${statusText}</div>
+                            <div data-ref="name" class="font-bold text-sm text-gray-900 dark:text-white truncate group-hover:text-blue-600 dark:group-hover:text-blue-400 transition">${escapeHtml(node.name)}</div>
+                            <div data-ref="status-badge" class="sm:hidden px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider ${ui.statusBg}">${ui.statusText}</div>
                         </div>
-                        <div class="text-[10px] sm:text-xs font-mono text-gray-400 truncate">${escapeHtml(displayIp)}</div>
+                        <div data-ref="ip" class="text-[10px] sm:text-xs font-mono text-gray-400 truncate">${escapeHtml(displayIp)}</div>
                     </div>
                 </div>
 
@@ -277,21 +415,21 @@ function renderNodesList(nodes) {
                     
                     <div class="text-center sm:text-right flex-1 sm:flex-none">
                         <div class="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">${lblCpu}</div>
-                        <div class="text-xs font-mono font-bold ${cpuColor}">${cpu}%</div>
+                        <div data-ref="cpu-val" class="text-xs font-mono font-bold ${ui.cpuColor}">${ui.cpu}%</div>
                     </div>
 
                     <div class="text-center sm:text-right flex-1 sm:flex-none">
                         <div class="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">${lblRam}</div>
-                        <div class="text-xs font-mono font-bold ${ramColor}">${ram}%</div>
+                        <div data-ref="ram-val" class="text-xs font-mono font-bold ${ui.ramColor}">${ui.ram}%</div>
                     </div>
 
                     <div class="text-center sm:text-right flex-1 sm:flex-none">
                         <div class="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">${lblDisk}</div>
-                        <div class="text-xs font-mono font-bold ${diskColor}">${disk}%</div>
+                        <div data-ref="disk-val" class="text-xs font-mono font-bold ${ui.diskColor}">${ui.disk}%</div>
                     </div>
 
                     <div class="hidden sm:block text-right ml-2 pl-3 border-l border-gray-200 dark:border-white/10 min-w-[70px]">
-                        <div class="text-[10px] font-bold ${statusTextClass} mb-0.5">${statusText}</div>
+                        <div data-ref="status-text" class="text-[10px] font-bold ${ui.statusTextClass} mb-0.5">${ui.statusText}</div>
                         <div class="text-[9px] text-gray-300 dark:text-gray-600">${lblStatus}</div>
                     </div>
                 </div>
@@ -299,7 +437,8 @@ function renderNodesList(nodes) {
         </div>`;
     }).join('');
 
-    container.innerHTML = html;
+    container.insertAdjacentHTML('beforeend', html);
+    renderedCount += batch.length;
 }
 
 function updateAgentStatsUI(data) {
@@ -403,7 +542,7 @@ function updateAgentStatsUI(data) {
             if (uptimeEl) uptimeEl.innerText = formatUptime(data.stats.boot_time);
 
             const ipEl = document.getElementById('agentIp');
-            if (ipEl && data.stats.ip) ipEl.innerText = decryptData(data.stats.ip); // Decrypt Agent IP
+            if (ipEl && data.stats.ip) ipEl.innerText = decryptData(data.stats.ip); 
         }
         renderAgentChart(data.history);
     } catch (e) {
@@ -681,7 +820,6 @@ window.switchLogType = function(type) {
                     removeLogLoading();
 
                     if (!document.getElementById('empty-logs-state')) {
-                        // FIX: Use localized strings for empty logs
                         const emptyTitle = (typeof I18N !== 'undefined' && I18N.web_logs_empty_title) ? I18N.web_logs_empty_title : "Logs are empty";
                         const emptyDesc = (typeof I18N !== 'undefined' && I18N.web_logs_empty_desc) ? I18N.web_logs_empty_desc : "No new entries found";
 
@@ -815,7 +953,7 @@ async function openNodeDetails(token, color) {
     if (modal) {
         setModalLoading();
         animateModalOpen(modal);
-        currentNodeToken = token; // Contains Encrypted Token from renderNodesList
+        currentNodeToken = token;
         cancelNodeRename();
     }
 
@@ -827,7 +965,6 @@ async function openNodeDetails(token, color) {
         nodeSSESource.close();
         nodeSSESource = null;
     }
-    // Token is already encrypted, send as is
     nodeSSESource = new EventSource(`/api/events/node?token=${token}`);
 
     nodeSSESource.addEventListener('node_details', (e) => {
@@ -928,7 +1065,8 @@ window.startNodeRename = function() {
         nameDisplay.classList.add('hidden');
         nameInputContainer.classList.remove('hidden');
         nameInput.value = currentName;
-        nameInput.focus();
+        // ИСПРАВЛЕНИЕ: preventScroll: true
+        nameInput.focus({ preventScroll: true });
     }
 };
 
@@ -958,7 +1096,7 @@ window.saveNodeRename = async function() {
             body: JSON.stringify({
                 token: currentNodeToken,
                 name: newName
-            }) // Token is already encrypted
+            })
         });
 
         if (res.ok) {
@@ -969,12 +1107,12 @@ window.saveNodeRename = async function() {
         } else {
             const data = await res.json();
             const errorMsg = (typeof I18N !== 'undefined' && I18N.web_node_rename_error) ? I18N.web_node_rename_error : "Error updating name";
-            const errTitle = (typeof I18N !== 'undefined' && I18N.web_error_short) ? I18N.web_error_short : "Error"; // FIX: Localized title
+            const errTitle = (typeof I18N !== 'undefined' && I18N.web_error_short) ? I18N.web_error_short : "Error";
             if (window.showModalAlert) await window.showModalAlert(data.error || errorMsg, errTitle);
         }
     } catch (e) {
         console.error(e);
-        const errTitle = (typeof I18N !== 'undefined' && I18N.web_error_short) ? I18N.web_error_short : "Error"; // FIX: Localized title
+        const errTitle = (typeof I18N !== 'undefined' && I18N.web_error_short) ? I18N.web_error_short : "Error";
         if (window.showModalAlert) await window.showModalAlert(String(e), errTitle);
     }
 };
@@ -1186,4 +1324,72 @@ window.resetTrafficDashboard = async function() {
         const errorShort = (typeof I18N !== 'undefined' && I18N.web_conn_error_short) ? I18N.web_conn_error_short : "Conn Error";
         await window.showModalAlert(String(e), errorShort);
     }
+};
+
+window.openAddNodeModal = function() {
+    const m = document.getElementById('addNodeModal');
+    if (m) {
+        document.getElementById('nodeResultDash')?.classList.add('hidden');
+        const i = document.getElementById('newNodeNameDash');
+        if (i) {
+            i.value = '';
+            if (typeof validateNodeInput === 'function') validateNodeInput();
+        }
+        animateModalOpen(m, true);
+        if (i) {
+            setTimeout(() => {
+                i.focus({ preventScroll: true });
+            }, 150); // Чуть увеличили задержку для надежности на iOS
+        }
+    }
+};
+
+window.animateModalClose = function(modal) {
+    if (!modal) return;
+    const card = modal.firstElementChild;
+    if (card) {
+        card.style.opacity = '0';
+        card.style.transform = 'scale(0.95)';
+    }
+    if (typeof handleModalInputClick !== 'undefined') {
+        modal.removeEventListener('click', handleModalInputClick);
+    }
+
+    setTimeout(() => {
+        modal.classList.add('hidden');
+        modal.classList.remove('flex');
+        if (document.body.style.position === 'fixed') {
+            const scrollY = Math.abs(parseInt(document.body.style.top || '0'));
+            document.body.style.position = '';
+            document.body.style.top = '';
+            document.body.style.width = '';
+            document.body.style.overflow = '';
+
+            // 3. ВАЖНО: Отключаем плавную прокрутку на всем документе перед восстановлением
+            const html = document.documentElement;
+            const originalBehavior = html.style.scrollBehavior;
+            html.style.scrollBehavior = 'auto'; 
+
+            // 4. Мгновенно прыгаем на место
+            window.scrollTo(0, scrollY);
+
+            // 5. Возвращаем плавность (если была) через небольшой таймаут
+            setTimeout(() => {
+                html.style.scrollBehavior = originalBehavior;
+            }, 50);
+        } else {
+            document.body.style.overflow = '';
+        }
+        modal.style.height = '';
+        modal.style.top = '';
+        modal.style.paddingBottom = '';
+        
+        modal.classList.remove('items-start', 'pt-4', 'overflow-y-auto');
+        modal.classList.add('items-center');
+
+        if (card) {
+            card.classList.add('my-auto');
+            card.style.marginBottom = '';
+        }
+    }, 200);
 };

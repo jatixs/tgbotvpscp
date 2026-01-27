@@ -10,6 +10,8 @@ import re
 import hmac
 import hashlib
 import json
+import collections
+from datetime import datetime
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 ENV_FILE = os.path.join(BASE_DIR, '.env')
@@ -45,7 +47,16 @@ class RedactingFormatter(logging.Formatter):
 logger = logging.getLogger()
 logger.setLevel(logging.DEBUG if DEBUG_MODE else logging.INFO)
 
-file_handler = logging.FileHandler("/opt/tg-bot/logs/node/node.log")
+# Путь к логам лучше брать относительно текущей директории или из конфига,
+# но оставим жесткий путь как в оригинале, если структура папок сохраняется.
+LOG_FILE_PATH = "/opt/tg-bot/logs/node/node.log"
+# Создаем директорию логов, если её нет (на случай ручного запуска)
+try:
+    os.makedirs(os.path.dirname(LOG_FILE_PATH), exist_ok=True)
+except Exception:
+    pass
+
+file_handler = logging.FileHandler(LOG_FILE_PATH)
 stream_handler = logging.StreamHandler()
 
 formatter = RedactingFormatter('%(asctime)s - %(levelname)s - %(message)s')
@@ -66,15 +77,95 @@ if not AGENT_BASE_URL or not AGENT_TOKEN:
     logging.error("CRITICAL: AGENT_BASE_URL or AGENT_TOKEN not found in .env")
     sys.exit(1)
 
-PENDING_RESULTS = []
+PENDING_RESULTS = collections.deque(maxlen=50)
 LAST_TRAFFIC_STATS = {}
+SSH_EVENTS = collections.deque(maxlen=100)
 
 EXTERNAL_IP_CACHE = None 
 
+class SSHMonitor:
+    def __init__(self):
+        self.log_files = ["/var/log/auth.log", "/var/log/secure"]
+        self.current_file = None
+        self.file_handle = None
+        self.inode = None
+        self.processed_lines = collections.deque(maxlen=100)
+        self._open_log_file()
+        if self.file_handle:
+            self.file_handle.seek(0, 2)
+
+    def _open_log_file(self):
+        for log_path in self.log_files:
+            if os.path.exists(log_path):
+                try:
+                    f = open(log_path, 'r', encoding='utf-8', errors='ignore')
+                    self.current_file = log_path
+                    self.file_handle = f
+                    st = os.fstat(f.fileno())
+                    self.inode = st.st_ino
+                    logging.info(f"SSH Monitor watching: {log_path}")
+                    return
+                except Exception as e:
+                    logging.error(f"Error opening SSH log {log_path}: {e}")
+        logging.warning("No SSH log files found (auth.log/secure).")
+
+    def check(self):
+        if not self.file_handle:
+            return []
+
+        try:
+            if not os.path.exists(self.current_file):
+                self.file_handle.close()
+                self._open_log_file()
+                return []
+            
+            st = os.stat(self.current_file)
+            if st.st_ino != self.inode or st.st_size < self.file_handle.tell():
+                logging.info("Log rotation detected. Reopening.")
+                self.file_handle.close()
+                self._open_log_file()
+                return []
+        except Exception:
+            pass
+
+        events = []
+        try:
+            while True:
+                line = self.file_handle.readline()
+                if not line:
+                    break
+                
+                if line in self.processed_lines:
+                    continue
+                self.processed_lines.append(line)
+                if "Accepted" in line and "ssh" in line:
+                    match = re.search(r"Accepted\s+(password|publickey)\s+for\s+(\S+)\s+from\s+(\S+)", line)
+                    if match:
+                        method = match.group(1)
+                        user = match.group(2)
+                        ip = match.group(3)
+                        
+                        try:
+                            tz_offset = time.strftime('%z')
+                            tz_label = f"GMT{tz_offset[:3]}:{tz_offset[3:]}" if tz_offset else "GMT"
+                        except:
+                            tz_label = "GMT"
+
+                        events.append({
+                            "user": user,
+                            "ip": ip,
+                            "method": method,
+                            "timestamp": int(time.time()),
+                            "node_time_str": time.strftime('%H:%M:%S'),
+                            "tz_label": tz_label
+                        })
+        except Exception as e:
+            logging.error(f"Error parsing SSH log: {e}")
+        
+        return events
+
 def get_external_ip():
     global EXTERNAL_IP_CACHE
-    
-    # ИЗМЕНЕНИЕ: Если IP уже получен, просто возвращаем его (кэшируем навсегда пока скрипт работает)
     if EXTERNAL_IP_CACHE:
         return EXTERNAL_IP_CACHE
 
@@ -216,11 +307,17 @@ def execute_command(task):
     user_id = task.get("user_id")
     logging.info(f"Executing command: {cmd}")
 
-    result_text = ""
+    result_payload = None
     try:
         if cmd == "uptime":
             uptime_sec = int(time.time() - psutil.boot_time())
-            result_text = f"⏱ Uptime: {format_uptime_simple(uptime_sec)}"
+            result_payload = {
+                "type": "i18n",
+                "key": "uptime_text",
+                "params": {
+                    "uptime": format_uptime_simple(uptime_sec)
+                }
+            }
 
         elif cmd == "traffic":
             net = psutil.net_io_counters()
@@ -229,7 +326,8 @@ def execute_command(task):
             rx_total = format_bytes_simple(net.bytes_recv)
             tx_total = format_bytes_simple(net.bytes_sent)
             
-            speed_info = ""
+            speed_rx_val = "0.00"
+            speed_tx_val = "0.00"
             
             if LAST_TRAFFIC_STATS:
                 prev_rx = LAST_TRAFFIC_STATS.get('rx', 0)
@@ -240,7 +338,8 @@ def execute_command(task):
                 if dt > 0:
                     rx_speed = (net.bytes_recv - prev_rx) * 8 / (1024 * 1024) / dt
                     tx_speed = (net.bytes_sent - prev_tx) * 8 / (1024 * 1024) / dt
-                    speed_info = f"\n\n⚡️ <b>Speed:</b>\n⬇️ {rx_speed:.2f} Mbit/s\n⬆️ {tx_speed:.2f} Mbit/s"
+                    speed_rx_val = f"{rx_speed:.2f}"
+                    speed_tx_val = f"{tx_speed:.2f}"
 
             LAST_TRAFFIC_STATS = {
                 'rx': net.bytes_recv,
@@ -248,7 +347,16 @@ def execute_command(task):
                 'time': now
             }
             
-            result_text = f"📡 <b>Traffic:</b>\n⬇️ Total RX: {rx_total}\n⬆️ Total TX: {tx_total}{speed_info}"
+            result_payload = {
+                "type": "i18n",
+                "key": "traffic_report_node", 
+                "params": {
+                    "rx": rx_total,
+                    "tx": tx_total,
+                    "speed_rx": speed_rx_val,
+                    "speed_tx": speed_tx_val
+                }
+            }
 
         elif cmd == "top":
             try:
@@ -256,10 +364,21 @@ def execute_command(task):
                     "ps aux --sort=-%cpu | head -n 11", shell=True).decode()
                 
                 safe_res = res.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-                result_text = f"<pre>{safe_res}</pre>"
+                
+                result_payload = {
+                    "type": "i18n",
+                    "key": "top_header",
+                    "params": {
+                        "output": safe_res
+                    }
+                }
                 
             except Exception as e:
-                result_text = f"Error running top: {e}"
+                result_payload = {
+                    "type": "i18n", 
+                    "key": "error_with_details", 
+                    "params": {"error": str(e)}
+                }
 
         elif cmd == "selftest":
             stats = get_system_stats()
@@ -269,13 +388,17 @@ def execute_command(task):
                      ext_ip = subprocess.check_output("curl -4 -s --max-time 2 ifconfig.me", shell=True).decode().strip()
             except Exception:
                 ext_ip = "N/A"
-                
+            
+            ping_val = "0"
+            inet_ok = False
             try:
                 ping_res = subprocess.check_output("ping -c 1 -W 1 8.8.8.8", shell=True).decode()
                 ping_match = re.search(r"time=([\d\.]+) ms", ping_res)
-                ping_status = f"🔗 {ping_match.group(1)} ms" if ping_match else "🔗 ❌ Fail"
+                if ping_match:
+                    ping_val = ping_match.group(1)
+                    inet_ok = True
             except Exception:
-                ping_status = "🔗 ❌ Fail"
+                pass
 
             try:
                 kernel = subprocess.check_output("uname -r", shell=True).decode().strip()
@@ -286,21 +409,21 @@ def execute_command(task):
             rx_total = format_bytes_simple(stats.get('net_rx', 0))
             tx_total = format_bytes_simple(stats.get('net_tx', 0))
             
-            result_text = (
-                f"🛠 <b>Server Info:</b>\n\n"
-                f"✅ Node Status: <b>Active</b>\n"
-                f"⏱ Uptime: <b>{uptime_str}</b>\n"
-                f"📦 OS/Kernel: {kernel}\n"
-                f"🌐 External IP: <code>{ext_ip}</code>\n"
-                f"📡 {ping_status}\n\n"
-                f"📊 <b>Resources:</b>\n"
-                f"  CPU: <b>{stats.get('cpu', 0):.1f}%</b>\n"
-                f"  RAM: <b>{stats.get('ram', 0):.1f}%</b>\n"
-                f"  Disk: <b>{stats.get('disk', 0):.1f}%</b>\n\n"
-                f"📈 <b>Traffic (Total):</b>\n"
-                f"  ⬇️ RX: {rx_total}\n"
-                f"  ⬆️ TX: {tx_total}"
-            )
+            result_payload = {
+                "type": "i18n",
+                "key": "selftest_results_body",
+                "params": {
+                    "cpu": stats.get('cpu', 0),
+                    "mem": stats.get('ram', 0),
+                    "disk": stats.get('disk', 0),
+                    "uptime": uptime_str,
+                    "inet_status": {"key": "selftest_inet_ok"} if inet_ok else {"key": "selftest_inet_fail"},
+                    "ping": ping_val,
+                    "ip": ext_ip,
+                    "rx": rx_total,
+                    "tx": tx_total
+                }
+            }
 
         elif cmd == "speedtest":
             server = get_public_iperf_server()
@@ -335,50 +458,84 @@ def execute_command(task):
                 if dl_speed == 0.0 and ul_speed == 0.0:
                     raise Exception("iperf3 returned zero speed or failed to parse.")
                     
-                result_text = (f"🚀 <b>Speedtest (iperf3)</b>\n"
-                               f"🌍 Server: {city}, {country} ({host})\n"
-                               f"⬇️ <b>Download:</b> {dl_speed:.2f} Mbit/s\n"
-                               f"⬆️ <b>Upload:</b> {ul_speed:.2f} Mbit/s\n\n"
-                               f"iPerf Done.")
+                result_payload = {
+                    "type": "i18n",
+                    "key": "speedtest_results",
+                    "params": {
+                        "dl": dl_speed,
+                        "ul": ul_speed,
+                        "ping": 0,
+                        "flag": "",
+                        "server": f"{city}, {country}",
+                        "provider": host
+                    }
+                }
             else:
                 try:
                     res = subprocess.check_output("ping -c 3 8.8.8.8", shell=True).decode()
-                    result_text = f"⚠️ iperf3 servers unavailable. Ping check:\n<pre>{res}</pre>"
+                    result_payload = {
+                        "type": "i18n",
+                        "key": "error_with_details",
+                        "params": {"error": f"iperf3 unavailable. Ping check:\n{res}"}
+                    }
                 except Exception as e:
-                    result_text = f"Network check failed: {e}"
+                    result_payload = {
+                        "type": "i18n",
+                        "key": "error_with_details",
+                        "params": {"error": f"Network check failed: {e}"}
+                    }
 
         elif cmd == "reboot":
-            result_text = "🔄 Reboot command received. Rebooting..."
+            result_payload = {
+                "type": "i18n",
+                "key": "reboot_confirmed",
+                "params": {}
+            }
             PENDING_RESULTS.append(
-                {"command": cmd, "user_id": user_id, "result": result_text})
+                {"command": cmd, "user_id": user_id, "result": result_payload})
             send_heartbeat()
             os.system("reboot")
             return
 
         else:
-            result_text = f"Unknown command: {cmd}"
+            result_payload = {
+                "type": "i18n", 
+                "key": "error_with_details", 
+                "params": {"error": f"Unknown command: {cmd}"}
+            }
 
     except subprocess.TimeoutExpired:
-        result_text = "❌ Speedtest timed out (server busy or test too long)."
+        result_payload = {
+            "type": "i18n",
+            "key": "error_with_details",
+            "params": {"error": "Speedtest timed out."}
+        }
     except Exception as e:
         logging.error(f"Command execution failed: {e}")
-        result_text = f"❌ Error: {str(e)}"
+        result_payload = {
+            "type": "i18n",
+            "key": "error_with_details",
+            "params": {"error": str(e)}
+        }
 
-    if result_text:
+    if result_payload:
         PENDING_RESULTS.append({
             "command": cmd,
             "user_id": user_id,
-            "result": result_text
+            "result": result_payload
         })
 
 def send_heartbeat():
-    global PENDING_RESULTS
+    global PENDING_RESULTS, SSH_EVENTS
     url = f"{AGENT_BASE_URL}/api/heartbeat"
+    current_results = list(PENDING_RESULTS)
+    current_ssh_events = list(SSH_EVENTS)
     
     payload_dict = {
         "token": AGENT_TOKEN,
         "stats": get_system_stats(),
-        "results": PENDING_RESULTS,
+        "results": current_results,
+        "ssh_logins": current_ssh_events,
         "timestamp": int(time.time())
     }
     
@@ -395,7 +552,8 @@ def send_heartbeat():
         response = requests.post(url, data=payload_bytes, headers=headers, timeout=5)
         if response.status_code == 200:
             data = response.json()
-            PENDING_RESULTS = []
+            PENDING_RESULTS.clear()
+            SSH_EVENTS.clear()
 
             tasks = data.get("tasks", [])
             for task in tasks:
@@ -409,8 +567,15 @@ def main():
     logging.info(f"Node Agent started. Target: {AGENT_BASE_URL}. Mode: {'DEBUG' if DEBUG_MODE else 'RELEASE'}")
     psutil.cpu_percent(interval=None)
     get_external_ip()
+    
+    ssh_monitor = SSHMonitor()
 
     while True:
+        new_events = ssh_monitor.check()
+        if new_events:
+            logging.info(f"Found {len(new_events)} SSH login events.")
+            SSH_EVENTS.extend(new_events)
+
         send_heartbeat()
         time.sleep(UPDATE_INTERVAL)
 

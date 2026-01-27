@@ -324,16 +324,46 @@ def get_back_keyboard(lang: str, callback_data="back_to_manage_users"):
 
 
 def get_alerts_menu_keyboard(user_id: int):
+    """Legacy function alias if needed, but we now use get_notifications_start_keyboard"""
+    return get_notifications_start_keyboard(user_id)
+
+
+def get_notifications_start_keyboard(user_id: int):
+    lang = get_user_lang(user_id)
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(text=_("notif_btn_global", lang), callback_data="notif_menu_global"),
+                InlineKeyboardButton(text=_("notif_btn_nodes", lang), callback_data="notif_menu_nodes_list"),
+            ],
+            [
+                InlineKeyboardButton(text=_("btn_back_to_menu", lang), callback_data="back_to_menu")
+            ]
+        ]
+    )
+
+
+def get_notifications_global_keyboard(user_id: int):
     lang = get_user_lang(user_id)
     user_config = ALERTS_CONFIG.get(user_id, {})
+    
+    # Agent settings
     res_enabled = user_config.get("resources", False)
     logins_enabled = user_config.get("logins", False)
     bans_enabled = user_config.get("bans", False)
-    downtime_enabled = user_config.get("downtime", False)
+    
+    # Global Node Settings
+    nodes_down_enabled = user_config.get("downtime", False)
+    nodes_res_enabled = user_config.get("node_resources", False)
+    nodes_ssh_enabled = user_config.get("node_logins", False)
+    
     status_yes = _("status_enabled", lang)
     status_no = _("status_disabled", lang)
+    
     return InlineKeyboardMarkup(
         inline_keyboard=[
+            # Agent Section
+            [InlineKeyboardButton(text=_("notif_btn_toggle_all_agent", lang), callback_data="toggle_all_agent")],
             [
                 InlineKeyboardButton(
                     text=_(
@@ -364,19 +394,125 @@ def get_alerts_menu_keyboard(user_id: int):
                     callback_data="toggle_alert_bans",
                 )
             ],
+            # Nodes Global Section
+            [InlineKeyboardButton(text=_("notif_btn_toggle_all_nodes", lang), callback_data="toggle_all_nodes")],
             [
                 InlineKeyboardButton(
                     text=_(
                         "alerts_menu_downtime",
                         lang,
-                        status=status_yes if downtime_enabled else status_no,
+                        status=status_yes if nodes_down_enabled else status_no,
                     ),
                     callback_data="toggle_alert_downtime",
                 )
             ],
             [
                 InlineKeyboardButton(
-                    text=_("btn_back_to_menu", lang), callback_data="back_to_menu"
+                    text=_(
+                        "alerts_menu_res",
+                        lang,
+                        status=status_yes if nodes_res_enabled else status_no,
+                    ),
+                    callback_data="toggle_alert_node_resources",
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text=_(
+                        "alerts_menu_logins",
+                        lang,
+                        status=status_yes if nodes_ssh_enabled else status_no,
+                    ),
+                    callback_data="toggle_alert_node_logins",
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text=_("btn_back", lang), callback_data="back_to_notif_menu"
+                )
+            ],
+        ]
+    )
+
+
+def get_notifications_nodes_list_keyboard(nodes_dict: dict, lang: str):
+    buttons = []
+    for token, node_data in nodes_dict.items():
+        name = node_data.get("name", "Unknown")
+        buttons.append(
+            [
+                InlineKeyboardButton(
+                    text=f"⚙️ {name}", callback_data=f"notif_select_node_{token}"
+                )
+            ]
+        )
+    buttons.append(
+        [
+            InlineKeyboardButton(
+                text=_("btn_back", lang), callback_data="back_to_notif_menu"
+            )
+        ]
+    )
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+def get_notifications_node_settings_keyboard(token: str, node_name: str, user_id: int):
+    lang = get_user_lang(user_id)
+    user_config = ALERTS_CONFIG.get(user_id, {})
+    
+    # Downtime
+    key_down = f"node_{token}_downtime"
+    if key_down in user_config:
+        val_down = user_config[key_down]
+        status_down = _("status_enabled", lang) if val_down else _("status_disabled", lang)
+    else:
+        # Fallback to global
+        global_down = user_config.get("downtime", False)
+        status_down = f"Global ({_('status_enabled', lang) if global_down else _('status_disabled', lang)})"
+
+    # Resources
+    key_res = f"node_{token}_node_resources"
+    if key_res in user_config:
+        val_res = user_config[key_res]
+        status_res = _("status_enabled", lang) if val_res else _("status_disabled", lang)
+    else:
+        # Fallback to global
+        global_res = user_config.get("node_resources", False)
+        status_res = f"Global ({_('status_enabled', lang) if global_res else _('status_disabled', lang)})"
+
+    # SSH Logins
+    key_ssh = f"node_{token}_node_logins"
+    if key_ssh in user_config:
+        val_ssh = user_config[key_ssh]
+        status_ssh = _("status_enabled", lang) if val_ssh else _("status_disabled", lang)
+    else:
+        # Fallback to global
+        global_ssh = user_config.get("node_logins", False)
+        status_ssh = f"Global ({_('status_enabled', lang) if global_ssh else _('status_disabled', lang)})"
+
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text=f"{_('alerts_menu_downtime', lang, status='')} : {status_down}",
+                    callback_data=f"toggle_node_{token}_downtime",
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text=f"{_('alerts_menu_res', lang, status='')} : {status_res}",
+                    callback_data=f"toggle_node_{token}_node_resources",
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text=f"{_('alerts_menu_logins', lang, status='')} : {status_ssh}",
+                    callback_data=f"toggle_node_{token}_node_logins",
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text=_("btn_back", lang), callback_data="notif_menu_nodes_list"
                 )
             ],
         ]
