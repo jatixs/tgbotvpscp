@@ -353,7 +353,7 @@ async def get_docker_image_from_container(container_name):
 
 async def get_docker_hub_description(image_name):
     """Get description from Docker Hub API"""
-    global _docker_descriptions_cache
+    global _docker_descriptions_cache  # noqa: F824
     
     # Check cache first
     if image_name in _docker_descriptions_cache:
