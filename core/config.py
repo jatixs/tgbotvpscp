@@ -90,7 +90,7 @@ DEPLOY_MODE = os.environ.get("DEPLOY_MODE", "systemd")
 ADMIN_USERNAME = os.environ.get("TG_ADMIN_USERNAME")
 TG_BOT_NAME = os.environ.get("TG_BOT_NAME", "VPS Bot")
 INSTALLED_VERSION = os.environ.get("INSTALLED_VERSION")
-WEB_SERVER_HOST = os.environ.get("WEB_SERVER_HOST", "0.0.0.0")
+WEB_SERVER_HOST = os.environ.get("WEB_SERVER_HOST", "127.0.0.1")
 WEB_SERVER_PORT = int(os.environ.get("WEB_SERVER_PORT", 8080))
 ENABLE_WEB_UI = os.environ.get("ENABLE_WEB_UI", "true").lower() == "true"
 try:
