@@ -1,62 +1,163 @@
 <p align="center">
   <a href="README.md">Русская Версия</a> | English Version
 </p>
-+
-+<h1 align="center">🤖 VPS Manager Telegram Bot</h1>
-+
-+<p align="center">
-+  <b>v1.18.0</b> — enterprise-grade ecosystem for monitoring and managing server infrastructure<br>
-+  Asynchronous architecture • Enterprise security • PWA web interface • Real-time SSE
-+</p>
-+
-+<p align="center">
-+  <a href="https://github.com/jatixs/tgbotvpscp/releases/latest"><img src="https://img.shields.io/badge/version-v1.18.0-blue?style=flat-square" alt="Version 1.18.0"/></a>
-+  <a href="CHANGELOG.en.md"><img src="https://img.shields.io/badge/build-66-purple?style=flat-square" alt="Build 66"/></a>
-+  <a href="https://www.python.org/"><img src="https://img.shields.io/badge/python-3.10%2B-green?style=flat-square" alt="Python 3.10+"/></a>
-+  <a href="https://choosealicense.com/licenses/gpl-3.0/"><img src="https://img.shields.io/badge/license-GPL--3.0-lightgrey?style=flat-square" alt="License GPL-3.0"/></a>
-+  <a href="https://github.com/aiogram/aiogram"><img src="https://img.shields.io/badge/aiogram-3.x-orange?style=flat-square" alt="Aiogram 3.x"/></a>
-+  <a href="https://www.docker.com/"><img src="https://img.shields.io/badge/docker-ready-blueviolet?style=flat-square" alt="Docker"/></a>
-+  <a href="https://releases.ubuntu.com/focal/"><img src="https://img.shields.io/badge/platform-Ubuntu%2020.04%2B-important?style=flat-square" alt="Platform Ubuntu 20.04+"/></a>
-+</p>
-+
-+---
-+
-+## 📘 Table of Contents
-+
-+1. [About](#-about-the-project)
-+2. [Key Features](#-key-features)
-+3. [Architecture](#-architecture)
-+4. [Quick Start](#-quick-start)
-+5. [Web Interface](#-web-interface)
-+6. [Security](#-security)
-+7. [Project Structure](#️-project-structure)
-+8. [Documentation](#-documentation)
-+9. [License](#-license)
-+
-+---
-+
-+## 🧩 About the Project
-+
-+**VPS Manager Telegram Bot** is a comprehensive enterprise-class solution for managing server infrastructure via Telegram and web interface.
-+
-+### 🎯 Who is this for?
-+
-+- **System Administrators** — automate routine tasks
-+- **DevOps Engineers** — monitor multiple servers from one place
-+- **VPN Providers** — manage X-ray/VLESS panels
-+- **Hosting Providers** — client monitoring
-+
-+### 💡 Problems this project solves
-+
-+✅ **Centralized Management** — one interface for all servers  
-+✅ **Real-time Monitoring** — instant updates without reloading  
-+✅ **Security** — enterprise-grade protection with WAF and audit logging  
-+✅ **Scalability** — from 1 to 1000+ servers  
-+✅ **Mobility** — manage from your phone via Telegram  
+
+<h1 align="center">🤖 VPS Manager Telegram Bot</h1>
+
+<p align="center">
+  <b>v1.18.0</b> — enterprise-grade ecosystem for monitoring and managing server infrastructure<br>
+  Asynchronous architecture • Enterprise security • PWA web interface • Real-time SSE
+</p>
+
+<p align="center">
+  <a href="https://github.com/jatixs/tgbotvpscp/releases/latest"><img src="https://img.shields.io/badge/version-v1.18.0-blue?style=flat-square" alt="Version 1.18.0"/></a>
+  <a href="CHANGELOG.en.md"><img src="https://img.shields.io/badge/build-66-purple?style=flat-square" alt="Build 66"/></a>
+  <a href="https://www.python.org/"><img src="https://img.shields.io/badge/python-3.10%2B-green?style=flat-square" alt="Python 3.10+"/></a>
+  <a href="https://choosealicense.com/licenses/gpl-3.0/"><img src="https://img.shields.io/badge/license-GPL--3.0-lightgrey?style=flat-square" alt="License GPL-3.0"/></a>
+  <a href="https://github.com/aiogram/aiogram"><img src="https://img.shields.io/badge/aiogram-3.x-orange?style=flat-square" alt="Aiogram 3.x"/></a>
+  <a href="https://www.docker.com/"><img src="https://img.shields.io/badge/docker-ready-blueviolet?style=flat-square" alt="Docker"/></a>
+  <a href="https://releases.ubuntu.com/focal/"><img src="https://img.shields.io/badge/platform-Ubuntu%2020.04%2B-important?style=flat-square" alt="Platform Ubuntu 20.04+"/></a>
+</p>
+
+---
+
+## 📘 Table of Contents
+
+1. [About](#-about-the-project)
+2. [Key Features](#-key-features)
+3. [Architecture](#-architecture)
+4. [Quick Start](#-quick-start)
+5. [Web Interface](#-web-interface)
+6. [Security](#-security)
+7. [Project Structure](#️-project-structure)
+8. [Documentation](#-documentation)
+9. [License](#-license)
+
+---
+
+## 🧩 About the Project
+
+**VPS Manager Telegram Bot** is a comprehensive enterprise-class solution for managing server infrastructure via Telegram and web interface.
+
+### 🎯 Who is this for?
+
+- **System Administrators** — automate routine tasks
+- **DevOps Engineers** — monitor multiple servers from one place
+- **VPN Providers** — manage X-ray/VLESS panels
+- **Hosting Providers** — client monitoring
+
+### 💡 Problems this project solves
+
+✅ **Centralized Management** — one interface for all servers  
+✅ **Real-time Monitoring** — instant updates without reloading  
+✅ **Security** — enterprise-grade protection with WAF and audit logging  
+✅ **Scalability** — from 1 to 1000+ servers  
+✅ **Mobility** — manage from your phone via Telegram  
+
+---
+
+## ⚡ Key Features
+
+### 🚀 Performance
+
+- ✅ **Fully Asynchronous** — AsyncIO, aiohttp, aiosqlite
+- ✅ **Low Footprint** — ~100MB RAM per agent
+- ✅ **Ring Buffers** — memory optimization via deque
+- ✅ **Garbage Collection** — automatic cleanup
+
+### 🖥 Multi-Server Management
+
+- ✅ **Unlimited Nodes** — scalable architecture
+- ✅ **Real-time Metrics** — CPU, RAM, Disk, Network
+- ✅ **Remote Execution** — commands on any server
+- ✅ **Centralized Dashboard** — unified control panel
+
+### 🛡️ Enterprise-Grade Security
+
+- ✅ **WAF** — protection against SQL Injection, XSS, Path Traversal
+- ✅ **Rate Limiting** — DDoS protection (100 req/min)
+- ✅ **Brute-force Protection** — auto-block after 5 attempts
+- ✅ **Audit Logging** — detailed logs of all events
+- ✅ **E2E Encryption** — Fernet + XOR encryption
+- ✅ **RBAC** — Root/Admin/User roles
+
+### 🎨 Modern Web Interface
+
+- ✅ **PWA** — works like a native app
+- ✅ **SSE (Server-Sent Events)** — updates without reloading
+- ✅ **Dark Theme** — automatic switching
+- ✅ **Responsive Design** — mobile-first approach
+- ✅ **Real-time Charts** — Chart.js visualization
+
+### ⚙️ Service Manager <sup>NEW v1.18.0</sup>
+
+- ✅ **Real-time Status** — all systemd services
+- ✅ **SSE Streaming** — updates every 5 seconds
+- ✅ **Start/Stop/Restart** — one-button control
+- ✅ **Encrypted Storage** — persistent configuration
+- ✅ **Detailed Info** — logs, uptime, PID
+
+### 🔔 Smart Notifications
+
+- ✅ **Customizable Thresholds** — CPU/RAM/Disk by choice
+- ✅ **Global and Individual** — for agent and each node
+- ✅ **Downtime Alerts** — node unavailable > 60 sec
+- ✅ **SSH Monitoring** — login notifications
+- ✅ **Fail2Ban Integration** — IP blocking
+
+### 🌐 Internationalization
+
+- ✅ **Russian** — full localization
+- ✅ **English** — complete translation
+- ✅ **Switch On-the-fly** — no restart needed
+
+### 🐳 Docker & DevOps
+
+- ✅ **Docker Compose** — easy deployment
+- ✅ **Two Modes** — Root (full access) / Secure (isolation)
+- ✅ **Auto-updates** — git pull + restart
+- ✅ **Watchdog** — auto-restart on crash
+- ✅ **Health Checks** — state monitoring
+
+---
+
+## 🏗 Architecture
+
+**Agent-Client Pattern** with centralized management:
+
+```
+┌─────────────────────────────────────────────────┐
+│  🤖 Telegram Bot (Main Agent)                   │
+│  ├── 📊 SQLite DB (nodes, users, metrics)       │
+│  ├── 🌐 Web Dashboard (Aiohttp + SSE)           │
+│  ├── 🔌 API Server (REST + Real-time)           │
+│  └── ⏰ Background Tasks (monitoring, alerts)   │
+└─────────────────────────────────────────────────┘
+              ↓         ↓         ↓
+    ┌─────────┴─────────┴─────────┴────────┐
+    │                                       │
+┌───▼────┐  ┌────────┐  ┌────────┐  ┌─────▼───┐
+│ Node 1 │  │ Node 2 │  │ Node 3 │  │ Node N  │
+│ (VPS)  │  │ (VPS)  │  │ (VPS)  │  │ (VPS)   │
+└────────┘  └────────┘  └────────┘  └─────────┘
+```
+
+**Technology Stack:**
+- **Backend:** Python 3.10+, Aiogram 3.x, Aiohttp, Tortoise ORM
+- **Database:** SQLite (aiosqlite)
+- **Frontend:** Tailwind CSS, Vanilla JavaScript, Chart.js
+- **Real-time:** Server-Sent Events (SSE)
+- **Security:** Argon2, Fernet, XOR encryption
+- **Infrastructure:** Docker, Docker Compose, Systemd
+
+📖 Learn more: [ARCHITECTURE.en.md](ARCHITECTURE.en.md)
+
+---
+
 ## 🚀 Quick Start
-+---
+
 ### System Requirements
-+## ⚡ Key Features
+
 **Minimum:**
 - Ubuntu 20.04+ / Debian 11+
 - Python 3.10+
@@ -67,7 +168,7 @@
 - 2 GB RAM
 - 20 GB SSD
 - 2 CPU cores
-+### 🚀 Performance
+
 ### 1️⃣ Preparation
 
 1. Get a bot token from [@BotFather](https://t.me/BotFather)
@@ -112,14 +213,14 @@ Enter:
 - **Token:** received from bot
 
 ✅ Node will appear in the list within seconds!
-+- ✅ **Ring Buffers** — memory optimization via deque
-+- ✅ **Garbage Collection** — automatic cleanup
-+
+
+---
+
 ## 💻 Web Interface
-+
+
 ### Access Dashboard
-+- ✅ **Real-time Metrics** — CPU, RAM, Disk, Network
-+
+
+```
 http://YOUR_SERVER_IP:8080
 ```
 
@@ -212,7 +313,7 @@ Automatic detection:
 - GDPR compliant
 
 **File:** `logs/audit/audit.log`
-+### 🛡️ Enterprise-Grade Security
+
 ---
 
 ## 🗂️ Project Structure
@@ -229,88 +330,88 @@ Automatic detection:
 ├── Dockerfile               # Container image
 ├── deploy_en.sh             # Installer
 ├── core/                    # System core
-+- ✅ **Brute-force Protection** — auto-block after 5 attempts
-+- ✅ **Audit Logging** — detailed logs of all events
-+- ✅ **E2E Encryption** — Fernet + XOR encryption
-+- ✅ **RBAC** — Root/Admin/User roles
-+
-+### 🎨 Modern Web Interface
-+
-+- ✅ **PWA** — works like a native app
-+- ✅ **SSE (Server-Sent Events)** — updates without reloading
-+- ✅ **Dark Theme** — automatic switching
-+- ✅ **Responsive Design** — mobile-first approach
-+- ✅ **Real-time Charts** — Chart.js visualization
-+
-+### ⚙️ Service Manager <sup>NEW v1.18.0</sup>
-+
-+- ✅ **Real-time Status** — all systemd services
-+- ✅ **SSE Streaming** — updates every 5 seconds
-+- ✅ **Start/Stop/Restart** — one-button control
-+- ✅ **Encrypted Storage** — persistent configuration
+│   ├── server.py            # Web server + API
+│   ├── auth.py              # Authorization
+│   ├── i18n.py              # Multilingual
+│   ├── keyboards.py         # UI generator
+│   ├── messaging.py         # Notifications
+│   ├── utils.py             # Utilities
+│   ├── nodes_db.py          # Node database
+│   ├── static/              # CSS, JS
+│   └── templates/           # HTML templates
+├── modules/                 # Functional modules
+│   ├── selftest.py          # Server summary
+│   ├── traffic.py           # Traffic monitoring
+│   ├── services.py          # Service manager
+│   ├── nodes.py             # Node management
+│   ├── users.py             # User management
+│   ├── notifications.py     # Background alerts
+│   └── ...                  # +15 modules
+└── node/                    # Client for remote servers
+    └── node.py              # Node agent
 ```
 
 📖 Detailed documentation: [ARCHITECTURE.en.md](ARCHITECTURE.en.md)
-+- ✅ **Detailed Info** — logs, uptime, PID
-+
-+### 🔔 Smart Notifications
+
+---
+
 ## 📚 Documentation
-+- ✅ **Customizable Thresholds** — CPU/RAM/Disk by choice
+
 ### Guides
-+- ✅ **Downtime Alerts** — node unavailable > 60 sec
+
 - 📘 [**ARCHITECTURE.en.md**](ARCHITECTURE.en.md) — Complete project architecture
 - 🧩 [**custom_module_en.md**](custom_module_en.md) — Creating your own module
 - 📝 [**CHANGELOG.en.md**](CHANGELOG.en.md) — Change history
-+- ✅ **Two Modes** — Root (full access) / Secure (isolation)
+
 ### Useful Commands
-+- ✅ **Watchdog** — auto-restart on crash
+
 #### Bot Management (Docker)
-+
+
 ```bash
 # Status
 docker compose -f /opt/tg-bot/docker-compose.yml ps
-+
+
 # Restart
 docker compose -f /opt/tg-bot/docker-compose.yml restart bot-secure
-+
+
 # Logs (real-time)
 docker compose -f /opt/tg-bot/docker-compose.yml logs -f bot-secure
-+│  ├── 🔌 API Server (REST + Real-time)           │
+
 # Stop
 docker compose -f /opt/tg-bot/docker-compose.yml stop
-+└─────────────────────────────────────────────────┘
+
 # Start
 docker compose -f /opt/tg-bot/docker-compose.yml up -d
 ```
-+│ (VPS)  │  │ (VPS)  │  │ (VPS)  │  │ (VPS)   │
+
 #### Bot Management (Systemd)
-+```
+
 ```bash
 # Status
 sudo systemctl status tg-bot
-+- **Real-time:** Server-Sent Events (SSE)
+
 # Restart
 sudo systemctl restart tg-bot
-+- **Infrastructure:** Docker, Docker Compose, Systemd
+
 # Logs
 sudo journalctl -u tg-bot -f
-## 🚀 Deployment (Quick Start)
+
 # Stop
 sudo systemctl stop tg-bot
 ```
-Requires **Ubuntu 20.04+** and `sudo` access.
+
 #### Backup
-### 1. Preparation
+
 ```bash
 # Database
 cp /opt/tg-bot/config/nodes.db /backup/nodes.db.$(date +%F)
-1.  Get a bot token from **[@BotFather](https://t.me/BotFather)**.
+
 # Configurations
 tar -czf /backup/tg-bot-config-$(date +%F).tar.gz /opt/tg-bot/config/
 
 # Logs
 tar -czf /backup/tg-bot-logs-$(date +%F).tar.gz /opt/tg-bot/logs/
-2.  Get your **User ID** (e.g., via [@userinfobot](https://t.me/userinfobot)).
+```
 
 #### Update
 
@@ -324,12 +425,12 @@ git pull
 source venv/bin/activate
 pip install -r requirements.txt --upgrade
 sudo systemctl restart tg-bot
-
------
-
-## ⚙️ Project Structure
-## 📊 API Endpoints
 ```
+
+---
+
+## 📊 API Endpoints
+
 ### Public Endpoints
 
 - `GET /` — Dashboard (authentication required)
@@ -357,9 +458,9 @@ sudo systemctl restart tg-bot
 - `POST /api/alerts_config` — Alert settings
 
 📖 Full API documentation: [ARCHITECTURE.en.md#api](ARCHITECTURE.en.md)
-│       ├── gitleaks.yml
-│       ├── python-safety.yml
-│       ├── security.yml
+
+---
+
 ## 🤝 Contributing
 
 We welcome contributions to the project!
@@ -373,7 +474,7 @@ We welcome contributions to the project!
 5. ⭐ **Star the project** — it motivates!
 
 ### Development
-├── assets/                  # Images (for README)
+
 ```bash
 # Clone
 git clone https://github.com/jatixs/tgbotvpscp.git
@@ -393,9 +494,9 @@ nano .env
 # Run
 python bot.py
 ```
-├── core/                    # Bot Core
-│   ├── static/              # Static files for Web Panel
-│   │   ├── css/
+
+---
+
 ## 📄 License
 
 This project is licensed under **GPL-3.0**. See [LICENSE](LICENSE) file for details.
@@ -429,86 +530,3 @@ If you find this project useful, support it:
   <br>
   Made with ❤️ for the DevOps community
 </p>
-│   │   │   └── style.css
-│   │       ├── login.js
-│   │       ├── settings.js
-│   │       └── theme_init.js
-│   ├── templates/           # HTML templates
-│   │   ├── dashboard.html
-│   │   ├── login.html
-│   │   ├── reset_password.html
-│   │   └── settings.html
-│   ├── auth.py              # Authorization and permissions
-│   ├── config.py            # Configuration (.env)
-│   ├── i18n.py              # Multilingual support (RU/EN)
-│   ├── keyboards.py         # Keyboards (Inline/Reply)
-│   ├── messaging.py         # Message management
-│   ├── middlewares.py       # Anti-spam (Middleware)
-│   ├── models.py            # DB Models (Tortoise ORM)
-│   ├── nodes_db.py          # Node Database (SQLite)
-│   ├── server.py            # Web Server (Aiohttp)
-│   ├── shared_state.py      # State (caches)
-│   └── utils.py             # Utilities
-├── modules/                 # Command Modules
-│   ├── fail2ban.py
-│   ├── logs.py
-│   ├── nodes.py             # Node management
-│   ├── notifications.py     # Alerts and monitoring
-│   ├── optimize.py
-│   ├── reboot.py
-│   ├── restart.py
-│   ├── selftest.py
-│   ├── speedtest.py
-│   ├── sshlog.py
-│   ├── top.py
-│   ├── traffic.py
-│   ├── update.py
-│   ├── uptime.py
-│   ├── users.py
-│   ├── vless.py
-│   └── xray.py
-├── node/                    # Agent for remote servers
-│   └── node.py
-├── .env.example             # Config example
-├── .gitignore
-├── aerich.ini               # Migration config
-├── bot.py                   # Main entry point
-├── CHANGELOG.md             # Changelog (RU)
-├── CHANGELOG.en.md          # Changelog (EN)
-├── custom_module.md         # Guide: Custom Module (RU)
-├── custom_module_en.md      # Guide: Custom Module (EN)
-├── deploy.sh                # Installer (RU)
-├── deploy_en.sh             # Installer (EN)
-├── docker-compose.yml       # Docker config
-├── Dockerfile
-├── LICENSE
-├── migrate.py               # Migration script
-├── README.md                # Description (RU)
-├── README.en.md             # Description (EN)
-├── requirements.txt         # Dependencies
-└── watchdog.py              # Watchdog (restart)
-```
-
------
-
-## 🔒 Security
-
-  * **Isolation:** Secure mode runs as `tgbot` user.
-  * **Data Protection:** SQLite DB, server-side sessions, Rate Limiting.
-  * **Injection Protection:** `shlex` command escaping.
-  * **Tokens:** Unique auth tokens for each node.
-
------
-
-## 📚 Documentation
-
-* 📖 **[Architecture & Full Feature Guide](ARCHITECTURE.en.md)** — learn how the bot is structured and what each file does.
-* 🧩 **[Create Custom Module](custom_module_en.md)** — guide on adding new buttons and features.
-
------
-
-## 👤 Author
-
-**Version:** 1.18.0 (Build 66) <br>
-**Author:** Jatix <br>
-📜 **License:** GPL-3.0 <br>
