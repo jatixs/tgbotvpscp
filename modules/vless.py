@@ -79,6 +79,18 @@ async def process_vless_file(message: types.Message, state: FSMContext):
     user_id = message.from_user.id
     lang = get_user_lang(user_id)
     command = "generate_vless"
+    
+    # Initialize cancel keyboard at the start of function
+    cancel_keyboard = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text=_("btn_cancel", lang), callback_data="back_to_menu"
+                )
+            ]
+        ]
+    )
+    
     original_question_msg_id = None
     if user_id in LAST_MESSAGE_IDS and command in LAST_MESSAGE_IDS[user_id]:
         original_question_msg_id = LAST_MESSAGE_IDS[user_id].pop(command)
@@ -94,15 +106,6 @@ async def process_vless_file(message: types.Message, state: FSMContext):
         pass
     document = message.document
     if not document.file_name or not document.file_name.lower().endswith(".json"):
-        cancel_keyboard = InlineKeyboardMarkup(
-            inline_keyboard=[
-                [
-                    InlineKeyboardButton(
-                        text=_("btn_cancel", lang), callback_data="back_to_menu"
-                    )
-                ]
-            ]
-        )
         sent_message = await message.answer(
             _("vless_error_not_json", lang),
             parse_mode="HTML",
