@@ -179,7 +179,7 @@ def load_system_config():
 
 
 def save_system_config(new_config: dict):
-    global TRAFFIC_INTERVAL, RESOURCE_CHECK_INTERVAL, CPU_THRESHOLD, RAM_THRESHOLD, DISK_THRESHOLD, RESOURCE_ALERT_COOLDOWN, NODE_OFFLINE_TIMEOUT, WEB_METADATA
+    global TRAFFIC_INTERVAL, RESOURCE_CHECK_INTERVAL, CPU_THRESHOLD, RAM_THRESHOLD, DISK_THRESHOLD, RESOURCE_ALERT_COOLDOWN, NODE_OFFLINE_TIMEOUT, WEB_METADATA  # noqa: F824
     try:
         if "TRAFFIC_INTERVAL" in new_config:
             TRAFFIC_INTERVAL = int(new_config["TRAFFIC_INTERVAL"])
@@ -215,7 +215,7 @@ def save_system_config(new_config: dict):
 
 
 def load_keyboard_config():
-    global KEYBOARD_CONFIG
+    global KEYBOARD_CONFIG  # noqa: F824
     try:
         data = load_encrypted_json(KEYBOARD_CONFIG_FILE)
         if data:
@@ -230,7 +230,7 @@ def load_keyboard_config():
 
 
 def save_keyboard_config(new_config: dict):
-    global KEYBOARD_CONFIG
+    # global KEYBOARD_CONFIG - dict is mutable
     try:
         for key in DEFAULT_KEYBOARD_CONFIG:
             if key in new_config:

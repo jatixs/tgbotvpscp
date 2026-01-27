@@ -562,7 +562,7 @@ def execute_command(task):
         })
 
 def send_heartbeat():
-    global PENDING_RESULTS, SSH_EVENTS
+    global PENDING_RESULTS, SSH_EVENTS  # noqa: F824
     url = f"{AGENT_BASE_URL}/api/heartbeat"
     current_results = list(PENDING_RESULTS)
     current_ssh_events = list(SSH_EVENTS)

@@ -65,7 +65,7 @@ def get_current_traffic_total():
 
 def load_traffic_state():
     """Loads the last backup and calculates offset at startup."""
-    global TRAFFIC_OFFSET, IS_SERVER_REBOOT
+    global TRAFFIC_OFFSET, IS_SERVER_REBOOT  # noqa: F824
     try:
         backups = sorted(glob.glob(os.path.join(config.TRAFFIC_BACKUP_DIR, "traffic_backup_*.json")))
         if not backups:
@@ -306,7 +306,7 @@ async def reset_stats_handler(callback: types.CallbackQuery):
         await callback.answer("Reset not allowed or time expired", show_alert=True)
         return
         
-    global TRAFFIC_OFFSET
+    global TRAFFIC_OFFSET  # noqa: F824
     TRAFFIC_OFFSET["rx"] = 0
     TRAFFIC_OFFSET["tx"] = 0
     

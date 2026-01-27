@@ -8,6 +8,7 @@ from aiogram.filters import StateFilter
 from aiogram.exceptions import TelegramBadRequest
 from core.i18n import _, I18nFilter, get_user_lang
 from core import config
+from core import shared_state
 from core.utils import log_audit_event, AuditEvent
 from core.auth import (
     is_allowed,

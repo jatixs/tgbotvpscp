@@ -340,7 +340,7 @@ def parse_systemd_timestamp(ts_str):
 
 
 def check_bot_service_systemd():
-    global bot_service_was_down_or_activating, status_alert_message_id, current_reported_state, last_service_start_dt
+    global bot_service_was_down_or_activating, status_alert_message_id, current_reported_state, last_service_start_dt  # noqa: F824
     actual_state = "unknown"
     status_output_full = "N/A"
     current_start_dt = None
@@ -383,8 +383,8 @@ def check_bot_service_systemd():
     process_service_state(actual_state, status_output_full, restart_service_systemd, current_start_dt, is_utc)
 
 
-def check_bot_service_docker():
-    global bot_service_was_down_or_activating, status_alert_message_id, current_reported_state
+def global bot_service_was_down_or_activating, status_alert_message_id, current_reported_state  # noqa: F824
+    check_bot_service_docker():
     if not docker_client:
         return
     actual_state = "unknown"

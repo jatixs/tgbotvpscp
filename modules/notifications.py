@@ -531,7 +531,7 @@ async def parse_f2b_log_line(line: str) -> dict | None:
 
 
 async def resource_monitor(bot: Bot):
-    global RESOURCE_ALERT_STATE, LAST_RESOURCE_ALERT_TIME
+    global RESOURCE_ALERT_STATE, LAST_RESOURCE_ALERT_TIME  # noqa: F824
     await asyncio.sleep(15)
     while True:
         try:
