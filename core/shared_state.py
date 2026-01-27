@@ -13,7 +13,7 @@ NODE_TRAFFIC_MONITORS = {}
 AUTH_TOKENS = {}
 RESOURCE_ALERT_STATE = {"cpu": False, "ram": False, "disk": False}
 LAST_RESOURCE_ALERT_TIME = {"cpu": 0, "ram": 0, "disk": 0}
-AGENT_HISTORY = []
+AGENT_HISTORY = deque(maxlen=60)
 WEB_NOTIFICATIONS = deque(maxlen=50)
 WEB_USER_LAST_READ = {}
 IS_RESTARTING = False

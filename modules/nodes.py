@@ -3,7 +3,7 @@ import asyncio
 import logging
 import html
 import socket
-import os  # <--- Добавлен импорт для чтения .env
+import os
 from datetime import datetime
 from aiogram import F, Dispatcher, types, Bot
 from aiogram.types import KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
@@ -177,17 +177,11 @@ async def process_node_name(message: types.Message, state: FSMContext):
     name = message.text.strip()
     token = await nodes_db.create_node(name)
 
-    # 0. Проверяем, задан ли домен вручную в .env
     configured_domain = os.environ.get("WEB_DOMAIN")
-    
     host_address = None
-    
     if configured_domain:
         host_address = configured_domain
     else:
-        # Если домен не задан, пытаемся определить автоматически
-        
-        # 1. Получаем внешний IP сервера
         ext_ip = None
         try:
             proc = await asyncio.create_subprocess_shell(
@@ -201,12 +195,10 @@ async def process_node_name(message: types.Message, state: FSMContext):
         except Exception as e:
             logging.error(f"Error detecting external IP: {e}")
 
-        # 2. Пытаемся определить домен по IP (Reverse DNS)
         host_address = ext_ip
         if ext_ip:
             try:
                 loop = asyncio.get_running_loop()
-                # Используем явные имена переменных вместо _, чтобы не затереть функцию перевода
                 hostname, aliases, ips = await loop.run_in_executor(None, socket.gethostbyaddr, ext_ip)
                 if hostname:
                     host_address = hostname
@@ -216,29 +208,18 @@ async def process_node_name(message: types.Message, state: FSMContext):
     if not host_address:
         host_address = "YOUR_SERVER_IP"
 
-    # 3. Формируем URL агента
-    # Если вы используете HTTPS для WEB_DOMAIN, измените http на https
     protocol = "https" if (configured_domain and "https" in config.AGENT_BASE_URL if hasattr(config, 'AGENT_BASE_URL') else False) else "http"
-    
-    # Простое формирование: используем порт из конфига. 
-    # Если у вас Nginx проксирует 80/443 -> 8080, то порт в URL указывать не нужно (или указывать 443).
-    # Для универсальности оставим порт, если это не стандартный 80/443.
-    
     port_str = f":{config.WEB_SERVER_PORT}"
     if configured_domain and config.WEB_SERVER_PORT in [80, 443]:
-         port_str = "" # не добавляем порт для стандартных портов
+         port_str = ""
          if config.WEB_SERVER_PORT == 443: protocol = "https"
 
-    # Если пользователь явно задал домен, скорее всего он хочет чистый URL
     if configured_domain:  
          agent_url = f"https://{configured_domain}" 
     else:
          agent_url = f"http://{host_address}:{config.WEB_SERVER_PORT}"
 
-    # 4. Формируем команду установки
     deploy_cmd = f"bash <(wget -qO- https://raw.githubusercontent.com/jatixs/tgbotvpscp/main/deploy.sh) --agent={agent_url} --token={token}"
-    
-    # 5. Экранируем команду
     safe_command = html.escape(deploy_cmd)
 
     await message.answer(
@@ -474,6 +455,7 @@ async def nodes_monitor(bot: Bot):
                             ),
                         ),
                         "downtime",
+                        node_token=token,
                     )
                     await nodes_db.update_node_extra(
                         token, "is_offline_alert_sent", True
@@ -483,6 +465,7 @@ async def nodes_monitor(bot: Bot):
                         bot,
                         lambda lang: _("alert_node_up", lang, name=name),
                         "downtime",
+                        node_token=token,
                     )
                     await nodes_db.update_node_extra(
                         token, "is_offline_alert_sent", False
@@ -512,7 +495,8 @@ async def nodes_monitor(bot: Bot):
                                         threshold=threshold,
                                         processes=p_info,
                                     ),
-                                    "resources",
+                                    "node_resources",
+                                    node_token=token,
                                     processes=p_info,
                                 )
                                 state["active"] = True
@@ -524,7 +508,8 @@ async def nodes_monitor(bot: Bot):
                                 lambda lang: _(
                                     key_norm, lang, name=name, usage=current
                                 ),
-                                "resources",
+                                "node_resources",
+                                node_token=token,
                             )
                             state["active"] = False
                             state["last_time"] = 0

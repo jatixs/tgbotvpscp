@@ -55,8 +55,10 @@ from .utils import (
     decrypt_for_web,
     get_web_key,
     generate_favicons,
+    get_server_timezone_label,
 )
 from .auth import save_users, get_user_name
+from .messaging import send_alert 
 from .keyboards import BTN_CONFIG_MAP
 from modules import update as update_module
 from modules import traffic as traffic_module
@@ -533,6 +535,7 @@ async def handle_dashboard(request):
         "meta_locked": meta_locked,
         "web_brand_name": TG_BOT_NAME,
         "web_version": display_version,
+        "pwa_version": current_config.INSTALLED_VERSION or display_version,
         "role_badge": role_badge_html,
         "cache_ver": CACHE_VER,
         "web_dashboard_title": _("web_dashboard_title", lang),
@@ -556,8 +559,8 @@ async def handle_dashboard(request):
         "web_logs_footer": _("web_logs_footer", lang),
         "web_loading": _("web_loading", lang),
         "web_nodes_loading": _("web_nodes_loading", lang),
-        "web_logs_btn_bot": "Логи Бота" if lang == "ru" else "Bot Logs",
-        "web_logs_btn_sys": "Логи VPS" if lang == "ru" else "VPS Logs",
+        "web_logs_btn_bot": _("web_logs_btn_bot", lang),
+        "web_logs_btn_sys": _("web_logs_btn_sys", lang),
         "node_action_btn": node_action_btn,
         "settings_btn": settings_btn,
         "web_footer_powered": _("web_footer_powered", lang),
@@ -682,9 +685,47 @@ async def handle_heartbeat(request):
     node = await nodes_db.get_node_by_token(token)
     if not node:
         return web.json_response({"error": "Auth fail"}, status=401)
+    ssh_logins = data.get("ssh_logins", [])
+    bot = request.app.get("bot")
+    
+    if ssh_logins and bot:
+        server_tz = get_server_timezone_label()
+        server_time = time.strftime("%H:%M")
+
+        for login in ssh_logins:
+            user_ssh = login.get("user", "unknown")
+            ip = login.get("ip", "unknown")
+            method_raw = login.get("method", "unknown")
+            node_time_str = login.get("node_time_str", "??:??")
+            tz_label = login.get("tz_label", "")
+            
+            flag = await get_country_flag(ip)
+            method_key = "auth_method_unknown"
+            if "publickey" in method_raw.lower():
+                method_key = "auth_method_key"
+            elif "password" in method_raw.lower():
+                method_key = "auth_method_password"
+
+            await send_alert(
+                bot,
+                lambda lang: _(
+                    "alert_ssh_login_node",
+                    lang,
+                    node_name=node.get('name', 'Node'),
+                    user=user_ssh,
+                    method=_(method_key, lang),
+                    ip_flag=flag,
+                    ip=ip,
+                    node_time=node_time_str,
+                    node_tz=tz_label,
+                    server_time=server_time,
+                    server_tz=server_tz
+                ),
+                "node_logins",
+                node_token=token
+            )
     stats = data.get("stats", {})
     results = data.get("results", [])
-    bot = request.app.get("bot")
     if bot and results:
         for res in results:
             asyncio.create_task(
@@ -720,10 +761,39 @@ async def handle_heartbeat(request):
         await nodes_db.clear_node_tasks(token)
     return web.json_response({"status": "ok", "tasks": tasks_to_send})
 
-
 async def process_node_result_background(bot, user_id, cmd, text, token, node_name):
-    if not user_id or not text:
+    if not user_id:
         return
+
+    # Обработка JSON-ответа с ключами локализации
+    final_text = text
+    if isinstance(text, dict) and text.get("type") == "i18n":
+        try:
+            lang = get_user_lang(user_id)
+            key = text.get("key")
+            params = text.get("params", {})
+            
+            # Рекурсивная обработка вложенных ключей (например, для inet_status)
+            resolved_params = {}
+            for k, v in params.items():
+                if isinstance(v, dict) and "key" in v:
+                    # Если параметр сам является объектом с ключом перевода
+                    resolved_params[k] = _(v["key"], lang, **v.get("params", {}))
+                else:
+                    resolved_params[k] = v
+            
+            # Формируем итоговый текст, используя язык пользователя
+            final_text = _(key, lang, **resolved_params)
+        except Exception as e:
+            logging.error(f"Error processing i18n node result: {e}")
+            final_text = str(text) # Возврат к исходному виду при ошибке
+    elif isinstance(text, dict):
+        # Если пришел словарь, но не i18n (на всякий случай)
+        final_text = str(text)
+
+    if not final_text:
+        return
+
     try:
         if cmd == "traffic" and user_id in NODE_TRAFFIC_MONITORS:
             monitor = NODE_TRAFFIC_MONITORS[user_id]
@@ -741,7 +811,7 @@ async def process_node_result_background(bot, user_id, cmd, text, token, node_na
                 )
                 try:
                     await bot.edit_message_text(
-                        text=text,
+                        text=final_text,
                         chat_id=user_id,
                         message_id=msg_id,
                         reply_markup=stop_kb,
@@ -752,13 +822,13 @@ async def process_node_result_background(bot, user_id, cmd, text, token, node_na
                 return
         await bot.send_message(
             chat_id=user_id,
-            text=f"🖥 <b>Ответ от {node_name}:</b>\n\n{text}",
+            text=_("node_response_template", user_id, name=node_name, text=final_text),
             parse_mode="HTML",
         )
+        
     except Exception as e:
         logging.error(f"Background send error: {e}")
-
-
+        
 async def handle_node_details(request):
     if not get_current_user(request):
         return web.json_response({"error": "Unauthorized"}, status=401)
@@ -831,7 +901,7 @@ async def handle_agent_stats(request):
             current_stats["disk"] = psutil.disk_usage(get_host_path("/")).percent
         except Exception:
             pass
-    return web.json_response({"stats": current_stats, "history": AGENT_HISTORY})
+    return web.json_response({"stats": current_stats, "history": list(AGENT_HISTORY)})
 
 
 async def handle_reset_traffic(request):
@@ -1797,7 +1867,7 @@ async def handle_sse_stream(request):
                     ).percent
                 except Exception:
                     pass
-            payload_stats = {"stats": current_stats, "history": AGENT_HISTORY}
+            payload_stats = {"stats": current_stats, "history": list(AGENT_HISTORY)}
             try:
                 await resp.write(
                     f"event: agent_stats\ndata: {json.dumps(payload_stats)}\n\n".encode(
@@ -1928,6 +1998,8 @@ async def handle_sse_logs(request):
             for line in raw_output:
                 if line.startswith("__CURSOR="):
                     new_cursor = line.split("=", 1)[1]
+                elif line.strip().startswith("-- cursor:"):
+                    continue
                 elif line:
                     log_lines.append(line)
             return (log_lines, new_cursor)
@@ -2157,6 +2229,28 @@ async def cleanup_server():
         except asyncio.CancelledError:
             pass
 
+async def cleanup_monitor():
+    """Периодическая очистка устаревших сессий и токенов для экономии памяти."""
+    while True:
+        try:
+            now = time.time()
+            expired_sessions = [token for token, sess in SERVER_SESSIONS.items() if now > sess["expires"]]
+            for token in expired_sessions:
+                del SERVER_SESSIONS[token]
+            expired_resets = [token for token, data in RESET_TOKENS.items() if now - data["ts"] > RESET_TOKEN_TTL]
+            for token in expired_resets:
+                del RESET_TOKENS[token]
+            expired_auth = [token for token, data in AUTH_TOKENS.items() if now - data["created_at"] > LOGIN_TOKEN_TTL]
+            for token in expired_auth:
+                del AUTH_TOKENS[token]
+            for ip in list(LOGIN_ATTEMPTS.keys()):
+                LOGIN_ATTEMPTS[ip] = [t for t in LOGIN_ATTEMPTS[ip] if now - t < LOGIN_BLOCK_TIME]
+                if not LOGIN_ATTEMPTS[ip]:
+                    del LOGIN_ATTEMPTS[ip]
+        except Exception as e:
+            logging.error(f"Cleanup task error: {e}")
+            
+        await asyncio.sleep(600)
 
 async def start_web_server(bot_instance: Bot):
     global AGENT_FLAG, AGENT_TASK
@@ -2223,6 +2317,7 @@ async def start_web_server(bot_instance: Bot):
         logging.info("Web UI DISABLED.")
         app.router.add_get("/", handle_api_root)
     AGENT_TASK = asyncio.create_task(agent_monitor())
+    asyncio.create_task(cleanup_monitor())
     runner = web.AppRunner(app, access_log=None, shutdown_timeout=1.0)
     await runner.setup()
     site = web.TCPSite(runner, WEB_SERVER_HOST, WEB_SERVER_PORT)
@@ -2263,9 +2358,8 @@ async def agent_monitor():
                 "tx": net.bytes_sent,
             }
             AGENT_HISTORY.append(point)
-            if len(AGENT_HISTORY) > 60:
-                AGENT_HISTORY.pop(0)
         except asyncio.CancelledError:
+            
             raise
         except Exception:
             pass
@@ -2845,7 +2939,7 @@ async def handle_sse_stream(request):
                     ).percent
                 except Exception:
                     pass
-            payload_stats = {"stats": current_stats, "history": AGENT_HISTORY}
+            payload_stats = {"stats": current_stats, "history": list(AGENT_HISTORY)}
             try:
                 await resp.write(
                     f"event: agent_stats\ndata: {json.dumps(payload_stats)}\n\n".encode(

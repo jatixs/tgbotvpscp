@@ -19,16 +19,37 @@ async function onTelegramAuth(user) {
             },
             body: JSON.stringify(user)
         });
+        
         if (response.ok) {
             window.location.reload();
         } else {
             const d = await response.json();
-            const errTitle = (typeof I18N !== 'undefined' && I18N.web_error_short) ? I18N.web_error_short : "Auth Error";
-            if (window.showModalAlert) await window.showModalAlert("Error: " + (d.error || "Unknown"), errTitle);
-            else alert(errTitle + ": " + (d.error || "Unknown"));
+            
+            // Если получили 403 Forbidden, показываем более понятное сообщение
+            if (response.status === 403) {
+                const title = (typeof I18N !== 'undefined' && I18N.login_access_denied) ? I18N.login_access_denied : "Access Denied";
+                let msgTemplate = (typeof I18N !== 'undefined' && I18N.login_unauthorized) ? I18N.login_unauthorized : "User <b>@{username}</b> is not authorized.<br><br>Please ask the administrator to add your ID: <b>{id}</b>";
+                
+                const username = user.username || user.id;
+                const msg = msgTemplate.replace('{username}', username).replace('{id}', user.id);
+                
+                // Используем window.showModalAlert (теперь работает с исправленным HTML)
+                if (window.showModalAlert) {
+                    await window.showModalAlert(msg, title);
+                } else {
+                    alert(`${title}\n\n${msg.replace(/<br>/g, '\n').replace(/<b>/g, '').replace(/<\/b>/g, '')}`);
+                }
+            } else {
+                // Другие ошибки
+                const errTitle = (typeof I18N !== 'undefined' && I18N.web_error_short) ? I18N.web_error_short : "Auth Error";
+                if (window.showModalAlert) await window.showModalAlert("Error: " + (d.error || "Unknown"), errTitle);
+                else alert(errTitle + ": " + (d.error || "Unknown"));
+            }
         }
     } catch (e) {
         console.error(e);
+        const errTitle = "Connection Error";
+        if (window.showModalAlert) await window.showModalAlert(String(e), errTitle);
     }
 }
 
@@ -230,7 +251,6 @@ async function requestPasswordReset() {
             const btnText = (I18N && I18N.login_go_to_bot) || "Go to Bot";
             const botLink = (typeof BOT_USERNAME !== 'undefined' && BOT_USERNAME) ? `https://t.me/${BOT_USERNAME}` : "#";
 
-            // ИСПРАВЛЕНО: Иконка "Синий самолетик" (Telegram) + Кнопка "Перейти в бот"
             container.innerHTML = `
                 <div class="text-center py-8 animate-fade-in-up">
                     <div class="w-16 h-16 bg-blue-500/10 rounded-full flex items-center justify-center mx-auto mb-4 border border-blue-500/20">
