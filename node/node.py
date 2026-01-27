@@ -191,12 +191,12 @@ def get_external_ip():
     
     try:
         # Security: Use exec instead of shell to prevent injection
-        proc = await asyncio.create_subprocess_exec(
-            "curl", "-4", "-s", "--max-time", "5", "ifconfig.me",
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE
+        proc = subprocess.Popen(
+            ["curl", "-4", "-s", "--max-time", "5", "ifconfig.me"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE
         )
-        stdout, _ = await proc.communicate()
+        stdout, _ = proc.communicate()
         res = stdout.decode().strip()
         if re.match(r"^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$", res):
             EXTERNAL_IP_CACHE = res
