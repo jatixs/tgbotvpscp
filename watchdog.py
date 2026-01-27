@@ -187,7 +187,7 @@ def process_startup_flags():
 def send_or_edit_telegram_alert(
     message_key: str, alert_type: str, message_id_to_edit=None, **kwargs
 ):
-    global last_alert_times, status_alert_message_id
+    global last_alert_times, status_alert_message_id  # noqa: F824
     load_user_settings()
     
     current_time = time.time()
@@ -430,7 +430,7 @@ def process_service_state(
     current_start_dt: Optional[datetime] = None,
     is_utc: bool = False
 ):
-    global bot_service_was_down_or_activating, status_alert_message_id, current_reported_state, down_time_start, last_service_start_dt
+    global bot_service_was_down_or_activating, status_alert_message_id, current_reported_state, down_time_start, last_service_start_dt  # noqa: F824
     state_to_report = None
     alert_type = None
     message_key = None
