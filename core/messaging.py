@@ -41,16 +41,28 @@ async def send_alert(
     bot: Bot,
     message_or_func: Union[str, Callable[[str], str]],
     alert_type: str,
+    node_token: str = None,
     **kwargs,
 ):
     if not alert_type:
         logging.warning("send_alert вызван без указания alert_type")
         return
-    users_to_alert = [
-        uid for uid, cfg in ALERTS_CONFIG.items() if cfg.get(alert_type, False)
-    ]
+
+    users_to_alert = []
+    for uid, cfg in ALERTS_CONFIG.items():
+        is_enabled = cfg.get(alert_type, False)
+
+        if node_token:
+            override_key = f"node_{node_token}_{alert_type}"
+            if override_key in cfg:
+                is_enabled = cfg[override_key]
+
+        if is_enabled:
+            users_to_alert.append(uid)
+
     if not users_to_alert:
         return
+
     try:
         web_text_default = ""
         text_map = {}
@@ -73,6 +85,7 @@ async def send_alert(
                     pass
             
         if web_text_default or text_map:
+            source = "node" if node_token else "agent"
             shared_state.WEB_NOTIFICATIONS.appendleft(
                 {
                     "id": str(uuid.uuid4()),
@@ -80,6 +93,7 @@ async def send_alert(
                     "text_map": text_map,
                     "time": time.time(),
                     "type": alert_type,
+                    "source": source, # Добавлено поле source
                 }
             )
     except Exception as e:

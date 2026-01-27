@@ -2,53 +2,58 @@
 <html lang="ru">
     <head>
         <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0">
         <title>{{ web_title }}</title>
-		<meta name="apple-mobile-web-app-capable" content="yes">
-		<meta name="apple-mobile-web-app-status-bar-style" content="default">
-		<meta name="apple-mobile-web-app-title" content="TG Bot Panel">
-		<meta name="theme-color" content="#f3f4f6" media="(prefers-color-scheme: light)">
-		<meta name="theme-color" content="#111827" media="(prefers-color-scheme: dark)">
-		<link rel="apple-touch-icon" sizes="180x180" href="/static/favicons/apple-touch-icon.png?v={{ cache_ver }}">
-		<link rel="icon" type="image/png" sizes="32x32" href="/static/favicons/favicon-32x32.png?v={{ cache_ver }}">
-		<link rel="icon" type="image/png" sizes="16x16" href="/static/favicons/favicon-16x16.png?v={{ cache_ver }}">
-		<link rel="manifest" href="/site.webmanifest?v={{ cache_ver }}">
-		<link rel="icon" type="image/x-icon" href="/static/favicons/favicon.ico?v={{ cache_ver }}">		
-		<meta name="description" content="{{ web_meta_desc }}">
-		<meta name="keywords" content="{{ web_meta_keywords }}">
-        <script src="https://cdn.tailwindcss.com"></script>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0, viewport-fit=cover">
+        <meta name="mobile-web-app-capable" content="yes">
+        <meta name="apple-mobile-web-app-capable" content="yes">
+        <meta name="apple-mobile-web-app-status-bar-style" content="default">
+        <meta name="apple-mobile-web-app-title" content="TG Bot Panel">
+        <meta name="theme-color" content="#f3f4f6" media="(prefers-color-scheme: light)">
+        <meta name="theme-color" content="#111827" media="(prefers-color-scheme: dark)">
+        <link rel="apple-touch-icon" sizes="180x180" href="/static/favicons/apple-touch-icon.png?v={{ cache_ver }}">
+        <link rel="icon" type="image/png" sizes="32x32" href="/static/favicons/favicon-32x32.png?v={{ cache_ver }}">
+        <link rel="icon" type="image/png" sizes="16x16" href="/static/favicons/favicon-16x16.png?v={{ cache_ver }}">
+        <link rel="manifest" href="/site.webmanifest?v={{ pwa_version }}">
+        <link rel="icon" type="image/x-icon" href="/static/favicons/favicon.ico?v={{ cache_ver }}">
+        <meta name="description" content="{{ web_meta_desc }}">
+        <meta name="keywords" content="{{ web_meta_keywords }}">
+        <link rel="stylesheet" href="/static/css/main.css?v={{ web_version }}">
         <script src="/static/js/theme_init.js?v={{ web_version }}"></script>
         <script>
         const I18N = {{ i18n_json | safe }};
         const USERS_DATA = {{ users_data_json | safe }};
         const NODES_DATA = {{ nodes_data_json | safe }};
         const KEYBOARD_CONFIG = {{ keyboard_config_json | safe }};
-		{{ user_role_js | safe }}
+        {{ user_role_js | safe }}
         </script>
-        <script src="https://unpkg.com/twemoji@latest/dist/twemoji.min.js"
-                crossorigin="anonymous"></script>
+        <script src="https://unpkg.com/twemoji@latest/dist/twemoji.min.js" crossorigin="anonymous"></script>
         <link rel="stylesheet" href="/static/css/style.css?v={{ web_version }}">
     </head>
     <body class="bg-gray-100 text-gray-900 dark:bg-gray-900 dark:text-gray-100 font-sans selection:bg-green-500/30 pb-10 overflow-x-hidden">
-        <div class="fixed top-[-10%] left-[-10%] w-96 h-96 rounded-full mix-blend-multiply dark:mix-blend-screen filter blur-3xl animate-float pointer-events-none opacity-70 dark:opacity-100 bg-cyan-300 dark:bg-purple-600/20">
-        </div>
-        <div class="fixed bottom-[-10%] right-[-10%] w-96 h-96 rounded-full mix-blend-multiply dark:mix-blend-screen filter blur-3xl animate-float delay-2000 pointer-events-none opacity-70 dark:opacity-100 bg-rose-300 dark:bg-blue-600/20">
-        </div>
+		<div class="fixed top-[-10%] left-[-10%] w-96 h-96 rounded-full mix-blend-multiply dark:mix-blend-screen filter blur-3xl animate-float pointer-events-none opacity-70 dark:opacity-100 bg-blue-300 dark:bg-blue-600/20">
+			</div>
+		<div class="fixed bottom-[-10%] right-[-10%] w-96 h-96 rounded-full mix-blend-multiply dark:mix-blend-screen filter blur-3xl animate-float delay-2000 pointer-events-none opacity-70 dark:opacity-100 bg-purple-300 dark:bg-purple-600/20">
+			</div>
         <nav class="bg-white/70 dark:bg-black/40 backdrop-blur-xl border-b border-white/20 dark:border-white/5 sticky top-0 z-40 shadow-sm dark:shadow-none">
             <div class="max-w-7xl mx-auto px-3 py-2 sm:px-4 sm:py-3 flex flex-nowrap justify-between items-center gap-2">
-                <div class="flex items-center space-x-2 shrink-0">
+				<div class="flex items-center gap-2 sm:gap-3 min-w-0">
                     <a href="/"
-                       class="text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white transition flex items-center gap-2 text-sm font-medium whitespace-nowrap">
+                       class="group shrink-0 flex items-center justify-center sm:justify-start gap-0 sm:gap-2 p-1.5 sm:px-3 sm:py-2 rounded-lg sm:rounded-xl transition-all duration-200 
+                              text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white
+                              hover:bg-gray-100 dark:hover:bg-white/10
+                              sm:text-gray-600 sm:dark:text-gray-300
+                              sm:bg-gray-100/50 sm:hover:bg-gray-200/50 sm:dark:bg-white/5 sm:dark:hover:bg-white/10
+                              sm:border sm:border-transparent sm:hover:border-gray-200 sm:dark:hover:border-white/5">
                         <svg xmlns="http://www.w3.org/2000/svg"
-                             class="h-5 w-5"
+                             class="h-5 w-5 sm:group-hover:-translate-x-1 transition-transform duration-200"
                              fill="none"
                              viewBox="0 0 24 24"
                              stroke="currentColor">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
                         </svg>
-                        <span class="hidden sm:inline">{{ web_back }}</span>
+                        <span class="hidden sm:inline font-bold text-sm">{{ web_back }}</span>
                     </a>
-                    <span class="font-bold text-lg ml-2 whitespace-nowrap">{{ web_settings_page_title }}</span>
+                    <span class="font-bold text-lg whitespace-nowrap truncate">{{ web_settings_page_title }}</span>
                 </div>
                 <div class="flex items-center gap-1 sm:gap-4 shrink-0">
                     <div class="relative group">
@@ -64,8 +69,7 @@
                             </svg>
                             <span id="notifBadge" class="notif-badge hidden">0</span>
                         </button>
-                        <div id="notifDropdown"
-                             class="notif-dropdown hidden fixed inset-x-4 top-16 z-50 sm:absolute sm:top-full sm:right-0 sm:left-auto sm:w-80 sm:z-auto sm:inset-auto origin-top-right !w-auto sm:!w-[320px] rounded-2xl shadow-2xl">
+                        <div id="notifDropdown" class="notif-dropdown hidden rounded-2xl shadow-2xl">
                             <div class="px-4 py-3 border-b border-gray-100 dark:border-white/5 bg-gray-50/50 dark:bg-white/5 backdrop-blur-sm rounded-t-2xl flex justify-between items-center">
                                 <span class="text-xs font-bold uppercase tracking-widest text-gray-500 dark:text-gray-400"
                                       data-i18n="web_notifications_title">{{ web_notifications_title }}</span>
@@ -331,7 +335,7 @@
                             </button>
                         </div>
                     </div>
-                    <div class="bg-white/60 dark:bg-white/5 backdrop-blur-md border border-white/40 dark:border-white/10 rounded-2xl p-6 shadow-lg dark:shadow-none"
+                    <div class="bg-white/60 dark:bg-white/5 backdrop-blur-md border border-white/40 dark:border-white/10 rounded-2xl p-6 shadow-lg dark:shadow-none lazy-block"
                          id="sessionsSection">
                         <h2 class="text-xl font-bold text-gray-900 dark:text-white mb-6 flex items-center gap-2">
                             <svg xmlns="http://www.w3.org/2000/svg"
@@ -367,7 +371,7 @@
                             {{ web_sessions_view_all }}
                         </button>
                     </div>
-<div class="bg-white/60 dark:bg-white/5 backdrop-blur-md border border-white/40 dark:border-white/10 rounded-2xl p-6 shadow-lg dark:shadow-none flex flex-col md:flex-row items-center justify-between gap-4 overflow-hidden">
+<div class="bg-white/60 dark:bg-white/5 backdrop-blur-md border border-white/40 dark:border-white/10 rounded-2xl p-6 shadow-lg dark:shadow-none flex flex-col md:flex-row items-center justify-between gap-4 overflow-hidden lazy-block">
                         
                         <h2 class="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2 whitespace-nowrap min-w-0 flex-1 truncate self-start md:self-auto">
                             <svg xmlns="http://www.w3.org/2000/svg"
@@ -442,7 +446,7 @@
                     </div>
                 </div>
                 <div class="flex flex-col gap-6 h-full">
-                    <div class="bg-white/60 dark:bg-white/5 backdrop-blur-md border border-white/40 dark:border-white/10 rounded-2xl p-6 shadow-lg dark:shadow-none">
+                    <div class="bg-white/60 dark:bg-white/5 backdrop-blur-md border border-white/40 dark:border-white/10 rounded-2xl p-6 shadow-lg dark:shadow-none lazy-block">
                         <h2 class="text-xl font-bold text-gray-900 dark:text-white mb-6 flex items-center gap-2">
                             <svg xmlns="http://www.w3.org/2000/svg"
                                  class="h-6 w-6 text-blue-500 dark:text-blue-400"
@@ -492,7 +496,7 @@
                             </div>
                         </div>
                     </div>
-                    <div class="bg-white/60 dark:bg-white/5 backdrop-blur-md border border-white/40 dark:border-white/10 rounded-2xl p-6 shadow-lg dark:shadow-none">
+                    <div class="bg-white/60 dark:bg-white/5 backdrop-blur-md border border-white/40 dark:border-white/10 rounded-2xl p-6 shadow-lg dark:shadow-none lazy-block">
                         <div class="flex justify-between items-center mb-4">
                             <h2 class="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
                                 <svg xmlns="http://www.w3.org/2000/svg"
@@ -559,7 +563,7 @@
                             </div>
                         </div>
                     </div>
-                    <div class="bg-white/60 dark:bg-white/5 backdrop-blur-md border border-white/40 dark:border-white/10 rounded-2xl p-6 shadow-lg dark:shadow-none"
+                    <div class="bg-white/60 dark:bg-white/5 backdrop-blur-md border border-white/40 dark:border-white/10 rounded-2xl p-6 shadow-lg dark:shadow-none lazy-block"
                          id="securitySection">
                         <h2 class="text-xl font-bold text-gray-900 dark:text-white mb-6 flex items-center gap-2">
                             <svg xmlns="http://www.w3.org/2000/svg"
@@ -600,7 +604,7 @@
                             </div>
                         </div>
                     </div>
-                    <div class="bg-white/60 dark:bg-white/5 backdrop-blur-md border border-white/40 dark:border-white/10 rounded-2xl p-5 shadow-lg dark:shadow-none flex flex-col justify-between flex-1">
+                    <div class="bg-white/60 dark:bg-white/5 backdrop-blur-md border border-white/40 dark:border-white/10 rounded-2xl p-5 shadow-lg dark:shadow-none flex flex-col justify-between flex-1 lazy-block">
                         <div>
                             <div class="flex justify-between items-center mb-4">
                                 <h2 class="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
@@ -648,7 +652,7 @@
                     </div>
                 </div>
                 <div class="md:col-span-2 space-y-6">
-                    <div class="bg-white/60 dark:bg-white/5 backdrop-blur-md border border-white/40 dark:border-white/10 rounded-2xl p-6 shadow-lg dark:shadow-none"
+                    <div class="bg-white/60 dark:bg-white/5 backdrop-blur-md border border-white/40 dark:border-white/10 rounded-2xl p-6 shadow-lg dark:shadow-none lazy-block"
                          id="usersSection">
                         <h2 class="text-xl font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
                             <svg xmlns="http://www.w3.org/2000/svg"
@@ -703,7 +707,7 @@
                             </div>
                         </div>
                     </div>
-                    <div class="bg-white/60 dark:bg-white/5 backdrop-blur-md border border-white/40 dark:border-white/10 rounded-2xl p-6 shadow-lg dark:shadow-none"
+                    <div class="bg-white/60 dark:bg-white/5 backdrop-blur-md border border-white/40 dark:border-white/10 rounded-2xl p-6 shadow-lg dark:shadow-none lazy-block"
                          id="nodesSection">
                         <h2 class="text-xl font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
                             <svg xmlns="http://www.w3.org/2000/svg"
@@ -947,7 +951,7 @@
             </div>
 		</div>
 {% if not meta_locked %}
-<div class="fixed bottom-4 right-4 sm:bottom-8 sm:right-8 z-40 animate-fade-in-up">
+<div class="fixed bottom-4 right-4 sm:bottom-8 sm:right-8 z-40">
     <button onclick="openMetaModal()"
             class="group relative flex items-center justify-center overflow-hidden select-none
                    /* Glass Effect */
