@@ -383,8 +383,8 @@ def check_bot_service_systemd():
     process_service_state(actual_state, status_output_full, restart_service_systemd, current_start_dt, is_utc)
 
 
-def global bot_service_was_down_or_activating, status_alert_message_id, current_reported_state  # noqa: F824
-    check_bot_service_docker():
+def check_bot_service_docker():
+    global bot_service_was_down_or_activating, status_alert_message_id, current_reported_state  # noqa: F824
     if not docker_client:
         return
     actual_state = "unknown"

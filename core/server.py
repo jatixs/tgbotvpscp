@@ -2373,7 +2373,7 @@ async def handle_sse_node_details(request):
 
 
 async def cleanup_server():
-    global AGENT_TASK
+    global AGENT_TASK  # noqa: F824
     if AGENT_TASK and (not AGENT_TASK.done()):
         AGENT_TASK.cancel()
         try:
@@ -2421,7 +2421,7 @@ async def cleanup_monitor():
         await asyncio.sleep(600)
 
 async def start_web_server(bot_instance: Bot):
-    global AGENT_FLAG, AGENT_TASK
+    global AGENT_FLAG, AGENT_TASK  # noqa: F824
     app = web.Application()
     app["bot"] = bot_instance
     app["shutdown_event"] = asyncio.Event()
@@ -3519,7 +3519,7 @@ async def handle_sse_node_details(request):
 
 
 async def cleanup_server():
-    global AGENT_TASK
+    global AGENT_TASK  # noqa: F824
     if AGENT_TASK and (not AGENT_TASK.done()):
         AGENT_TASK.cancel()
         try:
@@ -3529,7 +3529,7 @@ async def cleanup_server():
 
 
 async def start_web_server(bot_instance: Bot):
-    global AGENT_FLAG, AGENT_TASK
+    global AGENT_FLAG, AGENT_TASK  # noqa: F824
     app = web.Application()
     app["bot"] = bot_instance
     app["shutdown_event"] = asyncio.Event()
