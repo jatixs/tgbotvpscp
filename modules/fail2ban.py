@@ -40,8 +40,8 @@ async def fail2ban_handler(message: types.Message):
         LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = sent.message_id
         return
     try:
-        proc = await asyncio.create_subprocess_shell(
-            f"tail -n 50 {log_file}",
+        proc = await asyncio.create_subprocess_exec(
+            "tail", "-n", "50", log_file,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )

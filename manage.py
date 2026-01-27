@@ -3,6 +3,7 @@ import asyncio
 import argparse
 import sys
 import os
+import subprocess
 import logging
 
 base_dir = os.path.dirname(os.path.abspath(__file__))
@@ -94,12 +95,33 @@ async def cmd_restart(args):
     print("♻️  Перезапуск службы бота...")
     is_docker = os.environ.get("DEPLOY_MODE") == "docker"
 
-    if is_docker:
-        # Для Docker нужно знать имя контейнера или использовать docker compose
-        os.system("docker compose restart")  # Запуск из папки проекта должен сработать
-    else:
-        os.system("sudo systemctl restart tg-bot")
-    print("✅ Команда отправлена.")
+    try:
+        if is_docker:
+            # Для Docker используем subprocess вместо os.system
+            result = subprocess.run(
+                ["docker", "compose", "restart"],
+                cwd=os.path.dirname(os.path.abspath(__file__)),
+                capture_output=True,
+                text=True,
+                timeout=30
+            )
+            if result.returncode != 0:
+                print(f"⚠️ Ошибка перезапуска: {result.stderr}")
+        else:
+            # Используем subprocess.run вместо os.system для systemctl
+            result = subprocess.run(
+                ["sudo", "systemctl", "restart", "tg-bot"],
+                capture_output=True,
+                text=True,
+                timeout=30
+            )
+            if result.returncode != 0:
+                print(f"⚠️ Ошибка перезапуска: {result.stderr}")
+        print("✅ Команда отправлена.")
+    except subprocess.TimeoutExpired:
+        print("❌ Превышен timeout перезапуска.")
+    except Exception as e:
+        print(f"❌ Ошибка при перезапуске: {e}")
 
 
 def main():

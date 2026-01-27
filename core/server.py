@@ -65,8 +65,10 @@ from modules import traffic as traffic_module
 from . import shared_state
 
 COOKIE_NAME = "vps_agent_session"
+CSRF_TOKEN_COOKIE = "csrf_token"
 LOGIN_TOKEN_TTL = 300
 RESET_TOKEN_TTL = 600
+CSRF_TOKEN_TTL = 3600
 WEB_PASSWORD = os.environ.get("WEB_PASSWORD", "admin")
 TEMPLATE_DIR = os.path.join(BASE_DIR, "core", "templates")
 STATIC_DIR = os.path.join(BASE_DIR, "core", "static")
@@ -74,12 +76,17 @@ AGENT_FLAG = "🏳️"
 AGENT_IP_CACHE = "Loading..."
 RESET_TOKENS = {}
 SERVER_SESSIONS = {}
+CSRF_TOKENS = {}  # Store CSRF tokens with expiry
 LOGIN_ATTEMPTS = {}
+API_RATE_LIMITS = {}  # Store rate limits for each IP:endpoint
 MAX_LOGIN_ATTEMPTS = 5
+MAX_API_REQUESTS = 100  # Requests per minute per IP
 LOGIN_BLOCK_TIME = 300
+API_RATE_WINDOW = 60
 BOT_USERNAME_CACHE = None
 APP_VERSION = get_app_version()
 CACHE_VER = str(int(time.time()))
+MAX_FILE_SIZE = 50 * 1024 * 1024  # 50MB max file size
 AGENT_TASK = None
 JINJA_ENV = Environment(
     loader=FileSystemLoader(TEMPLATE_DIR), autoescape=select_autoescape(["html", "xml"])
@@ -100,6 +107,50 @@ def add_login_attempt(ip):
     LOGIN_ATTEMPTS[ip].append(time.time())
 
 
+def check_api_rate_limit(ip, endpoint):
+    """Check API rate limit - max requests per minute."""
+    now = time.time()
+    key = f"{ip}:{endpoint}"
+    if key not in API_RATE_LIMITS:
+        API_RATE_LIMITS[key] = []
+    # Clean old timestamps
+    API_RATE_LIMITS[key] = [t for t in API_RATE_LIMITS[key] if now - t < API_RATE_WINDOW]
+    if len(API_RATE_LIMITS[key]) >= MAX_API_REQUESTS:
+        return False
+    API_RATE_LIMITS[key].append(now)
+    return True
+
+
+def generate_csrf_token():
+    """Generate a secure CSRF token."""
+    token = secrets.token_urlsafe(32)
+    CSRF_TOKENS[token] = time.time() + CSRF_TOKEN_TTL
+    return token
+
+
+def verify_csrf_token(token):
+    """Verify CSRF token validity."""
+    if token not in CSRF_TOKENS:
+        return False
+    if time.time() > CSRF_TOKENS[token]:
+        del CSRF_TOKENS[token]
+        return False
+    # Clean up expired tokens periodically
+    if len(CSRF_TOKENS) > 1000:
+        now = time.time()
+        expired = [t for t, exp_time in CSRF_TOKENS.items() if now > exp_time]
+        for t in expired:
+            del CSRF_TOKENS[t]
+    return True
+
+
+def mask_sensitive_data(data, mask_length=6):
+    """Mask sensitive data like IPs and tokens for logging."""
+    if not isinstance(data, str) or len(data) < mask_length:
+        return "***"
+    return data[:mask_length] + "*" * (len(data) - mask_length)
+
+
 def get_client_ip(request):
     ip = request.headers.get("X-Forwarded-For")
     if ip:
@@ -109,17 +160,26 @@ def get_client_ip(request):
 
 
 def check_user_password(user_id, input_pass):
+    """Securely check user password with constant-time comparison."""
     if user_id not in ALLOWED_USERS:
+        # Always perform verification to prevent timing attacks
+        PasswordHasher().verify("$argon2id$v=19$m=102400,t=8,p=1$00000000000000000000000000000000$1234567890ABCDEF", "dummy")
         return False
     user_data = ALLOWED_USERS[user_id]
     if isinstance(user_data, str):
         return False
     stored_hash = user_data.get("password_hash")
     if not stored_hash:
-        return user_id == ADMIN_USER_ID and input_pass == "admin"
+        # Admin user with no password set
+        result = user_id == ADMIN_USER_ID and input_pass == "admin"
+        # Use constant-time comparison for default password too
+        return hmac.compare_digest(str(result), "True")
     ph = PasswordHasher()
     try:
-        return ph.verify(stored_hash, input_pass)
+        ph.verify(stored_hash, input_pass)
+        return True
+    except argon2_exceptions.VerifyMismatchError:
+        return False
     except Exception:
         return False
     ph = PasswordHasher()
@@ -1349,8 +1409,8 @@ async def handle_change_password(request):
         if not check_user_password(user["id"], data.get("current_password")):
             return web.json_response({"error": "Wrong password"}, status=400)
         new_pass = data.get("new_password")
-        if not new_pass or len(new_pass) < 4:
-            return web.json_response({"error": "Too short"}, status=400)
+        if not new_pass or len(new_pass) < 8:
+            return web.json_response({"error": "Password must be at least 8 characters"}, status=400)
         ph = PasswordHasher()
         new_hash = ph.hash(new_pass)
         if isinstance(ALLOWED_USERS[user["id"]], str):
@@ -1765,8 +1825,8 @@ async def handle_reset_confirm(request):
         if uid != ADMIN_USER_ID:
             del RESET_TOKENS[token]
             return web.json_response({"error": "Denied"}, status=403)
-        if not new_pass or len(new_pass) < 4:
-            return web.json_response({"error": "Short pass"}, status=400)
+        if not new_pass or len(new_pass) < 8:
+            return web.json_response({"error": "Password must be at least 8 characters"}, status=400)
         ph = PasswordHasher()
         new_hash = ph.hash(new_pass)
         if isinstance(ALLOWED_USERS[uid], str):
@@ -2243,6 +2303,22 @@ async def cleanup_monitor():
             expired_auth = [token for token, data in AUTH_TOKENS.items() if now - data["created_at"] > LOGIN_TOKEN_TTL]
             for token in expired_auth:
                 del AUTH_TOKENS[token]
+            
+            # Prevent AUTH_TOKENS memory leak by limiting size
+            if len(AUTH_TOKENS) > 1000:
+                # Sort by creation time and remove oldest 25%
+                sorted_tokens = sorted(AUTH_TOKENS.items(), key=lambda x: x[1]["created_at"])
+                remove_count = len(AUTH_TOKENS) // 4
+                for token, _ in sorted_tokens[:remove_count]:
+                    try:
+                        del AUTH_TOKENS[token]
+                    except KeyError:
+                        pass
+            
+            # Clean up API rate limits
+            expired_api_limits = [key for key in API_RATE_LIMITS.keys()]
+            for key in expired_api_limits:
+                del API_RATE_LIMITS[key]
             for ip in list(LOGIN_ATTEMPTS.keys()):
                 LOGIN_ATTEMPTS[ip] = [t for t in LOGIN_ATTEMPTS[ip] if now - t < LOGIN_BLOCK_TIME]
                 if not LOGIN_ATTEMPTS[ip]:
@@ -2257,6 +2333,22 @@ async def start_web_server(bot_instance: Bot):
     app = web.Application()
     app["bot"] = bot_instance
     app["shutdown_event"] = asyncio.Event()
+
+    # Add rate limiting middleware for API endpoints
+    @web.middleware
+    async def rate_limit_middleware(request, handler):
+        # Only rate limit API endpoints
+        if request.path.startswith("/api/") and request.method in ["POST", "PUT", "DELETE"]:
+            ip = get_client_ip(request)
+            endpoint = request.path
+            if not check_api_rate_limit(ip, endpoint):
+                return web.json_response(
+                    {"error": "Rate limit exceeded. Max 100 requests/minute per IP"},
+                    status=429
+                )
+        return await handler(request)
+
+    app.middlewares.append(rate_limit_middleware)
 
     async def on_shutdown(app):
         app["shutdown_event"].set()
@@ -2446,8 +2538,8 @@ async def handle_change_password(request):
         if not check_user_password(user["id"], data.get("current_password")):
             return web.json_response({"error": "Wrong password"}, status=400)
         new_pass = data.get("new_password")
-        if not new_pass or len(new_pass) < 4:
-            return web.json_response({"error": "Too short"}, status=400)
+        if not new_pass or len(new_pass) < 8:
+            return web.json_response({"error": "Password must be at least 8 characters"}, status=400)
         ph = PasswordHasher()
         new_hash = ph.hash(new_pass)
         if isinstance(ALLOWED_USERS[user["id"]], str):
@@ -2837,8 +2929,8 @@ async def handle_reset_confirm(request):
         if uid != ADMIN_USER_ID:
             del RESET_TOKENS[token]
             return web.json_response({"error": "Denied"}, status=403)
-        if not new_pass or len(new_pass) < 4:
-            return web.json_response({"error": "Short pass"}, status=400)
+        if not new_pass or len(new_pass) < 8:
+            return web.json_response({"error": "Password must be at least 8 characters"}, status=400)
         ph = PasswordHasher()
         new_hash = ph.hash(new_pass)
         if isinstance(ALLOWED_USERS[uid], str):

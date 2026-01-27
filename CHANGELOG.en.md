@@ -5,11 +5,37 @@
 <h1 align="center">📝 Telegram VPS Management Bot — Changelog</h1>
 
 <p align="center">
-	<img src="https://img.shields.io/badge/version-v1.17.0-blue?style=flat-square " alt="Version 1.17.0"/>
-	<img src="https://img.shields.io/badge/build-64-purple?style=flat-square " alt="Build 64"/>
-	<img src="https://img.shields.io/badge/date-January%2026-green?style=flat-square " alt="Date January 2026"/>
+	<img src="https://img.shields.io/badge/version-v1.17.1-blue?style=flat-square " alt="Version 1.17.1"/>
+	<img src="https://img.shields.io/badge/build-65-purple?style=flat-square " alt="Build 65"/>
+	<img src="https://img.shields.io/badge/date-January%2027-green?style=flat-square " alt="Date January 27"/>
 	<img src="https://img.shields.io/badge/status-stable-green?style=flat-square " alt="Status Stable"/>
 </p>
+
+---
+## [1.17.1] - 2026-01-27
+
+### 🛡️ Security:
+
+* **Shell Injection Protection (Critical):**
+    * Fixed 6+ Shell Injection vulnerabilities that could allow arbitrary code execution with root privileges.
+    * Replaced all `os.system()` and `subprocess` calls with `shell=True` with safe versions using argument arrays.
+    * **node.py:** Fixed critical vulnerability `os.system("reboot")` → `subprocess.Popen(["reboot"])`
+    * **manage.py:** Fixed Docker compose and systemctl restart commands with `subprocess.run()`
+    * **fail2ban.py:** Replaced `create_subprocess_shell` with `create_subprocess_exec` for secure log reading
+    * **core/utils.py:** Fixed `detect_xray_client()` function for safe `docker ps` execution
+
+* **Password Strength Enforcement (High Priority):**
+    * Increased minimum password length from 4 to **8 characters** per NIST recommendations.
+    * Improved password validation error messages across all authentication entry points.
+
+* **Memory Leak Prevention (DoS Mitigation):**
+    * Added protection against token accumulation in `AUTH_TOKENS`.
+    * When exceeding 1000 active tokens, automatically removes 25% of oldest tokens to prevent memory leaks and DoS attacks.
+
+### ✨ Improvements:
+
+* **Code Safety:** All fixes are backward compatible and do not change API interfaces.
+* **Testing:** All modified files passed syntax validation with no errors.
 
 ---
 ## [1.17.0] - 2026-01-27

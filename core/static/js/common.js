@@ -1,5 +1,27 @@
 /* /core/static/js/common.js */
 
+// Security: Safe HTML helpers
+function escapeHtml(text) {
+    const map = {
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#039;'
+    };
+    return String(text).replace(/[&<>"']/g, m => map[m]);
+}
+
+function setSafeText(element, text) {
+    if (!element) return;
+    element.textContent = text;
+}
+
+function setSafeHTML(element, html) {
+    if (!element) return;
+    element.innerHTML = html;  // Only use with trusted HTML
+}
+
 const themes = ['dark', 'light', 'system'];
 let currentTheme = localStorage.getItem('theme') || 'system';
 let latestNotificationTime = Math.floor(Date.now() / 1000);
@@ -709,7 +731,7 @@ function updateNotifUI(list, count) {
     const bellIcon = document.querySelector('#notifBtn svg');
     
     if (count > 0) {
-        badge.innerText = count > 99 ? '99+' : count;
+        setSafeText(badge, count > 99 ? '99+' : String(count));
         badge.classList.remove('hidden');
         if (lastUnreadCount !== -1 && count > lastUnreadCount) {
             bellIcon.classList.add('notif-bell-shake');
@@ -726,31 +748,36 @@ function updateNotifUI(list, count) {
     }
     
     if (list.length === 0) {
-        listContainer.innerHTML = `<div class="p-4 text-center text-gray-500 text-sm">${(typeof I18N !== 'undefined' ? I18N.web_no_notifications : "No notifications")}</div>`;
+        setSafeHTML(listContainer, `<div class="p-4 text-center text-gray-500 text-sm">${escapeHtml((typeof I18N !== 'undefined' ? I18N.web_no_notifications : "No notifications"))}</div>`);
     } else {
-        listContainer.innerHTML = list.map(n => {
+        listContainer.innerHTML = "";
+        list.forEach(n => {
+            const div = document.createElement('div');
+            div.className = "px-4 py-3 border-b border-gray-100 dark:border-white/5 hover:bg-gray-50 dark:hover:bg-white/5 transition last:border-0 group";
             const date = new Date(n.time * 1000).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
-            let cleanText = n.text.replace(/<(?!\/?b\s*>)[^>]*>/g, "").replace(/\n/g, "<br>");
+            
             let badgeHtml = '';
             if (n.source === 'node') {
                 badgeHtml = `<span class="px-1.5 py-0.5 rounded text-[9px] font-bold bg-purple-100 text-purple-700 dark:bg-purple-500/20 dark:text-purple-200 mr-2 uppercase tracking-wider">NODE</span>`;
             } else {
                 badgeHtml = `<span class="px-1.5 py-0.5 rounded text-[9px] font-bold bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-200 mr-2 uppercase tracking-wider">AGENT</span>`;
             }
-			
-            return `
-            <div class="px-4 py-3 border-b border-gray-100 dark:border-white/5 hover:bg-gray-50 dark:hover:bg-white/5 transition last:border-0 group">
+            
+            // Sanitize text - only allow basic <b> tags
+            let cleanText = n.text.replace(/<(?!\/?b\s*>)[^>]*>/g, "").replace(/\n/g, "<br>");
+            
+            div.innerHTML = `
                 <div class="flex justify-between items-start mb-1">
                     <div class="flex items-center">
                         ${badgeHtml}
-                        <span class="text-[10px] text-gray-400 font-mono">${date}</span>
+                        <span class="text-[10px] text-gray-400 font-mono">${escapeHtml(date)}</span>
                     </div>
                 </div>
                 <div class="text-sm text-gray-700 dark:text-gray-300 leading-snug break-words group-hover:text-gray-900 dark:group-hover:text-white transition-colors">
                     ${cleanText}
-                </div>
-            </div>`;
-        }).join('');
+                </div>`;
+            listContainer.appendChild(div);
+        });
     }
 }
 

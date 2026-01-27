@@ -297,8 +297,9 @@ def get_server_timezone_label():
 
 async def detect_xray_client():
     try:
-        proc = await asyncio.create_subprocess_shell(
-            "docker ps --format '{{.Names}} {{.Image}}'",
+        # Use subprocess.exec instead of shell for better security
+        proc = await asyncio.create_subprocess_exec(
+            "docker", "ps", "--format", "{{.Names}} {{.Image}}",
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )

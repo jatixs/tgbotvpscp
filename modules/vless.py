@@ -1,5 +1,6 @@
 import logging
 import io
+import json
 import qrcode
 from aiogram import F, Dispatcher, types
 from aiogram.types import (
@@ -112,7 +113,42 @@ async def process_vless_file(message: types.Message, state: FSMContext):
     try:
         file = await message.bot.get_file(document.file_id)
         file_download_result = await message.bot.download_file(file.file_path)
+        
+        # Security: Check file size before reading (max 10MB)
+        file_size = len(file_download_result.getvalue()) if hasattr(file_download_result, 'getvalue') else 0
+        if file_size > 10 * 1024 * 1024:  # 10MB limit
+            sent_message = await message.answer(
+                "File is too large (max 10MB)",
+                parse_mode="HTML",
+                reply_markup=cancel_keyboard,
+            )
+            LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = sent_message.message_id
+            return
+        
         json_data = file_download_result.read().decode("utf-8")
+        
+        # Security: Validate JSON safely with size limit
+        if len(json_data) > 10 * 1024 * 1024:
+            sent_message = await message.answer(
+                "JSON data too large",
+                parse_mode="HTML",
+                reply_markup=cancel_keyboard,
+            )
+            LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = sent_message.message_id
+            return
+        
+        # Parse JSON safely
+        try:
+            json.loads(json_data)  # Validate it's valid JSON
+        except json.JSONDecodeError:
+            sent_message = await message.answer(
+                _("vless_error_not_json", lang),
+                parse_mode="HTML",
+                reply_markup=cancel_keyboard,
+            )
+            LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = sent_message.message_id
+            return
+        
         await state.update_data(json_data=json_data)
         cancel_keyboard = InlineKeyboardMarkup(
             inline_keyboard=[
