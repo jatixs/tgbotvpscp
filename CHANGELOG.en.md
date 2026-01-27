@@ -14,28 +14,21 @@
 ---
 ## [1.17.1] - 2026-01-27
 
-### 🛡️ Security:
+### 🛡️ Security & Audit:
 
-* **Shell Injection Protection (Critical):**
-    * Fixed 6+ Shell Injection vulnerabilities that could allow arbitrary code execution with root privileges.
-    * Replaced all `os.system()` and `subprocess` calls with `shell=True` with safe versions using argument arrays.
-    * **node.py:** Fixed critical vulnerability `os.system("reboot")` → `subprocess.Popen(["reboot"])`
-    * **manage.py:** Fixed Docker compose and systemctl restart commands with `subprocess.run()`
-    * **fail2ban.py:** Replaced `create_subprocess_shell` with `create_subprocess_exec` for secure log reading
-    * **core/utils.py:** Fixed `detect_xray_client()` function for safe `docker ps` execution
+* **Comprehensive Protection:** Implemented WAF, Rate Limiting, and Brute-force protection for Web Panel and API.
+* **Audit System:** Added detailed security event logging to `logs/audit/audit.log`.
+* **Privacy:** Implemented automatic masking of sensitive data (IPs, tokens, passwords) in logs.
+* **Vulnerability Fixes:**
+    * Patched 6+ Shell Injection vulnerabilities (replaced unsafe `os.system` calls).
+    * Enforced stronger password requirements (min 8 chars, NIST compliant).
+    * Added DoS protection against memory leaks in token management.
 
-* **Password Strength Enforcement (High Priority):**
-    * Increased minimum password length from 4 to **8 characters** per NIST recommendations.
-    * Improved password validation error messages across all authentication entry points.
+### ⚙️ Optimization & Refactoring:
 
-* **Memory Leak Prevention (DoS Mitigation):**
-    * Added protection against token accumulation in `AUTH_TOKENS`.
-    * When exceeding 1000 active tokens, automatically removes 25% of oldest tokens to prevent memory leaks and DoS attacks.
-
-### ✨ Improvements:
-
-* **Code Safety:** All fixes are backward compatible and do not change API interfaces.
-* **Testing:** All modified files passed syntax validation with no errors.
+* **Project Structure:** Audit module merged into `core/utils.py`, removed redundant `core/audit.py`.
+* **Code Localization:** All source code comments translated to English (International Standard).
+* **Fixes:** Optimized secure Docker command execution in `watchdog` and `manage.py`.
 
 ---
 ## [1.17.0] - 2026-01-27

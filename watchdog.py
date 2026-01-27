@@ -95,7 +95,7 @@ if DEPLOY_MODE == "docker":
 
 
 def get_system_uptime() -> str:
-    """Получает аптайм системы из /proc/uptime"""
+    """Gets system uptime from /proc/uptime"""
     try:
         with open("/proc/uptime", "r") as f:
             uptime_seconds = float(f.readline().split()[0])
@@ -105,7 +105,7 @@ def get_system_uptime() -> str:
 
 
 def get_last_backup_info() -> str:
-    """Находит последний бэкап и возвращает локализованную строку статуса"""
+    """Finds the last backup and returns a localized status string"""
     load_user_settings()
     try:
         traffic_dir = getattr(config, 'TRAFFIC_BACKUP_DIR', None)
@@ -126,7 +126,7 @@ def get_last_backup_info() -> str:
 
 
 def process_startup_flags():
-    """Проверяет флаги перезагрузки/рестарта и уведомляет пользователей"""
+    """Checks reboot/restart flags and notifies users"""
     
     load_user_settings() 
     

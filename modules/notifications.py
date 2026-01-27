@@ -633,7 +633,7 @@ async def resource_monitor(bot: Bot):
                 RESOURCE_ALERT_STATE["disk"] = False
                 LAST_RESOURCE_ALERT_TIME["disk"] = 0
             if alerts:
-                # Агентские ресурсы (Agent)
+                # Agent resources (Agent)
                 await send_alert(
                     bot,
                     lambda lang: "\n\n".join([_(k, lang, **p) for k, p in alerts]),

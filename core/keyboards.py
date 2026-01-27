@@ -617,7 +617,7 @@ def get_node_management_keyboard(
     return InlineKeyboardMarkup(inline_keyboard=layout)
     
 def get_backups_menu_keyboard(lang: str) -> InlineKeyboardMarkup:
-    """Клавиатура главного меню бэкапов"""
+    """Backups main menu keyboard"""
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [

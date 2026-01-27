@@ -63,6 +63,7 @@ from .keyboards import BTN_CONFIG_MAP
 from modules import update as update_module
 from modules import traffic as traffic_module
 from . import shared_state
+from .utils import log_audit_event, AuditEvent
 
 COOKIE_NAME = "vps_agent_session"
 CSRF_TOKEN_COOKIE = "csrf_token"
@@ -149,6 +150,94 @@ def mask_sensitive_data(data, mask_length=6):
     if not isinstance(data, str) or len(data) < mask_length:
         return "***"
     return data[:mask_length] + "*" * (len(data) - mask_length)
+
+
+# WAF (Web Application Firewall) Rules
+WAF_ATTACK_PATTERNS = [
+    # SQL Injection patterns
+    (r"(\%27)|(\')|(\-\-)|(\%23)|(#)", "SQL_INJECTION"),
+    (r"((\%3D)|(=))[^\n]*((\%27)|(\')|(\-\-)|(\%3B)|(;))", "SQL_INJECTION"),
+    (r"\w*((\%27)|(\'))((\%6F)|o|(\%4F))((\%72)|r|(\%52))", "SQL_INJECTION"),
+    (r"(union|select|insert|update|delete|drop|create|alter|exec|execute)(\s|\+|%20)", "SQL_INJECTION"),
+    
+    # XSS (Cross-Site Scripting) patterns
+    (r"<script[^>]*>.*?</script>", "XSS"),
+    (r"javascript:", "XSS"),
+    (r"on\w+\s*=", "XSS"),
+    (r"<iframe[^>]*>", "XSS"),
+    (r"<embed[^>]*>", "XSS"),
+    (r"<object[^>]*>", "XSS"),
+    
+    # Path Traversal patterns
+    (r"\.\./", "PATH_TRAVERSAL"),
+    (r"\.\.\\", "PATH_TRAVERSAL"),
+    (r"%2e%2e/", "PATH_TRAVERSAL"),
+    (r"%2e%2e\\", "PATH_TRAVERSAL"),
+    
+    # Command Injection patterns
+    (r"[;&|`$()]", "COMMAND_INJECTION"),
+    (r"(bash|sh|cmd|powershell|wget|curl)\s", "COMMAND_INJECTION"),
+    
+    # LDAP Injection
+    (r"(\%28)|(\%29)|(\()|(\))|(\%7C)|(\|)", "LDAP_INJECTION"),
+]
+
+import re
+
+def check_waf_patterns(data: str) -> tuple[bool, str]:
+    """
+    Проверяет данные на наличие паттернов атак
+    
+    Returns:
+        (is_attack, attack_type): True если обнаружена атака, тип атаки
+    """
+    if not isinstance(data, str):
+        return False, ""
+    
+    data_lower = data.lower()
+    
+    for pattern, attack_type in WAF_ATTACK_PATTERNS:
+        if re.search(pattern, data_lower, re.IGNORECASE):
+            return True, attack_type
+    
+    return False, ""
+
+
+def validate_input_length(data: str, max_length: int = 1000) -> bool:
+    """Checks input data length"""
+    if not isinstance(data, str):
+        return True
+    return len(data) <= max_length
+
+
+def validate_file_upload(filename: str, content_type: str, file_size: int) -> tuple[bool, str]:
+    """
+    Валидация загружаемых файлов
+    
+    Returns:
+        (is_valid, error_message)
+    """
+    # Разрешенные расширения
+    ALLOWED_EXTENSIONS = {'.jpg', '.jpeg', '.png', '.gif', '.pdf', '.txt', '.log', '.zip'}
+    
+    # Проверка расширения
+    _, ext = os.path.splitext(filename.lower())
+    if ext not in ALLOWED_EXTENSIONS:
+        return False, f"File type {ext} not allowed"
+    
+    # Проверка размера (50MB)
+    if file_size > MAX_FILE_SIZE:
+        return False, f"File size {file_size} exceeds limit {MAX_FILE_SIZE}"
+    
+    # Проверка MIME type
+    allowed_mimes = {
+        'image/jpeg', 'image/png', 'image/gif',
+        'application/pdf', 'text/plain', 'application/zip'
+    }
+    if content_type not in allowed_mimes:
+        return False, f"Content type {content_type} not allowed"
+    
+    return True, ""
 
 
 def get_client_ip(request):
@@ -740,7 +829,7 @@ async def handle_heartbeat(request):
     ).hexdigest()
     if not hmac.compare_digest(expected_signature, signature):
         safe_ip = str(request.remote).replace("\n", "").replace("\r", "")
-        logging.warning(f"Invalid signature from {safe_ip}")
+        logging.warning(f"Invalid signature from {mask_sensitive_data(safe_ip)}")
         return web.json_response({"error": "Invalid signature"}, status=403)
     node = await nodes_db.get_node_by_token(token)
     if not node:
@@ -758,6 +847,9 @@ async def handle_heartbeat(request):
             method_raw = login.get("method", "unknown")
             node_time_str = login.get("node_time_str", "??:??")
             tz_label = login.get("tz_label", "")
+            
+            # Логируем с masking
+            logging.info(f"SSH login on node {node.get('name', 'Node')}: user={user_ssh}, ip={mask_sensitive_data(ip)}, method={method_raw}")
             
             flag = await get_country_flag(ip)
             method_key = "auth_method_unknown"
@@ -2290,7 +2382,7 @@ async def cleanup_server():
             pass
 
 async def cleanup_monitor():
-    """Периодическая очистка устаревших сессий и токенов для экономии памяти."""
+    """Periodic cleanup of expired sessions and tokens to save memory."""
     while True:
         try:
             now = time.time()
@@ -2342,13 +2434,57 @@ async def start_web_server(bot_instance: Bot):
             ip = get_client_ip(request)
             endpoint = request.path
             if not check_api_rate_limit(ip, endpoint):
+                logging.warning(f"Rate limit exceeded for IP: {mask_sensitive_data(ip)}")
                 return web.json_response(
                     {"error": "Rate limit exceeded. Max 100 requests/minute per IP"},
                     status=429
                 )
         return await handler(request)
+    
+    # WAF (Web Application Firewall) Middleware
+    @web.middleware
+    async def waf_middleware(request, handler):
+        # Проверяем только POST/PUT запросы с данными
+        if request.method in ["POST", "PUT"]:
+            ip = get_client_ip(request)
+            
+            # Проверка Query String
+            if request.query_string:
+                is_attack, attack_type = check_waf_patterns(request.query_string.decode('utf-8', errors='ignore'))
+                if is_attack:
+                    logging.critical(f"WAF: {attack_type} detected in query from IP {mask_sensitive_data(ip)}")
+                    return web.json_response(
+                        {"error": "Malicious request detected"},
+                        status=403
+                    )
+            
+            # Проверка тела запроса (JSON)
+            if request.content_type == 'application/json':
+                try:
+                    body = await request.text()
+                    if body:
+                        is_attack, attack_type = check_waf_patterns(body)
+                        if is_attack:
+                            logging.critical(f"WAF: {attack_type} detected in body from IP {mask_sensitive_data(ip)}")
+                            return web.json_response(
+                                {"error": "Malicious request detected"},
+                                status=403
+                            )
+                        
+                        # Проверка длины
+                        if not validate_input_length(body, max_length=10000):
+                            logging.warning(f"WAF: Request too large from IP {mask_sensitive_data(ip)}")
+                            return web.json_response(
+                                {"error": "Request too large"},
+                                status=413
+                            )
+                except Exception as e:
+                    logging.error(f"WAF middleware error: {e}")
+        
+        return await handler(request)
 
     app.middlewares.append(rate_limit_middleware)
+    app.middlewares.append(waf_middleware)
 
     async def on_shutdown(app):
         app["shutdown_event"].set()

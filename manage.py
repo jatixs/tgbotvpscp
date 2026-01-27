@@ -29,12 +29,12 @@ from core.nodes_db import init_db
 
 
 async def init_services():
-    """Инициализация БД"""
+    """Init DB"""
     await init_db()
 
 
 async def close_services():
-    """Закрытие соединений"""
+    """Close connections"""
     await Tortoise.close_connections()
 
 

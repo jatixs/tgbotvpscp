@@ -4,6 +4,7 @@ from aiogram import F, Dispatcher, types, Bot
 from aiogram.types import KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
 from core.i18n import _, I18nFilter, get_user_lang
 from core import config
+from core.utils import log_audit_event, AuditEvent
 from core.auth import is_allowed, send_access_denied_message
 from core.messaging import delete_previous_message
 from core.shared_state import LAST_MESSAGE_IDS
@@ -65,6 +66,13 @@ async def reboot_execute_handler(callback: types.CallbackQuery):
     bot: Bot = callback.bot
     await callback.message.edit_text(_("reboot_confirmed", lang), parse_mode="HTML")
     try:
+        # Audit logging
+        log_audit_event(
+            AuditEvent.SYSTEM_REBOOT,
+            user_id,
+            details={"action": "reboot"},
+            severity="CRITICAL"
+        )
         shared_state.IS_RESTARTING = True
         cmd = "nohup sh -c 'sleep 5 && /sbin/reboot' >/dev/null 2>&1 &"
         await asyncio.create_subprocess_shell(cmd)

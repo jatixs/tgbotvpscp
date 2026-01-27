@@ -47,10 +47,10 @@ class RedactingFormatter(logging.Formatter):
 logger = logging.getLogger()
 logger.setLevel(logging.DEBUG if DEBUG_MODE else logging.INFO)
 
-# Путь к логам лучше брать относительно текущей директории или из конфига,
-# но оставим жесткий путь как в оригинале, если структура папок сохраняется.
+# Path to logs is better taken relative to current dir or config,
+# but we kept hardcoded path as in original if folder structure is preserved.
 LOG_FILE_PATH = "/opt/tg-bot/logs/node/node.log"
-# Создаем директорию логов, если её нет (на случай ручного запуска)
+# Create log directory if missing (for manual run)
 try:
     os.makedirs(os.path.dirname(LOG_FILE_PATH), exist_ok=True)
 except Exception:

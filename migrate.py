@@ -4,7 +4,7 @@ import logging
 import sys
 import shutil
 from core import config  
-from core.config import CIPHER_SUITE, CONFIG_DIR  # Для шифрования
+from core.config import CIPHER_SUITE, CONFIG_DIR  # For encryption
 
 logging.basicConfig(
     level=logging.INFO,
