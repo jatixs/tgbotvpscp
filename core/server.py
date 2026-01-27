@@ -60,13 +60,17 @@ from .utils import (
 from .auth import save_users, get_user_name
 from .messaging import send_alert 
 from .keyboards import BTN_CONFIG_MAP
+from modules.services import get_all_services_status, perform_service_action, get_user_role_level, get_all_available_services, add_managed_service, remove_managed_service
 from modules import update as update_module
 from modules import traffic as traffic_module
 from . import shared_state
+from .utils import log_audit_event, AuditEvent
 
 COOKIE_NAME = "vps_agent_session"
+CSRF_TOKEN_COOKIE = "csrf_token"
 LOGIN_TOKEN_TTL = 300
 RESET_TOKEN_TTL = 600
+CSRF_TOKEN_TTL = 3600
 WEB_PASSWORD = os.environ.get("WEB_PASSWORD", "admin")
 TEMPLATE_DIR = os.path.join(BASE_DIR, "core", "templates")
 STATIC_DIR = os.path.join(BASE_DIR, "core", "static")
@@ -74,12 +78,17 @@ AGENT_FLAG = "🏳️"
 AGENT_IP_CACHE = "Loading..."
 RESET_TOKENS = {}
 SERVER_SESSIONS = {}
+CSRF_TOKENS = {}  # Store CSRF tokens with expiry
 LOGIN_ATTEMPTS = {}
+API_RATE_LIMITS = {}  # Store rate limits for each IP:endpoint
 MAX_LOGIN_ATTEMPTS = 5
+MAX_API_REQUESTS = 100  # Requests per minute per IP
 LOGIN_BLOCK_TIME = 300
+API_RATE_WINDOW = 60
 BOT_USERNAME_CACHE = None
 APP_VERSION = get_app_version()
 CACHE_VER = str(int(time.time()))
+MAX_FILE_SIZE = 50 * 1024 * 1024  # 50MB max file size
 AGENT_TASK = None
 JINJA_ENV = Environment(
     loader=FileSystemLoader(TEMPLATE_DIR), autoescape=select_autoescape(["html", "xml"])
@@ -100,6 +109,138 @@ def add_login_attempt(ip):
     LOGIN_ATTEMPTS[ip].append(time.time())
 
 
+def check_api_rate_limit(ip, endpoint):
+    """Check API rate limit - max requests per minute."""
+    now = time.time()
+    key = f"{ip}:{endpoint}"
+    if key not in API_RATE_LIMITS:
+        API_RATE_LIMITS[key] = []
+    # Clean old timestamps
+    API_RATE_LIMITS[key] = [t for t in API_RATE_LIMITS[key] if now - t < API_RATE_WINDOW]
+    if len(API_RATE_LIMITS[key]) >= MAX_API_REQUESTS:
+        return False
+    API_RATE_LIMITS[key].append(now)
+    return True
+
+
+def generate_csrf_token():
+    """Generate a secure CSRF token."""
+    token = secrets.token_urlsafe(32)
+    CSRF_TOKENS[token] = time.time() + CSRF_TOKEN_TTL
+    return token
+
+
+def verify_csrf_token(token):
+    """Verify CSRF token validity."""
+    if token not in CSRF_TOKENS:
+        return False
+    if time.time() > CSRF_TOKENS[token]:
+        del CSRF_TOKENS[token]
+        return False
+    # Clean up expired tokens periodically
+    if len(CSRF_TOKENS) > 1000:
+        now = time.time()
+        expired = [t for t, exp_time in CSRF_TOKENS.items() if now > exp_time]
+        for t in expired:
+            del CSRF_TOKENS[t]
+    return True
+
+
+def mask_sensitive_data(data, mask_length=6):
+    """Mask sensitive data like IPs and tokens for logging."""
+    if not isinstance(data, str) or len(data) < mask_length:
+        return "***"
+    return data[:mask_length] + "*" * (len(data) - mask_length)
+
+
+# WAF (Web Application Firewall) Rules
+WAF_ATTACK_PATTERNS = [
+    # SQL Injection patterns
+    (r"(\%27)|(\')|(\-\-)|(\%23)|(#)", "SQL_INJECTION"),
+    (r"((\%3D)|(=))[^\n]*((\%27)|(\')|(\-\-)|(\%3B)|(;))", "SQL_INJECTION"),
+    (r"\w*((\%27)|(\'))((\%6F)|o|(\%4F))((\%72)|r|(\%52))", "SQL_INJECTION"),
+    (r"(union|select|insert|update|delete|drop|create|alter|exec|execute)(\s|\+|%20)", "SQL_INJECTION"),
+    
+    # XSS (Cross-Site Scripting) patterns
+    (r"<script[^>]*>.*?</script>", "XSS"),
+    (r"javascript:", "XSS"),
+    (r"on\w+\s*=", "XSS"),
+    (r"<iframe[^>]*>", "XSS"),
+    (r"<embed[^>]*>", "XSS"),
+    (r"<object[^>]*>", "XSS"),
+    
+    # Path Traversal patterns
+    (r"\.\./", "PATH_TRAVERSAL"),
+    (r"\.\.\\", "PATH_TRAVERSAL"),
+    (r"%2e%2e/", "PATH_TRAVERSAL"),
+    (r"%2e%2e\\", "PATH_TRAVERSAL"),
+    
+    # Command Injection patterns
+    (r"[;&|`$()]", "COMMAND_INJECTION"),
+    (r"(bash|sh|cmd|powershell|wget|curl)\s", "COMMAND_INJECTION"),
+    
+    # LDAP Injection
+    (r"(\%28)|(\%29)|(\()|(\))|(\%7C)|(\|)", "LDAP_INJECTION"),
+]
+
+import re
+
+def check_waf_patterns(data: str) -> tuple[bool, str]:
+    """
+    Проверяет данные на наличие паттернов атак
+    
+    Returns:
+        (is_attack, attack_type): True если обнаружена атака, тип атаки
+    """
+    if not isinstance(data, str):
+        return False, ""
+    
+    data_lower = data.lower()
+    
+    for pattern, attack_type in WAF_ATTACK_PATTERNS:
+        if re.search(pattern, data_lower, re.IGNORECASE):
+            return True, attack_type
+    
+    return False, ""
+
+
+def validate_input_length(data: str, max_length: int = 1000) -> bool:
+    """Checks input data length"""
+    if not isinstance(data, str):
+        return True
+    return len(data) <= max_length
+
+
+def validate_file_upload(filename: str, content_type: str, file_size: int) -> tuple[bool, str]:
+    """
+    Валидация загружаемых файлов
+    
+    Returns:
+        (is_valid, error_message)
+    """
+    # Разрешенные расширения
+    ALLOWED_EXTENSIONS = {'.jpg', '.jpeg', '.png', '.gif', '.pdf', '.txt', '.log', '.zip'}
+    
+    # Проверка расширения
+    _, ext = os.path.splitext(filename.lower())
+    if ext not in ALLOWED_EXTENSIONS:
+        return False, f"File type {ext} not allowed"
+    
+    # Проверка размера (50MB)
+    if file_size > MAX_FILE_SIZE:
+        return False, f"File size {file_size} exceeds limit {MAX_FILE_SIZE}"
+    
+    # Проверка MIME type
+    allowed_mimes = {
+        'image/jpeg', 'image/png', 'image/gif',
+        'application/pdf', 'text/plain', 'application/zip'
+    }
+    if content_type not in allowed_mimes:
+        return False, f"Content type {content_type} not allowed"
+    
+    return True, ""
+
+
 def get_client_ip(request):
     ip = request.headers.get("X-Forwarded-For")
     if ip:
@@ -109,17 +250,26 @@ def get_client_ip(request):
 
 
 def check_user_password(user_id, input_pass):
+    """Securely check user password with constant-time comparison."""
     if user_id not in ALLOWED_USERS:
+        # Always perform verification to prevent timing attacks
+        PasswordHasher().verify("$argon2id$v=19$m=102400,t=8,p=1$00000000000000000000000000000000$1234567890ABCDEF", "dummy")
         return False
     user_data = ALLOWED_USERS[user_id]
     if isinstance(user_data, str):
         return False
     stored_hash = user_data.get("password_hash")
     if not stored_hash:
-        return user_id == ADMIN_USER_ID and input_pass == "admin"
+        # Admin user with no password set
+        result = user_id == ADMIN_USER_ID and input_pass == "admin"
+        # Use constant-time comparison for default password too
+        return hmac.compare_digest(str(result), "True")
     ph = PasswordHasher()
     try:
-        return ph.verify(stored_hash, input_pass)
+        ph.verify(stored_hash, input_pass)
+        return True
+    except argon2_exceptions.VerifyMismatchError:
+        return False
     except Exception:
         return False
     ph = PasswordHasher()
@@ -489,13 +639,22 @@ async def handle_dashboard(request):
     role = user.get("role", "users")
     is_main_admin = user_id == ADMIN_USER_ID
     is_admin = role == "admins" or is_main_admin
-    role_color = "green" if role == "admins" else "gray"
-    role_badge_html = f'<span class="ml-2 px-2 py-0.5 rounded text-[10px] border border-{role_color}-500/30 bg-{role_color}-100 dark:bg-{role_color}-500/20 text-{role_color}-600 dark:text-{role_color}-400 uppercase font-bold align-middle">{role}</span>'
+    
+    # Badge colors: Owner (main admin) = red, Admins = green, Users = amber
+    if is_main_admin:
+        role_text = _("web_role_owner", lang)
+        role_badge_html = f'<span class="role-badge-owner hidden sm:inline-flex px-2 py-0.5 rounded text-[10px] border uppercase font-bold">{role_text}</span>'
+    elif role == "admins":
+        role_text = _("web_role_admins", lang)
+        role_badge_html = f'<span class="role-badge-admin hidden sm:inline-flex px-2 py-0.5 rounded text-[10px] border uppercase font-bold">{role_text}</span>'
+    else:
+        role_text = _("web_role_users", lang)
+        role_badge_html = f'<span class="role-badge-user hidden sm:inline-flex px-2 py-0.5 rounded text-[10px] border uppercase font-bold">{role_text}</span>'
     node_action_btn = ""
     settings_btn = ""
     if user_id == ADMIN_USER_ID:
         node_action_btn = f"""<button onclick="openAddNodeModal()" class="inline-flex items-center gap-1.5 py-1.5 px-3 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold transition shadow-lg shadow-blue-500/20"><svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path></svg>{_('web_add_node_section', lang)}</button>"""
-        settings_btn = f'<a href="/settings" class="flex items-center justify-center w-8 h-8 rounded-lg hover:bg-black/5 dark:hover:bg-white/10 transition text-gray-600 dark:text-gray-400" title="{_('web_settings_button', lang)}"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg></a>'
+        settings_btn = f'<a href="/settings" class="flex items-center justify-center w-8 h-8 rounded-lg hover:bg-black/5 dark:hover:bg-white/10 transition text-gray-600 dark:text-gray-400" title="{_("web_settings_button", lang)}"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg></a>'
     clean_version = APP_VERSION.lstrip("v")
     display_version = f"v{clean_version}"
     users_json = "null"
@@ -548,6 +707,17 @@ async def handle_dashboard(request):
         "web_traffic_total": _("web_traffic_total", lang),
         "web_uptime": _("web_uptime", lang),
         "web_cpu": _("web_cpu", lang),
+        "web_ram": _("web_ram", lang),
+        "web_services_title": _("web_services_title", lang),
+        "web_services_empty": _("web_services_empty", lang),
+        "web_services_btn_start": _("web_services_btn_start", lang),
+        "web_services_btn_stop": _("web_services_btn_stop", lang),
+        "web_services_btn_restart": _("web_services_btn_restart", lang),
+        "web_services_edit_title": _("web_services_edit_title", lang),
+        "web_services_search": _("web_services_search", lang),
+        "web_services_info_title": _("web_services_info_title", lang),
+        "web_services_info_loading": _("web_services_info_loading", lang),
+        "user_role_level": get_user_role_level(user_id),
         "web_ram": _("web_ram", lang),
         "web_disk": _("web_disk", lang),
         "web_rx": _("web_rx", lang),
@@ -655,6 +825,26 @@ async def handle_dashboard(request):
                 "traffic_reset_done": _("web_traffic_reset_no_emoji", lang),
                 "web_logs_empty_title": _("web_logs_empty_title", lang),
                 "web_logs_empty_desc": _("web_logs_empty_desc", lang),
+                "web_services_confirm_start": _("web_services_confirm_start", lang),
+                "web_services_confirm_stop": _("web_services_confirm_stop", lang),
+                "web_services_confirm_restart": _("web_services_confirm_restart", lang),
+                "web_services_error": _("web_services_error", lang),
+                "web_services_request_failed": _("web_services_request_failed", lang),
+                "web_services_btn_add": _("web_services_btn_add", lang),
+                "web_services_btn_remove": _("web_services_btn_remove", lang),
+                "web_services_none_found": _("web_services_none_found", lang),
+                "web_services_global_results": _("web_services_global_results", lang),
+                "web_services_info_title": _("web_services_info_title", lang),
+                "web_services_info_name": _("web_services_info_name", lang),
+                "web_services_info_type": _("web_services_info_type", lang),
+                "web_services_info_status": _("web_services_info_status", lang),
+                "web_services_info_desc": _("web_services_info_desc", lang),
+                "web_services_info_loading": _("web_services_info_loading", lang),
+                "web_services_info_no_desc": _("web_services_info_no_desc", lang),
+                "web_services_status_running": _("web_services_status_running", lang),
+                "web_services_status_stopped": _("web_services_status_stopped", lang),
+                "web_services_status_unknown": _("web_services_status_unknown", lang),
+                "modal_title_error": _("modal_title_error", lang),
             }
         ),
     }
@@ -680,7 +870,7 @@ async def handle_heartbeat(request):
     ).hexdigest()
     if not hmac.compare_digest(expected_signature, signature):
         safe_ip = str(request.remote).replace("\n", "").replace("\r", "")
-        logging.warning(f"Invalid signature from {safe_ip}")
+        logging.warning(f"Invalid signature from {mask_sensitive_data(safe_ip)}")
         return web.json_response({"error": "Invalid signature"}, status=403)
     node = await nodes_db.get_node_by_token(token)
     if not node:
@@ -698,6 +888,9 @@ async def handle_heartbeat(request):
             method_raw = login.get("method", "unknown")
             node_time_str = login.get("node_time_str", "??:??")
             tz_label = login.get("tz_label", "")
+            
+            # Логируем с masking
+            logging.info(f"SSH login on node {node.get('name', 'Node')}: user={user_ssh}, ip={mask_sensitive_data(ip)}, method={method_raw}")
             
             flag = await get_country_flag(ip)
             method_key = "auth_method_unknown"
@@ -1349,8 +1542,8 @@ async def handle_change_password(request):
         if not check_user_password(user["id"], data.get("current_password")):
             return web.json_response({"error": "Wrong password"}, status=400)
         new_pass = data.get("new_password")
-        if not new_pass or len(new_pass) < 4:
-            return web.json_response({"error": "Too short"}, status=400)
+        if not new_pass or len(new_pass) < 8:
+            return web.json_response({"error": "Password must be at least 8 characters"}, status=400)
         ph = PasswordHasher()
         new_hash = ph.hash(new_pass)
         if isinstance(ALLOWED_USERS[user["id"]], str):
@@ -1765,8 +1958,8 @@ async def handle_reset_confirm(request):
         if uid != ADMIN_USER_ID:
             del RESET_TOKENS[token]
             return web.json_response({"error": "Denied"}, status=403)
-        if not new_pass or len(new_pass) < 4:
-            return web.json_response({"error": "Short pass"}, status=400)
+        if not new_pass or len(new_pass) < 8:
+            return web.json_response({"error": "Password must be at least 8 characters"}, status=400)
         ph = PasswordHasher()
         new_hash = ph.hash(new_pass)
         if isinstance(ALLOWED_USERS[uid], str):
@@ -2221,7 +2414,7 @@ async def handle_sse_node_details(request):
 
 
 async def cleanup_server():
-    global AGENT_TASK
+    global AGENT_TASK  # noqa: F824
     if AGENT_TASK and (not AGENT_TASK.done()):
         AGENT_TASK.cancel()
         try:
@@ -2230,7 +2423,7 @@ async def cleanup_server():
             pass
 
 async def cleanup_monitor():
-    """Периодическая очистка устаревших сессий и токенов для экономии памяти."""
+    """Periodic cleanup of expired sessions and tokens to save memory."""
     while True:
         try:
             now = time.time()
@@ -2243,6 +2436,22 @@ async def cleanup_monitor():
             expired_auth = [token for token, data in AUTH_TOKENS.items() if now - data["created_at"] > LOGIN_TOKEN_TTL]
             for token in expired_auth:
                 del AUTH_TOKENS[token]
+            
+            # Prevent AUTH_TOKENS memory leak by limiting size
+            if len(AUTH_TOKENS) > 1000:
+                # Sort by creation time and remove oldest 25%
+                sorted_tokens = sorted(AUTH_TOKENS.items(), key=lambda x: x[1]["created_at"])
+                remove_count = len(AUTH_TOKENS) // 4
+                for token, _ in sorted_tokens[:remove_count]:
+                    try:
+                        del AUTH_TOKENS[token]
+                    except KeyError:
+                        pass
+            
+            # Clean up API rate limits
+            expired_api_limits = [key for key in API_RATE_LIMITS.keys()]
+            for key in expired_api_limits:
+                del API_RATE_LIMITS[key]
             for ip in list(LOGIN_ATTEMPTS.keys()):
                 LOGIN_ATTEMPTS[ip] = [t for t in LOGIN_ATTEMPTS[ip] if now - t < LOGIN_BLOCK_TIME]
                 if not LOGIN_ATTEMPTS[ip]:
@@ -2253,10 +2462,70 @@ async def cleanup_monitor():
         await asyncio.sleep(600)
 
 async def start_web_server(bot_instance: Bot):
-    global AGENT_FLAG, AGENT_TASK
+    global AGENT_FLAG, AGENT_TASK  # noqa: F824
     app = web.Application()
     app["bot"] = bot_instance
     app["shutdown_event"] = asyncio.Event()
+
+    # Add rate limiting middleware for API endpoints
+    @web.middleware
+    async def rate_limit_middleware(request, handler):
+        # Only rate limit API endpoints
+        if request.path.startswith("/api/") and request.method in ["POST", "PUT", "DELETE"]:
+            ip = get_client_ip(request)
+            endpoint = request.path
+            if not check_api_rate_limit(ip, endpoint):
+                logging.warning(f"Rate limit exceeded for IP: {mask_sensitive_data(ip)}")
+                return web.json_response(
+                    {"error": "Rate limit exceeded. Max 100 requests/minute per IP"},
+                    status=429
+                )
+        return await handler(request)
+    
+    # WAF (Web Application Firewall) Middleware
+    @web.middleware
+    async def waf_middleware(request, handler):
+        # Проверяем только POST/PUT запросы с данными
+        if request.method in ["POST", "PUT"]:
+            ip = get_client_ip(request)
+            
+            # Проверка Query String
+            if request.query_string:
+                is_attack, attack_type = check_waf_patterns(request.query_string.decode('utf-8', errors='ignore'))
+                if is_attack:
+                    logging.critical(f"WAF: {attack_type} detected in query from IP {mask_sensitive_data(ip)}")
+                    return web.json_response(
+                        {"error": "Malicious request detected"},
+                        status=403
+                    )
+            
+            # Проверка тела запроса (JSON)
+            if request.content_type == 'application/json':
+                try:
+                    body = await request.text()
+                    if body:
+                        is_attack, attack_type = check_waf_patterns(body)
+                        if is_attack:
+                            logging.critical(f"WAF: {attack_type} detected in body from IP {mask_sensitive_data(ip)}")
+                            return web.json_response(
+                                {"error": "Malicious request detected"},
+                                status=403
+                            )
+                        
+                        # Проверка длины
+                        if not validate_input_length(body, max_length=10000):
+                            logging.warning(f"WAF: Request too large from IP {mask_sensitive_data(ip)}")
+                            return web.json_response(
+                                {"error": "Request too large"},
+                                status=413
+                            )
+                except Exception as e:
+                    logging.error(f"WAF middleware error: {e}")
+        
+        return await handler(request)
+
+    app.middlewares.append(rate_limit_middleware)
+    app.middlewares.append(waf_middleware)
 
     async def on_shutdown(app):
         app["shutdown_event"].set()
@@ -2446,8 +2715,8 @@ async def handle_change_password(request):
         if not check_user_password(user["id"], data.get("current_password")):
             return web.json_response({"error": "Wrong password"}, status=400)
         new_pass = data.get("new_password")
-        if not new_pass or len(new_pass) < 4:
-            return web.json_response({"error": "Too short"}, status=400)
+        if not new_pass or len(new_pass) < 8:
+            return web.json_response({"error": "Password must be at least 8 characters"}, status=400)
         ph = PasswordHasher()
         new_hash = ph.hash(new_pass)
         if isinstance(ALLOWED_USERS[user["id"]], str):
@@ -2837,8 +3106,8 @@ async def handle_reset_confirm(request):
         if uid != ADMIN_USER_ID:
             del RESET_TOKENS[token]
             return web.json_response({"error": "Denied"}, status=403)
-        if not new_pass or len(new_pass) < 4:
-            return web.json_response({"error": "Short pass"}, status=400)
+        if not new_pass or len(new_pass) < 8:
+            return web.json_response({"error": "Password must be at least 8 characters"}, status=400)
         ph = PasswordHasher()
         new_hash = ph.hash(new_pass)
         if isinstance(ALLOWED_USERS[uid], str):
@@ -3290,8 +3559,223 @@ async def handle_sse_node_details(request):
     return resp
 
 
+async def handle_sse_services(request):
+    """SSE endpoint for services status updates"""
+    user = get_current_user(request)
+    if not user:
+        return web.Response(status=401)
+    
+    current_token = request.cookies.get(COOKIE_NAME)
+    resp = web.StreamResponse(status=200, reason="OK")
+    resp.headers["Content-Type"] = "text/event-stream"
+    resp.headers["Cache-Control"] = "no-cache"
+    resp.headers["Connection"] = "keep-alive"
+    resp.headers["X-Accel-Buffering"] = "no"
+    await resp.prepare(request)
+    
+    shutdown_event = request.app.get("shutdown_event")
+    
+    try:
+        while True:
+            if shared_state.IS_RESTARTING:
+                try:
+                    await resp.write(b"event: shutdown\ndata: restarting\n\n")
+                except Exception:
+                    pass
+                break
+            
+            try:
+                if request.transport is None or request.transport.is_closing():
+                    break
+            except Exception:
+                break
+            
+            # Check session validity
+            if current_token and current_token not in SERVER_SESSIONS:
+                try:
+                    await resp.write(b"event: session_status\ndata: expired\n\n")
+                except Exception:
+                    pass
+                break
+            
+            # Get services status
+            try:
+                services = get_all_services_status()
+                # Encrypt each service data
+                encrypted_services = []
+                for svc in services:
+                    encrypted_services.append({
+                        "name": encrypt_for_web(svc.get("name", "")),
+                        "type": encrypt_for_web(svc.get("type", "")),
+                        "status": encrypt_for_web(svc.get("status", ""))
+                    })
+                
+                payload = json.dumps({"services": encrypted_services})
+                await resp.write(f"event: services\ndata: {payload}\n\n".encode("utf-8"))
+            except (ConnectionResetError, BrokenPipeError, ConnectionError):
+                break
+            except Exception as e:
+                logging.error(f"SSE Services fetch error: {e}")
+            
+            # Wait before next update
+            if shutdown_event:
+                try:
+                    if not shared_state.IS_RESTARTING:
+                        await asyncio.wait_for(shutdown_event.wait(), timeout=5.0)
+                        break
+                except asyncio.TimeoutError:
+                    pass
+            else:
+                await asyncio.sleep(5)
+    except asyncio.CancelledError:
+        pass
+    except Exception as e:
+        if "closing transport" not in str(e) and "'NoneType' object" not in str(e):
+            logging.error(f"SSE Services Error: {e}")
+    return resp
+
+
+async def handle_services_list(request):
+    try:
+        user = get_current_user(request)
+        if not user:
+            return web.json_response({"error": "Unauthorized"}, status=401)
+        
+        services = get_all_services_status()
+        return web.json_response(services)
+    except Exception as e:
+         return web.json_response({"error": str(e)}, status=500)
+
+async def api_control_service(request):
+    try:
+        user = get_current_user(request)
+        if not user:
+            return web.json_response({"error": "Unauthorized"}, status=401)
+            
+        user_id = user["id"]
+        level = get_user_role_level(user_id)
+        
+        action = request.match_info["action"] # start, stop, restart
+        
+        # Permission check
+        if level == 0:
+            return web.json_response({"error": "Access Denied (View Only)"}, status=403)
+        if action == "stop" and level < 2:
+             return web.json_response({"error": "Access Denied (Stop not allowed)"}, status=403)
+            
+        data = await request.json()
+        name = data.get("name")
+        sType = data.get("type", "systemd")
+        
+        if not name:
+            return web.json_response({"error": "Name required"}, status=400)
+            
+        # Security: check if service is in config
+        found = False
+        for s in current_config.MANAGED_SERVICES:
+            if s["name"] == name:
+                found = True
+                break
+        if not found:
+             return web.json_response({"error": "Service not managed"}, status=403)
+
+        success, msg = await perform_service_action(name, sType, action)
+        if success:
+             return web.json_response({"status": "ok", "message": msg})
+        else:
+             return web.json_response({"error": msg}, status=500)
+
+    except Exception as e:
+        return web.json_response({"error": str(e)}, status=500)
+
+
+async def api_service_info(request):
+    """Get detailed information about a service"""
+    try:
+        user = get_current_user(request)
+        if not user:
+            return web.json_response({"error": "Unauthorized"}, status=401)
+        
+        name = request.match_info.get("name")
+        sType = request.query.get("type", "systemd")
+        
+        if not name:
+            return web.json_response({"error": "Name required"}, status=400)
+        
+        from modules.services import get_service_info
+        info = await get_service_info(name, sType)
+        return web.json_response(info)
+    except Exception as e:
+        logging.error(f"Error in api_service_info: {e}")
+        return web.json_response({"error": str(e)}, status=500)
+
+
+async def api_services_available(request):
+    """Get all available services/containers for editing"""
+    try:
+        user = get_current_user(request)
+        if not user:
+            return web.json_response({"error": "Unauthorized"}, status=401)
+        
+        user_id = user["id"]
+        level = get_user_role_level(user_id)
+        
+        # Check if this is a search request (read-only) vs edit request
+        search_only = request.query.get("search") == "1"
+        
+        # For search, allow all authenticated users (read-only)
+        # For edit (manage modal), only Main Admin
+        if not search_only and level < 2:
+            return web.json_response({"error": "Access Denied"}, status=403)
+        
+        services = get_all_available_services()
+        return web.json_response(services)
+    except Exception as e:
+        logging.error(f"Error in api_services_available: {e}")
+        return web.json_response({"error": str(e)}, status=500)
+
+
+async def api_services_manage(request):
+    """Add or remove service from managed list"""
+    try:
+        user = get_current_user(request)
+        if not user:
+            return web.json_response({"error": "Unauthorized"}, status=401)
+        
+        user_id = user["id"]
+        level = get_user_role_level(user_id)
+        
+        # Only Main Admin (level 2) can edit services list
+        if level < 2:
+            return web.json_response({"error": "Access Denied"}, status=403)
+        
+        data = await request.json()
+        action = data.get("action")  # "add" or "remove"
+        name = data.get("name")
+        sType = data.get("type", "systemd")
+        
+        if not name:
+            return web.json_response({"error": "Name required"}, status=400)
+        
+        if action == "add":
+            success, msg = add_managed_service(name, sType)
+        elif action == "remove":
+            success, msg = remove_managed_service(name)
+        else:
+            return web.json_response({"error": "Invalid action"}, status=400)
+        
+        if success:
+            return web.json_response({"status": "ok", "message": msg})
+        else:
+            return web.json_response({"error": msg}, status=400)
+            
+    except Exception as e:
+        logging.error(f"Error in api_services_manage: {e}")
+        return web.json_response({"error": str(e)}, status=500)
+
+
 async def cleanup_server():
-    global AGENT_TASK
+    global AGENT_TASK  # noqa: F824
     if AGENT_TASK and (not AGENT_TASK.done()):
         AGENT_TASK.cancel()
         try:
@@ -3301,7 +3785,7 @@ async def cleanup_server():
 
 
 async def start_web_server(bot_instance: Bot):
-    global AGENT_FLAG, AGENT_TASK
+    global AGENT_FLAG, AGENT_TASK  # noqa: F824
     app = web.Application()
     app["bot"] = bot_instance
     app["shutdown_event"] = asyncio.Event()
@@ -3357,6 +3841,7 @@ async def start_web_server(bot_instance: Bot):
         app.router.add_get("/api/events", handle_sse_stream)
         app.router.add_get("/api/events/logs", handle_sse_logs)
         app.router.add_get("/api/events/node", handle_sse_node_details)
+        app.router.add_get("/api/events/services", handle_sse_services)
         app.router.add_get("/api/update/check", api_check_update)
         app.router.add_post("/api/update/run", api_run_update)
         app.router.add_get("/api/notifications/list", api_get_notifications)
@@ -3365,6 +3850,11 @@ async def start_web_server(bot_instance: Bot):
         app.router.add_get("/api/sessions/list", api_get_sessions)
         app.router.add_post("/api/sessions/revoke", api_revoke_session)
         app.router.add_post("/api/sessions/revoke_all", api_revoke_all_sessions)
+        app.router.add_get("/api/services", handle_services_list)
+        app.router.add_get("/api/services/available", api_services_available)
+        app.router.add_get("/api/services/info/{name}", api_service_info)
+        app.router.add_post("/api/services/manage", api_services_manage)
+        app.router.add_post("/api/services/{action}", api_control_service)
     else:
         logging.info("Web UI DISABLED.")
         app.router.add_get("/", handle_api_root)

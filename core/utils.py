@@ -11,6 +11,8 @@ import hashlib
 import requests
 from io import BytesIO
 from datetime import datetime
+from pathlib import Path
+from typing import Optional, Dict, Any
 from aiogram import Bot
 from aiogram.exceptions import TelegramBadRequest
 try:
@@ -142,6 +144,37 @@ def save_alerts_config():
         save_encrypted_json(ALERTS_CONFIG_FILE, config_to_save)
     except Exception as e:
         logging.error(f"Error saving alerts_config.json: {e}")
+
+
+def load_services_config():
+    """Load managed services from encrypted config file"""
+    from core.config import SERVICES_CONFIG_FILE, MANAGED_SERVICES
+    from core import config as config_module
+    try:
+        loaded_data = load_encrypted_json(SERVICES_CONFIG_FILE)
+        if loaded_data and isinstance(loaded_data, list):
+            # Replace MANAGED_SERVICES with loaded data
+            config_module.MANAGED_SERVICES.clear()
+            config_module.MANAGED_SERVICES.extend(loaded_data)
+            logging.info(f"Services config loaded (secure): {len(loaded_data)} services.")
+        else:
+            logging.info("Services config empty or not found, using defaults.")
+    except Exception as e:
+        logging.error(f"Error loading services.json: {e}")
+
+
+def save_services_config():
+    """Save managed services to encrypted config file"""
+    from core.config import SERVICES_CONFIG_FILE
+    from core import config as config_module
+    try:
+        os.makedirs(os.path.dirname(SERVICES_CONFIG_FILE), exist_ok=True)
+        save_encrypted_json(SERVICES_CONFIG_FILE, config_module.MANAGED_SERVICES)
+        logging.info(f"Services config saved (secure): {len(config_module.MANAGED_SERVICES)} services.")
+        return True
+    except Exception as e:
+        logging.error(f"Error saving services.json: {e}")
+        return False
 
 
 async def get_country_flag(ip_or_code: str) -> str:
@@ -297,8 +330,9 @@ def get_server_timezone_label():
 
 async def detect_xray_client():
     try:
-        proc = await asyncio.create_subprocess_shell(
-            "docker ps --format '{{.Names}} {{.Image}}'",
+        # Use subprocess.exec instead of shell for better security
+        proc = await asyncio.create_subprocess_exec(
+            "docker", "ps", "--format", "{{.Names}} {{.Image}}",
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )
@@ -409,15 +443,15 @@ def update_env_variable(key: str, value: str, env_path: str = None):
 
 def generate_favicons(source_url_or_path: str, output_dir: str):
     """
-    Генерирует набор фавиконок и манифест из исходного изображения.
-    Поддерживает: URL (http), Локальный путь, Base64 (data:image).
-    Полностью перезаписывает содержимое целевой папки.
+    Generates a set of favicons and a manifest from the source image.
+    Supports: URL (http), Local path, Base64 (data:image).
+    Completely overwrites the target directory content.
     """
     if not Image:
         logging.error("Pillow not installed. Cannot generate favicons.")
         return False
 
-    # 0. Очистка папки перед генерацией
+    # 0. Clean directory before generation
     if os.path.exists(output_dir):
         try:
             for filename in os.listdir(output_dir):
@@ -433,10 +467,10 @@ def generate_favicons(source_url_or_path: str, output_dir: str):
     try:
         img = None
         
-        # 1. Загрузка изображения (Base64 / URL / Path)
+        # 1. Load image (Base64 / URL / Path)
         if source_url_or_path.startswith('data:image'):
             try:
-                # Обработка Base64 (data:image/png;base64,...)
+                # Handle Base64 (data:image/png;base64,...)
                 if "," in source_url_or_path:
                     header, encoded = source_url_or_path.split(",", 1)
                 else:
@@ -463,13 +497,13 @@ def generate_favicons(source_url_or_path: str, output_dir: str):
             logging.error(f"Failed to load source image for favicon: {log_source}")
             return False
 
-        # Конвертируем в RGBA для сохранения прозрачности
+        # Convert to RGBA to preserve transparency
         img = img.convert("RGBA")
         
-        # Тема по умолчанию для манифеста (белый)
+        # Default theme for manifest (white)
         theme_color_hex = "#ffffff"
 
-        # 2. Нарезка и сохранение PNG (с прозрачностью)
+        # 2. Slice and save PNG (with transparency)
         icons_config = [
             ("favicon-16x16.png", (16, 16)),
             ("favicon-32x32.png", (32, 32)),
@@ -482,10 +516,10 @@ def generate_favicons(source_url_or_path: str, output_dir: str):
             resized_img = img.resize(size, Image.Resampling.LANCZOS)
             resized_img.save(os.path.join(output_dir, filename), format="PNG")
 
-        # 3. Сохранение ICO (мульти-размерный, поддерживает прозрачность)
+        # 3. Save ICO (multi-size, supports transparency)
         img.save(os.path.join(output_dir, "favicon.ico"), format="ICO", sizes=[(16, 16), (32, 32), (48, 48)])
 
-        # 4. Генерация site.webmanifest
+        # 4. Generate site.webmanifest
         manifest_content = {
             "name": "TG Bot Panel",
             "short_name": "BotPanel",
@@ -515,3 +549,214 @@ def generate_favicons(source_url_or_path: str, output_dir: str):
     except Exception as e:
         logging.error(f"Error generating favicons: {e}")
         return False
+
+
+# --- Audit Logging ---
+
+# Path to the audit log file (using config.BASE_DIR)
+AUDIT_LOG_DIR = os.path.join(config.BASE_DIR, "logs", "audit")
+AUDIT_LOG_FILE = os.path.join(AUDIT_LOG_DIR, "audit.log")
+
+# Audit event types
+class AuditEvent:
+    # User actions
+    USER_ADDED = "USER_ADDED"
+    USER_DELETED = "USER_DELETED"
+    USER_ROLE_CHANGED = "USER_ROLE_CHANGED"
+    
+    # Node actions
+    NODE_ADDED = "NODE_ADDED"
+    NODE_DELETED = "NODE_DELETED"
+    NODE_RENAMED = "NODE_RENAMED"
+    
+    # System actions
+    SYSTEM_UPDATE_STARTED = "SYSTEM_UPDATE_STARTED"
+    SYSTEM_UPDATE_COMPLETED = "SYSTEM_UPDATE_COMPLETED"
+    SYSTEM_REBOOT = "SYSTEM_REBOOT"
+    SYSTEM_RESTART = "SYSTEM_RESTART"
+    SYSTEM_OPTIMIZE = "SYSTEM_OPTIMIZE"
+    
+    # Security settings
+    PASSWORD_CHANGED = "PASSWORD_CHANGED"
+    PASSWORD_RESET = "PASSWORD_RESET"
+    CONFIG_CHANGED = "CONFIG_CHANGED"
+    KEYBOARD_CHANGED = "KEYBOARD_CHANGED"
+    
+    # Data actions
+    LOGS_CLEARED = "LOGS_CLEARED"
+    TRAFFIC_RESET = "TRAFFIC_RESET"
+    BACKUP_CREATED = "BACKUP_CREATED"
+    BACKUP_RESTORED = "BACKUP_RESTORED"
+    
+    # Service actions
+    SERVICE_STARTED = "SERVICE_STARTED"
+    SERVICE_STOPPED = "SERVICE_STOPPED"
+    SERVICE_RESTARTED = "SERVICE_RESTARTED"
+    
+    # Authentication
+    LOGIN_SUCCESS = "LOGIN_SUCCESS"
+    LOGIN_FAILED = "LOGIN_FAILED"
+    LOGOUT = "LOGOUT"
+    SESSION_EXPIRED = "SESSION_EXPIRED"
+    SESSION_REVOKED = "SESSION_REVOKED"
+    
+    # Dangerous actions
+    SHELL_COMMAND_EXECUTED = "SHELL_COMMAND_EXECUTED"
+    FILE_UPLOADED = "FILE_UPLOADED"
+    FILE_DELETED = "FILE_DELETED"
+
+
+def init_audit_log():
+    """Initialize audit log directory"""
+    try:
+        Path(AUDIT_LOG_DIR).mkdir(parents=True, exist_ok=True)
+        if not os.path.exists(AUDIT_LOG_FILE):
+            with open(AUDIT_LOG_FILE, 'w', encoding='utf-8') as f:
+                f.write(f"# Audit Log Started: {datetime.utcnow().isoformat()}Z\n")
+    except Exception as e:
+        logging.error(f"Failed to initialize audit log: {e}")
+
+
+def log_audit_event(
+    event_type: str,
+    user_id: int,
+    details: Optional[Dict[str, Any]] = None,
+    severity: str = "INFO",
+    ip_address: Optional[str] = None
+):
+    """
+    Records an audit event to the log
+    
+    Args:
+        event_type: Event type (from AuditEvent)
+        user_id: Telegram User ID
+        details: Additional event details (will be serialized to JSON)
+        severity: Severity level (INFO, WARNING, CRITICAL)
+        ip_address: User IP address (if available)
+    """
+    try:
+        # Create directory if it doesn't exist
+        if not os.path.exists(AUDIT_LOG_DIR):
+            init_audit_log()
+        
+        # Format the entry
+        timestamp = datetime.utcnow().isoformat() + "Z"
+        is_admin = user_id == config.ADMIN_USER_ID
+        role = "ADMIN" if is_admin else "USER"
+        
+        log_entry = {
+            "timestamp": timestamp,
+            "event": event_type,
+            "user_id": user_id,
+            "role": role,
+            "severity": severity,
+            "ip_address": ip_address or "N/A",
+            "details": details or {}
+        }
+        
+        # Write to file
+        with open(AUDIT_LOG_FILE, 'a', encoding='utf-8') as f:
+            f.write(json.dumps(log_entry, ensure_ascii=False) + "\n")
+        
+        # Duplicate to main log for critical events
+        if severity == "CRITICAL":
+            logging.critical(f"AUDIT: {event_type} by user {user_id} | {details}")
+        elif severity == "WARNING":
+            logging.warning(f"AUDIT: {event_type} by user {user_id}")
+        else:
+            logging.info(f"AUDIT: {event_type} by user {user_id}")
+            
+    except Exception as e:
+        logging.error(f"Failed to write audit log: {e}")
+
+
+def get_audit_logs(limit: int = 100, event_filter: Optional[str] = None) -> list:
+    """
+    Retrieves the latest entries from the audit log
+    
+    Args:
+        limit: Maximum number of entries
+        event_filter: Filter by event type
+    
+    Returns:
+        List of audit entries
+    """
+    try:
+        if not os.path.exists(AUDIT_LOG_FILE):
+            return []
+        
+        logs = []
+        with open(AUDIT_LOG_FILE, 'r', encoding='utf-8') as f:
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith('#'):
+                    continue
+                try:
+                    entry = json.loads(line)
+                    if event_filter and entry.get('event') != event_filter:
+                        continue
+                    logs.append(entry)
+                except json.JSONDecodeError:
+                    continue
+        
+        # Return last N entries
+        return logs[-limit:] if len(logs) > limit else logs
+        
+    except Exception as e:
+        logging.error(f"Failed to read audit logs: {e}")
+        return []
+
+
+def clear_old_audit_logs(days_to_keep: int = 90):
+    """
+    Removes audit entries older than the specified number of days
+    
+    Args:
+        days_to_keep: How many days to keep logs
+    """
+    try:
+        if not os.path.exists(AUDIT_LOG_FILE):
+            return
+        
+        cutoff_time = time.time() - (days_to_keep * 86400)
+        temp_file = AUDIT_LOG_FILE + ".tmp"
+        kept_count = 0
+        removed_count = 0
+        
+        with open(AUDIT_LOG_FILE, 'r', encoding='utf-8') as f_in:
+            with open(temp_file, 'w', encoding='utf-8') as f_out:
+                for line in f_in:
+                    if line.startswith('#'):
+                        f_out.write(line)
+                        continue
+                    
+                    try:
+                        entry = json.loads(line.strip())
+                        entry_time = datetime.fromisoformat(entry['timestamp'].replace('Z', '+00:00')).timestamp()
+                        
+                        if entry_time >= cutoff_time:
+                            f_out.write(line)
+                            kept_count += 1
+                        else:
+                            removed_count += 1
+                    except (json.JSONDecodeError, KeyError, ValueError):
+                        # Keep corrupted entries
+                        # Сохраняем поврежденные записи -> Keep corrupted entries
+                        f_out.write(line)
+        
+        # Replace original file
+        os.replace(temp_file, AUDIT_LOG_FILE)
+        logging.info(f"Audit log cleanup: kept {kept_count}, removed {removed_count} entries")
+        
+    except Exception as e:
+        logging.error(f"Failed to clean audit logs: {e}")
+        # Remove temporary file in case of error
+        if os.path.exists(temp_file):
+            try:
+                os.remove(temp_file)
+            except Exception:
+                pass
+
+
+# Initialize on successful load
+init_audit_log()

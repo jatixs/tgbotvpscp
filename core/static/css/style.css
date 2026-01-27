@@ -583,3 +583,40 @@ button.force-expanded .btn-text {
         max-width: 60px;
     }
 }
+
+/* Role Badge Styles */
+.role-badge-owner {
+    border-color: rgba(239, 68, 68, 0.3);
+    background-color: #fee2e2;
+    color: #dc2626;
+}
+
+html.dark .role-badge-owner {
+    border-color: rgba(239, 68, 68, 0.3);
+    background-color: rgba(127, 29, 29, 0.4);
+    color: #f87171;
+}
+
+.role-badge-admin {
+    border-color: rgba(34, 197, 94, 0.3);
+    background-color: #dcfce7;
+    color: #16a34a;
+}
+
+html.dark .role-badge-admin {
+    border-color: rgba(34, 197, 94, 0.3);
+    background-color: rgba(20, 83, 45, 0.4);
+    color: #4ade80;
+}
+
+.role-badge-user {
+    border-color: rgba(245, 158, 11, 0.3);
+    background-color: #fef3c7;
+    color: #d97706;
+}
+
+html.dark .role-badge-user {
+    border-color: rgba(245, 158, 11, 0.3);
+    background-color: rgba(120, 53, 15, 0.4);
+    color: #fbbf24;
+}

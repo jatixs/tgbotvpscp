@@ -47,10 +47,10 @@ class RedactingFormatter(logging.Formatter):
 logger = logging.getLogger()
 logger.setLevel(logging.DEBUG if DEBUG_MODE else logging.INFO)
 
-# Путь к логам лучше брать относительно текущей директории или из конфига,
-# но оставим жесткий путь как в оригинале, если структура папок сохраняется.
+# Path to logs is better taken relative to current dir or config,
+# but we kept hardcoded path as in original if folder structure is preserved.
 LOG_FILE_PATH = "/opt/tg-bot/logs/node/node.log"
-# Создаем директорию логов, если её нет (на случай ручного запуска)
+# Create log directory if missing (for manual run)
 try:
     os.makedirs(os.path.dirname(LOG_FILE_PATH), exist_ok=True)
 except Exception:
@@ -190,13 +190,20 @@ def get_external_ip():
             continue
     
     try:
-        res = subprocess.check_output("curl -4 -s --max-time 5 ifconfig.me", shell=True).decode().strip()
+        # Security: Use exec instead of shell to prevent injection
+        proc = subprocess.Popen(
+            ["curl", "-4", "-s", "--max-time", "5", "ifconfig.me"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE
+        )
+        stdout, _ = proc.communicate()
+        res = stdout.decode().strip()
         if re.match(r"^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$", res):
             EXTERNAL_IP_CACHE = res
             logging.info(f"External IP updated (curl): {res}")
             return res
-    except Exception:
-        pass
+    except Exception as e:
+        logging.debug(f"Failed to get IP via curl: {e}")
 
     logging.warning("Could not determine external IP locally. Delegating to Agent Server.")
     return None
@@ -360,8 +367,15 @@ def execute_command(task):
 
         elif cmd == "top":
             try:
-                res = subprocess.check_output(
-                    "ps aux --sort=-%cpu | head -n 11", shell=True).decode()
+                # Security: Use exec instead of shell
+                proc = subprocess.Popen(
+                    ["ps", "aux"],
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE
+                )
+                stdout, _ = proc.communicate()
+                all_lines = stdout.decode().split('\n')
+                res = '\n'.join(all_lines[:11])  # Head -n 11
                 
                 safe_res = res.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
                 
@@ -385,14 +399,26 @@ def execute_command(task):
             try:
                 ext_ip = stats.get("external_ip")
                 if not ext_ip:
-                     ext_ip = subprocess.check_output("curl -4 -s --max-time 2 ifconfig.me", shell=True).decode().strip()
+                    proc = subprocess.Popen(
+                        ["curl", "-4", "-s", "--max-time", "2", "ifconfig.me"],
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.PIPE
+                    )
+                    stdout, _ = proc.communicate()
+                    ext_ip = stdout.decode().strip()
             except Exception:
                 ext_ip = "N/A"
             
             ping_val = "0"
             inet_ok = False
             try:
-                ping_res = subprocess.check_output("ping -c 1 -W 1 8.8.8.8", shell=True).decode()
+                proc = subprocess.Popen(
+                    ["ping", "-c", "1", "-W", "1", "8.8.8.8"],
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE
+                )
+                stdout, _ = proc.communicate()
+                ping_res = stdout.decode()
                 ping_match = re.search(r"time=([\d\.]+) ms", ping_res)
                 if ping_match:
                     ping_val = ping_match.group(1)
@@ -401,7 +427,14 @@ def execute_command(task):
                 pass
 
             try:
-                kernel = subprocess.check_output("uname -r", shell=True).decode().strip()
+                # Security: Use exec instead of shell
+                proc = subprocess.Popen(
+                    ["uname", "-r"],
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE
+                )
+                stdout, _ = proc.communicate()
+                kernel = stdout.decode().strip()
             except Exception:
                 kernel = "N/A"
             
@@ -494,7 +527,10 @@ def execute_command(task):
             PENDING_RESULTS.append(
                 {"command": cmd, "user_id": user_id, "result": result_payload})
             send_heartbeat()
-            os.system("reboot")
+            try:
+                subprocess.Popen(["reboot"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            except Exception as e:
+                logger.error(f"Failed to reboot: {e}")
             return
 
         else:
@@ -526,7 +562,7 @@ def execute_command(task):
         })
 
 def send_heartbeat():
-    global PENDING_RESULTS, SSH_EVENTS
+    global PENDING_RESULTS, SSH_EVENTS  # noqa: F824
     url = f"{AGENT_BASE_URL}/api/heartbeat"
     current_results = list(PENDING_RESULTS)
     current_ssh_events = list(SSH_EVENTS)

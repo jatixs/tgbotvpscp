@@ -8,6 +8,8 @@ from aiogram.filters import StateFilter
 from aiogram.exceptions import TelegramBadRequest
 from core.i18n import _, I18nFilter, get_user_lang
 from core import config
+from core import shared_state
+from core.utils import log_audit_event, AuditEvent
 from core.auth import (
     is_allowed,
     send_access_denied_message,
@@ -252,6 +254,13 @@ async def process_add_user_group(callback: types.CallbackQuery, state: FSMContex
         logging.info(
             f"Админ {callback.from_user.id} добавил пользователя {new_user_name} ({new_user_id}) в группу '{group_key}'"
         )
+        # Audit logging
+        log_audit_event(
+            AuditEvent.USER_ADDED,
+            callback.from_user.id,
+            details={"target_user_id": new_user_id, "username": new_user_name, "role": group_key},
+            severity="WARNING"
+        )
         group_display = (
             _("group_admins", lang) if group_key == "admins" else _("group_users", lang)
         )
@@ -322,6 +331,13 @@ async def cq_delete_user_confirm(callback: types.CallbackQuery):
         save_user_settings()
         logging.info(
             f"Админ {admin_id} удалил пользователя {deleted_user_name} ({user_id_to_delete}) из группы '{deleted_group_key}'"
+        )
+        # Audit logging
+        log_audit_event(
+            AuditEvent.USER_DELETED,
+            admin_id,
+            details={"target_user_id": user_id_to_delete, "username": deleted_user_name, "role": deleted_group_key},
+            severity="WARNING"
         )
         keyboard = get_delete_users_keyboard(admin_id)
         await callback.message.edit_text(

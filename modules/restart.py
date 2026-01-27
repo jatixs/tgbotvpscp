@@ -6,6 +6,7 @@ from aiogram import F, Dispatcher, types, Bot
 from aiogram.types import KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
 from core.i18n import _, I18nFilter, get_user_lang
 from core import config
+from core.utils import log_audit_event, AuditEvent
 from core.auth import is_allowed, send_access_denied_message
 from core.messaging import delete_previous_message
 from core.shared_state import LAST_MESSAGE_IDS
@@ -68,6 +69,13 @@ async def restart_execute_handler(callback: types.CallbackQuery):
     lang = get_user_lang(user_id)
     await callback.message.edit_text(_("restart_start", lang), parse_mode="HTML")
     try:
+        # Audit logging
+        log_audit_event(
+            AuditEvent.SYSTEM_RESTART,
+            user_id,
+            details={"chat_id": chat_id},
+            severity="CRITICAL"
+        )
         os.makedirs(os.path.dirname(RESTART_FLAG_FILE), exist_ok=True)
         with open(RESTART_FLAG_FILE, "w") as f:
             f.write(f"{chat_id}:{callback.message.message_id}")

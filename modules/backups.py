@@ -29,7 +29,7 @@ def register_handlers(dp: Dispatcher):
 
 
 async def backups_main_menu_handler(message: types.Message):
-    """Вход в главное меню бэкапов (через реплай кнопку)"""
+    """Entry to backups main menu (via reply button)"""
     user_id = message.from_user.id
     chat_id = message.chat.id
     lang = get_user_lang(user_id)
@@ -53,7 +53,7 @@ async def backups_main_menu_handler(message: types.Message):
 
 
 async def backups_main_menu_callback(callback: types.CallbackQuery):
-    """Возврат в главное меню бэкапов (кнопка Назад)"""
+    """Return to backups main menu (Back button)"""
     user_id = callback.from_user.id
     lang = get_user_lang(user_id)
     text = get_text("backups_menu_title", lang)
@@ -62,7 +62,7 @@ async def backups_main_menu_callback(callback: types.CallbackQuery):
 
 
 async def traffic_backup_ui_handler(callback: types.CallbackQuery):
-    """Меню управления бэкапами трафика (с пояснением)"""
+    """Traffic backups management menu (with explanation)"""
     user_id = callback.from_user.id
     lang = get_user_lang(user_id)
     backups = sorted(glob.glob(os.path.join(config.TRAFFIC_BACKUP_DIR, "traffic_backup_*.json")), reverse=True)

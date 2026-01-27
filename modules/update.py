@@ -10,6 +10,7 @@ from aiogram.types import KeyboardButton, InlineKeyboardMarkup, InlineKeyboardBu
 from aiogram.exceptions import TelegramBadRequest
 from core.i18n import _, I18nFilter, get_user_lang
 from core import config, utils
+from core.utils import log_audit_event, AuditEvent
 from core.auth import is_allowed, send_access_denied_message
 from core.messaging import delete_previous_message, send_alert
 from core.shared_state import LAST_MESSAGE_IDS
@@ -160,6 +161,13 @@ async def execute_bot_update(branch: str, restart_source: str = "unknown"):
     try:
         branch = validate_branch_name(branch)
         logging.info(f"Starting bot update on branch '{branch}'...")
+        # Audit logging
+        log_audit_event(
+            AuditEvent.SYSTEM_UPDATE_STARTED,
+            config.ADMIN_USER_ID,
+            details={"branch": branch, "source": restart_source},
+            severity="CRITICAL"
+        )
         code, _, err = await run_command("git", "fetch", "origin")
         code, _, err = await run_command("git", "reset", "--hard", f"origin/{branch}")
         if code != 0:

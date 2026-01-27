@@ -4,7 +4,7 @@ import logging
 import sys
 import shutil
 from core import config  
-from core.config import CIPHER_SUITE, CONFIG_DIR  # Для шифрования
+from core.config import CIPHER_SUITE, CONFIG_DIR  # For encryption
 
 logging.basicConfig(
     level=logging.INFO,
@@ -15,7 +15,8 @@ logger = logging.getLogger("Migration")
 FILES_TO_MIGRATE = [
     "users.json",
     "alerts_config.json",
-    "user_settings.json"
+    "user_settings.json",
+    "services.json"
 ]
 
 def load_json(path: str):
