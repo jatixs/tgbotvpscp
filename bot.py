@@ -18,6 +18,7 @@ from modules import (
     optimize,
     nodes,
     backups,
+    services,
 )
 from core.i18n import _, I18nFilter, get_language_keyboard
 from core import i18n
@@ -268,6 +269,7 @@ def load_modules():
     register_module(vless, admin_only=True)
     register_module(xray, admin_only=True)
     register_module(nodes, admin_only=True)
+    register_module(services, admin_only=True)
     register_module(sshlog, root_only=True)
     register_module(fail2ban, root_only=True)
     register_module(logs, root_only=True)
@@ -327,6 +329,7 @@ async def main():
         await nodes_db.init_db()
         await asyncio.to_thread(auth.load_users)
         await asyncio.to_thread(utils.load_alerts_config)
+        await asyncio.to_thread(utils.load_services_config)
         await asyncio.to_thread(i18n.load_user_settings)
         asyncio.create_task(auth.refresh_user_names(bot))
         # Убраны вызовы utils.initial_reboot_check и utils.initial_restart_check

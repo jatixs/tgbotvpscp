@@ -1,6 +1,11 @@
 name: "Python Dependency Safety"
 
-on: [push, pull_request]
+on:
+  push:
+    branches: [ "main", "develop", "release/*", "feature/*", "hotfix/*" ]
+  pull_request:
+    branches: [ "main", "develop", "release/*", "feature/*", "hotfix/*" ]
+  workflow_dispatch:
 
 jobs:
   safety-check:

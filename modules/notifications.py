@@ -531,7 +531,7 @@ async def parse_f2b_log_line(line: str) -> dict | None:
 
 
 async def resource_monitor(bot: Bot):
-    global RESOURCE_ALERT_STATE, LAST_RESOURCE_ALERT_TIME
+    global RESOURCE_ALERT_STATE, LAST_RESOURCE_ALERT_TIME  # noqa: F824
     await asyncio.sleep(15)
     while True:
         try:
@@ -633,7 +633,7 @@ async def resource_monitor(bot: Bot):
                 RESOURCE_ALERT_STATE["disk"] = False
                 LAST_RESOURCE_ALERT_TIME["disk"] = 0
             if alerts:
-                # Агентские ресурсы (Agent)
+                # Agent resources (Agent)
                 await send_alert(
                     bot,
                     lambda lang: "\n\n".join([_(k, lang, **p) for k, p in alerts]),

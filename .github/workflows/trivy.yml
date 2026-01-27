@@ -2,9 +2,9 @@ name: "Trivy Container Scan"
 
 on:
   push:
-    branches: [ "main", "develop" , "feature" ]
+    branches: [ "main", "develop", "release/*", "feature/*", "hotfix/*" ]
   pull_request:
-    branches: [ "main" ]
+    branches: [ "main", "develop", "release/*", "feature/*", "hotfix/*" ]
 
 jobs:
   build-and-scan:

@@ -25,6 +25,7 @@ NODES_FILE = os.path.join(CONFIG_DIR, "nodes.json")
 REBOOT_FLAG_FILE = os.path.join(CONFIG_DIR, "reboot_flag.txt")
 RESTART_FLAG_FILE = os.path.join(CONFIG_DIR, "restart_flag.txt")
 ALERTS_CONFIG_FILE = os.path.join(CONFIG_DIR, "alerts_config.json")
+SERVICES_CONFIG_FILE = os.path.join(CONFIG_DIR, "services.json")
 USER_SETTINGS_FILE = os.path.join(CONFIG_DIR, "user_settings.json")
 SYSTEM_CONFIG_FILE = os.path.join(CONFIG_DIR, "system_config.json")
 KEYBOARD_CONFIG_FILE = os.path.join(CONFIG_DIR, "keyboard_config.json")
@@ -90,7 +91,7 @@ DEPLOY_MODE = os.environ.get("DEPLOY_MODE", "systemd")
 ADMIN_USERNAME = os.environ.get("TG_ADMIN_USERNAME")
 TG_BOT_NAME = os.environ.get("TG_BOT_NAME", "VPS Bot")
 INSTALLED_VERSION = os.environ.get("INSTALLED_VERSION")
-WEB_SERVER_HOST = os.environ.get("WEB_SERVER_HOST", "0.0.0.0")
+WEB_SERVER_HOST = os.environ.get("WEB_SERVER_HOST", "127.0.0.1")
 WEB_SERVER_PORT = int(os.environ.get("WEB_SERVER_PORT", 8080))
 ENABLE_WEB_UI = os.environ.get("ENABLE_WEB_UI", "true").lower() == "true"
 try:
@@ -129,7 +130,50 @@ DEFAULT_KEYBOARD_CONFIG = {
     "enable_users": True,
     "enable_nodes": True,
     "enable_optimize": True,
+    "enable_services": True,
 }
+
+# --- MANAGED SERVICES CONFIG ---
+# This list acts as a whitelist of services to monitor.
+# Only services that physically exist (installed/loaded) on the system will be displayed.
+MANAGED_SERVICES = [
+    # Core Services
+    {"name": "ssh", "type": "systemd"},
+    {"name": "sshd", "type": "systemd"},
+    {"name": "cron", "type": "systemd"},
+    {"name": "docker", "type": "systemd"},
+    {"name": "ufw", "type": "systemd"},
+    {"name": "fail2ban", "type": "systemd"},
+    
+    # Web Servers
+    {"name": "nginx", "type": "systemd"},
+    {"name": "apache2", "type": "systemd"},
+    {"name": "httpd", "type": "systemd"},
+    {"name": "caddy", "type": "systemd"},
+    
+    # Databases
+    {"name": "mysql", "type": "systemd"},
+    {"name": "mariadb", "type": "systemd"},
+    {"name": "postgresql", "type": "systemd"},
+    {"name": "redis-server", "type": "systemd"},
+    {"name": "redis", "type": "systemd"},
+    {"name": "mongodb", "type": "systemd"},
+    {"name": "mongod", "type": "systemd"},
+    
+    # VPN / Proxy
+    {"name": "xray", "type": "systemd"},
+    {"name": "v2ray", "type": "systemd"},
+    {"name": "wg-quick@wg0", "type": "systemd"},
+    
+    # Docker Containers (Common)
+    {"name": "portainer", "type": "docker"},
+    {"name": "nginx-proxy-manager", "type": "docker"},
+    {"name": "watchtower", "type": "docker"},
+    
+    # Bot itself if in docker
+    {"name": "bot-core", "type": "docker"},
+]
+# ------------------------------
 TRAFFIC_INTERVAL = DEFAULT_CONFIG["TRAFFIC_INTERVAL"]
 RESOURCE_CHECK_INTERVAL = DEFAULT_CONFIG["RESOURCE_CHECK_INTERVAL"]
 CPU_THRESHOLD = DEFAULT_CONFIG["CPU_THRESHOLD"]
@@ -179,7 +223,7 @@ def load_system_config():
 
 
 def save_system_config(new_config: dict):
-    global TRAFFIC_INTERVAL, RESOURCE_CHECK_INTERVAL, CPU_THRESHOLD, RAM_THRESHOLD, DISK_THRESHOLD, RESOURCE_ALERT_COOLDOWN, NODE_OFFLINE_TIMEOUT, WEB_METADATA
+    global TRAFFIC_INTERVAL, RESOURCE_CHECK_INTERVAL, CPU_THRESHOLD, RAM_THRESHOLD, DISK_THRESHOLD, RESOURCE_ALERT_COOLDOWN, NODE_OFFLINE_TIMEOUT, WEB_METADATA  # noqa: F824
     try:
         if "TRAFFIC_INTERVAL" in new_config:
             TRAFFIC_INTERVAL = int(new_config["TRAFFIC_INTERVAL"])
@@ -215,7 +259,7 @@ def save_system_config(new_config: dict):
 
 
 def load_keyboard_config():
-    global KEYBOARD_CONFIG
+    global KEYBOARD_CONFIG  # noqa: F824
     try:
         data = load_encrypted_json(KEYBOARD_CONFIG_FILE)
         if data:
@@ -230,7 +274,7 @@ def load_keyboard_config():
 
 
 def save_keyboard_config(new_config: dict):
-    global KEYBOARD_CONFIG
+    # global KEYBOARD_CONFIG - dict is mutable
     try:
         for key in DEFAULT_KEYBOARD_CONFIG:
             if key in new_config:
