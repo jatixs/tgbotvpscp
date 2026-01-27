@@ -12,23 +12,30 @@
 </p>
 
 ---
-## [1.16.3] - 2026-01-26
+## [1.16.3] - 2026-01-27
 
 ### 🚀 WebUI & PWA:
 
-* **iOS/iPadOS Fix:** Fixed PWA display and behavior on Apple devices.
-* **Compatibility:** Improved UI stability and error visibility in mobile browsers.
-* **Navigation:** Adjusted the "Back" button for all screen sizes.
+* **PWA Scroll Fix:** Fixed an issue with "uncontrolled" inertial scrolling and scroll jumps after page reload or PWA restart.
+* **Lazy Load Logic:** Fixed the "lazy loading" behavior — content (lists, logs) now loads smoothly and correctly while scrolling.
+* **Notification Rotation:** Added visual indication of the event source. New **AGENT** and **NODE** badges (Dark Mode supported) allow you to instantly distinguish between alerts from the main server and remote nodes.
+* **Rendering Optimization:** Improved web app performance on mobile devices.
 
-### ✨ UI & UX:
+### ⚙️ Core & Optimization:
 
-* **Bugfix:** Fixed issues with the notification dropdown.
-* **Scrollbar:** Updated scrollbar visual design.
-* **i18n:** Fixed localization and translation errors.
+* **Memory Efficiency:** Deep resource consumption optimization. Implemented ring buffers (`deque`) and regular garbage collection tasks, significantly reducing RAM usage during long-term bot operation.
+* **Flexible Notifications:** The alerts section has been completely redesigned. Settings are now split into Global (for the Agent) and Individual (for each Node), with switch synchronization added.
+* **Fail2Ban Anti-Flood:** Fixed a bug that caused mass sending of old ban notifications (`Restore Ban`) immediately after a server reboot.
 
-### ⚡️ Optimization:
+### 🖥 Node Agent (Client):
 
-* **Performance:** Faster page loading via Tailwind CSS compilation.
+* **Full Localization (i18n):** Responses from remote nodes are now fully translated and delivered in the language selected by the user in the bot settings.
+* **SSH Monitoring:** Added support for tracking SSH logins on remote nodes with detailed notifications (IP, Country Flag, Auth Method).
+
+### ✨ Misc:
+
+* **UI/UX:** Updated the icon in the node details modal window.
+* **Visuals:** Minor layout fixes and improved text readability in Dark Mode.
 
 ---
 ## [1.16.2] - 2026-01-24
