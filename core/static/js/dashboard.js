@@ -2122,16 +2122,14 @@ function filterServicesEditList(query) {
 async function openAgentIpsModal() {
   const m = document.getElementById('agentIpsModal');
   if (!m) return;
-  m.classList.remove('hidden');
-  m.classList.add('flex');
+  animateModalOpen(m, false);
   await loadAgentIpv4();
 }
 
 function closeAgentIpsModal() {
   const m = document.getElementById('agentIpsModal');
   if (!m) return;
-  m.classList.add('hidden');
-  m.classList.remove('flex');
+  animateModalClose(m);
 }
 
 async function loadAgentIpv4() {
