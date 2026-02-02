@@ -125,9 +125,22 @@
 
 **Паттерн Agent-Client** с централизованным управлением:
 
-
-<img width="1024" height="1024" alt="Gemini_Generated_Image_jexoeljexoeljexo" src="https://github.com/user-attachments/assets/0e192634-d81b-4276-bded-235f4f85daea" />
-
+```
+┌─────────────────────────────────────────────────┐
+│  🤖 Telegram Bot (Main Agent)                   │
+│  ├── 📊 SQLite DB (nodes, users, metrics)       │
+│  ├── 🌐 Web Dashboard (Aiohttp + SSE)            │
+│  ├── 🔌 API Server (REST + Real-time)           │
+│  └── ⏰ Background Tasks (monitoring, alerts)    │
+└─────────────────────────────────────────────────┘
+              ↓         ↓         ↓
+    ┌─────────┴─────────┴─────────┴───────┐
+    │                                     │
+┌───▼────┐  ┌────────┐  ┌────────┐  ┌─────▼───┐
+│ Node 1 │  │ Node 2 │  │ Node 3 │  │ Node N  │
+│ (VPS)  │  │ (VPS)  │  │ (VPS)  │  │ (VPS)   │
+└────────┘  └────────┘  └────────┘  └─────────┘
+```
 
 **Технологический стек:**
 - **Backend:** Python 3.10+, Aiogram 3.x, Aiohttp, Tortoise ORM
