@@ -554,13 +554,13 @@ button.force-expanded .btn-text {
         overflow: hidden;
         text-overflow: ellipsis;
     }
-    nav button.w-8.h-8, 
+    nav button.w-8.h-8,
     nav form button.w-8.h-8 {
         width: 1.75rem !important;  /* 28px */
         height: 1.75rem !important; /* 28px */
         border-radius: 0.375rem !important; /* Чуть меньше скругление */
     }
-    nav button svg, 
+    nav button svg,
     nav form button svg {
         width: 1rem !important;   /* 16px */
         height: 1rem !important;  /* 16px */
@@ -568,7 +568,7 @@ button.force-expanded .btn-text {
     nav .gap-1 {
         gap: 0.125rem !important; /* 2px */
     }
-    
+
     nav .gap-4 {
         gap: 0.25rem !important;
     }
@@ -577,7 +577,7 @@ button.force-expanded .btn-text {
         padding-left: 0.25rem !important;
         padding-right: 0.25rem !important;
     }
-    
+
     nav .max-w-\[140px\] span {
         font-size: 0.65rem !important;
         max-width: 60px;
@@ -620,3 +620,6 @@ html.dark .role-badge-user {
     background-color: rgba(120, 53, 15, 0.4);
     color: #fbbf24;
 }
+
+main{z-index:auto!important;}
+#systemModal,#addNodeModal,#keyboardModal,#sessionsModal,#genericHintModal,#nodeModal{z-index:9999!important;}

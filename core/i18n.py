@@ -369,6 +369,11 @@ STRINGS = {
         "web_footer_endpoint": "Эндпоинт",
         "web_footer_powered": "Работает на",
         "web_traffic_total": "Общий трафик",
+        "web_ips_title": "IP-адреса сервера",
+        "web_source_ip": "Основной IP",
+        "web_additional_ips": "Дополнительные IP",
+        "web_no_additional_ips": "Нет дополнительных IP-адресов",
+        "web_failed_to_load": "Не удалось загрузить список IP",
         "web_uptime": "Аптайм",
         "web_cpu": "Процессор",
         "web_ram": "ОЗУ",
@@ -627,7 +632,7 @@ STRINGS = {
         "notif_all_nodes_switched": "Глобальные уведомления Нод: {status}",
         "alert_ssh_login_node": "🔔 <b>Вход SSH на ноде</b>\n🌐 <b>Нода:</b> {node_name}\n👤 <b>Пользователь:</b> {user}\n🛡 <b>Способ:</b> {method}\n🌍 <b>IP:</b> {ip_flag} {ip}\n⏰ <b>Время:</b> {node_time} ({node_tz}) / 📍 {server_time} {server_tz}",
     },
-    
+
     "en": {
         "btn_services": "⚙️ Services",
         "web_services_manager_title": "Services Manager",
@@ -982,6 +987,11 @@ STRINGS = {
         "web_footer_endpoint": "Endpoint",
         "web_footer_powered": "Powered by",
         "web_traffic_total": "Total Traffic",
+        "web_ips_title": "Server IP Addresses",
+        "web_source_ip": "Primary IP",
+        "web_additional_ips": "Additional IPs",
+        "web_no_additional_ips": "No additional IP addresses",
+        "web_failed_to_load": "Failed to load IP list",
         "web_uptime": "Uptime",
         "web_cpu": "CPU",
         "web_ram": "RAM",
@@ -1207,7 +1217,6 @@ STRINGS = {
         "btn_refresh": "🔄 Refresh",
         "web_clear_notif_confirm": "Clear all notifications?",
         "web_notifications_cleared": "Notifications cleared.",
-        "web_logs_cleared_alert": "Logs cleared",
         "web_traffic_reset_no_emoji": "Reset",
         "modal_title_info": "Info",
         "web_logs_empty_title": "Logs are empty",
@@ -1368,4 +1377,4 @@ def get_language_keyboard() -> InlineKeyboardMarkup:
             ]
         ]
     )
-    return keyboard
+    return keyboardroot

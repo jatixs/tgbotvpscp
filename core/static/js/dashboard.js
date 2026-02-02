@@ -2119,9 +2119,84 @@ function filterServicesEditList(query) {
     }
 }
 
+function openAgentIpsModal() {
+  const m = document.getElementById('agentIpsModal');
+  if (!m) return;
+  m.classList.remove('hidden');
+  m.classList.add('flex');
+  loadAgentIpv4();
+}
+
+function closeAgentIpsModal() {
+  const m = document.getElementById('agentIpsModal');
+  if (!m) return;
+  m.classList.add('hidden');
+  m.classList.remove('flex');
+}
+
+async function loadAgentIpv4() {
+  const elPrimary = document.getElementById('agentIpsPrimary');
+  const elList = document.getElementById('agentIpsList');
+  const elEmpty = document.getElementById('agentIpsEmpty');
+  const elLoading = document.getElementById('agentIpsLoading');
+  const elError = document.getElementById('agentIpsError');
+  elError?.classList.add('hidden');
+  elEmpty?.classList.add('hidden');
+  if (elList) elList.innerHTML = '';
+  if (elLoading) elLoading.classList.remove('hidden');
+
+  try {
+    const r = await fetch('/api/agent/ipv4', { credentials: 'same-origin' });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const data = await r.json();
+
+    const primary = data.primary || data.source_ip || data.agent_ip || '-';
+    const ips = Array.isArray(data.ips) ? data.ips : Array.isArray(data.ipv4) ? data.ipv4 : [];
+
+    if (elPrimary) elPrimary.textContent = primary;
+
+    const secondary = ips.filter(ip => ip && ip !== primary);
+
+    if (!secondary.length) {
+      elEmpty?.classList.remove('hidden');
+    } else if (elList) {
+      elList.innerHTML = secondary.map(ip => `
+        <li class="bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-xl px-3 py-2 font-mono text-xs select-all">
+          ${escapeHtml(ip)}
+        </li>
+      `).join('');
+    }
+  } catch (e) {
+    console.error('Error loading IPs:', e);
+    elError?.classList.remove('hidden');
+  } finally {
+    elLoading?.classList.add('hidden');
+  }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  const badge = document.getElementById('agentIpBadge');
+  if (!badge) return;
+
+  const handler = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    openAgentIpsModal();
+  };
+
+  badge.addEventListener('click', handler);
+  badge.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      handler(e);
+    }
+  });
+});
+
+
 async function toggleServiceManaged(name, type, isCurrentlyManaged, btnElement) {
     const action = isCurrentlyManaged ? 'remove' : 'add';
-    
+
     // Show spinner on button
     if (btnElement) {
         btnElement.disabled = true;
@@ -2131,16 +2206,16 @@ async function toggleServiceManaged(name, type, isCurrentlyManaged, btnElement) 
         if (textEl) textEl.classList.add('hidden');
         if (spinnerEl) spinnerEl.classList.remove('hidden');
     }
-    
+
     try {
         const res = await fetch('/api/services/manage', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ action, name, type })
         });
-        
+
         const data = await res.json();
-        
+
         if (data.status === 'ok') {
             // Update just this item instead of reloading all
             updateServiceItemState(name, !isCurrentlyManaged);
@@ -2172,22 +2247,22 @@ function updateServiceItemState(name, isNowManaged) {
     const btnId = 'srv-btn-' + name.replace(/[^a-zA-Z0-9]/g, '_');
     const btn = document.getElementById(btnId);
     if (!btn) return;
-    
+
     // Update button appearance
     btn.disabled = false;
     btn.classList.remove('opacity-70', 'cursor-wait');
-    
+
     const textEl = btn.querySelector('.btn-text');
     const spinnerEl = btn.querySelector('.btn-spinner');
-    
+
     if (textEl) {
         textEl.classList.remove('hidden');
-        textEl.textContent = isNowManaged 
-            ? (I18N.web_services_btn_remove || 'Remove') 
+        textEl.textContent = isNowManaged
+            ? (I18N.web_services_btn_remove || 'Remove')
             : (I18N.web_services_btn_add || 'Add');
     }
     if (spinnerEl) spinnerEl.classList.add('hidden');
-    
+
     // Update button colors
     if (isNowManaged) {
         btn.classList.remove('bg-green-500/20', 'text-green-600', 'dark:text-green-400', 'hover:bg-green-500/30');
@@ -2196,7 +2271,7 @@ function updateServiceItemState(name, isNowManaged) {
         btn.classList.remove('bg-red-500/20', 'text-red-600', 'dark:text-red-400', 'hover:bg-red-500/30');
         btn.classList.add('bg-green-500/20', 'text-green-600', 'dark:text-green-400', 'hover:bg-green-500/30');
     }
-    
+
     // Update onclick handler
     btn.onclick = function() { toggleServiceManaged(name, btn.dataset.type || 'systemd', isNowManaged, this); };
 }

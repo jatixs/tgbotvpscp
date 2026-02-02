@@ -58,9 +58,10 @@ from .utils import (
     get_server_timezone_label,
 )
 from .auth import save_users, get_user_name
-from .messaging import send_alert 
+from .messaging import send_alert
 from .keyboards import BTN_CONFIG_MAP
-from modules.services import get_all_services_status, perform_service_action, get_user_role_level, get_all_available_services, add_managed_service, remove_managed_service
+from modules.services import get_all_services_status, perform_service_action, get_user_role_level, \
+    get_all_available_services, add_managed_service, remove_managed_service
 from modules import update as update_module
 from modules import traffic as traffic_module
 from . import shared_state
@@ -160,7 +161,7 @@ WAF_ATTACK_PATTERNS = [
     (r"((\%3D)|(=))[^\n]*((\%27)|(\')|(\-\-)|(\%3B)|(;))", "SQL_INJECTION"),
     (r"\w*((\%27)|(\'))((\%6F)|o|(\%4F))((\%72)|r|(\%52))", "SQL_INJECTION"),
     (r"(union|select|insert|update|delete|drop|create|alter|exec|execute)(\s|\+|%20)", "SQL_INJECTION"),
-    
+
     # XSS (Cross-Site Scripting) patterns
     (r"<script[^>]*>.*?</script>", "XSS"),
     (r"javascript:", "XSS"),
@@ -168,39 +169,40 @@ WAF_ATTACK_PATTERNS = [
     (r"<iframe[^>]*>", "XSS"),
     (r"<embed[^>]*>", "XSS"),
     (r"<object[^>]*>", "XSS"),
-    
+
     # Path Traversal patterns
     (r"\.\./", "PATH_TRAVERSAL"),
     (r"\.\.\\", "PATH_TRAVERSAL"),
     (r"%2e%2e/", "PATH_TRAVERSAL"),
     (r"%2e%2e\\", "PATH_TRAVERSAL"),
-    
+
     # Command Injection patterns
     (r"[;&|`$()]", "COMMAND_INJECTION"),
     (r"(bash|sh|cmd|powershell|wget|curl)\s", "COMMAND_INJECTION"),
-    
+
     # LDAP Injection
     (r"(\%28)|(\%29)|(\()|(\))|(\%7C)|(\|)", "LDAP_INJECTION"),
 ]
 
 import re
 
+
 def check_waf_patterns(data: str) -> tuple[bool, str]:
     """
     Проверяет данные на наличие паттернов атак
-    
+
     Returns:
         (is_attack, attack_type): True если обнаружена атака, тип атаки
     """
     if not isinstance(data, str):
         return False, ""
-    
+
     data_lower = data.lower()
-    
+
     for pattern, attack_type in WAF_ATTACK_PATTERNS:
         if re.search(pattern, data_lower, re.IGNORECASE):
             return True, attack_type
-    
+
     return False, ""
 
 
@@ -214,22 +216,22 @@ def validate_input_length(data: str, max_length: int = 1000) -> bool:
 def validate_file_upload(filename: str, content_type: str, file_size: int) -> tuple[bool, str]:
     """
     Валидация загружаемых файлов
-    
+
     Returns:
         (is_valid, error_message)
     """
     # Разрешенные расширения
     ALLOWED_EXTENSIONS = {'.jpg', '.jpeg', '.png', '.gif', '.pdf', '.txt', '.log', '.zip'}
-    
+
     # Проверка расширения
     _, ext = os.path.splitext(filename.lower())
     if ext not in ALLOWED_EXTENSIONS:
         return False, f"File type {ext} not allowed"
-    
+
     # Проверка размера (50MB)
     if file_size > MAX_FILE_SIZE:
         return False, f"File size {file_size} exceeds limit {MAX_FILE_SIZE}"
-    
+
     # Проверка MIME type
     allowed_mimes = {
         'image/jpeg', 'image/png', 'image/gif',
@@ -237,7 +239,7 @@ def validate_file_upload(filename: str, content_type: str, file_size: int) -> tu
     }
     if content_type not in allowed_mimes:
         return False, f"Content type {content_type} not allowed"
-    
+
     return True, ""
 
 
@@ -253,7 +255,8 @@ def check_user_password(user_id, input_pass):
     """Securely check user password with constant-time comparison."""
     if user_id not in ALLOWED_USERS:
         # Always perform verification to prevent timing attacks
-        PasswordHasher().verify("$argon2id$v=19$m=102400,t=8,p=1$00000000000000000000000000000000$1234567890ABCDEF", "dummy")
+        PasswordHasher().verify("$argon2id$v=19$m=102400,t=8,p=1$00000000000000000000000000000000$1234567890ABCDEF",
+                                "dummy")
         return False
     user_data = ALLOWED_USERS[user_id]
     if isinstance(user_data, str):
@@ -402,21 +405,22 @@ async def handle_get_logs(request):
     if not user or user['role'] != 'admins':
         return web.json_response({"error": "Unauthorized"}, status=403)
     lang = get_user_lang(user['id'])
-    
+
     log_path = os.path.join(BASE_DIR, "logs", "bot", "bot.log")
-    
+
     if not os.path.exists(log_path):
         return web.json_response({"logs": [
             _("web_logs_empty_title", lang),
             _("web_logs_empty_desc", lang)
         ]})
-        
+
     try:
         with open(log_path, "r", encoding="utf-8", errors="ignore") as f:
             lines = list(deque(f, 300))
         return web.json_response({"logs": lines})
     except Exception as e:
         return web.json_response({"error": str(e)}, status=500)
+
 
 async def handle_get_sys_logs(request):
     user = get_current_user(request)
@@ -456,7 +460,7 @@ async def api_get_notifications(request):
     uid = user["id"]
     lang = get_user_lang(uid)
     user_alerts = ALERTS_CONFIG.get(uid, {})
-    
+
     filtered = []
     for n in list(shared_state.WEB_NOTIFICATIONS):
         if user_alerts.get(n["type"], False):
@@ -588,8 +592,8 @@ async def api_revoke_session(request):
             )
         if target_token in SERVER_SESSIONS:
             if (
-                user["id"] == ADMIN_USER_ID
-                or SERVER_SESSIONS[target_token]["id"] == user["id"]
+                    user["id"] == ADMIN_USER_ID
+                    or SERVER_SESSIONS[target_token]["id"] == user["id"]
             ):
                 del SERVER_SESSIONS[target_token]
                 return web.json_response({"status": "ok"})
@@ -613,6 +617,8 @@ async def api_revoke_all_sessions(request):
             del SERVER_SESSIONS[token]
             count += 1
     return web.json_response({"status": "ok", "revoked_count": count})
+
+
 async def handle_dashboard(request):
     user = get_current_user(request)
     if not user:
@@ -639,7 +645,7 @@ async def handle_dashboard(request):
     role = user.get("role", "users")
     is_main_admin = user_id == ADMIN_USER_ID
     is_admin = role == "admins" or is_main_admin
-    
+
     # Badge colors: Owner (main admin) = red, Admins = green, Users = amber
     if is_main_admin:
         role_text = _("web_role_owner", lang)
@@ -683,9 +689,9 @@ async def handle_dashboard(request):
             for t, n in all_nodes.items()
         ]
         nodes_json = json.dumps(nlist)
-    
+
     can_reset = traffic_module.can_reset_traffic()
-    
+
     context = {
         "web_title": page_title,
         "web_favicon": web_meta.get("favicon", "/static/favicon.ico"),
@@ -705,6 +711,11 @@ async def handle_dashboard(request):
         "web_agent_stats_title": _("web_agent_stats_title", lang),
         "agent_ip": encrypt_for_web(AGENT_IP_CACHE),
         "web_traffic_total": _("web_traffic_total", lang),
+        "web_ips_title": _("web_ips_title", lang),
+        "web_source_ip": _("web_source_ip", lang),
+        "web_additional_ips": _("web_additional_ips", lang),
+        "web_no_additional_ips": _("web_no_additional_ips", lang),
+        "web_failed_to_load": _("web_failed_to_load", lang),
         "web_uptime": _("web_uptime", lang),
         "web_cpu": _("web_cpu", lang),
         "web_ram": _("web_ram", lang),
@@ -877,7 +888,7 @@ async def handle_heartbeat(request):
         return web.json_response({"error": "Auth fail"}, status=401)
     ssh_logins = data.get("ssh_logins", [])
     bot = request.app.get("bot")
-    
+
     if ssh_logins and bot:
         server_tz = get_server_timezone_label()
         server_time = time.strftime("%H:%M")
@@ -888,10 +899,11 @@ async def handle_heartbeat(request):
             method_raw = login.get("method", "unknown")
             node_time_str = login.get("node_time_str", "??:??")
             tz_label = login.get("tz_label", "")
-            
+
             # Логируем с masking
-            logging.info(f"SSH login on node {node.get('name', 'Node')}: user={user_ssh}, ip={mask_sensitive_data(ip)}, method={method_raw}")
-            
+            logging.info(
+                f"SSH login on node {node.get('name', 'Node')}: user={user_ssh}, ip={mask_sensitive_data(ip)}, method={method_raw}")
+
             flag = await get_country_flag(ip)
             method_key = "auth_method_unknown"
             if "publickey" in method_raw.lower():
@@ -940,9 +952,9 @@ async def handle_heartbeat(request):
         try:
             ip_obj = ipaddress.ip_address(ip)
             if (
-                (ip_obj.is_private or ip_obj.is_loopback)
-                and AGENT_IP_CACHE
-                and (AGENT_IP_CACHE not in ["Loading...", "Unknown"])
+                    (ip_obj.is_private or ip_obj.is_loopback)
+                    and AGENT_IP_CACHE
+                    and (AGENT_IP_CACHE not in ["Loading...", "Unknown"])
             ):
                 ip = AGENT_IP_CACHE
         except ValueError:
@@ -953,6 +965,7 @@ async def handle_heartbeat(request):
     if tasks_to_send:
         await nodes_db.clear_node_tasks(token)
     return web.json_response({"status": "ok", "tasks": tasks_to_send})
+
 
 async def process_node_result_background(bot, user_id, cmd, text, token, node_name):
     if not user_id:
@@ -965,7 +978,7 @@ async def process_node_result_background(bot, user_id, cmd, text, token, node_na
             lang = get_user_lang(user_id)
             key = text.get("key")
             params = text.get("params", {})
-            
+
             # Рекурсивная обработка вложенных ключей (например, для inet_status)
             resolved_params = {}
             for k, v in params.items():
@@ -974,12 +987,12 @@ async def process_node_result_background(bot, user_id, cmd, text, token, node_na
                     resolved_params[k] = _(v["key"], lang, **v.get("params", {}))
                 else:
                     resolved_params[k] = v
-            
+
             # Формируем итоговый текст, используя язык пользователя
             final_text = _(key, lang, **resolved_params)
         except Exception as e:
             logging.error(f"Error processing i18n node result: {e}")
-            final_text = str(text) # Возврат к исходному виду при ошибке
+            final_text = str(text)  # Возврат к исходному виду при ошибке
     elif isinstance(text, dict):
         # Если пришел словарь, но не i18n (на всякий случай)
         final_text = str(text)
@@ -1018,10 +1031,11 @@ async def process_node_result_background(bot, user_id, cmd, text, token, node_na
             text=_("node_response_template", user_id, name=node_name, text=final_text),
             parse_mode="HTML",
         )
-        
+
     except Exception as e:
         logging.error(f"Background send error: {e}")
-        
+
+
 async def handle_node_details(request):
     if not get_current_user(request):
         return web.json_response({"error": "Unauthorized"}, status=401)
@@ -1061,7 +1075,7 @@ async def handle_agent_stats(request):
     try:
         net = psutil.net_io_counters()
         rx_total, tx_total = traffic_module.get_current_traffic_total()
-        
+
         net_if = psutil.net_io_counters(pernic=True)
         mem = psutil.virtual_memory()
         disk = psutil.disk_usage(get_host_path("/"))
@@ -1097,6 +1111,60 @@ async def handle_agent_stats(request):
     return web.json_response({"stats": current_stats, "history": list(AGENT_HISTORY)})
 
 
+async def handle_agent_ipv4(request):
+    # RETURN ALL IPS
+    try:
+        user = get_current_user(request)
+        if not user:
+            return web.json_response({"error": "Unauthorized"}, status=401)
+
+        import netifaces
+        import socket
+
+        primary_ip = AGENT_IP_CACHE
+        all_ips = []
+
+        try:
+            # SHOW ALLL NETWORK INTERFACES
+            interfaces = netifaces.interfaces()
+            for iface in interfaces:
+                try:
+                    addrs = netifaces.ifaddresses(iface)
+                    if netifaces.AF_INET in addrs:
+                        for addr_info in addrs[netifaces.AF_INET]:
+                            ip = addr_info.get('addr')
+                            if ip and ip != '127.0.0.1' and not ip.startswith('169.254.'):
+                                all_ips.append(ip)
+                except:
+                    continue
+        except Exception as e:
+            logging.warning(f"Error getting network interfaces: {e}")
+            # FALLBACK
+            try:
+                hostname = socket.gethostname()
+                addrs = socket.getaddrinfo(hostname, None, socket.AF_INET)
+                for addr in addrs:
+                    ip = addr[4][0]
+                    if ip != '127.0.0.1':
+                        all_ips.append(ip)
+            except:
+                pass
+
+        # REMOVE DUBLICATE
+        unique_ips = list(dict.fromkeys(all_ips))
+
+        return web.json_response({
+            "primary": primary_ip if primary_ip not in ["Loading...", "Unknown"] else unique_ips[
+                0] if unique_ips else "-",
+            "ips": unique_ips,
+            "count": len(unique_ips)
+        })
+
+    except Exception as e:
+        logging.error(f"Error in handle_agent_ipv4: {e}")
+        return web.json_response({"error": str(e)}, status=500)
+
+
 async def handle_reset_traffic(request):
     user = get_current_user(request)
     if not user or user["role"] != "admins":
@@ -1104,7 +1172,7 @@ async def handle_reset_traffic(request):
     try:
         traffic_module.TRAFFIC_OFFSET["rx"] = 0
         traffic_module.TRAFFIC_OFFSET["tx"] = 0
-        
+
         try:
             import glob
             files = glob.glob(os.path.join(traffic_module.config.TRAFFIC_BACKUP_DIR, "traffic_backup_*.json"))
@@ -1112,7 +1180,7 @@ async def handle_reset_traffic(request):
                 os.remove(f)
         except Exception:
             pass
-            
+
         return web.json_response({"status": "ok"})
     except Exception as e:
         return web.json_response({"error": str(e)}, status=500)
@@ -1249,11 +1317,11 @@ async def handle_settings_page(request):
             for t, n in all_nodes.items()
         ]
         nodes_json = json.dumps(nlist)
-    
+
     can_reset = True
-    
+
     keyboard_config_json = json.dumps(KEYBOARD_CONFIG)
-    
+
     i18n_data = {
         "web_saving_btn": _("web_saving_btn", lang),
         "web_saved_btn": _("web_saved_btn", lang),
@@ -1343,7 +1411,7 @@ async def handle_settings_page(request):
         "web_meta_lock_confirm": _("web_meta_lock_confirm", lang),
         "web_seo_btn_default": _("web_seo_btn_default", lang),
         "web_seo_paste_help": _("web_seo_paste_help", lang),
-        "web_image_pasted": _("web_image_pasted", lang),        
+        "web_image_pasted": _("web_image_pasted", lang),
         "web_image_uploaded": _("web_image_uploaded", lang),
         "web_meta_success": _("web_meta_success", lang),
         "web_meta_locked_alert": _("web_meta_locked_alert", lang),
@@ -1393,7 +1461,7 @@ async def handle_settings_page(request):
         "notifications_alert_name_logins": _("notifications_alert_name_logins", lang),
         "notifications_alert_name_bans": _("notifications_alert_name_bans", lang),
         "notifications_alert_name_downtime": _(
-        "notifications_alert_name_downtime", lang),
+            "notifications_alert_name_downtime", lang),
         "web_save_btn": _("web_save_btn", lang),
         "web_users_section": _("web_users_section", lang),
         "web_add_user_btn": _("web_add_user_btn", lang),
@@ -1463,7 +1531,8 @@ async def handle_settings_page(request):
     template = JINJA_ENV.get_template("settings.html")
     html = template.render(**context)
     return web.Response(text=html, content_type="text/html")
-    
+
+
 async def handle_save_notifications(request):
     user = get_current_user(request)
     if not user:
@@ -1505,16 +1574,17 @@ async def handle_save_keyboard_config(request):
     except Exception as e:
         return web.json_response({"error": str(e)}, status=500)
 
+
 async def handle_save_metadata(request):
     user = get_current_user(request)
     if not user or user["role"] != "admins":
         return web.json_response({"error": "Admin required"}, status=403)
-    
+
     try:
         data = await request.json()
         current_meta = getattr(current_config, "WEB_METADATA", {})
         if current_meta.get("locked", False):
-             return web.json_response({"error": "Metadata is permanently locked"}, status=403)
+            return web.json_response({"error": "Metadata is permanently locked"}, status=403)
 
         new_meta = {
             "favicon": str(data.get("favicon", "")).strip(),
@@ -1530,6 +1600,7 @@ async def handle_save_metadata(request):
         return web.json_response({"status": "ok"})
     except Exception as e:
         return web.json_response({"error": str(e)}, status=500)
+
 
 async def handle_change_password(request):
     user = get_current_user(request)
@@ -1664,7 +1735,7 @@ async def handle_login_page(request):
         except Exception as e:
             logging.error(f"Error fetching bot username: {e}")
             BOT_USERNAME_CACHE = ""
-            
+
     lang_cookie = request.cookies.get("guest_lang", DEFAULT_LANGUAGE)
     lang = lang_cookie if lang_cookie in ["ru", "en"] else DEFAULT_LANGUAGE
     web_meta = getattr(current_config, "WEB_METADATA", {})
@@ -1721,7 +1792,7 @@ async def handle_login_page(request):
     alert = ""
     if is_default_password_active(ADMIN_USER_ID):
         alert = f'<div class="mb-4 p-3 bg-yellow-500/20 border border-yellow-500/50 rounded-xl flex items-start gap-3"><svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-yellow-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg><span class="text-xs text-yellow-200 font-medium" data-i18n="web_default_pass_alert">{_("web_default_pass_alert", lang)}</span></div>'
-    
+
     context = {
         "web_title": page_title,
         "web_favicon": web_meta.get("favicon", "/static/favicon.ico"),
@@ -1903,7 +1974,7 @@ async def handle_reset_page_render(request):
     if time.time() - RESET_TOKENS[token]["ts"] > RESET_TOKEN_TTL:
         del RESET_TOKENS[token]
         return web.Response(text="Expired", status=403)
-    
+
     lang = DEFAULT_LANGUAGE
     web_meta = getattr(current_config, "WEB_METADATA", {})
     custom_title = web_meta.get("title", "")
@@ -2025,7 +2096,7 @@ async def handle_sse_stream(request):
             try:
                 net = psutil.net_io_counters()
                 rx_total, tx_total = traffic_module.get_current_traffic_total()
-                
+
                 net_if = psutil.net_io_counters(pernic=True)
                 mem = psutil.virtual_memory()
                 disk = psutil.disk_usage(get_host_path("/"))
@@ -2102,7 +2173,7 @@ async def handle_sse_stream(request):
                 break
             user_alerts = ALERTS_CONFIG.get(uid, {})
             user_lang = get_user_lang(uid)
-            
+
             filtered = []
             for n in list(shared_state.WEB_NOTIFICATIONS):
                 if user_alerts.get(n["type"], False):
@@ -2147,7 +2218,7 @@ async def handle_sse_logs(request):
     user = get_current_user(request)
     if not user or user["role"] != "admins":
         return web.Response(status=403)
-    
+
     log_type = request.query.get("type", "bot")
     resp = web.StreamResponse(status=200, reason="OK")
     resp.headers["Content-Type"] = "text/event-stream"
@@ -2156,10 +2227,10 @@ async def handle_sse_logs(request):
     resp.headers["X-Accel-Buffering"] = "no"
     resp.enable_compression(False)
     await resp.prepare(request)
-    
+
     shutdown_event = request.app.get("shutdown_event")
     journal_bin = ["journalctl"]
-    
+
     if DEPLOY_MODE == "docker" and current_config.INSTALL_MODE == "root":
         if os.path.exists("/host/usr/bin/journalctl"):
             journal_bin = ["chroot", "/host", "/usr/bin/journalctl"]
@@ -2174,17 +2245,17 @@ async def handle_sse_logs(request):
             cmd.extend(["-n", str(lines)])
         else:
             cmd.extend(["-n", "300"])
-        
+
         try:
             proc = await asyncio.create_subprocess_exec(
                 *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
             )
             stdout, stderr = await proc.communicate()
-            
+
             if proc.returncode != 0:
                 logging.error(f"Journalctl error: {stderr.decode('utf-8', errors='ignore')}")
                 return (["Error: Failed to fetch system logs"], cursor)
-            
+
             raw_output = stdout.decode("utf-8", errors="ignore").strip().split("\n")
             log_lines = []
             new_cursor = cursor
@@ -2222,7 +2293,7 @@ async def handle_sse_logs(request):
                     clean_lines = [l.rstrip() for l in history_lines]
             except Exception as e:
                 logging.error(f"Error reading bot history: {e}")
-        
+
         await resp.write(
             f"event: logs\ndata: {json.dumps({'logs': clean_lines})}\n\n".encode("utf-8")
         )
@@ -2237,7 +2308,7 @@ async def handle_sse_logs(request):
         except Exception as e:
             logging.error(f"Error fetching sys logs: {e}")
             history_lines = ["Error: System logs temporarily unavailable"]
-        
+
         logs_to_send = history_lines if history_lines else []
         await resp.write(
             f"event: logs\ndata: {json.dumps({'logs': logs_to_send})}\n\n".encode("utf-8")
@@ -2251,10 +2322,10 @@ async def handle_sse_logs(request):
                 await resp.write(b"event: shutdown\ndata: restarting\n\n")
                 await resp.drain()
                 break
-            
+
             if request.transport is None or request.transport.is_closing():
                 break
-            
+
             data_sent = False
             if log_type == "bot":
                 if os.path.exists(bot_log_path):
@@ -2293,14 +2364,14 @@ async def handle_sse_logs(request):
                 except Exception as e:
                     logging.error(f"Error streaming sys logs: {e}")
                     new_lines = ["Error: Connection to system logs lost"]
-                
+
                 if not sys_cursor and new_lines and "Error:" not in new_lines[0]:
                     current_hash = hash(tuple(new_lines))
                     if current_hash == last_sent_lines_hash:
                         new_lines = []
                     else:
                         last_sent_lines_hash = current_hash
-                
+
                 if new_lines:
                     await resp.write(
                         f"event: logs\ndata: {json.dumps({'logs': new_lines})}\n\n".encode("utf-8")
@@ -2338,8 +2409,9 @@ async def handle_sse_logs(request):
                 await resp.write(f"event: error\ndata: {safe_msg}\n\n".encode("utf-8"))
             except Exception:
                 pass
-    
+
     return resp
+
 
 async def handle_sse_node_details(request):
     user = get_current_user(request)
@@ -2422,6 +2494,7 @@ async def cleanup_server():
         except asyncio.CancelledError:
             pass
 
+
 async def cleanup_monitor():
     """Periodic cleanup of expired sessions and tokens to save memory."""
     while True:
@@ -2436,7 +2509,7 @@ async def cleanup_monitor():
             expired_auth = [token for token, data in AUTH_TOKENS.items() if now - data["created_at"] > LOGIN_TOKEN_TTL]
             for token in expired_auth:
                 del AUTH_TOKENS[token]
-            
+
             # Prevent AUTH_TOKENS memory leak by limiting size
             if len(AUTH_TOKENS) > 1000:
                 # Sort by creation time and remove oldest 25%
@@ -2447,7 +2520,7 @@ async def cleanup_monitor():
                         del AUTH_TOKENS[token]
                     except KeyError:
                         pass
-            
+
             # Clean up API rate limits
             expired_api_limits = [key for key in API_RATE_LIMITS.keys()]
             for key in expired_api_limits:
@@ -2458,8 +2531,9 @@ async def cleanup_monitor():
                     del LOGIN_ATTEMPTS[ip]
         except Exception as e:
             logging.error(f"Cleanup task error: {e}")
-            
+
         await asyncio.sleep(600)
+
 
 async def start_web_server(bot_instance: Bot):
     global AGENT_FLAG, AGENT_TASK  # noqa: F824
@@ -2481,14 +2555,14 @@ async def start_web_server(bot_instance: Bot):
                     status=429
                 )
         return await handler(request)
-    
+
     # WAF (Web Application Firewall) Middleware
     @web.middleware
     async def waf_middleware(request, handler):
         # Проверяем только POST/PUT запросы с данными
         if request.method in ["POST", "PUT"]:
             ip = get_client_ip(request)
-            
+
             # Проверка Query String
             if request.query_string:
                 is_attack, attack_type = check_waf_patterns(request.query_string.decode('utf-8', errors='ignore'))
@@ -2498,7 +2572,7 @@ async def start_web_server(bot_instance: Bot):
                         {"error": "Malicious request detected"},
                         status=403
                     )
-            
+
             # Проверка тела запроса (JSON)
             if request.content_type == 'application/json':
                 try:
@@ -2511,7 +2585,7 @@ async def start_web_server(bot_instance: Bot):
                                 {"error": "Malicious request detected"},
                                 status=403
                             )
-                        
+
                         # Проверка длины
                         if not validate_input_length(body, max_length=10000):
                             logging.warning(f"WAF: Request too large from IP {mask_sensitive_data(ip)}")
@@ -2521,7 +2595,7 @@ async def start_web_server(bot_instance: Bot):
                             )
                 except Exception as e:
                     logging.error(f"WAF middleware error: {e}")
-        
+
         return await handler(request)
 
     app.middlewares.append(rate_limit_middleware)
@@ -2536,11 +2610,13 @@ async def start_web_server(bot_instance: Bot):
         logging.info("Web UI ENABLED.")
         if os.path.exists(STATIC_DIR):
             app.router.add_static("/static", STATIC_DIR)
+
         async def handle_manifest(request):
             manifest_path = os.path.join(STATIC_DIR, "favicons", "site.webmanifest")
             if os.path.exists(manifest_path):
                 return web.FileResponse(manifest_path)
-            return web.Response(status=404)
+            return web.Response(status=403)
+
         app.router.add_get("/site.webmanifest", handle_manifest)
         app.router.add_get("/", handle_dashboard)
         app.router.add_get("/settings", handle_settings_page)
@@ -2567,6 +2643,7 @@ async def start_web_server(bot_instance: Bot):
         app.router.add_post("/api/settings/metadata", handle_save_metadata)
         app.router.add_post("/api/logs/clear", handle_clear_logs)
         app.router.add_post("/api/traffic/reset", handle_reset_traffic)
+        app.router.add_get("/api/agent/ipv4", handle_agent_ipv4)
         app.router.add_post("/api/users/action", handle_user_action)
         app.router.add_post("/api/nodes/add", handle_node_add)
         app.router.add_post("/api/nodes/delete", handle_node_delete)
@@ -2587,7 +2664,7 @@ async def start_web_server(bot_instance: Bot):
         app.router.add_get("/", handle_api_root)
     AGENT_TASK = asyncio.create_task(agent_monitor())
     asyncio.create_task(cleanup_monitor())
-    runner = web.AppRunner(app, access_log=None, shutdown_timeout=1.0)
+    runner = web.AppRunner(app, access_log=True, shutdown_timeout=1.0)
     await runner.setup()
     site = web.TCPSite(runner, WEB_SERVER_HOST, WEB_SERVER_PORT)
     try:
@@ -2628,11 +2705,13 @@ async def agent_monitor():
             }
             AGENT_HISTORY.append(point)
         except asyncio.CancelledError:
-            
+
             raise
         except Exception:
             pass
         await asyncio.sleep(2)
+
+
 async def handle_save_notifications(request):
     user = get_current_user(request)
     if not user:
@@ -2674,16 +2753,17 @@ async def handle_save_keyboard_config(request):
     except Exception as e:
         return web.json_response({"error": str(e)}, status=500)
 
+
 async def handle_save_metadata(request):
     user = get_current_user(request)
     if not user or user["role"] != "admins":
         return web.json_response({"error": "Admin required"}, status=403)
-    
+
     try:
         data = await request.json()
         current_meta = getattr(current_config, "WEB_METADATA", {})
         if current_meta.get("locked", False):
-             return web.json_response({"error": "Metadata is permanently locked"}, status=403)
+            return web.json_response({"error": "Metadata is permanently locked"}, status=403)
 
         new_favicon_url = str(data.get("favicon", "")).strip()
 
@@ -2703,7 +2783,8 @@ async def handle_save_metadata(request):
         return web.json_response({"status": "ok"})
     except Exception as e:
         return web.json_response({"error": str(e)}, status=500)
-        
+
+
 async def handle_change_password(request):
     user = get_current_user(request)
     if not user:
@@ -2837,7 +2918,7 @@ async def handle_login_page(request):
         except Exception as e:
             logging.error(f"Error fetching bot username: {e}")
             BOT_USERNAME_CACHE = ""
-            
+
     lang_cookie = request.cookies.get("guest_lang", DEFAULT_LANGUAGE)
     lang = lang_cookie if lang_cookie in ["ru", "en"] else DEFAULT_LANGUAGE
     web_meta = getattr(current_config, "WEB_METADATA", {})
@@ -2869,7 +2950,7 @@ async def handle_login_page(request):
     alert = ""
     if is_default_password_active(ADMIN_USER_ID):
         alert = f'<div class="mb-4 p-3 bg-yellow-500/20 border border-yellow-500/50 rounded-xl flex items-start gap-3"><svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-yellow-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg><span class="text-xs text-yellow-200 font-medium" data-i18n="web_default_pass_alert">{_("web_default_pass_alert", lang)}</span></div>'
-    
+
     context = {
         "web_title": page_title,
         "web_favicon": web_meta.get("favicon", "/static/favicon.ico"),
@@ -3015,8 +3096,7 @@ async def handle_reset_request(request):
                 else f"tg://user?id={ADMIN_USER_ID}"
             )
             return web.json_response(
-                {"error": "not_found", "admin_url": adm}, status=404
-            )
+                {"error": "not_found", "admin_url": adm}, status=404)
         token = secrets.token_urlsafe(32)
         RESET_TOKENS[token] = {"ts": time.time(), "user_id": uid}
         host = request.headers.get("Host", f"{WEB_SERVER_HOST}:{WEB_SERVER_PORT}")
@@ -3051,7 +3131,7 @@ async def handle_reset_page_render(request):
     if time.time() - RESET_TOKENS[token]["ts"] > RESET_TOKEN_TTL:
         del RESET_TOKENS[token]
         return web.Response(text="Expired", status=403)
-    
+
     lang = DEFAULT_LANGUAGE
     web_meta = getattr(current_config, "WEB_METADATA", {})
     custom_title = web_meta.get("title", "")
@@ -3173,7 +3253,7 @@ async def handle_sse_stream(request):
             try:
                 net = psutil.net_io_counters()
                 rx_total, tx_total = traffic_module.get_current_traffic_total()
-                
+
                 net_if = psutil.net_io_counters(pernic=True)
                 mem = psutil.virtual_memory()
                 disk = psutil.disk_usage(get_host_path("/"))
@@ -3250,7 +3330,7 @@ async def handle_sse_stream(request):
                 break
             user_alerts = ALERTS_CONFIG.get(uid, {})
             user_lang = get_user_lang(uid)
-            
+
             filtered = []
             for n in list(shared_state.WEB_NOTIFICATIONS):
                 if user_alerts.get(n["type"], False):
@@ -3295,7 +3375,7 @@ async def handle_sse_logs(request):
     user = get_current_user(request)
     if not user or user["role"] != "admins":
         return web.Response(status=403)
-    
+
     log_type = request.query.get("type", "bot")
     resp = web.StreamResponse(status=200, reason="OK")
     resp.headers["Content-Type"] = "text/event-stream"
@@ -3304,10 +3384,10 @@ async def handle_sse_logs(request):
     resp.headers["X-Accel-Buffering"] = "no"
     resp.enable_compression(False)
     await resp.prepare(request)
-    
+
     shutdown_event = request.app.get("shutdown_event")
     journal_bin = ["journalctl"]
-    
+
     if DEPLOY_MODE == "docker" and current_config.INSTALL_MODE == "root":
         if os.path.exists("/host/usr/bin/journalctl"):
             journal_bin = ["chroot", "/host", "/usr/bin/journalctl"]
@@ -3322,17 +3402,17 @@ async def handle_sse_logs(request):
             cmd.extend(["-n", str(lines)])
         else:
             cmd.extend(["-n", "300"])
-        
+
         try:
             proc = await asyncio.create_subprocess_exec(
                 *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
             )
             stdout, stderr = await proc.communicate()
-            
+
             if proc.returncode != 0:
                 logging.error(f"Journalctl error: {stderr.decode('utf-8', errors='ignore')}")
                 return (["Error: Failed to fetch system logs"], cursor)
-            
+
             raw_output = stdout.decode("utf-8", errors="ignore").strip().split("\n")
             log_lines = []
             new_cursor = cursor
@@ -3368,7 +3448,7 @@ async def handle_sse_logs(request):
                     clean_lines = [l.rstrip() for l in history_lines]
             except Exception as e:
                 logging.error(f"Error reading bot history: {e}")
-        
+
         await resp.write(
             f"event: logs\ndata: {json.dumps({'logs': clean_lines})}\n\n".encode("utf-8")
         )
@@ -3383,7 +3463,7 @@ async def handle_sse_logs(request):
         except Exception as e:
             logging.error(f"Error fetching sys logs: {e}")
             history_lines = ["Error: System logs temporarily unavailable"]
-        
+
         logs_to_send = history_lines if history_lines else []
         await resp.write(
             f"event: logs\ndata: {json.dumps({'logs': logs_to_send})}\n\n".encode("utf-8")
@@ -3397,10 +3477,10 @@ async def handle_sse_logs(request):
                 await resp.write(b"event: shutdown\ndata: restarting\n\n")
                 await resp.drain()
                 break
-            
+
             if request.transport is None or request.transport.is_closing():
                 break
-            
+
             data_sent = False
             if log_type == "bot":
                 if os.path.exists(bot_log_path):
@@ -3439,14 +3519,14 @@ async def handle_sse_logs(request):
                 except Exception as e:
                     logging.error(f"Error streaming sys logs: {e}")
                     new_lines = ["Error: Connection to system logs lost"]
-                
+
                 if not sys_cursor and new_lines and "Error:" not in new_lines[0]:
                     current_hash = hash(tuple(new_lines))
                     if current_hash == last_sent_lines_hash:
                         new_lines = []
                     else:
                         last_sent_lines_hash = current_hash
-                
+
                 if new_lines:
                     await resp.write(
                         f"event: logs\ndata: {json.dumps({'logs': new_lines})}\n\n".encode("utf-8")
@@ -3484,8 +3564,9 @@ async def handle_sse_logs(request):
                 await resp.write(f"event: error\ndata: {safe_msg}\n\n".encode("utf-8"))
             except Exception:
                 pass
-    
+
     return resp
+
 
 async def handle_sse_node_details(request):
     user = get_current_user(request)
@@ -3564,7 +3645,7 @@ async def handle_sse_services(request):
     user = get_current_user(request)
     if not user:
         return web.Response(status=401)
-    
+
     current_token = request.cookies.get(COOKIE_NAME)
     resp = web.StreamResponse(status=200, reason="OK")
     resp.headers["Content-Type"] = "text/event-stream"
@@ -3572,9 +3653,9 @@ async def handle_sse_services(request):
     resp.headers["Connection"] = "keep-alive"
     resp.headers["X-Accel-Buffering"] = "no"
     await resp.prepare(request)
-    
+
     shutdown_event = request.app.get("shutdown_event")
-    
+
     try:
         while True:
             if shared_state.IS_RESTARTING:
@@ -3583,13 +3664,13 @@ async def handle_sse_services(request):
                 except Exception:
                     pass
                 break
-            
+
             try:
                 if request.transport is None or request.transport.is_closing():
                     break
             except Exception:
                 break
-            
+
             # Check session validity
             if current_token and current_token not in SERVER_SESSIONS:
                 try:
@@ -3597,7 +3678,7 @@ async def handle_sse_services(request):
                 except Exception:
                     pass
                 break
-            
+
             # Get services status
             try:
                 services = get_all_services_status()
@@ -3609,14 +3690,14 @@ async def handle_sse_services(request):
                         "type": encrypt_for_web(svc.get("type", "")),
                         "status": encrypt_for_web(svc.get("status", ""))
                     })
-                
+
                 payload = json.dumps({"services": encrypted_services})
                 await resp.write(f"event: services\ndata: {payload}\n\n".encode("utf-8"))
             except (ConnectionResetError, BrokenPipeError, ConnectionError):
                 break
             except Exception as e:
                 logging.error(f"SSE Services fetch error: {e}")
-            
+
             # Wait before next update
             if shutdown_event:
                 try:
@@ -3640,36 +3721,37 @@ async def handle_services_list(request):
         user = get_current_user(request)
         if not user:
             return web.json_response({"error": "Unauthorized"}, status=401)
-        
+
         services = get_all_services_status()
         return web.json_response(services)
     except Exception as e:
-         return web.json_response({"error": str(e)}, status=500)
+        return web.json_response({"error": str(e)}, status=500)
+
 
 async def api_control_service(request):
     try:
         user = get_current_user(request)
         if not user:
             return web.json_response({"error": "Unauthorized"}, status=401)
-            
+
         user_id = user["id"]
         level = get_user_role_level(user_id)
-        
-        action = request.match_info["action"] # start, stop, restart
-        
+
+        action = request.match_info["action"]  # start, stop, restart
+
         # Permission check
         if level == 0:
             return web.json_response({"error": "Access Denied (View Only)"}, status=403)
         if action == "stop" and level < 2:
-             return web.json_response({"error": "Access Denied (Stop not allowed)"}, status=403)
-            
+            return web.json_response({"error": "Access Denied (Stop not allowed)"}, status=403)
+
         data = await request.json()
         name = data.get("name")
         sType = data.get("type", "systemd")
-        
+
         if not name:
             return web.json_response({"error": "Name required"}, status=400)
-            
+
         # Security: check if service is in config
         found = False
         for s in current_config.MANAGED_SERVICES:
@@ -3677,13 +3759,13 @@ async def api_control_service(request):
                 found = True
                 break
         if not found:
-             return web.json_response({"error": "Service not managed"}, status=403)
+            return web.json_response({"error": "Service not managed"}, status=403)
 
         success, msg = await perform_service_action(name, sType, action)
         if success:
-             return web.json_response({"status": "ok", "message": msg})
+            return web.json_response({"status": "ok", "message": msg})
         else:
-             return web.json_response({"error": msg}, status=500)
+            return web.json_response({"error": msg}, status=500)
 
     except Exception as e:
         return web.json_response({"error": str(e)}, status=500)
@@ -3695,13 +3777,13 @@ async def api_service_info(request):
         user = get_current_user(request)
         if not user:
             return web.json_response({"error": "Unauthorized"}, status=401)
-        
+
         name = request.match_info.get("name")
         sType = request.query.get("type", "systemd")
-        
+
         if not name:
             return web.json_response({"error": "Name required"}, status=400)
-        
+
         from modules.services import get_service_info
         info = await get_service_info(name, sType)
         return web.json_response(info)
@@ -3716,18 +3798,18 @@ async def api_services_available(request):
         user = get_current_user(request)
         if not user:
             return web.json_response({"error": "Unauthorized"}, status=401)
-        
+
         user_id = user["id"]
         level = get_user_role_level(user_id)
-        
+
         # Check if this is a search request (read-only) vs edit request
         search_only = request.query.get("search") == "1"
-        
+
         # For search, allow all authenticated users (read-only)
         # For edit (manage modal), only Main Admin
         if not search_only and level < 2:
             return web.json_response({"error": "Access Denied"}, status=403)
-        
+
         services = get_all_available_services()
         return web.json_response(services)
     except Exception as e:
@@ -3741,34 +3823,34 @@ async def api_services_manage(request):
         user = get_current_user(request)
         if not user:
             return web.json_response({"error": "Unauthorized"}, status=401)
-        
+
         user_id = user["id"]
         level = get_user_role_level(user_id)
-        
+
         # Only Main Admin (level 2) can edit services list
         if level < 2:
             return web.json_response({"error": "Access Denied"}, status=403)
-        
+
         data = await request.json()
         action = data.get("action")  # "add" or "remove"
         name = data.get("name")
         sType = data.get("type", "systemd")
-        
+
         if not name:
             return web.json_response({"error": "Name required"}, status=400)
-        
+
         if action == "add":
             success, msg = add_managed_service(name, sType)
         elif action == "remove":
             success, msg = remove_managed_service(name)
         else:
             return web.json_response({"error": "Invalid action"}, status=400)
-        
+
         if success:
             return web.json_response({"status": "ok", "message": msg})
         else:
             return web.json_response({"error": msg}, status=400)
-            
+
     except Exception as e:
         logging.error(f"Error in api_services_manage: {e}")
         return web.json_response({"error": str(e)}, status=500)
@@ -3799,7 +3881,7 @@ async def start_web_server(bot_instance: Bot):
         logging.info("Web UI ENABLED.")
         if os.path.exists(STATIC_DIR):
             app.router.add_static("/static", STATIC_DIR)
-        
+
         # Добавляем маршрут для манифеста
         async def handle_manifest(request):
             manifest_path = os.path.join(STATIC_DIR, "favicons", "site.webmanifest")
@@ -3808,7 +3890,6 @@ async def start_web_server(bot_instance: Bot):
             return web.Response(status=404)
 
         app.router.add_get("/site.webmanifest", handle_manifest)
-
         app.router.add_get("/", handle_dashboard)
         app.router.add_get("/settings", handle_settings_page)
         app.router.add_get("/login", handle_login_page)
@@ -3833,6 +3914,7 @@ async def start_web_server(bot_instance: Bot):
         app.router.add_post("/api/settings/keyboard", handle_save_keyboard_config)
         app.router.add_post("/api/settings/metadata", handle_save_metadata)
         app.router.add_post("/api/logs/clear", handle_clear_logs)
+        app.router.add_get("/api/agent/ipv4", handle_agent_ipv4)
         app.router.add_post("/api/traffic/reset", handle_reset_traffic)
         app.router.add_post("/api/users/action", handle_user_action)
         app.router.add_post("/api/nodes/add", handle_node_add)
