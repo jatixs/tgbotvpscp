@@ -2047,14 +2047,26 @@ function renderServicesEditList(services) {
         return;
     }
     
+    // Critical services that cannot be removed
+    const CRITICAL_SERVICES = ['sshd', 'ssh', 'fail2ban'];
+    
     // Grid: 1 col mobile, 2 cols sm, 3 cols md, 4 cols lg
     let html = '<div id="servicesEditGrid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2">';
     
     for (const s of services) {
         const isManaged = s.managed;
+        const isCritical = CRITICAL_SERVICES.includes(s.name);
         const statusIcon = s.status === 'running' ? '🟢' : '🔴';
         const typeLabel = s.type === 'docker' ? '🐳' : '⚙️';
         const safeId = s.name.replace(/[^a-zA-Z0-9]/g, '_');
+        
+        // Disable remove button for critical services
+        const isRemoveDisabled = isManaged && isCritical;
+        const buttonClasses = isManaged 
+            ? (isRemoveDisabled ? 'bg-gray-500/20 text-gray-600 dark:text-gray-400 cursor-not-allowed opacity-50' : 'bg-red-500/20 text-red-600 dark:text-red-400 hover:bg-red-500/30') 
+            : 'bg-green-500/20 text-green-600 dark:text-green-400 hover:bg-green-500/30';
+        
+        const removeTitle = isRemoveDisabled ? 'This is a critical service and cannot be removed' : '';
         
         html += `
             <div class="service-edit-card flex items-center justify-between p-2.5 bg-gray-50 dark:bg-black/20 rounded-xl gap-2" data-name="${s.name}" data-type="${s.type}">
@@ -2068,9 +2080,9 @@ function renderServicesEditList(services) {
                 <button id="srv-btn-${safeId}" 
                         data-type="${s.type}"
                         onclick="toggleServiceManaged('${s.name}', '${s.type}', ${isManaged}, this)" 
-                        class="srv-manage-btn px-2 py-1 rounded-lg text-xs font-medium transition min-w-[60px] flex items-center justify-center gap-1 flex-shrink-0 ${isManaged 
-                            ? 'bg-red-500/20 text-red-600 dark:text-red-400 hover:bg-red-500/30' 
-                            : 'bg-green-500/20 text-green-600 dark:text-green-400 hover:bg-green-500/30'}">
+                        ${isRemoveDisabled ? 'disabled' : ''}
+                        title="${removeTitle}"
+                        class="srv-manage-btn px-2 py-1 rounded-lg text-xs font-medium transition min-w-[60px] flex items-center justify-center gap-1 flex-shrink-0 ${buttonClasses}">
                     <span class="btn-text">${isManaged ? (I18N.web_services_btn_remove || 'Remove') : (I18N.web_services_btn_add || 'Add')}</span>
                     <svg class="btn-spinner hidden animate-spin h-3 w-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                         <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
