@@ -2119,12 +2119,12 @@ function filterServicesEditList(query) {
     }
 }
 
-function openAgentIpsModal() {
+async function openAgentIpsModal() {
   const m = document.getElementById('agentIpsModal');
   if (!m) return;
   m.classList.remove('hidden');
   m.classList.add('flex');
-  loadAgentIpv4();
+  await loadAgentIpv4();
 }
 
 function closeAgentIpsModal() {
@@ -2178,10 +2178,10 @@ document.addEventListener('DOMContentLoaded', () => {
   const badge = document.getElementById('agentIpBadge');
   if (!badge) return;
 
-  const handler = (e) => {
+  const handler = async (e) => {
     e.preventDefault();
     e.stopPropagation();
-    openAgentIpsModal();
+    await openAgentIpsModal();
   };
 
   badge.addEventListener('click', handler);

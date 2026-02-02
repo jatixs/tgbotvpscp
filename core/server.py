@@ -1118,14 +1118,15 @@ async def handle_agent_ipv4(request):
         if not user:
             return web.json_response({"error": "Unauthorized"}, status=401)
 
-        import netifaces
         import socket
 
         primary_ip = AGENT_IP_CACHE
         all_ips = []
 
+        # Try netifaces first
         try:
-            # SHOW ALLL NETWORK INTERFACES
+            import netifaces
+            # SHOW ALL NETWORK INTERFACES
             interfaces = netifaces.interfaces()
             for iface in interfaces:
                 try:
@@ -1135,33 +1136,48 @@ async def handle_agent_ipv4(request):
                             ip = addr_info.get('addr')
                             if ip and ip != '127.0.0.1' and not ip.startswith('169.254.'):
                                 all_ips.append(ip)
-                except:
+                except Exception:
                     continue
-        except Exception as e:
-            logging.warning(f"Error getting network interfaces: {e}")
-            # FALLBACK
+        except ImportError:
+            logging.warning("netifaces module not installed, using fallback method")
+            # FALLBACK: use socket
             try:
                 hostname = socket.gethostname()
                 addrs = socket.getaddrinfo(hostname, None, socket.AF_INET)
                 for addr in addrs:
                     ip = addr[4][0]
-                    if ip != '127.0.0.1':
+                    if ip != '127.0.0.1' and not ip.startswith('169.254.'):
                         all_ips.append(ip)
-            except:
+            except Exception as e:
+                logging.warning(f"Error getting IPs via socket: {e}")
+        except Exception as e:
+            logging.warning(f"Error getting network interfaces: {e}")
+            # FALLBACK: use socket
+            try:
+                hostname = socket.gethostname()
+                addrs = socket.getaddrinfo(hostname, None, socket.AF_INET)
+                for addr in addrs:
+                    ip = addr[4][0]
+                    if ip != '127.0.0.1' and not ip.startswith('169.254.'):
+                        all_ips.append(ip)
+            except Exception:
                 pass
 
-        # REMOVE DUBLICATE
+        # REMOVE DUPLICATES
         unique_ips = list(dict.fromkeys(all_ips))
+        
+        # If no IPs found, try to use primary IP
+        if not unique_ips and primary_ip not in ["Loading...", "Unknown"]:
+            unique_ips = [primary_ip]
 
         return web.json_response({
-            "primary": primary_ip if primary_ip not in ["Loading...", "Unknown"] else unique_ips[
-                0] if unique_ips else "-",
+            "primary": primary_ip if primary_ip not in ["Loading...", "Unknown"] else (unique_ips[0] if unique_ips else "-"),
             "ips": unique_ips,
             "count": len(unique_ips)
         })
 
     except Exception as e:
-        logging.error(f"Error in handle_agent_ipv4: {e}")
+        logging.error(f"Error in handle_agent_ipv4: {e}", exc_info=True)
         return web.json_response({"error": str(e)}, status=500)
 
 
