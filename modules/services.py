@@ -563,7 +563,7 @@ async def services_handler(message: types.Message):
     else:
         kb, page, total_pages = result
         text = _("services_title", lang)
-        sent = await message.answer(text, reply_markup=kb)
+        sent = await message.answer(text, reply_markup=kb, parse_mode="HTML")
         
     LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = sent.message_id
 
@@ -589,7 +589,7 @@ async def cq_services_page(callback: types.CallbackQuery):
         else:
             kb, page, total_pages = result
             text = _("services_title", lang)
-            await callback.message.edit_text(text, reply_markup=kb)
+            await callback.message.edit_text(text, reply_markup=kb, parse_mode="HTML")
     except Exception:
         pass
     await callback.answer()
@@ -615,7 +615,7 @@ async def cq_services_refresh(callback: types.CallbackQuery):
         else:
             kb, page, total_pages = result
             text = _("services_title", lang) 
-            await callback.message.edit_text(text, reply_markup=kb)
+            await callback.message.edit_text(text, reply_markup=kb, parse_mode="HTML")
     except Exception:
         pass
     await callback.answer(_("btn_refresh", lang))
