@@ -2047,14 +2047,26 @@ function renderServicesEditList(services) {
         return;
     }
     
+    // Critical services that cannot be removed
+    const CRITICAL_SERVICES = ['sshd', 'ssh', 'fail2ban'];
+    
     // Grid: 1 col mobile, 2 cols sm, 3 cols md, 4 cols lg
     let html = '<div id="servicesEditGrid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2">';
     
     for (const s of services) {
         const isManaged = s.managed;
+        const isCritical = CRITICAL_SERVICES.includes(s.name);
         const statusIcon = s.status === 'running' ? '🟢' : '🔴';
         const typeLabel = s.type === 'docker' ? '🐳' : '⚙️';
         const safeId = s.name.replace(/[^a-zA-Z0-9]/g, '_');
+        
+        // Disable remove button for critical services
+        const isRemoveDisabled = isManaged && isCritical;
+        const buttonClasses = isManaged 
+            ? (isRemoveDisabled ? 'bg-gray-500/20 text-gray-600 dark:text-gray-400 cursor-not-allowed opacity-50' : 'bg-red-500/20 text-red-600 dark:text-red-400 hover:bg-red-500/30') 
+            : 'bg-green-500/20 text-green-600 dark:text-green-400 hover:bg-green-500/30';
+        
+        const removeTitle = isRemoveDisabled ? 'This is a critical service and cannot be removed' : '';
         
         html += `
             <div class="service-edit-card flex items-center justify-between p-2.5 bg-gray-50 dark:bg-black/20 rounded-xl gap-2" data-name="${s.name}" data-type="${s.type}">
@@ -2068,9 +2080,9 @@ function renderServicesEditList(services) {
                 <button id="srv-btn-${safeId}" 
                         data-type="${s.type}"
                         onclick="toggleServiceManaged('${s.name}', '${s.type}', ${isManaged}, this)" 
-                        class="srv-manage-btn px-2 py-1 rounded-lg text-xs font-medium transition min-w-[60px] flex items-center justify-center gap-1 flex-shrink-0 ${isManaged 
-                            ? 'bg-red-500/20 text-red-600 dark:text-red-400 hover:bg-red-500/30' 
-                            : 'bg-green-500/20 text-green-600 dark:text-green-400 hover:bg-green-500/30'}">
+                        ${isRemoveDisabled ? 'disabled' : ''}
+                        title="${removeTitle}"
+                        class="srv-manage-btn px-2 py-1 rounded-lg text-xs font-medium transition min-w-[60px] flex items-center justify-center gap-1 flex-shrink-0 ${buttonClasses}">
                     <span class="btn-text">${isManaged ? (I18N.web_services_btn_remove || 'Remove') : (I18N.web_services_btn_add || 'Add')}</span>
                     <svg class="btn-spinner hidden animate-spin h-3 w-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                         <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
@@ -2119,9 +2131,82 @@ function filterServicesEditList(query) {
     }
 }
 
+async function openAgentIpsModal() {
+  const m = document.getElementById('agentIpsModal');
+  if (!m) return;
+  animateModalOpen(m, false);
+  await loadAgentIpv4();
+}
+
+function closeAgentIpsModal() {
+  const m = document.getElementById('agentIpsModal');
+  if (!m) return;
+  animateModalClose(m);
+}
+
+async function loadAgentIpv4() {
+  const elPrimary = document.getElementById('agentIpsPrimary');
+  const elList = document.getElementById('agentIpsList');
+  const elEmpty = document.getElementById('agentIpsEmpty');
+  const elLoading = document.getElementById('agentIpsLoading');
+  const elError = document.getElementById('agentIpsError');
+  elError?.classList.add('hidden');
+  elEmpty?.classList.add('hidden');
+  if (elList) elList.innerHTML = '';
+  if (elLoading) elLoading.classList.remove('hidden');
+
+  try {
+    const r = await fetch('/api/agent/ipv4', { credentials: 'same-origin' });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const data = await r.json();
+
+    const primary = data.primary || data.source_ip || data.agent_ip || '-';
+    const ips = Array.isArray(data.ips) ? data.ips : Array.isArray(data.ipv4) ? data.ipv4 : [];
+
+    if (elPrimary) elPrimary.textContent = primary;
+
+    const secondary = ips.filter(ip => ip && ip !== primary);
+
+    if (!secondary.length) {
+      elEmpty?.classList.remove('hidden');
+    } else if (elList) {
+      elList.innerHTML = secondary.map(ip => `
+        <li class="bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-xl px-3 py-2 font-mono text-xs select-all">
+          ${escapeHtml(ip)}
+        </li>
+      `).join('');
+    }
+  } catch (e) {
+    console.error('Error loading IPs:', e);
+    elError?.classList.remove('hidden');
+  } finally {
+    elLoading?.classList.add('hidden');
+  }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  const badge = document.getElementById('agentIpBadge');
+  if (!badge) return;
+
+  const handler = async (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    await openAgentIpsModal();
+  };
+
+  badge.addEventListener('click', handler);
+  badge.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      handler(e);
+    }
+  });
+});
+
+
 async function toggleServiceManaged(name, type, isCurrentlyManaged, btnElement) {
     const action = isCurrentlyManaged ? 'remove' : 'add';
-    
+
     // Show spinner on button
     if (btnElement) {
         btnElement.disabled = true;
@@ -2131,16 +2216,16 @@ async function toggleServiceManaged(name, type, isCurrentlyManaged, btnElement) 
         if (textEl) textEl.classList.add('hidden');
         if (spinnerEl) spinnerEl.classList.remove('hidden');
     }
-    
+
     try {
         const res = await fetch('/api/services/manage', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ action, name, type })
         });
-        
+
         const data = await res.json();
-        
+
         if (data.status === 'ok') {
             // Update just this item instead of reloading all
             updateServiceItemState(name, !isCurrentlyManaged);
@@ -2172,22 +2257,22 @@ function updateServiceItemState(name, isNowManaged) {
     const btnId = 'srv-btn-' + name.replace(/[^a-zA-Z0-9]/g, '_');
     const btn = document.getElementById(btnId);
     if (!btn) return;
-    
+
     // Update button appearance
     btn.disabled = false;
     btn.classList.remove('opacity-70', 'cursor-wait');
-    
+
     const textEl = btn.querySelector('.btn-text');
     const spinnerEl = btn.querySelector('.btn-spinner');
-    
+
     if (textEl) {
         textEl.classList.remove('hidden');
-        textEl.textContent = isNowManaged 
-            ? (I18N.web_services_btn_remove || 'Remove') 
+        textEl.textContent = isNowManaged
+            ? (I18N.web_services_btn_remove || 'Remove')
             : (I18N.web_services_btn_add || 'Add');
     }
     if (spinnerEl) spinnerEl.classList.add('hidden');
-    
+
     // Update button colors
     if (isNowManaged) {
         btn.classList.remove('bg-green-500/20', 'text-green-600', 'dark:text-green-400', 'hover:bg-green-500/30');
@@ -2196,7 +2281,7 @@ function updateServiceItemState(name, isNowManaged) {
         btn.classList.remove('bg-red-500/20', 'text-red-600', 'dark:text-red-400', 'hover:bg-red-500/30');
         btn.classList.add('bg-green-500/20', 'text-green-600', 'dark:text-green-400', 'hover:bg-green-500/30');
     }
-    
+
     // Update onclick handler
     btn.onclick = function() { toggleServiceManaged(name, btn.dataset.type || 'systemd', isNowManaged, this); };
 }

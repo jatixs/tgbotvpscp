@@ -150,6 +150,14 @@ def load_services_config():
     """Load managed services from encrypted config file"""
     from core.config import SERVICES_CONFIG_FILE, MANAGED_SERVICES
     from core import config as config_module
+    
+    # Critical services that must always be present
+    CRITICAL_SERVICES = [
+        {"name": "sshd", "type": "systemd"},
+        {"name": "ssh", "type": "systemd"},
+        {"name": "fail2ban", "type": "systemd"}
+    ]
+    
     try:
         loaded_data = load_encrypted_json(SERVICES_CONFIG_FILE)
         if loaded_data and isinstance(loaded_data, list):
@@ -161,6 +169,13 @@ def load_services_config():
             logging.info("Services config empty or not found, using defaults.")
     except Exception as e:
         logging.error(f"Error loading services.json: {e}")
+    
+    # Ensure critical services are always present
+    existing_names = {s.get("name") for s in config_module.MANAGED_SERVICES}
+    for critical_service in CRITICAL_SERVICES:
+        if critical_service["name"] not in existing_names:
+            config_module.MANAGED_SERVICES.insert(0, critical_service)
+            logging.info(f"Re-added critical service: {critical_service['name']}")
 
 
 def save_services_config():

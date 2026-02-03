@@ -193,6 +193,12 @@ def add_managed_service(name, sType):
 
 def remove_managed_service(name):
     """Remove a service from MANAGED_SERVICES config"""
+    # List of critical services that cannot be removed
+    CRITICAL_SERVICES = ["sshd", "ssh", "fail2ban"]
+    
+    if name in CRITICAL_SERVICES:
+        return False, f"Cannot remove critical service: {name}"
+    
     for i, s in enumerate(config.MANAGED_SERVICES):
         if s["name"] == name:
             config.MANAGED_SERVICES.pop(i)

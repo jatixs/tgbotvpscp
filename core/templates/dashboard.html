@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <html lang="ru">
-	<head>
+    <head>
         <meta charset="UTF-8">
         <title>{{ web_title }}</title>
         <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0, viewport-fit=cover">
@@ -17,7 +17,7 @@
         <link rel="icon" type="image/x-icon" href="/static/favicons/favicon.ico?v={{ cache_ver }}">
         <meta name="description" content="{{ web_meta_desc }}">
         <meta name="keywords" content="{{ web_meta_keywords }}">
-		<link rel="stylesheet" href="/static/css/main.css?v={{ web_version }}">
+        <link rel="stylesheet" href="/static/css/main.css?v={{ web_version }}">
         <script src="/static/js/theme_init.js?v={{ web_version }}"></script>
         <script>
         window.i18n = window.i18n || {};
@@ -269,9 +269,21 @@
                             </svg>
                             <span class="truncate">{{ web_agent_stats_title }}</span>
                         </h3>
-                        <div class="flex-shrink-0 flex items-center gap-2 bg-gray-100 dark:bg-black/30 px-3 py-1 rounded-lg border border-gray-200 dark:border-white/10 shadow-sm">
+                        <div id="agentIpBadge"
+                             role="button"
+                             tabindex="2"
+                             onClick="openAgentIpsModal()"
+                             onkeydown="if(event.key==='Enter'||event.key===' ') { event.preventDefault(); openAgentIpsModal(); }"
+                             class="flex-shrink-0 flex items-center gap-2 bg-gray-100 dark:bg-black/30 px-3 py-1 rounded-lg border border-gray-200 dark:border-white/10 shadow-sm cursor-pointer hover:bg-gray-200/70 dark:hover:bg-white/10 transition">
                             <span id="agentIp"
                                   class="font-mono text-xs font-bold text-gray-600 dark:text-gray-300 select-all">{{ agent_ip }}</span>
+
+                            <!-- маленькая иконка, чтобы визуально было понятно, что это интерактив -->
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-gray-400" fill="none"
+                                 viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                      d="M13 16h-1v-4h-1m1-4h.01M12 20a8 8 0 100-16 8 8 0 000 16z"/>
+                            </svg>
                         </div>
                     </div>
                     <div class="h-[250px] w-full">
@@ -367,7 +379,7 @@
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                                     </svg>
                                 </div>
-                                <input type="text" id="servicesSearchInput" 
+                                <input type="text" id="servicesSearchInput"
                                        oninput="filterServices(this.value)"
                                        placeholder="{{ web_services_search }}"
                                        class="w-full pl-10 pr-4 py-2 bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 transition-all duration-300 placeholder-gray-400 text-gray-900 dark:text-white">
@@ -761,7 +773,7 @@
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                                 </svg>
                             </div>
-                            <input type="text" id="servicesEditSearchInputDesktop" 
+                            <input type="text" id="servicesEditSearchInputDesktop"
                                    oninput="filterServicesEditList(this.value); document.getElementById('servicesEditSearchInputMobile').value = this.value;"
                                    placeholder="{{ web_services_search }}"
                                    class="w-full pl-10 pr-4 py-2 bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 transition-all duration-300 placeholder-gray-400 text-gray-900 dark:text-white">
@@ -779,7 +791,7 @@
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                             </svg>
                         </div>
-                        <input type="text" id="servicesEditSearchInputMobile" 
+                        <input type="text" id="servicesEditSearchInputMobile"
                                oninput="filterServicesEditList(this.value); document.getElementById('servicesEditSearchInputDesktop').value = this.value;"
                                placeholder="{{ web_services_search }}"
                                class="w-full pl-10 pr-4 py-2 bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 transition-all duration-300 placeholder-gray-400 text-gray-900 dark:text-white">
@@ -813,6 +825,51 @@
                 </div>
             </div>
         </div>
+
+        <div id="agentIpsModal"
+             class="fixed inset-0 z-[9999] hidden items-center justify-center bg-black/50 dark:bg-black/80 backdrop-blur-sm p-4"
+             onclick="if(event.target === this) closeAgentIpsModal()">
+
+          <div class="bg-white dark:bg-gray-800 border border-white/20 dark:border-white/10 rounded-2xl shadow-2xl w-full max-w-md relative flex flex-col" style="transition: opacity 0.2s ease-out, transform 0.2s ease-out;">
+            <div class="p-4 border-b border-gray-200 dark:border-white/5 flex justify-between items-center rounded-t-2xl">
+              <h3 class="text-lg font-bold text-gray-900 dark:text-white"
+                  data-i18n="web_ips_title">{{ web_ips_title }}</h3>
+
+              <button onclick="closeAgentIpsModal()"
+                      class="text-gray-400 hover:text-gray-600 dark:hover:text-white transition p-1">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none"
+                     viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                </svg>
+              </button>
+            </div>
+
+            <div class="p-4 text-sm text-gray-700 dark:text-gray-300 space-y-4">
+              <div>
+                <div class="text-[10px] text-gray-500 uppercase font-bold tracking-wider"
+                     data-i18n="web_source_ip">{{ web_source_ip }}</div>
+                <div id="agentIpsPrimary" class="font-mono text-sm font-bold text-gray-900 dark:text-white">-</div>
+              </div>
+
+              <div>
+                <div class="text-[10px] text-gray-500 uppercase font-bold tracking-wider"
+                     data-i18n="web_additional_ips">{{ web_additional_ips }}</div>
+
+                <ul id="agentIpsList" class="mt-2 space-y-2"></ul>
+
+                <div id="agentIpsEmpty" class="hidden text-xs text-gray-500"
+                     data-i18n="web_no_additional_ips">{{ web_no_additional_ips }}</div>
+              </div>
+
+              <div id="agentIpsLoading" class="text-xs text-gray-500"
+                   data-i18n="web_loading">{{ web_loading }}</div>
+
+              <div id="agentIpsError" class="hidden text-xs text-red-500"
+                   data-i18n="web_failed_to_load">{{ web_failed_to_load }}</div>
+            </div>
+          </div>
+        </div>
+
         <script src="/static/js/common.js?v={{ web_version }}"></script>
         <script src="/static/js/dashboard.js?v={{ web_version }}"></script>
     </body>
