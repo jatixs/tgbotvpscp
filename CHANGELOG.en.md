@@ -16,8 +16,7 @@
 
 ### 🔧 Fixed:
 
-* **Console Spam:** Fixed a bug causing constant "access denied" errors in the browser console.
-* **Minor Fixes:** Various small bug fixes and stability improvements.
+ **Minor Fixes:** Various small bug fixes and stability improvements.
 
 ---
 ## [1.18.0] - 2026-01-27
