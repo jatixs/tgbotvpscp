@@ -5,11 +5,18 @@
 <h1 align="center">📝 Telegram VPS Management Bot — Changelog</h1>
 
 <p align="center">
-	<img src="https://img.shields.io/badge/version-v1.18.0-blue?style=flat-square " alt="Version 1.18.0"/>
-	<img src="https://img.shields.io/badge/build-66-purple?style=flat-square " alt="Build 66"/>
-	<img src="https://img.shields.io/badge/date-January%2027-green?style=flat-square " alt="Date January 27"/>
+	<img src="https://img.shields.io/badge/version-v1.18.1-blue?style=flat-square " alt="Version 1.18.1"/>
+	<img src="https://img.shields.io/badge/build-67-purple?style=flat-square " alt="Build 67"/>
+	<img src="https://img.shields.io/badge/date-February%2027-green?style=flat-square " alt="Date February 3"/>
 	<img src="https://img.shields.io/badge/status-stable-green?style=flat-square " alt="Status Stable"/>
 </p>
+
+---
+## [1.18.1] - 2026-02-03
+
+### 🔧 Fixed:
+
+ **Minor Fixes:** Various small bug fixes and stability improvements.
 
 ---
 ## [1.18.0] - 2026-01-27
