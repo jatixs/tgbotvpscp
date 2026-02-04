@@ -546,14 +546,15 @@ async function loadNodeServices(token) {
                 <div class="flex items-center gap-2">
                     <span class="${svc.status === 'running' ? 'text-green-500' : 'text-red-500'}">●</span>
                     <span class="text-sm font-medium text-gray-700 dark:text-gray-300">${escapeHtml(svc.name)}</span>
+                    ${svc.type === 'docker' ? '<span class="text-xs text-blue-500">🐳</span>' : ''}
                 </div>
                 <div class="flex gap-1">
-                    <button onclick="nodeServiceAction('${token}', '${svc.name}', 'restart')" class="p-1 text-yellow-600 dark:text-yellow-400 hover:bg-yellow-100 dark:hover:bg-yellow-500/20 rounded" title="Restart">
+                    <button onclick="nodeServiceAction('${token}', '${svc.name}', 'restart', '${svc.type || 'systemd'}')" class="p-1 text-yellow-600 dark:text-yellow-400 hover:bg-yellow-100 dark:hover:bg-yellow-500/20 rounded" title="Restart">
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                         </svg>
                     </button>
-                    <button onclick="nodeServiceAction('${token}', '${svc.name}', '${svc.status === 'running' ? 'stop' : 'start'}')" 
+                    <button onclick="nodeServiceAction('${token}', '${svc.name}', '${svc.status === 'running' ? 'stop' : 'start'}', '${svc.type || 'systemd'}')" 
                             class="p-1 ${svc.status === 'running' ? 'text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-500/20' : 'text-green-600 dark:text-green-400 hover:bg-green-100 dark:hover:bg-green-500/20'} rounded"
                             title="${svc.status === 'running' ? 'Stop' : 'Start'}">
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -632,12 +633,12 @@ function nodeCommand(cmd) {
     }
 }
 
-async function nodeServiceAction(token, service, action) {
+async function nodeServiceAction(token, service, action, type = 'systemd') {
     try {
         const response = await fetch('/api/nodes/monitor/service_action', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ token, service, action })
+            body: JSON.stringify({ token, service, action, type })
         });
         
         if (!response.ok) throw new Error('Service action failed');

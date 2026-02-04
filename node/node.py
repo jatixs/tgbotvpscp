@@ -292,18 +292,28 @@ def get_services_status():
     return services
 
 
-def service_action(service_name, action):
-    """Execute service action (start, stop, restart)"""
+def service_action(service_name, action, service_type="systemd"):
+    """Execute service action (start, stop, restart) for systemd or docker"""
     allowed_actions = ["start", "stop", "restart"]
     if action not in allowed_actions:
         return {"success": False, "error": f"Invalid action: {action}"}
     
     try:
-        proc = subprocess.run(
-            ["systemctl", action, service_name],
-            capture_output=True,
-            timeout=30
-        )
+        if service_type == "docker":
+            # Docker container commands
+            proc = subprocess.run(
+                ["docker", action, service_name],
+                capture_output=True,
+                timeout=60
+            )
+        else:
+            # Systemd service commands
+            proc = subprocess.run(
+                ["systemctl", action, service_name],
+                capture_output=True,
+                timeout=30
+            )
+        
         if proc.returncode == 0:
             return {"success": True, "message": f"Service {service_name} {action}ed successfully"}
         else:
@@ -709,6 +719,7 @@ def execute_command(task):
         elif cmd == "service_action":
             svc_name = task.get("service")
             svc_action = task.get("action")
+            svc_type = task.get("type", "systemd")
             if not svc_name or not svc_action:
                 result_payload = {
                     "type": "i18n",
@@ -716,7 +727,7 @@ def execute_command(task):
                     "params": {"error": "Missing service or action"}
                 }
             else:
-                result = service_action(svc_name, svc_action)
+                result = service_action(svc_name, svc_action, svc_type)
                 if result["success"]:
                     result_payload = {
                         "type": "i18n",

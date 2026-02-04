@@ -1559,6 +1559,7 @@ async def handle_nodes_monitor_service_action(request):
         token = decrypt_for_web(data.get("token"))
         service = data.get("service")
         action = data.get("action")
+        svc_type = data.get("type", "systemd")
         
         if not all([token, service, action]):
             return web.json_response({"error": "Token, service and action required"}, status=400)
@@ -1575,6 +1576,7 @@ async def handle_nodes_monitor_service_action(request):
             "command": "service_action",
             "service": service,
             "action": action,
+            "type": svc_type,
             "user_id": user["id"]
         })
         
