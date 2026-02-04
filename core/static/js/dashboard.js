@@ -12,6 +12,7 @@ let currentNodeToken = null;
 let currentRenderList = [];   
 let renderedCount = 0; 
 const NODES_BATCH_SIZE = 15;
+let nodesFirstUpdateReceived = false;
 
 function decryptData(text) {
     if (!text) return "";
@@ -76,6 +77,7 @@ function initScrollAnimations() {
 
 window.initDashboard = function() {
     cleanupDashboardSources();
+    nodesFirstUpdateReceived = false;  // Reset flag on dashboard init
     
     // Запускаем анимацию блоков
     initScrollAnimations();
@@ -266,7 +268,11 @@ function updateNodesListUI(data) {
         const container = document.getElementById('nodesList');
         const currentElements = container ? Array.from(container.children).filter(el => el.hasAttribute('data-token')) : [];
         
-        if (currentRenderList.length !== newList.length || (currentElements.length === 0 && newList.length > 0)) {
+        // Trigger render if: list length changed, first update with nodes, or first update with empty list (to show "no nodes" message)
+        const needsRender = currentRenderList.length !== newList.length || 
+                           (currentElements.length === 0 && newList.length > 0) ||
+                           (!nodesFirstUpdateReceived && newList.length === 0);
+        if (needsRender) {
             currentRenderList = newList;
             renderNodesList();
         } else {
@@ -277,6 +283,8 @@ function updateNodesListUI(data) {
                 renderNodesList();
             }
         }
+        
+        nodesFirstUpdateReceived = true;
 
         if (document.getElementById('nodesTotal')) {
             document.getElementById('nodesTotal').innerText = allNodesData.length;
@@ -2184,10 +2192,37 @@ async function loadAgentIpv4() {
   }
 }
 
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
   const badge = document.getElementById('agentIpBadge');
   if (!badge) return;
 
+  // Check if there are additional IPs before making badge interactive
+  try {
+    const response = await fetch('/api/agent/ipv4', { credentials: 'same-origin' });
+    if (response.ok) {
+      const data = await response.json();
+      const primary = data.primary || data.source_ip || data.agent_ip || '-';
+      const ips = Array.isArray(data.ips) ? data.ips : Array.isArray(data.ipv4) ? data.ipv4 : [];
+      const secondary = ips.filter(ip => ip && ip !== primary);
+      
+      // If no additional IPs, make badge non-interactive
+      if (secondary.length === 0) {
+        badge.removeAttribute('role');
+        badge.removeAttribute('tabindex');
+        badge.removeAttribute('onclick');
+        badge.removeAttribute('onkeydown');
+        badge.classList.remove('cursor-pointer', 'hover:bg-gray-200/70', 'dark:hover:bg-white/10');
+        // Remove the info icon
+        const icon = badge.querySelector('svg');
+        if (icon) icon.remove();
+        return; // Don't add click handlers
+      }
+    }
+  } catch (e) {
+    console.error('Error checking additional IPs:', e);
+  }
+
+  // Add click handlers only if there are additional IPs
   const handler = async (e) => {
     e.preventDefault();
     e.stopPropagation();
