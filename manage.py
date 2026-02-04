@@ -5,6 +5,7 @@ import sys
 import os
 import subprocess
 import logging
+import time
 
 base_dir = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(base_dir)
@@ -65,7 +66,10 @@ async def cmd_stats(args):
     await init_services()
     try:
         node_count = await models.Node.all().count()
-        active = await models.Node.filter(status="active").count()
+        # Active nodes are those with last_seen within NODE_OFFLINE_TIMEOUT
+        now = time.time()
+        threshold = now - config.NODE_OFFLINE_TIMEOUT
+        active = await models.Node.filter(last_seen__gte=threshold).count()
         print(f"📊 Статистика:")
         print(f"   Всего нод: {node_count}")
         print(f"   Активных: {active}")
@@ -180,12 +184,47 @@ async def cmd_status(args):
         print(f"❌ Ошибка проверки статуса: {e}")
 
 
+def print_banner():
+    """Print pretty CLI banner with commands"""
+    banner = """
+╔════════════════════════════════════════════════════════════╗
+║           🤖 TGCP-BOT - Telegram VPS Bot Manager           ║
+╠════════════════════════════════════════════════════════════╣
+║                                                            ║
+║  📋 Доступные команды:                                     ║
+║                                                            ║
+║    adduser   ➜  Добавить администратора                   ║
+║                 --id <ID>  --name <Имя>                    ║
+║                                                            ║
+║    webpass   ➜  Сбросить пароль Web-панели                ║
+║                 --password <пароль> (опционально)          ║
+║                                                            ║
+║    stats     ➜  Показать статистику БД                    ║
+║                                                            ║
+║    cleanlogs ➜  Очистить файлы логов                      ║
+║                                                            ║
+║    restart   ➜  Перезапустить бота                        ║
+║                                                            ║
+║    status    ➜  Показать статус бота                      ║
+║                                                            ║
+╠════════════════════════════════════════════════════════════╣
+║  💡 Примеры:                                               ║
+║    tgcp-bot stats                                          ║
+║    tgcp-bot adduser --id 123456789 --name Admin            ║
+║    tgcp-bot webpass --password MyNewPass123                ║
+╚════════════════════════════════════════════════════════════╝
+"""
+    print(banner)
+
+
 def main():
     parser = argparse.ArgumentParser(
         prog="tgcp-bot",
         description="CLI утилита управления Telegram VPS Bot",
         formatter_class=argparse.RawTextHelpFormatter,
+        add_help=False,
     )
+    parser.add_argument("-h", "--help", action="store_true", help="Показать справку")
 
     subparsers = parser.add_subparsers(dest="command", title="Доступные команды")
 
@@ -212,8 +251,8 @@ def main():
 
     args = parser.parse_args()
 
-    if not args.command:
-        parser.print_help()
+    if not args.command or args.help:
+        print_banner()
         return
 
     try:
