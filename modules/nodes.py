@@ -480,13 +480,16 @@ async def cq_node_service_detail(callback: types.CallbackQuery):
         return
     
     status = service_info.get("status", "unknown")
+    svc_type = service_info.get("type", "systemd")
     status_text = "🟢 Running" if status == "running" else "🔴 Stopped"
+    type_icon = "🐳 Docker" if svc_type == "docker" else "⚙️ Systemd"
     
-    keyboard = get_node_service_actions_keyboard(token, service_name, status, lang)
+    keyboard = get_node_service_actions_keyboard(token, service_name, status, lang, svc_type)
     await callback.message.edit_text(
         _("node_service_detail", lang, 
           service=service_name, 
-          status=status_text, 
+          status=status_text,
+          type=type_icon,
           node=node_name),
         reply_markup=keyboard,
         parse_mode="HTML",
@@ -504,15 +507,16 @@ async def cq_node_service_action(callback: types.CallbackQuery):
         await callback.answer(_("access_denied_no_rights", lang), show_alert=True)
         return
     
-    # Parse: node_svc_act_{token}_{service}_{action}
-    parts = callback.data.split("_", 5)
-    if len(parts) < 6:
+    # Parse: node_svc_act_{token}_{service}_{type}_{action}
+    parts = callback.data.split("_", 6)
+    if len(parts) < 7:
         await callback.answer("Invalid data", show_alert=True)
         return
     
     token = parts[3]
     service_name = parts[4]
-    action = parts[5]
+    svc_type = parts[5]
+    action = parts[6]
     
     if action not in ["start", "stop", "restart"]:
         await callback.answer("Invalid action", show_alert=True)
@@ -525,11 +529,12 @@ async def cq_node_service_action(callback: types.CallbackQuery):
     
     node_name = html.escape(node.get("name", "Unknown"))
     
-    # Send task to node
+    # Send task to node with service type
     await nodes_db.update_node_task(token, {
         "command": "service_action",
         "service": service_name,
         "action": action,
+        "type": svc_type,
         "user_id": user_id
     })
     
@@ -763,18 +768,21 @@ async def cq_node_service_detail(callback: types.CallbackQuery):
         return
     
     status = service.get("status", "unknown")
+    svc_type = service.get("type", "systemd")
     status_text = _("web_services_status_running", lang) if status == "running" else _("web_services_status_stopped", lang)
     status_icon = "🟢" if status == "running" else "🔴"
+    type_icon = "🐳 Docker" if svc_type == "docker" else "⚙️ Systemd"
     
     text = _(
         "node_service_detail",
         lang,
         service=service_name,
         status=f"{status_icon} {status_text}",
+        type=type_icon,
         node=html.escape(node.get("name", "Unknown")),
     )
     
-    keyboard = get_node_service_actions_keyboard(token, service_name, status, lang)
+    keyboard = get_node_service_actions_keyboard(token, service_name, status, lang, svc_type)
     await callback.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
     await callback.answer()
 
@@ -784,15 +792,16 @@ async def cq_node_service_action(callback: types.CallbackQuery):
     user_id = callback.from_user.id
     lang = get_user_lang(user_id)
     
-    # Parse: node_svc_act_{token}_{service}_{action}
-    parts = callback.data.split("_", 5)
-    if len(parts) < 6:
+    # Parse: node_svc_act_{token}_{service}_{type}_{action}
+    parts = callback.data.split("_", 6)
+    if len(parts) < 7:
         await callback.answer("Invalid data", show_alert=True)
         return
     
     token = parts[3]
     service_name = parts[4]
-    action = parts[5]
+    svc_type = parts[5]
+    action = parts[6]
     
     if action not in ["start", "stop", "restart"]:
         await callback.answer("Invalid action", show_alert=True)
@@ -803,11 +812,12 @@ async def cq_node_service_action(callback: types.CallbackQuery):
         await callback.answer("Node not found", show_alert=True)
         return
     
-    # Send service action task to node
+    # Send service action task to node with type
     await nodes_db.update_node_task(token, {
         "command": "service_action",
         "service": service_name,
         "action": action,
+        "type": svc_type,
         "user_id": user_id,
     })
     

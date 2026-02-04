@@ -643,27 +643,27 @@ def get_node_services_keyboard(token: str, services: list, lang: str) -> InlineK
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
-def get_node_service_actions_keyboard(token: str, service: str, status: str, lang: str) -> InlineKeyboardMarkup:
+def get_node_service_actions_keyboard(token: str, service: str, status: str, lang: str, svc_type: str = "systemd") -> InlineKeyboardMarkup:
     """Keyboard for service actions (start/stop/restart)"""
     actions = []
     if status == "running":
         actions.append(
             InlineKeyboardButton(
                 text=_("web_services_btn_stop", lang), 
-                callback_data=f"node_svc_act_{token}_{service}_stop"
+                callback_data=f"node_svc_act_{token}_{service}_{svc_type}_stop"
             )
         )
     else:
         actions.append(
             InlineKeyboardButton(
                 text=_("web_services_btn_start", lang), 
-                callback_data=f"node_svc_act_{token}_{service}_start"
+                callback_data=f"node_svc_act_{token}_{service}_{svc_type}_start"
             )
         )
     actions.append(
         InlineKeyboardButton(
             text=_("web_services_btn_restart", lang), 
-            callback_data=f"node_svc_act_{token}_{service}_restart"
+            callback_data=f"node_svc_act_{token}_{service}_{svc_type}_restart"
         )
     )
     return InlineKeyboardMarkup(inline_keyboard=[
