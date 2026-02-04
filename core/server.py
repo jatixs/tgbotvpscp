@@ -1395,39 +1395,43 @@ async def handle_nodes_monitor_list(request):
     if not user:
         return web.json_response({"error": "Unauthorized"}, status=401)
     
-    all_nodes = await nodes_db.get_all_nodes()
-    nodes_data = []
-    now = time.time()
-    
-    for token, node in all_nodes.items():
-        last_seen = node.get("last_seen", 0)
-        is_restarting = node.get("is_restarting", False)
+    try:
+        all_nodes = await nodes_db.get_all_nodes()
+        nodes_data = []
+        now = time.time()
         
-        status = "offline"
-        if is_restarting:
-            status = "restarting"
-        elif now - last_seen < NODE_OFFLINE_TIMEOUT:
-            status = "online"
+        for token, node in all_nodes.items():
+            last_seen = node.get("last_seen", 0)
+            is_restarting = node.get("is_restarting", False)
+            
+            status = "offline"
+            if is_restarting:
+                status = "restarting"
+            elif now - last_seen < NODE_OFFLINE_TIMEOUT:
+                status = "online"
+            
+            stats = node.get("stats", {})
+            
+            nodes_data.append({
+                "token": encrypt_for_web(token),
+                "name": node.get("name", "Unknown"),
+                "ip": node.get("ip", "Unknown"),
+                "status": status,
+                "cpu": stats.get("cpu", 0),
+                "ram": stats.get("ram", 0),
+                "disk": stats.get("disk", 0),
+                "uptime": stats.get("uptime", 0),
+                "traffic": {
+                    "rx": stats.get("net_rx", 0),
+                    "tx": stats.get("net_tx", 0),
+                },
+                "last_seen": last_seen,
+            })
         
-        stats = node.get("stats", {})
-        
-        nodes_data.append({
-            "token": encrypt_for_web(token),
-            "name": node.get("name", "Unknown"),
-            "ip": decrypt_for_web(encrypt_for_web(node.get("ip", "Unknown"))),  # Show real IP for admins
-            "status": status,
-            "cpu": stats.get("cpu", 0),
-            "ram": stats.get("ram", 0),
-            "disk": stats.get("disk", 0),
-            "uptime": stats.get("uptime", 0),
-            "traffic": {
-                "rx": stats.get("net_rx", 0),
-                "tx": stats.get("net_tx", 0),
-            },
-            "last_seen": last_seen,
-        })
-    
-    return web.json_response({"nodes": nodes_data})
+        return web.json_response({"nodes": nodes_data})
+    except Exception as e:
+        logging.error(f"Error in handle_nodes_monitor_list: {e}")
+        return web.json_response({"error": str(e), "nodes": []}, status=500)
 
 
 async def handle_nodes_monitor_detail(request):
