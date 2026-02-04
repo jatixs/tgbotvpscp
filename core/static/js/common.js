@@ -1174,6 +1174,9 @@ document.addEventListener('click', async (e) => {
                     if (url.includes('/settings')) {
                         if (window.initSettings) window.initSettings();
                         else window.location.reload();
+                    } else if (url.includes('/nodes')) {
+                        if (window.initNodesMonitor) window.initNodesMonitor();
+                        else window.location.reload();
                     } else if (url.endsWith('/') || url.includes('/dashboard')) {
                         if (window.initDashboard) window.initDashboard();
                         else window.location.reload();

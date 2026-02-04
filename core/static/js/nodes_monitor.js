@@ -12,16 +12,49 @@ let modalResChart = null;
 let modalNetChart = null;
 let updateInterval = null;
 
-// Initialize on page load
-document.addEventListener('DOMContentLoaded', () => {
+// Initialize function for SPA navigation
+function initNodesMonitor() {
+    // Clear previous interval if exists
+    if (updateInterval) {
+        clearInterval(updateInterval);
+        updateInterval = null;
+    }
+    
+    // Reset state
+    allNodesData = [];
+    currentFilter = 'all';
+    searchQuery = '';
+    selectedNodes.clear();
+    currentNodeToken = null;
+    
+    // Destroy charts if they exist
+    if (modalResChart) {
+        modalResChart.destroy();
+        modalResChart = null;
+    }
+    if (modalNetChart) {
+        modalNetChart.destroy();
+        modalNetChart = null;
+    }
+    
+    // Load nodes
     loadNodes();
-    // Auto-refresh every 10 seconds
+    
+    // Start auto-refresh
     updateInterval = setInterval(loadNodes, 10000);
     
     // Setup theme
     if (typeof updateThemeIcons === 'function') {
         updateThemeIcons();
     }
+}
+
+// Expose to window for SPA navigation
+window.initNodesMonitor = initNodesMonitor;
+
+// Initialize on page load
+document.addEventListener('DOMContentLoaded', () => {
+    initNodesMonitor();
 });
 
 // Load all nodes data
