@@ -53,8 +53,8 @@ def register_handlers(dp: Dispatcher):
     dp.message(StateFilter(RenameNodeStates.waiting_for_new_name))(process_node_rename)
     dp.callback_query(F.data.startswith("node_stop_traffic_"))(cq_node_stop_traffic)
     dp.callback_query(F.data.startswith("node_services_"))(cq_node_services)
-    dp.callback_query(F.data.startswith("node_svc_detail_"))(cq_node_service_detail)
-    dp.callback_query(F.data.startswith("node_svc_act_"))(cq_node_service_action)
+    dp.callback_query(F.data.startswith("nsd_"))(cq_node_service_detail)
+    dp.callback_query(F.data.startswith("nsa_"))(cq_node_service_action)
     dp.callback_query(F.data.startswith("node_cmd_"))(cq_node_command)
 
 
@@ -451,14 +451,14 @@ async def cq_node_service_detail(callback: types.CallbackQuery):
     user_id = callback.from_user.id
     lang = get_user_lang(user_id)
     
-    # Parse: node_svc_detail_{token}_{service_name}
-    parts = callback.data.split("_", 4)
-    if len(parts) < 5:
+    # Parse: nsd_{token}_{service_name}
+    parts = callback.data.split("_", 2)
+    if len(parts) < 3:
         await callback.answer("Invalid data", show_alert=True)
         return
     
-    token = parts[3]
-    service_name = parts[4]
+    token = parts[1]
+    service_name = parts[2]
     
     node = await nodes_db.get_node_by_token(token)
     if not node:
@@ -507,16 +507,17 @@ async def cq_node_service_action(callback: types.CallbackQuery):
         await callback.answer(_("access_denied_no_rights", lang), show_alert=True)
         return
     
-    # Parse: node_svc_act_{token}_{service}_{type}_{action}
-    parts = callback.data.split("_", 6)
-    if len(parts) < 7:
+    # Parse: nsa_{token}_{service}_{t}_{action} (t: d=docker, s=systemd)
+    parts = callback.data.split("_")
+    if len(parts) < 5:
         await callback.answer("Invalid data", show_alert=True)
         return
     
-    token = parts[3]
-    service_name = parts[4]
-    svc_type = parts[5]
-    action = parts[6]
+    token = parts[1]
+    service_name = parts[2]
+    t = parts[3]  # d=docker, s=systemd
+    action = parts[4]
+    svc_type = "docker" if t == "d" else "systemd"
     
     if action not in ["start", "stop", "restart"]:
         await callback.answer("Invalid action", show_alert=True)
@@ -746,14 +747,14 @@ async def cq_node_service_detail(callback: types.CallbackQuery):
     user_id = callback.from_user.id
     lang = get_user_lang(user_id)
     
-    # Parse: node_svc_detail_{token}_{service}
-    parts = callback.data.split("_", 4)
-    if len(parts) < 5:
+    # Parse: nsd_{token}_{service}
+    parts = callback.data.split("_", 2)
+    if len(parts) < 3:
         await callback.answer("Invalid data", show_alert=True)
         return
     
-    token = parts[3]
-    service_name = parts[4]
+    token = parts[1]
+    service_name = parts[2]
     
     node = await nodes_db.get_node_by_token(token)
     if not node:
@@ -792,16 +793,17 @@ async def cq_node_service_action(callback: types.CallbackQuery):
     user_id = callback.from_user.id
     lang = get_user_lang(user_id)
     
-    # Parse: node_svc_act_{token}_{service}_{type}_{action}
-    parts = callback.data.split("_", 6)
-    if len(parts) < 7:
+    # Parse: nsa_{token}_{service}_{t}_{action} (t: d=docker, s=systemd)
+    parts = callback.data.split("_")
+    if len(parts) < 5:
         await callback.answer("Invalid data", show_alert=True)
         return
     
-    token = parts[3]
-    service_name = parts[4]
-    svc_type = parts[5]
-    action = parts[6]
+    token = parts[1]
+    service_name = parts[2]
+    t = parts[3]  # d=docker, s=systemd
+    action = parts[4]
+    svc_type = "docker" if t == "d" else "systemd"
     
     if action not in ["start", "stop", "restart"]:
         await callback.answer("Invalid action", show_alert=True)

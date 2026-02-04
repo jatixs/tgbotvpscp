@@ -632,7 +632,7 @@ def get_node_services_keyboard(token: str, services: list, lang: str) -> InlineK
         buttons.append([
             InlineKeyboardButton(
                 text=f"{icon} {name}", 
-                callback_data=f"node_svc_detail_{token}_{name}"
+                callback_data=f"nsd_{token}_{name}"
             )
         ])
     buttons.append([
@@ -645,25 +645,27 @@ def get_node_services_keyboard(token: str, services: list, lang: str) -> InlineK
 
 def get_node_service_actions_keyboard(token: str, service: str, status: str, lang: str, svc_type: str = "systemd") -> InlineKeyboardMarkup:
     """Keyboard for service actions (start/stop/restart)"""
+    # Use short type code: d=docker, s=systemd (to fit 64 byte limit)
+    t = "d" if svc_type == "docker" else "s"
     actions = []
     if status == "running":
         actions.append(
             InlineKeyboardButton(
                 text=_("web_services_btn_stop", lang), 
-                callback_data=f"node_svc_act_{token}_{service}_{svc_type}_stop"
+                callback_data=f"nsa_{token}_{service}_{t}_stop"
             )
         )
     else:
         actions.append(
             InlineKeyboardButton(
                 text=_("web_services_btn_start", lang), 
-                callback_data=f"node_svc_act_{token}_{service}_{svc_type}_start"
+                callback_data=f"nsa_{token}_{service}_{t}_start"
             )
         )
     actions.append(
         InlineKeyboardButton(
             text=_("web_services_btn_restart", lang), 
-            callback_data=f"node_svc_act_{token}_{service}_{svc_type}_restart"
+            callback_data=f"nsa_{token}_{service}_{t}_restart"
         )
     )
     return InlineKeyboardMarkup(inline_keyboard=[
