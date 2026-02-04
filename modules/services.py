@@ -540,6 +540,13 @@ def get_services_keyboard(user_id, page=0):
     kb.inline_keyboard.append([
         InlineKeyboardButton(text=_("btn_refresh", lang), callback_data=f"srv_refresh_{page}"),
     ])
+    
+    # Add "Manage" button for Main Admin only (level >= 2)
+    if level >= 2:
+        kb.inline_keyboard.append([
+            InlineKeyboardButton(text=_("services_btn_manage", lang), callback_data="srv_manage_menu")
+        ])
+    
     return kb, page, total_pages
 
 async def services_handler(message: types.Message):
@@ -654,8 +661,12 @@ async def cq_service_action(callback: types.CallbackQuery):
     if not found:
          await callback.answer("Service not found config", show_alert=True)
          return
+    
+    # Get localized action name
+    action_key = f"service_action_{action}"
+    localized_action = _(action_key, lang)
             
-    await callback.answer(_("services_action_started", lang, action=action, name=name), show_alert=False)
+    await callback.answer(_("services_action_started", lang, action=localized_action, name=name), show_alert=False)
     
     success, msg = await perform_service_action(name, sType, action)
     
@@ -674,6 +685,225 @@ async def cq_service_action(callback: types.CallbackQuery):
     else:
         await callback.answer(_("services_error", lang, action=action, name=name, error=msg), show_alert=True)
 
+async def cq_services_manage_menu(callback: types.CallbackQuery):
+    """Show services management menu"""
+    user_id = callback.from_user.id
+    lang = get_user_lang(user_id)
+    level = get_user_role_level(user_id)
+    
+    if level < 2:
+        await callback.answer(_("access_denied", lang), show_alert=True)
+        return
+    
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text=_("services_btn_add_service", lang), callback_data="srv_add_list_0")],
+        [InlineKeyboardButton(text=_("services_btn_remove_service", lang), callback_data="srv_remove_list_0")],
+        [InlineKeyboardButton(text=_("btn_back", lang), callback_data="srv_refresh_0")]
+    ])
+    
+    await callback.message.edit_text(
+        _("services_manage_title", lang),
+        reply_markup=kb,
+        parse_mode="HTML"
+    )
+    await callback.answer()
+
+async def cq_services_add_list(callback: types.CallbackQuery):
+    """Show list of available services to add"""
+    user_id = callback.from_user.id
+    lang = get_user_lang(user_id)
+    level = get_user_role_level(user_id)
+    
+    if level < 2:
+        await callback.answer(_("access_denied", lang), show_alert=True)
+        return
+    
+    # Get page
+    try:
+        page = int(callback.data.split("_")[3])
+    except:
+        page = 0
+    
+    # Get all available services that are not yet managed
+    all_services = get_all_available_services()
+    available = [s for s in all_services if not s["managed"]]
+    
+    if not available:
+        await callback.answer(_("services_no_available", lang), show_alert=True)
+        return
+    
+    # Pagination
+    per_page = 8
+    total_pages = (len(available) + per_page - 1) // per_page
+    page = max(0, min(page, total_pages - 1))
+    start = page * per_page
+    end = min(start + per_page, len(available))
+    
+    kb = InlineKeyboardMarkup(inline_keyboard=[])
+    
+    for s in available[start:end]:
+        icon = "🟢" if s["status"] == "running" else "🔴"
+        type_icon = "🐳" if s["type"] == "docker" else "⚙️"
+        kb.inline_keyboard.append([
+            InlineKeyboardButton(
+                text=f"{icon} {type_icon} {s['name']}", 
+                callback_data=f"srv_add_{s['type']}_{s['name']}"
+            )
+        ])
+    
+    # Navigation
+    nav_row = []
+    if total_pages > 1:
+        if page > 0:
+            nav_row.append(InlineKeyboardButton(text="⬅️", callback_data=f"srv_add_list_{page-1}"))
+        nav_row.append(InlineKeyboardButton(text=f"{page+1}/{total_pages}", callback_data="noop"))
+        if page < total_pages - 1:
+            nav_row.append(InlineKeyboardButton(text="➡️", callback_data=f"srv_add_list_{page+1}"))
+    if nav_row:
+        kb.inline_keyboard.append(nav_row)
+    
+    kb.inline_keyboard.append([
+        InlineKeyboardButton(text=_("btn_back", lang), callback_data="srv_manage_menu")
+    ])
+    
+    await callback.message.edit_text(
+        _("services_select_to_add", lang),
+        reply_markup=kb,
+        parse_mode="HTML"
+    )
+    await callback.answer()
+
+async def cq_service_add(callback: types.CallbackQuery):
+    """Add a service to managed list"""
+    user_id = callback.from_user.id
+    lang = get_user_lang(user_id)
+    level = get_user_role_level(user_id)
+    
+    if level < 2:
+        await callback.answer(_("access_denied", lang), show_alert=True)
+        return
+    
+    # Parse: srv_add_type_name
+    parts = callback.data.split("_", 3)
+    if len(parts) < 4:
+        await callback.answer("Invalid data", show_alert=True)
+        return
+    
+    sType = parts[2]
+    name = parts[3]
+    
+    success, msg = add_managed_service(name, sType)
+    
+    if success:
+        await callback.answer(_("services_added", lang, name=name), show_alert=True)
+        # Return to services list
+        callback.data = "srv_refresh_0"
+        await cq_services_refresh(callback)
+    else:
+        await callback.answer(_("services_add_error", lang, error=msg), show_alert=True)
+
+async def cq_services_remove_list(callback: types.CallbackQuery):
+    """Show list of managed services to remove"""
+    user_id = callback.from_user.id
+    lang = get_user_lang(user_id)
+    level = get_user_role_level(user_id)
+    
+    if level < 2:
+        await callback.answer(_("access_denied", lang), show_alert=True)
+        return
+    
+    # Get page
+    try:
+        page = int(callback.data.split("_")[3])
+    except:
+        page = 0
+    
+    # Get all managed services
+    managed = config.MANAGED_SERVICES
+    
+    if not managed:
+        await callback.answer(_("services_no_managed", lang), show_alert=True)
+        return
+    
+    # Pagination
+    per_page = 8
+    total_pages = (len(managed) + per_page - 1) // per_page
+    page = max(0, min(page, total_pages - 1))
+    start = page * per_page
+    end = min(start + per_page, len(managed))
+    
+    kb = InlineKeyboardMarkup(inline_keyboard=[])
+    
+    for s in managed[start:end]:
+        name = s["name"]
+        sType = s.get("type", "systemd")
+        
+        # Get current status
+        status = "unknown"
+        if sType == "systemd":
+            status = get_systemd_status(name)
+        elif sType == "docker":
+            status = get_docker_status(name)
+        
+        icon = "🟢" if status == "running" else "🔴"
+        type_icon = "🐳" if sType == "docker" else "⚙️"
+        kb.inline_keyboard.append([
+            InlineKeyboardButton(
+                text=f"{icon} {type_icon} {name}", 
+                callback_data=f"srv_remove_{name}"
+            )
+        ])
+    
+    # Navigation
+    nav_row = []
+    if total_pages > 1:
+        if page > 0:
+            nav_row.append(InlineKeyboardButton(text="⬅️", callback_data=f"srv_remove_list_{page-1}"))
+        nav_row.append(InlineKeyboardButton(text=f"{page+1}/{total_pages}", callback_data="noop"))
+        if page < total_pages - 1:
+            nav_row.append(InlineKeyboardButton(text="➡️", callback_data=f"srv_remove_list_{page+1}"))
+    if nav_row:
+        kb.inline_keyboard.append(nav_row)
+    
+    kb.inline_keyboard.append([
+        InlineKeyboardButton(text=_("btn_back", lang), callback_data="srv_manage_menu")
+    ])
+    
+    await callback.message.edit_text(
+        _("services_select_to_remove", lang),
+        reply_markup=kb,
+        parse_mode="HTML"
+    )
+    await callback.answer()
+
+async def cq_service_remove(callback: types.CallbackQuery):
+    """Remove a service from managed list"""
+    user_id = callback.from_user.id
+    lang = get_user_lang(user_id)
+    level = get_user_role_level(user_id)
+    
+    if level < 2:
+        await callback.answer(_("access_denied", lang), show_alert=True)
+        return
+    
+    # Parse: srv_remove_name
+    parts = callback.data.split("_", 2)
+    if len(parts) < 3:
+        await callback.answer("Invalid data", show_alert=True)
+        return
+    
+    name = parts[2]
+    
+    success, msg = remove_managed_service(name)
+    
+    if success:
+        await callback.answer(_("services_removed", lang, name=name), show_alert=True)
+        # Return to services list
+        callback.data = "srv_refresh_0"
+        await cq_services_refresh(callback)
+    else:
+        await callback.answer(_("services_remove_error", lang, error=msg), show_alert=True)
+
 
 BUTTON_KEY = "btn_services"
 
@@ -682,4 +912,9 @@ def register_handlers(dp: Dispatcher):
     
     dp.callback_query.register(cq_services_page, F.data.startswith("srv_page_"))
     dp.callback_query.register(cq_services_refresh, F.data.startswith("srv_refresh_"))
+    dp.callback_query.register(cq_services_manage_menu, F.data == "srv_manage_menu")
+    dp.callback_query.register(cq_services_add_list, F.data.startswith("srv_add_list_"))
+    dp.callback_query.register(cq_services_remove_list, F.data.startswith("srv_remove_list_"))
+    dp.callback_query.register(cq_service_add, F.data.startswith("srv_add_"))
+    dp.callback_query.register(cq_service_remove, F.data.startswith("srv_remove_"))
     dp.callback_query.register(cq_service_action, F.data.startswith("srv_"))

@@ -124,6 +124,62 @@ async def cmd_restart(args):
         print(f"❌ Ошибка при перезапуске: {e}")
 
 
+async def cmd_status(args):
+    """Check bot status"""
+    print("📊 Проверка статуса бота...")
+    is_docker = os.environ.get("DEPLOY_MODE") == "docker"
+    
+    try:
+        if is_docker:
+            result = subprocess.run(
+                ["docker", "compose", "ps", "--format", "json"],
+                cwd=os.path.dirname(os.path.abspath(__file__)),
+                capture_output=True,
+                text=True,
+                timeout=10
+            )
+            if result.returncode == 0:
+                print("🐳 Docker режим:")
+                # Parse and display container status
+                if result.stdout:
+                    try:
+                        import json
+                        # docker compose ps --format json returns one JSON object per line
+                        containers = []
+                        for line in result.stdout.strip().split('\n'):
+                            if line:
+                                containers.append(json.loads(line))
+                        
+                        if containers:
+                            for container in containers:
+                                name = container.get('Name', 'Unknown')
+                                state = container.get('State', 'unknown')
+                                status = container.get('Status', '')
+                                print(f"  • {name}: {state} ({status})")
+                        else:
+                            print("  Контейнеры не найдены")
+                    except:
+                        # Fallback to raw output if JSON parsing fails
+                        print(result.stdout)
+                else:
+                    print("  Контейнеры не найдены")
+            else:
+                print(f"⚠️ Ошибка: {result.stderr}")
+        else:
+            result = subprocess.run(
+                ["systemctl", "status", "tg-bot", "--no-pager"],
+                capture_output=True,
+                text=True,
+                timeout=10
+            )
+            print("🔧 Systemd режим:")
+            print(result.stdout if result.stdout else result.stderr)
+    except subprocess.TimeoutExpired:
+        print("❌ Превышен timeout проверки статуса.")
+    except Exception as e:
+        print(f"❌ Ошибка проверки статуса: {e}")
+
+
 def main():
     parser = argparse.ArgumentParser(
         prog="tgcp-bot",
@@ -151,6 +207,9 @@ def main():
     # Команда: restart
     subparsers.add_parser("restart", help="Перезапустить бота")
 
+    # Команда: status
+    subparsers.add_parser("status", help="Показать статус бота")
+
     args = parser.parse_args()
 
     if not args.command:
@@ -168,6 +227,8 @@ def main():
             asyncio.run(cmd_cleanlogs(args))
         elif args.command == "restart":
             asyncio.run(cmd_restart(args))
+        elif args.command == "status":
+            asyncio.run(cmd_status(args))
     except KeyboardInterrupt:
         print("\n⛔ Отменено.")
     except Exception as e:
