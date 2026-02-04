@@ -581,7 +581,8 @@ async function clearLogs() {
             }, 2000);
         } else {
             const data = await res.json();
-            await window.showModalAlert(I18N.web_error.replace('{error}', data.error || "Failed"), 'Ошибка');
+            const errorShort = (typeof I18N !== 'undefined' && I18N.web_error_short) ? I18N.web_error_short : "Error";
+            await window.showModalAlert(I18N.web_error.replace('{error}', data.error || "Failed"), errorShort);
             
             btn.disabled = false;
             btn.innerHTML = originalHTML;
@@ -589,7 +590,8 @@ async function clearLogs() {
             btn.style.height = ''; 
         }
     } catch (e) {
-        await window.showModalAlert(I18N.web_conn_error.replace('{error}', e), 'Ошибка соединения');
+        const connErrTitle = (typeof I18N !== 'undefined' && I18N.web_conn_error_short) ? I18N.web_conn_error_short : "Connection Error";
+        await window.showModalAlert(I18N.web_conn_error.replace('{error}', e), connErrTitle);
         
         btn.disabled = false;
         btn.innerHTML = originalHTML;
@@ -717,8 +719,8 @@ async function deleteUser(id, name) {
 }
 
 async function openAddUserModal() {
-    const promptText = (typeof I18N !== 'undefined' && I18N.web_add_user_prompt) ? I18N.web_add_user_prompt : "Введите Telegram ID пользователя:";
-    const titleText = (typeof I18N !== 'undefined' && I18N.modal_title_prompt) ? I18N.modal_title_prompt : "Ввод данных";
+    const promptText = (typeof I18N !== 'undefined' && I18N.web_add_user_prompt) ? I18N.web_add_user_prompt : "Enter user's Telegram ID:";
+    const titleText = (typeof I18N !== 'undefined' && I18N.modal_title_prompt) ? I18N.modal_title_prompt : "Input";
     const id = await window.showModalPrompt(promptText, titleText, "123456789");
 
     if (!id) return;
@@ -878,7 +880,9 @@ window.handleSettingsRenameKeydown = function(event, token) {
 };
 
 async function deleteNode(token) {
-    if (!await window.showModalConfirm(I18N.node_delete_select || "Delete this node?", I18N.modal_title_confirm)) return;
+    const confirmMsg = (typeof I18N !== 'undefined' && I18N.web_node_delete_confirm) ? I18N.web_node_delete_confirm : "Delete this node?";
+    const confirmTitle = (typeof I18N !== 'undefined' && I18N.modal_title_confirm) ? I18N.modal_title_confirm : "Confirm";
+    if (!await window.showModalConfirm(confirmMsg, confirmTitle)) return;
 
     try {
         const res = await fetch('/api/nodes/delete', {
@@ -1064,7 +1068,7 @@ function renderKeyboardPreview() {
     const visibleKeys = getVisibleKeys();
     const totalAll = visibleKeys.length;
     const totalEnabled = visibleKeys.filter(k => KEYBOARD_CONFIG[k]).length;
-    const activeText = (typeof I18N !== 'undefined' && I18N.web_kb_active) ? I18N.web_kb_active : "Активно:";
+    const activeText = (typeof I18N !== 'undefined' && I18N.web_kb_active) ? I18N.web_kb_active : "Active:";
     const prevEl = document.getElementById('kbActiveCount');
     let startVal = 0;
     if (prevEl) {
@@ -1125,9 +1129,9 @@ function updateDoneButtonState(state) {
     const btn = document.getElementById('keyboardModalDoneBtn');
     if (!btn) return;
 
-    const activeText = (typeof I18N !== 'undefined' && I18N.web_kb_active) ? I18N.web_kb_active : "Активно:";
-    const savingText = (typeof I18N !== 'undefined' && I18N.web_saving_btn) ? I18N.web_saving_btn : "Сохранение...";
-    const savedText = (typeof I18N !== 'undefined' && I18N.web_saved_btn) ? I18N.web_saved_btn : "Сохранено!";
+    const activeText = (typeof I18N !== 'undefined' && I18N.web_kb_active) ? I18N.web_kb_active : "Active:";
+    const savingText = (typeof I18N !== 'undefined' && I18N.web_saving_btn) ? I18N.web_saving_btn : "Saving...";
+    const savedText = (typeof I18N !== 'undefined' && I18N.web_saved_btn) ? I18N.web_saved_btn : "Saved!";
 
     const visibleKeys = getVisibleKeys();
     const totalAll = visibleKeys.length;
@@ -1604,9 +1608,9 @@ window.saveMetaData = async function() {
     if (locked) {
         const confirmMsg = (typeof I18N !== 'undefined' && I18N.web_meta_lock_confirm) 
             ? I18N.web_meta_lock_confirm 
-            : "ВНИМАНИЕ: Вы собираетесь заблокировать настройки навсегда. Кнопка настроек исчезнет, и вы больше не сможете изменить эти данные. Продолжить?";
-            
-        if (!await window.showModalConfirm(confirmMsg, "Irreversible Action")) {
+            : "WARNING: You are about to lock settings forever. The settings button will disappear and you won't be able to change this data. Continue?";
+        const confirmTitle = (typeof I18N !== 'undefined' && I18N.modal_title_confirm) ? I18N.modal_title_confirm : "Confirm";
+        if (!await window.showModalConfirm(confirmMsg, confirmTitle)) {
             return; 
         }
     }

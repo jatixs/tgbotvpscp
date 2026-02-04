@@ -1720,6 +1720,8 @@ async def handle_settings_page(request):
         "web_meta_success": _("web_meta_success", lang),
         "web_meta_locked_alert": _("web_meta_locked_alert", lang),
         "web_notifications_cleared": _("web_notifications_cleared", lang),
+        "web_node_delete_confirm": _("web_node_delete_confirm", lang),
+        "modal_title_info": _("modal_title_info", lang),
 
     }
     for btn_key, conf_key in BTN_CONFIG_MAP.items():
@@ -2082,6 +2084,8 @@ async def handle_login_page(request):
         "web_default_pass_alert",
         "web_brand_name",
         "login_secure_gateway",
+        "login_telegram_id_label",
+        "login_via_telegram_btn",
     ]
     i18n_all = {}
     for l in ["ru", "en"]:
@@ -2108,6 +2112,8 @@ async def handle_login_page(request):
         "web_version": CACHE_VER,
         "current_lang": lang,
         "i18n_json": injection,
+        "login_telegram_id_label": _("login_telegram_id_label", lang),
+        "login_via_telegram_btn": _("login_via_telegram_btn", lang),
     }
     template = JINJA_ENV.get_template("login.html")
     html = template.render(**context)
@@ -3255,7 +3261,7 @@ async def handle_login_page(request):
         "login_btn_send_link", "login_btn_back", "btn_back", "login_support_btn_pay",
         "login_link_sent_title", "login_link_sent_desc", "reset_success_title",
         "reset_success_desc", "login_error_user_not_found", "web_default_pass_alert",
-        "web_brand_name", "login_secure_gateway",
+        "web_brand_name", "login_secure_gateway", "login_telegram_id_label", "login_via_telegram_btn",
     ]
     i18n_all = {}
     for l in ["ru", "en"]:
@@ -3282,6 +3288,8 @@ async def handle_login_page(request):
         "web_version": CACHE_VER,
         "current_lang": lang,
         "i18n_json": injection,
+        "login_telegram_id_label": _("login_telegram_id_label", lang),
+        "login_via_telegram_btn": _("login_via_telegram_btn", lang),
     }
     template = JINJA_ENV.get_template("login.html")
     html = template.render(**context)

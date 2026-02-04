@@ -222,7 +222,7 @@ function createNodeCard(node) {
             <!-- Actions -->
             <div class="px-4 pb-4 mb-3 pt-1 flex gap-2">
                 <button onclick="openNodeDetail('${node.token}')" class="flex-1 px-3 py-2 bg-blue-100 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400 rounded-xl text-xs font-bold hover:bg-blue-200 dark:hover:bg-blue-500/30 transition">
-                    ${I18N?.web_node_details || 'Детали ноды'}
+                    ${I18N?.web_node_details || 'Node Details'}
                 </button>
                 <button onclick="quickReboot('${node.token}')" class="node-reboot-btn px-3 py-2 text-red-600 dark:text-red-400 rounded-xl text-xs font-bold hover:bg-red-200 transition" title="Reboot">
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -389,7 +389,7 @@ function updateNodeModal(data) {
         document.getElementById('modalNodeStatus').textContent = I18N?.web_node_status_online || 'Online';
     } else {
         statusIcon.className = 'p-2 bg-red-100 dark:bg-red-500/20 rounded-lg text-red-600 dark:text-red-400';
-        document.getElementById('modalNodeStatus').textContent = 'Offline';
+        document.getElementById('modalNodeStatus').textContent = I18N?.web_node_status_offline || 'Offline';
     }
     
     const stats = data.stats || {};
@@ -558,11 +558,11 @@ async function loadNodeServices(token) {
                     if (showAll) {
                         btn.classList.add('expanded');
                         if (blurOverlay) blurOverlay.style.display = 'none';
-                        btn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 transition-transform duration-300" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7" /></svg> ${I18N?.web_show_less || 'Показать меньше'}`;
+                        btn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 transition-transform duration-300" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7" /></svg> ${I18N?.web_show_less || 'Show Less'}`;
                     } else {
                         btn.classList.remove('expanded');
                         if (blurOverlay) blurOverlay.style.display = '';
-                        btn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 transition-transform duration-300" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" /></svg> ${I18N?.web_show_more || 'Показать еще'} (${services.length - INITIAL_SHOW})`;
+                        btn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 transition-transform duration-300" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" /></svg> ${I18N?.web_show_more || 'Show More'} (${services.length - INITIAL_SHOW})`;
                     }
                 }
             } else {
