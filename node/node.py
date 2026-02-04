@@ -230,7 +230,7 @@ def format_bytes_simple(bytes_value):
 
 
 def get_services_status():
-    """Get status of common services on the node"""
+    """Get status of common services on the node - only installed ones"""
     services = []
     common_services = [
         "xray", "nginx", "docker", "ssh", "sshd", "fail2ban",
@@ -240,12 +240,27 @@ def get_services_status():
     
     for service in common_services:
         try:
+            # First check if service exists (is-enabled or show LoadState)
+            proc_check = subprocess.run(
+                ["systemctl", "show", service, "-p", "LoadState"],
+                capture_output=True,
+                timeout=2
+            )
+            load_state = proc_check.stdout.decode().strip()
+            
+            # Skip if service is not found/not installed
+            if "not-found" in load_state or "masked" in load_state:
+                continue
+                
+            # Get actual status
             proc = subprocess.run(
                 ["systemctl", "is-active", service],
                 capture_output=True,
                 timeout=2
             )
             status = proc.stdout.decode().strip()
+            
+            # Only add if service exists and has valid status
             if status in ["active", "inactive", "failed"]:
                 services.append({
                     "name": service,
@@ -253,6 +268,26 @@ def get_services_status():
                 })
         except Exception:
             pass
+    
+    # Also check for docker containers
+    try:
+        proc = subprocess.run(
+            ["docker", "ps", "-a", "--format", "{{.Names}}:{{.Status}}"],
+            capture_output=True,
+            timeout=5
+        )
+        if proc.returncode == 0:
+            for line in proc.stdout.decode().strip().split("\n"):
+                if ":" in line:
+                    name, status = line.split(":", 1)
+                    if name.strip():
+                        services.append({
+                            "name": name.strip(),
+                            "type": "docker",
+                            "status": "running" if "Up" in status else "stopped"
+                        })
+    except Exception:
+        pass
     
     return services
 
