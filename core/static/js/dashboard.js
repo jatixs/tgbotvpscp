@@ -1,5 +1,43 @@
 /* /core/static/js/dashboard.js */
 
+// Keyboard layout conversion (RU <-> EN)
+const LAYOUT_RU = 'ёйцукенгшщзхъфывапролджэячсмитьбю.ЁЙЦУКЕНГШЩЗХЪФЫВАПРОЛДЖЭЯЧСМИТЬБЮ,';
+const LAYOUT_EN = '`qwertyuiop[]asdfghjkl;\'zxcvbnm,./~QWERTYUIOP{}ASDFGHJKL:"ZXCVBNM<>?';
+
+function convertLayout(text, fromLayout, toLayout) {
+    let result = '';
+    for (const char of text) {
+        const idx = fromLayout.indexOf(char);
+        if (idx !== -1) {
+            result += toLayout[idx];
+        } else {
+            result += char;
+        }
+    }
+    return result;
+}
+
+function ruToEn(text) {
+    return convertLayout(text, LAYOUT_RU, LAYOUT_EN);
+}
+
+function enToRu(text) {
+    return convertLayout(text, LAYOUT_EN, LAYOUT_RU);
+}
+
+function detectWrongLayout(text) {
+    // Check if text contains Russian letters but looks like it should be English
+    const hasRussian = /[а-яё]/i.test(text);
+    const hasEnglish = /[a-z]/i.test(text);
+    
+    if (hasRussian && !hasEnglish) {
+        return { detected: 'ru', converted: ruToEn(text) };
+    } else if (hasEnglish && !hasRussian) {
+        return { detected: 'en', converted: enToRu(text) };
+    }
+    return null;
+}
+
 let chartRes = null;
 let chartNet = null;
 let nodeSSESource = null;
@@ -1648,9 +1686,11 @@ function filterServices(query) {
         }
     });
     
-    // Remove old "no results" message
+    // Remove old "no results" message and layout suggestion
     const noResults = container.querySelector('.no-search-results');
     if (noResults) noResults.remove();
+    const oldSuggestion = container.querySelector('.layout-suggestion-main');
+    if (oldSuggestion) oldSuggestion.remove();
     
     // Search globally with debounce - only for main admin (level 2) who can add services
     const roleLevel = window.USER_ROLE_LEVEL || 0;
@@ -1679,13 +1719,52 @@ function filterServices(query) {
             searchGlobalServices(q, visibleCount);
         }, 300);
     } else if (visibleCount === 0 && q) {
-        // Show "no results" for non-admins
+        // Show "no results" for non-admins with layout suggestion
         const globalResults = container.querySelectorAll('.global-search-result-card');
         globalResults.forEach(card => card.remove());
+        
+        // Check for wrong keyboard layout
+        const layoutCheck = detectWrongLayout(q);
+        let suggestionHtml = '';
+        
+        if (layoutCheck) {
+            const converted = layoutCheck.converted.toLowerCase();
+            // Check if converted query would find results in managed services
+            let convertedCount = 0;
+            cards.forEach(card => {
+                if (card.classList.contains('global-search-result-card')) return;
+                const name = card.dataset.name?.toLowerCase() || '';
+                if (name.includes(converted)) convertedCount++;
+            });
+            
+            if (convertedCount > 0) {
+                const suggestionText = I18N.web_did_you_mean || 'Did you mean';
+                suggestionHtml = `
+                    <div class="layout-suggestion-main text-center py-2 col-span-full">
+                        <span class="text-gray-400">${suggestionText}: </span>
+                        <button onclick="applyLayoutSuggestionMain('${layoutCheck.converted}')" 
+                                class="text-blue-500 hover:text-blue-400 font-medium hover:underline">
+                            "${layoutCheck.converted}"
+                        </button>
+                    </div>
+                `;
+                container.insertAdjacentHTML('beforeend', suggestionHtml);
+            }
+        }
+        
         const msg = document.createElement('div');
         msg.className = 'no-search-results col-span-full text-center text-gray-400 py-4';
         msg.textContent = I18N.web_services_none_found || 'No services found';
         container.appendChild(msg);
+    }
+}
+
+// Apply layout suggestion to main search input  
+function applyLayoutSuggestionMain(suggestion) {
+    const input = document.getElementById('servicesSearchInput');
+    if (input) {
+        input.value = suggestion;
+        input.dispatchEvent(new Event('input'));
     }
 }
 
@@ -2118,17 +2197,68 @@ function filterServicesEditList(query) {
         }
     });
     
+    // Remove old messages
+    const oldNoResults = grid.parentElement.querySelector('.no-search-results-edit');
+    if (oldNoResults) oldNoResults.remove();
+    const oldSuggestion = grid.parentElement.querySelector('.layout-suggestion');
+    if (oldSuggestion) oldSuggestion.remove();
+    
     // Show "no results" if nothing visible
-    let noResults = grid.parentElement.querySelector('.no-search-results-edit');
     if (visibleCount === 0 && q) {
-        if (!noResults) {
-            const msg = document.createElement('div');
-            msg.className = 'no-search-results-edit text-center text-gray-400 py-4';
-            msg.textContent = I18N.web_services_none_found || 'No services found';
-            grid.parentElement.appendChild(msg);
+        // Check if wrong keyboard layout
+        const layoutCheck = detectWrongLayout(q);
+        let suggestionHtml = '';
+        
+        if (layoutCheck) {
+            const converted = layoutCheck.converted.toLowerCase();
+            // Check if converted query would find results
+            let convertedCount = 0;
+            cards.forEach(card => {
+                const name = (card.dataset.name || '').toLowerCase();
+                if (name.includes(converted)) convertedCount++;
+            });
+            
+            if (convertedCount > 0) {
+                const suggestionText = I18N.web_did_you_mean || 'Did you mean';
+                suggestionHtml = `
+                    <div class="layout-suggestion text-center py-2">
+                        <span class="text-gray-400">${suggestionText}: </span>
+                        <button onclick="applyLayoutSuggestion('${layoutCheck.converted}')" 
+                                class="text-blue-500 hover:text-blue-400 font-medium hover:underline">
+                            "${layoutCheck.converted}"
+                        </button>
+                        <span class="text-gray-500 text-xs ml-2">(${convertedCount} ${I18N.web_results || 'results'})</span>
+                    </div>
+                `;
+            }
         }
-    } else if (noResults) {
-        noResults.remove();
+        
+        const msg = document.createElement('div');
+        msg.className = 'no-search-results-edit text-center text-gray-400 py-4';
+        msg.innerHTML = `
+            ${suggestionHtml}
+            <div class="mt-1">${I18N.web_services_none_found || 'No services found'}</div>
+        `;
+        grid.parentElement.appendChild(msg);
+    }
+}
+
+// Apply layout suggestion to search input
+function applyLayoutSuggestion(suggestion) {
+    // Try desktop input first, then mobile
+    const inputDesktop = document.getElementById('servicesEditSearchInputDesktop');
+    const inputMobile = document.getElementById('servicesEditSearchInputMobile');
+    const inputMain = document.getElementById('servicesSearchInput');
+    
+    if (inputDesktop && inputDesktop.offsetParent !== null) {
+        inputDesktop.value = suggestion;
+        inputDesktop.dispatchEvent(new Event('input'));
+    } else if (inputMobile && inputMobile.offsetParent !== null) {
+        inputMobile.value = suggestion;
+        inputMobile.dispatchEvent(new Event('input'));
+    } else if (inputMain) {
+        inputMain.value = suggestion;
+        inputMain.dispatchEvent(new Event('input'));
     }
 }
 

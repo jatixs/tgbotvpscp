@@ -844,6 +844,8 @@ async def handle_dashboard(request):
                 "web_services_btn_add": _("web_services_btn_add", lang),
                 "web_services_btn_remove": _("web_services_btn_remove", lang),
                 "web_services_none_found": _("web_services_none_found", lang),
+                "web_did_you_mean": _("web_did_you_mean", lang),
+                "web_results": _("web_results", lang),
                 "web_services_global_results": _("web_services_global_results", lang),
                 "web_services_info_title": _("web_services_info_title", lang),
                 "web_services_info_name": _("web_services_info_name", lang),
