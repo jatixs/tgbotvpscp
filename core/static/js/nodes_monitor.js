@@ -287,13 +287,24 @@ function toggleNodeSelection(token, checkbox) {
 // Mass commands
 async function massCommand(cmd) {
     if (selectedNodes.size === 0) {
-        showAlert(I18N?.modal_title_alert || 'Alert', I18N?.web_select_nodes_first || 'Please select at least one node');
+        showAlert(I18N?.modal_title_alert || 'Alert', I18N?.web_nodes_monitor_select_nodes || 'Please select at least one node');
         return;
     }
     
+    // Get localized command name
+    const cmdNames = {
+        'reboot': I18N?.web_nodes_monitor_btn_reboot || 'Reboot',
+        'selftest': I18N?.web_nodes_monitor_btn_selftest || 'System Test',
+        'speedtest': I18N?.web_nodes_monitor_btn_speedtest || 'Speedtest',
+        'traffic': I18N?.web_nodes_monitor_btn_traffic || 'Traffic'
+    };
+    const cmdName = cmdNames[cmd] || cmd;
+    
     const confirmMsg = cmd === 'reboot' 
-        ? (I18N?.web_mass_reboot_confirm || `Reboot ${selectedNodes.size} selected nodes?`)
-        : (I18N?.web_mass_command_confirm || `Execute ${cmd} on ${selectedNodes.size} nodes?`);
+        ? (I18N?.web_nodes_monitor_confirm_mass_reboot || `Reboot ${selectedNodes.size} selected nodes?`)
+        : (I18N?.web_nodes_monitor_confirm_mass_command || `Execute {command} on {count} nodes?`)
+            .replace('{command}', cmdName)
+            .replace('{count}', selectedNodes.size);
     
     showConfirm(I18N?.modal_title_confirm || 'Confirm', confirmMsg, async () => {
         for (const token of selectedNodes) {
@@ -384,12 +395,20 @@ function updateNodeModal(data) {
     
     const isOnline = data.status === 'online';
     const statusIcon = document.getElementById('modalNodeStatusIcon');
+    const statusBadge = document.getElementById('modalNodeStatusBadge');
+    const statusDot = document.getElementById('modalNodeStatusDot');
+    const statusText = document.getElementById('modalNodeStatus');
+    
     if (isOnline) {
         statusIcon.className = 'p-2 bg-green-100 dark:bg-green-500/20 rounded-lg text-green-600 dark:text-green-400';
-        document.getElementById('modalNodeStatus').textContent = I18N?.web_node_status_online || 'Online';
+        statusBadge.className = 'flex items-center gap-1 text-green-600 dark:text-green-400';
+        statusDot.className = 'w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse';
+        statusText.textContent = I18N?.web_node_status_online || 'Online';
     } else {
         statusIcon.className = 'p-2 bg-red-100 dark:bg-red-500/20 rounded-lg text-red-600 dark:text-red-400';
-        document.getElementById('modalNodeStatus').textContent = I18N?.web_node_status_offline || 'Offline';
+        statusBadge.className = 'flex items-center gap-1 text-red-600 dark:text-red-400';
+        statusDot.className = 'w-1.5 h-1.5 rounded-full bg-red-500';
+        statusText.textContent = I18N?.web_node_status_offline || 'Offline';
     }
     
     const stats = data.stats || {};
