@@ -103,9 +103,9 @@ def get_docker_status(container_name):
 
 def discover_all_systemd_services():
     """Discover all running/available systemd services"""
-    services = []
+    services = set()
     try:
-        # Get list of all services (running and available)
+        # Get list of all loaded services (running and available)
         cmd = ["systemctl", "list-units", "--type=service", "--all", "--no-pager", "--no-legend"]
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
         if result.returncode == 0:
@@ -118,10 +118,24 @@ def discover_all_systemd_services():
                     # Remove .service suffix
                     if unit.endswith(".service"):
                         name = unit[:-8]
-                        services.append(name)
+                        services.add(name)
+        
+        # Also get list of all unit files (includes services not currently loaded)
+        cmd2 = ["systemctl", "list-unit-files", "--type=service", "--no-pager", "--no-legend"]
+        result2 = subprocess.run(cmd2, capture_output=True, text=True, timeout=10)
+        if result2.returncode == 0:
+            for line in result2.stdout.strip().split("\n"):
+                if not line.strip():
+                    continue
+                parts = line.split()
+                if len(parts) >= 1:
+                    unit = parts[0]
+                    if unit.endswith(".service"):
+                        name = unit[:-8]
+                        services.add(name)
     except Exception as e:
         logging.error(f"Error discovering systemd services: {e}")
-    return services
+    return list(services)
 
 def discover_all_docker_containers():
     """Discover all docker containers (running and stopped)"""
@@ -193,12 +207,6 @@ def add_managed_service(name, sType):
 
 def remove_managed_service(name):
     """Remove a service from MANAGED_SERVICES config"""
-    # List of critical services that cannot be removed
-    CRITICAL_SERVICES = ["sshd", "ssh", "fail2ban"]
-    
-    if name in CRITICAL_SERVICES:
-        return False, f"Cannot remove critical service: {name}"
-    
     for i, s in enumerate(config.MANAGED_SERVICES):
         if s["name"] == name:
             config.MANAGED_SERVICES.pop(i)
