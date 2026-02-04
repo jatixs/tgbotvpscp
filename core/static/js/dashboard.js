@@ -266,7 +266,11 @@ function updateNodesListUI(data) {
         const container = document.getElementById('nodesList');
         const currentElements = container ? Array.from(container.children).filter(el => el.hasAttribute('data-token')) : [];
         
-        if (currentRenderList.length !== newList.length || (currentElements.length === 0 && newList.length > 0)) {
+        // Also trigger render if newList is empty and container still shows loading (no node elements)
+        const needsRender = currentRenderList.length !== newList.length || 
+                           (currentElements.length === 0 && newList.length > 0) ||
+                           (currentElements.length === 0 && newList.length === 0 && container && container.innerHTML.includes('animate-spin'));
+        if (needsRender) {
             currentRenderList = newList;
             renderNodesList();
         } else {
@@ -2184,10 +2188,37 @@ async function loadAgentIpv4() {
   }
 }
 
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
   const badge = document.getElementById('agentIpBadge');
   if (!badge) return;
 
+  // Check if there are additional IPs before making badge interactive
+  try {
+    const r = await fetch('/api/agent/ipv4', { credentials: 'same-origin' });
+    if (r.ok) {
+      const data = await r.json();
+      const primary = data.primary || data.source_ip || data.agent_ip || '-';
+      const ips = Array.isArray(data.ips) ? data.ips : Array.isArray(data.ipv4) ? data.ipv4 : [];
+      const secondary = ips.filter(ip => ip && ip !== primary);
+      
+      // If no additional IPs, make badge non-interactive
+      if (secondary.length === 0) {
+        badge.removeAttribute('role');
+        badge.removeAttribute('tabindex');
+        badge.removeAttribute('onclick');
+        badge.removeAttribute('onkeydown');
+        badge.classList.remove('cursor-pointer', 'hover:bg-gray-200/70', 'dark:hover:bg-white/10');
+        // Remove the info icon
+        const icon = badge.querySelector('svg');
+        if (icon) icon.remove();
+        return; // Don't add click handlers
+      }
+    }
+  } catch (e) {
+    console.error('Error checking additional IPs:', e);
+  }
+
+  // Add click handlers only if there are additional IPs
   const handler = async (e) => {
     e.preventDefault();
     e.stopPropagation();
