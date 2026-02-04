@@ -278,17 +278,28 @@ def service_action(service_name, action):
     except Exception as e:
         return {"success": False, "error": str(e)}
 
-def parse_iperf_speed(output: str, direction: str) -> float:
-    for line in reversed(output.splitlines()):
-        if "Mbits/sec" in line and (direction in line or direction == 'sender'):
-            speed_match = re.search(r"(\d+\.?\d*)\s+Mbits/sec", line)
-            if speed_match:
-                return float(speed_match.group(1))
+def parse_iperf_json(output: str, direction: str) -> float:
+    """
+    Parse iperf3 JSON output.
+    direction: 'download' or 'upload'
+    """
+    try:
+        data = json.loads(output)
+        if direction == 'download':
+            # For download test (-R), we need sum_received
+            if "end" in data and "sum_received" in data["end"]:
+                return data["end"]["sum_received"]["bits_per_second"] / 1000000
+        else:
+            # For upload test, we need sum_sent
+            if "end" in data and "sum_sent" in data["end"]:
+                return data["end"]["sum_sent"]["bits_per_second"] / 1000000
+    except json.JSONDecodeError as e:
+        logging.error(f"Failed to parse iperf3 JSON: {e}")
+    except KeyError as e:
+        logging.error(f"Missing key in iperf3 output: {e}")
+    except Exception as e:
+        logging.error(f"Error parsing iperf3 output: {e}")
     
-    fallback_match = re.findall(r"(\d+\.?\d*)\s+Mbits/sec", output)
-    if fallback_match:
-        return float(fallback_match[-1])
-        
     return 0.0
 
 def get_top_processes(metric):
@@ -516,22 +527,24 @@ def execute_command(task):
                 city = server.get("SITE", "Unknown")
                 country = server.get("COUNTRY", "")
                 
-                cmd_dl = ["iperf3", "-c", host, "-p", str(port), "-t", "5", "-4", "-R"]
+                # Download test with JSON output (-J flag, -R for reverse/download)
+                cmd_dl = ["iperf3", "-c", host, "-p", str(port), "-J", "-t", "5", "-4", "-R"]
                 try:
                     res_dl = subprocess.check_output(
-                        cmd_dl, stderr=subprocess.STDOUT, timeout=20).decode()
-                    dl_speed = parse_iperf_speed(res_dl, 'receiver')
+                        cmd_dl, stderr=subprocess.STDOUT, timeout=30).decode()
+                    dl_speed = parse_iperf_json(res_dl, 'download')
                 except subprocess.TimeoutExpired:
                     dl_speed = 0.0
                 except Exception as e:
                     logging.error(f"DL Test failed: {e}")
                     dl_speed = 0.0
                 
-                cmd_ul = ["iperf3", "-c", host, "-p", str(port), "-t", "5", "-4"]
+                # Upload test with JSON output (-J flag)
+                cmd_ul = ["iperf3", "-c", host, "-p", str(port), "-J", "-t", "5", "-4"]
                 try:
                     res_ul = subprocess.check_output(
-                        cmd_ul, stderr=subprocess.STDOUT, timeout=20).decode()
-                    ul_speed = parse_iperf_speed(res_ul, 'sender')
+                        cmd_ul, stderr=subprocess.STDOUT, timeout=30).decode()
+                    ul_speed = parse_iperf_json(res_ul, 'upload')
                 except subprocess.TimeoutExpired:
                     ul_speed = 0.0
                 except Exception as e:
