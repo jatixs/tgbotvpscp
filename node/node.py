@@ -228,6 +228,56 @@ def format_bytes_simple(bytes_value):
         unit_index += 1
     return f"{value:.2f} {units[unit_index]}"
 
+
+def get_services_status():
+    """Get status of common services on the node"""
+    services = []
+    common_services = [
+        "xray", "nginx", "docker", "ssh", "sshd", "fail2ban",
+        "mysql", "mariadb", "postgresql", "redis", "mongodb",
+        "apache2", "httpd", "php-fpm", "caddy", "traefik"
+    ]
+    
+    for service in common_services:
+        try:
+            proc = subprocess.run(
+                ["systemctl", "is-active", service],
+                capture_output=True,
+                timeout=2
+            )
+            status = proc.stdout.decode().strip()
+            if status in ["active", "inactive", "failed"]:
+                services.append({
+                    "name": service,
+                    "status": "running" if status == "active" else "stopped"
+                })
+        except Exception:
+            pass
+    
+    return services
+
+
+def service_action(service_name, action):
+    """Execute service action (start, stop, restart)"""
+    allowed_actions = ["start", "stop", "restart"]
+    if action not in allowed_actions:
+        return {"success": False, "error": f"Invalid action: {action}"}
+    
+    try:
+        proc = subprocess.run(
+            ["systemctl", action, service_name],
+            capture_output=True,
+            timeout=30
+        )
+        if proc.returncode == 0:
+            return {"success": True, "message": f"Service {service_name} {action}ed successfully"}
+        else:
+            return {"success": False, "error": proc.stderr.decode().strip()}
+    except subprocess.TimeoutExpired:
+        return {"success": False, "error": "Timeout while executing service action"}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
 def parse_iperf_speed(output: str, direction: str) -> float:
     for line in reversed(output.splitlines()):
         if "Mbits/sec" in line and (direction in line or direction == 'sender'):
@@ -533,6 +583,37 @@ def execute_command(task):
                 logger.error(f"Failed to reboot: {e}")
             return
 
+        elif cmd == "services_list":
+            services = get_services_status()
+            result_payload = {
+                "type": "services_list",
+                "services": services
+            }
+
+        elif cmd == "service_action":
+            svc_name = task.get("service")
+            svc_action = task.get("action")
+            if not svc_name or not svc_action:
+                result_payload = {
+                    "type": "i18n",
+                    "key": "error_with_details",
+                    "params": {"error": "Missing service or action"}
+                }
+            else:
+                result = service_action(svc_name, svc_action)
+                if result["success"]:
+                    result_payload = {
+                        "type": "i18n",
+                        "key": "services_action_success",
+                        "params": {"service": svc_name, "action": svc_action}
+                    }
+                else:
+                    result_payload = {
+                        "type": "i18n",
+                        "key": "error_with_details",
+                        "params": {"error": result.get("error", "Unknown error")}
+                    }
+
         else:
             result_payload = {
                 "type": "i18n", 
@@ -567,11 +648,19 @@ def send_heartbeat():
     current_results = list(PENDING_RESULTS)
     current_ssh_events = list(SSH_EVENTS)
     
+    # Get services status periodically
+    services = []
+    try:
+        services = get_services_status()
+    except Exception as e:
+        logging.debug(f"Failed to get services status: {e}")
+    
     payload_dict = {
         "token": AGENT_TOKEN,
         "stats": get_system_stats(),
         "results": current_results,
         "ssh_logins": current_ssh_events,
+        "services": services,
         "timestamp": int(time.time())
     }
     

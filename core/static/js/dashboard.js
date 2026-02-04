@@ -1505,6 +1505,9 @@ function loadServices() {
 function renderServices(services, forceRender = false) {
     const container = document.getElementById('services-container');
     
+    // Skip if services container doesn't exist on this page
+    if (!container) return;
+    
     // Don't re-render if user is actively searching (unless forceRender is true)
     const searchInput = document.getElementById('servicesSearchInput');
     if (!forceRender && searchInput && searchInput.value.trim()) {

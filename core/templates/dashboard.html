@@ -419,6 +419,12 @@
                             {{ web_node_mgmt_title }}
                         </h3>
                         <div class="flex gap-2">
+                            <a href="/nodes" class="px-2 py-1 bg-purple-100 dark:bg-purple-900/30 rounded text-xs font-bold text-purple-600 dark:text-purple-400 hover:bg-purple-200 dark:hover:bg-purple-900/50 transition flex items-center gap-1" title="{{ web_monitor_title }}">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                                </svg>
+                                <span class="hidden sm:inline">{{ web_monitor_btn }}</span>
+                            </a>
                             <span class="px-2 py-1 bg-gray-100 dark:bg-gray-700 rounded text-xs font-bold text-gray-600 dark:text-gray-300">{{ web_stats_total }}: <span id="nodesTotal">{{ nodes_count }}</span></span>
                             <span class="px-2 py-1 bg-green-100 dark:bg-green-900/30 rounded text-xs font-bold text-green-600 dark:text-green-400">{{ web_stats_active }}: <span id="nodesActive">{{ active_nodes }}</span></span>
                         </div>

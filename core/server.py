@@ -960,6 +960,12 @@ async def handle_heartbeat(request):
         except ValueError:
             pass
     await nodes_db.update_node_heartbeat(token, ip, stats)
+    
+    # Save services data if provided
+    services = data.get("services", [])
+    if services:
+        await nodes_db.update_node_extra(token, "services", services)
+    
     current_node = await nodes_db.get_node_by_token(token)
     tasks_to_send = current_node.get("tasks", [])
     if tasks_to_send:
@@ -1292,6 +1298,270 @@ async def handle_nodes_list_json(request):
             }
         )
     return web.json_response({"nodes": nodes_data})
+
+
+# ===== NODES MONITOR PAGE HANDLERS =====
+
+async def handle_nodes_monitor_page(request):
+    """Render the nodes monitoring page"""
+    user = get_current_user(request)
+    if not user:
+        raise web.HTTPFound("/login")
+    user_id = user["id"]
+    lang = get_user_lang(user_id)
+    role = user.get("role", "users")
+    is_admin = role == "admins" or user_id == ADMIN_USER_ID
+    
+    if not is_admin:
+        raise web.HTTPFound("/")
+    
+    web_meta = getattr(current_config, "WEB_METADATA", {})
+    custom_title = web_meta.get("title", "")
+    page_title = f"{_('web_nodes_monitor_title', lang)} - {TG_BOT_NAME}"
+    if custom_title:
+        page_title = f"{_('web_nodes_monitor_title', lang)} - {custom_title}"
+    
+    clean_version = APP_VERSION.lstrip("v")
+    display_version = f"v{clean_version}"
+    
+    context = {
+        "web_title": page_title,
+        "web_version": display_version,
+        "pwa_version": current_config.INSTALLED_VERSION or display_version,
+        "cache_ver": CACHE_VER,
+        "user_avatar": _get_avatar_html(user),
+        "user_name": user.get("first_name", "User"),
+        "user_role_js": f"const USER_ROLE = '{role}'; const IS_MAIN_ADMIN = {str(user_id == ADMIN_USER_ID).lower()}; const WEB_KEY = '{get_web_key()}';",
+        "web_monitor_title": _("web_nodes_monitor_title", lang),
+        "web_mass_actions": _("web_nodes_monitor_mass_actions", lang),
+        "web_select_all": _("web_nodes_monitor_select_all", lang),
+        "web_mass_selftest": _("web_nodes_monitor_mass_selftest", lang),
+        "web_mass_reboot": _("web_nodes_monitor_mass_reboot", lang),
+        "web_refresh": _("web_refresh", lang),
+        "web_search_placeholder": _("web_nodes_monitor_search", lang),
+        "web_filter_all": _("web_nodes_monitor_filter_all", lang),
+        "web_loading": _("web_loading", lang),
+        "web_stats_total": _("web_stats_total", lang),
+        "web_uptime": _("web_nodes_monitor_uptime", lang),
+        "web_resources_chart": _("web_nodes_monitor_resources_chart", lang),
+        "web_network_chart": _("web_nodes_monitor_network_chart", lang),
+        "web_services_title": _("web_nodes_monitor_tab_services", lang),
+        "btn_selftest": _("web_nodes_monitor_btn_selftest", lang),
+        "btn_speedtest": _("web_nodes_monitor_btn_speedtest", lang),
+        "btn_reboot": _("web_nodes_monitor_btn_reboot", lang),
+        "modal_btn_cancel": _("modal_btn_cancel", lang),
+        "modal_btn_ok": _("modal_btn_ok", lang),
+        "i18n_json": json.dumps({
+            "web_no_nodes": _("web_nodes_monitor_no_nodes", lang),
+            "web_no_nodes_desc": _("web_nodes_monitor_no_nodes_desc", lang),
+            "web_loading": _("web_loading", lang),
+            "web_error": _("web_nodes_monitor_error", lang),
+            "web_services_empty": _("web_nodes_monitor_no_services", lang),
+            "web_services_loading": _("web_nodes_monitor_services_loading", lang),
+            "modal_title_alert": _("modal_title_alert", lang),
+            "modal_title_confirm": _("modal_title_confirm", lang),
+            "modal_title_error": _("modal_title_error", lang),
+            "modal_title_info": _("web_nodes_monitor_detail_title", lang),
+            "web_time_d": _("unit_day_short", lang),
+            "web_time_h": _("unit_hour_short", lang),
+            "web_time_m": _("unit_minute_short", lang),
+            "web_node_status_online": _("web_nodes_monitor_online", lang),
+            "web_node_status_offline": _("web_nodes_monitor_offline", lang),
+            "web_select_nodes_first": _("web_nodes_monitor_select_nodes", lang),
+            "web_mass_reboot_confirm": _("web_nodes_monitor_confirm_mass_reboot", lang),
+            "web_reboot_node_confirm": _("web_nodes_monitor_confirm_reboot", lang),
+            "web_command_sent": _("web_nodes_monitor_command_sent", lang),
+            "web_service_start": _("web_nodes_monitor_service_start", lang),
+            "web_service_stop": _("web_nodes_monitor_service_stop", lang),
+            "web_service_restart": _("web_nodes_monitor_service_restart", lang),
+            "web_service_confirm": _("web_nodes_monitor_confirm_service", lang),
+            "web_details": _("web_nodes_monitor_details", lang),
+            "web_cpu": _("web_nodes_monitor_cpu", lang),
+            "web_ram": _("web_nodes_monitor_ram", lang),
+            "web_disk": _("web_nodes_monitor_disk", lang),
+            "web_traffic_in": _("web_nodes_monitor_traffic_in", lang),
+            "web_traffic_out": _("web_nodes_monitor_traffic_out", lang),
+        }),
+    }
+    
+    template = JINJA_ENV.get_template("nodes_monitor.html")
+    html = template.render(**context)
+    return web.Response(text=html, content_type="text/html")
+
+
+async def handle_nodes_monitor_list(request):
+    """API: Get all nodes for monitor page with extended data"""
+    user = get_current_user(request)
+    if not user:
+        return web.json_response({"error": "Unauthorized"}, status=401)
+    
+    all_nodes = await nodes_db.get_all_nodes()
+    nodes_data = []
+    now = time.time()
+    
+    for token, node in all_nodes.items():
+        last_seen = node.get("last_seen", 0)
+        is_restarting = node.get("is_restarting", False)
+        
+        status = "offline"
+        if is_restarting:
+            status = "restarting"
+        elif now - last_seen < NODE_OFFLINE_TIMEOUT:
+            status = "online"
+        
+        stats = node.get("stats", {})
+        
+        nodes_data.append({
+            "token": encrypt_for_web(token),
+            "name": node.get("name", "Unknown"),
+            "ip": decrypt_for_web(encrypt_for_web(node.get("ip", "Unknown"))),  # Show real IP for admins
+            "status": status,
+            "cpu": stats.get("cpu", 0),
+            "ram": stats.get("ram", 0),
+            "disk": stats.get("disk", 0),
+            "uptime": stats.get("uptime", 0),
+            "traffic": {
+                "rx": stats.get("net_rx", 0),
+                "tx": stats.get("net_tx", 0),
+            },
+            "last_seen": last_seen,
+        })
+    
+    return web.json_response({"nodes": nodes_data})
+
+
+async def handle_nodes_monitor_detail(request):
+    """API: Get detailed node info for modal"""
+    user = get_current_user(request)
+    if not user:
+        return web.json_response({"error": "Unauthorized"}, status=401)
+    
+    token = decrypt_for_web(request.query.get("token"))
+    if not token:
+        return web.json_response({"error": "Token required"}, status=400)
+    
+    node = await nodes_db.get_node_by_token(token)
+    if not node:
+        return web.json_response({"error": "Node not found"}, status=404)
+    
+    now = time.time()
+    last_seen = node.get("last_seen", 0)
+    is_restarting = node.get("is_restarting", False)
+    
+    status = "offline"
+    if is_restarting:
+        status = "restarting"
+    elif now - last_seen < NODE_OFFLINE_TIMEOUT:
+        status = "online"
+    
+    return web.json_response({
+        "name": node.get("name"),
+        "ip": node.get("ip"),
+        "status": status,
+        "stats": node.get("stats", {}),
+        "history": node.get("history", []),
+        "token": encrypt_for_web(token),
+        "last_seen": last_seen,
+        "services": node.get("services", []),
+    })
+
+
+async def handle_nodes_monitor_services(request):
+    """API: Get node services"""
+    user = get_current_user(request)
+    if not user:
+        return web.json_response({"error": "Unauthorized"}, status=401)
+    
+    token = decrypt_for_web(request.query.get("token"))
+    if not token:
+        return web.json_response({"error": "Token required"}, status=400)
+    
+    node = await nodes_db.get_node_by_token(token)
+    if not node:
+        return web.json_response({"error": "Node not found"}, status=404)
+    
+    # Services are collected from node heartbeat
+    services = node.get("services", [])
+    return web.json_response({"services": services})
+
+
+async def handle_nodes_monitor_command(request):
+    """API: Send command to node"""
+    user = get_current_user(request)
+    if not user:
+        return web.json_response({"error": "Unauthorized"}, status=401)
+    
+    role = user.get("role", "users")
+    is_admin = role == "admins" or user["id"] == ADMIN_USER_ID
+    if not is_admin:
+        return web.json_response({"error": "Admin required"}, status=403)
+    
+    try:
+        data = await request.json()
+        token = decrypt_for_web(data.get("token"))
+        command = data.get("command")
+        
+        if not token or not command:
+            return web.json_response({"error": "Token and command required"}, status=400)
+        
+        allowed_commands = ["selftest", "uptime", "traffic", "top", "speedtest", "reboot", "services_list"]
+        if command not in allowed_commands:
+            return web.json_response({"error": "Invalid command"}, status=400)
+        
+        node = await nodes_db.get_node_by_token(token)
+        if not node:
+            return web.json_response({"error": "Node not found"}, status=404)
+        
+        if command == "reboot":
+            await nodes_db.update_node_extra(token, "is_restarting", True)
+        
+        await nodes_db.update_node_task(token, {"command": command, "user_id": user["id"]})
+        
+        return web.json_response({"status": "ok"})
+    except Exception as e:
+        return web.json_response({"error": str(e)}, status=500)
+
+
+async def handle_nodes_monitor_service_action(request):
+    """API: Send service action to node"""
+    user = get_current_user(request)
+    if not user:
+        return web.json_response({"error": "Unauthorized"}, status=401)
+    
+    role = user.get("role", "users")
+    is_admin = role == "admins" or user["id"] == ADMIN_USER_ID
+    if not is_admin:
+        return web.json_response({"error": "Admin required"}, status=403)
+    
+    try:
+        data = await request.json()
+        token = decrypt_for_web(data.get("token"))
+        service = data.get("service")
+        action = data.get("action")
+        
+        if not all([token, service, action]):
+            return web.json_response({"error": "Token, service and action required"}, status=400)
+        
+        allowed_actions = ["start", "stop", "restart"]
+        if action not in allowed_actions:
+            return web.json_response({"error": "Invalid action"}, status=400)
+        
+        node = await nodes_db.get_node_by_token(token)
+        if not node:
+            return web.json_response({"error": "Node not found"}, status=404)
+        
+        await nodes_db.update_node_task(token, {
+            "command": "service_action",
+            "service": service,
+            "action": action,
+            "user_id": user["id"]
+        })
+        
+        return web.json_response({"status": "ok"})
+    except Exception as e:
+        return web.json_response({"error": str(e)}, status=500)
+
+# ===== END NODES MONITOR HANDLERS =====
 
 
 async def handle_settings_page(request):
@@ -2646,6 +2916,7 @@ async def start_web_server(bot_instance: Bot):
         app.router.add_get("/site.webmanifest", handle_manifest)
         app.router.add_get("/", handle_dashboard)
         app.router.add_get("/settings", handle_settings_page)
+        app.router.add_get("/nodes", handle_nodes_monitor_page)
         app.router.add_get("/login", handle_login_page)
         app.router.add_post("/api/login/request", handle_login_request)
         app.router.add_get("/api/login/magic", handle_magic_login)
@@ -2658,6 +2929,11 @@ async def start_web_server(bot_instance: Bot):
         app.router.add_get("/api/node/details", handle_node_details)
         app.router.add_get("/api/agent/stats", handle_agent_stats)
         app.router.add_get("/api/nodes/list", handle_nodes_list_json)
+        app.router.add_get("/api/nodes/monitor/list", handle_nodes_monitor_list)
+        app.router.add_get("/api/nodes/monitor/detail", handle_nodes_monitor_detail)
+        app.router.add_get("/api/nodes/monitor/services", handle_nodes_monitor_services)
+        app.router.add_post("/api/nodes/monitor/command", handle_nodes_monitor_command)
+        app.router.add_post("/api/nodes/monitor/service_action", handle_nodes_monitor_service_action)
         app.router.add_get("/api/logs", handle_get_logs)
         app.router.add_get("/api/logs/system", handle_get_sys_logs)
         app.router.add_post("/api/settings/save", handle_save_notifications)
@@ -3928,6 +4204,7 @@ async def start_web_server(bot_instance: Bot):
         app.router.add_get("/site.webmanifest", handle_manifest)
         app.router.add_get("/", handle_dashboard)
         app.router.add_get("/settings", handle_settings_page)
+        app.router.add_get("/nodes", handle_nodes_monitor_page)
         app.router.add_get("/login", handle_login_page)
         app.router.add_post("/api/login/request", handle_login_request)
         app.router.add_get("/api/login/magic", handle_magic_login)
@@ -3940,6 +4217,11 @@ async def start_web_server(bot_instance: Bot):
         app.router.add_get("/api/node/details", handle_node_details)
         app.router.add_get("/api/agent/stats", handle_agent_stats)
         app.router.add_get("/api/nodes/list", handle_nodes_list_json)
+        app.router.add_get("/api/nodes/monitor/list", handle_nodes_monitor_list)
+        app.router.add_get("/api/nodes/monitor/detail", handle_nodes_monitor_detail)
+        app.router.add_get("/api/nodes/monitor/services", handle_nodes_monitor_services)
+        app.router.add_post("/api/nodes/monitor/command", handle_nodes_monitor_command)
+        app.router.add_post("/api/nodes/monitor/service_action", handle_nodes_monitor_service_action)
         app.router.add_get("/api/logs", handle_get_logs)
         app.router.add_get("/api/logs/system", handle_get_sys_logs)
         app.router.add_post("/api/settings/save", handle_save_notifications)

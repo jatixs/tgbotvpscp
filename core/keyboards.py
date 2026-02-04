@@ -596,7 +596,10 @@ def get_node_management_keyboard(
     row3 = [
         InlineKeyboardButton(
             text=_("btn_speedtest", lang), callback_data=f"node_cmd_{token}_speedtest"
-        )
+        ),
+        InlineKeyboardButton(
+            text=_("btn_services", lang), callback_data=f"node_services_{token}"
+        ),
     ]
     row4 = []
     if user_id == ADMIN_USER_ID:
@@ -617,6 +620,57 @@ def get_node_management_keyboard(
     ]
     layout = [row1, row2, row3, row4, row5]
     return InlineKeyboardMarkup(inline_keyboard=layout)
+
+
+def get_node_services_keyboard(token: str, services: list, lang: str) -> InlineKeyboardMarkup:
+    """Keyboard for node services management"""
+    buttons = []
+    for svc in services:
+        name = svc.get("name", "unknown")
+        status = svc.get("status", "unknown")
+        icon = "🟢" if status == "running" else "🔴"
+        buttons.append([
+            InlineKeyboardButton(
+                text=f"{icon} {name}", 
+                callback_data=f"node_svc_detail_{token}_{name}"
+            )
+        ])
+    buttons.append([
+        InlineKeyboardButton(
+            text=_("btn_back", lang), callback_data=f"node_select_{token}"
+        )
+    ])
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+def get_node_service_actions_keyboard(token: str, service: str, status: str, lang: str) -> InlineKeyboardMarkup:
+    """Keyboard for service actions (start/stop/restart)"""
+    actions = []
+    if status == "running":
+        actions.append(
+            InlineKeyboardButton(
+                text=_("web_services_btn_stop", lang), 
+                callback_data=f"node_svc_act_{token}_{service}_stop"
+            )
+        )
+    else:
+        actions.append(
+            InlineKeyboardButton(
+                text=_("web_services_btn_start", lang), 
+                callback_data=f"node_svc_act_{token}_{service}_start"
+            )
+        )
+    actions.append(
+        InlineKeyboardButton(
+            text=_("web_services_btn_restart", lang), 
+            callback_data=f"node_svc_act_{token}_{service}_restart"
+        )
+    )
+    return InlineKeyboardMarkup(inline_keyboard=[
+        actions,
+        [InlineKeyboardButton(text=_("btn_back", lang), callback_data=f"node_services_{token}")]
+    ])
+
     
 def get_backups_menu_keyboard(lang: str) -> InlineKeyboardMarkup:
     """Backups main menu keyboard"""

@@ -730,10 +730,13 @@ function updateNotifUI(list, count) {
     const listContainer = document.getElementById('notifList');
     const bellIcon = document.querySelector('#notifBtn svg');
     
+    // Skip if notification elements don't exist on this page
+    if (!badge || !listContainer) return;
+    
     if (count > 0) {
         setSafeText(badge, count > 99 ? '99+' : String(count));
         badge.classList.remove('hidden');
-        if (lastUnreadCount !== -1 && count > lastUnreadCount) {
+        if (lastUnreadCount !== -1 && count > lastUnreadCount && bellIcon) {
             bellIcon.classList.add('notif-bell-shake');
             setTimeout(() => bellIcon.classList.remove('notif-bell-shake'), 500);
         }
@@ -784,11 +787,12 @@ function updateNotifUI(list, count) {
 function toggleNotifications() {
     const dropdown = document.getElementById('notifDropdown');
     const badge = document.getElementById('notifBadge');
+    if (!dropdown) return;
     if (dropdown.classList.contains('show')) closeNotifications();
     else {
         dropdown.classList.remove('hidden');
         setTimeout(() => dropdown.classList.add('show'), 10);
-        if (lastUnreadCount > 0) {
+        if (lastUnreadCount > 0 && badge) {
             fetch('/api/notifications/read', {
                 method: 'POST'
             }).then(() => badge.classList.add('hidden'));

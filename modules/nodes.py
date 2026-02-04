@@ -21,6 +21,8 @@ from core.keyboards import (
     get_node_management_keyboard,
     get_nodes_delete_keyboard,
     get_back_keyboard,
+    get_node_services_keyboard,
+    get_node_service_actions_keyboard,
 )
 from core.utils import format_uptime
 
@@ -50,6 +52,9 @@ def register_handlers(dp: Dispatcher):
     dp.callback_query(F.data.startswith("node_rename_"))(cq_node_rename)
     dp.message(StateFilter(RenameNodeStates.waiting_for_new_name))(process_node_rename)
     dp.callback_query(F.data.startswith("node_stop_traffic_"))(cq_node_stop_traffic)
+    dp.callback_query(F.data.startswith("node_services_"))(cq_node_services)
+    dp.callback_query(F.data.startswith("node_svc_detail_"))(cq_node_service_detail)
+    dp.callback_query(F.data.startswith("node_svc_act_"))(cq_node_service_action)
     dp.callback_query(F.data.startswith("node_cmd_"))(cq_node_command)
 
 
@@ -399,6 +404,151 @@ async def cq_node_stop_traffic(callback: types.CallbackQuery):
     )
 
 
+async def cq_node_services(callback: types.CallbackQuery):
+    """Show services list for a node"""
+    user_id = callback.from_user.id
+    lang = get_user_lang(user_id)
+    token = callback.data.replace("node_services_", "")
+    
+    node = await nodes_db.get_node_by_token(token)
+    if not node:
+        await callback.answer("Node not found", show_alert=True)
+        return
+    
+    node_name = html.escape(node.get("name", "Unknown"))
+    
+    # Check if node is online
+    now = time.time()
+    last_seen = node.get("last_seen", 0)
+    if now - last_seen >= config.NODE_OFFLINE_TIMEOUT:
+        await callback.message.edit_text(
+            _("node_services_empty", lang, name=node_name),
+            reply_markup=get_back_keyboard(lang, f"node_select_{token}"),
+            parse_mode="HTML",
+        )
+        return
+    
+    services = node.get("services", [])
+    if not services:
+        await callback.message.edit_text(
+            _("node_services_empty", lang, name=node_name),
+            reply_markup=get_back_keyboard(lang, f"node_select_{token}"),
+            parse_mode="HTML",
+        )
+        return
+    
+    keyboard = get_node_services_keyboard(token, services, lang)
+    await callback.message.edit_text(
+        _("node_services_menu", lang, name=node_name),
+        reply_markup=keyboard,
+        parse_mode="HTML",
+    )
+    await callback.answer()
+
+
+async def cq_node_service_detail(callback: types.CallbackQuery):
+    """Show service details with action buttons"""
+    user_id = callback.from_user.id
+    lang = get_user_lang(user_id)
+    
+    # Parse: node_svc_detail_{token}_{service_name}
+    parts = callback.data.split("_", 4)
+    if len(parts) < 5:
+        await callback.answer("Invalid data", show_alert=True)
+        return
+    
+    token = parts[3]
+    service_name = parts[4]
+    
+    node = await nodes_db.get_node_by_token(token)
+    if not node:
+        await callback.answer("Node not found", show_alert=True)
+        return
+    
+    node_name = html.escape(node.get("name", "Unknown"))
+    services = node.get("services", [])
+    
+    # Find the service
+    service_info = None
+    for svc in services:
+        if svc.get("name") == service_name:
+            service_info = svc
+            break
+    
+    if not service_info:
+        await callback.answer("Service not found", show_alert=True)
+        return
+    
+    status = service_info.get("status", "unknown")
+    status_text = "🟢 Running" if status == "running" else "🔴 Stopped"
+    
+    keyboard = get_node_service_actions_keyboard(token, service_name, status, lang)
+    await callback.message.edit_text(
+        _("node_service_detail", lang, 
+          service=service_name, 
+          status=status_text, 
+          node=node_name),
+        reply_markup=keyboard,
+        parse_mode="HTML",
+    )
+    await callback.answer()
+
+
+async def cq_node_service_action(callback: types.CallbackQuery):
+    """Execute service action (start/stop/restart)"""
+    user_id = callback.from_user.id
+    lang = get_user_lang(user_id)
+    
+    # Only admins can manage services
+    if user_id != config.ADMIN_USER_ID:
+        await callback.answer(_("access_denied_no_rights", lang), show_alert=True)
+        return
+    
+    # Parse: node_svc_act_{token}_{service}_{action}
+    parts = callback.data.split("_", 5)
+    if len(parts) < 6:
+        await callback.answer("Invalid data", show_alert=True)
+        return
+    
+    token = parts[3]
+    service_name = parts[4]
+    action = parts[5]
+    
+    if action not in ["start", "stop", "restart"]:
+        await callback.answer("Invalid action", show_alert=True)
+        return
+    
+    node = await nodes_db.get_node_by_token(token)
+    if not node:
+        await callback.answer("Node not found", show_alert=True)
+        return
+    
+    node_name = html.escape(node.get("name", "Unknown"))
+    
+    # Send task to node
+    await nodes_db.update_node_task(token, {
+        "command": "service_action",
+        "service": service_name,
+        "action": action,
+        "user_id": user_id
+    })
+    
+    action_text = {
+        "start": _("service_action_start", lang),
+        "stop": _("service_action_stop", lang),
+        "restart": _("service_action_restart", lang),
+    }.get(action, action)
+    
+    await callback.answer(
+        _("services_action_started", lang, action=action_text, name=service_name),
+        show_alert=False
+    )
+    
+    # Return to services list after short delay
+    await asyncio.sleep(1)
+    await cq_node_services(callback)
+
+
 async def node_traffic_scheduler(bot: Bot):
     while True:
         try:
@@ -543,3 +693,130 @@ async def nodes_monitor(bot: Bot):
         except Exception as e:
             logging.error(f"Error in nodes_monitor: {e}", exc_info=True)
         await asyncio.sleep(20)
+
+
+async def cq_node_services(callback: types.CallbackQuery):
+    """Show node services menu"""
+    user_id = callback.from_user.id
+    lang = get_user_lang(user_id)
+    token = callback.data.replace("node_services_", "")
+    
+    node = await nodes_db.get_node_by_token(token)
+    if not node:
+        await callback.answer("Node not found", show_alert=True)
+        return
+    
+    node_name = html.escape(node.get("name", "Unknown"))
+    services = node.get("services", [])
+    
+    if not services:
+        # Request services from node
+        await nodes_db.update_node_task(token, {"command": "services_list", "user_id": user_id})
+        await callback.answer(_("node_services_loading", lang), show_alert=False)
+        
+        # Wait a bit and try to get services
+        await asyncio.sleep(2)
+        node = await nodes_db.get_node_by_token(token)
+        services = node.get("services", [])
+    
+    if not services:
+        await callback.message.edit_text(
+            _("node_services_empty", lang, name=node_name),
+            reply_markup=get_back_keyboard(lang, f"node_select_{token}"),
+            parse_mode="HTML",
+        )
+        return
+    
+    keyboard = get_node_services_keyboard(token, services, lang)
+    await callback.message.edit_text(
+        _("node_services_menu", lang, name=node_name),
+        reply_markup=keyboard,
+        parse_mode="HTML",
+    )
+    await callback.answer()
+
+
+async def cq_node_service_detail(callback: types.CallbackQuery):
+    """Show service details with actions"""
+    user_id = callback.from_user.id
+    lang = get_user_lang(user_id)
+    
+    # Parse: node_svc_detail_{token}_{service}
+    parts = callback.data.split("_", 4)
+    if len(parts) < 5:
+        await callback.answer("Invalid data", show_alert=True)
+        return
+    
+    token = parts[3]
+    service_name = parts[4]
+    
+    node = await nodes_db.get_node_by_token(token)
+    if not node:
+        await callback.answer("Node not found", show_alert=True)
+        return
+    
+    services = node.get("services", [])
+    service = next((s for s in services if s.get("name") == service_name), None)
+    
+    if not service:
+        await callback.answer("Service not found", show_alert=True)
+        return
+    
+    status = service.get("status", "unknown")
+    status_text = _("web_services_status_running", lang) if status == "running" else _("web_services_status_stopped", lang)
+    status_icon = "🟢" if status == "running" else "🔴"
+    
+    text = _(
+        "node_service_detail",
+        lang,
+        service=service_name,
+        status=f"{status_icon} {status_text}",
+        node=html.escape(node.get("name", "Unknown")),
+    )
+    
+    keyboard = get_node_service_actions_keyboard(token, service_name, status, lang)
+    await callback.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
+    await callback.answer()
+
+
+async def cq_node_service_action(callback: types.CallbackQuery):
+    """Execute service action (start/stop/restart)"""
+    user_id = callback.from_user.id
+    lang = get_user_lang(user_id)
+    
+    # Parse: node_svc_act_{token}_{service}_{action}
+    parts = callback.data.split("_", 5)
+    if len(parts) < 6:
+        await callback.answer("Invalid data", show_alert=True)
+        return
+    
+    token = parts[3]
+    service_name = parts[4]
+    action = parts[5]
+    
+    if action not in ["start", "stop", "restart"]:
+        await callback.answer("Invalid action", show_alert=True)
+        return
+    
+    node = await nodes_db.get_node_by_token(token)
+    if not node:
+        await callback.answer("Node not found", show_alert=True)
+        return
+    
+    # Send service action task to node
+    await nodes_db.update_node_task(token, {
+        "command": "service_action",
+        "service": service_name,
+        "action": action,
+        "user_id": user_id,
+    })
+    
+    action_name = _(f"service_action_{action}", lang)
+    await callback.answer(
+        _("services_action_started", lang, action=action_name, name=service_name),
+        show_alert=False,
+    )
+    
+    # Wait a bit then refresh services list
+    await asyncio.sleep(3)
+    await cq_node_services(callback)
