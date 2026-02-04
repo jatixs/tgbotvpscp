@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="ru">
+<html lang="{{ lang }}">
     <head>
         <meta charset="UTF-8">
         <title>{{ web_title }}</title>
@@ -34,7 +34,7 @@
         <nav class="bg-white/70 dark:bg-black/40 backdrop-blur-xl border-b border-white/20 dark:border-white/5 sticky top-0 z-40 shadow-sm dark:shadow-none">
             <div class="max-w-7xl mx-auto px-3 py-2 sm:px-4 sm:py-3 flex flex-nowrap justify-between items-center gap-2">
                 <div class="flex items-center gap-2 shrink-0">
-                    <a href="/" class="text-gray-500 hover:text-gray-700 dark:hover:text-white transition p-1">
+                    <a href="/" class="text-gray-500 hover:text-gray-700 dark:hover:text-white transition p-1.5 rounded-lg hover:bg-black/5 dark:hover:bg-white/10">
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
                         </svg>
@@ -54,6 +54,25 @@
                         <span class="px-2 py-1 bg-red-100 dark:bg-red-900/30 rounded text-red-600 dark:text-red-400 font-bold">
                             🔴 <span id="nodesOffline">0</span>
                         </span>
+                    </div>
+                    
+                    <!-- Language Toggle -->
+                    <div class="relative group">
+                        <button class="flex items-center justify-center w-8 h-8 rounded-lg hover:bg-black/5 dark:hover:bg-white/10 transition text-gray-600 dark:text-gray-400" id="langBtn">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M3 5h12M9 3v2m1.048 9.5A18.022 18.022 0 016.412 9m6.088 9h7M11 21l5-10 5 10M12.751 5C11.783 10.77 8.07 15.61 3 18.129" />
+                            </svg>
+                        </button>
+                        <div class="absolute right-0 top-full pt-2 w-32 hidden group-hover:block z-50">
+                            <div class="bg-white/90 dark:bg-gray-800 border border-gray-200 dark:border-white/10 rounded-xl shadow-xl backdrop-blur-sm overflow-hidden">
+                                <button onclick="setLanguage('ru')" class="w-full text-left px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-white/5 flex items-center gap-2 text-gray-800 dark:text-gray-200">
+                                    <span>🇷🇺</span> Русский
+                                </button>
+                                <button onclick="setLanguage('en')" class="w-full text-left px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-white/5 flex items-center gap-2 text-gray-800 dark:text-gray-200">
+                                    <span>🇬🇧</span> English
+                                </button>
+                            </div>
+                        </div>
                     </div>
                     
                     <!-- Theme Toggle -->
@@ -101,7 +120,7 @@
                             </svg>
                             {{ web_mass_selftest }}
                         </button>
-                        <button onclick="massCommand('reboot')" class="px-3 py-1.5 text-xs font-bold bg-red-100 dark:bg-red-500/20 text-red-600 dark:text-red-400 rounded-lg hover:bg-red-200 dark:hover:bg-red-500/30 transition flex items-center gap-1">
+                        <button onclick="massCommand('reboot')" class="px-3 py-1.5 text-xs font-bold bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 rounded-lg hover:bg-red-100 dark:hover:bg-red-900/40 transition flex items-center gap-1">
                             <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                             </svg>
@@ -133,10 +152,10 @@
                         {{ web_filter_all }}
                     </button>
                     <button onclick="filterByStatus('online')" id="filterOnline" class="px-3 py-1.5 text-xs font-bold rounded-lg transition bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 hover:bg-green-100 dark:hover:bg-green-500/20">
-                        🟢 Online
+                        🟢 {{ web_filter_online }}
                     </button>
                     <button onclick="filterByStatus('offline')" id="filterOffline" class="px-3 py-1.5 text-xs font-bold rounded-lg transition bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 hover:bg-red-100 dark:hover:bg-red-500/20">
-                        🔴 Offline
+                        🔴 {{ web_filter_offline }}
                     </button>
                 </div>
             </div>
@@ -144,19 +163,20 @@
             <!-- Nodes Grid -->
             <div id="nodesGrid" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
                 <!-- Loading placeholder -->
-                <div class="col-span-full text-center py-12 text-gray-500">
-                    <svg class="animate-spin h-8 w-8 mx-auto mb-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <div class="col-span-full text-center py-12 text-gray-500 dark:text-gray-400">
+                    <svg class="animate-spin h-8 w-8 mx-auto mb-4 text-blue-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                         <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                         <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                     </svg>
-                    {{ web_loading }}
+                    <span class="text-sm font-medium">{{ web_loading }}</span>
                 </div>
             </div>
         </main>
 
         <!-- Node Details Modal -->
-        <div id="nodeDetailModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/30 dark:bg-black/80 backdrop-blur-sm p-4" onclick="if(event.target === this) closeNodeDetailModal()">
-            <div class="bg-white/90 dark:bg-gray-900 border border-white/20 dark:border-white/10 rounded-2xl shadow-2xl w-full max-w-4xl relative flex flex-col h-full sm:h-auto sm:max-h-[90vh] backdrop-blur-xl transition-all">
+        <div id="nodeDetailModal" class="fixed inset-0 z-50 hidden items-start justify-center bg-black/30 dark:bg-black/60 backdrop-blur-sm px-4 py-6 overflow-y-auto" onclick="if(event.target === this) closeNodeDetailModal()">
+            <div class="bg-white/90 dark:bg-gray-900 border border-white/20 dark:border-white/10 rounded-2xl shadow-2xl w-full max-w-4xl relative backdrop-blur-xl transition-all my-auto">
+                <!-- Modal Header -->
                 <div class="p-4 sm:p-5 border-b border-gray-200 dark:border-white/5 flex justify-between items-center rounded-t-2xl z-10 bg-white/50 dark:bg-black/20">
                     <div class="flex items-center gap-3">
                         <div id="modalNodeStatusIcon" class="p-2 bg-green-100 dark:bg-green-500/20 rounded-lg text-green-600 dark:text-green-400">
@@ -166,8 +186,15 @@
                         </div>
                         <div>
                             <h3 class="text-xl font-bold text-gray-900 dark:text-white" id="modalNodeTitle">...</h3>
-                            <div class="flex items-center gap-2 text-xs text-gray-500">
-                                <span id="modalNodeIp">-</span> &bull; <span id="modalNodeStatus">-</span>
+                            <div class="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
+                                <span class="font-mono" id="modalNodeIp">-</span> 
+                                <span class="text-gray-300 dark:text-gray-600">•</span> 
+                                <span id="modalNodeStatus">-</span>
+                                <span class="text-gray-300 dark:text-gray-600">•</span>
+                                <span class="flex items-center gap-1 text-green-600 dark:text-green-400">
+                                    <span class="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></span>
+                                    {{ web_live }}
+                                </span>
                             </div>
                         </div>
                     </div>
@@ -178,7 +205,7 @@
                     </button>
                 </div>
                 
-                <div class="p-4 sm:p-6 overflow-y-auto flex-1 custom-scrollbar">
+                <div class="p-4 sm:p-6">
                     <!-- Quick Stats -->
                     <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
                         <div class="bg-gray-50 dark:bg-black/20 p-3 rounded-xl border border-gray-200 dark:border-white/5 text-center">
@@ -186,15 +213,15 @@
                             <div class="font-mono text-sm font-bold text-gray-700 dark:text-gray-200" id="modalUptime">-</div>
                         </div>
                         <div class="bg-gray-50 dark:bg-black/20 p-3 rounded-xl border border-gray-200 dark:border-white/5 text-center">
-                            <div class="text-[10px] text-gray-500 font-bold uppercase tracking-wider mb-1">CPU</div>
+                            <div class="text-[10px] text-gray-500 font-bold uppercase tracking-wider mb-1">{{ web_cpu }}</div>
                             <div class="font-mono text-sm font-bold text-indigo-600 dark:text-indigo-400" id="modalCpu">-</div>
                         </div>
                         <div class="bg-gray-50 dark:bg-black/20 p-3 rounded-xl border border-gray-200 dark:border-white/5 text-center">
-                            <div class="text-[10px] text-gray-500 font-bold uppercase tracking-wider mb-1">RAM</div>
+                            <div class="text-[10px] text-gray-500 font-bold uppercase tracking-wider mb-1">{{ web_ram }}</div>
                             <div class="font-mono text-sm font-bold text-purple-600 dark:text-purple-400" id="modalRam">-</div>
                         </div>
                         <div class="bg-gray-50 dark:bg-black/20 p-3 rounded-xl border border-gray-200 dark:border-white/5 text-center">
-                            <div class="text-[10px] text-gray-500 font-bold uppercase tracking-wider mb-1">Disk</div>
+                            <div class="text-[10px] text-gray-500 font-bold uppercase tracking-wider mb-1">{{ web_disk }}</div>
                             <div class="font-mono text-sm font-bold text-green-600 dark:text-green-400" id="modalDisk">-</div>
                         </div>
                     </div>
@@ -223,8 +250,19 @@
                             </h4>
                             <button onclick="refreshNodeServices()" class="text-xs text-blue-600 dark:text-blue-400 hover:underline">{{ web_refresh }}</button>
                         </div>
-                        <div id="modalServicesContainer" class="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
-                            <div class="text-center py-4 text-gray-400">{{ web_loading }}</div>
+                        <div class="relative">
+                            <div id="modalServicesContainer" class="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm" data-show-all="false">
+                                <div class="text-center py-4 text-gray-400">{{ web_loading }}</div>
+                            </div>
+                            <div id="modalServicesToggle" class="hidden">
+                                <div class="services-blur-overlay"></div>
+                                <button onclick="toggleServicesDisplay()" class="services-toggle-btn w-full mt-2 px-4 py-2.5 bg-white/80 dark:bg-white/5 backdrop-blur-sm border border-gray-200 dark:border-white/10 text-gray-700 dark:text-gray-300 rounded-xl text-sm font-bold hover:bg-gray-100 dark:hover:bg-white/10 transition-all duration-300 flex items-center justify-center gap-2 shadow-sm dark:shadow-none">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 transition-transform duration-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                                    </svg>
+                                    {{ web_show_more }}
+                                </button>
+                            </div>
                         </div>
                     </div>
 
@@ -242,7 +280,7 @@
                             </svg>
                             {{ btn_speedtest }}
                         </button>
-                        <button onclick="nodeCommand('reboot')" class="flex-1 min-w-[120px] px-4 py-2 bg-red-100 dark:bg-red-500/20 text-red-600 dark:text-red-400 rounded-lg font-bold text-sm hover:bg-red-200 dark:hover:bg-red-500/30 transition flex items-center justify-center gap-2">
+                        <button onclick="nodeCommand('reboot')" class="flex-1 min-w-[120px] px-4 py-2 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 rounded-lg font-bold text-sm hover:bg-red-100 dark:hover:bg-red-900/40 transition flex items-center justify-center gap-2">
                             <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                             </svg>
@@ -254,7 +292,7 @@
         </div>
 
         <!-- System Modal (Alert/Confirm) -->
-        <div id="systemModal" class="fixed inset-0 z-[150] hidden items-center justify-center bg-black/60 backdrop-blur-sm p-4" onclick="if(event.target === this) closeSystemModal(null)">
+        <div id="systemModal" class="fixed inset-0 z-[150] hidden items-center justify-center bg-black/30 dark:bg-black/60 backdrop-blur-sm p-4" onclick="if(event.target === this) closeSystemModal(null)">
             <div class="bg-white dark:bg-gray-800 border border-white/20 dark:border-white/10 rounded-2xl shadow-2xl w-full max-w-sm transform transition-all scale-100">
                 <div class="p-6">
                     <h3 id="sysModalTitle" class="text-lg font-bold text-gray-900 dark:text-white mb-2">Title</h3>

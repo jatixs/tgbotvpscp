@@ -623,3 +623,62 @@ html.dark .role-badge-user {
 
 main{z-index:auto!important;}
 #systemModal,#addNodeModal,#keyboardModal,#sessionsModal,#genericHintModal,#nodeModal{z-index:9999!important;}
+
+/* Node card reboot button */
+.node-reboot-btn {
+    background-color: #fee2e2;
+}
+
+html.dark .node-reboot-btn {
+    background-color: rgba(239, 68, 68, 0.15);
+    border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+html.dark .node-reboot-btn:hover {
+    background-color: rgba(239, 68, 68, 0.25);
+}
+
+/* Services spoiler blur effect */
+.services-blur-overlay {
+    position: absolute;
+    bottom: 40px;
+    left: 0;
+    right: 0;
+    height: 50px;
+    background: linear-gradient(to bottom, transparent, rgba(249, 250, 251, 0.95));
+    pointer-events: none;
+    border-radius: 0 0 0.75rem 0.75rem;
+}
+
+html.dark .services-blur-overlay {
+    background: linear-gradient(to bottom, transparent, rgba(0, 0, 0, 0.4));
+}
+
+.services-toggle-btn.expanded svg {
+    transform: rotate(180deg);
+}
+
+#modalServicesContainer[data-show-all="true"] + #modalServicesToggle .services-blur-overlay {
+    display: none;
+}
+
+/* Monitor link button */
+.monitor-link-btn {
+    background-color: #faf5ff;
+    border: 1px solid #e9d5ff;
+    color: #9333ea;
+}
+
+.monitor-link-btn:hover {
+    background-color: #f3e8ff;
+}
+
+html.dark .monitor-link-btn {
+    background-color: rgba(147, 51, 234, 0.15);
+    border-color: rgba(147, 51, 234, 0.3);
+    color: #c084fc;
+}
+
+html.dark .monitor-link-btn:hover {
+    background-color: rgba(147, 51, 234, 0.25);
+}

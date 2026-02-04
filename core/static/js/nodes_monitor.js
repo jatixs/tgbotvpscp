@@ -11,6 +11,7 @@ let currentNodeToken = null;
 let modalResChart = null;
 let modalNetChart = null;
 let updateInterval = null;
+let modalUpdateInterval = null;
 
 // Initialize function for SPA navigation
 function initNodesMonitor() {
@@ -44,13 +45,16 @@ function initNodesMonitor() {
     updateInterval = setInterval(loadNodes, 10000);
     
     // Setup theme
-    if (typeof updateThemeIcons === 'function') {
+    if (typeof applyThemeUI === 'function') {
+        applyThemeUI(localStorage.getItem('theme') || 'system');
+    } else if (typeof updateThemeIcons === 'function') {
         updateThemeIcons();
     }
 }
 
-// Expose to window for SPA navigation
+// Expose functions to window
 window.initNodesMonitor = initNodesMonitor;
+window.toggleServicesDisplay = toggleServicesDisplay;
 
 // Initialize on page load
 document.addEventListener('DOMContentLoaded', () => {
@@ -91,6 +95,7 @@ function updateStats() {
 // Render nodes grid
 function renderNodes() {
     const container = document.getElementById('nodesGrid');
+    if (!container) return;
     
     // Filter nodes
     let filtered = allNodesData;
@@ -111,7 +116,7 @@ function renderNodes() {
     
     if (filtered.length === 0) {
         container.innerHTML = `
-            <div class="col-span-full text-center py-12 text-gray-500">
+            <div class="col-span-full text-center py-12 text-gray-500 dark:text-gray-400">
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 mx-auto mb-4 opacity-50" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
@@ -133,15 +138,15 @@ function createNodeCard(node) {
     if (isRestarting) {
         statusClass = 'bg-blue-100 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400';
         statusIcon = '🔵';
-        statusText = 'Restarting';
+        statusText = I18N?.web_node_status_restarting || 'Restarting';
     } else if (isOnline) {
         statusClass = 'bg-green-100 dark:bg-green-500/20 text-green-600 dark:text-green-400';
         statusIcon = '🟢';
-        statusText = 'Online';
+        statusText = I18N?.web_node_status_online || 'Online';
     } else {
         statusClass = 'bg-red-100 dark:bg-red-500/20 text-red-600 dark:text-red-400';
         statusIcon = '🔴';
-        statusText = 'Offline';
+        statusText = I18N?.web_node_status_offline || 'Offline';
     }
     
     const cpu = node.cpu || 0;
@@ -177,7 +182,7 @@ function createNodeCard(node) {
                 <!-- CPU -->
                 <div>
                     <div class="flex justify-between text-xs mb-1">
-                        <span class="text-gray-500 dark:text-gray-400 font-bold">CPU</span>
+                        <span class="text-gray-500 dark:text-gray-400 font-bold">${I18N?.web_cpu || 'CPU'}</span>
                         <span class="font-mono font-bold text-indigo-600 dark:text-indigo-400">${cpu}%</span>
                     </div>
                     <div class="w-full bg-gray-200 dark:bg-gray-700 h-1.5 rounded-full overflow-hidden">
@@ -188,7 +193,7 @@ function createNodeCard(node) {
                 <!-- RAM -->
                 <div>
                     <div class="flex justify-between text-xs mb-1">
-                        <span class="text-gray-500 dark:text-gray-400 font-bold">RAM</span>
+                        <span class="text-gray-500 dark:text-gray-400 font-bold">${I18N?.web_ram || 'RAM'}</span>
                         <span class="font-mono font-bold text-purple-600 dark:text-purple-400">${ram}%</span>
                     </div>
                     <div class="w-full bg-gray-200 dark:bg-gray-700 h-1.5 rounded-full overflow-hidden">
@@ -199,7 +204,7 @@ function createNodeCard(node) {
                 <!-- Disk -->
                 <div>
                     <div class="flex justify-between text-xs mb-1">
-                        <span class="text-gray-500 dark:text-gray-400 font-bold">Disk</span>
+                        <span class="text-gray-500 dark:text-gray-400 font-bold">${I18N?.web_disk || 'Disk'}</span>
                         <span class="font-mono font-bold text-green-600 dark:text-green-400">${disk}%</span>
                     </div>
                     <div class="w-full bg-gray-200 dark:bg-gray-700 h-1.5 rounded-full overflow-hidden">
@@ -215,11 +220,11 @@ function createNodeCard(node) {
             </div>
             
             <!-- Actions -->
-            <div class="px-4 pb-4 flex gap-2">
-                <button onclick="openNodeDetail('${node.token}')" class="flex-1 px-3 py-1.5 bg-blue-100 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400 rounded-lg text-xs font-bold hover:bg-blue-200 dark:hover:bg-blue-500/30 transition">
-                    ${I18N?.modal_title_info || 'Details'}
+            <div class="px-4 pb-4 mb-3 pt-1 flex gap-2">
+                <button onclick="openNodeDetail('${node.token}')" class="flex-1 px-3 py-2 bg-blue-100 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400 rounded-xl text-xs font-bold hover:bg-blue-200 dark:hover:bg-blue-500/30 transition">
+                    ${I18N?.web_node_details || 'Детали ноды'}
                 </button>
-                <button onclick="quickReboot('${node.token}')" class="px-3 py-1.5 bg-red-100 dark:bg-red-500/20 text-red-600 dark:text-red-400 rounded-lg text-xs font-bold hover:bg-red-200 dark:hover:bg-red-500/30 transition" title="Reboot">
+                <button onclick="quickReboot('${node.token}')" class="node-reboot-btn px-3 py-2 text-red-600 dark:text-red-400 rounded-xl text-xs font-bold hover:bg-red-200 transition" title="Reboot">
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                     </svg>
@@ -241,13 +246,17 @@ function filterByStatus(status) {
     // Update button styles
     ['filterAll', 'filterOnline', 'filterOffline'].forEach(id => {
         const btn = document.getElementById(id);
-        btn.className = btn.className.replace(/bg-blue-100|dark:bg-blue-500\/20|text-blue-600|dark:text-blue-400/g, '');
-        btn.classList.add('bg-gray-100', 'dark:bg-gray-700', 'text-gray-600', 'dark:text-gray-400');
+        btn.className = 'px-3 py-1.5 text-xs font-bold rounded-lg transition bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400';
     });
     
     const activeBtn = document.getElementById('filter' + status.charAt(0).toUpperCase() + status.slice(1));
-    activeBtn.classList.remove('bg-gray-100', 'dark:bg-gray-700', 'text-gray-600', 'dark:text-gray-400');
-    activeBtn.classList.add('bg-blue-100', 'dark:bg-blue-500/20', 'text-blue-600', 'dark:text-blue-400');
+    if (status === 'all') {
+        activeBtn.className = 'px-3 py-1.5 text-xs font-bold rounded-lg transition bg-blue-100 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400';
+    } else if (status === 'online') {
+        activeBtn.className = 'px-3 py-1.5 text-xs font-bold rounded-lg transition bg-green-100 dark:bg-green-500/20 text-green-600 dark:text-green-400';
+    } else {
+        activeBtn.className = 'px-3 py-1.5 text-xs font-bold rounded-lg transition bg-red-100 dark:bg-red-500/20 text-red-600 dark:text-red-400';
+    }
     
     renderNodes();
 }
@@ -324,12 +333,26 @@ async function openNodeDetail(token) {
     
     // Load node details
     await loadNodeDetails(token);
+    
+    // Start auto-refresh for modal (every 5 seconds)
+    if (modalUpdateInterval) clearInterval(modalUpdateInterval);
+    modalUpdateInterval = setInterval(() => {
+        if (currentNodeToken) {
+            loadNodeDetails(currentNodeToken);
+        }
+    }, 5000);
 }
 
 function closeNodeDetailModal() {
     document.getElementById('nodeDetailModal').classList.add('hidden');
     document.getElementById('nodeDetailModal').classList.remove('flex');
     currentNodeToken = null;
+    
+    // Stop modal auto-refresh
+    if (modalUpdateInterval) {
+        clearInterval(modalUpdateInterval);
+        modalUpdateInterval = null;
+    }
     
     // Destroy charts
     if (modalResChart) {
@@ -386,49 +409,102 @@ function updateModalCharts(history) {
     const rxData = history.map(h => (h.rx || 0) / 1024 / 1024);
     const txData = history.map(h => (h.tx || 0) / 1024 / 1024);
     
-    const chartOptions = {
+    const isDark = document.documentElement.classList.contains('dark');
+    const gridColor = isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.05)';
+    const tickColor = isDark ? '#9ca3af' : '#6b7280';
+    
+    // Gradient function
+    function getGradient(ctx, color) {
+        const gradient = ctx.createLinearGradient(0, 0, 0, 160);
+        gradient.addColorStop(0, color.replace('rgb', 'rgba').replace(')', ', 0.3)'));
+        gradient.addColorStop(1, color.replace('rgb', 'rgba').replace(')', ', 0.01)'));
+        return gradient;
+    }
+    
+    const commonOptions = {
         responsive: true,
         maintainAspectRatio: false,
-        plugins: { legend: { display: true, position: 'top', labels: { boxWidth: 12, font: { size: 10 } } } },
+        animation: false,
+        interaction: { mode: 'index', intersect: false },
+        plugins: { 
+            legend: { 
+                display: true, 
+                position: 'top', 
+                labels: { 
+                    color: tickColor,
+                    boxWidth: 10, 
+                    usePointStyle: true,
+                    font: { size: 10 } 
+                } 
+            } 
+        },
         scales: {
             x: { display: false },
-            y: { beginAtZero: true, max: 100, ticks: { font: { size: 10 } } }
+            y: { 
+                beginAtZero: true, 
+                max: 100,
+                grid: { color: gridColor },
+                ticks: { color: tickColor, font: { size: 10 } }
+            }
+        },
+        elements: {
+            line: { tension: 0.4 },
+            point: { radius: 0, hitRadius: 10 }
         }
     };
     
     // Resources chart
     const resCtx = document.getElementById('modalResChart').getContext('2d');
     if (modalResChart) modalResChart.destroy();
+    
+    const cpuGrad = getGradient(resCtx, 'rgb(59, 130, 246)');
+    const ramGrad = getGradient(resCtx, 'rgb(168, 85, 247)');
+    
     modalResChart = new Chart(resCtx, {
         type: 'line',
         data: {
             labels,
             datasets: [
-                { label: 'CPU', data: cpuData, borderColor: '#6366f1', backgroundColor: 'rgba(99, 102, 241, 0.1)', tension: 0.4, fill: true },
-                { label: 'RAM', data: ramData, borderColor: '#a855f7', backgroundColor: 'rgba(168, 85, 247, 0.1)', tension: 0.4, fill: true }
+                { label: 'CPU (%)', data: cpuData, borderColor: '#3b82f6', borderWidth: 2, backgroundColor: cpuGrad, fill: true },
+                { label: 'RAM (%)', data: ramData, borderColor: '#a855f7', borderWidth: 2, backgroundColor: ramGrad, fill: true }
             ]
         },
-        options: chartOptions
+        options: commonOptions
     });
     
     // Network chart
     const netCtx = document.getElementById('modalNetChart').getContext('2d');
     if (modalNetChart) modalNetChart.destroy();
+    
+    const rxGrad = getGradient(netCtx, 'rgb(34, 197, 94)');
+    const txGrad = getGradient(netCtx, 'rgb(239, 68, 68)');
+    
     modalNetChart = new Chart(netCtx, {
         type: 'line',
         data: {
             labels,
             datasets: [
-                { label: 'RX (MB)', data: rxData, borderColor: '#06b6d4', backgroundColor: 'rgba(6, 182, 212, 0.1)', tension: 0.4, fill: true },
-                { label: 'TX (MB)', data: txData, borderColor: '#f97316', backgroundColor: 'rgba(249, 115, 22, 0.1)', tension: 0.4, fill: true }
+                { label: 'RX (MB)', data: rxData, borderColor: '#22c55e', borderWidth: 2, backgroundColor: rxGrad, fill: true },
+                { label: 'TX (MB)', data: txData, borderColor: '#ef4444', borderWidth: 2, backgroundColor: txGrad, fill: true }
             ]
         },
-        options: { ...chartOptions, scales: { x: { display: false }, y: { beginAtZero: true, ticks: { font: { size: 10 } } } } }
+        options: { 
+            ...commonOptions, 
+            scales: { 
+                x: { display: false }, 
+                y: { 
+                    beginAtZero: true, 
+                    grid: { color: gridColor },
+                    ticks: { color: tickColor, font: { size: 10 } } 
+                }
+            } 
+        }
     });
 }
 
 async function loadNodeServices(token) {
     const container = document.getElementById('modalServicesContainer');
+    const btnContainer = document.getElementById('modalServicesToggle');
     try {
         const response = await fetch(`/api/nodes/monitor/services?token=${encodeURIComponent(token)}`);
         if (!response.ok) throw new Error('Failed to load services');
@@ -438,23 +514,28 @@ async function loadNodeServices(token) {
         
         if (services.length === 0) {
             container.innerHTML = `<div class="col-span-full text-center py-4 text-gray-400">${I18N?.web_services_empty || 'No services'}</div>`;
+            if (btnContainer) btnContainer.classList.add('hidden');
             return;
         }
         
-        container.innerHTML = services.map(svc => `
+        const INITIAL_SHOW = 4;
+        const showAll = container.dataset.showAll === 'true';
+        const displayServices = showAll ? services : services.slice(0, INITIAL_SHOW);
+        
+        container.innerHTML = displayServices.map(svc => `
             <div class="flex items-center justify-between bg-white/50 dark:bg-black/30 p-2 rounded-lg">
                 <div class="flex items-center gap-2">
                     <span class="${svc.status === 'running' ? 'text-green-500' : 'text-red-500'}">●</span>
-                    <span class="text-sm font-medium">${escapeHtml(svc.name)}</span>
+                    <span class="text-sm font-medium text-gray-700 dark:text-gray-300">${escapeHtml(svc.name)}</span>
                 </div>
                 <div class="flex gap-1">
-                    <button onclick="nodeServiceAction('${token}', '${svc.name}', 'restart')" class="p-1 text-yellow-600 hover:bg-yellow-100 dark:hover:bg-yellow-500/20 rounded" title="Restart">
+                    <button onclick="nodeServiceAction('${token}', '${svc.name}', 'restart')" class="p-1 text-yellow-600 dark:text-yellow-400 hover:bg-yellow-100 dark:hover:bg-yellow-500/20 rounded" title="Restart">
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                         </svg>
                     </button>
                     <button onclick="nodeServiceAction('${token}', '${svc.name}', '${svc.status === 'running' ? 'stop' : 'start'}')" 
-                            class="p-1 ${svc.status === 'running' ? 'text-red-600 hover:bg-red-100 dark:hover:bg-red-500/20' : 'text-green-600 hover:bg-green-100 dark:hover:bg-green-500/20'} rounded"
+                            class="p-1 ${svc.status === 'running' ? 'text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-500/20' : 'text-green-600 dark:text-green-400 hover:bg-green-100 dark:hover:bg-green-500/20'} rounded"
                             title="${svc.status === 'running' ? 'Stop' : 'Start'}">
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             ${svc.status === 'running' 
@@ -466,9 +547,39 @@ async function loadNodeServices(token) {
                 </div>
             </div>
         `).join('');
+        
+        // Show/hide toggle button
+        if (btnContainer) {
+            if (services.length > INITIAL_SHOW) {
+                btnContainer.classList.remove('hidden');
+                const btn = btnContainer.querySelector('button');
+                const blurOverlay = btnContainer.querySelector('.services-blur-overlay');
+                if (btn) {
+                    if (showAll) {
+                        btn.classList.add('expanded');
+                        if (blurOverlay) blurOverlay.style.display = 'none';
+                        btn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 transition-transform duration-300" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7" /></svg> ${I18N?.web_show_less || 'Показать меньше'}`;
+                    } else {
+                        btn.classList.remove('expanded');
+                        if (blurOverlay) blurOverlay.style.display = '';
+                        btn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 transition-transform duration-300" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" /></svg> ${I18N?.web_show_more || 'Показать еще'} (${services.length - INITIAL_SHOW})`;
+                    }
+                }
+            } else {
+                btnContainer.classList.add('hidden');
+            }
+        }
     } catch (error) {
         container.innerHTML = `<div class="col-span-full text-center py-4 text-red-400">${I18N?.web_error || 'Error'}</div>`;
+        if (btnContainer) btnContainer.classList.add('hidden');
     }
+}
+
+function toggleServicesDisplay() {
+    const container = document.getElementById('modalServicesContainer');
+    const isShowingAll = container.dataset.showAll === 'true';
+    container.dataset.showAll = !isShowingAll;
+    loadNodeServices(currentNodeToken);
 }
 
 function refreshNodeServices() {
@@ -623,7 +734,13 @@ if (typeof toggleTheme === 'undefined') {
 }
 
 function updateThemeIcons() {
-    const isDark = document.documentElement.classList.contains('dark');
-    document.getElementById('iconMoon')?.classList.toggle('hidden', isDark);
-    document.getElementById('iconSun')?.classList.toggle('hidden', !isDark);
+    const theme = localStorage.getItem('theme') || 'system';
+    if (typeof applyThemeUI === 'function') {
+        applyThemeUI(theme);
+        return;
+    }
+    const isDark = theme === 'dark' || (theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+    document.getElementById('iconMoon')?.classList.toggle('hidden', !isDark || theme === 'system');
+    document.getElementById('iconSun')?.classList.toggle('hidden', isDark || theme === 'system');
+    document.getElementById('iconSystem')?.classList.toggle('hidden', theme !== 'system');
 }

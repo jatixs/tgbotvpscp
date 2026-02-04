@@ -693,6 +693,10 @@ STRINGS = {
         "web_nodes_monitor_command_sent": "Команда отправлена",
         "web_nodes_monitor_error": "Произошла ошибка",
         "web_nodes_monitor_select_nodes": "Выберите хотя бы одну ноду",
+        "web_live": "В реальном времени",
+        "web_show_more": "Показать ещё",
+        "web_show_less": "Скрыть",
+        "web_node_restarting": "Перезагрузка",
     },
 
     "en": {
@@ -1378,6 +1382,10 @@ STRINGS = {
         "web_nodes_monitor_command_sent": "Command sent",
         "web_nodes_monitor_error": "An error occurred",
         "web_nodes_monitor_select_nodes": "Select at least one node",
+        "web_live": "Live",
+        "web_show_more": "Show more",
+        "web_show_less": "Show less",
+        "web_node_restarting": "Restarting",
     },
 }
 
