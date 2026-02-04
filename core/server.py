@@ -2310,11 +2310,16 @@ async def handle_sse_logs(request):
             except Exception as e:
                 logging.error(f"Error reading bot history: {e}")
 
-        await resp.write(
-            f"event: logs\ndata: {json.dumps({'logs': clean_lines})}\n\n".encode("utf-8")
-        )
-        await resp.drain()
-        last_activity = time.time()
+        try:
+            await resp.write(
+                f"event: logs\ndata: {json.dumps({'logs': clean_lines})}\n\n".encode("utf-8")
+            )
+            await resp.drain()
+            last_activity = time.time()
+        except Exception as e:
+            if "closing transport" in str(e):
+                return resp
+            raise
 
     elif log_type == "sys":
         history_lines = []
@@ -2326,11 +2331,16 @@ async def handle_sse_logs(request):
             history_lines = ["Error: System logs temporarily unavailable"]
 
         logs_to_send = history_lines if history_lines else []
-        await resp.write(
-            f"event: logs\ndata: {json.dumps({'logs': logs_to_send})}\n\n".encode("utf-8")
-        )
-        await resp.drain()
-        last_activity = time.time()
+        try:
+            await resp.write(
+                f"event: logs\ndata: {json.dumps({'logs': logs_to_send})}\n\n".encode("utf-8")
+            )
+            await resp.drain()
+            last_activity = time.time()
+        except Exception as e:
+            if "closing transport" in str(e):
+                return resp
+            raise
 
     try:
         while True:
@@ -3465,11 +3475,16 @@ async def handle_sse_logs(request):
             except Exception as e:
                 logging.error(f"Error reading bot history: {e}")
 
-        await resp.write(
-            f"event: logs\ndata: {json.dumps({'logs': clean_lines})}\n\n".encode("utf-8")
-        )
-        await resp.drain()
-        last_activity = time.time()
+        try:
+            await resp.write(
+                f"event: logs\ndata: {json.dumps({'logs': clean_lines})}\n\n".encode("utf-8")
+            )
+            await resp.drain()
+            last_activity = time.time()
+        except Exception as e:
+            if "closing transport" in str(e):
+                return resp
+            raise
 
     elif log_type == "sys":
         history_lines = []
@@ -3481,11 +3496,16 @@ async def handle_sse_logs(request):
             history_lines = ["Error: System logs temporarily unavailable"]
 
         logs_to_send = history_lines if history_lines else []
-        await resp.write(
-            f"event: logs\ndata: {json.dumps({'logs': logs_to_send})}\n\n".encode("utf-8")
-        )
-        await resp.drain()
-        last_activity = time.time()
+        try:
+            await resp.write(
+                f"event: logs\ndata: {json.dumps({'logs': logs_to_send})}\n\n".encode("utf-8")
+            )
+            await resp.drain()
+            last_activity = time.time()
+        except Exception as e:
+            if "closing transport" in str(e):
+                return resp
+            raise
 
     try:
         while True:
