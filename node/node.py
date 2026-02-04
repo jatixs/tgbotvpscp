@@ -285,14 +285,44 @@ def parse_iperf_json(output: str, direction: str) -> float:
     """
     try:
         data = json.loads(output)
+        
+        # Check for error in iperf3 output
+        if "error" in data:
+            logging.error(f"iperf3 error: {data['error']}")
+            return 0.0
+            
+        if "end" not in data:
+            logging.error(f"No 'end' section in iperf3 output")
+            return 0.0
+            
+        end = data["end"]
+        
         if direction == 'download':
             # For download test (-R), we need sum_received
-            if "end" in data and "sum_received" in data["end"]:
-                return data["end"]["sum_received"]["bits_per_second"] / 1000000
+            if "sum_received" in end:
+                speed = end["sum_received"]["bits_per_second"] / 1000000
+                logging.info(f"Download speed parsed: {speed:.2f} Mbps")
+                return speed
+            # Fallback: try streams
+            elif "streams" in end and len(end["streams"]) > 0:
+                speed = end["streams"][0].get("receiver", {}).get("bits_per_second", 0) / 1000000
+                logging.info(f"Download speed from streams: {speed:.2f} Mbps")
+                return speed
         else:
             # For upload test, we need sum_sent
-            if "end" in data and "sum_sent" in data["end"]:
-                return data["end"]["sum_sent"]["bits_per_second"] / 1000000
+            if "sum_sent" in end:
+                speed = end["sum_sent"]["bits_per_second"] / 1000000
+                logging.info(f"Upload speed parsed: {speed:.2f} Mbps")
+                return speed
+            # Fallback: try streams
+            elif "streams" in end and len(end["streams"]) > 0:
+                speed = end["streams"][0].get("sender", {}).get("bits_per_second", 0) / 1000000
+                logging.info(f"Upload speed from streams: {speed:.2f} Mbps")
+                return speed
+                
+        logging.error(f"Could not find speed data in iperf3 output for {direction}")
+        logging.debug(f"Available keys in 'end': {list(end.keys())}")
+        
     except json.JSONDecodeError as e:
         logging.error(f"Failed to parse iperf3 JSON: {e}")
     except KeyError as e:
@@ -357,6 +387,7 @@ def get_system_stats():
         return {}
 
 def get_public_iperf_server():
+    """Get best iperf3 server by measuring ping to multiple servers"""
     try:
         url = "https://export.iperf3serverlist.net/listed_iperf3_servers.json"
         response = requests.get(url, timeout=5)
@@ -364,9 +395,45 @@ def get_public_iperf_server():
             servers = response.json()
             valid_servers = [s for s in servers if s.get("IP/HOST") and s.get("PORT") and s.get("COUNTRY") != "RU"]
             if valid_servers:
+                # Test ping to up to 15 random servers and pick the best one
+                sample_size = min(15, len(valid_servers))
+                test_servers = random.sample(valid_servers, sample_size)
+                
+                best_server = None
+                best_ping = float('inf')
+                
+                for server in test_servers:
+                    host = server.get("IP/HOST")
+                    ping_ms = measure_ping(host)
+                    if ping_ms is not None and ping_ms < best_ping:
+                        best_ping = ping_ms
+                        best_server = server
+                        best_server["_ping"] = ping_ms
+                
+                if best_server:
+                    logging.info(f"Selected server: {best_server.get('IP/HOST')} ({best_ping:.2f} ms)")
+                    return best_server
+                    
+                # Fallback to random if ping failed
                 return random.choice(valid_servers)
     except Exception as e:
         logging.error(f"Error fetching iperf servers: {e}")
+    return None
+
+
+def measure_ping(host: str) -> float:
+    """Measure ping to a host, returns average ping in ms or None on failure"""
+    try:
+        # Linux ping command
+        cmd = ["ping", "-c", "2", "-W", "2", host]
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
+        if result.returncode == 0:
+            # Parse: rtt min/avg/max/mdev = 1.234/5.678/9.012/1.234 ms
+            match = re.search(r"rtt min/avg/max/mdev = [\d.]+/([\d.]+)/", result.stdout)
+            if match:
+                return float(match.group(1))
+    except Exception as e:
+        logging.debug(f"Ping to {host} failed: {e}")
     return None
 
 def execute_command(task):
@@ -526,6 +593,7 @@ def execute_command(task):
                 port = server.get("PORT")
                 city = server.get("SITE", "Unknown")
                 country = server.get("COUNTRY", "")
+                ping_ms = server.get("_ping", 0)  # Get ping from server selection
                 
                 # Download test with JSON output (-J flag, -R for reverse/download)
                 cmd_dl = ["iperf3", "-c", host, "-p", str(port), "-J", "-t", "5", "-4", "-R"]
@@ -560,7 +628,7 @@ def execute_command(task):
                     "params": {
                         "dl": dl_speed,
                         "ul": ul_speed,
-                        "ping": 0,
+                        "ping": ping_ms,
                         "flag": "",
                         "server": f"{city}, {country}",
                         "provider": host
