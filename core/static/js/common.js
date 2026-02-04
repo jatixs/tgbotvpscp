@@ -1303,3 +1303,33 @@ async function resetTrafficSettings() {
         btn.innerHTML = originalHTML;
     }
 }
+
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+        const modals = document.querySelectorAll('[id$="Modal"]');
+        modals.forEach(modal => {
+            if (!modal.classList.contains('hidden')) {
+                if (modal.id === 'nodeModal' && typeof closeNodeModal === 'function') {
+                    closeNodeModal();
+                } else if (modal.id === 'addNodeModal' && typeof closeAddNodeModal === 'function') {
+                    closeAddNodeModal();
+                } else if (modal.id === 'systemModal' && typeof closeSystemModal === 'function') {
+                    closeSystemModal(null);
+                } else if (modal.id === 'servicesEditModal' && typeof closeServicesEditModal === 'function') {
+                    closeServicesEditModal();
+                } else if (modal.id === 'serviceInfoModal' && typeof closeServiceInfoModal === 'function') {
+                    closeServiceInfoModal();
+                } else if (modal.id === 'agentIpsModal' && typeof closeAgentIpsModal === 'function') {
+                    closeAgentIpsModal();
+                } else if (modal.id === 'genericHintModal' && typeof closeHintModal === 'function') {
+                    closeHintModal();
+                }
+                else {
+                    modal.classList.add('hidden');
+                    modal.classList.remove('flex');
+                }
+            }
+        });
+    }
+});
+
