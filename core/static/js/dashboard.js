@@ -12,6 +12,7 @@ let currentNodeToken = null;
 let currentRenderList = [];   
 let renderedCount = 0; 
 const NODES_BATCH_SIZE = 15;
+let nodesFirstUpdateReceived = false;
 
 function decryptData(text) {
     if (!text) return "";
@@ -76,6 +77,7 @@ function initScrollAnimations() {
 
 window.initDashboard = function() {
     cleanupDashboardSources();
+    nodesFirstUpdateReceived = false;  // Reset flag on dashboard init
     
     // Запускаем анимацию блоков
     initScrollAnimations();
@@ -266,10 +268,10 @@ function updateNodesListUI(data) {
         const container = document.getElementById('nodesList');
         const currentElements = container ? Array.from(container.children).filter(el => el.hasAttribute('data-token')) : [];
         
-        // Also trigger render if newList is empty and container still shows loading (no node elements)
+        // Trigger render if: list length changed, first update with nodes, or first update with empty list (to show "no nodes" message)
         const needsRender = currentRenderList.length !== newList.length || 
                            (currentElements.length === 0 && newList.length > 0) ||
-                           (currentElements.length === 0 && newList.length === 0 && container && container.innerHTML.includes('animate-spin'));
+                           (!nodesFirstUpdateReceived && newList.length === 0);
         if (needsRender) {
             currentRenderList = newList;
             renderNodesList();
@@ -281,6 +283,8 @@ function updateNodesListUI(data) {
                 renderNodesList();
             }
         }
+        
+        nodesFirstUpdateReceived = true;
 
         if (document.getElementById('nodesTotal')) {
             document.getElementById('nodesTotal').innerText = allNodesData.length;
@@ -2194,9 +2198,9 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // Check if there are additional IPs before making badge interactive
   try {
-    const r = await fetch('/api/agent/ipv4', { credentials: 'same-origin' });
-    if (r.ok) {
-      const data = await r.json();
+    const response = await fetch('/api/agent/ipv4', { credentials: 'same-origin' });
+    if (response.ok) {
+      const data = await response.json();
       const primary = data.primary || data.source_ip || data.agent_ip || '-';
       const ips = Array.isArray(data.ips) ? data.ips : Array.isArray(data.ipv4) ? data.ipv4 : [];
       const secondary = ips.filter(ip => ip && ip !== primary);
