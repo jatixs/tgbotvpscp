@@ -205,12 +205,27 @@ setup_nginx_proxy() {
 
     sudo bash -c "cat > ${NGINX_CONF}" <<EOF
 server {
-    listen ${HTTPS_PORT} ssl;
+    listen ${HTTPS_PORT} ssl http2;
     server_name ${HTTPS_DOMAIN};
+
+    # SSL
     ssl_certificate /etc/letsencrypt/live/${HTTPS_DOMAIN}/fullchain.pem;
     ssl_certificate_key /etc/letsencrypt/live/${HTTPS_DOMAIN}/privkey.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_ciphers HIGH:!aNULL:!MD5:!RC4;
+    ssl_prefer_server_ciphers on;
+    ssl_session_cache shared:SSL:10m;
+    ssl_session_timeout 10m;
+
+    # Security headers
+    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+    add_header X-Content-Type-Options nosniff always;
+    add_header X-Frame-Options SAMEORIGIN always;
+    add_header Referrer-Policy strict-origin-when-cross-origin always;
+
     access_log /var/log/nginx/${HTTPS_DOMAIN}_access.log;
     error_log /var/log/nginx/${HTTPS_DOMAIN}_error.log;
+
     location / {
         proxy_pass http://127.0.0.1:${WEB_PORT};
         proxy_http_version 1.1;
@@ -220,6 +235,8 @@ server {
         proxy_set_header X-Real-IP \$remote_addr;
         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_read_timeout 86400;
+        proxy_send_timeout 86400;
     }
 }
 EOF
