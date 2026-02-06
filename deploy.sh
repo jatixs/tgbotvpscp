@@ -440,11 +440,32 @@ run_db_migrations() {
     if [ -f "${ENV_FILE}" ]; then set -a; source "${ENV_FILE}"; set +a; fi
     local cmd_prefix=""; if [ -n "$exec_user" ]; then cmd_prefix="sudo -E -u ${SERVICE_USER}"; fi
 
-    if [ ! -f "${BOT_INSTALL_PATH}/aerich.ini" ]; then $cmd_prefix ${VENV_PATH}/bin/aerich init -t core.config.TORTOISE_ORM >/dev/null 2>&1; fi
+    local aerich_bin="${VENV_PATH}/bin/aerich"
+    local aerich_cfg="${BOT_INSTALL_PATH}/aerich.ini"
+    if [ ! -x "$aerich_bin" ]; then msg_error "Aerich не найден в виртуальном окружении."; return 1; fi
+
+    if [ ! -f "$aerich_cfg" ]; then
+        msg_info "Создание aerich.ini..."
+        sudo bash -c "cat > '$aerich_cfg'" <<EOF
+[aerich]
+tortoise_orm = core.config.TORTOISE_ORM
+location = ./migrations
+src_folder = .
+EOF
+        $cmd_prefix "$aerich_bin" init -t core.config.TORTOISE_ORM >/dev/null 2>&1 || true
+    fi
+
     if [ ! -d "${BOT_INSTALL_PATH}/migrations" ]; then
-        if ! $cmd_prefix ${VENV_PATH}/bin/aerich init-db; then :; fi
+        if ! $cmd_prefix "$aerich_bin" -c "$aerich_cfg" init-db; then
+            msg_error "Ошибка инициализации миграций Aerich."; return 1
+        fi
     else
-        $cmd_prefix ${VENV_PATH}/bin/aerich upgrade >/dev/null 2>&1
+        if ! $cmd_prefix "$aerich_bin" -c "$aerich_cfg" upgrade >/dev/null 2>&1; then
+            $cmd_prefix "$aerich_bin" init -t core.config.TORTOISE_ORM >/dev/null 2>&1 || true
+            if ! $cmd_prefix "$aerich_bin" -c "$aerich_cfg" upgrade >/dev/null 2>&1; then
+                msg_error "Ошибка выполнения миграций Aerich."; return 1
+            fi
+        fi
     fi
 
     if [ -f "${BOT_INSTALL_PATH}/migrate.py" ]; then
