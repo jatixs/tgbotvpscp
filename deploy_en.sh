@@ -138,8 +138,9 @@ cleanup_common_trash() {
     if [ -d "$BOT_INSTALL_PATH/.github" ]; then sudo rm -rf "$BOT_INSTALL_PATH/.github"; fi
     if [ -d "$BOT_INSTALL_PATH/assets" ]; then sudo rm -rf "$BOT_INSTALL_PATH/assets"; fi
     
-    # Remove unnecessary files (*.txt, *.md, *.ini, *.sh, etc.)
-    sudo find "$BOT_INSTALL_PATH" -maxdepth 1 -type f \( -name "*.txt" -o -name "*.md" -o -name "*.ini" -o -name "*.sh" -o -name ".gitignore" -o -name "LICENSE" \) -delete
+    # Remove unnecessary files (*.txt, *.md, *.sh, etc.) but keep aerich.ini
+    sudo find "$BOT_INSTALL_PATH" -maxdepth 1 -type f \( -name "*.txt" -o -name "*.md" -o -name "*.sh" -o -name ".gitignore" -o -name "LICENSE" \) -delete
+    sudo find "$BOT_INSTALL_PATH" -maxdepth 1 -type f -name "*.ini" ! -name "aerich.ini" -delete
     
     sudo find "$BOT_INSTALL_PATH" -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null
 }
@@ -471,16 +472,14 @@ run_db_migrations() {
     local aerich_cfg="${BOT_INSTALL_PATH}/aerich.ini"
     if [ ! -x "$aerich_bin" ]; then msg_error "Aerich not found in the virtual environment."; return 1; fi
 
-    if [ ! -f "$aerich_cfg" ]; then
-        msg_info "Creating aerich.ini..."
-        sudo bash -c "cat > '$aerich_cfg'" <<'EOF'
+    # Always recreate aerich.ini with correct TOML format (quoted values)
+    msg_info "Creating aerich.ini..."
+    sudo bash -c "cat > '$aerich_cfg'" <<'EOF'
 [aerich]
 tortoise_orm = "core.config.TORTOISE_ORM"
 location = "./migrations"
 src_folder = "."
 EOF
-        $cmd_prefix "$aerich_bin" init -t core.config.TORTOISE_ORM >/dev/null 2>&1 || true
-    fi
 
     if [ ! -d "${BOT_INSTALL_PATH}/migrations" ]; then
         if ! $cmd_prefix "$aerich_bin" -c "$aerich_cfg" init-db; then
