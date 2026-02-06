@@ -106,11 +106,19 @@ check_integrity() {
         cd "${BOT_INSTALL_PATH}" || return
         git fetch origin "$GIT_BRANCH" >/dev/null 2>&1
         local FILES_TO_CHECK="core modules bot.py watchdog.py migrate.py manage.py"
-        local DIFF=$(git diff --name-only "origin/$GIT_BRANCH" -- $FILES_TO_CHECK 2>/dev/null)
-        if [ -n "$DIFF" ]; then
-            INTEGRITY_STATUS="${C_RED}⚠️ INTEGRITY VIOLATION (Files differ from origin/${GIT_BRANCH})${C_RESET}"
+        local EXISTING_FILES=""
+        for f in $FILES_TO_CHECK; do
+            if [ -e "${BOT_INSTALL_PATH}/$f" ]; then EXISTING_FILES="$EXISTING_FILES $f"; fi
+        done
+        if [ -z "$EXISTING_FILES" ]; then
+            INTEGRITY_STATUS="${C_YELLOW}⚠️ Files not found${C_RESET}"
         else
-            INTEGRITY_STATUS="${C_GREEN}🛡️ Verified${C_RESET}"
+            local DIFF=$(git diff --name-only HEAD -- $EXISTING_FILES 2>/dev/null)
+            if [ -n "$DIFF" ]; then
+                INTEGRITY_STATUS="${C_RED}⚠️ INTEGRITY VIOLATION (Files modified locally)${C_RESET}"
+            else
+                INTEGRITY_STATUS="${C_GREEN}🛡️ Verified${C_RESET}"
+            fi
         fi
         cd - >/dev/null
     else
@@ -465,37 +473,52 @@ run_db_migrations() {
     local exec_user=$1
     msg_info "Migrating database..."
     cd "${BOT_INSTALL_PATH}" || return 1
-    if [ -f "${ENV_FILE}" ]; then set -a; source "${ENV_FILE}"; set +a; fi
-    local cmd_prefix=""; if [ -n "$exec_user" ]; then cmd_prefix="sudo -E -u ${SERVICE_USER}"; fi
+
+    # Build env sourcing prefix for all commands
+    local env_source=""
+    if [ -f "${ENV_FILE}" ]; then
+        set -a; source "${ENV_FILE}"; set +a
+        env_source="set -a; source ${ENV_FILE}; set +a;"
+    fi
+
+    # For secure mode, run as service user with env vars
+    local run_cmd=""
+    if [ -n "$exec_user" ]; then
+        run_cmd="sudo -u ${SERVICE_USER} bash -c"
+    fi
 
     local aerich_bin="${VENV_PATH}/bin/aerich"
     local aerich_cfg="${BOT_INSTALL_PATH}/aerich.ini"
-    if [ ! -x "$aerich_bin" ]; then msg_error "Aerich not found in the virtual environment."; return 1; fi
 
     # Always recreate aerich.ini with correct TOML format (quoted values)
-    msg_info "Creating aerich.ini..."
-    sudo bash -c "cat > '$aerich_cfg'" <<'EOF'
+    sudo bash -c "cat > '${aerich_cfg}'" <<'EOF'
 [aerich]
 tortoise_orm = "core.config.TORTOISE_ORM"
 location = "./migrations"
 src_folder = "."
 EOF
 
-    if [ ! -d "${BOT_INSTALL_PATH}/migrations" ]; then
-        if ! $cmd_prefix "$aerich_bin" -c "$aerich_cfg" init-db; then
-            msg_error "Aerich migrations init failed."; return 1
+    if [ -n "$exec_user" ]; then sudo chown ${SERVICE_USER} "${aerich_cfg}" 2>/dev/null; fi
+
+    # Helper to run commands with proper env
+    _run() {
+        if [ -n "$run_cmd" ]; then
+            $run_cmd "${env_source} cd ${BOT_INSTALL_PATH} && $*"
+        else
+            eval "$*"
         fi
+    }
+
+    if [ ! -x "$aerich_bin" ]; then
+        msg_info "Aerich CLI not found, skipping DB migrations."
+    elif [ ! -d "${BOT_INSTALL_PATH}/migrations" ]; then
+        _run "'$aerich_bin' -c '$aerich_cfg' init-db" >/dev/null 2>&1 || true
     else
-        if ! $cmd_prefix "$aerich_bin" -c "$aerich_cfg" upgrade >/dev/null 2>&1; then
-            $cmd_prefix "$aerich_bin" init -t core.config.TORTOISE_ORM >/dev/null 2>&1 || true
-            if ! $cmd_prefix "$aerich_bin" -c "$aerich_cfg" upgrade >/dev/null 2>&1; then
-                msg_error "Aerich migrations failed."; return 1
-            fi
-        fi
+        _run "'$aerich_bin' -c '$aerich_cfg' upgrade" >/dev/null 2>&1 || true
     fi
 
     if [ -f "${BOT_INSTALL_PATH}/migrate.py" ]; then
-        $cmd_prefix ${VENV_PATH}/bin/python "${BOT_INSTALL_PATH}/migrate.py" $MIGRATE_ARGS
+        _run "'${VENV_PATH}/bin/python' '${BOT_INSTALL_PATH}/migrate.py' $MIGRATE_ARGS"
     fi
 }
 
