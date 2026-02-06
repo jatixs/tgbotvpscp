@@ -318,6 +318,11 @@ write_env_file() {
     local debug_setting="true"
     if [ "$GIT_BRANCH" == "main" ]; then debug_setting="false"; fi
 
+    local compose_profile=""
+    if [ "$dm" == "docker" ]; then compose_profile="${im}"; fi
+    local web_domain=""
+    if [ -n "$HTTPS_DOMAIN" ]; then web_domain="${HTTPS_DOMAIN}"; fi
+
     sudo bash -c "cat > ${ENV_FILE}" <<EOF
 TG_BOT_TOKEN="${T}"
 TG_ADMIN_ID="${A}"
@@ -333,8 +338,21 @@ TG_WEB_INITIAL_PASSWORD="${GEN_PASS}"
 DEBUG="${debug_setting}"
 SENTRY_DSN="${SENTRY_DSN}"
 INSTALLED_VERSION="${ver}"
+COMPOSE_PROFILES="${compose_profile}"
+WEB_DOMAIN="${web_domain}"
 EOF
     sudo chmod 600 "${ENV_FILE}"
+
+    # Create installstate file
+    local installstate_file="${BOT_INSTALL_PATH}/installstate"
+    sudo bash -c "cat > ${installstate_file}" <<EOF
+install_mode=${im}
+deploy_mode=${dm}
+installed_at=$(date -Iseconds)
+version=${ver}
+branch=${GIT_BRANCH}
+EOF
+    sudo chmod 644 "${installstate_file}"
 }
 
 check_docker_deps() {
