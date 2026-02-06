@@ -446,11 +446,11 @@ run_db_migrations() {
 
     if [ ! -f "$aerich_cfg" ]; then
         msg_info "Создание aerich.ini..."
-        sudo bash -c "cat > '$aerich_cfg'" <<EOF
+        sudo bash -c "cat > '$aerich_cfg'" <<'EOF'
 [aerich]
-tortoise_orm = core.config.TORTOISE_ORM
-location = ./migrations
-src_folder = .
+tortoise_orm = "core.config.TORTOISE_ORM"
+location = "./migrations"
+src_folder = "."
 EOF
         $cmd_prefix "$aerich_bin" init -t core.config.TORTOISE_ORM >/dev/null 2>&1 || true
     fi
