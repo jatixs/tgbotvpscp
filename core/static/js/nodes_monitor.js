@@ -129,6 +129,13 @@ function renderNodes() {
     container.innerHTML = filtered.map(node => createNodeCard(node)).join('');
 }
 
+// Get ping badge CSS classes based on latency value
+function getPingBadgeClass(ping) {
+    if (ping < 50) return 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400';
+    if (ping < 150) return 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400';
+    return 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400';
+}
+
 // Create node card HTML
 function createNodeCard(node) {
     const isOnline = node.status === 'online';
@@ -169,7 +176,10 @@ function createNodeCard(node) {
                            onchange="toggleNodeSelection('${node.token}', this)">
                     <div>
                         <h3 class="font-bold text-gray-900 dark:text-white text-sm">${escapeHtml(node.name)}</h3>
-                        <span class="text-xs text-gray-500 dark:text-gray-400">${node.ip || '-'}</span>
+                        <div class="flex items-center gap-1.5">
+                            <span class="text-xs text-gray-500 dark:text-gray-400">${node.ip || '-'}</span>
+                            ${node.ping != null ? `<span class="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold ${getPingBadgeClass(node.ping)}">${node.ping}ms</span>` : ''}
+                        </div>
                     </div>
                 </div>
                 <span class="px-2 py-1 rounded-lg text-xs font-bold ${statusClass}">
@@ -392,6 +402,17 @@ async function loadNodeDetails(token) {
 function updateNodeModal(data) {
     document.getElementById('modalNodeTitle').textContent = data.name || 'Unknown';
     document.getElementById('modalNodeIp').textContent = data.ip || '-';
+    
+    // Update ping badge in modal
+    const pingBadge = document.getElementById('modalNodePingBadge');
+    const stats = data.stats || {};
+    if (stats.ping != null) {
+        pingBadge.className = `inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold ${getPingBadgeClass(stats.ping)}`;
+        pingBadge.textContent = stats.ping + 'ms';
+    } else {
+        pingBadge.className = 'hidden';
+        pingBadge.textContent = '';
+    }
     
     const isOnline = data.status === 'online';
     const statusIcon = document.getElementById('modalNodeStatusIcon');

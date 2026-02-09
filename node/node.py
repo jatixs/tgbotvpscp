@@ -411,7 +411,22 @@ def get_system_stats():
         
         ext_ip = get_external_ip()
         
-        return {
+        # Measure ping to 8.8.8.8
+        ping_ms = None
+        try:
+            proc = subprocess.Popen(
+                ["ping", "-c", "1", "-W", "2", "8.8.8.8"],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE
+            )
+            stdout, _ = proc.communicate(timeout=5)
+            ping_match = re.search(r"time=([\d\.]+)\s*ms", stdout.decode())
+            if ping_match:
+                ping_ms = round(float(ping_match.group(1)), 1)
+        except Exception:
+            pass
+        
+        result = {
             "cpu": psutil.cpu_percent(interval=None),
             "ram": mem.percent,
             "disk": disk.percent,
@@ -427,6 +442,9 @@ def get_system_stats():
             "process_ram": get_top_processes('ram'),
             "external_ip": ext_ip
         }
+        if ping_ms is not None:
+            result["ping"] = ping_ms
+        return result
     except Exception as e:
         logging.error(f"Error gathering stats: {e}")
         return {}
