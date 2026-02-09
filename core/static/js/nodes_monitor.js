@@ -265,7 +265,7 @@ function filterByStatus(status) {
     } else if (status === 'online') {
         activeBtn.className = 'px-3 py-1.5 text-xs font-bold rounded-lg transition bg-green-100 dark:bg-green-500/20 text-green-600 dark:text-green-400';
     } else {
-        activeBtn.className = 'px-3 py-1.5 text-xs font-bold rounded-lg transition bg-red-100 dark:bg-red-500/20 text-red-600 dark:text-red-400';
+        activeBtn.className = 'px-3 py-1.5 text-xs font-bold rounded-lg transition bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400';
     }
     
     renderNodes();
@@ -426,7 +426,7 @@ function updateNodeModal(data) {
         statusDot.className = 'w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse';
         statusText.textContent = I18N?.web_node_status_online || 'Online';
     } else {
-        statusIcon.className = 'p-2 bg-red-100 dark:bg-red-500/20 rounded-lg text-red-600 dark:text-red-400';
+        statusIcon.className = 'p-2 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg text-red-600 dark:text-red-400';
         statusBadge.className = 'flex items-center gap-1 text-red-600 dark:text-red-400';
         statusDot.className = 'w-1.5 h-1.5 rounded-full bg-red-500';
         statusText.textContent = I18N?.web_node_status_offline || 'Offline';
