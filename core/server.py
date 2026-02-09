@@ -3019,6 +3019,19 @@ async def start_web_server(bot_instance: Bot):
         return None
 
 
+async def measure_agent_ping():
+    """Measure ping to google.com and return milliseconds as string, or None on failure"""
+    try:
+        t1 = time.time()
+        async with aiohttp.ClientSession() as session:
+            async with session.get("https://www.google.com", timeout=2) as resp:
+                if resp.status == 200:
+                    return str(int((time.time() - t1) * 1000))
+    except Exception:
+        pass
+    return None
+
+
 async def agent_monitor():
     global AGENT_IP_CACHE, AGENT_FLAG, AGENT_PING_CACHE, AGENT_PING_LAST_UPDATE
     import psutil
@@ -3036,15 +3049,10 @@ async def agent_monitor():
         pass
     
     # Measure initial ping
-    try:
-        async with aiohttp.ClientSession() as session:
-            t1 = time.time()
-            async with session.get("http://www.google.com", timeout=2) as resp:
-                if resp.status == 200:
-                    AGENT_PING_CACHE = f"{int((time.time() - t1) * 1000)} мс"
-                    AGENT_PING_LAST_UPDATE = time.time()
-    except Exception:
-        pass
+    ping_result = await measure_agent_ping()
+    if ping_result:
+        AGENT_PING_CACHE = ping_result
+        AGENT_PING_LAST_UPDATE = time.time()
     
     while True:
         try:
@@ -3062,15 +3070,10 @@ async def agent_monitor():
             
             # Update ping every 30 seconds
             if time.time() - AGENT_PING_LAST_UPDATE > 30:
-                try:
-                    async with aiohttp.ClientSession() as session:
-                        t1 = time.time()
-                        async with session.get("http://www.google.com", timeout=2) as resp:
-                            if resp.status == 200:
-                                AGENT_PING_CACHE = f"{int((time.time() - t1) * 1000)} мс"
-                                AGENT_PING_LAST_UPDATE = time.time()
-                except Exception:
-                    pass
+                ping_result = await measure_agent_ping()
+                if ping_result:
+                    AGENT_PING_CACHE = ping_result
+                    AGENT_PING_LAST_UPDATE = time.time()
         except asyncio.CancelledError:
 
             raise
@@ -4355,15 +4358,10 @@ async def agent_monitor():
         pass
     
     # Measure initial ping
-    try:
-        async with aiohttp.ClientSession() as session:
-            t1 = time.time()
-            async with session.get("http://www.google.com", timeout=2) as resp:
-                if resp.status == 200:
-                    AGENT_PING_CACHE = f"{int((time.time() - t1) * 1000)} мс"
-                    AGENT_PING_LAST_UPDATE = time.time()
-    except Exception:
-        pass
+    ping_result = await measure_agent_ping()
+    if ping_result:
+        AGENT_PING_CACHE = ping_result
+        AGENT_PING_LAST_UPDATE = time.time()
     
     while True:
         try:
@@ -4383,15 +4381,10 @@ async def agent_monitor():
             
             # Update ping every 30 seconds
             if time.time() - AGENT_PING_LAST_UPDATE > 30:
-                try:
-                    async with aiohttp.ClientSession() as session:
-                        t1 = time.time()
-                        async with session.get("http://www.google.com", timeout=2) as resp:
-                            if resp.status == 200:
-                                AGENT_PING_CACHE = f"{int((time.time() - t1) * 1000)} мс"
-                                AGENT_PING_LAST_UPDATE = time.time()
-                except Exception:
-                    pass
+                ping_result = await measure_agent_ping()
+                if ping_result:
+                    AGENT_PING_CACHE = ping_result
+                    AGENT_PING_LAST_UPDATE = time.time()
         except asyncio.CancelledError:
             raise
         except Exception:

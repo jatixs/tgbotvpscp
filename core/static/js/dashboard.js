@@ -592,7 +592,16 @@ function updateAgentStatsUI(data) {
             if (ipEl && data.stats.ip) ipEl.innerText = decryptData(data.stats.ip);
             
             const pingEl = document.getElementById('agentPing');
-            if (pingEl && data.stats.ping) pingEl.innerText = decryptData(data.stats.ping); 
+            if (pingEl && data.stats.ping) {
+                const pingValue = decryptData(data.stats.ping);
+                // Add unit if it's a number
+                if (pingValue && !isNaN(pingValue)) {
+                    const unit = (typeof I18N !== 'undefined' && I18N.web_agent_ping_unit) ? I18N.web_agent_ping_unit : 'ms';
+                    pingEl.innerText = pingValue + ' ' + unit;
+                } else {
+                    pingEl.innerText = pingValue;
+                }
+            } 
         }
         renderAgentChart(data.history);
     } catch (e) {
