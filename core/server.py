@@ -979,6 +979,13 @@ async def process_node_result_background(bot, user_id, cmd, text, token, node_na
     if not user_id:
         return
 
+    # Handle services_list result: save to DB, don't send as message
+    if isinstance(text, dict) and text.get("type") == "services_list":
+        services = text.get("services", [])
+        if services:
+            await nodes_db.update_node_extra(token, "services", services)
+        return
+
     # Обработка JSON-ответа с ключами локализации
     final_text = text
     if isinstance(text, dict) and text.get("type") == "i18n":
@@ -1438,6 +1445,7 @@ async def handle_nodes_monitor_list(request):
                 "ram": stats.get("ram", 0),
                 "disk": stats.get("disk", 0),
                 "uptime": stats.get("uptime", 0),
+                "ping": stats.get("ping"),
                 "traffic": {
                     "rx": stats.get("net_rx", 0),
                     "tx": stats.get("net_tx", 0),

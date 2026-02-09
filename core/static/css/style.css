@@ -682,3 +682,37 @@ html.dark .monitor-link-btn {
 html.dark .monitor-link-btn:hover {
     background-color: rgba(147, 51, 234, 0.25);
 }
+
+/* Missing Tailwind dark mode classes for nodes monitor */
+.dark\:bg-red-500\/20:is(.dark *) {
+    background-color: rgba(239, 68, 68, .2);
+}
+
+.dark\:hover\:bg-red-500\/20:hover:is(.dark *) {
+    background-color: rgba(239, 68, 68, .2);
+}
+
+.dark\:hover\:bg-green-500\/20:hover:is(.dark *) {
+    background-color: rgba(34, 197, 94, .2);
+}
+
+.dark\:hover\:bg-yellow-500\/20:hover:is(.dark *) {
+    background-color: rgba(234, 179, 8, .2);
+}
+
+.dark\:hover\:bg-blue-500\/30:hover:is(.dark *) {
+    background-color: rgba(59, 130, 246, .3);
+}
+
+/* Ping badge classes */
+.bg-yellow-100 {
+    background-color: rgb(254, 249, 195);
+}
+
+.text-yellow-700 {
+    color: rgb(161, 98, 7);
+}
+
+.dark\:bg-yellow-900\/30:is(.dark *) {
+    background-color: rgba(113, 63, 18, .3);
+}
