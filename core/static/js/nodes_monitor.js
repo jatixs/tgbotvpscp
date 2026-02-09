@@ -178,7 +178,7 @@ function createNodeCard(node) {
                         <h3 class="font-bold text-gray-900 dark:text-white text-sm">${escapeHtml(node.name)}</h3>
                         <div class="flex items-center gap-1.5">
                             <span class="text-xs text-gray-500 dark:text-gray-400">${node.ip || '-'}</span>
-                            ${node.ping != null ? `<span class="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold ${getPingBadgeClass(node.ping)}">${node.ping}ms</span>` : ''}
+                            ${node.ping != null && !isNaN(node.ping) ? `<span class="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold ${getPingBadgeClass(node.ping)}">${parseFloat(node.ping)}ms</span>` : ''}
                         </div>
                     </div>
                 </div>
@@ -406,9 +406,9 @@ function updateNodeModal(data) {
     // Update ping badge in modal
     const pingBadge = document.getElementById('modalNodePingBadge');
     const stats = data.stats || {};
-    if (stats.ping != null) {
+    if (stats.ping != null && !isNaN(stats.ping)) {
         pingBadge.className = `inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold ${getPingBadgeClass(stats.ping)}`;
-        pingBadge.textContent = stats.ping + 'ms';
+        pingBadge.textContent = parseFloat(stats.ping) + 'ms';
     } else {
         pingBadge.className = 'hidden';
         pingBadge.textContent = '';
@@ -432,7 +432,6 @@ function updateNodeModal(data) {
         statusText.textContent = I18N?.web_node_status_offline || 'Offline';
     }
     
-    const stats = data.stats || {};
     document.getElementById('modalUptime').textContent = formatUptime(stats.uptime || 0);
     document.getElementById('modalCpu').textContent = (stats.cpu || 0) + '%';
     document.getElementById('modalRam').textContent = (stats.ram || 0) + '%';
