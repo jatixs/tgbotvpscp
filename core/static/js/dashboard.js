@@ -589,7 +589,10 @@ function updateAgentStatsUI(data) {
             if (uptimeEl) uptimeEl.innerText = formatUptime(data.stats.boot_time);
 
             const ipEl = document.getElementById('agentIp');
-            if (ipEl && data.stats.ip) ipEl.innerText = decryptData(data.stats.ip); 
+            if (ipEl && data.stats.ip) ipEl.innerText = decryptData(data.stats.ip);
+            
+            const pingEl = document.getElementById('agentPing');
+            if (pingEl && data.stats.ping) pingEl.innerText = decryptData(data.stats.ping); 
         }
         renderAgentChart(data.history);
     } catch (e) {
