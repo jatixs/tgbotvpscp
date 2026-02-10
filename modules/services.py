@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import re
 import subprocess
 import json
 import os
@@ -15,6 +16,18 @@ from core.shared_state import LAST_MESSAGE_IDS
 
 # Cache for Docker Hub descriptions
 _docker_descriptions_cache = {}
+
+# Regex for valid service/container names: alphanumeric, hyphens, underscores, dots, @, /
+_VALID_NAME_RE = re.compile(r'^[a-zA-Z0-9._@/:-]+$')
+
+def _validate_name(name: str) -> str:
+    """Validate a service or container name to prevent command injection.
+    
+    Raises ValueError if the name contains unsafe characters.
+    """
+    if not name or not _VALID_NAME_RE.match(name):
+        raise ValueError(f"Invalid service/container name: {name!r}")
+    return name
 
 # --- Helpers ---
 
@@ -42,6 +55,7 @@ def get_user_role_level(user_id):
 
 def get_systemd_status(service_name):
     try:
+        _validate_name(service_name)
         # Check ActiveState and SubState and LoadState
         cmd = ["systemctl", "show", "-p", "ActiveState,SubState,LoadState", "--", service_name]
         # Use stdout/stderr pipe for compatibility with older python (capture_output added in 3.7)
@@ -88,7 +102,8 @@ def get_docker_status(container_name):
     except ImportError:
          # Fallback to CLI
         try:
-            cmd = ["docker", "inspect", "-f", "{{.State.Status}}", container_name]
+            _validate_name(container_name)
+            cmd = ["docker", "inspect", "-f", "{{.State.Status}}", "--", container_name]
             result = subprocess.run(cmd, capture_output=True, text=True)
             if result.returncode == 0:
                 status = result.stdout.strip()
@@ -250,6 +265,11 @@ async def perform_service_action(name, sType, action):
     if action not in ["start", "stop", "restart"]:
         return False, "Invalid action"
     
+    try:
+        _validate_name(name)
+    except ValueError:
+        return False, "Invalid service name"
+    
     cmd = []
     if sType == "systemd":
         cmd = ["sudo", "systemctl", action, "--", name]
@@ -277,6 +297,7 @@ async def perform_service_action(name, sType, action):
 def get_systemd_service_description(service_name):
     """Get description of a systemd service"""
     try:
+        _validate_name(service_name)
         cmd = ["systemctl", "show", "-p", "Description", "--", service_name]
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
         if result.returncode == 0:
@@ -302,6 +323,7 @@ def get_systemd_service_info(service_name):
         "uptime": None
     }
     try:
+        _validate_name(service_name)
         cmd = ["systemctl", "show", "-p", 
        "Description,LoadState,ActiveState,SubState,MainPID,MemoryCurrent,ActiveEnterTimestamp",
        "--", service_name]
@@ -358,7 +380,8 @@ def get_systemd_service_info(service_name):
 async def get_docker_image_from_container(container_name):
     """Get Docker image name from a running container"""
     try:
-        cmd = ["docker", "inspect", "-f", "{{.Config.Image}}", container_name]
+        _validate_name(container_name)
+        cmd = ["docker", "inspect", "-f", "{{.Config.Image}}", "--", container_name]
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
         if result.returncode == 0:
             return result.stdout.strip()
@@ -421,6 +444,7 @@ async def get_docker_container_info(container_name):
         "uptime": None
     }
     try:
+        _validate_name(container_name)
         cmd = ["docker", "inspect", "--", container_name]
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
         if result.returncode == 0:

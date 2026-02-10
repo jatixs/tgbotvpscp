@@ -63,7 +63,7 @@ function initScrollAnimations() {
 }
 // ----------------------------
 
-window.initSettings = function() {
+window.initSettings = function () {
     // Инициализация анимаций скролла
     initScrollAnimations();
 
@@ -74,7 +74,7 @@ window.initSettings = function() {
     updateBulkButtonsUI();
     initChangePasswordUI();
     fetchSessions();
-    
+
     // ИСПРАВЛЕНИЕ: Отключаем принудительный скролл к инпутам на мобильных
     // initInputScrollLogic(); 
 
@@ -98,7 +98,7 @@ window.initSettings = function() {
         const newBtn = btnCheckUpdate.cloneNode(true);
         btnCheckUpdate.parentNode.replaceChild(newBtn, btnCheckUpdate);
 
-        newBtn.addEventListener('click', async function() {
+        newBtn.addEventListener('click', async function () {
             newBtn.disabled = true;
             const spinner = '<svg class="animate-spin h-4 w-4 text-gray-500 inline-block mr-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>';
             const checkingText = (typeof I18N !== 'undefined' && I18N.web_update_checking) ? I18N.web_update_checking : "Checking...";
@@ -133,7 +133,7 @@ window.initSettings = function() {
         const newBtnDo = btnDoUpdate.cloneNode(true);
         btnDoUpdate.parentNode.replaceChild(newBtnDo, btnDoUpdate);
 
-        newBtnDo.addEventListener('click', async function() {
+        newBtnDo.addEventListener('click', async function () {
             if (!await window.showModalConfirm(I18N.web_update_started || "Are you sure you want to update the bot? The server will restart.", I18N.modal_title_confirm)) return;
 
             const currentCheckBtn = document.getElementById('btn-check-update');
@@ -160,7 +160,7 @@ window.initSettings = function() {
 
                 const alertMsg = (typeof I18N !== 'undefined' && I18N.web_update_started_alert) ? I18N.web_update_started_alert : "Update started! Page will reload in 15 seconds.";
                 const alertTitle = (typeof I18N !== 'undefined' && I18N.modal_title_info) ? I18N.modal_title_info : "Info";
-                
+
                 await window.showModalAlert(alertMsg, alertTitle);
                 setTimeout(() => location.reload(), 15000);
             } catch (error) {
@@ -203,39 +203,47 @@ document.addEventListener("DOMContentLoaded", () => {
         // для блоков, которые могли отрендериться статически
         initScrollAnimations();
     }
-    
+
     // Favicon Logic
     const favInput = document.getElementById('meta_favicon');
     const favImg = document.getElementById('faviconPreview');
     const favFallback = document.getElementById('faviconFallback');
-    const fileInput = document.getElementById('favFileInput'); 
-    
+    const fileInput = document.getElementById('favFileInput');
+
     if (favInput && favImg) {
         const updatePreview = () => {
-            if (favInput.value.trim()) {
-                favImg.src = favInput.value.trim();
-                favImg.style.display = 'block';
-                if(favFallback) favFallback.style.display = 'none';
+            const val = favInput.value.trim();
+            if (val) {
+                // Only allow safe URL schemes: http(s), relative paths, and data:image URIs
+                if (/^(https?:\/\/|\/|data:image\/)/i.test(val)) {
+                    favImg.src = val;
+                    favImg.style.display = 'block';
+                    if (favFallback) favFallback.style.display = 'none';
+                } else {
+                    favImg.removeAttribute('src');
+                    favImg.style.display = 'none';
+                    if (favFallback) favFallback.style.display = 'block';
+                }
             } else {
                 favImg.style.display = 'none';
-                if(favFallback) favFallback.style.display = 'block';
+                if (favFallback) favFallback.style.display = 'block';
             }
         };
 
         favInput.addEventListener('input', updatePreview);
-        
+
         favImg.addEventListener('error', () => {
             favImg.style.display = 'none';
-            if(favFallback) favFallback.style.display = 'block';
+            if (favFallback) favFallback.style.display = 'block';
         });
 
         // --- RESIZE LOGIC (Max 512x512) ---
         const processAndResizeImage = (file) => {
             if (!file) return;
             const reader = new FileReader();
-            reader.onload = function(e) {
+            reader.onload = function (e) {
                 const img = new Image();
-                img.onload = function() {
+                img.onload = function () {
                     const canvas = document.createElement('canvas');
                     let width = img.width;
                     let height = img.height;
@@ -261,15 +269,15 @@ document.addEventListener("DOMContentLoaded", () => {
 
                     // To Base64 (PNG)
                     const dataUrl = canvas.toDataURL('image/png');
-                    
+
                     // Insert into input
                     favInput.value = dataUrl;
                     updatePreview();
-                    
-                    const msg = (typeof I18N !== 'undefined' && I18N.web_image_uploaded) 
-                        ? I18N.web_image_uploaded 
+
+                    const msg = (typeof I18N !== 'undefined' && I18N.web_image_uploaded)
+                        ? I18N.web_image_uploaded
                         : "Image resized & loaded!";
-                    if(window.showToast) window.showToast(msg);
+                    if (window.showToast) window.showToast(msg);
                 };
                 img.src = e.target.result;
             };
@@ -300,7 +308,7 @@ document.addEventListener("DOMContentLoaded", () => {
 });
 
 // Default Favicon
-window.setDefaultFavicon = function() {
+window.setDefaultFavicon = function () {
     const input = document.getElementById('meta_favicon');
     if (input) {
         input.value = '/static/favicon.ico';
@@ -547,15 +555,15 @@ async function clearLogs() {
 
     const btn = document.getElementById('clearLogsBtn');
     const originalHTML = btn.innerHTML;
-    
+
     btn.style.width = getComputedStyle(btn).width;
     btn.style.height = getComputedStyle(btn).height;
-    
+
     const redClasses = ['bg-red-50', 'dark:bg-red-900/10', 'border-red-200', 'dark:border-red-800', 'text-red-600', 'dark:text-red-400', 'hover:bg-red-100', 'dark:hover:bg-red-900/30', 'active:bg-red-200'];
     const greenClasses = ['bg-green-600', 'text-white', 'border-green-600', 'hover:bg-green-500'];
 
     btn.disabled = true;
-    
+
     btn.innerHTML = `<div class="flex items-center justify-center w-full h-full"><svg class="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg></div>`;
 
     try {
@@ -567,70 +575,14 @@ async function clearLogs() {
         if (res.ok) {
             btn.classList.remove(...redClasses);
             btn.classList.add(...greenClasses);
-            
+
             btn.innerHTML = `<div class="flex items-center justify-center gap-2 w-full h-full"><svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-white shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg> <span class="whitespace-nowrap text-[10px] font-bold uppercase tracking-wider leading-4">${I18N.web_logs_cleared_alert}</span></div>`;
-            
+
             setTimeout(() => {
                 btn.innerHTML = originalHTML;
                 btn.classList.remove(...greenClasses);
                 btn.classList.add(...redClasses);
-                
-                btn.style.width = ''; 
-                btn.style.height = ''; 
-                btn.disabled = false;
-            }, 2000);
-        } else {
-            const data = await res.json();
-            const errorShort = (typeof I18N !== 'undefined' && I18N.web_error_short) ? I18N.web_error_short : "Error";
-            await window.showModalAlert(I18N.web_error.replace('{error}', data.error || "Failed"), errorShort);
-            
-            btn.disabled = false;
-            btn.innerHTML = originalHTML;
-            btn.style.width = ''; 
-            btn.style.height = ''; 
-        }
-    } catch (e) {
-        const connErrTitle = (typeof I18N !== 'undefined' && I18N.web_conn_error_short) ? I18N.web_conn_error_short : "Connection Error";
-        await window.showModalAlert(I18N.web_conn_error.replace('{error}', e), connErrTitle);
-        
-        btn.disabled = false;
-        btn.innerHTML = originalHTML;
-        btn.style.width = ''; 
-        btn.style.height = ''; 
-    }
-}
 
-async function resetTrafficSettings() {
-    if (!await window.showModalConfirm(I18N.web_traffic_reset_confirm || "Are you sure? This will zero out the counters.", I18N.modal_title_confirm)) return;
-
-    const btn = document.getElementById('resetTrafficBtn');
-    const originalHTML = btn.innerHTML;
-    
-    btn.style.width = getComputedStyle(btn).width;
-    btn.style.height = getComputedStyle(btn).height;
-    
-    const redClasses = ['bg-red-50', 'dark:bg-red-900/10', 'border-red-200', 'dark:border-red-800', 'text-red-600', 'dark:text-red-400', 'hover:bg-red-100', 'dark:hover:bg-red-900/30', 'active:bg-red-200'];
-    const greenClasses = ['bg-green-600', 'text-white', 'border-green-600', 'hover:bg-green-500'];
-
-    btn.disabled = true;
-    
-    btn.innerHTML = `<div class="flex items-center justify-center w-full h-full"><svg class="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg></div>`;
-
-    try {
-        const res = await fetch('/api/traffic/reset', { method: 'POST' });
-        if (res.ok) {
-            btn.classList.remove(...redClasses);
-            btn.classList.add(...greenClasses);
-            
-            const doneText = (typeof I18N !== 'undefined' && I18N.web_traffic_reset_no_emoji) ? I18N.web_traffic_reset_no_emoji : "Done!";
-            
-            btn.innerHTML = `<div class="flex items-center justify-center gap-2 w-full h-full"><svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-white shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg> <span class="whitespace-nowrap text-[10px] font-bold uppercase tracking-wider leading-4">${doneText}</span></div>`;
-            
-            setTimeout(() => {
-                btn.innerHTML = originalHTML;
-                btn.classList.remove(...greenClasses);
-                btn.classList.add(...redClasses);
-                
                 btn.style.width = '';
                 btn.style.height = '';
                 btn.disabled = false;
@@ -639,7 +591,63 @@ async function resetTrafficSettings() {
             const data = await res.json();
             const errorShort = (typeof I18N !== 'undefined' && I18N.web_error_short) ? I18N.web_error_short : "Error";
             await window.showModalAlert(I18N.web_error.replace('{error}', data.error || "Failed"), errorShort);
-            
+
+            btn.disabled = false;
+            btn.innerHTML = originalHTML;
+            btn.style.width = '';
+            btn.style.height = '';
+        }
+    } catch (e) {
+        const connErrTitle = (typeof I18N !== 'undefined' && I18N.web_conn_error_short) ? I18N.web_conn_error_short : "Connection Error";
+        await window.showModalAlert(I18N.web_conn_error.replace('{error}', e), connErrTitle);
+
+        btn.disabled = false;
+        btn.innerHTML = originalHTML;
+        btn.style.width = '';
+        btn.style.height = '';
+    }
+}
+
+async function resetTrafficSettings() {
+    if (!await window.showModalConfirm(I18N.web_traffic_reset_confirm || "Are you sure? This will zero out the counters.", I18N.modal_title_confirm)) return;
+
+    const btn = document.getElementById('resetTrafficBtn');
+    const originalHTML = btn.innerHTML;
+
+    btn.style.width = getComputedStyle(btn).width;
+    btn.style.height = getComputedStyle(btn).height;
+
+    const redClasses = ['bg-red-50', 'dark:bg-red-900/10', 'border-red-200', 'dark:border-red-800', 'text-red-600', 'dark:text-red-400', 'hover:bg-red-100', 'dark:hover:bg-red-900/30', 'active:bg-red-200'];
+    const greenClasses = ['bg-green-600', 'text-white', 'border-green-600', 'hover:bg-green-500'];
+
+    btn.disabled = true;
+
+    btn.innerHTML = `<div class="flex items-center justify-center w-full h-full"><svg class="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg></div>`;
+
+    try {
+        const res = await fetch('/api/traffic/reset', { method: 'POST' });
+        if (res.ok) {
+            btn.classList.remove(...redClasses);
+            btn.classList.add(...greenClasses);
+
+            const doneText = (typeof I18N !== 'undefined' && I18N.web_traffic_reset_no_emoji) ? I18N.web_traffic_reset_no_emoji : "Done!";
+
+            btn.innerHTML = `<div class="flex items-center justify-center gap-2 w-full h-full"><svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-white shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg> <span class="whitespace-nowrap text-[10px] font-bold uppercase tracking-wider leading-4">${doneText}</span></div>`;
+
+            setTimeout(() => {
+                btn.innerHTML = originalHTML;
+                btn.classList.remove(...greenClasses);
+                btn.classList.add(...redClasses);
+
+                btn.style.width = '';
+                btn.style.height = '';
+                btn.disabled = false;
+            }, 2000);
+        } else {
+            const data = await res.json();
+            const errorShort = (typeof I18N !== 'undefined' && I18N.web_error_short) ? I18N.web_error_short : "Error";
+            await window.showModalAlert(I18N.web_error.replace('{error}', data.error || "Failed"), errorShort);
+
             btn.disabled = false;
             btn.innerHTML = originalHTML;
             btn.style.width = '';
@@ -648,7 +656,7 @@ async function resetTrafficSettings() {
     } catch (e) {
         const errorShort = (typeof I18N !== 'undefined' && I18N.web_conn_error_short) ? I18N.web_conn_error_short : "Conn Error";
         await window.showModalAlert(I18N.web_conn_error.replace('{error}', e), errorShort);
-        
+
         btn.disabled = false;
         btn.innerHTML = originalHTML;
         btn.style.width = '';
@@ -799,26 +807,26 @@ function renderNodes() {
         tbody.innerHTML = `<tr><td colspan="4" class="px-4 py-3 text-center text-gray-500 text-xs">${I18N.web_no_nodes}</td></tr>`;
     }
 }
-window.startNodeRename = function(token) {
+window.startNodeRename = function (token) {
     document.getElementById(`disp_name_${token}`).classList.add('hidden');
     document.getElementById(`edit_name_${token}`).classList.remove('hidden');
     const input = document.getElementById(`input_name_${token}`);
-    
+
     // ИСПРАВЛЕНИЕ: Фокус без скролла
     input.focus({ preventScroll: true });
-    
+
     const node = NODES_DATA.find(n => n.token === token);
     if (node) input.value = node.name;
 
     // ИСПРАВЛЕНИЕ: Мы убрали принудительный scrollIntoView
 };
 
-window.cancelNodeRename = function(token) {
+window.cancelNodeRename = function (token) {
     document.getElementById(`disp_name_${token}`).classList.remove('hidden');
     document.getElementById(`edit_name_${token}`).classList.add('hidden');
 };
 
-window.saveNodeRename = async function(token) {
+window.saveNodeRename = async function (token) {
     const input = document.getElementById(`input_name_${token}`);
     const newName = input.value.trim();
     if (!newName) return;
@@ -871,7 +879,7 @@ window.saveNodeRename = async function(token) {
     }
 };
 
-window.handleSettingsRenameKeydown = function(event, token) {
+window.handleSettingsRenameKeydown = function (event, token) {
     if (event.key === 'Enter') {
         saveNodeRename(token);
     } else if (event.key === 'Escape') {
@@ -1111,14 +1119,14 @@ function renderKeyboardModalContent() {
     container.innerHTML = html;
 }
 
-window.openKeyboardModal = function() {
+window.openKeyboardModal = function () {
     const modal = document.getElementById('keyboardModal');
     if (modal) {
         animateModalOpen(modal);
     }
 };
 
-window.closeKeyboardModal = function() {
+window.closeKeyboardModal = function () {
     const modal = document.getElementById('keyboardModal');
     if (modal) {
         animateModalClose(modal);
@@ -1248,7 +1256,7 @@ function animateBulkButton(btnId, state, originalText) {
     }
 }
 
-window.enableAllKeyboard = async function() {
+window.enableAllKeyboard = async function () {
     const btnId = 'btnEnableAllKb';
     const btn = document.getElementById(btnId);
     if (btn && (btn.disabled || btn.querySelector('.animate-spin'))) return;
@@ -1283,7 +1291,7 @@ window.enableAllKeyboard = async function() {
     }, 1500);
 };
 
-window.disableAllKeyboard = async function() {
+window.disableAllKeyboard = async function () {
     const btnId = 'btnDisableAllKb';
     const btn = document.getElementById(btnId);
     if (btn && (btn.disabled || btn.querySelector('.animate-spin'))) return;
@@ -1428,19 +1436,19 @@ function renderSessionItem(s) {
             </div>
         </div>
         <div class="flex-shrink-0 ml-2">
-            ${isCurrent ? 
-                `<span class="px-2 py-1 bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400 text-[10px] font-bold uppercase rounded-lg tracking-wider">${I18N.web_session_current || 'Current'}</span>` : 
-                `<button onclick="revokeSession('${s.id}')" class="p-2 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition" title="${I18N.web_session_revoke || 'Revoke'}">
+            ${isCurrent ?
+            `<span class="px-2 py-1 bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400 text-[10px] font-bold uppercase rounded-lg tracking-wider">${I18N.web_session_current || 'Current'}</span>` :
+            `<button onclick="revokeSession('${s.id}')" class="p-2 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition" title="${I18N.web_session_revoke || 'Revoke'}">
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                     </svg>
                 </button>`
-            }
+        }
         </div>
     </div>`;
 }
 
-window.openSessionsModal = function() {
+window.openSessionsModal = function () {
     const modal = document.getElementById('sessionsModal');
     const content = document.getElementById('sessionsModalContent');
     const btnRevokeAll = document.getElementById('btnRevokeAllSessions');
@@ -1466,7 +1474,7 @@ window.openSessionsModal = function() {
     }
 };
 
-window.closeSessionsModal = function() {
+window.closeSessionsModal = function () {
     const modal = document.getElementById('sessionsModal');
     if (modal) {
         animateModalClose(modal);
@@ -1578,7 +1586,7 @@ async function handleSettingsBtnClick(btn, actionCallback) {
     } finally {
         settingsBtnTimer = setTimeout(() => {
             btn.classList.remove('force-expanded');
-            btn.blur(); 
+            btn.blur();
         }, 2500);
     }
 }
@@ -1586,32 +1594,32 @@ async function handleSettingsBtnClick(btn, actionCallback) {
 
 // --- Meta/SEO Modal Logic ---
 
-window.openMetaModal = function() {
+window.openMetaModal = function () {
     const modal = document.getElementById('metaModal');
     if (modal) {
         animateModalOpen(modal);
     }
 };
 
-window.closeMetaModal = function() {
+window.closeMetaModal = function () {
     const modal = document.getElementById('metaModal');
     if (modal) {
         animateModalClose(modal);
     }
 };
 
-window.saveMetaData = async function() {
+window.saveMetaData = async function () {
     const btn = document.getElementById('btnSaveMeta');
     const locked = document.getElementById('meta_lock_forever').checked;
-    
+
     // 1. Предупреждение о вечной блокировке
     if (locked) {
-        const confirmMsg = (typeof I18N !== 'undefined' && I18N.web_meta_lock_confirm) 
-            ? I18N.web_meta_lock_confirm 
+        const confirmMsg = (typeof I18N !== 'undefined' && I18N.web_meta_lock_confirm)
+            ? I18N.web_meta_lock_confirm
             : "WARNING: You are about to lock settings forever. The settings button will disappear and you won't be able to change this data. Continue?";
         const confirmTitle = (typeof I18N !== 'undefined' && I18N.modal_title_confirm) ? I18N.modal_title_confirm : "Confirm";
         if (!await window.showModalConfirm(confirmMsg, confirmTitle)) {
-            return; 
+            return;
         }
     }
 
@@ -1649,19 +1657,19 @@ window.saveMetaData = async function() {
         if (res.ok) {
             // Успех
             const successTitle = (typeof I18N !== 'undefined' && I18N.web_success) ? I18N.web_success : "Success";
-            const msgNormal = (typeof I18N !== 'undefined' && I18N.web_meta_success) 
-                ? I18N.web_meta_success 
+            const msgNormal = (typeof I18N !== 'undefined' && I18N.web_meta_success)
+                ? I18N.web_meta_success
                 : "Metadata updated successfully.";
-            const msgLocked = (typeof I18N !== 'undefined' && I18N.web_meta_locked_alert) 
-                ? I18N.web_meta_locked_alert 
+            const msgLocked = (typeof I18N !== 'undefined' && I18N.web_meta_locked_alert)
+                ? I18N.web_meta_locked_alert
                 : "Settings saved and LOCKED forever. Reloading...";
 
             const successMsg = locked ? msgLocked : msgNormal;
-                
+
             await window.showModalAlert(successMsg, successTitle);
-            
+
             if (locked) {
-                location.reload(); 
+                location.reload();
             } else {
                 closeMetaModal();
                 btn.innerHTML = originalText;
@@ -1683,7 +1691,7 @@ window.saveMetaData = async function() {
     }
 };
 
-window.animateModalClose = function(modal) {
+window.animateModalClose = function (modal) {
     if (!modal) return;
     const card = modal.firstElementChild;
     if (card) {
@@ -1722,7 +1730,7 @@ window.animateModalClose = function(modal) {
         modal.style.height = '';
         modal.style.top = '';
         modal.style.paddingBottom = '';
-        
+
         modal.classList.remove('items-start', 'pt-4', 'overflow-y-auto');
         modal.classList.add('items-center');
 

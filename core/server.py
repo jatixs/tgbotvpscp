@@ -4216,6 +4216,14 @@ async def api_service_info(request):
         if not name:
             return web.json_response({"error": "Name required"}, status=400)
 
+        found = False
+        for s in current_config.MANAGED_SERVICES:
+            if s["name"] == name:
+                found = True
+                break
+        if not found:
+            return web.json_response({"error": "Service not managed"}, status=403)
+
         from modules.services import get_service_info
         info = await get_service_info(name, sType)
         return web.json_response(info)
