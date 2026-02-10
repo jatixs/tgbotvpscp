@@ -18,7 +18,7 @@ from core import config
 from core.auth import is_allowed, send_access_denied_message
 from core.messaging import delete_previous_message
 from core.shared_state import LAST_MESSAGE_IDS
-from core.utils import escape_html, get_country_details
+from core.utils import escape_html
 
 BUTTON_KEY = "btn_speedtest"
 SERVER_LIST_URL = "https://export.iperf3serverlist.net/listed_iperf3_servers.json"
@@ -419,15 +419,13 @@ async def run_iperf_test_async(
     except Exception as e:
         logging.error(f"UL Error: {e}")
         return str(e)
-    flag, country_name = await get_country_details(server.get("country") or host)
-    loc = f"{country_name or server.get('country')} {server.get('city')}"
+    loc = f"{server.get('country')} {server.get('city')}"
     return _(
         "speedtest_results",
         lang,
         dl=results["download"],
         ul=results["upload"],
         ping=ping,
-        flag=flag,
         server=escape_html(loc),
         provider=escape_html(server.get("provider")),
     )
@@ -457,15 +455,12 @@ async def run_ookla_speedtest(bot: Bot, chat_id: int, message_id: int, lang: str
                 server_country = data.get("server", {}).get("country", "")
                 result_url = data.get("result", {}).get("url", "")
                 
-                flag, country_name = await get_country_details(server_country)
-                
                 return _(
                     "speedtest_ookla_results",
                     lang,
                     dl=download_speed,
                     ul=upload_speed,
                     ping=ping_latency,
-                    flag=flag,
                     server=escape_html(server_name),
                     location=escape_html(server_location),
                     url=result_url

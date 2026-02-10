@@ -888,7 +888,6 @@ def execute_command(task):
                             "dl": ookla_result["dl"],
                             "ul": ookla_result["ul"],
                             "ping": ookla_result["ping"],
-                            "flag": "",
                             "server": ookla_result["server"].split(" (")[0] if " (" in ookla_result["server"] else ookla_result["server"],
                             "location": ookla_result["server"].split(" (")[1].rstrip(")") if " (" in ookla_result["server"] else "",
                             "url": ookla_result.get("url", "")
@@ -945,7 +944,6 @@ def execute_command(task):
                             "dl": dl_speed,
                             "ul": ul_speed,
                             "ping": ping_ms,
-                            "flag": "",
                             "server": f"{city}, {country}",
                             "provider": host
                         }
