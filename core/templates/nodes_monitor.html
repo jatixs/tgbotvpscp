@@ -139,8 +139,8 @@
             <!-- Search and Filters -->
             <div class="flex flex-wrap items-center gap-4 mb-6">
                 <div class="relative flex-1 min-w-[200px]">
-                    <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                        <svg class="h-4 w-4 text-gray-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none z-10">
+                        <svg class="h-4 w-4 text-gray-500 dark:text-gray-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                         </svg>
                     </div>
@@ -148,14 +148,12 @@
                            class="w-full pl-10 pr-4 py-2 bg-white/60 dark:bg-black/20 border border-white/40 dark:border-white/10 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 transition-all duration-300 placeholder-gray-400 text-gray-900 dark:text-white backdrop-blur-md">
                 </div>
                 <div class="flex items-center gap-2">
-                    <button onclick="filterByStatus('all')" id="filterAll" class="px-3 py-1.5 text-xs font-bold rounded-lg transition focus:outline-none bg-blue-100 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400">
-                        {{ web_filter_all }}
-                    </button>
-                    <button onclick="filterByStatus('online')" id="filterOnline" class="px-3 py-1.5 text-xs font-bold rounded-lg transition focus:outline-none bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 hover:bg-green-100 dark:hover:bg-green-500/20">
-                        🟢 {{ web_filter_online }}
-                    </button>
-                    <button onclick="filterByStatus('offline')" id="filterOffline" class="px-3 py-1.5 text-xs font-bold rounded-lg transition focus:outline-none bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 hover:bg-red-100 dark:hover:bg-red-500/20">
-                        🔴 {{ web_filter_offline }}
+                    <button onclick="openFilterModal()" id="filterBtn" class="relative px-3 py-2 text-sm font-bold rounded-xl transition focus:outline-none bg-white/60 dark:bg-white/5 border border-white/40 dark:border-white/10 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-white/10 flex items-center gap-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+                        </svg>
+                        <span>{{ web_filter_btn }}</span>
+                        <span id="filterBadge" class="hidden absolute -top-1 -right-1 w-4 h-4 bg-blue-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center">0</span>
                     </button>
                 </div>
             </div>
@@ -178,14 +176,14 @@
             <div class="bg-white/90 dark:bg-gray-900 border border-white/20 dark:border-white/10 rounded-2xl shadow-2xl w-full max-w-4xl relative backdrop-blur-xl transition-all my-auto">
                 <!-- Modal Header -->
                 <div class="p-4 sm:p-5 border-b border-gray-200 dark:border-white/5 flex justify-between items-center rounded-t-2xl z-10 bg-white/50 dark:bg-black/20">
-                    <div class="flex items-center gap-3">
-                        <div id="modalNodeStatusIcon" class="p-2 bg-green-100 dark:bg-green-500/20 rounded-lg text-green-600 dark:text-green-400">
+                    <div class="flex items-center gap-3 min-w-0 flex-1 mr-2">
+                        <div id="modalNodeStatusIcon" class="p-2 bg-green-100 dark:bg-green-500/20 rounded-lg text-green-600 dark:text-green-400 flex-shrink-0">
                             <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01" />
                             </svg>
                         </div>
-                        <div>
-                            <h3 class="text-xl font-bold text-gray-900 dark:text-white" id="modalNodeTitle">...</h3>
+                        <div class="min-w-0">
+                            <h3 class="text-base sm:text-xl font-bold text-gray-900 dark:text-white truncate" id="modalNodeTitle">...</h3>
                             <div class="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
                                 <span class="font-mono" id="modalNodeIp">-</span>
                                 <span id="modalNodePingBadge" class="hidden"></span>
@@ -197,7 +195,7 @@
                             </div>
                         </div>
                     </div>
-                    <button onclick="closeNodeDetailModal()" class="text-gray-400 hover:text-gray-600 dark:hover:text-white transition p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-white/10">
+                    <button onclick="closeNodeDetailModal()" class="text-gray-400 hover:text-gray-600 dark:hover:text-white transition p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-white/10 flex-shrink-0">
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
                         </svg>
@@ -286,6 +284,91 @@
                             {{ btn_reboot }}
                         </button>
                     </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Filter Modal -->
+        <div id="filterModal" class="fixed inset-0 z-[100] hidden items-center justify-center bg-black/30 dark:bg-black/60 backdrop-blur-sm p-4" onclick="if(event.target === this) closeFilterModal()">
+            <div class="bg-white dark:bg-gray-800 border border-white/20 dark:border-white/10 rounded-2xl shadow-2xl w-full max-w-md transform transition-all">
+                <div class="p-5 border-b border-gray-200 dark:border-white/5 flex justify-between items-center">
+                    <h3 class="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+                        </svg>
+                        {{ web_filter_title }}
+                    </h3>
+                    <button onclick="closeFilterModal()" class="p-1 rounded-lg hover:bg-gray-100 dark:hover:bg-white/10 transition focus:outline-none">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                    </button>
+                </div>
+                <div class="p-5 space-y-5">
+                    <!-- Status Filter -->
+                    <div>
+                        <label class="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">{{ web_filter_status }}</label>
+                        <div class="grid grid-cols-2 gap-2">
+                            <button onclick="setFilterStatus('all')" id="fStatusAll" class="filter-status-btn px-2 sm:px-3 py-2 text-xs sm:text-sm font-medium rounded-lg transition focus:outline-none bg-blue-100 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400 border-2 border-blue-500 whitespace-nowrap">
+                                {{ web_filter_all }}
+                            </button>
+                            <button onclick="setFilterStatus('online')" id="fStatusOnline" class="filter-status-btn px-2 sm:px-3 py-2 text-xs sm:text-sm font-medium rounded-lg transition focus:outline-none bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 border-2 border-transparent hover:border-green-500 whitespace-nowrap">
+                                🟢 {{ web_filter_online }}
+                            </button>
+                            <button onclick="setFilterStatus('offline')" id="fStatusOffline" class="filter-status-btn px-2 sm:px-3 py-2 text-xs sm:text-sm font-medium rounded-lg transition focus:outline-none bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 border-2 border-transparent hover:border-red-500 whitespace-nowrap">
+                                🔴 {{ web_filter_offline }}
+                            </button>
+                            <button onclick="setFilterStatus('restarting')" id="fStatusRestarting" class="filter-status-btn px-2 sm:px-3 py-2 text-xs sm:text-sm font-medium rounded-lg transition focus:outline-none bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 border-2 border-transparent hover:border-blue-500 whitespace-nowrap">
+                                🔵 {{ web_filter_restarting }}
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- CPU Load Filter -->
+                    <div>
+                        <label class="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">{{ web_filter_cpu_load }}</label>
+                        <div class="grid grid-cols-2 gap-2">
+                            <button onclick="setFilterCpu('all')" id="fCpuAll" class="filter-cpu-btn px-2 sm:px-3 py-2 text-xs sm:text-sm font-medium rounded-lg transition focus:outline-none bg-blue-100 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400 border-2 border-blue-500 whitespace-nowrap">
+                                {{ web_filter_all }}
+                            </button>
+                            <button onclick="setFilterCpu('high')" id="fCpuHigh" class="filter-cpu-btn px-2 sm:px-3 py-2 text-xs sm:text-sm font-medium rounded-lg transition focus:outline-none bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 border-2 border-transparent hover:border-red-500 whitespace-nowrap">
+                                🔴 {{ web_filter_high }} (>80%)
+                            </button>
+                            <button onclick="setFilterCpu('medium')" id="fCpuMedium" class="filter-cpu-btn px-2 sm:px-3 py-2 text-xs sm:text-sm font-medium rounded-lg transition focus:outline-none bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 border-2 border-transparent hover:border-yellow-500 whitespace-nowrap">
+                                🟡 {{ web_filter_medium }} (50-80%)
+                            </button>
+                            <button onclick="setFilterCpu('low')" id="fCpuLow" class="filter-cpu-btn px-2 sm:px-3 py-2 text-xs sm:text-sm font-medium rounded-lg transition focus:outline-none bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 border-2 border-transparent hover:border-green-500 whitespace-nowrap">
+                                🟢 {{ web_filter_low }} (<50%)
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Sort By -->
+                    <div>
+                        <label class="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">{{ web_filter_sort_by }}</label>
+                        <div class="grid grid-cols-2 gap-2">
+                            <button onclick="setFilterSort('name')" id="fSortName" class="filter-sort-btn px-2 sm:px-3 py-2 text-xs sm:text-sm font-medium rounded-lg transition focus:outline-none bg-blue-100 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400 border-2 border-blue-500 whitespace-nowrap">
+                                {{ web_filter_sort_name }}
+                            </button>
+                            <button onclick="setFilterSort('cpu')" id="fSortCpu" class="filter-sort-btn px-2 sm:px-3 py-2 text-xs sm:text-sm font-medium rounded-lg transition focus:outline-none bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 border-2 border-transparent whitespace-nowrap">
+                                {{ web_filter_sort_cpu }}
+                            </button>
+                            <button onclick="setFilterSort('ram')" id="fSortRam" class="filter-sort-btn px-2 sm:px-3 py-2 text-xs sm:text-sm font-medium rounded-lg transition focus:outline-none bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 border-2 border-transparent whitespace-nowrap">
+                                {{ web_filter_sort_ram }}
+                            </button>
+                            <button onclick="setFilterSort('ping')" id="fSortPing" class="filter-sort-btn px-2 sm:px-3 py-2 text-xs sm:text-sm font-medium rounded-lg transition focus:outline-none bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 border-2 border-transparent whitespace-nowrap">
+                                {{ web_filter_sort_ping }}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                <div class="p-5 border-t border-gray-200 dark:border-white/5 flex justify-between gap-3">
+                    <button onclick="resetFilters()" class="px-4 py-2 rounded-lg text-sm font-medium text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 transition focus:outline-none">
+                        {{ web_filter_reset }}
+                    </button>
+                    <button onclick="applyFilters()" class="px-6 py-2 rounded-lg text-sm font-bold bg-blue-600 text-white hover:bg-blue-500 transition shadow-lg shadow-blue-500/20 focus:outline-none">
+                        {{ web_filter_apply }}
+                    </button>
                 </div>
             </div>
         </div>

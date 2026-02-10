@@ -5,6 +5,8 @@
 
 let allNodesData = [];
 let currentFilter = 'all';
+let currentCpuFilter = 'all';
+let currentSort = 'name';
 let searchQuery = '';
 let selectedNodes = new Set();
 let currentNodeToken = null;
@@ -24,6 +26,8 @@ function initNodesMonitor() {
     // Reset state
     allNodesData = [];
     currentFilter = 'all';
+    currentCpuFilter = 'all';
+    currentSort = 'name';
     searchQuery = '';
     selectedNodes.clear();
     currentNodeToken = null;
@@ -100,12 +104,25 @@ function renderNodes() {
     // Filter nodes
     let filtered = allNodesData;
     
+    // Status filter
     if (currentFilter === 'online') {
         filtered = filtered.filter(n => n.status === 'online');
     } else if (currentFilter === 'offline') {
-        filtered = filtered.filter(n => n.status !== 'online');
+        filtered = filtered.filter(n => n.status !== 'online' && n.status !== 'restarting');
+    } else if (currentFilter === 'restarting') {
+        filtered = filtered.filter(n => n.status === 'restarting');
     }
     
+    // CPU load filter
+    if (currentCpuFilter === 'high') {
+        filtered = filtered.filter(n => (n.cpu || 0) > 80);
+    } else if (currentCpuFilter === 'medium') {
+        filtered = filtered.filter(n => (n.cpu || 0) >= 50 && (n.cpu || 0) <= 80);
+    } else if (currentCpuFilter === 'low') {
+        filtered = filtered.filter(n => (n.cpu || 0) < 50);
+    }
+    
+    // Search filter
     if (searchQuery) {
         const q = searchQuery.toLowerCase();
         filtered = filtered.filter(n => 
@@ -113,6 +130,23 @@ function renderNodes() {
             (n.ip && n.ip.toLowerCase().includes(q))
         );
     }
+    
+    // Sort
+    filtered = [...filtered].sort((a, b) => {
+        switch (currentSort) {
+            case 'cpu':
+                return (b.cpu || 0) - (a.cpu || 0);
+            case 'ram':
+                return (b.ram || 0) - (a.ram || 0);
+            case 'ping':
+                const pingA = a.ping != null ? parseFloat(a.ping) : Infinity;
+                const pingB = b.ping != null ? parseFloat(b.ping) : Infinity;
+                return pingA - pingB;
+            case 'name':
+            default:
+                return a.name.localeCompare(b.name);
+        }
+    });
     
     if (filtered.length === 0) {
         container.innerHTML = `
@@ -188,42 +222,57 @@ function createNodeCard(node) {
             </div>
             
             <!-- Stats -->
-            <div class="p-4 space-y-3">
-                <!-- CPU -->
-                <div>
-                    <div class="flex justify-between text-xs mb-1">
-                        <span class="text-gray-500 dark:text-gray-400 font-bold">${I18N?.web_cpu || 'CPU'}</span>
-                        <span class="font-mono font-bold text-indigo-600 dark:text-indigo-400">${cpu}%</span>
+            <div class="px-3 py-3">
+                <!-- Circular Progress Indicators -->
+                <div class="flex justify-between items-center gap-2">
+                    <!-- CPU Circle -->
+                    <div class="flex flex-col items-center flex-1">
+                        <div class="relative w-full" style="max-width: 64px; aspect-ratio: 1;">
+                            <svg viewBox="0 0 48 48" class="w-full h-full" style="transform: rotate(-90deg);">
+                                <circle cx="24" cy="24" r="20" fill="none" stroke="rgba(99,102,241,0.15)" stroke-width="4"></circle>
+                                <circle cx="24" cy="24" r="20" fill="none" stroke="#6366f1" stroke-width="4" 
+                                    stroke-dasharray="${(cpu / 100) * 125.6} 125.6" stroke-linecap="round"></circle>
+                            </svg>
+                            <div class="absolute inset-0 flex items-center justify-center">
+                                <span class="text-sm font-bold" style="color: #6366f1;">${cpu}</span>
+                            </div>
+                        </div>
+                        <span class="text-[10px] text-gray-500 dark:text-gray-400 font-semibold mt-1 uppercase tracking-wide">${I18N?.web_cpu || 'CPU'}</span>
                     </div>
-                    <div class="w-full bg-gray-200 dark:bg-gray-700 h-1.5 rounded-full overflow-hidden">
-                        <div class="bg-indigo-500 h-1.5 rounded-full transition-all duration-500" style="width: ${cpu}%"></div>
+                    
+                    <!-- RAM Circle -->
+                    <div class="flex flex-col items-center flex-1">
+                        <div class="relative w-full" style="max-width: 64px; aspect-ratio: 1;">
+                            <svg viewBox="0 0 48 48" class="w-full h-full" style="transform: rotate(-90deg);">
+                                <circle cx="24" cy="24" r="20" fill="none" stroke="rgba(168,85,247,0.15)" stroke-width="4"></circle>
+                                <circle cx="24" cy="24" r="20" fill="none" stroke="#a855f7" stroke-width="4" 
+                                    stroke-dasharray="${(ram / 100) * 125.6} 125.6" stroke-linecap="round"></circle>
+                            </svg>
+                            <div class="absolute inset-0 flex items-center justify-center">
+                                <span class="text-sm font-bold" style="color: #a855f7;">${ram}</span>
+                            </div>
+                        </div>
+                        <span class="text-[10px] text-gray-500 dark:text-gray-400 font-semibold mt-1 uppercase tracking-wide">${I18N?.web_ram || 'RAM'}</span>
                     </div>
-                </div>
-                
-                <!-- RAM -->
-                <div>
-                    <div class="flex justify-between text-xs mb-1">
-                        <span class="text-gray-500 dark:text-gray-400 font-bold">${I18N?.web_ram || 'RAM'}</span>
-                        <span class="font-mono font-bold text-purple-600 dark:text-purple-400">${ram}%</span>
-                    </div>
-                    <div class="w-full bg-gray-200 dark:bg-gray-700 h-1.5 rounded-full overflow-hidden">
-                        <div class="bg-purple-500 h-1.5 rounded-full transition-all duration-500" style="width: ${ram}%"></div>
-                    </div>
-                </div>
-                
-                <!-- Disk -->
-                <div>
-                    <div class="flex justify-between text-xs mb-1">
-                        <span class="text-gray-500 dark:text-gray-400 font-bold">${I18N?.web_disk || 'Disk'}</span>
-                        <span class="font-mono font-bold text-green-600 dark:text-green-400">${disk}%</span>
-                    </div>
-                    <div class="w-full bg-gray-200 dark:bg-gray-700 h-1.5 rounded-full overflow-hidden">
-                        <div class="bg-green-500 h-1.5 rounded-full transition-all duration-500" style="width: ${disk}%"></div>
+                    
+                    <!-- Disk Circle -->
+                    <div class="flex flex-col items-center flex-1">
+                        <div class="relative w-full" style="max-width: 64px; aspect-ratio: 1;">
+                            <svg viewBox="0 0 48 48" class="w-full h-full" style="transform: rotate(-90deg);">
+                                <circle cx="24" cy="24" r="20" fill="none" stroke="rgba(34,197,94,0.15)" stroke-width="4"></circle>
+                                <circle cx="24" cy="24" r="20" fill="none" stroke="#22c55e" stroke-width="4" 
+                                    stroke-dasharray="${(disk / 100) * 125.6} 125.6" stroke-linecap="round"></circle>
+                            </svg>
+                            <div class="absolute inset-0 flex items-center justify-center">
+                                <span class="text-sm font-bold" style="color: #22c55e;">${disk}</span>
+                            </div>
+                        </div>
+                        <span class="text-[10px] text-gray-500 dark:text-gray-400 font-semibold mt-1 uppercase tracking-wide">${I18N?.web_disk || 'Disk'}</span>
                     </div>
                 </div>
                 
                 <!-- Info Row -->
-                <div class="flex justify-between text-xs text-gray-500 dark:text-gray-400 pt-2 border-t border-gray-100 dark:border-white/5">
+                <div class="flex justify-between text-xs text-gray-500 dark:text-gray-400 pt-2 mt-2 border-t border-gray-100 dark:border-white/5">
                     <span>⏱ ${uptime}</span>
                     <span>📊 ${traffic}</span>
                 </div>
@@ -250,25 +299,102 @@ function filterNodes(query) {
     renderNodes();
 }
 
-function filterByStatus(status) {
-    currentFilter = status;
-    
-    // Update button styles
-    ['filterAll', 'filterOnline', 'filterOffline'].forEach(id => {
-        const btn = document.getElementById(id);
-        btn.className = 'px-3 py-1.5 text-xs font-bold rounded-lg transition bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400';
+// Filter Modal functions
+let tempFilterStatus = 'all';
+let tempFilterCpu = 'all';
+let tempFilterSort = 'name';
+
+function openFilterModal() {
+    tempFilterStatus = currentFilter;
+    tempFilterCpu = currentCpuFilter;
+    tempFilterSort = currentSort;
+    updateFilterModalUI();
+    const modal = document.getElementById('filterModal');
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+}
+
+function closeFilterModal() {
+    const modal = document.getElementById('filterModal');
+    modal.classList.add('hidden');
+    modal.classList.remove('flex');
+}
+
+function updateFilterModalUI() {
+    // Status buttons
+    document.querySelectorAll('.filter-status-btn').forEach(btn => {
+        btn.className = 'filter-status-btn px-3 py-2 text-sm font-medium rounded-lg transition focus:outline-none bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 border-2 border-transparent';
     });
-    
-    const activeBtn = document.getElementById('filter' + status.charAt(0).toUpperCase() + status.slice(1));
-    if (status === 'all') {
-        activeBtn.className = 'px-3 py-1.5 text-xs font-bold rounded-lg transition bg-blue-100 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400';
-    } else if (status === 'online') {
-        activeBtn.className = 'px-3 py-1.5 text-xs font-bold rounded-lg transition bg-green-100 dark:bg-green-500/20 text-green-600 dark:text-green-400';
-    } else {
-        activeBtn.className = 'px-3 py-1.5 text-xs font-bold rounded-lg transition bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400';
+    const statusBtn = document.getElementById('fStatus' + tempFilterStatus.charAt(0).toUpperCase() + tempFilterStatus.slice(1));
+    if (statusBtn) {
+        statusBtn.className = 'filter-status-btn px-3 py-2 text-sm font-medium rounded-lg transition focus:outline-none bg-blue-100 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400 border-2 border-blue-500';
     }
     
+    // CPU buttons
+    document.querySelectorAll('.filter-cpu-btn').forEach(btn => {
+        btn.className = 'filter-cpu-btn px-3 py-2 text-sm font-medium rounded-lg transition focus:outline-none bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 border-2 border-transparent';
+    });
+    const cpuBtn = document.getElementById('fCpu' + tempFilterCpu.charAt(0).toUpperCase() + tempFilterCpu.slice(1));
+    if (cpuBtn) {
+        cpuBtn.className = 'filter-cpu-btn px-3 py-2 text-sm font-medium rounded-lg transition focus:outline-none bg-blue-100 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400 border-2 border-blue-500';
+    }
+    
+    // Sort buttons
+    document.querySelectorAll('.filter-sort-btn').forEach(btn => {
+        btn.className = 'filter-sort-btn px-3 py-2 text-sm font-medium rounded-lg transition focus:outline-none bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 border-2 border-transparent';
+    });
+    const sortBtn = document.getElementById('fSort' + tempFilterSort.charAt(0).toUpperCase() + tempFilterSort.slice(1));
+    if (sortBtn) {
+        sortBtn.className = 'filter-sort-btn px-3 py-2 text-sm font-medium rounded-lg transition focus:outline-none bg-blue-100 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400 border-2 border-blue-500';
+    }
+}
+
+function setFilterStatus(status) {
+    tempFilterStatus = status;
+    updateFilterModalUI();
+}
+
+function setFilterCpu(cpu) {
+    tempFilterCpu = cpu;
+    updateFilterModalUI();
+}
+
+function setFilterSort(sort) {
+    tempFilterSort = sort;
+    updateFilterModalUI();
+}
+
+function resetFilters() {
+    tempFilterStatus = 'all';
+    tempFilterCpu = 'all';
+    tempFilterSort = 'name';
+    updateFilterModalUI();
+}
+
+function applyFilters() {
+    currentFilter = tempFilterStatus;
+    currentCpuFilter = tempFilterCpu;
+    currentSort = tempFilterSort;
+    updateFilterBadge();
     renderNodes();
+    closeFilterModal();
+}
+
+function updateFilterBadge() {
+    const badge = document.getElementById('filterBadge');
+    let count = 0;
+    if (currentFilter !== 'all') count++;
+    if (currentCpuFilter !== 'all') count++;
+    if (currentSort !== 'name') count++;
+    
+    if (count > 0) {
+        badge.textContent = count;
+        badge.classList.remove('hidden');
+        badge.classList.add('flex');
+    } else {
+        badge.classList.add('hidden');
+        badge.classList.remove('flex');
+    }
 }
 
 // Selection functions
