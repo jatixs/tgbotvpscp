@@ -592,14 +592,18 @@ function updateAgentStatsUI(data) {
             if (ipEl && data.stats.ip) ipEl.innerText = decryptData(data.stats.ip);
             
             const pingEl = document.getElementById('agentPing');
-            if (pingEl && data.stats.ping) {
-                const pingValue = decryptData(data.stats.ping);
-                // Add unit if it's a number
-                if (pingValue && !isNaN(pingValue)) {
-                    const unit = (typeof I18N !== 'undefined' && I18N.web_agent_ping_unit) ? I18N.web_agent_ping_unit : 'ms';
-                    pingEl.innerText = pingValue + ' ' + unit;
+            if (pingEl) {
+                if (data.stats.ping) {
+                    const pingValue = decryptData(data.stats.ping);
+                    // Add unit if it's a number
+                    if (pingValue && !isNaN(pingValue)) {
+                        const unit = (typeof I18N !== 'undefined' && I18N.web_agent_ping_unit) ? I18N.web_agent_ping_unit : 'ms';
+                        pingEl.innerText = pingValue + ' ' + unit;
+                    } else {
+                        pingEl.innerText = pingValue || 'n/a';
+                    }
                 } else {
-                    pingEl.innerText = pingValue;
+                    pingEl.innerText = 'n/a';
                 }
             } 
         }
@@ -1056,7 +1060,10 @@ function updateNodeDetailsUI(data) {
     }
 
     document.getElementById('modalNodeIp').innerText = decryptData(data.ip);
-    document.getElementById('modalToken').innerText = decryptData(data.token);
+    const tokenEl = document.getElementById('modalToken');
+    if (tokenEl) {
+        tokenEl.innerText = decryptData(data.token);
+    }
 
     const stats = data.stats || {};
 

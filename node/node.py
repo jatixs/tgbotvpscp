@@ -411,20 +411,29 @@ def get_system_stats():
         
         ext_ip = get_external_ip()
         
-        # Measure ping to 8.8.8.8
+        # Measure ping via HTTPS (works even if ICMP is blocked)
         ping_ms = None
         try:
-            proc = subprocess.Popen(
-                ["ping", "-c", "1", "-W", "2", "8.8.8.8"],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE
-            )
-            stdout, _ = proc.communicate(timeout=5)
-            ping_match = re.search(r"time=([\d\.]+)\s*ms", stdout.decode())
-            if ping_match:
-                ping_ms = round(float(ping_match.group(1)), 1)
+            import urllib.request
+            t1 = time.time()
+            req = urllib.request.Request("https://www.google.com", method="HEAD")
+            with urllib.request.urlopen(req, timeout=3) as resp:
+                if resp.status == 200:
+                    ping_ms = round((time.time() - t1) * 1000, 1)
         except Exception:
-            pass
+            # Fallback: try ICMP ping
+            try:
+                proc = subprocess.Popen(
+                    ["ping", "-c", "1", "-W", "2", "8.8.8.8"],
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE
+                )
+                stdout, _ = proc.communicate(timeout=5)
+                ping_match = re.search(r"time=([\d\.]+)\s*ms", stdout.decode())
+                if ping_match:
+                    ping_ms = round(float(ping_match.group(1)), 1)
+            except Exception:
+                pass
         
         result = {
             "cpu": psutil.cpu_percent(interval=None),
@@ -440,10 +449,9 @@ def get_system_stats():
             "uptime": int(time.time() - psutil.boot_time()),
             "process_cpu": get_top_processes('cpu'),
             "process_ram": get_top_processes('ram'),
-            "external_ip": ext_ip
+            "external_ip": ext_ip,
+            "ping": ping_ms if ping_ms is not None else "n/a"
         }
-        if ping_ms is not None:
-            result["ping"] = ping_ms
         return result
     except Exception as e:
         logging.error(f"Error gathering stats: {e}")

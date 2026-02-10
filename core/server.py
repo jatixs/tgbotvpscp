@@ -80,7 +80,7 @@ AGENT_FLAG = "🏳️"
 AGENT_IP_CACHE = "Loading..."
 AGENT_PING_CACHE = "n/a"
 AGENT_PING_LAST_UPDATE = 0
-AGENT_PING_TIMEOUT = 2  # Ping measurement timeout in seconds
+AGENT_PING_TIMEOUT = 5  # Ping measurement timeout in seconds
 AGENT_PING_SESSION = None  # Reusable aiohttp session for ping measurements
 RESET_TOKENS = {}
 SERVER_SESSIONS = {}
@@ -3022,26 +3022,37 @@ async def start_web_server(bot_instance: Bot):
 
 
 async def measure_agent_ping():
-    """Measure ping to google.com and return milliseconds as string, or None on failure"""
+    """Measure ping via HTTPS and return milliseconds as string, or None on failure"""
     global AGENT_PING_SESSION
-    try:
-        # Create session if it doesn't exist
-        if AGENT_PING_SESSION is None:
-            timeout = aiohttp.ClientTimeout(total=AGENT_PING_TIMEOUT)
-            AGENT_PING_SESSION = aiohttp.ClientSession(timeout=timeout)
-        
-        t1 = time.time()
-        async with AGENT_PING_SESSION.get("https://www.google.com") as resp:
-            if resp.status == 200:
-                return str(int((time.time() - t1) * 1000))
-    except Exception:
-        # If session fails, recreate it on next attempt
-        if AGENT_PING_SESSION:
-            try:
-                await AGENT_PING_SESSION.close()
-            except Exception:
-                pass
-            AGENT_PING_SESSION = None
+    
+    # List of targets to try (in order)
+    targets = [
+        "https://www.google.com",
+        "https://www.cloudflare.com",
+        "https://1.1.1.1"
+    ]
+    
+    for target in targets:
+        try:
+            # Create session if it doesn't exist
+            if AGENT_PING_SESSION is None:
+                timeout = aiohttp.ClientTimeout(total=AGENT_PING_TIMEOUT)
+                AGENT_PING_SESSION = aiohttp.ClientSession(timeout=timeout)
+            
+            t1 = time.time()
+            async with AGENT_PING_SESSION.head(target, allow_redirects=False) as resp:
+                if resp.status in (200, 301, 302, 403):
+                    return str(int((time.time() - t1) * 1000))
+        except Exception:
+            continue
+    
+    # If all targets failed, recreate session for next attempt
+    if AGENT_PING_SESSION:
+        try:
+            await AGENT_PING_SESSION.close()
+        except Exception:
+            pass
+        AGENT_PING_SESSION = None
     return None
 
 
@@ -3063,9 +3074,8 @@ async def agent_monitor():
     
     # Measure initial ping
     ping_result = await measure_agent_ping()
-    if ping_result:
-        AGENT_PING_CACHE = ping_result
-        AGENT_PING_LAST_UPDATE = time.time()
+    AGENT_PING_CACHE = ping_result if ping_result else "n/a"
+    AGENT_PING_LAST_UPDATE = time.time()
     
     while True:
         try:
@@ -3084,9 +3094,8 @@ async def agent_monitor():
             # Update ping every 30 seconds
             if time.time() - AGENT_PING_LAST_UPDATE > 30:
                 ping_result = await measure_agent_ping()
-                if ping_result:
-                    AGENT_PING_CACHE = ping_result
-                    AGENT_PING_LAST_UPDATE = time.time()
+                AGENT_PING_CACHE = ping_result if ping_result else "n/a"
+                AGENT_PING_LAST_UPDATE = time.time()
         except asyncio.CancelledError:
 
             raise
@@ -4372,9 +4381,8 @@ async def agent_monitor():
     
     # Measure initial ping
     ping_result = await measure_agent_ping()
-    if ping_result:
-        AGENT_PING_CACHE = ping_result
-        AGENT_PING_LAST_UPDATE = time.time()
+    AGENT_PING_CACHE = ping_result if ping_result else "n/a"
+    AGENT_PING_LAST_UPDATE = time.time()
     
     while True:
         try:
@@ -4395,9 +4403,8 @@ async def agent_monitor():
             # Update ping every 30 seconds
             if time.time() - AGENT_PING_LAST_UPDATE > 30:
                 ping_result = await measure_agent_ping()
-                if ping_result:
-                    AGENT_PING_CACHE = ping_result
-                    AGENT_PING_LAST_UPDATE = time.time()
+                AGENT_PING_CACHE = ping_result if ping_result else "n/a"
+                AGENT_PING_LAST_UPDATE = time.time()
         except asyncio.CancelledError:
             raise
         except Exception:
