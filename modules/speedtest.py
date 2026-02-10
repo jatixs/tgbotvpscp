@@ -41,8 +41,8 @@ _SPEEDTEST_MODE_CACHE = None
 
 def get_speedtest_mode() -> str:
     """
-    Detect speedtest mode: 'OOKLA' or 'IPERF3'
-    Priority: 1) config file, 2) check if ookla is installed, 3) default to iperf3
+    Detect speedtest mode: 'OOKLA', 'IPERF3', or 'AUTO' (need geo-detection)
+    Priority: 1) config file, 2) check if ookla is installed, 3) check if iperf3 is installed, 4) AUTO
     """
     global _SPEEDTEST_MODE_CACHE
     if _SPEEDTEST_MODE_CACHE is not None:
@@ -69,9 +69,25 @@ def get_speedtest_mode() -> str:
     except Exception:
         pass
     
-    # Default to iperf3
-    _SPEEDTEST_MODE_CACHE = 'IPERF3'
+    # Check if iperf3 is available
+    try:
+        import subprocess
+        import shutil
+        if shutil.which('iperf3'):
+            _SPEEDTEST_MODE_CACHE = 'IPERF3'
+            return _SPEEDTEST_MODE_CACHE
+    except Exception:
+        pass
+    
+    # Neither tool is installed - need auto-detection based on geo
+    _SPEEDTEST_MODE_CACHE = 'AUTO'
     return _SPEEDTEST_MODE_CACHE
+
+
+def reset_speedtest_mode_cache():
+    """Reset the speedtest mode cache to force re-detection"""
+    global _SPEEDTEST_MODE_CACHE
+    _SPEEDTEST_MODE_CACHE = None
 
 
 def get_button() -> KeyboardButton:
@@ -483,6 +499,37 @@ async def speedtest_handler(message: types.Message):
     
     # Detect speedtest mode
     mode = get_speedtest_mode()
+    
+    # If mode is AUTO, we need to determine based on geo-location
+    if mode == 'AUTO':
+        msg = await message.answer(_("speedtest_status_geo", lang), parse_mode="HTML")
+        LAST_MESSAGE_IDS.setdefault(user_id, {})["speedtest"] = msg.message_id
+        try:
+            _, country_code, _ = await get_vps_location()
+            if country_code == 'RU':
+                # For Russia, iperf3 is required but not installed
+                await message.bot.edit_message_text(
+                    _("speedtest_not_installed", lang, tool="iperf3"),
+                    chat_id=message.chat.id,
+                    message_id=msg.message_id,
+                    parse_mode="HTML",
+                )
+            else:
+                # For other countries, Ookla is required but not installed
+                await message.bot.edit_message_text(
+                    _("speedtest_not_installed", lang, tool="Ookla Speedtest CLI"),
+                    chat_id=message.chat.id,
+                    message_id=msg.message_id,
+                    parse_mode="HTML",
+                )
+        except Exception as e:
+            await message.bot.edit_message_text(
+                _("speedtest_fail", lang, error=str(e)),
+                chat_id=message.chat.id,
+                message_id=msg.message_id,
+                parse_mode="HTML",
+            )
+        return
     
     if mode == 'OOKLA':
         # Use Ookla Speedtest CLI
