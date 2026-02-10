@@ -457,7 +457,7 @@ async def run_ookla_speedtest(bot: Bot, chat_id: int, message_id: int, lang: str
                 server_country = data.get("server", {}).get("country", "")
                 result_url = data.get("result", {}).get("url", "")
                 
-                flag, _ = await get_country_details(server_country)
+                flag, country_name = await get_country_details(server_country)
                 
                 return _(
                     "speedtest_ookla_results",
@@ -505,7 +505,7 @@ async def speedtest_handler(message: types.Message):
         msg = await message.answer(_("speedtest_status_geo", lang), parse_mode="HTML")
         LAST_MESSAGE_IDS.setdefault(user_id, {})["speedtest"] = msg.message_id
         try:
-            _, country_code, _ = await get_vps_location()
+            ip, country_code, continent = await get_vps_location()
             if country_code == 'RU':
                 # For Russia, iperf3 is required but not installed
                 await message.bot.edit_message_text(

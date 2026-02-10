@@ -493,6 +493,65 @@ EOF
     sudo chmod 644 "${installstate_file}"
 }
 
+ensure_env_variables() {
+    # Check and add missing environment variables to .env file
+    # This ensures compatibility between versions
+    
+    if [ ! -f "${ENV_FILE}" ]; then
+        msg_warning ".env файл не найден, пропуск проверки переменных."
+        return 0
+    fi
+    
+    msg_info "Проверка переменных окружения..."
+    local changes_made=false
+    
+    # List of variables with their default values
+    # Format: "VAR_NAME|default_value|description"
+    local ENV_VARS=(
+        "WEB_SERVER_HOST|0.0.0.0|Хост веб-сервера"
+        "WEB_SERVER_PORT|8080|Порт веб-сервера"
+        "INSTALL_MODE|secure|Режим установки"
+        "DEPLOY_MODE|systemd|Режим деплоя"
+        "ENABLE_WEB_UI|true|Включить веб-интерфейс"
+        "DEBUG|false|Режим отладки"
+        "TG_BOT_NAME|VPS Bot|Имя бота"
+    )
+    
+    for var_entry in "${ENV_VARS[@]}"; do
+        local var_name=$(echo "$var_entry" | cut -d'|' -f1)
+        local default_val=$(echo "$var_entry" | cut -d'|' -f2)
+        local var_desc=$(echo "$var_entry" | cut -d'|' -f3)
+        
+        if ! grep -q "^${var_name}=" "${ENV_FILE}"; then
+            echo -e "${C_YELLOW}  + Добавлена переменная ${var_name}=${default_val}${C_RESET}"
+            sudo bash -c "echo '${var_name}=\"${default_val}\"' >> ${ENV_FILE}"
+            changes_made=true
+        fi
+    done
+    
+    # Add optional variables if not present (with empty defaults)
+    local OPTIONAL_VARS=(
+        "SENTRY_DSN"
+        "TG_ADMIN_USERNAME"
+        "TG_BOT_CONTAINER_NAME"
+        "COMPOSE_PROFILES"
+        "WEB_DOMAIN"
+    )
+    
+    for var_name in "${OPTIONAL_VARS[@]}"; do
+        if ! grep -q "^${var_name}=" "${ENV_FILE}"; then
+            sudo bash -c "echo '${var_name}=\"\"' >> ${ENV_FILE}"
+            changes_made=true
+        fi
+    done
+    
+    if [ "$changes_made" = true ]; then
+        msg_success "Переменные окружения обновлены."
+    else
+        msg_success "Все переменные актуальны."
+    fi
+}
+
 check_docker_deps() {
     if ! command -v docker &> /dev/null; then curl -sSL https://get.docker.com -o /tmp/get-docker.sh; run_with_spinner "Установка Docker" sudo sh /tmp/get-docker.sh; fi
     if command -v docker-compose &> /dev/null; then sudo rm -f $(which docker-compose); fi
@@ -813,6 +872,9 @@ update_bot() {
              fi
         fi
     fi
+
+    # Check and add missing environment variables
+    ensure_env_variables
 
     local current_mode=$(grep '^DEPLOY_MODE=' "${ENV_FILE}" | cut -d'=' -f2 | tr -d '"')
     

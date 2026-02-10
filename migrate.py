@@ -91,6 +91,78 @@ def migrate_file(filename: str):
             logger.warning("   Файл восстановлен из бэкапа.")
         return
 
+
+def ensure_env_variables():
+    """
+    Проверяет .env файл на наличие всех необходимых переменных.
+    Добавляет недостающие переменные с значениями по умолчанию.
+    """
+    env_file = os.path.join(config.BASE_DIR, ".env")
+    
+    if not os.path.exists(env_file):
+        logger.warning(".env файл не найден, пропуск проверки переменных.")
+        return
+    
+    logger.info("🔍 Проверка переменных окружения в .env...")
+    
+    # Список обязательных переменных с дефолтными значениями
+    required_vars = {
+        "WEB_SERVER_HOST": "0.0.0.0",
+        "WEB_SERVER_PORT": "8080",
+        "INSTALL_MODE": "secure",
+        "DEPLOY_MODE": "systemd",
+        "ENABLE_WEB_UI": "true",
+        "DEBUG": "false",
+        "TG_BOT_NAME": "VPS Bot",
+    }
+    
+    # Опциональные переменные (добавляются с пустым значением)
+    optional_vars = [
+        "SENTRY_DSN",
+        "TG_ADMIN_USERNAME",
+        "TG_BOT_CONTAINER_NAME",
+        "COMPOSE_PROFILES",
+        "WEB_DOMAIN",
+    ]
+    
+    try:
+        with open(env_file, 'r', encoding='utf-8') as f:
+            content = f.read()
+        
+        existing_vars = set()
+        for line in content.split('\n'):
+            line = line.strip()
+            if line and not line.startswith('#') and '=' in line:
+                var_name = line.split('=')[0].strip()
+                existing_vars.add(var_name)
+        
+        changes_made = False
+        lines_to_add = []
+        
+        # Проверяем обязательные переменные
+        for var_name, default_val in required_vars.items():
+            if var_name not in existing_vars:
+                lines_to_add.append(f'{var_name}="{default_val}"')
+                logger.info(f"  + Добавлена переменная: {var_name}={default_val}")
+                changes_made = True
+        
+        # Проверяем опциональные переменные
+        for var_name in optional_vars:
+            if var_name not in existing_vars:
+                lines_to_add.append(f'{var_name}=""')
+                changes_made = True
+        
+        if lines_to_add:
+            with open(env_file, 'a', encoding='utf-8') as f:
+                f.write('\n' + '\n'.join(lines_to_add) + '\n')
+            logger.info(f"✅ Добавлено {len(lines_to_add)} переменных в .env")
+        else:
+            logger.info("✅ Все переменные окружения актуальны.")
+            
+    except Exception as e:
+        logger.error(f"❌ Ошибка при проверке .env: {e}")
+
+
 def migrate_metadata():
     """
     Проверяет и восстанавливает WEB_METADATA в system_config.json.
@@ -156,6 +228,9 @@ def main():
     logger.info("🚀 Запуск миграции конфигурации...")
     
     try:
+        # Проверка и обновление переменных окружения
+        ensure_env_variables()
+        
         for filename in FILES_TO_MIGRATE:
             migrate_file(filename)
         migrate_metadata()
