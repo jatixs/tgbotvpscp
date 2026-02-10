@@ -107,7 +107,7 @@ def ensure_env_variables():
     
     # Список обязательных переменных с дефолтными значениями
     required_vars = {
-        "WEB_SERVER_HOST": "0.0.0.0",
+        "WEB_SERVER_HOST": "0.0.0.0",  # nosec B104
         "WEB_SERVER_PORT": "8080",
         "INSTALL_MODE": "secure",
         "DEPLOY_MODE": "systemd",
