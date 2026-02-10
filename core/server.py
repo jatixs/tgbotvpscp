@@ -3022,9 +3022,29 @@ async def start_web_server(bot_instance: Bot):
 
 
 async def measure_agent_ping():
-    """Measure ping via HTTPS and return milliseconds as string, or None on failure"""
+    """Measure ping: try ICMP first (faster/accurate), fallback to HTTPS if blocked"""
+    import subprocess
+    import platform
     
-    # List of targets to try (in order)
+    # Try ICMP ping first
+    try:
+        if platform.system().lower() == "windows":
+            cmd = ["ping", "-n", "1", "-w", "2000", "8.8.8.8"]
+            pattern = r"[=<](\d+)\s*ms"
+        else:
+            cmd = ["ping", "-c", "1", "-W", "2", "8.8.8.8"]
+            pattern = r"time=([\d\.]+)\s*ms"
+        
+        proc = await asyncio.to_thread(
+            lambda: subprocess.run(cmd, capture_output=True, timeout=5)
+        )
+        ping_match = re.search(pattern, proc.stdout.decode())
+        if ping_match:
+            return str(round(float(ping_match.group(1)), 1))
+    except Exception:
+        pass
+    
+    # Fallback to HTTPS ping if ICMP failed/blocked
     targets = [
         "https://www.google.com",
         "https://www.cloudflare.com",

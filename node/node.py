@@ -411,27 +411,32 @@ def get_system_stats():
         
         ext_ip = get_external_ip()
         
-        # Measure ping via HTTPS (works even if ICMP is blocked)
+        # Measure ping: try ICMP first (faster/accurate), fallback to HTTPS if blocked
         ping_ms = None
+        
+        # Try ICMP ping first
         try:
-            import urllib.request
-            t1 = time.time()
-            req = urllib.request.Request("https://www.google.com", method="HEAD")
-            with urllib.request.urlopen(req, timeout=3) as resp:
-                if resp.status == 200:
-                    ping_ms = round((time.time() - t1) * 1000, 1)
+            proc = subprocess.Popen(
+                ["ping", "-c", "1", "-W", "2", "8.8.8.8"],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE
+            )
+            stdout, _ = proc.communicate(timeout=5)
+            ping_match = re.search(r"time=([\d\.]+)\s*ms", stdout.decode())
+            if ping_match:
+                ping_ms = round(float(ping_match.group(1)), 1)
         except Exception:
-            # Fallback: try ICMP ping
+            pass
+        
+        # Fallback to HTTPS ping if ICMP failed
+        if ping_ms is None:
             try:
-                proc = subprocess.Popen(
-                    ["ping", "-c", "1", "-W", "2", "8.8.8.8"],
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE
-                )
-                stdout, _ = proc.communicate(timeout=5)
-                ping_match = re.search(r"time=([\d\.]+)\s*ms", stdout.decode())
-                if ping_match:
-                    ping_ms = round(float(ping_match.group(1)), 1)
+                import urllib.request
+                t1 = time.time()
+                req = urllib.request.Request("https://www.google.com", method="HEAD")
+                with urllib.request.urlopen(req, timeout=3) as resp:
+                    if resp.status == 200:
+                        ping_ms = round((time.time() - t1) * 1000, 1)
             except Exception:
                 pass
         
