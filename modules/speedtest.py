@@ -71,6 +71,8 @@ async def edit_status_safe(
 async def get_ping_async(host: str) -> Optional[float]:
     safe_host = shlex.quote(host)
     os_type = platform.system().lower()
+    
+    # Try ICMP ping first
     if os_type == "windows":
         cmd = f"ping -n {PING_COUNT} -w {PING_TIMEOUT_SEC * 1000} {safe_host}"
         regex = "Average = ([\\d.]+)ms"
@@ -91,6 +93,17 @@ async def get_ping_async(host: str) -> Optional[float]:
             return float(match.group(1))
     except Exception as e:
         logging.debug(f"Ping failed for {host}: {e}")
+    
+    # HTTP fallback if ICMP failed
+    try:
+        t1 = time.time()
+        async with aiohttp.ClientSession() as session:
+            async with session.get(f"https://{host}", timeout=aiohttp.ClientTimeout(total=3), allow_redirects=False) as resp:
+                if resp.status in (200, 301, 302, 403, 204):
+                    return (time.time() - t1) * 1000
+    except Exception:
+        pass
+    
     return None
 
 
