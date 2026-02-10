@@ -295,8 +295,129 @@ install_extras() {
     if ! command -v fail2ban-client &> /dev/null; then
         msg_question "Fail2Ban не найден. Установить? (y/n): " I; if [[ "$I" =~ ^[Yy]$ ]]; then run_with_spinner "Установка Fail2ban" sudo apt-get install -y -q fail2ban; fi
     fi
-    if ! command -v iperf3 &> /dev/null; then
-        msg_question "iperf3 не найден. Установить? (y/n): " I; if [[ "$I" =~ ^[Yy]$ ]]; then run_with_spinner "Установка iperf3" sudo apt-get install -y -q iperf3; fi
+    
+    # Detect server location by external IP
+    msg_info "Определение геолокации сервера..."
+    SERVER_COUNTRY=""
+    EXT_IP=$(curl -s --connect-timeout 5 https://api.ipify.org 2>/dev/null || curl -s --connect-timeout 5 https://ipinfo.io/ip 2>/dev/null || echo "")
+    if [ -n "$EXT_IP" ]; then
+        SERVER_COUNTRY=$(curl -s --connect-timeout 5 "http://ip-api.com/line/${EXT_IP}?fields=countryCode" 2>/dev/null || echo "")
+    fi
+    
+    if [ "$SERVER_COUNTRY" == "RU" ]; then
+        msg_info "Сервер находится в России - используем iperf3 для speedtest"
+        if ! command -v iperf3 &> /dev/null; then
+            msg_question "iperf3 не найден. Установить? (y/n): " I; if [[ "$I" =~ ^[Yy]$ ]]; then run_with_spinner "Установка iperf3" sudo apt-get install -y -q iperf3; fi
+        fi
+        # Mark that we use iperf3 mode
+        echo "RU" | sudo tee "${BOT_INSTALL_PATH}/config/.speedtest_mode" > /dev/null
+    else
+        msg_info "Сервер не в России - рекомендуется Ookla Speedtest CLI"
+        
+        HAS_IPERF3=false
+        HAS_OOKLA=false
+        
+        if command -v iperf3 &> /dev/null; then
+            HAS_IPERF3=true
+        fi
+        
+        if command -v speedtest &> /dev/null && speedtest --version 2>&1 | grep -q "Speedtest by Ookla"; then
+            HAS_OOKLA=true
+        fi
+        
+        # If iperf3 is installed but Ookla is not - offer to switch
+        if [ "$HAS_IPERF3" = true ] && [ "$HAS_OOKLA" = false ]; then
+            echo -e "${C_YELLOW}⚠️  Обнаружен iperf3. Для серверов вне России рекомендуется Ookla Speedtest CLI.${C_RESET}"
+            msg_question "Удалить iperf3 и установить Ookla Speedtest CLI? (y/n) [y]: " SWITCH_CHOICE
+            SWITCH_CHOICE=${SWITCH_CHOICE:-y}
+            
+            if [[ "$SWITCH_CHOICE" =~ ^[Yy]$ ]]; then
+                run_with_spinner "Удаление iperf3" sudo apt-get remove -y -q iperf3
+                install_ookla_speedtest
+                echo "OOKLA" | sudo tee "${BOT_INSTALL_PATH}/config/.speedtest_mode" > /dev/null
+            else
+                msg_info "iperf3 оставлен. Будет использоваться он для speedtest."
+                echo "RU" | sudo tee "${BOT_INSTALL_PATH}/config/.speedtest_mode" > /dev/null
+            fi
+        # If Ookla already installed
+        elif [ "$HAS_OOKLA" = true ]; then
+            msg_success "Ookla Speedtest CLI уже установлен"
+            echo "OOKLA" | sudo tee "${BOT_INSTALL_PATH}/config/.speedtest_mode" > /dev/null
+        # If neither is installed
+        else
+            echo -e "${C_CYAN}Speedtest не установлен. Какой инструмент установить?${C_RESET}"
+            echo "  1) Ookla Speedtest CLI (рекомендуется для серверов вне России)"
+            echo "  2) iperf3"
+            echo "  3) Пропустить"
+            msg_question "Выберите (1/2/3) [1]: " ST_CHOICE
+            ST_CHOICE=${ST_CHOICE:-1}
+            
+            case "$ST_CHOICE" in
+                1)
+                    install_ookla_speedtest
+                    echo "OOKLA" | sudo tee "${BOT_INSTALL_PATH}/config/.speedtest_mode" > /dev/null
+                    ;;
+                2)
+                    run_with_spinner "Установка iperf3" sudo apt-get install -y -q iperf3
+                    echo "RU" | sudo tee "${BOT_INSTALL_PATH}/config/.speedtest_mode" > /dev/null
+                    ;;
+                3)
+                    msg_warning "Speedtest не будет доступен"
+                    ;;
+            esac
+        fi
+    fi
+}
+
+install_ookla_speedtest() {
+    # Check if already installed and working
+    if command -v speedtest &> /dev/null && speedtest --version 2>&1 | grep -q "Speedtest by Ookla"; then
+        msg_success "Ookla Speedtest CLI уже установлен"
+        return 0
+    fi
+    
+    msg_info "Установка Ookla Speedtest CLI..."
+    
+    # Install curl if not present
+    if ! command -v curl &> /dev/null; then
+        run_with_spinner "Установка curl" sudo apt-get install -y -q curl
+    fi
+    
+    # Get Ubuntu version
+    UBUNTU_VERSION=""
+    if [ -f /etc/os-release ]; then
+        . /etc/os-release
+        UBUNTU_VERSION="$VERSION_ID"
+    fi
+    
+    # Add Ookla repository
+    run_with_spinner "Добавление репозитория Ookla" bash -c 'curl -s https://packagecloud.io/install/repositories/ookla/speedtest-cli/script.deb.sh | sudo bash'
+    
+    # Fix for Ubuntu 24+ (noble -> jammy)
+    OOKLA_LIST="/etc/apt/sources.list.d/ookla_speedtest-cli.list"
+    if [ -f "$OOKLA_LIST" ]; then
+        if grep -q "noble" "$OOKLA_LIST" 2>/dev/null; then
+            msg_info "Применяю исправление для Ubuntu 24+..."
+            sudo sed -i 's/noble/jammy/g' "$OOKLA_LIST"
+        fi
+        # Also fix for other unsupported versions
+        if grep -q "oracular\|mantic\|lunar" "$OOKLA_LIST" 2>/dev/null; then
+            msg_info "Применяю исправление для неподдерживаемой версии Ubuntu..."
+            sudo sed -i 's/oracular\|mantic\|lunar/jammy/g' "$OOKLA_LIST"
+        fi
+    fi
+    
+    run_with_spinner "Обновление пакетов" sudo apt-get update -y -q
+    run_with_spinner "Установка speedtest" sudo apt-get install -y -q speedtest
+    
+    if command -v speedtest &> /dev/null; then
+        msg_success "Ookla Speedtest CLI установлен успешно"
+    else
+        msg_warning "Не удалось установить Ookla Speedtest CLI, будет использован iperf3"
+        if ! command -v iperf3 &> /dev/null; then
+            run_with_spinner "Установка iperf3" sudo apt-get install -y -q iperf3
+        fi
+        echo "RU" | sudo tee "${BOT_INSTALL_PATH}/config/.speedtest_mode" > /dev/null
     fi
 }
 
