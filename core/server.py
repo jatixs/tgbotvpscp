@@ -81,7 +81,6 @@ AGENT_IP_CACHE = "Loading..."
 AGENT_PING_CACHE = "n/a"
 AGENT_PING_LAST_UPDATE = 0
 AGENT_PING_TIMEOUT = 5  # Ping measurement timeout in seconds
-AGENT_PING_SESSION = None  # Reusable aiohttp session for ping measurements
 RESET_TOKENS = {}
 SERVER_SESSIONS = {}
 CSRF_TOKENS = {}  # Store CSRF tokens with expiry
@@ -3023,7 +3022,6 @@ async def start_web_server(bot_instance: Bot):
 
 async def measure_agent_ping():
     """Measure ping via HTTPS and return milliseconds as string, or None on failure"""
-    global AGENT_PING_SESSION
     
     # List of targets to try (in order)
     targets = [
@@ -3032,27 +3030,20 @@ async def measure_agent_ping():
         "https://1.1.1.1"
     ]
     
+    timeout = aiohttp.ClientTimeout(total=AGENT_PING_TIMEOUT)
+    
     for target in targets:
         try:
-            # Create session if it doesn't exist
-            if AGENT_PING_SESSION is None:
-                timeout = aiohttp.ClientTimeout(total=AGENT_PING_TIMEOUT)
-                AGENT_PING_SESSION = aiohttp.ClientSession(timeout=timeout)
-            
             t1 = time.time()
-            async with AGENT_PING_SESSION.head(target, allow_redirects=False) as resp:
-                if resp.status in (200, 301, 302, 403):
-                    return str(int((time.time() - t1) * 1000))
+            async with aiohttp.ClientSession(timeout=timeout) as session:
+                async with session.get(target, allow_redirects=False) as resp:
+                    await resp.read()
+                    if resp.status in (200, 301, 302, 403, 204):
+                        result = str(int((time.time() - t1) * 1000))
+                        return result
         except Exception:
             continue
     
-    # If all targets failed, recreate session for next attempt
-    if AGENT_PING_SESSION:
-        try:
-            await AGENT_PING_SESSION.close()
-        except Exception:
-            pass
-        AGENT_PING_SESSION = None
     return None
 
 
