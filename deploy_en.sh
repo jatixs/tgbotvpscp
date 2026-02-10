@@ -561,7 +561,7 @@ create_dockerfile() {
     sudo tee "${BOT_INSTALL_PATH}/Dockerfile" > /dev/null <<'EOF'
 FROM python:3.10-slim-bookworm
 RUN apt-get update && apt-get install -y python3-yaml iperf3 git curl wget sudo procps iputils-ping net-tools gnupg docker.io coreutils && rm -rf /var/lib/apt/lists/*
-RUN pip install --no-cache-dir docker aiohttp aiosqlite argon2-cffi sentry-sdk tortoise-orm aerich cryptography tomlkit
+RUN pip install --no-cache-dir --upgrade pip setuptools wheel && pip install --no-cache-dir docker aiohttp aiosqlite argon2-cffi sentry-sdk tortoise-orm aerich cryptography tomlkit
 RUN groupadd -g 1001 tgbot && useradd -u 1001 -g 1001 -m -s /bin/bash tgbot && echo "tgbot ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
 WORKDIR /opt/tg-bot
 COPY requirements.txt .
@@ -719,14 +719,14 @@ install_systemd_logic() {
         if ! id "${SERVICE_USER}" &>/dev/null; then sudo useradd -r -s /bin/false -d ${BOT_INSTALL_PATH} ${SERVICE_USER}; fi
         setup_repo_and_dirs "${SERVICE_USER}"
         sudo -u ${SERVICE_USER} ${PYTHON_BIN} -m venv "${VENV_PATH}"
-        run_with_spinner "Updating pip" sudo -u ${SERVICE_USER} "${VENV_PATH}/bin/pip" install --upgrade pip
+        run_with_spinner "Updating pip" sudo -u ${SERVICE_USER} "${VENV_PATH}/bin/pip" install --upgrade pip setuptools wheel
         run_with_spinner "Installing dependencies" sudo -u ${SERVICE_USER} "${VENV_PATH}/bin/pip" install -r "${BOT_INSTALL_PATH}/requirements.txt"
         run_with_spinner "Installing tomlkit" sudo -u ${SERVICE_USER} "${VENV_PATH}/bin/pip" install tomlkit
         exec_cmd="sudo -u ${SERVICE_USER}"
     else
         setup_repo_and_dirs "root"
         ${PYTHON_BIN} -m venv "${VENV_PATH}"
-        run_with_spinner "Updating pip" "${VENV_PATH}/bin/pip" install --upgrade pip
+        run_with_spinner "Updating pip" "${VENV_PATH}/bin/pip" install --upgrade pip setuptools wheel
         run_with_spinner "Installing dependencies" "${VENV_PATH}/bin/pip" install -r "${BOT_INSTALL_PATH}/requirements.txt"
         run_with_spinner "Installing tomlkit" "${VENV_PATH}/bin/pip" install tomlkit
         exec_cmd=""
@@ -801,7 +801,7 @@ install_node_logic() {
     run_with_spinner "Installing iperf3" sudo apt-get install -y -q iperf3
     setup_repo_and_dirs "root"
     if [ ! -d "${VENV_PATH}" ]; then run_with_spinner "Creating venv" ${PYTHON_BIN} -m venv "${VENV_PATH}"; fi
-    run_with_spinner "Updating pip" "${VENV_PATH}/bin/pip" install --upgrade pip
+    run_with_spinner "Updating pip" "${VENV_PATH}/bin/pip" install --upgrade pip setuptools wheel
     run_with_spinner "Installing dependencies" "${VENV_PATH}/bin/pip" install psutil requests
     load_cached_env
     msg_question "Agent URL (http://IP:8080): " AGENT_URL

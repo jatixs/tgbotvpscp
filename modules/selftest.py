@@ -238,7 +238,7 @@ async def selftest_handler(message: types.Message):
             proc = await asyncio.create_subprocess_exec(
                 *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
             )
-            stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=5)
+            stdout, stderr_ignored = await asyncio.wait_for(proc.communicate(), timeout=5)
             ping_match = re.search(pattern, stdout.decode())
             if ping_match:
                 ping = str(round(float(ping_match.group(1)), 1))

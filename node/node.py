@@ -577,15 +577,12 @@ def get_system_stats():
         except Exception:
             pass
         
-        # Fallback to HTTPS ping if ICMP failed
         if ping_ms is None:
             try:
-                import urllib.request
                 t1 = time.time()
-                req = urllib.request.Request("https://www.google.com", method="HEAD")
-                with urllib.request.urlopen(req, timeout=3) as resp:
-                    if resp.status == 200:
-                        ping_ms = round((time.time() - t1) * 1000, 1)
+                resp = requests.head("https://www.google.com", timeout=3)
+                if resp.status_code == 200:
+                    ping_ms = round((time.time() - t1) * 1000, 1)
             except Exception:
                 pass
         

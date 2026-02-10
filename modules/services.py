@@ -43,7 +43,7 @@ def get_user_role_level(user_id):
 def get_systemd_status(service_name):
     try:
         # Check ActiveState and SubState and LoadState
-        cmd = ["systemctl", "show", service_name, "-p", "ActiveState,SubState,LoadState"]
+        cmd = ["systemctl", "show", "-p", "ActiveState,SubState,LoadState", "--", service_name]
         # Use stdout/stderr pipe for compatibility with older python (capture_output added in 3.7)
         result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
         if result.returncode != 0:
@@ -252,9 +252,9 @@ async def perform_service_action(name, sType, action):
     
     cmd = []
     if sType == "systemd":
-        cmd = ["sudo", "systemctl", action, name]
+        cmd = ["sudo", "systemctl", action, "--", name]
     elif sType == "docker":
-        cmd = ["docker", action, name]
+        cmd = ["docker", action, "--", name]
     else:
         return False, "Unknown type"
         
@@ -277,7 +277,7 @@ async def perform_service_action(name, sType, action):
 def get_systemd_service_description(service_name):
     """Get description of a systemd service"""
     try:
-        cmd = ["systemctl", "show", service_name, "-p", "Description"]
+        cmd = ["systemctl", "show", "-p", "Description", "--", service_name]
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
         if result.returncode == 0:
             for line in result.stdout.splitlines():
@@ -302,8 +302,9 @@ def get_systemd_service_info(service_name):
         "uptime": None
     }
     try:
-        cmd = ["systemctl", "show", service_name, "-p", 
-               "Description,LoadState,ActiveState,SubState,MainPID,MemoryCurrent,ActiveEnterTimestamp"]
+        cmd = ["systemctl", "show", "-p", 
+       "Description,LoadState,ActiveState,SubState,MainPID,MemoryCurrent,ActiveEnterTimestamp",
+       "--", service_name]
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
         if result.returncode == 0:
             props = {}
@@ -420,7 +421,7 @@ async def get_docker_container_info(container_name):
         "uptime": None
     }
     try:
-        cmd = ["docker", "inspect", container_name]
+        cmd = ["docker", "inspect", "--", container_name]
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
         if result.returncode == 0:
             data = json.loads(result.stdout)
