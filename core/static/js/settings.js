@@ -214,9 +214,23 @@ document.addEventListener("DOMContentLoaded", () => {
         const updatePreview = () => {
             const val = favInput.value.trim();
             if (val) {
-                // Only allow safe URL schemes: http(s), relative paths, and data:image URIs
-                if (/^(https?:\/\/|\/|data:image\/)/i.test(val)) {
-                    favImg.src = val;
+                // Validate URL scheme via URL API to prevent javascript: injection
+                let safeUrl = null;
+                try {
+                    const parsed = new URL(val, window.location.origin);
+                    if (['http:', 'https:', 'data:'].includes(parsed.protocol)) {
+                        // For data: URIs, only allow image types
+                        if (parsed.protocol === 'data:' && !/^data:image\//i.test(val)) {
+                            safeUrl = null;
+                        } else {
+                            safeUrl = parsed.href;
+                        }
+                    }
+                } catch (e) {
+                    safeUrl = null;
+                }
+                if (safeUrl) {
+                    favImg.src = safeUrl;
                     favImg.style.display = 'block';
                     if (favFallback) favFallback.style.display = 'none';
                 } else {
