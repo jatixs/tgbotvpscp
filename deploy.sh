@@ -798,11 +798,29 @@ install_node_logic() {
     if [ -n "$AUTO_AGENT_URL" ]; then AGENT_URL="$AUTO_AGENT_URL"; fi
     if [ -n "$AUTO_NODE_TOKEN" ]; then NODE_TOKEN="$AUTO_NODE_TOKEN"; fi
     common_install_steps
-    run_with_spinner "Установка iperf3" sudo apt-get install -y -q iperf3
+    
+    # Detect node location and install appropriate speedtest tool
+    msg_info "Определение геолокации ноды..."
+    NODE_COUNTRY=""
+    EXT_IP=$(curl -s --connect-timeout 5 https://api.ipify.org 2>/dev/null || curl -s --connect-timeout 5 https://ipinfo.io/ip 2>/dev/null || echo "")
+    if [ -n "$EXT_IP" ]; then
+        NODE_COUNTRY=$(curl -s --connect-timeout 5 "http://ip-api.com/line/${EXT_IP}?fields=countryCode" 2>/dev/null || echo "")
+    fi
+    
+    if [ "$NODE_COUNTRY" == "RU" ]; then
+        msg_info "Нода в России - используем iperf3"
+        run_with_spinner "Установка iperf3" sudo apt-get install -y -q iperf3
+    else
+        msg_info "Нода не в России - устанавливаем Ookla Speedtest CLI"
+        install_ookla_speedtest
+        # Also install iperf3 as fallback
+        run_with_spinner "Установка iperf3" sudo apt-get install -y -q iperf3
+    fi
+    
     setup_repo_and_dirs "root"
     if [ ! -d "${VENV_PATH}" ]; then run_with_spinner "Создание venv" ${PYTHON_BIN} -m venv "${VENV_PATH}"; fi
     run_with_spinner "Обновление pip" "${VENV_PATH}/bin/pip" install --upgrade pip
-    run_with_spinner "Установка зависимостей" "${VENV_PATH}/bin/pip" install psutil requests
+    run_with_spinner "Установка зависимостей" "${VENV_PATH}/bin/pip" install psutil requests pyyaml
     load_cached_env
     msg_question "Agent URL (http://IP:8080): " AGENT_URL
     msg_question "Token: " NODE_TOKEN
