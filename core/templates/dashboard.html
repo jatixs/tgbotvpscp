@@ -263,29 +263,18 @@
                         </svg>
                         <span class="truncate">{{ web_agent_stats_title }}</span>
                     </h3>
-                    <div
-                        class="flex items-center gap-2 flex-shrink-0 max-[391px]:w-full max-[391px]:justify-center max-[391px]:mt-2">
-                        <!-- Ping Badge -->
-                        <div id="agentPingBadge"
-                            class="flex items-center gap-1 bg-gray-100 dark:bg-black/30 px-3 py-1 rounded-lg border border-gray-200 dark:border-white/10 shadow-sm">
-                            <span class="text-[10px] text-gray-500 dark:text-gray-400 font-bold uppercase">{{
-                                web_agent_ping_label }}</span>
-                            <span id="agentPing"
-                                class="font-mono text-xs font-bold text-gray-600 dark:text-gray-300">n/a</span>
+                    <div id="networkBadgesContainer" class="flex items-center gap-2 flex-shrink-0">
+                        <div id="agentPingBadge" class="network-badge flex items-center gap-1 bg-gray-100 dark:bg-black/30 px-3 py-1 rounded-lg border border-gray-200 dark:border-white/10 shadow-sm">
+                            <span class="text-[10px] text-gray-500 dark:text-gray-400 font-bold uppercase">{{ web_agent_ping_label }}</span>
+                            <span id="agentPing" class="font-mono text-xs font-bold text-gray-600 dark:text-gray-300">n/a</span>
                         </div>
-                        <!-- IP Badge -->
+                        <div id="networkBadgesDivider" class="hidden w-px h-6 bg-gray-300 dark:bg-gray-600 flex-shrink-0 mx-1"></div>
                         <div id="agentIpBadge" role="button" tabindex="2" onClick="openAgentIpsModal()"
                             onkeydown="if(event.key==='Enter'||event.key===' ') { event.preventDefault(); openAgentIpsModal(); }"
-                            class="flex items-center gap-2 bg-gray-100 dark:bg-black/30 px-3 py-1 rounded-lg border border-gray-200 dark:border-white/10 shadow-sm cursor-pointer hover:bg-gray-200/70 dark:hover:bg-white/10 transition">
-                            <span id="agentIp"
-                                class="font-mono text-xs font-bold text-gray-600 dark:text-gray-300 select-all">{{
-                                agent_ip }}</span>
-
-                            <!-- маленькая иконка, чтобы визуально было понятно, что это интерактив -->
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-gray-400" fill="none"
-                                viewBox="0 0 24 24" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                    d="M13 16h-1v-4h-1m1-4h.01M12 20a8 8 0 100-16 8 8 0 000 16z" />
+                            class="network-badge flex items-center gap-2 bg-gray-100 dark:bg-black/30 px-3 py-1 rounded-lg border border-gray-200 dark:border-white/10 shadow-sm cursor-pointer hover:bg-gray-200/70 dark:hover:bg-white/10 transition">
+                            <span id="agentIp" class="font-mono text-xs font-bold text-gray-600 dark:text-gray-300 select-all">{{ agent_ip }}</span>
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M12 20a8 8 0 100-16 8 8 0 000 16z" />
                             </svg>
                         </div>
                     </div>

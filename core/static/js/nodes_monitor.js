@@ -310,14 +310,22 @@ function openFilterModal() {
     tempFilterSort = currentSort;
     updateFilterModalUI();
     const modal = document.getElementById('filterModal');
-    modal.classList.remove('hidden');
-    modal.classList.add('flex');
+    if (typeof animateModalOpen === 'function') {
+        animateModalOpen(modal, false);
+    } else {
+        modal.classList.remove('hidden');
+        modal.classList.add('flex');
+    }
 }
 
 function closeFilterModal() {
     const modal = document.getElementById('filterModal');
-    modal.classList.add('hidden');
-    modal.classList.remove('flex');
+    if (typeof animateModalClose === 'function') {
+        animateModalClose(modal);
+    } else {
+        modal.classList.add('hidden');
+        modal.classList.remove('flex');
+    }
 }
 
 function updateFilterModalUI() {
@@ -475,8 +483,13 @@ async function quickReboot(token) {
 async function openNodeDetail(token) {
     currentNodeToken = token;
     const modal = document.getElementById('nodeDetailModal');
-    modal.classList.remove('hidden');
-    modal.classList.add('flex');
+    
+    if (typeof animateModalOpen === 'function') {
+        animateModalOpen(modal, false);
+    } else {
+        modal.classList.remove('hidden');
+        modal.classList.add('flex');
+    }
     
     // Load node details
     await loadNodeDetails(token);
@@ -491,8 +504,13 @@ async function openNodeDetail(token) {
 }
 
 function closeNodeDetailModal() {
-    document.getElementById('nodeDetailModal').classList.add('hidden');
-    document.getElementById('nodeDetailModal').classList.remove('flex');
+    const modal = document.getElementById('nodeDetailModal');
+    if (typeof animateModalClose === 'function') {
+        animateModalClose(modal);
+    } else {
+        modal.classList.add('hidden');
+        modal.classList.remove('flex');
+    }
     currentNodeToken = null;
     
     // Stop modal auto-refresh
@@ -568,103 +586,170 @@ function updateNodeModal(data) {
 }
 
 function updateModalCharts(history) {
-    const labels = history.map((_, i) => i);
-    const cpuData = history.map(h => h.c || 0);
-    const ramData = history.map(h => h.r || 0);
-    const rxData = history.map(h => (h.rx || 0) / 1024 / 1024);
-    const txData = history.map(h => (h.tx || 0) / 1024 / 1024);
+    if (!history || history.length < 2) return;
+
+    const gapThreshold = 25;
+    const labels = [];
+    const cpuData = [];
+    const ramData = [];
+    const rxData = [];
+    const txData = [];
+
+    labels.push(new Date(history[0].t * 1000).toLocaleTimeString([], {
+        hour: '2-digit', minute: '2-digit', second: '2-digit'
+    }));
+    cpuData.push(history[0].c || 0);
+    ramData.push(history[0].r || 0);
+    rxData.push(0);
+    txData.push(0);
+
+    for (let i = 1; i < history.length; i++) {
+        const dt = history[i].t - history[i - 1].t;
+        if (dt > gapThreshold) {
+            labels.push("");
+            cpuData.push(null);
+            ramData.push(null);
+            rxData.push(null);
+            txData.push(null);
+        }
+        labels.push(new Date(history[i].t * 1000).toLocaleTimeString([], {
+            hour: '2-digit', minute: '2-digit', second: '2-digit'
+        }));
+        cpuData.push(history[i].c || 0);
+        ramData.push(history[i].r || 0);
+        
+        const dtFixed = Math.max(dt, 1);
+        rxData.push((Math.max(0, history[i].rx - history[i - 1].rx) * 8 / dtFixed / 1024));
+        txData.push((Math.max(0, history[i].tx - history[i - 1].tx) * 8 / dtFixed / 1024));
+    }
     
     const isDark = document.documentElement.classList.contains('dark');
     const gridColor = isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.05)';
     const tickColor = isDark ? '#9ca3af' : '#6b7280';
-    
-    // Gradient function
+    const isMobile = window.innerWidth < 640;
+
+    // Градиенты точь-в-точь как в дашборде
     function getGradient(ctx, color) {
-        const gradient = ctx.createLinearGradient(0, 0, 0, 160);
-        gradient.addColorStop(0, color.replace('rgb', 'rgba').replace(')', ', 0.3)'));
-        gradient.addColorStop(1, color.replace('rgb', 'rgba').replace(')', ', 0.01)'));
+        const gradient = ctx.createLinearGradient(0, 0, 0, 400);
+        gradient.addColorStop(0, color.replace('rgb', 'rgba').replace(')', ', 0.5)'));
+        gradient.addColorStop(1, color.replace('rgb', 'rgba').replace(')', ', 0.0)'));
         return gradient;
     }
-    
-    const commonOptions = {
-        responsive: true,
-        maintainAspectRatio: false,
-        animation: false,
-        interaction: { mode: 'index', intersect: false },
-        plugins: { 
-            legend: { 
-                display: true, 
-                position: 'top', 
-                labels: { 
-                    color: tickColor,
-                    boxWidth: 10, 
-                    usePointStyle: true,
-                    font: { size: 10 } 
-                } 
-            } 
-        },
-        scales: {
-            x: { display: false },
-            y: { 
-                beginAtZero: true, 
-                max: 100,
-                grid: { color: gridColor },
-                ticks: { color: tickColor, font: { size: 10 } }
-            }
-        },
-        elements: {
-            line: { tension: 0.4 },
-            point: { radius: 0, hitRadius: 10 }
-        }
-    };
-    
-    // Resources chart
+
     const resCtx = document.getElementById('modalResChart').getContext('2d');
-    if (modalResChart) modalResChart.destroy();
-    
-    const cpuGrad = getGradient(resCtx, 'rgb(59, 130, 246)');
-    const ramGrad = getGradient(resCtx, 'rgb(168, 85, 247)');
-    
-    modalResChart = new Chart(resCtx, {
-        type: 'line',
-        data: {
-            labels,
-            datasets: [
-                { label: 'CPU (%)', data: cpuData, borderColor: '#3b82f6', borderWidth: 2, backgroundColor: cpuGrad, fill: true },
-                { label: 'RAM (%)', data: ramData, borderColor: '#a855f7', borderWidth: 2, backgroundColor: ramGrad, fill: true }
-            ]
-        },
-        options: commonOptions
-    });
-    
-    // Network chart
     const netCtx = document.getElementById('modalNetChart').getContext('2d');
-    if (modalNetChart) modalNetChart.destroy();
+
+    // --- Обновление или создание графика ресурсов ---
+    if (modalResChart) {
+        modalResChart.data.labels = labels;
+        modalResChart.data.datasets[0].data = cpuData;
+        modalResChart.data.datasets[1].data = ramData;
+        
+        // Принудительно обновляем градиенты, чтобы они не пропадали
+        modalResChart.data.datasets[0].backgroundColor = getGradient(resCtx, 'rgb(59, 130, 246)');
+        modalResChart.data.datasets[1].backgroundColor = getGradient(resCtx, 'rgb(168, 85, 247)');
+        
+        modalResChart.options.scales.x.ticks.color = tickColor;
+        modalResChart.options.scales.y.grid.color = gridColor;
+        modalResChart.options.scales.y.ticks.color = tickColor;
+        modalResChart.options.plugins.legend.labels.color = tickColor;
+        
+        modalResChart.update('none'); 
+    } else {
+        modalResChart = new Chart(resCtx, {
+            type: 'line',
+            data: {
+                labels,
+                datasets: [
+                    { label: 'CPU (%)', data: cpuData, borderColor: '#3b82f6', borderWidth: 2, backgroundColor: getGradient(resCtx, 'rgb(59, 130, 246)'), fill: true },
+                    { label: 'RAM (%)', data: ramData, borderColor: '#a855f7', borderWidth: 2, backgroundColor: getGradient(resCtx, 'rgb(168, 85, 247)'), fill: true }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                animation: false,
+                interaction: { mode: 'index', intersect: false },
+                plugins: { 
+                    legend: { 
+                        display: true, 
+                        position: 'top', 
+                        labels: { color: tickColor, boxWidth: 10, usePointStyle: true, font: { size: 10 } } 
+                    } 
+                },
+                scales: {
+                    x: { 
+                        grid: { display: false },
+                        ticks: { display: !isMobile, maxTicksLimit: isMobile ? 3 : 6, color: tickColor }
+                    },
+                    y: { 
+                        beginAtZero: true, max: 100,
+                        grid: { color: gridColor },
+                        ticks: { color: tickColor, font: { size: 10 } }
+                    }
+                },
+                elements: { line: { tension: 0.4 }, point: { radius: 0, hitRadius: 10 } }
+            }
+        });
+    }
     
-    const rxGrad = getGradient(netCtx, 'rgb(34, 197, 94)');
-    const txGrad = getGradient(netCtx, 'rgb(239, 68, 68)');
-    
-    modalNetChart = new Chart(netCtx, {
-        type: 'line',
-        data: {
-            labels,
-            datasets: [
-                { label: 'RX (MB)', data: rxData, borderColor: '#22c55e', borderWidth: 2, backgroundColor: rxGrad, fill: true },
-                { label: 'TX (MB)', data: txData, borderColor: '#ef4444', borderWidth: 2, backgroundColor: txGrad, fill: true }
-            ]
-        },
-        options: { 
-            ...commonOptions, 
-            scales: { 
-                x: { display: false }, 
-                y: { 
-                    beginAtZero: true, 
-                    grid: { color: gridColor },
-                    ticks: { color: tickColor, font: { size: 10 } } 
-                }
-            } 
-        }
-    });
+    // --- Обновление или создание графика сети ---
+    if (modalNetChart) {
+        modalNetChart.data.labels = labels;
+        modalNetChart.data.datasets[0].data = rxData;
+        modalNetChart.data.datasets[1].data = txData;
+        
+        // Принудительно обновляем градиенты
+        modalNetChart.data.datasets[0].backgroundColor = getGradient(netCtx, 'rgb(34, 197, 94)');
+        modalNetChart.data.datasets[1].backgroundColor = getGradient(netCtx, 'rgb(239, 68, 68)');
+        
+        modalNetChart.options.scales.x.ticks.color = tickColor;
+        modalNetChart.options.scales.y.grid.color = gridColor;
+        modalNetChart.options.scales.y.ticks.color = tickColor;
+        modalNetChart.options.plugins.legend.labels.color = tickColor;
+        
+        modalNetChart.update('none');
+    } else {
+        modalNetChart = new Chart(netCtx, {
+            type: 'line',
+            data: {
+                labels,
+                datasets: [
+                    { label: 'RX', data: rxData, borderColor: '#22c55e', borderWidth: 2, backgroundColor: getGradient(netCtx, 'rgb(34, 197, 94)'), fill: true },
+                    { label: 'TX', data: txData, borderColor: '#ef4444', borderWidth: 2, backgroundColor: getGradient(netCtx, 'rgb(239, 68, 68)'), fill: true }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                animation: false,
+                interaction: { mode: 'index', intersect: false },
+                plugins: { 
+                    legend: { 
+                        display: true, 
+                        position: 'top', 
+                        labels: { color: tickColor, boxWidth: 10, usePointStyle: true, font: { size: 10 } } 
+                    } 
+                },
+                scales: {
+                    x: { 
+                        grid: { display: false },
+                        ticks: { display: !isMobile, maxTicksLimit: isMobile ? 3 : 6, color: tickColor }
+                    },
+                    y: { 
+                        beginAtZero: true,
+                        grid: { color: gridColor },
+                        ticks: { 
+                            color: tickColor, 
+                            font: { size: 10 },
+                            callback: function(v) { return formatSpeed(v); }
+                        }
+                    }
+                },
+                elements: { line: { tension: 0.4 }, point: { radius: 0, hitRadius: 10 } }
+            }
+        });
+    }
 }
 
 async function loadNodeServices(token) {
@@ -724,7 +809,7 @@ async function loadNodeServices(token) {
                     if (showAll) {
                         btn.classList.add('expanded');
                         if (blurOverlay) blurOverlay.style.display = 'none';
-                        btn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 transition-transform duration-300" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7" /></svg> ${I18N?.web_show_less || 'Show Less'}`;
+                        btn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 transition-transform duration-300" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" /></svg> ${I18N?.web_show_less || 'Show Less'}`;
                     } else {
                         btn.classList.remove('expanded');
                         if (blurOverlay) blurOverlay.style.display = '';
@@ -845,6 +930,11 @@ function formatBytes(bytes) {
     return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
 }
 
+function formatSpeed(v) {
+    if (v === null || v === undefined) return '0 Kbps';
+    return v >= 1024 * 1024 ? (v / 1048576).toFixed(2) + ' Gbps' : (v >= 1024 ? (v / 1024).toFixed(2) + ' Mbps' : v.toFixed(2) + ' Kbps');
+}
+
 function escapeHtml(text) {
     const div = document.createElement('div');
     div.textContent = text;
@@ -858,8 +948,12 @@ function showAlert(title, message) {
     document.getElementById('sysModalMessage').textContent = message;
     document.getElementById('sysModalCancel').classList.add('hidden');
     document.getElementById('sysModalOk').onclick = () => closeSystemModal(null);
-    modal.classList.remove('hidden');
-    modal.classList.add('flex');
+    if (typeof animateModalOpen === 'function') {
+        animateModalOpen(modal, false);
+    } else {
+        modal.classList.remove('hidden');
+        modal.classList.add('flex');
+    }
 }
 
 function showConfirm(title, message, onConfirm) {
@@ -872,13 +966,22 @@ function showConfirm(title, message, onConfirm) {
         closeSystemModal(null);
         if (onConfirm) onConfirm();
     };
-    modal.classList.remove('hidden');
-    modal.classList.add('flex');
+    if (typeof animateModalOpen === 'function') {
+        animateModalOpen(modal, false);
+    } else {
+        modal.classList.remove('hidden');
+        modal.classList.add('flex');
+    }
 }
 
 function closeSystemModal() {
-    document.getElementById('systemModal').classList.add('hidden');
-    document.getElementById('systemModal').classList.remove('flex');
+    const modal = document.getElementById('systemModal');
+    if (typeof animateModalClose === 'function') {
+        animateModalClose(modal);
+    } else {
+        modal.classList.add('hidden');
+        modal.classList.remove('flex');
+    }
 }
 
 // Theme toggle (if not defined in common.js)
