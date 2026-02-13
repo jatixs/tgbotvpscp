@@ -15,6 +15,8 @@ from datetime import datetime
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 ENV_FILE = os.path.join(BASE_DIR, '.env')
+CONFIG_DIR = os.path.join(BASE_DIR, 'config')
+SPEEDTEST_MODE_FILE = os.path.join(CONFIG_DIR, '.speedtest_mode')
 
 def load_config():
     config = {}
@@ -27,6 +29,153 @@ def load_config():
                     value = value.strip().strip('"').strip("'")
                     config[key.strip()] = value
     return config
+
+
+def ensure_env_variables():
+    """
+    Check and add missing environment variables to .env file for nodes.
+    """
+    if not os.path.exists(ENV_FILE):
+        return
+    
+    required_vars = {
+        "MODE": "node",
+        "NODE_UPDATE_INTERVAL": "5",
+        "DEBUG": "false",
+    }
+    
+    optional_vars = [
+        "AGENT_BASE_URL",
+        "AGENT_TOKEN",
+    ]
+    
+    try:
+        with open(ENV_FILE, 'r', encoding='utf-8') as f:
+            content = f.read()
+        
+        existing_vars = set()
+        for line in content.split('\n'):
+            line = line.strip()
+            if line and not line.startswith('#') and '=' in line:
+                var_name = line.split('=')[0].strip()
+                existing_vars.add(var_name)
+        
+        lines_to_add = []
+        
+        for var_name, default_val in required_vars.items():
+            if var_name not in existing_vars:
+                lines_to_add.append(f'{var_name}="{default_val}"')
+        
+        for var_name in optional_vars:
+            if var_name not in existing_vars:
+                lines_to_add.append(f'{var_name}=""')
+        
+        if lines_to_add:
+            with open(ENV_FILE, 'a', encoding='utf-8') as f:
+                f.write('\n' + '\n'.join(lines_to_add) + '\n')
+            
+    except Exception as e:
+        pass  # Silent fail for env check
+
+
+def get_server_country():
+    """Detect server country code using external IP geolocation."""
+    try:
+        # Get external IP first
+        ip = None
+        for url in ["https://api.ipify.org", "https://ipinfo.io/ip", "https://ifconfig.me/ip"]:
+            try:
+                resp = requests.get(url, timeout=3)
+                if resp.status_code == 200:
+                    ip = resp.text.strip()
+                    break
+            except Exception:
+                continue
+        
+        if ip:
+            # Get country from IP
+            try:
+                resp = requests.get(f"http://ip-api.com/json/{ip}?fields=countryCode", timeout=3)
+                if resp.status_code == 200:
+                    data = resp.json()
+                    return data.get("countryCode", "")
+            except Exception:
+                pass
+    except Exception:
+        pass
+    return ""
+
+
+def get_speedtest_mode():
+    """
+    Detect speedtest mode: 'OOKLA', 'IPERF3', or 'AUTO'.
+    """
+    # Check config file first
+    if os.path.exists(SPEEDTEST_MODE_FILE):
+        try:
+            with open(SPEEDTEST_MODE_FILE, 'r') as f:
+                mode = f.read().strip().upper()
+                if mode in ('OOKLA', 'RU'):
+                    return 'OOKLA' if mode == 'OOKLA' else 'IPERF3'
+        except Exception:
+            pass
+    
+    # Check if Ookla speedtest is available
+    try:
+        result = subprocess.run(['speedtest', '--version'], capture_output=True, timeout=5)
+        if result.returncode == 0 and b'Speedtest by Ookla' in result.stdout:
+            return 'OOKLA'
+    except Exception:
+        pass
+    
+    # Check if iperf3 is available
+    try:
+        result = subprocess.run(['which', 'iperf3'], capture_output=True, timeout=5)
+        if result.returncode == 0:
+            return 'IPERF3'
+    except Exception:
+        pass
+    
+    return 'AUTO'
+
+
+def run_ookla_speedtest():
+    """Run Ookla Speedtest CLI and return result dict."""
+    cmd = ["speedtest", "--accept-license", "--accept-gdpr", "--format=json"]
+    
+    try:
+        result = subprocess.run(cmd, capture_output=True, timeout=120)
+        
+        if result.returncode == 0:
+            output = result.stdout.decode('utf-8', errors='ignore')
+            data = json.loads(output)
+            
+            download_speed = data.get("download", {}).get("bandwidth", 0) / 125000
+            upload_speed = data.get("upload", {}).get("bandwidth", 0) / 125000
+            ping_latency = data.get("ping", {}).get("latency", 0)
+            server_name = data.get("server", {}).get("name", "N/A")
+            server_location = data.get("server", {}).get("location", "N/A")
+            server_country = data.get("server", {}).get("country", "")
+            result_url = data.get("result", {}).get("url", "")
+            
+            return {
+                "success": True,
+                "dl": download_speed,
+                "ul": upload_speed,
+                "ping": ping_latency,
+                "server": f"{server_name} ({server_location})",
+                "country": server_country,
+                "url": result_url
+            }
+        else:
+            error = result.stderr.decode('utf-8', errors='ignore') or result.stdout.decode('utf-8', errors='ignore')
+            return {"success": False, "error": error[:500]}
+    except subprocess.TimeoutExpired:
+        return {"success": False, "error": "Timeout (120s)"}
+    except json.JSONDecodeError as e:
+        return {"success": False, "error": f"JSON parse error: {e}"}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
 
 CONF = load_config()
 DEBUG_MODE = CONF.get("DEBUG", "false").lower() == "true"
@@ -228,17 +377,153 @@ def format_bytes_simple(bytes_value):
         unit_index += 1
     return f"{value:.2f} {units[unit_index]}"
 
-def parse_iperf_speed(output: str, direction: str) -> float:
-    for line in reversed(output.splitlines()):
-        if "Mbits/sec" in line and (direction in line or direction == 'sender'):
-            speed_match = re.search(r"(\d+\.?\d*)\s+Mbits/sec", line)
-            if speed_match:
-                return float(speed_match.group(1))
+
+def get_services_status():
+    """Get status of common services on the node - only installed ones"""
+    services = []
+    common_services = [
+        "xray", "nginx", "docker", "ssh", "sshd", "fail2ban",
+        "mysql", "mariadb", "postgresql", "redis", "mongodb",
+        "apache2", "httpd", "php-fpm", "caddy", "traefik"
+    ]
     
-    fallback_match = re.findall(r"(\d+\.?\d*)\s+Mbits/sec", output)
-    if fallback_match:
-        return float(fallback_match[-1])
+    for service in common_services:
+        try:
+            # First check if service exists (is-enabled or show LoadState)
+            proc_check = subprocess.run(
+                ["systemctl", "show", service, "-p", "LoadState"],
+                capture_output=True,
+                timeout=2
+            )
+            load_state = proc_check.stdout.decode().strip()
+            
+            # Skip if service is not found/not installed
+            if "not-found" in load_state or "masked" in load_state:
+                continue
+                
+            # Get actual status
+            proc = subprocess.run(
+                ["systemctl", "is-active", service],
+                capture_output=True,
+                timeout=2
+            )
+            status = proc.stdout.decode().strip()
+            
+            # Only add if service exists and has valid status
+            if status in ["active", "inactive", "failed"]:
+                services.append({
+                    "name": service,
+                    "status": "running" if status == "active" else "stopped"
+                })
+        except Exception:
+            pass
+    
+    # Also check for docker containers
+    try:
+        proc = subprocess.run(
+            ["docker", "ps", "-a", "--format", "{{.Names}}:{{.Status}}"],
+            capture_output=True,
+            timeout=5
+        )
+        if proc.returncode == 0:
+            for line in proc.stdout.decode().strip().split("\n"):
+                if ":" in line:
+                    name, status = line.split(":", 1)
+                    if name.strip():
+                        services.append({
+                            "name": name.strip(),
+                            "type": "docker",
+                            "status": "running" if "Up" in status else "stopped"
+                        })
+    except Exception:
+        pass
+    
+    return services
+
+
+def service_action(service_name, action, service_type="systemd"):
+    """Execute service action (start, stop, restart) for systemd or docker"""
+    allowed_actions = ["start", "stop", "restart"]
+    if action not in allowed_actions:
+        return {"success": False, "error": f"Invalid action: {action}"}
+    
+    try:
+        if service_type == "docker":
+            # Docker container commands
+            proc = subprocess.run(
+                ["docker", action, service_name],
+                capture_output=True,
+                timeout=60
+            )
+        else:
+            # Systemd service commands
+            proc = subprocess.run(
+                ["systemctl", action, service_name],
+                capture_output=True,
+                timeout=30
+            )
         
+        if proc.returncode == 0:
+            return {"success": True, "message": f"Service {service_name} {action}ed successfully"}
+        else:
+            return {"success": False, "error": proc.stderr.decode().strip()}
+    except subprocess.TimeoutExpired:
+        return {"success": False, "error": "Timeout while executing service action"}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+def parse_iperf_json(output: str, direction: str) -> float:
+    """
+    Parse iperf3 JSON output.
+    direction: 'download' or 'upload'
+    """
+    try:
+        data = json.loads(output)
+        
+        # Check for error in iperf3 output
+        if "error" in data:
+            logging.error(f"iperf3 error: {data['error']}")
+            return 0.0
+            
+        if "end" not in data:
+            logging.error(f"No 'end' section in iperf3 output")
+            return 0.0
+            
+        end = data["end"]
+        
+        if direction == 'download':
+            # For download test (-R), we need sum_received
+            if "sum_received" in end:
+                speed = end["sum_received"]["bits_per_second"] / 1000000
+                logging.info(f"Download speed parsed: {speed:.2f} Mbps")
+                return speed
+            # Fallback: try streams
+            elif "streams" in end and len(end["streams"]) > 0:
+                speed = end["streams"][0].get("receiver", {}).get("bits_per_second", 0) / 1000000
+                logging.info(f"Download speed from streams: {speed:.2f} Mbps")
+                return speed
+        else:
+            # For upload test, we need sum_sent
+            if "sum_sent" in end:
+                speed = end["sum_sent"]["bits_per_second"] / 1000000
+                logging.info(f"Upload speed parsed: {speed:.2f} Mbps")
+                return speed
+            # Fallback: try streams
+            elif "streams" in end and len(end["streams"]) > 0:
+                speed = end["streams"][0].get("sender", {}).get("bits_per_second", 0) / 1000000
+                logging.info(f"Upload speed from streams: {speed:.2f} Mbps")
+                return speed
+                
+        logging.error(f"Could not find speed data in iperf3 output for {direction}")
+        logging.debug(f"Available keys in 'end': {list(end.keys())}")
+        
+    except json.JSONDecodeError as e:
+        logging.error(f"Failed to parse iperf3 JSON: {e}")
+    except KeyError as e:
+        logging.error(f"Missing key in iperf3 output: {e}")
+    except Exception as e:
+        logging.error(f"Error parsing iperf3 output: {e}")
+    
     return 0.0
 
 def get_top_processes(metric):
@@ -275,7 +560,33 @@ def get_system_stats():
         
         ext_ip = get_external_ip()
         
-        return {
+        # Measure ping: try ICMP first (faster/accurate), fallback to HTTPS if blocked
+        ping_ms = None
+        
+        # Try ICMP ping first
+        try:
+            proc = subprocess.Popen(
+                ["ping", "-c", "1", "-W", "2", "8.8.8.8"],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE
+            )
+            stdout, _ = proc.communicate(timeout=5)
+            ping_match = re.search(r"time=([\d\.]+)\s*ms", stdout.decode())
+            if ping_match:
+                ping_ms = round(float(ping_match.group(1)), 1)
+        except Exception:
+            pass
+        
+        if ping_ms is None:
+            try:
+                t1 = time.time()
+                resp = requests.head("https://www.google.com", timeout=3)
+                if resp.status_code == 200:
+                    ping_ms = round((time.time() - t1) * 1000, 1)
+            except Exception:
+                pass
+        
+        result = {
             "cpu": psutil.cpu_percent(interval=None),
             "ram": mem.percent,
             "disk": disk.percent,
@@ -289,23 +600,107 @@ def get_system_stats():
             "uptime": int(time.time() - psutil.boot_time()),
             "process_cpu": get_top_processes('cpu'),
             "process_ram": get_top_processes('ram'),
-            "external_ip": ext_ip
+            "external_ip": ext_ip,
+            "ping": ping_ms if ping_ms is not None else "n/a"
         }
+        return result
     except Exception as e:
         logging.error(f"Error gathering stats: {e}")
         return {}
 
-def get_public_iperf_server():
+def get_public_iperf_server(exclude_ru=True):
+    """Get best iperf3 server by measuring ping to multiple servers"""
     try:
+        # For Russia, use Russian server list
+        if not exclude_ru:
+            try:
+                import yaml
+                ru_url = "https://raw.githubusercontent.com/itdoginfo/russian-iperf3-servers/refs/heads/main/list.yml"
+                response = requests.get(ru_url, timeout=5)
+                if response.status_code == 200:
+                    data = yaml.safe_load(response.text)
+                    servers = []
+                    for s in data:
+                        if "address" in s and "port" in s:
+                            port = int(str(s["port"]).split("-")[0].strip())
+                            servers.append({
+                                "IP/HOST": s["address"],
+                                "PORT": port,
+                                "SITE": s.get("City", "Unknown"),
+                                "COUNTRY": "RU",
+                                "provider": s.get("Name", "")
+                            })
+                    if servers:
+                        sample_size = min(15, len(servers))
+                        test_servers = random.sample(servers, sample_size)
+                        
+                        best_server = None
+                        best_ping = float('inf')
+                        
+                        for server in test_servers:
+                            host = server.get("IP/HOST")
+                            ping_ms = measure_ping(host)
+                            if ping_ms is not None and ping_ms < best_ping:
+                                best_ping = ping_ms
+                                best_server = server
+                                best_server["_ping"] = ping_ms
+                        
+                        if best_server:
+                            logging.info(f"Selected RU server: {best_server.get('IP/HOST')} ({best_ping:.2f} ms)")
+                            return best_server
+                        return random.choice(servers)
+            except Exception as e:
+                logging.error(f"Error fetching RU iperf servers: {e}")
+        
+        # Global server list
         url = "https://export.iperf3serverlist.net/listed_iperf3_servers.json"
         response = requests.get(url, timeout=5)
         if response.status_code == 200:
             servers = response.json()
-            valid_servers = [s for s in servers if s.get("IP/HOST") and s.get("PORT") and s.get("COUNTRY") != "RU"]
+            if exclude_ru:
+                valid_servers = [s for s in servers if s.get("IP/HOST") and s.get("PORT") and s.get("COUNTRY") != "RU"]
+            else:
+                valid_servers = [s for s in servers if s.get("IP/HOST") and s.get("PORT")]
             if valid_servers:
+                # Test ping to up to 15 random servers and pick the best one
+                sample_size = min(15, len(valid_servers))
+                test_servers = random.sample(valid_servers, sample_size)
+                
+                best_server = None
+                best_ping = float('inf')
+                
+                for server in test_servers:
+                    host = server.get("IP/HOST")
+                    ping_ms = measure_ping(host)
+                    if ping_ms is not None and ping_ms < best_ping:
+                        best_ping = ping_ms
+                        best_server = server
+                        best_server["_ping"] = ping_ms
+                
+                if best_server:
+                    logging.info(f"Selected server: {best_server.get('IP/HOST')} ({best_ping:.2f} ms)")
+                    return best_server
+                    
+                # Fallback to random if ping failed
                 return random.choice(valid_servers)
     except Exception as e:
         logging.error(f"Error fetching iperf servers: {e}")
+    return None
+
+
+def measure_ping(host: str) -> float:
+    """Measure ping to a host, returns average ping in ms or None on failure"""
+    try:
+        # Linux ping command
+        cmd = ["ping", "-c", "2", "-W", "2", host]
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
+        if result.returncode == 0:
+            # Parse: rtt min/avg/max/mdev = 1.234/5.678/9.012/1.234 ms
+            match = re.search(r"rtt min/avg/max/mdev = [\d.]+/([\d.]+)/", result.stdout)
+            if match:
+                return float(match.group(1))
+    except Exception as e:
+        logging.debug(f"Ping to {host} failed: {e}")
     return None
 
 def execute_command(task):
@@ -459,64 +854,111 @@ def execute_command(task):
             }
 
         elif cmd == "speedtest":
-            server = get_public_iperf_server()
-            if server:
-                host = server.get("IP/HOST")
-                port = server.get("PORT")
-                city = server.get("SITE", "Unknown")
-                country = server.get("COUNTRY", "")
-                
-                cmd_dl = ["iperf3", "-c", host, "-p", str(port), "-t", "5", "-4", "-R"]
-                try:
-                    res_dl = subprocess.check_output(
-                        cmd_dl, stderr=subprocess.STDOUT, timeout=20).decode()
-                    dl_speed = parse_iperf_speed(res_dl, 'receiver')
-                except subprocess.TimeoutExpired:
-                    dl_speed = 0.0
-                except Exception as e:
-                    logging.error(f"DL Test failed: {e}")
-                    dl_speed = 0.0
-                
-                cmd_ul = ["iperf3", "-c", host, "-p", str(port), "-t", "5", "-4"]
-                try:
-                    res_ul = subprocess.check_output(
-                        cmd_ul, stderr=subprocess.STDOUT, timeout=20).decode()
-                    ul_speed = parse_iperf_speed(res_ul, 'sender')
-                except subprocess.TimeoutExpired:
-                    ul_speed = 0.0
-                except Exception as e:
-                    logging.error(f"UL Test failed: {e}")
-                    ul_speed = 0.0
-                
-                if dl_speed == 0.0 and ul_speed == 0.0:
-                    raise Exception("iperf3 returned zero speed or failed to parse.")
-                    
-                result_payload = {
-                    "type": "i18n",
-                    "key": "speedtest_results",
-                    "params": {
-                        "dl": dl_speed,
-                        "ul": ul_speed,
-                        "ping": 0,
-                        "flag": "",
-                        "server": f"{city}, {country}",
-                        "provider": host
+            # Determine speedtest mode
+            mode = get_speedtest_mode()
+            country_code = None
+            
+            if mode == 'AUTO':
+                # Need to detect based on geo
+                country_code = get_server_country()
+                if country_code == 'RU':
+                    mode = 'IPERF3'
+                else:
+                    # Check if Ookla is available
+                    try:
+                        result = subprocess.run(['speedtest', '--version'], capture_output=True, timeout=5)
+                        if result.returncode == 0 and b'Speedtest by Ookla' in result.stdout:
+                            mode = 'OOKLA'
+                        else:
+                            mode = 'IPERF3'
+                    except Exception:
+                        mode = 'IPERF3'
+            
+            if mode == 'OOKLA':
+                # Use Ookla Speedtest CLI
+                ookla_result = run_ookla_speedtest()
+                if ookla_result.get("success"):
+                    result_payload = {
+                        "type": "i18n",
+                        "key": "speedtest_ookla_results",
+                        "params": {
+                            "dl": ookla_result["dl"],
+                            "ul": ookla_result["ul"],
+                            "ping": ookla_result["ping"],
+                            "server": ookla_result["server"].split(" (")[0] if " (" in ookla_result["server"] else ookla_result["server"],
+                            "location": ookla_result["server"].split(" (")[1].rstrip(")") if " (" in ookla_result["server"] else "",
+                            "url": ookla_result.get("url", "")
+                        }
                     }
-                }
+                else:
+                    result_payload = {
+                        "type": "i18n",
+                        "key": "error_with_details",
+                        "params": {"error": ookla_result.get("error", "Ookla speedtest failed")}
+                    }
             else:
-                try:
-                    res = subprocess.check_output("ping -c 3 8.8.8.8", shell=True).decode()
+                # Use iperf3
+                is_russia = country_code == 'RU' if country_code else get_server_country() == 'RU'
+                server = get_public_iperf_server(exclude_ru=not is_russia)
+                if server:
+                    host = server.get("IP/HOST")
+                    port = server.get("PORT")
+                    city = server.get("SITE", "Unknown")
+                    country = server.get("COUNTRY", "")
+                    ping_ms = server.get("_ping", 0)
+                    
+                    # Download test
+                    cmd_dl = ["iperf3", "-c", host, "-p", str(port), "-J", "-t", "5", "-4", "-R"]
+                    try:
+                        res_dl = subprocess.check_output(
+                            cmd_dl, stderr=subprocess.STDOUT, timeout=30).decode()
+                        dl_speed = parse_iperf_json(res_dl, 'download')
+                    except subprocess.TimeoutExpired:
+                        dl_speed = 0.0
+                    except Exception as e:
+                        logging.error(f"DL Test failed: {e}")
+                        dl_speed = 0.0
+                    
+                    # Upload test
+                    cmd_ul = ["iperf3", "-c", host, "-p", str(port), "-J", "-t", "5", "-4"]
+                    try:
+                        res_ul = subprocess.check_output(
+                            cmd_ul, stderr=subprocess.STDOUT, timeout=30).decode()
+                        ul_speed = parse_iperf_json(res_ul, 'upload')
+                    except subprocess.TimeoutExpired:
+                        ul_speed = 0.0
+                    except Exception as e:
+                        logging.error(f"UL Test failed: {e}")
+                        ul_speed = 0.0
+                    
+                    if dl_speed == 0.0 and ul_speed == 0.0:
+                        raise Exception("iperf3 returned zero speed or failed to parse.")
+                        
                     result_payload = {
                         "type": "i18n",
-                        "key": "error_with_details",
-                        "params": {"error": f"iperf3 unavailable. Ping check:\n{res}"}
+                        "key": "speedtest_results",
+                        "params": {
+                            "dl": dl_speed,
+                            "ul": ul_speed,
+                            "ping": ping_ms,
+                            "server": f"{city}, {country}",
+                            "provider": host
+                        }
                     }
-                except Exception as e:
-                    result_payload = {
-                        "type": "i18n",
-                        "key": "error_with_details",
-                        "params": {"error": f"Network check failed: {e}"}
-                    }
+                else:
+                    try:
+                        res = subprocess.check_output("ping -c 3 8.8.8.8", shell=True).decode()
+                        result_payload = {
+                            "type": "i18n",
+                            "key": "error_with_details",
+                            "params": {"error": f"iperf3 unavailable. Ping check:\n{res}"}
+                        }
+                    except Exception as e:
+                        result_payload = {
+                            "type": "i18n",
+                            "key": "error_with_details",
+                            "params": {"error": f"Network check failed: {e}"}
+                        }
 
         elif cmd == "reboot":
             result_payload = {
@@ -532,6 +974,38 @@ def execute_command(task):
             except Exception as e:
                 logger.error(f"Failed to reboot: {e}")
             return
+
+        elif cmd == "services_list":
+            services = get_services_status()
+            result_payload = {
+                "type": "services_list",
+                "services": services
+            }
+
+        elif cmd == "service_action":
+            svc_name = task.get("service")
+            svc_action = task.get("action")
+            svc_type = task.get("type", "systemd")
+            if not svc_name or not svc_action:
+                result_payload = {
+                    "type": "i18n",
+                    "key": "error_with_details",
+                    "params": {"error": "Missing service or action"}
+                }
+            else:
+                result = service_action(svc_name, svc_action, svc_type)
+                if result["success"]:
+                    result_payload = {
+                        "type": "i18n",
+                        "key": "services_action_success",
+                        "params": {"service": svc_name, "action": svc_action}
+                    }
+                else:
+                    result_payload = {
+                        "type": "i18n",
+                        "key": "error_with_details",
+                        "params": {"error": result.get("error", "Unknown error")}
+                    }
 
         else:
             result_payload = {
@@ -567,11 +1041,19 @@ def send_heartbeat():
     current_results = list(PENDING_RESULTS)
     current_ssh_events = list(SSH_EVENTS)
     
+    # Get services status periodically
+    services = []
+    try:
+        services = get_services_status()
+    except Exception as e:
+        logging.debug(f"Failed to get services status: {e}")
+    
     payload_dict = {
         "token": AGENT_TOKEN,
         "stats": get_system_stats(),
         "results": current_results,
         "ssh_logins": current_ssh_events,
+        "services": services,
         "timestamp": int(time.time())
     }
     
@@ -600,6 +1082,9 @@ def send_heartbeat():
         logging.error(f"Connection error: {e}")
 
 def main():
+    # Check and update environment variables
+    ensure_env_variables()
+    
     logging.info(f"Node Agent started. Target: {AGENT_BASE_URL}. Mode: {'DEBUG' if DEBUG_MODE else 'RELEASE'}")
     psutil.cpu_percent(interval=None)
     get_external_ip()

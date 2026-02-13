@@ -1,5 +1,43 @@
 /* /core/static/js/dashboard.js */
 
+// Keyboard layout conversion (RU <-> EN)
+const LAYOUT_RU = 'ёйцукенгшщзхъфывапролджэячсмитьбю.ЁЙЦУКЕНГШЩЗХЪФЫВАПРОЛДЖЭЯЧСМИТЬБЮ,';
+const LAYOUT_EN = '`qwertyuiop[]asdfghjkl;\'zxcvbnm,./~QWERTYUIOP{}ASDFGHJKL:"ZXCVBNM<>?';
+
+function convertLayout(text, fromLayout, toLayout) {
+    let result = '';
+    for (const char of text) {
+        const idx = fromLayout.indexOf(char);
+        if (idx !== -1) {
+            result += toLayout[idx];
+        } else {
+            result += char;
+        }
+    }
+    return result;
+}
+
+function ruToEn(text) {
+    return convertLayout(text, LAYOUT_RU, LAYOUT_EN);
+}
+
+function enToRu(text) {
+    return convertLayout(text, LAYOUT_EN, LAYOUT_RU);
+}
+
+function detectWrongLayout(text) {
+    // Check if text contains Russian letters but looks like it should be English
+    const hasRussian = /[а-яё]/i.test(text);
+    const hasEnglish = /[a-z]/i.test(text);
+    
+    if (hasRussian && !hasEnglish) {
+        return { detected: 'ru', converted: ruToEn(text) };
+    } else if (hasEnglish && !hasRussian) {
+        return { detected: 'en', converted: enToRu(text) };
+    }
+    return null;
+}
+
 let chartRes = null;
 let chartNet = null;
 let nodeSSESource = null;
@@ -12,6 +50,7 @@ let currentNodeToken = null;
 let currentRenderList = [];   
 let renderedCount = 0; 
 const NODES_BATCH_SIZE = 15;
+let nodesFirstUpdateReceived = false;
 
 function decryptData(text) {
     if (!text) return "";
@@ -76,6 +115,7 @@ function initScrollAnimations() {
 
 window.initDashboard = function() {
     cleanupDashboardSources();
+    nodesFirstUpdateReceived = false;  // Reset flag on dashboard init
     
     // Запускаем анимацию блоков
     initScrollAnimations();
@@ -266,7 +306,11 @@ function updateNodesListUI(data) {
         const container = document.getElementById('nodesList');
         const currentElements = container ? Array.from(container.children).filter(el => el.hasAttribute('data-token')) : [];
         
-        if (currentRenderList.length !== newList.length || (currentElements.length === 0 && newList.length > 0)) {
+        // Trigger render if: list length changed, first update with nodes, or first update with empty list (to show "no nodes" message)
+        const needsRender = currentRenderList.length !== newList.length || 
+                           (currentElements.length === 0 && newList.length > 0) ||
+                           (!nodesFirstUpdateReceived && newList.length === 0);
+        if (needsRender) {
             currentRenderList = newList;
             renderNodesList();
         } else {
@@ -277,6 +321,8 @@ function updateNodesListUI(data) {
                 renderNodesList();
             }
         }
+        
+        nodesFirstUpdateReceived = true;
 
         if (document.getElementById('nodesTotal')) {
             document.getElementById('nodesTotal').innerText = allNodesData.length;
@@ -543,7 +589,23 @@ function updateAgentStatsUI(data) {
             if (uptimeEl) uptimeEl.innerText = formatUptime(data.stats.boot_time);
 
             const ipEl = document.getElementById('agentIp');
-            if (ipEl && data.stats.ip) ipEl.innerText = decryptData(data.stats.ip); 
+            if (ipEl && data.stats.ip) ipEl.innerText = decryptData(data.stats.ip);
+            
+            const pingEl = document.getElementById('agentPing');
+            if (pingEl) {
+                if (data.stats.ping) {
+                    const pingValue = decryptData(data.stats.ping);
+                    // Add unit if it's a number
+                    if (pingValue && !isNaN(pingValue)) {
+                        const unit = (typeof I18N !== 'undefined' && I18N.web_agent_ping_unit) ? I18N.web_agent_ping_unit : 'ms';
+                        pingEl.innerText = pingValue + ' ' + unit;
+                    } else {
+                        pingEl.innerText = pingValue || 'n/a';
+                    }
+                } else {
+                    pingEl.innerText = 'n/a';
+                }
+            } 
         }
         renderAgentChart(data.history);
     } catch (e) {
@@ -998,7 +1060,10 @@ function updateNodeDetailsUI(data) {
     }
 
     document.getElementById('modalNodeIp').innerText = decryptData(data.ip);
-    document.getElementById('modalToken').innerText = decryptData(data.token);
+    const tokenEl = document.getElementById('modalToken');
+    if (tokenEl) {
+        tokenEl.innerText = decryptData(data.token);
+    }
 
     const stats = data.stats || {};
 
@@ -1497,6 +1562,9 @@ function loadServices() {
 function renderServices(services, forceRender = false) {
     const container = document.getElementById('services-container');
     
+    // Skip if services container doesn't exist on this page
+    if (!container) return;
+    
     // Don't re-render if user is actively searching (unless forceRender is true)
     const searchInput = document.getElementById('servicesSearchInput');
     if (!forceRender && searchInput && searchInput.value.trim()) {
@@ -1637,9 +1705,11 @@ function filterServices(query) {
         }
     });
     
-    // Remove old "no results" message
+    // Remove old "no results" message and layout suggestion
     const noResults = container.querySelector('.no-search-results');
     if (noResults) noResults.remove();
+    const oldSuggestion = container.querySelector('.layout-suggestion-main');
+    if (oldSuggestion) oldSuggestion.remove();
     
     // Search globally with debounce - only for main admin (level 2) who can add services
     const roleLevel = window.USER_ROLE_LEVEL || 0;
@@ -1658,7 +1728,7 @@ function filterServices(query) {
                     <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                     <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                 </svg>
-                <span>${I18N.web_searching || 'Поиск...'}</span>
+                <span>${I18N.web_searching || 'Searching...'}</span>
             `;
             container.appendChild(loadingEl);
         }
@@ -1668,13 +1738,52 @@ function filterServices(query) {
             searchGlobalServices(q, visibleCount);
         }, 300);
     } else if (visibleCount === 0 && q) {
-        // Show "no results" for non-admins
+        // Show "no results" for non-admins with layout suggestion
         const globalResults = container.querySelectorAll('.global-search-result-card');
         globalResults.forEach(card => card.remove());
+        
+        // Check for wrong keyboard layout
+        const layoutCheck = detectWrongLayout(q);
+        let suggestionHtml = '';
+        
+        if (layoutCheck) {
+            const converted = layoutCheck.converted.toLowerCase();
+            // Check if converted query would find results in managed services
+            let convertedCount = 0;
+            cards.forEach(card => {
+                if (card.classList.contains('global-search-result-card')) return;
+                const name = card.dataset.name?.toLowerCase() || '';
+                if (name.includes(converted)) convertedCount++;
+            });
+            
+            if (convertedCount > 0) {
+                const suggestionText = I18N.web_did_you_mean || 'Did you mean';
+                suggestionHtml = `
+                    <div class="layout-suggestion-main text-center py-2 col-span-full">
+                        <span class="text-gray-400">${suggestionText}: </span>
+                        <button onclick="applyLayoutSuggestionMain('${layoutCheck.converted}')" 
+                                class="text-blue-500 hover:text-blue-400 font-medium hover:underline">
+                            "${layoutCheck.converted}"
+                        </button>
+                    </div>
+                `;
+                container.insertAdjacentHTML('beforeend', suggestionHtml);
+            }
+        }
+        
         const msg = document.createElement('div');
         msg.className = 'no-search-results col-span-full text-center text-gray-400 py-4';
         msg.textContent = I18N.web_services_none_found || 'No services found';
         container.appendChild(msg);
+    }
+}
+
+// Apply layout suggestion to main search input  
+function applyLayoutSuggestionMain(suggestion) {
+    const input = document.getElementById('servicesSearchInput');
+    if (input) {
+        input.value = suggestion;
+        input.dispatchEvent(new Event('input'));
     }
 }
 
@@ -1759,7 +1868,7 @@ async function searchGlobalServices(query, managedMatchCount) {
                 addButtonHtml = `
                     <button onclick="addServiceFromSearch('${item.name}', '${item.type}')" 
                             class="w-8 h-8 flex items-center justify-center rounded-lg bg-green-500/20 hover:bg-green-600 transition-all duration-200 hover:scale-110 active:scale-95"
-                            title="${I18N.web_services_btn_add || 'Добавить'}">
+                            title="${I18N.web_services_btn_add || 'Add'}">
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-green-500 hover:text-white transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
                             <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
                         </svg>
@@ -2047,26 +2156,18 @@ function renderServicesEditList(services) {
         return;
     }
     
-    // Critical services that cannot be removed
-    const CRITICAL_SERVICES = ['sshd', 'ssh', 'fail2ban'];
-    
     // Grid: 1 col mobile, 2 cols sm, 3 cols md, 4 cols lg
     let html = '<div id="servicesEditGrid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2">';
     
     for (const s of services) {
         const isManaged = s.managed;
-        const isCritical = CRITICAL_SERVICES.includes(s.name);
         const statusIcon = s.status === 'running' ? '🟢' : '🔴';
         const typeLabel = s.type === 'docker' ? '🐳' : '⚙️';
         const safeId = s.name.replace(/[^a-zA-Z0-9]/g, '_');
         
-        // Disable remove button for critical services
-        const isRemoveDisabled = isManaged && isCritical;
         const buttonClasses = isManaged 
-            ? (isRemoveDisabled ? 'bg-gray-500/20 text-gray-600 dark:text-gray-400 cursor-not-allowed opacity-50' : 'bg-red-500/20 text-red-600 dark:text-red-400 hover:bg-red-500/30') 
+            ? 'bg-red-500/20 text-red-600 dark:text-red-400 hover:bg-red-500/30'
             : 'bg-green-500/20 text-green-600 dark:text-green-400 hover:bg-green-500/30';
-        
-        const removeTitle = isRemoveDisabled ? 'This is a critical service and cannot be removed' : '';
         
         html += `
             <div class="service-edit-card flex items-center justify-between p-2.5 bg-gray-50 dark:bg-black/20 rounded-xl gap-2" data-name="${s.name}" data-type="${s.type}">
@@ -2080,8 +2181,6 @@ function renderServicesEditList(services) {
                 <button id="srv-btn-${safeId}" 
                         data-type="${s.type}"
                         onclick="toggleServiceManaged('${s.name}', '${s.type}', ${isManaged}, this)" 
-                        ${isRemoveDisabled ? 'disabled' : ''}
-                        title="${removeTitle}"
                         class="srv-manage-btn px-2 py-1 rounded-lg text-xs font-medium transition min-w-[60px] flex items-center justify-center gap-1 flex-shrink-0 ${buttonClasses}">
                     <span class="btn-text">${isManaged ? (I18N.web_services_btn_remove || 'Remove') : (I18N.web_services_btn_add || 'Add')}</span>
                     <svg class="btn-spinner hidden animate-spin h-3 w-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
@@ -2117,17 +2216,68 @@ function filterServicesEditList(query) {
         }
     });
     
+    // Remove old messages
+    const oldNoResults = grid.parentElement.querySelector('.no-search-results-edit');
+    if (oldNoResults) oldNoResults.remove();
+    const oldSuggestion = grid.parentElement.querySelector('.layout-suggestion');
+    if (oldSuggestion) oldSuggestion.remove();
+    
     // Show "no results" if nothing visible
-    let noResults = grid.parentElement.querySelector('.no-search-results-edit');
     if (visibleCount === 0 && q) {
-        if (!noResults) {
-            const msg = document.createElement('div');
-            msg.className = 'no-search-results-edit text-center text-gray-400 py-4';
-            msg.textContent = I18N.web_services_none_found || 'No services found';
-            grid.parentElement.appendChild(msg);
+        // Check if wrong keyboard layout
+        const layoutCheck = detectWrongLayout(q);
+        let suggestionHtml = '';
+        
+        if (layoutCheck) {
+            const converted = layoutCheck.converted.toLowerCase();
+            // Check if converted query would find results
+            let convertedCount = 0;
+            cards.forEach(card => {
+                const name = (card.dataset.name || '').toLowerCase();
+                if (name.includes(converted)) convertedCount++;
+            });
+            
+            if (convertedCount > 0) {
+                const suggestionText = I18N.web_did_you_mean || 'Did you mean';
+                suggestionHtml = `
+                    <div class="layout-suggestion text-center py-2">
+                        <span class="text-gray-400">${suggestionText}: </span>
+                        <button onclick="applyLayoutSuggestion('${layoutCheck.converted}')" 
+                                class="text-blue-500 hover:text-blue-400 font-medium hover:underline">
+                            "${layoutCheck.converted}"
+                        </button>
+                        <span class="text-gray-500 text-xs ml-2">(${convertedCount} ${I18N.web_results || 'results'})</span>
+                    </div>
+                `;
+            }
         }
-    } else if (noResults) {
-        noResults.remove();
+        
+        const msg = document.createElement('div');
+        msg.className = 'no-search-results-edit text-center text-gray-400 py-4';
+        msg.innerHTML = `
+            ${suggestionHtml}
+            <div class="mt-1">${I18N.web_services_none_found || 'No services found'}</div>
+        `;
+        grid.parentElement.appendChild(msg);
+    }
+}
+
+// Apply layout suggestion to search input
+function applyLayoutSuggestion(suggestion) {
+    // Try desktop input first, then mobile
+    const inputDesktop = document.getElementById('servicesEditSearchInputDesktop');
+    const inputMobile = document.getElementById('servicesEditSearchInputMobile');
+    const inputMain = document.getElementById('servicesSearchInput');
+    
+    if (inputDesktop && inputDesktop.offsetParent !== null) {
+        inputDesktop.value = suggestion;
+        inputDesktop.dispatchEvent(new Event('input'));
+    } else if (inputMobile && inputMobile.offsetParent !== null) {
+        inputMobile.value = suggestion;
+        inputMobile.dispatchEvent(new Event('input'));
+    } else if (inputMain) {
+        inputMain.value = suggestion;
+        inputMain.dispatchEvent(new Event('input'));
     }
 }
 
@@ -2184,10 +2334,37 @@ async function loadAgentIpv4() {
   }
 }
 
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
   const badge = document.getElementById('agentIpBadge');
   if (!badge) return;
 
+  // Check if there are additional IPs before making badge interactive
+  try {
+    const response = await fetch('/api/agent/ipv4', { credentials: 'same-origin' });
+    if (response.ok) {
+      const data = await response.json();
+      const primary = data.primary || data.source_ip || data.agent_ip || '-';
+      const ips = Array.isArray(data.ips) ? data.ips : Array.isArray(data.ipv4) ? data.ipv4 : [];
+      const secondary = ips.filter(ip => ip && ip !== primary);
+      
+      // If no additional IPs, make badge non-interactive
+      if (secondary.length === 0) {
+        badge.removeAttribute('role');
+        badge.removeAttribute('tabindex');
+        badge.removeAttribute('onclick');
+        badge.removeAttribute('onkeydown');
+        badge.classList.remove('cursor-pointer', 'hover:bg-gray-200/70', 'dark:hover:bg-white/10');
+        // Remove the info icon
+        const icon = badge.querySelector('svg');
+        if (icon) icon.remove();
+        return; // Don't add click handlers
+      }
+    }
+  } catch (e) {
+    console.error('Error checking additional IPs:', e);
+  }
+
+  // Add click handlers only if there are additional IPs
   const handler = async (e) => {
     e.preventDefault();
     e.stopPropagation();

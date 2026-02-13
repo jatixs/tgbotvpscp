@@ -269,21 +269,31 @@
                             </svg>
                             <span class="truncate">{{ web_agent_stats_title }}</span>
                         </h3>
-                        <div id="agentIpBadge"
-                             role="button"
-                             tabindex="2"
-                             onClick="openAgentIpsModal()"
-                             onkeydown="if(event.key==='Enter'||event.key===' ') { event.preventDefault(); openAgentIpsModal(); }"
-                             class="flex-shrink-0 flex items-center gap-2 bg-gray-100 dark:bg-black/30 px-3 py-1 rounded-lg border border-gray-200 dark:border-white/10 shadow-sm cursor-pointer hover:bg-gray-200/70 dark:hover:bg-white/10 transition">
-                            <span id="agentIp"
-                                  class="font-mono text-xs font-bold text-gray-600 dark:text-gray-300 select-all">{{ agent_ip }}</span>
+                        <div class="flex items-center gap-2 flex-shrink-0">
+                            <!-- Ping Badge -->
+                            <div id="agentPingBadge"
+                                 class="flex items-center gap-2 bg-gray-100 dark:bg-black/30 px-3 py-1 rounded-lg border border-gray-200 dark:border-white/10 shadow-sm">
+                                <span class="text-[10px] text-gray-500 dark:text-gray-400 font-bold uppercase">{{ web_agent_ping_label }}</span>
+                                <span id="agentPing"
+                                      class="font-mono text-xs font-bold text-gray-600 dark:text-gray-300">n/a</span>
+                            </div>
+                            <!-- IP Badge -->
+                            <div id="agentIpBadge"
+                                 role="button"
+                                 tabindex="2"
+                                 onClick="openAgentIpsModal()"
+                                 onkeydown="if(event.key==='Enter'||event.key===' ') { event.preventDefault(); openAgentIpsModal(); }"
+                                 class="flex items-center gap-2 bg-gray-100 dark:bg-black/30 px-3 py-1 rounded-lg border border-gray-200 dark:border-white/10 shadow-sm cursor-pointer hover:bg-gray-200/70 dark:hover:bg-white/10 transition">
+                                <span id="agentIp"
+                                      class="font-mono text-xs font-bold text-gray-600 dark:text-gray-300 select-all">{{ agent_ip }}</span>
 
-                            <!-- маленькая иконка, чтобы визуально было понятно, что это интерактив -->
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-gray-400" fill="none"
-                                 viewBox="0 0 24 24" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                      d="M13 16h-1v-4h-1m1-4h.01M12 20a8 8 0 100-16 8 8 0 000 16z"/>
-                            </svg>
+                                <!-- маленькая иконка, чтобы визуально было понятно, что это интерактив -->
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-gray-400" fill="none"
+                                     viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                          d="M13 16h-1v-4h-1m1-4h.01M12 20a8 8 0 100-16 8 8 0 000 16z"/>
+                                </svg>
+                            </div>
                         </div>
                     </div>
                     <div class="h-[250px] w-full">
@@ -419,6 +429,12 @@
                             {{ web_node_mgmt_title }}
                         </h3>
                         <div class="flex gap-2">
+                            <a href="/nodes" class="monitor-link-btn px-2 py-1 rounded text-xs font-bold transition flex items-center gap-1" title="{{ web_monitor_title }}">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                                </svg>
+                                <span class="hidden sm:inline">{{ web_monitor_btn }}</span>
+                            </a>
                             <span class="px-2 py-1 bg-gray-100 dark:bg-gray-700 rounded text-xs font-bold text-gray-600 dark:text-gray-300">{{ web_stats_total }}: <span id="nodesTotal">{{ nodes_count }}</span></span>
                             <span class="px-2 py-1 bg-green-100 dark:bg-green-900/30 rounded text-xs font-bold text-green-600 dark:text-green-400">{{ web_stats_active }}: <span id="nodesActive">{{ active_nodes }}</span></span>
                         </div>
@@ -640,6 +656,7 @@
                             <canvas id="nodeNetChart"></canvas>
                         </div>
                     </div>
+                    {% if is_main_admin %}
                     <div onclick="copyToken(this)"
                          class="group bg-gray-100/50 dark:bg-white/5 hover:bg-gray-200 dark:hover:bg-white/10 transition-colors border border-gray-200 dark:border-white/10 rounded-xl p-3 flex items-center justify-between cursor-pointer relative overflow-hidden">
                         <div class="flex items-center gap-3 overflow-hidden">
@@ -672,6 +689,7 @@
                             <span data-i18n="web_copied">{{ web_copied }}</span>
                         </div>
                     </div>
+                    {% endif %}
                 </div>
             </div>
         </div>

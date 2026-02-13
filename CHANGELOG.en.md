@@ -5,11 +5,39 @@
 <h1 align="center">📝 Telegram VPS Management Bot — Changelog</h1>
 
 <p align="center">
-	<img src="https://img.shields.io/badge/version-v1.18.1-blue?style=flat-square " alt="Version 1.18.1"/>
-	<img src="https://img.shields.io/badge/build-67-purple?style=flat-square " alt="Build 67"/>
-	<img src="https://img.shields.io/badge/date-February%2027-green?style=flat-square " alt="Date February 3"/>
-	<img src="https://img.shields.io/badge/status-stable-green?style=flat-square " alt="Status Stable"/>
+	<img src="https://img.shields.io/badge/version-v1.19.0-blue?style=flat-square" alt="Version 1.19.0"/>
+	<img src="https://img.shields.io/badge/build-68-purple?style=flat-square" alt="Build 68"/>
+	<img src="https://img.shields.io/badge/date-February%2027-green?style=flat-square" alt="Date February 13"/>
+	<img src="https://img.shields.io/badge/status-stable-green?style=flat-square" alt="Status Stable"/>
 </p>
+
+---
+## [1.19.0] - 2026-02-13
+
+### 🚀 WebUI and Monitoring:
+
+* **Node Monitoring:** Added a full-fledged monitoring page with server cards. Filtering by status (online/offline), viewing brief/detailed information, and managing services on each node is implemented.
+* **Ping Check:** A ping indicator (Ping Badge) has been added to the interface (network activity block).
+* **Hotkeys:** Added support for hotkeys for easy editing of text fields and working with windows (thanks @artemkaa2001).
+
+### ⚙️ System Logic and Network:
+
+* **Smart Speedtest:** The speed testing logic has been completely redesigned. Geolocation separation has been introduced: `iperf3` is used for the RU segment, and `Speedtest by Ookla` is used for other regions.
+* **Integrity Check:** Added checkers for `venv` and environment variables (`.env`) to identify missing parameters necessary for the correct operation of the bot.
+* **Deploy Scripts:** Scripts `deploy.sh `and `deploy_en.sh ` adapted to the new changes. The bot is installed, updated, and deleted correctly in both Docker and Systemd mode.
+* **Code Cleanup:** Outdated and unsupported code has been removed (Legacy code cleanup).
+
+### 🛡️ Security:
+
+* **CodeQL Alerts:** Fixed vulnerabilities and potential errors identified by the CodeQL static analysis system.
+* **Hardening:** Security audit criticisms have been fixed to improve the overall security of the project.
+
+### 🔧 Fixed:
+
+* **Issue #21:** Fixed an issue with updating the Xray core in the Marzban panel.
+* **Issue #61:** Fixes visual and logical errors in the web interface.
+* **Database:** Fixed errors that occurred during database migration and creation of the "null" configuration.
+* **General:** Many minor fixes from previous versions and improved user experience (UX).
 
 ---
 ## [1.18.1] - 2026-02-03

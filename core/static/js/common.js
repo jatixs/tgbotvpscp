@@ -124,7 +124,7 @@ function copyTextToClipboard(text) {
         try {
             document.execCommand('copy');
             showCopyFeedback();
-        } catch (e) {}
+        } catch (e) { }
         document.body.removeChild(t);
     }
 }
@@ -510,15 +510,15 @@ function checkSessionStatus() {
     if (document.getElementById('session-expired-overlay')) return;
 
     fetch('/api/settings/language', {
-            method: 'HEAD',
-            cache: 'no-store'
-        })
+        method: 'HEAD',
+        cache: 'no-store'
+    })
         .then(res => {
             if (res.status === 401 || res.status === 403) {
                 handleSessionExpired();
             }
         })
-        .catch(() => {});
+        .catch(() => { });
 }
 
 let lastUnreadCount = -1;
@@ -672,9 +672,9 @@ function handleServerRestart() {
 
     const checkServer = () => {
         fetch('/api/settings/language', {
-                method: 'HEAD',
-                cache: 'no-store'
-            })
+            method: 'HEAD',
+            cache: 'no-store'
+        })
             .then(res => {
                 if (res.status === 200 || res.status === 401 || res.status === 403) {
                     window.location.reload();
@@ -729,24 +729,27 @@ function updateNotifUI(list, count) {
     const badge = document.getElementById('notifBadge');
     const listContainer = document.getElementById('notifList');
     const bellIcon = document.querySelector('#notifBtn svg');
-    
+
+    // Skip if notification elements don't exist on this page
+    if (!badge || !listContainer) return;
+
     if (count > 0) {
         setSafeText(badge, count > 99 ? '99+' : String(count));
         badge.classList.remove('hidden');
-        if (lastUnreadCount !== -1 && count > lastUnreadCount) {
+        if (lastUnreadCount !== -1 && count > lastUnreadCount && bellIcon) {
             bellIcon.classList.add('notif-bell-shake');
             setTimeout(() => bellIcon.classList.remove('notif-bell-shake'), 500);
         }
     } else badge.classList.add('hidden');
-    
+
     lastUnreadCount = count;
-    
+
     const clearBtn = document.getElementById('notifClearBtn');
     if (clearBtn) {
         if (list.length > 0) clearBtn.classList.remove('hidden');
         else clearBtn.classList.add('hidden');
     }
-    
+
     if (list.length === 0) {
         setSafeHTML(listContainer, `<div class="p-4 text-center text-gray-500 text-sm">${escapeHtml((typeof I18N !== 'undefined' ? I18N.web_no_notifications : "No notifications"))}</div>`);
     } else {
@@ -754,18 +757,23 @@ function updateNotifUI(list, count) {
         list.forEach(n => {
             const div = document.createElement('div');
             div.className = "px-4 py-3 border-b border-gray-100 dark:border-white/5 hover:bg-gray-50 dark:hover:bg-white/5 transition last:border-0 group";
-            const date = new Date(n.time * 1000).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
-            
+            const date = new Date(n.time * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
             let badgeHtml = '';
             if (n.source === 'node') {
                 badgeHtml = `<span class="px-1.5 py-0.5 rounded text-[9px] font-bold bg-purple-100 text-purple-700 dark:bg-purple-500/20 dark:text-purple-200 mr-2 uppercase tracking-wider">NODE</span>`;
             } else {
                 badgeHtml = `<span class="px-1.5 py-0.5 rounded text-[9px] font-bold bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-200 mr-2 uppercase tracking-wider">AGENT</span>`;
             }
-            
-            // Sanitize text - only allow basic <b> tags
-            let cleanText = n.text.replace(/<(?!\/?b\s*>)[^>]*>/g, "").replace(/\n/g, "<br>");
-            
+
+            // Sanitize text: escape everything via DOM, then re-allow <b>, </b>, <br>
+            const tempSpan = document.createElement('span');
+            tempSpan.textContent = n.text;
+            let cleanText = tempSpan.innerHTML
+                .replace(/&lt;b&gt;/gi, "<b>")
+                .replace(/&lt;\/b&gt;/gi, "</b>")
+                .replace(/\n/g, "<br>");
+
             div.innerHTML = `
                 <div class="flex justify-between items-start mb-1">
                     <div class="flex items-center">
@@ -784,11 +792,12 @@ function updateNotifUI(list, count) {
 function toggleNotifications() {
     const dropdown = document.getElementById('notifDropdown');
     const badge = document.getElementById('notifBadge');
+    if (!dropdown) return;
     if (dropdown.classList.contains('show')) closeNotifications();
     else {
         dropdown.classList.remove('hidden');
         setTimeout(() => dropdown.classList.add('show'), 10);
-        if (lastUnreadCount > 0) {
+        if (lastUnreadCount > 0 && badge) {
             fetch('/api/notifications/read', {
                 method: 'POST'
             }).then(() => badge.classList.add('hidden'));
@@ -1053,7 +1062,7 @@ function prefetchUrl(url) {
         throw new Error('err');
     }).then(text => {
         pageCache.set(url, text);
-    }).catch(() => {});
+    }).catch(() => { });
 }
 
 document.addEventListener('mouseover', (e) => {
@@ -1130,12 +1139,12 @@ document.addEventListener('click', async (e) => {
                 scripts.forEach(s => {
                     const content = s.innerText || s.textContent;
                     if (content && (
-                            content.includes('const I18N') ||
-                            content.includes('const USERS_DATA') ||
-                            content.includes('const NODES_DATA') ||
-                            content.includes('const KEYBOARD_CONFIG') ||
-                            content.includes('const USER_ROLE')
-                        )) {
+                        content.includes('const I18N') ||
+                        content.includes('const USERS_DATA') ||
+                        content.includes('const NODES_DATA') ||
+                        content.includes('const KEYBOARD_CONFIG') ||
+                        content.includes('const USER_ROLE')
+                    )) {
                         try {
                             const patched = content
                                 .replace(/const\s+I18N\s*=/g, 'window.I18N =')
@@ -1162,13 +1171,16 @@ document.addEventListener('click', async (e) => {
 
                 try {
                     if (typeof parsePageEmojis === 'function') parsePageEmojis();
-                } catch (e) {}
+                } catch (e) { }
                 initHolidayMood();
                 initGlobalLazyLoad();
 
                 try {
                     if (url.includes('/settings')) {
                         if (window.initSettings) window.initSettings();
+                        else window.location.reload();
+                    } else if (url.includes('/nodes')) {
+                        if (window.initNodesMonitor) window.initNodesMonitor();
                         else window.location.reload();
                     } else if (url.endsWith('/') || url.includes('/dashboard')) {
                         if (window.initDashboard) window.initDashboard();
@@ -1296,3 +1308,33 @@ async function resetTrafficSettings() {
         btn.innerHTML = originalHTML;
     }
 }
+
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+        const modals = document.querySelectorAll('[id$="Modal"]');
+        modals.forEach(modal => {
+            if (!modal.classList.contains('hidden')) {
+                if (modal.id === 'nodeModal' && typeof closeNodeModal === 'function') {
+                    closeNodeModal();
+                } else if (modal.id === 'addNodeModal' && typeof closeAddNodeModal === 'function') {
+                    closeAddNodeModal();
+                } else if (modal.id === 'systemModal' && typeof closeSystemModal === 'function') {
+                    closeSystemModal(null);
+                } else if (modal.id === 'servicesEditModal' && typeof closeServicesEditModal === 'function') {
+                    closeServicesEditModal();
+                } else if (modal.id === 'serviceInfoModal' && typeof closeServiceInfoModal === 'function') {
+                    closeServiceInfoModal();
+                } else if (modal.id === 'agentIpsModal' && typeof closeAgentIpsModal === 'function') {
+                    closeAgentIpsModal();
+                } else if (modal.id === 'genericHintModal' && typeof closeHintModal === 'function') {
+                    closeHintModal();
+                }
+                else {
+                    modal.classList.add('hidden');
+                    modal.classList.remove('flex');
+                }
+            }
+        });
+    }
+});
+
