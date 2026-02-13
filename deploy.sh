@@ -214,6 +214,12 @@ EOF
 common_install_steps() {
     echo "" > /tmp/${SERVICE_NAME}_install.log
     msg_info "1. Обновление системы..."
+    
+    # Удаляем битые симлинки Nginx (оставшиеся от удаленных сайтов), чтобы избежать ошибок apt-get dpkg
+    if [ -d "/etc/nginx/sites-enabled" ]; then
+        sudo find /etc/nginx/sites-enabled -xtype l -delete 2>/dev/null
+    fi
+    
     run_with_spinner "Apt update" sudo apt-get update -y -q
     run_with_spinner "Установка пакетов" sudo apt-get install -y -q -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" python3 python3-pip python3-venv git curl wget sudo python3-yaml
 }
@@ -884,9 +890,9 @@ update_bot() {
         local new_ver=$(grep -oP 'img\.shields\.io/badge/version-v\K[\d\.]+' "$README_FILE")
         if [ -n "$new_ver" ] && [ -f "${ENV_FILE}" ]; then
              if grep -q "^INSTALLED_VERSION=" "${ENV_FILE}"; then
-                 sudo sed -i "s/^INSTALLED_VERSION=.*/INSTALLED_VERSION=${new_ver}/" "${ENV_FILE}"
+                 sudo sed -i "s/^INSTALLED_VERSION=.*/INSTALLED_VERSION=\"${new_ver}\"/" "${ENV_FILE}"
              else
-                 sudo bash -c "echo 'INSTALLED_VERSION=${new_ver}' >> ${ENV_FILE}"
+                 sudo bash -c "echo 'INSTALLED_VERSION=\"${new_ver}\"' >> ${ENV_FILE}"
              fi
         fi
     fi
