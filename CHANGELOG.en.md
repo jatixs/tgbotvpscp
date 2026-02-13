@@ -18,7 +18,7 @@
 
 * **Node Monitoring:** Added a full-fledged monitoring page with server cards. Filtering by status (online/offline), viewing brief/detailed information, and managing services on each node is implemented.
 * **Ping Check:** A ping indicator (Ping Badge) has been added to the interface (network activity block).
-* **Hotkeys:** Added support for hotkeys for easy editing of text fields and working with windows (thanks @artemkaa2001).
+* **Hotkeys:** Added support for hotkeys for easy editing of text fields and working with windows (thanks [@artemkaa_2001](https://github.com/artemkaa2001)).
 
 ### ⚙️ System Logic and Network:
 
