@@ -373,7 +373,7 @@ const groups = {
         btnId: 'saveThresholdsBtn'
     },
     intervals: {
-        ids: ['conf_traffic', 'conf_timeout'],
+        ids: ['conf_traffic', 'conf_services', 'conf_ping', 'conf_timeout'],
         btnId: 'saveIntervalsBtn'
     }
 };
@@ -504,6 +504,9 @@ async function saveSystemConfig(groupName) {
 
     if (groupName === 'intervals') {
         const trafficVal = parseInt(document.getElementById('conf_traffic').value);
+        const servicesVal = parseInt(document.getElementById('conf_services').value);
+        const pingVal = parseInt(document.getElementById('conf_ping').value);
+        
         if (trafficVal < 5) {
             showError('conf_traffic', I18N.error_traffic_interval_low);
             btn.innerText = originalText;
@@ -516,6 +519,18 @@ async function saveSystemConfig(groupName) {
             toggleSaveButton(config.btnId, true);
             return;
         }
+        if (servicesVal < 2) {
+            showError('conf_services', "Минимум 2 сек.");
+            btn.innerText = originalText;
+            toggleSaveButton(config.btnId, true);
+            return;
+        }
+        if (pingVal < 10) {
+            showError('conf_ping', "Минимум 10 сек.");
+            btn.innerText = originalText;
+            toggleSaveButton(config.btnId, true);
+            return;
+        }
     }
 
     const data = {
@@ -523,6 +538,8 @@ async function saveSystemConfig(groupName) {
         RAM_THRESHOLD: document.getElementById('conf_ram').value,
         DISK_THRESHOLD: document.getElementById('conf_disk').value,
         TRAFFIC_INTERVAL: document.getElementById('conf_traffic').value,
+        SERVICES_INTERVAL: document.getElementById('conf_services').value,
+        PING_INTERVAL: document.getElementById('conf_ping').value,
         NODE_OFFLINE_TIMEOUT: document.getElementById('conf_timeout').value
     };
 

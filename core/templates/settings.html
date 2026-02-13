@@ -303,6 +303,42 @@
                             </div>
                             <div>
                                 <div class="flex items-center gap-1 mb-1.5">
+                                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">{{ web_services_interval }}</label>
+                                    <div class="relative inline-block">
+                                        <button onclick="toggleHint(event, 'hint-services-set')"
+                                                type="button"
+                                                class="p-0.5 -m-0.5 rounded-full focus:outline-none focus:ring-1 focus:ring-blue-500/50">
+                                            <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 text-gray-400 cursor-help" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                                        </button>
+                                        <div id="hint-services-set" class="hidden">{{ web_hint_services_interval }}</div>
+                                    </div>
+                                </div>
+                                <input type="number"
+                                       id="conf_services"
+                                       value="{{ val_services }}"
+                                       class="w-full bg-white dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/50 text-gray-900 dark:text-white transition-all">
+                                <div class="text-red-500 text-xs mt-1 hidden" id="error_conf_services"></div>
+                            </div>
+                            <div>
+                                <div class="flex items-center gap-1 mb-1.5">
+                                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">{{ web_ping_interval }}</label>
+                                    <div class="relative inline-block">
+                                        <button onclick="toggleHint(event, 'hint-ping-set')"
+                                                type="button"
+                                                class="p-0.5 -m-0.5 rounded-full focus:outline-none focus:ring-1 focus:ring-blue-500/50">
+                                            <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 text-gray-400 cursor-help" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                                        </button>
+                                        <div id="hint-ping-set" class="hidden">{{ web_hint_ping_interval }}</div>
+                                    </div>
+                                </div>
+                                <input type="number"
+                                       id="conf_ping"
+                                       value="{{ val_ping }}"
+                                       class="w-full bg-white dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/50 text-gray-900 dark:text-white transition-all">
+                                <div class="text-red-500 text-xs mt-1 hidden" id="error_conf_ping"></div>
+                            </div>
+                            <div>
+                                <div class="flex items-center gap-1 mb-1.5">
                                     <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">{{ web_node_timeout }}</label>
                                     <div class="relative inline-block">
                                         <button onclick="toggleHint(event, 'hint-node-timeout-set')"

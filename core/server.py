@@ -1805,6 +1805,8 @@ async def handle_settings_page(request):
         "val_ram": str(current_config.RAM_THRESHOLD),
         "val_disk": str(current_config.DISK_THRESHOLD),
         "val_traffic": str(current_config.TRAFFIC_INTERVAL),
+        "val_services": str(getattr(current_config, "SERVICES_INTERVAL", 5)),
+        "val_ping": str(getattr(current_config, "PING_INTERVAL", 30)),
         "val_timeout": str(current_config.NODE_OFFLINE_TIMEOUT),
         "web_settings_page_title": _("web_settings_page_title", lang),
         "web_back": _("web_back", lang),
@@ -1835,6 +1837,8 @@ async def handle_settings_page(request):
         "web_ram_threshold": _("web_ram_threshold", lang),
         "web_disk_threshold": _("web_disk_threshold", lang),
         "web_traffic_interval": _("web_traffic_interval", lang),
+        "web_services_interval": _("web_services_interval", lang),
+        "web_ping_interval": _("web_ping_interval", lang),
         "web_node_timeout": _("web_node_timeout", lang),
         "web_clear_logs_btn": _("web_clear_logs_btn", lang),
         "web_reset_traffic_btn": _("web_reset_traffic_btn", lang),
@@ -1848,6 +1852,8 @@ async def handle_settings_page(request):
         "web_hint_ram_threshold": _("web_hint_ram_threshold", lang),
         "web_hint_disk_threshold": _("web_hint_disk_threshold", lang),
         "web_hint_traffic_interval": _("web_hint_traffic_interval", lang),
+        "web_hint_services_interval": _("web_hint_services_interval", lang),
+        "web_hint_ping_interval": _("web_hint_ping_interval", lang),
         "web_hint_node_timeout": _("web_hint_node_timeout", lang),
         "web_keyboard_title": _("web_keyboard_title", lang),
         "web_node_mgmt_title": _("web_node_mgmt_title", lang),
@@ -3131,8 +3137,9 @@ async def agent_monitor():
             }
             AGENT_HISTORY.append(point)
             
-            # Update ping every 30 seconds
-            if time.time() - AGENT_PING_LAST_UPDATE > 30:
+            # Update ping interval based on config
+            ping_int = getattr(current_config, "PING_INTERVAL", 30)
+            if time.time() - AGENT_PING_LAST_UPDATE > ping_int:
                 ping_result = await measure_agent_ping()
                 AGENT_PING_CACHE = ping_result if ping_result else "n/a"
                 AGENT_PING_LAST_UPDATE = time.time()
@@ -4144,15 +4151,16 @@ async def handle_sse_services(request):
                 logging.error(f"SSE Services fetch error: {e}")
 
             # Wait before next update
+            sleep_time = getattr(current_config, "SERVICES_INTERVAL", 5)
             if shutdown_event:
                 try:
                     if not shared_state.IS_RESTARTING:
-                        await asyncio.wait_for(shutdown_event.wait(), timeout=5.0)
+                        await asyncio.wait_for(shutdown_event.wait(), timeout=float(sleep_time))
                         break
                 except asyncio.TimeoutError:
                     pass
             else:
-                await asyncio.sleep(5)
+                await asyncio.sleep(sleep_time)
     except asyncio.CancelledError:
         pass
     except Exception as e:
@@ -4449,8 +4457,9 @@ async def agent_monitor():
             if len(AGENT_HISTORY) > 60:
                 AGENT_HISTORY.pop(0)
             
-            # Update ping every 30 seconds
-            if time.time() - AGENT_PING_LAST_UPDATE > 30:
+            # Update ping interval based on config
+            ping_int = getattr(current_config, "PING_INTERVAL", 30)
+            if time.time() - AGENT_PING_LAST_UPDATE > ping_int:
                 ping_result = await measure_agent_ping()
                 AGENT_PING_CACHE = ping_result if ping_result else "n/a"
                 AGENT_PING_LAST_UPDATE = time.time()
