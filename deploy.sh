@@ -886,15 +886,30 @@ update_bot() {
     if ! run_with_spinner "Git fetch" $exec_cmd git fetch origin; then return 1; fi
     if ! run_with_spinner "Git reset" $exec_cmd git reset --hard "origin/${GIT_BRANCH}"; then return 1; fi
     
-    if [ -f "$README_FILE" ]; then
-        local new_ver=$(grep -oP 'img\.shields\.io/badge/version-v\K[\d\.]+' "$README_FILE")
-        if [ -n "$new_ver" ] && [ -f "${ENV_FILE}" ]; then
-             if grep -q "^INSTALLED_VERSION=" "${ENV_FILE}"; then
-                 sudo sed -i "s/^INSTALLED_VERSION=.*/INSTALLED_VERSION=\"${new_ver}\"/" "${ENV_FILE}"
-             else
-                 sudo bash -c "echo 'INSTALLED_VERSION=\"${new_ver}\"' >> ${ENV_FILE}"
-             fi
-        fi
+    local new_ver=""
+    
+    # 1. Пробуем получить версию из названия ветки (например, release/1.19.0 -> 1.19.0)
+    if echo "$GIT_BRANCH" | grep -q "release/"; then
+        new_ver=$(echo "$GIT_BRANCH" | grep -oP 'release/\K[\d\.]+')
+    fi
+    
+    # 2. Если не вышло, ищем последнюю версию в CHANGELOG.md (по формату ## [1.19.0])
+    if [ -z "$new_ver" ] && [ -f "${BOT_INSTALL_PATH}/CHANGELOG.md" ]; then
+        new_ver=$(grep -oP '^## \[\K[\d\.]+' "${BOT_INSTALL_PATH}/CHANGELOG.md" | head -n 1)
+    fi
+    
+    # 3. Если и там нет, берем из README.md (как было изначально)
+    if [ -z "$new_ver" ] && [ -f "$README_FILE" ]; then
+        new_ver=$(grep -oP 'img\.shields\.io/badge/version-v\K[\d\.]+' "$README_FILE")
+    fi
+
+    # Обновляем .env
+    if [ -n "$new_ver" ] && [ -f "${ENV_FILE}" ]; then
+         if grep -q "^INSTALLED_VERSION=" "${ENV_FILE}"; then
+             sudo sed -i "s/^INSTALLED_VERSION=.*/INSTALLED_VERSION=\"${new_ver}\"/" "${ENV_FILE}"
+         else
+             sudo bash -c "echo 'INSTALLED_VERSION=\"${new_ver}\"' >> ${ENV_FILE}"
+         fi
     fi
 
     # Check and add missing environment variables
