@@ -1013,6 +1013,99 @@ async function changePassword() {
     btn.innerText = origText;
 }
 
+// --- NOTIFICATIONS MENU LOGIC ---
+let currentNodeForNotif = null;
+
+window.switchNotifView = function(view) {
+    document.getElementById('notifViewMenu').classList.add('hidden');
+    document.getElementById('notifViewGlobal').classList.add('hidden');
+    document.getElementById('notifViewNodes').classList.add('hidden');
+    document.getElementById('notifViewNodeDetail').classList.add('hidden');
+
+    if (view === 'menu') {
+        document.getElementById('notifViewMenu').classList.remove('hidden');
+    } else if (view === 'global') {
+        document.getElementById('notifViewGlobal').classList.remove('hidden');
+    } else if (view === 'nodes') {
+        document.getElementById('notifViewNodes').classList.remove('hidden');
+        renderNotifNodesList();
+    } else if (view === 'node_detail') {
+        document.getElementById('notifViewNodeDetail').classList.remove('hidden');
+        renderNotifNodeDetail();
+    }
+};
+
+function renderNotifNodesList() {
+    const container = document.getElementById('notifNodesListContainer');
+    if (!container || !NODES_DATA || NODES_DATA.length === 0) {
+        container.innerHTML = `<div class="text-center text-gray-500 py-4">${I18N.web_no_nodes || 'No nodes'}</div>`;
+        return;
+    }
+
+    container.innerHTML = NODES_DATA.map(n => {
+        return `
+        <button onclick="currentNodeForNotif='${n.token}'; switchNotifView('node_detail')" class="flex items-center justify-between w-full bg-gray-50 dark:bg-black/20 p-4 rounded-xl hover:bg-gray-100 dark:hover:bg-black/30 transition border border-gray-200 dark:border-white/5 cursor-pointer group">
+            <div class="flex items-center gap-3 min-w-0">
+                <span class="text-2xl group-hover:scale-110 transition-transform flex-shrink-0">🖥</span>
+                <span class="text-sm font-bold text-gray-900 dark:text-white text-left truncate">${escapeHtml(n.name)}</span>
+            </div>
+            <svg class="w-5 h-5 text-gray-400 group-hover:text-blue-500 transition-colors flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
+        </button>`;
+    }).join('');
+}
+
+function renderNotifNodeDetail() {
+    const container = document.getElementById('notifNodeDetailContainer');
+    const nameEl = document.getElementById('notifDetailNodeName');
+    const titleEl = document.getElementById('notifNodeSettingsTitle');
+    if (!container || !currentNodeForNotif) return;
+
+    const node = NODES_DATA.find(n => n.token === currentNodeForNotif);
+    if (node) {
+        nameEl.innerText = node.name;
+        if (I18N.notif_node_settings_title) {
+            titleEl.innerText = I18N.notif_node_settings_title.replace('{name}', node.name).replace(/<[^>]*>?/gm, '');
+        }
+    }
+
+    const t = currentNodeForNotif;
+    
+    // Check if override exists, else use global state
+    const isChecked = (type) => {
+        const key = `node_${t}_${type}`;
+        if (USER_ALERTS && typeof USER_ALERTS[key] !== 'undefined') return USER_ALERTS[key];
+        return USER_ALERTS ? USER_ALERTS[type] || false : false;
+    };
+
+    const tDowntime = I18N.notifications_alert_name_downtime || 'Downtime';
+    const tRes = I18N.notifications_alert_name_res || 'Resources';
+    const tLogins = I18N.notifications_alert_name_logins || 'SSH Auth';
+
+    container.innerHTML = `
+        <div class="flex items-center justify-between bg-gray-50 dark:bg-black/20 p-4 rounded-xl hover:bg-gray-100 dark:hover:bg-black/30 transition border border-gray-200 dark:border-white/5 cursor-pointer" onclick="document.getElementById('n_alert_${t}_downtime').click()">
+            <span class="text-sm font-medium text-gray-900 dark:text-white">${tDowntime}</span>
+            <label class="relative inline-flex items-center cursor-pointer" onclick="event.stopPropagation()">
+                <input type="checkbox" id="n_alert_${t}_downtime" class="sr-only peer" onchange="triggerAutoSave()" ${isChecked('downtime') ? 'checked' : ''}>
+                <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-green-500"></div>
+            </label>
+        </div>
+        <div class="flex items-center justify-between bg-gray-50 dark:bg-black/20 p-4 rounded-xl hover:bg-gray-100 dark:hover:bg-black/30 transition border border-gray-200 dark:border-white/5 cursor-pointer" onclick="document.getElementById('n_alert_${t}_node_resources').click()">
+            <span class="text-sm font-medium text-gray-900 dark:text-white">${tRes}</span>
+            <label class="relative inline-flex items-center cursor-pointer" onclick="event.stopPropagation()">
+                <input type="checkbox" id="n_alert_${t}_node_resources" class="sr-only peer" onchange="triggerAutoSave()" ${isChecked('node_resources') ? 'checked' : ''}>
+                <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-green-500"></div>
+            </label>
+        </div>
+        <div class="flex items-center justify-between bg-gray-50 dark:bg-black/20 p-4 rounded-xl hover:bg-gray-100 dark:hover:bg-black/30 transition border border-gray-200 dark:border-white/5 cursor-pointer" onclick="document.getElementById('n_alert_${t}_node_logins').click()">
+            <span class="text-sm font-medium text-gray-900 dark:text-white">${tLogins}</span>
+            <label class="relative inline-flex items-center cursor-pointer" onclick="event.stopPropagation()">
+                <input type="checkbox" id="n_alert_${t}_node_logins" class="sr-only peer" onchange="triggerAutoSave()" ${isChecked('node_logins') ? 'checked' : ''}>
+                <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-green-500"></div>
+            </label>
+        </div>
+    `;
+}
+
 async function triggerAutoSave() {
     const statusEl = document.getElementById('notifStatus');
     if (statusEl) {
@@ -1025,8 +1118,24 @@ async function triggerAutoSave() {
         resources: document.getElementById('alert_resources')?.checked || false,
         logins: document.getElementById('alert_logins')?.checked || false,
         bans: document.getElementById('alert_bans')?.checked || false,
-        downtime: document.getElementById('alert_downtime')?.checked || false
+        downtime: document.getElementById('alert_downtime')?.checked || false,
+        node_resources: document.getElementById('alert_node_resources')?.checked || false,
+        node_logins: document.getElementById('alert_node_logins')?.checked || false,
     };
+    
+    if (typeof USER_ALERTS === 'undefined') window.USER_ALERTS = {};
+    Object.assign(USER_ALERTS, data);
+
+    if (currentNodeForNotif && !document.getElementById('notifViewNodeDetail').classList.contains('hidden')) {
+        const t = currentNodeForNotif;
+        const nDowntime = document.getElementById(`n_alert_${t}_downtime`)?.checked;
+        const nRes = document.getElementById(`n_alert_${t}_node_resources`)?.checked;
+        const nLogins = document.getElementById(`n_alert_${t}_node_logins`)?.checked;
+        
+        if (nDowntime !== undefined) { data[`node_${t}_downtime`] = nDowntime; USER_ALERTS[`node_${t}_downtime`] = nDowntime; }
+        if (nRes !== undefined) { data[`node_${t}_node_resources`] = nRes; USER_ALERTS[`node_${t}_node_resources`] = nRes; }
+        if (nLogins !== undefined) { data[`node_${t}_node_logins`] = nLogins; USER_ALERTS[`node_${t}_node_logins`] = nLogins; }
+    }
 
     try {
         const res = await fetch('/api/settings/save', {

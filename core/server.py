@@ -1884,6 +1884,8 @@ async def handle_settings_page(request):
         "check_logins": "checked" if user_alerts.get("logins", False) else "",
         "check_bans": "checked" if user_alerts.get("bans", False) else "",
         "check_downtime": "checked" if user_alerts.get("downtime", False) else "",
+        "user_alerts": user_alerts,
+        "user_alerts_json": json.dumps(user_alerts),
         "i18n_json": json.dumps(i18n_data),
     }
     template = JINJA_ENV.get_template("settings.html")
@@ -1900,9 +1902,10 @@ async def handle_save_notifications(request):
         uid = user["id"]
         if uid not in ALERTS_CONFIG:
             ALERTS_CONFIG[uid] = {}
-        for k in ["resources", "logins", "bans", "downtime"]:
-            if k in data:
-                ALERTS_CONFIG[uid][k] = bool(data[k])
+            
+        for k, v in data.items():
+            ALERTS_CONFIG[uid][k] = bool(v)
+            
         save_alerts_config()
         return web.json_response({"status": "ok"})
     except Exception as e:
