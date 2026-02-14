@@ -12,7 +12,7 @@
 </p>
 
 ---
-## [1.19.0] - 2026-02-13
+## [1.19.0] - 2026-02-14
 
 ### 🚀 WebUI and Monitoring:
 
@@ -38,6 +38,12 @@
 * **Issue #61:** Fixes visual and logical errors in the web interface.
 * **Database:** Fixed errors that occurred during database migration and creation of the "null" configuration.
 * **General:** Many minor fixes from previous versions and improved user experience (UX).
+
+### ✨ UI/UX improvements:
+
+* **Notifications:** We duplicated the notification center. It is now available in both the WebUI and the bot. The configuration is saved and synchronized on the fly between the bot and the WebUI.
+* **Intervals:** Added new interval variables for ping checking and service manager. The configuration is fully synchronized with the bot. Web-First practice.
+
 
 ---
 ## [1.18.1] - 2026-02-03
