@@ -436,7 +436,7 @@ STRINGS = {
         "web_conn_error": "Ошибка соединения: {error}",
         "web_settings_page_title": "Настройки",
         "web_back": "Назад",
-        "web_notif_section": "Уведомления",
+        "web_notif_section": "Центр уведомлений",
         "web_users_section": "Пользователи",
         "web_add_user_btn": "Добавить",
         "web_add_node_section": "Добавить Ноду",
@@ -738,6 +738,11 @@ STRINGS = {
         "web_show_more": "Показать ещё",
         "web_show_less": "Скрыть",
         "web_node_restarting": "Перезагрузка",
+        "web_notif_btn_global": "Глобальные настройки",
+        "web_notif_btn_nodes": "Настройки по Нодам",
+        "web_notif_nodes_list_title": "Выберите ноду для индивидуальной настройки:",
+        "web_notif_node_settings_title": "Индивидуальные настройки переопределяют глобальные правила для этого сервера.",
+        "web_notif_menu_desc": "Здесь вы можете гибко настроить систему уведомлений. Глобальные правила действуют для главного сервера и всех нод по умолчанию. Если вам нужно переопределить алерты для конкретной ноды — перейдите в индивидуальные настройки.",
     },
 
     "en": {
@@ -1161,7 +1166,7 @@ STRINGS = {
         "web_conn_error": "Connection error: {error}",
         "web_settings_page_title": "Settings",
         "web_back": "Back",
-        "web_notif_section": "Notifications",
+        "web_notif_section": "Notifications Center",
         "web_users_section": "Users",
         "web_add_user_btn": "Add",
         "web_add_node_section": "Add Node",
@@ -1468,6 +1473,11 @@ STRINGS = {
         "web_show_more": "Show more",
         "web_show_less": "Show less",
         "web_node_restarting": "Restarting",
+        "web_notif_btn_global": "Global Settings",
+        "web_notif_btn_nodes": "Node Settings",
+        "web_notif_nodes_list_title": "Select a node for individual configuration:",
+        "web_notif_node_settings_title": "Individual settings override global rules for this server.",
+        "web_notif_menu_desc": "Here you can flexibly configure the notification system. Global rules apply to the main server and all nodes by default. If you need to override alerts for a specific node, go to individual settings.",
     },
 }
 

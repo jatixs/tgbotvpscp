@@ -1768,7 +1768,7 @@ async def handle_settings_page(request):
         "web_notifications_cleared": _("web_notifications_cleared", lang),
         "web_node_delete_confirm": _("web_node_delete_confirm", lang),
         "modal_title_info": _("modal_title_info", lang),
-
+        "notif_node_settings_title": _("web_notif_node_settings_title", lang),
     }
     for btn_key, conf_key in BTN_CONFIG_MAP.items():
         i18n_data[f"lbl_{conf_key}"] = _(btn_key, lang)
@@ -1814,8 +1814,12 @@ async def handle_settings_page(request):
         "notifications_alert_name_res": _("notifications_alert_name_res", lang),
         "notifications_alert_name_logins": _("notifications_alert_name_logins", lang),
         "notifications_alert_name_bans": _("notifications_alert_name_bans", lang),
-        "notifications_alert_name_downtime": _(
-            "notifications_alert_name_downtime", lang),
+        "notifications_alert_name_downtime": _("notifications_alert_name_downtime", lang),
+        "web_notif_btn_global": _("web_notif_btn_global", lang),
+        "web_notif_btn_nodes": _("web_notif_btn_nodes", lang),
+        "web_notif_nodes_list_title": _("web_notif_nodes_list_title", lang),
+        "web_notif_node_settings_title": _("web_notif_node_settings_title", lang),
+        "web_notif_menu_desc": _("web_notif_menu_desc", lang),
         "web_save_btn": _("web_save_btn", lang),
         "web_users_section": _("web_users_section", lang),
         "web_add_user_btn": _("web_add_user_btn", lang),

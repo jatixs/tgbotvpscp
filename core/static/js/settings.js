@@ -1015,12 +1015,27 @@ async function changePassword() {
 
 // --- NOTIFICATIONS MENU LOGIC ---
 let currentNodeForNotif = null;
+let currentNotifView = 'menu';
 
 window.switchNotifView = function(view) {
     document.getElementById('notifViewMenu').classList.add('hidden');
     document.getElementById('notifViewGlobal').classList.add('hidden');
     document.getElementById('notifViewNodes').classList.add('hidden');
     document.getElementById('notifViewNodeDetail').classList.add('hidden');
+
+    currentNotifView = view;
+    
+    // Управление видимостью кнопки НАЗАД в шапке
+    const backBtn = document.getElementById('notifHeaderBackBtn');
+    if (backBtn) {
+        if (view === 'menu') {
+            backBtn.classList.add('hidden');
+            backBtn.classList.remove('flex');
+        } else {
+            backBtn.classList.remove('hidden');
+            backBtn.classList.add('flex');
+        }
+    }
 
     if (view === 'menu') {
         document.getElementById('notifViewMenu').classList.remove('hidden');
@@ -1032,6 +1047,15 @@ window.switchNotifView = function(view) {
     } else if (view === 'node_detail') {
         document.getElementById('notifViewNodeDetail').classList.remove('hidden');
         renderNotifNodeDetail();
+    }
+};
+
+window.notifGoBack = function() {
+    // Умная логика возврата (если были внутри ноды - вернуть к списку нод)
+    if (currentNotifView === 'node_detail') {
+        switchNotifView('nodes');
+    } else {
+        switchNotifView('menu');
     }
 };
 
