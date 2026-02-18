@@ -105,6 +105,8 @@ if not TOKEN:
 DEFAULT_LANGUAGE = "ru"
 DEFAULT_CONFIG = {
     "TRAFFIC_INTERVAL": 5,
+    "SERVICES_INTERVAL": 5,
+    "PING_INTERVAL": 30,
     "RESOURCE_CHECK_INTERVAL": 60,
     "CPU_THRESHOLD": 90.0,
     "RAM_THRESHOLD": 90.0,
@@ -188,13 +190,19 @@ WEB_METADATA = {}
 # ---------------------------------
 
 def load_system_config():
-    global TRAFFIC_INTERVAL, RESOURCE_CHECK_INTERVAL, CPU_THRESHOLD, RAM_THRESHOLD, DISK_THRESHOLD, RESOURCE_ALERT_COOLDOWN, NODE_OFFLINE_TIMEOUT, WEB_METADATA
+    global TRAFFIC_INTERVAL, SERVICES_INTERVAL, PING_INTERVAL, RESOURCE_CHECK_INTERVAL, CPU_THRESHOLD, RAM_THRESHOLD, DISK_THRESHOLD, RESOURCE_ALERT_COOLDOWN, NODE_OFFLINE_TIMEOUT, WEB_METADATA
     try:
         if os.path.exists(SYSTEM_CONFIG_FILE):
             with open(SYSTEM_CONFIG_FILE, "r", encoding="utf-8") as f:
                 data = json.load(f)
                 TRAFFIC_INTERVAL = data.get(
                     "TRAFFIC_INTERVAL", DEFAULT_CONFIG["TRAFFIC_INTERVAL"]
+                )
+                SERVICES_INTERVAL = data.get(
+                    "SERVICES_INTERVAL", DEFAULT_CONFIG["SERVICES_INTERVAL"]
+                )
+                PING_INTERVAL = data.get(
+                    "PING_INTERVAL", DEFAULT_CONFIG["PING_INTERVAL"]
                 )
                 RESOURCE_CHECK_INTERVAL = data.get(
                     "RESOURCE_CHECK_INTERVAL", DEFAULT_CONFIG["RESOURCE_CHECK_INTERVAL"]
@@ -223,10 +231,14 @@ def load_system_config():
 
 
 def save_system_config(new_config: dict):
-    global TRAFFIC_INTERVAL, RESOURCE_CHECK_INTERVAL, CPU_THRESHOLD, RAM_THRESHOLD, DISK_THRESHOLD, RESOURCE_ALERT_COOLDOWN, NODE_OFFLINE_TIMEOUT, WEB_METADATA  # noqa: F824
+    global TRAFFIC_INTERVAL, SERVICES_INTERVAL, PING_INTERVAL, RESOURCE_CHECK_INTERVAL, CPU_THRESHOLD, RAM_THRESHOLD, DISK_THRESHOLD, RESOURCE_ALERT_COOLDOWN, NODE_OFFLINE_TIMEOUT, WEB_METADATA  # noqa: F824
     try:
         if "TRAFFIC_INTERVAL" in new_config:
             TRAFFIC_INTERVAL = int(new_config["TRAFFIC_INTERVAL"])
+        if "SERVICES_INTERVAL" in new_config:
+            SERVICES_INTERVAL = int(new_config["SERVICES_INTERVAL"])
+        if "PING_INTERVAL" in new_config:
+            PING_INTERVAL = int(new_config["PING_INTERVAL"])
         if "NODE_OFFLINE_TIMEOUT" in new_config:
             NODE_OFFLINE_TIMEOUT = int(new_config["NODE_OFFLINE_TIMEOUT"])
         if "CPU_THRESHOLD" in new_config:
@@ -243,6 +255,8 @@ def save_system_config(new_config: dict):
 
         config_to_save = {
             "TRAFFIC_INTERVAL": TRAFFIC_INTERVAL,
+            "SERVICES_INTERVAL": SERVICES_INTERVAL,
+            "PING_INTERVAL": PING_INTERVAL,
             "RESOURCE_CHECK_INTERVAL": RESOURCE_CHECK_INTERVAL,
             "CPU_THRESHOLD": CPU_THRESHOLD,
             "RAM_THRESHOLD": RAM_THRESHOLD,

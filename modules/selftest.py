@@ -221,13 +221,40 @@ async def selftest_handler(message: types.Message):
                         ip = await resp.text()
                         ip = ip.strip()
                         inet_status = _("selftest_inet_ok", lang)
-                
-                t1 = time.time()
-                async with session.get("http://www.google.com", timeout=2) as resp:
-                    if resp.status == 200:
-                        ping = f"{int((time.time() - t1) * 1000)}"
         except Exception:
             pass
+        
+        # Measure ping: ICMP first (accurate), HTTP fallback if blocked
+        import subprocess
+        import platform
+        try:
+            if platform.system().lower() == "windows":
+                cmd = ["ping", "-n", "1", "-w", "2000", "8.8.8.8"]
+                pattern = r"[=<](\d+)\s*ms"
+            else:
+                cmd = ["ping", "-c", "1", "-W", "2", "8.8.8.8"]
+                pattern = r"time=([\d\.]+)\s*ms"
+            
+            proc = await asyncio.create_subprocess_exec(
+                *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
+            )
+            stdout, stderr_ignored = await asyncio.wait_for(proc.communicate(), timeout=5)
+            ping_match = re.search(pattern, stdout.decode())
+            if ping_match:
+                ping = str(round(float(ping_match.group(1)), 1))
+        except Exception:
+            pass
+        
+        # HTTP fallback if ICMP failed
+        if ping == "n/a":
+            try:
+                async with aiohttp.ClientSession() as session:
+                    t1 = time.time()
+                    async with session.get("http://www.google.com", timeout=2) as resp:
+                        if resp.status == 200:
+                            ping = f"{int((time.time() - t1) * 1000)}"
+            except Exception:
+                pass
 
         ssh_info = ""
         if config.INSTALL_MODE == "root" or os.geteuid() == 0:

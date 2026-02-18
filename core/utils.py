@@ -150,6 +150,14 @@ def load_services_config():
     """Load managed services from encrypted config file"""
     from core.config import SERVICES_CONFIG_FILE, MANAGED_SERVICES
     from core import config as config_module
+    
+    # Critical services that must always be present
+    CRITICAL_SERVICES = [
+        {"name": "sshd", "type": "systemd"},
+        {"name": "ssh", "type": "systemd"},
+        {"name": "fail2ban", "type": "systemd"}
+    ]
+    
     try:
         loaded_data = load_encrypted_json(SERVICES_CONFIG_FILE)
         if loaded_data and isinstance(loaded_data, list):
@@ -161,6 +169,13 @@ def load_services_config():
             logging.info("Services config empty or not found, using defaults.")
     except Exception as e:
         logging.error(f"Error loading services.json: {e}")
+    
+    # Ensure critical services are always present
+    existing_names = {s.get("name") for s in config_module.MANAGED_SERVICES}
+    for critical_service in CRITICAL_SERVICES:
+        if critical_service["name"] not in existing_names:
+            config_module.MANAGED_SERVICES.insert(0, critical_service)
+            logging.info(f"Re-added critical service: {critical_service['name']}")
 
 
 def save_services_config():
@@ -329,6 +344,13 @@ def get_server_timezone_label():
 
 
 async def detect_xray_client():
+    """
+    Detect Xray client installation.
+    Returns: (client_type, container_name, setup_variant)
+    - client_type: "amnezia", "marzban", or None
+    - container_name: Docker container name
+    - setup_variant: "standard", "akiyamov", or None (for additional path handling)
+    """
     try:
         # Use subprocess.exec instead of shell for better security
         proc = await asyncio.create_subprocess_exec(
@@ -339,7 +361,12 @@ async def detect_xray_client():
         stdout, _ = await proc.communicate()
         output = stdout.decode().strip()
         if not output:
-            return (None, None)
+            return (None, None, None)
+        
+        # Check for Akiyamov setup directory
+        akiyamov_path = "/opt/xray-vps-setup"
+        is_akiyamov = os.path.isdir(akiyamov_path)
+        
         for line in output.split("\n"):
             parts = line.split()
             if len(parts) >= 2:
@@ -349,12 +376,13 @@ async def detect_xray_client():
                     and "xray" in image.lower()
                     or name == "amnezia-xray"
                 ):
-                    return ("amnezia", name)
+                    return ("amnezia", name, "standard")
                 if "marzban" in image.lower() or "marzban" in name:
-                    return ("marzban", name)
-        return (None, None)
+                    variant = "akiyamov" if is_akiyamov else "standard"
+                    return ("marzban", name, variant)
+        return (None, None, None)
     except Exception:
-        return (None, None)
+        return (None, None, None)
 
 
 async def initial_restart_check(bot: Bot):

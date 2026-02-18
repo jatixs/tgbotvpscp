@@ -97,8 +97,8 @@
                               method="POST"
                               class="space-y-5">
                             <div>
-                                <label class="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2 ml-1">
-                                    Telegram ID
+                                <label class="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2 ml-1" data-i18n="login_telegram_id_label">
+                                    {{ login_telegram_id_label }}
                                 </label>
                                 <div class="relative">
                                     <input type="number"
@@ -120,8 +120,9 @@
                                 </div>
                             </div>
                             <button type="submit"
-                                    class="w-full py-3.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white rounded-xl font-bold shadow-lg shadow-blue-500/20 transition-all transform active:scale-[0.98]">
-                                Login via Telegram
+                                    class="w-full py-3.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white rounded-xl font-bold shadow-lg shadow-blue-500/20 transition-all transform active:scale-[0.98]"
+                                    data-i18n="login_via_telegram_btn">
+                                {{ login_via_telegram_btn }}
                             </button>
                         </form>
                         <div class="relative flex py-6 items-center">
@@ -137,8 +138,8 @@
                     <div id="password-form" class="hidden">
                         <form action="/api/login/password" method="POST" class="space-y-5">
                             <div>
-                                <label class="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2 ml-1">
-                                    Telegram ID
+                                <label class="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2 ml-1" data-i18n="login_telegram_id_label">
+                                    {{ login_telegram_id_label }}
                                 </label>
                                 <div class="relative">
                                     <input type="number"
@@ -208,8 +209,8 @@
                         </div>
                         <div class="space-y-5">
                             <div>
-                                <label class="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2 ml-1">
-                                    Telegram ID
+                                <label class="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2 ml-1" data-i18n="login_telegram_id_label">
+                                    {{ login_telegram_id_label }}
                                 </label>
                                 <div class="relative">
                                     <input type="number"
@@ -364,11 +365,13 @@
                     
                     <div class="flex justify-end gap-3">
                         <button id="sysModalCancel"
-                                class="hidden px-4 py-2 rounded-lg text-sm font-medium text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 transition">
+                                class="hidden px-4 py-2 rounded-lg text-sm font-medium text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 transition"
+                                data-i18n="modal_btn_cancel">
                             Cancel
                         </button>
                         <button id="sysModalOk"
-                                class="px-4 py-2 rounded-lg text-sm font-bold bg-blue-600 text-white hover:bg-blue-500 transition shadow-lg shadow-blue-500/20">
+                                class="px-4 py-2 rounded-lg text-sm font-bold bg-blue-600 text-white hover:bg-blue-500 transition shadow-lg shadow-blue-500/20"
+                                data-i18n="modal_btn_ok">
                             OK
                         </button>
                     </div>

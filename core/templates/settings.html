@@ -24,6 +24,7 @@
         const USERS_DATA = {{ users_data_json | safe }};
         const NODES_DATA = {{ nodes_data_json | safe }};
         const KEYBOARD_CONFIG = {{ keyboard_config_json | safe }};
+        let USER_ALERTS = {{ user_alerts_json | safe }};
         {{ user_role_js | safe }}
         </script>
         <script src="https://unpkg.com/twemoji@latest/dist/twemoji.min.js" crossorigin="anonymous"></script>
@@ -303,6 +304,42 @@
                             </div>
                             <div>
                                 <div class="flex items-center gap-1 mb-1.5">
+                                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">{{ web_services_interval }}</label>
+                                    <div class="relative inline-block">
+                                        <button onclick="toggleHint(event, 'hint-services-set')"
+                                                type="button"
+                                                class="p-0.5 -m-0.5 rounded-full focus:outline-none focus:ring-1 focus:ring-blue-500/50">
+                                            <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 text-gray-400 cursor-help" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                                        </button>
+                                        <div id="hint-services-set" class="hidden">{{ web_hint_services_interval }}</div>
+                                    </div>
+                                </div>
+                                <input type="number"
+                                       id="conf_services"
+                                       value="{{ val_services }}"
+                                       class="w-full bg-white dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/50 text-gray-900 dark:text-white transition-all">
+                                <div class="text-red-500 text-xs mt-1 hidden" id="error_conf_services"></div>
+                            </div>
+                            <div>
+                                <div class="flex items-center gap-1 mb-1.5">
+                                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">{{ web_ping_interval }}</label>
+                                    <div class="relative inline-block">
+                                        <button onclick="toggleHint(event, 'hint-ping-set')"
+                                                type="button"
+                                                class="p-0.5 -m-0.5 rounded-full focus:outline-none focus:ring-1 focus:ring-blue-500/50">
+                                            <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 text-gray-400 cursor-help" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                                        </button>
+                                        <div id="hint-ping-set" class="hidden">{{ web_hint_ping_interval }}</div>
+                                    </div>
+                                </div>
+                                <input type="number"
+                                       id="conf_ping"
+                                       value="{{ val_ping }}"
+                                       class="w-full bg-white dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/50 text-gray-900 dark:text-white transition-all">
+                                <div class="text-red-500 text-xs mt-1 hidden" id="error_conf_ping"></div>
+                            </div>
+                            <div>
+                                <div class="flex items-center gap-1 mb-1.5">
                                     <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">{{ web_node_timeout }}</label>
                                     <div class="relative inline-block">
                                         <button onclick="toggleHint(event, 'hint-node-timeout-set')"
@@ -496,71 +533,110 @@
                             </div>
                         </div>
                     </div>
-                    <div class="bg-white/60 dark:bg-white/5 backdrop-blur-md border border-white/40 dark:border-white/10 rounded-2xl p-6 shadow-lg dark:shadow-none lazy-block">
+                    <div class="bg-white/60 dark:bg-white/5 backdrop-blur-md border border-white/40 dark:border-white/10 rounded-2xl p-6 shadow-lg dark:shadow-none flex flex-col flex-1 min-h-[300px] lazy-block" id="notificationsSection">
                         <div class="flex justify-between items-center mb-4">
-                            <h2 class="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
-                                <svg xmlns="http://www.w3.org/2000/svg"
-                                     class="h-6 w-6 text-yellow-500 dark:text-yellow-400"
-                                     fill="none"
-                                     viewBox="0 0 24 24"
-                                     stroke="currentColor">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
-                                </svg>
-                                {{ web_notif_section }}
-                            </h2>
-                            <span id="notifStatus"
-                                  class="text-xs font-medium text-gray-500 dark:text-gray-400 transition-opacity opacity-0"></span>
+                            <div class="flex items-center gap-2">
+                                <button id="notifHeaderBackBtn" onclick="notifGoBack()" class="hidden items-center justify-center p-1 sm:p-1.5 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 bg-gray-100 dark:bg-white/5 hover:bg-gray-200 dark:hover:bg-white/10 rounded-lg transition-colors" title="{{ web_back }}">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" /></svg>
+                                </button>
+                                <h2 class="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-yellow-500 dark:text-yellow-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+                                    </svg>
+                                    {{ web_notif_section }}
+                                </h2>
+                            </div>
+                            <span id="notifStatus" class="text-xs font-medium text-gray-500 dark:text-gray-400 transition-opacity opacity-0"></span>
                         </div>
-                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                            <div class="flex items-center justify-between bg-gray-50 dark:bg-black/20 p-4 rounded-xl hover:bg-gray-100 dark:hover:bg-black/30 transition border border-gray-200 dark:border-white/5 cursor-pointer"
-                                 onclick="document.getElementById('alert_resources').click(); triggerAutoSave();">
-                                <span class="text-sm font-medium text-gray-900 dark:text-white">{{ notifications_alert_name_res }}</span>
-                                <label class="relative inline-flex items-center cursor-pointer"
-                                       onclick="event.stopPropagation(); triggerAutoSave();">
-                                    <input type="checkbox"
-                                           id="alert_resources"
-                                           class="sr-only peer"
-                                           {{ check_resources }}>
-                                    <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-green-500">
-                                    </div>
-                                </label>
+
+                        <div id="notifViewMenu" class="animate-fade-in-up flex flex-col flex-1">
+                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                <button onclick="switchNotifView('global')" class="flex flex-col items-center justify-center bg-gray-50 dark:bg-black/20 p-6 rounded-xl hover:bg-gray-100 dark:hover:bg-black/30 transition border border-gray-200 dark:border-white/5 cursor-pointer group">
+                                    <span class="text-4xl mb-3 group-hover:scale-110 transition-transform">🌐</span>
+                                    <span class="text-sm font-bold text-gray-900 dark:text-white">{{ web_notif_btn_global }}</span>
+                                    <span class="text-[10px] text-gray-500 mt-1.5 text-center uppercase tracking-wider font-bold">Агент + Общие правила</span>
+                                </button>
+                                <button onclick="switchNotifView('nodes')" class="flex flex-col items-center justify-center bg-gray-50 dark:bg-black/20 p-6 rounded-xl hover:bg-gray-100 dark:hover:bg-black/30 transition border border-gray-200 dark:border-white/5 cursor-pointer group">
+                                    <span class="text-4xl mb-3 group-hover:scale-110 transition-transform">🖥</span>
+                                    <span class="text-sm font-bold text-gray-900 dark:text-white">{{ web_notif_btn_nodes }}</span>
+                                    <span class="text-[10px] text-gray-500 mt-1.5 text-center uppercase tracking-wider font-bold">Индивидуальные правила</span>
+                                </button>
                             </div>
-                            <div class="flex items-center justify-between bg-gray-50 dark:bg-black/20 p-4 rounded-xl hover:bg-gray-100 dark:hover:bg-black/30 transition border border-gray-200 dark:border-white/5 cursor-pointer"
-                                 onclick="document.getElementById('alert_logins').click(); triggerAutoSave();">
-                                <span class="text-sm font-medium text-gray-900 dark:text-white">{{ notifications_alert_name_logins }}</span>
-                                <label class="relative inline-flex items-center cursor-pointer"
-                                       onclick="event.stopPropagation(); triggerAutoSave();">
-                                    <input type="checkbox"
-                                           id="alert_logins"
-                                           class="sr-only peer"
-                                           {{ check_logins }}>
-                                    <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-green-500">
-                                    </div>
-                                </label>
+                                <div class="mt-5 md:mt-auto pt-2"> <div class="-mb-1.5 p-2 bg-blue-50 dark:bg-blue-900/20 border-blue-100 dark:border-blue-800/50 rounded-xl flex items-start gap-3">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-blue-500 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                                <p class="text-sm text-blue-800 dark:text-blue-300 leading-relaxed">{{ web_notif_menu_desc }}</p>
+                                </div>
                             </div>
-                            <div class="flex items-center justify-between bg-gray-50 dark:bg-black/20 p-4 rounded-xl hover:bg-gray-100 dark:hover:bg-black/30 transition border border-gray-200 dark:border-white/5 cursor-pointer"
-                                 onclick="document.getElementById('alert_bans').click(); triggerAutoSave();">
-                                <span class="text-sm font-medium text-gray-900 dark:text-white">{{ notifications_alert_name_bans }}</span>
-                                <label class="relative inline-flex items-center cursor-pointer"
-                                       onclick="event.stopPropagation(); triggerAutoSave();">
-                                    <input type="checkbox" id="alert_bans" class="sr-only peer" {{ check_bans }}>
-                                    <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-green-500">
-                                    </div>
-                                </label>
+                        </div>
+
+                        <div id="notifViewGlobal" class="hidden animate-fade-in-up">
+                            <h3 class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3 ml-1">Главный Сервер (Агент)</h3>
+                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-6">
+                                <div class="flex items-center justify-between bg-gray-50 dark:bg-black/20 p-3 rounded-xl hover:bg-gray-100 dark:hover:bg-black/30 transition border border-gray-200 dark:border-white/5 cursor-pointer" onclick="document.getElementById('alert_resources').click()">
+                                    <span class="text-sm font-medium text-gray-900 dark:text-white">{{ notifications_alert_name_res }}</span>
+                                    <label class="relative inline-flex items-center cursor-pointer" onclick="event.stopPropagation()">
+                                        <input type="checkbox" id="alert_resources" class="sr-only peer" onchange="triggerAutoSave()" {{ check_resources }}>
+                                        <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-green-500"></div>
+                                    </label>
+                                </div>
+                                <div class="flex items-center justify-between bg-gray-50 dark:bg-black/20 p-3 rounded-xl hover:bg-gray-100 dark:hover:bg-black/30 transition border border-gray-200 dark:border-white/5 cursor-pointer" onclick="document.getElementById('alert_logins').click()">
+                                    <span class="text-sm font-medium text-gray-900 dark:text-white">{{ notifications_alert_name_logins }}</span>
+                                    <label class="relative inline-flex items-center cursor-pointer" onclick="event.stopPropagation()">
+                                        <input type="checkbox" id="alert_logins" class="sr-only peer" onchange="triggerAutoSave()" {{ check_logins }}>
+                                        <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-green-500"></div>
+                                    </label>
+                                </div>
+                                <div class="flex items-center justify-between bg-gray-50 dark:bg-black/20 p-3 rounded-xl hover:bg-gray-100 dark:hover:bg-black/30 transition border border-gray-200 dark:border-white/5 cursor-pointer" onclick="document.getElementById('alert_bans').click()">
+                                    <span class="text-sm font-medium text-gray-900 dark:text-white">{{ notifications_alert_name_bans }}</span>
+                                    <label class="relative inline-flex items-center cursor-pointer" onclick="event.stopPropagation()">
+                                        <input type="checkbox" id="alert_bans" class="sr-only peer" onchange="triggerAutoSave()" {{ check_bans }}>
+                                        <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-green-500"></div>
+                                    </label>
+                                </div>
                             </div>
-                            <div class="flex items-center justify-between bg-gray-50 dark:bg-black/20 p-4 rounded-xl hover:bg-gray-100 dark:hover:bg-black/30 transition border border-gray-200 dark:border-white/5 cursor-pointer"
-                                 onclick="document.getElementById('alert_downtime').click(); triggerAutoSave();">
-                                <span class="text-sm font-medium text-gray-900 dark:text-white">{{ notifications_alert_name_downtime }}</span>
-                                <label class="relative inline-flex items-center cursor-pointer"
-                                       onclick="event.stopPropagation(); triggerAutoSave();">
-                                    <input type="checkbox"
-                                           id="alert_downtime"
-                                           class="sr-only peer"
-                                           {{ check_downtime }}>
-                                    <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-green-500">
-                                    </div>
-                                </label>
+
+                            <h3 class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3 ml-1">Удаленные Серверы (Ноды)</h3>
+                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                <div class="flex items-center justify-between bg-gray-50 dark:bg-black/20 p-3 rounded-xl hover:bg-gray-100 dark:hover:bg-black/30 transition border border-gray-200 dark:border-white/5 cursor-pointer" onclick="document.getElementById('alert_downtime').click()">
+                                    <span class="text-sm font-medium text-gray-900 dark:text-white">{{ notifications_alert_name_downtime }}</span>
+                                    <label class="relative inline-flex items-center cursor-pointer" onclick="event.stopPropagation()">
+                                        <input type="checkbox" id="alert_downtime" class="sr-only peer" onchange="triggerAutoSave()" {{ check_downtime }}>
+                                        <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-green-500"></div>
+                                    </label>
+                                </div>
+                                <div class="flex items-center justify-between bg-gray-50 dark:bg-black/20 p-3 rounded-xl hover:bg-gray-100 dark:hover:bg-black/30 transition border border-gray-200 dark:border-white/5 cursor-pointer" onclick="document.getElementById('alert_node_resources').click()">
+                                    <span class="text-sm font-medium text-gray-900 dark:text-white">{{ notifications_alert_name_res }}</span>
+                                    <label class="relative inline-flex items-center cursor-pointer" onclick="event.stopPropagation()">
+                                        <input type="checkbox" id="alert_node_resources" class="sr-only peer" onchange="triggerAutoSave()" {{ 'checked' if user_alerts.get('node_resources', False) else '' }}>
+                                        <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-green-500"></div>
+                                    </label>
+                                </div>
+                                <div class="flex items-center justify-between bg-gray-50 dark:bg-black/20 p-3 rounded-xl hover:bg-gray-100 dark:hover:bg-black/30 transition border border-gray-200 dark:border-white/5 cursor-pointer" onclick="document.getElementById('alert_node_logins').click()">
+                                    <span class="text-sm font-medium text-gray-900 dark:text-white">{{ notifications_alert_name_logins }}</span>
+                                    <label class="relative inline-flex items-center cursor-pointer" onclick="event.stopPropagation()">
+                                        <input type="checkbox" id="alert_node_logins" class="sr-only peer" onchange="triggerAutoSave()" {{ 'checked' if user_alerts.get('node_logins', False) else '' }}>
+                                        <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-green-500"></div>
+                                    </label>
+                                </div>
                             </div>
+                        </div>
+
+                        <div id="notifViewNodes" class="hidden animate-fade-in-up">
+                            <p class="text-sm text-gray-500 dark:text-gray-400 mb-4">{{ web_notif_nodes_list_title }}</p>
+                            <div class="flex flex-col gap-2 max-h-[400px] overflow-y-auto custom-scrollbar pr-1" id="notifNodesListContainer">
+                                </div>
+                        </div>
+
+                        <div id="notifViewNodeDetail" class="hidden animate-fade-in-up">
+                            <div class="flex items-center justify-between mb-4">
+                                <span class="text-xs font-bold bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400 px-2.5 py-1 rounded-lg border border-purple-200 dark:border-purple-500/20 truncate max-w-[150px] sm:max-w-none" id="notifDetailNodeName">Node</span>
+                            </div>
+                            <p class="text-sm text-gray-500 dark:text-gray-400 mb-4 font-medium leading-relaxed" id="notifNodeSettingsTitle"></p>
+                            
+                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3" id="notifNodeDetailContainer">
+                                </div>
                         </div>
                     </div>
                     <div class="bg-white/60 dark:bg-white/5 backdrop-blur-md border border-white/40 dark:border-white/10 rounded-2xl p-6 shadow-lg dark:shadow-none lazy-block"
@@ -604,7 +680,7 @@
                             </div>
                         </div>
                     </div>
-                    <div class="bg-white/60 dark:bg-white/5 backdrop-blur-md border border-white/40 dark:border-white/10 rounded-2xl p-5 shadow-lg dark:shadow-none flex flex-col justify-between flex-1 lazy-block">
+                    <div class="bg-white/60 dark:bg-white/5 backdrop-blur-md border border-white/40 dark:border-white/10 rounded-2xl p-6 shadow-lg dark:shadow-none lazy-block">
                         <div>
                             <div class="flex justify-between items-center mb-4">
                                 <h2 class="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
