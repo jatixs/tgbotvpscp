@@ -8,6 +8,7 @@ import hashlib
 import ipaddress
 from argon2 import PasswordHasher, exceptions as argon2_exceptions
 import hmac
+import aiohttp
 from aiohttp import web
 from aiogram import Bot
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
@@ -77,6 +78,9 @@ TEMPLATE_DIR = os.path.join(BASE_DIR, "core", "templates")
 STATIC_DIR = os.path.join(BASE_DIR, "core", "static")
 AGENT_FLAG = "🏳️"
 AGENT_IP_CACHE = "Loading..."
+AGENT_PING_CACHE = "n/a"
+AGENT_PING_LAST_UPDATE = 0
+AGENT_PING_TIMEOUT = 5  # Ping measurement timeout in seconds
 RESET_TOKENS = {}
 SERVER_SESSIONS = {}
 CSRF_TOKENS = {}  # Store CSRF tokens with expiry
@@ -844,6 +848,8 @@ async def handle_dashboard(request):
                 "web_services_btn_add": _("web_services_btn_add", lang),
                 "web_services_btn_remove": _("web_services_btn_remove", lang),
                 "web_services_none_found": _("web_services_none_found", lang),
+                "web_did_you_mean": _("web_did_you_mean", lang),
+                "web_results": _("web_results", lang),
                 "web_services_global_results": _("web_services_global_results", lang),
                 "web_services_info_title": _("web_services_info_title", lang),
                 "web_services_info_name": _("web_services_info_name", lang),
@@ -960,6 +966,12 @@ async def handle_heartbeat(request):
         except ValueError:
             pass
     await nodes_db.update_node_heartbeat(token, ip, stats)
+    
+    # Save services data if provided
+    services = data.get("services", [])
+    if services:
+        await nodes_db.update_node_extra(token, "services", services)
+    
     current_node = await nodes_db.get_node_by_token(token)
     tasks_to_send = current_node.get("tasks", [])
     if tasks_to_send:
@@ -969,6 +981,13 @@ async def handle_heartbeat(request):
 
 async def process_node_result_background(bot, user_id, cmd, text, token, node_name):
     if not user_id:
+        return
+
+    # Handle services_list result: save to DB, don't send as message
+    if isinstance(text, dict) and text.get("type") == "services_list":
+        services = text.get("services", [])
+        if services:
+            await nodes_db.update_node_extra(token, "services", services)
         return
 
     # Обработка JSON-ответа с ключами локализации
@@ -1068,6 +1087,7 @@ async def handle_agent_stats(request):
         "ram": 0,
         "disk": 0,
         "ip": encrypt_for_web(AGENT_IP_CACHE),
+        "ping": encrypt_for_web(AGENT_PING_CACHE),
         "net_sent": 0,
         "net_recv": 0,
         "boot_time": 0,
@@ -1294,6 +1314,320 @@ async def handle_nodes_list_json(request):
     return web.json_response({"nodes": nodes_data})
 
 
+# ===== NODES MONITOR PAGE HANDLERS =====
+
+async def handle_nodes_monitor_page(request):
+    """Render the nodes monitoring page"""
+    user = get_current_user(request)
+    if not user:
+        raise web.HTTPFound("/login")
+    user_id = user["id"]
+    lang = get_user_lang(user_id)
+    role = user.get("role", "users")
+    is_admin = role == "admins" or user_id == ADMIN_USER_ID
+    
+    if not is_admin:
+        raise web.HTTPFound("/")
+    
+    web_meta = getattr(current_config, "WEB_METADATA", {})
+    custom_title = web_meta.get("title", "")
+    page_title = f"{_('web_nodes_monitor_title', lang)} - {TG_BOT_NAME}"
+    if custom_title:
+        page_title = f"{_('web_nodes_monitor_title', lang)} - {custom_title}"
+    
+    clean_version = APP_VERSION.lstrip("v")
+    display_version = f"v{clean_version}"
+    
+    context = {
+        "lang": lang,
+        "web_title": page_title,
+        "web_version": display_version,
+        "pwa_version": current_config.INSTALLED_VERSION or display_version,
+        "cache_ver": CACHE_VER,
+        "user_avatar": _get_avatar_html(user),
+        "user_name": user.get("first_name", "User"),
+        "user_role_js": f"const USER_ROLE = '{role}'; const IS_MAIN_ADMIN = {str(user_id == ADMIN_USER_ID).lower()}; const WEB_KEY = '{get_web_key()}';",
+        "web_monitor_title": _("web_nodes_monitor_title", lang),
+        "web_mass_actions": _("web_nodes_monitor_mass_actions", lang),
+        "web_select_all": _("web_nodes_monitor_select_all", lang),
+        "web_mass_selftest": _("web_nodes_monitor_mass_selftest", lang),
+        "web_mass_reboot": _("web_nodes_monitor_mass_reboot", lang),
+        "web_refresh": _("web_refresh", lang),
+        "web_search_placeholder": _("web_nodes_monitor_search", lang),
+        "web_filter_all": _("web_nodes_monitor_filter_all", lang),
+        "web_filter_online": _("web_nodes_monitor_filter_online", lang),
+        "web_filter_offline": _("web_nodes_monitor_filter_offline", lang),
+        "web_filter_restarting": _("web_nodes_monitor_filter_restarting", lang),
+        "web_filter_btn": _("web_nodes_monitor_filter_btn", lang),
+        "web_filter_title": _("web_nodes_monitor_filter_title", lang),
+        "web_filter_status": _("web_nodes_monitor_filter_status", lang),
+        "web_filter_cpu_load": _("web_nodes_monitor_filter_cpu_load", lang),
+        "web_filter_high": _("web_nodes_monitor_filter_high", lang),
+        "web_filter_medium": _("web_nodes_monitor_filter_medium", lang),
+        "web_filter_low": _("web_nodes_monitor_filter_low", lang),
+        "web_filter_sort_by": _("web_nodes_monitor_filter_sort_by", lang),
+        "web_filter_sort_name": _("web_nodes_monitor_filter_sort_name", lang),
+        "web_filter_sort_cpu": _("web_nodes_monitor_filter_sort_cpu", lang),
+        "web_filter_sort_ram": _("web_nodes_monitor_filter_sort_ram", lang),
+        "web_filter_sort_ping": _("web_nodes_monitor_filter_sort_ping", lang),
+        "web_filter_reset": _("web_nodes_monitor_filter_reset", lang),
+        "web_filter_apply": _("web_nodes_monitor_filter_apply", lang),
+        "web_loading": _("web_loading", lang),
+        "web_stats_total": _("web_stats_total", lang),
+        "web_uptime": _("web_nodes_monitor_uptime", lang),
+        "web_resources_chart": _("web_nodes_monitor_resources_chart", lang),
+        "web_network_chart": _("web_nodes_monitor_network_chart", lang),
+        "web_services_title": _("web_nodes_monitor_tab_services", lang),
+        "web_live": _("web_live", lang),
+        "web_cpu": _("web_nodes_monitor_cpu", lang),
+        "web_ram": _("web_nodes_monitor_ram", lang),
+        "web_disk": _("web_nodes_monitor_disk", lang),
+        "web_show_more": _("web_show_more", lang),
+        "web_show_less": _("web_show_less", lang),
+        "web_node_details": _("web_nodes_monitor_details", lang),
+        "btn_selftest": _("web_nodes_monitor_btn_selftest", lang),
+        "btn_speedtest": _("web_nodes_monitor_btn_speedtest", lang),
+        "btn_reboot": _("web_nodes_monitor_btn_reboot", lang),
+        "modal_btn_cancel": _("modal_btn_cancel", lang),
+        "modal_btn_ok": _("modal_btn_ok", lang),
+        "i18n_json": json.dumps({
+            "web_no_nodes": _("web_nodes_monitor_no_nodes", lang),
+            "web_no_nodes_desc": _("web_nodes_monitor_no_nodes_desc", lang),
+            "web_loading": _("web_loading", lang),
+            "web_error": _("web_nodes_monitor_error", lang),
+            "web_services_empty": _("web_nodes_monitor_no_services", lang),
+            "web_services_loading": _("web_nodes_monitor_services_loading", lang),
+            "modal_title_alert": _("modal_title_alert", lang),
+            "modal_title_confirm": _("modal_title_confirm", lang),
+            "modal_title_error": _("modal_title_error", lang),
+            "modal_title_info": _("web_nodes_monitor_detail_title", lang),
+            "web_time_d": _("unit_day_short", lang),
+            "web_time_h": _("unit_hour_short", lang),
+            "web_time_m": _("unit_minute_short", lang),
+            "web_node_status_online": _("web_nodes_monitor_online", lang),
+            "web_node_status_offline": _("web_nodes_monitor_offline", lang),
+            "web_node_status_restarting": _("web_node_restarting", lang),
+            "web_nodes_monitor_select_nodes": _("web_nodes_monitor_select_nodes", lang),
+            "web_nodes_monitor_confirm_mass_reboot": _("web_nodes_monitor_confirm_mass_reboot", lang),
+            "web_nodes_monitor_confirm_mass_command": _("web_nodes_monitor_confirm_mass_command", lang),
+            "web_reboot_node_confirm": _("web_nodes_monitor_confirm_reboot", lang),
+            "web_command_sent": _("web_nodes_monitor_command_sent", lang),
+            "web_service_start": _("web_nodes_monitor_service_start", lang),
+            "web_service_stop": _("web_nodes_monitor_service_stop", lang),
+            "web_service_restart": _("web_nodes_monitor_service_restart", lang),
+            "web_service_confirm": _("web_nodes_monitor_confirm_service", lang),
+            "web_details": _("web_nodes_monitor_details", lang),
+            "web_node_details": _("web_nodes_monitor_details", lang),
+            "web_cpu": _("web_nodes_monitor_cpu", lang),
+            "web_ram": _("web_nodes_monitor_ram", lang),
+            "web_disk": _("web_nodes_monitor_disk", lang),
+            "web_traffic_in": _("web_nodes_monitor_traffic_in", lang),
+            "web_traffic_out": _("web_nodes_monitor_traffic_out", lang),
+            "web_show_more": _("web_show_more", lang),
+            "web_show_less": _("web_show_less", lang),
+            "web_nodes_monitor_btn_reboot": _("web_nodes_monitor_btn_reboot", lang),
+            "web_nodes_monitor_btn_selftest": _("web_nodes_monitor_btn_selftest", lang),
+            "web_nodes_monitor_btn_speedtest": _("web_nodes_monitor_btn_speedtest", lang),
+            "web_nodes_monitor_btn_traffic": _("web_nodes_monitor_btn_traffic", lang),
+            "web_commands_sent": _("web_commands_sent", lang),
+            "web_reboot_sent": _("web_reboot_sent", lang),
+            "web_node_modal_loading": _("web_node_modal_loading", lang),
+            "unit_bytes": _("unit_bytes", lang),
+            "unit_kb": _("unit_kb", lang),
+            "unit_mb": _("unit_mb", lang),
+            "unit_gb": _("unit_gb", lang),
+            "unit_tb": _("unit_tb", lang),
+            "unit_pb": _("unit_pb", lang),
+        }),
+    }
+    
+    template = JINJA_ENV.get_template("nodes_monitor.html")
+    html = template.render(**context)
+    return web.Response(text=html, content_type="text/html")
+
+
+async def handle_nodes_monitor_list(request):
+    """API: Get all nodes for monitor page with extended data"""
+    user = get_current_user(request)
+    if not user:
+        return web.json_response({"error": "Unauthorized"}, status=401)
+    
+    try:
+        all_nodes = await nodes_db.get_all_nodes()
+        nodes_data = []
+        now = time.time()
+        
+        for token, node in all_nodes.items():
+            last_seen = node.get("last_seen", 0)
+            is_restarting = node.get("is_restarting", False)
+            
+            status = "offline"
+            if is_restarting:
+                status = "restarting"
+            elif now - last_seen < NODE_OFFLINE_TIMEOUT:
+                status = "online"
+            
+            stats = node.get("stats", {})
+            
+            nodes_data.append({
+                "token": encrypt_for_web(token),
+                "name": node.get("name", "Unknown"),
+                "ip": node.get("ip", "Unknown"),
+                "status": status,
+                "cpu": stats.get("cpu", 0),
+                "ram": stats.get("ram", 0),
+                "disk": stats.get("disk", 0),
+                "uptime": stats.get("uptime", 0),
+                "ping": stats.get("ping"),
+                "traffic": {
+                    "rx": stats.get("net_rx", 0),
+                    "tx": stats.get("net_tx", 0),
+                },
+                "last_seen": last_seen,
+            })
+        
+        return web.json_response({"nodes": nodes_data})
+    except Exception as e:
+        logging.error(f"Error in handle_nodes_monitor_list: {e}")
+        return web.json_response({"error": str(e), "nodes": []}, status=500)
+
+
+async def handle_nodes_monitor_detail(request):
+    """API: Get detailed node info for modal"""
+    user = get_current_user(request)
+    if not user:
+        return web.json_response({"error": "Unauthorized"}, status=401)
+    
+    token = decrypt_for_web(request.query.get("token"))
+    if not token:
+        return web.json_response({"error": "Token required"}, status=400)
+    
+    node = await nodes_db.get_node_by_token(token)
+    if not node:
+        return web.json_response({"error": "Node not found"}, status=404)
+    
+    now = time.time()
+    last_seen = node.get("last_seen", 0)
+    is_restarting = node.get("is_restarting", False)
+    
+    status = "offline"
+    if is_restarting:
+        status = "restarting"
+    elif now - last_seen < NODE_OFFLINE_TIMEOUT:
+        status = "online"
+    
+    return web.json_response({
+        "name": node.get("name"),
+        "ip": node.get("ip"),
+        "status": status,
+        "stats": node.get("stats", {}),
+        "history": node.get("history", []),
+        "token": encrypt_for_web(token),
+        "last_seen": last_seen,
+        "services": node.get("services", []),
+    })
+
+
+async def handle_nodes_monitor_services(request):
+    """API: Get node services"""
+    user = get_current_user(request)
+    if not user:
+        return web.json_response({"error": "Unauthorized"}, status=401)
+    
+    token = decrypt_for_web(request.query.get("token"))
+    if not token:
+        return web.json_response({"error": "Token required"}, status=400)
+    
+    node = await nodes_db.get_node_by_token(token)
+    if not node:
+        return web.json_response({"error": "Node not found"}, status=404)
+    
+    # Services are collected from node heartbeat
+    services = node.get("services", [])
+    return web.json_response({"services": services})
+
+
+async def handle_nodes_monitor_command(request):
+    """API: Send command to node"""
+    user = get_current_user(request)
+    if not user:
+        return web.json_response({"error": "Unauthorized"}, status=401)
+    
+    role = user.get("role", "users")
+    is_admin = role == "admins" or user["id"] == ADMIN_USER_ID
+    if not is_admin:
+        return web.json_response({"error": "Admin required"}, status=403)
+    
+    try:
+        data = await request.json()
+        token = decrypt_for_web(data.get("token"))
+        command = data.get("command")
+        
+        if not token or not command:
+            return web.json_response({"error": "Token and command required"}, status=400)
+        
+        allowed_commands = ["selftest", "uptime", "traffic", "top", "speedtest", "reboot", "services_list"]
+        if command not in allowed_commands:
+            return web.json_response({"error": "Invalid command"}, status=400)
+        
+        node = await nodes_db.get_node_by_token(token)
+        if not node:
+            return web.json_response({"error": "Node not found"}, status=404)
+        
+        if command == "reboot":
+            await nodes_db.update_node_extra(token, "is_restarting", True)
+        
+        await nodes_db.update_node_task(token, {"command": command, "user_id": user["id"]})
+        
+        return web.json_response({"status": "ok"})
+    except Exception as e:
+        return web.json_response({"error": str(e)}, status=500)
+
+
+async def handle_nodes_monitor_service_action(request):
+    """API: Send service action to node"""
+    user = get_current_user(request)
+    if not user:
+        return web.json_response({"error": "Unauthorized"}, status=401)
+    
+    role = user.get("role", "users")
+    is_admin = role == "admins" or user["id"] == ADMIN_USER_ID
+    if not is_admin:
+        return web.json_response({"error": "Admin required"}, status=403)
+    
+    try:
+        data = await request.json()
+        token = decrypt_for_web(data.get("token"))
+        service = data.get("service")
+        action = data.get("action")
+        svc_type = data.get("type", "systemd")
+        
+        if not all([token, service, action]):
+            return web.json_response({"error": "Token, service and action required"}, status=400)
+        
+        allowed_actions = ["start", "stop", "restart"]
+        if action not in allowed_actions:
+            return web.json_response({"error": "Invalid action"}, status=400)
+        
+        node = await nodes_db.get_node_by_token(token)
+        if not node:
+            return web.json_response({"error": "Node not found"}, status=404)
+        
+        await nodes_db.update_node_task(token, {
+            "command": "service_action",
+            "service": service,
+            "action": action,
+            "type": svc_type,
+            "user_id": user["id"]
+        })
+        
+        return web.json_response({"status": "ok"})
+    except Exception as e:
+        return web.json_response({"error": str(e)}, status=500)
+
+# ===== END NODES MONITOR HANDLERS =====
+
+
 async def handle_settings_page(request):
     user = get_current_user(request)
     if not user:
@@ -1432,7 +1766,9 @@ async def handle_settings_page(request):
         "web_meta_success": _("web_meta_success", lang),
         "web_meta_locked_alert": _("web_meta_locked_alert", lang),
         "web_notifications_cleared": _("web_notifications_cleared", lang),
-
+        "web_node_delete_confirm": _("web_node_delete_confirm", lang),
+        "modal_title_info": _("modal_title_info", lang),
+        "notif_node_settings_title": _("web_notif_node_settings_title", lang),
     }
     for btn_key, conf_key in BTN_CONFIG_MAP.items():
         i18n_data[f"lbl_{conf_key}"] = _(btn_key, lang)
@@ -1469,6 +1805,8 @@ async def handle_settings_page(request):
         "val_ram": str(current_config.RAM_THRESHOLD),
         "val_disk": str(current_config.DISK_THRESHOLD),
         "val_traffic": str(current_config.TRAFFIC_INTERVAL),
+        "val_services": str(getattr(current_config, "SERVICES_INTERVAL", 5)),
+        "val_ping": str(getattr(current_config, "PING_INTERVAL", 30)),
         "val_timeout": str(current_config.NODE_OFFLINE_TIMEOUT),
         "web_settings_page_title": _("web_settings_page_title", lang),
         "web_back": _("web_back", lang),
@@ -1476,8 +1814,12 @@ async def handle_settings_page(request):
         "notifications_alert_name_res": _("notifications_alert_name_res", lang),
         "notifications_alert_name_logins": _("notifications_alert_name_logins", lang),
         "notifications_alert_name_bans": _("notifications_alert_name_bans", lang),
-        "notifications_alert_name_downtime": _(
-            "notifications_alert_name_downtime", lang),
+        "notifications_alert_name_downtime": _("notifications_alert_name_downtime", lang),
+        "web_notif_btn_global": _("web_notif_btn_global", lang),
+        "web_notif_btn_nodes": _("web_notif_btn_nodes", lang),
+        "web_notif_nodes_list_title": _("web_notif_nodes_list_title", lang),
+        "web_notif_node_settings_title": _("web_notif_node_settings_title", lang),
+        "web_notif_menu_desc": _("web_notif_menu_desc", lang),
         "web_save_btn": _("web_save_btn", lang),
         "web_users_section": _("web_users_section", lang),
         "web_add_user_btn": _("web_add_user_btn", lang),
@@ -1499,6 +1841,8 @@ async def handle_settings_page(request):
         "web_ram_threshold": _("web_ram_threshold", lang),
         "web_disk_threshold": _("web_disk_threshold", lang),
         "web_traffic_interval": _("web_traffic_interval", lang),
+        "web_services_interval": _("web_services_interval", lang),
+        "web_ping_interval": _("web_ping_interval", lang),
         "web_node_timeout": _("web_node_timeout", lang),
         "web_clear_logs_btn": _("web_clear_logs_btn", lang),
         "web_reset_traffic_btn": _("web_reset_traffic_btn", lang),
@@ -1512,6 +1856,8 @@ async def handle_settings_page(request):
         "web_hint_ram_threshold": _("web_hint_ram_threshold", lang),
         "web_hint_disk_threshold": _("web_hint_disk_threshold", lang),
         "web_hint_traffic_interval": _("web_hint_traffic_interval", lang),
+        "web_hint_services_interval": _("web_hint_services_interval", lang),
+        "web_hint_ping_interval": _("web_hint_ping_interval", lang),
         "web_hint_node_timeout": _("web_hint_node_timeout", lang),
         "web_keyboard_title": _("web_keyboard_title", lang),
         "web_node_mgmt_title": _("web_node_mgmt_title", lang),
@@ -1542,6 +1888,8 @@ async def handle_settings_page(request):
         "check_logins": "checked" if user_alerts.get("logins", False) else "",
         "check_bans": "checked" if user_alerts.get("bans", False) else "",
         "check_downtime": "checked" if user_alerts.get("downtime", False) else "",
+        "user_alerts": user_alerts,
+        "user_alerts_json": json.dumps(user_alerts),
         "i18n_json": json.dumps(i18n_data),
     }
     template = JINJA_ENV.get_template("settings.html")
@@ -1558,9 +1906,10 @@ async def handle_save_notifications(request):
         uid = user["id"]
         if uid not in ALERTS_CONFIG:
             ALERTS_CONFIG[uid] = {}
-        for k in ["resources", "logins", "bans", "downtime"]:
-            if k in data:
-                ALERTS_CONFIG[uid][k] = bool(data[k])
+            
+        for k, v in data.items():
+            ALERTS_CONFIG[uid][k] = bool(v)
+            
         save_alerts_config()
         return web.json_response({"status": "ok"})
     except Exception as e:
@@ -1794,6 +2143,8 @@ async def handle_login_page(request):
         "web_default_pass_alert",
         "web_brand_name",
         "login_secure_gateway",
+        "login_telegram_id_label",
+        "login_via_telegram_btn",
     ]
     i18n_all = {}
     for l in ["ru", "en"]:
@@ -1820,6 +2171,8 @@ async def handle_login_page(request):
         "web_version": CACHE_VER,
         "current_lang": lang,
         "i18n_json": injection,
+        "login_telegram_id_label": _("login_telegram_id_label", lang),
+        "login_via_telegram_btn": _("login_via_telegram_btn", lang),
     }
     template = JINJA_ENV.get_template("login.html")
     html = template.render(**context)
@@ -2105,6 +2458,7 @@ async def handle_sse_stream(request):
                 "ram": 0,
                 "disk": 0,
                 "ip": encrypt_for_web(AGENT_IP_CACHE),
+                "ping": encrypt_for_web(AGENT_PING_CACHE),
                 "net_sent": 0,
                 "net_recv": 0,
                 "boot_time": 0,
@@ -2310,11 +2664,16 @@ async def handle_sse_logs(request):
             except Exception as e:
                 logging.error(f"Error reading bot history: {e}")
 
-        await resp.write(
-            f"event: logs\ndata: {json.dumps({'logs': clean_lines})}\n\n".encode("utf-8")
-        )
-        await resp.drain()
-        last_activity = time.time()
+        try:
+            await resp.write(
+                f"event: logs\ndata: {json.dumps({'logs': clean_lines})}\n\n".encode("utf-8")
+            )
+            await resp.drain()
+            last_activity = time.time()
+        except Exception as e:
+            if "closing transport" in str(e):
+                return resp
+            raise
 
     elif log_type == "sys":
         history_lines = []
@@ -2326,11 +2685,16 @@ async def handle_sse_logs(request):
             history_lines = ["Error: System logs temporarily unavailable"]
 
         logs_to_send = history_lines if history_lines else []
-        await resp.write(
-            f"event: logs\ndata: {json.dumps({'logs': logs_to_send})}\n\n".encode("utf-8")
-        )
-        await resp.drain()
-        last_activity = time.time()
+        try:
+            await resp.write(
+                f"event: logs\ndata: {json.dumps({'logs': logs_to_send})}\n\n".encode("utf-8")
+            )
+            await resp.drain()
+            last_activity = time.time()
+        except Exception as e:
+            if "closing transport" in str(e):
+                return resp
+            raise
 
     try:
         while True:
@@ -2636,6 +3000,7 @@ async def start_web_server(bot_instance: Bot):
         app.router.add_get("/site.webmanifest", handle_manifest)
         app.router.add_get("/", handle_dashboard)
         app.router.add_get("/settings", handle_settings_page)
+        app.router.add_get("/nodes", handle_nodes_monitor_page)
         app.router.add_get("/login", handle_login_page)
         app.router.add_post("/api/login/request", handle_login_request)
         app.router.add_get("/api/login/magic", handle_magic_login)
@@ -2648,6 +3013,11 @@ async def start_web_server(bot_instance: Bot):
         app.router.add_get("/api/node/details", handle_node_details)
         app.router.add_get("/api/agent/stats", handle_agent_stats)
         app.router.add_get("/api/nodes/list", handle_nodes_list_json)
+        app.router.add_get("/api/nodes/monitor/list", handle_nodes_monitor_list)
+        app.router.add_get("/api/nodes/monitor/detail", handle_nodes_monitor_detail)
+        app.router.add_get("/api/nodes/monitor/services", handle_nodes_monitor_services)
+        app.router.add_post("/api/nodes/monitor/command", handle_nodes_monitor_command)
+        app.router.add_post("/api/nodes/monitor/service_action", handle_nodes_monitor_service_action)
         app.router.add_get("/api/logs", handle_get_logs)
         app.router.add_get("/api/logs/system", handle_get_sys_logs)
         app.router.add_post("/api/settings/save", handle_save_notifications)
@@ -2692,8 +3062,55 @@ async def start_web_server(bot_instance: Bot):
         return None
 
 
+async def measure_agent_ping():
+    """Measure ping: try ICMP first (faster/accurate), fallback to HTTPS if blocked"""
+    import subprocess
+    import platform
+    
+    # Try ICMP ping first
+    try:
+        if platform.system().lower() == "windows":
+            cmd = ["ping", "-n", "1", "-w", "2000", "8.8.8.8"]
+            pattern = r"[=<](\d+)\s*ms"
+        else:
+            cmd = ["ping", "-c", "1", "-W", "2", "8.8.8.8"]
+            pattern = r"time=([\d\.]+)\s*ms"
+        
+        proc = await asyncio.to_thread(
+            lambda: subprocess.run(cmd, capture_output=True, timeout=5)
+        )
+        ping_match = re.search(pattern, proc.stdout.decode())
+        if ping_match:
+            return str(round(float(ping_match.group(1)), 1))
+    except Exception:
+        pass
+    
+    # Fallback to HTTPS ping if ICMP failed/blocked
+    targets = [
+        "https://www.google.com",
+        "https://www.cloudflare.com",
+        "https://1.1.1.1"
+    ]
+    
+    timeout = aiohttp.ClientTimeout(total=AGENT_PING_TIMEOUT)
+    
+    for target in targets:
+        try:
+            t1 = time.time()
+            async with aiohttp.ClientSession(timeout=timeout) as session:
+                async with session.get(target, allow_redirects=False) as resp:
+                    await resp.read()
+                    if resp.status in (200, 301, 302, 403, 204):
+                        result = str(int((time.time() - t1) * 1000))
+                        return result
+        except Exception:
+            continue
+    
+    return None
+
+
 async def agent_monitor():
-    global AGENT_IP_CACHE, AGENT_FLAG
+    global AGENT_IP_CACHE, AGENT_FLAG, AGENT_PING_CACHE, AGENT_PING_LAST_UPDATE
     import psutil
     import requests
 
@@ -2707,6 +3124,12 @@ async def agent_monitor():
         AGENT_FLAG = await get_country_flag(AGENT_IP_CACHE)
     except Exception:
         pass
+    
+    # Measure initial ping
+    ping_result = await measure_agent_ping()
+    AGENT_PING_CACHE = ping_result if ping_result else "n/a"
+    AGENT_PING_LAST_UPDATE = time.time()
+    
     while True:
         try:
             cpu = psutil.cpu_percent(interval=None)
@@ -2720,6 +3143,13 @@ async def agent_monitor():
                 "tx": net.bytes_sent,
             }
             AGENT_HISTORY.append(point)
+            
+            # Update ping interval based on config
+            ping_int = getattr(current_config, "PING_INTERVAL", 30)
+            if time.time() - AGENT_PING_LAST_UPDATE > ping_int:
+                ping_result = await measure_agent_ping()
+                AGENT_PING_CACHE = ping_result if ping_result else "n/a"
+                AGENT_PING_LAST_UPDATE = time.time()
         except asyncio.CancelledError:
 
             raise
@@ -2951,7 +3381,7 @@ async def handle_login_page(request):
         "login_btn_send_link", "login_btn_back", "btn_back", "login_support_btn_pay",
         "login_link_sent_title", "login_link_sent_desc", "reset_success_title",
         "reset_success_desc", "login_error_user_not_found", "web_default_pass_alert",
-        "web_brand_name", "login_secure_gateway",
+        "web_brand_name", "login_secure_gateway", "login_telegram_id_label", "login_via_telegram_btn",
     ]
     i18n_all = {}
     for l in ["ru", "en"]:
@@ -2978,6 +3408,8 @@ async def handle_login_page(request):
         "web_version": CACHE_VER,
         "current_lang": lang,
         "i18n_json": injection,
+        "login_telegram_id_label": _("login_telegram_id_label", lang),
+        "login_via_telegram_btn": _("login_via_telegram_btn", lang),
     }
     template = JINJA_ENV.get_template("login.html")
     html = template.render(**context)
@@ -3262,6 +3694,7 @@ async def handle_sse_stream(request):
                 "ram": 0,
                 "disk": 0,
                 "ip": encrypt_for_web(AGENT_IP_CACHE),
+                "ping": encrypt_for_web(AGENT_PING_CACHE),
                 "net_sent": 0,
                 "net_recv": 0,
                 "boot_time": 0,
@@ -3465,11 +3898,16 @@ async def handle_sse_logs(request):
             except Exception as e:
                 logging.error(f"Error reading bot history: {e}")
 
-        await resp.write(
-            f"event: logs\ndata: {json.dumps({'logs': clean_lines})}\n\n".encode("utf-8")
-        )
-        await resp.drain()
-        last_activity = time.time()
+        try:
+            await resp.write(
+                f"event: logs\ndata: {json.dumps({'logs': clean_lines})}\n\n".encode("utf-8")
+            )
+            await resp.drain()
+            last_activity = time.time()
+        except Exception as e:
+            if "closing transport" in str(e):
+                return resp
+            raise
 
     elif log_type == "sys":
         history_lines = []
@@ -3481,11 +3919,16 @@ async def handle_sse_logs(request):
             history_lines = ["Error: System logs temporarily unavailable"]
 
         logs_to_send = history_lines if history_lines else []
-        await resp.write(
-            f"event: logs\ndata: {json.dumps({'logs': logs_to_send})}\n\n".encode("utf-8")
-        )
-        await resp.drain()
-        last_activity = time.time()
+        try:
+            await resp.write(
+                f"event: logs\ndata: {json.dumps({'logs': logs_to_send})}\n\n".encode("utf-8")
+            )
+            await resp.drain()
+            last_activity = time.time()
+        except Exception as e:
+            if "closing transport" in str(e):
+                return resp
+            raise
 
     try:
         while True:
@@ -3715,15 +4158,16 @@ async def handle_sse_services(request):
                 logging.error(f"SSE Services fetch error: {e}")
 
             # Wait before next update
+            sleep_time = getattr(current_config, "SERVICES_INTERVAL", 5)
             if shutdown_event:
                 try:
                     if not shared_state.IS_RESTARTING:
-                        await asyncio.wait_for(shutdown_event.wait(), timeout=5.0)
+                        await asyncio.wait_for(shutdown_event.wait(), timeout=float(sleep_time))
                         break
                 except asyncio.TimeoutError:
                     pass
             else:
-                await asyncio.sleep(5)
+                await asyncio.sleep(sleep_time)
     except asyncio.CancelledError:
         pass
     except Exception as e:
@@ -3799,6 +4243,14 @@ async def api_service_info(request):
 
         if not name:
             return web.json_response({"error": "Name required"}, status=400)
+
+        found = False
+        for s in current_config.MANAGED_SERVICES:
+            if s["name"] == name:
+                found = True
+                break
+        if not found:
+            return web.json_response({"error": "Service not managed"}, status=403)
 
         from modules.services import get_service_info
         info = await get_service_info(name, sType)
@@ -3908,6 +4360,7 @@ async def start_web_server(bot_instance: Bot):
         app.router.add_get("/site.webmanifest", handle_manifest)
         app.router.add_get("/", handle_dashboard)
         app.router.add_get("/settings", handle_settings_page)
+        app.router.add_get("/nodes", handle_nodes_monitor_page)
         app.router.add_get("/login", handle_login_page)
         app.router.add_post("/api/login/request", handle_login_request)
         app.router.add_get("/api/login/magic", handle_magic_login)
@@ -3920,6 +4373,11 @@ async def start_web_server(bot_instance: Bot):
         app.router.add_get("/api/node/details", handle_node_details)
         app.router.add_get("/api/agent/stats", handle_agent_stats)
         app.router.add_get("/api/nodes/list", handle_nodes_list_json)
+        app.router.add_get("/api/nodes/monitor/list", handle_nodes_monitor_list)
+        app.router.add_get("/api/nodes/monitor/detail", handle_nodes_monitor_detail)
+        app.router.add_get("/api/nodes/monitor/services", handle_nodes_monitor_services)
+        app.router.add_post("/api/nodes/monitor/command", handle_nodes_monitor_command)
+        app.router.add_post("/api/nodes/monitor/service_action", handle_nodes_monitor_service_action)
         app.router.add_get("/api/logs", handle_get_logs)
         app.router.add_get("/api/logs/system", handle_get_sys_logs)
         app.router.add_post("/api/settings/save", handle_save_notifications)
@@ -3970,7 +4428,7 @@ async def start_web_server(bot_instance: Bot):
 
 
 async def agent_monitor():
-    global AGENT_IP_CACHE, AGENT_FLAG
+    global AGENT_IP_CACHE, AGENT_FLAG, AGENT_PING_CACHE, AGENT_PING_LAST_UPDATE
     import psutil
     import requests
 
@@ -3984,6 +4442,12 @@ async def agent_monitor():
         AGENT_FLAG = await get_country_flag(AGENT_IP_CACHE)
     except Exception:
         pass
+    
+    # Measure initial ping
+    ping_result = await measure_agent_ping()
+    AGENT_PING_CACHE = ping_result if ping_result else "n/a"
+    AGENT_PING_LAST_UPDATE = time.time()
+    
     while True:
         try:
             cpu = psutil.cpu_percent(interval=None)
@@ -3999,6 +4463,13 @@ async def agent_monitor():
             AGENT_HISTORY.append(point)
             if len(AGENT_HISTORY) > 60:
                 AGENT_HISTORY.pop(0)
+            
+            # Update ping interval based on config
+            ping_int = getattr(current_config, "PING_INTERVAL", 30)
+            if time.time() - AGENT_PING_LAST_UPDATE > ping_int:
+                ping_result = await measure_agent_ping()
+                AGENT_PING_CACHE = ping_result if ping_result else "n/a"
+                AGENT_PING_LAST_UPDATE = time.time()
         except asyncio.CancelledError:
             raise
         except Exception:

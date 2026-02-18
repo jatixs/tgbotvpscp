@@ -88,7 +88,7 @@ get_local_version() {
     fi 
 }
 
-INSTALL_TYPE="NONE"; STATUS_MESSAGE="Not checked."
+INSTALL_TYPE="NONE"; STATUS_MESSAGE="Check not performed."
 INTEGRITY_STATUS=""
 
 check_integrity() {
@@ -106,11 +106,19 @@ check_integrity() {
         cd "${BOT_INSTALL_PATH}" || return
         git fetch origin "$GIT_BRANCH" >/dev/null 2>&1
         local FILES_TO_CHECK="core modules bot.py watchdog.py migrate.py manage.py"
-        local DIFF=$(git diff --name-only "origin/$GIT_BRANCH" -- $FILES_TO_CHECK 2>/dev/null)
-        if [ -n "$DIFF" ]; then
-            INTEGRITY_STATUS="${C_RED}⚠️ INTEGRITY VIOLATION (Files differ from origin/${GIT_BRANCH})${C_RESET}"
+        local EXISTING_FILES=""
+        for f in $FILES_TO_CHECK; do
+            if [ -e "${BOT_INSTALL_PATH}/$f" ]; then EXISTING_FILES="$EXISTING_FILES $f"; fi
+        done
+        if [ -z "$EXISTING_FILES" ]; then
+            INTEGRITY_STATUS="${C_YELLOW}⚠️ Files not found${C_RESET}"
         else
-            INTEGRITY_STATUS="${C_GREEN}🛡️ Verified${C_RESET}"
+            local DIFF=$(git diff --name-only HEAD -- $EXISTING_FILES 2>/dev/null)
+            if [ -n "$DIFF" ]; then
+                INTEGRITY_STATUS="${C_RED}⚠️ INTEGRITY VIOLATED (Files modified locally)${C_RESET}"
+            else
+                INTEGRITY_STATUS="${C_GREEN}🛡️ Code verified${C_RESET}"
+            fi
         fi
         cd - >/dev/null
     else
@@ -130,44 +138,6 @@ check_integrity() {
         INSTALL_TYPE="AGENT (Systemd)"
         if systemctl is-active --quiet ${SERVICE_NAME}.service; then STATUS_MESSAGE="${C_GREEN}Systemd OK${C_RESET}"; else STATUS_MESSAGE="${C_RED}Systemd Stop${C_RESET}"; fi
     fi
-}
-
-# --- CLEANUP FUNCTIONS ---
-
-cleanup_common_trash() {
-    if [ -d "$BOT_INSTALL_PATH/.github" ]; then sudo rm -rf "$BOT_INSTALL_PATH/.github"; fi
-    if [ -d "$BOT_INSTALL_PATH/assets" ]; then sudo rm -rf "$BOT_INSTALL_PATH/assets"; fi
-    
-    # Remove unnecessary files (*.txt, *.md, *.ini, *.sh, etc.)
-    sudo find "$BOT_INSTALL_PATH" -maxdepth 1 -type f \( -name "*.txt" -o -name "*.md" -o -name "*.ini" -o -name "*.sh" -o -name ".gitignore" -o -name "LICENSE" \) -delete
-    
-    sudo find "$BOT_INSTALL_PATH" -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null
-}
-
-cleanup_for_systemd() {
-    local action_name=$1
-    msg_info "Finalizing ${action_name}..."
-    cleanup_common_trash
-    sudo rm -rf "${BOT_INSTALL_PATH}/node"
-    sudo rm -f "${BOT_INSTALL_PATH}/Dockerfile" "${BOT_INSTALL_PATH}/docker-compose.yml"
-}
-
-cleanup_for_docker() {
-    local action_name=$1
-    msg_info "Finalizing ${action_name}..."
-    cleanup_common_trash
-    cd "${BOT_INSTALL_PATH}"
-    sudo rm -rf node
-    sudo rm -rf core modules bot.py watchdog.py manage.py migrate.py aerich.ini
-    sudo rm -f Dockerfile
-}
-
-cleanup_for_node() {
-    local action_name=$1
-    msg_info "Finalizing ${action_name}..."
-    cleanup_common_trash
-    cd ${BOT_INSTALL_PATH}
-    sudo rm -rf core modules bot.py watchdog.py Dockerfile docker-compose.yml .git config/users.json config/alerts_config.json
 }
 
 setup_nginx_proxy() {
@@ -196,12 +166,27 @@ setup_nginx_proxy() {
 
     sudo bash -c "cat > ${NGINX_CONF}" <<EOF
 server {
-    listen ${HTTPS_PORT} ssl;
+    listen ${HTTPS_PORT} ssl http2;
     server_name ${HTTPS_DOMAIN};
+
+    # SSL
     ssl_certificate /etc/letsencrypt/live/${HTTPS_DOMAIN}/fullchain.pem;
     ssl_certificate_key /etc/letsencrypt/live/${HTTPS_DOMAIN}/privkey.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_ciphers HIGH:!aNULL:!MD5:!RC4;
+    ssl_prefer_server_ciphers on;
+    ssl_session_cache shared:SSL:10m;
+    ssl_session_timeout 10m;
+
+    # Security headers
+    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+    add_header X-Content-Type-Options nosniff always;
+    add_header X-Frame-Options SAMEORIGIN always;
+    add_header Referrer-Policy strict-origin-when-cross-origin always;
+
     access_log /var/log/nginx/${HTTPS_DOMAIN}_access.log;
     error_log /var/log/nginx/${HTTPS_DOMAIN}_error.log;
+
     location / {
         proxy_pass http://127.0.0.1:${WEB_PORT};
         proxy_http_version 1.1;
@@ -211,6 +196,8 @@ server {
         proxy_set_header X-Real-IP \$remote_addr;
         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_read_timeout 86400;
+        proxy_send_timeout 86400;
     }
 }
 EOF
@@ -218,15 +205,21 @@ EOF
     if sudo nginx -t; then
         sudo systemctl restart nginx
         if command -v ufw &> /dev/null; then sudo ufw allow ${HTTPS_PORT}/tcp >/dev/null; fi
-        echo -e "Web Panel available: https://${HTTPS_DOMAIN}:${HTTPS_PORT}/"
+        echo -e "Web panel available at: https://${HTTPS_DOMAIN}:${HTTPS_PORT}/"
     else
-        msg_error "Nginx config error."
+        msg_error "Error in Nginx config."
     fi
 }
 
 common_install_steps() {
     echo "" > /tmp/${SERVICE_NAME}_install.log
     msg_info "1. Updating system..."
+    
+    # Removing broken Nginx symlinks to avoid apt-get dpkg errors
+    if [ -d "/etc/nginx/sites-enabled" ]; then
+        sudo find /etc/nginx/sites-enabled -xtype l -delete 2>/dev/null
+    fi
+    
     run_with_spinner "Apt update" sudo apt-get update -y -q
     run_with_spinner "Installing packages" sudo apt-get install -y -q -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" python3 python3-pip python3-venv git curl wget sudo python3-yaml
 }
@@ -249,7 +242,7 @@ load_cached_env() {
     if [ ! -f "$env_file" ] && [ -f "/tmp/tgbot_env.bak" ]; then env_file="/tmp/tgbot_env.bak"; fi
 
     if [ -f "$env_file" ]; then
-        echo -e "${C_YELLOW}⚠️  Found saved configuration.${C_RESET}"
+        echo -e "${C_YELLOW}⚠️  Saved configuration detected.${C_RESET}"
         read -p "$(echo -e "${C_CYAN}❓ Restore settings? (y/n) [y]: ${C_RESET}")" RESTORE_CHOICE
         RESTORE_CHOICE=${RESTORE_CHOICE:-y}
 
@@ -273,13 +266,164 @@ load_cached_env() {
         fi
     fi
 }
+cleanup_common_trash() {
+    if [ -d "$BOT_INSTALL_PATH/.github" ]; then sudo rm -rf "$BOT_INSTALL_PATH/.github"; fi
+    if [ -d "$BOT_INSTALL_PATH/assets" ]; then sudo rm -rf "$BOT_INSTALL_PATH/assets"; fi
+    sudo find "$BOT_INSTALL_PATH" -maxdepth 1 -type f \( -name "*.txt" -o -name "*.md" -o -name "*.sh" -o -name ".gitignore" -o -name "LICENSE" \) -delete
+    sudo find "$BOT_INSTALL_PATH" -maxdepth 1 -type f -name "*.ini" ! -name "aerich.ini" -delete
+    sudo find "$BOT_INSTALL_PATH" -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null
+}
+cleanup_for_systemd() {
+    local action_name=$1
+    msg_info "Finishing ${action_name}..."
+    cleanup_common_trash
+    sudo rm -rf "${BOT_INSTALL_PATH}/node"
+    sudo rm -f "${BOT_INSTALL_PATH}/Dockerfile" "${BOT_INSTALL_PATH}/docker-compose.yml"
+}
+cleanup_for_docker() {
+    local action_name=$1
+    msg_info "Finishing ${action_name}..."
+    cleanup_common_trash
+    cd "${BOT_INSTALL_PATH}"
+    sudo rm -rf node
+    sudo rm -rf core modules bot.py watchdog.py manage.py migrate.py aerich.ini
+    sudo rm -f Dockerfile
+}
+cleanup_for_node() {
+    local action_name=$1
+    msg_info "Finishing ${action_name}..."
+    cleanup_common_trash
+    cd ${BOT_INSTALL_PATH}
+    sudo rm -rf core modules bot.py watchdog.py Dockerfile docker-compose.yml .git config/users.json config/alerts_config.json
+}
 
 install_extras() {
     if ! command -v fail2ban-client &> /dev/null; then
         msg_question "Fail2Ban not found. Install? (y/n): " I; if [[ "$I" =~ ^[Yy]$ ]]; then run_with_spinner "Installing Fail2ban" sudo apt-get install -y -q fail2ban; fi
     fi
-    if ! command -v iperf3 &> /dev/null; then
-        msg_question "iperf3 not found. Install? (y/n): " I; if [[ "$I" =~ ^[Yy]$ ]]; then run_with_spinner "Installing iperf3" sudo apt-get install -y -q iperf3; fi
+    
+    # Detect server location by external IP
+    msg_info "Detecting server geolocation..."
+    SERVER_COUNTRY=""
+    EXT_IP=$(curl -s --connect-timeout 5 https://api.ipify.org 2>/dev/null || curl -s --connect-timeout 5 https://ipinfo.io/ip 2>/dev/null || echo "")
+    if [ -n "$EXT_IP" ]; then
+        SERVER_COUNTRY=$(curl -s --connect-timeout 5 "http://ip-api.com/line/${EXT_IP}?fields=countryCode" 2>/dev/null || echo "")
+    fi
+    
+    if [ "$SERVER_COUNTRY" == "RU" ]; then
+        msg_info "Server is located in Russia - using iperf3 for speedtest"
+        if ! command -v iperf3 &> /dev/null; then
+            msg_question "iperf3 not found. Install? (y/n): " I; if [[ "$I" =~ ^[Yy]$ ]]; then run_with_spinner "Installing iperf3" sudo apt-get install -y -q iperf3; fi
+        fi
+        # Mark that we use iperf3 mode
+        echo "RU" | sudo tee "${BOT_INSTALL_PATH}/config/.speedtest_mode" > /dev/null
+    else
+        msg_info "Server is not in Russia - Ookla Speedtest CLI is recommended"
+        
+        HAS_IPERF3=false
+        HAS_OOKLA=false
+        
+        if command -v iperf3 &> /dev/null; then
+            HAS_IPERF3=true
+        fi
+        
+        if command -v speedtest &> /dev/null && speedtest --version 2>&1 | grep -q "Speedtest by Ookla"; then
+            HAS_OOKLA=true
+        fi
+        
+        # If iperf3 is installed but Ookla is not - offer to switch
+        if [ "$HAS_IPERF3" = true ] && [ "$HAS_OOKLA" = false ]; then
+            echo -e "${C_YELLOW}⚠️  iperf3 detected. For servers outside Russia, Ookla Speedtest CLI is recommended.${C_RESET}"
+            msg_question "Remove iperf3 and install Ookla Speedtest CLI? (y/n) [y]: " SWITCH_CHOICE
+            SWITCH_CHOICE=${SWITCH_CHOICE:-y}
+            
+            if [[ "$SWITCH_CHOICE" =~ ^[Yy]$ ]]; then
+                run_with_spinner "Removing iperf3" sudo apt-get remove -y -q iperf3
+                install_ookla_speedtest
+                echo "OOKLA" | sudo tee "${BOT_INSTALL_PATH}/config/.speedtest_mode" > /dev/null
+            else
+                msg_info "iperf3 kept. It will be used for speedtest."
+                echo "RU" | sudo tee "${BOT_INSTALL_PATH}/config/.speedtest_mode" > /dev/null
+            fi
+        # If Ookla already installed
+        elif [ "$HAS_OOKLA" = true ]; then
+            msg_success "Ookla Speedtest CLI is already installed"
+            echo "OOKLA" | sudo tee "${BOT_INSTALL_PATH}/config/.speedtest_mode" > /dev/null
+        # If neither is installed
+        else
+            echo -e "${C_CYAN}Speedtest is not installed. Which tool to install?${C_RESET}"
+            echo "  1) Ookla Speedtest CLI (recommended for servers outside Russia)"
+            echo "  2) iperf3"
+            echo "  3) Skip"
+            msg_question "Choose (1/2/3) [1]: " ST_CHOICE
+            ST_CHOICE=${ST_CHOICE:-1}
+            
+            case "$ST_CHOICE" in
+                1)
+                    install_ookla_speedtest
+                    echo "OOKLA" | sudo tee "${BOT_INSTALL_PATH}/config/.speedtest_mode" > /dev/null
+                    ;;
+                2)
+                    run_with_spinner "Installing iperf3" sudo apt-get install -y -q iperf3
+                    echo "RU" | sudo tee "${BOT_INSTALL_PATH}/config/.speedtest_mode" > /dev/null
+                    ;;
+                3)
+                    msg_warning "Speedtest will not be available"
+                    ;;
+            esac
+        fi
+    fi
+}
+
+install_ookla_speedtest() {
+    # Check if already installed and working
+    if command -v speedtest &> /dev/null && speedtest --version 2>&1 | grep -q "Speedtest by Ookla"; then
+        msg_success "Ookla Speedtest CLI is already installed"
+        return 0
+    fi
+    
+    msg_info "Installing Ookla Speedtest CLI..."
+    
+    # Install curl if not present
+    if ! command -v curl &> /dev/null; then
+        run_with_spinner "Installing curl" sudo apt-get install -y -q curl
+    fi
+    
+    # Get Ubuntu version
+    UBUNTU_VERSION=""
+    if [ -f /etc/os-release ]; then
+        . /etc/os-release
+        UBUNTU_VERSION="$VERSION_ID"
+    fi
+    
+    # Add Ookla repository
+    run_with_spinner "Adding Ookla repository" bash -c 'curl -s https://packagecloud.io/install/repositories/ookla/speedtest-cli/script.deb.sh | sudo bash'
+    
+    # Fix for Ubuntu 24+ (noble -> jammy)
+    OOKLA_LIST="/etc/apt/sources.list.d/ookla_speedtest-cli.list"
+    if [ -f "$OOKLA_LIST" ]; then
+        if grep -q "noble" "$OOKLA_LIST" 2>/dev/null; then
+            msg_info "Applying fix for Ubuntu 24+..."
+            sudo sed -i 's/noble/jammy/g' "$OOKLA_LIST"
+        fi
+        # Also fix for other unsupported versions
+        if grep -q "oracular\|mantic\|lunar" "$OOKLA_LIST" 2>/dev/null; then
+            msg_info "Applying fix for unsupported Ubuntu version..."
+            sudo sed -i 's/oracular\|mantic\|lunar/jammy/g' "$OOKLA_LIST"
+        fi
+    fi
+    
+    run_with_spinner "Updating packages" sudo apt-get update -y -q
+    run_with_spinner "Installing speedtest" sudo apt-get install -y -q speedtest
+    
+    if command -v speedtest &> /dev/null; then
+        msg_success "Ookla Speedtest CLI installed successfully"
+    else
+        msg_warning "Failed to install Ookla Speedtest CLI, will use iperf3"
+        if ! command -v iperf3 &> /dev/null; then
+            run_with_spinner "Installing iperf3" sudo apt-get install -y -q iperf3
+        fi
+        echo "RU" | sudo tee "${BOT_INSTALL_PATH}/config/.speedtest_mode" > /dev/null
     fi
 }
 
@@ -318,6 +462,11 @@ write_env_file() {
     local debug_setting="true"
     if [ "$GIT_BRANCH" == "main" ]; then debug_setting="false"; fi
 
+    local compose_profile=""
+    if [ "$dm" == "docker" ]; then compose_profile="${im}"; fi
+    local web_domain=""
+    if [ -n "$HTTPS_DOMAIN" ]; then web_domain="${HTTPS_DOMAIN}"; fi
+
     sudo bash -c "cat > ${ENV_FILE}" <<EOF
 TG_BOT_TOKEN="${T}"
 TG_ADMIN_ID="${A}"
@@ -333,8 +482,80 @@ TG_WEB_INITIAL_PASSWORD="${GEN_PASS}"
 DEBUG="${debug_setting}"
 SENTRY_DSN="${SENTRY_DSN}"
 INSTALLED_VERSION="${ver}"
+COMPOSE_PROFILES="${compose_profile}"
+WEB_DOMAIN="${web_domain}"
 EOF
     sudo chmod 600 "${ENV_FILE}"
+
+    # Create installstate file
+    local installstate_file="${BOT_INSTALL_PATH}/installstate"
+    sudo bash -c "cat > ${installstate_file}" <<EOF
+install_mode=${im}
+deploy_mode=${dm}
+installed_at=$(date -Iseconds)
+version=${ver}
+branch=${GIT_BRANCH}
+EOF
+    sudo chmod 644 "${installstate_file}"
+}
+
+ensure_env_variables() {
+    # Check and add missing environment variables to .env file
+    # This ensures compatibility between versions
+    
+    if [ ! -f "${ENV_FILE}" ]; then
+        msg_warning ".env file not found, skipping variable check."
+        return 0
+    fi
+    
+    msg_info "Checking environment variables..."
+    local changes_made=false
+    
+    # List of variables with their default values
+    # Format: "VAR_NAME|default_value|description"
+    local ENV_VARS=(
+        "WEB_SERVER_HOST|0.0.0.0|Web server host"
+        "WEB_SERVER_PORT|8080|Web server port"
+        "INSTALL_MODE|secure|Installation mode"
+        "DEPLOY_MODE|systemd|Deploy mode"
+        "ENABLE_WEB_UI|true|Enable web interface"
+        "DEBUG|false|Debug mode"
+        "TG_BOT_NAME|VPS Bot|Bot name"
+    )
+    
+    for var_entry in "${ENV_VARS[@]}"; do
+        local var_name=$(echo "$var_entry" | cut -d'|' -f1)
+        local default_val=$(echo "$var_entry" | cut -d'|' -f2)
+        local var_desc=$(echo "$var_entry" | cut -d'|' -f3)
+        
+        if ! grep -q "^${var_name}=" "${ENV_FILE}"; then
+            echo -e "${C_YELLOW}  + Added variable ${var_name}=${default_val}${C_RESET}"
+            sudo bash -c "echo '${var_name}=\"${default_val}\"' >> ${ENV_FILE}"
+            changes_made=true
+        fi
+    done
+    
+    # Add optional variables if not present (with empty defaults)
+    local OPTIONAL_VARS=(
+        "SENTRY_DSN"
+        "TG_ADMIN_USERNAME"
+        "TG_BOT_CONTAINER_NAME"
+        "COMPOSE_PROFILES"
+        "WEB_DOMAIN"
+    )
+    
+    for var_name in "${OPTIONAL_VARS[@]}"; do
+        if ! grep -q "^${var_name}=" "${ENV_FILE}"; then
+            sudo bash -c "echo '${var_name}=\"\"' >> ${ENV_FILE}"
+            changes_made=true
+        fi
+    done
+    
+    if [ "$changes_made" = true ]; then
+        msg_success "Environment variables updated."
+    else
+        msg_success "All variables are up to date."
+    fi
 }
 
 check_docker_deps() {
@@ -346,7 +567,7 @@ create_dockerfile() {
     sudo tee "${BOT_INSTALL_PATH}/Dockerfile" > /dev/null <<'EOF'
 FROM python:3.10-slim-bookworm
 RUN apt-get update && apt-get install -y python3-yaml iperf3 git curl wget sudo procps iputils-ping net-tools gnupg docker.io coreutils && rm -rf /var/lib/apt/lists/*
-RUN pip install --no-cache-dir docker aiohttp aiosqlite argon2-cffi sentry-sdk tortoise-orm aerich cryptography tomlkit
+RUN pip install --no-cache-dir --upgrade pip setuptools wheel && pip install --no-cache-dir docker aiohttp aiosqlite argon2-cffi sentry-sdk tortoise-orm aerich cryptography tomlkit
 RUN groupadd -g 1001 tgbot && useradd -u 1001 -g 1001 -m -s /bin/bash tgbot && echo "tgbot ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
 WORKDIR /opt/tg-bot
 COPY requirements.txt .
@@ -444,20 +665,54 @@ EOF
 
 run_db_migrations() {
     local exec_user=$1
-    msg_info "Migrating database..."
+    msg_info "Database and settings migration..."
     cd "${BOT_INSTALL_PATH}" || return 1
-    if [ -f "${ENV_FILE}" ]; then set -a; source "${ENV_FILE}"; set +a; fi
-    local cmd_prefix=""; if [ -n "$exec_user" ]; then cmd_prefix="sudo -E -u ${SERVICE_USER}"; fi
 
-    if [ ! -f "${BOT_INSTALL_PATH}/aerich.ini" ]; then $cmd_prefix ${VENV_PATH}/bin/aerich init -t core.config.TORTOISE_ORM >/dev/null 2>&1; fi
-    if [ ! -d "${BOT_INSTALL_PATH}/migrations" ]; then
-        if ! $cmd_prefix ${VENV_PATH}/bin/aerich init-db; then :; fi
+    # Build env sourcing prefix for all commands
+    local env_source=""
+    if [ -f "${ENV_FILE}" ]; then
+        set -a; source "${ENV_FILE}"; set +a
+        env_source="set -a; source ${ENV_FILE}; set +a;"
+    fi
+
+    # For secure mode, run as service user with env vars
+    local run_cmd=""
+    if [ -n "$exec_user" ]; then
+        run_cmd="sudo -u ${SERVICE_USER} bash -c"
+    fi
+
+    local aerich_bin="${VENV_PATH}/bin/aerich"
+    local aerich_cfg="${BOT_INSTALL_PATH}/aerich.ini"
+
+    # Always recreate aerich.ini with correct TOML format (quoted values)
+    sudo bash -c "cat > '${aerich_cfg}'" <<'EOF'
+[aerich]
+tortoise_orm = "core.config.TORTOISE_ORM"
+location = "./migrations"
+src_folder = "."
+EOF
+
+    if [ -n "$exec_user" ]; then sudo chown ${SERVICE_USER} "${aerich_cfg}" 2>/dev/null; fi
+
+    # Helper to run commands with proper env
+    _run() {
+        if [ -n "$run_cmd" ]; then
+            $run_cmd "${env_source} cd ${BOT_INSTALL_PATH} && $*"
+        else
+            eval "$*"
+        fi
+    }
+
+    if [ ! -x "$aerich_bin" ]; then
+        msg_info "Aerich CLI not found, skipping DB migrations."
+    elif [ ! -d "${BOT_INSTALL_PATH}/migrations" ]; then
+        _run "'$aerich_bin' -c '$aerich_cfg' init-db" >/dev/null 2>&1 || true
     else
-        $cmd_prefix ${VENV_PATH}/bin/aerich upgrade >/dev/null 2>&1
+        _run "'$aerich_bin' -c '$aerich_cfg' upgrade" >/dev/null 2>&1 || true
     fi
 
     if [ -f "${BOT_INSTALL_PATH}/migrate.py" ]; then
-        $cmd_prefix ${VENV_PATH}/bin/python "${BOT_INSTALL_PATH}/migrate.py" $MIGRATE_ARGS
+        _run "'${VENV_PATH}/bin/python' '${BOT_INSTALL_PATH}/migrate.py' $MIGRATE_ARGS"
     fi
 }
 
@@ -470,14 +725,14 @@ install_systemd_logic() {
         if ! id "${SERVICE_USER}" &>/dev/null; then sudo useradd -r -s /bin/false -d ${BOT_INSTALL_PATH} ${SERVICE_USER}; fi
         setup_repo_and_dirs "${SERVICE_USER}"
         sudo -u ${SERVICE_USER} ${PYTHON_BIN} -m venv "${VENV_PATH}"
-        run_with_spinner "Updating pip" sudo -u ${SERVICE_USER} "${VENV_PATH}/bin/pip" install --upgrade pip
+        run_with_spinner "Updating pip" sudo -u ${SERVICE_USER} "${VENV_PATH}/bin/pip" install --upgrade pip setuptools wheel
         run_with_spinner "Installing dependencies" sudo -u ${SERVICE_USER} "${VENV_PATH}/bin/pip" install -r "${BOT_INSTALL_PATH}/requirements.txt"
         run_with_spinner "Installing tomlkit" sudo -u ${SERVICE_USER} "${VENV_PATH}/bin/pip" install tomlkit
         exec_cmd="sudo -u ${SERVICE_USER}"
     else
         setup_repo_and_dirs "root"
         ${PYTHON_BIN} -m venv "${VENV_PATH}"
-        run_with_spinner "Updating pip" "${VENV_PATH}/bin/pip" install --upgrade pip
+        run_with_spinner "Updating pip" "${VENV_PATH}/bin/pip" install --upgrade pip setuptools wheel
         run_with_spinner "Installing dependencies" "${VENV_PATH}/bin/pip" install -r "${BOT_INSTALL_PATH}/requirements.txt"
         run_with_spinner "Installing tomlkit" "${VENV_PATH}/bin/pip" install tomlkit
         exec_cmd=""
@@ -487,12 +742,11 @@ install_systemd_logic() {
     ask_env_details
     write_env_file "systemd" "$mode" ""
     run_db_migrations "$exec_cmd"
-    
     cleanup_for_systemd "installation"
-
     create_and_start_service "${SERVICE_NAME}" "${BOT_INSTALL_PATH}/bot.py" "$mode" "Telegram Bot"
     create_and_start_service "${WATCHDOG_SERVICE_NAME}" "${BOT_INSTALL_PATH}/watchdog.py" "root" "Watchdog"
 
+    msg_info "Creating 'tgcp-bot' command..."
     sudo bash -c "cat > /usr/local/bin/tgcp-bot" <<EOF
 #!/bin/bash
 cd ${BOT_INSTALL_PATH}
@@ -502,7 +756,7 @@ EOF
     sudo chmod +x /usr/local/bin/tgcp-bot
 
     local ip=$(curl -s ipinfo.io/ip)
-    echo ""; msg_success "Installation complete! Dashboard: http://${ip}:${WEB_PORT}"
+    echo ""; msg_success "Installation complete! Panel: http://${ip}:${WEB_PORT}"
     if [ "${ENABLE_WEB}" == "true" ]; then echo -e "${C_CYAN}🔑 PASSWORD: ${C_BOLD}${GEN_PASS}${C_RESET}"; fi
     if [ "$SETUP_HTTPS" == "true" ]; then setup_nginx_proxy; fi
 }
@@ -519,18 +773,16 @@ install_docker_logic() {
     create_docker_compose_yml
     local container_name="tg-bot-${mode}"
     write_env_file "docker" "$mode" "${container_name}"
-    
     cd ${BOT_INSTALL_PATH}
     local dc_cmd=""; if sudo docker compose version &>/dev/null; then dc_cmd="docker compose"; else dc_cmd="docker-compose"; fi
-    run_with_spinner "Docker Build" sudo $dc_cmd build
-    run_with_spinner "Docker Up" sudo $dc_cmd --profile "${mode}" up -d --remove-orphans
+    run_with_spinner "Building Docker" sudo $dc_cmd build
+    run_with_spinner "Starting Docker" sudo $dc_cmd --profile "${mode}" up -d --remove-orphans
 
-    msg_info "Migrations in container..."
+    msg_info "Migration in container..."
     sudo $dc_cmd --profile "${mode}" exec -T ${container_name} aerich init -t core.config.TORTOISE_ORM >/dev/null 2>&1
     sudo $dc_cmd --profile "${mode}" exec -T ${container_name} aerich init-db >/dev/null 2>&1
     sudo $dc_cmd --profile "${mode}" exec -T ${container_name} aerich upgrade >/dev/null 2>&1
     sudo $dc_cmd --profile "${mode}" exec -T ${container_name} python migrate.py $MIGRATE_ARGS >/dev/null 2>&1
-    
     cleanup_for_docker "installation"
 
     sudo bash -c "cat > /usr/local/bin/tgcp-bot" <<EOF
@@ -548,14 +800,14 @@ EOF
 }
 
 install_node_logic() {
-    echo -e "\n${C_BOLD}=== Installing NODE ===${C_RESET}"
+    echo -e "\n${C_BOLD}=== NODE Installation ===${C_RESET}"
     if [ -n "$AUTO_AGENT_URL" ]; then AGENT_URL="$AUTO_AGENT_URL"; fi
     if [ -n "$AUTO_NODE_TOKEN" ]; then NODE_TOKEN="$AUTO_NODE_TOKEN"; fi
     common_install_steps
     run_with_spinner "Installing iperf3" sudo apt-get install -y -q iperf3
     setup_repo_and_dirs "root"
     if [ ! -d "${VENV_PATH}" ]; then run_with_spinner "Creating venv" ${PYTHON_BIN} -m venv "${VENV_PATH}"; fi
-    run_with_spinner "Updating pip" "${VENV_PATH}/bin/pip" install --upgrade pip
+    run_with_spinner "Updating pip" "${VENV_PATH}/bin/pip" install --upgrade pip setuptools wheel
     run_with_spinner "Installing dependencies" "${VENV_PATH}/bin/pip" install psutil requests
     load_cached_env
     msg_question "Agent URL (http://IP:8080): " AGENT_URL
@@ -585,15 +837,13 @@ RestartSec=10
 WantedBy=multi-user.target
 EOF
     sudo systemctl daemon-reload; sudo systemctl enable ${NODE_SERVICE_NAME}
-    
-    cleanup_for_node "installation"
-    
+    cleanup_for_node "installation"  
     run_with_spinner "Starting Node" sudo systemctl restart ${NODE_SERVICE_NAME}
     msg_success "Node installed!"
 }
 
 uninstall_bot() {
-    echo -e "\n${C_BOLD}=== Uninstalling ===${C_RESET}"
+    echo -e "\n${C_BOLD}=== Uninstall ===${C_RESET}"
     cd /
     sudo systemctl stop ${SERVICE_NAME} ${WATCHDOG_SERVICE_NAME} ${NODE_SERVICE_NAME} &> /dev/null
     sudo systemctl disable ${SERVICE_NAME} ${WATCHDOG_SERVICE_NAME} ${NODE_SERVICE_NAME} &> /dev/null
@@ -607,7 +857,7 @@ uninstall_bot() {
 }
 
 update_bot() {
-    echo -e "\n${C_BOLD}=== Updating ===${C_RESET}"
+    echo -e "\n${C_BOLD}=== Update ===${C_RESET}"
     if [ -f "${ENV_FILE}" ] && grep -q "MODE=node" "${ENV_FILE}"; then install_node_logic; return; fi
     if [ ! -d "${BOT_INSTALL_PATH}/.git" ]; then msg_error "Git not found."; return 1; fi
     echo "" > /tmp/${SERVICE_NAME}_install.log
@@ -622,19 +872,22 @@ update_bot() {
         local new_ver=$(grep -oP 'img\.shields\.io/badge/version-v\K[\d\.]+' "$README_FILE")
         if [ -n "$new_ver" ] && [ -f "${ENV_FILE}" ]; then
              if grep -q "^INSTALLED_VERSION=" "${ENV_FILE}"; then
-                 sudo sed -i "s/^INSTALLED_VERSION=.*/INSTALLED_VERSION=${new_ver}/" "${ENV_FILE}"
+                 sudo sed -i "s/^INSTALLED_VERSION=.*/INSTALLED_VERSION=\"${new_ver}\"/" "${ENV_FILE}"
              else
-                 sudo bash -c "echo 'INSTALLED_VERSION=${new_ver}' >> ${ENV_FILE}"
+                 sudo bash -c "echo 'INSTALLED_VERSION=\"${new_ver}\"' >> ${ENV_FILE}"
              fi
         fi
     fi
 
+    # Check and add missing environment variables
+    ensure_env_variables
+
     local current_mode=$(grep '^DEPLOY_MODE=' "${ENV_FILE}" | cut -d'=' -f2 | tr -d '"')
+    
     if [ "$current_mode" == "docker" ]; then
         if [ -f "docker-compose.yml" ]; then
             local dc_cmd=""; if sudo docker compose version &>/dev/null; then dc_cmd="docker compose"; else dc_cmd="docker-compose"; fi
             if ! run_with_spinner "Docker Up" sudo $dc_cmd up -d --build; then msg_error "Docker error."; return 1; fi
-            
             sudo bash -c "cat > /usr/local/bin/tgcp-bot" <<EOF
 #!/bin/bash
 cd ${BOT_INSTALL_PATH}
@@ -645,10 +898,8 @@ EOF
             sudo chmod +x /usr/local/bin/tgcp-bot
         else msg_error "No docker-compose.yml"; return 1; fi
     else
-        # SYSTEMD
         run_with_spinner "Updating pip" $exec_cmd "${VENV_PATH}/bin/pip" install -r "${BOT_INSTALL_PATH}/requirements.txt" --upgrade
         run_with_spinner "Updating tomlkit" $exec_cmd "${VENV_PATH}/bin/pip" install tomlkit
-        
         sudo bash -c "cat > /usr/local/bin/tgcp-bot" <<EOF
 #!/bin/bash
 cd ${BOT_INSTALL_PATH}
@@ -656,18 +907,19 @@ if [ -f .env ]; then set -a; source .env; set +a; fi
 ${VENV_PATH}/bin/python manage.py "\$@"
 EOF
         sudo chmod +x /usr/local/bin/tgcp-bot
+        if systemctl list-unit-files | grep -q "^${SERVICE_NAME}.service"; then sudo systemctl restart ${SERVICE_NAME}; fi
+        if systemctl list-unit-files | grep -q "^${WATCHDOG_SERVICE_NAME}.service"; then sudo systemctl restart ${WATCHDOG_SERVICE_NAME}; fi
     fi
-
-    # --- METADATA RESET QUESTION AND MIGRATIONS (AT THE END) ---
+	
     MIGRATE_ARGS=""
     if [ -f "${BOT_INSTALL_PATH}/config/system_config.json" ]; then
         echo ""
         echo -e "${C_CYAN}🔍 Checking configuration...${C_RESET}"
-        echo "❓ Do you want to reset WebUI Metadata (title, favicon, SEO) to defaults?"
+        echo "❓ Do you want to reset WebUI meta-data (title, favicon, SEO) to defaults?"
         read -p "Reset? (y/N): " reset_meta_answer
         if [[ "$reset_meta_answer" =~ ^[Yy]$ ]]; then
             MIGRATE_ARGS="--reset-meta"
-            echo -e "${C_YELLOW}⚠️  Metadata will be reset.${C_RESET}"
+            echo -e "${C_YELLOW}⚠️  Meta-data will be reset.${C_RESET}"
         fi
     fi
 
@@ -676,13 +928,11 @@ EOF
          local cn="tg-bot-${mode}"
          sudo $dc_cmd --profile "${mode}" exec -T ${cn} aerich upgrade >/dev/null 2>&1
          sudo $dc_cmd --profile "${mode}" exec -T ${cn} python migrate.py $MIGRATE_ARGS >/dev/null 2>&1
+         
          cleanup_for_docker "update"
     else
-         # SYSTEMD
          run_db_migrations "$exec_cmd"
          cleanup_for_systemd "update"
-         if systemctl list-unit-files | grep -q "^${SERVICE_NAME}.service"; then sudo systemctl restart ${SERVICE_NAME}; fi
-         if systemctl list-unit-files | grep -q "^${WATCHDOG_SERVICE_NAME}.service"; then sudo systemctl restart ${WATCHDOG_SERVICE_NAME}; fi
     fi
 
     msg_success "Updated."
@@ -693,15 +943,15 @@ main_menu() {
     while true; do
         clear
         echo -e "${C_BLUE}${C_BOLD}╔═══════════════════════════════════╗${C_RESET}"
-        echo -e "${C_BLUE}${C_BOLD}║      VPS Manager Telegram Bot     ║${C_RESET}"
+        echo -e "${C_BLUE}${C_BOLD}║    VPS Telegram Bot Manager       ║${C_RESET}"
         echo -e "${C_BLUE}${C_BOLD}╚═══════════════════════════════════╝${C_RESET}"
         check_integrity
         echo -e "  Branch: ${GIT_BRANCH} | Version: ${local_version}"
         echo -e "  Type: ${INSTALL_TYPE} | Status: ${STATUS_MESSAGE}"
         if [ -n "$INTEGRITY_STATUS" ]; then echo -e "  Integrity: ${INTEGRITY_STATUS}"; fi
         echo "--------------------------------------------------------"
-        echo "  1) Update Bot"
-        echo "  2) Uninstall Bot"
+        echo "  1) Update bot"
+        echo "  2) Uninstall bot"
         echo "  3) Reinstall (Systemd - Secure)"
         echo "  4) Reinstall (Systemd - Root)"
         echo "  5) Reinstall (Docker - Secure)"
@@ -709,7 +959,7 @@ main_menu() {
         echo -e "${C_GREEN}  7) Install NODE (Client)${C_RESET}"
         echo "  0) Exit"
         echo "--------------------------------------------------------"
-        read -p "$(echo -e "${C_BOLD}Choice: ${C_RESET}")" choice
+        read -p "$(echo -e "${C_BOLD}Your choice: ${C_RESET}")" choice
         case $choice in
             1) update_bot; read -p "Press Enter..." ;;
             2) msg_question "Uninstall? (y/n): " c; if [[ "$c" =~ ^[Yy]$ ]]; then uninstall_bot; return; fi ;;
@@ -730,18 +980,18 @@ check_integrity
 if [ "$INSTALL_TYPE" == "NONE" ]; then
     clear
     echo -e "${C_BLUE}${C_BOLD}╔═══════════════════════════════════╗${C_RESET}"
-    echo -e "${C_BLUE}${C_BOLD}║      VPS Manager Bot Installer    ║${C_RESET}"
+    echo -e "${C_BLUE}${C_BOLD}║      VPS Manager Bot Install      ║${C_RESET}"
     echo -e "${C_BLUE}${C_BOLD}╚═══════════════════════════════════╝${C_RESET}"
     echo -e "  Select installation mode:"
     echo "--------------------------------------------------------"
     echo "  1) AGENT (Systemd - Secure)  [Recommended]"
-    echo "  2) AGENT (Systemd - Root)    [Full Access]"
-    echo "  3) AGENT (Docker - Secure)   [Isolated]"
+    echo "  2) AGENT (Systemd - Root)    [Full access]"
+    echo "  3) AGENT (Docker - Secure)   [Isolation]"
     echo "  4) AGENT (Docker - Root)     [Docker + Host]"
     echo -e "${C_GREEN}  7) NODE (Client)${C_RESET}"
     echo "  0) Exit"
     echo "--------------------------------------------------------"
-    read -p "$(echo -e "${C_BOLD}Choice: ${C_RESET}")" ch
+    read -p "$(echo -e "${C_BOLD}Your choice: ${C_RESET}")" ch
     case $ch in
         1) uninstall_bot; install_systemd_logic "secure"; read -p "Press Enter..." ;;
         2) uninstall_bot; install_systemd_logic "root"; read -p "Press Enter..." ;;

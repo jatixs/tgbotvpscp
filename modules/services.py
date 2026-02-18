@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import re
 import subprocess
 import json
 import os
@@ -15,6 +16,18 @@ from core.shared_state import LAST_MESSAGE_IDS
 
 # Cache for Docker Hub descriptions
 _docker_descriptions_cache = {}
+
+# Regex for valid service/container names: alphanumeric, hyphens, underscores, dots, @, /
+_VALID_NAME_RE = re.compile(r'^[a-zA-Z0-9._@/:-]+$')
+
+def _validate_name(name: str) -> str:
+    """Validate a service or container name to prevent command injection.
+    
+    Raises ValueError if the name contains unsafe characters.
+    """
+    if not name or not _VALID_NAME_RE.match(name):
+        raise ValueError(f"Invalid service/container name: {name!r}")
+    return name
 
 # --- Helpers ---
 
@@ -42,8 +55,9 @@ def get_user_role_level(user_id):
 
 def get_systemd_status(service_name):
     try:
+        _validate_name(service_name)
         # Check ActiveState and SubState and LoadState
-        cmd = ["systemctl", "show", service_name, "-p", "ActiveState,SubState,LoadState"]
+        cmd = ["systemctl", "show", "-p", "ActiveState,SubState,LoadState", "--", service_name]
         # Use stdout/stderr pipe for compatibility with older python (capture_output added in 3.7)
         result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
         if result.returncode != 0:
@@ -88,7 +102,8 @@ def get_docker_status(container_name):
     except ImportError:
          # Fallback to CLI
         try:
-            cmd = ["docker", "inspect", "-f", "{{.State.Status}}", container_name]
+            _validate_name(container_name)
+            cmd = ["docker", "inspect", "-f", "{{.State.Status}}", "--", container_name]
             result = subprocess.run(cmd, capture_output=True, text=True)
             if result.returncode == 0:
                 status = result.stdout.strip()
@@ -103,9 +118,9 @@ def get_docker_status(container_name):
 
 def discover_all_systemd_services():
     """Discover all running/available systemd services"""
-    services = []
+    services = set()
     try:
-        # Get list of all services (running and available)
+        # Get list of all loaded services (running and available)
         cmd = ["systemctl", "list-units", "--type=service", "--all", "--no-pager", "--no-legend"]
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
         if result.returncode == 0:
@@ -118,10 +133,24 @@ def discover_all_systemd_services():
                     # Remove .service suffix
                     if unit.endswith(".service"):
                         name = unit[:-8]
-                        services.append(name)
+                        services.add(name)
+        
+        # Also get list of all unit files (includes services not currently loaded)
+        cmd2 = ["systemctl", "list-unit-files", "--type=service", "--no-pager", "--no-legend"]
+        result2 = subprocess.run(cmd2, capture_output=True, text=True, timeout=10)
+        if result2.returncode == 0:
+            for line in result2.stdout.strip().split("\n"):
+                if not line.strip():
+                    continue
+                parts = line.split()
+                if len(parts) >= 1:
+                    unit = parts[0]
+                    if unit.endswith(".service"):
+                        name = unit[:-8]
+                        services.add(name)
     except Exception as e:
         logging.error(f"Error discovering systemd services: {e}")
-    return services
+    return list(services)
 
 def discover_all_docker_containers():
     """Discover all docker containers (running and stopped)"""
@@ -193,12 +222,6 @@ def add_managed_service(name, sType):
 
 def remove_managed_service(name):
     """Remove a service from MANAGED_SERVICES config"""
-    # List of critical services that cannot be removed
-    CRITICAL_SERVICES = ["sshd", "ssh", "fail2ban"]
-    
-    if name in CRITICAL_SERVICES:
-        return False, f"Cannot remove critical service: {name}"
-    
     for i, s in enumerate(config.MANAGED_SERVICES):
         if s["name"] == name:
             config.MANAGED_SERVICES.pop(i)
@@ -242,11 +265,16 @@ async def perform_service_action(name, sType, action):
     if action not in ["start", "stop", "restart"]:
         return False, "Invalid action"
     
+    try:
+        _validate_name(name)
+    except ValueError:
+        return False, "Invalid service name"
+    
     cmd = []
     if sType == "systemd":
-        cmd = ["sudo", "systemctl", action, name]
+        cmd = ["sudo", "systemctl", action, "--", name]
     elif sType == "docker":
-        cmd = ["docker", action, name]
+        cmd = ["docker", action, "--", name]
     else:
         return False, "Unknown type"
         
@@ -269,7 +297,8 @@ async def perform_service_action(name, sType, action):
 def get_systemd_service_description(service_name):
     """Get description of a systemd service"""
     try:
-        cmd = ["systemctl", "show", service_name, "-p", "Description"]
+        _validate_name(service_name)
+        cmd = ["systemctl", "show", "-p", "Description", "--", service_name]
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
         if result.returncode == 0:
             for line in result.stdout.splitlines():
@@ -294,8 +323,10 @@ def get_systemd_service_info(service_name):
         "uptime": None
     }
     try:
-        cmd = ["systemctl", "show", service_name, "-p", 
-               "Description,LoadState,ActiveState,SubState,MainPID,MemoryCurrent,ActiveEnterTimestamp"]
+        _validate_name(service_name)
+        cmd = ["systemctl", "show", "-p", 
+       "Description,LoadState,ActiveState,SubState,MainPID,MemoryCurrent,ActiveEnterTimestamp",
+       "--", service_name]
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
         if result.returncode == 0:
             props = {}
@@ -349,7 +380,8 @@ def get_systemd_service_info(service_name):
 async def get_docker_image_from_container(container_name):
     """Get Docker image name from a running container"""
     try:
-        cmd = ["docker", "inspect", "-f", "{{.Config.Image}}", container_name]
+        _validate_name(container_name)
+        cmd = ["docker", "inspect", "-f", "{{.Config.Image}}", "--", container_name]
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
         if result.returncode == 0:
             return result.stdout.strip()
@@ -412,7 +444,8 @@ async def get_docker_container_info(container_name):
         "uptime": None
     }
     try:
-        cmd = ["docker", "inspect", container_name]
+        _validate_name(container_name)
+        cmd = ["docker", "inspect", "--", container_name]
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
         if result.returncode == 0:
             data = json.loads(result.stdout)
@@ -540,6 +573,13 @@ def get_services_keyboard(user_id, page=0):
     kb.inline_keyboard.append([
         InlineKeyboardButton(text=_("btn_refresh", lang), callback_data=f"srv_refresh_{page}"),
     ])
+    
+    # Add "Manage" button for Main Admin only (level >= 2)
+    if level >= 2:
+        kb.inline_keyboard.append([
+            InlineKeyboardButton(text=_("services_btn_manage", lang), callback_data="srv_manage_menu")
+        ])
+    
     return kb, page, total_pages
 
 async def services_handler(message: types.Message):
@@ -654,8 +694,12 @@ async def cq_service_action(callback: types.CallbackQuery):
     if not found:
          await callback.answer("Service not found config", show_alert=True)
          return
+    
+    # Get localized action name
+    action_key = f"service_action_{action}"
+    localized_action = _(action_key, lang)
             
-    await callback.answer(_("services_action_started", lang, action=action, name=name), show_alert=False)
+    await callback.answer(_("services_action_started", lang, action=localized_action, name=name), show_alert=False)
     
     success, msg = await perform_service_action(name, sType, action)
     
@@ -674,6 +718,225 @@ async def cq_service_action(callback: types.CallbackQuery):
     else:
         await callback.answer(_("services_error", lang, action=action, name=name, error=msg), show_alert=True)
 
+async def cq_services_manage_menu(callback: types.CallbackQuery):
+    """Show services management menu"""
+    user_id = callback.from_user.id
+    lang = get_user_lang(user_id)
+    level = get_user_role_level(user_id)
+    
+    if level < 2:
+        await callback.answer(_("access_denied", lang), show_alert=True)
+        return
+    
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text=_("services_btn_add_service", lang), callback_data="srv_add_list_0")],
+        [InlineKeyboardButton(text=_("services_btn_remove_service", lang), callback_data="srv_remove_list_0")],
+        [InlineKeyboardButton(text=_("btn_back", lang), callback_data="srv_refresh_0")]
+    ])
+    
+    await callback.message.edit_text(
+        _("services_manage_title", lang),
+        reply_markup=kb,
+        parse_mode="HTML"
+    )
+    await callback.answer()
+
+async def cq_services_add_list(callback: types.CallbackQuery):
+    """Show list of available services to add"""
+    user_id = callback.from_user.id
+    lang = get_user_lang(user_id)
+    level = get_user_role_level(user_id)
+    
+    if level < 2:
+        await callback.answer(_("access_denied", lang), show_alert=True)
+        return
+    
+    # Get page
+    try:
+        page = int(callback.data.split("_")[3])
+    except:
+        page = 0
+    
+    # Get all available services that are not yet managed
+    all_services = get_all_available_services()
+    available = [s for s in all_services if not s["managed"]]
+    
+    if not available:
+        await callback.answer(_("services_no_available", lang), show_alert=True)
+        return
+    
+    # Pagination
+    per_page = 8
+    total_pages = (len(available) + per_page - 1) // per_page
+    page = max(0, min(page, total_pages - 1))
+    start = page * per_page
+    end = min(start + per_page, len(available))
+    
+    kb = InlineKeyboardMarkup(inline_keyboard=[])
+    
+    for s in available[start:end]:
+        icon = "🟢" if s["status"] == "running" else "🔴"
+        type_icon = "🐳" if s["type"] == "docker" else "⚙️"
+        kb.inline_keyboard.append([
+            InlineKeyboardButton(
+                text=f"{icon} {type_icon} {s['name']}", 
+                callback_data=f"srv_add_{s['type']}_{s['name']}"
+            )
+        ])
+    
+    # Navigation
+    nav_row = []
+    if total_pages > 1:
+        if page > 0:
+            nav_row.append(InlineKeyboardButton(text="⬅️", callback_data=f"srv_add_list_{page-1}"))
+        nav_row.append(InlineKeyboardButton(text=f"{page+1}/{total_pages}", callback_data="noop"))
+        if page < total_pages - 1:
+            nav_row.append(InlineKeyboardButton(text="➡️", callback_data=f"srv_add_list_{page+1}"))
+    if nav_row:
+        kb.inline_keyboard.append(nav_row)
+    
+    kb.inline_keyboard.append([
+        InlineKeyboardButton(text=_("btn_back", lang), callback_data="srv_manage_menu")
+    ])
+    
+    await callback.message.edit_text(
+        _("services_select_to_add", lang),
+        reply_markup=kb,
+        parse_mode="HTML"
+    )
+    await callback.answer()
+
+async def cq_service_add(callback: types.CallbackQuery):
+    """Add a service to managed list"""
+    user_id = callback.from_user.id
+    lang = get_user_lang(user_id)
+    level = get_user_role_level(user_id)
+    
+    if level < 2:
+        await callback.answer(_("access_denied", lang), show_alert=True)
+        return
+    
+    # Parse: srv_add_type_name
+    parts = callback.data.split("_", 3)
+    if len(parts) < 4:
+        await callback.answer("Invalid data", show_alert=True)
+        return
+    
+    sType = parts[2]
+    name = parts[3]
+    
+    success, msg = add_managed_service(name, sType)
+    
+    if success:
+        await callback.answer(_("services_added", lang, name=name), show_alert=True)
+        # Return to services list
+        callback.data = "srv_refresh_0"
+        await cq_services_refresh(callback)
+    else:
+        await callback.answer(_("services_add_error", lang, error=msg), show_alert=True)
+
+async def cq_services_remove_list(callback: types.CallbackQuery):
+    """Show list of managed services to remove"""
+    user_id = callback.from_user.id
+    lang = get_user_lang(user_id)
+    level = get_user_role_level(user_id)
+    
+    if level < 2:
+        await callback.answer(_("access_denied", lang), show_alert=True)
+        return
+    
+    # Get page
+    try:
+        page = int(callback.data.split("_")[3])
+    except:
+        page = 0
+    
+    # Get all managed services
+    managed = config.MANAGED_SERVICES
+    
+    if not managed:
+        await callback.answer(_("services_no_managed", lang), show_alert=True)
+        return
+    
+    # Pagination
+    per_page = 8
+    total_pages = (len(managed) + per_page - 1) // per_page
+    page = max(0, min(page, total_pages - 1))
+    start = page * per_page
+    end = min(start + per_page, len(managed))
+    
+    kb = InlineKeyboardMarkup(inline_keyboard=[])
+    
+    for s in managed[start:end]:
+        name = s["name"]
+        sType = s.get("type", "systemd")
+        
+        # Get current status
+        status = "unknown"
+        if sType == "systemd":
+            status = get_systemd_status(name)
+        elif sType == "docker":
+            status = get_docker_status(name)
+        
+        icon = "🟢" if status == "running" else "🔴"
+        type_icon = "🐳" if sType == "docker" else "⚙️"
+        kb.inline_keyboard.append([
+            InlineKeyboardButton(
+                text=f"{icon} {type_icon} {name}", 
+                callback_data=f"srv_remove_{name}"
+            )
+        ])
+    
+    # Navigation
+    nav_row = []
+    if total_pages > 1:
+        if page > 0:
+            nav_row.append(InlineKeyboardButton(text="⬅️", callback_data=f"srv_remove_list_{page-1}"))
+        nav_row.append(InlineKeyboardButton(text=f"{page+1}/{total_pages}", callback_data="noop"))
+        if page < total_pages - 1:
+            nav_row.append(InlineKeyboardButton(text="➡️", callback_data=f"srv_remove_list_{page+1}"))
+    if nav_row:
+        kb.inline_keyboard.append(nav_row)
+    
+    kb.inline_keyboard.append([
+        InlineKeyboardButton(text=_("btn_back", lang), callback_data="srv_manage_menu")
+    ])
+    
+    await callback.message.edit_text(
+        _("services_select_to_remove", lang),
+        reply_markup=kb,
+        parse_mode="HTML"
+    )
+    await callback.answer()
+
+async def cq_service_remove(callback: types.CallbackQuery):
+    """Remove a service from managed list"""
+    user_id = callback.from_user.id
+    lang = get_user_lang(user_id)
+    level = get_user_role_level(user_id)
+    
+    if level < 2:
+        await callback.answer(_("access_denied", lang), show_alert=True)
+        return
+    
+    # Parse: srv_remove_name
+    parts = callback.data.split("_", 2)
+    if len(parts) < 3:
+        await callback.answer("Invalid data", show_alert=True)
+        return
+    
+    name = parts[2]
+    
+    success, msg = remove_managed_service(name)
+    
+    if success:
+        await callback.answer(_("services_removed", lang, name=name), show_alert=True)
+        # Return to services list
+        callback.data = "srv_refresh_0"
+        await cq_services_refresh(callback)
+    else:
+        await callback.answer(_("services_remove_error", lang, error=msg), show_alert=True)
+
 
 BUTTON_KEY = "btn_services"
 
@@ -682,4 +945,9 @@ def register_handlers(dp: Dispatcher):
     
     dp.callback_query.register(cq_services_page, F.data.startswith("srv_page_"))
     dp.callback_query.register(cq_services_refresh, F.data.startswith("srv_refresh_"))
+    dp.callback_query.register(cq_services_manage_menu, F.data == "srv_manage_menu")
+    dp.callback_query.register(cq_services_add_list, F.data.startswith("srv_add_list_"))
+    dp.callback_query.register(cq_services_remove_list, F.data.startswith("srv_remove_list_"))
+    dp.callback_query.register(cq_service_add, F.data.startswith("srv_add_"))
+    dp.callback_query.register(cq_service_remove, F.data.startswith("srv_remove_"))
     dp.callback_query.register(cq_service_action, F.data.startswith("srv_"))

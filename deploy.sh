@@ -106,11 +106,19 @@ check_integrity() {
         cd "${BOT_INSTALL_PATH}" || return
         git fetch origin "$GIT_BRANCH" >/dev/null 2>&1
         local FILES_TO_CHECK="core modules bot.py watchdog.py migrate.py manage.py"
-        local DIFF=$(git diff --name-only "origin/$GIT_BRANCH" -- $FILES_TO_CHECK 2>/dev/null)
-        if [ -n "$DIFF" ]; then
-            INTEGRITY_STATUS="${C_RED}⚠️ ЦЕЛОСТНОСТЬ НАРУШЕНА (Файлы отличаются от origin/${GIT_BRANCH})${C_RESET}"
+        local EXISTING_FILES=""
+        for f in $FILES_TO_CHECK; do
+            if [ -e "${BOT_INSTALL_PATH}/$f" ]; then EXISTING_FILES="$EXISTING_FILES $f"; fi
+        done
+        if [ -z "$EXISTING_FILES" ]; then
+            INTEGRITY_STATUS="${C_YELLOW}⚠️ Файлы не найдены${C_RESET}"
         else
-            INTEGRITY_STATUS="${C_GREEN}🛡️ Код подтвержден${C_RESET}"
+            local DIFF=$(git diff --name-only HEAD -- $EXISTING_FILES 2>/dev/null)
+            if [ -n "$DIFF" ]; then
+                INTEGRITY_STATUS="${C_RED}⚠️ ЦЕЛОСТНОСТЬ НАРУШЕНА (Файлы изменены локально)${C_RESET}"
+            else
+                INTEGRITY_STATUS="${C_GREEN}🛡️ Код подтвержден${C_RESET}"
+            fi
         fi
         cd - >/dev/null
     else
@@ -158,12 +166,27 @@ setup_nginx_proxy() {
 
     sudo bash -c "cat > ${NGINX_CONF}" <<EOF
 server {
-    listen ${HTTPS_PORT} ssl;
+    listen ${HTTPS_PORT} ssl http2;
     server_name ${HTTPS_DOMAIN};
+
+    # SSL
     ssl_certificate /etc/letsencrypt/live/${HTTPS_DOMAIN}/fullchain.pem;
     ssl_certificate_key /etc/letsencrypt/live/${HTTPS_DOMAIN}/privkey.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_ciphers HIGH:!aNULL:!MD5:!RC4;
+    ssl_prefer_server_ciphers on;
+    ssl_session_cache shared:SSL:10m;
+    ssl_session_timeout 10m;
+
+    # Security headers
+    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+    add_header X-Content-Type-Options nosniff always;
+    add_header X-Frame-Options SAMEORIGIN always;
+    add_header Referrer-Policy strict-origin-when-cross-origin always;
+
     access_log /var/log/nginx/${HTTPS_DOMAIN}_access.log;
     error_log /var/log/nginx/${HTTPS_DOMAIN}_error.log;
+
     location / {
         proxy_pass http://127.0.0.1:${WEB_PORT};
         proxy_http_version 1.1;
@@ -173,6 +196,8 @@ server {
         proxy_set_header X-Real-IP \$remote_addr;
         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_read_timeout 86400;
+        proxy_send_timeout 86400;
     }
 }
 EOF
@@ -189,6 +214,12 @@ EOF
 common_install_steps() {
     echo "" > /tmp/${SERVICE_NAME}_install.log
     msg_info "1. Обновление системы..."
+    
+    # Удаляем битые симлинки Nginx (оставшиеся от удаленных сайтов), чтобы избежать ошибок apt-get dpkg
+    if [ -d "/etc/nginx/sites-enabled" ]; then
+        sudo find /etc/nginx/sites-enabled -xtype l -delete 2>/dev/null
+    fi
+    
     run_with_spinner "Apt update" sudo apt-get update -y -q
     run_with_spinner "Установка пакетов" sudo apt-get install -y -q -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" python3 python3-pip python3-venv git curl wget sudo python3-yaml
 }
@@ -238,7 +269,8 @@ load_cached_env() {
 cleanup_common_trash() {
     if [ -d "$BOT_INSTALL_PATH/.github" ]; then sudo rm -rf "$BOT_INSTALL_PATH/.github"; fi
     if [ -d "$BOT_INSTALL_PATH/assets" ]; then sudo rm -rf "$BOT_INSTALL_PATH/assets"; fi
-    sudo find "$BOT_INSTALL_PATH" -maxdepth 1 -type f \( -name "*.txt" -o -name "*.md" -o -name "*.ini" -o -name "*.sh" -o -name ".gitignore" -o -name "LICENSE" \) -delete
+    sudo find "$BOT_INSTALL_PATH" -maxdepth 1 -type f \( -name "*.txt" -o -name "*.md" -o -name "*.sh" -o -name ".gitignore" -o -name "LICENSE" \) -delete
+    sudo find "$BOT_INSTALL_PATH" -maxdepth 1 -type f -name "*.ini" ! -name "aerich.ini" -delete
     sudo find "$BOT_INSTALL_PATH" -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null
 }
 cleanup_for_systemd() {
@@ -269,8 +301,129 @@ install_extras() {
     if ! command -v fail2ban-client &> /dev/null; then
         msg_question "Fail2Ban не найден. Установить? (y/n): " I; if [[ "$I" =~ ^[Yy]$ ]]; then run_with_spinner "Установка Fail2ban" sudo apt-get install -y -q fail2ban; fi
     fi
-    if ! command -v iperf3 &> /dev/null; then
-        msg_question "iperf3 не найден. Установить? (y/n): " I; if [[ "$I" =~ ^[Yy]$ ]]; then run_with_spinner "Установка iperf3" sudo apt-get install -y -q iperf3; fi
+    
+    # Detect server location by external IP
+    msg_info "Определение геолокации сервера..."
+    SERVER_COUNTRY=""
+    EXT_IP=$(curl -s --connect-timeout 5 https://api.ipify.org 2>/dev/null || curl -s --connect-timeout 5 https://ipinfo.io/ip 2>/dev/null || echo "")
+    if [ -n "$EXT_IP" ]; then
+        SERVER_COUNTRY=$(curl -s --connect-timeout 5 "http://ip-api.com/line/${EXT_IP}?fields=countryCode" 2>/dev/null || echo "")
+    fi
+    
+    if [ "$SERVER_COUNTRY" == "RU" ]; then
+        msg_info "Сервер находится в России - используем iperf3 для speedtest"
+        if ! command -v iperf3 &> /dev/null; then
+            msg_question "iperf3 не найден. Установить? (y/n): " I; if [[ "$I" =~ ^[Yy]$ ]]; then run_with_spinner "Установка iperf3" sudo apt-get install -y -q iperf3; fi
+        fi
+        # Mark that we use iperf3 mode
+        echo "RU" | sudo tee "${BOT_INSTALL_PATH}/config/.speedtest_mode" > /dev/null
+    else
+        msg_info "Сервер не в России - рекомендуется Ookla Speedtest CLI"
+        
+        HAS_IPERF3=false
+        HAS_OOKLA=false
+        
+        if command -v iperf3 &> /dev/null; then
+            HAS_IPERF3=true
+        fi
+        
+        if command -v speedtest &> /dev/null && speedtest --version 2>&1 | grep -q "Speedtest by Ookla"; then
+            HAS_OOKLA=true
+        fi
+        
+        # If iperf3 is installed but Ookla is not - offer to switch
+        if [ "$HAS_IPERF3" = true ] && [ "$HAS_OOKLA" = false ]; then
+            echo -e "${C_YELLOW}⚠️  Обнаружен iperf3. Для серверов вне России рекомендуется Ookla Speedtest CLI.${C_RESET}"
+            msg_question "Удалить iperf3 и установить Ookla Speedtest CLI? (y/n) [y]: " SWITCH_CHOICE
+            SWITCH_CHOICE=${SWITCH_CHOICE:-y}
+            
+            if [[ "$SWITCH_CHOICE" =~ ^[Yy]$ ]]; then
+                run_with_spinner "Удаление iperf3" sudo apt-get remove -y -q iperf3
+                install_ookla_speedtest
+                echo "OOKLA" | sudo tee "${BOT_INSTALL_PATH}/config/.speedtest_mode" > /dev/null
+            else
+                msg_info "iperf3 оставлен. Будет использоваться он для speedtest."
+                echo "RU" | sudo tee "${BOT_INSTALL_PATH}/config/.speedtest_mode" > /dev/null
+            fi
+        # If Ookla already installed
+        elif [ "$HAS_OOKLA" = true ]; then
+            msg_success "Ookla Speedtest CLI уже установлен"
+            echo "OOKLA" | sudo tee "${BOT_INSTALL_PATH}/config/.speedtest_mode" > /dev/null
+        # If neither is installed
+        else
+            echo -e "${C_CYAN}Speedtest не установлен. Какой инструмент установить?${C_RESET}"
+            echo "  1) Ookla Speedtest CLI (рекомендуется для серверов вне России)"
+            echo "  2) iperf3"
+            echo "  3) Пропустить"
+            msg_question "Выберите (1/2/3) [1]: " ST_CHOICE
+            ST_CHOICE=${ST_CHOICE:-1}
+            
+            case "$ST_CHOICE" in
+                1)
+                    install_ookla_speedtest
+                    echo "OOKLA" | sudo tee "${BOT_INSTALL_PATH}/config/.speedtest_mode" > /dev/null
+                    ;;
+                2)
+                    run_with_spinner "Установка iperf3" sudo apt-get install -y -q iperf3
+                    echo "RU" | sudo tee "${BOT_INSTALL_PATH}/config/.speedtest_mode" > /dev/null
+                    ;;
+                3)
+                    msg_warning "Speedtest не будет доступен"
+                    ;;
+            esac
+        fi
+    fi
+}
+
+install_ookla_speedtest() {
+    # Check if already installed and working
+    if command -v speedtest &> /dev/null && speedtest --version 2>&1 | grep -q "Speedtest by Ookla"; then
+        msg_success "Ookla Speedtest CLI уже установлен"
+        return 0
+    fi
+    
+    msg_info "Установка Ookla Speedtest CLI..."
+    
+    # Install curl if not present
+    if ! command -v curl &> /dev/null; then
+        run_with_spinner "Установка curl" sudo apt-get install -y -q curl
+    fi
+    
+    # Get Ubuntu version
+    UBUNTU_VERSION=""
+    if [ -f /etc/os-release ]; then
+        . /etc/os-release
+        UBUNTU_VERSION="$VERSION_ID"
+    fi
+    
+    # Add Ookla repository
+    run_with_spinner "Добавление репозитория Ookla" bash -c 'curl -s https://packagecloud.io/install/repositories/ookla/speedtest-cli/script.deb.sh | sudo bash'
+    
+    # Fix for Ubuntu 24+ (noble -> jammy)
+    OOKLA_LIST="/etc/apt/sources.list.d/ookla_speedtest-cli.list"
+    if [ -f "$OOKLA_LIST" ]; then
+        if grep -q "noble" "$OOKLA_LIST" 2>/dev/null; then
+            msg_info "Применяю исправление для Ubuntu 24+..."
+            sudo sed -i 's/noble/jammy/g' "$OOKLA_LIST"
+        fi
+        # Also fix for other unsupported versions
+        if grep -q "oracular\|mantic\|lunar" "$OOKLA_LIST" 2>/dev/null; then
+            msg_info "Применяю исправление для неподдерживаемой версии Ubuntu..."
+            sudo sed -i 's/oracular\|mantic\|lunar/jammy/g' "$OOKLA_LIST"
+        fi
+    fi
+    
+    run_with_spinner "Обновление пакетов" sudo apt-get update -y -q
+    run_with_spinner "Установка speedtest" sudo apt-get install -y -q speedtest
+    
+    if command -v speedtest &> /dev/null; then
+        msg_success "Ookla Speedtest CLI установлен успешно"
+    else
+        msg_warning "Не удалось установить Ookla Speedtest CLI, будет использован iperf3"
+        if ! command -v iperf3 &> /dev/null; then
+            run_with_spinner "Установка iperf3" sudo apt-get install -y -q iperf3
+        fi
+        echo "RU" | sudo tee "${BOT_INSTALL_PATH}/config/.speedtest_mode" > /dev/null
     fi
 }
 
@@ -309,6 +462,11 @@ write_env_file() {
     local debug_setting="true"
     if [ "$GIT_BRANCH" == "main" ]; then debug_setting="false"; fi
 
+    local compose_profile=""
+    if [ "$dm" == "docker" ]; then compose_profile="${im}"; fi
+    local web_domain=""
+    if [ -n "$HTTPS_DOMAIN" ]; then web_domain="${HTTPS_DOMAIN}"; fi
+
     sudo bash -c "cat > ${ENV_FILE}" <<EOF
 TG_BOT_TOKEN="${T}"
 TG_ADMIN_ID="${A}"
@@ -324,8 +482,80 @@ TG_WEB_INITIAL_PASSWORD="${GEN_PASS}"
 DEBUG="${debug_setting}"
 SENTRY_DSN="${SENTRY_DSN}"
 INSTALLED_VERSION="${ver}"
+COMPOSE_PROFILES="${compose_profile}"
+WEB_DOMAIN="${web_domain}"
 EOF
     sudo chmod 600 "${ENV_FILE}"
+
+    # Create installstate file
+    local installstate_file="${BOT_INSTALL_PATH}/installstate"
+    sudo bash -c "cat > ${installstate_file}" <<EOF
+install_mode=${im}
+deploy_mode=${dm}
+installed_at=$(date -Iseconds)
+version=${ver}
+branch=${GIT_BRANCH}
+EOF
+    sudo chmod 644 "${installstate_file}"
+}
+
+ensure_env_variables() {
+    # Check and add missing environment variables to .env file
+    # This ensures compatibility between versions
+    
+    if [ ! -f "${ENV_FILE}" ]; then
+        msg_warning ".env файл не найден, пропуск проверки переменных."
+        return 0
+    fi
+    
+    msg_info "Проверка переменных окружения..."
+    local changes_made=false
+    
+    # List of variables with their default values
+    # Format: "VAR_NAME|default_value|description"
+    local ENV_VARS=(
+        "WEB_SERVER_HOST|0.0.0.0|Хост веб-сервера"
+        "WEB_SERVER_PORT|8080|Порт веб-сервера"
+        "INSTALL_MODE|secure|Режим установки"
+        "DEPLOY_MODE|systemd|Режим деплоя"
+        "ENABLE_WEB_UI|true|Включить веб-интерфейс"
+        "DEBUG|false|Режим отладки"
+        "TG_BOT_NAME|VPS Bot|Имя бота"
+    )
+    
+    for var_entry in "${ENV_VARS[@]}"; do
+        local var_name=$(echo "$var_entry" | cut -d'|' -f1)
+        local default_val=$(echo "$var_entry" | cut -d'|' -f2)
+        local var_desc=$(echo "$var_entry" | cut -d'|' -f3)
+        
+        if ! grep -q "^${var_name}=" "${ENV_FILE}"; then
+            echo -e "${C_YELLOW}  + Добавлена переменная ${var_name}=${default_val}${C_RESET}"
+            sudo bash -c "echo '${var_name}=\"${default_val}\"' >> ${ENV_FILE}"
+            changes_made=true
+        fi
+    done
+    
+    # Add optional variables if not present (with empty defaults)
+    local OPTIONAL_VARS=(
+        "SENTRY_DSN"
+        "TG_ADMIN_USERNAME"
+        "TG_BOT_CONTAINER_NAME"
+        "COMPOSE_PROFILES"
+        "WEB_DOMAIN"
+    )
+    
+    for var_name in "${OPTIONAL_VARS[@]}"; do
+        if ! grep -q "^${var_name}=" "${ENV_FILE}"; then
+            sudo bash -c "echo '${var_name}=\"\"' >> ${ENV_FILE}"
+            changes_made=true
+        fi
+    done
+    
+    if [ "$changes_made" = true ]; then
+        msg_success "Переменные окружения обновлены."
+    else
+        msg_success "Все переменные актуальны."
+    fi
 }
 
 check_docker_deps() {
@@ -337,7 +567,7 @@ create_dockerfile() {
     sudo tee "${BOT_INSTALL_PATH}/Dockerfile" > /dev/null <<'EOF'
 FROM python:3.10-slim-bookworm
 RUN apt-get update && apt-get install -y python3-yaml iperf3 git curl wget sudo procps iputils-ping net-tools gnupg docker.io coreutils && rm -rf /var/lib/apt/lists/*
-RUN pip install --no-cache-dir docker aiohttp aiosqlite argon2-cffi sentry-sdk tortoise-orm aerich cryptography tomlkit
+RUN pip install --no-cache-dir --upgrade pip setuptools wheel && pip install --no-cache-dir docker aiohttp aiosqlite argon2-cffi sentry-sdk tortoise-orm aerich cryptography tomlkit
 RUN groupadd -g 1001 tgbot && useradd -u 1001 -g 1001 -m -s /bin/bash tgbot && echo "tgbot ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
 WORKDIR /opt/tg-bot
 COPY requirements.txt .
@@ -437,18 +667,52 @@ run_db_migrations() {
     local exec_user=$1
     msg_info "Миграция базы данных и настроек..."
     cd "${BOT_INSTALL_PATH}" || return 1
-    if [ -f "${ENV_FILE}" ]; then set -a; source "${ENV_FILE}"; set +a; fi
-    local cmd_prefix=""; if [ -n "$exec_user" ]; then cmd_prefix="sudo -E -u ${SERVICE_USER}"; fi
 
-    if [ ! -f "${BOT_INSTALL_PATH}/aerich.ini" ]; then $cmd_prefix ${VENV_PATH}/bin/aerich init -t core.config.TORTOISE_ORM >/dev/null 2>&1; fi
-    if [ ! -d "${BOT_INSTALL_PATH}/migrations" ]; then
-        if ! $cmd_prefix ${VENV_PATH}/bin/aerich init-db; then :; fi
+    # Build env sourcing prefix for all commands
+    local env_source=""
+    if [ -f "${ENV_FILE}" ]; then
+        set -a; source "${ENV_FILE}"; set +a
+        env_source="set -a; source ${ENV_FILE}; set +a;"
+    fi
+
+    # For secure mode, run as service user with env vars
+    local run_cmd=""
+    if [ -n "$exec_user" ]; then
+        run_cmd="sudo -u ${SERVICE_USER} bash -c"
+    fi
+
+    local aerich_bin="${VENV_PATH}/bin/aerich"
+    local aerich_cfg="${BOT_INSTALL_PATH}/aerich.ini"
+
+    # Always recreate aerich.ini with correct TOML format (quoted values)
+    sudo bash -c "cat > '${aerich_cfg}'" <<'EOF'
+[aerich]
+tortoise_orm = "core.config.TORTOISE_ORM"
+location = "./migrations"
+src_folder = "."
+EOF
+
+    if [ -n "$exec_user" ]; then sudo chown ${SERVICE_USER} "${aerich_cfg}" 2>/dev/null; fi
+
+    # Helper to run commands with proper env
+    _run() {
+        if [ -n "$run_cmd" ]; then
+            $run_cmd "${env_source} cd ${BOT_INSTALL_PATH} && $*"
+        else
+            eval "$*"
+        fi
+    }
+
+    if [ ! -x "$aerich_bin" ]; then
+        msg_info "Aerich CLI не найден, пропуск миграций БД."
+    elif [ ! -d "${BOT_INSTALL_PATH}/migrations" ]; then
+        _run "'$aerich_bin' -c '$aerich_cfg' init-db" >/dev/null 2>&1 || true
     else
-        $cmd_prefix ${VENV_PATH}/bin/aerich upgrade >/dev/null 2>&1
+        _run "'$aerich_bin' -c '$aerich_cfg' upgrade" >/dev/null 2>&1 || true
     fi
 
     if [ -f "${BOT_INSTALL_PATH}/migrate.py" ]; then
-        $cmd_prefix ${VENV_PATH}/bin/python "${BOT_INSTALL_PATH}/migrate.py" $MIGRATE_ARGS
+        _run "'${VENV_PATH}/bin/python' '${BOT_INSTALL_PATH}/migrate.py' $MIGRATE_ARGS"
     fi
 }
 
@@ -461,14 +725,14 @@ install_systemd_logic() {
         if ! id "${SERVICE_USER}" &>/dev/null; then sudo useradd -r -s /bin/false -d ${BOT_INSTALL_PATH} ${SERVICE_USER}; fi
         setup_repo_and_dirs "${SERVICE_USER}"
         sudo -u ${SERVICE_USER} ${PYTHON_BIN} -m venv "${VENV_PATH}"
-        run_with_spinner "Обновление pip" sudo -u ${SERVICE_USER} "${VENV_PATH}/bin/pip" install --upgrade pip
+        run_with_spinner "Обновление pip" sudo -u ${SERVICE_USER} "${VENV_PATH}/bin/pip" install --upgrade pip setuptools wheel
         run_with_spinner "Установка зависимостей" sudo -u ${SERVICE_USER} "${VENV_PATH}/bin/pip" install -r "${BOT_INSTALL_PATH}/requirements.txt"
         run_with_spinner "Установка tomlkit" sudo -u ${SERVICE_USER} "${VENV_PATH}/bin/pip" install tomlkit
         exec_cmd="sudo -u ${SERVICE_USER}"
     else
         setup_repo_and_dirs "root"
         ${PYTHON_BIN} -m venv "${VENV_PATH}"
-        run_with_spinner "Обновление pip" "${VENV_PATH}/bin/pip" install --upgrade pip
+        run_with_spinner "Обновление pip" "${VENV_PATH}/bin/pip" install --upgrade pip setuptools wheel
         run_with_spinner "Установка зависимостей" "${VENV_PATH}/bin/pip" install -r "${BOT_INSTALL_PATH}/requirements.txt"
         run_with_spinner "Установка tomlkit" "${VENV_PATH}/bin/pip" install tomlkit
         exec_cmd=""
@@ -540,11 +804,29 @@ install_node_logic() {
     if [ -n "$AUTO_AGENT_URL" ]; then AGENT_URL="$AUTO_AGENT_URL"; fi
     if [ -n "$AUTO_NODE_TOKEN" ]; then NODE_TOKEN="$AUTO_NODE_TOKEN"; fi
     common_install_steps
-    run_with_spinner "Установка iperf3" sudo apt-get install -y -q iperf3
+    
+    # Detect node location and install appropriate speedtest tool
+    msg_info "Определение геолокации ноды..."
+    NODE_COUNTRY=""
+    EXT_IP=$(curl -s --connect-timeout 5 https://api.ipify.org 2>/dev/null || curl -s --connect-timeout 5 https://ipinfo.io/ip 2>/dev/null || echo "")
+    if [ -n "$EXT_IP" ]; then
+        NODE_COUNTRY=$(curl -s --connect-timeout 5 "http://ip-api.com/line/${EXT_IP}?fields=countryCode" 2>/dev/null || echo "")
+    fi
+    
+    if [ "$NODE_COUNTRY" == "RU" ]; then
+        msg_info "Нода в России - используем iperf3"
+        run_with_spinner "Установка iperf3" sudo apt-get install -y -q iperf3
+    else
+        msg_info "Нода не в России - устанавливаем Ookla Speedtest CLI"
+        install_ookla_speedtest
+        # Also install iperf3 as fallback
+        run_with_spinner "Установка iperf3" sudo apt-get install -y -q iperf3
+    fi
+    
     setup_repo_and_dirs "root"
     if [ ! -d "${VENV_PATH}" ]; then run_with_spinner "Создание venv" ${PYTHON_BIN} -m venv "${VENV_PATH}"; fi
-    run_with_spinner "Обновление pip" "${VENV_PATH}/bin/pip" install --upgrade pip
-    run_with_spinner "Установка зависимостей" "${VENV_PATH}/bin/pip" install psutil requests
+    run_with_spinner "Обновление pip" "${VENV_PATH}/bin/pip" install --upgrade pip setuptools wheel
+    run_with_spinner "Установка зависимостей" "${VENV_PATH}/bin/pip" install psutil requests pyyaml
     load_cached_env
     msg_question "Agent URL (http://IP:8080): " AGENT_URL
     msg_question "Token: " NODE_TOKEN
@@ -604,16 +886,34 @@ update_bot() {
     if ! run_with_spinner "Git fetch" $exec_cmd git fetch origin; then return 1; fi
     if ! run_with_spinner "Git reset" $exec_cmd git reset --hard "origin/${GIT_BRANCH}"; then return 1; fi
     
-    if [ -f "$README_FILE" ]; then
-        local new_ver=$(grep -oP 'img\.shields\.io/badge/version-v\K[\d\.]+' "$README_FILE")
-        if [ -n "$new_ver" ] && [ -f "${ENV_FILE}" ]; then
-             if grep -q "^INSTALLED_VERSION=" "${ENV_FILE}"; then
-                 sudo sed -i "s/^INSTALLED_VERSION=.*/INSTALLED_VERSION=${new_ver}/" "${ENV_FILE}"
-             else
-                 sudo bash -c "echo 'INSTALLED_VERSION=${new_ver}' >> ${ENV_FILE}"
-             fi
-        fi
+    local new_ver=""
+    
+    # 1. Пробуем получить версию из названия ветки (например, release/1.19.0 -> 1.19.0)
+    if echo "$GIT_BRANCH" | grep -q "release/"; then
+        new_ver=$(echo "$GIT_BRANCH" | grep -oP 'release/\K[\d\.]+')
     fi
+    
+    # 2. Если не вышло, ищем последнюю версию в CHANGELOG.md (по формату ## [1.19.0])
+    if [ -z "$new_ver" ] && [ -f "${BOT_INSTALL_PATH}/CHANGELOG.md" ]; then
+        new_ver=$(grep -oP '^## \[\K[\d\.]+' "${BOT_INSTALL_PATH}/CHANGELOG.md" | head -n 1)
+    fi
+    
+    # 3. Если и там нет, берем из README.md (как было изначально)
+    if [ -z "$new_ver" ] && [ -f "$README_FILE" ]; then
+        new_ver=$(grep -oP 'img\.shields\.io/badge/version-v\K[\d\.]+' "$README_FILE")
+    fi
+
+    # Обновляем .env
+    if [ -n "$new_ver" ] && [ -f "${ENV_FILE}" ]; then
+         if grep -q "^INSTALLED_VERSION=" "${ENV_FILE}"; then
+             sudo sed -i "s/^INSTALLED_VERSION=.*/INSTALLED_VERSION=\"${new_ver}\"/" "${ENV_FILE}"
+         else
+             sudo bash -c "echo 'INSTALLED_VERSION=\"${new_ver}\"' >> ${ENV_FILE}"
+         fi
+    fi
+
+    # Check and add missing environment variables
+    ensure_env_variables
 
     local current_mode=$(grep '^DEPLOY_MODE=' "${ENV_FILE}" | cut -d'=' -f2 | tr -d '"')
     

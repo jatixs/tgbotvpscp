@@ -1,5 +1,43 @@
 /* /core/static/js/dashboard.js */
 
+// Keyboard layout conversion (RU <-> EN)
+const LAYOUT_RU = 'ёйцукенгшщзхъфывапролджэячсмитьбю.ЁЙЦУКЕНГШЩЗХЪФЫВАПРОЛДЖЭЯЧСМИТЬБЮ,';
+const LAYOUT_EN = '`qwertyuiop[]asdfghjkl;\'zxcvbnm,./~QWERTYUIOP{}ASDFGHJKL:"ZXCVBNM<>?';
+
+function convertLayout(text, fromLayout, toLayout) {
+    let result = '';
+    for (const char of text) {
+        const idx = fromLayout.indexOf(char);
+        if (idx !== -1) {
+            result += toLayout[idx];
+        } else {
+            result += char;
+        }
+    }
+    return result;
+}
+
+function ruToEn(text) {
+    return convertLayout(text, LAYOUT_RU, LAYOUT_EN);
+}
+
+function enToRu(text) {
+    return convertLayout(text, LAYOUT_EN, LAYOUT_RU);
+}
+
+function detectWrongLayout(text) {
+    // Check if text contains Russian letters but looks like it should be English
+    const hasRussian = /[а-яё]/i.test(text);
+    const hasEnglish = /[a-z]/i.test(text);
+
+    if (hasRussian && !hasEnglish) {
+        return { detected: 'ru', converted: ruToEn(text) };
+    } else if (hasEnglish && !hasRussian) {
+        return { detected: 'en', converted: enToRu(text) };
+    }
+    return null;
+}
+
 let chartRes = null;
 let chartNet = null;
 let nodeSSESource = null;
@@ -9,9 +47,10 @@ let servicesSSESource = null;
 let agentChart = null;
 let allNodesData = [];
 let currentNodeToken = null;
-let currentRenderList = [];   
-let renderedCount = 0; 
+let currentRenderList = [];
+let renderedCount = 0;
 const NODES_BATCH_SIZE = 15;
+let nodesFirstUpdateReceived = false;
 
 function decryptData(text) {
     if (!text) return "";
@@ -55,7 +94,7 @@ function initScrollAnimations() {
     const observerOptions = {
         root: null,
         rootMargin: '0px',
-        threshold: 0.1 
+        threshold: 0.1
     };
 
     const observer = new IntersectionObserver((entries, obs) => {
@@ -74,9 +113,10 @@ function initScrollAnimations() {
     });
 }
 
-window.initDashboard = function() {
+window.initDashboard = function () {
     cleanupDashboardSources();
-    
+    nodesFirstUpdateReceived = false;  // Reset flag on dashboard init
+
     // Запускаем анимацию блоков
     initScrollAnimations();
 
@@ -97,11 +137,11 @@ window.initDashboard = function() {
                 filterAndRenderNodes();
             });
         }
-        
+
         // Lazy Load для списка узлов (Infinite Scroll)
         const listContainer = document.getElementById('nodesList');
         if (listContainer) {
-            listContainer.onscroll = function() {
+            listContainer.onscroll = function () {
                 if (listContainer.scrollTop + listContainer.clientHeight >= listContainer.scrollHeight - 100) {
                     renderNextNodeBatch();
                 }
@@ -242,7 +282,7 @@ function getNodeUiParams(node) {
     const cpuColor = cpu > 80 ? 'text-red-500' : 'text-gray-600 dark:text-gray-300';
     const ramColor = ram > 80 ? 'text-red-500' : 'text-gray-600 dark:text-gray-300';
     const diskColor = disk > 90 ? 'text-red-500' : 'text-gray-600 dark:text-gray-300';
-    
+
     return { statusColor, statusText, statusTextClass, statusBg, cpu, ram, disk, cpuColor, ramColor, diskColor };
 }
 
@@ -251,7 +291,7 @@ function updateNodesListUI(data) {
         allNodesData = data.nodes || [];
         const searchInput = document.getElementById('nodeSearch');
         const query = searchInput ? searchInput.value.trim().toLowerCase() : "";
-        
+
         let newList = [];
         if (query) {
             newList = allNodesData.filter(node => {
@@ -262,21 +302,27 @@ function updateNodesListUI(data) {
         } else {
             newList = allNodesData;
         }
-        
+
         const container = document.getElementById('nodesList');
         const currentElements = container ? Array.from(container.children).filter(el => el.hasAttribute('data-token')) : [];
-        
-        if (currentRenderList.length !== newList.length || (currentElements.length === 0 && newList.length > 0)) {
+
+        // Trigger render if: list length changed, first update with nodes, or first update with empty list (to show "no nodes" message)
+        const needsRender = currentRenderList.length !== newList.length ||
+            (currentElements.length === 0 && newList.length > 0) ||
+            (!nodesFirstUpdateReceived && newList.length === 0);
+        if (needsRender) {
             currentRenderList = newList;
             renderNodesList();
         } else {
             currentRenderList = newList;
-            
+
             const success = updateVisibleNodes(currentElements, currentRenderList);
             if (!success) {
                 renderNodesList();
             }
         }
+
+        nodesFirstUpdateReceived = true;
 
         if (document.getElementById('nodesTotal')) {
             document.getElementById('nodesTotal').innerText = allNodesData.length;
@@ -293,9 +339,9 @@ function updateVisibleNodes(elements, dataList) {
     for (let i = 0; i < elements.length; i++) {
         const el = elements[i];
         const token = el.getAttribute('data-token');
-        const nodeData = dataList[i];   
-        if (!nodeData || nodeData.token !== token) return false;   
-        const ui = getNodeUiParams(nodeData);     
+        const nodeData = dataList[i];
+        if (!nodeData || nodeData.token !== token) return false;
+        const ui = getNodeUiParams(nodeData);
         const cpuEl = el.querySelector('[data-ref="cpu-val"]');
         if (cpuEl) {
             cpuEl.innerText = ui.cpu + '%';
@@ -321,12 +367,12 @@ function updateVisibleNodes(elements, dataList) {
             stBadge.innerText = ui.statusText;
             stBadge.className = `sm:hidden px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider ${ui.statusBg}`;
         }
-        
+
         const stDot = el.querySelector('[data-ref="status-dot"]');
         if (stDot) {
             stDot.className = `w-2.5 h-2.5 rounded-full ${ui.statusColor}`;
         }
-        
+
         const stPing = el.querySelector('[data-ref="status-ping"]');
         if (stPing) {
             if (nodeData.status === 'online') {
@@ -335,16 +381,16 @@ function updateVisibleNodes(elements, dataList) {
             } else {
                 stPing.style.display = 'none';
             }
-        }    
+        }
         el.setAttribute('onclick', `openNodeDetails('${escapeHtml(nodeData.token)}', '${ui.statusColor}')`);
     }
-    return true; 
+    return true;
 }
 
 function filterAndRenderNodes() {
     const searchInput = document.getElementById('nodeSearch');
     const query = searchInput ? searchInput.value.trim().toLowerCase() : "";
-    
+
     if (query) {
         currentRenderList = allNodesData.filter(node => {
             const name = (node.name || "").toLowerCase();
@@ -379,11 +425,11 @@ function renderNodesList() {
 function renderNextNodeBatch() {
     const container = document.getElementById('nodesList');
     if (!container) return;
-    
+
     if (renderedCount >= currentRenderList.length) return;
 
     const batch = currentRenderList.slice(renderedCount, renderedCount + NODES_BATCH_SIZE);
-    
+
     const lblCpu = (typeof I18N !== 'undefined' && I18N.web_label_cpu) ? I18N.web_label_cpu : "CPU";
     const lblRam = (typeof I18N !== 'undefined' && I18N.web_label_ram) ? I18N.web_label_ram : "RAM";
     const lblDisk = (typeof I18N !== 'undefined' && I18N.web_label_disk) ? I18N.web_label_disk : "DISK";
@@ -543,7 +589,23 @@ function updateAgentStatsUI(data) {
             if (uptimeEl) uptimeEl.innerText = formatUptime(data.stats.boot_time);
 
             const ipEl = document.getElementById('agentIp');
-            if (ipEl && data.stats.ip) ipEl.innerText = decryptData(data.stats.ip); 
+            if (ipEl && data.stats.ip) ipEl.innerText = decryptData(data.stats.ip);
+
+            const pingEl = document.getElementById('agentPing');
+            if (pingEl) {
+                if (data.stats.ping) {
+                    const pingValue = decryptData(data.stats.ping);
+                    // Add unit if it's a number
+                    if (pingValue && !isNaN(pingValue)) {
+                        const unit = (typeof I18N !== 'undefined' && I18N.web_agent_ping_unit) ? I18N.web_agent_ping_unit : 'ms';
+                        pingEl.innerText = pingValue + ' ' + unit;
+                    } else {
+                        pingEl.innerText = pingValue || 'n/a';
+                    }
+                } else {
+                    pingEl.innerText = 'n/a';
+                }
+            }
         }
         renderAgentChart(data.history);
     } catch (e) {
@@ -774,7 +836,7 @@ function removeLogLoading() {
     }, 300);
 }
 
-window.switchLogType = function(type) {
+window.switchLogType = function (type) {
     ['btnLogBot', 'btnLogSys'].forEach(id => {
         const el = document.getElementById(id);
         const isActive = (id === 'btnLogBot' && type === 'bot') || (id === 'btnLogSys' && type === 'sys');
@@ -985,7 +1047,7 @@ async function openNodeDetails(token, color) {
                     console.warn("Node SSE Error:", errData.error);
                 }
             }
-        } catch (ex) {}
+        } catch (ex) { }
     });
 }
 
@@ -998,7 +1060,10 @@ function updateNodeDetailsUI(data) {
     }
 
     document.getElementById('modalNodeIp').innerText = decryptData(data.ip);
-    document.getElementById('modalToken').innerText = decryptData(data.token);
+    const tokenEl = document.getElementById('modalToken');
+    if (tokenEl) {
+        tokenEl.innerText = decryptData(data.token);
+    }
 
     const stats = data.stats || {};
 
@@ -1056,7 +1121,7 @@ function closeNodeModal() {
     }
 }
 
-window.startNodeRename = function() {
+window.startNodeRename = function () {
     const nameDisplay = document.getElementById('nodeNameContainer');
     const nameInputContainer = document.getElementById('nodeNameInputContainer');
     const nameInput = document.getElementById('modalNodeNameInput');
@@ -1071,7 +1136,7 @@ window.startNodeRename = function() {
     }
 };
 
-window.cancelNodeRename = function() {
+window.cancelNodeRename = function () {
     const nameDisplay = document.getElementById('nodeNameContainer');
     const nameInputContainer = document.getElementById('nodeNameInputContainer');
 
@@ -1081,7 +1146,7 @@ window.cancelNodeRename = function() {
     }
 };
 
-window.saveNodeRename = async function() {
+window.saveNodeRename = async function () {
     const nameInput = document.getElementById('modalNodeNameInput');
     const newName = nameInput.value.trim();
     if (!newName || !currentNodeToken) return;
@@ -1118,7 +1183,7 @@ window.saveNodeRename = async function() {
     }
 };
 
-window.handleRenameKeydown = function(event) {
+window.handleRenameKeydown = function (event) {
     if (event.key === 'Enter') {
         saveNodeRename();
     } else if (event.key === 'Escape') {
@@ -1304,7 +1369,7 @@ function renderCharts(history) {
     }
 }
 
-window.resetTrafficDashboard = async function() {
+window.resetTrafficDashboard = async function () {
     if (!await window.showModalConfirm(I18N.web_traffic_reset_confirm, I18N.modal_title_confirm)) return;
 
     try {
@@ -1327,7 +1392,7 @@ window.resetTrafficDashboard = async function() {
     }
 };
 
-window.openAddNodeModal = function() {
+window.openAddNodeModal = function () {
     const m = document.getElementById('addNodeModal');
     if (m) {
         document.getElementById('nodeResultDash')?.classList.add('hidden');
@@ -1345,7 +1410,7 @@ window.openAddNodeModal = function() {
     }
 };
 
-window.animateModalClose = function(modal) {
+window.animateModalClose = function (modal) {
     if (!modal) return;
     const card = modal.firstElementChild;
     if (card) {
@@ -1369,7 +1434,7 @@ window.animateModalClose = function(modal) {
             // 3. ВАЖНО: Отключаем плавную прокрутку на всем документе перед восстановлением
             const html = document.documentElement;
             const originalBehavior = html.style.scrollBehavior;
-            html.style.scrollBehavior = 'auto'; 
+            html.style.scrollBehavior = 'auto';
 
             // 4. Мгновенно прыгаем на место
             window.scrollTo(0, scrollY);
@@ -1384,7 +1449,7 @@ window.animateModalClose = function(modal) {
         modal.style.height = '';
         modal.style.top = '';
         modal.style.paddingBottom = '';
-        
+
         modal.classList.remove('items-start', 'pt-4', 'overflow-y-auto');
         modal.classList.add('items-center');
 
@@ -1401,44 +1466,44 @@ window.animateModalClose = function(modal) {
 function initServicesSSE() {
     const container = document.getElementById('services-container');
     if (!container) return;
-    
+
     // Close existing connection if any
     if (servicesSSESource) {
         servicesSSESource.close();
         servicesSSESource = null;
     }
-    
+
     servicesSSESource = new EventSource('/api/events/services');
-    
+
     servicesSSESource.addEventListener('services', (e) => {
         try {
             const data = JSON.parse(e.data);
             const encryptedServices = data.services || [];
-            
+
             // Decrypt each service
             const services = encryptedServices.map(svc => ({
                 name: decryptData(svc.name),
                 type: decryptData(svc.type),
                 status: decryptData(svc.status)
             }));
-            
+
             renderServices(services);
         } catch (err) {
             console.error('SSE Services parse error:', err);
         }
     });
-    
+
     servicesSSESource.addEventListener('session_status', (e) => {
         if (e.data === 'expired') {
             servicesSSESource.close();
             window.location.reload();
         }
     });
-    
+
     servicesSSESource.addEventListener('shutdown', () => {
         servicesSSESource.close();
     });
-    
+
     servicesSSESource.onerror = (err) => {
         console.error('SSE Services error:', err);
         // Try to reconnect after 5 seconds
@@ -1469,9 +1534,9 @@ function loadServices() {
                 return null;
             }
             if (!res.ok) {
-                 return res.json().then(errData => {
-                     throw new Error(errData.error || 'Server Error ' + res.status);
-                 });
+                return res.json().then(errData => {
+                    throw new Error(errData.error || 'Server Error ' + res.status);
+                });
             }
             return res.json();
         })
@@ -1481,10 +1546,10 @@ function loadServices() {
                 return;
             }
             if (data.error) {
-                 throw new Error(data.error);
+                throw new Error(data.error);
             }
             renderServices(data);
-            
+
             // Restart SSE connection after manual refresh
             initServicesSSE();
         })
@@ -1496,7 +1561,10 @@ function loadServices() {
 
 function renderServices(services, forceRender = false) {
     const container = document.getElementById('services-container');
-    
+
+    // Skip if services container doesn't exist on this page
+    if (!container) return;
+
     // Don't re-render if user is actively searching (unless forceRender is true)
     const searchInput = document.getElementById('servicesSearchInput');
     if (!forceRender && searchInput && searchInput.value.trim()) {
@@ -1516,33 +1584,33 @@ function renderServices(services, forceRender = false) {
         });
         return;
     }
-    
+
     container.innerHTML = '';
-    
+
     // Store services for filtering
     window._servicesData = services;
-    
+
     if (!Array.isArray(services)) {
         console.error("Services is not array:", services);
         return;
     }
-    
+
     if (services.length === 0) {
         container.innerHTML = `<div class="col-span-full text-center text-gray-500 py-4">${window.i18n.services_empty}</div>`;
         return;
     }
-    
+
     const roleLevel = window.USER_ROLE_LEVEL || 0;
-    
+
     services.forEach(item => {
         const isRunning = item.status === 'running' || item.status === 'active';
         const colorClass = isRunning ? 'green' : 'red';
-        
+
         // Buttons Logic based on User Role Level
         // Level 0: View Only (No buttons)
         // Level 1: Start/Restart (Admins)
         // Level 2: All (Main Admin)
-        
+
         let buttonsHtml = '';
         if (roleLevel >= 1) {
             // Show Start only if NOT running
@@ -1577,7 +1645,7 @@ function renderServices(services, forceRender = false) {
         card.dataset.name = item.name;
         card.dataset.type = item.type;
         card.onclick = () => openServiceInfoModal(item.name, item.type);
-        
+
         card.innerHTML = `
             <div class="flex items-center gap-3 min-w-0">
                 <div class="w-2.5 h-2.5 rounded-full bg-${colorClass}-500 shadow-[0_0_6px_rgba(var(--color-${colorClass}-500),0.6)] flex-shrink-0"></div>
@@ -1603,12 +1671,12 @@ function filterServices(query) {
     const container = document.getElementById('services-container');
     const cards = container.querySelectorAll('.service-card');
     const q = query.toLowerCase().trim();
-    
+
     // Remove blur from all cards
     cards.forEach(card => {
         card.classList.remove('opacity-30', 'pointer-events-none');
     });
-    
+
     // If empty query, show all managed services and remove global results
     if (!q) {
         cards.forEach(card => card.style.display = '');
@@ -1620,13 +1688,13 @@ function filterServices(query) {
         if (loadingEl) loadingEl.remove();
         return;
     }
-    
+
     // Filter managed services (exclude global search result cards)
     let visibleCount = 0;
     cards.forEach(card => {
         // Skip global search result cards
         if (card.classList.contains('global-search-result-card')) return;
-        
+
         const name = card.dataset.name?.toLowerCase() || '';
         const type = card.dataset.type?.toLowerCase() || '';
         if (name.includes(q) || type.includes(q)) {
@@ -1636,18 +1704,20 @@ function filterServices(query) {
             card.style.display = 'none';
         }
     });
-    
-    // Remove old "no results" message
+
+    // Remove old "no results" message and layout suggestion
     const noResults = container.querySelector('.no-search-results');
     if (noResults) noResults.remove();
-    
+    const oldSuggestion = container.querySelector('.layout-suggestion-main');
+    if (oldSuggestion) oldSuggestion.remove();
+
     // Search globally with debounce - only for main admin (level 2) who can add services
     const roleLevel = window.USER_ROLE_LEVEL || 0;
     if (q.length >= 1 && roleLevel >= 2) {
         // Remove old global results
         const oldGlobalResults = container.querySelectorAll('.global-search-result-card');
         oldGlobalResults.forEach(card => card.remove());
-        
+
         // Show loading spinner
         let loadingEl = container.querySelector('.search-loading');
         if (!loadingEl) {
@@ -1658,19 +1728,49 @@ function filterServices(query) {
                     <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                     <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                 </svg>
-                <span>${I18N.web_searching || 'Поиск...'}</span>
+                <span>${I18N.web_searching || 'Searching...'}</span>
             `;
             container.appendChild(loadingEl);
         }
-        
+
         clearTimeout(_globalSearchTimeout);
         _globalSearchTimeout = setTimeout(() => {
             searchGlobalServices(q, visibleCount);
         }, 300);
     } else if (visibleCount === 0 && q) {
-        // Show "no results" for non-admins
+        // Show "no results" for non-admins with layout suggestion
         const globalResults = container.querySelectorAll('.global-search-result-card');
         globalResults.forEach(card => card.remove());
+
+        // Check for wrong keyboard layout
+        const layoutCheck = detectWrongLayout(q);
+        let suggestionHtml = '';
+
+        if (layoutCheck) {
+            const converted = layoutCheck.converted.toLowerCase();
+            // Check if converted query would find results in managed services
+            let convertedCount = 0;
+            cards.forEach(card => {
+                if (card.classList.contains('global-search-result-card')) return;
+                const name = card.dataset.name?.toLowerCase() || '';
+                if (name.includes(converted)) convertedCount++;
+            });
+
+            if (convertedCount > 0) {
+                const suggestionText = I18N.web_did_you_mean || 'Did you mean';
+                suggestionHtml = `
+                    <div class="layout-suggestion-main text-center py-2 col-span-full">
+                        <span class="text-gray-400">${suggestionText}: </span>
+                        <button onclick="applyLayoutSuggestionMain('${layoutCheck.converted}')" 
+                                class="text-blue-500 hover:text-blue-400 font-medium hover:underline">
+                            "${layoutCheck.converted}"
+                        </button>
+                    </div>
+                `;
+                container.insertAdjacentHTML('beforeend', suggestionHtml);
+            }
+        }
+
         const msg = document.createElement('div');
         msg.className = 'no-search-results col-span-full text-center text-gray-400 py-4';
         msg.textContent = I18N.web_services_none_found || 'No services found';
@@ -1678,20 +1778,29 @@ function filterServices(query) {
     }
 }
 
+// Apply layout suggestion to main search input  
+function applyLayoutSuggestionMain(suggestion) {
+    const input = document.getElementById('servicesSearchInput');
+    if (input) {
+        input.value = suggestion;
+        input.dispatchEvent(new Event('input'));
+    }
+}
+
 async function searchGlobalServices(query, managedMatchCount) {
     const container = document.getElementById('services-container');
     const cards = container.querySelectorAll('.service-card:not(.global-search-result-card)');
-    
+
     // Remove loading spinner
     const loadingEl = container.querySelector('.search-loading');
     if (loadingEl) loadingEl.remove();
-    
+
     // Get managed service names to exclude from results
     const managedNames = new Set();
     cards.forEach(card => {
         if (card.dataset.name) managedNames.add(card.dataset.name.toLowerCase());
     });
-    
+
     try {
         // Use cache or fetch (with search=1 param for read-only access)
         if (!_globalServicesCache) {
@@ -1701,9 +1810,9 @@ async function searchGlobalServices(query, managedMatchCount) {
             // Cache expires after 30 seconds
             setTimeout(() => { _globalServicesCache = null; }, 30000);
         }
-        
+
         const q = query.toLowerCase();
-        
+
         // Filter global services that match and are NOT already managed
         const matches = _globalServicesCache.filter(s => {
             const name = s.name.toLowerCase();
@@ -1711,9 +1820,9 @@ async function searchGlobalServices(query, managedMatchCount) {
             const isNotManaged = !managedNames.has(name);
             return isMatch && isNotManaged && !s.managed;
         }).slice(0, 6); // Limit to 6 results
-        
+
         // Remove previous global results (already handled at the top of this section)
-        
+
         if (matches.length === 0) {
             // Remove blur if no global matches
             cards.forEach(card => {
@@ -1731,42 +1840,42 @@ async function searchGlobalServices(query, managedMatchCount) {
             }
             return;
         }
-        
+
         // Blur existing managed cards to focus on global results
         cards.forEach(card => {
             if (card.style.display !== 'none') {
                 card.classList.add('opacity-30', 'pointer-events-none');
             }
         });
-        
+
         // Remove old global results first
         const oldResults = container.querySelectorAll('.global-search-result-card');
         oldResults.forEach(card => card.remove());
-        
+
         matches.forEach(item => {
             const isRunning = item.status === 'running' || item.status === 'active';
             const colorClass = isRunning ? 'green' : 'red';
             const typeIcon = item.type === 'docker' ? '🐳' : '⚙️';
             const roleLevel = window.USER_ROLE_LEVEL || 0;
-            
+
             // Card in same style as managed services but with Add button
             const card = document.createElement('div');
             card.className = 'global-search-result-card service-card w-fit bg-gray-50 dark:bg-black/20 rounded-xl px-4 py-3 flex items-center justify-between gap-3 transition hover:bg-gray-100 dark:hover:bg-white/5';
-            
+
             // Build add button only for main admin
             let addButtonHtml = '';
             if (roleLevel >= 2) {
                 addButtonHtml = `
                     <button onclick="addServiceFromSearch('${item.name}', '${item.type}')" 
                             class="w-8 h-8 flex items-center justify-center rounded-lg bg-green-500/20 hover:bg-green-600 transition-all duration-200 hover:scale-110 active:scale-95"
-                            title="${I18N.web_services_btn_add || 'Добавить'}">
+                            title="${I18N.web_services_btn_add || 'Add'}">
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-green-500 hover:text-white transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
                             <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
                         </svg>
                     </button>
                 `;
             }
-            
+
             card.innerHTML = `
                 <div class="flex items-center gap-3 min-w-0">
                     <div class="w-2.5 h-2.5 rounded-full bg-${colorClass}-500 shadow-[0_0_6px_rgba(var(--color-${colorClass}-500),0.6)] flex-shrink-0"></div>
@@ -1781,7 +1890,7 @@ async function searchGlobalServices(query, managedMatchCount) {
             `;
             container.appendChild(card);
         });
-        
+
     } catch (err) {
         console.error('Error searching global services:', err);
     }
@@ -1794,23 +1903,23 @@ async function addServiceFromSearch(name, type) {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ action: 'add', name, type })
         });
-        
+
         if (res.ok) {
             // Clear search field
             const searchInput = document.getElementById('servicesSearchInput');
             if (searchInput) searchInput.value = '';
-            
+
             // Clear global results and caches
             _globalServicesCache = null;
             const container = document.getElementById('services-container');
             const globalResults = container.querySelectorAll('.global-search-result-card');
             globalResults.forEach(card => card.remove());
-            
+
             // Remove blur from managed cards
             container.querySelectorAll('.service-card').forEach(card => {
                 card.classList.remove('opacity-30', 'pointer-events-none');
             });
-            
+
             // Force full reload
             loadServices();
         } else {
@@ -1829,10 +1938,10 @@ function openServiceInfoModal(name, type) {
     const modal = document.getElementById('serviceInfoModal');
     const content = document.getElementById('serviceInfoContent');
     const title = document.getElementById('serviceInfoModalTitle');
-    
+
     // Set title to service name
     if (title) title.innerText = name;
-    
+
     // Show loading
     content.innerHTML = `<div class="text-center py-4 text-gray-400">
         <svg class="animate-spin h-6 w-6 mx-auto mb-2 text-blue-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
@@ -1841,7 +1950,7 @@ function openServiceInfoModal(name, type) {
         </svg>
         ${I18N.web_services_info_loading || 'Loading...'}
     </div>`;
-    
+
     // Open modal with animation
     if (typeof animateModalOpen === 'function') {
         animateModalOpen(modal, false);
@@ -1850,7 +1959,7 @@ function openServiceInfoModal(name, type) {
         modal.classList.add('flex');
         document.body.style.overflow = 'hidden';
     }
-    
+
     // Fetch service info
     fetch(`/api/services/info/${encodeURIComponent(name)}?type=${type}`)
         .then(res => res.json())
@@ -1876,36 +1985,36 @@ function closeServiceInfoModal() {
 
 function renderServiceInfo(info) {
     const content = document.getElementById('serviceInfoContent');
-    
+
     const statusColor = info.status === 'running' ? 'green' : info.status === 'stopped' ? 'red' : 'gray';
-    const statusText = info.status === 'running' 
+    const statusText = info.status === 'running'
         ? (I18N.web_services_status_running || 'Running')
-        : info.status === 'stopped' 
+        : info.status === 'stopped'
             ? (I18N.web_services_status_stopped || 'Stopped')
             : (I18N.web_services_status_unknown || 'Unknown');
-    
+
     const typeIcon = info.type === 'docker' ? '🐳' : '⚙️';
     const typeLabel = info.type === 'docker' ? 'Docker' : 'Systemd';
     const description = info.description || (I18N.web_services_info_no_desc || 'No description');
-    
+
     // Build info items
     let infoItems = [];
-    
+
     // Status
     infoItems.push(`<div class="flex items-center gap-2">
         <span class="w-2 h-2 rounded-full bg-${statusColor}-500"></span>
         <span class="text-${statusColor}-600 dark:text-${statusColor}-400 font-medium">${statusText}</span>
     </div>`);
-    
+
     // Type
     infoItems.push(`<div class="flex items-center gap-1.5 text-gray-500 dark:text-gray-400">
         <span>${typeIcon}</span>
         <span class="uppercase text-xs">${typeLabel}</span>
     </div>`);
-    
+
     // Extra info items
     let extraItems = [];
-    
+
     // Docker specific
     if (info.type === 'docker') {
         if (info.image) {
@@ -1921,7 +2030,7 @@ function renderServiceInfo(info) {
             </div>`);
         }
     }
-    
+
     // Systemd specific
     if (info.type === 'systemd') {
         if (info.main_pid) {
@@ -1937,14 +2046,14 @@ function renderServiceInfo(info) {
             </div>`);
         }
     }
-    
+
     if (info.uptime) {
         extraItems.push(`<div class="flex justify-between py-1.5">
             <span class="text-gray-500 dark:text-gray-400">Uptime</span>
             <span class="text-xs">${info.uptime}</span>
         </div>`);
     }
-    
+
     content.innerHTML = `
         <div class="space-y-3">
             <!-- Status row -->
@@ -1968,9 +2077,9 @@ function renderServiceInfo(info) {
 async function controlService(name, type, action) {
     const confirmKey = 'web_services_confirm_' + action;
     const confirmMsg = (I18N[confirmKey] || 'Are you sure you want to {action} {name}?').replace('{name}', name).replace('{action}', action);
-    
+
     if (!await window.showModalConfirm(confirmMsg, I18N.modal_title_confirm)) return;
-    
+
     try {
         const res = await fetch('/api/services/' + action, {
             method: 'POST',
@@ -2023,15 +2132,15 @@ async function loadAvailableServices() {
             </svg>
             <span>${I18N.web_loading || 'Loading...'}</span>
         </div>`;
-    
+
     try {
         const res = await fetch('/api/services/available');
         const data = await res.json();
-        
+
         if (!res.ok) {
             throw new Error(data.error || 'Error');
         }
-        
+
         renderServicesEditList(data);
     } catch (err) {
         console.error('Error loading available services:', err);
@@ -2041,33 +2150,25 @@ async function loadAvailableServices() {
 
 function renderServicesEditList(services) {
     const container = document.getElementById('servicesEditList');
-    
+
     if (!services || services.length === 0) {
         container.innerHTML = `<div class="text-center py-8 text-gray-400">${I18N.web_services_none_found || 'No services found'}</div>`;
         return;
     }
-    
-    // Critical services that cannot be removed
-    const CRITICAL_SERVICES = ['sshd', 'ssh', 'fail2ban'];
-    
+
     // Grid: 1 col mobile, 2 cols sm, 3 cols md, 4 cols lg
     let html = '<div id="servicesEditGrid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2">';
-    
+
     for (const s of services) {
         const isManaged = s.managed;
-        const isCritical = CRITICAL_SERVICES.includes(s.name);
         const statusIcon = s.status === 'running' ? '🟢' : '🔴';
         const typeLabel = s.type === 'docker' ? '🐳' : '⚙️';
         const safeId = s.name.replace(/[^a-zA-Z0-9]/g, '_');
-        
-        // Disable remove button for critical services
-        const isRemoveDisabled = isManaged && isCritical;
-        const buttonClasses = isManaged 
-            ? (isRemoveDisabled ? 'bg-gray-500/20 text-gray-600 dark:text-gray-400 cursor-not-allowed opacity-50' : 'bg-red-500/20 text-red-600 dark:text-red-400 hover:bg-red-500/30') 
+
+        const buttonClasses = isManaged
+            ? 'bg-red-500/20 text-red-600 dark:text-red-400 hover:bg-red-500/30'
             : 'bg-green-500/20 text-green-600 dark:text-green-400 hover:bg-green-500/30';
-        
-        const removeTitle = isRemoveDisabled ? 'This is a critical service and cannot be removed' : '';
-        
+
         html += `
             <div class="service-edit-card flex items-center justify-between p-2.5 bg-gray-50 dark:bg-black/20 rounded-xl gap-2" data-name="${s.name}" data-type="${s.type}">
                 <div class="flex items-center gap-2 min-w-0 flex-1">
@@ -2080,8 +2181,6 @@ function renderServicesEditList(services) {
                 <button id="srv-btn-${safeId}" 
                         data-type="${s.type}"
                         onclick="toggleServiceManaged('${s.name}', '${s.type}', ${isManaged}, this)" 
-                        ${isRemoveDisabled ? 'disabled' : ''}
-                        title="${removeTitle}"
                         class="srv-manage-btn px-2 py-1 rounded-lg text-xs font-medium transition min-w-[60px] flex items-center justify-center gap-1 flex-shrink-0 ${buttonClasses}">
                     <span class="btn-text">${isManaged ? (I18N.web_services_btn_remove || 'Remove') : (I18N.web_services_btn_add || 'Add')}</span>
                     <svg class="btn-spinner hidden animate-spin h-3 w-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
@@ -2092,7 +2191,7 @@ function renderServicesEditList(services) {
             </div>
         `;
     }
-    
+
     html += '</div>';
     container.innerHTML = html;
 }
@@ -2101,10 +2200,10 @@ function renderServicesEditList(services) {
 function filterServicesEditList(query) {
     const grid = document.getElementById('servicesEditGrid');
     if (!grid) return;
-    
+
     const cards = grid.querySelectorAll('.service-edit-card');
     const q = (query || '').toLowerCase().trim();
-    
+
     let visibleCount = 0;
     cards.forEach(card => {
         const name = (card.dataset.name || '').toLowerCase();
@@ -2116,91 +2215,169 @@ function filterServicesEditList(query) {
             card.classList.add('hidden');
         }
     });
-    
+
+    // Remove old messages
+    const oldNoResults = grid.parentElement.querySelector('.no-search-results-edit');
+    if (oldNoResults) oldNoResults.remove();
+    const oldSuggestion = grid.parentElement.querySelector('.layout-suggestion');
+    if (oldSuggestion) oldSuggestion.remove();
+
     // Show "no results" if nothing visible
-    let noResults = grid.parentElement.querySelector('.no-search-results-edit');
     if (visibleCount === 0 && q) {
-        if (!noResults) {
-            const msg = document.createElement('div');
-            msg.className = 'no-search-results-edit text-center text-gray-400 py-4';
-            msg.textContent = I18N.web_services_none_found || 'No services found';
-            grid.parentElement.appendChild(msg);
+        // Check if wrong keyboard layout
+        const layoutCheck = detectWrongLayout(q);
+        let suggestionHtml = '';
+
+        if (layoutCheck) {
+            const converted = layoutCheck.converted.toLowerCase();
+            // Check if converted query would find results
+            let convertedCount = 0;
+            cards.forEach(card => {
+                const name = (card.dataset.name || '').toLowerCase();
+                if (name.includes(converted)) convertedCount++;
+            });
+
+            if (convertedCount > 0) {
+                const suggestionText = I18N.web_did_you_mean || 'Did you mean';
+                suggestionHtml = `
+                    <div class="layout-suggestion text-center py-2">
+                        <span class="text-gray-400">${suggestionText}: </span>
+                        <button onclick="applyLayoutSuggestion('${layoutCheck.converted}')" 
+                                class="text-blue-500 hover:text-blue-400 font-medium hover:underline">
+                            "${layoutCheck.converted}"
+                        </button>
+                        <span class="text-gray-500 text-xs ml-2">(${convertedCount} ${I18N.web_results || 'results'})</span>
+                    </div>
+                `;
+            }
         }
-    } else if (noResults) {
-        noResults.remove();
+
+        const msg = document.createElement('div');
+        msg.className = 'no-search-results-edit text-center text-gray-400 py-4';
+        msg.innerHTML = `
+            ${suggestionHtml}
+            <div class="mt-1">${I18N.web_services_none_found || 'No services found'}</div>
+        `;
+        grid.parentElement.appendChild(msg);
+    }
+}
+
+// Apply layout suggestion to search input
+function applyLayoutSuggestion(suggestion) {
+    // Try desktop input first, then mobile
+    const inputDesktop = document.getElementById('servicesEditSearchInputDesktop');
+    const inputMobile = document.getElementById('servicesEditSearchInputMobile');
+    const inputMain = document.getElementById('servicesSearchInput');
+
+    if (inputDesktop && inputDesktop.offsetParent !== null) {
+        inputDesktop.value = suggestion;
+        inputDesktop.dispatchEvent(new Event('input'));
+    } else if (inputMobile && inputMobile.offsetParent !== null) {
+        inputMobile.value = suggestion;
+        inputMobile.dispatchEvent(new Event('input'));
+    } else if (inputMain) {
+        inputMain.value = suggestion;
+        inputMain.dispatchEvent(new Event('input'));
     }
 }
 
 async function openAgentIpsModal() {
-  const m = document.getElementById('agentIpsModal');
-  if (!m) return;
-  animateModalOpen(m, false);
-  await loadAgentIpv4();
+    const m = document.getElementById('agentIpsModal');
+    if (!m) return;
+    animateModalOpen(m, false);
+    await loadAgentIpv4();
 }
 
 function closeAgentIpsModal() {
-  const m = document.getElementById('agentIpsModal');
-  if (!m) return;
-  animateModalClose(m);
+    const m = document.getElementById('agentIpsModal');
+    if (!m) return;
+    animateModalClose(m);
 }
 
 async function loadAgentIpv4() {
-  const elPrimary = document.getElementById('agentIpsPrimary');
-  const elList = document.getElementById('agentIpsList');
-  const elEmpty = document.getElementById('agentIpsEmpty');
-  const elLoading = document.getElementById('agentIpsLoading');
-  const elError = document.getElementById('agentIpsError');
-  elError?.classList.add('hidden');
-  elEmpty?.classList.add('hidden');
-  if (elList) elList.innerHTML = '';
-  if (elLoading) elLoading.classList.remove('hidden');
+    const elPrimary = document.getElementById('agentIpsPrimary');
+    const elList = document.getElementById('agentIpsList');
+    const elEmpty = document.getElementById('agentIpsEmpty');
+    const elLoading = document.getElementById('agentIpsLoading');
+    const elError = document.getElementById('agentIpsError');
+    elError?.classList.add('hidden');
+    elEmpty?.classList.add('hidden');
+    if (elList) elList.innerHTML = '';
+    if (elLoading) elLoading.classList.remove('hidden');
 
-  try {
-    const r = await fetch('/api/agent/ipv4', { credentials: 'same-origin' });
-    if (!r.ok) throw new Error('HTTP ' + r.status);
-    const data = await r.json();
+    try {
+        const r = await fetch('/api/agent/ipv4', { credentials: 'same-origin' });
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        const data = await r.json();
 
-    const primary = data.primary || data.source_ip || data.agent_ip || '-';
-    const ips = Array.isArray(data.ips) ? data.ips : Array.isArray(data.ipv4) ? data.ipv4 : [];
+        const primary = data.primary || data.source_ip || data.agent_ip || '-';
+        const ips = Array.isArray(data.ips) ? data.ips : Array.isArray(data.ipv4) ? data.ipv4 : [];
 
-    if (elPrimary) elPrimary.textContent = primary;
+        if (elPrimary) elPrimary.textContent = primary;
 
-    const secondary = ips.filter(ip => ip && ip !== primary);
+        const secondary = ips.filter(ip => ip && ip !== primary);
 
-    if (!secondary.length) {
-      elEmpty?.classList.remove('hidden');
-    } else if (elList) {
-      elList.innerHTML = secondary.map(ip => `
+        if (!secondary.length) {
+            elEmpty?.classList.remove('hidden');
+        } else if (elList) {
+            elList.innerHTML = secondary.map(ip => `
         <li class="bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-xl px-3 py-2 font-mono text-xs select-all">
           ${escapeHtml(ip)}
         </li>
       `).join('');
+        }
+    } catch (e) {
+        console.error('Error loading IPs:', e);
+        elError?.classList.remove('hidden');
+    } finally {
+        elLoading?.classList.add('hidden');
     }
-  } catch (e) {
-    console.error('Error loading IPs:', e);
-    elError?.classList.remove('hidden');
-  } finally {
-    elLoading?.classList.add('hidden');
-  }
 }
 
-document.addEventListener('DOMContentLoaded', () => {
-  const badge = document.getElementById('agentIpBadge');
-  if (!badge) return;
+document.addEventListener('DOMContentLoaded', async () => {
+    const badge = document.getElementById('agentIpBadge');
+    if (!badge) return;
 
-  const handler = async (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    await openAgentIpsModal();
-  };
+    // Check if there are additional IPs before making badge interactive
+    try {
+        const response = await fetch('/api/agent/ipv4', { credentials: 'same-origin' });
+        if (response.ok) {
+            const data = await response.json();
+            const primary = data.primary || data.source_ip || data.agent_ip || '-';
+            const ips = Array.isArray(data.ips) ? data.ips : Array.isArray(data.ipv4) ? data.ipv4 : [];
+            const secondary = ips.filter(ip => ip && ip !== primary);
 
-  badge.addEventListener('click', handler);
-  badge.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter' || e.key === ' ') {
-      e.preventDefault();
-      handler(e);
+            // If no additional IPs, make badge non-interactive
+            if (secondary.length === 0) {
+                badge.removeAttribute('role');
+                badge.removeAttribute('tabindex');
+                badge.removeAttribute('onclick');
+                badge.removeAttribute('onkeydown');
+                badge.classList.remove('cursor-pointer', 'hover:bg-gray-200/70', 'dark:hover:bg-white/10');
+                // Remove the info icon
+                const icon = badge.querySelector('svg');
+                if (icon) icon.remove();
+                return; // Don't add click handlers
+            }
+        }
+    } catch (e) {
+        console.error('Error checking additional IPs:', e);
     }
-  });
+
+    // Add click handlers only if there are additional IPs
+    const handler = async (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        await openAgentIpsModal();
+    };
+
+    badge.addEventListener('click', handler);
+    badge.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            handler(e);
+        }
+    });
 });
 
 
@@ -2283,11 +2460,11 @@ function updateServiceItemState(name, isNowManaged) {
     }
 
     // Update onclick handler
-    btn.onclick = function() { toggleServiceManaged(name, btn.dataset.type || 'systemd', isNowManaged, this); };
+    btn.onclick = function () { toggleServiceManaged(name, btn.dataset.type || 'systemd', isNowManaged, this); };
 }
 
 // Init when DOM loaded
 document.addEventListener('DOMContentLoaded', () => {
-   // Initial load via fetch, then SSE will be started automatically
-   loadServices();
+    // Initial load via fetch, then SSE will be started automatically
+    loadServices();
 });

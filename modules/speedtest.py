@@ -18,13 +18,14 @@ from core import config
 from core.auth import is_allowed, send_access_denied_message
 from core.messaging import delete_previous_message
 from core.shared_state import LAST_MESSAGE_IDS
-from core.utils import escape_html, get_country_details
+from core.utils import escape_html
 
 BUTTON_KEY = "btn_speedtest"
 SERVER_LIST_URL = "https://export.iperf3serverlist.net/listed_iperf3_servers.json"
 RU_SERVER_LIST_URL = "https://raw.githubusercontent.com/itdoginfo/russian-iperf3-servers/refs/heads/main/list.yml"
 LOCAL_CACHE_FILE = os.path.join(config.CONFIG_DIR, "iperf_servers_cache.json")
 LOCAL_RU_CACHE_FILE = os.path.join(config.CONFIG_DIR, "iperf_servers_ru_cache.yml")
+SPEEDTEST_MODE_FILE = os.path.join(config.CONFIG_DIR, ".speedtest_mode")
 MAX_SERVERS_TO_PING = 100
 PING_COUNT = 3
 PING_TIMEOUT_SEC = 2
@@ -33,6 +34,60 @@ IPERF_PROCESS_TIMEOUT = 30.0
 MAX_TEST_ATTEMPTS = 3
 MESSAGE_EDIT_THROTTLE = {}
 MIN_UPDATE_INTERVAL = 1.5
+
+# Cache for speedtest mode
+_SPEEDTEST_MODE_CACHE = None
+
+
+def get_speedtest_mode() -> str:
+    """
+    Detect speedtest mode: 'OOKLA', 'IPERF3', or 'AUTO' (need geo-detection)
+    Priority: 1) config file, 2) check if ookla is installed, 3) check if iperf3 is installed, 4) AUTO
+    """
+    global _SPEEDTEST_MODE_CACHE
+    if _SPEEDTEST_MODE_CACHE is not None:
+        return _SPEEDTEST_MODE_CACHE
+    
+    # Check config file first
+    if os.path.exists(SPEEDTEST_MODE_FILE):
+        try:
+            with open(SPEEDTEST_MODE_FILE, 'r') as f:
+                mode = f.read().strip().upper()
+                if mode in ('OOKLA', 'RU'):
+                    _SPEEDTEST_MODE_CACHE = 'OOKLA' if mode == 'OOKLA' else 'IPERF3'
+                    return _SPEEDTEST_MODE_CACHE
+        except Exception:
+            pass
+    
+    # Check if Ookla speedtest is available
+    try:
+        import subprocess
+        result = subprocess.run(['speedtest', '--version'], capture_output=True, timeout=5)
+        if result.returncode == 0 and b'Speedtest by Ookla' in result.stdout:
+            _SPEEDTEST_MODE_CACHE = 'OOKLA'
+            return _SPEEDTEST_MODE_CACHE
+    except Exception:
+        pass
+    
+    # Check if iperf3 is available
+    try:
+        import subprocess
+        import shutil
+        if shutil.which('iperf3'):
+            _SPEEDTEST_MODE_CACHE = 'IPERF3'
+            return _SPEEDTEST_MODE_CACHE
+    except Exception:
+        pass
+    
+    # Neither tool is installed - need auto-detection based on geo
+    _SPEEDTEST_MODE_CACHE = 'AUTO'
+    return _SPEEDTEST_MODE_CACHE
+
+
+def reset_speedtest_mode_cache():
+    """Reset the speedtest mode cache to force re-detection"""
+    global _SPEEDTEST_MODE_CACHE
+    _SPEEDTEST_MODE_CACHE = None
 
 
 def get_button() -> KeyboardButton:
@@ -71,6 +126,8 @@ async def edit_status_safe(
 async def get_ping_async(host: str) -> Optional[float]:
     safe_host = shlex.quote(host)
     os_type = platform.system().lower()
+    
+    # Try ICMP ping first
     if os_type == "windows":
         cmd = f"ping -n {PING_COUNT} -w {PING_TIMEOUT_SEC * 1000} {safe_host}"
         regex = "Average = ([\\d.]+)ms"
@@ -91,6 +148,17 @@ async def get_ping_async(host: str) -> Optional[float]:
             return float(match.group(1))
     except Exception as e:
         logging.debug(f"Ping failed for {host}: {e}")
+    
+    # HTTP fallback if ICMP failed
+    try:
+        t1 = time.time()
+        async with aiohttp.ClientSession() as session:
+            async with session.get(f"https://{host}", timeout=aiohttp.ClientTimeout(total=3), allow_redirects=False) as resp:
+                if resp.status in (200, 301, 302, 403, 204):
+                    return (time.time() - t1) * 1000
+    except Exception:
+        pass
+    
     return None
 
 
@@ -351,18 +419,67 @@ async def run_iperf_test_async(
     except Exception as e:
         logging.error(f"UL Error: {e}")
         return str(e)
-    flag, country_name = await get_country_details(server.get("country") or host)
-    loc = f"{country_name or server.get('country')} {server.get('city')}"
+    loc = f"{server.get('country')} {server.get('city')}"
     return _(
         "speedtest_results",
         lang,
         dl=results["download"],
         ul=results["upload"],
         ping=ping,
-        flag=flag,
         server=escape_html(loc),
         provider=escape_html(server.get("provider")),
     )
+
+
+async def run_ookla_speedtest(bot: Bot, chat_id: int, message_id: int, lang: str) -> str:
+    """Run Ookla Speedtest CLI and return formatted result"""
+    cmd = "speedtest --accept-license --accept-gdpr --format=json"
+    
+    try:
+        proc = await asyncio.create_subprocess_shell(
+            cmd, 
+            stdout=asyncio.subprocess.PIPE, 
+            stderr=asyncio.subprocess.PIPE
+        )
+        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=120)
+        
+        if proc.returncode == 0:
+            output = stdout.decode('utf-8', errors='ignore')
+            try:
+                data = json.loads(output)
+                download_speed = data.get("download", {}).get("bandwidth", 0) / 125000
+                upload_speed = data.get("upload", {}).get("bandwidth", 0) / 125000
+                ping_latency = data.get("ping", {}).get("latency", 0)
+                server_name = data.get("server", {}).get("name", "N/A")
+                server_location = data.get("server", {}).get("location", "N/A")
+                server_country = data.get("server", {}).get("country", "")
+                result_url = data.get("result", {}).get("url", "")
+                
+                return _(
+                    "speedtest_ookla_results",
+                    lang,
+                    dl=download_speed,
+                    ul=upload_speed,
+                    ping=ping_latency,
+                    server=escape_html(server_name),
+                    location=escape_html(server_location),
+                    url=result_url
+                )
+            except json.JSONDecodeError as e:
+                logging.error(f"Ookla JSON parse error: {e}\nOutput: {output[:500]}")
+                return _("speedtest_ookla_parse_error", lang)
+            except Exception as e:
+                logging.error(f"Ookla processing error: {e}")
+                return _("speedtest_fail", lang, error=str(e))
+        else:
+            error_output = stderr.decode('utf-8', errors='ignore') or stdout.decode('utf-8', errors='ignore')
+            logging.error(f"Ookla speedtest failed. Code: {proc.returncode}. Output: {error_output}")
+            return _("speedtest_fail", lang, error=escape_html(error_output[:500]))
+    except asyncio.TimeoutError:
+        return _("speedtest_fail", lang, error="Timeout (120s)")
+    except Exception as e:
+        logging.error(f"Ookla speedtest error: {e}")
+        return _("speedtest_fail", lang, error=str(e))
 
 
 async def speedtest_handler(message: types.Message):
@@ -374,6 +491,78 @@ async def speedtest_handler(message: types.Message):
         )
         return
     await delete_previous_message(user_id, "speedtest", message.chat.id, message.bot)
+    
+    # Detect speedtest mode
+    mode = get_speedtest_mode()
+    
+    # If mode is AUTO, we need to determine based on geo-location
+    if mode == 'AUTO':
+        msg = await message.answer(_("speedtest_status_geo", lang), parse_mode="HTML")
+        LAST_MESSAGE_IDS.setdefault(user_id, {})["speedtest"] = msg.message_id
+        try:
+            ip, country_code, continent = await get_vps_location()
+            if country_code == 'RU':
+                # For Russia, iperf3 is required but not installed
+                await message.bot.edit_message_text(
+                    _("speedtest_not_installed", lang, tool="iperf3"),
+                    chat_id=message.chat.id,
+                    message_id=msg.message_id,
+                    parse_mode="HTML",
+                )
+            else:
+                # For other countries, Ookla is required but not installed
+                await message.bot.edit_message_text(
+                    _("speedtest_not_installed", lang, tool="Ookla Speedtest CLI"),
+                    chat_id=message.chat.id,
+                    message_id=msg.message_id,
+                    parse_mode="HTML",
+                )
+        except Exception as e:
+            await message.bot.edit_message_text(
+                _("speedtest_fail", lang, error=str(e)),
+                chat_id=message.chat.id,
+                message_id=msg.message_id,
+                parse_mode="HTML",
+            )
+        return
+    
+    if mode == 'OOKLA':
+        # Use Ookla Speedtest CLI
+        msg = await message.answer(_("speedtest_ookla_starting", lang), parse_mode="HTML")
+        LAST_MESSAGE_IDS.setdefault(user_id, {})["speedtest"] = msg.message_id
+        
+        try:
+            result = await run_ookla_speedtest(message.bot, message.chat.id, msg.message_id, lang)
+            try:
+                await message.bot.edit_message_text(
+                    result,
+                    chat_id=message.chat.id,
+                    message_id=msg.message_id,
+                    parse_mode="HTML",
+                    disable_web_page_preview=True,
+                )
+            except TelegramBadRequest:
+                logging.warning("Speedtest finished, but message was deleted.")
+        except Exception as e:
+            logging.error(f"Ookla speedtest fatal: {e}", exc_info=True)
+            try:
+                await message.bot.edit_message_text(
+                    _("speedtest_fail", lang, error=str(e)),
+                    chat_id=message.chat.id,
+                    message_id=msg.message_id,
+                )
+            except TelegramBadRequest:
+                pass
+    else:
+        # Use iperf3 (for RU and fallback)
+        await speedtest_iperf3_handler(message)
+
+
+async def speedtest_iperf3_handler(message: types.Message):
+    """Original iperf3-based speedtest handler"""
+    user_id = message.from_user.id
+    lang = get_user_lang(user_id)
+    
     msg = await message.answer(_("speedtest_status_geo", lang), parse_mode="HTML")
     LAST_MESSAGE_IDS.setdefault(user_id, {})["speedtest"] = msg.message_id
     try:

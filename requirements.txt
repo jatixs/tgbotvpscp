@@ -18,3 +18,5 @@ python-dateutil
 Pillow
 requests
 netifaces
+wheel>=0.46.2
+setuptools

@@ -431,7 +431,9 @@ button {
 #keyboardModal>div,
 #sessionsModal>div,
 #genericHintModal>div,
-#nodeModal>div {
+#nodeModal>div,
+#filterModal>div,
+#nodeDetailModal>div {
 	transition: opacity 0.2s ease-out, transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
 }
 
@@ -490,136 +492,321 @@ button.force-expanded .btn-text {
 		transform: translateY(0) !important;
 	}
 }
+
 /* Инерция (импульсная прокрутка) для всех прокручиваемых блоков */
-.custom-scrollbar, .overflow-y-auto, .overflow-x-auto {
-    -webkit-overflow-scrolling: touch;
+.custom-scrollbar,
+.overflow-y-auto,
+.overflow-x-auto {
+	-webkit-overflow-scrolling: touch;
 }
 
 /* 2. Стилизация Webkit (Chrome, Safari, Edge) */
 /* Применяем ТОЛЬКО к элементам с классом .custom-scrollbar */
 
 .custom-scrollbar::-webkit-scrollbar {
-    width: 6px;       /* Тонкий вертикальный скролл */
-    height: 6px;      /* Тонкий горизонтальный скролл */
+	width: 6px;
+	/* Тонкий вертикальный скролл */
+	height: 6px;
+	/* Тонкий горизонтальный скролл */
 }
 
 .custom-scrollbar::-webkit-scrollbar-track {
-    background: transparent;
+	background: transparent;
 }
 
 .custom-scrollbar::-webkit-scrollbar-thumb {
-    background-color: rgba(156, 163, 175, 0.5); /* gray-400 полупрозрачный */
-    border-radius: 9999px;
-    border: 2px solid transparent; /* Отступ внутри */
-    background-clip: content-box;
-    transition: background-color 0.2s;
+	background-color: rgba(156, 163, 175, 0.5);
+	/* gray-400 полупрозрачный */
+	border-radius: 9999px;
+	border: 2px solid transparent;
+	/* Отступ внутри */
+	background-clip: content-box;
+	transition: background-color 0.2s;
 }
 
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-    background-color: rgba(107, 114, 128, 0.8); /* gray-500 при наведении */
+	background-color: rgba(107, 114, 128, 0.8);
+	/* gray-500 при наведении */
 }
 
 .custom-scrollbar::-webkit-scrollbar-corner {
-    background: transparent;
+	background: transparent;
 }
 
 /* Адаптация под темную тему */
 .dark .custom-scrollbar::-webkit-scrollbar-thumb {
-    background-color: rgba(75, 85, 99, 0.5); /* gray-600 */
+	background-color: rgba(75, 85, 99, 0.5);
+	/* gray-600 */
 }
 
 .dark .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-    background-color: rgba(156, 163, 175, 0.8); /* gray-400 */
+	background-color: rgba(156, 163, 175, 0.8);
+	/* gray-400 */
 }
 
 .custom-scrollbar {
-    scrollbar-width: thin;
-    scrollbar-color: rgba(156, 163, 175, 0.5) transparent;
+	scrollbar-width: thin;
+	scrollbar-color: rgba(156, 163, 175, 0.5) transparent;
 }
 
 .dark .custom-scrollbar {
-    scrollbar-color: rgba(75, 85, 99, 0.5) transparent;
+	scrollbar-color: rgba(75, 85, 99, 0.5) transparent;
 }
 
 @media (max-width: 390px) {
-    nav > div {
-        padding-left: 0.5rem !important;  /* 8px */
-        padding-right: 0.5rem !important; /* 8px */
-        gap: 0.25rem !important;          /* Уменьшаем разрыв между левой и правой частью */
-    }
+	nav>div {
+		padding-left: 0.5rem !important;
+		/* 8px */
+		padding-right: 0.5rem !important;
+		/* 8px */
+		gap: 0.25rem !important;
+		/* Уменьшаем разрыв между левой и правой частью */
+	}
 
-    nav span.text-lg {
-        font-size: 0.95rem !important;    /* Чуть меньше стандарта */
-        max-width: 120px;                 /* Ограничиваем ширину, чтобы не толкал кнопки */
-        overflow: hidden;
-        text-overflow: ellipsis;
-    }
-    nav button.w-8.h-8,
-    nav form button.w-8.h-8 {
-        width: 1.75rem !important;  /* 28px */
-        height: 1.75rem !important; /* 28px */
-        border-radius: 0.375rem !important; /* Чуть меньше скругление */
-    }
-    nav button svg,
-    nav form button svg {
-        width: 1rem !important;   /* 16px */
-        height: 1rem !important;  /* 16px */
-    }
-    nav .gap-1 {
-        gap: 0.125rem !important; /* 2px */
-    }
+	nav span.text-lg {
+		font-size: 0.95rem !important;
+		/* Чуть меньше стандарта */
+		max-width: 120px;
+		/* Ограничиваем ширину, чтобы не толкал кнопки */
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
 
-    nav .gap-4 {
-        gap: 0.25rem !important;
-    }
+	nav button.w-8.h-8,
+	nav form button.w-8.h-8 {
+		width: 1.75rem !important;
+		/* 28px */
+		height: 1.75rem !important;
+		/* 28px */
+		border-radius: 0.375rem !important;
+		/* Чуть меньше скругление */
+	}
 
-    nav .max-w-\[140px\] {
-        padding-left: 0.25rem !important;
-        padding-right: 0.25rem !important;
-    }
+	nav button svg,
+	nav form button svg {
+		width: 1rem !important;
+		/* 16px */
+		height: 1rem !important;
+		/* 16px */
+	}
 
-    nav .max-w-\[140px\] span {
-        font-size: 0.65rem !important;
-        max-width: 60px;
-    }
+	nav .gap-1 {
+		gap: 0.125rem !important;
+		/* 2px */
+	}
+
+	nav .gap-4 {
+		gap: 0.25rem !important;
+	}
+
+	nav .max-w-\[140px\] {
+		padding-left: 0.25rem !important;
+		padding-right: 0.25rem !important;
+	}
+
+	nav .max-w-\[140px\] span {
+		font-size: 0.65rem !important;
+		max-width: 60px;
+	}
 }
 
 /* Role Badge Styles */
 .role-badge-owner {
-    border-color: rgba(239, 68, 68, 0.3);
-    background-color: #fee2e2;
-    color: #dc2626;
+	border-color: rgba(239, 68, 68, 0.3);
+	background-color: #fee2e2;
+	color: #dc2626;
 }
 
 html.dark .role-badge-owner {
-    border-color: rgba(239, 68, 68, 0.3);
-    background-color: rgba(127, 29, 29, 0.4);
-    color: #f87171;
+	border-color: rgba(239, 68, 68, 0.3);
+	background-color: rgba(127, 29, 29, 0.4);
+	color: #f87171;
 }
 
 .role-badge-admin {
-    border-color: rgba(34, 197, 94, 0.3);
-    background-color: #dcfce7;
-    color: #16a34a;
+	border-color: rgba(34, 197, 94, 0.3);
+	background-color: #dcfce7;
+	color: #16a34a;
 }
 
 html.dark .role-badge-admin {
-    border-color: rgba(34, 197, 94, 0.3);
-    background-color: rgba(20, 83, 45, 0.4);
-    color: #4ade80;
+	border-color: rgba(34, 197, 94, 0.3);
+	background-color: rgba(20, 83, 45, 0.4);
+	color: #4ade80;
 }
 
 .role-badge-user {
-    border-color: rgba(245, 158, 11, 0.3);
-    background-color: #fef3c7;
-    color: #d97706;
+	border-color: rgba(245, 158, 11, 0.3);
+	background-color: #fef3c7;
+	color: #d97706;
 }
 
 html.dark .role-badge-user {
-    border-color: rgba(245, 158, 11, 0.3);
-    background-color: rgba(120, 53, 15, 0.4);
-    color: #fbbf24;
+	border-color: rgba(245, 158, 11, 0.3);
+	background-color: rgba(120, 53, 15, 0.4);
+	color: #fbbf24;
 }
 
-main{z-index:auto!important;}
-#systemModal,#addNodeModal,#keyboardModal,#sessionsModal,#genericHintModal,#nodeModal{z-index:9999!important;}
+main {
+	z-index: auto !important;
+}
+
+#systemModal,
+#addNodeModal,
+#keyboardModal,
+#sessionsModal,
+#genericHintModal,
+#nodeModal {
+	z-index: 9999 !important;
+}
+
+/* Node card reboot button */
+.node-reboot-btn {
+	background-color: #fee2e2;
+}
+
+html.dark .node-reboot-btn {
+	background-color: rgba(239, 68, 68, 0.15);
+	border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+html.dark .node-reboot-btn:hover {
+	background-color: rgba(239, 68, 68, 0.25);
+}
+
+/* Services spoiler blur effect */
+.services-blur-overlay {
+	position: absolute;
+	bottom: 40px;
+	left: 0;
+	right: 0;
+	height: 50px;
+	background: linear-gradient(to bottom, transparent, rgba(249, 250, 251, 0.95));
+	pointer-events: none;
+	border-radius: 0 0 0.75rem 0.75rem;
+}
+
+html.dark .services-blur-overlay {
+	background: linear-gradient(to bottom, transparent, rgba(0, 0, 0, 0.4));
+}
+
+.services-toggle-btn.expanded svg {
+	transform: rotate(180deg);
+}
+
+#modalServicesContainer[data-show-all="true"]+#modalServicesToggle .services-blur-overlay {
+	display: none;
+}
+
+/* Monitor link button */
+.monitor-link-btn {
+	background-color: #faf5ff;
+	border: 1px solid #e9d5ff;
+	color: #9333ea;
+}
+
+.monitor-link-btn:hover {
+	background-color: #f3e8ff;
+}
+
+html.dark .monitor-link-btn {
+	background-color: rgba(147, 51, 234, 0.15);
+	border-color: rgba(147, 51, 234, 0.3);
+	color: #c084fc;
+}
+
+html.dark .monitor-link-btn:hover {
+	background-color: rgba(147, 51, 234, 0.25);
+}
+
+/* Missing Tailwind dark mode classes for nodes monitor */
+.dark\:bg-red-500\/20:is(.dark *) {
+	background-color: rgba(239, 68, 68, .2);
+}
+
+.dark\:hover\:bg-red-500\/20:hover:is(.dark *) {
+	background-color: rgba(239, 68, 68, .2);
+}
+
+.dark\:hover\:bg-green-500\/20:hover:is(.dark *) {
+	background-color: rgba(34, 197, 94, .2);
+}
+
+.dark\:hover\:bg-yellow-500\/20:hover:is(.dark *) {
+	background-color: rgba(234, 179, 8, .2);
+}
+
+.dark\:hover\:bg-blue-500\/30:hover:is(.dark *) {
+	background-color: rgba(59, 130, 246, .3);
+}
+
+/* Ping badge classes */
+.bg-yellow-100 {
+	background-color: rgb(254, 249, 195);
+}
+
+.text-yellow-700 {
+	color: rgb(161, 98, 7);
+}
+
+.dark\:bg-yellow-900\/30:is(.dark *) {
+	background-color: rgba(113, 63, 18, .3);
+}
+
+/* Responsive adjustments for Network Activity section on narrow screens */
+@media (max-width: 484px) {
+	/* Делаем контейнер на всю ширину и применяем стиль единой панели */
+	#networkBadgesContainer {
+		width: 100% !important;
+		justify-content: space-between !important;
+		margin-top: 0.75rem !important;
+		background-color: #f9fafb !important;
+		padding: 0.25rem !important;
+		border-radius: 0.75rem !important;
+		border: 1px solid #e5e7eb !important;
+		gap: 0 !important;
+	}
+
+	html.dark #networkBadgesContainer {
+		background-color: rgba(0, 0, 0, 0.2) !important;
+		border-color: rgba(255, 255, 255, 0.05) !important;
+	}
+
+	/* Убираем рамки и фон у самих кнопок, чтобы они слились в одну панель */
+	#networkBadgesContainer .network-badge {
+		flex: 1 1 0% !important;
+		justify-content: center !important;
+		background-color: transparent !important;
+		border: none !important;
+		box-shadow: none !important;
+		padding-top: 0.375rem !important;
+		padding-bottom: 0.375rem !important;
+	}
+
+	/* Показываем разделитель и жестко задаем ему размеры и цвет */
+	#networkBadgesDivider {
+		display: block !important;
+		width: 1px !important;
+		min-width: 1px !important;
+		height: 1.25rem !important; /* Аккуратная высота линии */
+		background-color: #d1d5db !important; /* Серый цвет для светлой темы */
+		margin: 0 4px !important;
+		flex-shrink: 0 !important;
+	}
+
+	html.dark #networkBadgesDivider {
+		background-color: #4b5563 !important; /* Темно-серый цвет для темной темы */
+	}
+
+	/* Уменьшаем размер шрифтов в бейджах для компактности */
+	#agentPingBadge span:first-child {
+		font-size: 0.55rem !important;
+	}А
+	#agentPing, #agentIp {
+		font-size: 0.625rem !important;
+	}
+	#agentIpBadge svg {
+		width: 0.875rem !important;
+		height: 0.875rem !important;
+	}
+}

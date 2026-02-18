@@ -37,7 +37,7 @@ async def updatexray_handler(message: types.Message, state: FSMContext):
     sent_msg = await message.answer(_("xray_detecting", lang))
     LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = sent_msg.message_id
     try:
-        client, container_name = await detect_xray_client()
+        client, container_name, setup_variant = await detect_xray_client()
         if not client:
             try:
                 await message.bot.edit_message_text(
@@ -50,6 +50,8 @@ async def updatexray_handler(message: types.Message, state: FSMContext):
             return
         version = _("xray_version_unknown", lang)
         client_name_display = client.capitalize()
+        if setup_variant == "akiyamov":
+            client_name_display = f"{client.capitalize()} (Akiyamov)"
         try:
             await message.bot.edit_message_text(
                 _(
@@ -79,14 +81,29 @@ async def updatexray_handler(message: types.Message, state: FSMContext):
             version_cmd = f"docker exec {safe_container} /usr/bin/xray version"
         elif client == "marzban":
             check_deps = "command -v unzip >/dev/null 2>&1 || (DEBIAN_FRONTEND=noninteractive apt-get update -y && apt-get install -y unzip wget)"
-            dl_cmd = "mkdir -p /var/lib/marzban/xray-core && cd /var/lib/marzban/xray-core && wget -q -O Xray-linux-64.zip https://github.com/XTLS/Xray-core/releases/latest/download/Xray-linux-64.zip && wget -q -O geoip.dat https://github.com/v2fly/geoip/releases/latest/download/geoip.dat && wget -q -O geosite.dat https://github.com/v2fly/domain-list-community/releases/latest/download/dlc.dat && unzip -o Xray-linux-64.zip xray && rm Xray-linux-64.zip"
-            env_path = "/opt/marzban/.env"
-            update_env = f"if [ -f {env_path} ]; then if ! grep -q '^XRAY_EXECUTABLE_PATH=' {env_path}; then echo 'XRAY_EXECUTABLE_PATH=/var/lib/marzban/xray-core/xray' >> {env_path}; fi; fi"
-            restart_cmd = f"docker restart {safe_container}"
-            update_cmd = f"{check_deps} && {dl_cmd} && {update_env} && {restart_cmd}"
-            version_cmd = (
-                f"docker exec {safe_container} /var/lib/marzban/xray-core/xray version"
-            )
+            
+            if setup_variant == "akiyamov":
+                # Akiyamov's Marzban setup uses different paths
+                xray_dir = "/opt/xray-vps-setup/marzban_lib/xray-core"
+                env_path = "/opt/xray-vps-setup/.env"
+                xray_path = f"{xray_dir}/xray"
+                dl_cmd = f"mkdir -p {xray_dir} && cd {xray_dir} && wget -q -O Xray-linux-64.zip https://github.com/XTLS/Xray-core/releases/latest/download/Xray-linux-64.zip && wget -q -O geoip.dat https://github.com/v2fly/geoip/releases/latest/download/geoip.dat && wget -q -O geosite.dat https://github.com/v2fly/domain-list-community/releases/latest/download/dlc.dat && unzip -o Xray-linux-64.zip xray && chmod +x xray && rm Xray-linux-64.zip"
+                update_env = f"if [ -f {env_path} ]; then sed -i 's|^#*XRAY_EXECUTABLE_PATH=.*|XRAY_EXECUTABLE_PATH={xray_path}|' {env_path}; if ! grep -q '^XRAY_EXECUTABLE_PATH=' {env_path}; then echo 'XRAY_EXECUTABLE_PATH={xray_path}' >> {env_path}; fi; fi"
+                # Try to find docker-compose directory
+                compose_dir = "/opt/xray-vps-setup"
+                restart_cmd = f"cd {compose_dir} && (docker compose down && docker compose up -d) || (docker-compose down && docker-compose up -d)"
+                update_cmd = f"{check_deps} && {dl_cmd} && {update_env} && {restart_cmd}"
+                version_cmd = f"docker exec {safe_container} {xray_path} version"
+            else:
+                # Standard Marzban setup
+                xray_dir = "/var/lib/marzban/xray-core"
+                env_path = "/opt/marzban/.env"
+                xray_path = f"{xray_dir}/xray"
+                dl_cmd = f"mkdir -p {xray_dir} && cd {xray_dir} && wget -q -O Xray-linux-64.zip https://github.com/XTLS/Xray-core/releases/latest/download/Xray-linux-64.zip && wget -q -O geoip.dat https://github.com/v2fly/geoip/releases/latest/download/geoip.dat && wget -q -O geosite.dat https://github.com/v2fly/domain-list-community/releases/latest/download/dlc.dat && unzip -o Xray-linux-64.zip xray && rm Xray-linux-64.zip"
+                update_env = f"if [ -f {env_path} ]; then if ! grep -q '^XRAY_EXECUTABLE_PATH=' {env_path}; then echo 'XRAY_EXECUTABLE_PATH={xray_path}' >> {env_path}; fi; fi"
+                restart_cmd = f"docker restart {safe_container}"
+                update_cmd = f"{check_deps} && {dl_cmd} && {update_env} && {restart_cmd}"
+                version_cmd = f"docker exec {safe_container} {xray_path} version"
         process_update = await asyncio.create_subprocess_shell(
             update_cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
         )
