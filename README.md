@@ -507,7 +507,7 @@ python bot.py
 
 **Jatix**
 
-- 📧 Email: [jatix.com@mail.ru](jatix.com@mail.ru)
+- 📧 Почта: [jatix.com@mail.ru](jatix.com@mail.ru)
 - 💬 Telegram: [@jatix](https://t.me/faridshykhaliev)
 - 🌐 GitHub: [@jatixs](https://github.com/jatixs)
 
@@ -519,14 +519,14 @@ python bot.py
 
 - ⭐ **Поставь звезду** на GitHub
 - 🔄 **Поделись** с друзьями
-- 💰 **[Donate](https://yoomoney.ru/to/410011639584793)**
+- 💰 **[Донат](https://yoomoney.ru/to/410011639584793)**
 
 ---
 
 <p align="center">
   <b>Версия:</b> 1.19.0 (Build 68)<br>
   <b>Дата обновления:</b> 3 Февраля 2026 г.<br>
-  <b>Статус:</b> Stable<br>
+  <b>Статус:</b> Релиз<br>
   <br>
   Сделано с ❤️ для сообщества DevOps
 </p>
