@@ -5,13 +5,13 @@
 <h1 align="center">🤖 VPS Manager Telegram Bot</h1>
 
 <p align="center">
-  <b>v1.18.1</b> — профессиональная экосистема для мониторинга и управления серверной инфраструктурой<br>
+  <b>v1.19.0</b> — профессиональная экосистема для мониторинга и управления серверной инфраструктурой<br>
   Асинхронная архитектура • Enterprise-безопасность • PWA веб-интерфейс • Real-time SSE
 </p>
 
 <p align="center">
-  <a href="https://github.com/jatixs/tgbotvpscp/releases/latest"><img src="https://img.shields.io/badge/version-v1.18.1-blue?style=flat-square" alt="Version 1.18.1"/></a>
-  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/build-67-purple?style=flat-square" alt="Build 67"/></a>
+  <a href="https://github.com/jatixs/tgbotvpscp/releases/latest"><img src="https://img.shields.io/badge/version-v1.19.0-blue?style=flat-square" alt="Version 1.19.0"/></a>
+  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/build-67-purple?style=flat-square" alt="Build 68"/></a>
   <a href="https://www.python.org/"><img src="https://img.shields.io/badge/python-3.10%2B-green?style=flat-square" alt="Python 3.10+"/></a>
   <a href="https://choosealicense.com/licenses/gpl-3.0/"><img src="https://img.shields.io/badge/license-GPL--3.0-lightgrey?style=flat-square" alt="License GPL-3.0"/></a>
   <a href="https://github.com/aiogram/aiogram"><img src="https://img.shields.io/badge/aiogram-3.x-orange?style=flat-square" alt="Aiogram 3.x"/></a>
@@ -89,7 +89,7 @@
 - ✅ **Адаптивный дизайн** — Mobile-first подход
 - ✅ **Графики в реальном времени** — Chart.js визуализация
 
-### ⚙️ Менеджер сервисов <sup>NEW v1.18.1</sup>
+### ⚙️ Менеджер сервисов <sup>NEW v1.19.0</sup>
 
 - ✅ **Real-time статус** — все systemd сервисы
 - ✅ **SSE стриминг** — обновления каждые 5 секунд
@@ -524,7 +524,7 @@ python bot.py
 ---
 
 <p align="center">
-  <b>Версия:</b> 1.18.1 (Build 67)<br>
+  <b>Версия:</b> 1.19.0 (Build 68)<br>
   <b>Дата обновления:</b> 3 Февраля 2026 г.<br>
   <b>Статус:</b> Stable<br>
   <br>
