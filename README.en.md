@@ -510,8 +510,8 @@ This project is licensed under **GPL-3.0**. See [LICENSE](LICENSE) file for deta
 
 **Jatix**
 
-- 📧 Email: [Coming soon]
-- 💬 Telegram: [@jatix](https://t.me/jatix)
+- 📧 Email: [jatix.com@mail.ru](jatix.com@mail.ru)
+- 💬 Telegram: [@jatix](https://t.me/faridshykhaliev)
 - 🌐 GitHub: [@jatixs](https://github.com/jatixs)
 
 ---
