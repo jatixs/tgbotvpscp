@@ -1108,6 +1108,8 @@ toggle_agent_monitoring() {
         echo -e "${C_CYAN}Agent monitoring requires:${C_RESET}"
         echo -e "  1. BOT_TOKEN - your Telegram bot token"
         echo -e "  2. CRITICAL_ALERT_CHAT_IDS - chat IDs for critical alerts (comma-separated)"
+        echo -e "  3. AGENT_ALERT_DELAY_SECONDS - delay before sending alert (in seconds)"
+        echo -e "  4. NODE_NAME - name of this node"
         echo ""
         echo -e "${C_YELLOW}Important:${C_RESET} do not use another bot's chat_id (Telegram blocks bot-to-bot messaging)."
         echo ""

@@ -1141,6 +1141,8 @@ toggle_agent_monitoring() {
         echo -e "${C_CYAN}Для работы мониторинга агента нужны:${C_RESET}"
         echo -e "  1. BOT_TOKEN - токен вашего Telegram бота"
         echo -e "  2. CRITICAL_ALERT_CHAT_IDS - ID чатов для критических алертов (через запятую)"
+        echo -e "  3. AGENT_ALERT_DELAY_SECONDS - задержка перед отправкой алерта (в секундах)"
+        echo -e "  4. NODE_NAME - имя этой ноды"
         echo ""
         echo -e "${C_YELLOW}Важно:${C_RESET} не используйте chat_id другого бота (Telegram блокирует отправку боту от бота)."
         echo ""
