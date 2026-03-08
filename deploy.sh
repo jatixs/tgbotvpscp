@@ -493,13 +493,13 @@ WEB_DOMAIN="${web_domain}"
 EOF
     sudo chmod 600 "${ENV_FILE}"
     
-    # Restore monitoring variables if they exist
-    if [ -n "$MONITORING_BOT_TOKEN" ] || [ -n "$MONITORING_CHAT_IDS" ] || [ -n "$MONITORING_NODE_NAME" ]; then
+    # Restore monitoring variables if monitoring was configured
+    if [ -n "$MONITORING_BOT_TOKEN" ] && [ -n "$MONITORING_CHAT_IDS" ]; then
         echo "" | sudo tee -a "${ENV_FILE}" > /dev/null
         echo "# Agent Monitoring Configuration" | sudo tee -a "${ENV_FILE}" > /dev/null
-        [ -n "$MONITORING_BOT_TOKEN" ] && echo "BOT_TOKEN=\"${MONITORING_BOT_TOKEN}\"" | sudo tee -a "${ENV_FILE}" > /dev/null
-        [ -n "$MONITORING_CHAT_IDS" ] && echo "CRITICAL_ALERT_CHAT_IDS=\"${MONITORING_CHAT_IDS}\"" | sudo tee -a "${ENV_FILE}" > /dev/null
-        [ -n "$MONITORING_NODE_NAME" ] && echo "NODE_NAME=\"${MONITORING_NODE_NAME}\"" | sudo tee -a "${ENV_FILE}" > /dev/null
+        echo "BOT_TOKEN=\"${MONITORING_BOT_TOKEN}\"" | sudo tee -a "${ENV_FILE}" > /dev/null
+        echo "CRITICAL_ALERT_CHAT_IDS=\"${MONITORING_CHAT_IDS}\"" | sudo tee -a "${ENV_FILE}" > /dev/null
+        echo "NODE_NAME=\"${MONITORING_NODE_NAME}\"" | sudo tee -a "${ENV_FILE}" > /dev/null
         [ -n "$MONITORING_DELAY" ] && echo "AGENT_ALERT_DELAY_SECONDS=\"${MONITORING_DELAY}\"" | sudo tee -a "${ENV_FILE}" > /dev/null
     fi
 
@@ -859,7 +859,8 @@ EOF
     if [[ "$RESTORE_CHOICE" =~ ^[Yy]$ ]] && [ -f "/tmp/tgbot_env.bak" ]; then
         local saved_bot_token=$(grep "^BOT_TOKEN=" "/tmp/tgbot_env.bak" | cut -d'=' -f2- | tr -d '"' | xargs)
         local saved_chat_ids=$(grep "^CRITICAL_ALERT_CHAT_IDS=" "/tmp/tgbot_env.bak" | cut -d'=' -f2- | tr -d '"' | xargs)
-        local saved_node_name=$(grep "^NODE_NAME=" "/tmp/tgbot_env.bak" | cut -d'=' -f2- | tr -d '"' | xargs)
+        local saved_node_name=$(grep "^NODE_NAME=" "/tmp/tgbot_env.bak" | cut -d'=' -f2- | tr -d '"')
+        local saved_delay=$(grep "^AGENT_ALERT_DELAY_SECONDS=" "/tmp/tgbot_env.bak" | cut -d'=' -f2- | tr -d '"')
         
         # Ask user if monitoring variables are missing or empty
         local need_bot_token=""
@@ -911,13 +912,14 @@ EOF
             fi
         fi
         
-        # Add monitoring variables to .env if they exist
-        if [ -n "$saved_bot_token" ] || [ -n "$saved_chat_ids" ] || [ -n "$saved_node_name" ]; then
+        # Add monitoring variables to .env if monitoring was configured (has BOT_TOKEN and CHAT_IDS)
+        if [ -n "$saved_bot_token" ] && [ -n "$saved_chat_ids" ]; then
             echo "" | sudo tee -a "${ENV_FILE}" > /dev/null
             echo "# Agent Monitoring Configuration" | sudo tee -a "${ENV_FILE}" > /dev/null
-            [ -n "$saved_bot_token" ] && echo "BOT_TOKEN=\"${saved_bot_token}\"" | sudo tee -a "${ENV_FILE}" > /dev/null
-            [ -n "$saved_chat_ids" ] && echo "CRITICAL_ALERT_CHAT_IDS=\"${saved_chat_ids}\"" | sudo tee -a "${ENV_FILE}" > /dev/null
-            [ -n "$saved_node_name" ] && echo "NODE_NAME=\"${saved_node_name}\"" | sudo tee -a "${ENV_FILE}" > /dev/null
+            echo "BOT_TOKEN=\"${saved_bot_token}\"" | sudo tee -a "${ENV_FILE}" > /dev/null
+            echo "CRITICAL_ALERT_CHAT_IDS=\"${saved_chat_ids}\"" | sudo tee -a "${ENV_FILE}" > /dev/null
+            echo "NODE_NAME=\"${saved_node_name}\"" | sudo tee -a "${ENV_FILE}" > /dev/null
+            [ -n "$saved_delay" ] && echo "AGENT_ALERT_DELAY_SECONDS=\"${saved_delay}\"" | sudo tee -a "${ENV_FILE}" > /dev/null
             msg_info "✓ Переменные мониторинга добавлены в .env"
         fi
     fi
