@@ -1178,15 +1178,13 @@ def build_agent_down_alert(node_name):
             f"🚨 <b>CRITICAL: Main agent (primary server) is UNREACHABLE!</b>\n\n"
             f"🌐 <b>Reported by node:</b> {node_name}\n"
             f"💭 <b>Status:</b> Agent is unreachable since {datetime.fromtimestamp(AGENT_DOWN_SINCE).strftime('%H:%M:%S')}\n"
-            f"⚠️ <b>Action:</b> Check main server availability and bot service status\n"
-            f"🔗 <b>URL:</b> {AGENT_BASE_URL}"
+            f"⚠️ <b>Action:</b> Check main server availability and bot service status"
         )
     return (
         f"🚨 <b>КРИТИЧНОЕ: Главный агент (основной сервер) НЕДОСТУПЕН!</b>\n\n"
         f"🌐 <b>Сообщено нодой:</b> {node_name}\n"
         f"💭 <b>Статус:</b> Агент недоступен с {datetime.fromtimestamp(AGENT_DOWN_SINCE).strftime('%H:%M:%S')}\n"
-        f"⚠️ <b>Действие:</b> Проверьте доступность основного сервера и службы бота\n"
-        f"🔗 <b>URL:</b> {AGENT_BASE_URL}"
+        f"⚠️ <b>Действие:</b> Проверьте доступность основного сервера и службы бота"
     )
 
 
@@ -1196,14 +1194,14 @@ def build_agent_recovery_alert(node_name, downtime):
         return (
             f"✅ <b>Main agent recovered!</b>\n\n"
             f"🌐 <b>Reported by node:</b> {node_name}\n"
-            f"💚 <b>Status:</b> Agent is reachable again\n"
+            f"🟢 <b>Status:</b> Agent is reachable again\n"
             f"⏱ <b>Downtime:</b> {downtime_text}\n"
             f"📡 <b>System stabilized</b>"
         )
     return (
         f"✅ <b>Главный агент восстановлен!</b>\n\n"
         f"🌐 <b>Сообщено нодой:</b> {node_name}\n"
-        f"💚 <b>Статус:</b> Агент снова доступен\n"
+        f"🟢 <b>Статус:</b> Агент снова доступен\n"
         f"⏱ <b>Время простоя:</b> {downtime_text}\n"
         f"📡 <b>Система стабилизована</b>"
     )
