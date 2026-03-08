@@ -943,11 +943,11 @@ check_agent_monitoring_status() {
         echo "off"
         return
     fi
-    
-    local has_bot_token=$(grep -q '^BOT_TOKEN=' "${ENV_FILE}" && echo "yes" || echo "no")
-    local has_chat_ids=$(grep -q '^CRITICAL_ALERT_CHAT_IDS=' "${ENV_FILE}" && echo "yes" || echo "no")
-    
-    if [ "$has_bot_token" == "yes" ] && [ "$has_chat_ids" == "yes" ]; then
+
+    local bot_token_value=$(grep '^BOT_TOKEN=' "${ENV_FILE}" | tail -n 1 | cut -d'=' -f2- | tr -d '"' | xargs)
+    local chat_ids_value=$(grep '^CRITICAL_ALERT_CHAT_IDS=' "${ENV_FILE}" | tail -n 1 | cut -d'=' -f2- | tr -d '"' | xargs)
+
+    if [ -n "$bot_token_value" ] && [ -n "$chat_ids_value" ]; then
         echo "on"
     else
         echo "off"
@@ -959,9 +959,11 @@ toggle_agent_monitoring() {
         msg_error ".env file not found!"
         return
     fi
-    
+
+    local current_bot_token=$(grep '^BOT_TOKEN=' "${ENV_FILE}" | tail -n 1 | cut -d'=' -f2- | tr -d '"' | xargs)
+    local current_chat_ids=$(grep '^CRITICAL_ALERT_CHAT_IDS=' "${ENV_FILE}" | tail -n 1 | cut -d'=' -f2- | tr -d '"' | xargs)
     local status=$(check_agent_monitoring_status)
-    
+
     if [ "$status" == "on" ]; then
         # Disable monitoring - remove variables
         msg_warning "Disabling agent monitoring..."
@@ -970,37 +972,54 @@ toggle_agent_monitoring() {
         msg_success "Agent monitoring disabled. BOT_TOKEN and CRITICAL_ALERT_CHAT_IDS removed from .env"
         msg_info "Restart the node: sudo systemctl restart ${NODE_SERVICE_NAME}"
     else
-        # Enable monitoring - request data and add variables
+        # Enable/fix monitoring - request data and update variables
         msg_info "Setting up agent monitoring..."
+        if [ -z "$current_bot_token" ]; then
+            msg_warning "BOT_TOKEN is missing or empty in .env"
+        fi
+        if [ -z "$current_chat_ids" ]; then
+            msg_warning "CRITICAL_ALERT_CHAT_IDS is missing or empty in .env"
+        fi
+
         echo ""
         echo -e "${C_CYAN}Agent monitoring requires:${C_RESET}"
         echo -e "  1. BOT_TOKEN - your Telegram bot token"
         echo -e "  2. CRITICAL_ALERT_CHAT_IDS - chat IDs for critical alerts (comma-separated)"
         echo ""
+        echo -e "${C_YELLOW}Important:${C_RESET} do not use another bot's chat_id (Telegram blocks bot-to-bot messaging)."
+        echo ""
         echo -e "${C_YELLOW}How to get Chat ID:${C_RESET}"
         echo -e "  • Send /start to @userinfobot"
         echo -e "  • Or add the bot to a group and use /start"
         echo ""
-        
-        read -p "Enter BOT_TOKEN: " bot_token
+
+        read -p "Enter BOT_TOKEN [current: ${current_bot_token:-empty}]: " bot_token
+        if [ -z "$bot_token" ]; then
+            bot_token="$current_bot_token"
+        fi
         if [ -z "$bot_token" ]; then
             msg_error "BOT_TOKEN cannot be empty!"
             return
         fi
-        
-        read -p "Enter CRITICAL_ALERT_CHAT_IDS (comma-separated): " chat_ids
+
+        read -p "Enter CRITICAL_ALERT_CHAT_IDS (comma-separated) [current: ${current_chat_ids:-empty}]: " chat_ids
+        if [ -z "$chat_ids" ]; then
+            chat_ids="$current_chat_ids"
+        fi
         if [ -z "$chat_ids" ]; then
             msg_error "CRITICAL_ALERT_CHAT_IDS cannot be empty!"
             return
         fi
-        
-        # Add variables to .env
+
+        # Update variables in .env
+        sed -i '/^BOT_TOKEN=/d' "${ENV_FILE}"
+        sed -i '/^CRITICAL_ALERT_CHAT_IDS=/d' "${ENV_FILE}"
         echo "" >> "${ENV_FILE}"
         echo "# Agent Monitoring Configuration" >> "${ENV_FILE}"
         echo "BOT_TOKEN=\"${bot_token}\"" >> "${ENV_FILE}"
         echo "CRITICAL_ALERT_CHAT_IDS=\"${chat_ids}\"" >> "${ENV_FILE}"
-        
-        msg_success "Agent monitoring enabled!"
+
+        msg_success "Agent monitoring enabled/updated!"
         msg_info "Restart the node: sudo systemctl restart ${NODE_SERVICE_NAME}"
     fi
 }

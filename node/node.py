@@ -1113,10 +1113,16 @@ def send_critical_telegram_alert(message):
                 success_count += 1
                 logging.info(f"Critical alert sent to Telegram chat {chat_id}")
             else:
+                response_text = response.text[:200]
                 logging.warning(
                     f"Failed to send critical alert to chat {chat_id}: "
-                    f"{response.status_code} {response.text[:200]}"
+                    f"{response.status_code} {response_text}"
                 )
+                if response.status_code == 403 and "bots can't send messages to bots" in response_text:
+                    logging.warning(
+                        "Invalid CRITICAL_ALERT_CHAT_IDS target: this is a bot chat. "
+                        "Use your personal chat_id, group_id, or channel_id where your bot is added and has access."
+                    )
         except Exception as e:
             logging.error(f"Error sending critical Telegram alert to chat {chat_id}: {e}")
     
