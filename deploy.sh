@@ -928,19 +928,28 @@ EOF
                 fi
                 
                 if [ -n "$need_node_name" ]; then
-                    read -p "Введите NODE_NAME (имя этой ноды): " saved_node_name
+                    read -p "Введите NODE_NAME (имя этой ноды) [Node]: " saved_node_name
+                    saved_node_name=${saved_node_name:-Node}
                 fi
             fi
         fi
+
+        [ -z "$saved_node_name" ] && saved_node_name="Node"
+        [ -z "$saved_delay" ] && saved_delay="15"
         
         # Add monitoring variables to .env if monitoring was configured (has BOT_TOKEN and CHAT_IDS)
         if [ -n "$saved_bot_token" ] && [ -n "$saved_chat_ids" ]; then
+            sed -i '/^# Agent Monitoring Configuration$/d' "${ENV_FILE}"
+            sed -i '/^BOT_TOKEN=/d' "${ENV_FILE}"
+            sed -i '/^CRITICAL_ALERT_CHAT_IDS=/d' "${ENV_FILE}"
+            sed -i '/^NODE_NAME=/d' "${ENV_FILE}"
+            sed -i '/^AGENT_ALERT_DELAY_SECONDS=/d' "${ENV_FILE}"
             echo "" | sudo tee -a "${ENV_FILE}" > /dev/null
             echo "# Agent Monitoring Configuration" | sudo tee -a "${ENV_FILE}" > /dev/null
             echo "BOT_TOKEN=\"${saved_bot_token}\"" | sudo tee -a "${ENV_FILE}" > /dev/null
             echo "CRITICAL_ALERT_CHAT_IDS=\"${saved_chat_ids}\"" | sudo tee -a "${ENV_FILE}" > /dev/null
             echo "NODE_NAME=\"${saved_node_name}\"" | sudo tee -a "${ENV_FILE}" > /dev/null
-            [ -n "$saved_delay" ] && echo "AGENT_ALERT_DELAY_SECONDS=\"${saved_delay}\"" | sudo tee -a "${ENV_FILE}" > /dev/null
+            echo "AGENT_ALERT_DELAY_SECONDS=\"${saved_delay}\"" | sudo tee -a "${ENV_FILE}" > /dev/null
             msg_info "✓ Переменные мониторинга добавлены в .env"
         fi
     fi
@@ -1102,11 +1111,14 @@ toggle_agent_monitoring() {
 
     local current_bot_token=$(grep '^BOT_TOKEN=' "${ENV_FILE}" | tail -n 1 | cut -d'=' -f2- | tr -d '"' | xargs)
     local current_chat_ids=$(grep '^CRITICAL_ALERT_CHAT_IDS=' "${ENV_FILE}" | tail -n 1 | cut -d'=' -f2- | tr -d '"' | xargs)
+    local current_node_name=$(grep '^NODE_NAME=' "${ENV_FILE}" | tail -n 1 | cut -d'=' -f2- | tr -d '"')
+    local current_delay=$(grep '^AGENT_ALERT_DELAY_SECONDS=' "${ENV_FILE}" | tail -n 1 | cut -d'=' -f2- | tr -d '"' | xargs)
     local status=$(check_agent_monitoring_status)
 
     if [ "$status" == "вкл" ]; then
         # Отключаем мониторинг - удаляем переменные
         msg_warning "Отключение мониторинга агента..."
+        sed -i '/^# Agent Monitoring Configuration$/d' "${ENV_FILE}"
         sed -i '/^BOT_TOKEN=/d' "${ENV_FILE}"
         sed -i '/^CRITICAL_ALERT_CHAT_IDS=/d' "${ENV_FILE}"
         msg_success "Мониторинг агента отключен. Переменные BOT_TOKEN и CRITICAL_ALERT_CHAT_IDS удалены из .env"
@@ -1151,13 +1163,28 @@ toggle_agent_monitoring() {
             return
         fi
 
+        read -p "Введите NODE_NAME [текущее: ${current_node_name:-Node}]: " node_name
+        if [ -z "$node_name" ]; then
+            node_name="${current_node_name:-Node}"
+        fi
+
+        read -p "Введите AGENT_ALERT_DELAY_SECONDS [текущее: ${current_delay:-15}]: " alert_delay
+        if [ -z "$alert_delay" ]; then
+            alert_delay="${current_delay:-15}"
+        fi
+
         # Обновляем переменные в .env
+        sed -i '/^# Agent Monitoring Configuration$/d' "${ENV_FILE}"
         sed -i '/^BOT_TOKEN=/d' "${ENV_FILE}"
         sed -i '/^CRITICAL_ALERT_CHAT_IDS=/d' "${ENV_FILE}"
+        sed -i '/^NODE_NAME=/d' "${ENV_FILE}"
+        sed -i '/^AGENT_ALERT_DELAY_SECONDS=/d' "${ENV_FILE}"
         echo "" >> "${ENV_FILE}"
         echo "# Agent Monitoring Configuration" >> "${ENV_FILE}"
         echo "BOT_TOKEN=\"${bot_token}\"" >> "${ENV_FILE}"
         echo "CRITICAL_ALERT_CHAT_IDS=\"${chat_ids}\"" >> "${ENV_FILE}"
+        echo "NODE_NAME=\"${node_name}\"" >> "${ENV_FILE}"
+        echo "AGENT_ALERT_DELAY_SECONDS=\"${alert_delay}\"" >> "${ENV_FILE}"
 
         msg_success "Мониторинг агента включен/обновлен!"
         msg_info "Перезапустите ноду: sudo systemctl restart ${NODE_SERVICE_NAME}"
