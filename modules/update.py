@@ -250,7 +250,7 @@ async def update_menu_handler(message: types.Message):
             ],
             [
                 InlineKeyboardButton(
-                    text=_("btn_cancel", lang), callback_data="back_to_menu"
+                    text=_("btn_cancel", lang), callback_data="back_to_menu", style="danger"
                 )
             ],
         ]
@@ -302,11 +302,12 @@ async def check_bot_update(callback: types.CallbackQuery):
                         InlineKeyboardButton(
                             text=_("btn_update_bot_now", lang),
                             callback_data=f"do_bot_update:{branch}",
+                            style="success"
                         )
                     ],
                     [
                         InlineKeyboardButton(
-                            text=_("btn_cancel", lang), callback_data="back_to_menu"
+                            text=_("btn_cancel", lang), callback_data="back_to_menu", style="danger"
                         )
                     ],
                 ]
@@ -330,7 +331,7 @@ async def check_bot_update(callback: types.CallbackQuery):
                     inline_keyboard=[
                         [
                             InlineKeyboardButton(
-                                text=_("btn_back", lang), callback_data="back_to_menu"
+                                text=_("btn_back", lang), callback_data="back_to_menu", style="primary"
                             )
                         ]
                     ]

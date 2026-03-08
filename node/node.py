@@ -1035,6 +1035,25 @@ def execute_command(task):
             "result": result_payload
         })
 
+def check_agent_health():
+    """
+    Check if the agent is accessible by making a simple HTTP request.
+    Returns True if accessible, False otherwise.
+    """
+    try:
+        # Try to reach agent's health endpoint with a short timeout
+        health_url = f"{AGENT_BASE_URL.rstrip('/')}/health"
+        response = requests.get(health_url, timeout=3)
+        return response.status_code == 200
+    except Exception:
+        # If health endpoint doesn't exist, try with heartbeat URL but only headers
+        try:
+            response = requests.head(f"{AGENT_BASE_URL.rstrip('/')}/api/heartbeat", timeout=3)
+            return response.status_code in [200, 401, 403]  # These statuses mean server is reachable
+        except Exception:
+            return False
+
+
 def send_heartbeat():
     global PENDING_RESULTS, SSH_EVENTS  # noqa: F824
     url = f"{AGENT_BASE_URL}/api/heartbeat"
@@ -1048,12 +1067,16 @@ def send_heartbeat():
     except Exception as e:
         logging.debug(f"Failed to get services status: {e}")
     
+    # Check agent health status before sending heartbeat
+    agent_status = "online" if check_agent_health() else "unreachable"
+    
     payload_dict = {
         "token": AGENT_TOKEN,
         "stats": get_system_stats(),
         "results": current_results,
         "ssh_logins": current_ssh_events,
         "services": services,
+        "agent_status": agent_status,
         "timestamp": int(time.time())
     }
     

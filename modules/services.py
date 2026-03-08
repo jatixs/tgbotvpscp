@@ -731,7 +731,7 @@ async def cq_services_manage_menu(callback: types.CallbackQuery):
     kb = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text=_("services_btn_add_service", lang), callback_data="srv_add_list_0")],
         [InlineKeyboardButton(text=_("services_btn_remove_service", lang), callback_data="srv_remove_list_0")],
-        [InlineKeyboardButton(text=_("btn_back", lang), callback_data="srv_refresh_0")]
+        [InlineKeyboardButton(text=_("btn_back", lang), callback_data="srv_refresh_0", style="primary")]
     ])
     
     await callback.message.edit_text(
@@ -796,7 +796,7 @@ async def cq_services_add_list(callback: types.CallbackQuery):
         kb.inline_keyboard.append(nav_row)
     
     kb.inline_keyboard.append([
-        InlineKeyboardButton(text=_("btn_back", lang), callback_data="srv_manage_menu")
+        InlineKeyboardButton(text=_("btn_back", lang), callback_data="srv_manage_menu", style="primary")
     ])
     
     await callback.message.edit_text(
@@ -899,7 +899,7 @@ async def cq_services_remove_list(callback: types.CallbackQuery):
         kb.inline_keyboard.append(nav_row)
     
     kb.inline_keyboard.append([
-        InlineKeyboardButton(text=_("btn_back", lang), callback_data="srv_manage_menu")
+        InlineKeyboardButton(text=_("btn_back", lang), callback_data="srv_manage_menu", style="primary")
     ])
     
     await callback.message.edit_text(

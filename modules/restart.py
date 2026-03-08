@@ -39,10 +39,10 @@ async def restart_confirm_handler(message: types.Message):
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text=_("btn_confirm", lang), callback_data="restart_confirm"
+                    text=_("btn_confirm", lang), callback_data="restart_confirm", style="success"
                 ),
                 InlineKeyboardButton(
-                    text=_("btn_cancel", lang), callback_data="restart_cancel"
+                    text=_("btn_cancel", lang), callback_data="restart_cancel", style="danger"
                 ),
             ]
         ]

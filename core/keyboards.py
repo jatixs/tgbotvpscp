@@ -139,7 +139,7 @@ def get_keyboard_settings_inline(lang: str) -> InlineKeyboardMarkup:
     rows.append(
         [
             InlineKeyboardButton(
-                text=_("btn_back", lang), callback_data="close_kb_settings"
+                text=_("btn_back", lang), callback_data="close_kb_settings", style="primary"
             )
         ]
     )
@@ -167,7 +167,7 @@ def get_manage_users_keyboard(lang: str):
             ],
             [
                 InlineKeyboardButton(
-                    text=_("btn_back_to_menu", lang), callback_data="back_to_menu"
+                    text=_("btn_back_to_menu", lang), callback_data="back_to_menu", style="primary"
                 )
             ],
         ]
@@ -211,7 +211,7 @@ def get_delete_users_keyboard(current_user_id: int):
     buttons.append(
         [
             InlineKeyboardButton(
-                text=_("btn_back", lang), callback_data="back_to_manage_users"
+                text=_("btn_back", lang), callback_data="back_to_manage_users", style="primary"
             )
         ]
     )
@@ -250,7 +250,7 @@ def get_change_group_keyboard(admin_user_id: int):
     buttons.append(
         [
             InlineKeyboardButton(
-                text=_("btn_back", lang), callback_data="back_to_manage_users"
+                text=_("btn_back", lang), callback_data="back_to_manage_users", style="primary"
             )
         ]
     )
@@ -273,7 +273,7 @@ def get_group_selection_keyboard(lang: str, user_id_to_change=None):
             ],
             [
                 InlineKeyboardButton(
-                    text=_("btn_cancel", lang), callback_data="back_to_manage_users"
+                    text=_("btn_cancel", lang), callback_data="back_to_manage_users", style="danger"
                 )
             ],
         ]
@@ -288,9 +288,10 @@ def get_self_delete_confirmation_keyboard(user_id: int):
                 InlineKeyboardButton(
                     text=_("btn_confirm", lang),
                     callback_data=f"confirm_self_delete_{user_id}",
+                    style="success",
                 ),
                 InlineKeyboardButton(
-                    text=_("btn_cancel", lang), callback_data="back_to_delete_users"
+                    text=_("btn_cancel", lang), callback_data="back_to_delete_users", style="danger"
                 ),
             ]
         ]
@@ -303,25 +304,22 @@ def get_reboot_confirmation_keyboard(user_id: int):
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text=_("btn_reboot_confirm", lang), 
-                    callback_data="reboot",
-                    style="success"  # Делает кнопку зеленой
+                    text=_("btn_reboot_confirm", lang), callback_data="reboot", style="success"
                 ),
                 InlineKeyboardButton(
-                    text=_("btn_reboot_cancel", lang), 
-                    callback_data="back_to_menu",
-                    style="danger"   # Делает кнопку красной
+                    text=_("btn_reboot_cancel", lang), callback_data="back_to_menu", style="danger"
                 ),
             ]
         ]
     )
+
 
 def get_back_keyboard(lang: str, callback_data="back_to_manage_users"):
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text=_("btn_back", lang), callback_data=callback_data
+                    text=_("btn_back", lang), callback_data=callback_data, style="primary"
                 )
             ]
         ]
@@ -342,7 +340,7 @@ def get_notifications_start_keyboard(user_id: int):
                 InlineKeyboardButton(text=_("notif_btn_nodes", lang), callback_data="notif_menu_nodes_list"),
             ],
             [
-                InlineKeyboardButton(text=_("btn_back_to_menu", lang), callback_data="back_to_menu")
+                InlineKeyboardButton(text=_("btn_back_to_menu", lang), callback_data="back_to_menu", style="primary")
             ]
         ]
     )
@@ -433,7 +431,7 @@ def get_notifications_global_keyboard(user_id: int):
             ],
             [
                 InlineKeyboardButton(
-                    text=_("btn_back", lang), callback_data="back_to_notif_menu"
+                    text=_("btn_back", lang), callback_data="back_to_notif_menu", style="primary"
                 )
             ],
         ]
@@ -454,7 +452,7 @@ def get_notifications_nodes_list_keyboard(nodes_dict: dict, lang: str):
     buttons.append(
         [
             InlineKeyboardButton(
-                text=_("btn_back", lang), callback_data="back_to_notif_menu"
+                text=_("btn_back", lang), callback_data="back_to_notif_menu", style="primary"
             )
         ]
     )
@@ -517,7 +515,7 @@ def get_notifications_node_settings_keyboard(token: str, node_name: str, user_id
             ],
             [
                 InlineKeyboardButton(
-                    text=_("btn_back", lang), callback_data="notif_menu_nodes_list"
+                    text=_("btn_back", lang), callback_data="notif_menu_nodes_list", style="primary"
                 )
             ],
         ]
@@ -549,7 +547,7 @@ def get_nodes_list_keyboard(nodes_dict: dict, lang: str) -> InlineKeyboardMarkup
     buttons.append(
         [
             InlineKeyboardButton(
-                text=_("btn_back_to_menu", lang), callback_data="back_to_menu"
+                text=_("btn_back_to_menu", lang), callback_data="back_to_menu", style="primary"
             )
         ]
     )
@@ -570,7 +568,7 @@ def get_nodes_delete_keyboard(nodes_dict: dict, lang: str) -> InlineKeyboardMark
     buttons.append(
         [
             InlineKeyboardButton(
-                text=_("btn_back", lang), callback_data="nodes_list_refresh"
+                text=_("btn_back", lang), callback_data="nodes_list_refresh", style="primary"
             )
         ]
     )
@@ -618,7 +616,7 @@ def get_node_management_keyboard(
     )
     row5 = [
         InlineKeyboardButton(
-            text=_("btn_back", lang), callback_data="nodes_list_refresh"
+            text=_("btn_back", lang), callback_data="nodes_list_refresh", style="primary"
         )
     ]
     layout = [row1, row2, row3, row4, row5]
@@ -640,7 +638,7 @@ def get_node_services_keyboard(token: str, services: list, lang: str) -> InlineK
         ])
     buttons.append([
         InlineKeyboardButton(
-            text=_("btn_back", lang), callback_data=f"node_select_{token}"
+            text=_("btn_back", lang), callback_data=f"node_select_{token}", style="primary"
         )
     ])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
@@ -673,7 +671,7 @@ def get_node_service_actions_keyboard(token: str, service: str, status: str, lan
     )
     return InlineKeyboardMarkup(inline_keyboard=[
         actions,
-        [InlineKeyboardButton(text=_("btn_back", lang), callback_data=f"node_services_{token}")]
+        [InlineKeyboardButton(text=_("btn_back", lang), callback_data=f"node_services_{token}", style="primary")]
     ])
 
     
