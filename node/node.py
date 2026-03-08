@@ -49,6 +49,7 @@ def ensure_env_variables():
         "AGENT_TOKEN",
         "BOT_TOKEN",
         "CRITICAL_ALERT_CHAT_IDS",
+        "AGENT_ALERT_DELAY_SECONDS",
         "NODE_NAME",
     ]
     
@@ -226,18 +227,31 @@ AGENT_TOKEN = CONF.get("AGENT_TOKEN")
 UPDATE_INTERVAL = int(CONF.get("NODE_UPDATE_INTERVAL", 5))
 BOT_TOKEN = CONF.get("BOT_TOKEN", "")
 CRITICAL_ALERT_CHAT_IDS = CONF.get("CRITICAL_ALERT_CHAT_IDS", "")
+AGENT_ALERT_DELAY_SECONDS = int(CONF.get("AGENT_ALERT_DELAY_SECONDS", 30))
 
 if not AGENT_BASE_URL or not AGENT_TOKEN:
     logging.error("CRITICAL: AGENT_BASE_URL or AGENT_TOKEN not found in .env")
     sys.exit(1)
 
-# Parse critical chat IDs if provided
+# Parse critical alert targets if provided.
+# Supports numeric chat IDs (e.g. -100123...) and string targets (e.g. @channel_username).
 CRITICAL_CHAT_IDS = []
 if CRITICAL_ALERT_CHAT_IDS:
-    try:
-        CRITICAL_CHAT_IDS = [int(cid.strip()) for cid in CRITICAL_ALERT_CHAT_IDS.split(',') if cid.strip()]
-    except Exception as e:
-        logging.warning(f"Failed to parse CRITICAL_ALERT_CHAT_IDS: {e}")
+    for raw_target in CRITICAL_ALERT_CHAT_IDS.split(','):
+        target = raw_target.strip()
+        if not target:
+            continue
+        if re.fullmatch(r"-?\d+", target):
+            CRITICAL_CHAT_IDS.append(int(target))
+        else:
+            CRITICAL_CHAT_IDS.append(target)
+
+if BOT_TOKEN and CRITICAL_CHAT_IDS:
+    logging.info(f"Critical alerts configured for {len(CRITICAL_CHAT_IDS)} chat target(s)")
+elif BOT_TOKEN and not CRITICAL_CHAT_IDS:
+    logging.warning("BOT_TOKEN configured, but CRITICAL_ALERT_CHAT_IDS is empty or invalid")
+elif not BOT_TOKEN and CRITICAL_ALERT_CHAT_IDS:
+    logging.warning("CRITICAL_ALERT_CHAT_IDS configured, but BOT_TOKEN is empty")
 
 PENDING_RESULTS = collections.deque(maxlen=50)
 LAST_TRAFFIC_STATS = {}
@@ -1081,7 +1095,7 @@ def send_critical_telegram_alert(message):
     Used when agent is down and cannot relay messages.
     """
     if not BOT_TOKEN or not CRITICAL_CHAT_IDS:
-        logging.debug("BOT_TOKEN or CRITICAL_CHAT_IDS not configured, skipping direct Telegram alert")
+        logging.warning("Direct Telegram alert skipped: BOT_TOKEN or CRITICAL_ALERT_CHAT_IDS not configured")
         return False
     
     telegram_api_url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
@@ -1099,7 +1113,10 @@ def send_critical_telegram_alert(message):
                 success_count += 1
                 logging.info(f"Critical alert sent to Telegram chat {chat_id}")
             else:
-                logging.warning(f"Failed to send critical alert to chat {chat_id}: {response.status_code}")
+                logging.warning(
+                    f"Failed to send critical alert to chat {chat_id}: "
+                    f"{response.status_code} {response.text[:200]}"
+                )
         except Exception as e:
             logging.error(f"Error sending critical Telegram alert to chat {chat_id}: {e}")
     
@@ -1207,7 +1224,7 @@ def send_heartbeat():
                     logging.warning("Agent detected as unreachable")
 
                 downtime = current_time - AGENT_DOWN_SINCE
-                if downtime >= 30 and not AGENT_DOWN_ALERT_SENT:
+                if downtime >= AGENT_ALERT_DELAY_SECONDS and not AGENT_DOWN_ALERT_SENT:
                     node_name = CONF.get("NODE_NAME", "")
                     if not node_name:
                         try:
@@ -1237,7 +1254,7 @@ def send_heartbeat():
             logging.warning("Agent detected as unreachable")
 
         downtime = current_time - AGENT_DOWN_SINCE
-        if downtime >= 30 and not AGENT_DOWN_ALERT_SENT:
+        if downtime >= AGENT_ALERT_DELAY_SECONDS and not AGENT_DOWN_ALERT_SENT:
             node_name = CONF.get("NODE_NAME", "")
             if not node_name:
                 try:
