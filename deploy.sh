@@ -261,6 +261,7 @@ load_cached_env() {
             fi
             [ -z "$AGENT_URL" ] && AGENT_URL=$(get_env_val "AGENT_BASE_URL")
             [ -z "$NODE_TOKEN" ] && NODE_TOKEN=$(get_env_val "AGENT_TOKEN")
+            [ -z "$DEBUG_VALUE" ] && DEBUG_VALUE=$(get_env_val "DEBUG")
             
             # Load monitoring variables
             [ -z "$MONITORING_BOT_TOKEN" ] && MONITORING_BOT_TOKEN=$(get_env_val "BOT_TOKEN")
@@ -438,6 +439,23 @@ ask_env_details() {
     msg_question "Токен Ботa: " T; msg_question "ID Админа: " A; msg_question "Username (opt): " U; msg_question "Bot Name (opt): " N
     msg_question "Внутренний Web Port [8080]: " P; if [ -z "$P" ]; then WEB_PORT="8080"; else WEB_PORT="$P"; fi
     msg_question "Sentry DSN (opt): " SENTRY_DSN
+    
+    local debug_current="${DEBUG_VALUE:-false}"
+    msg_question "DEBUG (true/false) [${debug_current}]: " DEBUG_INPUT
+    if [ -n "$DEBUG_INPUT" ]; then
+        case "${DEBUG_INPUT,,}" in
+            true|false) DEBUG_VALUE="${DEBUG_INPUT,,}" ;;
+            *) msg_warning "Некорректное значение DEBUG, используется: ${debug_current}"; DEBUG_VALUE="$debug_current" ;;
+        esac
+    else
+        DEBUG_VALUE="$debug_current"
+    fi
+
+    msg_question "AGENT_ALERT_DELAY_SECONDS (opt) [${MONITORING_DELAY:-пусто}]: " MONITORING_DELAY_INPUT
+    if [ -n "$MONITORING_DELAY_INPUT" ]; then MONITORING_DELAY="$MONITORING_DELAY_INPUT"; fi
+
+    msg_question "NODE_NAME (opt) [${MONITORING_NODE_NAME:-пусто}]: " MONITORING_NODE_NAME_INPUT
+    if [ -n "$MONITORING_NODE_NAME_INPUT" ]; then MONITORING_NODE_NAME="$MONITORING_NODE_NAME_INPUT"; fi
 
     msg_question "Включить Web-UI? (y/n) [y]: " W
     if [[ "$W" =~ ^[Nn]$ ]]; then
@@ -457,7 +475,7 @@ ask_env_details() {
             SETUP_HTTPS="false"
         fi
     fi
-    export T A U N WEB_PORT ENABLE_WEB SETUP_HTTPS HTTPS_DOMAIN HTTPS_EMAIL HTTPS_PORT GEN_PASS SENTRY_DSN
+    export T A U N WEB_PORT ENABLE_WEB SETUP_HTTPS HTTPS_DOMAIN HTTPS_EMAIL HTTPS_PORT GEN_PASS SENTRY_DSN DEBUG_VALUE MONITORING_DELAY MONITORING_NODE_NAME
 }
 
 write_env_file() {
@@ -467,6 +485,7 @@ write_env_file() {
     if [ -z "$ver" ]; then ver="Unknown"; fi
     local debug_setting="true"
     if [ "$GIT_BRANCH" == "main" ]; then debug_setting="false"; fi
+    if [ -n "$DEBUG_VALUE" ]; then debug_setting="$DEBUG_VALUE"; fi
 
     local compose_profile=""
     if [ "$dm" == "docker" ]; then compose_profile="${im}"; fi
@@ -490,6 +509,8 @@ SENTRY_DSN="${SENTRY_DSN}"
 INSTALLED_VERSION="${ver}"
 COMPOSE_PROFILES="${compose_profile}"
 WEB_DOMAIN="${web_domain}"
+AGENT_ALERT_DELAY_SECONDS="${MONITORING_DELAY}"
+NODE_NAME="${MONITORING_NODE_NAME}"
 EOF
     sudo chmod 600 "${ENV_FILE}"
     
