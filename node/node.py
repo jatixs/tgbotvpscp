@@ -479,7 +479,8 @@ def service_action(service_name, action, service_type="systemd"):
     allowed_actions = ["start", "stop", "restart"]
     if action not in allowed_actions:
         return {"success": False, "error": f"Invalid action: {action}"}
-    
+    if not re.match(r"^[\w\-\.]+$", service_name):
+        return {"success": False, "error": "Invalid service name format"}
     try:
         if service_type == "docker":
             # Docker container commands
@@ -795,9 +796,8 @@ def execute_command(task):
 
         elif cmd == "top":
             try:
-                # Security: Use exec instead of shell
                 proc = subprocess.Popen(
-                    ["ps", "aux"],
+                    ["ps", "-eo", "user,pid,%cpu,%mem,comm", "--sort=-%cpu"],
                     stdout=subprocess.PIPE,
                     stderr=subprocess.PIPE
                 )
@@ -980,7 +980,7 @@ def execute_command(task):
                     }
                 else:
                     try:
-                        res = subprocess.check_output("ping -c 3 8.8.8.8", shell=True).decode()
+                        res = subprocess.check_output(["ping", "-c", "3", "8.8.8.8"]).decode()
                         result_payload = {
                             "type": "i18n",
                             "key": "error_with_details",
@@ -1228,7 +1228,6 @@ def send_heartbeat():
         logging.warning("Agent detected as unreachable")
     
     payload_dict = {
-        "token": AGENT_TOKEN,
         "stats": get_system_stats(),
         "results": current_results,
         "ssh_logins": current_ssh_events,
@@ -1243,6 +1242,7 @@ def send_heartbeat():
     
     headers = {
         "Content-Type": "application/json",
+        "X-Node-Token": AGENT_TOKEN,
         "X-Signature": signature
     }
 
