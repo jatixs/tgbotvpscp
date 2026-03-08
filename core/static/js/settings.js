@@ -1086,7 +1086,14 @@ function renderNotifNodeDetail() {
 
     const node = NODES_DATA.find(n => n.token === currentNodeForNotif);
     if (node) {
-        nameEl.innerText = node.name;
+        // Update node name in badge (find the text span to preserve icon)
+        const textSpan = nameEl.querySelector('span.truncate');
+        if (textSpan) {
+            textSpan.innerText = node.name;
+        } else {
+            nameEl.innerText = node.name;
+        }
+        
         if (I18N.notif_node_settings_title) {
             titleEl.innerText = I18N.notif_node_settings_title.replace('{name}', node.name).replace(/<[^>]*>?/gm, '');
         }
