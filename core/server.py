@@ -979,7 +979,14 @@ async def handle_heartbeat(request):
     tasks_to_send = current_node.get("tasks", [])
     if tasks_to_send:
         await nodes_db.clear_node_tasks(token)
-    return web.json_response({"status": "ok", "tasks": tasks_to_send})
+
+    # Provide preferred alert language to node so it can keep localized critical alerts
+    # even when the agent becomes unreachable.
+    alert_lang = get_user_lang(ADMIN_USER_ID)
+    if alert_lang not in STRINGS:
+        alert_lang = DEFAULT_LANGUAGE
+
+    return web.json_response({"status": "ok", "tasks": tasks_to_send, "alert_lang": alert_lang})
 
 
 async def process_node_result_background(bot, user_id, cmd, text, token, node_name):

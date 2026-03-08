@@ -1032,17 +1032,23 @@ main_menu() {
         echo -e "${C_BLUE}${C_BOLD}║    VPS Telegram Bot Manager       ║${C_RESET}"
         echo -e "${C_BLUE}${C_BOLD}╚═══════════════════════════════════╝${C_RESET}"
         check_integrity
+        local item_type="agent"
+        if [ "$IS_NODE" == "yes" ]; then
+            item_type="node"
+        fi
         echo -e "  Branch: ${GIT_BRANCH} | Version: ${local_version}"
         echo -e "  Type: ${INSTALL_TYPE} | Status: ${STATUS_MESSAGE}"
         if [ -n "$INTEGRITY_STATUS" ]; then echo -e "  Integrity: ${INTEGRITY_STATUS}"; fi
         echo "--------------------------------------------------------"
-        echo "  1) Update bot"
-        echo "  2) Uninstall bot"
+        echo "  1) Update ${item_type}"
+        echo "  2) Uninstall ${item_type}"
         echo "  3) Reinstall (Systemd - Secure)"
         echo "  4) Reinstall (Systemd - Root)"
         echo "  5) Reinstall (Docker - Secure)"
         echo "  6) Reinstall (Docker - Root)"
-        echo -e "${C_GREEN}  7) Install NODE (Client)${C_RESET}"
+        if [ "$IS_NODE" == "yes" ]; then
+            echo -e "${C_GREEN}  7) Install NODE (Client)${C_RESET}"
+        fi
         
         # Show agent monitoring option only for nodes
         if [ "$IS_NODE" == "yes" ]; then
@@ -1055,12 +1061,12 @@ main_menu() {
         read -p "$(echo -e "${C_BOLD}Your choice: ${C_RESET}")" choice
         case $choice in
             1) update_bot; read -p "Press Enter..." ;;
-            2) msg_question "Uninstall? (y/n): " c; if [[ "$c" =~ ^[Yy]$ ]]; then uninstall_bot; return; fi ;;
+            2) msg_question "Uninstall ${item_type}? (y/n): " c; if [[ "$c" =~ ^[Yy]$ ]]; then uninstall_bot; return; fi ;;
             3) uninstall_bot; install_systemd_logic "secure"; read -p "Press Enter..." ;;
             4) uninstall_bot; install_systemd_logic "root"; read -p "Press Enter..." ;;
             5) uninstall_bot; install_docker_logic "secure"; read -p "Press Enter..." ;;
             6) uninstall_bot; install_docker_logic "root"; read -p "Press Enter..." ;;
-            7) uninstall_bot; install_node_logic; read -p "Press Enter..." ;;
+            7) if [ "$IS_NODE" == "yes" ]; then uninstall_bot; install_node_logic; read -p "Press Enter..."; else msg_error "Option available in NODE mode only."; sleep 2; fi ;;
             8) if [ "$IS_NODE" == "yes" ]; then toggle_agent_monitoring; read -p "Press Enter..."; fi ;;
             0) break ;;
         esac

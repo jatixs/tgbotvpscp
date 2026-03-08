@@ -1065,17 +1065,23 @@ main_menu() {
         echo -e "${C_BLUE}${C_BOLD}║    Менеджер VPS Telegram Бот      ║${C_RESET}"
         echo -e "${C_BLUE}${C_BOLD}╚═══════════════════════════════════╝${C_RESET}"
         check_integrity
+        local item_type="агента"
+        if [ "$IS_NODE" == "yes" ]; then
+            item_type="ноду"
+        fi
         echo -e "  Ветка: ${GIT_BRANCH} | Версия: ${local_version}"
         echo -e "  Тип: ${INSTALL_TYPE} | Статус: ${STATUS_MESSAGE}"
         if [ -n "$INTEGRITY_STATUS" ]; then echo -e "  Интегритет: ${INTEGRITY_STATUS}"; fi
         echo "--------------------------------------------------------"
-        echo "  1) Обновить бота"
-        echo "  2) Удалить бота"
+        echo "  1) Обновить ${item_type}"
+        echo "  2) Удалить ${item_type}"
         echo "  3) Переустановить (Systemd - Secure)"
         echo "  4) Переустановить (Systemd - Root)"
         echo "  5) Переустановить (Docker - Secure)"
         echo "  6) Переустановить (Docker - Root)"
-        echo -e "${C_GREEN}  7) Установить НОДУ (Клиент)${C_RESET}"
+        if [ "$IS_NODE" == "yes" ]; then
+            echo -e "${C_GREEN}  7) Установить НОДУ (Клиент)${C_RESET}"
+        fi
         
         # Показываем пункт мониторинга агента только для нод
         if [ "$IS_NODE" == "yes" ]; then
@@ -1088,12 +1094,12 @@ main_menu() {
         read -p "$(echo -e "${C_BOLD}Ваш выбор: ${C_RESET}")" choice
         case $choice in
             1) update_bot; read -p "Нажмите Enter..." ;;
-            2) msg_question "Удалить? (y/n): " c; if [[ "$c" =~ ^[Yy]$ ]]; then uninstall_bot; return; fi ;;
+            2) msg_question "Удалить ${item_type}? (y/n): " c; if [[ "$c" =~ ^[Yy]$ ]]; then uninstall_bot; return; fi ;;
             3) uninstall_bot; install_systemd_logic "secure"; read -p "Нажмите Enter..." ;;
             4) uninstall_bot; install_systemd_logic "root"; read -p "Нажмите Enter..." ;;
             5) uninstall_bot; install_docker_logic "secure"; read -p "Нажмите Enter..." ;;
             6) uninstall_bot; install_docker_logic "root"; read -p "Нажмите Enter..." ;;
-            7) uninstall_bot; install_node_logic; read -p "Нажмите Enter..." ;;
+            7) if [ "$IS_NODE" == "yes" ]; then uninstall_bot; install_node_logic; read -p "Нажмите Enter..."; else msg_error "Пункт доступен только в режиме НОДЫ."; sleep 2; fi ;;
             8) if [ "$IS_NODE" == "yes" ]; then toggle_agent_monitoring; read -p "Нажмите Enter..."; fi ;;
             0) break ;;
         esac

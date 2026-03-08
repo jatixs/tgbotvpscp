@@ -228,6 +228,7 @@ UPDATE_INTERVAL = int(CONF.get("NODE_UPDATE_INTERVAL", 5))
 BOT_TOKEN = CONF.get("BOT_TOKEN", "")
 CRITICAL_ALERT_CHAT_IDS = CONF.get("CRITICAL_ALERT_CHAT_IDS", "")
 AGENT_ALERT_DELAY_SECONDS = int(CONF.get("AGENT_ALERT_DELAY_SECONDS", 30))
+AGENT_ALERT_LANG = CONF.get("AGENT_ALERT_LANG", "ru").lower()
 
 if not AGENT_BASE_URL or not AGENT_TOKEN:
     logging.error("CRITICAL: AGENT_BASE_URL or AGENT_TOKEN not found in .env")
@@ -260,6 +261,7 @@ SSH_EVENTS = collections.deque(maxlen=100)
 # Agent health tracking
 AGENT_DOWN_SINCE = None
 AGENT_DOWN_ALERT_SENT = False
+LAST_AGENT_LANG = AGENT_ALERT_LANG if AGENT_ALERT_LANG in {"ru", "en"} else "ru"
 
 EXTERNAL_IP_CACHE = None 
 
@@ -1130,22 +1132,85 @@ def send_critical_telegram_alert(message):
 
 
 def format_downtime(seconds):
-    """Format downtime duration in human-readable format"""
-    if seconds < 60:
-        return f"{int(seconds)} секунд"
-    elif seconds < 3600:
-        minutes = int(seconds / 60)
-        return f"{minutes} минут"
-    else:
+    return format_downtime_localized(seconds, LAST_AGENT_LANG)
+
+
+def format_downtime_localized(seconds, lang):
+    """Format downtime duration in human-readable format in the selected language."""
+    if lang == "en":
+        if seconds < 60:
+            return f"{int(seconds)} seconds"
+        if seconds < 3600:
+            minutes = int(seconds / 60)
+            return f"{minutes} minutes"
         hours = int(seconds / 3600)
         minutes = int((seconds % 3600) / 60)
         if minutes > 0:
-            return f"{hours} часов {minutes} минут"
-        return f"{hours} часов"
+            return f"{hours} hours {minutes} minutes"
+        return f"{hours} hours"
+
+    if seconds < 60:
+        return f"{int(seconds)} секунд"
+    if seconds < 3600:
+        minutes = int(seconds / 60)
+        return f"{minutes} минут"
+    hours = int(seconds / 3600)
+    minutes = int((seconds % 3600) / 60)
+    if minutes > 0:
+        return f"{hours} часов {minutes} минут"
+    return f"{hours} часов"
+
+
+def get_node_name_for_alert():
+    node_name = CONF.get("NODE_NAME", "")
+    if node_name:
+        return node_name
+    try:
+        import socket
+        return socket.gethostname()
+    except Exception:
+        return "Unknown Node"
+
+
+def build_agent_down_alert(node_name):
+    if LAST_AGENT_LANG == "en":
+        return (
+            f"🚨 <b>CRITICAL: Main agent (primary server) is UNREACHABLE!</b>\n\n"
+            f"🌐 <b>Reported by node:</b> {node_name}\n"
+            f"💭 <b>Status:</b> Agent is unreachable since {datetime.fromtimestamp(AGENT_DOWN_SINCE).strftime('%H:%M:%S')}\n"
+            f"⚠️ <b>Action:</b> Check main server availability and bot service status\n"
+            f"🔗 <b>URL:</b> {AGENT_BASE_URL}"
+        )
+    return (
+        f"🚨 <b>КРИТИЧНОЕ: Главный агент (основной сервер) НЕДОСТУПЕН!</b>\n\n"
+        f"🌐 <b>Сообщено нодой:</b> {node_name}\n"
+        f"💭 <b>Статус:</b> Агент недоступен с {datetime.fromtimestamp(AGENT_DOWN_SINCE).strftime('%H:%M:%S')}\n"
+        f"⚠️ <b>Действие:</b> Проверьте доступность основного сервера и службы бота\n"
+        f"🔗 <b>URL:</b> {AGENT_BASE_URL}"
+    )
+
+
+def build_agent_recovery_alert(node_name, downtime):
+    downtime_text = format_downtime_localized(downtime, LAST_AGENT_LANG)
+    if LAST_AGENT_LANG == "en":
+        return (
+            f"✅ <b>Main agent recovered!</b>\n\n"
+            f"🌐 <b>Reported by node:</b> {node_name}\n"
+            f"💚 <b>Status:</b> Agent is reachable again\n"
+            f"⏱ <b>Downtime:</b> {downtime_text}\n"
+            f"📡 <b>System stabilized</b>"
+        )
+    return (
+        f"✅ <b>Главный агент восстановлен!</b>\n\n"
+        f"🌐 <b>Сообщено нодой:</b> {node_name}\n"
+        f"💚 <b>Статус:</b> Агент снова доступен\n"
+        f"⏱ <b>Время простоя:</b> {downtime_text}\n"
+        f"📡 <b>Система стабилизована</b>"
+    )
 
 
 def send_heartbeat():
-    global PENDING_RESULTS, SSH_EVENTS, AGENT_DOWN_SINCE, AGENT_DOWN_ALERT_SENT  # noqa: F824
+    global PENDING_RESULTS, SSH_EVENTS, AGENT_DOWN_SINCE, AGENT_DOWN_ALERT_SENT, LAST_AGENT_LANG  # noqa: F824
     url = f"{AGENT_BASE_URL}/api/heartbeat"
     current_results = list(PENDING_RESULTS)
     current_ssh_events = list(SSH_EVENTS)
@@ -1187,6 +1252,13 @@ def send_heartbeat():
         response = requests.post(url, data=payload_bytes, headers=headers, timeout=5)
         if response.status_code == 200:
             data = response.json()
+
+            # Agent provides preferred language while online; keep it cached for offline alerts.
+            response_lang = data.get("alert_lang")
+            if response_lang in {"ru", "en"} and response_lang != LAST_AGENT_LANG:
+                LAST_AGENT_LANG = response_lang
+                logging.info(f"Updated alert language from agent: {LAST_AGENT_LANG}")
+
             PENDING_RESULTS.clear()
             SSH_EVENTS.clear()
 
@@ -1197,23 +1269,10 @@ def send_heartbeat():
             # Heartbeat delivery succeeded - reset down state and notify recovery if needed
             if AGENT_DOWN_SINCE is not None:
                 downtime = time.time() - AGENT_DOWN_SINCE
-
-                node_name = CONF.get("NODE_NAME", "")
-                if not node_name:
-                    try:
-                        import socket
-                        node_name = socket.gethostname()
-                    except Exception:
-                        node_name = "Unknown Node"
+                node_name = get_node_name_for_alert()
 
                 if AGENT_DOWN_ALERT_SENT:
-                    recovery_message = (
-                        f"✅ <b>Главный агент восстановлен!</b>\n\n"
-                        f"🌐 <b>Сообщено нодой:</b> {node_name}\n"
-                        f"💚 <b>Статус:</b> Агент снова доступен\n"
-                        f"⏱ <b>Время простоя:</b> {format_downtime(downtime)}\n"
-                        f"📡 <b>Система стабилизована</b>"
-                    )
+                    recovery_message = build_agent_recovery_alert(node_name, downtime)
                     send_critical_telegram_alert(recovery_message)
                     logging.info(f"Agent recovered after {format_downtime(downtime)} downtime")
 
@@ -1231,22 +1290,8 @@ def send_heartbeat():
 
                 downtime = current_time - AGENT_DOWN_SINCE
                 if downtime >= AGENT_ALERT_DELAY_SECONDS and not AGENT_DOWN_ALERT_SENT:
-                    node_name = CONF.get("NODE_NAME", "")
-                    if not node_name:
-                        try:
-                            import socket
-                            node_name = socket.gethostname()
-                        except Exception:
-                            node_name = "Unknown Node"
-
-                    alert_message = (
-                        f"🚨 <b>КРИТИЧНОЕ: Главный агент (основной сервер) НЕДОСТУПЕН!</b>\n\n"
-                        f"🌐 <b>Сообщено нодой:</b> {node_name}\n"
-                        f"💭 <b>Статус:</b> Агент недоступен с {datetime.fromtimestamp(AGENT_DOWN_SINCE).strftime('%H:%M:%S')}\n"
-                        f"⏱ <b>Время недоступности:</b> {format_downtime(downtime)}\n"
-                        f"⚠️ <b>Действие:</b> Проверьте доступность основного сервера и службы бота\n"
-                        f"🔗 <b>URL:</b> {AGENT_BASE_URL}"
-                    )
+                    node_name = get_node_name_for_alert()
+                    alert_message = build_agent_down_alert(node_name)
 
                     if send_critical_telegram_alert(alert_message):
                         AGENT_DOWN_ALERT_SENT = True
@@ -1261,22 +1306,8 @@ def send_heartbeat():
 
         downtime = current_time - AGENT_DOWN_SINCE
         if downtime >= AGENT_ALERT_DELAY_SECONDS and not AGENT_DOWN_ALERT_SENT:
-            node_name = CONF.get("NODE_NAME", "")
-            if not node_name:
-                try:
-                    import socket
-                    node_name = socket.gethostname()
-                except Exception:
-                    node_name = "Unknown Node"
-
-            alert_message = (
-                f"🚨 <b>КРИТИЧНОЕ: Главный агент (основной сервер) НЕДОСТУПЕН!</b>\n\n"
-                f"🌐 <b>Сообщено нодой:</b> {node_name}\n"
-                f"💭 <b>Статус:</b> Агент недоступен с {datetime.fromtimestamp(AGENT_DOWN_SINCE).strftime('%H:%M:%S')}\n"
-                f"⏱ <b>Время недоступности:</b> {format_downtime(downtime)}\n"
-                f"⚠️ <b>Действие:</b> Проверьте доступность основного сервера и службы бота\n"
-                f"🔗 <b>URL:</b> {AGENT_BASE_URL}"
-            )
+            node_name = get_node_name_for_alert()
+            alert_message = build_agent_down_alert(node_name)
 
             if send_critical_telegram_alert(alert_message):
                 AGENT_DOWN_ALERT_SENT = True
