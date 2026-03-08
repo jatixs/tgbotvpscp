@@ -5,11 +5,27 @@
 <h1 align="center">📝 Telegram VPS Management Bot — Список изменений</h1>
 
 <p align="center">
-	<img src="https://img.shields.io/badge/version-v1.19.0-blue?style=flat-square" alt="Version 1.19.0"/>
-	<img src="https://img.shields.io/badge/build-68-purple?style=flat-square" alt="Build 68"/>
-	<img src="https://img.shields.io/badge/date-Февраль%2027-green?style=flat-square" alt="Date February 13"/>
+	<img src="https://img.shields.io/badge/version-v1.19.1-blue?style=flat-square" alt="Version 1.19.1"/>
+	<img src="https://img.shields.io/badge/build-69-purple?style=flat-square" alt="Build 69"/>
+	<img src="https://img.shields.io/badge/date-Март%2026-green?style=flat-square" alt="Date March 8"/>
 	<img src="https://img.shields.io/badge/status-stable-green?style=flat-square" alt="Status Stable"/>
 </p>
+
+---
+## [1.19.1] - 2026-03-08
+
+### 🚀 Добавлено:
+* **WebUI:** Поддержка включения и отключения методов авторизации (вход по паролю или через официальный виджет Telegram).
+* **Core & Deployment:** Проверка доступности агента (клиента) через систему активных нод — механизм обратного опроса (Reverse Heartbeat). Интегрировано в ядро и скрипты установки.
+
+### ✨ Изменено:
+* **Bot:** Обновлена цветовая схема для инлайн-кнопок (кнопки подтверждения, отмены и «Назад»).
+* **Deployment:** Повышена гибкость меню установки (улучшена навигация скрипта).
+
+### 🔧 Исправлено:
+* **WebUI:** Ошибки в дизайне бейджей статуса нод (Node badge).
+* **WebUI:** Недочеты локализации (перевода) в веб-интерфейсе.
+* **Bot:** Завершена полная локализация всех системных уведомлений (алертов).
 
 ---
 ## [1.19.0] - 2026-02-18

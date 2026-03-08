@@ -5,11 +5,27 @@
 <h1 align="center">📝 Telegram VPS Management Bot — Changelog</h1>
 
 <p align="center">
-	<img src="https://img.shields.io/badge/version-v1.19.0-blue?style=flat-square" alt="Version 1.19.0"/>
-	<img src="https://img.shields.io/badge/build-68-purple?style=flat-square" alt="Build 68"/>
-	<img src="https://img.shields.io/badge/date-February%2027-green?style=flat-square" alt="Date February 13"/>
+	<img src="https://img.shields.io/badge/version-v1.19.1-blue?style=flat-square" alt="Version 1.19.1"/>
+	<img src="https://img.shields.io/badge/build-69-purple?style=flat-square" alt="Build 69"/>
+	<img src="https://img.shields.io/badge/date-March%2026-green?style=flat-square" alt="Date March 8"/>
 	<img src="https://img.shields.io/badge/status-stable-green?style=flat-square" alt="Status Stable"/>
 </p>
+
+---
+## [1.19.1] - 2026-03-08
+
+### 🚀 Added:
+* **WebUI:** Support for enabling and disabling authorization methods (password login or via the official Telegram widget).
+* **Core & Deployment:** Agent (client) availability check via the active nodes system — Reverse Heartbeat mechanism. Integrated into the core and installation scripts.
+
+### ✨ Changed:
+* **Bot:** Updated color scheme for inline buttons (confirmation, cancel, and "Back" buttons).
+* **Deployment:** Increased flexibility of the installation menu (improved script navigation).
+
+### 🔧 Fixed:
+* **WebUI:** Errors in the design of node status badges (Node badge).
+* **WebUI:** Localization (translation) issues in the web interface.
+* **Bot:** Completed full localization of all system notifications (alerts).
 
 ---
 ## [1.19.0] - 2026-02-18
