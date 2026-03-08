@@ -1911,3 +1911,85 @@ window.animateModalClose = function (modal) {
         }
     }, 200);
 };
+
+// --- Telegram Only Mode Logic ---
+let telegramOnlyMode = false;
+
+async function loadTelegramOnlyMode() {
+    try {
+        const res = await fetch('/api/security/telegram_only_mode');
+        if (res.ok) {
+            const data = await res.json();
+            telegramOnlyMode = data.enabled || false;
+            updateLockIcon();
+        }
+    } catch (e) {
+        console.error('Failed to load telegram only mode:', e);
+    }
+}
+
+function updateLockIcon() {
+    const lockIcon = document.getElementById('lockIcon');
+    const passwordSection = document.getElementById('passwordChangeSection');
+    const passwordOverlay = document.getElementById('passwordChangeOverlay');
+    
+    if (!lockIcon || !passwordSection) return;
+    
+    if (telegramOnlyMode) {
+        lockIcon.classList.add('lock-active');
+        passwordSection.classList.add('blurred');
+        if (passwordOverlay) passwordOverlay.classList.remove('hidden');
+    } else {
+        lockIcon.classList.remove('lock-active');
+        passwordSection.classList.remove('blurred');
+        if (passwordOverlay) passwordOverlay.classList.add('hidden');
+    }
+}
+
+async function toggleTelegramOnlyMode() {
+    try {
+        const newMode = !telegramOnlyMode;
+        const res = await fetch('/api/security/telegram_only_mode', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                enabled: newMode
+            })
+        });
+        
+        if (res.ok) {
+            telegramOnlyMode = newMode;
+            updateLockIcon();
+            localStorage.setItem('telegram_only_mode', newMode ? '1' : '0');
+            
+            const message = newMode 
+                ? (I18N.web_telegram_only_enabled || 'Telegram only mode enabled. Password login disabled.')
+                : (I18N.web_telegram_only_disabled || 'All login methods enabled.');
+            
+            if (window.showToast) {
+                window.showToast(message);
+            }
+        } else {
+            const data = await res.json();
+            const errorShort = (typeof I18N !== 'undefined' && I18N.web_error_short) ? I18N.web_error_short : "Error";
+            await window.showModalAlert(data.error || 'Failed to toggle mode', errorShort);
+        }
+    } catch (e) {
+        console.error('Failed to toggle telegram only mode:', e);
+        const errorShort = (typeof I18N !== 'undefined' && I18N.web_conn_error_short) ? I18N.web_conn_error_short : "Conn Error";
+        await window.showModalAlert(String(e), errorShort);
+    }
+}
+
+window.toggleTelegramOnlyMode = toggleTelegramOnlyMode;
+
+// Load telegram only mode on settings init
+if (typeof window.initSettings === 'function') {
+    const originalInit = window.initSettings;
+    window.initSettings = function() {
+        originalInit.apply(this, arguments);
+        loadTelegramOnlyMode();
+    };
+}

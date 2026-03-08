@@ -30,6 +30,7 @@ USER_SETTINGS_FILE = os.path.join(CONFIG_DIR, "user_settings.json")
 SYSTEM_CONFIG_FILE = os.path.join(CONFIG_DIR, "system_config.json")
 KEYBOARD_CONFIG_FILE = os.path.join(CONFIG_DIR, "keyboard_config.json")
 WEB_AUTH_FILE = os.path.join(CONFIG_DIR, "web_auth.txt")
+SECURITY_SETTINGS_FILE = os.path.join(CONFIG_DIR, "security_settings.json")
 SECURITY_KEY_FILE = os.path.join(CONFIG_DIR, "security.key")
 
 

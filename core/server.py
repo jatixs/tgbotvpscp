@@ -33,6 +33,9 @@ from .config import (
     KEYBOARD_CONFIG,
     DEPLOY_MODE,
     TG_BOT_NAME,
+    SECURITY_SETTINGS_FILE,
+    load_encrypted_json,
+    save_encrypted_json,
 )
 from . import config as current_config
 from .shared_state import (
@@ -1692,6 +1695,8 @@ async def handle_settings_page(request):
         "web_logs_cleared_alert": _("web_logs_cleared_alert", lang),
         "web_pass_changed": _("web_pass_changed", lang),
         "web_pass_mismatch": _("web_pass_mismatch", lang),
+        "web_telegram_only_enabled": _("web_telegram_only_enabled", lang),
+        "web_telegram_only_disabled": _("web_telegram_only_disabled", lang),
         "web_clear_bot_confirm": _("web_clear_bot_confirm", lang),
         "web_clear_node_confirm": _("web_clear_node_confirm", lang),
         "web_clear_all_confirm": _("web_clear_all_confirm", lang),
@@ -1854,6 +1859,8 @@ async def handle_settings_page(request):
         "web_clear_logs_btn": _("web_clear_logs_btn", lang),
         "web_reset_traffic_btn": _("web_reset_traffic_btn", lang),
         "web_security_section": _("web_security_section", lang),
+        "web_telegram_only_tooltip": _("web_telegram_only_tooltip", lang),
+        "web_telegram_only_notice": _("web_telegram_only_notice", lang),
         "web_change_password_title": _("web_change_password_title", lang),
         "web_current_password": _("web_current_password", lang),
         "web_new_password": _("web_new_password", lang),
@@ -1998,6 +2005,32 @@ async def handle_change_password(request):
             ALLOWED_USERS[user["id"]]["password_hash"] = new_hash
         save_users()
         return web.json_response({"status": "ok"})
+    except Exception as e:
+        return web.json_response({"error": str(e)}, status=500)
+
+
+async def handle_get_telegram_only_mode(request):
+    try:
+        settings = load_encrypted_json(SECURITY_SETTINGS_FILE)
+        enabled = bool(settings.get("telegram_only_mode", False))
+        return web.json_response({"enabled": enabled})
+    except Exception as e:
+        return web.json_response({"error": str(e)}, status=500)
+
+
+async def handle_set_telegram_only_mode(request):
+    user = get_current_user(request)
+    if not user:
+        return web.json_response({"error": "Unauthorized"}, status=401)
+    if user["id"] != ADMIN_USER_ID:
+        return web.json_response({"error": "Main Admin only"}, status=403)
+    try:
+        data = await request.json()
+        enabled = data.get("enabled", False)
+        settings = load_encrypted_json(SECURITY_SETTINGS_FILE)
+        settings["telegram_only_mode"] = enabled
+        save_encrypted_json(SECURITY_SETTINGS_FILE, settings)
+        return web.json_response({"status": "ok", "enabled": enabled})
     except Exception as e:
         return web.json_response({"error": str(e)}, status=500)
 
@@ -2187,6 +2220,11 @@ async def handle_login_page(request):
 
 
 async def handle_login_request(request):
+    # Check if telegram only mode is enabled
+    settings = load_encrypted_json(SECURITY_SETTINGS_FILE)
+    if settings.get("telegram_only_mode", False):
+        return web.Response(text="Only Telegram widget login is allowed", status=403)
+    
     data = await request.post()
     try:
         uid = int(data.get("user_id", 0))
@@ -2218,6 +2256,11 @@ async def handle_login_request(request):
 
 
 async def handle_login_password(request):
+    # Check if telegram only mode is enabled
+    settings = load_encrypted_json(SECURITY_SETTINGS_FILE)
+    if settings.get("telegram_only_mode", False):
+        return web.Response(text="Password login disabled. Only Telegram widget login is allowed.", status=403)
+    
     data = await request.post()
     ip = get_client_ip(request)
     if not check_rate_limit(ip):
@@ -3032,6 +3075,8 @@ async def start_web_server(bot_instance: Bot):
         app.router.add_head("/api/settings/language", handle_session_check_head)
         app.router.add_post("/api/settings/system", handle_save_system_config)
         app.router.add_post("/api/settings/password", handle_change_password)
+        app.router.add_get("/api/security/telegram_only_mode", handle_get_telegram_only_mode)
+        app.router.add_post("/api/security/telegram_only_mode", handle_set_telegram_only_mode)
         app.router.add_post("/api/settings/keyboard", handle_save_keyboard_config)
         app.router.add_post("/api/settings/metadata", handle_save_metadata)
         app.router.add_post("/api/logs/clear", handle_clear_logs)
@@ -3424,6 +3469,11 @@ async def handle_login_page(request):
 
 
 async def handle_login_request(request):
+    # Check if telegram only mode is enabled
+    settings = load_encrypted_json(SECURITY_SETTINGS_FILE)
+    if settings.get("telegram_only_mode", False):
+        return web.Response(text="Only Telegram widget login is allowed", status=403)
+
     data = await request.post()
     try:
         uid = int(data.get("user_id", 0))
@@ -3455,6 +3505,11 @@ async def handle_login_request(request):
 
 
 async def handle_login_password(request):
+    # Check if telegram only mode is enabled
+    settings = load_encrypted_json(SECURITY_SETTINGS_FILE)
+    if settings.get("telegram_only_mode", False):
+        return web.Response(text="Password login disabled. Only Telegram widget login is allowed.", status=403)
+
     data = await request.post()
     ip = get_client_ip(request)
     if not check_rate_limit(ip):
@@ -4392,6 +4447,8 @@ async def start_web_server(bot_instance: Bot):
         app.router.add_head("/api/settings/language", handle_session_check_head)
         app.router.add_post("/api/settings/system", handle_save_system_config)
         app.router.add_post("/api/settings/password", handle_change_password)
+        app.router.add_get("/api/security/telegram_only_mode", handle_get_telegram_only_mode)
+        app.router.add_post("/api/security/telegram_only_mode", handle_set_telegram_only_mode)
         app.router.add_post("/api/settings/keyboard", handle_save_keyboard_config)
         app.router.add_post("/api/settings/metadata", handle_save_metadata)
         app.router.add_post("/api/logs/clear", handle_clear_logs)

@@ -534,7 +534,7 @@
                         </div>
                     </div>
                     <div class="bg-white/60 dark:bg-white/5 backdrop-blur-md border border-white/40 dark:border-white/10 rounded-2xl p-6 shadow-lg dark:shadow-none flex flex-col flex-1 min-h-[300px] lazy-block" id="notificationsSection">
-                        <div class="flex justify-between items-center mb-4">
+                        <div class="flex justify-between items-center mb-6">
                             <div class="flex items-center gap-2">
                                 <button id="notifHeaderBackBtn" onclick="notifGoBack()" class="hidden items-center justify-center p-1 sm:p-1.5 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 bg-gray-100 dark:bg-white/5 hover:bg-gray-200 dark:hover:bg-white/10 rounded-lg transition-colors" title="{{ web_back }}">
                                     <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" /></svg>
@@ -572,7 +572,7 @@
                         </div>
 
                         <div id="notifViewGlobal" class="hidden animate-fade-in-up">
-                            <h3 class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3 ml-1" data-i18n="web_notif_global_group_agent">{{ web_notif_global_group_agent }}</h3>
+                            <h3 class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-4 ml-1" data-i18n="web_notif_global_group_agent">{{ web_notif_global_group_agent }}</h3>
                             <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-6">
                                 <div class="flex items-center justify-between bg-gray-50 dark:bg-black/20 p-3 rounded-xl hover:bg-gray-100 dark:hover:bg-black/30 transition border border-gray-200 dark:border-white/5 cursor-pointer" onclick="document.getElementById('alert_resources').click()">
                                     <span class="text-sm font-medium text-gray-900 dark:text-white">{{ notifications_alert_name_res }}</span>
@@ -597,7 +597,7 @@
                                 </div>
                             </div>
 
-                            <h3 class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3 ml-1" data-i18n="web_notif_global_group_nodes">{{ web_notif_global_group_nodes }}</h3>
+                            <h3 class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-4 ml-1" data-i18n="web_notif_global_group_nodes">{{ web_notif_global_group_nodes }}</h3>
                             <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                 <div class="flex items-center justify-between bg-gray-50 dark:bg-black/20 p-3 rounded-xl hover:bg-gray-100 dark:hover:bg-black/30 transition border border-gray-200 dark:border-white/5 cursor-pointer" onclick="document.getElementById('alert_downtime').click()">
                                     <span class="text-sm font-medium text-gray-900 dark:text-white">{{ notifications_alert_name_downtime }}</span>
@@ -644,42 +644,66 @@
                     </div>
                     <div class="bg-white/60 dark:bg-white/5 backdrop-blur-md border border-white/40 dark:border-white/10 rounded-2xl p-6 shadow-lg dark:shadow-none lazy-block"
                          id="securitySection">
-                        <h2 class="text-xl font-bold text-gray-900 dark:text-white mb-6 flex items-center gap-2">
-                            <svg xmlns="http://www.w3.org/2000/svg"
-                                 class="h-6 w-6 text-red-500 dark:text-red-400"
-                                 fill="none"
-                                 viewBox="0 0 24 24"
-                                 stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                            </svg>
-                            {{ web_security_section }}
-                        </h2>
-                        <div class="w-full">
-                            <h3 class="text-sm font-bold text-gray-500 dark:text-gray-400 uppercase mb-4 tracking-wider">
-                                {{ web_change_password_title }}
-                            </h3>
-                            <div class="space-y-4">
-                                <div>
-                                    <input type="password"
-                                           id="pass_current"
-                                           placeholder="{{ web_current_password }}"
-                                           class="w-full bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-red-500 text-gray-900 dark:text-white">
+                        <div class="flex justify-between items-center mb-6">
+                            <h2 class="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                                <svg xmlns="http://www.w3.org/2000/svg"
+                                     class="h-6 w-6 text-red-500 dark:text-red-400"
+                                     fill="none"
+                                     viewBox="0 0 24 24"
+                                     stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                                </svg>
+                                {{ web_security_section }}
+                            </h2>
+                            <button id="telegramOnlyBtn" 
+                                    onclick="toggleTelegramOnlyMode()"
+                                    class="relative p-2 rounded-lg transition-all duration-200 hover:bg-gray-100 dark:hover:bg-white/10"
+                                    title="{{ web_telegram_only_tooltip }}">
+                                <svg id="lockIcon" xmlns="http://www.w3.org/2000/svg" 
+                                      class="h-6 w-6 text-gray-400 transition-all duration-200" 
+                                     fill="none" 
+                                     viewBox="0 0 24 24" 
+                                     stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                                </svg>
+                            </button>
+                        </div>
+                        <div class="w-full relative">
+                            <div class="w-full" id="passwordChangeSection">
+                                <h3 class="text-sm font-bold text-gray-500 dark:text-gray-400 uppercase mb-4 tracking-wider">
+                                    {{ web_change_password_title }}
+                                </h3>
+                                <div class="space-y-4">
+                                    <div>
+                                        <input type="password"
+                                               id="pass_current"
+                                               placeholder="{{ web_current_password }}"
+                                               class="w-full bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-red-500 text-gray-900 dark:text-white">
+                                    </div>
+                                    <div class="grid grid-cols-2 gap-2">
+                                        <input type="password"
+                                               id="pass_new"
+                                               placeholder="{{ web_new_password }}"
+                                               class="w-full bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-red-500 text-gray-900 dark:text-white">
+                                        <input type="password"
+                                               id="pass_confirm"
+                                               placeholder="{{ web_confirm_password }}"
+                                               class="w-full bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-red-500 text-gray-900 dark:text-white">
+                                    </div>
+                                    <button onclick="changePassword()"
+                                            id="btnChangePass"
+                                            class="w-full px-4 py-2 bg-red-500 hover:bg-red-600 text-white rounded-lg font-bold transition shadow-lg shadow-red-500/20">
+                                        {{ web_change_btn }}
+                                    </button>
                                 </div>
-                                <div class="grid grid-cols-2 gap-2">
-                                    <input type="password"
-                                           id="pass_new"
-                                           placeholder="{{ web_new_password }}"
-                                           class="w-full bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-red-500 text-gray-900 dark:text-white">
-                                    <input type="password"
-                                           id="pass_confirm"
-                                           placeholder="{{ web_confirm_password }}"
-                                           class="w-full bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-red-500 text-gray-900 dark:text-white">
+                            </div>
+                            <div id="passwordChangeOverlay" class="telegram-only-overlay hidden">
+                                <div class="telegram-only-overlay-badge">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                                    </svg>
+                                    <span>{{ web_telegram_only_notice }}</span>
                                 </div>
-                                <button onclick="changePassword()"
-                                        id="btnChangePass"
-                                        class="w-full px-4 py-2 bg-red-500 hover:bg-red-600 text-white rounded-lg font-bold transition shadow-lg shadow-red-500/20">
-                                    {{ web_change_btn }}
-                                </button>
                             </div>
                         </div>
                     </div>

@@ -125,13 +125,13 @@
                                 {{ login_via_telegram_btn }}
                             </button>
                         </form>
-                        <div class="relative flex py-6 items-center">
+                        <div id="login-or-separator" class="relative flex py-6 items-center">
                             <div class="flex-grow border-t border-gray-200 dark:border-white/10"></div>
                             <span class="flex-shrink-0 mx-4 text-gray-400 text-[10px] uppercase tracking-widest"
                                   data-i18n="login_or">OR</span>
                             <div class="flex-grow border-t border-gray-200 dark:border-white/10"></div>
                         </div>
-                        <button onclick="toggleForms('password')"
+                        <button id="password-login-toggle-btn" onclick="toggleForms('password')"
                                 class="w-full py-3.5 bg-white dark:bg-white/5 border border-gray-200 dark:border-white/10 hover:bg-gray-50 dark:hover:bg-white/10 text-gray-700 dark:text-gray-300 rounded-xl font-bold transition-all text-sm"
                                 data-i18n="login_pass_btn">Password Login</button>
                     </div>
