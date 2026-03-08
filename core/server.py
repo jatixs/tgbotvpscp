@@ -975,44 +975,6 @@ async def handle_heartbeat(request):
     if services:
         await nodes_db.update_node_extra(token, "services", services)
     
-    # Handle agent status reports from nodes
-    agent_status = data.get("agent_status", "online")
-    if agent_status == "unreachable":
-        shared_state.NODES_REPORTING_AGENT_DOWN.add(token)
-        # If at least one node reports agent is down, and we haven't sent alert yet
-        if not shared_state.AGENT_DOWN_ALERT_SENT and bot:
-            current_time = time.time()
-            # Only send alert if enough time has passed since last alert (prevent spam)
-            if current_time - shared_state.AGENT_DOWN_REPORT_TIME > 300:  # 5 minutes cooldown
-                shared_state.AGENT_DOWN_ALERT_SENT = True
-                shared_state.AGENT_DOWN_REPORT_TIME = current_time
-                
-                node_name = node.get("name", "Unknown")
-                logging.warning(f"Agent appears to be unreachable! Reported by node: {node_name}")
-                
-                await send_alert(
-                    bot,
-                    lambda lang: _(
-                        "alert_agent_down",
-                        lang,
-                        node_name=node_name
-                    ),
-                    "downtime"  # Using downtime alert type
-                )
-    else:
-        # Agent is online
-        shared_state.NODES_REPORTING_AGENT_DOWN.discard(token)
-        # If all nodes report agent is back online
-        if not shared_state.NODES_REPORTING_AGENT_DOWN and shared_state.AGENT_DOWN_ALERT_SENT:
-            shared_state.AGENT_DOWN_ALERT_SENT = False
-            if bot:
-                logging.info("Agent is back online!")
-                await send_alert(
-                    bot,
-                    lambda lang: _("alert_agent_recovered", lang),
-                    "downtime"
-                )
-    
     current_node = await nodes_db.get_node_by_token(token)
     tasks_to_send = current_node.get("tasks", [])
     if tasks_to_send:

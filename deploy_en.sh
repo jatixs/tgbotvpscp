@@ -938,6 +938,73 @@ EOF
     msg_success "Updated."
 }
 
+check_agent_monitoring_status() {
+    if [ ! -f "${ENV_FILE}" ]; then
+        echo "off"
+        return
+    fi
+    
+    local has_bot_token=$(grep -q '^BOT_TOKEN=' "${ENV_FILE}" && echo "yes" || echo "no")
+    local has_chat_ids=$(grep -q '^CRITICAL_ALERT_CHAT_IDS=' "${ENV_FILE}" && echo "yes" || echo "no")
+    
+    if [ "$has_bot_token" == "yes" ] && [ "$has_chat_ids" == "yes" ]; then
+        echo "on"
+    else
+        echo "off"
+    fi
+}
+
+toggle_agent_monitoring() {
+    if [ ! -f "${ENV_FILE}" ]; then
+        msg_error ".env file not found!"
+        return
+    fi
+    
+    local status=$(check_agent_monitoring_status)
+    
+    if [ "$status" == "on" ]; then
+        # Disable monitoring - remove variables
+        msg_warning "Disabling agent monitoring..."
+        sed -i '/^BOT_TOKEN=/d' "${ENV_FILE}"
+        sed -i '/^CRITICAL_ALERT_CHAT_IDS=/d' "${ENV_FILE}"
+        msg_success "Agent monitoring disabled. BOT_TOKEN and CRITICAL_ALERT_CHAT_IDS removed from .env"
+        msg_info "Restart the node: sudo systemctl restart ${NODE_SERVICE_NAME}"
+    else
+        # Enable monitoring - request data and add variables
+        msg_info "Setting up agent monitoring..."
+        echo ""
+        echo -e "${C_CYAN}Agent monitoring requires:${C_RESET}"
+        echo -e "  1. BOT_TOKEN - your Telegram bot token"
+        echo -e "  2. CRITICAL_ALERT_CHAT_IDS - chat IDs for critical alerts (comma-separated)"
+        echo ""
+        echo -e "${C_YELLOW}How to get Chat ID:${C_RESET}"
+        echo -e "  • Send /start to @userinfobot"
+        echo -e "  • Or add the bot to a group and use /start"
+        echo ""
+        
+        read -p "Enter BOT_TOKEN: " bot_token
+        if [ -z "$bot_token" ]; then
+            msg_error "BOT_TOKEN cannot be empty!"
+            return
+        fi
+        
+        read -p "Enter CRITICAL_ALERT_CHAT_IDS (comma-separated): " chat_ids
+        if [ -z "$chat_ids" ]; then
+            msg_error "CRITICAL_ALERT_CHAT_IDS cannot be empty!"
+            return
+        fi
+        
+        # Add variables to .env
+        echo "" >> "${ENV_FILE}"
+        echo "# Agent Monitoring Configuration" >> "${ENV_FILE}"
+        echo "BOT_TOKEN=\"${bot_token}\"" >> "${ENV_FILE}"
+        echo "CRITICAL_ALERT_CHAT_IDS=\"${chat_ids}\"" >> "${ENV_FILE}"
+        
+        msg_success "Agent monitoring enabled!"
+        msg_info "Restart the node: sudo systemctl restart ${NODE_SERVICE_NAME}"
+    fi
+}
+
 main_menu() {
     local local_version=$(get_local_version)
     while true; do
@@ -957,6 +1024,13 @@ main_menu() {
         echo "  5) Reinstall (Docker - Secure)"
         echo "  6) Reinstall (Docker - Root)"
         echo -e "${C_GREEN}  7) Install NODE (Client)${C_RESET}"
+        
+        # Show agent monitoring option only for nodes
+        if [ "$IS_NODE" == "yes" ]; then
+            local monitoring_status=$(check_agent_monitoring_status)
+            echo -e "${C_YELLOW}  8) Agent Monitoring (${monitoring_status})${C_RESET}"
+        fi
+        
         echo "  0) Exit"
         echo "--------------------------------------------------------"
         read -p "$(echo -e "${C_BOLD}Your choice: ${C_RESET}")" choice
@@ -968,6 +1042,7 @@ main_menu() {
             5) uninstall_bot; install_docker_logic "secure"; read -p "Press Enter..." ;;
             6) uninstall_bot; install_docker_logic "root"; read -p "Press Enter..." ;;
             7) uninstall_bot; install_node_logic; read -p "Press Enter..." ;;
+            8) if [ "$IS_NODE" == "yes" ]; then toggle_agent_monitoring; read -p "Press Enter..."; fi ;;
             0) break ;;
         esac
     done

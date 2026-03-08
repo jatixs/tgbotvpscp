@@ -47,6 +47,9 @@ def ensure_env_variables():
     optional_vars = [
         "AGENT_BASE_URL",
         "AGENT_TOKEN",
+        "BOT_TOKEN",
+        "CRITICAL_ALERT_CHAT_IDS",
+        "NODE_NAME",
     ]
     
     try:
@@ -221,14 +224,28 @@ logger.addHandler(stream_handler)
 AGENT_BASE_URL = CONF.get("AGENT_BASE_URL")
 AGENT_TOKEN = CONF.get("AGENT_TOKEN")
 UPDATE_INTERVAL = int(CONF.get("NODE_UPDATE_INTERVAL", 5))
+BOT_TOKEN = CONF.get("BOT_TOKEN", "")
+CRITICAL_ALERT_CHAT_IDS = CONF.get("CRITICAL_ALERT_CHAT_IDS", "")
 
 if not AGENT_BASE_URL or not AGENT_TOKEN:
     logging.error("CRITICAL: AGENT_BASE_URL or AGENT_TOKEN not found in .env")
     sys.exit(1)
 
+# Parse critical chat IDs if provided
+CRITICAL_CHAT_IDS = []
+if CRITICAL_ALERT_CHAT_IDS:
+    try:
+        CRITICAL_CHAT_IDS = [int(cid.strip()) for cid in CRITICAL_ALERT_CHAT_IDS.split(',') if cid.strip()]
+    except Exception as e:
+        logging.warning(f"Failed to parse CRITICAL_ALERT_CHAT_IDS: {e}")
+
 PENDING_RESULTS = collections.deque(maxlen=50)
 LAST_TRAFFIC_STATS = {}
 SSH_EVENTS = collections.deque(maxlen=100)
+
+# Agent health tracking
+AGENT_DOWN_SINCE = None
+AGENT_DOWN_ALERT_SENT = False
 
 EXTERNAL_IP_CACHE = None 
 
@@ -1054,8 +1071,54 @@ def check_agent_health():
             return False
 
 
+def send_critical_telegram_alert(message):
+    """
+    Send critical alert directly to Telegram, bypassing the agent.
+    Used when agent is down and cannot relay messages.
+    """
+    if not BOT_TOKEN or not CRITICAL_CHAT_IDS:
+        logging.debug("BOT_TOKEN or CRITICAL_CHAT_IDS not configured, skipping direct Telegram alert")
+        return False
+    
+    telegram_api_url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+    success_count = 0
+    
+    for chat_id in CRITICAL_CHAT_IDS:
+        try:
+            payload = {
+                "chat_id": chat_id,
+                "text": message,
+                "parse_mode": "HTML"
+            }
+            response = requests.post(telegram_api_url, json=payload, timeout=10)
+            if response.status_code == 200:
+                success_count += 1
+                logging.info(f"Critical alert sent to Telegram chat {chat_id}")
+            else:
+                logging.warning(f"Failed to send critical alert to chat {chat_id}: {response.status_code}")
+        except Exception as e:
+            logging.error(f"Error sending critical Telegram alert to chat {chat_id}: {e}")
+    
+    return success_count > 0
+
+
+def format_downtime(seconds):
+    """Format downtime duration in human-readable format"""
+    if seconds < 60:
+        return f"{int(seconds)} секунд"
+    elif seconds < 3600:
+        minutes = int(seconds / 60)
+        return f"{minutes} минут"
+    else:
+        hours = int(seconds / 3600)
+        minutes = int((seconds % 3600) / 60)
+        if minutes > 0:
+            return f"{hours} часов {minutes} минут"
+        return f"{hours} часов"
+
+
 def send_heartbeat():
-    global PENDING_RESULTS, SSH_EVENTS  # noqa: F824
+    global PENDING_RESULTS, SSH_EVENTS, AGENT_DOWN_SINCE, AGENT_DOWN_ALERT_SENT  # noqa: F824
     url = f"{AGENT_BASE_URL}/api/heartbeat"
     current_results = list(PENDING_RESULTS)
     current_ssh_events = list(SSH_EVENTS)
@@ -1068,7 +1131,75 @@ def send_heartbeat():
         logging.debug(f"Failed to get services status: {e}")
     
     # Check agent health status before sending heartbeat
-    agent_status = "online" if check_agent_health() else "unreachable"
+    agent_is_healthy = check_agent_health()
+    agent_status = "online" if agent_is_healthy else "unreachable"
+    
+    # Handle agent down state
+    if not agent_is_healthy:
+        current_time = time.time()
+        
+        # Mark when agent went down
+        if AGENT_DOWN_SINCE is None:
+            AGENT_DOWN_SINCE = current_time
+            logging.warning("Agent detected as unreachable")
+        
+        # Send critical alert after 30 seconds of downtime (to avoid false positives)
+        downtime = current_time - AGENT_DOWN_SINCE
+        if downtime >= 30 and not AGENT_DOWN_ALERT_SENT:
+            # Get node name from environment or use hostname
+            node_name = CONF.get("NODE_NAME", "")
+            if not node_name:
+                try:
+                    import socket
+                    node_name = socket.gethostname()
+                except:
+                    node_name = "Unknown Node"
+            
+            alert_message = (
+                f"🚨 <b>КРИТИЧНОЕ: Главный агент (основной сервер) НЕДОСТУПЕН!</b>\n\n"
+                f"🌐 <b>Сообщено нодой:</b> {node_name}\n"
+                f"💭 <b>Статус:</b> Агент недоступен с {datetime.fromtimestamp(AGENT_DOWN_SINCE).strftime('%H:%M:%S')}\n"
+                f"⏱ <b>Время недоступности:</b> {format_downtime(downtime)}\n"
+                f"⚠️ <b>Действие:</b> Проверьте доступность основного сервера и службы бота\n"
+                f"🔗 <b>URL:</b> {AGENT_BASE_URL}"
+            )
+            
+            if send_critical_telegram_alert(alert_message):
+                AGENT_DOWN_ALERT_SENT = True
+                logging.warning(f"Critical alert sent: Agent down for {format_downtime(downtime)}")
+        
+        # Don't try to send heartbeat if agent is down
+        logging.debug(f"Agent unreachable, skipping heartbeat (down for {format_downtime(downtime)})")
+        return
+    
+    # Agent is back online
+    if AGENT_DOWN_SINCE is not None:
+        downtime = time.time() - AGENT_DOWN_SINCE
+        
+        # Get node name
+        node_name = CONF.get("NODE_NAME", "")
+        if not node_name:
+            try:
+                import socket
+                node_name = socket.gethostname()
+            except:
+                node_name = "Unknown Node"
+        
+        # Send recovery alert if we previously sent a down alert
+        if AGENT_DOWN_ALERT_SENT:
+            recovery_message = (
+                f"✅ <b>Главный агент восстановлен!</b>\n\n"
+                f"🌐 <b>Сообщено нодой:</b> {node_name}\n"
+                f"💚 <b>Статус:</b> Агент снова доступен\n"
+                f"⏱ <b>Время простоя:</b> {format_downtime(downtime)}\n"
+                f"📡 <b>Система стабилизована</b>"
+            )
+            send_critical_telegram_alert(recovery_message)
+            logging.info(f"Agent recovered after {format_downtime(downtime)} downtime")
+        
+        # Reset downtime tracking
+        AGENT_DOWN_SINCE = None
+        AGENT_DOWN_ALERT_SENT = False
     
     payload_dict = {
         "token": AGENT_TOKEN,
