@@ -2292,7 +2292,7 @@ async def handle_login_password(request):
     settings = load_encrypted_json(SECURITY_SETTINGS_FILE)
     if settings.get("telegram_only_mode", False):
         return web.Response(text="Password login disabled. Only Telegram widget login is allowed.", status=403)
-    
+
     data = await request.post()
     ip = get_client_ip(request)
     if not check_rate_limit(ip):
@@ -2329,7 +2329,7 @@ async def handle_magic_login(request):
     uid = td["user_id"]
     if uid not in ALLOWED_USERS:
         return web.Response(text="Denied", status=403)
-st = secrets.token_hex(32)
+    st = secrets.token_hex(32)
     SERVER_SESSIONS[st] = {
         "id": uid,
         "expires": time.time() + 2592000,
@@ -2339,6 +2339,7 @@ st = secrets.token_hex(32)
     }
     resp = web.HTTPFound("/")
     resp.set_cookie(COOKIE_NAME, st, max_age=2592000, httponly=True, samesite="Strict")
+    # Запрещаем кэширование страницы с токеном
     resp.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
     resp.headers['Pragma'] = 'no-cache'
     return resp
@@ -2366,7 +2367,7 @@ async def handle_telegram_auth(request):
         return resp
     except Exception as e:
         logging.error(f"Internal API error: {e}")
-    return web.json_response({"error": "Internal Server Error"}, status=500)
+        return web.json_response({"error": "Internal Server Error"}, status=500)
 
 
 async def handle_logout(request):
