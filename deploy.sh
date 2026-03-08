@@ -868,13 +868,24 @@ install_node_logic() {
     msg_question "Agent URL (http://IP:8080): " AGENT_URL
     msg_question "Token: " NODE_TOKEN
     local ver="Unknown"; if [ -f "$README_FILE" ]; then ver=$(grep -oP 'img\.shields\.io/badge/version-v\K[\d\.]+' "$README_FILE"); fi
-    sudo bash -c "cat > ${ENV_FILE}" <<EOF
+    
+    if [[ "$RESTORE_CHOICE" =~ ^[Yy]$ ]] && [ -f "/tmp/tgbot_env.bak" ]; then
+        msg_info "Восстановление оригинальных настроек .env..."
+        sudo cp /tmp/tgbot_env.bak "${ENV_FILE}"
+        if grep -q "^INSTALLED_VERSION=" "${ENV_FILE}"; then
+            sudo sed -i "s/^INSTALLED_VERSION=.*/INSTALLED_VERSION=\"${ver}\"/" "${ENV_FILE}"
+        else
+            sudo bash -c "echo 'INSTALLED_VERSION=\"${ver}\"' >> ${ENV_FILE}"
+        fi
+    else
+        sudo bash -c "cat > ${ENV_FILE}" <<EOF
 MODE=node
 AGENT_BASE_URL="${AGENT_URL}"
 AGENT_TOKEN="${NODE_TOKEN}"
 NODE_UPDATE_INTERVAL=5
 INSTALLED_VERSION="${ver}"
 EOF
+    fi
     
     # Check and restore/configure agent monitoring variables if settings were restored
     if [[ "$RESTORE_CHOICE" =~ ^[Yy]$ ]] && [ -f "/tmp/tgbot_env.bak" ]; then
