@@ -922,16 +922,17 @@ EOF
         # Add monitoring variables to .env if monitoring was configured (has BOT_TOKEN and CHAT_IDS)
         if [ -n "$saved_bot_token" ] && [ -n "$saved_chat_ids" ]; then
             sed -i '/^# Agent Monitoring Configuration$/d' "${ENV_FILE}"
+            sed -i '/^DEBUG=/d' "${ENV_FILE}"
             sed -i '/^BOT_TOKEN=/d' "${ENV_FILE}"
             sed -i '/^CRITICAL_ALERT_CHAT_IDS=/d' "${ENV_FILE}"
-            sed -i '/^NODE_NAME=/d' "${ENV_FILE}"
             sed -i '/^AGENT_ALERT_DELAY_SECONDS=/d' "${ENV_FILE}"
+            sed -i '/^NODE_NAME=/d' "${ENV_FILE}"
             echo "" | sudo tee -a "${ENV_FILE}" > /dev/null
-            echo "# Agent Monitoring Configuration" | sudo tee -a "${ENV_FILE}" > /dev/null
+            echo "DEBUG=\"false\"" | sudo tee -a "${ENV_FILE}" > /dev/null
             echo "BOT_TOKEN=\"${saved_bot_token}\"" | sudo tee -a "${ENV_FILE}" > /dev/null
             echo "CRITICAL_ALERT_CHAT_IDS=\"${saved_chat_ids}\"" | sudo tee -a "${ENV_FILE}" > /dev/null
-            echo "NODE_NAME=\"${saved_node_name}\"" | sudo tee -a "${ENV_FILE}" > /dev/null
             echo "AGENT_ALERT_DELAY_SECONDS=\"${saved_delay}\"" | sudo tee -a "${ENV_FILE}" > /dev/null
+            echo "NODE_NAME=\"${saved_node_name}\"" | sudo tee -a "${ENV_FILE}" > /dev/null
             msg_info "✓ Monitoring variables added to .env"
         fi
     fi
@@ -1086,9 +1087,12 @@ toggle_agent_monitoring() {
         # Disable monitoring - remove variables
         msg_warning "Disabling agent monitoring..."
         sed -i '/^# Agent Monitoring Configuration$/d' "${ENV_FILE}"
+        sed -i '/^DEBUG=/d' "${ENV_FILE}"
         sed -i '/^BOT_TOKEN=/d' "${ENV_FILE}"
         sed -i '/^CRITICAL_ALERT_CHAT_IDS=/d' "${ENV_FILE}"
-        msg_success "Agent monitoring disabled. BOT_TOKEN and CRITICAL_ALERT_CHAT_IDS removed from .env"
+        sed -i '/^AGENT_ALERT_DELAY_SECONDS=/d' "${ENV_FILE}"
+        sed -i '/^NODE_NAME=/d' "${ENV_FILE}"
+        msg_success "Agent monitoring disabled. Variables removed from .env"
         msg_info "Restart the node: sudo systemctl restart ${NODE_SERVICE_NAME}"
     else
         # Enable/fix monitoring - request data and update variables
@@ -1142,16 +1146,17 @@ toggle_agent_monitoring() {
 
         # Update variables in .env
         sed -i '/^# Agent Monitoring Configuration$/d' "${ENV_FILE}"
+        sed -i '/^DEBUG=/d' "${ENV_FILE}"
         sed -i '/^BOT_TOKEN=/d' "${ENV_FILE}"
         sed -i '/^CRITICAL_ALERT_CHAT_IDS=/d' "${ENV_FILE}"
-        sed -i '/^NODE_NAME=/d' "${ENV_FILE}"
         sed -i '/^AGENT_ALERT_DELAY_SECONDS=/d' "${ENV_FILE}"
+        sed -i '/^NODE_NAME=/d' "${ENV_FILE}"
         echo "" >> "${ENV_FILE}"
-        echo "# Agent Monitoring Configuration" >> "${ENV_FILE}"
+        echo "DEBUG=\"false\"" >> "${ENV_FILE}"
         echo "BOT_TOKEN=\"${bot_token}\"" >> "${ENV_FILE}"
         echo "CRITICAL_ALERT_CHAT_IDS=\"${chat_ids}\"" >> "${ENV_FILE}"
-        echo "NODE_NAME=\"${node_name}\"" >> "${ENV_FILE}"
         echo "AGENT_ALERT_DELAY_SECONDS=\"${alert_delay}\"" >> "${ENV_FILE}"
+        echo "NODE_NAME=\"${node_name}\"" >> "${ENV_FILE}"
 
         msg_success "Agent monitoring enabled/updated!"
         msg_info "Restart the node: sudo systemctl restart ${NODE_SERVICE_NAME}"
