@@ -1061,14 +1061,18 @@ def check_agent_health():
         # Try to reach agent's health endpoint with a short timeout
         health_url = f"{AGENT_BASE_URL.rstrip('/')}/health"
         response = requests.get(health_url, timeout=3)
-        return response.status_code == 200
+        # Any non-5xx response means endpoint is reachable (even if /health is not implemented)
+        if response.status_code < 500:
+            return True
     except Exception:
-        # If health endpoint doesn't exist, try with heartbeat URL but only headers
-        try:
-            response = requests.head(f"{AGENT_BASE_URL.rstrip('/')}/api/heartbeat", timeout=3)
-            return response.status_code in [200, 401, 403]  # These statuses mean server is reachable
-        except Exception:
-            return False
+        pass
+
+    # If health endpoint doesn't exist or is unstable, check heartbeat endpoint reachability
+    try:
+        response = requests.head(f"{AGENT_BASE_URL.rstrip('/')}/api/heartbeat", timeout=3)
+        return response.status_code < 500
+    except Exception:
+        return False
 
 
 def send_critical_telegram_alert(message):
@@ -1134,72 +1138,8 @@ def send_heartbeat():
     agent_is_healthy = check_agent_health()
     agent_status = "online" if agent_is_healthy else "unreachable"
     
-    # Handle agent down state
     if not agent_is_healthy:
-        current_time = time.time()
-        
-        # Mark when agent went down
-        if AGENT_DOWN_SINCE is None:
-            AGENT_DOWN_SINCE = current_time
-            logging.warning("Agent detected as unreachable")
-        
-        # Send critical alert after 30 seconds of downtime (to avoid false positives)
-        downtime = current_time - AGENT_DOWN_SINCE
-        if downtime >= 30 and not AGENT_DOWN_ALERT_SENT:
-            # Get node name from environment or use hostname
-            node_name = CONF.get("NODE_NAME", "")
-            if not node_name:
-                try:
-                    import socket
-                    node_name = socket.gethostname()
-                except:
-                    node_name = "Unknown Node"
-            
-            alert_message = (
-                f"🚨 <b>КРИТИЧНОЕ: Главный агент (основной сервер) НЕДОСТУПЕН!</b>\n\n"
-                f"🌐 <b>Сообщено нодой:</b> {node_name}\n"
-                f"💭 <b>Статус:</b> Агент недоступен с {datetime.fromtimestamp(AGENT_DOWN_SINCE).strftime('%H:%M:%S')}\n"
-                f"⏱ <b>Время недоступности:</b> {format_downtime(downtime)}\n"
-                f"⚠️ <b>Действие:</b> Проверьте доступность основного сервера и службы бота\n"
-                f"🔗 <b>URL:</b> {AGENT_BASE_URL}"
-            )
-            
-            if send_critical_telegram_alert(alert_message):
-                AGENT_DOWN_ALERT_SENT = True
-                logging.warning(f"Critical alert sent: Agent down for {format_downtime(downtime)}")
-        
-        # Don't try to send heartbeat if agent is down
-        logging.debug(f"Agent unreachable, skipping heartbeat (down for {format_downtime(downtime)})")
-        return
-    
-    # Agent is back online
-    if AGENT_DOWN_SINCE is not None:
-        downtime = time.time() - AGENT_DOWN_SINCE
-        
-        # Get node name
-        node_name = CONF.get("NODE_NAME", "")
-        if not node_name:
-            try:
-                import socket
-                node_name = socket.gethostname()
-            except:
-                node_name = "Unknown Node"
-        
-        # Send recovery alert if we previously sent a down alert
-        if AGENT_DOWN_ALERT_SENT:
-            recovery_message = (
-                f"✅ <b>Главный агент восстановлен!</b>\n\n"
-                f"🌐 <b>Сообщено нодой:</b> {node_name}\n"
-                f"💚 <b>Статус:</b> Агент снова доступен\n"
-                f"⏱ <b>Время простоя:</b> {format_downtime(downtime)}\n"
-                f"📡 <b>Система стабилизована</b>"
-            )
-            send_critical_telegram_alert(recovery_message)
-            logging.info(f"Agent recovered after {format_downtime(downtime)} downtime")
-        
-        # Reset downtime tracking
-        AGENT_DOWN_SINCE = None
-        AGENT_DOWN_ALERT_SENT = False
+        logging.warning("Agent detected as unreachable")
     
     payload_dict = {
         "token": AGENT_TOKEN,
@@ -1230,10 +1170,94 @@ def send_heartbeat():
             tasks = data.get("tasks", [])
             for task in tasks:
                 execute_command(task)
+
+            # Heartbeat delivery succeeded - reset down state and notify recovery if needed
+            if AGENT_DOWN_SINCE is not None:
+                downtime = time.time() - AGENT_DOWN_SINCE
+
+                node_name = CONF.get("NODE_NAME", "")
+                if not node_name:
+                    try:
+                        import socket
+                        node_name = socket.gethostname()
+                    except Exception:
+                        node_name = "Unknown Node"
+
+                if AGENT_DOWN_ALERT_SENT:
+                    recovery_message = (
+                        f"✅ <b>Главный агент восстановлен!</b>\n\n"
+                        f"🌐 <b>Сообщено нодой:</b> {node_name}\n"
+                        f"💚 <b>Статус:</b> Агент снова доступен\n"
+                        f"⏱ <b>Время простоя:</b> {format_downtime(downtime)}\n"
+                        f"📡 <b>Система стабилизована</b>"
+                    )
+                    send_critical_telegram_alert(recovery_message)
+                    logging.info(f"Agent recovered after {format_downtime(downtime)} downtime")
+
+                AGENT_DOWN_SINCE = None
+                AGENT_DOWN_ALERT_SENT = False
         else:
             logging.warning(f"Server returned status: {response.status_code} {response.text}")
+
+            # Treat only server-side failures as downtime; 4xx means reachable but misconfigured/request issue
+            if response.status_code >= 500:
+                current_time = time.time()
+                if AGENT_DOWN_SINCE is None:
+                    AGENT_DOWN_SINCE = current_time
+                    logging.warning("Agent detected as unreachable")
+
+                downtime = current_time - AGENT_DOWN_SINCE
+                if downtime >= 30 and not AGENT_DOWN_ALERT_SENT:
+                    node_name = CONF.get("NODE_NAME", "")
+                    if not node_name:
+                        try:
+                            import socket
+                            node_name = socket.gethostname()
+                        except Exception:
+                            node_name = "Unknown Node"
+
+                    alert_message = (
+                        f"🚨 <b>КРИТИЧНОЕ: Главный агент (основной сервер) НЕДОСТУПЕН!</b>\n\n"
+                        f"🌐 <b>Сообщено нодой:</b> {node_name}\n"
+                        f"💭 <b>Статус:</b> Агент недоступен с {datetime.fromtimestamp(AGENT_DOWN_SINCE).strftime('%H:%M:%S')}\n"
+                        f"⏱ <b>Время недоступности:</b> {format_downtime(downtime)}\n"
+                        f"⚠️ <b>Действие:</b> Проверьте доступность основного сервера и службы бота\n"
+                        f"🔗 <b>URL:</b> {AGENT_BASE_URL}"
+                    )
+
+                    if send_critical_telegram_alert(alert_message):
+                        AGENT_DOWN_ALERT_SENT = True
+                        logging.warning(f"Critical alert sent: Agent down for {format_downtime(downtime)}")
     except Exception as e:
         logging.error(f"Connection error: {e}")
+
+        current_time = time.time()
+        if AGENT_DOWN_SINCE is None:
+            AGENT_DOWN_SINCE = current_time
+            logging.warning("Agent detected as unreachable")
+
+        downtime = current_time - AGENT_DOWN_SINCE
+        if downtime >= 30 and not AGENT_DOWN_ALERT_SENT:
+            node_name = CONF.get("NODE_NAME", "")
+            if not node_name:
+                try:
+                    import socket
+                    node_name = socket.gethostname()
+                except Exception:
+                    node_name = "Unknown Node"
+
+            alert_message = (
+                f"🚨 <b>КРИТИЧНОЕ: Главный агент (основной сервер) НЕДОСТУПЕН!</b>\n\n"
+                f"🌐 <b>Сообщено нодой:</b> {node_name}\n"
+                f"💭 <b>Статус:</b> Агент недоступен с {datetime.fromtimestamp(AGENT_DOWN_SINCE).strftime('%H:%M:%S')}\n"
+                f"⏱ <b>Время недоступности:</b> {format_downtime(downtime)}\n"
+                f"⚠️ <b>Действие:</b> Проверьте доступность основного сервера и службы бота\n"
+                f"🔗 <b>URL:</b> {AGENT_BASE_URL}"
+            )
+
+            if send_critical_telegram_alert(alert_message):
+                AGENT_DOWN_ALERT_SENT = True
+                logging.warning(f"Critical alert sent: Agent down for {format_downtime(downtime)}")
 
 def main():
     # Check and update environment variables
