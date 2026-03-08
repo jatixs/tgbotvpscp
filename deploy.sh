@@ -232,7 +232,7 @@ setup_repo_and_dirs() {
     if [ -d "${BOT_INSTALL_PATH}" ]; then run_with_spinner "Удаление старых файлов" sudo rm -rf "${BOT_INSTALL_PATH}"; fi
     sudo mkdir -p ${BOT_INSTALL_PATH}
     run_with_spinner "Клонирование репозитория" sudo git clone --branch "${GIT_BRANCH}" "${GITHUB_REPO_URL}" "${BOT_INSTALL_PATH}" || exit 1
-    if [ -f "/tmp/tgbot_env.bak" ]; then sudo mv /tmp/tgbot_env.bak "${ENV_FILE}"; fi
+    if [ -f "/tmp/tgbot_env.bak" ]; then sudo cp /tmp/tgbot_env.bak "${ENV_FILE}"; fi
     sudo mkdir -p "${BOT_INSTALL_PATH}/logs/bot" "${BOT_INSTALL_PATH}/logs/watchdog" "${BOT_INSTALL_PATH}/logs/node" "${BOT_INSTALL_PATH}/config"
     sudo chown -R ${owner_user}:${owner_user} ${BOT_INSTALL_PATH}
 }
@@ -971,6 +971,14 @@ EOF
             echo "AGENT_ALERT_DELAY_SECONDS=\"${saved_delay}\"" | sudo tee -a "${ENV_FILE}" > /dev/null
             echo "NODE_NAME=\"${saved_node_name}\"" | sudo tee -a "${ENV_FILE}" > /dev/null
             msg_info "✓ Переменные мониторинга добавлены в .env"
+        else
+            # Удаляем пустые или недонастроенные переменные мониторинга
+            sed -i '/^# Agent Monitoring Configuration$/d' "${ENV_FILE}"
+            sed -i '/^DEBUG=/d' "${ENV_FILE}"
+            sed -i '/^BOT_TOKEN=/d' "${ENV_FILE}"
+            sed -i '/^CRITICAL_ALERT_CHAT_IDS=/d' "${ENV_FILE}"
+            sed -i '/^AGENT_ALERT_DELAY_SECONDS=/d' "${ENV_FILE}"
+            sed -i '/^NODE_NAME=/d' "${ENV_FILE}"
         fi
     fi
     
