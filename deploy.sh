@@ -885,8 +885,7 @@ EOF
         
         # Ask user if monitoring variables are missing or empty
         local need_bot_token=""
-        local need_chat_ids=""
-        local need_node_name=""
+        local need_delay=""
         
         if [ -z "$saved_bot_token" ]; then
             need_bot_token="yes"
@@ -897,13 +896,17 @@ EOF
         if [ -z "$saved_node_name" ]; then
             need_node_name="yes"
         fi
+        if [ -z "$saved_delay" ]; then
+            need_delay="yes"
+        fi
         
         # If any monitoring variable is missing, ask if user wants to configure them
-        if [ -n "$need_bot_token" ] || [ -n "$need_chat_ids" ]; then
+        if [ -n "$need_bot_token" ] || [ -n "$need_chat_ids" ] || [ -n "$need_node_name" ] || [ -n "$need_delay" ]; then
             echo ""
             echo -e "${C_YELLOW}⚠️  Обнаружены пустые переменные для мониторинга агента:${C_RESET}"
             [ -n "$need_bot_token" ] && echo -e "  • BOT_TOKEN (токен бота)"
             [ -n "$need_chat_ids" ] && echo -e "  • CRITICAL_ALERT_CHAT_IDS (ID чатов для алертов)"
+            [ -n "$need_delay" ] && echo -e "  • AGENT_ALERT_DELAY_SECONDS (задержка перед отправкой алерта)"
             [ -n "$need_node_name" ] && echo -e "  • NODE_NAME (имя ноды)"
             echo ""
             read -p "$(echo -e "${C_CYAN}❓ Настроить мониторинг агента сейчас? (y/n) [n]: ${C_RESET}")" setup_monitoring
@@ -930,6 +933,11 @@ EOF
                 if [ -n "$need_node_name" ]; then
                     read -p "Введите NODE_NAME (имя этой ноды) [Node]: " saved_node_name
                     saved_node_name=${saved_node_name:-Node}
+                fi
+                
+                if [ -n "$need_delay" ]; then
+                    read -p "Введите AGENT_ALERT_DELAY_SECONDS (задержка алерта) [15]: " saved_delay
+                    saved_delay=${saved_delay:-15}
                 fi
             fi
         fi
@@ -1135,6 +1143,12 @@ toggle_agent_monitoring() {
         fi
         if [ -z "$current_chat_ids" ]; then
             msg_warning "CRITICAL_ALERT_CHAT_IDS отсутствует или пустой в .env"
+        fi
+        if [ -z "$current_node_name" ]; then
+            msg_warning "NODE_NAME отсутствует или пустой в .env"
+        fi
+        if [ -z "$current_delay" ]; then
+            msg_warning "AGENT_ALERT_DELAY_SECONDS отсутствует или пустой в .env"
         fi
 
         echo ""

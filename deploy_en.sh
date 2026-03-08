@@ -867,8 +867,7 @@ EOF
         
         # Ask user if monitoring variables are missing or empty
         local need_bot_token=""
-        local need_chat_ids=""
-        local need_node_name=""
+        local need_delay=""
         
         if [ -z "$saved_bot_token" ]; then
             need_bot_token="yes"
@@ -879,13 +878,17 @@ EOF
         if [ -z "$saved_node_name" ]; then
             need_node_name="yes"
         fi
+        if [ -z "$saved_delay" ]; then
+            need_delay="yes"
+        fi
         
         # If any monitoring variable is missing, ask if user wants to configure them
-        if [ -n "$need_bot_token" ] || [ -n "$need_chat_ids" ]; then
+        if [ -n "$need_bot_token" ] || [ -n "$need_chat_ids" ] || [ -n "$need_node_name" ] || [ -n "$need_delay" ]; then
             echo ""
             echo -e "${C_YELLOW}⚠️  Found empty variables for agent monitoring:${C_RESET}"
             [ -n "$need_bot_token" ] && echo -e "  • BOT_TOKEN (bot token)"
             [ -n "$need_chat_ids" ] && echo -e "  • CRITICAL_ALERT_CHAT_IDS (chat IDs for alerts)"
+            [ -n "$need_delay" ] && echo -e "  • AGENT_ALERT_DELAY_SECONDS (delay before sending alert)"
             [ -n "$need_node_name" ] && echo -e "  • NODE_NAME (node name)"
             echo ""
             read -p "$(echo -e "${C_CYAN}❓ Configure agent monitoring now? (y/n) [n]: ${C_RESET}")" setup_monitoring
@@ -912,6 +915,11 @@ EOF
                 if [ -n "$need_node_name" ]; then
                     read -p "Enter NODE_NAME (name of this node) [Node]: " saved_node_name
                     saved_node_name=${saved_node_name:-Node}
+                fi
+                
+                if [ -n "$need_delay" ]; then
+                    read -p "Enter AGENT_ALERT_DELAY_SECONDS (alert delay) [15]: " saved_delay
+                    saved_delay=${saved_delay:-15}
                 fi
             fi
         fi
@@ -1102,6 +1110,12 @@ toggle_agent_monitoring() {
         fi
         if [ -z "$current_chat_ids" ]; then
             msg_warning "CRITICAL_ALERT_CHAT_IDS is missing or empty in .env"
+        fi
+        if [ -z "$current_node_name" ]; then
+            msg_warning "NODE_NAME is missing or empty in .env"
+        fi
+        if [ -z "$current_delay" ]; then
+            msg_warning "AGENT_ALERT_DELAY_SECONDS is missing or empty in .env"
         fi
 
         echo ""
