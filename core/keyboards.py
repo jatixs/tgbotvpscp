@@ -303,15 +303,18 @@ def get_reboot_confirmation_keyboard(user_id: int):
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text=_("btn_reboot_confirm", lang), callback_data="reboot"
+                    text=_("btn_reboot_confirm", lang), 
+                    callback_data="reboot",
+                    style="success"  # Делает кнопку зеленой
                 ),
                 InlineKeyboardButton(
-                    text=_("btn_reboot_cancel", lang), callback_data="back_to_menu"
+                    text=_("btn_reboot_cancel", lang), 
+                    callback_data="back_to_menu",
+                    style="danger"   # Делает кнопку красной
                 ),
             ]
         ]
     )
-
 
 def get_back_keyboard(lang: str, callback_data="back_to_manage_users"):
     return InlineKeyboardMarkup(
