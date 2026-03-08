@@ -554,12 +554,12 @@
                                 <button onclick="switchNotifView('global')" class="flex flex-col items-center justify-center bg-gray-50 dark:bg-black/20 p-6 rounded-xl hover:bg-gray-100 dark:hover:bg-black/30 transition border border-gray-200 dark:border-white/5 cursor-pointer group">
                                     <span class="text-4xl mb-3 group-hover:scale-110 transition-transform">🌐</span>
                                     <span class="text-sm font-bold text-gray-900 dark:text-white">{{ web_notif_btn_global }}</span>
-                                    <span class="text-[10px] text-gray-500 mt-1.5 text-center uppercase tracking-wider font-bold">Агент + Общие правила</span>
+                                    <span class="text-[10px] text-gray-500 mt-1.5 text-center uppercase tracking-wider font-bold" data-i18n="web_notif_btn_global_subtitle">{{ web_notif_btn_global_subtitle }}</span>
                                 </button>
                                 <button onclick="switchNotifView('nodes')" class="flex flex-col items-center justify-center bg-gray-50 dark:bg-black/20 p-6 rounded-xl hover:bg-gray-100 dark:hover:bg-black/30 transition border border-gray-200 dark:border-white/5 cursor-pointer group">
                                     <span class="text-4xl mb-3 group-hover:scale-110 transition-transform">🖥</span>
                                     <span class="text-sm font-bold text-gray-900 dark:text-white">{{ web_notif_btn_nodes }}</span>
-                                    <span class="text-[10px] text-gray-500 mt-1.5 text-center uppercase tracking-wider font-bold">Индивидуальные правила</span>
+                                    <span class="text-[10px] text-gray-500 mt-1.5 text-center uppercase tracking-wider font-bold" data-i18n="web_notif_btn_nodes_subtitle">{{ web_notif_btn_nodes_subtitle }}</span>
                                 </button>
                             </div>
                                 <div class="mt-5 md:mt-auto pt-2"> <div class="-mb-1.5 p-2 bg-blue-50 dark:bg-blue-900/20 border-blue-100 dark:border-blue-800/50 rounded-xl flex items-start gap-3">
@@ -572,7 +572,7 @@
                         </div>
 
                         <div id="notifViewGlobal" class="hidden animate-fade-in-up">
-                            <h3 class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3 ml-1">Главный Сервер (Агент)</h3>
+                            <h3 class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3 ml-1" data-i18n="web_notif_global_group_agent">{{ web_notif_global_group_agent }}</h3>
                             <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-6">
                                 <div class="flex items-center justify-between bg-gray-50 dark:bg-black/20 p-3 rounded-xl hover:bg-gray-100 dark:hover:bg-black/30 transition border border-gray-200 dark:border-white/5 cursor-pointer" onclick="document.getElementById('alert_resources').click()">
                                     <span class="text-sm font-medium text-gray-900 dark:text-white">{{ notifications_alert_name_res }}</span>
@@ -597,7 +597,7 @@
                                 </div>
                             </div>
 
-                            <h3 class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3 ml-1">Удаленные Серверы (Ноды)</h3>
+                            <h3 class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3 ml-1" data-i18n="web_notif_global_group_nodes">{{ web_notif_global_group_nodes }}</h3>
                             <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                 <div class="flex items-center justify-between bg-gray-50 dark:bg-black/20 p-3 rounded-xl hover:bg-gray-100 dark:hover:bg-black/30 transition border border-gray-200 dark:border-white/5 cursor-pointer" onclick="document.getElementById('alert_downtime').click()">
                                     <span class="text-sm font-medium text-gray-900 dark:text-white">{{ notifications_alert_name_downtime }}</span>
