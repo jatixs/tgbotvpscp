@@ -261,6 +261,12 @@ load_cached_env() {
             fi
             [ -z "$AGENT_URL" ] && AGENT_URL=$(get_env_val "AGENT_BASE_URL")
             [ -z "$NODE_TOKEN" ] && NODE_TOKEN=$(get_env_val "AGENT_TOKEN")
+            
+            # Load monitoring variables
+            [ -z "$MONITORING_BOT_TOKEN" ] && MONITORING_BOT_TOKEN=$(get_env_val "BOT_TOKEN")
+            [ -z "$MONITORING_CHAT_IDS" ] && MONITORING_CHAT_IDS=$(get_env_val "CRITICAL_ALERT_CHAT_IDS")
+            [ -z "$MONITORING_NODE_NAME" ] && MONITORING_NODE_NAME=$(get_env_val "NODE_NAME")
+            [ -z "$MONITORING_DELAY" ] && MONITORING_DELAY=$(get_env_val "AGENT_ALERT_DELAY_SECONDS")
         else
             msg_info "Восстановление пропущено."
         fi
@@ -486,6 +492,16 @@ COMPOSE_PROFILES="${compose_profile}"
 WEB_DOMAIN="${web_domain}"
 EOF
     sudo chmod 600 "${ENV_FILE}"
+    
+    # Restore monitoring variables if they exist
+    if [ -n "$MONITORING_BOT_TOKEN" ] || [ -n "$MONITORING_CHAT_IDS" ] || [ -n "$MONITORING_NODE_NAME" ]; then
+        echo "" | sudo tee -a "${ENV_FILE}" > /dev/null
+        echo "# Agent Monitoring Configuration" | sudo tee -a "${ENV_FILE}" > /dev/null
+        [ -n "$MONITORING_BOT_TOKEN" ] && echo "BOT_TOKEN=\"${MONITORING_BOT_TOKEN}\"" | sudo tee -a "${ENV_FILE}" > /dev/null
+        [ -n "$MONITORING_CHAT_IDS" ] && echo "CRITICAL_ALERT_CHAT_IDS=\"${MONITORING_CHAT_IDS}\"" | sudo tee -a "${ENV_FILE}" > /dev/null
+        [ -n "$MONITORING_NODE_NAME" ] && echo "NODE_NAME=\"${MONITORING_NODE_NAME}\"" | sudo tee -a "${ENV_FILE}" > /dev/null
+        [ -n "$MONITORING_DELAY" ] && echo "AGENT_ALERT_DELAY_SECONDS=\"${MONITORING_DELAY}\"" | sudo tee -a "${ENV_FILE}" > /dev/null
+    fi
 
     # Create installstate file
     local installstate_file="${BOT_INSTALL_PATH}/installstate"
