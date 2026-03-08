@@ -838,6 +838,74 @@ AGENT_TOKEN="${NODE_TOKEN}"
 NODE_UPDATE_INTERVAL=5
 INSTALLED_VERSION="${ver}"
 EOF
+    
+    # Check and restore/configure agent monitoring variables if settings were restored
+    if [[ "$RESTORE_CHOICE" =~ ^[Yy]$ ]] && [ -f "/tmp/tgbot_env.bak" ]; then
+        local saved_bot_token=$(grep "^BOT_TOKEN=" "/tmp/tgbot_env.bak" | cut -d'=' -f2- | tr -d '"' | xargs)
+        local saved_chat_ids=$(grep "^CRITICAL_ALERT_CHAT_IDS=" "/tmp/tgbot_env.bak" | cut -d'=' -f2- | tr -d '"' | xargs)
+        local saved_node_name=$(grep "^NODE_NAME=" "/tmp/tgbot_env.bak" | cut -d'=' -f2- | tr -d '"' | xargs)
+        
+        # Ask user if monitoring variables are missing or empty
+        local need_bot_token=""
+        local need_chat_ids=""
+        local need_node_name=""
+        
+        if [ -z "$saved_bot_token" ]; then
+            need_bot_token="yes"
+        fi
+        if [ -z "$saved_chat_ids" ]; then
+            need_chat_ids="yes"
+        fi
+        if [ -z "$saved_node_name" ]; then
+            need_node_name="yes"
+        fi
+        
+        # If any monitoring variable is missing, ask if user wants to configure them
+        if [ -n "$need_bot_token" ] || [ -n "$need_chat_ids" ]; then
+            echo ""
+            echo -e "${C_YELLOW}⚠️  Обнаружены пустые переменные для мониторинга агента:${C_RESET}"
+            [ -n "$need_bot_token" ] && echo -e "  • BOT_TOKEN (токен бота)"
+            [ -n "$need_chat_ids" ] && echo -e "  • CRITICAL_ALERT_CHAT_IDS (ID чатов для алертов)"
+            [ -n "$need_node_name" ] && echo -e "  • NODE_NAME (имя ноды)"
+            echo ""
+            read -p "$(echo -e "${C_CYAN}❓ Настроить мониторинг агента сейчас? (y/n) [n]: ${C_RESET}")" setup_monitoring
+            setup_monitoring=${setup_monitoring:-n}
+            
+            if [[ "$setup_monitoring" =~ ^[Yy]$ ]]; then
+                echo ""
+                echo -e "${C_CYAN}Настройка мониторинга агента:${C_RESET}"
+                echo -e "${C_YELLOW}Важно:${C_RESET} не используйте chat_id другого бота (Telegram блокирует отправку боту от бота)."
+                echo ""
+                echo -e "${C_YELLOW}Как получить Chat ID:${C_RESET}"
+                echo -e "  • Напишите боту @userinfobot команду /start"
+                echo -e "  • Или добавьте бота в группу и используйте /start"
+                echo ""
+                
+                if [ -n "$need_bot_token" ]; then
+                    read -p "Введите BOT_TOKEN: " saved_bot_token
+                fi
+                
+                if [ -n "$need_chat_ids" ]; then
+                    read -p "Введите CRITICAL_ALERT_CHAT_IDS (через запятую): " saved_chat_ids
+                fi
+                
+                if [ -n "$need_node_name" ]; then
+                    read -p "Введите NODE_NAME (имя этой ноды): " saved_node_name
+                fi
+            fi
+        fi
+        
+        # Add monitoring variables to .env if they exist
+        if [ -n "$saved_bot_token" ] || [ -n "$saved_chat_ids" ] || [ -n "$saved_node_name" ]; then
+            echo "" | sudo tee -a "${ENV_FILE}" > /dev/null
+            echo "# Agent Monitoring Configuration" | sudo tee -a "${ENV_FILE}" > /dev/null
+            [ -n "$saved_bot_token" ] && echo "BOT_TOKEN=\"${saved_bot_token}\"" | sudo tee -a "${ENV_FILE}" > /dev/null
+            [ -n "$saved_chat_ids" ] && echo "CRITICAL_ALERT_CHAT_IDS=\"${saved_chat_ids}\"" | sudo tee -a "${ENV_FILE}" > /dev/null
+            [ -n "$saved_node_name" ] && echo "NODE_NAME=\"${saved_node_name}\"" | sudo tee -a "${ENV_FILE}" > /dev/null
+            msg_info "✓ Переменные мониторинга добавлены в .env"
+        fi
+    fi
+    
     sudo chmod 600 "${ENV_FILE}"
     sudo tee "/etc/systemd/system/${NODE_SERVICE_NAME}.service" > /dev/null <<EOF
 [Unit]
