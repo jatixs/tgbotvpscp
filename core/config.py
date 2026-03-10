@@ -16,10 +16,16 @@ BOT_LOG_DIR = os.path.join(LOG_DIR, "bot")
 WATCHDOG_LOG_DIR = os.path.join(LOG_DIR, "watchdog")
 NODE_LOG_DIR = os.path.join(LOG_DIR, "node")
 TRAFFIC_BACKUP_DIR = os.path.join(LOG_DIR, "traffic_backups")
+CONFIG_BACKUP_DIR = os.path.join(LOG_DIR, "config_backups")
+LOGS_BACKUP_DIR = os.path.join(LOG_DIR, "logs_backups")
+NODES_BACKUP_DIR = os.path.join(LOG_DIR, "nodes_backups")
 os.makedirs(BOT_LOG_DIR, exist_ok=True)
 os.makedirs(WATCHDOG_LOG_DIR, exist_ok=True)
 os.makedirs(NODE_LOG_DIR, exist_ok=True)
 os.makedirs(TRAFFIC_BACKUP_DIR, exist_ok=True)
+os.makedirs(CONFIG_BACKUP_DIR, exist_ok=True)
+os.makedirs(LOGS_BACKUP_DIR, exist_ok=True)
+os.makedirs(NODES_BACKUP_DIR, exist_ok=True)
 USERS_FILE = os.path.join(CONFIG_DIR, "users.json")
 NODES_FILE = os.path.join(CONFIG_DIR, "nodes.json")
 REBOOT_FLAG_FILE = os.path.join(CONFIG_DIR, "reboot_flag.txt")
@@ -106,6 +112,8 @@ if not TOKEN:
 DEFAULT_LANGUAGE = "ru"
 DEFAULT_CONFIG = {
     "TRAFFIC_INTERVAL": 5,
+    "BACKUP_INTERVAL": 300,
+    "BACKUP_LAST_INTERVAL": 300,
     "SERVICES_INTERVAL": 5,
     "PING_INTERVAL": 30,
     "RESOURCE_CHECK_INTERVAL": 60,
@@ -178,6 +186,8 @@ MANAGED_SERVICES = [
 ]
 # ------------------------------
 TRAFFIC_INTERVAL = DEFAULT_CONFIG["TRAFFIC_INTERVAL"]
+BACKUP_INTERVAL = DEFAULT_CONFIG["BACKUP_INTERVAL"]
+BACKUP_LAST_INTERVAL = DEFAULT_CONFIG["BACKUP_LAST_INTERVAL"]
 RESOURCE_CHECK_INTERVAL = DEFAULT_CONFIG["RESOURCE_CHECK_INTERVAL"]
 CPU_THRESHOLD = DEFAULT_CONFIG["CPU_THRESHOLD"]
 RAM_THRESHOLD = DEFAULT_CONFIG["RAM_THRESHOLD"]
@@ -191,13 +201,19 @@ WEB_METADATA = {}
 # ---------------------------------
 
 def load_system_config():
-    global TRAFFIC_INTERVAL, SERVICES_INTERVAL, PING_INTERVAL, RESOURCE_CHECK_INTERVAL, CPU_THRESHOLD, RAM_THRESHOLD, DISK_THRESHOLD, RESOURCE_ALERT_COOLDOWN, NODE_OFFLINE_TIMEOUT, WEB_METADATA
+    global TRAFFIC_INTERVAL, BACKUP_INTERVAL, BACKUP_LAST_INTERVAL, SERVICES_INTERVAL, PING_INTERVAL, RESOURCE_CHECK_INTERVAL, CPU_THRESHOLD, RAM_THRESHOLD, DISK_THRESHOLD, RESOURCE_ALERT_COOLDOWN, NODE_OFFLINE_TIMEOUT, WEB_METADATA
     try:
         if os.path.exists(SYSTEM_CONFIG_FILE):
             with open(SYSTEM_CONFIG_FILE, "r", encoding="utf-8") as f:
                 data = json.load(f)
                 TRAFFIC_INTERVAL = data.get(
                     "TRAFFIC_INTERVAL", DEFAULT_CONFIG["TRAFFIC_INTERVAL"]
+                )
+                BACKUP_INTERVAL = data.get(
+                    "BACKUP_INTERVAL", DEFAULT_CONFIG["BACKUP_INTERVAL"]
+                )
+                BACKUP_LAST_INTERVAL = data.get(
+                    "BACKUP_LAST_INTERVAL", DEFAULT_CONFIG["BACKUP_LAST_INTERVAL"]
                 )
                 SERVICES_INTERVAL = data.get(
                     "SERVICES_INTERVAL", DEFAULT_CONFIG["SERVICES_INTERVAL"]
@@ -232,10 +248,14 @@ def load_system_config():
 
 
 def save_system_config(new_config: dict):
-    global TRAFFIC_INTERVAL, SERVICES_INTERVAL, PING_INTERVAL, RESOURCE_CHECK_INTERVAL, CPU_THRESHOLD, RAM_THRESHOLD, DISK_THRESHOLD, RESOURCE_ALERT_COOLDOWN, NODE_OFFLINE_TIMEOUT, WEB_METADATA  # noqa: F824
+    global TRAFFIC_INTERVAL, BACKUP_INTERVAL, BACKUP_LAST_INTERVAL, SERVICES_INTERVAL, PING_INTERVAL, RESOURCE_CHECK_INTERVAL, CPU_THRESHOLD, RAM_THRESHOLD, DISK_THRESHOLD, RESOURCE_ALERT_COOLDOWN, NODE_OFFLINE_TIMEOUT, WEB_METADATA  # noqa: F824
     try:
         if "TRAFFIC_INTERVAL" in new_config:
             TRAFFIC_INTERVAL = int(new_config["TRAFFIC_INTERVAL"])
+        if "BACKUP_INTERVAL" in new_config:
+            BACKUP_INTERVAL = int(new_config["BACKUP_INTERVAL"])
+        if "BACKUP_LAST_INTERVAL" in new_config:
+            BACKUP_LAST_INTERVAL = int(new_config["BACKUP_LAST_INTERVAL"])
         if "SERVICES_INTERVAL" in new_config:
             SERVICES_INTERVAL = int(new_config["SERVICES_INTERVAL"])
         if "PING_INTERVAL" in new_config:
@@ -256,6 +276,8 @@ def save_system_config(new_config: dict):
 
         config_to_save = {
             "TRAFFIC_INTERVAL": TRAFFIC_INTERVAL,
+            "BACKUP_INTERVAL": BACKUP_INTERVAL,
+            "BACKUP_LAST_INTERVAL": BACKUP_LAST_INTERVAL,
             "SERVICES_INTERVAL": SERVICES_INTERVAL,
             "PING_INTERVAL": PING_INTERVAL,
             "RESOURCE_CHECK_INTERVAL": RESOURCE_CHECK_INTERVAL,

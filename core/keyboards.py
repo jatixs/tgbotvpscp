@@ -675,20 +675,48 @@ def get_node_service_actions_keyboard(token: str, service: str, status: str, lan
     ])
 
     
-def get_backups_menu_keyboard(lang: str) -> InlineKeyboardMarkup:
+def get_backups_menu_keyboard(lang: str, interval_label: str) -> InlineKeyboardMarkup:
     """Backups main menu keyboard"""
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [
                 InlineKeyboardButton(text=_("btn_backup_traffic", lang), callback_data="open_traffic_backups"),
-                InlineKeyboardButton(text=_("btn_backup_config", lang), callback_data="backup_in_dev"),
+                InlineKeyboardButton(text=_("btn_backup_config", lang), callback_data="open_config_backups"),
             ],
             [
-                InlineKeyboardButton(text=_("btn_backup_logs", lang), callback_data="backup_in_dev"),
-                InlineKeyboardButton(text=_("btn_backup_nodes", lang), callback_data="backup_in_dev"),
+                InlineKeyboardButton(text=_("btn_backup_logs", lang), callback_data="open_logs_backups"),
+                InlineKeyboardButton(text=_("btn_backup_nodes", lang), callback_data="open_nodes_backups"),
+            ],
+            [
+                InlineKeyboardButton(text=_("btn_backup_timer_settings", lang), callback_data="open_backup_timer_settings"),
+                InlineKeyboardButton(text=interval_label, callback_data="backup_interval_noop"),
+            ],
+            [
+                InlineKeyboardButton(text=_("btn_backup_delete_menu", lang), callback_data="open_backup_delete_menu"),
             ],
             [
                 InlineKeyboardButton(text=_("btn_close", lang), callback_data="close_backups_menu")
             ]
+        ]
+    )
+
+
+def get_backup_timer_settings_keyboard(lang: str, is_enabled: bool) -> InlineKeyboardMarkup:
+    toggle_key = "btn_backup_toggle_off" if is_enabled else "btn_backup_toggle_on"
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(text=_("btn_backup_interval_minus", lang), callback_data="backup_interval_dec"),
+                InlineKeyboardButton(text=_("btn_backup_interval_plus", lang), callback_data="backup_interval_inc"),
+            ],
+            [
+                InlineKeyboardButton(text=_(toggle_key, lang), callback_data="backup_toggle_enabled"),
+            ],
+            [
+                InlineKeyboardButton(text=_("btn_backup_timer_reset", lang), callback_data="backup_interval_reset"),
+            ],
+            [
+                InlineKeyboardButton(text=_("btn_back", lang), callback_data="back_to_backups_main", style="primary"),
+            ],
         ]
     )
