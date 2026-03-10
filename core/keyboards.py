@@ -695,7 +695,7 @@ def get_backups_menu_keyboard(lang: str, interval_label: str) -> InlineKeyboardM
                 InlineKeyboardButton(text=_("btn_backup_delete_menu", lang), callback_data="open_backup_delete_menu"),
             ],
             [
-                InlineKeyboardButton(text=_("btn_close", lang), callback_data="close_backups_menu")
+                InlineKeyboardButton(text=_("btn_close", lang), callback_data="close_backups_menu", style="danger")
             ]
         ]
     )

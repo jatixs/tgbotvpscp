@@ -251,7 +251,7 @@ def _get_backup_delete_menu_keyboard(lang: str) -> InlineKeyboardMarkup:
                 InlineKeyboardButton(text=get_text("btn_backup_nodes", lang), callback_data="open_nodes_backups"),
             ],
             [
-                InlineKeyboardButton(text=get_text("btn_backup_delete_all", lang), callback_data="confirm_delete_all_backups"),
+                InlineKeyboardButton(text=get_text("btn_backup_delete_all", lang), callback_data="confirm_delete_all_backups", style="danger"),
             ],
             [
                 InlineKeyboardButton(text=get_text("btn_back", lang), callback_data="back_to_backups_main", style="primary"),
