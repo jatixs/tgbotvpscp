@@ -363,6 +363,7 @@ async def cq_node_command(callback: types.CallbackQuery):
         "traffic": "btn_traffic",
         "top": "btn_top",
         "speedtest": "btn_speedtest",
+        "update": "btn_node_update_system",
         "reboot": "btn_reboot",
     }
     cmd_name = _(cmd_map.get(cmd, cmd), lang)

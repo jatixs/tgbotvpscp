@@ -1596,7 +1596,7 @@ async def handle_nodes_monitor_command(request):
         if not token or not command:
             return web.json_response({"error": "Token and command required"}, status=400)
         
-        allowed_commands = ["selftest", "uptime", "traffic", "top", "speedtest", "reboot", "services_list"]
+        allowed_commands = ["selftest", "uptime", "traffic", "top", "speedtest", "update", "reboot", "services_list"]
         if command not in allowed_commands:
             return web.json_response({"error": "Invalid command"}, status=400)
         

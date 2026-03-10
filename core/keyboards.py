@@ -611,15 +611,20 @@ def get_node_management_keyboard(
         )
     row4.append(
         InlineKeyboardButton(
-            text=_("btn_reboot", lang), callback_data=f"node_cmd_{token}_reboot"
+            text=_("btn_node_update_system", lang), callback_data=f"node_cmd_{token}_update"
         )
     )
     row5 = [
         InlineKeyboardButton(
+            text=_("btn_reboot", lang), callback_data=f"node_cmd_{token}_reboot"
+        )
+    ]
+    row6 = [
+        InlineKeyboardButton(
             text=_("btn_back", lang), callback_data="nodes_list_refresh", style="primary"
         )
     ]
-    layout = [row1, row2, row3, row4, row5]
+    layout = [row1, row2, row3, row4, row5, row6]
     return InlineKeyboardMarkup(inline_keyboard=layout)
 
 

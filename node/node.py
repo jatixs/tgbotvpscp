@@ -10,6 +10,7 @@ import re
 import hmac
 import hashlib
 import json
+import html
 import collections
 from datetime import datetime
 
@@ -992,6 +993,47 @@ def execute_command(task):
                             "key": "error_with_details",
                             "params": {"error": f"Network check failed: {e}"}
                         }
+
+        elif cmd == "update":
+            if os.geteuid() == 0:
+                base_cmd = "DEBIAN_FRONTEND=noninteractive apt update && DEBIAN_FRONTEND=noninteractive apt upgrade -y && apt autoremove -y"
+            else:
+                base_cmd = "sudo DEBIAN_FRONTEND=noninteractive apt update && sudo DEBIAN_FRONTEND=noninteractive apt upgrade -y && sudo apt autoremove -y"
+
+            try:
+                result = subprocess.run(
+                    ["bash", "-lc", base_cmd],
+                    capture_output=True,
+                    text=True,
+                    timeout=1800,
+                )
+                if result.returncode == 0:
+                    result_payload = {
+                        "type": "i18n",
+                        "key": "update_success",
+                        "params": {
+                            "output": html.escape((result.stdout or "")[-2000:])
+                        }
+                    }
+                else:
+                    error_text = result.stderr or result.stdout or "Unknown error"
+                    result_payload = {
+                        "type": "i18n",
+                        "key": "update_fail",
+                        "params": {
+                            "code": result.returncode,
+                            "error": html.escape(error_text[-2000:])
+                        }
+                    }
+            except subprocess.TimeoutExpired:
+                result_payload = {
+                    "type": "i18n",
+                    "key": "update_fail",
+                    "params": {
+                        "code": "timeout",
+                        "error": html.escape("Command timed out after 1800 seconds")
+                    }
+                }
 
         elif cmd == "reboot":
             result_payload = {
