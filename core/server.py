@@ -98,6 +98,7 @@ APP_VERSION = get_app_version()
 CACHE_VER = str(int(time.time()))
 MAX_FILE_SIZE = 50 * 1024 * 1024  # 50MB max file size
 AGENT_TASK = None
+RECENT_SSH_LOGINS = {}  # SSH cache for recent logins
 JINJA_ENV = Environment(
     loader=FileSystemLoader(TEMPLATE_DIR), autoescape=select_autoescape(["html", "xml"])
 )
@@ -906,15 +907,21 @@ async def handle_heartbeat(request):
     if ssh_logins and bot:
         server_tz = get_server_timezone_label()
         server_time = time.strftime("%H:%M")
-
+        now = time.time()
         for login in ssh_logins:
             user_ssh = login.get("user", "unknown")
             ip = login.get("ip", "unknown")
             method_raw = login.get("method", "unknown")
             node_time_str = login.get("node_time_str", "??:??")
             tz_label = login.get("tz_label", "")
-
-            # Логируем с masking
+            cache_key = f"{token}_{ip}"
+            last_alert_time = RECENT_SSH_LOGINS.get(cache_key, 0)
+            if now - last_alert_time <= 10:
+                logging.debug(f"Пропущен дубликат SSH алерта для {ip} на ноде {node.get('name', 'Node')}")
+                continue
+            RECENT_SSH_LOGINS[cache_key] = now
+            if len(RECENT_SSH_LOGINS) > 1000:
+                RECENT_SSH_LOGINS.clear()
             logging.info(
                 f"SSH login on node {node.get('name', 'Node')}: user={user_ssh}, ip={mask_sensitive_data(ip)}, method={method_raw}")
 
