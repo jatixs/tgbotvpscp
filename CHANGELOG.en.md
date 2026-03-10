@@ -12,7 +12,7 @@
 </p>
 
 ---
-## [1.19.1] - 2026-03-08
+## [1.19.1] - 2026-03-09
 
 ### 🚀 Added:
 * **WebUI:** Support for enabling and disabling authorization methods (password login or via the official Telegram widget).
@@ -26,6 +26,8 @@
 * **WebUI:** Errors in the design of node status badges (Node badge).
 * **WebUI:** Localization (translation) issues in the web interface.
 * **Bot:** Completed full localization of all system notifications (alerts).
+* **Bot:** Prevented false positive node offline/recovery alerts upon main agent restart by introducing a startup grace period.
+* **Bot:** Deduplicated SSH login notifications to prevent spam from redundant log entries (added a 10-second cooldown per IP).
 
 ---
 ## [1.19.0] - 2026-02-18
