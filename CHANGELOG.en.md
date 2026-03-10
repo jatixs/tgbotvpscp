@@ -17,10 +17,15 @@
 ### 🚀 Added:
 * **WebUI:** Support for enabling and disabling authorization methods (password login or via the official Telegram widget).
 * **Core & Deployment:** Agent (client) availability check via the active nodes system — Reverse Heartbeat mechanism. Integrated into the core and installation scripts.
+* **Backups:** Full in-bot backup manager for `Traffic / Config / Logs / Nodes` with manual creation, file delivery to chat, restore, and delete actions.
+* **Backups:** Bulk “Delete all backups” action with confirmation.
+* **Backups:** Dedicated auto-backup timer settings screen: 30s step up to 10 minutes, nonlinear scaling after 10 minutes (`x2` / `/2`), reset button, and `ON/OFF` toggle.
 
 ### ✨ Changed:
 * **Bot:** Updated color scheme for inline buttons (confirmation, cancel, and "Back" buttons).
 * **Deployment:** Increased flexibility of the installation menu (improved script navigation).
+* **Backups:** “How it works” section now dynamically shows the currently selected auto-backup interval.
+* **Backups:** Backup interval display is now human-readable (`days / hours / minutes / seconds`).
 
 ### 🔧 Fixed:
 * **WebUI:** Errors in the design of node status badges (Node badge).
@@ -28,6 +33,8 @@
 * **Bot:** Completed full localization of all system notifications (alerts).
 * **Bot:** Prevented false positive node offline/recovery alerts upon main agent restart by introducing a startup grace period.
 * **Bot:** Deduplicated SSH login notifications to prevent spam from redundant log entries (added a 10-second cooldown per IP).
+* **Backups:** Auto-backup ON/OFF now preserves and restores the last configured timer value.
+* **Backups:** Backup rotation is unified across all categories (keeps latest 5 backups, removes oldest automatically).
 
 ---
 ## [1.19.0] - 2026-02-18
