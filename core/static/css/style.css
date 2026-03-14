@@ -810,3 +810,64 @@ html.dark .monitor-link-btn:hover {
 		height: 0.875rem !important;
 	}
 }
+
+/* Lock Icon Styles */
+#lockIcon {
+	transition: all 0.3s ease;
+}
+
+#lockIcon.lock-active {
+	color: #10b981 !important; /* green-500 */
+	filter: drop-shadow(0 0 8px rgba(16, 185, 129, 0.6));
+}
+
+html.dark #lockIcon.lock-active {
+	color: #34d399 !important; /* green-400 */
+}
+
+/* Password Section Blur */
+#passwordChangeSection.blurred {
+	filter: blur(4px);
+	pointer-events: none;
+	user-select: none;
+	opacity: 0.5;
+	transition: all 0.3s ease;
+}
+
+.telegram-only-overlay {
+	position: absolute;
+	inset: 0;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	pointer-events: none;
+	z-index: 2;
+}
+
+.telegram-only-overlay.hidden {
+	display: none !important;
+}
+
+.telegram-only-overlay-badge {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.5rem;
+	padding: 0.5rem 0.75rem;
+	border-radius: 0.75rem;
+	font-size: 0.8rem;
+	font-weight: 700;
+	color: #065f46;
+	background: rgba(209, 250, 229, 0.92);
+	border: 1px solid rgba(16, 185, 129, 0.45);
+	box-shadow: 0 10px 24px rgba(16, 185, 129, 0.16);
+	backdrop-filter: blur(4px);
+	max-width: calc(100% - 1rem);
+	text-align: center;
+}
+
+html.dark .telegram-only-overlay-badge {
+	color: #a7f3d0;
+	background: rgba(6, 78, 59, 0.88);
+	border-color: rgba(16, 185, 129, 0.55);
+	box-shadow: 0 10px 24px rgba(16, 185, 129, 0.24);
+}

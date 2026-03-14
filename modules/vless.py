@@ -63,7 +63,7 @@ async def generate_vless_handler(message: types.Message, state: FSMContext):
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text=_("btn_cancel", lang), callback_data="back_to_menu"
+                    text=_("btn_cancel", lang), callback_data="back_to_menu", style="danger"
                 )
             ]
         ]
@@ -85,7 +85,7 @@ async def process_vless_file(message: types.Message, state: FSMContext):
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text=_("btn_cancel", lang), callback_data="back_to_menu"
+                    text=_("btn_cancel", lang), callback_data="back_to_menu", style="danger"
                 )
             ]
         ]
@@ -157,7 +157,7 @@ async def process_vless_file(message: types.Message, state: FSMContext):
             inline_keyboard=[
                 [
                     InlineKeyboardButton(
-                        text=_("btn_cancel", lang), callback_data="back_to_menu"
+                        text=_("btn_cancel", lang), callback_data="back_to_menu", style="danger"
                     )
                 ]
             ]
@@ -255,7 +255,7 @@ async def process_vless_file_invalid(message: types.Message, state: FSMContext):
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text=_("btn_cancel", lang), callback_data="back_to_menu"
+                    text=_("btn_cancel", lang), callback_data="back_to_menu", style="danger"
                 )
             ]
         ]
@@ -274,7 +274,7 @@ async def process_vless_name_invalid(message: types.Message, state: FSMContext):
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text=_("btn_cancel", lang), callback_data="back_to_menu"
+                    text=_("btn_cancel", lang), callback_data="back_to_menu", style="danger"
                 )
             ]
         ]

@@ -232,7 +232,7 @@ setup_repo_and_dirs() {
     if [ -d "${BOT_INSTALL_PATH}" ]; then run_with_spinner "Удаление старых файлов" sudo rm -rf "${BOT_INSTALL_PATH}"; fi
     sudo mkdir -p ${BOT_INSTALL_PATH}
     run_with_spinner "Клонирование репозитория" sudo git clone --branch "${GIT_BRANCH}" "${GITHUB_REPO_URL}" "${BOT_INSTALL_PATH}" || exit 1
-    if [ -f "/tmp/tgbot_env.bak" ]; then sudo mv /tmp/tgbot_env.bak "${ENV_FILE}"; fi
+    if [ -f "/tmp/tgbot_env.bak" ]; then sudo cp /tmp/tgbot_env.bak "${ENV_FILE}"; fi
     sudo mkdir -p "${BOT_INSTALL_PATH}/logs/bot" "${BOT_INSTALL_PATH}/logs/watchdog" "${BOT_INSTALL_PATH}/logs/node" "${BOT_INSTALL_PATH}/config"
     sudo chown -R ${owner_user}:${owner_user} ${BOT_INSTALL_PATH}
 }
@@ -311,67 +311,28 @@ install_extras() {
     fi
     
     if [ "$SERVER_COUNTRY" == "RU" ]; then
-        msg_info "Сервер находится в России - используем iperf3 для speedtest"
+        msg_info "Сервер находится в России - устанавливаем iperf3 для speedtest"
         if ! command -v iperf3 &> /dev/null; then
-            msg_question "iperf3 не найден. Установить? (y/n): " I; if [[ "$I" =~ ^[Yy]$ ]]; then run_with_spinner "Установка iperf3" sudo apt-get install -y -q iperf3; fi
+            run_with_spinner "Установка iperf3" sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -q iperf3
+        else
+            msg_success "iperf3 уже установлен"
         fi
         # Mark that we use iperf3 mode
         echo "RU" | sudo tee "${BOT_INSTALL_PATH}/config/.speedtest_mode" > /dev/null
     else
-        msg_info "Сервер не в России - рекомендуется Ookla Speedtest CLI"
+        msg_info "Сервер не в России - устанавливаем Ookla Speedtest CLI"
         
-        HAS_IPERF3=false
-        HAS_OOKLA=false
-        
+        # Remove iperf3 if present (not needed outside Russia)
         if command -v iperf3 &> /dev/null; then
-            HAS_IPERF3=true
+            run_with_spinner "Удаление iperf3" sudo apt-get remove -y -q iperf3
         fi
         
         if command -v speedtest &> /dev/null && speedtest --version 2>&1 | grep -q "Speedtest by Ookla"; then
-            HAS_OOKLA=true
-        fi
-        
-        # If iperf3 is installed but Ookla is not - offer to switch
-        if [ "$HAS_IPERF3" = true ] && [ "$HAS_OOKLA" = false ]; then
-            echo -e "${C_YELLOW}⚠️  Обнаружен iperf3. Для серверов вне России рекомендуется Ookla Speedtest CLI.${C_RESET}"
-            msg_question "Удалить iperf3 и установить Ookla Speedtest CLI? (y/n) [y]: " SWITCH_CHOICE
-            SWITCH_CHOICE=${SWITCH_CHOICE:-y}
-            
-            if [[ "$SWITCH_CHOICE" =~ ^[Yy]$ ]]; then
-                run_with_spinner "Удаление iperf3" sudo apt-get remove -y -q iperf3
-                install_ookla_speedtest
-                echo "OOKLA" | sudo tee "${BOT_INSTALL_PATH}/config/.speedtest_mode" > /dev/null
-            else
-                msg_info "iperf3 оставлен. Будет использоваться он для speedtest."
-                echo "RU" | sudo tee "${BOT_INSTALL_PATH}/config/.speedtest_mode" > /dev/null
-            fi
-        # If Ookla already installed
-        elif [ "$HAS_OOKLA" = true ]; then
             msg_success "Ookla Speedtest CLI уже установлен"
-            echo "OOKLA" | sudo tee "${BOT_INSTALL_PATH}/config/.speedtest_mode" > /dev/null
-        # If neither is installed
         else
-            echo -e "${C_CYAN}Speedtest не установлен. Какой инструмент установить?${C_RESET}"
-            echo "  1) Ookla Speedtest CLI (рекомендуется для серверов вне России)"
-            echo "  2) iperf3"
-            echo "  3) Пропустить"
-            msg_question "Выберите (1/2/3) [1]: " ST_CHOICE
-            ST_CHOICE=${ST_CHOICE:-1}
-            
-            case "$ST_CHOICE" in
-                1)
-                    install_ookla_speedtest
-                    echo "OOKLA" | sudo tee "${BOT_INSTALL_PATH}/config/.speedtest_mode" > /dev/null
-                    ;;
-                2)
-                    run_with_spinner "Установка iperf3" sudo apt-get install -y -q iperf3
-                    echo "RU" | sudo tee "${BOT_INSTALL_PATH}/config/.speedtest_mode" > /dev/null
-                    ;;
-                3)
-                    msg_warning "Speedtest не будет доступен"
-                    ;;
-            esac
+            install_ookla_speedtest
         fi
+        echo "OOKLA" | sudo tee "${BOT_INSTALL_PATH}/config/.speedtest_mode" > /dev/null
     fi
 }
 
@@ -421,7 +382,7 @@ install_ookla_speedtest() {
     else
         msg_warning "Не удалось установить Ookla Speedtest CLI, будет использован iperf3"
         if ! command -v iperf3 &> /dev/null; then
-            run_with_spinner "Установка iperf3" sudo apt-get install -y -q iperf3
+            run_with_spinner "Установка iperf3" sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -q iperf3
         fi
         echo "RU" | sudo tee "${BOT_INSTALL_PATH}/config/.speedtest_mode" > /dev/null
     fi
@@ -815,12 +776,12 @@ install_node_logic() {
     
     if [ "$NODE_COUNTRY" == "RU" ]; then
         msg_info "Нода в России - используем iperf3"
-        run_with_spinner "Установка iperf3" sudo apt-get install -y -q iperf3
+        run_with_spinner "Установка iperf3" sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -q iperf3
     else
         msg_info "Нода не в России - устанавливаем Ookla Speedtest CLI"
         install_ookla_speedtest
         # Also install iperf3 as fallback
-        run_with_spinner "Установка iperf3" sudo apt-get install -y -q iperf3
+        run_with_spinner "Установка iperf3" sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -q iperf3
     fi
     
     setup_repo_and_dirs "root"
@@ -838,6 +799,76 @@ AGENT_TOKEN="${NODE_TOKEN}"
 NODE_UPDATE_INTERVAL=5
 INSTALLED_VERSION="${ver}"
 EOF
+    
+    # Check and restore/configure agent monitoring variables if settings were restored
+    if [[ "$RESTORE_CHOICE" =~ ^[Yy]$ ]] && [ -f "/tmp/tgbot_env.bak" ]; then
+        local saved_bot_token=$(grep "^BOT_TOKEN=" "/tmp/tgbot_env.bak" | cut -d'=' -f2- | tr -d '"' | xargs)
+        local saved_chat_ids=$(grep "^CRITICAL_ALERT_CHAT_IDS=" "/tmp/tgbot_env.bak" | cut -d'=' -f2- | tr -d '"' | xargs)
+        local saved_node_name=$(grep "^NODE_NAME=" "/tmp/tgbot_env.bak" | cut -d'=' -f2- | tr -d '"')
+        local saved_delay=$(grep "^AGENT_ALERT_DELAY_SECONDS=" "/tmp/tgbot_env.bak" | cut -d'=' -f2- | tr -d '"')
+        
+        # Ask user if monitoring variables are missing or empty
+        local need_bot_token=""
+        local need_chat_ids=""
+        local need_node_name=""
+        
+        if [ -z "$saved_bot_token" ]; then
+            need_bot_token="yes"
+        fi
+        if [ -z "$saved_chat_ids" ]; then
+            need_chat_ids="yes"
+        fi
+        if [ -z "$saved_node_name" ]; then
+            need_node_name="yes"
+        fi
+        
+        # If any monitoring variable is missing, ask if user wants to configure them
+        if [ -n "$need_bot_token" ] || [ -n "$need_chat_ids" ]; then
+            echo ""
+            echo -e "${C_YELLOW}⚠️  Обнаружены пустые переменные для мониторинга агента:${C_RESET}"
+            [ -n "$need_bot_token" ] && echo -e "  • BOT_TOKEN (токен бота)"
+            [ -n "$need_chat_ids" ] && echo -e "  • CRITICAL_ALERT_CHAT_IDS (ID чатов для алертов)"
+            [ -n "$need_node_name" ] && echo -e "  • NODE_NAME (имя ноды)"
+            echo ""
+            read -p "$(echo -e "${C_CYAN}❓ Настроить мониторинг агента сейчас? (y/n) [n]: ${C_RESET}")" setup_monitoring
+            setup_monitoring=${setup_monitoring:-n}
+            
+            if [[ "$setup_monitoring" =~ ^[Yy]$ ]]; then
+                echo ""
+                echo -e "${C_CYAN}Настройка мониторинга агента:${C_RESET}"
+                echo -e "${C_YELLOW}Важно:${C_RESET} не используйте chat_id другого бота (Telegram блокирует отправку боту от бота)."
+                echo ""
+                echo -e "${C_YELLOW}Как получить Chat ID:${C_RESET}"
+                echo -e "  • Напишите боту @userinfobot команду /start"
+                echo -e "  • Или добавьте бота в группу и используйте /start"
+                echo ""
+                
+                if [ -n "$need_bot_token" ]; then
+                    read -p "Введите BOT_TOKEN: " saved_bot_token
+                fi
+                
+                if [ -n "$need_chat_ids" ]; then
+                    read -p "Введите CRITICAL_ALERT_CHAT_IDS (через запятую): " saved_chat_ids
+                fi
+                
+                if [ -n "$need_node_name" ]; then
+                    read -p "Введите NODE_NAME (имя этой ноды): " saved_node_name
+                fi
+            fi
+        fi
+        
+        # Add monitoring variables to .env if monitoring was configured (has BOT_TOKEN and CHAT_IDS)
+        if [ -n "$saved_bot_token" ] && [ -n "$saved_chat_ids" ]; then
+            echo "" | sudo tee -a "${ENV_FILE}" > /dev/null
+            echo "# Agent Monitoring Configuration" | sudo tee -a "${ENV_FILE}" > /dev/null
+            echo "BOT_TOKEN=\"${saved_bot_token}\"" | sudo tee -a "${ENV_FILE}" > /dev/null
+            echo "CRITICAL_ALERT_CHAT_IDS=\"${saved_chat_ids}\"" | sudo tee -a "${ENV_FILE}" > /dev/null
+            echo "NODE_NAME=\"${saved_node_name}\"" | sudo tee -a "${ENV_FILE}" > /dev/null
+            [ -n "$saved_delay" ] && echo "AGENT_ALERT_DELAY_SECONDS=\"${saved_delay}\"" | sudo tee -a "${ENV_FILE}" > /dev/null
+            msg_info "✓ Переменные мониторинга добавлены в .env"
+        fi
+    fi
+    
     sudo chmod 600 "${ENV_FILE}"
     sudo tee "/etc/systemd/system/${NODE_SERVICE_NAME}.service" > /dev/null <<EOF
 [Unit]
@@ -971,6 +1002,142 @@ EOF
     msg_success "Обновлено."
 }
 
+check_agent_monitoring_status() {
+    if [ ! -f "${ENV_FILE}" ]; then
+        echo "выкл"
+        return
+    fi
+
+    local bot_token_value=$(grep '^BOT_TOKEN=' "${ENV_FILE}" | tail -n 1 | cut -d'=' -f2- | tr -d '"' | xargs)
+    local chat_ids_value=$(grep '^CRITICAL_ALERT_CHAT_IDS=' "${ENV_FILE}" | tail -n 1 | cut -d'=' -f2- | tr -d '"' | xargs)
+
+    if [ -n "$bot_token_value" ] && [ -n "$chat_ids_value" ]; then
+        echo "вкл"
+    else
+        echo "выкл"
+    fi
+}
+
+toggle_agent_monitoring() {
+    if [ ! -f "${ENV_FILE}" ]; then
+        msg_error "Файл .env не найден!"
+        return
+    fi
+
+    local current_bot_token=$(grep '^BOT_TOKEN=' "${ENV_FILE}" | tail -n 1 | cut -d'=' -f2- | tr -d '"' | xargs)
+    local current_chat_ids=$(grep '^CRITICAL_ALERT_CHAT_IDS=' "${ENV_FILE}" | tail -n 1 | cut -d'=' -f2- | tr -d '"' | xargs)
+    local current_node_name=$(grep '^NODE_NAME=' "${ENV_FILE}" | tail -n 1 | cut -d'=' -f2- | tr -d '"')
+    local current_delay=$(grep '^AGENT_ALERT_DELAY_SECONDS=' "${ENV_FILE}" | tail -n 1 | cut -d'=' -f2- | tr -d '"' | xargs)
+    local status=$(check_agent_monitoring_status)
+
+    if [ "$status" == "вкл" ]; then
+        # Отключаем мониторинг - удаляем переменные
+        msg_warning "Отключение мониторинга агента..."
+        sed -i '/^# Agent Monitoring Configuration$/d' "${ENV_FILE}"
+        sed -i '/^DEBUG=/d' "${ENV_FILE}"
+        sed -i '/^BOT_TOKEN=/d' "${ENV_FILE}"
+        sed -i '/^CRITICAL_ALERT_CHAT_IDS=/d' "${ENV_FILE}"
+        sed -i '/^AGENT_ALERT_DELAY_SECONDS=/d' "${ENV_FILE}"
+        sed -i '/^NODE_NAME=/d' "${ENV_FILE}"
+        msg_success "Мониторинг агента отключен. Переменные удалены из .env"
+        local deploy_mode=$(grep '^DEPLOY_MODE=' "${ENV_FILE}" | cut -d'=' -f2 | tr -d '"')
+        if [ "$deploy_mode" == "docker" ]; then
+            msg_info "Перезапуск Docker контейнера..."
+            local dc_cmd=""; if sudo docker compose version &>/dev/null; then dc_cmd="docker compose"; else dc_cmd="docker-compose"; fi
+            cd "${BOT_INSTALL_PATH}" && sudo $dc_cmd restart
+            msg_success "Docker контейнер перезапущен"
+        else
+            msg_info "Перезапуск ноды..."
+            sudo systemctl restart ${NODE_SERVICE_NAME}
+            msg_success "Нода перезапущена"
+        fi
+    else
+        # Включаем/чинить мониторинг - запрашиваем данные и обновляем переменные
+        msg_info "Настройка мониторинга агента..."
+        if [ -z "$current_bot_token" ]; then
+            msg_warning "BOT_TOKEN отсутствует или пустой в .env"
+        fi
+        if [ -z "$current_chat_ids" ]; then
+            msg_warning "CRITICAL_ALERT_CHAT_IDS отсутствует или пустой в .env"
+        fi
+        if [ -z "$current_node_name" ]; then
+            msg_warning "NODE_NAME отсутствует или пустой в .env"
+        fi
+        if [ -z "$current_delay" ]; then
+            msg_warning "AGENT_ALERT_DELAY_SECONDS отсутствует или пустой в .env"
+        fi
+
+        echo ""
+        echo -e "${C_CYAN}Для работы мониторинга агента нужны:${C_RESET}"
+        echo -e "  1. BOT_TOKEN - токен вашего Telegram бота"
+        echo -e "  2. CRITICAL_ALERT_CHAT_IDS - ID чатов для критических алертов (через запятую)"
+        echo -e "  3. AGENT_ALERT_DELAY_SECONDS - задержка перед отправкой алерта (в секундах)"
+        echo -e "  4. NODE_NAME - имя этой ноды"
+        echo ""
+        echo -e "${C_YELLOW}Важно:${C_RESET} не используйте chat_id другого бота (Telegram блокирует отправку боту от бота)."
+        echo ""
+        echo -e "${C_YELLOW}Как получить Chat ID:${C_RESET}"
+        echo -e "  • Напишите боту @userinfobot команду /start"
+        echo -e "  • Или добавьте бота в группу и используйте /start"
+        echo ""
+
+        read -p "Введите BOT_TOKEN [текущее: ${current_bot_token:-пусто}]: " bot_token
+        if [ -z "$bot_token" ]; then
+            bot_token="$current_bot_token"
+        fi
+        if [ -z "$bot_token" ]; then
+            msg_error "BOT_TOKEN не может быть пустым!"
+            return
+        fi
+
+        read -p "Введите CRITICAL_ALERT_CHAT_IDS (через запятую) [текущее: ${current_chat_ids:-пусто}]: " chat_ids
+        if [ -z "$chat_ids" ]; then
+            chat_ids="$current_chat_ids"
+        fi
+        if [ -z "$chat_ids" ]; then
+            msg_error "CRITICAL_ALERT_CHAT_IDS не может быть пустым!"
+            return
+        fi
+
+        read -p "Введите NODE_NAME [текущее: ${current_node_name:-Node}]: " node_name
+        if [ -z "$node_name" ]; then
+            node_name="${current_node_name:-Node}"
+        fi
+
+        read -p "Введите AGENT_ALERT_DELAY_SECONDS [текущее: ${current_delay:-15}]: " alert_delay
+        if [ -z "$alert_delay" ]; then
+            alert_delay="${current_delay:-15}"
+        fi
+
+        # Обновляем переменные в .env
+        sed -i '/^# Agent Monitoring Configuration$/d' "${ENV_FILE}"
+        sed -i '/^DEBUG=/d' "${ENV_FILE}"
+        sed -i '/^BOT_TOKEN=/d' "${ENV_FILE}"
+        sed -i '/^CRITICAL_ALERT_CHAT_IDS=/d' "${ENV_FILE}"
+        sed -i '/^AGENT_ALERT_DELAY_SECONDS=/d' "${ENV_FILE}"
+        sed -i '/^NODE_NAME=/d' "${ENV_FILE}"
+        echo "" >> "${ENV_FILE}"
+        echo "DEBUG=\"false\"" >> "${ENV_FILE}"
+        echo "BOT_TOKEN=\"${bot_token}\"" >> "${ENV_FILE}"
+        echo "CRITICAL_ALERT_CHAT_IDS=\"${chat_ids}\"" >> "${ENV_FILE}"
+        echo "AGENT_ALERT_DELAY_SECONDS=\"${alert_delay}\"" >> "${ENV_FILE}"
+        echo "NODE_NAME=\"${node_name}\"" >> "${ENV_FILE}"
+
+        msg_success "Мониторинг агента включен/обновлен!"
+        local deploy_mode=$(grep '^DEPLOY_MODE=' "${ENV_FILE}" | cut -d'=' -f2 | tr -d '"')
+        if [ "$deploy_mode" == "docker" ]; then
+            msg_info "Перезапуск Docker контейнера..."
+            local dc_cmd=""; if sudo docker compose version &>/dev/null; then dc_cmd="docker compose"; else dc_cmd="docker-compose"; fi
+            cd "${BOT_INSTALL_PATH}" && sudo $dc_cmd restart
+            msg_success "Docker контейнер перезапущен"
+        else
+            msg_info "Перезапуск ноды..."
+            sudo systemctl restart ${NODE_SERVICE_NAME}
+            msg_success "Нода перезапущена"
+        fi
+    fi
+}
+
 main_menu() {
     local local_version=$(get_local_version)
     while true; do
@@ -979,28 +1146,42 @@ main_menu() {
         echo -e "${C_BLUE}${C_BOLD}║    Менеджер VPS Telegram Бот      ║${C_RESET}"
         echo -e "${C_BLUE}${C_BOLD}╚═══════════════════════════════════╝${C_RESET}"
         check_integrity
+        local item_type="агента"
+        if [ "$IS_NODE" == "yes" ]; then
+            item_type="ноду"
+        fi
         echo -e "  Ветка: ${GIT_BRANCH} | Версия: ${local_version}"
         echo -e "  Тип: ${INSTALL_TYPE} | Статус: ${STATUS_MESSAGE}"
         if [ -n "$INTEGRITY_STATUS" ]; then echo -e "  Интегритет: ${INTEGRITY_STATUS}"; fi
         echo "--------------------------------------------------------"
-        echo "  1) Обновить бота"
-        echo "  2) Удалить бота"
+        echo "  1) Обновить ${item_type}"
+        echo "  2) Удалить ${item_type}"
         echo "  3) Переустановить (Systemd - Secure)"
         echo "  4) Переустановить (Systemd - Root)"
         echo "  5) Переустановить (Docker - Secure)"
         echo "  6) Переустановить (Docker - Root)"
-        echo -e "${C_GREEN}  7) Установить НОДУ (Клиент)${C_RESET}"
+        if [ "$IS_NODE" == "yes" ]; then
+            echo -e "${C_GREEN}  7) Установить НОДУ (Клиент)${C_RESET}"
+        fi
+        
+        # Показываем пункт мониторинга агента только для нод
+        if [ "$IS_NODE" == "yes" ]; then
+            local monitoring_status=$(check_agent_monitoring_status)
+            echo -e "${C_YELLOW}  8) Мониторинг агента (${monitoring_status})${C_RESET}"
+        fi
+        
         echo "  0) Выход"
         echo "--------------------------------------------------------"
         read -p "$(echo -e "${C_BOLD}Ваш выбор: ${C_RESET}")" choice
         case $choice in
             1) update_bot; read -p "Нажмите Enter..." ;;
-            2) msg_question "Удалить? (y/n): " c; if [[ "$c" =~ ^[Yy]$ ]]; then uninstall_bot; return; fi ;;
+            2) msg_question "Удалить ${item_type}? (y/n): " c; if [[ "$c" =~ ^[Yy]$ ]]; then uninstall_bot; return; fi ;;
             3) uninstall_bot; install_systemd_logic "secure"; read -p "Нажмите Enter..." ;;
             4) uninstall_bot; install_systemd_logic "root"; read -p "Нажмите Enter..." ;;
             5) uninstall_bot; install_docker_logic "secure"; read -p "Нажмите Enter..." ;;
             6) uninstall_bot; install_docker_logic "root"; read -p "Нажмите Enter..." ;;
-            7) uninstall_bot; install_node_logic; read -p "Нажмите Enter..." ;;
+            7) if [ "$IS_NODE" == "yes" ]; then uninstall_bot; install_node_logic; read -p "Нажмите Enter..."; else msg_error "Пункт доступен только в режиме НОДЫ."; sleep 2; fi ;;
+            8) if [ "$IS_NODE" == "yes" ]; then toggle_agent_monitoring; read -p "Нажмите Enter..."; fi ;;
             0) break ;;
         esac
     done

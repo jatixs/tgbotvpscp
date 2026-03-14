@@ -21,13 +21,13 @@ _docker_descriptions_cache = {}
 _VALID_NAME_RE = re.compile(r'^[a-zA-Z0-9._@/:-]+$')
 
 def _validate_name(name: str) -> str:
-    """Validate a service or container name to prevent command injection.
-    
-    Raises ValueError if the name contains unsafe characters.
-    """
-    if not name or not _VALID_NAME_RE.match(name):
+    """Validate a service or container name to prevent command injection."""
+    if not name:
+        raise ValueError("Name cannot be empty")
+    match = _VALID_NAME_RE.match(name)
+    if not match:
         raise ValueError(f"Invalid service/container name: {name!r}")
-    return name
+    return match.group(0)
 
 # --- Helpers ---
 
@@ -55,7 +55,7 @@ def get_user_role_level(user_id):
 
 def get_systemd_status(service_name):
     try:
-        _validate_name(service_name)
+        service_name = _validate_name(service_name)
         # Check ActiveState and SubState and LoadState
         cmd = ["systemctl", "show", "-p", "ActiveState,SubState,LoadState", "--", service_name]
         # Use stdout/stderr pipe for compatibility with older python (capture_output added in 3.7)
@@ -102,7 +102,7 @@ def get_docker_status(container_name):
     except ImportError:
          # Fallback to CLI
         try:
-            _validate_name(container_name)
+            container_name = _validate_name(container_name)
             cmd = ["docker", "inspect", "-f", "{{.State.Status}}", "--", container_name]
             result = subprocess.run(cmd, capture_output=True, text=True)
             if result.returncode == 0:
@@ -266,7 +266,7 @@ async def perform_service_action(name, sType, action):
         return False, "Invalid action"
     
     try:
-        _validate_name(name)
+        name = _validate_name(name)
     except ValueError:
         return False, "Invalid service name"
     
@@ -297,7 +297,7 @@ async def perform_service_action(name, sType, action):
 def get_systemd_service_description(service_name):
     """Get description of a systemd service"""
     try:
-        _validate_name(service_name)
+        service_name = _validate_name(service_name)
         cmd = ["systemctl", "show", "-p", "Description", "--", service_name]
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
         if result.returncode == 0:
@@ -323,7 +323,7 @@ def get_systemd_service_info(service_name):
         "uptime": None
     }
     try:
-        _validate_name(service_name)
+        service_name = _validate_name(service_name)
         cmd = ["systemctl", "show", "-p", 
        "Description,LoadState,ActiveState,SubState,MainPID,MemoryCurrent,ActiveEnterTimestamp",
        "--", service_name]
@@ -380,7 +380,7 @@ def get_systemd_service_info(service_name):
 async def get_docker_image_from_container(container_name):
     """Get Docker image name from a running container"""
     try:
-        _validate_name(container_name)
+        container_name = _validate_name(container_name)
         cmd = ["docker", "inspect", "-f", "{{.Config.Image}}", "--", container_name]
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
         if result.returncode == 0:
@@ -444,7 +444,7 @@ async def get_docker_container_info(container_name):
         "uptime": None
     }
     try:
-        _validate_name(container_name)
+        container_name = _validate_name(container_name)
         cmd = ["docker", "inspect", "--", container_name]
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
         if result.returncode == 0:
@@ -731,7 +731,7 @@ async def cq_services_manage_menu(callback: types.CallbackQuery):
     kb = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text=_("services_btn_add_service", lang), callback_data="srv_add_list_0")],
         [InlineKeyboardButton(text=_("services_btn_remove_service", lang), callback_data="srv_remove_list_0")],
-        [InlineKeyboardButton(text=_("btn_back", lang), callback_data="srv_refresh_0")]
+        [InlineKeyboardButton(text=_("btn_back", lang), callback_data="srv_refresh_0", style="primary")]
     ])
     
     await callback.message.edit_text(
@@ -796,7 +796,7 @@ async def cq_services_add_list(callback: types.CallbackQuery):
         kb.inline_keyboard.append(nav_row)
     
     kb.inline_keyboard.append([
-        InlineKeyboardButton(text=_("btn_back", lang), callback_data="srv_manage_menu")
+        InlineKeyboardButton(text=_("btn_back", lang), callback_data="srv_manage_menu", style="primary")
     ])
     
     await callback.message.edit_text(
@@ -899,7 +899,7 @@ async def cq_services_remove_list(callback: types.CallbackQuery):
         kb.inline_keyboard.append(nav_row)
     
     kb.inline_keyboard.append([
-        InlineKeyboardButton(text=_("btn_back", lang), callback_data="srv_manage_menu")
+        InlineKeyboardButton(text=_("btn_back", lang), callback_data="srv_manage_menu", style="primary")
     ])
     
     await callback.message.edit_text(
