@@ -899,6 +899,122 @@ EOF
     msg_success "Updated."
 }
 
+check_agent_monitoring_status() {
+    if [ ! -f "${ENV_FILE}" ]; then
+        echo "off"
+        return
+    fi
+
+    local bot_token_value=$(grep '^BOT_TOKEN=' "${ENV_FILE}" | tail -n 1 | cut -d'=' -f2- | tr -d '"' | xargs)
+    local chat_ids_value=$(grep '^CRITICAL_ALERT_CHAT_IDS=' "${ENV_FILE}" | tail -n 1 | cut -d'=' -f2- | tr -d '"' | xargs)
+
+    if [ -n "$bot_token_value" ] && [ -n "$chat_ids_value" ]; then
+        echo "on"
+    else
+        echo "off"
+    fi
+}
+
+toggle_agent_monitoring() {
+    if [ ! -f "${ENV_FILE}" ]; then
+        msg_error ".env file not found!"
+        return
+    fi
+
+    local current_bot_token=$(grep '^BOT_TOKEN=' "${ENV_FILE}" | tail -n 1 | cut -d'=' -f2- | tr -d '"' | xargs)
+    local current_chat_ids=$(grep '^CRITICAL_ALERT_CHAT_IDS=' "${ENV_FILE}" | tail -n 1 | cut -d'=' -f2- | tr -d '"' | xargs)
+    local current_node_name=$(grep '^NODE_NAME=' "${ENV_FILE}" | tail -n 1 | cut -d'=' -f2- | tr -d '"')
+    local current_delay=$(grep '^AGENT_ALERT_DELAY_SECONDS=' "${ENV_FILE}" | tail -n 1 | cut -d'=' -f2- | tr -d '"' | xargs)
+    local status=$(check_agent_monitoring_status)
+
+    if [ "$status" == "on" ]; then
+        # Disable monitoring - remove variables
+        msg_warning "Disabling agent monitoring..."
+        sed -i '/^# Agent Monitoring Configuration$/d' "${ENV_FILE}"
+        sed -i '/^DEBUG=/d' "${ENV_FILE}"
+        sed -i '/^BOT_TOKEN=/d' "${ENV_FILE}"
+        sed -i '/^CRITICAL_ALERT_CHAT_IDS=/d' "${ENV_FILE}"
+        sed -i '/^AGENT_ALERT_DELAY_SECONDS=/d' "${ENV_FILE}"
+        sed -i '/^NODE_NAME=/d' "${ENV_FILE}"
+        msg_success "Agent monitoring disabled. Variables removed from .env"
+        msg_info "Restart the node: sudo systemctl restart ${NODE_SERVICE_NAME}"
+    else
+        # Enable/fix monitoring - request data and update variables
+        msg_info "Setting up agent monitoring..."
+        if [ -z "$current_bot_token" ]; then
+            msg_warning "BOT_TOKEN is missing or empty in .env"
+        fi
+        if [ -z "$current_chat_ids" ]; then
+            msg_warning "CRITICAL_ALERT_CHAT_IDS is missing or empty in .env"
+        fi
+        if [ -z "$current_node_name" ]; then
+            msg_warning "NODE_NAME is missing or empty in .env"
+        fi
+        if [ -z "$current_delay" ]; then
+            msg_warning "AGENT_ALERT_DELAY_SECONDS is missing or empty in .env"
+        fi
+
+        echo ""
+        echo -e "${C_CYAN}Agent monitoring requires:${C_RESET}"
+        echo -e "  1. BOT_TOKEN - your Telegram bot token"
+        echo -e "  2. CRITICAL_ALERT_CHAT_IDS - chat IDs for critical alerts (comma-separated)"
+        echo -e "  3. AGENT_ALERT_DELAY_SECONDS - delay before sending alert (in seconds)"
+        echo -e "  4. NODE_NAME - name of this node"
+        echo ""
+        echo -e "${C_YELLOW}Important:${C_RESET} do not use another bot's chat_id (Telegram blocks bot-to-bot messaging)."
+        echo ""
+        echo -e "${C_YELLOW}How to get Chat ID:${C_RESET}"
+        echo -e "  • Send /start to @userinfobot"
+        echo -e "  • Or add the bot to a group and use /start"
+        echo ""
+
+        read -p "Enter BOT_TOKEN [current: ${current_bot_token:-empty}]: " bot_token
+        if [ -z "$bot_token" ]; then
+            bot_token="$current_bot_token"
+        fi
+        if [ -z "$bot_token" ]; then
+            msg_error "BOT_TOKEN cannot be empty!"
+            return
+        fi
+
+        read -p "Enter CRITICAL_ALERT_CHAT_IDS (comma-separated) [current: ${current_chat_ids:-empty}]: " chat_ids
+        if [ -z "$chat_ids" ]; then
+            chat_ids="$current_chat_ids"
+        fi
+        if [ -z "$chat_ids" ]; then
+            msg_error "CRITICAL_ALERT_CHAT_IDS cannot be empty!"
+            return
+        fi
+
+        read -p "Enter NODE_NAME [current: ${current_node_name:-Node}]: " node_name
+        if [ -z "$node_name" ]; then
+            node_name="${current_node_name:-Node}"
+        fi
+
+        read -p "Enter AGENT_ALERT_DELAY_SECONDS [current: ${current_delay:-15}]: " alert_delay
+        if [ -z "$alert_delay" ]; then
+            alert_delay="${current_delay:-15}"
+        fi
+
+        # Update variables in .env
+        sed -i '/^# Agent Monitoring Configuration$/d' "${ENV_FILE}"
+        sed -i '/^DEBUG=/d' "${ENV_FILE}"
+        sed -i '/^BOT_TOKEN=/d' "${ENV_FILE}"
+        sed -i '/^CRITICAL_ALERT_CHAT_IDS=/d' "${ENV_FILE}"
+        sed -i '/^AGENT_ALERT_DELAY_SECONDS=/d' "${ENV_FILE}"
+        sed -i '/^NODE_NAME=/d' "${ENV_FILE}"
+        echo "" >> "${ENV_FILE}"
+        echo "DEBUG=\"false\"" >> "${ENV_FILE}"
+        echo "BOT_TOKEN=\"${bot_token}\"" >> "${ENV_FILE}"
+        echo "CRITICAL_ALERT_CHAT_IDS=\"${chat_ids}\"" >> "${ENV_FILE}"
+        echo "AGENT_ALERT_DELAY_SECONDS=\"${alert_delay}\"" >> "${ENV_FILE}"
+        echo "NODE_NAME=\"${node_name}\"" >> "${ENV_FILE}"
+
+        msg_success "Agent monitoring enabled/updated!"
+        msg_info "Restart the node: sudo systemctl restart ${NODE_SERVICE_NAME}"
+    fi
+}
+
 main_menu() {
     local local_version=$(get_local_version)
     while true; do
@@ -907,28 +1023,42 @@ main_menu() {
         echo -e "${C_BLUE}${C_BOLD}║    VPS Telegram Bot Manager       ║${C_RESET}"
         echo -e "${C_BLUE}${C_BOLD}╚═══════════════════════════════════╝${C_RESET}"
         check_integrity
+        local item_type="agent"
+        if [ "$IS_NODE" == "yes" ]; then
+            item_type="node"
+        fi
         echo -e "  Branch: ${GIT_BRANCH} | Version: ${local_version}"
         echo -e "  Type: ${INSTALL_TYPE} | Status: ${STATUS_MESSAGE}"
         if [ -n "$INTEGRITY_STATUS" ]; then echo -e "  Integrity: ${INTEGRITY_STATUS}"; fi
         echo "--------------------------------------------------------"
-        echo "  1) Update bot"
-        echo "  2) Uninstall bot"
+        echo "  1) Update ${item_type}"
+        echo "  2) Uninstall ${item_type}"
         echo "  3) Reinstall (Systemd - Secure)"
         echo "  4) Reinstall (Systemd - Root)"
         echo "  5) Reinstall (Docker - Secure)"
         echo "  6) Reinstall (Docker - Root)"
-        echo -e "${C_GREEN}  7) Install NODE (Client)${C_RESET}"
+        if [ "$IS_NODE" == "yes" ]; then
+            echo -e "${C_GREEN}  7) Install NODE (Client)${C_RESET}"
+        fi
+        
+        # Show agent monitoring option only for nodes
+        if [ "$IS_NODE" == "yes" ]; then
+            local monitoring_status=$(check_agent_monitoring_status)
+            echo -e "${C_YELLOW}  8) Agent Monitoring (${monitoring_status})${C_RESET}"
+        fi
+        
         echo "  0) Exit"
         echo "--------------------------------------------------------"
         read -p "$(echo -e "${C_BOLD}Your choice: ${C_RESET}")" choice
         case $choice in
             1) update_bot; read -p "Press Enter..." ;;
-            2) msg_question "Uninstall? (y/n): " c; if [[ "$c" =~ ^[Yy]$ ]]; then uninstall_bot; return; fi ;;
+            2) msg_question "Uninstall ${item_type}? (y/n): " c; if [[ "$c" =~ ^[Yy]$ ]]; then uninstall_bot; return; fi ;;
             3) uninstall_bot; install_systemd_logic "secure"; read -p "Press Enter..." ;;
             4) uninstall_bot; install_systemd_logic "root"; read -p "Press Enter..." ;;
             5) uninstall_bot; install_docker_logic "secure"; read -p "Press Enter..." ;;
             6) uninstall_bot; install_docker_logic "root"; read -p "Press Enter..." ;;
-            7) uninstall_bot; install_node_logic; read -p "Press Enter..." ;;
+            7) if [ "$IS_NODE" == "yes" ]; then uninstall_bot; install_node_logic; read -p "Press Enter..."; else msg_error "Option available in NODE mode only."; sleep 2; fi ;;
+            8) if [ "$IS_NODE" == "yes" ]; then toggle_agent_monitoring; read -p "Press Enter..."; fi ;;
             0) break ;;
         esac
     done
