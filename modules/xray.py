@@ -50,15 +50,18 @@ async def updatexray_handler(message: types.Message, state: FSMContext):
             return
         version = _("xray_version_unknown", lang)
         client_name_display = client.capitalize()
+        if client == "3x-ui":
+            client_name_display = "3X-UI"
         if setup_variant == "akiyamov":
             client_name_display = f"{client.capitalize()} (Akiyamov)"
+        container_display = escape_html(container_name) if container_name else "native"
         try:
             await message.bot.edit_message_text(
                 _(
                     "xray_detected_start_update",
                     lang,
                     client=client_name_display,
-                    container=escape_html(container_name),
+                    container=container_display,
                 ),
                 chat_id=chat_id,
                 message_id=sent_msg.message_id,
@@ -79,6 +82,13 @@ async def updatexray_handler(message: types.Message, state: FSMContext):
             clean_chain = f"({clean_apk}) || ({clean_apt}) || true"
             update_cmd = f'docker exec {safe_container} /bin/sh -c "{install_chain} && rm -f Xray-linux-64.zip xray geoip.dat geosite.dat && wget -q -O Xray-linux-64.zip https://github.com/XTLS/Xray-core/releases/latest/download/Xray-linux-64.zip && wget -q -O geoip.dat https://github.com/v2fly/geoip/releases/latest/download/geoip.dat && wget -q -O geosite.dat https://github.com/v2fly/domain-list-community/releases/latest/download/dlc.dat && unzip -o Xray-linux-64.zip xray && cp xray /usr/bin/xray && cp geoip.dat /usr/bin/geoip.dat && cp geosite.dat /usr/bin/geosite.dat && rm Xray-linux-64.zip xray geoip.dat geosite.dat && {clean_chain}" && docker restart {safe_container}'
             version_cmd = f"docker exec {safe_container} /usr/bin/xray version"
+        elif client == "3x-ui":
+            if setup_variant == "native":
+                update_cmd = "x-ui update"
+                version_cmd = "xray version"
+            else:
+                update_cmd = f"docker exec {safe_container} x-ui update"
+                version_cmd = f"docker exec {safe_container} xray version"
         elif client == "marzban":
             check_deps = "command -v unzip >/dev/null 2>&1 || (DEBIAN_FRONTEND=noninteractive apt-get update -y && apt-get install -y unzip wget)"
             
