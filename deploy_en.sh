@@ -1007,7 +1007,17 @@ toggle_agent_monitoring() {
         sed -i '/^AGENT_ALERT_DELAY_SECONDS=/d' "${ENV_FILE}"
         sed -i '/^NODE_NAME=/d' "${ENV_FILE}"
         msg_success "Agent monitoring disabled. Variables removed from .env"
-        msg_info "Restart the node: sudo systemctl restart ${NODE_SERVICE_NAME}"
+        local deploy_mode=$(grep '^DEPLOY_MODE=' "${ENV_FILE}" | cut -d'=' -f2 | tr -d '"')
+        if [ "$deploy_mode" == "docker" ]; then
+            msg_info "Restarting Docker container..."
+            local dc_cmd=""; if sudo docker compose version &>/dev/null; then dc_cmd="docker compose"; else dc_cmd="docker-compose"; fi
+            cd "${BOT_INSTALL_PATH}" && sudo $dc_cmd restart
+            msg_success "Docker container restarted"
+        else
+            msg_info "Restarting node..."
+            sudo systemctl restart ${NODE_SERVICE_NAME}
+            msg_success "Node restarted"
+        fi
     else
         # Enable/fix monitoring - request data and update variables
         msg_info "Setting up agent monitoring..."
@@ -1081,7 +1091,17 @@ toggle_agent_monitoring() {
         echo "NODE_NAME=\"${node_name}\"" >> "${ENV_FILE}"
 
         msg_success "Agent monitoring enabled/updated!"
-        msg_info "Restart the node: sudo systemctl restart ${NODE_SERVICE_NAME}"
+        local deploy_mode=$(grep '^DEPLOY_MODE=' "${ENV_FILE}" | cut -d'=' -f2 | tr -d '"')
+        if [ "$deploy_mode" == "docker" ]; then
+            msg_info "Restarting Docker container..."
+            local dc_cmd=""; if sudo docker compose version &>/dev/null; then dc_cmd="docker compose"; else dc_cmd="docker-compose"; fi
+            cd "${BOT_INSTALL_PATH}" && sudo $dc_cmd restart
+            msg_success "Docker container restarted"
+        else
+            msg_info "Restarting node..."
+            sudo systemctl restart ${NODE_SERVICE_NAME}
+            msg_success "Node restarted"
+        fi
     fi
 }
 

@@ -1040,7 +1040,17 @@ toggle_agent_monitoring() {
         sed -i '/^AGENT_ALERT_DELAY_SECONDS=/d' "${ENV_FILE}"
         sed -i '/^NODE_NAME=/d' "${ENV_FILE}"
         msg_success "Мониторинг агента отключен. Переменные удалены из .env"
-        msg_info "Перезапустите ноду: sudo systemctl restart ${NODE_SERVICE_NAME}"
+        local deploy_mode=$(grep '^DEPLOY_MODE=' "${ENV_FILE}" | cut -d'=' -f2 | tr -d '"')
+        if [ "$deploy_mode" == "docker" ]; then
+            msg_info "Перезапуск Docker контейнера..."
+            local dc_cmd=""; if sudo docker compose version &>/dev/null; then dc_cmd="docker compose"; else dc_cmd="docker-compose"; fi
+            cd "${BOT_INSTALL_PATH}" && sudo $dc_cmd restart
+            msg_success "Docker контейнер перезапущен"
+        else
+            msg_info "Перезапуск ноды..."
+            sudo systemctl restart ${NODE_SERVICE_NAME}
+            msg_success "Нода перезапущена"
+        fi
     else
         # Включаем/чинить мониторинг - запрашиваем данные и обновляем переменные
         msg_info "Настройка мониторинга агента..."
@@ -1114,7 +1124,17 @@ toggle_agent_monitoring() {
         echo "NODE_NAME=\"${node_name}\"" >> "${ENV_FILE}"
 
         msg_success "Мониторинг агента включен/обновлен!"
-        msg_info "Перезапустите ноду: sudo systemctl restart ${NODE_SERVICE_NAME}"
+        local deploy_mode=$(grep '^DEPLOY_MODE=' "${ENV_FILE}" | cut -d'=' -f2 | tr -d '"')
+        if [ "$deploy_mode" == "docker" ]; then
+            msg_info "Перезапуск Docker контейнера..."
+            local dc_cmd=""; if sudo docker compose version &>/dev/null; then dc_cmd="docker compose"; else dc_cmd="docker-compose"; fi
+            cd "${BOT_INSTALL_PATH}" && sudo $dc_cmd restart
+            msg_success "Docker контейнер перезапущен"
+        else
+            msg_info "Перезапуск ноды..."
+            sudo systemctl restart ${NODE_SERVICE_NAME}
+            msg_success "Нода перезапущена"
+        fi
     fi
 }
 
