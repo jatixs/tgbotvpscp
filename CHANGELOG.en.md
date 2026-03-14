@@ -5,14 +5,14 @@
 <h1 align="center">📝 Telegram VPS Management Bot — Changelog</h1>
 
 <p align="center">
-	<img src="https://img.shields.io/badge/version-v1.19.1-blue?style=flat-square" alt="Version 1.19.1"/>
-	<img src="https://img.shields.io/badge/build-69-purple?style=flat-square" alt="Build 69"/>
-	<img src="https://img.shields.io/badge/date-March%2026-green?style=flat-square" alt="Date March 9"/>
+	<img src="https://img.shields.io/badge/version-v1.20.0-blue?style=flat-square" alt="Version 1.20.0"/>
+	<img src="https://img.shields.io/badge/build-70-purple?style=flat-square" alt="Build 70"/>
+	<img src="https://img.shields.io/badge/date-March%2015%202026-green?style=flat-square" alt="Date March 15 2026"/>
 	<img src="https://img.shields.io/badge/status-stable-green?style=flat-square" alt="Status Stable"/>
 </p>
 
 ---
-## [1.19.1] - 2026-03-09
+## [1.20.0] - 2026-03-15
 
 ### 🚀 Added:
 * **WebUI:** Support for enabling and disabling authorization methods (password login or via the official Telegram widget).
@@ -20,6 +20,7 @@
 * **Backups:** Full in-bot backup manager for `Traffic / Config / Logs / Nodes` with manual creation, file delivery to chat, restore, and delete actions.
 * **Backups:** Bulk “Delete all backups” action with confirmation.
 * **Backups:** Dedicated auto-backup timer settings screen: 30s step up to 10 minutes, nonlinear scaling after 10 minutes (`x2` / `/2`), reset button, and `ON/OFF` toggle.
+* **Xray:** Support for updating the Xray core for **3X-UI** panel (native installation and Docker container) via the `x-ui update` command. Auto-detection: checks for native installation first, then falls back to Docker.
 
 ### ✨ Changed:
 * **Bot:** Updated color scheme for inline buttons (confirmation, cancel, and "Back" buttons).
@@ -35,6 +36,8 @@
 * **Bot:** Deduplicated SSH login notifications to prevent spam from redundant log entries (added a 10-second cooldown per IP).
 * **Backups:** Auto-backup ON/OFF now preserves and restores the last configured timer value.
 * **Backups:** Backup rotation is unified across all categories (keeps latest 5 backups, removes oldest automatically).
+* **Nodes:** Fixed false "Node offline" alert triggered during Speedtest execution. Speedtest now runs in a background thread, keeping the heartbeat cycle unblocked. Same applies to the `update` command.
+* **Nodes:** Fixed duplicate traffic result messages appearing after stopping the traffic monitor.
 
 ---
 ## [1.19.0] - 2026-02-18
