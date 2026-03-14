@@ -1042,7 +1042,9 @@ async def process_node_result_background(bot, user_id, cmd, text, token, node_na
         return
 
     try:
-        if cmd == "traffic" and user_id in NODE_TRAFFIC_MONITORS:
+        if cmd == "traffic":
+            if user_id not in NODE_TRAFFIC_MONITORS:
+                return
             monitor = NODE_TRAFFIC_MONITORS[user_id]
             if monitor.get("token") == token:
                 msg_id = monitor.get("message_id")
