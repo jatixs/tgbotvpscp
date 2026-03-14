@@ -792,24 +792,13 @@ install_node_logic() {
     msg_question "Agent URL (http://IP:8080): " AGENT_URL
     msg_question "Token: " NODE_TOKEN
     local ver="Unknown"; if [ -f "$README_FILE" ]; then ver=$(grep -oP 'img\.shields\.io/badge/version-v\K[\d\.]+' "$README_FILE"); fi
-    
-    if [[ "$RESTORE_CHOICE" =~ ^[Yy]$ ]] && [ -f "/tmp/tgbot_env.bak" ]; then
-        msg_info "Восстановление оригинальных настроек .env..."
-        sudo cp /tmp/tgbot_env.bak "${ENV_FILE}"
-        if grep -q "^INSTALLED_VERSION=" "${ENV_FILE}"; then
-            sudo sed -i "s/^INSTALLED_VERSION=.*/INSTALLED_VERSION=\"${ver}\"/" "${ENV_FILE}"
-        else
-            sudo bash -c "echo 'INSTALLED_VERSION=\"${ver}\"' >> ${ENV_FILE}"
-        fi
-    else
-        sudo bash -c "cat > ${ENV_FILE}" <<EOF
+    sudo bash -c "cat > ${ENV_FILE}" <<EOF
 MODE=node
 AGENT_BASE_URL="${AGENT_URL}"
 AGENT_TOKEN="${NODE_TOKEN}"
 NODE_UPDATE_INTERVAL=5
 INSTALLED_VERSION="${ver}"
 EOF
-    fi
     
     # Check and restore/configure agent monitoring variables if settings were restored
     if [[ "$RESTORE_CHOICE" =~ ^[Yy]$ ]] && [ -f "/tmp/tgbot_env.bak" ]; then
@@ -820,7 +809,8 @@ EOF
         
         # Ask user if monitoring variables are missing or empty
         local need_bot_token=""
-        local need_delay=""
+        local need_chat_ids=""
+        local need_node_name=""
         
         if [ -z "$saved_bot_token" ]; then
             need_bot_token="yes"
@@ -831,17 +821,13 @@ EOF
         if [ -z "$saved_node_name" ]; then
             need_node_name="yes"
         fi
-        if [ -z "$saved_delay" ]; then
-            need_delay="yes"
-        fi
         
         # If any monitoring variable is missing, ask if user wants to configure them
-        if [ -n "$need_bot_token" ] || [ -n "$need_chat_ids" ] || [ -n "$need_node_name" ] || [ -n "$need_delay" ]; then
+        if [ -n "$need_bot_token" ] || [ -n "$need_chat_ids" ]; then
             echo ""
             echo -e "${C_YELLOW}⚠️  Обнаружены пустые переменные для мониторинга агента:${C_RESET}"
             [ -n "$need_bot_token" ] && echo -e "  • BOT_TOKEN (токен бота)"
             [ -n "$need_chat_ids" ] && echo -e "  • CRITICAL_ALERT_CHAT_IDS (ID чатов для алертов)"
-            [ -n "$need_delay" ] && echo -e "  • AGENT_ALERT_DELAY_SECONDS (задержка перед отправкой алерта)"
             [ -n "$need_node_name" ] && echo -e "  • NODE_NAME (имя ноды)"
             echo ""
             read -p "$(echo -e "${C_CYAN}❓ Настроить мониторинг агента сейчас? (y/n) [n]: ${C_RESET}")" setup_monitoring
@@ -866,43 +852,20 @@ EOF
                 fi
                 
                 if [ -n "$need_node_name" ]; then
-                    read -p "Введите NODE_NAME (имя этой ноды) [Node]: " saved_node_name
-                    saved_node_name=${saved_node_name:-Node}
-                fi
-                
-                if [ -n "$need_delay" ]; then
-                    read -p "Введите AGENT_ALERT_DELAY_SECONDS (задержка алерта) [15]: " saved_delay
-                    saved_delay=${saved_delay:-15}
+                    read -p "Введите NODE_NAME (имя этой ноды): " saved_node_name
                 fi
             fi
         fi
-
-        [ -z "$saved_node_name" ] && saved_node_name="Node"
-        [ -z "$saved_delay" ] && saved_delay="15"
         
         # Add monitoring variables to .env if monitoring was configured (has BOT_TOKEN and CHAT_IDS)
         if [ -n "$saved_bot_token" ] && [ -n "$saved_chat_ids" ]; then
-            sed -i '/^# Agent Monitoring Configuration$/d' "${ENV_FILE}"
-            sed -i '/^DEBUG=/d' "${ENV_FILE}"
-            sed -i '/^BOT_TOKEN=/d' "${ENV_FILE}"
-            sed -i '/^CRITICAL_ALERT_CHAT_IDS=/d' "${ENV_FILE}"
-            sed -i '/^AGENT_ALERT_DELAY_SECONDS=/d' "${ENV_FILE}"
-            sed -i '/^NODE_NAME=/d' "${ENV_FILE}"
             echo "" | sudo tee -a "${ENV_FILE}" > /dev/null
-            echo "DEBUG=\"false\"" | sudo tee -a "${ENV_FILE}" > /dev/null
+            echo "# Agent Monitoring Configuration" | sudo tee -a "${ENV_FILE}" > /dev/null
             echo "BOT_TOKEN=\"${saved_bot_token}\"" | sudo tee -a "${ENV_FILE}" > /dev/null
             echo "CRITICAL_ALERT_CHAT_IDS=\"${saved_chat_ids}\"" | sudo tee -a "${ENV_FILE}" > /dev/null
-            echo "AGENT_ALERT_DELAY_SECONDS=\"${saved_delay}\"" | sudo tee -a "${ENV_FILE}" > /dev/null
             echo "NODE_NAME=\"${saved_node_name}\"" | sudo tee -a "${ENV_FILE}" > /dev/null
+            [ -n "$saved_delay" ] && echo "AGENT_ALERT_DELAY_SECONDS=\"${saved_delay}\"" | sudo tee -a "${ENV_FILE}" > /dev/null
             msg_info "✓ Переменные мониторинга добавлены в .env"
-        else
-            # Удаляем пустые или недонастроенные переменные мониторинга
-            sed -i '/^# Agent Monitoring Configuration$/d' "${ENV_FILE}"
-            sed -i '/^DEBUG=/d' "${ENV_FILE}"
-            sed -i '/^BOT_TOKEN=/d' "${ENV_FILE}"
-            sed -i '/^CRITICAL_ALERT_CHAT_IDS=/d' "${ENV_FILE}"
-            sed -i '/^AGENT_ALERT_DELAY_SECONDS=/d' "${ENV_FILE}"
-            sed -i '/^NODE_NAME=/d' "${ENV_FILE}"
         fi
     fi
     
