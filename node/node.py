@@ -12,6 +12,7 @@ import hashlib
 import json
 import html
 import collections
+import threading
 from datetime import datetime
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -258,6 +259,10 @@ elif not BOT_TOKEN and CRITICAL_ALERT_CHAT_IDS:
 PENDING_RESULTS = collections.deque(maxlen=50)
 LAST_TRAFFIC_STATS = {}
 SSH_EVENTS = collections.deque(maxlen=100)
+
+# Commands that take a long time and must run in a background thread
+# so heartbeats are not blocked.
+LONG_RUNNING_COMMANDS = {"speedtest", "update"}
 
 # Agent health tracking
 AGENT_DOWN_SINCE = None
@@ -1304,7 +1309,13 @@ def send_heartbeat():
 
             tasks = data.get("tasks", [])
             for task in tasks:
-                execute_command(task)
+                cmd = task.get("command", "")
+                if cmd in LONG_RUNNING_COMMANDS:
+                    threading.Thread(
+                        target=execute_command, args=(task,), daemon=True
+                    ).start()
+                else:
+                    execute_command(task)
 
             # Heartbeat delivery succeeded - reset down state and notify recovery if needed
             if AGENT_DOWN_SINCE is not None:

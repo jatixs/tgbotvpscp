@@ -54,15 +54,23 @@ async def updatexray_handler(message: types.Message, state: FSMContext):
             client_name_display = "3X-UI"
         if setup_variant == "akiyamov":
             client_name_display = f"{client.capitalize()} (Akiyamov)"
-        container_display = escape_html(container_name) if container_name else "native"
+        container_display = escape_html(container_name) if container_name else None
         try:
-            await message.bot.edit_message_text(
-                _(
+            if container_display:
+                detect_text = _(
                     "xray_detected_start_update",
                     lang,
                     client=client_name_display,
                     container=container_display,
-                ),
+                )
+            else:
+                detect_text = _(
+                    "xray_detected_start_update_native",
+                    lang,
+                    client=client_name_display,
+                )
+            await message.bot.edit_message_text(
+                detect_text,
                 chat_id=chat_id,
                 message_id=sent_msg.message_id,
                 parse_mode="HTML",
@@ -71,7 +79,7 @@ async def updatexray_handler(message: types.Message, state: FSMContext):
             pass
         update_cmd = ""
         version_cmd = ""
-        safe_container = shlex.quote(container_name)
+        safe_container = shlex.quote(container_name) if container_name else None
         if client == "amnezia":
             check_tools = "command -v wget >/dev/null && command -v unzip >/dev/null"
             try_apk = "command -v apk >/dev/null && apk add --no-cache wget unzip"
@@ -84,11 +92,11 @@ async def updatexray_handler(message: types.Message, state: FSMContext):
             version_cmd = f"docker exec {safe_container} /usr/bin/xray version"
         elif client == "3x-ui":
             if setup_variant == "native":
-                update_cmd = "x-ui update"
-                version_cmd = "xray version"
+                update_cmd = "echo y | x-ui update"
+                version_cmd = "/usr/local/x-ui/bin/xray-linux-* version"
             else:
-                update_cmd = f"docker exec {safe_container} x-ui update"
-                version_cmd = f"docker exec {safe_container} xray version"
+                update_cmd = f"docker exec {safe_container} bash -c 'echo y | x-ui update'"
+                version_cmd = f"docker exec {safe_container} bash -c '/usr/local/x-ui/bin/xray-linux-* version'"
         elif client == "marzban":
             check_deps = "command -v unzip >/dev/null 2>&1 || (DEBIAN_FRONTEND=noninteractive apt-get update -y && apt-get install -y unzip wget)"
             
@@ -130,6 +138,12 @@ async def updatexray_handler(message: types.Message, state: FSMContext):
                     error=escape_html(error_output),
                 )
             )
+        # For 3x-ui, try to parse panel version from update output first
+        if client == "3x-ui":
+            update_output = stdout_update.decode("utf-8", "ignore")
+            panel_match = re.search(r"x-ui\s+v?([\d\.]+)\s+updating finished", update_output)
+            if panel_match:
+                version = panel_match.group(1)
         process_version = await asyncio.create_subprocess_shell(
             version_cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
         )
