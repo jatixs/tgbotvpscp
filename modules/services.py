@@ -29,6 +29,15 @@ def _validate_name(name: str) -> str:
         raise ValueError(f"Invalid service/container name: {name!r}")
     return match.group(0)
 
+def _validate_managed_target(name: str, s_type: str) -> str:
+    """Allow command execution only for targets explicitly listed in MANAGED_SERVICES."""
+    safe_name = _validate_name(name)
+    for item in MANAGED_SERVICES:
+        if item.get("name") == safe_name and item.get("type") == s_type:
+            # Return canonical value from allowlist to avoid using raw user-derived data in commands.
+            return str(item.get("name"))
+    raise ValueError(f"Target is not managed: {safe_name!r} ({s_type})")
+
 # --- Helpers ---
 
 def get_user_role_level(user_id):
@@ -297,7 +306,7 @@ async def perform_service_action(name, sType, action):
 def get_systemd_service_description(service_name):
     """Get description of a systemd service"""
     try:
-        service_name = _validate_name(service_name)
+        service_name = _validate_managed_target(service_name, "systemd")
         cmd = ["systemctl", "show", "-p", "Description", "--", service_name]
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
         if result.returncode == 0:
@@ -323,7 +332,7 @@ def get_systemd_service_info(service_name):
         "uptime": None
     }
     try:
-        service_name = _validate_name(service_name)
+        service_name = _validate_managed_target(service_name, "systemd")
         cmd = ["systemctl", "show", "-p", 
        "Description,LoadState,ActiveState,SubState,MainPID,MemoryCurrent,ActiveEnterTimestamp",
        "--", service_name]
@@ -380,7 +389,7 @@ def get_systemd_service_info(service_name):
 async def get_docker_image_from_container(container_name):
     """Get Docker image name from a running container"""
     try:
-        container_name = _validate_name(container_name)
+        container_name = _validate_managed_target(container_name, "docker")
         cmd = ["docker", "inspect", "-f", "{{.Config.Image}}", "--", container_name]
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
         if result.returncode == 0:
@@ -444,7 +453,7 @@ async def get_docker_container_info(container_name):
         "uptime": None
     }
     try:
-        container_name = _validate_name(container_name)
+        container_name = _validate_managed_target(container_name, "docker")
         cmd = ["docker", "inspect", "--", container_name]
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
         if result.returncode == 0:
