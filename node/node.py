@@ -10,7 +10,9 @@ import re
 import hmac
 import hashlib
 import json
+import html
 import collections
+import threading
 from datetime import datetime
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -47,6 +49,10 @@ def ensure_env_variables():
     optional_vars = [
         "AGENT_BASE_URL",
         "AGENT_TOKEN",
+        "BOT_TOKEN",
+        "CRITICAL_ALERT_CHAT_IDS",
+        "AGENT_ALERT_DELAY_SECONDS",
+        "NODE_NAME",
     ]
     
     try:
@@ -221,14 +227,47 @@ logger.addHandler(stream_handler)
 AGENT_BASE_URL = CONF.get("AGENT_BASE_URL")
 AGENT_TOKEN = CONF.get("AGENT_TOKEN")
 UPDATE_INTERVAL = int(CONF.get("NODE_UPDATE_INTERVAL", 5))
+BOT_TOKEN = CONF.get("BOT_TOKEN", "")
+CRITICAL_ALERT_CHAT_IDS = CONF.get("CRITICAL_ALERT_CHAT_IDS", "")
+AGENT_ALERT_DELAY_SECONDS = int(CONF.get("AGENT_ALERT_DELAY_SECONDS", 30))
+AGENT_ALERT_LANG = CONF.get("AGENT_ALERT_LANG", "ru").lower()
 
 if not AGENT_BASE_URL or not AGENT_TOKEN:
     logging.error("CRITICAL: AGENT_BASE_URL or AGENT_TOKEN not found in .env")
     sys.exit(1)
 
+# Parse critical alert targets if provided.
+# Supports numeric chat IDs (e.g. -100123...) and string targets (e.g. @channel_username).
+CRITICAL_CHAT_IDS = []
+if CRITICAL_ALERT_CHAT_IDS:
+    for raw_target in CRITICAL_ALERT_CHAT_IDS.split(','):
+        target = raw_target.strip()
+        if not target:
+            continue
+        if re.fullmatch(r"-?\d+", target):
+            CRITICAL_CHAT_IDS.append(int(target))
+        else:
+            CRITICAL_CHAT_IDS.append(target)
+
+if BOT_TOKEN and CRITICAL_CHAT_IDS:
+    logging.info(f"Critical alerts configured for {len(CRITICAL_CHAT_IDS)} chat target(s)")
+elif BOT_TOKEN and not CRITICAL_CHAT_IDS:
+    logging.warning("BOT_TOKEN configured, but CRITICAL_ALERT_CHAT_IDS is empty or invalid")
+elif not BOT_TOKEN and CRITICAL_ALERT_CHAT_IDS:
+    logging.warning("CRITICAL_ALERT_CHAT_IDS configured, but BOT_TOKEN is empty")
+
 PENDING_RESULTS = collections.deque(maxlen=50)
 LAST_TRAFFIC_STATS = {}
 SSH_EVENTS = collections.deque(maxlen=100)
+
+# Commands that take a long time and must run in a background thread
+# so heartbeats are not blocked.
+LONG_RUNNING_COMMANDS = {"speedtest", "update"}
+
+# Agent health tracking
+AGENT_DOWN_SINCE = None
+AGENT_DOWN_ALERT_SENT = False
+LAST_AGENT_LANG = AGENT_ALERT_LANG if AGENT_ALERT_LANG in {"ru", "en"} else "ru"
 
 EXTERNAL_IP_CACHE = None 
 
@@ -446,7 +485,8 @@ def service_action(service_name, action, service_type="systemd"):
     allowed_actions = ["start", "stop", "restart"]
     if action not in allowed_actions:
         return {"success": False, "error": f"Invalid action: {action}"}
-    
+    if not re.match(r"^[\w\-\.]+$", service_name):
+        return {"success": False, "error": "Invalid service name format"}
     try:
         if service_type == "docker":
             # Docker container commands
@@ -762,9 +802,8 @@ def execute_command(task):
 
         elif cmd == "top":
             try:
-                # Security: Use exec instead of shell
                 proc = subprocess.Popen(
-                    ["ps", "aux"],
+                    ["ps", "-eo", "user,pid,%cpu,%mem,comm", "--sort=-%cpu"],
                     stdout=subprocess.PIPE,
                     stderr=subprocess.PIPE
                 )
@@ -947,7 +986,7 @@ def execute_command(task):
                     }
                 else:
                     try:
-                        res = subprocess.check_output("ping -c 3 8.8.8.8", shell=True).decode()
+                        res = subprocess.check_output(["ping", "-c", "3", "8.8.8.8"]).decode()
                         result_payload = {
                             "type": "i18n",
                             "key": "error_with_details",
@@ -959,6 +998,47 @@ def execute_command(task):
                             "key": "error_with_details",
                             "params": {"error": f"Network check failed: {e}"}
                         }
+
+        elif cmd == "update":
+            if os.geteuid() == 0:
+                base_cmd = "DEBIAN_FRONTEND=noninteractive apt update && DEBIAN_FRONTEND=noninteractive apt upgrade -y && apt autoremove -y"
+            else:
+                base_cmd = "sudo DEBIAN_FRONTEND=noninteractive apt update && sudo DEBIAN_FRONTEND=noninteractive apt upgrade -y && sudo apt autoremove -y"
+
+            try:
+                result = subprocess.run(
+                    ["bash", "-lc", base_cmd],
+                    capture_output=True,
+                    text=True,
+                    timeout=1800,
+                )
+                if result.returncode == 0:
+                    result_payload = {
+                        "type": "i18n",
+                        "key": "update_success",
+                        "params": {
+                            "output": html.escape((result.stdout or "")[-2000:])
+                        }
+                    }
+                else:
+                    error_text = result.stderr or result.stdout or "Unknown error"
+                    result_payload = {
+                        "type": "i18n",
+                        "key": "update_fail",
+                        "params": {
+                            "code": result.returncode,
+                            "error": html.escape(error_text[-2000:])
+                        }
+                    }
+            except subprocess.TimeoutExpired:
+                result_payload = {
+                    "type": "i18n",
+                    "key": "update_fail",
+                    "params": {
+                        "code": "timeout",
+                        "error": html.escape("Command timed out after 1800 seconds")
+                    }
+                }
 
         elif cmd == "reboot":
             result_payload = {
@@ -1035,8 +1115,147 @@ def execute_command(task):
             "result": result_payload
         })
 
+def check_agent_health():
+    """
+    Check if the agent is accessible by making a simple HTTP request.
+    Returns True if accessible, False otherwise.
+    """
+    try:
+        # Try to reach agent's health endpoint with a short timeout
+        health_url = f"{AGENT_BASE_URL.rstrip('/')}/health"
+        response = requests.get(health_url, timeout=3)
+        # Any non-5xx response means endpoint is reachable (even if /health is not implemented)
+        if response.status_code < 500:
+            return True
+    except Exception:
+        pass
+
+    # If health endpoint doesn't exist or is unstable, check heartbeat endpoint reachability
+    try:
+        response = requests.head(f"{AGENT_BASE_URL.rstrip('/')}/api/heartbeat", timeout=3)
+        return response.status_code < 500
+    except Exception:
+        return False
+
+
+def send_critical_telegram_alert(message):
+    """
+    Send critical alert directly to Telegram, bypassing the agent.
+    Used when agent is down and cannot relay messages.
+    """
+    if not BOT_TOKEN or not CRITICAL_CHAT_IDS:
+        logging.warning("Direct Telegram alert skipped: BOT_TOKEN or CRITICAL_ALERT_CHAT_IDS not configured")
+        return False
+    
+    telegram_api_url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+    success_count = 0
+    
+    for chat_id in CRITICAL_CHAT_IDS:
+        try:
+            payload = {
+                "chat_id": chat_id,
+                "text": message,
+                "parse_mode": "HTML"
+            }
+            response = requests.post(telegram_api_url, json=payload, timeout=10)
+            if response.status_code == 200:
+                success_count += 1
+                logging.info(f"Critical alert sent to Telegram chat {chat_id}")
+            else:
+                response_text = response.text[:200]
+                logging.warning(
+                    f"Failed to send critical alert to chat {chat_id}: "
+                    f"{response.status_code} {response_text}"
+                )
+                if response.status_code == 403 and "bots can't send messages to bots" in response_text:
+                    logging.warning(
+                        "Invalid CRITICAL_ALERT_CHAT_IDS target: this is a bot chat. "
+                        "Use your personal chat_id, group_id, or channel_id where your bot is added and has access."
+                    )
+        except Exception as e:
+            logging.error(f"Error sending critical Telegram alert to chat {chat_id}: {e}")
+    
+    return success_count > 0
+
+
+def format_downtime(seconds):
+    return format_downtime_localized(seconds, LAST_AGENT_LANG)
+
+
+def format_downtime_localized(seconds, lang):
+    """Format downtime duration in human-readable format in the selected language."""
+    if lang == "en":
+        if seconds < 60:
+            return f"{int(seconds)} seconds"
+        if seconds < 3600:
+            minutes = int(seconds / 60)
+            return f"{minutes} minutes"
+        hours = int(seconds / 3600)
+        minutes = int((seconds % 3600) / 60)
+        if minutes > 0:
+            return f"{hours} hours {minutes} minutes"
+        return f"{hours} hours"
+
+    if seconds < 60:
+        return f"{int(seconds)} секунд"
+    if seconds < 3600:
+        minutes = int(seconds / 60)
+        return f"{minutes} минут"
+    hours = int(seconds / 3600)
+    minutes = int((seconds % 3600) / 60)
+    if minutes > 0:
+        return f"{hours} часов {minutes} минут"
+    return f"{hours} часов"
+
+
+def get_node_name_for_alert():
+    node_name = CONF.get("NODE_NAME", "")
+    if node_name:
+        return node_name
+    try:
+        import socket
+        return socket.gethostname()
+    except Exception:
+        return "Unknown Node"
+
+
+def build_agent_down_alert(node_name):
+    if LAST_AGENT_LANG == "en":
+        return (
+            f"🚨 <b>CRITICAL: Main agent (primary server) is UNREACHABLE!</b>\n\n"
+            f"🌐 <b>Reported by node:</b> {node_name}\n"
+            f"💭 <b>Status:</b> Agent is unreachable since {datetime.fromtimestamp(AGENT_DOWN_SINCE).strftime('%H:%M:%S')}\n"
+            f"⚠️ <b>Action:</b> Check main server availability and bot service status"
+        )
+    return (
+        f"🚨 <b>КРИТИЧНОЕ: Главный агент (основной сервер) НЕДОСТУПЕН!</b>\n\n"
+        f"🌐 <b>Сообщено нодой:</b> {node_name}\n"
+        f"💭 <b>Статус:</b> Агент недоступен с {datetime.fromtimestamp(AGENT_DOWN_SINCE).strftime('%H:%M:%S')}\n"
+        f"⚠️ <b>Действие:</b> Проверьте доступность основного сервера и службы бота"
+    )
+
+
+def build_agent_recovery_alert(node_name, downtime):
+    downtime_text = format_downtime_localized(downtime, LAST_AGENT_LANG)
+    if LAST_AGENT_LANG == "en":
+        return (
+            f"✅ <b>Main agent recovered!</b>\n\n"
+            f"🌐 <b>Reported by node:</b> {node_name}\n"
+            f"🟢 <b>Status:</b> Agent is reachable again\n"
+            f"⏱ <b>Downtime:</b> {downtime_text}\n"
+            f"📡 <b>System stabilized</b>"
+        )
+    return (
+        f"✅ <b>Главный агент восстановлен!</b>\n\n"
+        f"🌐 <b>Сообщено нодой:</b> {node_name}\n"
+        f"🟢 <b>Статус:</b> Агент снова доступен\n"
+        f"⏱ <b>Время простоя:</b> {downtime_text}\n"
+        f"📡 <b>Система стабилизована</b>"
+    )
+
+
 def send_heartbeat():
-    global PENDING_RESULTS, SSH_EVENTS  # noqa: F824
+    global PENDING_RESULTS, SSH_EVENTS, AGENT_DOWN_SINCE, AGENT_DOWN_ALERT_SENT, LAST_AGENT_LANG  # noqa: F824
     url = f"{AGENT_BASE_URL}/api/heartbeat"
     current_results = list(PENDING_RESULTS)
     current_ssh_events = list(SSH_EVENTS)
@@ -1048,12 +1267,19 @@ def send_heartbeat():
     except Exception as e:
         logging.debug(f"Failed to get services status: {e}")
     
+    # Check agent health status before sending heartbeat
+    agent_is_healthy = check_agent_health()
+    agent_status = "online" if agent_is_healthy else "unreachable"
+    
+    if not agent_is_healthy:
+        logging.warning("Agent detected as unreachable")
+    
     payload_dict = {
-        "token": AGENT_TOKEN,
         "stats": get_system_stats(),
         "results": current_results,
         "ssh_logins": current_ssh_events,
         "services": services,
+        "agent_status": agent_status,
         "timestamp": int(time.time())
     }
     
@@ -1063,6 +1289,7 @@ def send_heartbeat():
     
     headers = {
         "Content-Type": "application/json",
+        "X-Node-Token": AGENT_TOKEN,
         "X-Signature": signature
     }
 
@@ -1070,16 +1297,72 @@ def send_heartbeat():
         response = requests.post(url, data=payload_bytes, headers=headers, timeout=5)
         if response.status_code == 200:
             data = response.json()
+
+            # Agent provides preferred language while online; keep it cached for offline alerts.
+            response_lang = data.get("alert_lang")
+            if response_lang in {"ru", "en"} and response_lang != LAST_AGENT_LANG:
+                LAST_AGENT_LANG = response_lang
+                logging.info(f"Updated alert language from agent: {LAST_AGENT_LANG}")
+
             PENDING_RESULTS.clear()
             SSH_EVENTS.clear()
 
             tasks = data.get("tasks", [])
             for task in tasks:
-                execute_command(task)
+                cmd = task.get("command", "")
+                if cmd in LONG_RUNNING_COMMANDS:
+                    threading.Thread(
+                        target=execute_command, args=(task,), daemon=True
+                    ).start()
+                else:
+                    execute_command(task)
+
+            # Heartbeat delivery succeeded - reset down state and notify recovery if needed
+            if AGENT_DOWN_SINCE is not None:
+                downtime = time.time() - AGENT_DOWN_SINCE
+                node_name = get_node_name_for_alert()
+
+                if AGENT_DOWN_ALERT_SENT:
+                    recovery_message = build_agent_recovery_alert(node_name, downtime)
+                    send_critical_telegram_alert(recovery_message)
+                    logging.info(f"Agent recovered after {format_downtime(downtime)} downtime")
+
+                AGENT_DOWN_SINCE = None
+                AGENT_DOWN_ALERT_SENT = False
         else:
             logging.warning(f"Server returned status: {response.status_code} {response.text}")
+
+            # Treat only server-side failures as downtime; 4xx means reachable but misconfigured/request issue
+            if response.status_code >= 500:
+                current_time = time.time()
+                if AGENT_DOWN_SINCE is None:
+                    AGENT_DOWN_SINCE = current_time
+                    logging.warning("Agent detected as unreachable")
+
+                downtime = current_time - AGENT_DOWN_SINCE
+                if downtime >= AGENT_ALERT_DELAY_SECONDS and not AGENT_DOWN_ALERT_SENT:
+                    node_name = get_node_name_for_alert()
+                    alert_message = build_agent_down_alert(node_name)
+
+                    if send_critical_telegram_alert(alert_message):
+                        AGENT_DOWN_ALERT_SENT = True
+                        logging.warning(f"Critical alert sent: Agent down for {format_downtime(downtime)}")
     except Exception as e:
         logging.error(f"Connection error: {e}")
+
+        current_time = time.time()
+        if AGENT_DOWN_SINCE is None:
+            AGENT_DOWN_SINCE = current_time
+            logging.warning("Agent detected as unreachable")
+
+        downtime = current_time - AGENT_DOWN_SINCE
+        if downtime >= AGENT_ALERT_DELAY_SECONDS and not AGENT_DOWN_ALERT_SENT:
+            node_name = get_node_name_for_alert()
+            alert_message = build_agent_down_alert(node_name)
+
+            if send_critical_telegram_alert(alert_message):
+                AGENT_DOWN_ALERT_SENT = True
+                logging.warning(f"Critical alert sent: Agent down for {format_downtime(downtime)}")
 
 def main():
     # Check and update environment variables

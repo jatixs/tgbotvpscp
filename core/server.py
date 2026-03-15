@@ -33,6 +33,9 @@ from .config import (
     KEYBOARD_CONFIG,
     DEPLOY_MODE,
     TG_BOT_NAME,
+    SECURITY_SETTINGS_FILE,
+    load_encrypted_json,
+    save_encrypted_json,
 )
 from . import config as current_config
 from .shared_state import (
@@ -95,6 +98,7 @@ APP_VERSION = get_app_version()
 CACHE_VER = str(int(time.time()))
 MAX_FILE_SIZE = 50 * 1024 * 1024  # 50MB max file size
 AGENT_TASK = None
+RECENT_SSH_LOGINS = {}  # SSH cache for recent logins
 JINJA_ENV = Environment(
     loader=FileSystemLoader(TEMPLATE_DIR), autoescape=select_autoescape(["html", "xml"])
 )
@@ -118,9 +122,11 @@ def check_api_rate_limit(ip, endpoint):
     """Check API rate limit - max requests per minute."""
     now = time.time()
     key = f"{ip}:{endpoint}"
+    if len(API_RATE_LIMITS) > 5000:
+        API_RATE_LIMITS.clear()
+        
     if key not in API_RATE_LIMITS:
         API_RATE_LIMITS[key] = []
-    # Clean old timestamps
     API_RATE_LIMITS[key] = [t for t in API_RATE_LIMITS[key] if now - t < API_RATE_WINDOW]
     if len(API_RATE_LIMITS[key]) >= MAX_API_REQUESTS:
         return False
@@ -160,19 +166,17 @@ def mask_sensitive_data(data, mask_length=6):
 
 # WAF (Web Application Firewall) Rules
 WAF_ATTACK_PATTERNS = [
-    # SQL Injection patterns
-    (r"(\%27)|(\')|(\-\-)|(\%23)|(#)", "SQL_INJECTION"),
-    (r"((\%3D)|(=))[^\n]*((\%27)|(\')|(\-\-)|(\%3B)|(;))", "SQL_INJECTION"),
-    (r"\w*((\%27)|(\'))((\%6F)|o|(\%4F))((\%72)|r|(\%52))", "SQL_INJECTION"),
-    (r"(union|select|insert|update|delete|drop|create|alter|exec|execute)(\s|\+|%20)", "SQL_INJECTION"),
+    # SQL Injection patterns (очищено от слишком агрессивных символов)
+    (r"(?i)(union|select|insert|update|delete|drop|create|alter|exec|execute)\s+", "SQL_INJECTION"),
+    (r"(?i)(%20|\s)(or|and)(\s|%20)+.*=", "SQL_INJECTION"),
 
     # XSS (Cross-Site Scripting) patterns
-    (r"<script[^>]*>.*?</script>", "XSS"),
-    (r"javascript:", "XSS"),
-    (r"on\w+\s*=", "XSS"),
-    (r"<iframe[^>]*>", "XSS"),
-    (r"<embed[^>]*>", "XSS"),
-    (r"<object[^>]*>", "XSS"),
+    (r"(?i)<script[^>]*>.*?</script>", "XSS"),
+    (r"(?i)javascript:", "XSS"),
+    (r"(?i)on\w+\s*=", "XSS"),
+    (r"(?i)<iframe[^>]*>", "XSS"),
+    (r"(?i)<embed[^>]*>", "XSS"),
+    (r"(?i)<object[^>]*>", "XSS"),
 
     # Path Traversal patterns
     (r"\.\./", "PATH_TRAVERSAL"),
@@ -180,12 +184,8 @@ WAF_ATTACK_PATTERNS = [
     (r"%2e%2e/", "PATH_TRAVERSAL"),
     (r"%2e%2e\\", "PATH_TRAVERSAL"),
 
-    # Command Injection patterns
-    (r"[;&|`$()]", "COMMAND_INJECTION"),
-    (r"(bash|sh|cmd|powershell|wget|curl)\s", "COMMAND_INJECTION"),
-
-    # LDAP Injection
-    (r"(\%28)|(\%29)|(\()|(\))|(\%7C)|(\|)", "LDAP_INJECTION"),
+    (r"[;&|`]", "COMMAND_INJECTION"),
+    (r"(?i)(bash|sh|cmd|powershell|wget|curl)\s", "COMMAND_INJECTION"),
 ]
 
 import re
@@ -248,11 +248,14 @@ def validate_file_upload(filename: str, content_type: str, file_size: int) -> tu
 
 
 def get_client_ip(request):
-    ip = request.headers.get("X-Forwarded-For")
-    if ip:
-        return ip.split(",")[0]
     peer = request.transport.get_extra_info("peername")
-    return peer[0] if peer else "unknown"
+    real_ip = peer[0] if peer else "unknown"
+    if real_ip in ("127.0.0.1", "::1", "localhost"):
+        xfwd = request.headers.get("X-Forwarded-For")
+        if xfwd:
+            return xfwd.split(",")[0].strip()
+            
+    return real_ip
 
 
 def check_user_password(user_id, input_pass):
@@ -423,7 +426,8 @@ async def handle_get_logs(request):
             lines = list(deque(f, 300))
         return web.json_response({"logs": lines})
     except Exception as e:
-        return web.json_response({"error": str(e)}, status=500)
+        logging.error(f"Internal API error: {e}")
+    return web.json_response({"error": "Internal Server Error"}, status=500)
 
 
 async def handle_get_sys_logs(request):
@@ -454,7 +458,8 @@ async def handle_get_sys_logs(request):
                 {"error": f"Error reading logs: {stderr.decode()}"}
             )
     except Exception as e:
-        return web.json_response({"error": str(e)}, status=500)
+        logging.error(f"Internal API error: {e}")
+    return web.json_response({"error": "Internal Server Error"}, status=500)
 
 
 async def api_get_notifications(request):
@@ -524,7 +529,8 @@ async def api_check_update(request):
             }
         )
     except Exception as e:
-        return web.json_response({"error": str(e)}, status=500)
+        logging.error(f"Internal API error: {e}")
+    return web.json_response({"error": "Internal Server Error"}, status=500)
 
 
 async def api_run_update(request):
@@ -540,7 +546,8 @@ async def api_run_update(request):
         await update_module.execute_bot_update(branch, restart_source="web:admin")
         return web.json_response({"status": "Update started, server restarting..."})
     except Exception as e:
-        return web.json_response({"error": str(e)}, status=500)
+        logging.error(f"Internal API error: {e}")
+    return web.json_response({"error": "Internal Server Error"}, status=500)
 
 
 async def api_get_sessions(request):
@@ -605,7 +612,8 @@ async def api_revoke_session(request):
             {"error": "Session not found or access denied"}, status=404
         )
     except Exception as e:
-        return web.json_response({"error": str(e)}, status=500)
+        logging.error(f"Internal API error: {e}")
+    return web.json_response({"error": "Internal Server Error"}, status=500)
 
 
 async def api_revoke_all_sessions(request):
@@ -879,9 +887,10 @@ async def handle_heartbeat(request):
         data = json.loads(body_bytes)
     except Exception:
         return web.json_response({"error": "Invalid JSON"}, status=400)
-    token = data.get("token")
+    token = request.headers.get("X-Node-Token") or data.get("token")
     if not token:
         return web.json_response({"error": "Token missing"}, status=401)
+        
     expected_signature = hmac.new(
         token.encode(), body_bytes, hashlib.sha256
     ).hexdigest()
@@ -898,15 +907,21 @@ async def handle_heartbeat(request):
     if ssh_logins and bot:
         server_tz = get_server_timezone_label()
         server_time = time.strftime("%H:%M")
-
+        now = time.time()
         for login in ssh_logins:
             user_ssh = login.get("user", "unknown")
             ip = login.get("ip", "unknown")
             method_raw = login.get("method", "unknown")
             node_time_str = login.get("node_time_str", "??:??")
             tz_label = login.get("tz_label", "")
-
-            # Логируем с masking
+            cache_key = f"{token}_{ip}"
+            last_alert_time = RECENT_SSH_LOGINS.get(cache_key, 0)
+            if now - last_alert_time <= 10:
+                logging.debug(f"Пропущен дубликат SSH алерта для {ip} на ноде {node.get('name', 'Node')}")
+                continue
+            RECENT_SSH_LOGINS[cache_key] = now
+            if len(RECENT_SSH_LOGINS) > 1000:
+                RECENT_SSH_LOGINS.clear()
             logging.info(
                 f"SSH login on node {node.get('name', 'Node')}: user={user_ssh}, ip={mask_sensitive_data(ip)}, method={method_raw}")
 
@@ -976,7 +991,14 @@ async def handle_heartbeat(request):
     tasks_to_send = current_node.get("tasks", [])
     if tasks_to_send:
         await nodes_db.clear_node_tasks(token)
-    return web.json_response({"status": "ok", "tasks": tasks_to_send})
+
+    # Provide preferred alert language to node so it can keep localized critical alerts
+    # even when the agent becomes unreachable.
+    alert_lang = get_user_lang(ADMIN_USER_ID)
+    if alert_lang not in STRINGS:
+        alert_lang = DEFAULT_LANGUAGE
+
+    return web.json_response({"status": "ok", "tasks": tasks_to_send, "alert_lang": alert_lang})
 
 
 async def process_node_result_background(bot, user_id, cmd, text, token, node_name):
@@ -1020,7 +1042,9 @@ async def process_node_result_background(bot, user_id, cmd, text, token, node_na
         return
 
     try:
-        if cmd == "traffic" and user_id in NODE_TRAFFIC_MONITORS:
+        if cmd == "traffic":
+            if user_id not in NODE_TRAFFIC_MONITORS:
+                return
             monitor = NODE_TRAFFIC_MONITORS[user_id]
             if monitor.get("token") == token:
                 msg_id = monitor.get("message_id")
@@ -1198,7 +1222,8 @@ async def handle_agent_ipv4(request):
 
     except Exception as e:
         logging.error(f"Error in handle_agent_ipv4: {e}", exc_info=True)
-        return web.json_response({"error": str(e)}, status=500)
+        logging.error(f"Internal API error: {e}")
+    return web.json_response({"error": "Internal Server Error"}, status=500)
 
 
 async def handle_reset_traffic(request):
@@ -1219,7 +1244,8 @@ async def handle_reset_traffic(request):
 
         return web.json_response({"status": "ok"})
     except Exception as e:
-        return web.json_response({"error": str(e)}, status=500)
+        logging.error(f"Internal API error: {e}")
+    return web.json_response({"error": "Internal Server Error"}, status=500)
 
 
 async def handle_node_add(request):
@@ -1232,7 +1258,10 @@ async def handle_node_add(request):
         if not name:
             return web.json_response({"error": "Name required"}, status=400)
         token = await nodes_db.create_node(name)
+        
         host = request.headers.get("Host", f"{WEB_SERVER_HOST}:{WEB_SERVER_PORT}")
+        if not re.match(r"^[a-zA-Z0-9\-\.:]+$", host):
+            host = f"{WEB_SERVER_HOST}:{WEB_SERVER_PORT}"
         proto = (
             "https" if request.headers.get("X-Forwarded-Proto") == "https" else "http"
         )
@@ -1247,7 +1276,8 @@ async def handle_node_add(request):
             }
         )
     except Exception as e:
-        return web.json_response({"error": str(e)}, status=500)
+        logging.error(f"Internal API error: {e}")
+    return web.json_response({"error": "Internal Server Error"}, status=500)
 
 
 async def handle_node_delete(request):
@@ -1262,7 +1292,8 @@ async def handle_node_delete(request):
         await nodes_db.delete_node(token)
         return web.json_response({"status": "ok"})
     except Exception as e:
-        return web.json_response({"error": str(e)}, status=500)
+        logging.error(f"Internal API error: {e}")
+    return web.json_response({"error": "Internal Server Error"}, status=500)
 
 
 async def handle_node_rename(request):
@@ -1281,7 +1312,8 @@ async def handle_node_rename(request):
         else:
             return web.json_response({"error": "Node not found"}, status=404)
     except Exception as e:
-        return web.json_response({"error": str(e)}, status=500)
+        logging.error(f"Internal API error: {e}")
+    return web.json_response({"error": "Internal Server Error"}, status=500)
 
 
 async def handle_nodes_list_json(request):
@@ -1566,7 +1598,7 @@ async def handle_nodes_monitor_command(request):
         if not token or not command:
             return web.json_response({"error": "Token and command required"}, status=400)
         
-        allowed_commands = ["selftest", "uptime", "traffic", "top", "speedtest", "reboot", "services_list"]
+        allowed_commands = ["selftest", "uptime", "traffic", "top", "speedtest", "update", "reboot", "services_list"]
         if command not in allowed_commands:
             return web.json_response({"error": "Invalid command"}, status=400)
         
@@ -1581,7 +1613,8 @@ async def handle_nodes_monitor_command(request):
         
         return web.json_response({"status": "ok"})
     except Exception as e:
-        return web.json_response({"error": str(e)}, status=500)
+        logging.error(f"Internal API error: {e}")
+    return web.json_response({"error": "Internal Server Error"}, status=500)
 
 
 async def handle_nodes_monitor_service_action(request):
@@ -1623,7 +1656,8 @@ async def handle_nodes_monitor_service_action(request):
         
         return web.json_response({"status": "ok"})
     except Exception as e:
-        return web.json_response({"error": str(e)}, status=500)
+        logging.error(f"Internal API error: {e}")
+    return web.json_response({"error": "Internal Server Error"}, status=500)
 
 # ===== END NODES MONITOR HANDLERS =====
 
@@ -1677,6 +1711,9 @@ async def handle_settings_page(request):
         "web_saved_btn": _("web_saved_btn", lang),
         "web_save_btn": _("web_save_btn", lang),
         "web_change_btn": _("web_change_btn", lang),
+        "notifications_alert_name_res": _("notifications_alert_name_res", lang),
+        "notifications_alert_name_logins": _("notifications_alert_name_logins", lang),
+        "notifications_alert_name_downtime": _("notifications_alert_name_downtime", lang),
         "web_error": _("web_error", lang, error=""),
         "web_conn_error": _("web_conn_error", lang, error=""),
         "web_confirm_delete_user": _("web_confirm_delete_user", lang),
@@ -1689,6 +1726,8 @@ async def handle_settings_page(request):
         "web_logs_cleared_alert": _("web_logs_cleared_alert", lang),
         "web_pass_changed": _("web_pass_changed", lang),
         "web_pass_mismatch": _("web_pass_mismatch", lang),
+        "web_telegram_only_enabled": _("web_telegram_only_enabled", lang),
+        "web_telegram_only_disabled": _("web_telegram_only_disabled", lang),
         "web_clear_bot_confirm": _("web_clear_bot_confirm", lang),
         "web_clear_node_confirm": _("web_clear_node_confirm", lang),
         "web_clear_all_confirm": _("web_clear_all_confirm", lang),
@@ -1816,7 +1855,11 @@ async def handle_settings_page(request):
         "notifications_alert_name_bans": _("notifications_alert_name_bans", lang),
         "notifications_alert_name_downtime": _("notifications_alert_name_downtime", lang),
         "web_notif_btn_global": _("web_notif_btn_global", lang),
+        "web_notif_btn_global_subtitle": _("web_notif_btn_global_subtitle", lang),
         "web_notif_btn_nodes": _("web_notif_btn_nodes", lang),
+        "web_notif_btn_nodes_subtitle": _("web_notif_btn_nodes_subtitle", lang),
+        "web_notif_global_group_agent": _("web_notif_global_group_agent", lang),
+        "web_notif_global_group_nodes": _("web_notif_global_group_nodes", lang),
         "web_notif_nodes_list_title": _("web_notif_nodes_list_title", lang),
         "web_notif_node_settings_title": _("web_notif_node_settings_title", lang),
         "web_notif_menu_desc": _("web_notif_menu_desc", lang),
@@ -1847,6 +1890,8 @@ async def handle_settings_page(request):
         "web_clear_logs_btn": _("web_clear_logs_btn", lang),
         "web_reset_traffic_btn": _("web_reset_traffic_btn", lang),
         "web_security_section": _("web_security_section", lang),
+        "web_telegram_only_tooltip": _("web_telegram_only_tooltip", lang),
+        "web_telegram_only_notice": _("web_telegram_only_notice", lang),
         "web_change_password_title": _("web_change_password_title", lang),
         "web_current_password": _("web_current_password", lang),
         "web_new_password": _("web_new_password", lang),
@@ -1913,7 +1958,8 @@ async def handle_save_notifications(request):
         save_alerts_config()
         return web.json_response({"status": "ok"})
     except Exception as e:
-        return web.json_response({"error": str(e)}, status=500)
+        logging.error(f"Internal API error: {e}")
+    return web.json_response({"error": "Internal Server Error"}, status=500)
 
 
 async def handle_save_system_config(request):
@@ -1925,7 +1971,8 @@ async def handle_save_system_config(request):
         save_system_config(data)
         return web.json_response({"status": "ok"})
     except Exception as e:
-        return web.json_response({"error": str(e)}, status=500)
+        logging.error(f"Internal API error: {e}")
+    return web.json_response({"error": "Internal Server Error"}, status=500)
 
 
 async def handle_save_keyboard_config(request):
@@ -1937,7 +1984,8 @@ async def handle_save_keyboard_config(request):
         save_keyboard_config(data)
         return web.json_response({"status": "ok"})
     except Exception as e:
-        return web.json_response({"error": str(e)}, status=500)
+        logging.error(f"Internal API error: {e}")
+    return web.json_response({"error": "Internal Server Error"}, status=500)
 
 
 async def handle_save_metadata(request):
@@ -1964,7 +2012,8 @@ async def handle_save_metadata(request):
 
         return web.json_response({"status": "ok"})
     except Exception as e:
-        return web.json_response({"error": str(e)}, status=500)
+        logging.error(f"Internal API error: {e}")
+    return web.json_response({"error": "Internal Server Error"}, status=500)
 
 
 async def handle_change_password(request):
@@ -1992,7 +2041,36 @@ async def handle_change_password(request):
         save_users()
         return web.json_response({"status": "ok"})
     except Exception as e:
-        return web.json_response({"error": str(e)}, status=500)
+        logging.error(f"Internal API error: {e}")
+    return web.json_response({"error": "Internal Server Error"}, status=500)
+
+
+async def handle_get_telegram_only_mode(request):
+    try:
+        settings = load_encrypted_json(SECURITY_SETTINGS_FILE)
+        enabled = bool(settings.get("telegram_only_mode", False))
+        return web.json_response({"enabled": enabled})
+    except Exception as e:
+        logging.error(f"Internal API error: {e}")
+    return web.json_response({"error": "Internal Server Error"}, status=500)
+
+
+async def handle_set_telegram_only_mode(request):
+    user = get_current_user(request)
+    if not user:
+        return web.json_response({"error": "Unauthorized"}, status=401)
+    if user["id"] != ADMIN_USER_ID:
+        return web.json_response({"error": "Main Admin only"}, status=403)
+    try:
+        data = await request.json()
+        enabled = data.get("enabled", False)
+        settings = load_encrypted_json(SECURITY_SETTINGS_FILE)
+        settings["telegram_only_mode"] = enabled
+        save_encrypted_json(SECURITY_SETTINGS_FILE, settings)
+        return web.json_response({"status": "ok", "enabled": enabled})
+    except Exception as e:
+        logging.error(f"Internal API error: {e}")
+    return web.json_response({"error": "Internal Server Error"}, status=500)
 
 
 async def handle_clear_logs(request):
@@ -2024,7 +2102,8 @@ async def handle_clear_logs(request):
                             f_obj.truncate(0)
         return web.json_response({"status": "ok", "target": target})
     except Exception as e:
-        return web.json_response({"error": str(e)}, status=500)
+        logging.error(f"Internal API error: {e}")
+    return web.json_response({"error": "Internal Server Error"}, status=500)
 
 
 async def handle_user_action(request):
@@ -2062,7 +2141,8 @@ async def handle_user_action(request):
             save_users()
             return web.json_response({"status": "ok", "name": USER_NAMES.get(str(tid))})
     except Exception as e:
-        return web.json_response({"error": str(e)}, status=500)
+        logging.error(f"Internal API error: {e}")
+    return web.json_response({"error": "Internal Server Error"}, status=500)
     return web.json_response({"error": "Unknown"}, status=400)
 
 
@@ -2078,7 +2158,8 @@ async def handle_set_language(request):
             return web.json_response({"status": "ok"})
         return web.json_response({"error": "Invalid language"}, status=400)
     except Exception as e:
-        return web.json_response({"error": str(e)}, status=500)
+        logging.error(f"Internal API error: {e}")
+    return web.json_response({"error": "Internal Server Error"}, status=500)
 
 
 async def handle_session_check_head(request):
@@ -2180,6 +2261,11 @@ async def handle_login_page(request):
 
 
 async def handle_login_request(request):
+    # Check if telegram only mode is enabled
+    settings = load_encrypted_json(SECURITY_SETTINGS_FILE)
+    if settings.get("telegram_only_mode", False):
+        return web.Response(text="Only Telegram widget login is allowed", status=403)
+    
     data = await request.post()
     try:
         uid = int(data.get("user_id", 0))
@@ -2211,6 +2297,11 @@ async def handle_login_request(request):
 
 
 async def handle_login_password(request):
+    # Check if telegram only mode is enabled
+    settings = load_encrypted_json(SECURITY_SETTINGS_FILE)
+    if settings.get("telegram_only_mode", False):
+        return web.Response(text="Password login disabled. Only Telegram widget login is allowed.", status=403)
+
     data = await request.post()
     ip = get_client_ip(request)
     if not check_rate_limit(ip):
@@ -2231,7 +2322,7 @@ async def handle_login_password(request):
             "created": time.time(),
         }
         resp = web.HTTPFound("/")
-        resp.set_cookie(COOKIE_NAME, st, max_age=604800, httponly=True, samesite="Lax")
+        resp.set_cookie(COOKIE_NAME, st, max_age=604800, httponly=True, samesite="Strict")
         return resp
     add_login_attempt(ip)
     return web.Response(text="Invalid password", status=403)
@@ -2256,7 +2347,10 @@ async def handle_magic_login(request):
         "created": time.time(),
     }
     resp = web.HTTPFound("/")
-    resp.set_cookie(COOKIE_NAME, st, max_age=2592000, httponly=True, samesite="Lax")
+    resp.set_cookie(COOKIE_NAME, st, max_age=2592000, httponly=True, samesite="Strict")
+    # Запрещаем кэширование страницы с токеном
+    resp.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+    resp.headers['Pragma'] = 'no-cache'
     return resp
 
 
@@ -2278,10 +2372,11 @@ async def handle_telegram_auth(request):
             "photo_url": data.get("photo_url"),
         }
         resp = web.json_response({"status": "ok"})
-        resp.set_cookie(COOKIE_NAME, st, max_age=2592000, httponly=True, samesite="Lax")
+        resp.set_cookie(COOKIE_NAME, st, max_age=2592000, httponly=True, samesite="Strict")
         return resp
     except Exception as e:
-        return web.json_response({"error": str(e)}, status=500)
+        logging.error(f"Internal API error: {e}")
+        return web.json_response({"error": "Internal Server Error"}, status=500)
 
 
 async def handle_logout(request):
@@ -2333,7 +2428,8 @@ async def handle_reset_request(request):
                 return web.json_response({"error": "bot_send_error"}, status=500)
         return web.json_response({"error": "bot_not_ready"}, status=500)
     except Exception as e:
-        return web.json_response({"error": str(e)}, status=500)
+        logging.error(f"Internal API error: {e}")
+    return web.json_response({"error": "Internal Server Error"}, status=500)
 
 
 async def handle_reset_page_render(request):
@@ -2413,7 +2509,8 @@ async def handle_reset_confirm(request):
         del RESET_TOKENS[token]
         return web.json_response({"status": "ok"})
     except Exception as e:
-        return web.json_response({"error": str(e)}, status=500)
+        logging.error(f"Internal API error: {e}")
+    return web.json_response({"error": "Internal Server Error"}, status=500)
 
 
 async def handle_api_root(request):
@@ -2954,27 +3051,25 @@ async def start_web_server(bot_instance: Bot):
                     )
 
             # Проверка тела запроса (JSON)
-            if request.content_type == 'application/json':
-                try:
-                    body = await request.text()
-                    if body:
-                        is_attack, attack_type = check_waf_patterns(body)
-                        if is_attack:
-                            logging.critical(f"WAF: {attack_type} detected in body from IP {mask_sensitive_data(ip)}")
-                            return web.json_response(
-                                {"error": "Malicious request detected"},
-                                status=403
-                            )
+            try:
+                body = await request.text()
+                if body:
+                    is_attack, attack_type = check_waf_patterns(body)
+                    if is_attack:
+                        logging.critical(f"WAF: {attack_type} detected in body from IP {mask_sensitive_data(ip)}")
+                        return web.json_response(
+                            {"error": "Malicious request detected"},
+                            status=403
+                        )
 
-                        # Проверка длины
-                        if not validate_input_length(body, max_length=10000):
-                            logging.warning(f"WAF: Request too large from IP {mask_sensitive_data(ip)}")
-                            return web.json_response(
-                                {"error": "Request too large"},
-                                status=413
-                            )
-                except Exception as e:
-                    logging.error(f"WAF middleware error: {e}")
+                    if not validate_input_length(body, max_length=10000):
+                        logging.warning(f"WAF: Request too large from IP {mask_sensitive_data(ip)}")
+                        return web.json_response(
+                            {"error": "Request too large"},
+                            status=413
+                        )
+            except Exception as e:
+                logging.error(f"WAF middleware error: {e}")
 
         return await handler(request)
 
@@ -3025,6 +3120,8 @@ async def start_web_server(bot_instance: Bot):
         app.router.add_head("/api/settings/language", handle_session_check_head)
         app.router.add_post("/api/settings/system", handle_save_system_config)
         app.router.add_post("/api/settings/password", handle_change_password)
+        app.router.add_get("/api/security/telegram_only_mode", handle_get_telegram_only_mode)
+        app.router.add_post("/api/security/telegram_only_mode", handle_set_telegram_only_mode)
         app.router.add_post("/api/settings/keyboard", handle_save_keyboard_config)
         app.router.add_post("/api/settings/metadata", handle_save_metadata)
         app.router.add_post("/api/logs/clear", handle_clear_logs)
@@ -3173,7 +3270,8 @@ async def handle_save_notifications(request):
         save_alerts_config()
         return web.json_response({"status": "ok"})
     except Exception as e:
-        return web.json_response({"error": str(e)}, status=500)
+        logging.error(f"Internal API error: {e}")
+    return web.json_response({"error": "Internal Server Error"}, status=500)
 
 
 async def handle_save_system_config(request):
@@ -3185,7 +3283,8 @@ async def handle_save_system_config(request):
         save_system_config(data)
         return web.json_response({"status": "ok"})
     except Exception as e:
-        return web.json_response({"error": str(e)}, status=500)
+        logging.error(f"Internal API error: {e}")
+    return web.json_response({"error": "Internal Server Error"}, status=500)
 
 
 async def handle_save_keyboard_config(request):
@@ -3197,7 +3296,8 @@ async def handle_save_keyboard_config(request):
         save_keyboard_config(data)
         return web.json_response({"status": "ok"})
     except Exception as e:
-        return web.json_response({"error": str(e)}, status=500)
+        logging.error(f"Internal API error: {e}")
+    return web.json_response({"error": "Internal Server Error"}, status=500)
 
 
 async def handle_save_metadata(request):
@@ -3212,6 +3312,8 @@ async def handle_save_metadata(request):
             return web.json_response({"error": "Metadata is permanently locked"}, status=403)
 
         new_favicon_url = str(data.get("favicon", "")).strip()
+        if new_favicon_url and not new_favicon_url.startswith(("http://", "https://", "/")):
+            return web.json_response({"error": "Favicon URL must start with http://, https:// or /"}, status=400)
 
         new_meta = {
             "favicon": new_favicon_url,
@@ -3220,7 +3322,7 @@ async def handle_save_metadata(request):
             "keywords": str(data.get("keywords", "")).strip(),
             "locked": bool(data.get("locked", False))
         }
-        if new_favicon_url:
+        if new_favicon_url and new_favicon_url.startswith(("http://", "https://")):
             static_fav_dir = os.path.join(STATIC_DIR, "favicons")
             await asyncio.to_thread(generate_favicons, new_favicon_url, static_fav_dir)
         current_config.WEB_METADATA = new_meta
@@ -3228,7 +3330,8 @@ async def handle_save_metadata(request):
 
         return web.json_response({"status": "ok"})
     except Exception as e:
-        return web.json_response({"error": str(e)}, status=500)
+        logging.error(f"Internal API error: {e}")
+    return web.json_response({"error": "Internal Server Error"}, status=500)
 
 
 async def handle_change_password(request):
@@ -3256,7 +3359,8 @@ async def handle_change_password(request):
         save_users()
         return web.json_response({"status": "ok"})
     except Exception as e:
-        return web.json_response({"error": str(e)}, status=500)
+        logging.error(f"Internal API error: {e}")
+    return web.json_response({"error": "Internal Server Error"}, status=500)
 
 
 async def handle_clear_logs(request):
@@ -3288,7 +3392,8 @@ async def handle_clear_logs(request):
                             f_obj.truncate(0)
         return web.json_response({"status": "ok", "target": target})
     except Exception as e:
-        return web.json_response({"error": str(e)}, status=500)
+        logging.error(f"Internal API error: {e}")
+    return web.json_response({"error": "Internal Server Error"}, status=500)
 
 
 async def handle_user_action(request):
@@ -3326,7 +3431,8 @@ async def handle_user_action(request):
             save_users()
             return web.json_response({"status": "ok", "name": USER_NAMES.get(str(tid))})
     except Exception as e:
-        return web.json_response({"error": str(e)}, status=500)
+        logging.error(f"Internal API error: {e}")
+    return web.json_response({"error": "Internal Server Error"}, status=500)
     return web.json_response({"error": "Unknown"}, status=400)
 
 
@@ -3342,7 +3448,8 @@ async def handle_set_language(request):
             return web.json_response({"status": "ok"})
         return web.json_response({"error": "Invalid language"}, status=400)
     except Exception as e:
-        return web.json_response({"error": str(e)}, status=500)
+        logging.error(f"Internal API error: {e}")
+    return web.json_response({"error": "Internal Server Error"}, status=500)
 
 
 async def handle_session_check_head(request):
@@ -3417,6 +3524,11 @@ async def handle_login_page(request):
 
 
 async def handle_login_request(request):
+    # Check if telegram only mode is enabled
+    settings = load_encrypted_json(SECURITY_SETTINGS_FILE)
+    if settings.get("telegram_only_mode", False):
+        return web.Response(text="Only Telegram widget login is allowed", status=403)
+
     data = await request.post()
     try:
         uid = int(data.get("user_id", 0))
@@ -3448,6 +3560,10 @@ async def handle_login_request(request):
 
 
 async def handle_login_password(request):
+    settings = load_encrypted_json(SECURITY_SETTINGS_FILE)
+    if settings.get("telegram_only_mode", False):
+        return web.Response(text="Password login disabled. Only Telegram widget login is allowed.", status=403)
+
     data = await request.post()
     ip = get_client_ip(request)
     if not check_rate_limit(ip):
@@ -3468,7 +3584,7 @@ async def handle_login_password(request):
             "created": time.time(),
         }
         resp = web.HTTPFound("/")
-        resp.set_cookie(COOKIE_NAME, st, max_age=604800, httponly=True, samesite="Lax")
+        resp.set_cookie(COOKIE_NAME, st, max_age=604800, httponly=True, samesite="Strict")
         return resp
     add_login_attempt(ip)
     return web.Response(text="Invalid password", status=403)
@@ -3493,7 +3609,9 @@ async def handle_magic_login(request):
         "created": time.time(),
     }
     resp = web.HTTPFound("/")
-    resp.set_cookie(COOKIE_NAME, st, max_age=2592000, httponly=True, samesite="Lax")
+    resp.set_cookie(COOKIE_NAME, st, max_age=2592000, httponly=True, samesite="Strict")
+    resp.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+    resp.headers['Pragma'] = 'no-cache'
     return resp
 
 
@@ -3515,10 +3633,11 @@ async def handle_telegram_auth(request):
             "photo_url": data.get("photo_url"),
         }
         resp = web.json_response({"status": "ok"})
-        resp.set_cookie(COOKIE_NAME, st, max_age=2592000, httponly=True, samesite="Lax")
+        resp.set_cookie(COOKIE_NAME, st, max_age=2592000, httponly=True, samesite="Strict")
         return resp
     except Exception as e:
-        return web.json_response({"error": str(e)}, status=500)
+        logging.error(f"Internal API error: {e}")
+    return web.json_response({"error": "Internal Server Error"}, status=500)
 
 
 async def handle_logout(request):
@@ -3569,7 +3688,8 @@ async def handle_reset_request(request):
                 return web.json_response({"error": "bot_send_error"}, status=500)
         return web.json_response({"error": "bot_not_ready"}, status=500)
     except Exception as e:
-        return web.json_response({"error": str(e)}, status=500)
+        logging.error(f"Internal API error: {e}")
+    return web.json_response({"error": "Internal Server Error"}, status=500)
 
 
 async def handle_reset_page_render(request):
@@ -3649,7 +3769,8 @@ async def handle_reset_confirm(request):
         del RESET_TOKENS[token]
         return web.json_response({"status": "ok"})
     except Exception as e:
-        return web.json_response({"error": str(e)}, status=500)
+        logging.error(f"Internal API error: {e}")
+    return web.json_response({"error": "Internal Server Error"}, status=500)
 
 
 async def handle_api_root(request):
@@ -4185,7 +4306,8 @@ async def handle_services_list(request):
         services = get_all_services_status()
         return web.json_response(services)
     except Exception as e:
-        return web.json_response({"error": str(e)}, status=500)
+        logging.error(f"Internal API error: {e}")
+    return web.json_response({"error": "Internal Server Error"}, status=500)
 
 
 async def api_control_service(request):
@@ -4228,7 +4350,8 @@ async def api_control_service(request):
             return web.json_response({"error": msg}, status=500)
 
     except Exception as e:
-        return web.json_response({"error": str(e)}, status=500)
+        logging.error(f"Internal API error: {e}")
+    return web.json_response({"error": "Internal Server Error"}, status=500)
 
 
 async def api_service_info(request):
@@ -4257,7 +4380,8 @@ async def api_service_info(request):
         return web.json_response(info)
     except Exception as e:
         logging.error(f"Error in api_service_info: {e}")
-        return web.json_response({"error": str(e)}, status=500)
+        logging.error(f"Internal API error: {e}")
+    return web.json_response({"error": "Internal Server Error"}, status=500)
 
 
 async def api_services_available(request):
@@ -4282,7 +4406,8 @@ async def api_services_available(request):
         return web.json_response(services)
     except Exception as e:
         logging.error(f"Error in api_services_available: {e}")
-        return web.json_response({"error": str(e)}, status=500)
+        logging.error(f"Internal API error: {e}")
+    return web.json_response({"error": "Internal Server Error"}, status=500)
 
 
 async def api_services_manage(request):
@@ -4321,7 +4446,8 @@ async def api_services_manage(request):
 
     except Exception as e:
         logging.error(f"Error in api_services_manage: {e}")
-        return web.json_response({"error": str(e)}, status=500)
+        logging.error(f"Internal API error: {e}")
+    return web.json_response({"error": "Internal Server Error"}, status=500)
 
 
 async def cleanup_server():
@@ -4385,6 +4511,8 @@ async def start_web_server(bot_instance: Bot):
         app.router.add_head("/api/settings/language", handle_session_check_head)
         app.router.add_post("/api/settings/system", handle_save_system_config)
         app.router.add_post("/api/settings/password", handle_change_password)
+        app.router.add_get("/api/security/telegram_only_mode", handle_get_telegram_only_mode)
+        app.router.add_post("/api/security/telegram_only_mode", handle_set_telegram_only_mode)
         app.router.add_post("/api/settings/keyboard", handle_save_keyboard_config)
         app.router.add_post("/api/settings/metadata", handle_save_metadata)
         app.router.add_post("/api/logs/clear", handle_clear_logs)

@@ -347,12 +347,25 @@ async def detect_xray_client():
     """
     Detect Xray client installation.
     Returns: (client_type, container_name, setup_variant)
-    - client_type: "amnezia", "marzban", or None
-    - container_name: Docker container name
-    - setup_variant: "standard", "akiyamov", or None (for additional path handling)
+    - client_type: "amnezia", "marzban", "3x-ui", or None
+    - container_name: Docker container name or None for native install
+    - setup_variant: "standard", "akiyamov", "native", or None
     """
+    # Check native 3x-ui first
     try:
-        # Use subprocess.exec instead of shell for better security
+        proc = await asyncio.create_subprocess_exec(
+            "which", "x-ui",
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        stdout, _ = await proc.communicate()
+        if proc.returncode == 0 and stdout.decode().strip():
+            return ("3x-ui", None, "native")
+    except Exception:
+        pass
+
+    # Fallback: check Docker containers
+    try:
         proc = await asyncio.create_subprocess_exec(
             "docker", "ps", "--format", "{{.Names}} {{.Image}}",
             stdout=asyncio.subprocess.PIPE,
@@ -360,29 +373,31 @@ async def detect_xray_client():
         )
         stdout, _ = await proc.communicate()
         output = stdout.decode().strip()
-        if not output:
-            return (None, None, None)
         
-        # Check for Akiyamov setup directory
-        akiyamov_path = "/opt/xray-vps-setup"
-        is_akiyamov = os.path.isdir(akiyamov_path)
-        
-        for line in output.split("\n"):
-            parts = line.split()
-            if len(parts) >= 2:
-                name, image = (parts[0], parts[1])
-                if (
-                    "amnezia" in image.lower()
-                    and "xray" in image.lower()
-                    or name == "amnezia-xray"
-                ):
-                    return ("amnezia", name, "standard")
-                if "marzban" in image.lower() or "marzban" in name:
-                    variant = "akiyamov" if is_akiyamov else "standard"
-                    return ("marzban", name, variant)
-        return (None, None, None)
+        if output:
+            # Check for Akiyamov setup directory
+            akiyamov_path = "/opt/xray-vps-setup"
+            is_akiyamov = os.path.isdir(akiyamov_path)
+            
+            for line in output.split("\n"):
+                parts = line.split()
+                if len(parts) >= 2:
+                    name, image = (parts[0], parts[1])
+                    if (
+                        "amnezia" in image.lower()
+                        and "xray" in image.lower()
+                        or name == "amnezia-xray"
+                    ):
+                        return ("amnezia", name, "standard")
+                    if "marzban" in image.lower() or "marzban" in name:
+                        variant = "akiyamov" if is_akiyamov else "standard"
+                        return ("marzban", name, variant)
+                    if "3x-ui" in name.lower() or "3x-ui" in image.lower() or "x-ui" in image.lower():
+                        return ("3x-ui", name, "standard")
     except Exception:
-        return (None, None, None)
+        pass
+
+    return (None, None, None)
 
 
 async def initial_restart_check(bot: Bot):
