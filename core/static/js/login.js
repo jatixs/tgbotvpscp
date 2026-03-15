@@ -358,6 +358,31 @@ async function submitNewPassword() {
 
 // --- Initialization ---
 document.addEventListener("DOMContentLoaded", () => {
+    const loginOrSeparator = document.getElementById('login-or-separator');
+    const passwordLoginToggleBtn = document.getElementById('password-login-toggle-btn');
+
+    const applyTelegramOnlyMode = (enabled) => {
+        if (loginOrSeparator) {
+            loginOrSeparator.classList.toggle('hidden', enabled);
+        }
+        if (passwordLoginToggleBtn) {
+            passwordLoginToggleBtn.classList.toggle('hidden', enabled);
+        }
+    };
+
+    const refreshTelegramOnlyMode = async () => {
+        try {
+            const res = await fetch('/api/security/telegram_only_mode', { cache: 'no-store' });
+            if (!res.ok) return;
+            const data = await res.json();
+            const enabled = Boolean(data && data.enabled);
+            applyTelegramOnlyMode(enabled);
+            localStorage.setItem('telegram_only_mode', enabled ? '1' : '0');
+        } catch (e) {
+            console.error('Failed to refresh telegram-only mode on login page:', e);
+        }
+    };
+
     if (typeof CURRENT_LANG !== 'undefined' && typeof updateLangSlider === 'function') {
         updateLangSlider(CURRENT_LANG);
     }
@@ -401,7 +426,7 @@ document.addEventListener("DOMContentLoaded", () => {
         const botLink = (typeof BOT_USERNAME !== 'undefined' && BOT_USERNAME) ? `https://t.me/${BOT_USERNAME}` : "#";
 
         // ИСПРАВЛЕНО: Иконка "Синий самолетик" и для Magic Link тоже
-        container.innerHTML = `
+        formsContainer.innerHTML = `
             <div class="text-center py-8 animate-fade-in-up">
                 <div class="w-16 h-16 bg-blue-500/10 rounded-full flex items-center justify-center mx-auto mb-4 border border-blue-500/20">
                     <svg class="w-8 h-8 text-blue-500 ml-[-2px] mt-[2px]" fill="currentColor" viewBox="0 0 24 24">
@@ -447,4 +472,24 @@ document.addEventListener("DOMContentLoaded", () => {
         container.classList.remove('hidden');
         magicForm.classList.add('hidden');
     }
+
+    const storedMode = localStorage.getItem('telegram_only_mode');
+    if (storedMode === '1' || storedMode === '0') {
+        applyTelegramOnlyMode(storedMode === '1');
+    }
+
+    refreshTelegramOnlyMode();
+    setInterval(refreshTelegramOnlyMode, 5000);
+
+    document.addEventListener('visibilitychange', () => {
+        if (!document.hidden) {
+            refreshTelegramOnlyMode();
+        }
+    });
+
+    window.addEventListener('storage', (event) => {
+        if (event.key === 'telegram_only_mode' && event.newValue !== null) {
+            applyTelegramOnlyMode(event.newValue === '1');
+        }
+    });
 });

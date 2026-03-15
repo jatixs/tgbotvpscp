@@ -36,10 +36,10 @@ async def reboot_confirm_handler(message: types.Message):
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text=_("btn_reboot_confirm", lang), callback_data="reboot_confirm"
+                    text=_("btn_reboot_confirm", lang), callback_data="reboot_confirm", style="success"
                 ),
                 InlineKeyboardButton(
-                    text=_("btn_reboot_cancel", lang), callback_data="reboot_cancel"
+                    text=_("btn_reboot_cancel", lang), callback_data="reboot_cancel", style="danger"
                 ),
             ]
         ]

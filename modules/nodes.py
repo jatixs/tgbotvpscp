@@ -27,7 +27,7 @@ from core.keyboards import (
 from core.utils import format_uptime
 
 BUTTON_KEY = "btn_nodes"
-
+AGENT_START_TIME = time.time()
 
 class AddNodeStates(StatesGroup):
     waiting_for_name = State()
@@ -363,6 +363,7 @@ async def cq_node_command(callback: types.CallbackQuery):
         "traffic": "btn_traffic",
         "top": "btn_top",
         "speedtest": "btn_speedtest",
+        "update": "btn_node_update_system",
         "reboot": "btn_reboot",
     }
     cmd_name = _(cmd_map.get(cmd, cmd), lang)
@@ -578,10 +579,12 @@ async def node_traffic_scheduler(bot: Bot):
 
 async def nodes_monitor(bot: Bot):
     logging.info("Nodes Monitor started.")
+    grace_period = config.NODE_OFFLINE_TIMEOUT + 15
     await asyncio.sleep(10)
     while True:
         try:
             now = time.time()
+            is_startup_grace = (now - AGENT_START_TIME) < grace_period
             nodes = await nodes_db.get_all_nodes()
             for token, node in nodes.items():
                 name = html.escape(node.get("name", "Unknown"))
@@ -599,6 +602,10 @@ async def nodes_monitor(bot: Bot):
                 is_dead = (
                     now - last_seen >= config.NODE_OFFLINE_TIMEOUT and last_seen > 0
                 )
+                if is_startup_grace:
+                    if not is_dead and is_offline_alert_sent:
+                        await nodes_db.update_node_extra(token, "is_offline_alert_sent", False)
+                    continue
                 if is_dead and (not is_offline_alert_sent) and (not is_restarting):
                     await send_alert(
                         bot,
