@@ -33,9 +33,8 @@ from .config import (
     KEYBOARD_CONFIG,
     DEPLOY_MODE,
     TG_BOT_NAME,
-    SECURITY_SETTINGS_FILE,
-    load_encrypted_json,
-    save_encrypted_json,
+    get_bot_config,
+    set_bot_config,
 )
 from . import config as current_config
 from .shared_state import (
@@ -703,9 +702,7 @@ async def handle_terminal_ws(request):
         await ws_client.close()
         return ws_client
         
-    TERMINAL_CREDS_FILE = os.path.join(current_config.CONFIG_DIR, "terminal_creds.json")
-    if use_saved:
-        creds = load_encrypted_json(TERMINAL_CREDS_FILE)
+        creds = current_config.get_bot_config("terminal_creds", {})
         uid_str = str(user["id"])
         if uid_str in creds and host in creds[uid_str]:
             saved_cred = creds[uid_str][host]
@@ -798,8 +795,7 @@ async def handle_get_terminal_creds(request):
     if not ip:
         return web.json_response({"status": "error", "message": "Missing IP"})
         
-    TERMINAL_CREDS_FILE = os.path.join(current_config.CONFIG_DIR, "terminal_creds.json")
-    creds = load_encrypted_json(TERMINAL_CREDS_FILE)
+    creds = current_config.get_bot_config("terminal_creds", {})
     uid_str = str(user["id"])
     
     if uid_str in creds and ip in creds[uid_str]:
@@ -873,8 +869,7 @@ async def handle_save_terminal_creds(request):
         if not ip:
             return web.json_response({"status": "error", "message": "Missing IP"})
             
-        TERMINAL_CREDS_FILE = os.path.join(current_config.CONFIG_DIR, "terminal_creds.json")
-        creds = load_encrypted_json(TERMINAL_CREDS_FILE)
+        creds = current_config.get_bot_config("terminal_creds", {})
         if not isinstance(creds, dict):
             creds = {}
             
@@ -889,7 +884,7 @@ async def handle_save_terminal_creds(request):
             "password": data.get("password", ""),
             "private_key": data.get("private_key", "")
         }
-        save_encrypted_json(TERMINAL_CREDS_FILE, creds)
+        current_config.set_bot_config("terminal_creds", creds)
         return web.json_response({"status": "ok"})
     except Exception as e:
         return web.json_response({"status": "error", "message": str(e)})
@@ -2317,7 +2312,7 @@ async def handle_change_password(request):
 
 async def handle_get_telegram_only_mode(request):
     try:
-        settings = load_encrypted_json(SECURITY_SETTINGS_FILE)
+        settings = current_config.get_bot_config("security_settings", {})
         enabled = bool(settings.get("telegram_only_mode", False))
         return web.json_response({"enabled": enabled})
     except Exception as e:
@@ -2334,9 +2329,9 @@ async def handle_set_telegram_only_mode(request):
     try:
         data = await request.json()
         enabled = data.get("enabled", False)
-        settings = load_encrypted_json(SECURITY_SETTINGS_FILE)
+        settings = current_config.get_bot_config("security_settings", {})
         settings["telegram_only_mode"] = enabled
-        save_encrypted_json(SECURITY_SETTINGS_FILE, settings)
+        current_config.set_bot_config("security_settings", settings)
         return web.json_response({"status": "ok", "enabled": enabled})
     except Exception as e:
         logging.error(f"Internal API error: {e}")
@@ -2531,8 +2526,7 @@ async def handle_login_page(request):
 
 
 async def handle_login_request(request):
-    # Check if telegram only mode is enabled
-    settings = load_encrypted_json(SECURITY_SETTINGS_FILE)
+    settings = current_config.get_bot_config("security_settings", {})
     if settings.get("telegram_only_mode", False):
         return web.Response(text="Only Telegram widget login is allowed", status=403)
     
@@ -2567,8 +2561,7 @@ async def handle_login_request(request):
 
 
 async def handle_login_password(request):
-    # Check if telegram only mode is enabled
-    settings = load_encrypted_json(SECURITY_SETTINGS_FILE)
+    settings = current_config.get_bot_config("security_settings", {})
     if settings.get("telegram_only_mode", False):
         return web.Response(text="Password login disabled. Only Telegram widget login is allowed.", status=403)
 
@@ -3794,8 +3787,7 @@ async def handle_login_page(request):
 
 
 async def handle_login_request(request):
-    # Check if telegram only mode is enabled
-    settings = load_encrypted_json(SECURITY_SETTINGS_FILE)
+    settings = current_config.get_bot_config("security_settings", {})
     if settings.get("telegram_only_mode", False):
         return web.Response(text="Only Telegram widget login is allowed", status=403)
 
@@ -3830,7 +3822,7 @@ async def handle_login_request(request):
 
 
 async def handle_login_password(request):
-    settings = load_encrypted_json(SECURITY_SETTINGS_FILE)
+    settings = current_config.get_bot_config("security_settings", {})
     if settings.get("telegram_only_mode", False):
         return web.Response(text="Password login disabled. Only Telegram widget login is allowed.", status=403)
 

@@ -6,7 +6,7 @@ from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from . import config as core_config
 from . import shared_state
 from functools import lru_cache
-from .config import load_encrypted_json, save_encrypted_json
+from .config import get_bot_config, set_bot_config
 
 STRINGS = {
     "ru": {
@@ -1620,30 +1620,29 @@ STRINGS = {
 
 def load_user_settings():
     try:
-        settings = load_encrypted_json(core_config.USER_SETTINGS_FILE)
+        settings = get_bot_config("user_settings", {})
         if settings:
             loaded_data_int_keys = {int(k): v for k, v in settings.items()}
             shared_state.USER_SETTINGS.clear()
             shared_state.USER_SETTINGS.update(loaded_data_int_keys)
-            logging.info("Настройки пользователей (языки) загружены (secure).")
+            logging.info("Настройки пользователей (языки) загружены из bot.db.")
         else:
             shared_state.USER_SETTINGS.clear()
-            logging.info("Файл user_settings.json не найден или пуст.")
+            logging.info("Настройки пользователей (языки) не найдены или пусты.")
     except Exception as e:
         safe_e = str(e).replace("\n", " ").replace("\r", "")
-        logging.error(f"Ошибка загрузки user_settings.json: {safe_e}")
+        logging.error(f"Ошибка загрузки user_settings: {safe_e}")
         shared_state.USER_SETTINGS.clear()
 
 
 def save_user_settings():
     try:
-        os.makedirs(os.path.dirname(core_config.USER_SETTINGS_FILE), exist_ok=True)
         settings_to_save = {str(k): v for k, v in shared_state.USER_SETTINGS.items()}
-        save_encrypted_json(core_config.USER_SETTINGS_FILE, settings_to_save)
+        set_bot_config("user_settings", settings_to_save)
         logging.debug("Настройки пользователей (языки) сохранены.")
     except Exception as e:
         safe_e = str(e).replace("\n", " ").replace("\r", "")
-        logging.error(f"Ошибка сохранения user_settings.json: {safe_e}")
+        logging.error(f"Ошибка сохранения user_settings: {safe_e}")
 
 
 def get_user_lang(user_id: int | str | None) -> str:
