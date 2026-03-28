@@ -1110,6 +1110,13 @@ async def handle_dashboard(request):
                 "web_node_rename_error": _("web_node_rename_error", lang),
                 "web_traffic_reset_confirm": _("web_traffic_reset_confirm", lang),
                 "traffic_reset_done": _("web_traffic_reset_no_emoji", lang),
+                "web_traffic_live": _("web_traffic_live", lang),
+                "web_traffic_1h": _("web_traffic_1h", lang),
+                "web_traffic_6h": _("web_traffic_6h", lang),
+                "web_traffic_24h": _("web_traffic_24h", lang),
+                "web_traffic_7d": _("web_traffic_7d", lang),
+                "web_traffic_30d": _("web_traffic_30d", lang),
+                "web_traffic_no_data": _("web_traffic_no_data", lang),
                 "web_logs_empty_title": _("web_logs_empty_title", lang),
                 "web_logs_empty_desc": _("web_logs_empty_desc", lang),
                 "web_services_confirm_start": _("web_services_confirm_start", lang),
@@ -1509,6 +1516,26 @@ async def handle_reset_traffic(request):
         return web.json_response({"status": "ok"})
     except Exception as e:
         logging.error(f"Internal API error: {e}")
+    return web.json_response({"error": "Internal Server Error"}, status=500)
+
+
+async def handle_traffic_history(request):
+    user = get_current_user(request)
+    if not user:
+        return web.json_response({"error": "Unauthorized"}, status=401)
+    try:
+        source = request.query.get("source", "agent")
+        period = request.query.get("period", "24h")
+        if period not in ("1h", "6h", "24h", "7d", "30d", "all"):
+            period = "24h"
+
+        from core.config import get_traffic_history
+        data = await asyncio.get_event_loop().run_in_executor(
+            None, get_traffic_history, source, period
+        )
+        return web.json_response({"points": data})
+    except Exception as e:
+        logging.error(f"Traffic history API error: {e}")
     return web.json_response({"error": "Internal Server Error"}, status=500)
 
 
@@ -3388,6 +3415,7 @@ async def start_web_server(bot_instance: Bot):
         app.router.add_post("/api/settings/metadata", handle_save_metadata)
         app.router.add_post("/api/logs/clear", handle_clear_logs)
         app.router.add_post("/api/traffic/reset", handle_reset_traffic)
+        app.router.add_get("/api/traffic/history", handle_traffic_history)
         app.router.add_get("/api/agent/ipv4", handle_agent_ipv4)
         app.router.add_post("/api/users/action", handle_user_action)
         app.router.add_post("/api/nodes/add", handle_node_add)
@@ -4784,6 +4812,7 @@ async def start_web_server(bot_instance: Bot):
         app.router.add_post("/api/logs/clear", handle_clear_logs)
         app.router.add_get("/api/agent/ipv4", handle_agent_ipv4)
         app.router.add_post("/api/traffic/reset", handle_reset_traffic)
+        app.router.add_get("/api/traffic/history", handle_traffic_history)
         app.router.add_post("/api/users/action", handle_user_action)
         app.router.add_post("/api/nodes/add", handle_node_add)
         app.router.add_post("/api/nodes/delete", handle_node_delete)

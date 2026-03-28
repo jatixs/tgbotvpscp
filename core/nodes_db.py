@@ -123,6 +123,8 @@ async def delete_node(token: str):
     logging.info(f"Node deleted.")
 
 
+_node_traffic_last_insert = {}
+
 async def update_node_heartbeat(token: str, ip: str, stats: dict):
     t_hash = _get_token_hash(token)
     node = await Node.get_or_none(token_hash=t_hash)
@@ -144,6 +146,21 @@ async def update_node_heartbeat(token: str, ip: str, stats: dict):
     node.stats = stats
     node.history = history
     await node.save()
+
+    # Record traffic history for this node (throttled to once per 5 min)
+    now = time.time()
+    last_insert = _node_traffic_last_insert.get(t_hash, 0)
+    if now - last_insert >= 300:
+        _node_traffic_last_insert[t_hash] = now
+        rx = stats.get("net_rx", 0)
+        tx = stats.get("net_tx", 0)
+        if rx > 0 or tx > 0:
+            try:
+                from .config import record_traffic_point
+                record_traffic_point(t_hash, rx, tx)
+            except Exception as e:
+                import logging
+                logging.error(f"Error recording node traffic history: {e}")
 
 
 async def update_node_task(token: str, task: dict):
