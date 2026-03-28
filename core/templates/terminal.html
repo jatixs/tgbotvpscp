@@ -38,68 +38,79 @@
         .xterm .xterm-viewport {
             border-radius: 8px;
         }
+        
+        @media (min-width: 768px) {
+            #mobileKeyboard {
+                display: none !important;
+            }
+        }
     </style>
 </head>
-<body class="bg-gray-900 flex flex-col h-screen">
+<body class="bg-gray-900 flex flex-col font-sans" style="height: 100vh; height: 100dvh; position: fixed; inset: 0; overflow: hidden; margin: 0; padding: 0;">
     
-    <div class="bg-gray-800 shrink-0 shadow-lg z-10 flex flex-col">
-        <div class="h-[50px] flex items-center justify-between px-2 sm:px-4">
-            <div class="flex items-center gap-2 sm:gap-3">
-                <span class="font-bold text-base sm:text-lg text-blue-400 truncate max-w-[120px] sm:max-w-none">
-                    {{ web_terminal_title }}
-                </span>
-                <span id="statusBadge" class="px-1.5 sm:px-2 py-0.5 rounded text-[9px] sm:text-[10px] uppercase font-bold bg-gray-700 text-gray-300">
-                    {{ web_terminal_status_disconnected }}
-                </span>
+    <div class="h-[50px] bg-gray-800 flex items-center justify-between px-3 sm:px-4 shrink-0 shadow-lg z-10 w-full overflow-hidden">
+        <div class="flex items-center gap-2 sm:gap-3 min-w-0 shrink">
+            <span class="font-bold text-[15px] sm:text-lg text-blue-400 whitespace-nowrap truncate min-w-0">
+                {{ web_terminal_title }}
+            </span>
+            <span id="statusBadge" class="px-1.5 sm:px-2 py-0.5 rounded text-[9px] sm:text-[10px] uppercase font-bold bg-gray-700 text-gray-300 shrink-0">
+                {{ web_terminal_status_disconnected }}
+            </span>
+        </div>
+        
+        <div class="flex items-center gap-1.5 sm:gap-3 ml-auto shrink-0">
+            <!-- Stats Bar -->
+            <div class="hidden md:flex items-center gap-3 text-[10px] uppercase font-mono text-gray-400 bg-black/40 px-3 h-8 rounded-lg shadow-inner">
+                <div class="flex items-center gap-1"><span class="tracking-wide">CPU</span><span id="statCpu" class="text-white font-medium min-w-[2.2rem] text-right">--%</span></div>
+                <div class="w-px h-3 bg-gray-700"></div>
+                <div class="flex items-center gap-1"><span class="tracking-wide">RAM</span><span id="statRam" class="text-white font-medium min-w-[2.2rem] text-right">--%</span></div>
+                <div class="w-px h-3 bg-gray-700"></div>
+                <div class="flex items-center gap-1"><span class="tracking-wide">ROM</span><span id="statRom" class="text-white font-medium min-w-[2.2rem] text-right">--%</span></div>
+                <div class="w-px h-3 bg-gray-700"></div>
+                <div class="flex items-center gap-1"><span class="tracking-wide">UP</span><span id="statUptime" class="text-white font-medium min-w-[3rem] text-right">--</span></div>
+                <div class="w-px h-3 bg-gray-700"></div>
+                <div class="flex items-center gap-1"><span class="tracking-wide text-yellow-500/80">PING</span><span id="statPing" class="text-yellow-400 font-medium min-w-[2.5rem] text-right">--ms</span></div>
             </div>
-            
-            <div class="flex items-center gap-1 sm:gap-3 ml-auto">
-                <!-- Stats Bar Desktop -->
-                <div class="hidden lg:flex items-center gap-2 lg:gap-3 text-[10px] uppercase font-mono text-gray-400 bg-black/40 px-2 lg:px-3 h-7 sm:h-8 rounded-lg shadow-inner">
-                    <div class="flex items-center gap-1"><span class="tracking-wide">CPU</span><span id="statCpuD" class="text-white font-medium min-w-[2.2rem] text-right">--%</span></div>
-                    <div class="w-px h-3 bg-gray-700"></div>
-                    <div class="flex items-center gap-1"><span class="tracking-wide">RAM</span><span id="statRamD" class="text-white font-medium min-w-[2.2rem] text-right">--%</span></div>
-                    <div class="w-px h-3 bg-gray-700"></div>
-                    <div class="flex items-center gap-1"><span class="tracking-wide">ROM</span><span id="statRomD" class="text-white font-medium min-w-[2.2rem] text-right">--%</span></div>
-                    <div class="w-px h-3 bg-gray-700"></div>
-                    <div class="flex items-center gap-1"><span class="tracking-wide">UP</span><span id="statUptimeD" class="text-white font-medium min-w-[3rem] text-right">--</span></div>
-                    <div class="w-px h-3 bg-gray-700"></div>
-                    <div class="flex items-center gap-1"><span class="tracking-wide text-yellow-500/80">PING</span><span id="statPingD" class="text-yellow-400 font-medium min-w-[2.5rem] text-right">--ms</span></div>
-                </div>
             
             <!-- Tools and Actions -->
             <div class="flex items-center gap-1.5 sm:gap-2">
-                <button onclick="document.getElementById('helpModal').classList.remove('hidden')" class="w-7 h-7 sm:w-8 sm:h-8 bg-gray-700 hover:bg-gray-600 rounded-lg text-white transition flex items-center justify-center shadow-sm" title="Help / Hotkeys">
+                <button onclick="document.getElementById('helpModal').classList.remove('hidden')" class="w-7 h-7 sm:w-8 sm:h-8 bg-gray-700 hover:bg-gray-600 rounded-lg text-white transition flex items-center justify-center shadow-sm shrink-0" title="Help / Hotkeys">
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
                 </button>
-                <button id="btnSettings" onclick="document.getElementById('connectModal').classList.remove('hidden')" class="h-7 sm:h-8 px-2 sm:px-3 bg-gray-700 hover:bg-gray-600 rounded-lg text-xs sm:text-sm text-white font-medium transition flex items-center gap-1.5 shadow-sm">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 hidden sm:block" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <button id="btnSettings" onclick="document.getElementById('connectModal').classList.remove('hidden')" class="h-7 sm:h-8 px-2 sm:px-3 bg-gray-700 hover:bg-gray-600 rounded-lg text-[10px] sm:text-sm text-white font-medium transition flex items-center gap-1.5 shadow-sm shrink-0">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5 sm:h-4 sm:w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                     </svg>
-                    <span class="sm:inline">Настройки</span>
+                    <span class="hidden sm:inline">Настройки</span>
                 </button>
-                <button id="btnDisconnect" onclick="disconnect()" class="hidden h-7 sm:h-8 px-2 sm:px-3 bg-red-600 hover:bg-red-700 text-white rounded-lg text-xs sm:text-sm font-bold transition shadow-sm items-center gap-1">
+                <button id="btnDisconnect" onclick="disconnect()" class="hidden h-7 sm:h-8 px-2 sm:px-3 bg-red-600 hover:bg-red-700 text-white rounded-lg text-[10px] sm:text-sm font-bold transition shadow-sm shrink-0 items-center justify-center gap-1">
                     <span class="hidden sm:inline">{{ web_terminal_disconnect }}</span>
-                    <svg class="w-4 h-4 sm:hidden" stroke="currentColor" fill="none" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path></svg>
+                    <svg class="w-3.5 h-3.5 sm:hidden" stroke="currentColor" fill="none" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path></svg>
                 </button>
             </div>
-        </div>
-        
-        <!-- Stats Mobile -->
-        <div class="lg:hidden flex items-center justify-between gap-1 text-[9px] uppercase font-mono text-gray-400 bg-gray-900 border-t border-gray-700/50 px-2 sm:px-4 py-1.5 overflow-x-auto custom-scrollbar">
-            <div class="flex items-center gap-1 shrink-0"><span class="tracking-wide">CPU</span><span id="statCpuM" class="text-white font-medium">--%</span></div>
-            <div class="flex items-center gap-1 shrink-0"><span class="tracking-wide">RAM</span><span id="statRamM" class="text-white font-medium">--%</span></div>
-            <div class="flex items-center gap-1 shrink-0"><span class="tracking-wide">ROM</span><span id="statRomM" class="text-white font-medium">--%</span></div>
-            <div class="flex items-center gap-1 shrink-0"><span class="tracking-wide">UP</span><span id="statUptimeM" class="text-white font-medium">--</span></div>
-            <div class="flex items-center gap-1 shrink-0"><span class="tracking-wide text-yellow-500/80">PING</span><span id="statPingM" class="text-yellow-400 font-medium">--ms</span></div>
         </div>
     </div>
     
     <div id="terminal-container" class="flex-1 w-full relative">
         <div id="termDiv" class="w-full h-full"></div>
+    </div>
+
+    <!-- Mobile Termius Keyboard -->
+    <div id="mobileKeyboard" class="flex bg-gray-800 border-t border-gray-700 w-full overflow-x-auto custom-scrollbar items-center shrink-0 z-20" style="height: 44px; min-height: 44px;">
+        <button onmousedown="event.preventDefault(); term.focus();" class="px-4 h-full text-sm font-bold text-gray-400 hover:bg-gray-700 border-r border-gray-700 shrink-0">⌨️</button>
+        <button onmousedown="event.preventDefault(); ws&&ws.send('\x1b');" class="px-5 h-full text-[13px] font-bold text-gray-300 hover:text-white hover:bg-gray-700 border-r border-gray-700 shrink-0">ESC</button>
+        <button id="btnCtrl" onmousedown="event.preventDefault(); toggleCtrlMode();" class="px-5 h-full text-[13px] font-bold text-gray-300 hover:text-white hover:bg-gray-700 border-r border-gray-700 shrink-0">CTRL</button>
+        <button onmousedown="event.preventDefault(); ws&&ws.send('\x09');" class="px-5 h-full text-[13px] font-bold text-gray-300 hover:text-white hover:bg-gray-700 border-r border-gray-700 shrink-0">TAB</button>
+        <button onmousedown="event.preventDefault(); ws&&ws.send('-');" class="px-5 h-full text-base font-bold text-gray-300 hover:text-white hover:bg-gray-700 border-r border-gray-700 shrink-0">-</button>
+        <button onmousedown="event.preventDefault(); ws&&ws.send('/');" class="px-5 h-full text-base font-bold text-gray-300 hover:text-white hover:bg-gray-700 border-r border-gray-700 shrink-0">/</button>
+        <button onmousedown="event.preventDefault(); ws&&ws.send('|');" class="px-5 h-full text-base font-bold text-gray-300 hover:text-white hover:bg-gray-700 border-r border-gray-700 shrink-0">|</button>
+        <button onmousedown="event.preventDefault(); ws&&ws.send('\x1b[A');" class="px-5 h-full text-base font-bold text-gray-300 hover:text-white hover:bg-gray-700 border-r border-gray-700 shrink-0">↑</button>
+        <button onmousedown="event.preventDefault(); ws&&ws.send('\x1b[B');" class="px-5 h-full text-base font-bold text-gray-300 hover:text-white hover:bg-gray-700 border-r border-gray-700 shrink-0">↓</button>
+        <button onmousedown="event.preventDefault(); ws&&ws.send('\x1b[D');" class="px-5 h-full text-base font-bold text-gray-300 hover:text-white hover:bg-gray-700 border-r border-gray-700 shrink-0">←</button>
+        <button onmousedown="event.preventDefault(); ws&&ws.send('\x1b[C');" class="px-5 h-full text-base font-bold text-gray-300 hover:text-white hover:bg-gray-700 shrink-0">→</button>
     </div>
     
     <div id="connectModal" class="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-2 sm:p-4">
@@ -202,6 +213,16 @@
     </div>
     
     <script>
+        if (window.visualViewport) {
+            const updateViewport = () => {
+                document.body.style.height = window.visualViewport.height + 'px';
+                window.scrollTo(0, 0);
+            };
+            window.visualViewport.addEventListener('resize', updateViewport);
+            window.visualViewport.addEventListener('scroll', updateViewport);
+            updateViewport();
+        }
+
         const term = new Terminal({
             cursorBlink: true,
             theme: {
@@ -254,12 +275,34 @@
 
         term.onData(data => {
             if (ws && ws.readyState === WebSocket.OPEN) {
+                if (ctrlMode && data.length === 1) {
+                    let charCode = data.charCodeAt(0);
+                    if (charCode >= 97 && charCode <= 122) { // a-z
+                        data = String.fromCharCode(charCode - 96);
+                    } else if (charCode >= 65 && charCode <= 90) { // A-Z
+                        data = String.fromCharCode(charCode - 64);
+                    }
+                    toggleCtrlMode(); // Disable after one char
+                }
                 ws.send(JSON.stringify({
                     type: "data",
                     data: data
                 }));
             }
         });
+        
+        let ctrlMode = false;
+        function toggleCtrlMode() {
+            ctrlMode = !ctrlMode;
+            const btn = document.getElementById('btnCtrl');
+            if (ctrlMode) {
+                btn.classList.add('bg-blue-600', 'text-white');
+                btn.classList.remove('text-gray-300');
+            } else {
+                btn.classList.remove('bg-blue-600', 'text-white');
+                btn.classList.add('text-gray-300');
+            }
+        }
         
         const statusBadge = document.getElementById('statusBadge');
         const modal = document.getElementById('connectModal');
@@ -500,16 +543,11 @@
                                 const m = Math.floor((d.uptime % 3600)/60);
                                 uptimeStr = `${h}h ${m}m`;
                             }
-                            // Update Desktop Stats
-                            ['D', 'M'].forEach(ext => {
-                                if (document.getElementById('statCpu'+ext)) {
-                                    document.getElementById('statCpu'+ext).innerText = d.cpu.toFixed(1) + '%';
-                                    document.getElementById('statRam'+ext).innerText = Math.round(d.ram) + '%';
-                                    document.getElementById('statRom'+ext).innerText = Math.round(d.rom) + '%';
-                                    document.getElementById('statUptime'+ext).innerText = uptimeStr;
-                                    document.getElementById('statPing'+ext).innerText = Math.round(d.ping) + 'ms';
-                                }
-                            });
+                            document.getElementById('statCpu').innerText = d.cpu.toFixed(1) + '%';
+                            document.getElementById('statRam').innerText = Math.round(d.ram) + '%';
+                            document.getElementById('statRom').innerText = Math.round(d.rom) + '%';
+                            document.getElementById('statUptime').innerText = uptimeStr;
+                            document.getElementById('statPing').innerText = Math.round(d.ping) + 'ms';
                         }
                     }).catch(()=>{});
             }
