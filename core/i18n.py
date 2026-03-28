@@ -803,6 +803,14 @@ STRINGS = {
         "web_terminal_status_connecting": "Подключение...",
         "web_terminal_status_connected": "Подключен",
         "web_terminal_error": "Ошибка подключения",
+        "web_vnc_select_server": "Выберите сервер для VNC",
+        "web_terminal_port": "Порт:",
+        "web_terminal_auth_method": "Метод авторизации:",
+        "web_terminal_password_auth": "Пароль",
+        "web_terminal_key_auth": "SSH Ключ",
+        "web_terminal_key": "Закрытый ключ (RSA/Ed25519):",
+        "web_terminal_key_select": "Выбрать файл",
+        "web_terminal_remember": "Запомнить метод входа для этого IP",
     },
 
     "en": {
@@ -1598,6 +1606,14 @@ STRINGS = {
         "web_terminal_status_connecting": "Connecting...",
         "web_terminal_status_connected": "Connected",
         "web_terminal_error": "Connection error",
+        "web_vnc_select_server": "Select server for VNC",
+        "web_terminal_port": "Port:",
+        "web_terminal_auth_method": "Auth Method:",
+        "web_terminal_password_auth": "Password",
+        "web_terminal_key_auth": "SSH Key",
+        "web_terminal_key": "Private Key (RSA/Ed25519):",
+        "web_terminal_key_select": "Select file",
+        "web_terminal_remember": "Remember login method for this IP",
     },
 }
 

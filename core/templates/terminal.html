@@ -9,11 +9,9 @@
     <link rel="icon" type="image/png" sizes="32x32" href="/static/favicons/favicon-32x32.png">
     <link rel="icon" type="image/x-icon" href="/static/favicons/favicon.ico">
     
-    <!-- Tailwind CSS (reusing main.css if possible, or standard script for now) -->
     <link rel="stylesheet" href="/static/css/main.css?v={{ web_version }}">
     <script src="https://unpkg.com/twemoji@latest/dist/twemoji.min.js" crossorigin="anonymous"></script>
     
-    <!-- Xterm.js Support -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.css" />
     <script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.js"></script>
@@ -23,8 +21,8 @@
         body, html {
             height: 100%;
             margin: 0;
-            background-color: #111827; /* Tailwind dark gray-900 */
-            color: #f3f4f6; /* Tailwind gray-100 */
+            background-color: #111827; 
+            color: #f3f4f6;
             font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
             overflow: hidden;
         }
@@ -44,10 +42,10 @@
 </head>
 <body class="bg-gray-900 flex flex-col h-screen">
     
-    <!-- Header bar -->
     <div class="h-[50px] bg-gray-800 border-b border-gray-700 flex items-center justify-between px-4 shrink-0 shadow-lg z-10">
         <div class="flex items-center gap-3">
-            <span class="font-bold text-lg bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-purple-400">
+            <!-- FIXED TEXT VISIBILITY: using solid text color instead of gradient clip text -->
+            <span class="font-bold text-lg text-blue-400">
                 {{ web_terminal_title }}
             </span>
             <span id="statusBadge" class="px-2 py-0.5 rounded text-[10px] uppercase font-bold bg-gray-700 text-gray-300">
@@ -69,12 +67,10 @@
         </div>
     </div>
     
-    <!-- Terminal container -->
     <div id="terminal-container" class="flex-1 w-full relative">
         <div id="termDiv" class="w-full h-full"></div>
     </div>
     
-    <!-- Connection Modal -->
     <div id="connectModal" class="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
         <div class="bg-gray-800 border border-gray-700 rounded-2xl shadow-2xl w-full max-w-sm flex flex-col relative overflow-hidden">
             <div class="absolute top-0 right-0 p-4">
@@ -84,7 +80,7 @@
             </div>
             
             <div class="p-6">
-                <h3 class="text-xl font-bold text-white mb-6 flex items-center gap-2">
+                <h3 class="text-xl font-bold text-white mb-4 flex items-center gap-2">
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                     </svg>
@@ -93,23 +89,53 @@
                 
                 <form id="connectForm" onsubmit="event.preventDefault(); connect();">
                     <div class="space-y-4">
-                        <div>
-                            <label class="block text-xs font-bold text-gray-400 uppercase tracking-wide mb-1">{{ web_terminal_ip }}</label>
-                            <input type="text" id="inpIp" required value="{{ prefill_ip }}" class="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-sm">
+                        <div class="flex gap-2">
+                            <div class="flex-[3]">
+                                <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-wide mb-1">{{ web_terminal_ip }}</label>
+                                <input type="text" id="inpIp" required value="{{ prefill_ip }}" class="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-sm leading-tight transition">
+                            </div>
+                            <div class="flex-1">
+                                <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-wide mb-1">{{ web_terminal_port }}</label>
+                                <input type="number" id="inpPort" placeholder="22" class="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-sm leading-tight transition">
+                            </div>
                         </div>
+                        
                         <div>
-                            <label class="block text-xs font-bold text-gray-400 uppercase tracking-wide mb-1">{{ web_terminal_user }}</label>
-                            <input type="text" id="inpUser" required value="root" class="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-sm">
+                            <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-wide mb-1">{{ web_terminal_user }}</label>
+                            <input type="text" id="inpUser" required value="root" class="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-sm leading-tight transition">
                         </div>
+
                         <div>
-                            <label class="block text-xs font-bold text-gray-400 uppercase tracking-wide mb-1">{{ web_terminal_pass }}</label>
-                            <input type="password" id="inpPass" required placeholder="***" class="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-sm">
+                            <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-wide mb-1">{{ web_terminal_auth_method }}</label>
+                            <select id="inpAuthMethod" onchange="toggleAuthFields()" class="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500 font-sans text-sm outline-none transition cursor-pointer">
+                                <option value="password">{{ web_terminal_password_auth }}</option>
+                                <option value="key">{{ web_terminal_key_auth }}</option>
+                            </select>
+                        </div>
+
+                        <div id="fieldPassword">
+                            <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-wide mb-1">{{ web_terminal_pass }}</label>
+                            <input type="password" id="inpPass" placeholder="***" class="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-sm leading-tight transition">
+                        </div>
+                        
+                        <div id="fieldKey" class="hidden">
+                            <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-wide mb-1 flex justify-between">
+                                <span>{{ web_terminal_key }}</span>
+                                <label for="inpKeyFile" class="text-blue-400 hover:text-blue-300 cursor-pointer text-[10px]">📁 {{ web_terminal_key_select }}</label>
+                                <input type="file" id="inpKeyFile" class="hidden" accept=".pem,.key,.*" onchange="loadKeyFile(event)">
+                            </label>
+                            <textarea id="inpKey" rows="3" placeholder="-----BEGIN OPENSSH PRIVATE KEY-----" class="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-[10px] leading-tight resize-none transition custom-scrollbar"></textarea>
+                        </div>
+
+                        <div class="flex items-center gap-2 mt-2">
+                            <input type="checkbox" id="inpRemember" class="w-4 h-4 rounded border-gray-700 bg-gray-900 text-blue-500 focus:ring-blue-500 focus:ring-offset-gray-800 transition cursor-pointer">
+                            <label for="inpRemember" class="text-xs text-gray-300 cursor-pointer select-none">{{ web_terminal_remember }}</label>
                         </div>
                         
                         <div id="connError" class="hidden bg-red-900/40 text-red-400 text-xs p-3 rounded-lg border border-red-800/50 mt-2">
                         </div>
                         
-                        <div class="mt-6 pt-2">
+                        <div class="mt-4 pt-2">
                             <button type="submit" id="btnConnect" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-2.5 rounded-lg shadow-lg shadow-blue-500/20 transition-all flex justify-center items-center gap-2">
                                 <span>{{ web_terminal_connect }}</span>
                             </button>
@@ -121,7 +147,6 @@
     </div>
     
     <script>
-        // Init XTerm
         const term = new Terminal({
             cursorBlink: true,
             theme: {
@@ -161,7 +186,6 @@
         let ws = null;
         let pinger = null;
         
-        // Window resize
         window.addEventListener('resize', () => {
             fitAddon.fit();
             if (ws && ws.readyState === WebSocket.OPEN) {
@@ -194,13 +218,59 @@
             error: "{{ web_terminal_error }}"
         };
         
-        // If IP is passed in query, open modal automatically
-        const urlParams = new URLSearchParams(window.location.search);
-        if (urlParams.has('ip')) {
-            document.getElementById('inpIp').value = urlParams.get('ip');
+        function toggleAuthFields() {
+            const method = document.getElementById('inpAuthMethod').value;
+            if (method === 'key') {
+                document.getElementById('fieldKey').classList.remove('hidden');
+                document.getElementById('fieldPassword').classList.add('hidden');
+            } else {
+                document.getElementById('fieldKey').classList.add('hidden');
+                document.getElementById('fieldPassword').classList.remove('hidden');
+            }
         }
 
-        // Show welcome message
+        function loadKeyFile(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                document.getElementById('inpKey').value = e.target.result;
+            };
+            reader.readAsText(file);
+        }
+
+        // Fetch credentials continuously if IP changes
+        document.getElementById('inpIp').addEventListener('blur', function() {
+            const ip = this.value.trim();
+            if (!ip) return;
+            fetch(`/api/terminal/creds?ip=${encodeURIComponent(ip)}`)
+                .then(r => r.json())
+                .then(data => {
+                    if (data.status === 'ok' && data.saved) {
+                        document.getElementById('inpUser').value = data.user || 'root';
+                        document.getElementById('inpAuthMethod').value = data.type;
+                        document.getElementById('inpPort').value = data.port || '';
+                        toggleAuthFields();
+                        // For security, backend will remember the key. Frontend doesn't receive it.
+                        // We indicate saved status.
+                        document.getElementById('inpRemember').checked = true;
+                        if (data.type === 'key') {
+                            document.getElementById('inpKey').value = '*** SAVED SECURE KEY ***';
+                        } else {
+                            document.getElementById('inpPass').value = '*** SAVED PASSWORD ***';
+                        }
+                    }
+                })
+                .catch(() => {});
+        });
+
+        const urlParams = new URLSearchParams(window.location.search);
+        if (urlParams.has('ip')) {
+            const ip = urlParams.get('ip');
+            document.getElementById('inpIp').value = ip;
+            document.getElementById('inpIp').dispatchEvent(new Event('blur'));
+        }
+
         term.writeln('\x1b[1;36mTelegram VPS Control Panel - Web Terminal\x1b[0m');
         term.writeln('Enter connection details in the settings menu to continue.\r\n');
 
@@ -230,25 +300,47 @@
                 if (msg) {
                     connError.innerText = msg;
                     connError.classList.remove('hidden');
-                    modal.classList.remove('hidden'); // Show modal with error
+                    modal.classList.remove('hidden');
                 }
             }
         }
 
         function connect() {
-            if (ws) {
-                ws.close();
-            }
+            if (ws) ws.close();
             
             const ip = document.getElementById('inpIp').value;
+            const port = document.getElementById('inpPort').value || 22;
             const user = document.getElementById('inpUser').value;
-            const pass = document.getElementById('inpPass').value;
+            const method = document.getElementById('inpAuthMethod').value;
+            const remember = document.getElementById('inpRemember').checked;
             
+            let password = document.getElementById('inpPass').value;
+            let privateKey = document.getElementById('inpKey').value;
+            
+            const isSavedPass = password === '*** SAVED PASSWORD ***';
+            const isSavedKey = privateKey === '*** SAVED SECURE KEY ***';
+
             if (!ip || !user) return;
             
+            // If remember is checked, and we provide real password/key, save them via POST /api/terminal/creds
+            if (remember && (!isSavedPass && !isSavedKey)) {
+                fetch('/api/terminal/creds', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        ip: ip,
+                        port: port,
+                        user: user,
+                        type: method,
+                        password: method === 'password' ? password : '',
+                        private_key: method === 'key' ? privateKey : ''
+                    })
+                }).catch(e => console.error(e));
+            }
+
             setStatus('connecting');
             term.reset();
-            term.writeln('\x1b[1;34m[*] Connecting to ' + ip + '...\x1b[0m');
+            term.writeln('\x1b[1;34m[*] Connecting to ' + ip + ':' + port + '...\x1b[0m');
             
             const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
             const wsUrl = `${protocol}//${window.location.host}/api/terminal/ws`;
@@ -256,39 +348,36 @@
             ws = new WebSocket(wsUrl);
             
             ws.onopen = () => {
-                // Send auth
                 ws.send(JSON.stringify({
                     type: "auth",
                     host: ip,
+                    port: parseInt(port),
                     user: user,
-                    password: pass,
+                    use_saved: (isSavedPass || isSavedKey),
+                    auth_type: method,
+                    password: password,
+                    private_key: privateKey,
                     cols: term.cols,
                     rows: term.rows
                 }));
             };
             
             ws.onmessage = (event) => {
-                // Read as text
                 try {
-                    // Try parsing as JSON first for internal messages
                     const data = JSON.parse(event.data);
                     if (data.type === "connected") {
                         setStatus('connected');
-                        
-                        // Keep-alive pinger
                         pinger = setInterval(() => {
                             if (ws && ws.readyState === WebSocket.OPEN) {
                                 ws.send(JSON.stringify({type: "ping"}));
                             }
                         }, 20000);
-                        
                     } else if (data.type === "error") {
                         setStatus('error', data.message);
                         term.writeln('\r\n\x1b[1;31m[!] Error: ' + data.message + '\x1b[0m');
                         ws.close();
                     }
                 } catch (e) {
-                    // Raw terminal data
                      term.write(event.data);
                 }
             };
@@ -305,9 +394,7 @@
         }
         
         function disconnect() {
-            if (ws) {
-                ws.close();
-            }
+            if (ws) ws.close();
         }
     </script>
 </body>

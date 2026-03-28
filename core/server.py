@@ -651,6 +651,13 @@ async def handle_terminal_page(request):
         "web_terminal_pass": _("web_terminal_pass", lang),
         "web_terminal_connect": _("web_terminal_connect", lang),
         "web_terminal_disconnect": _("web_terminal_disconnect", lang),
+        "web_terminal_port": _("web_terminal_port", lang),
+        "web_terminal_auth_method": _("web_terminal_auth_method", lang),
+        "web_terminal_password_auth": _("web_terminal_password_auth", lang),
+        "web_terminal_key_auth": _("web_terminal_key_auth", lang),
+        "web_terminal_key": _("web_terminal_key", lang),
+        "web_terminal_key_select": _("web_terminal_key_select", lang),
+        "web_terminal_remember": _("web_terminal_remember", lang),
         "web_terminal_status_disconnected": _("web_terminal_status_disconnected", lang),
         "web_terminal_status_connecting": _("web_terminal_status_connecting", lang),
         "web_terminal_status_connected": _("web_terminal_status_connected", lang),
@@ -683,7 +690,11 @@ async def handle_terminal_ws(request):
         
     host = msg.get("host")
     username = msg.get("user")
-    password = msg.get("password")
+    port = int(msg.get("port", 22))
+    use_saved = msg.get("use_saved", False)
+    auth_type = msg.get("auth_type", "password")
+    password = msg.get("password", "")
+    private_key = msg.get("private_key", "")
     cols = msg.get("cols", 80)
     rows = msg.get("rows", 24)
     
@@ -692,9 +703,39 @@ async def handle_terminal_ws(request):
         await ws_client.close()
         return ws_client
         
+    TERMINAL_CREDS_FILE = os.path.join(core_config.CONFIG_DIR, "terminal_creds.json")
+    if use_saved:
+        creds = core_config.load_encrypted_json(TERMINAL_CREDS_FILE)
+        uid_str = str(user["id"])
+        if uid_str in creds and host in creds[uid_str]:
+            saved_cred = creds[uid_str][host]
+            auth_type = saved_cred.get("type", "password")
+            if auth_type == "password":
+                password = saved_cred.get("password", "")
+            else:
+                private_key = saved_cred.get("private_key", "")
+    
     try:
         import asyncssh
-        conn = await asyncssh.connect(host, username=username, password=password, known_hosts=None)
+        connect_kwargs = {
+            "host": host,
+            "port": port,
+            "username": username,
+            "known_hosts": None
+        }
+        if auth_type == "key" and private_key:
+            try:
+                # Load the private key string
+                key = asyncssh.import_private_key(private_key)
+                connect_kwargs["client_keys"] = [key]
+            except Exception as e:
+                await ws_client.send_json({"type": "error", "message": f"Invalid SSH Key: {e}"})
+                await ws_client.close()
+                return ws_client
+        else:
+            connect_kwargs["password"] = password
+
+        conn = await asyncssh.connect(**connect_kwargs)
         
         async def forward_stdout(process):
             try:
@@ -748,6 +789,62 @@ async def handle_terminal_ws(request):
     return ws_client
 
 
+async def handle_get_terminal_creds(request):
+    user = get_current_user(request)
+    if not user:
+        return web.json_response({"status": "error"}, status=401)
+    
+    ip = request.query.get("ip", "")
+    if not ip:
+        return web.json_response({"status": "error", "message": "Missing IP"})
+        
+    TERMINAL_CREDS_FILE = os.path.join(core_config.CONFIG_DIR, "terminal_creds.json")
+    creds = core_config.load_encrypted_json(TERMINAL_CREDS_FILE)
+    uid_str = str(user["id"])
+    
+    if uid_str in creds and ip in creds[uid_str]:
+        c = creds[uid_str][ip]
+        return web.json_response({
+            "status": "ok",
+            "saved": True,
+            "type": c.get("type", "password"),
+            "user": c.get("user", "root"),
+            "port": c.get("port", 22)
+        })
+    return web.json_response({"status": "ok", "saved": False})
+
+
+async def handle_save_terminal_creds(request):
+    user = get_current_user(request)
+    if not user:
+        return web.json_response({"status": "error"}, status=401)
+        
+    try:
+        data = await request.json()
+        ip = data.get("ip")
+        if not ip:
+            return web.json_response({"status": "error", "message": "Missing IP"})
+            
+        TERMINAL_CREDS_FILE = os.path.join(core_config.CONFIG_DIR, "terminal_creds.json")
+        creds = core_config.load_encrypted_json(TERMINAL_CREDS_FILE)
+        if not isinstance(creds, dict):
+            creds = {}
+            
+        uid_str = str(user["id"])
+        if uid_str not in creds:
+            creds[uid_str] = {}
+            
+        creds[uid_str][ip] = {
+            "type": data.get("type", "password"),
+            "user": data.get("user", "root"),
+            "port": data.get("port", 22),
+            "password": data.get("password", ""),
+            "private_key": data.get("private_key", "")
+        }
+        core_config.save_encrypted_json(TERMINAL_CREDS_FILE, creds)
+        return web.json_response({"status": "ok"})
+    except Exception as e:
+        return web.json_response({"status": "error", "message": str(e)})
 async def handle_dashboard(request):
     user = get_current_user(request)
     if not user:
@@ -819,6 +916,12 @@ async def handle_dashboard(request):
         ]
         nodes_json = json.dumps(nlist)
 
+    vnc_nodes = [{"name": _("web_notif_global_group_agent", lang) or "Agent", "ip": AGENT_IP_CACHE}]
+    for t, n in all_nodes.items():
+        ip = n.get("ip", "")
+        if ip:
+            vnc_nodes.append({"name": n.get("name", "Unknown"), "ip": ip})
+
     can_reset = traffic_module.can_reset_traffic()
 
     context = {
@@ -831,6 +934,8 @@ async def handle_dashboard(request):
         "web_version": display_version,
         "pwa_version": current_config.INSTALLED_VERSION or display_version,
         "role_badge": role_badge_html,
+        "vnc_nodes": vnc_nodes,
+        "web_vnc_select_server": _("web_vnc_select_server", lang) or "Выберите сервер для VNC",
         "cache_ver": CACHE_VER,
         "web_dashboard_title": _("web_dashboard_title", lang),
         "user_avatar": _get_avatar_html(user),
@@ -4604,6 +4709,8 @@ async def start_web_server(bot_instance: Bot):
         app.router.add_get("/", handle_dashboard)
         app.router.add_get("/terminal", handle_terminal_page)
         app.router.add_get("/api/terminal/ws", handle_terminal_ws)
+        app.router.add_get("/api/terminal/creds", handle_get_terminal_creds)
+        app.router.add_post("/api/terminal/creds", handle_save_terminal_creds)
         app.router.add_get("/settings", handle_settings_page)
         app.router.add_get("/nodes", handle_nodes_monitor_page)
         app.router.add_get("/login", handle_login_page)
