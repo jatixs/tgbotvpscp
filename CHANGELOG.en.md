@@ -5,11 +5,24 @@
 <h1 align="center">📝 Telegram VPS Management Bot — Changelog</h1>
 
 <p align="center">
-	<img src="https://img.shields.io/badge/version-v1.20.0-blue?style=flat-square" alt="Version 1.20.0"/>
-	<img src="https://img.shields.io/badge/build-70-purple?style=flat-square" alt="Build 70"/>
-	<img src="https://img.shields.io/badge/date-March%2015%202026-green?style=flat-square" alt="Date March 15 2026"/>
+	<img src="https://img.shields.io/badge/version-v1.21.0-blue?style=flat-square" alt="Version 1.21.0"/>
+	<img src="https://img.shields.io/badge/build-71-purple?style=flat-square" alt="Build 71"/>
+	<img src="https://img.shields.io/badge/date-March%2029%202026-green?style=flat-square" alt="Date March 29 2026"/>
 	<img src="https://img.shields.io/badge/status-stable-green?style=flat-square" alt="Status Stable"/>
 </p>
+
+---
+## [1.21.0] - 2026-03-29
+
+### 🚀 Added:
+* **Web Terminal (VNC):** A fully featured, secure web terminal for managing the server directly from your browser (with WebSocket support).
+* **Database (bot.db):** Migrated all configuration JSON files into a single secure SQLite database for improved reliability.
+* **Encryption:** Terminal settings and system configurations are now securely encrypted using the Fernet (AES) algorithm.
+
+### ✨ Improved:
+* **Web UI (Mobile):** Completely reworked web terminal adaptability for mobile devices (interactive Termius-style keyboard, `100dvh` handling).
+* **Monitoring:** Added real-time server resource consumption statistics directly within the web terminal (CPU, RAM, ROM, Uptime, Ping).
+* **Design:** Updated the desktop terminal appearance, removed unnecessary borders, and added a custom context menu with copy/paste support.
 
 ---
 ## [1.20.0] - 2026-03-15
