@@ -53,30 +53,38 @@
             </span>
         </div>
         
-        <div class="flex items-center gap-4 ml-4 hidden md:flex text-[10px] font-mono text-gray-400">
-            <div class="flex flex-col"><span>CPU</span><span id="statCpu" class="text-white">--%</span></div>
-            <div class="flex flex-col"><span>RAM</span><span id="statRam" class="text-white">--%</span></div>
-            <div class="flex flex-col"><span>ROM</span><span id="statRom" class="text-white">--%</span></div>
-            <div class="flex flex-col"><span>UPTIME</span><span id="statUptime" class="text-white">--</span></div>
-            <div class="flex flex-col"><span>PING</span><span id="statPing" class="text-white">--ms</span></div>
-        </div>
-        
-        <div class="flex items-center gap-2 ml-auto">
-            <button onclick="document.getElementById('helpModal').classList.remove('hidden')" class="px-2 py-1.5 bg-gray-700 hover:bg-gray-600 rounded text-sm text-white transition flex items-center justify-center shadow-sm" title="Help / Hotkeys">
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-            </button>
-            <button id="btnSettings" onclick="document.getElementById('connectModal').classList.remove('hidden')" class="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 rounded text-sm text-white transition flex items-center gap-1 shadow-sm">
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                </svg>
-                <span class="hidden sm:inline">Настройки</span>
-            </button>
-            <button id="btnDisconnect" onclick="disconnect()" class="hidden px-3 py-1.5 bg-red-600 hover:bg-red-500 rounded text-sm text-white font-bold transition shadow-sm">
-                {{ web_terminal_disconnect }}
-            </button>
+        <div class="flex items-center gap-1 sm:gap-3 ml-auto">
+            <!-- Stats Bar -->
+            <div class="hidden md:flex items-center gap-3 text-[10px] uppercase font-mono text-gray-400 bg-black/40 px-3 h-8 rounded-lg border border-gray-700/50 shadow-inner">
+                <div class="flex items-center gap-1"><span class="tracking-wide">CPU</span><span id="statCpu" class="text-white font-medium min-w-[2.2rem] text-right">--%</span></div>
+                <div class="w-px h-3 bg-gray-700"></div>
+                <div class="flex items-center gap-1"><span class="tracking-wide">RAM</span><span id="statRam" class="text-white font-medium min-w-[2.2rem] text-right">--%</span></div>
+                <div class="w-px h-3 bg-gray-700"></div>
+                <div class="flex items-center gap-1"><span class="tracking-wide">ROM</span><span id="statRom" class="text-white font-medium min-w-[2.2rem] text-right">--%</span></div>
+                <div class="w-px h-3 bg-gray-700"></div>
+                <div class="flex items-center gap-1"><span class="tracking-wide">UP</span><span id="statUptime" class="text-white font-medium min-w-[3rem] text-right">--</span></div>
+                <div class="w-px h-3 bg-gray-700"></div>
+                <div class="flex items-center gap-1"><span class="tracking-wide text-yellow-500/80">PING</span><span id="statPing" class="text-yellow-400 font-medium min-w-[2.5rem] text-right">--ms</span></div>
+            </div>
+            
+            <!-- Tools and Actions -->
+            <div class="flex items-center gap-2">
+                <button onclick="document.getElementById('helpModal').classList.remove('hidden')" class="w-8 h-8 bg-gray-700 hover:bg-gray-600 rounded-lg text-white transition flex items-center justify-center shadow-sm" title="Help / Hotkeys">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                </button>
+                <button id="btnSettings" onclick="document.getElementById('connectModal').classList.remove('hidden')" class="h-8 px-2 sm:px-3 bg-gray-700 hover:bg-gray-600 rounded-lg text-xs sm:text-sm text-white font-medium transition flex items-center gap-1.5 shadow-sm">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                    </svg>
+                    <span class="hidden sm:inline">Настройки</span>
+                </button>
+                <button id="btnDisconnect" onclick="disconnect()" class="hidden h-8 px-2 sm:px-3 bg-red-600/20 text-red-500 hover:bg-red-500 hover:text-white border border-red-500/30 rounded-lg text-xs sm:text-sm font-bold transition shadow-sm">
+                    {{ web_terminal_disconnect }}
+                </button>
+            </div>
         </div>
     </div>
     
