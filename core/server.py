@@ -631,6 +631,123 @@ async def api_revoke_all_sessions(request):
     return web.json_response({"status": "ok", "revoked_count": count})
 
 
+async def handle_terminal_page(request):
+    user = get_current_user(request)
+    if not user:
+        raise web.HTTPFound("/login")
+    lang = get_user_lang(user["id"])
+    prefill_ip = request.query.get('ip', '')
+    
+    custom_title = getattr(current_config, "WEB_METADATA", {}).get("title", "")
+    page_title = custom_title if custom_title else f"{_('web_terminal_title', lang)} - {TG_BOT_NAME}"
+    
+    context = {
+        "web_title": page_title,
+        "web_brand_name": TG_BOT_NAME,
+        "web_version": APP_VERSION,
+        "web_terminal_title": _("web_terminal_title", lang),
+        "web_terminal_ip": _("web_terminal_ip", lang),
+        "web_terminal_user": _("web_terminal_user", lang),
+        "web_terminal_pass": _("web_terminal_pass", lang),
+        "web_terminal_connect": _("web_terminal_connect", lang),
+        "web_terminal_disconnect": _("web_terminal_disconnect", lang),
+        "web_terminal_status_disconnected": _("web_terminal_status_disconnected", lang),
+        "web_terminal_status_connecting": _("web_terminal_status_connecting", lang),
+        "web_terminal_status_connected": _("web_terminal_status_connected", lang),
+        "web_terminal_error": _("web_terminal_error", lang),
+        "prefill_ip": prefill_ip
+    }
+    
+    template = JINJA_ENV.get_template("terminal.html")
+    html_content = template.render(context)
+    return web.Response(text=html_content, content_type="text/html")
+
+
+async def handle_terminal_ws(request):
+    user = get_current_user(request)
+    if not user:
+        return web.Response(status=401)
+        
+    ws_client = web.WebSocketResponse()
+    await ws_client.prepare(request)
+    
+    try:
+        msg = await ws_client.receive_json()
+    except Exception:
+        await ws_client.close()
+        return ws_client
+
+    if msg.get("type") != "auth":
+        await ws_client.close()
+        return ws_client
+        
+    host = msg.get("host")
+    username = msg.get("user")
+    password = msg.get("password")
+    cols = msg.get("cols", 80)
+    rows = msg.get("rows", 24)
+    
+    if not host or not username:
+        await ws_client.send_json({"type": "error", "message": "Missing host or username"})
+        await ws_client.close()
+        return ws_client
+        
+    try:
+        import asyncssh
+        conn = await asyncssh.connect(host, username=username, password=password, known_hosts=None)
+        
+        async def forward_stdout(process):
+            try:
+                while True:
+                    data = await process.stdout.read(4096)
+                    if not data:
+                        break
+                    await ws_client.send_str(data)
+            except Exception:
+                pass
+                
+        async def forward_stderr(process):
+            try:
+                while True:
+                    data = await process.stderr.read(4096)
+                    if not data:
+                        break
+                    await ws_client.send_str(data)
+            except Exception:
+                pass
+                
+        process = await conn.create_process(term_type='xterm', term_size=(cols, rows))
+        await ws_client.send_json({"type": "connected"})
+        
+        asyncio.create_task(forward_stdout(process))
+        asyncio.create_task(forward_stderr(process))
+        
+        async for ws_msg in ws_client:
+            if ws_msg.type == aiohttp.WSMsgType.TEXT:
+                try:
+                    data = json.loads(ws_msg.data)
+                    if data.get("type") == "data":
+                        process.stdin.write(data["data"])
+                    elif data.get("type") == "resize":
+                        process.change_terminal_size(data.get("cols", 80), data.get("rows", 24))
+                except Exception:
+                    pass
+            elif ws_msg.type == aiohttp.WSMsgType.ERROR:
+                break
+                
+        process.close()
+        conn.close()
+        
+    except Exception as e:
+        await ws_client.send_json({"type": "error", "message": str(e)})
+        
+    finally:
+        if not ws_client.closed:
+            await ws_client.close()
+            
+    return ws_client
+
+
 async def handle_dashboard(request):
     user = get_current_user(request)
     if not user:
@@ -4485,6 +4602,8 @@ async def start_web_server(bot_instance: Bot):
 
         app.router.add_get("/site.webmanifest", handle_manifest)
         app.router.add_get("/", handle_dashboard)
+        app.router.add_get("/terminal", handle_terminal_page)
+        app.router.add_get("/api/terminal/ws", handle_terminal_ws)
         app.router.add_get("/settings", handle_settings_page)
         app.router.add_get("/nodes", handle_nodes_monitor_page)
         app.router.add_get("/login", handle_login_page)
