@@ -703,9 +703,9 @@ async def handle_terminal_ws(request):
         await ws_client.close()
         return ws_client
         
-    TERMINAL_CREDS_FILE = os.path.join(core_config.CONFIG_DIR, "terminal_creds.json")
+    TERMINAL_CREDS_FILE = os.path.join(current_config.CONFIG_DIR, "terminal_creds.json")
     if use_saved:
-        creds = core_config.load_encrypted_json(TERMINAL_CREDS_FILE)
+        creds = load_encrypted_json(TERMINAL_CREDS_FILE)
         uid_str = str(user["id"])
         if uid_str in creds and host in creds[uid_str]:
             saved_cred = creds[uid_str][host]
@@ -798,8 +798,8 @@ async def handle_get_terminal_creds(request):
     if not ip:
         return web.json_response({"status": "error", "message": "Missing IP"})
         
-    TERMINAL_CREDS_FILE = os.path.join(core_config.CONFIG_DIR, "terminal_creds.json")
-    creds = core_config.load_encrypted_json(TERMINAL_CREDS_FILE)
+    TERMINAL_CREDS_FILE = os.path.join(current_config.CONFIG_DIR, "terminal_creds.json")
+    creds = load_encrypted_json(TERMINAL_CREDS_FILE)
     uid_str = str(user["id"])
     
     if uid_str in creds and ip in creds[uid_str]:
@@ -825,8 +825,8 @@ async def handle_save_terminal_creds(request):
         if not ip:
             return web.json_response({"status": "error", "message": "Missing IP"})
             
-        TERMINAL_CREDS_FILE = os.path.join(core_config.CONFIG_DIR, "terminal_creds.json")
-        creds = core_config.load_encrypted_json(TERMINAL_CREDS_FILE)
+        TERMINAL_CREDS_FILE = os.path.join(current_config.CONFIG_DIR, "terminal_creds.json")
+        creds = load_encrypted_json(TERMINAL_CREDS_FILE)
         if not isinstance(creds, dict):
             creds = {}
             
@@ -841,7 +841,7 @@ async def handle_save_terminal_creds(request):
             "password": data.get("password", ""),
             "private_key": data.get("private_key", "")
         }
-        core_config.save_encrypted_json(TERMINAL_CREDS_FILE, creds)
+        save_encrypted_json(TERMINAL_CREDS_FILE, creds)
         return web.json_response({"status": "ok"})
     except Exception as e:
         return web.json_response({"status": "error", "message": str(e)})
