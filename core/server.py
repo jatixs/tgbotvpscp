@@ -26,7 +26,6 @@ from .config import (
     BOT_LOG_DIR,
     WATCHDOG_LOG_DIR,
     NODE_LOG_DIR,
-    WEB_AUTH_FILE,
     ADMIN_USERNAME,
     TOKEN,
     save_keyboard_config,
