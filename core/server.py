@@ -814,6 +814,54 @@ async def handle_get_terminal_creds(request):
     return web.json_response({"status": "ok", "saved": False})
 
 
+async def handle_terminal_stats(request):
+    user = get_current_user(request)
+    if not user:
+        return web.json_response({"error": "Unauthorized"}, status=401)
+    
+    ip = request.query.get("ip")
+    if not ip:
+        return web.json_response({"error": "Missing IP"}, status=400)
+        
+    try:
+        if ip == AGENT_IP_CACHE or ip in ["127.0.0.1", "localhost", "0.0.0.0"]:
+            import psutil
+            try:
+                cpu = psutil.cpu_percent()
+                mem = psutil.virtual_memory()
+                disk = psutil.disk_usage(get_host_path("/"))
+                uptime = int(time.time() - psutil.boot_time())
+                return web.json_response({
+                    "cpu": cpu,
+                    "ram": mem.percent,
+                    "rom": disk.percent,
+                    "uptime": uptime,
+                    "ping": AGENT_PING_CACHE
+                })
+            except Exception:
+                pass
+
+        all_nodes = await nodes_db.get_all_nodes()
+        for token, node_data in all_nodes.items():
+            if node_data.get("ip") == ip:
+                stats = node_data.get("stats", {})
+                last_seen = node_data.get("last_seen", 0)
+                # Calculate uptime based on heartbeat or last_seen
+                uptime = 0
+                if last_seen > 0:
+                    uptime = int(time.time() - last_seen) # Approximate or we can use boot_time if they sent it
+                return web.json_response({
+                    "cpu": stats.get("cpu", 0),
+                    "ram": stats.get("ram", 0),
+                    "rom": stats.get("disk", 0),
+                    "uptime": stats.get("uptime", 0), # assuming node sends it, if not 0
+                    "ping": stats.get("ping", 0)
+                })
+                
+        return web.json_response({"error": "No stats"}, status=404)
+    except Exception as e:
+        return web.json_response({"error": str(e)}, status=500)
+
 async def handle_save_terminal_creds(request):
     user = get_current_user(request)
     if not user:
@@ -4711,6 +4759,7 @@ async def start_web_server(bot_instance: Bot):
         app.router.add_get("/api/terminal/ws", handle_terminal_ws)
         app.router.add_get("/api/terminal/creds", handle_get_terminal_creds)
         app.router.add_post("/api/terminal/creds", handle_save_terminal_creds)
+        app.router.add_get("/api/terminal/stats", handle_terminal_stats)
         app.router.add_get("/settings", handle_settings_page)
         app.router.add_get("/nodes", handle_nodes_monitor_page)
         app.router.add_get("/login", handle_login_page)
