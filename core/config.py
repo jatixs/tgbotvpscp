@@ -64,111 +64,11 @@ def init_bot_db():
                     value BLOB
                 )
             ''')
-            cursor.execute('''
-                CREATE TABLE IF NOT EXISTS traffic_history (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    source TEXT NOT NULL DEFAULT 'agent',
-                    timestamp INTEGER NOT NULL,
-                    rx_bytes INTEGER NOT NULL,
-                    tx_bytes INTEGER NOT NULL
-                )
-            ''')
-            cursor.execute('''
-                CREATE INDEX IF NOT EXISTS idx_th_source_ts
-                ON traffic_history(source, timestamp)
-            ''')
             conn.commit()
     except Exception as e:
         logging.error(f"Error initializing bot.db: {e}")
 
 init_bot_db()
-
-TRAFFIC_RETENTION_SECONDS = 30 * 86400  # 30 days
-
-def record_traffic_point(source: str, rx_bytes: int, tx_bytes: int):
-    """Insert a traffic data point and clean up old entries."""
-    try:
-        now = int(datetime.now().timestamp())
-        cutoff = now - TRAFFIC_RETENTION_SECONDS
-        with sqlite3.connect(BOT_DB_PATH) as conn:
-            cursor = conn.cursor()
-            cursor.execute(
-                "INSERT INTO traffic_history (source, timestamp, rx_bytes, tx_bytes) VALUES (?, ?, ?, ?)",
-                (source, now, rx_bytes, tx_bytes)
-            )
-            cursor.execute(
-                "DELETE FROM traffic_history WHERE source = ? AND timestamp < ?",
-                (source, cutoff)
-            )
-            conn.commit()
-    except Exception as e:
-        logging.error(f"Error recording traffic point for {source}: {e}")
-
-def get_traffic_history(source: str, period: str) -> list:
-    """Query traffic history for a given source and period. Returns list of {t, rx, tx}."""
-    period_map = {
-        "1h": 3600,
-        "6h": 21600,
-        "24h": 86400,
-        "7d": 604800,
-        "30d": 2592000,
-    }
-    # Aggregation intervals (group by N seconds)
-    agg_map = {
-        "1h": None,     # raw
-        "6h": None,     # raw
-        "24h": None,    # raw
-        "7d": 3600,     # 1 hour
-        "30d": 21600,   # 6 hours
-        "all": 86400,   # 1 day
-    }
-    try:
-        now = int(datetime.now().timestamp())
-        seconds = period_map.get(period)
-        agg_interval = agg_map.get(period)
-
-        with sqlite3.connect(BOT_DB_PATH) as conn:
-            cursor = conn.cursor()
-
-            if seconds:
-                since = now - seconds
-                if agg_interval:
-                    cursor.execute(
-                        """SELECT (timestamp / ?) * ? as t_bucket,
-                                  MAX(rx_bytes) as rx, MAX(tx_bytes) as tx
-                           FROM traffic_history
-                           WHERE source = ? AND timestamp >= ?
-                           GROUP BY t_bucket ORDER BY t_bucket""",
-                        (agg_interval, agg_interval, source, since)
-                    )
-                else:
-                    cursor.execute(
-                        "SELECT timestamp, rx_bytes, tx_bytes FROM traffic_history WHERE source = ? AND timestamp >= ? ORDER BY timestamp",
-                        (source, since)
-                    )
-            else:
-                # 'all'
-                if agg_interval:
-                    cursor.execute(
-                        """SELECT (timestamp / ?) * ? as t_bucket,
-                                  MAX(rx_bytes) as rx, MAX(tx_bytes) as tx
-                           FROM traffic_history
-                           WHERE source = ?
-                           GROUP BY t_bucket ORDER BY t_bucket""",
-                        (agg_interval, agg_interval, source)
-                    )
-                else:
-                    cursor.execute(
-                        "SELECT timestamp, rx_bytes, tx_bytes FROM traffic_history WHERE source = ? ORDER BY timestamp",
-                        (source,)
-                    )
-
-            rows = cursor.fetchall()
-            return [{"t": r[0], "rx": r[1], "tx": r[2]} for r in rows]
-    except Exception as e:
-        logging.error(f"Error querying traffic history for {source}/{period}: {e}")
-        return []
-
 
 def get_bot_config(key: str, default=None):
     try:

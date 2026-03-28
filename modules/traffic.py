@@ -150,11 +150,6 @@ async def periodic_backup_task():
         await asyncio.sleep(300)
         rx, tx = get_current_traffic_total()
         await asyncio.to_thread(save_backup_file, rx, tx)
-        # Record to persistent traffic history DB
-        try:
-            config.record_traffic_point("agent", rx, tx)
-        except Exception as e:
-            logging.error(f"Error recording traffic history: {e}")
 
 
 async def traffic_handler(message: types.Message):
