@@ -2893,6 +2893,8 @@ async def handle_sse_stream(request):
                         "cpu": stats.get("cpu", 0),
                         "ram": stats.get("ram", 0),
                         "disk": stats.get("disk", 0),
+                        "net_rx_speed": stats.get("net_rx_speed", 0),
+                        "net_tx_speed": stats.get("net_tx_speed", 0)
                     }
                 )
             try:
@@ -4152,6 +4154,8 @@ async def handle_sse_stream(request):
                         "cpu": stats.get("cpu", 0),
                         "ram": stats.get("ram", 0),
                         "disk": stats.get("disk", 0),
+                        "net_rx_speed": stats.get("net_rx_speed", 0),
+                        "net_tx_speed": stats.get("net_tx_speed", 0)
                     }
                 )
             try:

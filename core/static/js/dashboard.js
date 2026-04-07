@@ -288,7 +288,11 @@ function getNodeUiParams(node) {
 
 function updateNodesListUI(data) {
     try {
-        allNodesData = data.nodes || [];
+        allNodesData = (data.nodes || []).map(node => {
+            node.rxSpeed = node.net_rx_speed || 0;
+            node.txSpeed = node.net_tx_speed || 0;
+            return node;
+        });
         const searchInput = document.getElementById('nodeSearch');
         const query = searchInput ? searchInput.value.trim().toLowerCase() : "";
 
@@ -357,6 +361,22 @@ function updateVisibleNodes(elements, dataList) {
             diskEl.innerText = ui.disk + '%';
             diskEl.className = `text-xs font-mono font-bold ${ui.diskColor}`;
         }
+        
+        const rxElVal = el.querySelector('[data-ref="rx-val"]');
+        const rxElUnit = el.querySelector('[data-ref="rx-unit"]');
+        if (rxElVal && rxElUnit) {
+            const rxP = formatSpeed(nodeData.rxSpeed).split(' ');
+            rxElVal.innerText = rxP[0] || '0.00';
+            rxElUnit.innerText = rxP[1] || 'Kbps';
+        }
+        const txElVal = el.querySelector('[data-ref="tx-val"]');
+        const txElUnit = el.querySelector('[data-ref="tx-unit"]');
+        if (txElVal && txElUnit) {
+            const txP = formatSpeed(nodeData.txSpeed).split(' ');
+            txElVal.innerText = txP[0] || '0.00';
+            txElUnit.innerText = txP[1] || 'Kbps';
+        }
+        
         const stText = el.querySelector('[data-ref="status-text"]');
         if (stText) {
             stText.innerText = ui.statusText;
@@ -434,10 +454,18 @@ function renderNextNodeBatch() {
     const lblRam = (typeof I18N !== 'undefined' && I18N.web_label_ram) ? I18N.web_label_ram : "RAM";
     const lblDisk = (typeof I18N !== 'undefined' && I18N.web_label_disk) ? I18N.web_label_disk : "DISK";
     const lblStatus = (typeof I18N !== 'undefined' && I18N.web_label_status) ? I18N.web_label_status : "STATUS";
+    const lblRx = (typeof I18N !== 'undefined' && I18N.web_label_rx) ? I18N.web_label_rx : "ВХ";
+    const lblTx = (typeof I18N !== 'undefined' && I18N.web_label_tx) ? I18N.web_label_tx : "ИСХ";
 
     const html = batch.map(node => {
         const ui = getNodeUiParams(node);
         const displayIp = decryptData(node.ip);
+        const rxP = formatSpeed(node.rxSpeed).split(' ');
+        const rxVal = rxP[0] || '0.00';
+        const rxUnit = rxP[1] || 'Kbps';
+        const txP = formatSpeed(node.txSpeed).split(' ');
+        const txVal = txP[0] || '0.00';
+        const txUnit = txP[1] || 'Kbps';
 
         return `
         <div data-token="${escapeHtml(node.token)}" class="bg-white dark:bg-white/5 hover:bg-gray-50 dark:hover:bg-white/10 transition-all duration-200 rounded-xl border border-gray-100 dark:border-white/5 cursor-pointer shadow-sm hover:shadow-md overflow-hidden group mb-2 animate-fade-in-up" onclick="openNodeDetails('${escapeHtml(node.token)}', '${ui.statusColor}')">
@@ -458,24 +486,40 @@ function renderNextNodeBatch() {
                     </div>
                 </div>
 
-                <div class="flex items-center justify-between sm:justify-end gap-1 sm:gap-6 mt-1 sm:mt-0 pt-3 sm:pt-0 border-t border-gray-100 dark:border-white/5 sm:border-0">
+                <div class="flex items-center justify-between sm:justify-end gap-1 sm:gap-4 mt-1 sm:mt-0 pt-3 sm:pt-0 border-t border-gray-100 dark:border-white/5 sm:border-0">
                     
-                    <div class="text-center sm:text-right flex-1 sm:flex-none">
+                    <div class="text-center flex-1 sm:flex-none" style="width:42px;min-width:42px">
                         <div class="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">${lblCpu}</div>
-                        <div data-ref="cpu-val" class="text-xs font-mono font-bold ${ui.cpuColor}">${ui.cpu}%</div>
+                        <div data-ref="cpu-val" class="text-xs font-mono font-bold ${ui.cpuColor}" style="font-variant-numeric:tabular-nums">${ui.cpu}%</div>
                     </div>
 
-                    <div class="text-center sm:text-right flex-1 sm:flex-none">
+                    <div class="text-center flex-1 sm:flex-none" style="width:42px;min-width:42px">
                         <div class="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">${lblRam}</div>
-                        <div data-ref="ram-val" class="text-xs font-mono font-bold ${ui.ramColor}">${ui.ram}%</div>
+                        <div data-ref="ram-val" class="text-xs font-mono font-bold ${ui.ramColor}" style="font-variant-numeric:tabular-nums">${ui.ram}%</div>
                     </div>
 
-                    <div class="text-center sm:text-right flex-1 sm:flex-none">
+                    <div class="text-center flex-1 sm:flex-none" style="width:42px;min-width:42px">
                         <div class="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">${lblDisk}</div>
-                        <div data-ref="disk-val" class="text-xs font-mono font-bold ${ui.diskColor}">${ui.disk}%</div>
+                        <div data-ref="disk-val" class="text-xs font-mono font-bold ${ui.diskColor}" style="font-variant-numeric:tabular-nums">${ui.disk}%</div>
                     </div>
 
-                    <div class="hidden sm:block text-right ml-2 pl-3 border-l border-gray-200 dark:border-white/10 min-w-[70px]">
+                    <div class="text-center flex-1 sm:flex-none" style="width:55px;min-width:55px">
+                        <div class="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">${lblRx}</div>
+                        <div class="relative">
+                            <div data-ref="rx-val" class="text-xs font-mono font-bold text-green-500 dark:text-green-400" style="font-variant-numeric:tabular-nums">${rxVal}</div>
+                            <div data-ref="rx-unit" class="text-[9px] text-gray-400 dark:text-gray-500 uppercase font-bold absolute left-0 right-0 top-full mt-0.5">${rxUnit}</div>
+                        </div>
+                    </div>
+
+                    <div class="text-center flex-1 sm:flex-none" style="width:55px;min-width:55px">
+                        <div class="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">${lblTx}</div>
+                        <div class="relative">
+                            <div data-ref="tx-val" class="text-xs font-mono font-bold text-blue-500 dark:text-blue-400" style="font-variant-numeric:tabular-nums">${txVal}</div>
+                            <div data-ref="tx-unit" class="text-[9px] text-gray-400 dark:text-gray-500 uppercase font-bold absolute left-0 right-0 top-full mt-0.5">${txUnit}</div>
+                        </div>
+                    </div>
+
+                    <div class="hidden sm:block text-right ml-2 pl-3 border-l border-gray-200 dark:border-white/10" style="width:70px;min-width:70px">
                         <div data-ref="status-text" class="text-[10px] font-bold ${ui.statusTextClass} mb-0.5">${ui.statusText}</div>
                         <div class="text-[9px] text-gray-300 dark:text-gray-600">${lblStatus}</div>
                     </div>

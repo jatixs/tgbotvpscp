@@ -595,6 +595,7 @@ def get_top_processes(metric):
         return "n/a"
 
 def get_system_stats():
+    global LAST_TRAFFIC_STATS
     try:
         net = psutil.net_io_counters()
         mem = psutil.virtual_memory()
@@ -602,6 +603,31 @@ def get_system_stats():
         freq = psutil.cpu_freq()
         
         ext_ip = get_external_ip()
+        
+        # Calculate network speed from previous measurement
+        now = time.time()
+        net_rx_speed = 0.0
+        net_tx_speed = 0.0
+        if LAST_TRAFFIC_STATS:
+            prev_rx = LAST_TRAFFIC_STATS.get('rx', 0)
+            prev_tx = LAST_TRAFFIC_STATS.get('tx', 0)
+            prev_time = LAST_TRAFFIC_STATS.get('time', 0)
+            dt = now - prev_time
+            if 1 <= dt <= 120:
+                net_rx_speed = max(0.0, (net.bytes_recv - prev_rx) * 8 / 1024 / dt)
+                net_tx_speed = max(0.0, (net.bytes_sent - prev_tx) * 8 / 1024 / dt)
+            else:
+                # Keep previous speed if interval is abnormal
+                net_rx_speed = LAST_TRAFFIC_STATS.get('last_rx_speed', 0.0)
+                net_tx_speed = LAST_TRAFFIC_STATS.get('last_tx_speed', 0.0)
+        
+        LAST_TRAFFIC_STATS = {
+            'rx': net.bytes_recv,
+            'tx': net.bytes_sent,
+            'time': now,
+            'last_rx_speed': net_rx_speed,
+            'last_tx_speed': net_tx_speed
+        }
         
         # Measure ping: try ICMP first (faster/accurate), fallback to HTTPS if blocked
         ping_ms = None
@@ -640,6 +666,8 @@ def get_system_stats():
             "cpu_freq": freq.current if freq else 0,
             "net_rx": net.bytes_recv,
             "net_tx": net.bytes_sent,
+            "net_rx_speed": round(net_rx_speed, 2),
+            "net_tx_speed": round(net_tx_speed, 2),
             "uptime": int(time.time() - psutil.boot_time()),
             "process_cpu": get_top_processes('cpu'),
             "process_ram": get_top_processes('ram'),
