@@ -1230,7 +1230,10 @@ async def handle_heartbeat(request):
             )
     if node.get("is_restarting"):
         await nodes_db.update_node_extra(token, "is_restarting", False)
-    ip = request.transport.get_extra_info("peername")[0]
+    if request.transport is not None:
+        ip = request.transport.get_extra_info("peername")[0]
+    else:
+        ip = "127.0.0.1"
     if stats.get("external_ip"):
         ip = stats.get("external_ip")
     else:
