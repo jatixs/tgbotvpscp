@@ -113,17 +113,6 @@ document.addEventListener("DOMContentLoaded", () => {
 });
 
 function initHapticsToggle() {
-    const themeBtn = document.getElementById('themeBtn');
-    if (themeBtn && !document.getElementById('hapticsBtn')) {
-        const btn = document.createElement('button');
-        btn.id = 'hapticsBtn';
-        btn.className = 'flex lg:hidden items-center justify-center w-8 h-8 rounded-lg hover:bg-black/5 dark:hover:bg-white/10 transition text-gray-600 dark:text-gray-400 mr-1';
-        btn.onclick = toggleHaptics;
-        themeBtn.parentNode.insertBefore(btn, themeBtn);
-        
-        // Ensure consistent spacing if another button was inserted (like holiday)
-        btn.setAttribute('title', 'Toggle Vibration');
-    }
     updateHapticsUI();
 }
 
@@ -142,13 +131,25 @@ function toggleHaptics() {
 }
 
 function updateHapticsUI() {
-    const btn = document.getElementById('hapticsBtn');
-    if (!btn) return;
     const isEnabled = localStorage.getItem('haptics_enabled') !== 'false';
-    if (isEnabled) {
-        btn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-gray-900 dark:text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12h2"/><path d="M20 12h2"/><path d="M5 8l-1-1"/><path d="M19 8l1-1"/><path d="M5 16l-1 1"/><path d="M19 16l1 1"/><rect x="7" y="4" width="10" height="16" rx="2" ry="2"/><path d="M12 16h.01"/></svg>`;
-    } else {
-        btn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-gray-400 dark:text-gray-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="4" width="10" height="16" rx="2" ry="2"/><path d="M12 16h.01"/><line x1="2" y1="2" x2="22" y2="22"/></svg>`;
+    const track = document.getElementById('mHapticsTrack');
+    const thumb = document.getElementById('mHapticsThumb');
+    
+    if (track && thumb) {
+        if (isEnabled) {
+            track.classList.replace('bg-gray-200', 'bg-green-500');
+            track.classList.replace('dark:bg-gray-700', 'dark:bg-green-500');
+            thumb.style.transform = 'translateX(20px)';
+        } else {
+            track.classList.replace('bg-green-500', 'bg-gray-200');
+            track.classList.replace('dark:bg-green-500', 'dark:bg-gray-700');
+            thumb.style.transform = 'translateX(0px)';
+        }
+    }
+    const statusText = document.getElementById('mobileHapticsStatus');
+    if (statusText) {
+        statusText.innerText = isEnabled ? 'Вкл' : 'Выкл';
+        statusText.className = isEnabled ? 'text-xs font-bold uppercase text-green-500' : 'text-xs font-bold uppercase text-gray-500';
     }
 }
 
@@ -611,7 +612,12 @@ function initNotifications() {
         newClearBtn.addEventListener('click', clearNotifications);
     }
     document.addEventListener('click', (e) => {
-        if (!e.target.closest('#notifDropdown') && !e.target.closest('#notifBtn')) closeNotifications();
+        if (!e.target.closest('#notifDropdown') && !e.target.closest('#notifBtn')) {
+            if (typeof closeNotifications === 'function') closeNotifications();
+        }
+        if (!e.target.closest('#mobileSettingsDropdown') && !e.target.closest('#mobileSettingsBtn')) {
+            if (typeof closeMobileSettings === 'function') closeMobileSettings();
+        }
     });
 }
 
@@ -877,6 +883,8 @@ function toggleNotifications() {
         }
     }
 }
+window.toggleNotifications = toggleNotifications;
+window.closeNotifications = closeNotifications;
 
 function closeNotifications() {
     const d = document.getElementById('notifDropdown');
@@ -886,21 +894,78 @@ function closeNotifications() {
     }
 }
 
-function toggleTheme() {
-    const n = (themes.indexOf(currentTheme) + 1) % themes.length;
-    currentTheme = themes[n];
-    localStorage.setItem('theme', currentTheme);
-    applyThemeUI(currentTheme);
-    document.documentElement.classList.toggle('dark', currentTheme === 'dark' || (currentTheme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches));
+function toggleMobileSettings(e) {
+    if (e) e.stopPropagation();
+    const dropdown = document.getElementById('mobileSettingsDropdown');
+    if (!dropdown) return;
 
-    window.dispatchEvent(new Event('themeChanged'));
+    if (!dropdown.classList.contains('hidden')) {
+        closeMobileSettings();
+    } else {
+        if (typeof closeNotifications === 'function') closeNotifications();
+        dropdown.classList.remove('hidden');
+    }
+}
+
+function closeMobileSettings() {
+    const dropdown = document.getElementById('mobileSettingsDropdown');
+    if (dropdown) {
+        dropdown.classList.add('hidden');
+    }
+}
+window.closeMobileSettings = closeMobileSettings;
+window.toggleMobileSettings = toggleMobileSettings;
+
+function toggleTheme() {
+    const themes = ["system", "dark", "light"];
+    let currentTheme = localStorage.getItem("theme");
+    if (!currentTheme) currentTheme = "system";
+
+    const currentIndex = themes.indexOf(currentTheme);
+    const nextTheme = themes[(currentIndex + 1) % themes.length];
+
+    setThemeDirect(nextTheme, null);
+}
+
+function setThemeDirect(theme, event) {
+    if (event) event.stopPropagation();
+    localStorage.setItem("theme", theme);
+    document.documentElement.classList.toggle('dark', theme === 'dark' || (theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches));
+    applyThemeUI(theme);
+    window.dispatchEvent(new Event("themeChanged"));
 }
 
 function applyThemeUI(t) {
+    if (!t) return;
     ['iconMoon', 'iconSun', 'iconSystem'].forEach(id => document.getElementById(id)?.classList.add('hidden'));
-    if (t === 'dark') document.getElementById('iconMoon')?.classList.remove('hidden');
-    else if (t === 'light') document.getElementById('iconSun')?.classList.remove('hidden');
-    else document.getElementById('iconSystem')?.classList.remove('hidden');
+    
+    if (t === 'dark') {
+        document.getElementById('iconMoon')?.classList.remove('hidden');
+    } else if (t === 'light') {
+        document.getElementById('iconSun')?.classList.remove('hidden');
+    } else {
+        document.getElementById('iconSystem')?.classList.remove('hidden');
+    }
+    
+    // Interactive segmented control style for active theme
+    const baseClasses = ["text-gray-500", "hover:text-gray-700", "dark:text-gray-400", "dark:hover:text-gray-200", "hover:bg-gray-200", "dark:hover:bg-gray-800"];
+    const activeClasses = ["bg-white", "dark:bg-gray-600", "shadow-sm", "text-gray-900", "dark:text-white"];
+    
+    ['mThemeSys', 'mThemeDark', 'mThemeLight'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) {
+            el.classList.remove(...activeClasses);
+            el.classList.add(...baseClasses);
+        }
+    });
+
+    const activeEl = document.getElementById(
+        t === 'light' ? 'mThemeLight' : t === 'dark' ? 'mThemeDark' : 'mThemeSys'
+    );
+    if (activeEl) {
+        activeEl.classList.remove(...baseClasses);
+        activeEl.classList.add(...activeClasses);
+    }
 }
 
 function handleVisualViewportResize() {
