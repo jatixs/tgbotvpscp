@@ -656,12 +656,15 @@ def get_system_stats():
             except Exception:
                 pass
         
+        ram_used = mem.total - mem.available
+        ram_pct = round(ram_used / mem.total * 100, 1) if mem.total > 0 else 0
+        
         result = {
             "cpu": psutil.cpu_percent(interval=None),
-            "ram": mem.percent,
+            "ram": ram_pct,
             "disk": disk.percent,
             "ram_total": mem.total,
-            "ram_used": mem.total - mem.available,
+            "ram_used": ram_used,
             "disk_total": disk.total,
             "disk_free": disk.free,
             "cpu_freq": freq.current if freq else 0,

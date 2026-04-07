@@ -201,7 +201,8 @@ async def selftest_handler(message: types.Message):
 
     try:
         cpu = psutil.cpu_percent(interval=0.5)
-        ram = psutil.virtual_memory().percent
+        _mem = psutil.virtual_memory()
+        ram = round((_mem.total - _mem.available) / _mem.total * 100, 1) if _mem.total > 0 else 0
         disk = psutil.disk_usage(get_host_path("/")).percent
         uptime_seconds = time.time() - psutil.boot_time()
         uptime_str = format_uptime(uptime_seconds, lang)

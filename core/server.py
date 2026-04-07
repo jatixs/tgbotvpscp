@@ -826,9 +826,11 @@ async def handle_terminal_stats(request):
                 mem = psutil.virtual_memory()
                 disk = psutil.disk_usage(get_host_path("/"))
                 uptime = int(time.time() - psutil.boot_time())
+                ram_used = mem.total - mem.available
+                ram_pct = round(ram_used / mem.total * 100, 1) if mem.total > 0 else 0
                 return web.json_response({
                     "cpu": cpu,
-                    "ram": mem.percent,
+                    "ram": ram_pct,
                     "rom": disk.percent,
                     "uptime": uptime,
                     "ping": AGENT_PING_CACHE
@@ -3499,12 +3501,13 @@ async def agent_monitor():
     while True:
         try:
             cpu = psutil.cpu_percent(interval=None)
-            ram = psutil.virtual_memory().percent
+            mem = psutil.virtual_memory()
+            ram_pct = round((mem.total - mem.available) / mem.total * 100, 1) if mem.total > 0 else 0
             net = psutil.net_io_counters()
             point = {
                 "t": int(time.time()),
                 "c": cpu,
-                "r": ram,
+                "r": ram_pct,
                 "rx": net.bytes_recv,
                 "tx": net.bytes_sent,
             }
@@ -4854,12 +4857,13 @@ async def agent_monitor():
     while True:
         try:
             cpu = psutil.cpu_percent(interval=None)
-            ram = psutil.virtual_memory().percent
+            mem = psutil.virtual_memory()
+            ram_pct = round((mem.total - mem.available) / mem.total * 100, 1) if mem.total > 0 else 0
             net = psutil.net_io_counters()
             point = {
                 "t": int(time.time()),
                 "c": cpu,
-                "r": ram,
+                "r": ram_pct,
                 "rx": net.bytes_recv,
                 "tx": net.bytes_sent,
             }
