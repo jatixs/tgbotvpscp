@@ -501,7 +501,7 @@ async def parse_f2b_log_line(line: str) -> dict | None:
             flag, offset = await get_ip_data(ip)            
             s_now = datetime.now()
             s_tz_label = get_server_timezone_label()
-            time_str = f"⏰ Время: {s_now.strftime('%H:%M:%S')}{s_tz_label}"
+            time_str = f"{s_now.strftime('%H:%M:%S')}{s_tz_label}"
             if offset is not None:
                 try:
                     utc_now = datetime.now(timezone.utc)
