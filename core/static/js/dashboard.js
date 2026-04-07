@@ -468,7 +468,7 @@ function renderNextNodeBatch() {
         const txUnit = txP[1] || 'Kbps';
 
         return `
-        <div data-token="${escapeHtml(node.token)}" class="bg-white dark:bg-white/5 hover:bg-gray-50 dark:hover:bg-white/10 transition-all duration-200 rounded-xl border border-gray-100 dark:border-white/5 cursor-pointer shadow-sm hover:shadow-md group mb-2 animate-fade-in-up" onclick="openNodeDetails('${escapeHtml(node.token)}', '${ui.statusColor}')">
+        <div data-token="${escapeHtml(node.token)}" class="bg-white dark:bg-white/5 hover:bg-gray-50 dark:hover:bg-white/10 transition-all duration-200 rounded-xl border border-gray-100 dark:border-white/5 cursor-pointer shadow-sm hover:shadow-md group animate-fade-in-up" onclick="openNodeDetails('${escapeHtml(node.token)}', '${ui.statusColor}')">
             
             <div class="p-3 sm:p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
                 
@@ -486,7 +486,7 @@ function renderNextNodeBatch() {
                     </div>
                 </div>
 
-                <div class="flex flex-wrap sm:flex-nowrap items-center justify-between sm:justify-end gap-x-1 gap-y-5 sm:gap-4 mt-1 sm:mt-0 pt-3 sm:pt-0 border-t border-gray-100 dark:border-white/5 sm:border-0 pb-3 sm:pb-0 w-full sm:w-auto">
+                <div class="flex flex-wrap sm:flex-nowrap items-center justify-between sm:justify-end gap-x-1 gap-y-5 sm:gap-4 mt-1 sm:mt-0 pt-3 sm:pt-0 border-t border-gray-100 dark:border-white/5 sm:border-0 pb-5 sm:pb-0 w-full sm:w-auto">
                     
                     <div class="text-center flex-1 sm:flex-none" style="width:42px;min-width:42px">
                         <div class="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">${lblCpu}</div>
@@ -507,7 +507,7 @@ function renderNextNodeBatch() {
                         <div class="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">${lblRx}</div>
                         <div class="relative">
                             <div data-ref="rx-val" class="text-xs font-mono font-bold text-green-500 dark:text-green-400" style="font-variant-numeric:tabular-nums">${rxVal}</div>
-                            <div data-ref="rx-unit" class="text-[9px] text-gray-400 dark:text-gray-500 uppercase font-bold absolute left-0 right-0 top-full mt-0.5">${rxUnit}</div>
+                            <div data-ref="rx-unit" class="text-[9px] text-gray-400 dark:text-gray-500 uppercase font-bold absolute left-0 right-0 top-full mt-[-2px]">${rxUnit}</div>
                         </div>
                     </div>
 
@@ -515,7 +515,7 @@ function renderNextNodeBatch() {
                         <div class="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">${lblTx}</div>
                         <div class="relative">
                             <div data-ref="tx-val" class="text-xs font-mono font-bold text-blue-500 dark:text-blue-400" style="font-variant-numeric:tabular-nums">${txVal}</div>
-                            <div data-ref="tx-unit" class="text-[9px] text-gray-400 dark:text-gray-500 uppercase font-bold absolute left-0 right-0 top-full mt-0.5">${txUnit}</div>
+                            <div data-ref="tx-unit" class="text-[9px] text-gray-400 dark:text-gray-500 uppercase font-bold absolute left-0 right-0 top-full mt-[-2px]">${txUnit}</div>
                         </div>
                     </div>
 
@@ -804,8 +804,11 @@ function renderAgentChart(history) {
 }
 
 function formatSpeed(v) {
-    if (v === null || v === undefined) return '0 Kbps';
-    return v >= 1024 * 1024 ? (v / 1048576).toFixed(2) + ' Gbps' : (v >= 1024 ? (v / 1024).toFixed(2) + ' Mbps' : v.toFixed(2) + ' Kbps');
+    const sKbps = (typeof I18N !== 'undefined' && I18N.unit_kbps) ? I18N.unit_kbps : 'Kbps';
+    const sMbps = (typeof I18N !== 'undefined' && I18N.unit_mbps) ? I18N.unit_mbps : 'Mbps';
+    const sGbps = (typeof I18N !== 'undefined' && I18N.unit_gbps) ? I18N.unit_gbps : 'Gbps';
+    if (v === null || v === undefined) return '0 ' + sKbps;
+    return v >= 1024 * 1024 ? (v / 1048576).toFixed(2) + ' ' + sGbps : (v >= 1024 ? (v / 1024).toFixed(2) + ' ' + sMbps : v.toFixed(2) + ' ' + sKbps);
 }
 
 function formatBytes(b) {

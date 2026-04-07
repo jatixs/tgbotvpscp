@@ -70,6 +70,7 @@ document.addEventListener("DOMContentLoaded", () => {
     initSSE();
     initSessionSync();
     initHolidayMood();
+    initHapticsToggle();
     initAddNodeLogic();
     if (document.getElementById('logsContainer')) {
         if (typeof window.switchLogType === 'function') {
@@ -86,26 +87,70 @@ document.addEventListener("DOMContentLoaded", () => {
     document.body.addEventListener('touchstart', unlockHaptics, { once: true, passive: true });
     document.body.addEventListener('click', unlockHaptics, { once: true, passive: true });
 
+    window.playHaptic = function(pattern) {
+        if (navigator.vibrate && localStorage.getItem('haptics_enabled') !== 'false') {
+            navigator.vibrate(pattern);
+        }
+    };
+
     document.body.addEventListener('input', (e) => {
         if (e.target && e.target.tagName === 'INPUT' && e.target.type === 'range') {
-            if (navigator.vibrate) navigator.vibrate(5);
+            playHaptic(5);
         }
     });
 
     document.body.addEventListener('change', (e) => {
         if (e.target && e.target.tagName === 'INPUT' && (e.target.type === 'checkbox' || e.target.type === 'radio')) {
-            if (navigator.vibrate) {
-                if (e.target.checked) {
-                    navigator.vibrate([10, 30, 10]); 
-                } else {
-                    navigator.vibrate(10); 
-                }
+            if (e.target.checked) {
+                playHaptic([10, 30, 10]); 
+            } else {
+                playHaptic(10); 
             }
         }
     });
 
     pageCache.set(window.location.href, document.documentElement.outerHTML);
 });
+
+function initHapticsToggle() {
+    const themeBtn = document.getElementById('themeBtn');
+    if (themeBtn && !document.getElementById('hapticsBtn')) {
+        const btn = document.createElement('button');
+        btn.id = 'hapticsBtn';
+        btn.className = 'flex lg:hidden items-center justify-center w-8 h-8 rounded-lg hover:bg-black/5 dark:hover:bg-white/10 transition text-gray-600 dark:text-gray-400 mr-1';
+        btn.onclick = toggleHaptics;
+        themeBtn.parentNode.insertBefore(btn, themeBtn);
+        
+        // Ensure consistent spacing if another button was inserted (like holiday)
+        btn.setAttribute('title', 'Toggle Vibration');
+    }
+    updateHapticsUI();
+}
+
+function toggleHaptics() {
+    const currentState = localStorage.getItem('haptics_enabled') !== 'false';
+    localStorage.setItem('haptics_enabled', currentState ? 'false' : 'true');
+    updateHapticsUI();
+    if (!currentState) {
+        if (navigator.vibrate) navigator.vibrate([10, 30, 10]);
+        const msgOn = (typeof I18N !== 'undefined' && I18N.web_haptics_on) ? I18N.web_haptics_on : "Haptics: ON";
+        if (window.showToast) window.showToast(msgOn);
+    } else {
+        const msgOff = (typeof I18N !== 'undefined' && I18N.web_haptics_off) ? I18N.web_haptics_off : "Haptics: OFF";
+        if (window.showToast) window.showToast(msgOff);
+    }
+}
+
+function updateHapticsUI() {
+    const btn = document.getElementById('hapticsBtn');
+    if (!btn) return;
+    const isEnabled = localStorage.getItem('haptics_enabled') !== 'false';
+    if (isEnabled) {
+        btn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-gray-900 dark:text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12h2"/><path d="M20 12h2"/><path d="M5 8l-1-1"/><path d="M19 8l1-1"/><path d="M5 16l-1 1"/><path d="M19 16l1 1"/><rect x="7" y="4" width="10" height="16" rx="2" ry="2"/><path d="M12 16h.01"/></svg>`;
+    } else {
+        btn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-gray-400 dark:text-gray-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="4" width="10" height="16" rx="2" ry="2"/><path d="M12 16h.01"/><line x1="2" y1="2" x2="22" y2="22"/></svg>`;
+    }
+}
 
 function parsePageEmojis() {
     if (window.twemoji) {
@@ -879,6 +924,9 @@ function handleModalInputClick(e) {
 
 function animateModalOpen(modal, isInput = false) {
     if (!modal) return;
+
+    // Taptic engine pop-in simulation for modals/hints
+    if (window.playHaptic) playHaptic([8, 40, 10]);
 
     if (modalCloseTimer) {
         clearTimeout(modalCloseTimer);
