@@ -76,6 +76,34 @@ document.addEventListener("DOMContentLoaded", () => {
             window.switchLogType('bot');
         }
     }
+
+    // Unlock Vibration API on first interaction
+    const unlockHaptics = () => {
+        if (navigator.vibrate) navigator.vibrate(0);
+        document.body.removeEventListener('touchstart', unlockHaptics);
+        document.body.removeEventListener('click', unlockHaptics);
+    };
+    document.body.addEventListener('touchstart', unlockHaptics, { once: true, passive: true });
+    document.body.addEventListener('click', unlockHaptics, { once: true, passive: true });
+
+    document.body.addEventListener('input', (e) => {
+        if (e.target && e.target.tagName === 'INPUT' && e.target.type === 'range') {
+            if (navigator.vibrate) navigator.vibrate(5);
+        }
+    });
+
+    document.body.addEventListener('change', (e) => {
+        if (e.target && e.target.tagName === 'INPUT' && (e.target.type === 'checkbox' || e.target.type === 'radio')) {
+            if (navigator.vibrate) {
+                if (e.target.checked) {
+                    navigator.vibrate([10, 30, 10]); 
+                } else {
+                    navigator.vibrate(10); 
+                }
+            }
+        }
+    });
+
     pageCache.set(window.location.href, document.documentElement.outerHTML);
 });
 

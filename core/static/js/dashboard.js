@@ -468,7 +468,7 @@ function renderNextNodeBatch() {
         const txUnit = txP[1] || 'Kbps';
 
         return `
-        <div data-token="${escapeHtml(node.token)}" class="bg-white dark:bg-white/5 hover:bg-gray-50 dark:hover:bg-white/10 transition-all duration-200 rounded-xl border border-gray-100 dark:border-white/5 cursor-pointer shadow-sm hover:shadow-md overflow-hidden group mb-2 animate-fade-in-up" onclick="openNodeDetails('${escapeHtml(node.token)}', '${ui.statusColor}')">
+        <div data-token="${escapeHtml(node.token)}" class="bg-white dark:bg-white/5 hover:bg-gray-50 dark:hover:bg-white/10 transition-all duration-200 rounded-xl border border-gray-100 dark:border-white/5 cursor-pointer shadow-sm hover:shadow-md group mb-2 animate-fade-in-up" onclick="openNodeDetails('${escapeHtml(node.token)}', '${ui.statusColor}')">
             
             <div class="p-3 sm:p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
                 
@@ -486,7 +486,7 @@ function renderNextNodeBatch() {
                     </div>
                 </div>
 
-                <div class="flex items-center justify-between sm:justify-end gap-1 sm:gap-4 mt-1 sm:mt-0 pt-3 sm:pt-0 border-t border-gray-100 dark:border-white/5 sm:border-0">
+                <div class="flex flex-wrap sm:flex-nowrap items-center justify-between sm:justify-end gap-x-1 gap-y-5 sm:gap-4 mt-1 sm:mt-0 pt-3 sm:pt-0 border-t border-gray-100 dark:border-white/5 sm:border-0 pb-3 sm:pb-0 w-full sm:w-auto">
                     
                     <div class="text-center flex-1 sm:flex-none" style="width:42px;min-width:42px">
                         <div class="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">${lblCpu}</div>
