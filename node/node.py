@@ -261,6 +261,7 @@ elif not BOT_TOKEN and CRITICAL_ALERT_CHAT_IDS:
 
 PENDING_RESULTS = collections.deque(maxlen=50)
 LAST_TRAFFIC_STATS = {}
+_HEARTBEAT_NET_STATS = {}
 SSH_EVENTS = collections.deque(maxlen=100)
 
 # Commands that take a long time and must run in a background thread
@@ -595,7 +596,7 @@ def get_top_processes(metric):
         return "n/a"
 
 def get_system_stats():
-    global LAST_TRAFFIC_STATS
+    global _HEARTBEAT_NET_STATS
     try:
         net = psutil.net_io_counters()
         mem = psutil.virtual_memory()
@@ -604,24 +605,24 @@ def get_system_stats():
         
         ext_ip = get_external_ip()
         
-        # Calculate network speed from previous measurement
+        # Calculate network speed from previous heartbeat measurement
         now = time.time()
         net_rx_speed = 0.0
         net_tx_speed = 0.0
-        if LAST_TRAFFIC_STATS:
-            prev_rx = LAST_TRAFFIC_STATS.get('rx', 0)
-            prev_tx = LAST_TRAFFIC_STATS.get('tx', 0)
-            prev_time = LAST_TRAFFIC_STATS.get('time', 0)
+        if _HEARTBEAT_NET_STATS:
+            prev_rx = _HEARTBEAT_NET_STATS.get('rx', 0)
+            prev_tx = _HEARTBEAT_NET_STATS.get('tx', 0)
+            prev_time = _HEARTBEAT_NET_STATS.get('time', 0)
             dt = now - prev_time
             if 1 <= dt <= 120:
                 net_rx_speed = max(0.0, (net.bytes_recv - prev_rx) * 8 / 1024 / dt)
                 net_tx_speed = max(0.0, (net.bytes_sent - prev_tx) * 8 / 1024 / dt)
             else:
                 # Keep previous speed if interval is abnormal
-                net_rx_speed = LAST_TRAFFIC_STATS.get('last_rx_speed', 0.0)
-                net_tx_speed = LAST_TRAFFIC_STATS.get('last_tx_speed', 0.0)
+                net_rx_speed = _HEARTBEAT_NET_STATS.get('last_rx_speed', 0.0)
+                net_tx_speed = _HEARTBEAT_NET_STATS.get('last_tx_speed', 0.0)
         
-        LAST_TRAFFIC_STATS = {
+        _HEARTBEAT_NET_STATS = {
             'rx': net.bytes_recv,
             'tx': net.bytes_sent,
             'time': now,

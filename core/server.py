@@ -1088,6 +1088,8 @@ async def handle_dashboard(request):
                 "web_label_ram": _("web_label_ram", lang),
                 "web_label_disk": _("web_label_disk", lang),
                 "web_label_status": _("web_label_status", lang),
+                "web_label_rx": _("web_label_rx", lang),
+                "web_label_tx": _("web_label_tx", lang),
                 "modal_title_info": _("web_node_details_title", lang),
                 "web_click_copy": _("web_click_copy", lang),
                 "web_top_cpu": _("web_top_cpu", lang),
