@@ -557,8 +557,8 @@ function updateAgentStatsUI(data) {
             const progRam = document.getElementById('prog_ram');
             if (ramEl) {
                 let html = `${Math.round(data.stats.ram)}%`;
-                if (data.stats.ram_free) {
-                    html += ` <span class="text-xs font-normal opacity-60">/ ${formatBytes(data.stats.ram_free)} ${freeIcon}</span>`;
+                if (data.stats.ram_used !== undefined) {
+                    html += ` <span class="text-xs font-normal opacity-60">/ ${formatBytes(data.stats.ram_total - data.stats.ram_used)} ${freeIcon}</span>`;
                 }
                 ramEl.innerHTML = html;
                 const hintRam = document.getElementById('hint-ram');
@@ -1119,7 +1119,7 @@ function updateNodeDetailsUI(data) {
     }
 
     if (stats.ram_total) {
-        const ramUsed = stats.ram_total - (stats.ram_free || 0);
+        const ramUsed = stats.ram_used || 0;
         document.getElementById('modalNodeRam').innerText = `${formatBytes(ramUsed)} / ${formatBytes(stats.ram_total)}`;
     } else {
         document.getElementById('modalNodeRam').innerText = "-";

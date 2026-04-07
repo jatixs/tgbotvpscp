@@ -661,7 +661,7 @@ def get_system_stats():
             "ram": mem.percent,
             "disk": disk.percent,
             "ram_total": mem.total,
-            "ram_free": mem.available,
+            "ram_used": mem.total - mem.available,
             "disk_total": disk.total,
             "disk_free": disk.free,
             "cpu_freq": freq.current if freq else 0,
@@ -970,13 +970,36 @@ def execute_command(task):
             else:
                 # Use iperf3
                 is_russia = country_code == 'RU' if country_code else get_server_country() == 'RU'
-                server = get_public_iperf_server(exclude_ru=not is_russia)
-                if server:
+                
+                # Try RU servers first, fallback to global
+                server_lists_to_try = []
+                if is_russia:
+                    server_lists_to_try.append(('ru', False))    # RU servers
+                    server_lists_to_try.append(('global', True)) # Global fallback
+                else:
+                    server_lists_to_try.append(('global', True))
+                
+                speedtest_done = False
+                last_error = None
+                
+                for list_name, exclude_ru_flag in server_lists_to_try:
+                    if speedtest_done:
+                        break
+                    
+                    server = get_public_iperf_server(exclude_ru=exclude_ru_flag)
+                    if not server:
+                        logging.warning(f"No iperf3 servers found in {list_name} list")
+                        continue
+                    
+                    # Try the selected server
                     host = server.get("IP/HOST")
                     port = server.get("PORT")
                     city = server.get("SITE", "Unknown")
                     country = server.get("COUNTRY", "")
                     ping_ms = server.get("_ping", 0)
+                    
+                    dl_speed = 0.0
+                    ul_speed = 0.0
                     
                     # Download test
                     cmd_dl = ["iperf3", "-c", host, "-p", str(port), "-J", "-t", "5", "-4", "-R"]
@@ -985,10 +1008,9 @@ def execute_command(task):
                             cmd_dl, stderr=subprocess.STDOUT, timeout=30).decode()
                         dl_speed = parse_iperf_json(res_dl, 'download')
                     except subprocess.TimeoutExpired:
-                        dl_speed = 0.0
+                        logging.warning(f"DL test timeout for {host}:{port}")
                     except Exception as e:
-                        logging.error(f"DL Test failed: {e}")
-                        dl_speed = 0.0
+                        logging.error(f"DL Test failed for {host}:{port}: {e}")
                     
                     # Upload test
                     cmd_ul = ["iperf3", "-c", host, "-p", str(port), "-J", "-t", "5", "-4"]
@@ -997,39 +1019,33 @@ def execute_command(task):
                             cmd_ul, stderr=subprocess.STDOUT, timeout=30).decode()
                         ul_speed = parse_iperf_json(res_ul, 'upload')
                     except subprocess.TimeoutExpired:
-                        ul_speed = 0.0
+                        logging.warning(f"UL test timeout for {host}:{port}")
                     except Exception as e:
-                        logging.error(f"UL Test failed: {e}")
-                        ul_speed = 0.0
+                        logging.error(f"UL Test failed for {host}:{port}: {e}")
                     
-                    if dl_speed == 0.0 and ul_speed == 0.0:
-                        raise Exception("iperf3 returned zero speed or failed to parse.")
-                        
+                    if dl_speed > 0.0 or ul_speed > 0.0:
+                        result_payload = {
+                            "type": "i18n",
+                            "key": "speedtest_results",
+                            "params": {
+                                "dl": dl_speed,
+                                "ul": ul_speed,
+                                "ping": ping_ms,
+                                "server": f"{city}, {country}",
+                                "provider": host
+                            }
+                        }
+                        speedtest_done = True
+                    else:
+                        last_error = f"{host}:{port} ({list_name})"
+                        logging.warning(f"iperf3 failed on {last_error}, trying next...")
+                
+                if not speedtest_done:
                     result_payload = {
                         "type": "i18n",
-                        "key": "speedtest_results",
-                        "params": {
-                            "dl": dl_speed,
-                            "ul": ul_speed,
-                            "ping": ping_ms,
-                            "server": f"{city}, {country}",
-                            "provider": host
-                        }
+                        "key": "error_with_details",
+                        "params": {"error": f"All iperf3 servers unavailable. Last tried: {last_error or 'none found'}"}
                     }
-                else:
-                    try:
-                        res = subprocess.check_output(["ping", "-c", "3", "8.8.8.8"]).decode()
-                        result_payload = {
-                            "type": "i18n",
-                            "key": "error_with_details",
-                            "params": {"error": f"iperf3 unavailable. Ping check:\n{res}"}
-                        }
-                    except Exception as e:
-                        result_payload = {
-                            "type": "i18n",
-                            "key": "error_with_details",
-                            "params": {"error": f"Network check failed: {e}"}
-                        }
 
         elif cmd == "update":
             if os.geteuid() == 0:
