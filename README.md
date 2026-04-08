@@ -6,7 +6,6 @@
 
 <p align="center">
   <b>v1.21.0</b> — профессиональная экосистема для мониторинга и управления серверной инфраструктурой<br>
-  <b>v2.5.0-beta</b> — <i>Mobile Support Edition</i><br>
 </p>
 
 <p align="center">
