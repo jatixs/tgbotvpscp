@@ -931,8 +931,11 @@ function formatBytes(bytes) {
 }
 
 function formatSpeed(v) {
-    if (v === null || v === undefined) return '0 Kbps';
-    return v >= 1024 * 1024 ? (v / 1048576).toFixed(2) + ' Gbps' : (v >= 1024 ? (v / 1024).toFixed(2) + ' Mbps' : v.toFixed(2) + ' Kbps');
+    const sKbps = (typeof I18N !== 'undefined' && I18N.unit_kbps) ? I18N.unit_kbps : 'Kbps';
+    const sMbps = (typeof I18N !== 'undefined' && I18N.unit_mbps) ? I18N.unit_mbps : 'Mbps';
+    const sGbps = (typeof I18N !== 'undefined' && I18N.unit_gbps) ? I18N.unit_gbps : 'Gbps';
+    if (v === null || v === undefined) return '0 ' + sKbps;
+    return v >= 1024 * 1024 ? (v / 1048576).toFixed(2) + ' ' + sGbps : (v >= 1024 ? (v / 1024).toFixed(2) + ' ' + sMbps : v.toFixed(2) + ' ' + sKbps);
 }
 
 function escapeHtml(text) {

@@ -370,7 +370,7 @@ def _format_backup_line(path: str, lang: str, backup_type: str) -> str:
     return f"📦 <b>{ts}</b>\n└ {size}"
 
 
-async def start_background_tasks(_bot) -> list[asyncio.Task]:
+def start_background_tasks(_bot) -> list[asyncio.Task]:
     task = asyncio.create_task(periodic_backups_task(), name="GenericBackups")
     return [task]
 

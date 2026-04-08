@@ -26,17 +26,10 @@ os.makedirs(TRAFFIC_BACKUP_DIR, exist_ok=True)
 os.makedirs(CONFIG_BACKUP_DIR, exist_ok=True)
 os.makedirs(LOGS_BACKUP_DIR, exist_ok=True)
 os.makedirs(NODES_BACKUP_DIR, exist_ok=True)
-USERS_FILE = os.path.join(CONFIG_DIR, "users.json")
-NODES_FILE = os.path.join(CONFIG_DIR, "nodes.json")
+
+BOT_DB_PATH = os.path.join(CONFIG_DIR, "bot.db")
 REBOOT_FLAG_FILE = os.path.join(CONFIG_DIR, "reboot_flag.txt")
 RESTART_FLAG_FILE = os.path.join(CONFIG_DIR, "restart_flag.txt")
-ALERTS_CONFIG_FILE = os.path.join(CONFIG_DIR, "alerts_config.json")
-SERVICES_CONFIG_FILE = os.path.join(CONFIG_DIR, "services.json")
-USER_SETTINGS_FILE = os.path.join(CONFIG_DIR, "user_settings.json")
-SYSTEM_CONFIG_FILE = os.path.join(CONFIG_DIR, "system_config.json")
-KEYBOARD_CONFIG_FILE = os.path.join(CONFIG_DIR, "keyboard_config.json")
-WEB_AUTH_FILE = os.path.join(CONFIG_DIR, "web_auth.txt")
-SECURITY_SETTINGS_FILE = os.path.join(CONFIG_DIR, "security_settings.json")
 SECURITY_KEY_FILE = os.path.join(CONFIG_DIR, "security.key")
 
 
@@ -59,37 +52,84 @@ DATA_ENCRYPTION_KEY = load_or_create_key()
 CIPHER_SUITE = Fernet(DATA_ENCRYPTION_KEY)
 
 
-def load_encrypted_json(path: str) -> dict | list:
-    if not os.path.exists(path):
-        return {}
+import sqlite3
+
+def init_bot_db():
     try:
-        with open(path, "rb") as f:
-            data = f.read()
-        if not data:
-            return {}
-        try:
-            decrypted = CIPHER_SUITE.decrypt(data)
-            return json.loads(decrypted.decode("utf-8"))
-        except Exception:
-            return json.loads(data.decode("utf-8"))
+        with sqlite3.connect(BOT_DB_PATH) as conn:
+            cursor = conn.cursor()
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS bot_config (
+                    key TEXT PRIMARY KEY,
+                    value BLOB
+                )
+            ''')
+            conn.commit()
     except Exception as e:
-        logging.error(f"Error loading secure config {path}: {e}")
-        return {}
+        logging.error(f"Error initializing bot.db: {e}")
 
+init_bot_db()
 
-def save_encrypted_json(path: str, data: dict | list):
+def get_bot_config(key: str, default=None):
+    try:
+        with sqlite3.connect(BOT_DB_PATH) as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT value FROM bot_config WHERE key = ?", (key,))
+            row = cursor.fetchone()
+            if row:
+                try:
+                    decrypted = CIPHER_SUITE.decrypt(row[0])
+                    return json.loads(decrypted.decode("utf-8"))
+                except Exception:
+                    # Fallback for unencrypted blobs if any
+                    return json.loads(row[0].decode("utf-8"))
+    except Exception as e:
+        logging.error(f"Error loading bot config {key}: {e}")
+    return default if default is not None else {}
+
+def set_bot_config(key: str, data: dict | list):
     try:
         json_str = json.dumps(data, indent=4, ensure_ascii=False)
         encrypted = CIPHER_SUITE.encrypt(json_str.encode("utf-8"))
-        tmp_path = path + ".tmp"
-        with open(tmp_path, "wb") as f:
-            f.write(encrypted)
-            f.flush()
-            os.fsync(f.fileno())
-        os.replace(tmp_path, path)
+        with sqlite3.connect(BOT_DB_PATH) as conn:
+            cursor = conn.cursor()
+            cursor.execute("INSERT OR REPLACE INTO bot_config (key, value) VALUES (?, ?)", (key, encrypted))
+            conn.commit()
     except Exception as e:
-        logging.error(f"Error saving secure config {path}: {e}")
+        logging.error(f"Error saving bot config {key}: {e}")
 
+def _migrate_json_to_db():
+    migration_map = {
+        "users": os.path.join(CONFIG_DIR, "users.json"),
+        "alerts_config": os.path.join(CONFIG_DIR, "alerts_config.json"),
+        "services": os.path.join(CONFIG_DIR, "services.json"),
+        "user_settings": os.path.join(CONFIG_DIR, "user_settings.json"),
+        "system_config": os.path.join(CONFIG_DIR, "system_config.json"),
+        "keyboard_config": os.path.join(CONFIG_DIR, "keyboard_config.json"),
+        "security_settings": os.path.join(CONFIG_DIR, "security_settings.json"),
+        "terminal_creds": os.path.join(CONFIG_DIR, "terminal_creds.json"),
+        "dashboard_config": os.path.join(CONFIG_DIR, "dashboard_config.json"),
+    }
+    for key, file_path in migration_map.items():
+        if os.path.exists(file_path):
+            try:
+                data = {}
+                with open(file_path, "rb") as f:
+                    raw = f.read()
+                if not raw: continue
+                try:
+                    decrypted = CIPHER_SUITE.decrypt(raw)
+                    data = json.loads(decrypted.decode("utf-8"))
+                except Exception:
+                    data = json.loads(raw.decode("utf-8"))
+                
+                set_bot_config(key, data)
+                os.rename(file_path, file_path + ".bak")
+                logging.info(f"Migrated {file_path} to DB key '{key}'")
+            except Exception as e:
+                logging.error(f"Failed to migrate {file_path}: {e}")
+
+_migrate_json_to_db()
 
 DEBUG_MODE = os.environ.get("DEBUG", "false").lower() == "true"
 TOKEN = os.environ.get("TG_BOT_TOKEN")
@@ -203,46 +243,21 @@ WEB_METADATA = {}
 def load_system_config():
     global TRAFFIC_INTERVAL, BACKUP_INTERVAL, BACKUP_LAST_INTERVAL, SERVICES_INTERVAL, PING_INTERVAL, RESOURCE_CHECK_INTERVAL, CPU_THRESHOLD, RAM_THRESHOLD, DISK_THRESHOLD, RESOURCE_ALERT_COOLDOWN, NODE_OFFLINE_TIMEOUT, WEB_METADATA
     try:
-        if os.path.exists(SYSTEM_CONFIG_FILE):
-            with open(SYSTEM_CONFIG_FILE, "r", encoding="utf-8") as f:
-                data = json.load(f)
-                TRAFFIC_INTERVAL = data.get(
-                    "TRAFFIC_INTERVAL", DEFAULT_CONFIG["TRAFFIC_INTERVAL"]
-                )
-                BACKUP_INTERVAL = data.get(
-                    "BACKUP_INTERVAL", DEFAULT_CONFIG["BACKUP_INTERVAL"]
-                )
-                BACKUP_LAST_INTERVAL = data.get(
-                    "BACKUP_LAST_INTERVAL", DEFAULT_CONFIG["BACKUP_LAST_INTERVAL"]
-                )
-                SERVICES_INTERVAL = data.get(
-                    "SERVICES_INTERVAL", DEFAULT_CONFIG["SERVICES_INTERVAL"]
-                )
-                PING_INTERVAL = data.get(
-                    "PING_INTERVAL", DEFAULT_CONFIG["PING_INTERVAL"]
-                )
-                RESOURCE_CHECK_INTERVAL = data.get(
-                    "RESOURCE_CHECK_INTERVAL", DEFAULT_CONFIG["RESOURCE_CHECK_INTERVAL"]
-                )
-                CPU_THRESHOLD = data.get(
-                    "CPU_THRESHOLD", DEFAULT_CONFIG["CPU_THRESHOLD"]
-                )
-                RAM_THRESHOLD = data.get(
-                    "RAM_THRESHOLD", DEFAULT_CONFIG["RAM_THRESHOLD"]
-                )
-                DISK_THRESHOLD = data.get(
-                    "DISK_THRESHOLD", DEFAULT_CONFIG["DISK_THRESHOLD"]
-                )
-                RESOURCE_ALERT_COOLDOWN = data.get(
-                    "RESOURCE_ALERT_COOLDOWN", DEFAULT_CONFIG["RESOURCE_ALERT_COOLDOWN"]
-                )
-                NODE_OFFLINE_TIMEOUT = data.get(
-                    "NODE_OFFLINE_TIMEOUT", DEFAULT_CONFIG["NODE_OFFLINE_TIMEOUT"]
-                )
-                # --- LOAD METADATA ---
-                WEB_METADATA = data.get("WEB_METADATA", {})
-                # ---------------------
-                logging.info("System config loaded successfully.")
+        data = get_bot_config("system_config", {})
+        if data:
+            TRAFFIC_INTERVAL = data.get("TRAFFIC_INTERVAL", DEFAULT_CONFIG["TRAFFIC_INTERVAL"])
+            BACKUP_INTERVAL = data.get("BACKUP_INTERVAL", DEFAULT_CONFIG["BACKUP_INTERVAL"])
+            BACKUP_LAST_INTERVAL = data.get("BACKUP_LAST_INTERVAL", DEFAULT_CONFIG["BACKUP_LAST_INTERVAL"])
+            SERVICES_INTERVAL = data.get("SERVICES_INTERVAL", DEFAULT_CONFIG["SERVICES_INTERVAL"])
+            PING_INTERVAL = data.get("PING_INTERVAL", DEFAULT_CONFIG["PING_INTERVAL"])
+            RESOURCE_CHECK_INTERVAL = data.get("RESOURCE_CHECK_INTERVAL", DEFAULT_CONFIG["RESOURCE_CHECK_INTERVAL"])
+            CPU_THRESHOLD = data.get("CPU_THRESHOLD", DEFAULT_CONFIG["CPU_THRESHOLD"])
+            RAM_THRESHOLD = data.get("RAM_THRESHOLD", DEFAULT_CONFIG["RAM_THRESHOLD"])
+            DISK_THRESHOLD = data.get("DISK_THRESHOLD", DEFAULT_CONFIG["DISK_THRESHOLD"])
+            RESOURCE_ALERT_COOLDOWN = data.get("RESOURCE_ALERT_COOLDOWN", DEFAULT_CONFIG["RESOURCE_ALERT_COOLDOWN"])
+            NODE_OFFLINE_TIMEOUT = data.get("NODE_OFFLINE_TIMEOUT", DEFAULT_CONFIG["NODE_OFFLINE_TIMEOUT"])
+            WEB_METADATA = data.get("WEB_METADATA", {})
+            logging.info("System config loaded successfully from bot.db.")
     except Exception as e:
         logging.error(f"Error loading system config: {e}")
 
@@ -286,24 +301,25 @@ def save_system_config(new_config: dict):
             "DISK_THRESHOLD": DISK_THRESHOLD,
             "RESOURCE_ALERT_COOLDOWN": RESOURCE_ALERT_COOLDOWN,
             "NODE_OFFLINE_TIMEOUT": NODE_OFFLINE_TIMEOUT,
-            "WEB_METADATA": WEB_METADATA, # SAVE METADATA
+            "WEB_METADATA": WEB_METADATA,
         }
-        with open(SYSTEM_CONFIG_FILE, "w", encoding="utf-8") as f:
-            json.dump(config_to_save, f, indent=4, ensure_ascii=False)
+        set_bot_config("system_config", config_to_save)
         logging.info("System config saved.")
     except Exception as e:
         logging.error(f"Error saving system config: {e}")
 
 
 def load_keyboard_config():
-    global KEYBOARD_CONFIG  # noqa: F824
+    global KEYBOARD_CONFIG
     try:
-        data = load_encrypted_json(KEYBOARD_CONFIG_FILE)
+        data = get_bot_config("keyboard_config", {})
         if data:
-            KEYBOARD_CONFIG.update(data)
-            if "enable_nodes" not in KEYBOARD_CONFIG:
-                KEYBOARD_CONFIG["enable_nodes"] = True
-            logging.info("Keyboard config loaded (secure).")
+            new_config = KEYBOARD_CONFIG.copy()
+            new_config.update(data)
+            if "enable_nodes" not in new_config:
+                new_config["enable_nodes"] = True
+            KEYBOARD_CONFIG = new_config            
+            logging.info("Keyboard config loaded from bot.db.")
         else:
             logging.info("Keyboard config not found or empty, using defaults.")
     except Exception as e:
@@ -311,13 +327,12 @@ def load_keyboard_config():
 
 
 def save_keyboard_config(new_config: dict):
-    # global KEYBOARD_CONFIG - dict is mutable
     try:
         for key in DEFAULT_KEYBOARD_CONFIG:
             if key in new_config:
                 KEYBOARD_CONFIG[key] = bool(new_config[key])
-        save_encrypted_json(KEYBOARD_CONFIG_FILE, KEYBOARD_CONFIG)
-        logging.info("Keyboard config saved (secure).")
+        set_bot_config("keyboard_config", KEYBOARD_CONFIG)
+        logging.info("Keyboard config saved to bot.db.")
     except Exception as e:
         logging.error(f"Error saving keyboard config: {e}")
 
@@ -373,7 +388,18 @@ def setup_logging(log_directory, log_filename_prefix):
 
 
 SENTRY_DSN = os.environ.get("SENTRY_DSN")
-DB_URL = f"sqlite://{os.path.join(CONFIG_DIR, 'nodes.db')}"
+
+OLD_DB_URL = os.path.join(CONFIG_DIR, 'nodes.db')
+NEW_DB_URL = os.path.join(CONFIG_DIR, 'node.db')
+if os.path.exists(OLD_DB_URL) and not os.path.exists(NEW_DB_URL):
+    try:
+        os.rename(OLD_DB_URL, NEW_DB_URL)
+        logging.info(f"Database renamed from {OLD_DB_URL} to {NEW_DB_URL}")
+    except Exception as e:
+        logging.error(f"Failed to rename nodes.db: {e}")
+        NEW_DB_URL = OLD_DB_URL
+
+DB_URL = f"sqlite://{NEW_DB_URL}"
 TORTOISE_ORM = {
     "connections": {"default": DB_URL},
     "apps": {

@@ -5,11 +5,30 @@
 <h1 align="center">📝 Telegram VPS Management Bot — Список изменений</h1>
 
 <p align="center">
-	<img src="https://img.shields.io/badge/version-v1.20.0-blue?style=flat-square" alt="Version 1.20.0"/>
-	<img src="https://img.shields.io/badge/build-70-purple?style=flat-square" alt="Build 70"/>
-	<img src="https://img.shields.io/badge/date-Март%2015%202026-green?style=flat-square" alt="Date March 15 2026"/>
+	<img src="https://img.shields.io/badge/version-v1.21.0-blue?style=flat-square" alt="Version 1.21.0"/>
+	<img src="https://img.shields.io/badge/build-71-purple?style=flat-square" alt="Build 71"/>
+	<img src="https://img.shields.io/badge/date-Апрель%2008%202026-green?style=flat-square" alt="Date April 08 2026"/>
 	<img src="https://img.shields.io/badge/status-stable-green?style=flat-square" alt="Status Stable"/>
 </p>
+
+---
+## [1.21.0] - 2026-04-08
+
+### 🚀 Добавлено:
+* **Web Terminal (VNC):** Полноценный защищенный веб-терминал для управления сервером прямо из браузера (с поддержкой WebSocket).
+* **Database (bot.db):** Миграция всех конфигурационных JSON-файлов в единую зашифрованную SQLite базу данных для повышенной надежности.
+* **Шифрование:** Настройки терминала и системные конфигурации теперь надежно зашифрованы алгоритмом Fernet (AES).
+* **PWA:** Добавление возможности виброотклика (тактильная отдача) при взаимодействии с элементами WebUI.
+* **Network Monitoring:** Добавление отображения скорости на сетевом интерфейсе нод.
+
+### ✨ Улучшено:
+* **Web UI (Мобильная версия):** Полностью переработана адаптивность веб-терминала для мобильных устройств (интерактивная клавиатура Termius-style, обработка `100dvh`).
+* **Мониторинг:** Добавлена живая статистика потребления ресурсов сервера непосредственно в веб-терминале (CPU, RAM, ROM, Uptime, Ping).
+* **Дизайн:** Обновлен внешний вид терминала на десктопе, убраны лишние рамки и добавлено контекстное меню с поддержкой копирования/вставки.
+
+### 🔧 Исправлено:
+* **Статистика ОЗУ:** Исправление логики посчёта свободного и занятого пространства RAM.
+* **Общее:** Мелкие исправления и багфиксы.
 
 ---
 ## [1.20.0] - 2026-03-15

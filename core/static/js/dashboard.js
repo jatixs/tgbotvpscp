@@ -288,7 +288,11 @@ function getNodeUiParams(node) {
 
 function updateNodesListUI(data) {
     try {
-        allNodesData = data.nodes || [];
+        allNodesData = (data.nodes || []).map(node => {
+            node.rxSpeed = node.net_rx_speed || 0;
+            node.txSpeed = node.net_tx_speed || 0;
+            return node;
+        });
         const searchInput = document.getElementById('nodeSearch');
         const query = searchInput ? searchInput.value.trim().toLowerCase() : "";
 
@@ -357,6 +361,22 @@ function updateVisibleNodes(elements, dataList) {
             diskEl.innerText = ui.disk + '%';
             diskEl.className = `text-xs font-mono font-bold ${ui.diskColor}`;
         }
+        
+        const rxElVal = el.querySelector('[data-ref="rx-val"]');
+        const rxElUnit = el.querySelector('[data-ref="rx-unit"]');
+        if (rxElVal && rxElUnit) {
+            const rxP = formatSpeed(nodeData.rxSpeed).split(' ');
+            rxElVal.innerText = rxP[0] || '0.00';
+            rxElUnit.innerText = rxP[1] || 'Kbps';
+        }
+        const txElVal = el.querySelector('[data-ref="tx-val"]');
+        const txElUnit = el.querySelector('[data-ref="tx-unit"]');
+        if (txElVal && txElUnit) {
+            const txP = formatSpeed(nodeData.txSpeed).split(' ');
+            txElVal.innerText = txP[0] || '0.00';
+            txElUnit.innerText = txP[1] || 'Kbps';
+        }
+        
         const stText = el.querySelector('[data-ref="status-text"]');
         if (stText) {
             stText.innerText = ui.statusText;
@@ -403,6 +423,19 @@ function filterAndRenderNodes() {
     renderNodesList();
 }
 
+function updateNodesScrollMode(container, count) {
+    if (count > 3) {
+        // На мобильных карточки выше (flex-col), нужен больший лимит
+        const w = window.innerWidth;
+        const maxH = w < 640 ? '500px' : w < 1024 ? '420px' : '320px';
+        container.style.maxHeight = maxH;
+        container.classList.add('overflow-y-auto', 'custom-scrollbar');
+    } else {
+        container.style.maxHeight = '';
+        container.classList.remove('overflow-y-auto', 'custom-scrollbar');
+    }
+}
+
 function renderNodesList() {
     const container = document.getElementById('nodesList');
     if (!container) return;
@@ -414,11 +447,13 @@ function renderNodesList() {
             emptyText = (typeof I18N !== 'undefined' && I18N.web_search_nothing_found) ? I18N.web_search_nothing_found : "Nothing found";
         }
         container.innerHTML = `<div class="text-center py-8 text-gray-400 dark:text-gray-500 text-sm">${emptyText}</div>`;
+        updateNodesScrollMode(container, 0);
         return;
     }
 
     container.innerHTML = '';
     renderedCount = 0;
+    updateNodesScrollMode(container, currentRenderList.length);
     renderNextNodeBatch();
 }
 
@@ -434,13 +469,21 @@ function renderNextNodeBatch() {
     const lblRam = (typeof I18N !== 'undefined' && I18N.web_label_ram) ? I18N.web_label_ram : "RAM";
     const lblDisk = (typeof I18N !== 'undefined' && I18N.web_label_disk) ? I18N.web_label_disk : "DISK";
     const lblStatus = (typeof I18N !== 'undefined' && I18N.web_label_status) ? I18N.web_label_status : "STATUS";
+    const lblRx = (typeof I18N !== 'undefined' && I18N.web_label_rx) ? I18N.web_label_rx : "ВХ";
+    const lblTx = (typeof I18N !== 'undefined' && I18N.web_label_tx) ? I18N.web_label_tx : "ИСХ";
 
     const html = batch.map(node => {
         const ui = getNodeUiParams(node);
         const displayIp = decryptData(node.ip);
+        const rxP = formatSpeed(node.rxSpeed).split(' ');
+        const rxVal = rxP[0] || '0.00';
+        const rxUnit = rxP[1] || 'Kbps';
+        const txP = formatSpeed(node.txSpeed).split(' ');
+        const txVal = txP[0] || '0.00';
+        const txUnit = txP[1] || 'Kbps';
 
         return `
-        <div data-token="${escapeHtml(node.token)}" class="bg-white dark:bg-white/5 hover:bg-gray-50 dark:hover:bg-white/10 transition-all duration-200 rounded-xl border border-gray-100 dark:border-white/5 cursor-pointer shadow-sm hover:shadow-md overflow-hidden group mb-2 animate-fade-in-up" onclick="openNodeDetails('${escapeHtml(node.token)}', '${ui.statusColor}')">
+        <div data-token="${escapeHtml(node.token)}" class="bg-white dark:bg-white/5 hover:bg-gray-50 dark:hover:bg-white/10 transition-all duration-200 rounded-xl border border-gray-100 dark:border-white/5 cursor-pointer shadow-sm hover:shadow-md group animate-fade-in-up" onclick="openNodeDetails('${escapeHtml(node.token)}', '${ui.statusColor}')">
             
             <div class="p-3 sm:p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
                 
@@ -458,24 +501,40 @@ function renderNextNodeBatch() {
                     </div>
                 </div>
 
-                <div class="flex items-center justify-between sm:justify-end gap-1 sm:gap-6 mt-1 sm:mt-0 pt-3 sm:pt-0 border-t border-gray-100 dark:border-white/5 sm:border-0">
+                <div class="flex flex-wrap sm:flex-nowrap items-center justify-between sm:justify-end gap-x-1 gap-y-5 sm:gap-4 mt-1 sm:mt-0 pt-3 sm:pt-0 border-t border-gray-100 dark:border-white/5 sm:border-0 pb-5 sm:pb-0 w-full sm:w-auto">
                     
-                    <div class="text-center sm:text-right flex-1 sm:flex-none">
+                    <div class="text-center flex-1 sm:flex-none" style="width:42px;min-width:42px">
                         <div class="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">${lblCpu}</div>
-                        <div data-ref="cpu-val" class="text-xs font-mono font-bold ${ui.cpuColor}">${ui.cpu}%</div>
+                        <div data-ref="cpu-val" class="text-xs font-mono font-bold ${ui.cpuColor}" style="font-variant-numeric:tabular-nums">${ui.cpu}%</div>
                     </div>
 
-                    <div class="text-center sm:text-right flex-1 sm:flex-none">
+                    <div class="text-center flex-1 sm:flex-none" style="width:42px;min-width:42px">
                         <div class="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">${lblRam}</div>
-                        <div data-ref="ram-val" class="text-xs font-mono font-bold ${ui.ramColor}">${ui.ram}%</div>
+                        <div data-ref="ram-val" class="text-xs font-mono font-bold ${ui.ramColor}" style="font-variant-numeric:tabular-nums">${ui.ram}%</div>
                     </div>
 
-                    <div class="text-center sm:text-right flex-1 sm:flex-none">
+                    <div class="text-center flex-1 sm:flex-none" style="width:42px;min-width:42px">
                         <div class="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">${lblDisk}</div>
-                        <div data-ref="disk-val" class="text-xs font-mono font-bold ${ui.diskColor}">${ui.disk}%</div>
+                        <div data-ref="disk-val" class="text-xs font-mono font-bold ${ui.diskColor}" style="font-variant-numeric:tabular-nums">${ui.disk}%</div>
                     </div>
 
-                    <div class="hidden sm:block text-right ml-2 pl-3 border-l border-gray-200 dark:border-white/10 min-w-[70px]">
+                    <div class="text-center flex-1 sm:flex-none" style="width:55px;min-width:55px">
+                        <div class="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">${lblRx}</div>
+                        <div class="relative">
+                            <div data-ref="rx-val" class="text-xs font-mono font-bold text-green-500 dark:text-green-400" style="font-variant-numeric:tabular-nums">${rxVal}</div>
+                            <div data-ref="rx-unit" class="text-[9px] text-gray-400 dark:text-gray-500 uppercase font-bold absolute left-0 right-0 top-full mt-[-2px]">${rxUnit}</div>
+                        </div>
+                    </div>
+
+                    <div class="text-center flex-1 sm:flex-none" style="width:55px;min-width:55px">
+                        <div class="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">${lblTx}</div>
+                        <div class="relative">
+                            <div data-ref="tx-val" class="text-xs font-mono font-bold text-blue-500 dark:text-blue-400" style="font-variant-numeric:tabular-nums">${txVal}</div>
+                            <div data-ref="tx-unit" class="text-[9px] text-gray-400 dark:text-gray-500 uppercase font-bold absolute left-0 right-0 top-full mt-[-2px]">${txUnit}</div>
+                        </div>
+                    </div>
+
+                    <div class="hidden sm:block text-right ml-2 pl-3 border-l border-gray-200 dark:border-white/10" style="width:70px;min-width:70px">
                         <div data-ref="status-text" class="text-[10px] font-bold ${ui.statusTextClass} mb-0.5">${ui.statusText}</div>
                         <div class="text-[9px] text-gray-300 dark:text-gray-600">${lblStatus}</div>
                     </div>
@@ -513,8 +572,8 @@ function updateAgentStatsUI(data) {
             const progRam = document.getElementById('prog_ram');
             if (ramEl) {
                 let html = `${Math.round(data.stats.ram)}%`;
-                if (data.stats.ram_free) {
-                    html += ` <span class="text-xs font-normal opacity-60">/ ${formatBytes(data.stats.ram_free)} ${freeIcon}</span>`;
+                if (data.stats.ram_used !== undefined) {
+                    html += ` <span class="text-xs font-normal opacity-60">/ ${formatBytes(data.stats.ram_total - data.stats.ram_used)} ${freeIcon}</span>`;
                 }
                 ramEl.innerHTML = html;
                 const hintRam = document.getElementById('hint-ram');
@@ -760,8 +819,11 @@ function renderAgentChart(history) {
 }
 
 function formatSpeed(v) {
-    if (v === null || v === undefined) return '0 Kbps';
-    return v >= 1024 * 1024 ? (v / 1048576).toFixed(2) + ' Gbps' : (v >= 1024 ? (v / 1024).toFixed(2) + ' Mbps' : v.toFixed(2) + ' Kbps');
+    const sKbps = (typeof I18N !== 'undefined' && I18N.unit_kbps) ? I18N.unit_kbps : 'Kbps';
+    const sMbps = (typeof I18N !== 'undefined' && I18N.unit_mbps) ? I18N.unit_mbps : 'Mbps';
+    const sGbps = (typeof I18N !== 'undefined' && I18N.unit_gbps) ? I18N.unit_gbps : 'Gbps';
+    if (v === null || v === undefined) return '0 ' + sKbps;
+    return v >= 1024 * 1024 ? (v / 1048576).toFixed(2) + ' ' + sGbps : (v >= 1024 ? (v / 1024).toFixed(2) + ' ' + sMbps : v.toFixed(2) + ' ' + sKbps);
 }
 
 function formatBytes(b) {
@@ -1075,7 +1137,7 @@ function updateNodeDetailsUI(data) {
     }
 
     if (stats.ram_total) {
-        const ramUsed = stats.ram_total - (stats.ram_free || 0);
+        const ramUsed = stats.ram_used || 0;
         document.getElementById('modalNodeRam').innerText = `${formatBytes(ramUsed)} / ${formatBytes(stats.ram_total)}`;
     } else {
         document.getElementById('modalNodeRam').innerText = "-";
