@@ -148,19 +148,12 @@ def get_speedtest_mode():
 def run_ookla_speedtest():
     """Run Ookla Speedtest CLI and return result dict."""
     cmd = ["speedtest", "--accept-license", "--accept-gdpr", "--format=json"]
-    proc = None
+    
     try:
-        # FIXED: Use Popen + communicate() for explicit process lifecycle control
-        proc = subprocess.Popen(
-            cmd,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            start_new_session=True  # Create new process group for clean kill
-        )
-        stdout, stderr = proc.communicate(timeout=120)
+        result = subprocess.run(cmd, capture_output=True, timeout=120)
         
-        if proc.returncode == 0:
-            output = stdout.decode('utf-8', errors='ignore')
+        if result.returncode == 0:
+            output = result.stdout.decode('utf-8', errors='ignore')
             data = json.loads(output)
             
             download_speed = data.get("download", {}).get("bandwidth", 0) / 125000
@@ -181,17 +174,9 @@ def run_ookla_speedtest():
                 "url": result_url
             }
         else:
-            error = stderr.decode('utf-8', errors='ignore') or stdout.decode('utf-8', errors='ignore')
+            error = result.stderr.decode('utf-8', errors='ignore') or result.stdout.decode('utf-8', errors='ignore')
             return {"success": False, "error": error[:500]}
     except subprocess.TimeoutExpired:
-        # FIXED: Kill zombie process and its entire process group on timeout
-        if proc is not None:
-            try:
-                import signal
-                os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
-            except (ProcessLookupError, PermissionError, OSError):
-                proc.kill()
-            proc.wait()  # Reap zombie
         return {"success": False, "error": "Timeout (120s)"}
     except json.JSONDecodeError as e:
         return {"success": False, "error": f"JSON parse error: {e}"}
@@ -200,23 +185,6 @@ def run_ookla_speedtest():
 
 CONF = load_config()
 DEBUG_MODE = CONF.get("DEBUG", "false").lower() == "true"
-
-
-def mask_sensitive_output(text):
-    """Mask tokens, passwords, and IPs from output before sending to agent server."""
-    if not isinstance(text, str):
-        return text
-    # Mask hex tokens (32-64 chars)
-    text = re.sub(r'\b[a-fA-F0-9]{32,64}\b', '[REDACTED_TOKEN]', text)
-    # Mask IP addresses (keep localhost/0.0.0.0)
-    text = re.sub(
-        r'\b(?!127\.0\.0\.1|0\.0\.0\.0)(\d{1,3}\.){3}\d{1,3}\b',
-        '[REDACTED_IP]', text
-    )
-    # Mask password-like patterns in key=value format
-    text = re.sub(r'(?i)(password|passwd|pass|token|secret|key)\s*[=:]\s*\S+',
-                  r'\1=[REDACTED]', text)
-    return text
 
 class RedactingFormatter(logging.Formatter):
     def format(self, record):
@@ -422,18 +390,21 @@ def get_external_ip():
         except Exception:
             continue
     
-    # Fallback: use stdlib urllib instead of fragile subprocess curl
     try:
-        import urllib.request
-        req = urllib.request.Request("https://ifconfig.me/ip", headers={"User-Agent": "curl/7.0"})
-        response = urllib.request.urlopen(req, timeout=5)
-        res = response.read().decode().strip()
+        # Security: Use exec instead of shell to prevent injection
+        proc = subprocess.Popen(
+            ["curl", "-4", "-s", "--max-time", "5", "ifconfig.me"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE
+        )
+        stdout, _ = proc.communicate()
+        res = stdout.decode().strip()
         if re.match(r"^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$", res):
             EXTERNAL_IP_CACHE = res
-            logging.info(f"External IP updated (urllib): {res}")
+            logging.info(f"External IP updated (curl): {res}")
             return res
     except Exception as e:
-        logging.debug(f"Failed to get IP via urllib fallback: {e}")
+        logging.debug(f"Failed to get IP via curl: {e}")
 
     logging.warning("Could not determine external IP locally. Delegating to Agent Server.")
     return None
@@ -1090,9 +1061,9 @@ def execute_command(task):
 
         elif cmd == "update":
             if os.geteuid() == 0:
-                base_cmd = "DEBIAN_FRONTEND=noninteractive apt update && DEBIAN_FRONTEND=noninteractive apt-get --only-upgrade install -y && apt autoremove -y"
+                base_cmd = "DEBIAN_FRONTEND=noninteractive apt update && DEBIAN_FRONTEND=noninteractive apt upgrade -y && apt autoremove -y"
             else:
-                base_cmd = "sudo DEBIAN_FRONTEND=noninteractive apt update && sudo DEBIAN_FRONTEND=noninteractive apt-get --only-upgrade install -y && sudo apt autoremove -y"
+                base_cmd = "sudo DEBIAN_FRONTEND=noninteractive apt update && sudo DEBIAN_FRONTEND=noninteractive apt upgrade -y && sudo apt autoremove -y"
 
             try:
                 result = subprocess.run(
@@ -1106,7 +1077,7 @@ def execute_command(task):
                         "type": "i18n",
                         "key": "update_success",
                         "params": {
-                            "output": mask_sensitive_output(html.escape((result.stdout or "")[-2000:]))
+                            "output": html.escape((result.stdout or "")[-2000:])
                         }
                     }
                 else:
@@ -1116,7 +1087,7 @@ def execute_command(task):
                         "key": "update_fail",
                         "params": {
                             "code": result.returncode,
-                            "error": mask_sensitive_output(html.escape(error_text[-2000:]))
+                            "error": html.escape(error_text[-2000:])
                         }
                     }
             except subprocess.TimeoutExpired:
