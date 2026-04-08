@@ -801,7 +801,7 @@ html.dark .monitor-link-btn:hover {
 	/* Уменьшаем размер шрифтов в бейджах для компактности */
 	#agentPingBadge span:first-child {
 		font-size: 0.55rem !important;
-	}А
+	}
 	#agentPing, #agentIp {
 		font-size: 0.625rem !important;
 	}
