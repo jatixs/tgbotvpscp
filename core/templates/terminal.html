@@ -1,0 +1,558 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>{{ web_terminal_title }} | {{ web_brand_name }}</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0">
+    <meta name="theme-color" content="#111827">
+    
+    <link rel="icon" type="image/png" sizes="32x32" href="/static/favicons/favicon-32x32.png">
+    <link rel="icon" type="image/x-icon" href="/static/favicons/favicon.ico">
+    
+    <link rel="stylesheet" href="/static/css/main.css?v={{ web_version }}">
+    <script src="https://unpkg.com/twemoji@latest/dist/twemoji.min.js" crossorigin="anonymous"></script>
+    
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.css" />
+    <script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xterm-addon-web-links@0.9.0/lib/xterm-addon-web-links.js"></script>
+    
+    <style>
+        body, html {
+            height: 100%;
+            margin: 0;
+            background-color: #111827; 
+            color: #f3f4f6;
+            font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            overflow: hidden;
+        }
+        
+        #terminal-container {
+            width: 100%;
+            height: calc(100vh - 50px);
+            padding: 10px;
+            box-sizing: border-box;
+            background: #000;
+        }
+        
+        .xterm .xterm-viewport {
+            border-radius: 8px;
+        }
+        
+        @media (min-width: 768px) {
+            #mobileKeyboard {
+                display: none !important;
+            }
+        }
+    </style>
+</head>
+<body class="bg-gray-900 flex flex-col font-sans" style="height: 100vh; height: 100dvh; position: fixed; inset: 0; overflow: hidden; margin: 0; padding: 0;">
+    
+    <div class="h-[50px] bg-gray-800 flex items-center justify-between px-3 sm:px-4 shrink-0 shadow-lg z-10 w-full overflow-hidden">
+        <div class="flex items-center gap-2 sm:gap-3 min-w-0 shrink">
+            <span class="font-bold text-[15px] sm:text-lg text-blue-400 whitespace-nowrap truncate min-w-0">
+                {{ web_terminal_title }}
+            </span>
+            <span id="statusBadge" class="px-1.5 sm:px-2 py-0.5 rounded text-[9px] sm:text-[10px] uppercase font-bold bg-gray-700 text-gray-300 shrink-0">
+                {{ web_terminal_status_disconnected }}
+            </span>
+        </div>
+        
+        <div class="flex items-center gap-1.5 sm:gap-3 ml-auto shrink-0">
+            <!-- Stats Bar -->
+            <div class="hidden md:flex items-center gap-3 text-[10px] uppercase font-mono text-gray-400 bg-black/40 px-3 h-8 rounded-lg shadow-inner">
+                <div class="flex items-center gap-1"><span class="tracking-wide">CPU</span><span id="statCpu" class="text-white font-medium min-w-[2.2rem] text-right">--%</span></div>
+                <div class="w-px h-3 bg-gray-700"></div>
+                <div class="flex items-center gap-1"><span class="tracking-wide">RAM</span><span id="statRam" class="text-white font-medium min-w-[2.2rem] text-right">--%</span></div>
+                <div class="w-px h-3 bg-gray-700"></div>
+                <div class="flex items-center gap-1"><span class="tracking-wide">ROM</span><span id="statRom" class="text-white font-medium min-w-[2.2rem] text-right">--%</span></div>
+                <div class="w-px h-3 bg-gray-700"></div>
+                <div class="flex items-center gap-1"><span class="tracking-wide">UP</span><span id="statUptime" class="text-white font-medium min-w-[3rem] text-right">--</span></div>
+                <div class="w-px h-3 bg-gray-700"></div>
+                <div class="flex items-center gap-1"><span class="tracking-wide text-yellow-500/80">PING</span><span id="statPing" class="text-yellow-400 font-medium min-w-[2.5rem] text-right">--ms</span></div>
+            </div>
+            
+            <!-- Tools and Actions -->
+            <div class="flex items-center gap-1.5 sm:gap-2">
+                <button onclick="document.getElementById('helpModal').classList.remove('hidden')" class="w-7 h-7 sm:w-8 sm:h-8 bg-gray-700 hover:bg-gray-600 rounded-lg text-white transition flex items-center justify-center shadow-sm shrink-0" title="Help / Hotkeys">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                </button>
+                <button id="btnSettings" onclick="document.getElementById('connectModal').classList.remove('hidden')" class="h-7 sm:h-8 px-2 sm:px-3 bg-gray-700 hover:bg-gray-600 rounded-lg text-[10px] sm:text-sm text-white font-medium transition flex items-center gap-1.5 shadow-sm shrink-0">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5 sm:h-4 sm:w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                    </svg>
+                    <span class="hidden sm:inline">Настройки</span>
+                </button>
+                <button id="btnDisconnect" onclick="disconnect()" class="hidden h-7 sm:h-8 px-2 sm:px-3 bg-red-600 hover:bg-red-700 text-white rounded-lg text-[10px] sm:text-sm font-bold transition shadow-sm shrink-0 items-center justify-center gap-1">
+                    <span class="hidden sm:inline">{{ web_terminal_disconnect }}</span>
+                    <svg class="w-3.5 h-3.5 sm:hidden" stroke="currentColor" fill="none" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path></svg>
+                </button>
+            </div>
+        </div>
+    </div>
+    
+    <div id="terminal-container" class="flex-1 w-full relative">
+        <div id="termDiv" class="w-full h-full"></div>
+    </div>
+
+    <!-- Mobile Termius Keyboard -->
+    <div id="mobileKeyboard" class="flex bg-gray-800 border-t border-gray-700 w-full overflow-x-auto custom-scrollbar items-center shrink-0 z-20" style="height: 44px; min-height: 44px;">
+        <button onmousedown="event.preventDefault(); term.focus();" class="px-4 h-full text-sm font-bold text-gray-400 hover:bg-gray-700 border-r border-gray-700 shrink-0">⌨️</button>
+        <button onmousedown="event.preventDefault(); ws&&ws.send('\x1b');" class="px-5 h-full text-[13px] font-bold text-gray-300 hover:text-white hover:bg-gray-700 border-r border-gray-700 shrink-0">ESC</button>
+        <button id="btnCtrl" onmousedown="event.preventDefault(); toggleCtrlMode();" class="px-5 h-full text-[13px] font-bold text-gray-300 hover:text-white hover:bg-gray-700 border-r border-gray-700 shrink-0">CTRL</button>
+        <button onmousedown="event.preventDefault(); ws&&ws.send('\x09');" class="px-5 h-full text-[13px] font-bold text-gray-300 hover:text-white hover:bg-gray-700 border-r border-gray-700 shrink-0">TAB</button>
+        <button onmousedown="event.preventDefault(); ws&&ws.send('-');" class="px-5 h-full text-base font-bold text-gray-300 hover:text-white hover:bg-gray-700 border-r border-gray-700 shrink-0">-</button>
+        <button onmousedown="event.preventDefault(); ws&&ws.send('/');" class="px-5 h-full text-base font-bold text-gray-300 hover:text-white hover:bg-gray-700 border-r border-gray-700 shrink-0">/</button>
+        <button onmousedown="event.preventDefault(); ws&&ws.send('|');" class="px-5 h-full text-base font-bold text-gray-300 hover:text-white hover:bg-gray-700 border-r border-gray-700 shrink-0">|</button>
+        <button onmousedown="event.preventDefault(); ws&&ws.send('\x1b[A');" class="px-5 h-full text-base font-bold text-gray-300 hover:text-white hover:bg-gray-700 border-r border-gray-700 shrink-0">↑</button>
+        <button onmousedown="event.preventDefault(); ws&&ws.send('\x1b[B');" class="px-5 h-full text-base font-bold text-gray-300 hover:text-white hover:bg-gray-700 border-r border-gray-700 shrink-0">↓</button>
+        <button onmousedown="event.preventDefault(); ws&&ws.send('\x1b[D');" class="px-5 h-full text-base font-bold text-gray-300 hover:text-white hover:bg-gray-700 border-r border-gray-700 shrink-0">←</button>
+        <button onmousedown="event.preventDefault(); ws&&ws.send('\x1b[C');" class="px-5 h-full text-base font-bold text-gray-300 hover:text-white hover:bg-gray-700 shrink-0">→</button>
+    </div>
+    
+    <div id="connectModal" class="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-2 sm:p-4">
+        <div class="bg-gray-800 rounded-2xl shadow-2xl w-full max-w-sm flex flex-col relative overflow-hidden">
+            <div class="absolute top-0 right-0 p-3 sm:p-4">
+                <button onclick="document.getElementById('connectModal').classList.add('hidden')" class="text-gray-400 hover:text-white transition cursor-pointer">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                </button>
+            </div>
+            
+            <div class="p-4 sm:p-6">
+                <h3 class="text-xl font-bold text-white mb-4 flex items-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                    </svg>
+                    <span>{{ web_terminal_title }}</span>
+                </h3>
+                
+                <form id="connectForm" onsubmit="event.preventDefault(); connect();">
+                    <div class="space-y-4">
+                        <div class="flex gap-2">
+                            <div class="flex-[3]">
+                                <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-wide mb-1">{{ web_terminal_ip }}</label>
+                                <input type="text" id="inpIp" required value="{{ prefill_ip }}" class="w-full bg-gray-900 rounded-lg px-3 py-2 text-white outline-none focus:ring-2 focus:ring-blue-500/50 focus:bg-gray-800 font-mono text-sm leading-tight transition">
+                            </div>
+                            <div class="flex-1">
+                                <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-wide mb-1">{{ web_terminal_port }}</label>
+                                <input type="number" id="inpPort" placeholder="22" class="w-full bg-gray-900 rounded-lg px-3 py-2 text-white outline-none focus:ring-2 focus:ring-blue-500/50 focus:bg-gray-800 font-mono text-sm leading-tight transition">
+                            </div>
+                        </div>
+                        
+                        <div>
+                            <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-wide mb-1">{{ web_terminal_user }}</label>
+                            <input type="text" id="inpUser" required value="root" class="w-full bg-gray-900 rounded-lg px-3 py-2 text-white outline-none focus:ring-2 focus:ring-blue-500/50 focus:bg-gray-800 font-mono text-sm leading-tight transition">
+                        </div>
+
+                        <div>
+                            <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-wide mb-1">{{ web_terminal_auth_method }}</label>
+                            <select id="inpAuthMethod" onchange="toggleAuthFields()" class="w-full bg-gray-900 rounded-lg px-3 py-2 text-white outline-none focus:ring-2 focus:ring-blue-500/50 focus:bg-gray-800 font-sans text-sm transition cursor-pointer">
+                                <option value="password">{{ web_terminal_password_auth }}</option>
+                                <option value="key">{{ web_terminal_key_auth }}</option>
+                            </select>
+                        </div>
+
+                        <div id="fieldPassword">
+                            <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-wide mb-1">{{ web_terminal_pass }}</label>
+                            <input type="password" id="inpPass" placeholder="***" class="w-full bg-gray-900 rounded-lg px-3 py-2 text-white outline-none focus:ring-2 focus:ring-blue-500/50 focus:bg-gray-800 font-mono text-sm leading-tight transition">
+                        </div>
+                        
+                        <div id="fieldKey" class="hidden">
+                            <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-wide mb-1 flex justify-between">
+                                <span>{{ web_terminal_key }}</span>
+                                <label for="inpKeyFile" class="text-blue-400 hover:text-blue-300 cursor-pointer text-[10px]">📁 {{ web_terminal_key_select }}</label>
+                                <input type="file" id="inpKeyFile" class="hidden" accept=".pem,.key,.*" onchange="loadKeyFile(event)">
+                            </label>
+                            <textarea id="inpKey" rows="3" placeholder="-----BEGIN OPENSSH PRIVATE KEY-----" class="w-full bg-gray-900 rounded-lg px-3 py-2 text-white outline-none focus:ring-2 focus:ring-blue-500/50 focus:bg-gray-800 font-mono text-[10px] leading-tight resize-none transition custom-scrollbar"></textarea>
+                        </div>
+
+                        <div class="flex items-center gap-2 mt-2">
+                            <input type="checkbox" id="inpRemember" class="w-4 h-4 rounded border-gray-700 bg-gray-900 text-blue-500 focus:ring-blue-500 focus:ring-offset-gray-800 transition cursor-pointer">
+                            <label for="inpRemember" class="text-xs text-gray-300 cursor-pointer select-none">{{ web_terminal_remember }}</label>
+                        </div>
+                        
+                        <div id="connError" class="hidden bg-red-900/40 text-red-400 text-xs p-3 rounded-lg border border-red-800/50 mt-2">
+                        </div>
+                        
+                        <div class="mt-4 pt-2">
+                            <button type="submit" id="btnConnect" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-2.5 rounded-lg shadow-lg shadow-blue-500/20 transition-all flex justify-center items-center gap-2">
+                                <span>{{ web_terminal_connect }}</span>
+                            </button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    
+    <div id="termCtxMenu" class="fixed hidden z-[200] bg-gray-800 border border-gray-700 rounded-lg shadow-xl overflow-hidden min-w-[120px] text-sm py-1">
+        <button onclick="termCopy()" class="w-full text-left px-4 py-2 text-gray-200 hover:bg-gray-700 transition">Копировать</button>
+        <button onclick="termCut()" class="w-full text-left px-4 py-2 text-gray-200 hover:bg-gray-700 transition">Вырезать</button>
+        <button onclick="termPaste()" class="w-full text-left px-4 py-2 text-gray-200 hover:bg-gray-700 transition">Вставить</button>
+    </div>
+
+    <div id="helpModal" class="fixed inset-0 z-[150] hidden flex items-center justify-center bg-black/80 backdrop-blur-sm p-2 sm:p-4 text-white" onclick="if(event.target === this) document.getElementById('helpModal').classList.add('hidden')">
+        <div class="bg-gray-800 rounded-2xl shadow-2xl w-full max-w-sm p-4 sm:p-6 relative">
+            <h3 class="text-lg sm:text-xl font-bold mb-4 border-b border-gray-700 pb-2 flex items-center gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                Горячие клавиши
+            </h3>
+            <ul class="space-y-3 text-sm text-gray-300">
+                <li class="flex justify-between items-center"><span class="bg-gray-700 px-2 py-1 flex items-center justify-center rounded border-b-2 border-gray-900 font-mono shadow-sm">ПКМ (Клик правой)</span><span>Контекстное меню</span></li>
+                <li class="flex justify-between items-center"><span class="bg-gray-700 px-2 py-1 flex items-center justify-center rounded border-b-2 border-gray-900 font-mono shadow-sm">Shift + Insert</span><span>Вставить</span></li>
+                <li class="flex justify-between items-center"><span class="bg-gray-700 px-2 py-1 flex items-center justify-center rounded border-b-2 border-gray-900 font-mono shadow-sm">Ctrl + Shift + C</span><span>Копировать</span></li>
+                <li class="flex justify-between items-center"><span class="bg-gray-700 px-2 py-1 flex items-center justify-center rounded border-b-2 border-gray-900 font-mono shadow-sm">Ctrl + Shift + V</span><span>Вставить</span></li>
+            </ul>
+            <button onclick="document.getElementById('helpModal').classList.add('hidden')" class="mt-6 w-full py-2 bg-gray-700 hover:bg-gray-600 font-bold rounded-lg transition">Понятно</button>
+        </div>
+    </div>
+    
+    <script>
+        if (window.visualViewport) {
+            const updateViewport = () => {
+                document.body.style.height = window.visualViewport.height + 'px';
+                window.scrollTo(0, 0);
+            };
+            window.visualViewport.addEventListener('resize', updateViewport);
+            window.visualViewport.addEventListener('scroll', updateViewport);
+            updateViewport();
+        }
+
+        const term = new Terminal({
+            cursorBlink: true,
+            theme: {
+                background: '#09090b',
+                foreground: '#f8fafc',
+                cursor: '#3b82f6',
+                selectionBackground: 'rgba(59, 130, 246, 0.3)',
+                black: '#000000',
+                red: '#ef4444',
+                green: '#22c55e',
+                yellow: '#eab308',
+                blue: '#3b82f6',
+                magenta: '#d946ef',
+                cyan: '#06b6d4',
+                white: '#ffffff',
+                brightBlack: '#64748b',
+                brightRed: '#f87171',
+                brightGreen: '#4ade80',
+                brightYellow: '#fde047',
+                brightBlue: '#60a5fa',
+                brightMagenta: '#e879f9',
+                brightCyan: '#22d3ee',
+                brightWhite: '#ffffff'
+            },
+            fontFamily: 'Consolas, "Courier New", monospace',
+            fontSize: 14,
+            rendererType: 'canvas'
+        });
+        
+        const fitAddon = new FitAddon.FitAddon();
+        term.loadAddon(fitAddon);
+        term.loadAddon(new WebLinksAddon.WebLinksAddon());
+        
+        term.open(document.getElementById('termDiv'));
+        fitAddon.fit();
+        
+        let ws = null;
+        let pinger = null;
+        
+        window.addEventListener('resize', () => {
+            fitAddon.fit();
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({
+                    type: "resize",
+                    cols: term.cols,
+                    rows: term.rows
+                }));
+            }
+        });
+
+        term.onData(data => {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                if (ctrlMode && data.length === 1) {
+                    let charCode = data.charCodeAt(0);
+                    if (charCode >= 97 && charCode <= 122) { // a-z
+                        data = String.fromCharCode(charCode - 96);
+                    } else if (charCode >= 65 && charCode <= 90) { // A-Z
+                        data = String.fromCharCode(charCode - 64);
+                    }
+                    toggleCtrlMode(); // Disable after one char
+                }
+                ws.send(JSON.stringify({
+                    type: "data",
+                    data: data
+                }));
+            }
+        });
+        
+        let ctrlMode = false;
+        function toggleCtrlMode() {
+            ctrlMode = !ctrlMode;
+            const btn = document.getElementById('btnCtrl');
+            if (ctrlMode) {
+                btn.classList.add('bg-blue-600', 'text-white');
+                btn.classList.remove('text-gray-300');
+            } else {
+                btn.classList.remove('bg-blue-600', 'text-white');
+                btn.classList.add('text-gray-300');
+            }
+        }
+        
+        const statusBadge = document.getElementById('statusBadge');
+        const modal = document.getElementById('connectModal');
+        const btnDisconnect = document.getElementById('btnDisconnect');
+        const connError = document.getElementById('connError');
+        
+        const I18N = {
+            disconnected: "{{ web_terminal_status_disconnected }}",
+            connecting: "{{ web_terminal_status_connecting }}",
+            connected: "{{ web_terminal_status_connected }}",
+            error: "{{ web_terminal_error }}"
+        };
+        
+        function toggleAuthFields() {
+            const method = document.getElementById('inpAuthMethod').value;
+            if (method === 'key') {
+                document.getElementById('fieldKey').classList.remove('hidden');
+                document.getElementById('fieldPassword').classList.add('hidden');
+            } else {
+                document.getElementById('fieldKey').classList.add('hidden');
+                document.getElementById('fieldPassword').classList.remove('hidden');
+            }
+        }
+
+        function loadKeyFile(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                document.getElementById('inpKey').value = e.target.result;
+            };
+            reader.readAsText(file);
+        }
+
+        // Fetch credentials continuously if IP changes
+        document.getElementById('inpIp').addEventListener('blur', function() {
+            const ip = this.value.trim();
+            if (!ip) return;
+            fetch(`/api/terminal/creds?ip=${encodeURIComponent(ip)}`)
+                .then(r => r.json())
+                .then(data => {
+                    if (data.status === 'ok' && data.saved) {
+                        document.getElementById('inpUser').value = data.user || 'root';
+                        document.getElementById('inpAuthMethod').value = data.type;
+                        document.getElementById('inpPort').value = data.port || '';
+                        toggleAuthFields();
+                        // For security, backend will remember the key. Frontend doesn't receive it.
+                        // We indicate saved status.
+                        document.getElementById('inpRemember').checked = true;
+                        if (data.type === 'key') {
+                            document.getElementById('inpKey').value = '*** SAVED SECURE KEY ***';
+                        } else {
+                            document.getElementById('inpPass').value = '*** SAVED PASSWORD ***';
+                        }
+                    }
+                })
+                .catch(() => {});
+        });
+
+        const urlParams = new URLSearchParams(window.location.search);
+        if (urlParams.has('ip')) {
+            const ip = urlParams.get('ip');
+            document.getElementById('inpIp').value = ip;
+            document.getElementById('inpIp').dispatchEvent(new Event('blur'));
+        }
+
+        term.writeln('\x1b[1;36mTelegram VPS Control Panel - Web Terminal\x1b[0m');
+        term.writeln('Enter connection details in the settings menu to continue.\r\n');
+
+        function setStatus(state, msg="") {
+            if (state === 'disconnected') {
+                statusBadge.className = "px-2 py-0.5 rounded text-[10px] uppercase font-bold bg-gray-700 text-gray-300";
+                statusBadge.innerText = I18N.disconnected;
+                btnDisconnect.classList.add('hidden');
+                
+                if (pinger) {
+                    clearInterval(pinger);
+                    pinger = null;
+                }
+            } else if (state === 'connecting') {
+                statusBadge.className = "px-2 py-0.5 rounded text-[10px] uppercase font-bold bg-yellow-500/20 text-yellow-500 border border-yellow-500/30";
+                statusBadge.innerText = I18N.connecting;
+                connError.classList.add('hidden');
+            } else if (state === 'connected') {
+                statusBadge.className = "px-2 py-0.5 rounded text-[10px] uppercase font-bold bg-green-500/20 text-green-500 border border-green-500/30";
+                statusBadge.innerText = I18N.connected;
+                btnDisconnect.classList.remove('hidden');
+                modal.classList.add('hidden');
+            } else if (state === 'error') {
+                statusBadge.className = "px-2 py-0.5 rounded text-[10px] uppercase font-bold bg-red-500/20 text-red-500 border border-red-500/30";
+                statusBadge.innerText = I18N.error;
+                
+                if (msg) {
+                    connError.innerText = msg;
+                    connError.classList.remove('hidden');
+                    modal.classList.remove('hidden');
+                }
+            }
+        }
+
+        function connect() {
+            if (ws) ws.close();
+            
+            const ip = document.getElementById('inpIp').value;
+            const port = document.getElementById('inpPort').value || 22;
+            const user = document.getElementById('inpUser').value;
+            const method = document.getElementById('inpAuthMethod').value;
+            const remember = document.getElementById('inpRemember').checked;
+            
+            let password = document.getElementById('inpPass').value;
+            let privateKey = document.getElementById('inpKey').value;
+            
+            const isSavedPass = password === '*** SAVED PASSWORD ***';
+            const isSavedKey = privateKey === '*** SAVED SECURE KEY ***';
+
+            if (!ip || !user) return;
+            
+            // If remember is checked, and we provide real password/key, save them via POST /api/terminal/creds
+            if (remember && (!isSavedPass && !isSavedKey)) {
+                fetch('/api/terminal/creds', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        ip: ip,
+                        port: port,
+                        user: user,
+                        type: method,
+                        password: method === 'password' ? password : '',
+                        private_key: method === 'key' ? privateKey : ''
+                    })
+                }).catch(e => console.error(e));
+            }
+
+            setStatus('connecting');
+            term.reset();
+            term.writeln('\x1b[1;34m[*] Connecting to ' + ip + ':' + port + '...\x1b[0m');
+            
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsUrl = `${protocol}//${window.location.host}/api/terminal/ws`;
+            
+            ws = new WebSocket(wsUrl);
+            
+            ws.onopen = () => {
+                ws.send(JSON.stringify({
+                    type: "auth",
+                    host: ip,
+                    port: parseInt(port),
+                    user: user,
+                    use_saved: (isSavedPass || isSavedKey),
+                    auth_type: method,
+                    password: password,
+                    private_key: privateKey,
+                    cols: term.cols,
+                    rows: term.rows
+                }));
+            };
+            
+            ws.onmessage = (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+                    if (data.type === "connected") {
+                        setStatus('connected');
+                        pinger = setInterval(() => {
+                            if (ws && ws.readyState === WebSocket.OPEN) {
+                                ws.send(JSON.stringify({type: "ping"}));
+                            }
+                        }, 20000);
+                    } else if (data.type === "error") {
+                        setStatus('error', data.message);
+                        term.writeln('\r\n\x1b[1;31m[!] Error: ' + data.message + '\x1b[0m');
+                        ws.close();
+                    }
+                } catch (e) {
+                     term.write(event.data);
+                }
+            };
+            
+            ws.onclose = (event) => {
+                setStatus('disconnected');
+                term.writeln('\r\n\x1b[1;33m[*] Connection closed.\x1b[0m');
+            };
+            
+            ws.onerror = (error) => {
+                setStatus('error', "WebSocket connection error");
+                term.writeln('\r\n\x1b[1;31m[!] WebSocket error.\x1b[0m');
+            };
+        }
+        
+        function disconnect() {
+            if (ws) ws.close();
+        }
+
+        // --- Context Menu Logic ---
+        const termCtxMenu = document.getElementById('termCtxMenu');
+        
+        document.getElementById('termDiv').addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+            termCtxMenu.style.left = e.clientX + 'px';
+            termCtxMenu.style.top = e.clientY + 'px';
+            termCtxMenu.classList.remove('hidden');
+        });
+        
+        document.addEventListener('click', () => {
+            termCtxMenu.classList.add('hidden');
+        });
+        
+        function termCopy() {
+            const sel = term.getSelection();
+            if (sel) navigator.clipboard.writeText(sel);
+            term.focus();
+        }
+        function termCut() {
+            termCopy();
+            term.clearSelection();
+            term.focus();
+        }
+        function termPaste() {
+            navigator.clipboard.readText().then(text => {
+                if (ws && ws.readyState === WebSocket.OPEN) {
+                    ws.send(JSON.stringify({ type: "data", data: text }));
+                }
+            });
+            term.focus();
+        }
+
+        // --- Stats Polling Logic ---
+        function updateStats() {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                const ip = document.getElementById('inpIp').value;
+                if (!ip) return;
+                fetch(`/api/terminal/stats?ip=${encodeURIComponent(ip)}`)
+                    .then(r => r.json())
+                    .then(d => {
+                        if (!d.error) {
+                            let uptimeStr = "--";
+                            if (d.uptime > 0) {
+                                const h = Math.floor(d.uptime / 3600);
+                                const m = Math.floor((d.uptime % 3600)/60);
+                                uptimeStr = `${h}h ${m}m`;
+                            }
+                            document.getElementById('statCpu').innerText = d.cpu.toFixed(1) + '%';
+                            document.getElementById('statRam').innerText = Math.round(d.ram) + '%';
+                            document.getElementById('statRom').innerText = Math.round(d.rom) + '%';
+                            document.getElementById('statUptime').innerText = uptimeStr;
+                            document.getElementById('statPing').innerText = Math.round(d.ping) + 'ms';
+                        }
+                    }).catch(()=>{});
+            }
+        }
+        setInterval(updateStats, 2000);
+    </script>
+</body>
+</html>

@@ -25,13 +25,12 @@ from . import shared_state
 from .i18n import get_text, get_user_lang
 from .config import INSTALL_MODE, DEPLOY_MODE, DEBUG_MODE
 from .config import (
-    ALERTS_CONFIG_FILE,
     REBOOT_FLAG_FILE,
     RESTART_FLAG_FILE,
     CIPHER_SUITE,
     DATA_ENCRYPTION_KEY,
 )
-from .config import load_encrypted_json, save_encrypted_json
+from .config import get_bot_config, set_bot_config
 
 
 def anonymize_user(user_id: int, username: str = None) -> str:
@@ -123,32 +122,30 @@ def get_host_path(path: str) -> str:
 
 def load_alerts_config():
     try:
-        loaded_data = load_encrypted_json(ALERTS_CONFIG_FILE)
+        loaded_data = get_bot_config("alerts_config", {})
         if loaded_data:
             loaded_data_int_keys = {int(k): v for k, v in loaded_data.items()}
             shared_state.ALERTS_CONFIG.clear()
             shared_state.ALERTS_CONFIG.update(loaded_data_int_keys)
-            logging.info("Alerts config loaded (secure).")
+            logging.info("Alerts config loaded from bot.db.")
         else:
             shared_state.ALERTS_CONFIG.clear()
             logging.info("Alerts config empty or not found.")
     except Exception as e:
-        logging.error(f"Error loading alerts_config.json: {e}")
+        logging.error(f"Error loading alerts config: {e}")
         shared_state.ALERTS_CONFIG.clear()
 
 
 def save_alerts_config():
     try:
-        os.makedirs(os.path.dirname(ALERTS_CONFIG_FILE), exist_ok=True)
         config_to_save = {str(k): v for k, v in shared_state.ALERTS_CONFIG.items()}
-        save_encrypted_json(ALERTS_CONFIG_FILE, config_to_save)
+        set_bot_config("alerts_config", config_to_save)
     except Exception as e:
-        logging.error(f"Error saving alerts_config.json: {e}")
+        logging.error(f"Error saving alerts config: {e}")
 
 
 def load_services_config():
     """Load managed services from encrypted config file"""
-    from core.config import SERVICES_CONFIG_FILE, MANAGED_SERVICES
     from core import config as config_module
     
     # Critical services that must always be present
@@ -159,16 +156,16 @@ def load_services_config():
     ]
     
     try:
-        loaded_data = load_encrypted_json(SERVICES_CONFIG_FILE)
+        loaded_data = config_module.get_bot_config("services", [])
         if loaded_data and isinstance(loaded_data, list):
             # Replace MANAGED_SERVICES with loaded data
             config_module.MANAGED_SERVICES.clear()
             config_module.MANAGED_SERVICES.extend(loaded_data)
-            logging.info(f"Services config loaded (secure): {len(loaded_data)} services.")
+            logging.info(f"Services config loaded from bot.db: {len(loaded_data)} services.")
         else:
             logging.info("Services config empty or not found, using defaults.")
     except Exception as e:
-        logging.error(f"Error loading services.json: {e}")
+        logging.error(f"Error loading services config: {e}")
     
     # Ensure critical services are always present
     existing_names = {s.get("name") for s in config_module.MANAGED_SERVICES}
@@ -180,15 +177,13 @@ def load_services_config():
 
 def save_services_config():
     """Save managed services to encrypted config file"""
-    from core.config import SERVICES_CONFIG_FILE
     from core import config as config_module
     try:
-        os.makedirs(os.path.dirname(SERVICES_CONFIG_FILE), exist_ok=True)
-        save_encrypted_json(SERVICES_CONFIG_FILE, config_module.MANAGED_SERVICES)
-        logging.info(f"Services config saved (secure): {len(config_module.MANAGED_SERVICES)} services.")
+        config_module.set_bot_config("services", config_module.MANAGED_SERVICES)
+        logging.info(f"Services config saved to bot.db: {len(config_module.MANAGED_SERVICES)} services.")
         return True
     except Exception as e:
-        logging.error(f"Error saving services.json: {e}")
+        logging.error(f"Error saving services config: {e}")
         return False
 
 

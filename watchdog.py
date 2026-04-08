@@ -94,14 +94,44 @@ if DEPLOY_MODE == "docker":
         )
 
 
-def get_system_uptime() -> str:
-    """Gets system uptime from /proc/uptime"""
+def get_system_uptime_seconds() -> int:
+    """Gets system uptime in seconds from /proc/uptime"""
     try:
         with open("/proc/uptime", "r") as f:
-            uptime_seconds = float(f.readline().split()[0])
-        return str(timedelta(seconds=int(uptime_seconds)))
+            return int(float(f.readline().split()[0]))
     except Exception:
+        return 0
+
+def format_time_watchdog(seconds: int, lang_id: int) -> str:
+    """Formats seconds into human readable string localized"""
+    if seconds <= 0:
         return "N/A"
+    
+    lang = getattr(config, "DEFAULT_LANGUAGE", "ru")
+    try:
+        from core.i18n import get_user_lang
+        lang = get_user_lang(lang_id)
+    except Exception:
+        pass
+        
+    days = seconds // 86400
+    hours = (seconds % 86400) // 3600
+    minutes = (seconds % 3600) // 60
+    secs = seconds % 60
+    
+    parts = []
+    if lang == "ru":
+        if days > 0: parts.append(f"{days} дн.")
+        if hours > 0: parts.append(f"{hours} ч.")
+        if minutes > 0: parts.append(f"{minutes} мин.")
+        parts.append(f"{secs} сек.")
+    else:
+        if days > 0: parts.append(f"{days}d")
+        if hours > 0: parts.append(f"{hours}h")
+        if minutes > 0: parts.append(f"{minutes}m")
+        parts.append(f"{secs}s")
+        
+    return " ".join(parts)
 
 
 def get_last_backup_info() -> str:
@@ -222,10 +252,8 @@ def send_or_edit_telegram_alert(
     extra_info = []
     if kwargs.get("downtime") and kwargs.get("downtime") != "N/A":
         extra_info.append(get_text("wd_downtime", ALERT_ADMIN_ID, value=kwargs['downtime']))
-    if kwargs.get("uptime"):
+    if kwargs.get("uptime") and kwargs.get("uptime") != "N/A":
         extra_info.append(get_text("wd_uptime", ALERT_ADMIN_ID, value=kwargs['uptime']))
-    if kwargs.get("last_backup"):
-        extra_info.append(get_text("wd_last_backup", ALERT_ADMIN_ID, value=kwargs['last_backup']))
     
     if extra_info:
         text_to_send += "\n\n" + "\n".join(extra_info)
@@ -484,12 +512,11 @@ def process_service_state(
                 downtime_str = "N/A"
                 if down_time_start:
                     d_seconds = int(time.time() - down_time_start)
-                    downtime_str = str(timedelta(seconds=d_seconds))
+                    downtime_str = format_time_watchdog(d_seconds, ALERT_ADMIN_ID)
                     down_time_start = None
                 
                 message_kwargs["downtime"] = downtime_str
-                message_kwargs["uptime"] = get_system_uptime()
-                message_kwargs["last_backup"] = get_last_backup_info()
+                message_kwargs["uptime"] = format_time_watchdog(get_system_uptime_seconds(), ALERT_ADMIN_ID)
                 process_startup_flags()
                 
             elif log_status_key:

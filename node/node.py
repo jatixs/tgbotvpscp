@@ -226,11 +226,23 @@ logger.addHandler(stream_handler)
 
 AGENT_BASE_URL = CONF.get("AGENT_BASE_URL")
 AGENT_TOKEN = CONF.get("AGENT_TOKEN")
-UPDATE_INTERVAL = int(CONF.get("NODE_UPDATE_INTERVAL", 5))
 BOT_TOKEN = CONF.get("BOT_TOKEN", "")
 CRITICAL_ALERT_CHAT_IDS = CONF.get("CRITICAL_ALERT_CHAT_IDS", "")
-AGENT_ALERT_DELAY_SECONDS = int(CONF.get("AGENT_ALERT_DELAY_SECONDS", 30))
-AGENT_ALERT_LANG = CONF.get("AGENT_ALERT_LANG", "ru").lower()
+
+try:
+    UPDATE_INTERVAL = max(1, int(CONF.get("NODE_UPDATE_INTERVAL", 5)))
+except ValueError:
+    UPDATE_INTERVAL = 5
+
+try:
+    AGENT_ALERT_DELAY_SECONDS = int(CONF.get("AGENT_ALERT_DELAY_SECONDS", 30))
+except ValueError:
+    AGENT_ALERT_DELAY_SECONDS = 30
+
+try:
+    AGENT_ALERT_LANG = CONF.get("AGENT_ALERT_LANG", "ru").lower()
+except ValueError:
+    AGENT_ALERT_LANG = "ru"
 
 if not AGENT_BASE_URL or not AGENT_TOKEN:
     logging.error("CRITICAL: AGENT_BASE_URL or AGENT_TOKEN not found in .env")
@@ -258,6 +270,7 @@ elif not BOT_TOKEN and CRITICAL_ALERT_CHAT_IDS:
 
 PENDING_RESULTS = collections.deque(maxlen=50)
 LAST_TRAFFIC_STATS = {}
+_HEARTBEAT_NET_STATS = {}
 SSH_EVENTS = collections.deque(maxlen=100)
 
 # Commands that take a long time and must run in a background thread
@@ -592,6 +605,7 @@ def get_top_processes(metric):
         return "n/a"
 
 def get_system_stats():
+    global _HEARTBEAT_NET_STATS
     try:
         net = psutil.net_io_counters()
         mem = psutil.virtual_memory()
@@ -599,6 +613,31 @@ def get_system_stats():
         freq = psutil.cpu_freq()
         
         ext_ip = get_external_ip()
+        
+        # Calculate network speed from previous heartbeat measurement
+        now = time.time()
+        net_rx_speed = 0.0
+        net_tx_speed = 0.0
+        if _HEARTBEAT_NET_STATS:
+            prev_rx = _HEARTBEAT_NET_STATS.get('rx', 0)
+            prev_tx = _HEARTBEAT_NET_STATS.get('tx', 0)
+            prev_time = _HEARTBEAT_NET_STATS.get('time', 0)
+            dt = now - prev_time
+            if 1 <= dt <= 120:
+                net_rx_speed = max(0.0, (net.bytes_recv - prev_rx) * 8 / 1024 / dt)
+                net_tx_speed = max(0.0, (net.bytes_sent - prev_tx) * 8 / 1024 / dt)
+            else:
+                # Keep previous speed if interval is abnormal
+                net_rx_speed = _HEARTBEAT_NET_STATS.get('last_rx_speed', 0.0)
+                net_tx_speed = _HEARTBEAT_NET_STATS.get('last_tx_speed', 0.0)
+        
+        _HEARTBEAT_NET_STATS = {
+            'rx': net.bytes_recv,
+            'tx': net.bytes_sent,
+            'time': now,
+            'last_rx_speed': net_rx_speed,
+            'last_tx_speed': net_tx_speed
+        }
         
         # Measure ping: try ICMP first (faster/accurate), fallback to HTTPS if blocked
         ping_ms = None
@@ -626,17 +665,22 @@ def get_system_stats():
             except Exception:
                 pass
         
+        ram_used = mem.total - mem.available
+        ram_pct = round(ram_used / mem.total * 100, 1) if mem.total > 0 else 0
+        
         result = {
             "cpu": psutil.cpu_percent(interval=None),
-            "ram": mem.percent,
+            "ram": ram_pct,
             "disk": disk.percent,
             "ram_total": mem.total,
-            "ram_free": mem.available,
+            "ram_used": ram_used,
             "disk_total": disk.total,
             "disk_free": disk.free,
             "cpu_freq": freq.current if freq else 0,
             "net_rx": net.bytes_recv,
             "net_tx": net.bytes_sent,
+            "net_rx_speed": round(net_rx_speed, 2),
+            "net_tx_speed": round(net_tx_speed, 2),
             "uptime": int(time.time() - psutil.boot_time()),
             "process_cpu": get_top_processes('cpu'),
             "process_ram": get_top_processes('ram'),
@@ -938,13 +982,36 @@ def execute_command(task):
             else:
                 # Use iperf3
                 is_russia = country_code == 'RU' if country_code else get_server_country() == 'RU'
-                server = get_public_iperf_server(exclude_ru=not is_russia)
-                if server:
+                
+                # Try RU servers first, fallback to global
+                server_lists_to_try = []
+                if is_russia:
+                    server_lists_to_try.append(('ru', False))    # RU servers
+                    server_lists_to_try.append(('global', True)) # Global fallback
+                else:
+                    server_lists_to_try.append(('global', True))
+                
+                speedtest_done = False
+                last_error = None
+                
+                for list_name, exclude_ru_flag in server_lists_to_try:
+                    if speedtest_done:
+                        break
+                    
+                    server = get_public_iperf_server(exclude_ru=exclude_ru_flag)
+                    if not server:
+                        logging.warning(f"No iperf3 servers found in {list_name} list")
+                        continue
+                    
+                    # Try the selected server
                     host = server.get("IP/HOST")
                     port = server.get("PORT")
                     city = server.get("SITE", "Unknown")
                     country = server.get("COUNTRY", "")
                     ping_ms = server.get("_ping", 0)
+                    
+                    dl_speed = 0.0
+                    ul_speed = 0.0
                     
                     # Download test
                     cmd_dl = ["iperf3", "-c", host, "-p", str(port), "-J", "-t", "5", "-4", "-R"]
@@ -953,10 +1020,9 @@ def execute_command(task):
                             cmd_dl, stderr=subprocess.STDOUT, timeout=30).decode()
                         dl_speed = parse_iperf_json(res_dl, 'download')
                     except subprocess.TimeoutExpired:
-                        dl_speed = 0.0
+                        logging.warning(f"DL test timeout for {host}:{port}")
                     except Exception as e:
-                        logging.error(f"DL Test failed: {e}")
-                        dl_speed = 0.0
+                        logging.error(f"DL Test failed for {host}:{port}: {e}")
                     
                     # Upload test
                     cmd_ul = ["iperf3", "-c", host, "-p", str(port), "-J", "-t", "5", "-4"]
@@ -965,39 +1031,33 @@ def execute_command(task):
                             cmd_ul, stderr=subprocess.STDOUT, timeout=30).decode()
                         ul_speed = parse_iperf_json(res_ul, 'upload')
                     except subprocess.TimeoutExpired:
-                        ul_speed = 0.0
+                        logging.warning(f"UL test timeout for {host}:{port}")
                     except Exception as e:
-                        logging.error(f"UL Test failed: {e}")
-                        ul_speed = 0.0
+                        logging.error(f"UL Test failed for {host}:{port}: {e}")
                     
-                    if dl_speed == 0.0 and ul_speed == 0.0:
-                        raise Exception("iperf3 returned zero speed or failed to parse.")
-                        
+                    if dl_speed > 0.0 or ul_speed > 0.0:
+                        result_payload = {
+                            "type": "i18n",
+                            "key": "speedtest_results",
+                            "params": {
+                                "dl": dl_speed,
+                                "ul": ul_speed,
+                                "ping": ping_ms,
+                                "server": f"{city}, {country}",
+                                "provider": host
+                            }
+                        }
+                        speedtest_done = True
+                    else:
+                        last_error = f"{host}:{port} ({list_name})"
+                        logging.warning(f"iperf3 failed on {last_error}, trying next...")
+                
+                if not speedtest_done:
                     result_payload = {
                         "type": "i18n",
-                        "key": "speedtest_results",
-                        "params": {
-                            "dl": dl_speed,
-                            "ul": ul_speed,
-                            "ping": ping_ms,
-                            "server": f"{city}, {country}",
-                            "provider": host
-                        }
+                        "key": "error_with_details",
+                        "params": {"error": f"All iperf3 servers unavailable. Last tried: {last_error or 'none found'}"}
                     }
-                else:
-                    try:
-                        res = subprocess.check_output(["ping", "-c", "3", "8.8.8.8"]).decode()
-                        result_payload = {
-                            "type": "i18n",
-                            "key": "error_with_details",
-                            "params": {"error": f"iperf3 unavailable. Ping check:\n{res}"}
-                        }
-                    except Exception as e:
-                        result_payload = {
-                            "type": "i18n",
-                            "key": "error_with_details",
-                            "params": {"error": f"Network check failed: {e}"}
-                        }
 
         elif cmd == "update":
             if os.geteuid() == 0:
