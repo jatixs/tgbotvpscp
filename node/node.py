@@ -20,6 +20,18 @@ ENV_FILE = os.path.join(BASE_DIR, '.env')
 CONFIG_DIR = os.path.join(BASE_DIR, 'config')
 SPEEDTEST_MODE_FILE = os.path.join(CONFIG_DIR, '.speedtest_mode')
 
+import urllib.request
+
+def mask_sensitive_data(text):
+    """Hide IPs, emails, and tokens from error outputs before sending"""
+    if not isinstance(text, str):
+        return text
+    # Mask standard IPv4
+    text = re.sub(r'\b(?!(?:127\.0\.0\.1|0\.0\.0\.0|localhost))(?:\d{1,3}\.){3}\d{1,3}\b', '[IP_REDACTED]', text)
+    # Mask long tokens/hashes
+    text = re.sub(r'\b[a-fA-F0-9]{32,64}\b', '[TOKEN_REDACTED]', text)
+    return text
+
 def load_config():
     config = {}
     if os.path.exists(ENV_FILE):
@@ -150,10 +162,16 @@ def run_ookla_speedtest():
     cmd = ["speedtest", "--accept-license", "--accept-gdpr", "--format=json"]
     
     try:
-        result = subprocess.run(cmd, capture_output=True, timeout=120)
+        proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        try:
+            stdout, stderr = proc.communicate(timeout=120)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            proc.communicate()
+            return {"success": False, "error": "Timeout (120s)"}
         
-        if result.returncode == 0:
-            output = result.stdout.decode('utf-8', errors='ignore')
+        if proc.returncode == 0:
+            output = stdout.decode('utf-8', errors='ignore')
             data = json.loads(output)
             
             download_speed = data.get("download", {}).get("bandwidth", 0) / 125000
@@ -174,10 +192,8 @@ def run_ookla_speedtest():
                 "url": result_url
             }
         else:
-            error = result.stderr.decode('utf-8', errors='ignore') or result.stdout.decode('utf-8', errors='ignore')
+            error = stderr.decode('utf-8', errors='ignore') or stdout.decode('utf-8', errors='ignore')
             return {"success": False, "error": error[:500]}
-    except subprocess.TimeoutExpired:
-        return {"success": False, "error": "Timeout (120s)"}
     except json.JSONDecodeError as e:
         return {"success": False, "error": f"JSON parse error: {e}"}
     except Exception as e:
@@ -391,20 +407,15 @@ def get_external_ip():
             continue
     
     try:
-        # Security: Use exec instead of shell to prevent injection
-        proc = subprocess.Popen(
-            ["curl", "-4", "-s", "--max-time", "5", "ifconfig.me"],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE
-        )
-        stdout, _ = proc.communicate()
-        res = stdout.decode().strip()
-        if re.match(r"^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$", res):
-            EXTERNAL_IP_CACHE = res
-            logging.info(f"External IP updated (curl): {res}")
-            return res
+        req = urllib.request.Request("https://ifconfig.me/ip", headers={'User-Agent': 'Mozilla/5.0'})
+        with urllib.request.urlopen(req, timeout=5) as response:
+            res = response.read().decode().strip()
+            if re.match(r"^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$", res):
+                EXTERNAL_IP_CACHE = res
+                logging.info(f"External IP updated (urllib): {res}")
+                return res
     except Exception as e:
-        logging.debug(f"Failed to get IP via curl: {e}")
+        logging.debug(f"Failed to get IP via urllib: {e}")
 
     logging.warning("Could not determine external IP locally. Delegating to Agent Server.")
     return None
@@ -1061,42 +1072,54 @@ def execute_command(task):
 
         elif cmd == "update":
             if os.geteuid() == 0:
-                base_cmd = "DEBIAN_FRONTEND=noninteractive apt update && DEBIAN_FRONTEND=noninteractive apt upgrade -y && apt autoremove -y"
+                base_cmd = "DEBIAN_FRONTEND=noninteractive apt-get update && DEBIAN_FRONTEND=noninteractive apt-get --only-upgrade install -y"
             else:
-                base_cmd = "sudo DEBIAN_FRONTEND=noninteractive apt update && sudo DEBIAN_FRONTEND=noninteractive apt upgrade -y && sudo apt autoremove -y"
+                base_cmd = "sudo DEBIAN_FRONTEND=noninteractive apt-get update && sudo DEBIAN_FRONTEND=noninteractive apt-get --only-upgrade install -y"
 
             try:
-                result = subprocess.run(
+                proc = subprocess.Popen(
                     ["bash", "-lc", base_cmd],
-                    capture_output=True,
-                    text=True,
-                    timeout=1800,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
                 )
-                if result.returncode == 0:
-                    result_payload = {
-                        "type": "i18n",
-                        "key": "update_success",
-                        "params": {
-                            "output": html.escape((result.stdout or "")[-2000:])
+                try:
+                    stdout, stderr = proc.communicate(timeout=1800)
+                    if proc.returncode == 0:
+                        result_payload = {
+                            "type": "i18n",
+                            "key": "update_success",
+                            "params": {
+                                "output": mask_sensitive_data(html.escape((stdout.decode() or "")[-2000:]))
+                            }
                         }
-                    }
-                else:
-                    error_text = result.stderr or result.stdout or "Unknown error"
+                    else:
+                        error_text = stderr.decode() or stdout.decode() or "Unknown error"
+                        result_payload = {
+                            "type": "i18n",
+                            "key": "update_fail",
+                            "params": {
+                                "code": proc.returncode,
+                                "error": mask_sensitive_data(html.escape(error_text[-2000:]))
+                            }
+                        }
+                except subprocess.TimeoutExpired:
+                    proc.kill()
+                    proc.communicate()
                     result_payload = {
                         "type": "i18n",
                         "key": "update_fail",
                         "params": {
-                            "code": result.returncode,
-                            "error": html.escape(error_text[-2000:])
+                            "code": "timeout",
+                            "error": html.escape("Command timed out after 1800 seconds")
                         }
                     }
-            except subprocess.TimeoutExpired:
+            except Exception as e:
                 result_payload = {
                     "type": "i18n",
                     "key": "update_fail",
                     "params": {
-                        "code": "timeout",
-                        "error": html.escape("Command timed out after 1800 seconds")
+                        "code": "exception",
+                        "error": mask_sensitive_data(html.escape(str(e)))
                     }
                 }
 

@@ -1487,3 +1487,33 @@ document.addEventListener('keydown', (e) => {
     }
 });
 
+
+let CSRF_TOKEN = '';
+async function initializeCsrf() {
+    try {
+        const res = await fetch('/api/csrf');
+        if (res.ok) {
+            const data = await res.json();
+            CSRF_TOKEN = data.token;
+        }
+    } catch(e) {}
+}
+
+const originalFetch = window.fetch;
+window.fetch = async function(resource, config) {
+    if (typeof resource === 'string' && resource.startsWith('/api/')) {
+        config = config || {};
+        const method = config.method ? config.method.toUpperCase() : 'GET';
+        if (['POST', 'PUT', 'DELETE'].includes(method)) {
+            config.headers = config.headers || {};
+            // Если токен еще не получен, пробуем получить его на месте
+            if (!CSRF_TOKEN) await initializeCsrf();
+            if (CSRF_TOKEN) config.headers['X-CSRF-Token'] = CSRF_TOKEN;
+        }
+    }
+    return originalFetch.apply(this, arguments);
+};
+
+// Запускаем первичное получение при загрузке
+initializeCsrf();
+

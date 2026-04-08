@@ -96,6 +96,7 @@ APP_VERSION = get_app_version()
 CACHE_VER = str(int(time.time()))
 MAX_FILE_SIZE = 50 * 1024 * 1024  # 50MB max file size
 AGENT_TASK = None
+ACTIVE_SSE_QUEUES = set()
 RECENT_SSH_LOGINS = {}  # SSH cache for recent logins
 JINJA_ENV = Environment(
     loader=FileSystemLoader(TEMPLATE_DIR), autoescape=select_autoescape(["html", "xml"])
@@ -121,7 +122,12 @@ def check_api_rate_limit(ip, endpoint):
     now = time.time()
     key = f"{ip}:{endpoint}"
     if len(API_RATE_LIMITS) > 5000:
-        API_RATE_LIMITS.clear()
+        # Safe cleanup of expired limits
+        expired_keys = [k for k, v in API_RATE_LIMITS.items() if not v or (now - v[-1] >= API_RATE_WINDOW)]
+        for k in expired_keys:
+            del API_RATE_LIMITS[k]
+        if len(API_RATE_LIMITS) > 10000:
+            API_RATE_LIMITS.clear()
         
     if key not in API_RATE_LIMITS:
         API_RATE_LIMITS[key] = []
@@ -2804,161 +2810,71 @@ async def handle_sse_stream(request):
     resp.headers["Connection"] = "keep-alive"
     await resp.prepare(request)
     shutdown_event = request.app.get("shutdown_event")
-    import psutil
-
+    
     uid = user["id"]
+    queue = asyncio.Queue(maxsize=10)
+    ACTIVE_SSE_QUEUES.add(queue)
+
     try:
         while True:
             if shared_state.IS_RESTARTING:
-                try:
-                    await resp.write(b"event: shutdown\ndata: restarting\n\n")
-                except Exception:
-                    pass
+                try: await resp.write(b"event: shutdown\ndata: restarting\n\n")
+                except: pass
                 break
-            try:
-                if request.transport is None or request.transport.is_closing():
-                    break
-            except Exception:
+                
+            if request.transport is None or request.transport.is_closing():
                 break
+                
             if current_token and current_token not in SERVER_SESSIONS:
-                try:
-                    await resp.write(b"event: session_status\ndata: expired\n\n")
-                except Exception:
-                    pass
+                try: await resp.write(b"event: session_status\ndata: expired\n\n")
+                except: pass
                 break
-            current_stats = {
-                "cpu": 0,
-                "ram": 0,
-                "disk": 0,
-                "ip": encrypt_for_web(AGENT_IP_CACHE),
-                "ping": encrypt_for_web(AGENT_PING_CACHE),
-                "net_sent": 0,
-                "net_recv": 0,
-                "boot_time": 0,
-            }
-            try:
-                net = psutil.net_io_counters()
-                rx_total, tx_total = traffic_module.get_current_traffic_total()
 
-                net_if = psutil.net_io_counters(pernic=True)
-                mem = psutil.virtual_memory()
-                disk = psutil.disk_usage(get_host_path("/"))
-                freq = psutil.cpu_freq()
-                proc_cpu = await asyncio.to_thread(_get_top_processes, "cpu")
-                proc_ram = await asyncio.to_thread(_get_top_processes, "ram")
-                proc_disk = await asyncio.to_thread(_get_top_processes, "disk")
-                current_stats.update(
-                    {
-                        "net_sent": tx_total,
-                        "net_recv": rx_total,
-                        "boot_time": psutil.boot_time(),
-                        "ram_total": mem.total,
-                        "ram_used": mem.total - mem.available,
-                        "disk_total": disk.total,
-                        "disk_free": disk.free,
-                        "cpu_freq": freq.current if freq else 0,
-                        "process_cpu": proc_cpu,
-                        "process_ram": proc_ram,
-                        "process_disk": proc_disk,
-                        "interfaces": {k: v._asdict() for k, v in net_if.items()},
-                    }
-                )
-            except Exception:
-                pass
-            if AGENT_HISTORY:
-                latest = AGENT_HISTORY[-1]
-                current_stats.update({"cpu": latest["c"], "ram": latest["r"]})
-                try:
-                    current_stats["disk"] = psutil.disk_usage(
-                        get_host_path("/")
-                    ).percent
-                except Exception:
-                    pass
-            payload_stats = {"stats": current_stats, "history": list(AGENT_HISTORY)}
             try:
-                await resp.write(
-                    f"event: agent_stats\ndata: {json.dumps(payload_stats)}\n\n".encode(
-                        "utf-8"
-                    )
-                )
+                data = await asyncio.wait_for(queue.get(), timeout=5)
+            except asyncio.TimeoutError:
+                await resp.write(b"\n\n") # Keep alive
+                if shutdown_event and shutdown_event.is_set() and not shared_state.IS_RESTARTING:
+                    break
+                continue
+
+            try:
+                await resp.write(data["agent"])
+                await resp.write(data["nodes"])
+                
+                # Process notifications
+                user_alerts = ALERTS_CONFIG.get(uid, {})
+                user_lang = get_user_lang(uid)
+                filtered = []
+                for n in data["raw_notifications"]:
+                    if user_alerts.get(n["type"], False):
+                        n_copy = n.copy()
+                        if "text_map" in n_copy and isinstance(n_copy["text_map"], dict):
+                            text_map = n_copy["text_map"]
+                            localized_text = text_map.get(user_lang) or text_map.get(DEFAULT_LANGUAGE)
+                            if localized_text:
+                                n_copy["text"] = localized_text
+                            del n_copy["text_map"]
+                        filtered.append(n_copy)
+
+                last_read = shared_state.WEB_USER_LAST_READ.get(uid, 0)
+                unread_count = sum((1 for n in filtered if n["time"] > last_read))
+                notif_payload = {"notifications": filtered, "unread_count": unread_count}
+                await resp.write(f"event: notifications\ndata: {json.dumps(notif_payload)}\n\n".encode("utf-8"))
             except (ConnectionResetError, BrokenPipeError, ConnectionError):
                 break
-            all_nodes = await nodes_db.get_all_nodes()
-            nodes_data = []
-            now = time.time()
-            for token, node in all_nodes.items():
-                last_seen = node.get("last_seen", 0)
-                is_restarting = node.get("is_restarting", False)
-                status = "offline"
-                if is_restarting:
-                    status = "restarting"
-                elif now - last_seen < NODE_OFFLINE_TIMEOUT:
-                    status = "online"
-                stats = node.get("stats", {})
-                nodes_data.append(
-                    {
-                        "token": encrypt_for_web(token),
-                        "name": node.get("name", "Unknown"),
-                        "ip": encrypt_for_web(node.get("ip", "Unknown")),
-                        "status": status,
-                        "cpu": stats.get("cpu", 0),
-                        "ram": stats.get("ram", 0),
-                        "disk": stats.get("disk", 0),
-                        "net_rx_speed": stats.get("net_rx_speed", 0),
-                        "net_tx_speed": stats.get("net_tx_speed", 0)
-                    }
-                )
-            try:
-                await resp.write(
-                    f"event: nodes_list\ndata: {json.dumps({'nodes': nodes_data})}\n\n".encode(
-                        "utf-8"
-                    )
-                )
-            except (ConnectionResetError, BrokenPipeError, ConnectionError):
+                
+            if shutdown_event and shutdown_event.is_set() and not shared_state.IS_RESTARTING:
                 break
-            user_alerts = ALERTS_CONFIG.get(uid, {})
-            user_lang = get_user_lang(uid)
-
-            filtered = []
-            for n in list(shared_state.WEB_NOTIFICATIONS):
-                if user_alerts.get(n["type"], False):
-                    n_copy = n.copy()
-                    if "text_map" in n_copy and isinstance(n_copy["text_map"], dict):
-                        text_map = n_copy["text_map"]
-                        localized_text = text_map.get(user_lang) or text_map.get(DEFAULT_LANGUAGE)
-                        if localized_text:
-                            n_copy["text"] = localized_text
-                        del n_copy["text_map"]
-                    filtered.append(n_copy)
-
-            last_read = shared_state.WEB_USER_LAST_READ.get(uid, 0)
-            unread_count = sum((1 for n in filtered if n["time"] > last_read))
-            notif_payload = {"notifications": filtered, "unread_count": unread_count}
-            try:
-                await resp.write(
-                    f"event: notifications\ndata: {json.dumps(notif_payload)}\n\n".encode(
-                        "utf-8"
-                    )
-                )
-            except (ConnectionResetError, BrokenPipeError, ConnectionError):
-                break
-            if shutdown_event:
-                try:
-                    if not shared_state.IS_RESTARTING:
-                        await asyncio.wait_for(shutdown_event.wait(), timeout=3.0)
-                        break
-                except asyncio.TimeoutError:
-                    pass
-            else:
-                await asyncio.sleep(3)
     except asyncio.CancelledError:
         pass
     except Exception as e:
         if "closing transport" not in str(e) and "'NoneType' object" not in str(e):
             logging.error(f"SSE Stream Error: {e}")
+    finally:
+        ACTIVE_SSE_QUEUES.discard(queue)
+        
     return resp
-
-
 async def handle_sse_logs(request):
     user = get_current_user(request)
     if not user or user["role"] != "admins":
@@ -3311,12 +3227,28 @@ async def start_web_server(bot_instance: Bot):
                 )
         return await handler(request)
 
+    # CSRF Middleware
+    @web.middleware
+    async def csrf_middleware(request, handler):
+        if request.method in ["POST", "PUT", "DELETE"]:
+            excluded = ["/api/login/request", "/api/login/password", "/api/login/magic", "/api/heartbeat"]
+            if request.path not in excluded and not request.path.startswith("/api/terminal/ws"):
+                token = request.headers.get("X-CSRF-Token")
+                if not token or not verify_csrf_token(token):
+                    return web.json_response({"error": "Invalid or missing CSRF token"}, status=403)
+        return await handler(request)
+
     # WAF (Web Application Firewall) Middleware
     @web.middleware
     async def waf_middleware(request, handler):
         # Проверяем только POST/PUT запросы с данными
         if request.method in ["POST", "PUT"]:
             ip = get_client_ip(request)
+
+            # WAF Whitelist exclusion
+            if request.path.startswith("/api/terminal/ws") or \
+               request.path in ["/api/settings/sys_config", "/api/settings/keyboard"]:
+                return await handler(request)
 
             # Проверка Query String
             if request.query_string:
@@ -3330,9 +3262,10 @@ async def start_web_server(bot_instance: Bot):
 
             # Проверка тела запроса (JSON)
             try:
-                body = await request.text()
+                body = await request.read()
                 if body:
-                    is_attack, attack_type = check_waf_patterns(body)
+                    body_text = body.decode('utf-8', errors='ignore')
+                    is_attack, attack_type = check_waf_patterns(body_text)
                     if is_attack:
                         logging.critical(f"WAF: {attack_type} detected in body from IP {mask_sensitive_data(ip)}")
                         return web.json_response(
@@ -3340,7 +3273,7 @@ async def start_web_server(bot_instance: Bot):
                             status=403
                         )
 
-                    if not validate_input_length(body, max_length=10000):
+                    if not validate_input_length(body_text, max_length=10000):
                         logging.warning(f"WAF: Request too large from IP {mask_sensitive_data(ip)}")
                         return web.json_response(
                             {"error": "Request too large"},
@@ -3352,12 +3285,18 @@ async def start_web_server(bot_instance: Bot):
         return await handler(request)
 
     app.middlewares.append(rate_limit_middleware)
+    app.middlewares.append(csrf_middleware)
     app.middlewares.append(waf_middleware)
 
     async def on_shutdown(app):
         app["shutdown_event"].set()
 
+    async def handle_get_csrf(request):
+        # We don't require auth to GET the token, but it is tied to requests.
+        return web.json_response({"token": generate_csrf_token()})
+
     app.on_shutdown.append(on_shutdown)
+    app.router.add_get("/api/csrf", handle_get_csrf)
     app.router.add_post("/api/heartbeat", handle_heartbeat)
     if ENABLE_WEB_UI:
         logging.info("Web UI ENABLED.")
@@ -3500,13 +3439,13 @@ async def agent_monitor():
     except Exception:
         pass
     
-    # Measure initial ping
     ping_result = await measure_agent_ping()
     AGENT_PING_CACHE = ping_result if ping_result else "n/a"
     AGENT_PING_LAST_UPDATE = time.time()
     
     while True:
         try:
+            # 1. Gather Agent Stats
             cpu = psutil.cpu_percent(interval=None)
             mem = psutil.virtual_memory()
             ram_pct = round((mem.total - mem.available) / mem.total * 100, 1) if mem.total > 0 else 0
@@ -3519,13 +3458,84 @@ async def agent_monitor():
                 "tx": net.bytes_sent,
             }
             AGENT_HISTORY.append(point)
+            if len(AGENT_HISTORY) > 60:
+                AGENT_HISTORY.pop(0)
+                
+            rx_total, tx_total = traffic_module.get_current_traffic_total()
+            net_if = psutil.net_io_counters(pernic=True)
+            disk = psutil.disk_usage(get_host_path("/"))
+            freq = psutil.cpu_freq()
+            proc_cpu = await asyncio.to_thread(_get_top_processes, "cpu")
+            proc_ram = await asyncio.to_thread(_get_top_processes, "ram")
+            proc_disk = await asyncio.to_thread(_get_top_processes, "disk")
             
-            # Update ping interval based on config
+            current_stats = {
+                "cpu": cpu,
+                "ram": ram_pct,
+                "disk": disk.percent,
+                "ip": encrypt_for_web(AGENT_IP_CACHE),
+                "ping": encrypt_for_web(AGENT_PING_CACHE),
+                "net_sent": tx_total,
+                "net_recv": rx_total,
+                "boot_time": psutil.boot_time(),
+                "ram_total": mem.total,
+                "ram_used": mem.total - mem.available,
+                "disk_total": disk.total,
+                "disk_free": disk.free,
+                "cpu_freq": freq.current if freq else 0,
+                "process_cpu": proc_cpu,
+                "process_ram": proc_ram,
+                "process_disk": proc_disk,
+                "interfaces": {k: v._asdict() for k, v in net_if.items()},
+            }
+            payload_stats = {"stats": current_stats, "history": list(AGENT_HISTORY)}
+            evt_agent = f"event: agent_stats\ndata: {json.dumps(payload_stats)}\n\n".encode("utf-8")
+            
+            # 2. Gather Nodes List
+            all_nodes = await nodes_db.get_all_nodes()
+            nodes_data = []
+            now = time.time()
+            for token, node in all_nodes.items():
+                last_seen = node.get("last_seen", 0)
+                is_restarting = node.get("is_restarting", False)
+                status = "offline"
+                if is_restarting:
+                    status = "restarting"
+                elif now - last_seen < NODE_OFFLINE_TIMEOUT:
+                    status = "online"
+                stats = node.get("stats", {})
+                nodes_data.append(
+                    {
+                        "token": encrypt_for_web(token),
+                        "name": node.get("name", "Unknown"),
+                        "ip": encrypt_for_web(node.get("ip", "Unknown")),
+                        "status": status,
+                        "cpu": stats.get("cpu", 0),
+                        "ram": stats.get("ram", 0),
+                        "disk": stats.get("disk", 0),
+                        "net_rx_speed": stats.get("net_rx_speed", 0),
+                        "net_tx_speed": stats.get("net_tx_speed", 0)
+                    }
+                )
+            evt_nodes = f"event: nodes_list\ndata: {json.dumps({'nodes': nodes_data})}\n\n".encode("utf-8")
+            
+            # 3. Broadcast to all active queues
+            for q in list(ACTIVE_SSE_QUEUES):
+                try:
+                    q.put_nowait({
+                        "agent": evt_agent,
+                        "nodes": evt_nodes,
+                        "raw_notifications": list(shared_state.WEB_NOTIFICATIONS)
+                    })
+                except asyncio.QueueFull:
+                    pass
+
             ping_int = getattr(current_config, "PING_INTERVAL", 30)
             if time.time() - AGENT_PING_LAST_UPDATE > ping_int:
                 ping_result = await measure_agent_ping()
                 AGENT_PING_CACHE = ping_result if ping_result else "n/a"
                 AGENT_PING_LAST_UPDATE = time.time()
+                
         except asyncio.CancelledError:
 
             raise
