@@ -314,9 +314,11 @@ def load_keyboard_config():
     try:
         data = get_bot_config("keyboard_config", {})
         if data:
-            KEYBOARD_CONFIG.update(data)
-            if "enable_nodes" not in KEYBOARD_CONFIG:
-                KEYBOARD_CONFIG["enable_nodes"] = True
+            new_config = KEYBOARD_CONFIG.copy()
+            new_config.update(data)
+            if "enable_nodes" not in new_config:
+                new_config["enable_nodes"] = True
+            KEYBOARD_CONFIG = new_config            
             logging.info("Keyboard config loaded from bot.db.")
         else:
             logging.info("Keyboard config not found or empty, using defaults.")
