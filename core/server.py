@@ -819,7 +819,7 @@ async def handle_terminal_stats(request):
         return web.json_response({"error": "Missing IP"}, status=400)
         
     try:
-        if ip == AGENT_IP_CACHE or ip in ["127.0.0.1", "localhost", "0.0.0.0"]:
+        if ip == AGENT_IP_CACHE or ip in ["127.0.0.1", "localhost", "0.0.0.0"]:  # nosec B104
             import psutil
             try:
                 cpu = psutil.cpu_percent()
