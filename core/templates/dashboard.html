@@ -184,9 +184,10 @@
                             <div onclick="toggleHaptics()"
                                 class="w-full cursor-pointer px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-white/5 flex items-center justify-between text-gray-800 dark:text-gray-200 transition">
                                 <span class="font-medium">Вибрация</span>
-                                <div class="w-11 h-6 bg-gray-200 dark:bg-gray-700 rounded-full relative transition-all duration-300 shrink-0 shadow-inner border border-black/5 dark:border-white/5" id="mHapticsTrack">
-                                    <div class="w-5 h-5 bg-white rounded-full shadow-[0_2px_4px_rgba(0,0,0,0.2)] absolute left-[2px] top-[2px] transition-transform duration-300 ease-[cubic-bezier(0.4,0,0.2,1)]" id="mHapticsThumb"></div>
-                                </div>
+                                <label class="relative inline-flex items-center cursor-pointer" onclick="event.stopPropagation(); event.preventDefault(); toggleHaptics()">
+                                    <input type="checkbox" id="mHapticsCheckbox" class="sr-only peer">
+                                    <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-green-500"></div>
+                                </label>
                             </div>
                         </div>
                     </div>
@@ -531,7 +532,7 @@
                         class="w-full pl-10 pr-4 py-2 bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 transition-all duration-300 placeholder-gray-400 text-gray-900 dark:text-white"
                         placeholder="{{ web_search_placeholder }}">
                 </div>
-                <div class="space-y-3 max-h-[320px] overflow-y-auto pr-2 custom-scrollbar" id="nodesList">
+                <div class="space-y-3 pr-2 pb-3" id="nodesList">
                     <div class="text-center py-8 text-gray-400 dark:text-gray-500 text-sm">
                         <svg class="animate-spin h-5 w-5 mx-auto mb-2 opacity-50" xmlns="http://www.w3.org/2000/svg"
                             fill="none" viewBox="0 0 24 24">

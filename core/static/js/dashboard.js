@@ -423,6 +423,19 @@ function filterAndRenderNodes() {
     renderNodesList();
 }
 
+function updateNodesScrollMode(container, count) {
+    if (count > 3) {
+        // На мобильных карточки выше (flex-col), нужен больший лимит
+        const w = window.innerWidth;
+        const maxH = w < 640 ? '500px' : w < 1024 ? '420px' : '320px';
+        container.style.maxHeight = maxH;
+        container.classList.add('overflow-y-auto', 'custom-scrollbar');
+    } else {
+        container.style.maxHeight = '';
+        container.classList.remove('overflow-y-auto', 'custom-scrollbar');
+    }
+}
+
 function renderNodesList() {
     const container = document.getElementById('nodesList');
     if (!container) return;
@@ -434,11 +447,13 @@ function renderNodesList() {
             emptyText = (typeof I18N !== 'undefined' && I18N.web_search_nothing_found) ? I18N.web_search_nothing_found : "Nothing found";
         }
         container.innerHTML = `<div class="text-center py-8 text-gray-400 dark:text-gray-500 text-sm">${emptyText}</div>`;
+        updateNodesScrollMode(container, 0);
         return;
     }
 
     container.innerHTML = '';
     renderedCount = 0;
+    updateNodesScrollMode(container, currentRenderList.length);
     renderNextNodeBatch();
 }
 

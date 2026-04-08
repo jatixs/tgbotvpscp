@@ -132,9 +132,16 @@ function toggleHaptics() {
 
 function updateHapticsUI() {
     const isEnabled = localStorage.getItem('haptics_enabled') !== 'false';
+    
+    // Новый стиль: checkbox peer-checked
+    const checkbox = document.getElementById('mHapticsCheckbox');
+    if (checkbox) {
+        checkbox.checked = isEnabled;
+    }
+    
+    // Обратная совместимость со старым стилем (если есть)
     const track = document.getElementById('mHapticsTrack');
     const thumb = document.getElementById('mHapticsThumb');
-    
     if (track && thumb) {
         if (isEnabled) {
             track.classList.replace('bg-gray-200', 'bg-green-500');
@@ -146,6 +153,7 @@ function updateHapticsUI() {
             thumb.style.transform = 'translateX(0px)';
         }
     }
+
     const statusText = document.getElementById('mobileHapticsStatus');
     if (statusText) {
         statusText.innerText = isEnabled ? 'Вкл' : 'Выкл';

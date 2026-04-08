@@ -755,6 +755,7 @@ html.dark .monitor-link-btn:hover {
 
 /* Responsive adjustments for Network Activity section on narrow screens */
 @media (max-width: 484px) {
+
 	/* Делаем контейнер на всю ширину и применяем стиль единой панели */
 	#networkBadgesContainer {
 		width: 100% !important;
@@ -788,23 +789,29 @@ html.dark .monitor-link-btn:hover {
 		display: block !important;
 		width: 1px !important;
 		min-width: 1px !important;
-		height: 1.25rem !important; /* Аккуратная высота линии */
-		background-color: #d1d5db !important; /* Серый цвет для светлой темы */
+		height: 1.25rem !important;
+		/* Аккуратная высота линии */
+		background-color: #d1d5db !important;
+		/* Серый цвет для светлой темы */
 		margin: 0 4px !important;
 		flex-shrink: 0 !important;
 	}
 
 	html.dark #networkBadgesDivider {
-		background-color: #4b5563 !important; /* Темно-серый цвет для темной темы */
+		background-color: #4b5563 !important;
+		/* Темно-серый цвет для темной темы */
 	}
 
 	/* Уменьшаем размер шрифтов в бейджах для компактности */
 	#agentPingBadge span:first-child {
 		font-size: 0.55rem !important;
 	}
-	#agentPing, #agentIp {
+
+	#agentPing,
+	#agentIp {
 		font-size: 0.625rem !important;
 	}
+
 	#agentIpBadge svg {
 		width: 0.875rem !important;
 		height: 0.875rem !important;
@@ -817,12 +824,14 @@ html.dark .monitor-link-btn:hover {
 }
 
 #lockIcon.lock-active {
-	color: #10b981 !important; /* green-500 */
+	color: #10b981 !important;
+	/* green-500 */
 	filter: drop-shadow(0 0 8px rgba(16, 185, 129, 0.6));
 }
 
 html.dark #lockIcon.lock-active {
-	color: #34d399 !important; /* green-400 */
+	color: #34d399 !important;
+	/* green-400 */
 }
 
 /* Password Section Blur */
@@ -870,4 +879,13 @@ html.dark .telegram-only-overlay-badge {
 	background: rgba(6, 78, 59, 0.88);
 	border-color: rgba(16, 185, 129, 0.55);
 	box-shadow: 0 10px 24px rgba(16, 185, 129, 0.24);
+}
+
+/* Анимация переключателя виброотклика */
+#mHapticsCheckbox+div {
+	transition: background-color 0.3s ease;
+}
+
+#mHapticsCheckbox+div::after {
+	transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.3s ease;
 }
