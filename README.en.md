@@ -6,7 +6,6 @@
 
 <p align="center">
   <b>v1.21.0</b> — enterprise-grade ecosystem for monitoring and managing server infrastructure<br>
-  <b>v2.5.0-beta</b> — <i>Mobile Support Edition</i><br>
 </p>
 
 <p align="center">
