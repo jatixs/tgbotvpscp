@@ -297,6 +297,43 @@ cleanup_for_node() {
     sudo rm -rf core modules bot.py watchdog.py Dockerfile docker-compose.yml .git config/users.json config/alerts_config.json
 }
 
+get_country_code_by_ip() {
+    local ext_ip=""
+    local country=""
+    local sypex_country=""
+    local ipgeobase_country=""
+
+    # Use strict overall timeout to avoid hanging on slow or blocked providers.
+    ext_ip=$(curl -4fsS --connect-timeout 3 --max-time 8 https://api.ipify.org 2>/dev/null \
+        || curl -4fsS --connect-timeout 3 --max-time 8 https://ipinfo.io/ip 2>/dev/null \
+        || echo "")
+
+    if [ -n "$ext_ip" ]; then
+        country=$(curl -4fsS --connect-timeout 3 --max-time 8 "https://ipapi.co/${ext_ip}/country/" 2>/dev/null \
+            || curl -4fsS --connect-timeout 3 --max-time 8 "http://ip-api.com/line/${ext_ip}?fields=countryCode" 2>/dev/null \
+            || echo "")
+
+        if [ -z "$country" ]; then
+            # Russian geolocation providers as extra fallback.
+            sypex_country=$(curl -4fsS --connect-timeout 3 --max-time 8 "https://api.sypexgeo.net/json/${ext_ip}" 2>/dev/null \
+                | tr -d '\n' \
+                | sed -n 's/.*"country"[^{]*{[^}]*"iso"[[:space:]]*:[[:space:]]*"\([A-Za-z][A-Za-z]\)".*/\1/p')
+
+            if [ -n "$sypex_country" ]; then
+                country="$sypex_country"
+            else
+                ipgeobase_country=$(curl -4fsS --connect-timeout 3 --max-time 8 "https://ipgeobase.ru:7020/geo?ip=${ext_ip}" 2>/dev/null \
+                    | tr -d '\n' \
+                    | sed -n 's:.*<country>\([A-Za-z][A-Za-z]\)</country>.*:\1:p')
+                country="$ipgeobase_country"
+            fi
+        fi
+    fi
+
+    country=$(echo "$country" | tr -d '\r\n[:space:]' | tr '[:lower:]' '[:upper:]')
+    echo "${country:0:2}"
+}
+
 install_extras() {
     if ! command -v fail2ban-client &> /dev/null; then
         msg_question "Fail2Ban not found. Install? (y/n): " I; if [[ "$I" =~ ^[Yy]$ ]]; then run_with_spinner "Installing Fail2ban" sudo apt-get install -y -q fail2ban; fi
@@ -304,11 +341,7 @@ install_extras() {
     
     # Detect server location by external IP
     msg_info "Detecting server geolocation..."
-    SERVER_COUNTRY=""
-    EXT_IP=$(curl -s --connect-timeout 5 https://api.ipify.org 2>/dev/null || curl -s --connect-timeout 5 https://ipinfo.io/ip 2>/dev/null || echo "")
-    if [ -n "$EXT_IP" ]; then
-        SERVER_COUNTRY=$(curl -s --connect-timeout 5 "http://ip-api.com/line/${EXT_IP}?fields=countryCode" 2>/dev/null || echo "")
-    fi
+    SERVER_COUNTRY=$(get_country_code_by_ip)
     
     if [ "$SERVER_COUNTRY" == "RU" ]; then
         msg_info "Server is located in Russia - installing iperf3 for speedtest"

@@ -70,14 +70,96 @@ document.addEventListener("DOMContentLoaded", () => {
     initSSE();
     initSessionSync();
     initHolidayMood();
+    initHapticsToggle();
     initAddNodeLogic();
     if (document.getElementById('logsContainer')) {
         if (typeof window.switchLogType === 'function') {
             window.switchLogType('bot');
         }
     }
+
+    // Unlock Vibration API on first interaction
+    const unlockHaptics = () => {
+        if (navigator.vibrate) navigator.vibrate(0);
+        document.body.removeEventListener('touchstart', unlockHaptics);
+        document.body.removeEventListener('click', unlockHaptics);
+    };
+    document.body.addEventListener('touchstart', unlockHaptics, { once: true, passive: true });
+    document.body.addEventListener('click', unlockHaptics, { once: true, passive: true });
+
+    window.playHaptic = function(pattern) {
+        if (navigator.vibrate && localStorage.getItem('haptics_enabled') !== 'false') {
+            navigator.vibrate(pattern);
+        }
+    };
+
+    document.body.addEventListener('input', (e) => {
+        if (e.target && e.target.tagName === 'INPUT' && e.target.type === 'range') {
+            playHaptic(5);
+        }
+    });
+
+    document.body.addEventListener('change', (e) => {
+        if (e.target && e.target.tagName === 'INPUT' && (e.target.type === 'checkbox' || e.target.type === 'radio')) {
+            if (e.target.checked) {
+                playHaptic([10, 30, 10]); 
+            } else {
+                playHaptic(10); 
+            }
+        }
+    });
+
     pageCache.set(window.location.href, document.documentElement.outerHTML);
 });
+
+function initHapticsToggle() {
+    updateHapticsUI();
+}
+
+function toggleHaptics() {
+    const currentState = localStorage.getItem('haptics_enabled') !== 'false';
+    localStorage.setItem('haptics_enabled', currentState ? 'false' : 'true');
+    updateHapticsUI();
+    if (!currentState) {
+        if (navigator.vibrate) navigator.vibrate([10, 30, 10]);
+        const msgOn = (typeof I18N !== 'undefined' && I18N.web_haptics_on) ? I18N.web_haptics_on : "Haptics: ON";
+        if (window.showToast) window.showToast(msgOn);
+    } else {
+        const msgOff = (typeof I18N !== 'undefined' && I18N.web_haptics_off) ? I18N.web_haptics_off : "Haptics: OFF";
+        if (window.showToast) window.showToast(msgOff);
+    }
+}
+
+function updateHapticsUI() {
+    const isEnabled = localStorage.getItem('haptics_enabled') !== 'false';
+    
+    // Новый стиль: checkbox peer-checked
+    const checkbox = document.getElementById('mHapticsCheckbox');
+    if (checkbox) {
+        checkbox.checked = isEnabled;
+    }
+    
+    // Обратная совместимость со старым стилем (если есть)
+    const track = document.getElementById('mHapticsTrack');
+    const thumb = document.getElementById('mHapticsThumb');
+    if (track && thumb) {
+        if (isEnabled) {
+            track.classList.replace('bg-gray-200', 'bg-green-500');
+            track.classList.replace('dark:bg-gray-700', 'dark:bg-green-500');
+            thumb.style.transform = 'translateX(20px)';
+        } else {
+            track.classList.replace('bg-green-500', 'bg-gray-200');
+            track.classList.replace('dark:bg-green-500', 'dark:bg-gray-700');
+            thumb.style.transform = 'translateX(0px)';
+        }
+    }
+
+    const statusText = document.getElementById('mobileHapticsStatus');
+    if (statusText) {
+        statusText.innerText = isEnabled ? 'Вкл' : 'Выкл';
+        statusText.className = isEnabled ? 'text-xs font-bold uppercase text-green-500' : 'text-xs font-bold uppercase text-gray-500';
+    }
+}
 
 function parsePageEmojis() {
     if (window.twemoji) {
@@ -538,7 +620,12 @@ function initNotifications() {
         newClearBtn.addEventListener('click', clearNotifications);
     }
     document.addEventListener('click', (e) => {
-        if (!e.target.closest('#notifDropdown') && !e.target.closest('#notifBtn')) closeNotifications();
+        if (!e.target.closest('#notifDropdown') && !e.target.closest('#notifBtn')) {
+            if (typeof closeNotifications === 'function') closeNotifications();
+        }
+        if (!e.target.closest('#mobileSettingsDropdown') && !e.target.closest('#mobileSettingsBtn')) {
+            if (typeof closeMobileSettings === 'function') closeMobileSettings();
+        }
     });
 }
 
@@ -804,6 +891,8 @@ function toggleNotifications() {
         }
     }
 }
+window.toggleNotifications = toggleNotifications;
+window.closeNotifications = closeNotifications;
 
 function closeNotifications() {
     const d = document.getElementById('notifDropdown');
@@ -813,21 +902,78 @@ function closeNotifications() {
     }
 }
 
-function toggleTheme() {
-    const n = (themes.indexOf(currentTheme) + 1) % themes.length;
-    currentTheme = themes[n];
-    localStorage.setItem('theme', currentTheme);
-    applyThemeUI(currentTheme);
-    document.documentElement.classList.toggle('dark', currentTheme === 'dark' || (currentTheme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches));
+function toggleMobileSettings(e) {
+    if (e) e.stopPropagation();
+    const dropdown = document.getElementById('mobileSettingsDropdown');
+    if (!dropdown) return;
 
-    window.dispatchEvent(new Event('themeChanged'));
+    if (!dropdown.classList.contains('hidden')) {
+        closeMobileSettings();
+    } else {
+        if (typeof closeNotifications === 'function') closeNotifications();
+        dropdown.classList.remove('hidden');
+    }
+}
+
+function closeMobileSettings() {
+    const dropdown = document.getElementById('mobileSettingsDropdown');
+    if (dropdown) {
+        dropdown.classList.add('hidden');
+    }
+}
+window.closeMobileSettings = closeMobileSettings;
+window.toggleMobileSettings = toggleMobileSettings;
+
+function toggleTheme() {
+    const themes = ["system", "dark", "light"];
+    let currentTheme = localStorage.getItem("theme");
+    if (!currentTheme) currentTheme = "system";
+
+    const currentIndex = themes.indexOf(currentTheme);
+    const nextTheme = themes[(currentIndex + 1) % themes.length];
+
+    setThemeDirect(nextTheme, null);
+}
+
+function setThemeDirect(theme, event) {
+    if (event) event.stopPropagation();
+    localStorage.setItem("theme", theme);
+    document.documentElement.classList.toggle('dark', theme === 'dark' || (theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches));
+    applyThemeUI(theme);
+    window.dispatchEvent(new Event("themeChanged"));
 }
 
 function applyThemeUI(t) {
+    if (!t) return;
     ['iconMoon', 'iconSun', 'iconSystem'].forEach(id => document.getElementById(id)?.classList.add('hidden'));
-    if (t === 'dark') document.getElementById('iconMoon')?.classList.remove('hidden');
-    else if (t === 'light') document.getElementById('iconSun')?.classList.remove('hidden');
-    else document.getElementById('iconSystem')?.classList.remove('hidden');
+    
+    if (t === 'dark') {
+        document.getElementById('iconMoon')?.classList.remove('hidden');
+    } else if (t === 'light') {
+        document.getElementById('iconSun')?.classList.remove('hidden');
+    } else {
+        document.getElementById('iconSystem')?.classList.remove('hidden');
+    }
+    
+    // Interactive segmented control style for active theme
+    const baseClasses = ["text-gray-500", "hover:text-gray-700", "dark:text-gray-400", "dark:hover:text-gray-200", "hover:bg-gray-200", "dark:hover:bg-gray-800"];
+    const activeClasses = ["bg-white", "dark:bg-gray-600", "shadow-sm", "text-gray-900", "dark:text-white"];
+    
+    ['mThemeSys', 'mThemeDark', 'mThemeLight'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) {
+            el.classList.remove(...activeClasses);
+            el.classList.add(...baseClasses);
+        }
+    });
+
+    const activeEl = document.getElementById(
+        t === 'light' ? 'mThemeLight' : t === 'dark' ? 'mThemeDark' : 'mThemeSys'
+    );
+    if (activeEl) {
+        activeEl.classList.remove(...baseClasses);
+        activeEl.classList.add(...activeClasses);
+    }
 }
 
 function handleVisualViewportResize() {
@@ -851,6 +997,9 @@ function handleModalInputClick(e) {
 
 function animateModalOpen(modal, isInput = false) {
     if (!modal) return;
+
+    // Taptic engine pop-in simulation for modals/hints
+    if (window.playHaptic) playHaptic([8, 40, 10]);
 
     if (modalCloseTimer) {
         clearTimeout(modalCloseTimer);

@@ -26,16 +26,14 @@ from .config import (
     BOT_LOG_DIR,
     WATCHDOG_LOG_DIR,
     NODE_LOG_DIR,
-    WEB_AUTH_FILE,
     ADMIN_USERNAME,
     TOKEN,
     save_keyboard_config,
     KEYBOARD_CONFIG,
     DEPLOY_MODE,
     TG_BOT_NAME,
-    SECURITY_SETTINGS_FILE,
-    load_encrypted_json,
-    save_encrypted_json,
+    get_bot_config,
+    set_bot_config,
 )
 from . import config as current_config
 from .shared_state import (
@@ -631,6 +629,266 @@ async def api_revoke_all_sessions(request):
     return web.json_response({"status": "ok", "revoked_count": count})
 
 
+async def handle_terminal_page(request):
+    user = get_current_user(request)
+    if not user:
+        raise web.HTTPFound("/login")
+    lang = get_user_lang(user["id"])
+    prefill_ip = request.query.get('ip', '')
+    
+    custom_title = getattr(current_config, "WEB_METADATA", {}).get("title", "")
+    page_title = custom_title if custom_title else f"{_('web_terminal_title', lang)} - {TG_BOT_NAME}"
+    
+    context = {
+        "web_title": page_title,
+        "web_brand_name": TG_BOT_NAME,
+        "web_version": APP_VERSION,
+        "web_terminal_title": _("web_terminal_title", lang),
+        "web_terminal_ip": _("web_terminal_ip", lang),
+        "web_terminal_user": _("web_terminal_user", lang),
+        "web_terminal_pass": _("web_terminal_pass", lang),
+        "web_terminal_connect": _("web_terminal_connect", lang),
+        "web_terminal_disconnect": _("web_terminal_disconnect", lang),
+        "web_terminal_port": _("web_terminal_port", lang),
+        "web_terminal_auth_method": _("web_terminal_auth_method", lang),
+        "web_terminal_password_auth": _("web_terminal_password_auth", lang),
+        "web_terminal_key_auth": _("web_terminal_key_auth", lang),
+        "web_terminal_key": _("web_terminal_key", lang),
+        "web_terminal_key_select": _("web_terminal_key_select", lang),
+        "web_terminal_remember": _("web_terminal_remember", lang),
+        "web_terminal_status_disconnected": _("web_terminal_status_disconnected", lang),
+        "web_terminal_status_connecting": _("web_terminal_status_connecting", lang),
+        "web_terminal_status_connected": _("web_terminal_status_connected", lang),
+        "web_terminal_error": _("web_terminal_error", lang),
+        "prefill_ip": prefill_ip
+    }
+    
+    template = JINJA_ENV.get_template("terminal.html")
+    html_content = template.render(context)
+    return web.Response(text=html_content, content_type="text/html")
+
+
+async def handle_terminal_ws(request):
+    user = get_current_user(request)
+    if not user:
+        return web.Response(status=401)
+        
+    ws_client = web.WebSocketResponse()
+    await ws_client.prepare(request)
+    
+    try:
+        msg = await ws_client.receive_json()
+    except Exception:
+        await ws_client.close()
+        return ws_client
+
+    if msg.get("type") != "auth":
+        await ws_client.close()
+        return ws_client
+        
+    host = msg.get("host")
+    username = msg.get("user")
+    port = int(msg.get("port", 22))
+    use_saved = msg.get("use_saved", False)
+    auth_type = msg.get("auth_type", "password")
+    password = msg.get("password", "")
+    private_key = msg.get("private_key", "")
+    cols = msg.get("cols", 80)
+    rows = msg.get("rows", 24)
+    
+    if not host or not username:
+        await ws_client.send_json({"type": "error", "message": "Missing host or username"})
+        await ws_client.close()
+        return ws_client
+        
+        creds = current_config.get_bot_config("terminal_creds", {})
+        uid_str = str(user["id"])
+        if uid_str in creds and host in creds[uid_str]:
+            saved_cred = creds[uid_str][host]
+            auth_type = saved_cred.get("type", "password")
+            if auth_type == "password":
+                password = saved_cred.get("password", "")
+            else:
+                private_key = saved_cred.get("private_key", "")
+    
+    try:
+        import asyncssh
+        connect_kwargs = {
+            "host": host,
+            "port": port,
+            "username": username,
+            "known_hosts": None
+        }
+        if auth_type == "key" and private_key:
+            try:
+                # Load the private key string
+                key = asyncssh.import_private_key(private_key)
+                connect_kwargs["client_keys"] = [key]
+            except Exception as e:
+                await ws_client.send_json({"type": "error", "message": f"Invalid SSH Key: {e}"})
+                await ws_client.close()
+                return ws_client
+        else:
+            connect_kwargs["password"] = password
+
+        conn = await asyncssh.connect(**connect_kwargs)
+        
+        async def forward_stdout(process):
+            try:
+                while True:
+                    data = await process.stdout.read(4096)
+                    if not data:
+                        break
+                    await ws_client.send_str(data)
+            except Exception:
+                pass
+                
+        async def forward_stderr(process):
+            try:
+                while True:
+                    data = await process.stderr.read(4096)
+                    if not data:
+                        break
+                    await ws_client.send_str(data)
+            except Exception:
+                pass
+                
+        process = await conn.create_process(term_type='xterm', term_size=(cols, rows))
+        await ws_client.send_json({"type": "connected"})
+        
+        asyncio.create_task(forward_stdout(process))
+        asyncio.create_task(forward_stderr(process))
+        
+        async for ws_msg in ws_client:
+            if ws_msg.type == aiohttp.WSMsgType.TEXT:
+                try:
+                    data = json.loads(ws_msg.data)
+                    if data.get("type") == "data":
+                        process.stdin.write(data["data"])
+                    elif data.get("type") == "resize":
+                        process.change_terminal_size(data.get("cols", 80), data.get("rows", 24))
+                except Exception:
+                    pass
+            elif ws_msg.type == aiohttp.WSMsgType.ERROR:
+                break
+                
+        process.close()
+        conn.close()
+        
+    except Exception as e:
+        await ws_client.send_json({"type": "error", "message": str(e)})
+        
+    finally:
+        if not ws_client.closed:
+            await ws_client.close()
+            
+    return ws_client
+
+
+async def handle_get_terminal_creds(request):
+    user = get_current_user(request)
+    if not user:
+        return web.json_response({"status": "error"}, status=401)
+    
+    ip = request.query.get("ip", "")
+    if not ip:
+        return web.json_response({"status": "error", "message": "Missing IP"})
+        
+    creds = current_config.get_bot_config("terminal_creds", {})
+    uid_str = str(user["id"])
+    
+    if uid_str in creds and ip in creds[uid_str]:
+        c = creds[uid_str][ip]
+        return web.json_response({
+            "status": "ok",
+            "saved": True,
+            "type": c.get("type", "password"),
+            "user": c.get("user", "root"),
+            "port": c.get("port", 22)
+        })
+    return web.json_response({"status": "ok", "saved": False})
+
+
+async def handle_terminal_stats(request):
+    user = get_current_user(request)
+    if not user:
+        return web.json_response({"error": "Unauthorized"}, status=401)
+    
+    ip = request.query.get("ip")
+    if not ip:
+        return web.json_response({"error": "Missing IP"}, status=400)
+        
+    try:
+        if ip == AGENT_IP_CACHE or ip in ["127.0.0.1", "localhost", "0.0.0.0"]:  # nosec B104
+            import psutil
+            try:
+                cpu = psutil.cpu_percent()
+                mem = psutil.virtual_memory()
+                disk = psutil.disk_usage(get_host_path("/"))
+                uptime = int(time.time() - psutil.boot_time())
+                ram_used = mem.total - mem.available
+                ram_pct = round(ram_used / mem.total * 100, 1) if mem.total > 0 else 0
+                return web.json_response({
+                    "cpu": cpu,
+                    "ram": ram_pct,
+                    "rom": disk.percent,
+                    "uptime": uptime,
+                    "ping": AGENT_PING_CACHE
+                })
+            except Exception:
+                pass
+
+        all_nodes = await nodes_db.get_all_nodes()
+        for token, node_data in all_nodes.items():
+            if node_data.get("ip") == ip:
+                stats = node_data.get("stats", {})
+                last_seen = node_data.get("last_seen", 0)
+                # Calculate uptime based on heartbeat or last_seen
+                uptime = 0
+                if last_seen > 0:
+                    uptime = int(time.time() - last_seen) # Approximate or we can use boot_time if they sent it
+                return web.json_response({
+                    "cpu": stats.get("cpu", 0),
+                    "ram": stats.get("ram", 0),
+                    "rom": stats.get("disk", 0),
+                    "uptime": stats.get("uptime", 0), # assuming node sends it, if not 0
+                    "ping": stats.get("ping", 0)
+                })
+                
+        return web.json_response({"error": "No stats"}, status=404)
+    except Exception as e:
+        return web.json_response({"error": str(e)}, status=500)
+
+async def handle_save_terminal_creds(request):
+    user = get_current_user(request)
+    if not user:
+        return web.json_response({"status": "error"}, status=401)
+        
+    try:
+        data = await request.json()
+        ip = data.get("ip")
+        if not ip:
+            return web.json_response({"status": "error", "message": "Missing IP"})
+            
+        creds = current_config.get_bot_config("terminal_creds", {})
+        if not isinstance(creds, dict):
+            creds = {}
+            
+        uid_str = str(user["id"])
+        if uid_str not in creds:
+            creds[uid_str] = {}
+            
+        creds[uid_str][ip] = {
+            "type": data.get("type", "password"),
+            "user": data.get("user", "root"),
+            "port": data.get("port", 22),
+            "password": data.get("password", ""),
+            "private_key": data.get("private_key", "")
+        }
+        current_config.set_bot_config("terminal_creds", creds)
+        return web.json_response({"status": "ok"})
+    except Exception as e:
+        return web.json_response({"status": "error", "message": str(e)})
 async def handle_dashboard(request):
     user = get_current_user(request)
     if not user:
@@ -702,6 +960,12 @@ async def handle_dashboard(request):
         ]
         nodes_json = json.dumps(nlist)
 
+    vnc_nodes = [{"name": _("web_notif_global_group_agent", lang) or "Agent", "ip": AGENT_IP_CACHE}]
+    for t, n in all_nodes.items():
+        ip = n.get("ip", "")
+        if ip:
+            vnc_nodes.append({"name": n.get("name", "Unknown"), "ip": ip})
+
     can_reset = traffic_module.can_reset_traffic()
 
     context = {
@@ -714,6 +978,8 @@ async def handle_dashboard(request):
         "web_version": display_version,
         "pwa_version": current_config.INSTALLED_VERSION or display_version,
         "role_badge": role_badge_html,
+        "vnc_nodes": vnc_nodes,
+        "web_vnc_select_server": _("web_vnc_select_server", lang) or "Выберите сервер для VNC",
         "cache_ver": CACHE_VER,
         "web_dashboard_title": _("web_dashboard_title", lang),
         "user_avatar": _get_avatar_html(user),
@@ -815,6 +1081,11 @@ async def handle_dashboard(request):
                 "unit_gb": _("unit_gb", lang),
                 "unit_tb": _("unit_tb", lang),
                 "unit_pb": _("unit_pb", lang),
+                "unit_kbps": _("unit_kbps", lang),
+                "unit_mbps": _("unit_mbps", lang),
+                "unit_gbps": _("unit_gbps", lang),
+                "web_haptics_on": _("web_haptics_on", lang),
+                "web_haptics_off": _("web_haptics_off", lang),
                 "web_search_nothing_found": _("web_search_nothing_found", lang),
                 "web_node_modal_loading": _("web_node_modal_loading", lang),
                 "web_node_status_online": _("web_node_status_online", lang),
@@ -824,6 +1095,8 @@ async def handle_dashboard(request):
                 "web_label_ram": _("web_label_ram", lang),
                 "web_label_disk": _("web_label_disk", lang),
                 "web_label_status": _("web_label_status", lang),
+                "web_label_rx": _("web_label_rx", lang),
+                "web_label_tx": _("web_label_tx", lang),
                 "modal_title_info": _("web_node_details_title", lang),
                 "web_click_copy": _("web_click_copy", lang),
                 "web_top_cpu": _("web_top_cpu", lang),
@@ -966,7 +1239,10 @@ async def handle_heartbeat(request):
             )
     if node.get("is_restarting"):
         await nodes_db.update_node_extra(token, "is_restarting", False)
-    ip = request.transport.get_extra_info("peername")[0]
+    if request.transport is not None:
+        ip = request.transport.get_extra_info("peername")[0]
+    else:
+        ip = "127.0.0.1"
     if stats.get("external_ip"):
         ip = stats.get("external_ip")
     else:
@@ -1133,7 +1409,7 @@ async def handle_agent_stats(request):
                 "net_recv": rx_total,
                 "boot_time": psutil.boot_time(),
                 "ram_total": mem.total,
-                "ram_free": mem.available,
+                "ram_used": mem.total - mem.available,
                 "disk_total": disk.total,
                 "disk_free": disk.free,
                 "cpu_freq": freq.current if freq else 0,
@@ -1709,6 +1985,8 @@ async def handle_settings_page(request):
     i18n_data = {
         "web_saving_btn": _("web_saving_btn", lang),
         "web_saved_btn": _("web_saved_btn", lang),
+        "web_haptics_on": _("web_haptics_on", lang),
+        "web_haptics_off": _("web_haptics_off", lang),
         "web_save_btn": _("web_save_btn", lang),
         "web_change_btn": _("web_change_btn", lang),
         "notifications_alert_name_res": _("notifications_alert_name_res", lang),
@@ -2047,7 +2325,7 @@ async def handle_change_password(request):
 
 async def handle_get_telegram_only_mode(request):
     try:
-        settings = load_encrypted_json(SECURITY_SETTINGS_FILE)
+        settings = current_config.get_bot_config("security_settings", {})
         enabled = bool(settings.get("telegram_only_mode", False))
         return web.json_response({"enabled": enabled})
     except Exception as e:
@@ -2064,9 +2342,9 @@ async def handle_set_telegram_only_mode(request):
     try:
         data = await request.json()
         enabled = data.get("enabled", False)
-        settings = load_encrypted_json(SECURITY_SETTINGS_FILE)
+        settings = current_config.get_bot_config("security_settings", {})
         settings["telegram_only_mode"] = enabled
-        save_encrypted_json(SECURITY_SETTINGS_FILE, settings)
+        current_config.set_bot_config("security_settings", settings)
         return web.json_response({"status": "ok", "enabled": enabled})
     except Exception as e:
         logging.error(f"Internal API error: {e}")
@@ -2261,8 +2539,7 @@ async def handle_login_page(request):
 
 
 async def handle_login_request(request):
-    # Check if telegram only mode is enabled
-    settings = load_encrypted_json(SECURITY_SETTINGS_FILE)
+    settings = current_config.get_bot_config("security_settings", {})
     if settings.get("telegram_only_mode", False):
         return web.Response(text="Only Telegram widget login is allowed", status=403)
     
@@ -2297,8 +2574,7 @@ async def handle_login_request(request):
 
 
 async def handle_login_password(request):
-    # Check if telegram only mode is enabled
-    settings = load_encrypted_json(SECURITY_SETTINGS_FILE)
+    settings = current_config.get_bot_config("security_settings", {})
     if settings.get("telegram_only_mode", False):
         return web.Response(text="Password login disabled. Only Telegram widget login is allowed.", status=403)
 
@@ -2577,7 +2853,7 @@ async def handle_sse_stream(request):
                         "net_recv": rx_total,
                         "boot_time": psutil.boot_time(),
                         "ram_total": mem.total,
-                        "ram_free": mem.available,
+                        "ram_used": mem.total - mem.available,
                         "disk_total": disk.total,
                         "disk_free": disk.free,
                         "cpu_freq": freq.current if freq else 0,
@@ -2628,6 +2904,8 @@ async def handle_sse_stream(request):
                         "cpu": stats.get("cpu", 0),
                         "ram": stats.get("ram", 0),
                         "disk": stats.get("disk", 0),
+                        "net_rx_speed": stats.get("net_rx_speed", 0),
+                        "net_tx_speed": stats.get("net_tx_speed", 0)
                     }
                 )
             try:
@@ -3230,12 +3508,13 @@ async def agent_monitor():
     while True:
         try:
             cpu = psutil.cpu_percent(interval=None)
-            ram = psutil.virtual_memory().percent
+            mem = psutil.virtual_memory()
+            ram_pct = round((mem.total - mem.available) / mem.total * 100, 1) if mem.total > 0 else 0
             net = psutil.net_io_counters()
             point = {
                 "t": int(time.time()),
                 "c": cpu,
-                "r": ram,
+                "r": ram_pct,
                 "rx": net.bytes_recv,
                 "tx": net.bytes_sent,
             }
@@ -3524,8 +3803,7 @@ async def handle_login_page(request):
 
 
 async def handle_login_request(request):
-    # Check if telegram only mode is enabled
-    settings = load_encrypted_json(SECURITY_SETTINGS_FILE)
+    settings = current_config.get_bot_config("security_settings", {})
     if settings.get("telegram_only_mode", False):
         return web.Response(text="Only Telegram widget login is allowed", status=403)
 
@@ -3560,7 +3838,7 @@ async def handle_login_request(request):
 
 
 async def handle_login_password(request):
-    settings = load_encrypted_json(SECURITY_SETTINGS_FILE)
+    settings = current_config.get_bot_config("security_settings", {})
     if settings.get("telegram_only_mode", False):
         return web.Response(text="Password login disabled. Only Telegram widget login is allowed.", status=403)
 
@@ -3837,7 +4115,7 @@ async def handle_sse_stream(request):
                         "net_recv": rx_total,
                         "boot_time": psutil.boot_time(),
                         "ram_total": mem.total,
-                        "ram_free": mem.available,
+                        "ram_used": mem.total - mem.available,
                         "disk_total": disk.total,
                         "disk_free": disk.free,
                         "cpu_freq": freq.current if freq else 0,
@@ -3888,6 +4166,8 @@ async def handle_sse_stream(request):
                         "cpu": stats.get("cpu", 0),
                         "ram": stats.get("ram", 0),
                         "disk": stats.get("disk", 0),
+                        "net_rx_speed": stats.get("net_rx_speed", 0),
+                        "net_tx_speed": stats.get("net_tx_speed", 0)
                     }
                 )
             try:
@@ -4485,6 +4765,11 @@ async def start_web_server(bot_instance: Bot):
 
         app.router.add_get("/site.webmanifest", handle_manifest)
         app.router.add_get("/", handle_dashboard)
+        app.router.add_get("/terminal", handle_terminal_page)
+        app.router.add_get("/api/terminal/ws", handle_terminal_ws)
+        app.router.add_get("/api/terminal/creds", handle_get_terminal_creds)
+        app.router.add_post("/api/terminal/creds", handle_save_terminal_creds)
+        app.router.add_get("/api/terminal/stats", handle_terminal_stats)
         app.router.add_get("/settings", handle_settings_page)
         app.router.add_get("/nodes", handle_nodes_monitor_page)
         app.router.add_get("/login", handle_login_page)
@@ -4579,12 +4864,13 @@ async def agent_monitor():
     while True:
         try:
             cpu = psutil.cpu_percent(interval=None)
-            ram = psutil.virtual_memory().percent
+            mem = psutil.virtual_memory()
+            ram_pct = round((mem.total - mem.available) / mem.total * 100, 1) if mem.total > 0 else 0
             net = psutil.net_io_counters()
             point = {
                 "t": int(time.time()),
                 "c": cpu,
-                "r": ram,
+                "r": ram_pct,
                 "rx": net.bytes_recv,
                 "tx": net.bytes_sent,
             }

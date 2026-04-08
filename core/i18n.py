@@ -6,7 +6,7 @@ from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from . import config as core_config
 from . import shared_state
 from functools import lru_cache
-from .config import load_encrypted_json, save_encrypted_json
+from .config import get_bot_config, set_bot_config
 
 STRINGS = {
     "ru": {
@@ -382,6 +382,11 @@ STRINGS = {
         "unit_gb": "ГБ",
         "unit_tb": "ТБ",
         "unit_pb": "ПБ",
+        "unit_kbps": "Кбит/с",
+        "unit_mbps": "Мбит/с",
+        "unit_gbps": "Гбит/с",
+        "web_haptics_on": "Тактильная отдача: ВКЛ",
+        "web_haptics_off": "Тактильная отдача: ВЫКЛ",
         "unit_year_short": "г",
         "unit_day_short": "д",
         "unit_hour_short": "ч",
@@ -551,6 +556,8 @@ STRINGS = {
         "web_label_ram": "RAM",
         "web_label_disk": "ДИСК",
         "web_label_status": "СТАТУС",
+        "web_label_rx": "ВХ",
+        "web_label_tx": "ИСХ",
         "web_time_d": "д",
         "web_time_h": "ч",
         "web_time_m": "м",
@@ -792,6 +799,25 @@ STRINGS = {
         "web_notif_nodes_list_title": "Выберите ноду для индивидуальной настройки:",
         "web_notif_node_settings_title": "Индивидуальные настройки переопределяют глобальные правила для этого сервера.",
         "web_notif_menu_desc": "Здесь вы можете гибко настроить систему уведомлений. Глобальные правила действуют для главного сервера и всех нод по умолчанию. Если вам нужно переопределить алерты для конкретной ноды — перейдите в индивидуальные настройки.",
+        "web_terminal_btn": "VNC",
+        "web_terminal_title": "Web Терминал (SSH)",
+        "web_terminal_ip": "IP-адрес:",
+        "web_terminal_user": "Имя пользователя:",
+        "web_terminal_pass": "Пароль:",
+        "web_terminal_connect": "Подключить",
+        "web_terminal_disconnect": "Отключить",
+        "web_terminal_status_disconnected": "Отключен",
+        "web_terminal_status_connecting": "Подключение...",
+        "web_terminal_status_connected": "Подключен",
+        "web_terminal_error": "Ошибка подключения",
+        "web_vnc_select_server": "Выберите сервер для VNC",
+        "web_terminal_port": "Порт:",
+        "web_terminal_auth_method": "Метод авторизации:",
+        "web_terminal_password_auth": "Пароль",
+        "web_terminal_key_auth": "SSH Ключ",
+        "web_terminal_key": "Закрытый ключ (RSA/Ed25519):",
+        "web_terminal_key_select": "Выбрать файл",
+        "web_terminal_remember": "Запомнить метод входа для этого IP",
     },
 
     "en": {
@@ -1157,6 +1183,11 @@ STRINGS = {
         "unit_gb": "GB",
         "unit_tb": "TB",
         "unit_pb": "PB",
+        "unit_kbps": "Kbps",
+        "unit_mbps": "Mbps",
+        "unit_gbps": "Gbps",
+        "web_haptics_on": "Haptics: ON",
+        "web_haptics_off": "Haptics: OFF",
         "unit_year_short": "y",
         "unit_day_short": "d",
         "unit_hour_short": "h",
@@ -1312,6 +1343,8 @@ STRINGS = {
         "web_label_ram": "RAM",
         "web_label_disk": "DISK",
         "web_label_status": "STATUS",
+        "web_label_rx": "RX",
+        "web_label_tx": "TX",
         "web_time_d": "d",
         "web_time_h": "h",
         "web_time_m": "m",
@@ -1576,36 +1609,54 @@ STRINGS = {
         "web_notif_nodes_list_title": "Select a node for individual configuration:",
         "web_notif_node_settings_title": "Individual settings override global rules for this server.",
         "web_notif_menu_desc": "Here you can flexibly configure the notification system. Global rules apply to the main server and all nodes by default. If you need to override alerts for a specific node, go to individual settings.",
+        "web_terminal_btn": "VNC",
+        "web_terminal_title": "Web Terminal (SSH)",
+        "web_terminal_ip": "IP Address:",
+        "web_terminal_user": "Username:",
+        "web_terminal_pass": "Password:",
+        "web_terminal_connect": "Connect",
+        "web_terminal_disconnect": "Disconnect",
+        "web_terminal_status_disconnected": "Disconnected",
+        "web_terminal_status_connecting": "Connecting...",
+        "web_terminal_status_connected": "Connected",
+        "web_terminal_error": "Connection error",
+        "web_vnc_select_server": "Select server for VNC",
+        "web_terminal_port": "Port:",
+        "web_terminal_auth_method": "Auth Method:",
+        "web_terminal_password_auth": "Password",
+        "web_terminal_key_auth": "SSH Key",
+        "web_terminal_key": "Private Key (RSA/Ed25519):",
+        "web_terminal_key_select": "Select file",
+        "web_terminal_remember": "Remember login method for this IP",
     },
 }
 
 
 def load_user_settings():
     try:
-        settings = load_encrypted_json(core_config.USER_SETTINGS_FILE)
+        settings = get_bot_config("user_settings", {})
         if settings:
             loaded_data_int_keys = {int(k): v for k, v in settings.items()}
             shared_state.USER_SETTINGS.clear()
             shared_state.USER_SETTINGS.update(loaded_data_int_keys)
-            logging.info("Настройки пользователей (языки) загружены (secure).")
+            logging.info("Настройки пользователей (языки) загружены из bot.db.")
         else:
             shared_state.USER_SETTINGS.clear()
-            logging.info("Файл user_settings.json не найден или пуст.")
+            logging.info("Настройки пользователей (языки) не найдены или пусты.")
     except Exception as e:
         safe_e = str(e).replace("\n", " ").replace("\r", "")
-        logging.error(f"Ошибка загрузки user_settings.json: {safe_e}")
+        logging.error(f"Ошибка загрузки user_settings: {safe_e}")
         shared_state.USER_SETTINGS.clear()
 
 
 def save_user_settings():
     try:
-        os.makedirs(os.path.dirname(core_config.USER_SETTINGS_FILE), exist_ok=True)
         settings_to_save = {str(k): v for k, v in shared_state.USER_SETTINGS.items()}
-        save_encrypted_json(core_config.USER_SETTINGS_FILE, settings_to_save)
+        set_bot_config("user_settings", settings_to_save)
         logging.debug("Настройки пользователей (языки) сохранены.")
     except Exception as e:
         safe_e = str(e).replace("\n", " ").replace("\r", "")
-        logging.error(f"Ошибка сохранения user_settings.json: {safe_e}")
+        logging.error(f"Ошибка сохранения user_settings: {safe_e}")
 
 
 def get_user_lang(user_id: int | str | None) -> str:

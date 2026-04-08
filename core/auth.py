@@ -9,8 +9,8 @@ from aiogram.exceptions import TelegramBadRequest
 from argon2 import PasswordHasher
 from . import config
 from .i18n import _
-from .config import USERS_FILE, ADMIN_USER_ID, ADMIN_USERNAME, INSTALL_MODE
-from .config import load_encrypted_json, save_encrypted_json
+from .config import ADMIN_USER_ID, ADMIN_USERNAME, INSTALL_MODE
+from .config import get_bot_config, set_bot_config
 from .shared_state import ALLOWED_USERS, USER_NAMES, LAST_MESSAGE_IDS
 from .messaging import delete_previous_message
 from .utils import escape_html
@@ -18,10 +18,9 @@ from .utils import escape_html
 
 def load_users():
     try:
-        os.makedirs(os.path.dirname(USERS_FILE), exist_ok=True)
         ALLOWED_USERS.clear()
         USER_NAMES.clear()
-        data = load_encrypted_json(USERS_FILE)
+        data = get_bot_config("users", {})
         if data:
             for user in data.get("allowed_users", []):
                 uid = int(user["id"])
@@ -29,10 +28,8 @@ def load_users():
                 password_hash = user.get("password_hash", None)
                 ALLOWED_USERS[uid] = {"group": group, "password_hash": password_hash}
             USER_NAMES.update(data.get("user_names", {}))
-        elif os.path.exists(USERS_FILE):
-            logging.warning(f"Файл {USERS_FILE} пуст или поврежден.")
         else:
-            logging.info(f"Файл {USERS_FILE} не найден. Инициализация.")
+            logging.info("Users config empty. Инициализация.")
         if ADMIN_USER_ID not in ALLOWED_USERS:
             logging.info(f"Главный админ ID {ADMIN_USER_ID} не найден, добавляю.")
             initial_pass = os.environ.get("TG_WEB_INITIAL_PASSWORD")
@@ -55,7 +52,7 @@ def load_users():
             ALLOWED_USERS[ADMIN_USER_ID] = {"group": "admins", "password_hash": None}
         logging.info(f"Пользователи загружены: {len(ALLOWED_USERS)}")
     except Exception as e:
-        logging.error(f"Критическая ошибка загрузки users.json: {e}", exc_info=True)
+        logging.error(f"Критическая ошибка загрузки пользователей: {e}", exc_info=True)
         ALLOWED_USERS[ADMIN_USER_ID] = {"group": "admins", "password_hash": None}
         save_users()
 
@@ -78,10 +75,9 @@ def save_users():
             "allowed_users": allowed_users_to_save,
             "user_names": user_names_to_save,
         }
-        os.makedirs(os.path.dirname(USERS_FILE), exist_ok=True)
-        save_encrypted_json(USERS_FILE, data)
+        set_bot_config("users", data)
     except Exception as e:
-        logging.error(f"Ошибка сохранения users.json: {e}", exc_info=True)
+        logging.error(f"Ошибка сохранения пользователей: {e}", exc_info=True)
 
 
 def is_allowed(user_id, command=None):

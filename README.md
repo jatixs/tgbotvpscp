@@ -5,12 +5,12 @@
 <h1 align="center">🤖 VPS Manager Telegram Bot</h1>
 
 <p align="center">
-  <b>v1.20.0</b> — профессиональная экосистема для мониторинга и управления серверной инфраструктурой<br>
-  Асинхронная архитектура • Enterprise-безопасность • PWA веб-интерфейс • Real-time SSE
+  <b>v1.21.0</b> — профессиональная экосистема для мониторинга и управления серверной инфраструктурой<br>
+  <b>v2.5.0-beta</b> — <i>Mobile Support Edition</i><br>
 </p>
 
 <p align="center">
-  <a href="https://github.com/jatixs/tgbotvpscp/releases/latest"><img src="https://img.shields.io/badge/version-v1.20.0-blue?style=flat-square" alt="Version 1.20.0"/></a>
+  <a href="https://github.com/jatixs/tgbotvpscp/releases/latest"><img src="https://img.shields.io/badge/version-v1.21.0-blue?style=flat-square" alt="Version 1.21.0"/></a>
   <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/build-70-purple?style=flat-square" alt="Build 70"/></a>
   <a href="https://www.python.org/"><img src="https://img.shields.io/badge/python-3.10%2B-green?style=flat-square" alt="Python 3.10+"/></a>
   <a href="https://choosealicense.com/licenses/gpl-3.0/"><img src="https://img.shields.io/badge/license-GPL--3.0-lightgrey?style=flat-square" alt="License GPL-3.0"/></a>
@@ -524,7 +524,7 @@ python bot.py
 ---
 
 <p align="center">
-  <b>Версия:</b> 1.20.0 (Build 70)<br>
+  <b>Версия:</b> 1.21.0 (Build 71)<br>
   <b>Дата обновления:</b> 3 Февраля 2026 г.<br>
   <b>Статус:</b> Релиз<br>
   <br>
