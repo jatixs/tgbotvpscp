@@ -226,14 +226,23 @@ logger.addHandler(stream_handler)
 
 AGENT_BASE_URL = CONF.get("AGENT_BASE_URL")
 AGENT_TOKEN = CONF.get("AGENT_TOKEN")
+BOT_TOKEN = CONF.get("BOT_TOKEN", "")
+CRITICAL_ALERT_CHAT_IDS = CONF.get("CRITICAL_ALERT_CHAT_IDS", "")
+
 try:
     UPDATE_INTERVAL = max(1, int(CONF.get("NODE_UPDATE_INTERVAL", 5)))
 except ValueError:
     UPDATE_INTERVAL = 5
-BOT_TOKEN = CONF.get("BOT_TOKEN", "")
-CRITICAL_ALERT_CHAT_IDS = CONF.get("CRITICAL_ALERT_CHAT_IDS", "")
-AGENT_ALERT_DELAY_SECONDS = int(CONF.get("AGENT_ALERT_DELAY_SECONDS", 30))
-AGENT_ALERT_LANG = CONF.get("AGENT_ALERT_LANG", "ru").lower()
+
+try:
+    AGENT_ALERT_DELAY_SECONDS = int(CONF.get("AGENT_ALERT_DELAY_SECONDS", 30))
+except ValueError:
+    AGENT_ALERT_DELAY_SECONDS = 30
+
+try:
+    AGENT_ALERT_LANG = CONF.get("AGENT_ALERT_LANG", "ru").lower()
+except ValueError:
+    AGENT_ALERT_LANG = "ru"
 
 if not AGENT_BASE_URL or not AGENT_TOKEN:
     logging.error("CRITICAL: AGENT_BASE_URL or AGENT_TOKEN not found in .env")
