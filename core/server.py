@@ -1454,7 +1454,7 @@ async def handle_agent_ipv4(request):
                     if netifaces.AF_INET in addrs:
                         for addr_info in addrs[netifaces.AF_INET]:
                             ip = addr_info.get('addr')
-                            if ip and ip != '127.0.0.1' and not ip.startswith('169.254.'):
+                            if ip and ip != '127.0.0.1' and not ip.startswith('169.254.') and not ip.startswith('172.17.0.1'):
                                 all_ips.append(ip)
                 except Exception:
                     continue
