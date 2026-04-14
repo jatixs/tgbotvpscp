@@ -178,7 +178,7 @@ function initInputScrollLogic() {
     const isTouchDevice = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
     if (!isTouchDevice) return;
 
-    const ids = ['conf_traffic', 'conf_timeout', 'pass_current', 'pass_new', 'pass_confirm', 'meta_favicon', 'meta_title', 'meta_desc', 'meta_keywords'];
+    const ids = ['conf_traffic', 'conf_monitoring', 'conf_history_days', 'conf_timeout', 'pass_current', 'pass_new', 'pass_confirm', 'meta_favicon', 'meta_title', 'meta_desc', 'meta_keywords'];
     ids.forEach(id => {
         const el = document.getElementById(id);
         if (el) {
@@ -373,7 +373,7 @@ const groups = {
         btnId: 'saveThresholdsBtn'
     },
     intervals: {
-        ids: ['conf_traffic', 'conf_services', 'conf_ping', 'conf_timeout'],
+        ids: ['conf_traffic', 'conf_services', 'conf_ping', 'conf_monitoring', 'conf_history_days', 'conf_timeout'],
         btnId: 'saveIntervalsBtn'
     }
 };
@@ -506,6 +506,8 @@ async function saveSystemConfig(groupName) {
         const trafficVal = parseInt(document.getElementById('conf_traffic').value);
         const servicesVal = parseInt(document.getElementById('conf_services').value);
         const pingVal = parseInt(document.getElementById('conf_ping').value);
+        const monitoringVal = parseInt(document.getElementById('conf_monitoring').value);
+        const historyDaysVal = parseInt(document.getElementById('conf_history_days').value);
         
         if (trafficVal < 5) {
             showError('conf_traffic', I18N.error_traffic_interval_low);
@@ -531,6 +533,18 @@ async function saveSystemConfig(groupName) {
             toggleSaveButton(config.btnId, true);
             return;
         }
+        if (monitoringVal < 5) {
+            showError('conf_monitoring', "Минимум 5 сек.");
+            btn.innerText = originalText;
+            toggleSaveButton(config.btnId, true);
+            return;
+        }
+        if (historyDaysVal < 1 || historyDaysVal > 365) {
+            showError('conf_history_days', "От 1 до 365 дней.");
+            btn.innerText = originalText;
+            toggleSaveButton(config.btnId, true);
+            return;
+        }
     }
 
     const data = {
@@ -540,6 +554,8 @@ async function saveSystemConfig(groupName) {
         TRAFFIC_INTERVAL: document.getElementById('conf_traffic').value,
         SERVICES_INTERVAL: document.getElementById('conf_services').value,
         PING_INTERVAL: document.getElementById('conf_ping').value,
+        MONITORING_INTERVAL: document.getElementById('conf_monitoring').value,
+        HISTORY_RETENTION_DAYS: document.getElementById('conf_history_days').value,
         NODE_OFFLINE_TIMEOUT: document.getElementById('conf_timeout').value
     };
 
@@ -636,6 +652,29 @@ async function clearLogs() {
         btn.innerHTML = originalHTML;
         btn.style.width = '';
         btn.style.height = '';
+    }
+}
+
+async function clearMonitoringHistory() {
+    if (!await window.showModalConfirm(I18N.web_clear_history_confirm || 'Очистить историю мониторинга?', I18N.modal_title_confirm)) return;
+
+    try {
+        const res = await fetch('/api/settings/monitoring/clear', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
+
+        if (res.ok) {
+            if (window.showToast) window.showToast(I18N.web_history_cleared || 'История мониторинга очищена.');
+        } else {
+            const data = await res.json();
+            const errorShort = (typeof I18N !== 'undefined' && I18N.web_error_short) ? I18N.web_error_short : 'Error';
+            await window.showModalAlert(data.error || 'Failed', errorShort);
+        }
+    } catch (e) {
+        console.error(e);
     }
 }
 
@@ -1509,13 +1548,19 @@ async function fetchSessions() {
     if (!container) return;
 
     try {
-        const res = await fetch('/api/sessions/list');
-        const data = await res.json();
-        if (data.sessions) {
-            ALL_SESSIONS = data.sessions;
-            renderSessionsMainWidget(data.sessions);
+        const res = await fetch('/api/sessions/list', {
+            headers: { 'Accept': 'application/json' }
+        });
+
+        if (!res.ok) {
+            throw new Error(`HTTP ${res.status}`);
         }
+
+        const data = await res.json();
+        ALL_SESSIONS = Array.isArray(data.sessions) ? data.sessions : [];
+        renderSessionsMainWidget(ALL_SESSIONS);
     } catch (e) {
+        ALL_SESSIONS = [];
         const errorLoading = (typeof I18N !== 'undefined' && I18N.web_error_loading_sessions) ? I18N.web_error_loading_sessions : "Error loading sessions";
         container.innerHTML = `<div class="text-red-500 text-sm text-center">${errorLoading}</div>`;
     }
@@ -1534,43 +1579,63 @@ function renderSessionsMainWidget(sessions) {
     }
 }
 
-function renderSessionItem(s) {
-    const isCurrent = s.current;
-    const isMine = s.is_mine !== false;
-    let deviceText = s.ua;
-    let iconType = "desktop";
+function detectSessionDevice(userAgent) {
+    const rawUa = String(userAgent || '');
+    const ua = rawUa.toLowerCase();
+    let os = '';
+    let browser = '';
+    let iconType = 'desktop';
 
-    const ua = s.ua.toLowerCase();
-    let os = "";
-    if (ua.includes('windows')) os = "Windows";
-    else if (ua.includes('mac os')) os = "macOS";
-    else if (ua.includes('android')) {
-        os = "Android";
-        iconType = "mobile";
-    } else if (ua.includes('iphone')) {
-        os = "iPhone";
-        iconType = "mobile";
-    } else if (ua.includes('ipad')) {
-        os = "iPad";
-        iconType = "mobile";
-    } else if (ua.includes('linux')) os = "Linux";
-
-    let browser = "";
-    if (ua.includes('edg')) browser = "Edge";
-    else if (ua.includes('opr') || ua.includes('opera')) browser = "Opera";
-    else if (ua.includes('firefox')) browser = "Firefox";
-    else if (ua.includes('chrome') && !ua.includes('edg') && !ua.includes('opr')) browser = "Chrome";
-    else if (ua.includes('safari') && !ua.includes('chrome')) browser = "Safari";
-    else if (ua.includes('telegram')) browser = "Telegram";
-    else if (ua.includes('python') || ua.includes('curl')) {
-        browser = "Script";
-        iconType = "terminal";
+    if (ua.includes('iphone')) {
+        os = 'iPhone';
+        iconType = 'mobile';
+    } else if (ua.includes('ipad') || ua.includes('ipad;') || (ua.includes('macintosh') && ua.includes('mobile'))) {
+        os = 'iPad';
+        iconType = 'mobile';
+    } else if (ua.includes('ipod')) {
+        os = 'iPod';
+        iconType = 'mobile';
+    } else if (ua.includes('android')) {
+        os = ua.includes('tablet') ? 'Android Tablet' : 'Android';
+        iconType = 'mobile';
+    } else if (ua.includes('macintosh') || ua.includes('mac os x')) {
+        os = 'macOS';
+    } else if (ua.includes('windows')) {
+        os = 'Windows';
+    } else if (ua.includes('linux')) {
+        os = 'Linux';
     }
 
+    if (ua.includes('telegram')) {
+        browser = 'Telegram';
+    } else if (ua.includes('edgios') || ua.includes('edg/')) {
+        browser = 'Edge';
+    } else if (ua.includes('opios') || ua.includes('opr/') || ua.includes('opera')) {
+        browser = 'Opera';
+    } else if (ua.includes('fxios') || ua.includes('firefox')) {
+        browser = 'Firefox';
+    } else if (ua.includes('crios') || ua.includes('chrome') || ua.includes('chromium')) {
+        browser = 'Chrome';
+    } else if (ua.includes('version/') && ua.includes('safari')) {
+        browser = 'Safari';
+    } else if (ua.includes('python') || ua.includes('curl') || ua.includes('wget')) {
+        browser = 'Script';
+        iconType = 'terminal';
+    }
+
+    let deviceText = rawUa || 'Unknown Device';
     if (os && browser) deviceText = `${browser} (${os})`;
     else if (os) deviceText = os;
     else if (browser) deviceText = browser;
-    else deviceText = s.ua.length > 30 ? s.ua.substring(0, 30) + "..." : s.ua;
+    else if (deviceText.length > 40) deviceText = deviceText.substring(0, 40) + '...';
+
+    return { deviceText, iconType, rawUa };
+}
+
+function renderSessionItem(s) {
+    const isCurrent = s.current;
+    const isMine = s.is_mine !== false;
+    const { deviceText, iconType, rawUa } = detectSessionDevice(s.ua);
 
     const date = new Date(s.created * 1000).toLocaleString();
     let iconPath = "M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z";
@@ -1603,7 +1668,7 @@ function renderSessionItem(s) {
             </div>
             <div class="min-w-0">
                 ${userBadge}
-                <div class="text-sm font-bold text-gray-900 dark:text-white truncate" title="${s.ua}">${deviceText}</div>
+                <div class="text-sm font-bold text-gray-900 dark:text-white truncate" title="${escapeHtml(rawUa)}">${escapeHtml(deviceText)}</div>
                 <div class="text-xs text-gray-500 dark:text-gray-400 flex items-center gap-2">
                     <span class="font-mono">${escapeHtml(decryptData(s.ip))}</span>
                     <span>•</span>

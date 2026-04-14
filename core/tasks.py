@@ -75,6 +75,8 @@ async def agent_monitor() -> None:
     import psutil
     import requests
 
+    last_persisted_at = 0.0
+
     try:
         shared_state.AGENT_IP_CACHE = await asyncio.to_thread(
             lambda: requests.get("https://api.ipify.org", timeout=3).text
@@ -93,25 +95,36 @@ async def agent_monitor() -> None:
 
     while True:
         try:
+            now = time.time()
             cpu = psutil.cpu_percent(interval=None)
             mem = psutil.virtual_memory()
             ram_pct = round((mem.total - mem.available) / mem.total * 100, 1) if mem.total > 0 else 0
             net = psutil.net_io_counters()
-            AGENT_HISTORY.append(
-                {
-                    "t": int(time.time()),
-                    "c": cpu,
-                    "r": ram_pct,
-                    "rx": net.bytes_recv,
-                    "tx": net.bytes_sent,
-                }
-            )
+            point = {
+                "t": int(now),
+                "c": cpu,
+                "r": ram_pct,
+                "rx": net.bytes_recv,
+                "tx": net.bytes_sent,
+            }
+
+            monitoring_interval = max(5, int(getattr(current_config, "MONITORING_INTERVAL", 5)))
+            if not AGENT_HISTORY or now - float(AGENT_HISTORY[-1].get("t", 0)) >= monitoring_interval:
+                AGENT_HISTORY.append(point)
+            else:
+                AGENT_HISTORY[-1] = point
+
+            shared_state.prune_agent_history()
 
             ping_interval = getattr(current_config, "PING_INTERVAL", 30)
             if time.time() - shared_state.AGENT_PING_LAST_UPDATE > ping_interval:
                 ping_result = await measure_agent_ping()
                 shared_state.AGENT_PING_CACHE = ping_result if ping_result else "n/a"
                 shared_state.AGENT_PING_LAST_UPDATE = time.time()
+
+            if now - last_persisted_at >= max(30, monitoring_interval * 3):
+                await asyncio.to_thread(shared_state.persist_agent_history)
+                last_persisted_at = now
         except asyncio.CancelledError:
             raise
         except Exception:
@@ -183,6 +196,8 @@ async def cleanup_monitor(app: web.Application) -> None:
 
 async def start_background_tasks(app: web.Application) -> None:
     """Start long-running background coroutines for monitoring and maintenance."""
+    await asyncio.to_thread(shared_state.load_agent_history)
+
     existing = app.get(BACKGROUND_TASKS_KEY)
     if isinstance(existing, list) and any(not task.done() for task in existing):
         return
@@ -208,6 +223,7 @@ async def cleanup_server(app: web.Application) -> None:
     if tasks:
         await asyncio.gather(*tasks, return_exceptions=True)
 
+    await asyncio.to_thread(shared_state.persist_agent_history)
     app[BACKGROUND_TASKS_KEY] = []
 
 
