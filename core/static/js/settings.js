@@ -1142,13 +1142,51 @@ function renderNotifNodeDetail() {
     `;
 }
 
-async function triggerAutoSave() {
+let notifStatusHideTimer = null;
+
+function showNotifStatus(message, state = 'neutral', autoHideMs = 1800) {
     const statusEl = document.getElementById('notifStatus');
-    if (statusEl) {
-        statusEl.innerText = (typeof I18N !== 'undefined' && I18N.web_saving_btn) ? I18N.web_saving_btn : "Saving...";
-        statusEl.classList.remove('text-green-500', 'text-red-500', 'opacity-0');
-        statusEl.classList.add('text-gray-500', 'dark:text-gray-400', 'opacity-100');
+    if (!statusEl) return;
+
+    if (notifStatusHideTimer) {
+        clearTimeout(notifStatusHideTimer);
+        notifStatusHideTimer = null;
     }
+
+    statusEl.classList.remove(
+        'hidden', 'opacity-0', 'opacity-100', 'translate-y-1', 'translate-y-0',
+        'text-gray-500', 'dark:text-gray-400',
+        'text-green-500', 'text-green-600', 'dark:text-green-400',
+        'text-red-500', 'text-red-600', 'dark:text-red-400',
+        'bg-gray-100/80', 'dark:bg-white/5',
+        'bg-green-100', 'dark:bg-green-500/10',
+        'bg-red-100', 'dark:bg-red-500/10'
+    );
+
+    const stateClasses = {
+        neutral: ['text-gray-500', 'dark:text-gray-400', 'bg-gray-100/80', 'dark:bg-white/5'],
+        success: ['text-green-600', 'dark:text-green-400', 'bg-green-100', 'dark:bg-green-500/10'],
+        error: ['text-red-600', 'dark:text-red-400', 'bg-red-100', 'dark:bg-red-500/10']
+    };
+
+    statusEl.textContent = message;
+    statusEl.classList.add('inline-flex', 'opacity-100', 'translate-y-0', ...(stateClasses[state] || stateClasses.neutral));
+
+    if (autoHideMs > 0) {
+        notifStatusHideTimer = setTimeout(() => {
+            statusEl.classList.remove('opacity-100', 'translate-y-0');
+            statusEl.classList.add('opacity-0', 'translate-y-1');
+
+            setTimeout(() => {
+                statusEl.classList.add('hidden');
+                statusEl.textContent = '';
+            }, 250);
+        }, autoHideMs);
+    }
+}
+
+async function triggerAutoSave() {
+    showNotifStatus((typeof I18N !== 'undefined' && I18N.web_saving_btn) ? I18N.web_saving_btn : 'Saving...', 'neutral', 0);
 
     const data = {
         resources: document.getElementById('alert_resources')?.checked || false,
@@ -1181,25 +1219,15 @@ async function triggerAutoSave() {
             },
             body: JSON.stringify(data)
         });
-        if (statusEl) {
-            if (res.ok) {
-                statusEl.innerText = (typeof I18N !== 'undefined' && I18N.web_saved_btn) ? I18N.web_saved_btn : "Saved!";
-                statusEl.classList.remove('text-gray-500', 'dark:text-gray-400');
-                statusEl.classList.add('text-green-500');
-                setTimeout(() => {
-                    statusEl.classList.add('opacity-0');
-                }, 2000);
-            } else {
-                statusEl.innerText = (typeof I18N !== 'undefined' && I18N.web_error_short) ? I18N.web_error_short : "Error";
-                statusEl.classList.add('text-red-500');
-            }
+
+        if (res.ok) {
+            showNotifStatus((typeof I18N !== 'undefined' && I18N.web_saved_btn) ? I18N.web_saved_btn : 'Saved!', 'success', 1600);
+        } else {
+            showNotifStatus((typeof I18N !== 'undefined' && I18N.web_error_short) ? I18N.web_error_short : 'Error', 'error', 2500);
         }
     } catch (e) {
         console.error(e);
-        if (statusEl) {
-            statusEl.innerText = (typeof I18N !== 'undefined' && I18N.web_conn_error_short) ? I18N.web_conn_error_short : "Conn Error";
-            statusEl.classList.add('text-red-500');
-        }
+        showNotifStatus((typeof I18N !== 'undefined' && I18N.web_conn_error_short) ? I18N.web_conn_error_short : 'Conn Error', 'error', 2500);
     }
 }
 
