@@ -785,12 +785,20 @@ function renderAgentChart(history) {
     const opts = window.buildInteractiveChartOptions ? window.buildInteractiveChartOptions(optsBase) : optsBase;
 
     if (agentChart) {
-        agentChart.data.labels = labels;
-        agentChart.data.datasets[0].data = netRx;
-        agentChart.data.datasets[1].data = netTx;
-        agentChart.options = opts;
-        agentChart.update();
-        if (window.attachChartInteractions) window.attachChartInteractions(agentChart, 'agentChart');
+        const applyAgentChartData = () => {
+            agentChart.data.labels = labels;
+            agentChart.data.datasets[0].data = netRx;
+            agentChart.data.datasets[1].data = netTx;
+            agentChart.options = opts;
+        };
+
+        if (window.updateChartWithLiveData) {
+            window.updateChartWithLiveData(agentChart, applyAgentChartData, 'agentChart');
+        } else {
+            applyAgentChartData();
+            agentChart.update('none');
+            if (window.attachChartInteractions) window.attachChartInteractions(agentChart, 'agentChart');
+        }
     } else {
         const rxGrad = getGradient(ctx, 'rgb(34, 197, 94)');
         const txGrad = getGradient(ctx, 'rgb(59, 130, 246)');
@@ -1360,11 +1368,19 @@ function renderCharts(history) {
     const commonOptions = window.buildInteractiveChartOptions ? window.buildInteractiveChartOptions(commonOptionsBase) : commonOptionsBase;
 
     if (chartRes) {
-        chartRes.data.labels = labels;
-        chartRes.data.datasets[0].data = cpuData;
-        chartRes.data.datasets[1].data = ramData;
-        chartRes.update();
-        if (window.attachChartInteractions) window.attachChartInteractions(chartRes, 'nodeResChart');
+        const applyResChartData = () => {
+            chartRes.data.labels = labels;
+            chartRes.data.datasets[0].data = cpuData;
+            chartRes.data.datasets[1].data = ramData;
+        };
+
+        if (window.updateChartWithLiveData) {
+            window.updateChartWithLiveData(chartRes, applyResChartData, 'nodeResChart');
+        } else {
+            applyResChartData();
+            chartRes.update('none');
+            if (window.attachChartInteractions) window.attachChartInteractions(chartRes, 'nodeResChart');
+        }
     } else {
         const cpuGrad = getGradient(ctxRes, 'rgb(59, 130, 246)');
         const ramGrad = getGradient(ctxRes, 'rgb(168, 85, 247)');
@@ -1403,14 +1419,33 @@ function renderCharts(history) {
     }
 
     if (chartNet) {
-        chartNet.data.labels = labels;
-        chartNet.data.datasets[0].data = netRx;
-        chartNet.data.datasets[1].data = netTx;
-        chartNet.update();
-        if (window.attachChartInteractions) window.attachChartInteractions(chartNet, 'nodeNetChart');
+        const applyNetChartData = () => {
+            chartNet.data.labels = labels;
+            chartNet.data.datasets[0].data = netRx;
+            chartNet.data.datasets[1].data = netTx;
+        };
+
+        if (window.updateChartWithLiveData) {
+            window.updateChartWithLiveData(chartNet, applyNetChartData, 'nodeNetChart');
+        } else {
+            applyNetChartData();
+            chartNet.update('none');
+            if (window.attachChartInteractions) window.attachChartInteractions(chartNet, 'nodeNetChart');
+        }
     } else {
-        const netOpts = JSON.parse(JSON.stringify(commonOptions));
-        netOpts.scales.y.ticks.callback = (v) => formatSpeed(v);
+        const netOpts = {
+            ...commonOptions,
+            scales: {
+                ...commonOptions.scales,
+                y: {
+                    ...commonOptions.scales.y,
+                    ticks: {
+                        ...commonOptions.scales.y.ticks,
+                        callback: (v) => formatSpeed(v)
+                    }
+                }
+            }
+        };
         const rxGrad = getGradient(ctxNet, 'rgb(34, 197, 94)');
         const txGrad = getGradient(ctxNet, 'rgb(239, 68, 68)');
         chartNet = new Chart(ctxNet, {
