@@ -1169,7 +1169,12 @@ function showNotifStatus(message, state = 'neutral', autoHideMs = 1800) {
         error: ['text-red-600', 'dark:text-red-400', 'bg-red-100', 'dark:bg-red-900/20']
     };
 
-    statusEl.textContent = message;
+    const icons = {
+        neutral: '',
+        success: '<svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/></svg>',
+        error: '<svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M6 18L18 6M6 6l12 12"/></svg>'
+    };
+    statusEl.innerHTML = (icons[state] || '') + '<span>' + message + '</span>';
     statusEl.classList.add('inline-flex', 'opacity-100', 'translate-y-0', ...(stateClasses[state] || stateClasses.neutral));
 
     if (autoHideMs > 0) {
@@ -1179,7 +1184,7 @@ function showNotifStatus(message, state = 'neutral', autoHideMs = 1800) {
 
             setTimeout(() => {
                 statusEl.classList.add('hidden');
-                statusEl.textContent = '';
+                statusEl.innerHTML = '';
             }, 250);
         }, autoHideMs);
     }
