@@ -1987,12 +1987,22 @@ let telegramOnlyMode = false;
 
 async function loadTelegramOnlyMode() {
     try {
-        const res = await fetch('/api/security/telegram_only_mode');
-        if (res.ok) {
-            const data = await res.json();
-            telegramOnlyMode = data.enabled || false;
-            updateLockIcon();
+        const res = await fetch('/api/security/telegram_only_mode', {
+            headers: { 'Accept': 'application/json' }
+        });
+
+        if (!res.ok) {
+            throw new Error(`HTTP ${res.status}`);
         }
+
+        const contentType = res.headers.get('content-type') || '';
+        if (!contentType.includes('application/json')) {
+            throw new Error('Server returned non-JSON response');
+        }
+
+        const data = await res.json();
+        telegramOnlyMode = Boolean(data.enabled);
+        updateLockIcon();
     } catch (e) {
         console.error('Failed to load telegram only mode:', e);
     }
@@ -2022,27 +2032,30 @@ async function toggleTelegramOnlyMode() {
         const res = await fetch('/api/security/telegram_only_mode', {
             method: 'POST',
             headers: {
-                'Content-Type': 'application/json'
+                'Content-Type': 'application/json',
+                'Accept': 'application/json'
             },
             body: JSON.stringify({
                 enabled: newMode
             })
         });
-        
+
+        const contentType = res.headers.get('content-type') || '';
+        const data = contentType.includes('application/json') ? await res.json() : {};
+
         if (res.ok) {
-            telegramOnlyMode = newMode;
+            telegramOnlyMode = Boolean(data.enabled);
             updateLockIcon();
-            localStorage.setItem('telegram_only_mode', newMode ? '1' : '0');
-            
-            const message = newMode 
+            localStorage.setItem('telegram_only_mode', telegramOnlyMode ? '1' : '0');
+
+            const message = telegramOnlyMode
                 ? (I18N.web_telegram_only_enabled || 'Telegram only mode enabled. Password login disabled.')
                 : (I18N.web_telegram_only_disabled || 'All login methods enabled.');
-            
+
             if (window.showToast) {
                 window.showToast(message);
             }
         } else {
-            const data = await res.json();
             const errorShort = (typeof I18N !== 'undefined' && I18N.web_error_short) ? I18N.web_error_short : "Error";
             await window.showModalAlert(data.error || 'Failed to toggle mode', errorShort);
         }
