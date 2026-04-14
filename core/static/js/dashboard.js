@@ -725,7 +725,7 @@ function renderAgentChart(history) {
     const isMobile = window.innerWidth < 640;
     const maxTicks = isMobile ? 4 : 8;
 
-    const opts = {
+    const optsBase = {
         responsive: true,
         maintainAspectRatio: false,
         animation: false,
@@ -782,6 +782,7 @@ function renderAgentChart(history) {
             }
         }
     };
+    const opts = window.buildInteractiveChartOptions ? window.buildInteractiveChartOptions(optsBase) : optsBase;
 
     if (agentChart) {
         agentChart.data.labels = labels;
@@ -789,6 +790,7 @@ function renderAgentChart(history) {
         agentChart.data.datasets[1].data = netTx;
         agentChart.options = opts;
         agentChart.update();
+        if (window.attachChartInteractions) window.attachChartInteractions(agentChart, 'agentChart');
     } else {
         const rxGrad = getGradient(ctx, 'rgb(34, 197, 94)');
         const txGrad = getGradient(ctx, 'rgb(59, 130, 246)');
@@ -815,6 +817,7 @@ function renderAgentChart(history) {
             },
             options: opts
         });
+        if (window.attachChartInteractions) window.attachChartInteractions(agentChart, 'agentChart');
     }
 }
 
@@ -1304,7 +1307,7 @@ function renderCharts(history) {
     const lblCpu = (typeof I18N !== 'undefined' && I18N.web_label_cpu) ? I18N.web_label_cpu : "CPU";
     const lblRam = (typeof I18N !== 'undefined' && I18N.web_label_ram) ? I18N.web_label_ram : "RAM";
 
-    const commonOptions = {
+    const commonOptionsBase = {
         responsive: true,
         maintainAspectRatio: false,
         animation: false,
@@ -1354,12 +1357,14 @@ function renderCharts(history) {
             }
         }
     };
+    const commonOptions = window.buildInteractiveChartOptions ? window.buildInteractiveChartOptions(commonOptionsBase) : commonOptionsBase;
 
     if (chartRes) {
         chartRes.data.labels = labels;
         chartRes.data.datasets[0].data = cpuData;
         chartRes.data.datasets[1].data = ramData;
         chartRes.update();
+        if (window.attachChartInteractions) window.attachChartInteractions(chartRes, 'nodeResChart');
     } else {
         const cpuGrad = getGradient(ctxRes, 'rgb(59, 130, 246)');
         const ramGrad = getGradient(ctxRes, 'rgb(168, 85, 247)');
@@ -1394,6 +1399,7 @@ function renderCharts(history) {
                 }
             }
         });
+        if (window.attachChartInteractions) window.attachChartInteractions(chartRes, 'nodeResChart');
     }
 
     if (chartNet) {
@@ -1401,6 +1407,7 @@ function renderCharts(history) {
         chartNet.data.datasets[0].data = netRx;
         chartNet.data.datasets[1].data = netTx;
         chartNet.update();
+        if (window.attachChartInteractions) window.attachChartInteractions(chartNet, 'nodeNetChart');
     } else {
         const netOpts = JSON.parse(JSON.stringify(commonOptions));
         netOpts.scales.y.ticks.callback = (v) => formatSpeed(v);
@@ -1428,6 +1435,7 @@ function renderCharts(history) {
             },
             options: netOpts
         });
+        if (window.attachChartInteractions) window.attachChartInteractions(chartNet, 'nodeNetChart');
     }
 }
 
