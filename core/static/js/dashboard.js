@@ -45,8 +45,6 @@ let logSSESource = null;
 let servicesSSESource = null;
 
 let agentChart = null;
-let latestAgentHistory = [];
-let latestNodeHistory = [];
 let allNodesData = [];
 let currentNodeToken = null;
 let currentRenderList = [];
@@ -697,33 +695,8 @@ function getGradient(ctx, colorBase) {
     return gradient;
 }
 
-window.__agentChartPeriod = window.__agentChartPeriod || localStorage.getItem('agentChartPeriod') || '24h';
-window.__nodeModalChartPeriod = window.__nodeModalChartPeriod || localStorage.getItem('nodeModalChartPeriod') || '24h';
-
-window.setAgentChartPeriod = function(period) {
-    window.__agentChartPeriod = period;
-    localStorage.setItem('agentChartPeriod', period);
-    if (window.setActiveChartPeriodButtons) window.setActiveChartPeriodButtons('agentChartPeriodButtons', period);
-    renderAgentChart(latestAgentHistory);
-};
-
-window.setNodeModalChartPeriod = function(period) {
-    window.__nodeModalChartPeriod = period;
-    localStorage.setItem('nodeModalChartPeriod', period);
-    if (window.setActiveChartPeriodButtons) window.setActiveChartPeriodButtons('nodeModalChartPeriodButtons', period);
-    renderCharts(latestNodeHistory);
-};
-
 function renderAgentChart(history) {
-    latestAgentHistory = Array.isArray(history) ? history : [];
-    const preparedHistory = window.prepareHistoryForChart
-        ? window.prepareHistoryForChart(latestAgentHistory, window.__agentChartPeriod)
-        : latestAgentHistory;
-
-    if (!preparedHistory || preparedHistory.length === 0) return;
-    if (window.setActiveChartPeriodButtons) window.setActiveChartPeriodButtons('agentChartPeriodButtons', window.__agentChartPeriod);
-
-    const historyToRender = preparedHistory;
+    if (!history || history.length < 2) return;
     const ctx = document.getElementById('agentChart').getContext('2d');
     const labels = [];
     const netRx = [];
@@ -1301,15 +1274,8 @@ window.handleRenameKeydown = function (event) {
 };
 
 function renderCharts(history) {
-    latestNodeHistory = Array.isArray(history) ? history : [];
-    const preparedHistory = window.prepareHistoryForChart
-        ? window.prepareHistoryForChart(latestNodeHistory, window.__nodeModalChartPeriod)
-        : latestNodeHistory;
+    if (!history || history.length < 2) return;
 
-    if (!preparedHistory || preparedHistory.length === 0) return;
-    if (window.setActiveChartPeriodButtons) window.setActiveChartPeriodButtons('nodeModalChartPeriodButtons', window.__nodeModalChartPeriod);
-
-    const historyToRender = preparedHistory;
     const ctxRes = document.getElementById('nodeResChart').getContext('2d');
     const ctxNet = document.getElementById('nodeNetChart').getContext('2d');
     const gapThreshold = 25;
@@ -1320,13 +1286,13 @@ function renderCharts(history) {
     const netRx = [];
     const netTx = [];
 
-    labels.push(new Date(historyToRender[0].t * 1000).toLocaleTimeString([], {
+    labels.push(new Date(history[0].t * 1000).toLocaleTimeString([], {
         hour: '2-digit',
         minute: '2-digit',
         second: '2-digit'
     }));
-    cpuData.push(historyToRender[0].c);
-    ramData.push(historyToRender[0].r);
+    cpuData.push(history[0].c);
+    ramData.push(history[0].r);
     netRx.push(0);
     netTx.push(0);
 
@@ -1344,11 +1310,10 @@ function renderCharts(history) {
             minute: '2-digit',
             second: '2-digit'
         }));
-        cpuData.push(historyToRender[i].c);
-        ramData.push(historyToRender[i].r);
-        const safeDt = Math.max(dt, 1);
-        netRx.push((Math.max(0, historyToRender[i].rx - historyToRender[i - 1].rx) * 8 / safeDt / 1024));
-        netTx.push((Math.max(0, historyToRender[i].tx - historyToRender[i - 1].tx) * 8 / safeDt / 1024));
+        cpuData.push(history[i].c);
+        ramData.push(history[i].r);
+        netRx.push((Math.max(0, history[i].rx - history[i - 1].rx) * 8 / dt / 1024));
+        netTx.push((Math.max(0, history[i].tx - history[i - 1].tx) * 8 / dt / 1024));
     }
 
     const isDark = document.documentElement.classList.contains('dark');
