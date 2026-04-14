@@ -10,7 +10,6 @@ from typing import Any
 from aiohttp import web
 
 from .. import config as current_config
-from .. import nodes_db
 from ..auth import get_user_name, save_users
 from ..config import (
     ADMIN_USER_ID,
@@ -26,7 +25,6 @@ from ..shared_state import ALERTS_CONFIG, ALLOWED_USERS, USER_NAMES
 from ..utils import generate_favicons, save_alerts_config
 from .auth import get_current_user
 from modules import update as update_module
-from modules import traffic as traffic_module
 from .. import shared_state
 
 routes = web.RouteTableDef()
@@ -243,48 +241,6 @@ async def handle_set_language(request: web.Request) -> web.StreamResponse:
             await asyncio.to_thread(set_user_lang, int(user["id"]), lang)
             return web.json_response({"status": "ok"})
         return web.json_response({"error": "Invalid language"}, status=400)
-    except Exception as exc:
-        logging.error("Internal API error: %s", exc)
-        return web.json_response({"error": "Internal Server Error"}, status=500)
-
-
-@routes.post("/api/settings/monitoring/clear")
-async def handle_clear_monitoring_history(request: web.Request) -> web.StreamResponse:
-    user = get_current_user(request)
-    if not user or not _is_admin(user):
-        return web.json_response({"error": "Admin required"}, status=403)
-
-    try:
-        await asyncio.to_thread(shared_state.clear_monitoring_history)
-        await nodes_db.clear_all_histories()
-        return web.json_response({"status": "ok"})
-    except Exception as exc:
-        logging.error("Internal API error: %s", exc)
-        return web.json_response({"error": "Internal Server Error"}, status=500)
-
-
-@routes.post("/api/traffic/reset")
-async def handle_reset_traffic(request: web.Request) -> web.StreamResponse:
-    user = get_current_user(request)
-    if not user or not _is_admin(user):
-        return web.json_response({"error": "Admin required"}, status=403)
-
-    try:
-        import glob
-
-        traffic_module.TRAFFIC_OFFSET["rx"] = 0
-        traffic_module.TRAFFIC_OFFSET["tx"] = 0
-
-        try:
-            files = glob.glob(
-                os.path.join(traffic_module.config.TRAFFIC_BACKUP_DIR, "traffic_backup_*.json")
-            )
-            for f in files:
-                os.remove(f)
-        except Exception:
-            pass
-
-        return web.json_response({"status": "ok"})
     except Exception as exc:
         logging.error("Internal API error: %s", exc)
         return web.json_response({"error": "Internal Server Error"}, status=500)

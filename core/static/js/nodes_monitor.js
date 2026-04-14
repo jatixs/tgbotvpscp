@@ -490,11 +490,6 @@ async function openNodeDetail(token) {
         modal.classList.remove('hidden');
         modal.classList.add('flex');
     }
-
-    if (window.hideChartResetButton) {
-        window.hideChartResetButton('modalResChart');
-        window.hideChartResetButton('modalNetChart');
-    }
     
     // Load node details
     await loadNodeDetails(token);
@@ -517,11 +512,6 @@ function closeNodeDetailModal() {
         modal.classList.remove('flex');
     }
     currentNodeToken = null;
-
-    if (window.hideChartResetButton) {
-        window.hideChartResetButton('modalResChart');
-        window.hideChartResetButton('modalNetChart');
-    }
     
     // Stop modal auto-refresh
     if (modalUpdateInterval) {

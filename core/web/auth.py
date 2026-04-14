@@ -30,7 +30,6 @@ from ..config import (
 )
 from ..i18n import get_text as _, get_user_lang
 from ..shared_state import ALLOWED_USERS, USER_NAMES, AUTH_TOKENS
-from ..utils import encrypt_for_web
 
 routes = web.RouteTableDef()
 
@@ -194,92 +193,6 @@ def get_current_user(request: web.Request) -> dict[str, Any] | None:
         "first_name": USER_NAMES.get(str(user_id), f"ID: {user_id}"),
         "photo_url": session.get("photo_url", AGENT_FLAG),
     }
-
-
-@routes.get("/api/sessions/list")
-async def api_get_sessions(request: web.Request) -> web.StreamResponse:
-    user = get_current_user(request)
-    if not user:
-        return web.json_response({"error": "Unauthorized"}, status=401)
-
-    current_token = request.cookies.get(COOKIE_NAME)
-    user_sessions: list[dict[str, Any]] = []
-    expired_tokens: list[str] = []
-    is_main_admin = int(user["id"]) == ADMIN_USER_ID
-
-    for token, session in list(SERVER_SESSIONS.items()):
-        if time.time() > float(session.get("expires", 0)):
-            expired_tokens.append(token)
-            continue
-
-        session_user_id = int(session.get("id", 0))
-        if is_main_admin or session_user_id == int(user["id"]):
-            user_sessions.append(
-                {
-                    "token_prefix": token[:6] + "...",
-                    "id": token,
-                    "ip": encrypt_for_web(session.get("ip", "Unknown")),
-                    "ua": str(session.get("ua", "Unknown Device")),
-                    "created": float(session.get("created", 0)),
-                    "current": token == current_token,
-                    "user_id": session_user_id,
-                    "user_name": USER_NAMES.get(str(session_user_id), f"ID: {session_user_id}"),
-                    "is_mine": session_user_id == int(user["id"]),
-                }
-            )
-
-    for token in expired_tokens:
-        SERVER_SESSIONS.pop(token, None)
-
-    user_sessions.sort(key=lambda item: (not item["current"], not item["is_mine"], item["created"]))
-    return web.json_response({"sessions": user_sessions})
-
-
-@routes.post("/api/sessions/revoke")
-async def api_revoke_session(request: web.Request) -> web.StreamResponse:
-    user = get_current_user(request)
-    if not user:
-        return web.json_response({"error": "Unauthorized"}, status=401)
-
-    try:
-        data = await request.json()
-        target_token = str(data.get("token", "")).strip()
-        current_token = request.cookies.get(COOKIE_NAME)
-
-        if not target_token:
-            return web.json_response({"error": "Token is required"}, status=400)
-        if target_token == current_token:
-            return web.json_response({"error": "Cannot revoke current session"}, status=400)
-
-        session = SERVER_SESSIONS.get(target_token)
-        if session and (
-            int(user["id"]) == ADMIN_USER_ID or int(session.get("id", 0)) == int(user["id"])
-        ):
-            SERVER_SESSIONS.pop(target_token, None)
-            return web.json_response({"status": "ok"})
-
-        return web.json_response({"error": "Session not found or access denied"}, status=404)
-    except Exception:
-        logging.exception("Failed to revoke session")
-        return web.json_response({"error": "Internal Server Error"}, status=500)
-
-
-@routes.post("/api/sessions/revoke_all")
-async def api_revoke_all_sessions(request: web.Request) -> web.StreamResponse:
-    user = get_current_user(request)
-    if not user:
-        return web.json_response({"error": "Unauthorized"}, status=401)
-
-    current_token = request.cookies.get(COOKIE_NAME)
-    revoked_count = 0
-    user_id = int(user["id"])
-
-    for token, session in list(SERVER_SESSIONS.items()):
-        if int(session.get("id", 0)) == user_id and token != current_token:
-            SERVER_SESSIONS.pop(token, None)
-            revoked_count += 1
-
-    return web.json_response({"status": "ok", "revoked_count": revoked_count})
 
 
 def check_telegram_auth(data: dict[str, Any], bot_token: str) -> bool:
@@ -766,40 +679,6 @@ async def handle_reset_confirm(request: web.Request) -> web.StreamResponse:
         return web.json_response({"status": "ok"})
     except Exception:
         logging.exception("Password reset confirmation failed")
-        return web.json_response({"error": "Internal Server Error"}, status=500)
-
-
-@routes.post("/api/settings/password")
-async def handle_change_password(request: web.Request) -> web.StreamResponse:
-    """Allow the main admin to change their password."""
-    user = get_current_user(request)
-    if not user:
-        return web.json_response({"error": "Unauthorized"}, status=401)
-    if int(user.get("id", 0)) != ADMIN_USER_ID:
-        return web.json_response({"error": "Main Admin only"}, status=403)
-
-    try:
-        data = await request.json()
-        if not check_user_password(user["id"], data.get("current_password")):
-            return web.json_response({"error": "Wrong password"}, status=400)
-
-        new_pass = data.get("new_password")
-        if not isinstance(new_pass, str) or len(new_pass) < 8:
-            return web.json_response(
-                {"error": "Password must be at least 8 characters"}, status=400
-            )
-
-        new_hash = PasswordHasher().hash(new_pass)
-        current_user = ALLOWED_USERS.get(user["id"])
-        if isinstance(current_user, str):
-            ALLOWED_USERS[user["id"]] = {"group": current_user, "password_hash": new_hash}
-        else:
-            current_user["password_hash"] = new_hash
-
-        save_users()
-        return web.json_response({"status": "ok"})
-    except Exception:
-        logging.exception("Password change failed")
         return web.json_response({"error": "Internal Server Error"}, status=500)
 
 
