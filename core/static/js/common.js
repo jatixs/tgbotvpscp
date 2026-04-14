@@ -22,6 +22,115 @@ function setSafeHTML(element, html) {
     element.innerHTML = html;  // Only use with trusted HTML
 }
 
+window.__chartRegistry = window.__chartRegistry || {};
+
+function ensureChartZoomRegistered() {
+    if (typeof Chart === 'undefined' || window.__chartZoomRegistered) return;
+
+    const candidates = [
+        window.ChartZoom,
+        window.chartjsPluginZoom,
+        window['chartjs-plugin-zoom'],
+        window.zoomPlugin
+    ];
+
+    for (const plugin of candidates) {
+        if (!plugin) continue;
+        try {
+            Chart.register(plugin);
+            window.__chartZoomRegistered = true;
+            break;
+        } catch (e) {
+            console.debug('Chart zoom plugin registration skipped:', e);
+        }
+    }
+}
+
+function buildInteractiveChartOptions(baseOptions = {}) {
+    ensureChartZoomRegistered();
+
+    return {
+        ...baseOptions,
+        plugins: {
+            ...(baseOptions.plugins || {}),
+            zoom: {
+                pan: {
+                    enabled: true,
+                    mode: 'x',
+                    modifierKey: 'shift'
+                },
+                zoom: {
+                    wheel: { enabled: true },
+                    pinch: { enabled: true },
+                    drag: {
+                        enabled: true,
+                        backgroundColor: 'rgba(59, 130, 246, 0.10)',
+                        borderColor: 'rgba(59, 130, 246, 0.45)',
+                        borderWidth: 1
+                    },
+                    mode: 'x'
+                },
+                limits: {
+                    x: { min: 'original', max: 'original', minRange: 2 },
+                    y: { min: 'original', max: 'original' }
+                }
+            }
+        }
+    };
+}
+window.buildInteractiveChartOptions = buildInteractiveChartOptions;
+
+function attachChartInteractions(chart, canvasOrId) {
+    if (!chart) return;
+
+    const canvas = typeof canvasOrId === 'string' ? document.getElementById(canvasOrId) : canvasOrId;
+    if (!canvas) return;
+
+    ensureChartZoomRegistered();
+
+    if (canvas.id) {
+        window.__chartRegistry[canvas.id] = chart;
+    }
+
+    canvas.title = 'Колесо — масштаб, выделение мышью — увеличить область, Shift + перетаскивание — панорама, двойной клик — сброс';
+
+    if (!canvas.dataset.zoomResetBound) {
+        canvas.addEventListener('dblclick', () => {
+            const activeChart = canvas.id ? window.__chartRegistry[canvas.id] : chart;
+            if (activeChart && typeof activeChart.resetZoom === 'function') {
+                activeChart.resetZoom();
+            }
+        });
+        canvas.dataset.zoomResetBound = 'true';
+    }
+
+    const wrapper = canvas.parentElement;
+    if (wrapper) {
+        if (!wrapper.classList.contains('relative')) {
+            wrapper.classList.add('relative');
+        }
+
+        let resetBtn = wrapper.querySelector('.chart-reset-zoom-btn');
+        if (!resetBtn) {
+            resetBtn = document.createElement('button');
+            resetBtn.type = 'button';
+            resetBtn.className = 'chart-reset-zoom-btn absolute top-2 right-2 z-10 px-2 py-1 rounded-md text-[10px] font-bold bg-white/80 dark:bg-gray-900/80 text-blue-600 dark:text-blue-400 border border-blue-500/20 hover:bg-blue-50 dark:hover:bg-blue-500/10 transition';
+            resetBtn.textContent = 'Reset';
+            resetBtn.title = 'Сбросить масштаб';
+            resetBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                const activeChart = canvas.id ? window.__chartRegistry[canvas.id] : chart;
+                if (activeChart && typeof activeChart.resetZoom === 'function') {
+                    activeChart.resetZoom();
+                }
+            });
+            wrapper.appendChild(resetBtn);
+        }
+    }
+}
+window.attachChartInteractions = attachChartInteractions;
+
 function getCookieValue(name) {
     const prefix = `${name}=`;
     const cookie = document.cookie

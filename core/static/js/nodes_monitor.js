@@ -639,6 +639,8 @@ function updateModalCharts(history) {
     const resCtx = document.getElementById('modalResChart').getContext('2d');
     const netCtx = document.getElementById('modalNetChart').getContext('2d');
 
+    const interactiveOptions = window.buildInteractiveChartOptions ? window.buildInteractiveChartOptions({}) : {};
+
     // --- Обновление или создание графика ресурсов ---
     if (modalResChart) {
         modalResChart.data.labels = labels;
@@ -655,6 +657,7 @@ function updateModalCharts(history) {
         modalResChart.options.plugins.legend.labels.color = tickColor;
         
         modalResChart.update('none'); 
+        if (window.attachChartInteractions) window.attachChartInteractions(modalResChart, 'modalResChart');
     } else {
         modalResChart = new Chart(resCtx, {
             type: 'line',
@@ -666,11 +669,13 @@ function updateModalCharts(history) {
                 ]
             },
             options: {
+                ...interactiveOptions,
                 responsive: true,
                 maintainAspectRatio: false,
                 animation: false,
                 interaction: { mode: 'index', intersect: false },
-                plugins: { 
+                plugins: {
+                    ...(interactiveOptions.plugins || {}),
                     legend: { 
                         display: true, 
                         position: 'top', 
@@ -691,6 +696,7 @@ function updateModalCharts(history) {
                 elements: { line: { tension: 0.4 }, point: { radius: 0, hitRadius: 10 } }
             }
         });
+        if (window.attachChartInteractions) window.attachChartInteractions(modalResChart, 'modalResChart');
     }
     
     // --- Обновление или создание графика сети ---
@@ -709,6 +715,7 @@ function updateModalCharts(history) {
         modalNetChart.options.plugins.legend.labels.color = tickColor;
         
         modalNetChart.update('none');
+        if (window.attachChartInteractions) window.attachChartInteractions(modalNetChart, 'modalNetChart');
     } else {
         modalNetChart = new Chart(netCtx, {
             type: 'line',
@@ -720,11 +727,13 @@ function updateModalCharts(history) {
                 ]
             },
             options: {
+                ...interactiveOptions,
                 responsive: true,
                 maintainAspectRatio: false,
                 animation: false,
                 interaction: { mode: 'index', intersect: false },
-                plugins: { 
+                plugins: {
+                    ...(interactiveOptions.plugins || {}),
                     legend: { 
                         display: true, 
                         position: 'top', 
@@ -749,6 +758,7 @@ function updateModalCharts(history) {
                 elements: { line: { tension: 0.4 }, point: { radius: 0, hitRadius: 10 } }
             }
         });
+        if (window.attachChartInteractions) window.attachChartInteractions(modalNetChart, 'modalNetChart');
     }
 }
 
