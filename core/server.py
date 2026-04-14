@@ -77,10 +77,10 @@ CSRF_TOKEN_TTL = 3600
 WEB_PASSWORD = os.environ.get("WEB_PASSWORD", "admin")
 TEMPLATE_DIR = os.path.join(BASE_DIR, "core", "templates")
 STATIC_DIR = os.path.join(BASE_DIR, "core", "static")
-AGENT_FLAG = "🏳️"
-AGENT_IP_CACHE = "Loading..."
-AGENT_PING_CACHE = "n/a"
-AGENT_PING_LAST_UPDATE = 0
+AGENT_FLAG = shared_state.AGENT_FLAG = "🏳️"
+AGENT_IP_CACHE = shared_state.AGENT_IP_CACHE = "Loading..."
+AGENT_PING_CACHE = shared_state.AGENT_PING_CACHE = "n/a"
+AGENT_PING_LAST_UPDATE = shared_state.AGENT_PING_LAST_UPDATE = 0
 AGENT_PING_TIMEOUT = 5  # Ping measurement timeout in seconds
 RESET_TOKENS = {}
 SERVER_SESSIONS = {}
@@ -96,7 +96,7 @@ APP_VERSION = get_app_version()
 CACHE_VER = str(int(time.time()))
 MAX_FILE_SIZE = 50 * 1024 * 1024  # 50MB max file size
 AGENT_TASK = None
-RECENT_SSH_LOGINS = {}  # SSH cache for recent logins
+RECENT_SSH_LOGINS = shared_state.RECENT_SSH_LOGINS = {}  # SSH cache for recent logins
 JINJA_ENV = Environment(
     loader=FileSystemLoader(TEMPLATE_DIR), autoescape=select_autoescape(["html", "xml"])
 )
@@ -3493,18 +3493,21 @@ async def agent_monitor():
         AGENT_IP_CACHE = await asyncio.to_thread(
             lambda: requests.get("https://api.ipify.org", timeout=3).text
         )
+        shared_state.AGENT_IP_CACHE = AGENT_IP_CACHE
     except Exception:
         pass
     try:
         AGENT_FLAG = await get_country_flag(AGENT_IP_CACHE)
+        shared_state.AGENT_FLAG = AGENT_FLAG
     except Exception:
         pass
-    
-    # Measure initial ping
+
     ping_result = await measure_agent_ping()
     AGENT_PING_CACHE = ping_result if ping_result else "n/a"
     AGENT_PING_LAST_UPDATE = time.time()
-    
+    shared_state.AGENT_PING_CACHE = AGENT_PING_CACHE
+    shared_state.AGENT_PING_LAST_UPDATE = AGENT_PING_LAST_UPDATE
+
     while True:
         try:
             cpu = psutil.cpu_percent(interval=None)
@@ -3519,15 +3522,15 @@ async def agent_monitor():
                 "tx": net.bytes_sent,
             }
             AGENT_HISTORY.append(point)
-            
-            # Update ping interval based on config
+
             ping_int = getattr(current_config, "PING_INTERVAL", 30)
             if time.time() - AGENT_PING_LAST_UPDATE > ping_int:
                 ping_result = await measure_agent_ping()
                 AGENT_PING_CACHE = ping_result if ping_result else "n/a"
                 AGENT_PING_LAST_UPDATE = time.time()
+                shared_state.AGENT_PING_CACHE = AGENT_PING_CACHE
+                shared_state.AGENT_PING_LAST_UPDATE = AGENT_PING_LAST_UPDATE
         except asyncio.CancelledError:
-
             raise
         except Exception:
             pass
@@ -4728,164 +4731,3 @@ async def api_services_manage(request):
         logging.error(f"Error in api_services_manage: {e}")
         logging.error(f"Internal API error: {e}")
     return web.json_response({"error": "Internal Server Error"}, status=500)
-
-
-async def cleanup_server():
-    global AGENT_TASK  # noqa: F824
-    if AGENT_TASK and (not AGENT_TASK.done()):
-        AGENT_TASK.cancel()
-        try:
-            await AGENT_TASK
-        except asyncio.CancelledError:
-            pass
-
-
-async def start_web_server(bot_instance: Bot):
-    global AGENT_FLAG, AGENT_TASK  # noqa: F824
-    app = web.Application()
-    app["bot"] = bot_instance
-    app["shutdown_event"] = asyncio.Event()
-
-    async def on_shutdown(app):
-        app["shutdown_event"].set()
-
-    app.on_shutdown.append(on_shutdown)
-    app.router.add_post("/api/heartbeat", handle_heartbeat)
-    if ENABLE_WEB_UI:
-        logging.info("Web UI ENABLED.")
-        if os.path.exists(STATIC_DIR):
-            app.router.add_static("/static", STATIC_DIR)
-
-        # Добавляем маршрут для манифеста
-        async def handle_manifest(request):
-            manifest_path = os.path.join(STATIC_DIR, "favicons", "site.webmanifest")
-            if os.path.exists(manifest_path):
-                return web.FileResponse(manifest_path)
-            return web.Response(status=404)
-
-        app.router.add_get("/site.webmanifest", handle_manifest)
-        app.router.add_get("/", handle_dashboard)
-        app.router.add_get("/terminal", handle_terminal_page)
-        app.router.add_get("/api/terminal/ws", handle_terminal_ws)
-        app.router.add_get("/api/terminal/creds", handle_get_terminal_creds)
-        app.router.add_post("/api/terminal/creds", handle_save_terminal_creds)
-        app.router.add_get("/api/terminal/stats", handle_terminal_stats)
-        app.router.add_get("/settings", handle_settings_page)
-        app.router.add_get("/nodes", handle_nodes_monitor_page)
-        app.router.add_get("/login", handle_login_page)
-        app.router.add_post("/api/login/request", handle_login_request)
-        app.router.add_get("/api/login/magic", handle_magic_login)
-        app.router.add_post("/api/login/password", handle_login_password)
-        app.router.add_post("/api/login/reset", handle_reset_request)
-        app.router.add_get("/reset_password", handle_reset_page_render)
-        app.router.add_post("/api/reset/confirm", handle_reset_confirm)
-        app.router.add_post("/api/auth/telegram", handle_telegram_auth)
-        app.router.add_post("/logout", handle_logout)
-        app.router.add_get("/api/node/details", handle_node_details)
-        app.router.add_get("/api/agent/stats", handle_agent_stats)
-        app.router.add_get("/api/nodes/list", handle_nodes_list_json)
-        app.router.add_get("/api/nodes/monitor/list", handle_nodes_monitor_list)
-        app.router.add_get("/api/nodes/monitor/detail", handle_nodes_monitor_detail)
-        app.router.add_get("/api/nodes/monitor/services", handle_nodes_monitor_services)
-        app.router.add_post("/api/nodes/monitor/command", handle_nodes_monitor_command)
-        app.router.add_post("/api/nodes/monitor/service_action", handle_nodes_monitor_service_action)
-        app.router.add_get("/api/logs", handle_get_logs)
-        app.router.add_get("/api/logs/system", handle_get_sys_logs)
-        app.router.add_post("/api/settings/save", handle_save_notifications)
-        app.router.add_post("/api/settings/language", handle_set_language)
-        app.router.add_head("/api/settings/language", handle_session_check_head)
-        app.router.add_post("/api/settings/system", handle_save_system_config)
-        app.router.add_post("/api/settings/password", handle_change_password)
-        app.router.add_get("/api/security/telegram_only_mode", handle_get_telegram_only_mode)
-        app.router.add_post("/api/security/telegram_only_mode", handle_set_telegram_only_mode)
-        app.router.add_post("/api/settings/keyboard", handle_save_keyboard_config)
-        app.router.add_post("/api/settings/metadata", handle_save_metadata)
-        app.router.add_post("/api/logs/clear", handle_clear_logs)
-        app.router.add_get("/api/agent/ipv4", handle_agent_ipv4)
-        app.router.add_post("/api/traffic/reset", handle_reset_traffic)
-        app.router.add_post("/api/users/action", handle_user_action)
-        app.router.add_post("/api/nodes/add", handle_node_add)
-        app.router.add_post("/api/nodes/delete", handle_node_delete)
-        app.router.add_post("/api/nodes/rename", handle_node_rename)
-        app.router.add_get("/api/events", handle_sse_stream)
-        app.router.add_get("/api/events/logs", handle_sse_logs)
-        app.router.add_get("/api/events/node", handle_sse_node_details)
-        app.router.add_get("/api/events/services", handle_sse_services)
-        app.router.add_get("/api/update/check", api_check_update)
-        app.router.add_post("/api/update/run", api_run_update)
-        app.router.add_get("/api/notifications/list", api_get_notifications)
-        app.router.add_post("/api/notifications/read", api_read_notifications)
-        app.router.add_post("/api/notifications/clear", api_clear_notifications)
-        app.router.add_get("/api/sessions/list", api_get_sessions)
-        app.router.add_post("/api/sessions/revoke", api_revoke_session)
-        app.router.add_post("/api/sessions/revoke_all", api_revoke_all_sessions)
-        app.router.add_get("/api/services", handle_services_list)
-        app.router.add_get("/api/services/available", api_services_available)
-        app.router.add_get("/api/services/info/{name}", api_service_info)
-        app.router.add_post("/api/services/manage", api_services_manage)
-        app.router.add_post("/api/services/{action}", api_control_service)
-    else:
-        logging.info("Web UI DISABLED.")
-        app.router.add_get("/", handle_api_root)
-    AGENT_TASK = asyncio.create_task(agent_monitor())
-    runner = web.AppRunner(app, access_log=None, shutdown_timeout=1.0)
-    await runner.setup()
-    site = web.TCPSite(runner, WEB_SERVER_HOST, WEB_SERVER_PORT)
-    try:
-        await site.start()
-        logging.info(f"Web Server started on {WEB_SERVER_HOST}:{WEB_SERVER_PORT}")
-        return runner
-    except Exception as e:
-        logging.error(f"Failed to start Web Server: {e}")
-        return None
-
-
-async def agent_monitor():
-    global AGENT_IP_CACHE, AGENT_FLAG, AGENT_PING_CACHE, AGENT_PING_LAST_UPDATE
-    import psutil
-    import requests
-
-    try:
-        AGENT_IP_CACHE = await asyncio.to_thread(
-            lambda: requests.get("https://api.ipify.org", timeout=3).text
-        )
-    except Exception:
-        pass
-    try:
-        AGENT_FLAG = await get_country_flag(AGENT_IP_CACHE)
-    except Exception:
-        pass
-    
-    # Measure initial ping
-    ping_result = await measure_agent_ping()
-    AGENT_PING_CACHE = ping_result if ping_result else "n/a"
-    AGENT_PING_LAST_UPDATE = time.time()
-    
-    while True:
-        try:
-            cpu = psutil.cpu_percent(interval=None)
-            mem = psutil.virtual_memory()
-            ram_pct = round((mem.total - mem.available) / mem.total * 100, 1) if mem.total > 0 else 0
-            net = psutil.net_io_counters()
-            point = {
-                "t": int(time.time()),
-                "c": cpu,
-                "r": ram_pct,
-                "rx": net.bytes_recv,
-                "tx": net.bytes_sent,
-            }
-            AGENT_HISTORY.append(point)
-            if len(AGENT_HISTORY) > 60:
-                AGENT_HISTORY.pop(0)
-            
-            # Update ping interval based on config
-            ping_int = getattr(current_config, "PING_INTERVAL", 30)
-            if time.time() - AGENT_PING_LAST_UPDATE > ping_int:
-                ping_result = await measure_agent_ping()
-                AGENT_PING_CACHE = ping_result if ping_result else "n/a"
-                AGENT_PING_LAST_UPDATE = time.time()
-        except asyncio.CancelledError:
-            raise
-        except Exception:
-            pass
-        await asyncio.sleep(2)

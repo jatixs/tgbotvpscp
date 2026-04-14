@@ -22,6 +22,55 @@ function setSafeHTML(element, html) {
     element.innerHTML = html;  // Only use with trusted HTML
 }
 
+function getCookieValue(name) {
+    const prefix = `${name}=`;
+    const cookie = document.cookie
+        .split(';')
+        .map(part => part.trim())
+        .find(part => part.startsWith(prefix));
+    return cookie ? decodeURIComponent(cookie.slice(prefix.length)) : '';
+}
+
+function getCsrfToken() {
+    return getCookieValue('csrf_token');
+}
+
+(function patchFetchWithCsrf() {
+    if (typeof window.fetch !== 'function' || window.__csrfFetchPatched) return;
+
+    const originalFetch = window.fetch.bind(window);
+    window.fetch = function(resource, options = {}) {
+        const requestUrl = typeof resource === 'string' ? resource : (resource && resource.url) ? resource.url : '';
+        const method = String(options.method || (resource && resource.method) || 'GET').toUpperCase();
+        const isMutating = ['POST', 'PUT', 'DELETE'].includes(method);
+
+        if (isMutating && requestUrl) {
+            let url = null;
+            try {
+                url = new URL(requestUrl, window.location.origin);
+            } catch (e) {
+                url = null;
+            }
+
+            if (url && url.origin === window.location.origin && url.pathname.startsWith('/api/')) {
+                const headers = new Headers(options.headers || (resource instanceof Request ? resource.headers : undefined));
+                const csrfToken = getCsrfToken();
+                if (csrfToken && !headers.has('X-CSRF-Token')) {
+                    headers.set('X-CSRF-Token', csrfToken);
+                }
+                options = { ...options, headers };
+                if (!options.credentials) {
+                    options.credentials = 'same-origin';
+                }
+            }
+        }
+
+        return originalFetch(resource, options);
+    };
+
+    window.__csrfFetchPatched = true;
+})();
+
 const themes = ['dark', 'light', 'system'];
 let currentTheme = localStorage.getItem('theme') || 'system';
 let latestNotificationTime = Math.floor(Date.now() / 1000);
