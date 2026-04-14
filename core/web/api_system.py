@@ -247,6 +247,37 @@ async def handle_set_language(request: web.Request) -> web.StreamResponse:
         return web.json_response({"error": "Internal Server Error"}, status=500)
 
 
+@routes.get("/api/security/telegram_only_mode")
+async def handle_get_telegram_only_mode(request: web.Request) -> web.StreamResponse:
+    try:
+        settings = await asyncio.to_thread(current_config.get_bot_config, "security_settings", {})
+        enabled = bool(settings.get("telegram_only_mode", False))
+        return web.json_response({"enabled": enabled})
+    except Exception as exc:
+        logging.error("Internal API error: %s", exc)
+        return web.json_response({"error": "Internal Server Error"}, status=500)
+
+
+@routes.post("/api/security/telegram_only_mode")
+async def handle_set_telegram_only_mode(request: web.Request) -> web.StreamResponse:
+    user = get_current_user(request)
+    if not user:
+        return web.json_response({"error": "Unauthorized"}, status=401)
+    if not _is_main_admin(user):
+        return web.json_response({"error": "Main Admin only"}, status=403)
+
+    try:
+        data = await request.json()
+        enabled = bool(data.get("enabled", False))
+        settings = await asyncio.to_thread(current_config.get_bot_config, "security_settings", {})
+        settings["telegram_only_mode"] = enabled
+        await asyncio.to_thread(current_config.set_bot_config, "security_settings", settings)
+        return web.json_response({"status": "ok", "enabled": enabled})
+    except Exception as exc:
+        logging.error("Internal API error: %s", exc)
+        return web.json_response({"error": "Internal Server Error"}, status=500)
+
+
 @routes.post("/api/settings/monitoring/clear")
 async def handle_clear_monitoring_history(request: web.Request) -> web.StreamResponse:
     user = get_current_user(request)
