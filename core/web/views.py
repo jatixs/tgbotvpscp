@@ -161,7 +161,7 @@ async def handle_dashboard(request: web.Request) -> web.StreamResponse:
         nodes_json = json.dumps(nlist)
 
     vnc_nodes = [{"name": _("web_notif_global_group_agent", lang) or "Agent", "ip": _agent_ip()}]
-    for _, node in all_nodes.items():
+    for node_token, node in all_nodes.items():
         ip = node.get("ip", "")
         if ip:
             vnc_nodes.append({"name": node.get("name", "Unknown"), "ip": ip})
