@@ -622,6 +622,132 @@ async def _forward_ws_stream(stream: Any, ws_client: web.WebSocketResponse) -> N
         pass
 
 
+@routes.get("/api/terminal/creds")
+async def handle_get_terminal_creds(request: web.Request) -> web.StreamResponse:
+    user = get_current_user(request)
+    if not user:
+        return web.json_response({"status": "error", "error": "Unauthorized"}, status=401)
+
+    ip = str(request.query.get("ip", "")).strip()
+    if not ip:
+        return web.json_response({"status": "error", "error": "Missing IP"}, status=400)
+
+    try:
+        creds = await asyncio.to_thread(current_config.get_bot_config, "terminal_creds", {})
+        uid_str = str(user["id"])
+        if isinstance(creds, dict) and uid_str in creds and ip in creds[uid_str]:
+            saved = creds[uid_str][ip]
+            return web.json_response(
+                {
+                    "status": "ok",
+                    "saved": True,
+                    "type": str(saved.get("type", "password")),
+                    "user": str(saved.get("user", "root")),
+                    "port": int(saved.get("port", 22)),
+                }
+            )
+        return web.json_response({"status": "ok", "saved": False})
+    except Exception as exc:
+        logging.error("Terminal creds load failed: %s", exc)
+        return web.json_response({"status": "error", "error": "Internal Server Error"}, status=500)
+
+
+@routes.post("/api/terminal/creds")
+async def handle_save_terminal_creds(request: web.Request) -> web.StreamResponse:
+    user = get_current_user(request)
+    if not user:
+        return web.json_response({"status": "error", "error": "Unauthorized"}, status=401)
+
+    try:
+        data = await request.json()
+        ip = str(data.get("ip", "")).strip()
+        if not ip:
+            return web.json_response({"status": "error", "error": "Missing IP"}, status=400)
+
+        creds = await asyncio.to_thread(current_config.get_bot_config, "terminal_creds", {})
+        if not isinstance(creds, dict):
+            creds = {}
+
+        uid_str = str(user["id"])
+        if uid_str not in creds or not isinstance(creds.get(uid_str), dict):
+            creds[uid_str] = {}
+
+        creds[uid_str][ip] = {
+            "type": str(data.get("type", "password")),
+            "user": str(data.get("user", "root")),
+            "port": int(data.get("port", 22)),
+            "password": str(data.get("password", "")),
+            "private_key": str(data.get("private_key", "")),
+        }
+        await asyncio.to_thread(current_config.set_bot_config, "terminal_creds", creds)
+        return web.json_response({"status": "ok"})
+    except Exception as exc:
+        logging.error("Terminal creds save failed: %s", exc)
+        return web.json_response({"status": "error", "error": "Internal Server Error"}, status=500)
+
+
+@routes.get("/api/terminal/stats")
+async def handle_terminal_stats(request: web.Request) -> web.StreamResponse:
+    user = get_current_user(request)
+    if not user:
+        return web.json_response({"error": "Unauthorized"}, status=401)
+
+    ip = str(request.query.get("ip", "")).strip()
+    if not ip:
+        return web.json_response({"error": "Missing IP"}, status=400)
+
+    try:
+        safe_agent_ip = _safe_agent_ip()
+        if ip in {safe_agent_ip, "127.0.0.1", "localhost", "0.0.0.0"}:
+            import psutil
+
+            cpu = psutil.cpu_percent(interval=None)
+            mem = psutil.virtual_memory()
+            disk = psutil.disk_usage(get_host_path("/"))
+            uptime = int(time.time() - psutil.boot_time())
+            ram_used = mem.total - mem.available
+            ram_pct = round(ram_used / mem.total * 100, 1) if mem.total > 0 else 0
+            ping_raw = _safe_agent_ping()
+            try:
+                ping_value = float(str(ping_raw).replace("ms", "").strip())
+            except Exception:
+                ping_value = 0.0
+
+            return web.json_response(
+                {
+                    "cpu": float(cpu),
+                    "ram": float(ram_pct),
+                    "rom": float(disk.percent),
+                    "uptime": uptime,
+                    "ping": ping_value,
+                }
+            )
+
+        all_nodes = await nodes_db.get_all_nodes()
+        for node_data in all_nodes.values():
+            if str(node_data.get("ip", "")).strip() == ip:
+                stats = node_data.get("stats", {}) or {}
+                ping_raw = stats.get("ping", 0)
+                try:
+                    ping_value = float(str(ping_raw).replace("ms", "").strip())
+                except Exception:
+                    ping_value = 0.0
+                return web.json_response(
+                    {
+                        "cpu": float(stats.get("cpu", 0) or 0),
+                        "ram": float(stats.get("ram", 0) or 0),
+                        "rom": float(stats.get("disk", 0) or 0),
+                        "uptime": int(stats.get("uptime", 0) or 0),
+                        "ping": ping_value,
+                    }
+                )
+
+        return web.json_response({"error": "No stats"}, status=404)
+    except Exception as exc:
+        logging.error("Terminal stats failed: %s", exc)
+        return web.json_response({"error": "Internal Server Error"}, status=500)
+
+
 @routes.get("/api/terminal/ws")
 async def handle_terminal_ws(request: web.Request) -> web.StreamResponse:
     user = get_current_user(request)

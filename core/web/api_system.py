@@ -25,6 +25,7 @@ from ..shared_state import ALERTS_CONFIG, ALLOWED_USERS, USER_NAMES
 from ..utils import generate_favicons, save_alerts_config
 from .auth import get_current_user
 from modules import update as update_module
+from modules import traffic as traffic_module
 from .. import shared_state
 
 routes = web.RouteTableDef()
@@ -387,6 +388,31 @@ async def api_clear_notifications(request: web.Request) -> web.StreamResponse:
     shared_state.WEB_NOTIFICATIONS.clear()
     shared_state.WEB_USER_LAST_READ.clear()
     return web.json_response({"status": "ok"})
+
+
+@routes.post("/api/traffic/reset")
+async def handle_reset_traffic(request: web.Request) -> web.StreamResponse:
+    user = get_current_user(request)
+    if not user or not _is_admin(user):
+        return web.json_response({"error": "Admin required"}, status=403)
+
+    try:
+        traffic_module.TRAFFIC_OFFSET["rx"] = 0
+        traffic_module.TRAFFIC_OFFSET["tx"] = 0
+
+        try:
+            import glob
+
+            files = glob.glob(os.path.join(traffic_module.config.TRAFFIC_BACKUP_DIR, "traffic_backup_*.json"))
+            for file_path in files:
+                os.remove(file_path)
+        except Exception:
+            logging.exception("Failed to remove traffic backup files")
+
+        return web.json_response({"status": "ok"})
+    except Exception as exc:
+        logging.error("Internal API error: %s", exc)
+        return web.json_response({"error": "Internal Server Error"}, status=500)
 
 
 __all__ = [
