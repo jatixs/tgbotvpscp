@@ -46,6 +46,96 @@ function ensureChartZoomRegistered() {
     }
 }
 
+function getChartResetLabel() {
+    if (typeof I18N !== 'undefined') {
+        return I18N.web_nodes_monitor_filter_reset || I18N.web_traffic_reset_no_emoji || 'Сбросить';
+    }
+    return 'Сбросить';
+}
+
+function getChartHintText() {
+    return 'Колесо — масштаб, выделение мышью — увеличить область, Shift + перетаскивание — панорама, двойной клик — сброс';
+}
+
+function refreshChartZoomState(chart, canvasOrId) {
+    if (!chart) return { isZoomed: false, freezeUpdates: false, atLiveEdge: true };
+
+    const canvas = typeof canvasOrId === 'string' ? document.getElementById(canvasOrId) : (canvasOrId || chart.canvas);
+    const state = chart.__liveZoomState = chart.__liveZoomState || {};
+    const total = Array.isArray(chart.data?.labels) ? chart.data.labels.length : 0;
+    const maxIndex = Math.max(0, total - 1);
+    const xScale = chart.scales?.x;
+
+    let min = 0;
+    let max = maxIndex;
+
+    if (xScale) {
+        const rawMin = Number(xScale.min);
+        const rawMax = Number(xScale.max);
+        if (Number.isFinite(rawMin)) min = Math.max(0, Math.round(rawMin));
+        if (Number.isFinite(rawMax)) max = Math.min(maxIndex, Math.round(rawMax));
+    }
+
+    const hasZoom = total > 1 && (min > 0 || max < maxIndex);
+    const atLiveEdge = total <= 1 || max >= (maxIndex - 1);
+    const visibleRange = Math.max(1, max - min);
+
+    if (!state.liveRangeSize || !state.freezeUpdates) {
+        state.liveRangeSize = visibleRange;
+    }
+
+    state.isZoomed = hasZoom;
+    state.atLiveEdge = atLiveEdge;
+    state.freezeUpdates = hasZoom && !atLiveEdge;
+
+    const wrapper = canvas?.parentElement;
+    const resetBtn = wrapper?.querySelector('.chart-reset-zoom-btn');
+    if (resetBtn) {
+        resetBtn.textContent = getChartResetLabel();
+        resetBtn.title = getChartResetLabel();
+        resetBtn.classList.toggle('hidden', !hasZoom);
+    }
+
+    return state;
+}
+window.refreshChartZoomState = refreshChartZoomState;
+
+function alignChartToLiveWindow(chart) {
+    if (!chart?.options?.scales?.x) return;
+
+    const total = Array.isArray(chart.data?.labels) ? chart.data.labels.length : 0;
+    if (total <= 1) return;
+
+    const state = chart.__liveZoomState = chart.__liveZoomState || {};
+    const maxIndex = total - 1;
+    const liveRangeSize = Math.max(1, Math.min(maxIndex, state.liveRangeSize || maxIndex));
+
+    chart.options.scales.x.min = Math.max(0, maxIndex - liveRangeSize);
+    chart.options.scales.x.max = maxIndex;
+    state.freezeUpdates = false;
+    state.atLiveEdge = true;
+}
+window.alignChartToLiveWindow = alignChartToLiveWindow;
+
+function updateChartWithLiveData(chart, applyData, canvasOrId) {
+    if (!chart || typeof applyData !== 'function') return false;
+
+    const state = chart.__liveZoomState = chart.__liveZoomState || {};
+    state.pendingUpdate = applyData;
+
+    refreshChartZoomState(chart, canvasOrId);
+    if (state.freezeUpdates) {
+        return false;
+    }
+
+    applyData();
+    alignChartToLiveWindow(chart);
+    chart.update('none');
+    refreshChartZoomState(chart, canvasOrId);
+    return true;
+}
+window.updateChartWithLiveData = updateChartWithLiveData;
+
 function buildInteractiveChartOptions(baseOptions = {}) {
     ensureChartZoomRegistered();
 
@@ -57,7 +147,10 @@ function buildInteractiveChartOptions(baseOptions = {}) {
                 pan: {
                     enabled: true,
                     mode: 'x',
-                    modifierKey: 'shift'
+                    modifierKey: 'shift',
+                    onPanComplete: ({ chart }) => {
+                        window.refreshChartZoomState?.(chart);
+                    }
                 },
                 zoom: {
                     wheel: { enabled: true },
@@ -68,7 +161,10 @@ function buildInteractiveChartOptions(baseOptions = {}) {
                         borderColor: 'rgba(59, 130, 246, 0.45)',
                         borderWidth: 1
                     },
-                    mode: 'x'
+                    mode: 'x',
+                    onZoomComplete: ({ chart }) => {
+                        window.refreshChartZoomState?.(chart);
+                    }
                 },
                 limits: {
                     x: { min: 'original', max: 'original', minRange: 2 },
@@ -92,15 +188,42 @@ function attachChartInteractions(chart, canvasOrId) {
         window.__chartRegistry[canvas.id] = chart;
     }
 
-    canvas.title = 'Колесо — масштаб, выделение мышью — увеличить область, Shift + перетаскивание — панорама, двойной клик — сброс';
+    canvas.title = getChartHintText();
+
+    const applyPendingAndReset = () => {
+        const activeChart = canvas.id ? window.__chartRegistry[canvas.id] : chart;
+        if (!activeChart) return;
+
+        if (typeof activeChart.resetZoom === 'function') {
+            activeChart.resetZoom();
+        }
+
+        const state = activeChart.__liveZoomState = activeChart.__liveZoomState || {};
+        state.freezeUpdates = false;
+
+        if (typeof state.pendingUpdate === 'function') {
+            state.pendingUpdate();
+        }
+
+        window.alignChartToLiveWindow?.(activeChart);
+        activeChart.update('none');
+        window.refreshChartZoomState?.(activeChart, canvas);
+    };
 
     if (!canvas.dataset.zoomResetBound) {
         canvas.addEventListener('dblclick', () => {
-            const activeChart = canvas.id ? window.__chartRegistry[canvas.id] : chart;
-            if (activeChart && typeof activeChart.resetZoom === 'function') {
-                activeChart.resetZoom();
-            }
+            applyPendingAndReset();
         });
+
+        ['wheel', 'mouseup', 'touchend'].forEach(eventName => {
+            canvas.addEventListener(eventName, () => {
+                setTimeout(() => {
+                    const activeChart = canvas.id ? window.__chartRegistry[canvas.id] : chart;
+                    window.refreshChartZoomState?.(activeChart, canvas);
+                }, 60);
+            }, { passive: true });
+        });
+
         canvas.dataset.zoomResetBound = 'true';
     }
 
@@ -114,20 +237,19 @@ function attachChartInteractions(chart, canvasOrId) {
         if (!resetBtn) {
             resetBtn = document.createElement('button');
             resetBtn.type = 'button';
-            resetBtn.className = 'chart-reset-zoom-btn absolute top-2 right-2 z-10 px-2 py-1 rounded-md text-[10px] font-bold bg-white/80 dark:bg-gray-900/80 text-blue-600 dark:text-blue-400 border border-blue-500/20 hover:bg-blue-50 dark:hover:bg-blue-500/10 transition';
-            resetBtn.textContent = 'Reset';
-            resetBtn.title = 'Сбросить масштаб';
+            resetBtn.className = 'chart-reset-zoom-btn hidden absolute top-2 left-2 z-10 px-2 py-1 rounded-md text-[10px] font-bold bg-white/90 dark:bg-gray-900/90 text-blue-600 dark:text-blue-400 border border-blue-500/20 shadow-sm hover:bg-blue-50 dark:hover:bg-blue-500/10 transition';
+            resetBtn.textContent = getChartResetLabel();
+            resetBtn.title = getChartResetLabel();
             resetBtn.addEventListener('click', (e) => {
                 e.preventDefault();
                 e.stopPropagation();
-                const activeChart = canvas.id ? window.__chartRegistry[canvas.id] : chart;
-                if (activeChart && typeof activeChart.resetZoom === 'function') {
-                    activeChart.resetZoom();
-                }
+                applyPendingAndReset();
             });
             wrapper.appendChild(resetBtn);
         }
     }
+
+    refreshChartZoomState(chart, canvas);
 }
 window.attachChartInteractions = attachChartInteractions;
 

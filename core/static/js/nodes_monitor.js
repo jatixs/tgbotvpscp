@@ -643,21 +643,28 @@ function updateModalCharts(history) {
 
     // --- Обновление или создание графика ресурсов ---
     if (modalResChart) {
-        modalResChart.data.labels = labels;
-        modalResChart.data.datasets[0].data = cpuData;
-        modalResChart.data.datasets[1].data = ramData;
-        
-        // Принудительно обновляем градиенты, чтобы они не пропадали
-        modalResChart.data.datasets[0].backgroundColor = getGradient(resCtx, 'rgb(59, 130, 246)');
-        modalResChart.data.datasets[1].backgroundColor = getGradient(resCtx, 'rgb(168, 85, 247)');
-        
-        modalResChart.options.scales.x.ticks.color = tickColor;
-        modalResChart.options.scales.y.grid.color = gridColor;
-        modalResChart.options.scales.y.ticks.color = tickColor;
-        modalResChart.options.plugins.legend.labels.color = tickColor;
-        
-        modalResChart.update('none'); 
-        if (window.attachChartInteractions) window.attachChartInteractions(modalResChart, 'modalResChart');
+        const applyModalResChartData = () => {
+            modalResChart.data.labels = labels;
+            modalResChart.data.datasets[0].data = cpuData;
+            modalResChart.data.datasets[1].data = ramData;
+
+            // Принудительно обновляем градиенты, чтобы они не пропадали
+            modalResChart.data.datasets[0].backgroundColor = getGradient(resCtx, 'rgb(59, 130, 246)');
+            modalResChart.data.datasets[1].backgroundColor = getGradient(resCtx, 'rgb(168, 85, 247)');
+
+            modalResChart.options.scales.x.ticks.color = tickColor;
+            modalResChart.options.scales.y.grid.color = gridColor;
+            modalResChart.options.scales.y.ticks.color = tickColor;
+            modalResChart.options.plugins.legend.labels.color = tickColor;
+        };
+
+        if (window.updateChartWithLiveData) {
+            window.updateChartWithLiveData(modalResChart, applyModalResChartData, 'modalResChart');
+        } else {
+            applyModalResChartData();
+            modalResChart.update('none');
+            if (window.attachChartInteractions) window.attachChartInteractions(modalResChart, 'modalResChart');
+        }
     } else {
         modalResChart = new Chart(resCtx, {
             type: 'line',
@@ -701,21 +708,28 @@ function updateModalCharts(history) {
     
     // --- Обновление или создание графика сети ---
     if (modalNetChart) {
-        modalNetChart.data.labels = labels;
-        modalNetChart.data.datasets[0].data = rxData;
-        modalNetChart.data.datasets[1].data = txData;
-        
-        // Принудительно обновляем градиенты
-        modalNetChart.data.datasets[0].backgroundColor = getGradient(netCtx, 'rgb(34, 197, 94)');
-        modalNetChart.data.datasets[1].backgroundColor = getGradient(netCtx, 'rgb(239, 68, 68)');
-        
-        modalNetChart.options.scales.x.ticks.color = tickColor;
-        modalNetChart.options.scales.y.grid.color = gridColor;
-        modalNetChart.options.scales.y.ticks.color = tickColor;
-        modalNetChart.options.plugins.legend.labels.color = tickColor;
-        
-        modalNetChart.update('none');
-        if (window.attachChartInteractions) window.attachChartInteractions(modalNetChart, 'modalNetChart');
+        const applyModalNetChartData = () => {
+            modalNetChart.data.labels = labels;
+            modalNetChart.data.datasets[0].data = rxData;
+            modalNetChart.data.datasets[1].data = txData;
+
+            // Принудительно обновляем градиенты
+            modalNetChart.data.datasets[0].backgroundColor = getGradient(netCtx, 'rgb(34, 197, 94)');
+            modalNetChart.data.datasets[1].backgroundColor = getGradient(netCtx, 'rgb(239, 68, 68)');
+
+            modalNetChart.options.scales.x.ticks.color = tickColor;
+            modalNetChart.options.scales.y.grid.color = gridColor;
+            modalNetChart.options.scales.y.ticks.color = tickColor;
+            modalNetChart.options.plugins.legend.labels.color = tickColor;
+        };
+
+        if (window.updateChartWithLiveData) {
+            window.updateChartWithLiveData(modalNetChart, applyModalNetChartData, 'modalNetChart');
+        } else {
+            applyModalNetChartData();
+            modalNetChart.update('none');
+            if (window.attachChartInteractions) window.attachChartInteractions(modalNetChart, 'modalNetChart');
+        }
     } else {
         modalNetChart = new Chart(netCtx, {
             type: 'line',
