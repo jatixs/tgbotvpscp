@@ -358,6 +358,13 @@
                     </div>
 
                 </div>
+                <div id="agentChartPeriodButtons" class="flex items-center gap-1 mb-3 flex-wrap">
+                    <button type="button" data-period="15m" onclick="setAgentChartPeriod('15m')" class="chart-period-btn px-2 py-1 text-[10px] rounded-lg border border-transparent bg-white/70 dark:bg-black/20 text-gray-600 dark:text-gray-300 transition">15м</button>
+                    <button type="button" data-period="1h" onclick="setAgentChartPeriod('1h')" class="chart-period-btn px-2 py-1 text-[10px] rounded-lg border border-transparent bg-white/70 dark:bg-black/20 text-gray-600 dark:text-gray-300 transition">1ч</button>
+                    <button type="button" data-period="6h" onclick="setAgentChartPeriod('6h')" class="chart-period-btn px-2 py-1 text-[10px] rounded-lg border border-transparent bg-white/70 dark:bg-black/20 text-gray-600 dark:text-gray-300 transition">6ч</button>
+                    <button type="button" data-period="24h" onclick="setAgentChartPeriod('24h')" class="chart-period-btn px-2 py-1 text-[10px] rounded-lg border border-transparent bg-white/70 dark:bg-black/20 text-gray-600 dark:text-gray-300 transition">24ч</button>
+                    <button type="button" data-period="all" onclick="setAgentChartPeriod('all')" class="chart-period-btn px-2 py-1 text-[10px] rounded-lg border border-transparent bg-white/70 dark:bg-black/20 text-gray-600 dark:text-gray-300 transition">Все</button>
+                </div>
                 <div class="h-[250px] w-full">
                     <canvas id="agentChart"></canvas>
                 </div>
@@ -718,6 +725,12 @@
                         <div class="font-mono text-xs sm:text-sm font-bold text-blue-600 dark:text-blue-400 truncate"
                             id="modalNodeTraffic">-</div>
                     </div>
+                </div>
+                <div id="nodeModalChartPeriodButtons" class="flex items-center gap-1 mb-3 flex-wrap">
+                    <button type="button" data-period="1h" onclick="setNodeModalChartPeriod('1h')" class="chart-period-btn px-2 py-1 text-[10px] rounded-lg border border-transparent bg-white/70 dark:bg-black/20 text-gray-600 dark:text-gray-300 transition">1ч</button>
+                    <button type="button" data-period="6h" onclick="setNodeModalChartPeriod('6h')" class="chart-period-btn px-2 py-1 text-[10px] rounded-lg border border-transparent bg-white/70 dark:bg-black/20 text-gray-600 dark:text-gray-300 transition">6ч</button>
+                    <button type="button" data-period="24h" onclick="setNodeModalChartPeriod('24h')" class="chart-period-btn px-2 py-1 text-[10px] rounded-lg border border-transparent bg-white/70 dark:bg-black/20 text-gray-600 dark:text-gray-300 transition">24ч</button>
+                    <button type="button" data-period="all" onclick="setNodeModalChartPeriod('all')" class="chart-period-btn px-2 py-1 text-[10px] rounded-lg border border-transparent bg-white/70 dark:bg-black/20 text-gray-600 dark:text-gray-300 transition">Все</button>
                 </div>
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6 mb-6">
                     <div
