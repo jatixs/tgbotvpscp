@@ -5,12 +5,12 @@
 <h1 align="center">🤖 VPS Manager Telegram Bot</h1>
 
 <p align="center">
-  <b>v1.21.0</b> — enterprise-grade ecosystem for monitoring and managing server infrastructure<br>
+  <b>v1.22.0</b> — enterprise-grade ecosystem for monitoring and managing server infrastructure<br>
 </p>
 
 <p align="center">
-  <a href="https://github.com/jatixs/tgbotvpscp/releases/latest"><img src="https://img.shields.io/badge/version-v1.21.0-blue?style=flat-square" alt="Version 1.21.0"/></a>
-  <a href="CHANGELOG.en.md"><img src="https://img.shields.io/badge/build-70-purple?style=flat-square" alt="Build 70"/></a>
+  <a href="https://github.com/jatixs/tgbotvpscp/releases/latest"><img src="https://img.shields.io/badge/version-v1.22.0-blue?style=flat-square" alt="Version 1.22.0"/></a>
+  <a href="CHANGELOG.en.md"><img src="https://img.shields.io/badge/build-72-purple?style=flat-square" alt="Build 72"/></a>
   <a href="https://www.python.org/"><img src="https://img.shields.io/badge/python-3.10%2B-green?style=flat-square" alt="Python 3.10+"/></a>
   <a href="https://choosealicense.com/licenses/gpl-3.0/"><img src="https://img.shields.io/badge/license-GPL--3.0-lightgrey?style=flat-square" alt="License GPL-3.0"/></a>
   <a href="https://github.com/aiogram/aiogram"><img src="https://img.shields.io/badge/aiogram-3.x-orange?style=flat-square" alt="Aiogram 3.x"/></a>
@@ -332,23 +332,37 @@ Automatic detection:
 ├── Dockerfile               # Container image
 ├── deploy_en.sh             # Installer
 ├── core/                    # System core
-│   ├── server.py            # Web server + API
+│   ├── config.py            # Configuration loader
 │   ├── auth.py              # Authorization
 │   ├── i18n.py              # Multilingual
 │   ├── keyboards.py         # UI generator
 │   ├── messaging.py         # Notifications
-│   ├── utils.py             # Utilities
+│   ├── middlewares.py       # Bot middlewares
+│   ├── models.py            # ORM models (Tortoise)
 │   ├── nodes_db.py          # Node database
+│   ├── server.py            # API server bootstrap
+│   ├── shared_state.py      # Bot ↔ Web state bridge
+│   ├── tasks.py             # Background tasks
+│   ├── utils.py             # Utilities
+│   ├── web/                 # Web layer (aiohttp)
+│   │   ├── app.py           # Routes & init
+│   │   ├── auth.py          # Web auth (password/magic link/Telegram)
+│   │   ├── middlewares.py   # WAF, CSRF, Rate Limiting
+│   │   ├── api_nodes.py     # Nodes REST API
+│   │   ├── api_system.py    # System REST API
+│   │   ├── streaming.py     # SSE streams
+│   │   └── views.py         # Jinja2 HTML pages
 │   ├── static/              # CSS, JS
 │   └── templates/           # HTML templates
-├── modules/                 # Functional modules
+├── modules/                 # Functional modules (18 modules)
 │   ├── selftest.py          # Server summary
 │   ├── traffic.py           # Traffic monitoring
 │   ├── services.py          # Service manager
 │   ├── nodes.py             # Node management
 │   ├── users.py             # User management
+│   ├── backups.py           # Backup manager
 │   ├── notifications.py     # Background alerts
-│   └── ...                  # +15 modules
+│   └── ...                  # +11 modules
 └── node/                    # Client for remote servers
     └── node.py              # Node agent
 ```
@@ -363,6 +377,7 @@ Automatic detection:
 
 - 📘 [**ARCHITECTURE.en.md**](ARCHITECTURE.en.md) — Complete project architecture
 - 🧩 [**custom_module_en.md**](custom_module_en.md) — Creating your own module
+- 🌐 [**web_module_en.md**](web_module_en.md) — Creating a web module (WebUI + Bot)
 - 📝 [**CHANGELOG.en.md**](CHANGELOG.en.md) — Change history
 
 ### Useful Commands
@@ -526,8 +541,8 @@ If you find this project useful, support it:
 ---
 
 <p align="center">
-  <b>Version:</b> 1.21.0 (Build 71)<br>
-  <b>Updated:</b> February 3, 2026<br>
+  <b>Version:</b> 1.22.0 (Build 72)<br>
+  <b>Updated:</b> April 15, 2026<br>
   <b>Status:</b> Stable<br>
   <br>
   Made with ❤️ for the DevOps community

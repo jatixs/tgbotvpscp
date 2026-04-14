@@ -11,6 +11,7 @@
 3. **Security** — multi-level protection (WAF, Rate Limiting, encryption)
 4. **Scalability** — support for unlimited number of remote nodes
 5. **Fault Tolerance** — Watchdog system and automatic restart
+6. **Separation of Concerns** — web layer in `core/web/`, bot logic in `modules/`
 
 ---
 
@@ -35,12 +36,20 @@
 **Purpose:** System entry point, orchestrator of all components
 
 **Core Functions:**
-- Initialize Aiogram Bot and Dispatcher
+- Initialize Aiogram Bot and Dispatcher with MemoryStorage
 - Connect SQLite database (Tortoise ORM)
-- Start web server (Aiohttp) on port 8080
-- Register all modules and middleware
+- Start web server via `core/web/app.py` on port 8080
+- Register **18 functional modules** and middleware
 - Handle lifecycle events (startup/shutdown)
 - Integrate with Sentry for error monitoring
+- Categorized menu: Monitoring, Management, Security, Tools, Settings
+
+**Module Registration:**
+```python
+register_module(selftest)          # Available to all
+register_module(users, admin_only=True)  # Admins only
+register_module(reboot, root_only=True)  # Root only
+```
 
 **Technologies:** Aiogram 3.x, AsyncIO, Tortoise ORM
 
@@ -67,32 +76,45 @@
 ```
 core/
 ├── config.py               # Central configuration
-├── auth.py                 # Authorization system
-├── server.py               # Web server and API
+├── auth.py                 # Authorization system (Telegram)
+├── server.py               # Compatibility (legacy bridge)
 ├── i18n.py                 # Internationalization
 ├── keyboards.py            # UI element generation
 ├── messaging.py            # Notification system
-├── middlewares.py          # Anti-spam, filters
+├── middlewares.py          # Anti-spam, filters (Telegram)
 ├── utils.py                # Helper utilities
-├── nodes_db.py             # Node database (SQLite)
-├── models.py               # ORM models (Tortoise)
-├── shared_state.py         # Global state
+├── nodes_db.py             # Node database (Tortoise ORM)
+├── models.py               # ORM models
+├── shared_state.py         # Global state (in-memory)
+├── tasks.py                # Background tasks (monitoring, cleanup)
+├── web/                    # 🌐 Web server (details below)
+│   ├── app.py              # Aiohttp initialization, routing
+│   ├── auth.py             # Authentication (Web)
+│   ├── middlewares.py      # WAF, Rate Limiting, CSRF
+│   ├── api_nodes.py        # Node management API
+│   ├── api_system.py       # System settings API
+│   ├── streaming.py        # Server-Sent Events (SSE)
+│   └── views.py            # HTML views (Jinja2)
 ├── static/                 # CSS, JS, images
 │   ├── css/
-│   │   ├── login.css
-│   │   ├── main.css
-│   │   └── style.css
+│   │   ├── login.css       # Auth styles
+│   │   ├── main.css        # Tailwind base styles
+│   │   └── style.css       # Components and animations
 │   └── js/
-│       ├── common.js       # Common functions
-│       ├── dashboard.js    # Dashboard logic
+│       ├── common.js       # Encryption, modals, toast
+│       ├── dashboard.js    # Dashboard logic and SSE
 │       ├── login.js        # Authentication
-│       ├── settings.js     # Settings
-│       └── theme_init.js   # Theme styling
-└── templates/              # HTML templates
-    ├── dashboard.html
-    ├── login.html
-    ├── reset_password.html
-    └── settings.html
+│       ├── nodes_monitor.js # Node monitoring
+│       ├── settings.js     # Settings and notifications
+│       ├── reset_password.js # Password reset
+│       └── theme_init.js   # Theme management
+└── templates/              # HTML templates (Jinja2)
+    ├── dashboard.html      # Main dashboard
+    ├── login.html          # Login page
+    ├── nodes_monitor.html  # Node monitoring
+    ├── reset_password.html # Password reset
+    ├── settings.html       # Settings
+    └── terminal.html       # Web terminal (VNC)
 ```
 
 ---
@@ -114,11 +136,12 @@ core/
 - `save_encrypted_json()` — Save with Fernet encryption
 - `save_system_config()` — Write system settings
 - `save_keyboard_config()` — Keyboard configuration
+- `setup_logging()` — Logging setup (Debug/Release)
 
 ---
 
-#### **auth.py** — Authorization System
-**Purpose:** Access control and user management
+#### **auth.py** — Authorization System (Telegram)
+**Purpose:** Bot user access control
 
 **Role Hierarchy:**
 1. **Root/Owner** (ADMIN_USER_ID) — full access, including dangerous operations
@@ -128,55 +151,11 @@ core/
 **Functions:**
 - `is_root_admin()` — Check owner status
 - `is_admin()` — Check administrative rights
-- `check_user_access()` — Validate function access
-- `load_users()` — Load user list
-- `save_users()` — Save with encryption (Fernet)
+- `is_allowed()` — Validate command access
+- `load_users()` / `save_users()` — Encrypted user list management
+- `refresh_user_names()` — Update names via Telegram API
 
-**Storage:** `/opt/tg-bot/config/users.json` (encrypted)
-
----
-
-#### **server.py** — Web Server and API
-**Purpose:** REST API, Dashboard, SSE streams
-
-**Main Endpoints:**
-
-**Authentication:**
-- `POST /api/login` — Web panel login
-- `POST /api/logout` — Logout, delete session
-- `POST /api/request_reset` — Request password reset
-- `POST /api/reset_password` — Reset password by token
-
-**Dashboard:**
-- `GET /` — Main dashboard page
-- `GET /api/dashboard_data` — Chart data
-- `POST /api/reset_traffic` — Reset traffic counter
-
-**Real-time Events (SSE):**
-- `GET /api/events` — Server-Sent Events for notifications
-- `GET /api/events/services` — SSE for service manager
-
-**Nodes Management:**
-- `GET /api/nodes` — List all nodes
-- `POST /api/nodes/register` — Register new node
-- `POST /api/nodes/:token/metrics` — Receive metrics from node
-- `POST /api/nodes/:id/delete` — Delete node
-
-**System:**
-- `GET /api/logs/:type` — Get logs
-- `POST /api/system_config` — Save configuration
-- `POST /api/keyboard_config` — Keyboard settings
-- `POST /api/alerts_config` — Alert configuration
-
-**Security Features:**
-- **WAF** — Web Application Firewall (SQL Injection, XSS, Path Traversal)
-- **Rate Limiting** — 100 requests/minute per IP
-- **Brute-force Protection** — Block after 5 failed attempts
-- **CSRF Tokens** — Protection against request forgery
-- **Session Management** — Secure server-side sessions
-- **Audit Logging** — Detailed logging to `logs/audit/audit.log`
-
-**Technologies:** Aiohttp, Argon2 (password hashing), Jinja2 (templates)
+**Storage:** `/opt/tg-bot/config/users.json` (Fernet encryption)
 
 ---
 
@@ -198,32 +177,32 @@ STRINGS = {
 ```
 
 **Core Functions:**
-- `get_text(key, lang)` — Get translation
-- `get_user_lang(user_id)` — User language
-- `set_user_lang(user_id, lang)` — Change language
-- `I18nFilter` — Middleware for automatic translation
+- `get_text(key, lang)` — Get translation (alias `_()`)
+- `get_user_lang(user_id)` — User language from cache
+- `set_user_lang(user_id, lang)` — Set language
+- `I18nFilter` — Aiogram filter for intercepting buttons in any language
 
-**Storage:** Language settings in `config/users.json`
+**Storage:** Language settings in `shared_state.USER_SETTINGS`
 
 ---
 
 #### **keyboards.py** — UI Generator
-**Purpose:** Dynamic keyboard creation
+**Purpose:** Dynamic Telegram keyboard creation
 
 **Keyboard Types:**
-1. **Reply Keyboard** — Main menu
+1. **Reply Keyboard** — Main categorized menu
 2. **Inline Keyboard** — Callback buttons in messages
 
 **Functions:**
-- `get_main_reply_keyboard(user_id)` — Main menu with permissions check
-- `get_subcategory_keyboard(category, user_id)` — Category submenus
+- `get_main_reply_keyboard(user_id)` — Main menu (5 categories)
+- `get_subcategory_keyboard(category, user_id)` — Category submenu
 - `get_manage_users_keyboard()` — User management
-- `get_keyboard_settings_inline()` — Keyboard settings
+- `get_keyboard_settings_inline()` — Button visibility settings
 
 **Adaptivity:** Buttons automatically hide/show based on:
 - User role (Root/Admin/User)
-- Installation mode (DEPLOY_MODE: root/secure)
-- Configuration in `config/keyboard_config.json`
+- Installation mode (`DEPLOY_MODE`: root/secure)
+- Visibility configuration (`KEYBOARD_CONFIG`)
 
 ---
 
@@ -232,103 +211,82 @@ STRINGS = {
 
 **Functions:**
 - `send_alert()` — Send notification to all admins
-  - Markdown support
-  - Automatic translation to user language
-  - Web notification integration
-- `delete_previous_message()` — Delete old message
+  - HTML markup support
+  - Automatic translation to recipient's language
+  - Duplication to web panel via SSE
+- `delete_previous_message()` — Delete old message (anti-spam)
 - `send_support_message()` — Support link
 
 **Notification Types:**
 - ⚠️ Resource threshold exceeded (CPU/RAM/Disk)
 - 🔒 SSH logins to server
 - 🛡️ IP ban via Fail2Ban
-- 📡 Node downtime (node offline)
+- 📡 Node downtime (node offline > 60 sec)
 - 🚀 System events (bot start/restart)
 
-**Mechanism:**
-- Telegram API for bots
-- Web panel receives via SSE (`/api/events`)
+**Delivery Channels:**
+- Telegram API (direct delivery)
+- Web panel via `WEB_NOTIFICATIONS` deque + SSE
 - Logging to `logs/bot/bot.log`
 
 ---
 
-#### **middlewares.py** — Middleware Layer
-**Purpose:** Request processing before handler invocation
-
-**Implemented Middleware:**
+#### **middlewares.py** — Middleware Layer (Telegram)
+**Purpose:** Request processing before bot handler invocation
 
 **SpamThrottleMiddleware:**
 - Flood protection (max 1 request per second per user)
-- Store last request time
-- Automatic reset when limit exceeded
-
-**Application:** Registered globally for all updates
+- Last request time stored in memory
+- Applied globally for messages and callback queries
 
 ---
 
 #### **utils.py** — Utilities and Helpers
 **Purpose:** Common helper functions
 
-**Main Categories:**
-
 **Formatting:**
 - `format_bytes(bytes)` — Convert bytes to KB/MB/GB
 - `format_uptime(seconds)` — Convert seconds to readable format
-- `get_country_flag(ip)` — Get country flag by IP
+- `get_country_flag(ip)` — Get country flag by IP (GeoIP)
 
 **Security:**
-- `encrypt_for_web(data)` — XOR + Base64 encryption for web client
-- `decrypt_for_web(data)` — Frontend decryption
+- `encrypt_for_web(data)` — XOR + Base64 encryption for SSE
+- `decrypt_for_web(data)` — Client-side decryption
 - `log_audit_event()` — Audit logging (GDPR compliant)
-- `mask_sensitive_data()` — Mask IPs, tokens, passwords
+- `mask_sensitive_data()` — Mask IPs, tokens, passwords in logs
 
 **System:**
-- `get_host_path()` — Correct paths for Docker
+- `get_host_path()` — Correct Docker paths (`/proc_host`)
 - `get_app_version()` — Version from CHANGELOG
 - `get_server_timezone_label()` — Server timezone
-- `generate_favicons()` — Generate icons for PWA
+- `generate_favicons()` — Generate PWA icons
 
 **Service Configuration:**
-- `load_services_config()` — Load `config/services.json` (Fernet)
-- `save_services_config()` — Save managed services list
+- `load_services_config()` / `save_services_config()` — Work with `config/services.json` (Fernet)
 
 ---
 
 #### **nodes_db.py** — Node Database
-**Purpose:** Remote server management
+**Purpose:** Remote server management via Tortoise ORM
 
 **ORM:** Tortoise ORM + SQLite (`config/nodes.db`)
 
 **Core Functions:**
-- `init_nodes_db()` — Initialize database
-- `add_node()` — Register new node
-- `get_node_by_token()` — Search by token
-- `update_node_metrics()` — Update metrics
+- `init_db()` — Initialize database and schema
+- `add_node()` — Register new node (generate token)
+- `get_node_by_token()` — Search by authorization token
+- `update_node_metrics()` — Update metrics (CPU, RAM, Disk)
 - `get_all_nodes()` — List all servers
 - `delete_node()` — Delete node
-
-**Node Model:**
-```python
-class Node:
-    id: int
-    token: str              # Unique authorization token
-    name: str               # Human-readable name
-    ip: str                 # Node IP address
-    last_seen: datetime     # Last activity
-    cpu_percent: float      # CPU load
-    ram_percent: float      # RAM usage
-    disk_percent: float     # Disk usage
-    uptime: int             # Uptime (seconds)
-```
 
 ---
 
 #### **models.py** — ORM Models
-**Purpose:** Data structure definition
+**Purpose:** Data structure definition (Tortoise ORM)
 
 **Models:**
 - `User` — Bot users (Telegram ID, role, language)
-- `Node` — Remote servers
+- `Node` — Remote servers (token, name, IP, metrics)
 - `Alert` — Notification history
 - `TrafficLog` — Network traffic logs
 
@@ -337,20 +295,228 @@ class Node:
 ---
 
 #### **shared_state.py** — Global State
-**Purpose:** In-memory storage for performance
+**Purpose:** In-memory storage for high performance
 
-**Variables:**
-- `ALLOWED_USERS: dict` — User cache
-- `AUTH_TOKENS: dict` — Node tokens
+**Key Structures:**
+- `ALLOWED_USERS: dict` — Authorized user cache
+- `USER_SETTINGS: dict` — Language settings
+- `USER_NAMES: dict` — User names (Telegram)
+- `AUTH_TOKENS: dict` — Node tokens for heartbeat
 - `NODE_TRAFFIC_MONITORS: dict` — Active traffic monitors
-- `ALERTS_CONFIG: dict` — Notification thresholds
-- `AGENT_HISTORY: deque` — Agent metrics history (ring buffer)
+- `ALERTS_CONFIG: dict` — Notification threshold configuration
+- `AGENT_HISTORY: deque` — Agent metrics history (ring buffer ~1000 points)
 - `WEB_NOTIFICATIONS: deque` — Web panel notifications
-- `WEB_USER_LAST_READ: dict` — Last read notification
+- `WEB_USER_LAST_READ: dict` — Last read notification per user
 
 **Features:**
-- Use of `deque` for memory limitation
+- `collections.deque` for memory limitation
 - Periodic cleanup via `gc.collect()`
+
+---
+
+#### **tasks.py** — Background Tasks
+**Purpose:** Periodic processes launched at web server startup
+
+**agent_monitor():**
+- Updates agent public IP cache (`AGENT_IP_CACHE`)
+- Updates country flag (`AGENT_FLAG`)
+- Measures agent ping (`AGENT_PING_CACHE`)
+- Records metrics history to `AGENT_HISTORY` (CPU%, RAM%, RX, TX)
+
+**cleanup_monitor() — every 600 seconds:**
+- Removes expired web sessions
+- Cleans `RESET_TOKENS` (TTL 10 min)
+- Cleans `AUTH_TOKENS` (TTL 5 min)
+- Cleans `CSRF_TOKENS` (TTL 1 hour)
+- Resets `LOGIN_ATTEMPTS` per IP (5 min window)
+
+---
+
+### 🔹 Directory `core/web/` — Web Server
+
+The web layer is implemented as a separate package with clear separation of concerns:
+
+```
+core/web/
+├── app.py              # Initialization, routing, lifecycle
+├── auth.py             # Authentication (password, magic link, Telegram widget)
+├── middlewares.py      # WAF, Rate Limiting, CSRF Protection
+├── api_nodes.py        # REST API for nodes (heartbeat, CRUD, commands)
+├── api_system.py       # REST API for settings, logs, users
+├── streaming.py        # Server-Sent Events (3 streams)
+└── views.py            # HTML pages (Jinja2 rendering)
+```
+
+#### **app.py** — Web Server Entry Point
+**Purpose:** Create and configure aiohttp Application
+
+**Functions:**
+- Creates `aiohttp.web.Application` with middleware stack
+- Registers routes from 5 modules (views, auth, nodes, system, streaming)
+- Serves static files (`/static/`)
+- Launches background tasks from `tasks.py` on startup
+- Handles graceful shutdown via `shutdown_event`
+
+**Routing:**
+```python
+view_routes      → HTML pages
+auth_routes      → Authentication
+node_routes      → Node API
+system_routes    → System API
+streaming_routes → SSE streams
+```
+
+---
+
+#### **auth.py** (web) — Web Panel Authentication
+**Purpose:** Multiple login methods with different session TTLs
+
+**Authentication Methods:**
+
+| Method | Session TTL | Available To |
+|--------|-----------|--------------|
+| Password (Argon2) | 7 days | Main admin only |
+| Magic Link | 30 days (session) / 5 min (link) | All bot users |
+| Telegram Widget | 30 days | All bot users |
+
+**Endpoints:**
+- `POST /api/login/password` — Password login (ADMIN only)
+- `POST /api/login/request` — Request magic link (sends to Telegram)
+- `GET /api/login/magic?token=...` — Activate magic link
+- `POST /api/auth/telegram` — Telegram Widget login (HMAC validation)
+- `POST /api/logout` — Logout and delete session
+- `POST /api/request_reset` — Request password reset
+- `POST /api/reset_password` — Reset password by token
+
+**Security:**
+- Rate limiting: 5 attempts per 5 minutes (per IP)
+- Constant-time comparison (Argon2)
+- HMAC validation for Telegram Widget
+- CSRF tokens per request (TTL 1 hour)
+
+---
+
+#### **middlewares.py** (web) — 3 Security Layers
+**Purpose:** HTTP request-level security
+
+**1. Rate Limit Middleware:**
+- 100 requests/min per IP per endpoint
+- Automatic window reset
+
+**2. CSRF Middleware:**
+- CSRF token generation on page load
+- Validation for all POST/PUT/DELETE requests
+- Exception: node heartbeat routes
+
+**3. WAF Middleware (Web Application Firewall):**
+```
+Detected attacks:
+├── SQL Injection (UNION, SELECT, DROP, INSERT)
+├── XSS (<script>, javascript:, on* attributes)
+├── Path Traversal (../, %2e%2e/)
+├── Command Injection (bash, sh, wget, curl)
+└── LDAP Injection
+```
+
+---
+
+#### **api_nodes.py** — Node Management API
+**Purpose:** CRUD operations and heartbeat protocol
+
+**Key Endpoint — `/api/heartbeat`:**
+- Nodes send status with HMAC signature
+- Updates metrics: CPU, RAM, Disk, Uptime, Network Speed
+- Processes SSH logins → sends alerts
+- Returns command queue for the node
+
+**Endpoints:**
+```
+GET  /api/nodes/list                    — Node list (encrypted)
+POST /api/nodes/add                     — Add node
+POST /api/nodes/delete                  — Delete node
+POST /api/nodes/rename                  — Rename (admin only)
+GET  /api/nodes/monitor/list            — Data for monitoring page
+GET  /api/nodes/monitor/detail?token=   — Specific node details
+POST /api/nodes/monitor/command         — Send command to node
+POST /api/nodes/monitor/service_action  — Manage service on node
+```
+
+---
+
+#### **api_system.py** — System API
+**Purpose:** Settings, logs, users, updates
+
+**Endpoints:**
+```
+GET  /api/logs                 — Bot logs (last 300 lines)
+GET  /api/logs/system          — System logs (journalctl)
+POST /api/logs/clear           — Clear logs
+
+POST /api/settings/save        — Save notifications (alerts)
+POST /api/settings/system      — CPU/RAM/Disk thresholds
+POST /api/settings/keyboard    — Bot button visibility
+POST /api/settings/metadata    — Favicon, Title, Description (SEO)
+
+POST /api/users/action         — Add/delete users
+GET  /api/sessions             — Active web sessions
+POST /api/sessions/revoke      — Revoke session
+
+GET  /api/update/check         — Check updates (GitHub)
+POST /api/update/run           — Run update
+
+GET  /api/notifications/list   — Notification list
+POST /api/notifications/read   — Mark as read
+POST /api/notifications/clear  — Clear all
+```
+
+---
+
+#### **streaming.py** — Server-Sent Events
+**Purpose:** Real-time updates without WebSocket
+
+**Three SSE Streams:**
+
+**1. `GET /api/events` — Main stream:**
+- `agent_stats` — CPU, RAM, Disk, Network, chart history
+- `nodes_list` — All nodes with statuses
+- `notifications` — Notifications (filtered by last read)
+
+**2. `GET /api/events/logs` — Real-time logs:**
+- Bot logs — file watching (`tail -f` style)
+- System logs — `journalctl --follow`
+
+**3. `GET /api/events/node` — Specific node details:**
+- Statistics and chart data
+- Updates via `?token=...` parameter
+
+**Encryption:** All data encrypted with XOR + Base64 via `encrypt_for_web()` before sending.
+
+---
+
+#### **views.py** — HTML Views
+**Purpose:** Server-side page rendering via Jinja2
+
+**Routes:**
+```
+GET  /                → dashboard.html (auth required)
+GET  /login           → login.html
+GET  /nodes           → nodes_monitor.html
+GET  /settings        → settings.html
+GET  /terminal        → terminal.html (web terminal)
+GET  /reset-password  → reset_password.html
+GET  /site.webmanifest → PWA manifest (JSON)
+```
+
+**Template Context:**
+```python
+{
+    "I18N": { ... },         # Localized strings
+    "USER_ROLE": "owner",    # Current user role
+    "IS_MAIN_ADMIN": True,   # Is main admin
+    "WEB_KEY": "...",        # XOR decryption key
+    "CSRF_TOKEN": "...",     # CSRF token
+}
+```
 
 ---
 
@@ -362,11 +528,12 @@ modules/
 ├── traffic.py              # Network traffic monitoring
 ├── uptime.py               # Uptime without reboot
 ├── top.py                  # Top-10 processes by CPU
-├── speedtest.py            # Speed test (iperf3)
+├── speedtest.py            # Speed test (iperf3 / Ookla)
 ├── notifications.py        # Background checks and alerts
 ├── users.py                # User management
-├── nodes.py                # Node management
+├── nodes.py                # Node management (Telegram UI)
 ├── services.py             # System services manager
+├── backups.py              # Backup manager (Traffic/Config/Logs/Nodes)
 ├── vless.py                # VLESS link generation
 ├── xray.py                 # Xray Core update
 ├── sshlog.py               # SSH login logs
@@ -375,28 +542,32 @@ modules/
 ├── update.py               # Bot and system update
 ├── reboot.py               # Server reboot
 ├── restart.py              # Bot restart
-├── optimize.py             # System optimization
-└── backups.py              # Configuration backups
+└── optimize.py             # System optimization
 ```
 
-#### Module Working Principle
+#### Module Interface
 
-Each module implements a unified interface:
+Each module implements a unified contract:
 
 ```python
-# Required functions:
+# Required:
+BUTTON_KEY = "btn_my_feature"       # i18n button key
+
 def get_button() -> KeyboardButton:
-    """Button for main menu"""
+    """Button for keyboard"""
     
 def register_handlers(dp: Dispatcher):
-    """Register handlers"""
+    """Register Aiogram handlers"""
 
 # Optional:
+def start_background_tasks(bot) -> list[asyncio.Task]:
+    """Module background tasks"""
+
+def get_subcategory() -> str:
+    """Category: monitoring/management/security/tools"""
+    
 def has_subcategory() -> bool:
     """Has submenu"""
-    
-def get_subcategory() -> str:
-    """Category name (monitoring/management/security/tools)"""
 ```
 
 ---
@@ -405,7 +576,7 @@ def get_subcategory() -> str:
 **Purpose:** Background monitoring and notifications
 
 **Monitored Metrics:**
-- CPU > 80% (configurable threshold)
+- CPU > 80% (configurable threshold, 50–99%)
 - RAM > 90%
 - Disk > 85%
 - Node downtime > 60 seconds
@@ -414,66 +585,40 @@ def get_subcategory() -> str:
 - Async task `asyncio.create_task(check_alerts_loop())`
 - Check interval: 30 seconds
 - Debounce: repeat notification after 5 minutes
+- Grace period on startup (prevent false alerts)
 
-**Configuration:** Web panel Settings → Alerts Config
+**Configuration:**
+- Global thresholds (for agent)
+- Individual thresholds (for each node)
+- Real-time synchronization between bot and WebUI
 
 ---
 
 #### **services.py** — Service Manager
-**Purpose:** Real-time systemd service management
+**Purpose:** Manage systemd services via bot and WebUI
 
 **Capabilities:**
 - View status of all services (ssh, docker, nginx, mysql, etc.)
 - Start/Stop/Restart services
 - Add/remove from monitoring list
-- Real-time updates via SSE (`/api/events/services`)
+- Real-time updates via SSE
 
 **Security:**
-- Data encryption: XOR + Base64 on backend
-- Frontend decryption (JavaScript)
+- Data encryption: XOR + Base64 (backend → frontend)
 - Persistent configuration: `config/services.json` (Fernet)
-
-**Architecture:**
-```
-Backend (server.py)
-  ↓ SSE Stream (5 sec interval)
-  ↓ encrypt_for_web(data)
-Frontend (dashboard.js)
-  ↓ EventSource API
-  ↓ decrypt_for_web(data)
-  ↓ Update UI
-```
-
-**Functions:**
-- `get_all_services_status()` — All services status
-- `perform_service_action(service, action)` — Execute command
-- `add_managed_service()` — Add to monitoring
-- `remove_managed_service()` — Remove from monitoring
 
 ---
 
-#### **nodes.py** — Node Management
-**Purpose:** Multi-server management
+#### **backups.py** — Backup Manager
+**Purpose:** Backup management
 
-**Functions:**
-- Add new node (generate token)
-- List all connected nodes
-- Switch context between servers
-- Delete node
-- View detailed information (CPU, RAM, uptime)
+**Categories:** Traffic / Config / Logs / Nodes
 
-**Connection Process:**
-1. Root admin: "Nodes" → "Add Node"
-2. Enter name → Get token
-3. On remote server: 
-   ```bash
-   curl -O deploy_en.sh && bash deploy_en.sh
-   # Select "Install NODE (Client)"
-   # Enter agent URL and token
-   ```
-4. Node appears in list
-
-**Node Agent:** `node/node.py` — lightweight HTTP server sending metrics
+**Capabilities:**
+- Manual backup creation with file delivery to Telegram
+- Auto-backup with configurable timer (30 sec step → x2 after 10 min)
+- Rotation: keep 5 latest copies, auto-delete oldest
+- Restore and bulk deletion
 
 ---
 
@@ -485,36 +630,19 @@ node/
 ```
 
 #### **node.py** — Node Agent
-**Purpose:** Client for remote VPS
+**Purpose:** Lightweight client for remote VPS
 
 **Functions:**
-- Collect system metrics (CPU, RAM, Disk, uptime)
-- Send to main server (`POST /api/nodes/{token}/metrics`)
-- Execute commands (on request from agent)
-- SSH monitoring (optional)
+- Collect system metrics (CPU, RAM, Disk, Uptime, Network Speed)
+- Heartbeat to main server (`POST /api/heartbeat`) with HMAC signature
+- Execute commands on request from agent (selftest, speedtest, reboot)
+- SSH monitoring with login log delivery
+- Service management on node (on request from WebUI)
 
 **Requirements:**
 - Python 3.10+
 - Libraries: requests, psutil
 - Open port on main server (8080)
-
-**Deployment:**
-```bash
-cd /opt && git clone <repo> tg-node
-cd tg-node/node
-python3 node.py --agent-url http://MAIN_SERVER:8080 --token NODE_TOKEN
-```
-
-**Systemd Integration:**
-```ini
-[Unit]
-Description=TG Node Agent
-[Service]
-ExecStart=/usr/bin/python3 /opt/tg-node/node/node.py ...
-Restart=always
-[Install]
-WantedBy=multi-user.target
-```
 
 ---
 
@@ -524,29 +652,31 @@ WantedBy=multi-user.target
 
 #### 1️⃣ Telegram Bot Security
 - **Whitelist** — Only authorized Telegram IDs
-- **Role-based Access Control** — Root/Admin/User
+- **Role-based Access Control** — Root / Admin / User
 - **Anti-spam middleware** — Throttling 1 req/sec per user
 
 #### 2️⃣ Web Panel Security
 - **Argon2** — Password hashing (OWASP recommended)
-- **Server-side sessions** — Secure cookie with HTTPS
-- **CSRF Protection** — Tokens for all POST requests
-- **Brute-force Protection** — 5 attempts → 5 minute block
-- **Rate Limiting** — 100 API requests/min per IP
+- **Server-side sessions** — Secure cookies (7–30 days TTL)
+- **CSRF Protection** — Tokens for all POST requests (TTL 1 hour)
+- **Brute-force Protection** — 5 attempts → IP block for 5 minutes
+- **Rate Limiting** — 100 requests/min per IP per endpoint
+- **Magic Link** — Passwordless login via Telegram (TTL 5 min)
+- **Telegram Widget** — OAuth via HMAC validation
 
 #### 3️⃣ WAF (Web Application Firewall)
 Attack Patterns:
-- SQL Injection (`UNION SELECT`, `OR 1=1`)
-- XSS (`<script>`, `javascript:`)
+- SQL Injection (`UNION SELECT`, `OR 1=1`, `DROP TABLE`)
+- XSS (`<script>`, `javascript:`, `on*` attributes)
 - Path Traversal (`../`, `%2e%2e`)
-- Command Injection (`;`, `|`, `` ` ``)
-- LDAP Injection (`()`, `|`)
+- Command Injection (`bash`, `sh`, `wget`, `curl`)
+- LDAP Injection
 
 #### 4️⃣ Data Encryption
-- **Fernet** — Symmetric config encryption
-  - `users.json`, `services.json`, `alerts_config.json`
-- **XOR + Base64** — Lightweight web client encryption
-  - Used for SSE events, services data
+- **Fernet (AES)** — Symmetric config encryption
+  - `users.json`, `services.json`, `alerts_config.json`, `bot.db`
+- **XOR + Base64** — Lightweight encryption for SSE streams
+- **HMAC** — Heartbeat message signing from nodes
 
 #### 5️⃣ Audit Logging
 **Location:** `logs/audit/audit.log`
@@ -556,23 +686,12 @@ Attack Patterns:
 - Password resets
 - User additions/deletions
 - Configuration changes
-- Suspicious activity (WAF triggers)
+- WAF triggers / Suspicious activity
 
-**Format:**
-```json
-{
-  "timestamp": "2026-01-27T12:00:00Z",
-  "event_type": "LOGIN_SUCCESS",
-  "ip": "203.0.113.X",
-  "user": "admin",
-  "details": {...}
-}
-```
-
-**Privacy:**
-- IP addresses masked (203.0.113.XXX)
-- Tokens hidden (abc123...)
-- GDPR compliant
+**Privacy (GDPR Compliant):**
+- IP addresses masked (`203.0.113.XXX`)
+- Tokens hidden (`abc123...`)
+- Sensitive data not logged
 
 ---
 
@@ -586,26 +705,26 @@ Attack Patterns:
 3. Connect to SQLite database (Tortoise ORM)
 4. Load encrypted configs (users, alerts, services)
 5. Initialize Telegram Bot + Dispatcher
-6. Register all modules & handlers
-7. Start Aiohttp web server (port 8080)
-8. Launch background tasks:
-   - check_alerts_loop()
-   - agent_metrics_collector()
-   - SSE event broadcaster
-9. Send startup notification to admin
+6. Register 18 modules and middleware
+7. Start Aiohttp web server (core/web/app.py, port 8080)
+8. Launch background tasks (tasks.py):
+   - agent_monitor() — agent metrics collection
+   - cleanup_monitor() — session and token cleanup
+9. Launch module background tasks:
+   - check_alerts_loop() — threshold monitoring
+10. Send startup notification to admin
 ```
 
 ### Shutdown Sequence
 
 ```
 1. Signal received (SIGTERM/SIGINT)
-2. Stop accepting new requests
-3. Cancel background tasks
-4. Save in-memory state to disk
-5. Close database connections
-6. Stop web server
-7. Send shutdown notification
-8. Exit gracefully (exit code 0)
+2. Stop Aiogram polling
+3. Cancel background tasks (graceful, 5 sec timeout)
+4. Stop web server (cleanup, 5 sec timeout)
+5. Close DB connections (Tortoise ORM)
+6. Close bot HTTP session
+7. Log completion
 ```
 
 ### Watchdog Flow
@@ -625,72 +744,67 @@ while True:
 
 ## 📊 Data Flows
 
-### Metrics Collection Flow
+### Metrics Collection Flow (Nodes → Agent)
 
 ```
 Remote Node (node.py)
-    ↓ (every 60 sec)
-POST /api/nodes/{token}/metrics
+    ↓ (heartbeat every 60 sec)
+POST /api/heartbeat (HMAC signature)
     {
-        "cpu": 45.2,
-        "ram": 72.1,
-        "disk": 38.5,
-        "uptime": 864000
+        "cpu": 45.2, "ram": 72.1,
+        "disk": 38.5, "uptime": 864000,
+        "net_speed": {"rx": 1024, "tx": 512}
     }
     ↓
-Agent Server (server.py)
+api_nodes.py → HMAC validation
     ↓
 Update nodes_db (SQLite)
     ↓
-Store in AGENT_HISTORY (deque)
+Check thresholds → Send alert (if needed)
     ↓
-Check thresholds → Trigger alert if needed
-    ↓
-Broadcast via SSE → Web Dashboard updates
+Broadcast via SSE → WebUI updates in real-time
 ```
 
-### User Interaction Flow
+### User Interaction Flow (Telegram)
 
 ```
 User (Telegram)
     ↓
-Send command "/start"
+Send command or press button
     ↓
-SpamThrottleMiddleware
+SpamThrottleMiddleware (1 req/sec)
     ↓
-Auth check (is_admin/is_root)
+Auth check (is_allowed → role-based)
     ↓
-I18n translation
+I18nFilter (language routing)
     ↓
 Module handler (e.g., selftest.py)
     ↓
 Execute system command (if root mode)
     ↓
-Format response with markdown
+Format response (HTML)
     ↓
-Send message + inline keyboard
-    ↓
-Store message_id for deletion
+Send message + store ID for deletion
 ```
 
-### SSE Event Flow
+### SSE Event Flow (Server → Browser)
 
 ```
-Backend Event (e.g., node metric update)
+Backend Event (metric, notification)
     ↓
-Encrypt data (encrypt_for_web)
+encrypt_for_web(data) → XOR + Base64
     ↓
 Push to WEB_NOTIFICATIONS deque
     ↓
-SSE endpoint /api/events checks queue
+streaming.py → SSE endpoint checks queue
     ↓
-Send as "data: {encrypted_json}\n\n"
+"data: {encrypted_json}\n\n"
     ↓
-Frontend EventSource receives
+Frontend EventSource (JavaScript)
     ↓
-Decrypt (decrypt_for_web)
+decrypt() → XOR + Base64
     ↓
-Update DOM dynamically
+Update DOM in real-time
 ```
 
 ---
@@ -699,45 +813,48 @@ Update DOM dynamically
 
 ### Technologies
 - **Tailwind CSS** — Utility-first CSS framework
-- **Vanilla JavaScript** — No frameworks, pure ES6+
-- **Server-Sent Events** — Real-time updates without WebSocket
+- **Vanilla JavaScript** — ES6+, no frameworks
+- **Server-Sent Events** — Real-time updates
 - **Chart.js** — Resource consumption charts
 - **PWA** — Progressive Web App with manifest
+- **xterm.js** — Web terminal (VNC)
 
 ### Key Files
 
 #### **dashboard.js**
-**Purpose:** Main page logic
+- `initSSE()` — Connect to main SSE stream
+- `initServicesSSE()` — SSE for service manager
+- `updateDashboard()` — Update CPU/RAM/Disk charts
+- `renderTrafficChart()` — Network traffic chart
+- `fetchNodesList()` — Render node list
 
-**Core Functions:**
-- `initServicesSSE()` — Connect to SSE for services
-- `loadServices()` — Load services list
-- `updateDashboard()` — Update charts
-- `openServiceInfoModal()` — Detailed service info
-- `renderTrafficChart()` — Traffic chart
-- `fetchNodesList()` — Node list
+#### **nodes_monitor.js**
+- `loadNodes()` — Load nodes via API
+- Filtering: by status (online/offline), by CPU load
+- Search by name and IP
+- Sorting (name, CPU, RAM, ping)
+- Multi-select + bulk commands
+- Modal: Resources/Network charts, services, actions
 
-**EventSource Connections:**
-- `/api/events` — General notifications
-- `/api/events/services` — Real-time services
-
-#### **theme_init.js**
-**Purpose:** Theme management
-
-**Functions:**
-- Auto-detect system theme
-- Switch light/dark mode
-- Save to localStorage
-- Sync between tabs
+#### **settings.js**
+- Notification center (alert toggles with hint tooltips)
+- Thresholds: CPU/RAM/Disk (range 50–99%)
+- Intervals: traffic, services, ping, timeout
+- Password change with validation
+- Favicon upload (resize → 512x512 → base64 PNG)
+- User management, sessions, updates
 
 #### **common.js**
-**Purpose:** Common utilities
-
-**Functions:**
-- `encrypt()/decrypt()` — XOR encryption
-- `animateModalOpen()/Close()` — Modal animations
+- `encrypt()` / `decrypt()` — XOR encryption/decryption
+- `animateModalOpen()` / `animateModalClose()` — Modal animations
 - `showNotification()` — Toast notifications
 - `formatBytes()` — Size formatting
+
+#### **theme_init.js**
+- Auto-detect system theme (prefers-color-scheme)
+- Light/dark toggle, saved to localStorage
+- Cross-tab synchronization
+- Dynamic status-bar (iOS)
 
 ---
 
@@ -775,43 +892,24 @@ CREATE TABLE users (
 
 ### Encrypted JSON Configs
 
-#### `config/users.json`
+#### `config/users.json` (Fernet)
 ```json
 {
-    "12345678": {
-        "role": "admins",
-        "name": "John Doe",
-        "lang": "en"
-    }
+    "12345678": { "role": "admins", "name": "John Doe", "lang": "en" }
 }
 ```
 
-#### `config/services.json`
+#### `config/services.json` (Fernet)
 ```json
-[
-    "ssh",
-    "docker",
-    "nginx",
-    "mysql",
-    "postgresql"
-]
+["ssh", "docker", "nginx", "mysql", "postgresql"]
 ```
 
-#### `config/alerts_config.json`
+#### `config/alerts_config.json` (Fernet)
 ```json
 {
     "global_enabled": true,
-    "thresholds": {
-        "cpu": 80,
-        "ram": 90,
-        "disk": 85
-    },
-    "nodes": {
-        "node_token_123": {
-            "enabled": true,
-            "custom_threshold": {...}
-        }
-    }
+    "thresholds": { "cpu": 80, "ram": 90, "disk": 85 },
+    "nodes": { "node_token_123": { "enabled": true } }
 }
 ```
 
@@ -820,320 +918,28 @@ CREATE TABLE users (
 ## 🚀 Installation Modes
 
 ### Root Mode
-**Characteristics:**
 - Full system access
-- Host `/proc` mounting in Docker
-- Dangerous operations available
+- Host `/proc` mounting → `/proc_host` in Docker
+- ✅ Server reboot, journalctl reading, apt upgrade
 
-**Capabilities:**
-✅ Reboot physical server
-✅ Read system logs (journalctl)
-✅ Manage all services
-✅ System update (apt upgrade)
-
-**Installation:**
-```bash
-bash deploy.sh
-# Select: 3) Docker - Root Mode
-```
-
-### Secure Mode
-**Characteristics:**
-- Limited privileges
-- Container isolation
-- User `tgbot` (UID 1000)
-
-**Limitations:**
-❌ Cannot reboot server
-❌ No system log access
-✅ Resource monitoring
-✅ Bot management
-✅ Web panel
-
-**Installation:**
-```bash
-bash deploy.sh
-# Select: 1) Docker - Secure Mode (Recommended)
-```
-
----
-
-## 🧪 Testing and Debugging
-
-### Logging
-
-**Levels:**
-- `DEBUG` — Detailed information
-- `INFO` — Normal events
-- `WARNING` — Warnings
-- `ERROR` — Errors
-- `CRITICAL` — Critical failures
-
-**Log Files:**
-- `logs/bot/bot.log` — Main bot log
-- `logs/watchdog/watchdog.log` — Watchdog events
-- `logs/node/node_{name}.log` — Logs for each node
-- `logs/audit/audit.log` — Security audit
-
-**Real-time Viewing:**
-```bash
-# Systemd
-journalctl -u tg-bot -f
-
-# Docker
-docker compose -f /opt/tg-bot/docker-compose.yml logs -f bot-secure
-```
-
-### Debug Endpoints
-
-**GET /api/health**
-```json
-{
-    "status": "healthy",
-    "version": "1.18.0",
-    "uptime": 86400,
-    "nodes_count": 5
-}
-```
-
-**GET /api/debug/state** (Root only)
-```json
-{
-    "allowed_users": [...],
-    "active_traffic_monitors": 3,
-    "notifications_queue": 12,
-    "memory_usage_mb": 145.2
-}
-```
-
----
-
-## 📝 Adding a New Module
-
-### Module Template
-
-```python
-# modules/my_feature.py
-
-from aiogram import Dispatcher, types
-from aiogram.types import KeyboardButton
-from core.i18n import get_text as _
-from core import config
-
-BUTTON_KEY = "button_my_feature"
-CATEGORY = "tools"  # monitoring/management/security/tools
-
-def get_button() -> KeyboardButton:
-    return KeyboardButton(text=_(BUTTON_KEY, config.DEFAULT_LANGUAGE))
-
-def get_subcategory() -> str:
-    return CATEGORY
-
-def has_subcategory() -> bool:
-    return True
-
-def register_handlers(dp: Dispatcher):
-    dp.message.register(
-        my_feature_handler,
-        lambda msg: msg.text == _(BUTTON_KEY, config.DEFAULT_LANGUAGE)
-    )
-
-async def my_feature_handler(message: types.Message):
-    user_id = message.from_user.id
-    # Your logic here
-    await message.answer("Feature response")
-```
-
-### Integration
-
-1. **Add strings to `core/i18n.py`:**
-```python
-STRINGS = {
-    "button_my_feature": {
-        "ru": "🎯 My Feature",
-        "en": "🎯 My Feature"
-    }
-}
-```
-
-2. **Import in `bot.py`:**
-```python
-from modules import my_feature
-
-# In main():
-my_feature.register_handlers(dp)
-```
-
-3. **Add to keyboard config:**
-```python
-# core/config.py
-KEYBOARD_CONFIG = {
-    "my_feature": {"visible": True, "category": "tools"}
-}
-```
+### Secure Mode (Recommended)
+- Container isolation, user `tgbot` (UID 1000)
+- ✅ Monitoring, web panel, bot management
+- ❌ No reboot, no system logs
 
 ---
 
 ## 📚 Dependencies
 
-### Python Packages
-
-**Core:**
-- `aiogram==3.4.1` — Telegram Bot API
-- `aiohttp==3.9.1` — Async HTTP server
-- `tortoise-orm==0.20.0` — SQLite ORM
-- `cryptography==41.0.7` — Fernet encryption
-- `argon2-cffi==23.1.0` — Password hashing
-
-**Utilities:**
-- `psutil==5.9.6` — System metrics
-- `aiosqlite==0.19.0` — Async SQLite
-- `python-dotenv==1.0.0` — Load .env
-- `jinja2==3.1.2` — HTML templates
-
-**Optional:**
-- `sentry-sdk==1.39.1` — Error monitoring
-- `aerich==0.7.2` — DB migrations
-
-**Dev:**
-- `pytest==7.4.3`
-- `black==23.12.1`
-- `flake8==6.1.0`
-
-### System Requirements
-
-**Minimum:**
-- Ubuntu 20.04+ / Debian 11+
-- Python 3.10+
-- 1 GB RAM
-- 10 GB Disk
-- Docker 20.10+ (for containers)
-
-**Recommended:**
-- 2 GB RAM
-- 20 GB SSD
-- 2 CPU cores
-
----
-
-## 🔗 Useful Links
-
-- [Aiogram Documentation](https://docs.aiogram.dev/)
-- [Aiohttp Documentation](https://docs.aiohttp.org/)
-- [Tortoise ORM](https://tortoise.github.io/)
-- [Tailwind CSS](https://tailwindcss.com/)
-- [Telegram Bot API](https://core.telegram.org/bots/api)
-
----
-
-**Author:** Jatix  
-**Version:** 1.18.0 (Build 66)  
-**License:** GPL-3.0  
-**Last Updated:** January 27, 2026
-
-
-2. **Secure (Safe):** The bot runs as a restricted user.
-* *Restrictions:* Cannot reboot the physical server, no access to system SSH and Fail2Ban logs. Only monitoring and bot management are available.
-
-
-
-### 👤 User Roles
-
-An access hierarchy is implemented within the bot:
-
-1. **Root (Super-Admin):**
-* Has access to all functions, including dangerous ones (reboot, logs).
-* Defined by the `ADMIN_ID` variable in `.env`.
-
-
-2. **Admin:**
-* Can manage users, generate VLESS links, run Speedtest.
-* Assigned via the "Users" menu.
-
-
-3. **User:**
-* Only statistics viewing (Traffic, Uptime, Status).
-* Cannot change settings or manage the server.
-
-
-
----
-
-## 3. Detailed Function Description (Modules)
-
-### 📊 "Monitoring" Category
-
-* **🛠 Server Info (`selftest.py`):** Shows a summary: CPU, RAM, Disk, IP, Ping, OS Version.
-* **📡 Network Traffic (`traffic.py`):** Starts live monitoring. The message updates every X seconds, showing current speed (Mbit/s) and total volume.
-* **⏱ Uptime (`uptime.py`):** Shows how long the server has been running without a reboot.
-* **🔥 Top Processes (`top.py`):** Lists the 10 processes most demanding on the CPU.
-
-### ⚙️ "Management" Category
-
-* **👤 Users (`users.py`):** Panel for adding new people to the bot by Telegram ID, changing their roles, or removing them.
-* **🖥 Nodes (`nodes.py`):** Management of remote servers (agents). Allows switching between servers and executing commands on them.
-* **⚙️ Service Manager (`services.py`):** Management of system services (ssh, docker, nginx, mysql, etc.). Data is transmitted in real-time via Server-Sent Events (SSE) with automatic updates every 5 seconds. Data is encrypted on the backend (XOR + Base64) and decrypted on the frontend. Configuration is saved to encrypted file `/opt/tg-bot/config/services.json`.
-* **🔗 VLESS Link (`vless.py`):** Access key generator. You send the bot an Xray JSON config, and it generates a ready-to-use `vless://` link and QR code.
-* **🩻 Update X-ray (`xray.py`):** Automatically detects the installed panel (Amnezia, Marzban) and updates the Xray Core binary in the container.
-
-### 🛡️ "Security" Category (Root Only)
-
-* **📜 SSH Log (`sshlog.py`):** Shows recent login attempts to the server (successful and failed) with country flags.
-* **🔒 Fail2Ban Log (`fail2ban.py`):** Shows the latest IP addresses banned by the protection system.
-* **📜 Recent Events (`logs.py`):** Output of the last lines from the system journal `journalctl` (errors, warnings).
-
-### 🛠 "Tools" Category
-
-* **🚀 Network Speed (`speedtest.py`):** Runs a speed test via `iperf3`. Automatically searches for the nearest server, or a server in RU/Europe depending on geolocation.
-* **⚡️ Optimization (`optimize.py`):** Runs a script to clear cache, remove old kernels, and optimize the TCP stack (sysctl).
-
-### 🔌 Power Management
-
-* **♻️ Restart Bot (`restart.py`):** Restarts the bot process (via Systemd or Docker).
-* **🔄 Reboot Server (`reboot.py`):** Sends the `reboot` command to the host system. Requires confirmation.
-* **🔄 Update VPS (`update.py`):** Offers a choice: update bot code (git pull) or system packages (`apt upgrade`).
-
----
-
-## 4. Web Interface (WebUI)
-
-The bot hosts a local website (default port 8080), which serves as a graphical control panel.
-
-**WebUI Features:**
-
-1. **Dashboard:** Beautiful real-time resource consumption charts.
-2. **Settings:**
-* Change notification thresholds (e.g., send alert if CPU > 80%).
-* Configure traffic update frequency.
-* Manage button visibility in the Telegram menu.
-
-
-3. **Logs:** View bot logs directly in the browser.
-4. **Sessions:** View and forcibly terminate active user sessions.
-
----
-
-## 5. Node System (Multi-Server)
-
-The bot can manage not only the server where it is installed but also other VPS.
-
-1. **Server (Main Bot):** The main bot where you click buttons. Stores the database of all nodes.
-2. **Agent (`node/node.py`):** A lightweight script installed on subordinate servers.
-* Runs as a web service.
-* Receives commands from the Main Bot (e.g., "give CPU stats").
-* Sends results back.
-* Requires only Python and an open port.
-
-
-
-**Process:** In the "🖥 Nodes" menu, you create a node -> The bot gives a token -> You run the agent installation script on the second server with this token.
-
----
-
-## 6. Notification System
-
-The `modules/notifications.py` file runs in the background and checks:
-
-1. **Resources:** If CPU/RAM/Disk exceed the threshold (configured in WebUI), the admin receives a notification.
-2. **Node Downtime:** If a remote agent stops responding, the bot sends a "Node Unavailable" alert.
-3. **SSH/Fail2Ban:** (If enabled) Notifies about every login to the system or IP ban.
+### Python Packages (Core)
+- `aiogram==3.x` — Telegram Bot API
+- `aiohttp` — Async HTTP server
+- `tortoise-orm` — SQLite ORM
+- `cryptography` — Fernet encryption
+- `argon2-cffi` — Password hashing (OWASP)
+- `psutil` — System metrics
+- `aiosqlite` — Async SQLite
+- `python-dotenv` — Load .env
+- `jinja2` — HTML template engine
+- `sentry-sdk` — Error monitoring (optional)
+- `aerich` — DB migrations

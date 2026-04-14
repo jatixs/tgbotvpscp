@@ -1159,14 +1159,14 @@ function showNotifStatus(message, state = 'neutral', autoHideMs = 1800) {
         'text-green-500', 'text-green-600', 'dark:text-green-400',
         'text-red-500', 'text-red-600', 'dark:text-red-400',
         'bg-gray-100/80', 'dark:bg-white/5',
-        'bg-green-100', 'dark:bg-green-500/10',
-        'bg-red-100', 'dark:bg-red-500/10'
+        'bg-green-100', 'dark:bg-green-500/20',
+        'bg-red-100', 'dark:bg-red-900/20'
     );
 
     const stateClasses = {
         neutral: ['text-gray-500', 'dark:text-gray-400', 'bg-gray-100/80', 'dark:bg-white/5'],
-        success: ['text-green-600', 'dark:text-green-400', 'bg-green-100', 'dark:bg-green-500/10'],
-        error: ['text-red-600', 'dark:text-red-400', 'bg-red-100', 'dark:bg-red-500/10']
+        success: ['text-green-600', 'dark:text-green-400', 'bg-green-100', 'dark:bg-green-500/20'],
+        error: ['text-red-600', 'dark:text-red-400', 'bg-red-100', 'dark:bg-red-900/20']
     };
 
     statusEl.textContent = message;
