@@ -23,7 +23,9 @@ from ..utils import decrypt_for_web, encrypt_for_web, get_app_version, get_count
 from .auth import get_current_user
 from modules.services import (
     add_managed_service,
+    get_all_available_services,
     get_all_services_status,
+    get_service_info,
     get_user_role_level,
     perform_service_action,
     remove_managed_service,
@@ -695,6 +697,36 @@ async def handle_services_list(request: web.Request) -> web.StreamResponse:
         return web.json_response({"error": "Internal Server Error"}, status=500)
 
 
+@routes.get("/api/services/available")
+async def handle_available_services(request: web.Request) -> web.StreamResponse:
+    user = await _require_user(request)
+    if not user:
+        return web.json_response({"error": "Unauthorized"}, status=401)
+
+    try:
+        services = await asyncio.to_thread(get_all_available_services)
+        return web.json_response(services)
+    except Exception:
+        logging.exception("Failed to fetch available services")
+        return web.json_response({"error": "Internal Server Error"}, status=500)
+
+
+@routes.get(r"/api/services/info/{name:.+}")
+async def handle_service_info(request: web.Request) -> web.StreamResponse:
+    user = await _require_user(request)
+    if not user:
+        return web.json_response({"error": "Unauthorized"}, status=401)
+
+    try:
+        name = request.match_info.get("name", "")
+        service_type = str(request.query.get("type", "systemd")).strip()
+        info = await get_service_info(name, service_type)
+        return web.json_response(info)
+    except Exception:
+        logging.exception("Failed to fetch service info")
+        return web.json_response({"error": "Internal Server Error"}, status=500)
+
+
 @routes.post("/api/services/{action}")
 async def api_control_service(request: web.Request) -> web.StreamResponse:
     user = await _require_user(request)
@@ -779,6 +811,8 @@ __all__ = [
     "handle_nodes_monitor_command",
     "handle_nodes_monitor_service_action",
     "handle_services_list",
+    "handle_available_services",
+    "handle_service_info",
     "api_control_service",
     "api_services_manage",
 ]
