@@ -14,15 +14,6 @@ let modalResChart = null;
 let modalNetChart = null;
 let updateInterval = null;
 let modalUpdateInterval = null;
-let latestNodesMonitorHistory = [];
-window.__nodesMonitorModalChartPeriod = window.__nodesMonitorModalChartPeriod || localStorage.getItem('nodesMonitorModalChartPeriod') || '24h';
-
-window.setNodesMonitorChartPeriod = function(period) {
-    window.__nodesMonitorModalChartPeriod = period;
-    localStorage.setItem('nodesMonitorModalChartPeriod', period);
-    if (window.setActiveChartPeriodButtons) window.setActiveChartPeriodButtons('nodesMonitorChartPeriodButtons', period);
-    updateModalCharts(latestNodesMonitorHistory);
-};
 
 // Initialize function for SPA navigation
 function initNodesMonitor() {
@@ -605,15 +596,8 @@ function updateNodeModal(data) {
 }
 
 function updateModalCharts(history) {
-    latestNodesMonitorHistory = Array.isArray(history) ? history : [];
-    const preparedHistory = window.prepareHistoryForChart
-        ? window.prepareHistoryForChart(latestNodesMonitorHistory, window.__nodesMonitorModalChartPeriod)
-        : latestNodesMonitorHistory;
+    if (!history || history.length < 2) return;
 
-    if (!preparedHistory || preparedHistory.length === 0) return;
-    if (window.setActiveChartPeriodButtons) window.setActiveChartPeriodButtons('nodesMonitorChartPeriodButtons', window.__nodesMonitorModalChartPeriod);
-
-    const historyToRender = preparedHistory;
     const gapThreshold = 25;
     const labels = [];
     const cpuData = [];
@@ -621,16 +605,16 @@ function updateModalCharts(history) {
     const rxData = [];
     const txData = [];
 
-    labels.push(new Date(historyToRender[0].t * 1000).toLocaleTimeString([], {
+    labels.push(new Date(history[0].t * 1000).toLocaleTimeString([], {
         hour: '2-digit', minute: '2-digit', second: '2-digit'
     }));
-    cpuData.push(historyToRender[0].c || 0);
-    ramData.push(historyToRender[0].r || 0);
+    cpuData.push(history[0].c || 0);
+    ramData.push(history[0].r || 0);
     rxData.push(0);
     txData.push(0);
 
-    for (let i = 1; i < historyToRender.length; i++) {
-        const dt = historyToRender[i].t - historyToRender[i - 1].t;
+    for (let i = 1; i < history.length; i++) {
+        const dt = history[i].t - history[i - 1].t;
         if (dt > gapThreshold) {
             labels.push("");
             cpuData.push(null);
@@ -638,15 +622,15 @@ function updateModalCharts(history) {
             rxData.push(null);
             txData.push(null);
         }
-        labels.push(new Date(historyToRender[i].t * 1000).toLocaleTimeString([], {
+        labels.push(new Date(history[i].t * 1000).toLocaleTimeString([], {
             hour: '2-digit', minute: '2-digit', second: '2-digit'
         }));
-        cpuData.push(historyToRender[i].c || 0);
-        ramData.push(historyToRender[i].r || 0);
+        cpuData.push(history[i].c || 0);
+        ramData.push(history[i].r || 0);
         
         const dtFixed = Math.max(dt, 1);
-        rxData.push((Math.max(0, historyToRender[i].rx - historyToRender[i - 1].rx) * 8 / dtFixed / 1024));
-        txData.push((Math.max(0, historyToRender[i].tx - historyToRender[i - 1].tx) * 8 / dtFixed / 1024));
+        rxData.push((Math.max(0, history[i].rx - history[i - 1].rx) * 8 / dtFixed / 1024));
+        txData.push((Math.max(0, history[i].tx - history[i - 1].tx) * 8 / dtFixed / 1024));
     }
     
     const isDark = document.documentElement.classList.contains('dark');
