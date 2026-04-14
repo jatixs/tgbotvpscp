@@ -769,6 +769,40 @@ async def handle_reset_confirm(request: web.Request) -> web.StreamResponse:
         return web.json_response({"error": "Internal Server Error"}, status=500)
 
 
+@routes.post("/api/settings/password")
+async def handle_change_password(request: web.Request) -> web.StreamResponse:
+    """Allow the main admin to change their password."""
+    user = get_current_user(request)
+    if not user:
+        return web.json_response({"error": "Unauthorized"}, status=401)
+    if int(user.get("id", 0)) != ADMIN_USER_ID:
+        return web.json_response({"error": "Main Admin only"}, status=403)
+
+    try:
+        data = await request.json()
+        if not check_user_password(user["id"], data.get("current_password")):
+            return web.json_response({"error": "Wrong password"}, status=400)
+
+        new_pass = data.get("new_password")
+        if not isinstance(new_pass, str) or len(new_pass) < 8:
+            return web.json_response(
+                {"error": "Password must be at least 8 characters"}, status=400
+            )
+
+        new_hash = PasswordHasher().hash(new_pass)
+        current_user = ALLOWED_USERS.get(user["id"])
+        if isinstance(current_user, str):
+            ALLOWED_USERS[user["id"]] = {"group": current_user, "password_hash": new_hash}
+        else:
+            current_user["password_hash"] = new_hash
+
+        save_users()
+        return web.json_response({"status": "ok"})
+    except Exception:
+        logging.exception("Password change failed")
+        return web.json_response({"error": "Internal Server Error"}, status=500)
+
+
 __all__ = [
     "routes",
     "SERVER_SESSIONS",
