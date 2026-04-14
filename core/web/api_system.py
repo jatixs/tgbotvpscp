@@ -22,7 +22,7 @@ from ..config import (
 )
 from ..i18n import get_text as _, get_user_lang, set_user_lang
 from ..shared_state import ALERTS_CONFIG, ALLOWED_USERS, USER_NAMES
-from ..utils import save_alerts_config
+from ..utils import generate_favicons, save_alerts_config
 from .auth import get_current_user
 from modules import update as update_module
 from .. import shared_state
@@ -204,13 +204,21 @@ async def handle_save_metadata(request: web.Request) -> web.StreamResponse:
         if current_meta.get("locked", False):
             return web.json_response({"error": "Metadata is permanently locked"}, status=403)
 
+        new_favicon_url = str(data.get("favicon", "")).strip()
+        if new_favicon_url and not new_favicon_url.startswith(("http://", "https://", "/", "data:image")):
+            return web.json_response({"error": "Favicon URL must start with http://, https://, / or data:image"}, status=400)
+
         new_meta = {
-            "favicon": str(data.get("favicon", "")).strip(),
+            "favicon": new_favicon_url,
             "title": str(data.get("title", "")).strip(),
             "description": str(data.get("description", "")).strip(),
             "keywords": str(data.get("keywords", "")).strip(),
             "locked": bool(data.get("locked", False)),
         }
+
+        if new_favicon_url.startswith(("http://", "https://", "data:image")):
+            static_fav_dir = os.path.join(current_config.BASE_DIR, "core", "static", "favicons")
+            await asyncio.to_thread(generate_favicons, new_favicon_url, static_fav_dir)
 
         current_config.WEB_METADATA = new_meta
         await asyncio.to_thread(save_system_config, {"WEB_METADATA": new_meta})

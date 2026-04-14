@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import asyncio
 import json
+import os
 import secrets
+import socket
 import time
 from pathlib import Path
 from typing import Any, Final
@@ -14,7 +17,7 @@ from .. import nodes_db, shared_state
 from ..config import ADMIN_USER_ID, BASE_DIR, DEFAULT_LANGUAGE, TG_BOT_NAME
 from ..i18n import get_text as _, get_user_lang
 from ..keyboards import BTN_CONFIG_MAP
-from ..utils import encrypt_for_web, get_app_version, get_web_key
+from ..utils import encrypt_for_web, generate_favicons, get_app_version, get_web_key
 from modules import traffic as traffic_module
 from modules.services import get_user_role_level
 from . import auth as web_auth
@@ -41,12 +44,116 @@ def _agent_ip() -> str:
     return str(getattr(shared_state, "AGENT_IP_CACHE", "Loading..."))
 
 
+def _collect_ipv4_addresses() -> list[str]:
+    ips: list[str] = []
+
+    try:
+        import netifaces  # type: ignore
+
+        for iface in netifaces.interfaces():
+            try:
+                addrs = netifaces.ifaddresses(iface)
+                if netifaces.AF_INET in addrs:
+                    for addr_info in addrs[netifaces.AF_INET]:
+                        ip = str(addr_info.get("addr", "")).strip()
+                        if ip and ip != "127.0.0.1" and not ip.startswith("169.254.") and not ip.startswith("172.17.0.1"):
+                            ips.append(ip)
+            except Exception:
+                continue
+    except Exception:
+        try:
+            hostname = socket.gethostname()
+            for addr in socket.getaddrinfo(hostname, None, socket.AF_INET):
+                ip = str(addr[4][0]).strip()
+                if ip and ip != "127.0.0.1" and not ip.startswith("169.254."):
+                    ips.append(ip)
+        except Exception:
+            pass
+
+    primary_ip = _agent_ip()
+    if primary_ip not in {"", "Loading...", "Unknown", "-"}:
+        ips.insert(0, primary_ip)
+
+    return list(dict.fromkeys(ips))
+
+
+async def _ensure_generated_favicons() -> None:
+    fav_dir = Path(BASE_DIR) / "core" / "static" / "favicons"
+    required_files = [
+        fav_dir / "site.webmanifest",
+        fav_dir / "favicon.ico",
+        fav_dir / "favicon-16x16.png",
+        fav_dir / "favicon-32x32.png",
+    ]
+    if all(path.exists() for path in required_files):
+        return
+
+    web_meta = getattr(current_config, "WEB_METADATA", {})
+    favicon_source = str(web_meta.get("favicon", "")).strip()
+    source: str | None = None
+
+    if favicon_source.startswith(("http://", "https://", "data:image")):
+        source = favicon_source
+    else:
+        fallback_candidates = [
+            Path(BASE_DIR) / "assets" / "web_1.png",
+            Path(BASE_DIR) / "assets" / "bot_1.png",
+        ]
+        for candidate in fallback_candidates:
+            if candidate.exists():
+                source = str(candidate)
+                break
+
+    if source:
+        await asyncio.to_thread(generate_favicons, source, str(fav_dir))
+
+
 def _render_html_response(template_name: str, context: dict[str, Any], request: web.Request) -> web.Response:
     template = JINJA_ENV.get_template(template_name)
     response = web.Response(text=template.render(**context), content_type="text/html")
     if hasattr(web_auth, "_set_csrf_cookie"):
         web_auth._set_csrf_cookie(response, request)
     return response
+
+
+@routes.get("/site.webmanifest")
+async def handle_manifest(request: web.Request) -> web.StreamResponse:
+    await _ensure_generated_favicons()
+
+    manifest_path = Path(BASE_DIR) / "core" / "static" / "favicons" / "site.webmanifest"
+    if manifest_path.exists():
+        return web.FileResponse(manifest_path)
+
+    manifest = {
+        "name": TG_BOT_NAME,
+        "short_name": TG_BOT_NAME,
+        "start_url": "/",
+        "display": "standalone",
+        "background_color": "#0f172a",
+        "theme_color": "#0f172a",
+        "icons": [],
+    }
+    return web.json_response(manifest, content_type="application/manifest+json")
+
+
+@routes.get("/api/agent/ipv4")
+async def handle_agent_ipv4(request: web.Request) -> web.StreamResponse:
+    user = web_auth.get_current_user(request)
+    if not user:
+        return web.json_response({"error": "Unauthorized"}, status=401)
+
+    ips = _collect_ipv4_addresses()
+    primary = _agent_ip()
+    if primary in {"", "Loading...", "Unknown", "-"}:
+        primary = ips[0] if ips else "-"
+
+    return web.json_response({
+        "primary": primary,
+        "source_ip": primary,
+        "agent_ip": primary,
+        "ips": ips,
+        "count": len(ips),
+    })
 
 
 @routes.get("/terminal")
