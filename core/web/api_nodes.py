@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import hmac
 import json
 import logging
 import re
@@ -9,13 +11,15 @@ from pathlib import Path
 from typing import Any, Final
 
 from aiohttp import web
+from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
 from .. import config as current_config
-from .. import nodes_db
-from ..config import ADMIN_USER_ID, BASE_DIR, NODE_OFFLINE_TIMEOUT, TG_BOT_NAME, WEB_SERVER_HOST, WEB_SERVER_PORT
-from ..i18n import get_text as _, get_user_lang
-from ..utils import decrypt_for_web, encrypt_for_web, get_app_version, get_web_key
+from .. import nodes_db, shared_state
+from ..config import ADMIN_USER_ID, BASE_DIR, NODE_OFFLINE_TIMEOUT, TG_BOT_NAME, WEB_SERVER_HOST, WEB_SERVER_PORT, DEFAULT_LANGUAGE
+from ..i18n import STRINGS, get_text as _, get_user_lang
+from ..messaging import send_alert
+from ..utils import decrypt_for_web, encrypt_for_web, get_app_version, get_country_flag, get_server_timezone_label, get_web_key
 from .auth import get_current_user
 from modules.services import (
     add_managed_service,
@@ -47,6 +51,83 @@ ALLOWED_NODE_COMMANDS: Final[set[str]] = {
 ALLOWED_SERVICE_ACTIONS: Final[set[str]] = {"start", "stop", "restart"}
 
 
+def _mask_ip(ip: str) -> str:
+    if not isinstance(ip, str) or len(ip) < 4:
+        return "***"
+    return ip[:4] + "*" * max(0, len(ip) - 4)
+
+
+async def process_node_result_background(
+    bot: Any,
+    user_id: int | None,
+    cmd: str,
+    text: Any,
+    token: str,
+    node_name: str,
+) -> None:
+    if not user_id:
+        return
+
+    if isinstance(text, dict) and text.get("type") == "services_list":
+        services = text.get("services", [])
+        if services:
+            await nodes_db.update_node_extra(token, "services", services)
+        return
+
+    final_text = text
+    if isinstance(text, dict) and text.get("type") == "i18n":
+        try:
+            lang = get_user_lang(user_id)
+            key = text.get("key")
+            params = text.get("params", {})
+            resolved_params: dict[str, Any] = {}
+            for param_key, param_value in params.items():
+                if isinstance(param_value, dict) and "key" in param_value:
+                    resolved_params[param_key] = _(param_value["key"], lang, **param_value.get("params", {}))
+                else:
+                    resolved_params[param_key] = param_value
+            final_text = _(key, lang, **resolved_params)
+        except Exception as exc:
+            logging.error("Error processing i18n node result: %s", exc)
+            final_text = str(text)
+    elif isinstance(text, dict):
+        final_text = str(text)
+
+    if not final_text:
+        return
+
+    try:
+        if cmd == "traffic":
+            monitors = getattr(shared_state, "NODE_TRAFFIC_MONITORS", {})
+            if user_id not in monitors:
+                return
+            monitor = monitors[user_id]
+            if monitor.get("token") == token:
+                msg_id = monitor.get("message_id")
+                stop_kb = InlineKeyboardMarkup(
+                    inline_keyboard=[[InlineKeyboardButton(text="⏹ Stop", callback_data=f"node_stop_traffic_{token}")]]
+                )
+                try:
+                    await bot.edit_message_text(
+                        text=final_text,
+                        chat_id=user_id,
+                        message_id=msg_id,
+                        reply_markup=stop_kb,
+                        parse_mode="HTML",
+                    )
+                except Exception:
+                    pass
+                return
+
+        await bot.send_message(
+            chat_id=user_id,
+            text=_("node_response_template", user_id, name=node_name, text=final_text),
+            parse_mode="HTML",
+        )
+    except Exception as exc:
+        logging.error("Background send error: %s", exc)
+
+
 def _get_avatar_html(user: dict[str, Any]) -> str:
     raw = str(user.get("photo_url", ""))
     if raw.startswith("http"):
@@ -63,6 +144,129 @@ async def _require_user(request: web.Request) -> dict[str, Any] | None:
     if not user:
         return None
     return user
+
+
+@routes.get("/api/heartbeat")
+async def handle_heartbeat_probe(request: web.Request) -> web.StreamResponse:
+    return web.json_response({"status": "ok"})
+
+
+@routes.post("/api/heartbeat")
+async def handle_heartbeat(request: web.Request) -> web.StreamResponse:
+    signature = request.headers.get("X-Signature")
+    if not signature:
+        return web.json_response({"error": "Signature missing"}, status=401)
+
+    try:
+        body_bytes = await request.read()
+        data = json.loads(body_bytes)
+    except Exception:
+        return web.json_response({"error": "Invalid JSON"}, status=400)
+
+    token = request.headers.get("X-Node-Token") or data.get("token")
+    if not token:
+        return web.json_response({"error": "Token missing"}, status=401)
+
+    expected_signature = hmac.new(token.encode(), body_bytes, hashlib.sha256).hexdigest()
+    if not hmac.compare_digest(expected_signature, signature):
+        safe_ip = str(request.remote or "unknown").replace("\n", "").replace("\r", "")
+        logging.warning("Invalid signature from %s", _mask_ip(safe_ip))
+        return web.json_response({"error": "Invalid signature"}, status=403)
+
+    node = await nodes_db.get_node_by_token(token)
+    if not node:
+        return web.json_response({"error": "Auth fail"}, status=401)
+
+    bot = request.app.get("bot")
+    ssh_logins = data.get("ssh_logins", [])
+    if ssh_logins and bot:
+        server_tz = get_server_timezone_label()
+        server_time = time.strftime("%H:%M")
+        now = time.time()
+        recent_ssh_logins = getattr(shared_state, "RECENT_SSH_LOGINS", {})
+
+        for login in ssh_logins:
+            user_ssh = login.get("user", "unknown")
+            ip = login.get("ip", "unknown")
+            method_raw = login.get("method", "unknown")
+            node_time_str = login.get("node_time_str", "??:??")
+            tz_label = login.get("tz_label", "")
+            cache_key = f"{token}_{ip}"
+            last_alert_time = recent_ssh_logins.get(cache_key, 0)
+            if now - last_alert_time <= 10:
+                continue
+
+            recent_ssh_logins[cache_key] = now
+            if len(recent_ssh_logins) > 1000:
+                recent_ssh_logins.clear()
+
+            method_key = "auth_method_unknown"
+            if "publickey" in str(method_raw).lower():
+                method_key = "auth_method_key"
+            elif "password" in str(method_raw).lower():
+                method_key = "auth_method_password"
+
+            flag = await get_country_flag(ip)
+            await send_alert(
+                bot,
+                lambda lang: _(
+                    "alert_ssh_login_node",
+                    lang,
+                    node_name=node.get("name", "Node"),
+                    user=user_ssh,
+                    method=_(method_key, lang),
+                    ip_flag=flag,
+                    ip=ip,
+                    node_time=node_time_str,
+                    node_tz=tz_label,
+                    server_time=server_time,
+                    server_tz=server_tz,
+                ),
+                "node_logins",
+                node_token=token,
+            )
+
+    stats = data.get("stats", {})
+    results = data.get("results", [])
+    if bot and results:
+        for result in results:
+            asyncio.create_task(
+                process_node_result_background(
+                    bot,
+                    result.get("user_id"),
+                    result.get("command", ""),
+                    result.get("result"),
+                    token,
+                    node.get("name", "Node"),
+                )
+            )
+
+    if node.get("is_restarting"):
+        await nodes_db.update_node_extra(token, "is_restarting", False)
+
+    peer_ip = "127.0.0.1"
+    if request.transport is not None:
+        peer = request.transport.get_extra_info("peername")
+        if isinstance(peer, tuple) and peer:
+            peer_ip = str(peer[0])
+
+    ip = str(stats.get("external_ip") or peer_ip)
+    await nodes_db.update_node_heartbeat(token, ip, stats)
+
+    services = data.get("services", [])
+    if services:
+        await nodes_db.update_node_extra(token, "services", services)
+
+    current_node = await nodes_db.get_node_by_token(token)
+    tasks_to_send = current_node.get("tasks", []) if current_node else []
+    if tasks_to_send:
+        await nodes_db.clear_node_tasks(token)
+
+    alert_lang = get_user_lang(ADMIN_USER_ID)
+    if alert_lang not in STRINGS:
+        alert_lang = DEFAULT_LANGUAGE
+
+    return web.json_response({"status": "ok", "tasks": tasks_to_send, "alert_lang": alert_lang})
 
 
 @routes.get("/api/nodes/list")
