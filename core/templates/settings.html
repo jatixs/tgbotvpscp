@@ -340,6 +340,42 @@
                             </div>
                             <div>
                                 <div class="flex items-center gap-1 mb-1.5">
+                                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">{{ web_monitoring_interval }}</label>
+                                    <div class="relative inline-block">
+                                        <button onclick="toggleHint(event, 'hint-monitoring-set')"
+                                                type="button"
+                                                class="p-0.5 -m-0.5 rounded-full focus:outline-none focus:ring-1 focus:ring-blue-500/50">
+                                            <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 text-gray-400 cursor-help" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                                        </button>
+                                        <div id="hint-monitoring-set" class="hidden">{{ web_hint_monitoring_interval }}</div>
+                                    </div>
+                                </div>
+                                <input type="number"
+                                       id="conf_monitoring"
+                                       value="{{ val_monitoring_interval }}"
+                                       class="w-full bg-white dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/50 text-gray-900 dark:text-white transition-all">
+                                <div class="text-red-500 text-xs mt-1 hidden" id="error_conf_monitoring"></div>
+                            </div>
+                            <div>
+                                <div class="flex items-center gap-1 mb-1.5">
+                                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">{{ web_history_retention_days }}</label>
+                                    <div class="relative inline-block">
+                                        <button onclick="toggleHint(event, 'hint-history-retention-set')"
+                                                type="button"
+                                                class="p-0.5 -m-0.5 rounded-full focus:outline-none focus:ring-1 focus:ring-blue-500/50">
+                                            <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 text-gray-400 cursor-help" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                                        </button>
+                                        <div id="hint-history-retention-set" class="hidden">{{ web_hint_history_retention }}</div>
+                                    </div>
+                                </div>
+                                <input type="number"
+                                       id="conf_history_days"
+                                       value="{{ val_history_days }}"
+                                       class="w-full bg-white dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/50 text-gray-900 dark:text-white transition-all">
+                                <div class="text-red-500 text-xs mt-1 hidden" id="error_conf_history_days"></div>
+                            </div>
+                            <div>
+                                <div class="flex items-center gap-1 mb-1.5">
                                     <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">{{ web_node_timeout }}</label>
                                     <div class="relative inline-block">
                                         <button onclick="toggleHint(event, 'hint-node-timeout-set')"
@@ -450,6 +486,27 @@
                                 </div>
                             </button>
 
+                            <button onclick="handleSettingsBtnClick(this, clearMonitoringHistory)"
+                                    id="clearMonitoringHistoryBtn"
+                                    class="group relative flex items-center justify-center overflow-hidden select-none
+                                           bg-amber-50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-800 text-amber-600 dark:text-amber-400 
+                                           rounded-xl transition-all duration-300
+                                           active:scale-95 active:bg-amber-100 dark:active:bg-amber-900/30
+                                           flex-1 py-2 px-1.5 sm:py-3 sm:px-2 md:flex-none md:py-2 md:px-3 
+                                           md:hover:pr-4 md:hover:bg-amber-100 md:dark:hover:bg-amber-900/30">
+                                <div class="flex items-center whitespace-nowrap justify-center">
+                                    <svg xmlns="http://www.w3.org/2000/svg"
+                                         class="h-4 w-4 sm:h-5 sm:w-5 flex-shrink-0 transition-transform duration-300 md:group-hover:scale-110"
+                                         fill="none"
+                                         viewBox="0 0 24 24"
+                                         stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999A5.002 5.002 0 006 10a4 4 0 00-3 5z" />
+                                    </svg>
+                                    <span class="btn-text font-bold uppercase tracking-wider transition-all duration-500 ease-in-out text-[10px] ml-1.5 sm:text-xs sm:ml-2 md:text-[9px] md:ml-0 md:max-w-0 md:opacity-0 md:group-hover:max-w-[200px] md:group-hover:opacity-100 md:group-hover:ml-2">
+                                        {{ web_clear_history_btn }}
+                                    </span>
+                                </div>
+                            </button>
                             {% if reset_allowed %}
                             <button onclick="handleSettingsBtnClick(this, resetTrafficSettings)"
                                     id="resetTrafficBtn"

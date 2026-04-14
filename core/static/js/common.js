@@ -100,6 +100,16 @@ function refreshChartZoomState(chart, canvasOrId) {
 }
 window.refreshChartZoomState = refreshChartZoomState;
 
+function hideChartResetButton(canvasOrId) {
+    const canvas = typeof canvasOrId === 'string' ? document.getElementById(canvasOrId) : canvasOrId;
+    const wrapper = canvas?.parentElement;
+    const resetBtn = wrapper?.querySelector('.chart-reset-zoom-btn');
+    if (resetBtn) {
+        resetBtn.classList.add('hidden');
+    }
+}
+window.hideChartResetButton = hideChartResetButton;
+
 function alignChartToLiveWindow(chart) {
     if (!chart?.options?.scales?.x) return;
 

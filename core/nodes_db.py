@@ -128,7 +128,13 @@ async def update_node_heartbeat(token: str, ip: str, stats: dict):
     node = await Node.get_or_none(token_hash=t_hash)
     if not node:
         return
-    history = node.history or []
+
+    monitoring_interval = max(5, int(getattr(__import__('core.config', fromlist=['MONITORING_INTERVAL']), 'MONITORING_INTERVAL', 5)))
+    retention_days = max(1, int(getattr(__import__('core.config', fromlist=['HISTORY_RETENTION_DAYS']), 'HISTORY_RETENTION_DAYS', 1)))
+    max_points = max(300, min(20000, int((retention_days * 86400) / monitoring_interval) + 10))
+    cutoff_ts = int(time.time() - retention_days * 86400)
+
+    history = [p for p in (node.history or []) if isinstance(p, dict) and int(p.get('t', 0)) >= cutoff_ts]
     point = {
         "t": int(time.time()),
         "c": stats.get("cpu", 0),
@@ -136,9 +142,13 @@ async def update_node_heartbeat(token: str, ip: str, stats: dict):
         "rx": stats.get("net_rx", 0),
         "tx": stats.get("net_tx", 0),
     }
-    history.append(point)
-    if len(history) > 60:
-        history = history[-60:]
+
+    if history and point["t"] - int(history[-1].get("t", 0)) < monitoring_interval:
+        history[-1] = point
+    else:
+        history.append(point)
+
+    history = history[-max_points:]
     node.last_seen = time.time()
     node.ip = ip
     node.stats = stats
@@ -171,4 +181,10 @@ async def update_node_extra(token: str, key: str, value):
         extra = node.extra_state or {}
         extra[key] = value
         node.extra_state = extra
+        await node.save()
+
+
+async def clear_all_histories():
+    for node in await Node.all():
+        node.history = []
         await node.save()
