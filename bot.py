@@ -23,7 +23,8 @@ from modules import (
 from core.i18n import _, I18nFilter, get_language_keyboard
 from core import i18n
 from core import config, shared_state, auth, utils, keyboards, messaging
-from core import nodes_db, server
+from core import nodes_db
+from core.web.app import start_web_server
 import asyncio
 import logging
 import signal
@@ -295,7 +296,6 @@ async def shutdown(dispatcher: Dispatcher, bot_instance: Bot, web_runner=None):
             logging.warning("Web server cleanup timed out.")
         except Exception as e:
             logging.error(f"Web server cleanup error: {e}")
-    await server.cleanup_server()
     cancelled_tasks = []
     for task in list(background_tasks):
         if task and (not task.done()):
@@ -336,7 +336,7 @@ async def main():
         # Теперь эта логика обрабатывается в watchdog.py
         load_modules()
         logging.info("Starting Agent Web Server...")
-        web_runner = await server.start_web_server(bot)
+        web_runner = await start_web_server(bot)
         if not web_runner:
             logging.warning("Web Server NOT started.")
         logging.info("Starting polling...")
