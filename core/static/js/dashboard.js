@@ -1093,11 +1093,6 @@ async function openNodeDetails(token, color) {
         cancelNodeRename();
     }
 
-    if (window.hideChartResetButton) {
-        window.hideChartResetButton('nodeResChart');
-        window.hideChartResetButton('nodeNetChart');
-    }
-
     if (chartRes) chartRes.destroy();
     if (chartNet) chartNet.destroy();
     chartRes = null;
@@ -1193,10 +1188,6 @@ function closeNodeModal() {
         animateModalClose(modal);
     }
     removeModalLoading();
-    if (window.hideChartResetButton) {
-        window.hideChartResetButton('nodeResChart');
-        window.hideChartResetButton('nodeNetChart');
-    }
     if (nodeSSESource) {
         nodeSSESource.close();
         nodeSSESource = null;
