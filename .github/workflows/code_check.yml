@@ -39,9 +39,10 @@ jobs:
         bandit -r . -ll
 
     - name: 📦 Check Dependencies Vulnerabilities
+      continue-on-error: true
       run: |
         # Scans requirements.txt for known vulnerabilities
-        safety check -r requirements.txt --continue-on-error
+        safety check -r requirements.txt
 
     - name: 🐚 ShellCheck
       uses: ludeeus/action-shellcheck@master

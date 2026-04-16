@@ -1062,7 +1062,7 @@ window.notifGoBack = function() {
 function renderNotifNodesList() {
     const container = document.getElementById('notifNodesListContainer');
     if (!container || !NODES_DATA || NODES_DATA.length === 0) {
-        container.innerHTML = `<div class="text-center text-gray-500 py-4">${I18N.web_no_nodes || 'No nodes'}</div>`;
+        container.innerHTML = `<div class="text-center text-gray-500 py-4">${I18N.web_no_nodes || ''}</div>`;
         return;
     }
 
@@ -1113,42 +1113,112 @@ function renderNotifNodeDetail() {
         return USER_ALERTS ? USER_ALERTS[type] || false : false;
     };
 
-    const tDowntime = I18N.notifications_alert_name_downtime || 'Downtime';
-    const tRes = I18N.notifications_alert_name_res || 'Resources';
-    const tLogins = I18N.notifications_alert_name_logins || 'SSH Auth';
+    const tDowntime = I18N.notifications_alert_name_downtime || '';
+    const tRes = I18N.notifications_alert_name_res || '';
+    const tLogins = I18N.notifications_alert_name_logins || '';
 
     container.innerHTML = `
         <div class="flex items-center justify-between bg-gray-50 dark:bg-black/20 p-4 rounded-xl hover:bg-gray-100 dark:hover:bg-black/30 transition border border-gray-200 dark:border-white/5 cursor-pointer" onclick="document.getElementById('n_alert_${t}_downtime').click()">
             <span class="text-sm font-medium text-gray-900 dark:text-white">${tDowntime}</span>
             <label class="relative inline-flex items-center cursor-pointer" onclick="event.stopPropagation()">
-                <input type="checkbox" id="n_alert_${t}_downtime" class="sr-only peer" onchange="triggerAutoSave()" ${isChecked('downtime') ? 'checked' : ''}>
+                <input type="checkbox" id="n_alert_${t}_downtime" class="sr-only peer" onchange="triggerAutoSave('node_detail')" ${isChecked('downtime') ? 'checked' : ''}>
                 <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-green-500"></div>
             </label>
         </div>
         <div class="flex items-center justify-between bg-gray-50 dark:bg-black/20 p-4 rounded-xl hover:bg-gray-100 dark:hover:bg-black/30 transition border border-gray-200 dark:border-white/5 cursor-pointer" onclick="document.getElementById('n_alert_${t}_node_resources').click()">
             <span class="text-sm font-medium text-gray-900 dark:text-white">${tRes}</span>
             <label class="relative inline-flex items-center cursor-pointer" onclick="event.stopPropagation()">
-                <input type="checkbox" id="n_alert_${t}_node_resources" class="sr-only peer" onchange="triggerAutoSave()" ${isChecked('node_resources') ? 'checked' : ''}>
+                <input type="checkbox" id="n_alert_${t}_node_resources" class="sr-only peer" onchange="triggerAutoSave('node_detail')" ${isChecked('node_resources') ? 'checked' : ''}>
                 <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-green-500"></div>
             </label>
         </div>
         <div class="flex items-center justify-between bg-gray-50 dark:bg-black/20 p-4 rounded-xl hover:bg-gray-100 dark:hover:bg-black/30 transition border border-gray-200 dark:border-white/5 cursor-pointer" onclick="document.getElementById('n_alert_${t}_node_logins').click()">
             <span class="text-sm font-medium text-gray-900 dark:text-white">${tLogins}</span>
             <label class="relative inline-flex items-center cursor-pointer" onclick="event.stopPropagation()">
-                <input type="checkbox" id="n_alert_${t}_node_logins" class="sr-only peer" onchange="triggerAutoSave()" ${isChecked('node_logins') ? 'checked' : ''}>
+                <input type="checkbox" id="n_alert_${t}_node_logins" class="sr-only peer" onchange="triggerAutoSave('node_detail')" ${isChecked('node_logins') ? 'checked' : ''}>
                 <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-green-500"></div>
             </label>
         </div>
+        <div id="notifStatusNodeDetail" class="flex min-h-[50px] items-center justify-center gap-2 rounded-xl border border-dashed border-gray-200 dark:border-white/5 bg-gray-50/60 dark:bg-black/10 px-4 py-3 text-center text-xs font-semibold text-gray-500 dark:text-gray-400 opacity-0 translate-y-4 transition-all duration-300"></div>
     `;
 }
 
-async function triggerAutoSave() {
-    const statusEl = document.getElementById('notifStatus');
-    if (statusEl) {
-        statusEl.innerText = (typeof I18N !== 'undefined' && I18N.web_saving_btn) ? I18N.web_saving_btn : "Saving...";
-        statusEl.classList.remove('text-green-500', 'text-red-500', 'opacity-0');
-        statusEl.classList.add('text-gray-500', 'dark:text-gray-400', 'opacity-100');
+let notifStatusHideTimer = null;
+
+function getNotifStatusElement(scope = 'agent') {
+    if (scope === 'node_detail') return document.getElementById('notifStatusNodeDetail');
+    if (scope === 'nodes_global') return document.getElementById('notifStatusNodesGlobal');
+    return document.getElementById('notifStatusAgent');
+}
+
+function resetNotifStatusElement(statusEl) {
+    if (!statusEl) return;
+    statusEl.classList.remove(
+        'opacity-100', 'translate-y-0',
+        'text-gray-500', 'dark:text-gray-400',
+        'text-green-500', 'text-green-600', 'dark:text-green-400',
+        'text-red-500', 'text-red-600', 'dark:text-red-400',
+        'bg-gray-100/80', 'dark:bg-white/5',
+        'bg-green-100', 'dark:bg-green-500/20',
+        'bg-red-100', 'dark:bg-red-900/20'
+    );
+    statusEl.classList.add('opacity-0', 'translate-y-4');
+    statusEl.innerHTML = '';
+}
+
+function showNotifStatus(message, state = 'neutral', autoHideMs = 1800, scope = 'agent') {
+    const statusEls = [
+        document.getElementById('notifStatusAgent'),
+        document.getElementById('notifStatusNodesGlobal'),
+        document.getElementById('notifStatusNodeDetail')
+    ];
+    const statusEl = getNotifStatusElement(scope);
+    if (!statusEl) return;
+
+    if (notifStatusHideTimer) {
+        clearTimeout(notifStatusHideTimer);
+        notifStatusHideTimer = null;
     }
+
+    statusEls.forEach((element) => {
+        if (element && element !== statusEl) {
+            resetNotifStatusElement(element);
+        }
+    });
+
+    statusEl.classList.remove(
+        'opacity-0', 'opacity-100', 'translate-y-4', 'translate-y-0',
+        'text-gray-500', 'dark:text-gray-400',
+        'text-green-500', 'text-green-600', 'dark:text-green-400',
+        'text-red-500', 'text-red-600', 'dark:text-red-400',
+        'bg-gray-100/80', 'dark:bg-white/5',
+        'bg-green-100', 'dark:bg-green-500/20',
+        'bg-red-100', 'dark:bg-red-900/20'
+    );
+
+    const stateClasses = {
+        neutral: ['text-gray-500', 'dark:text-gray-400', 'bg-gray-100/80', 'dark:bg-white/5'],
+        success: ['text-green-600', 'dark:text-green-400', 'bg-green-100', 'dark:bg-green-500/20'],
+        error: ['text-red-600', 'dark:text-red-400', 'bg-red-100', 'dark:bg-red-900/20']
+    };
+
+    const icons = {
+        neutral: '',
+        success: '<svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/></svg>',
+        error: '<svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M6 18L18 6M6 6l12 12"/></svg>'
+    };
+    statusEl.innerHTML = (icons[state] || '') + '<span>' + message + '</span>';
+    statusEl.classList.add('opacity-100', 'translate-y-0', ...(stateClasses[state] || stateClasses.neutral));
+
+    if (autoHideMs > 0) {
+        notifStatusHideTimer = setTimeout(() => {
+            resetNotifStatusElement(statusEl);
+        }, autoHideMs);
+    }
+}
+
+async function triggerAutoSave(scope = 'agent') {
+    showNotifStatus((typeof I18N !== 'undefined' && I18N.web_saving_btn) ? I18N.web_saving_btn : '', 'neutral', 0, scope);
 
     const data = {
         resources: document.getElementById('alert_resources')?.checked || false,
@@ -1181,25 +1251,15 @@ async function triggerAutoSave() {
             },
             body: JSON.stringify(data)
         });
-        if (statusEl) {
-            if (res.ok) {
-                statusEl.innerText = (typeof I18N !== 'undefined' && I18N.web_saved_btn) ? I18N.web_saved_btn : "Saved!";
-                statusEl.classList.remove('text-gray-500', 'dark:text-gray-400');
-                statusEl.classList.add('text-green-500');
-                setTimeout(() => {
-                    statusEl.classList.add('opacity-0');
-                }, 2000);
-            } else {
-                statusEl.innerText = (typeof I18N !== 'undefined' && I18N.web_error_short) ? I18N.web_error_short : "Error";
-                statusEl.classList.add('text-red-500');
-            }
+
+        if (res.ok) {
+            showNotifStatus((typeof I18N !== 'undefined' && I18N.web_saved_btn) ? I18N.web_saved_btn : '', 'success', 1600, scope);
+        } else {
+            showNotifStatus((typeof I18N !== 'undefined' && I18N.web_error_short) ? I18N.web_error_short : '', 'error', 2500, scope);
         }
     } catch (e) {
         console.error(e);
-        if (statusEl) {
-            statusEl.innerText = (typeof I18N !== 'undefined' && I18N.web_conn_error_short) ? I18N.web_conn_error_short : "Conn Error";
-            statusEl.classList.add('text-red-500');
-        }
+        showNotifStatus((typeof I18N !== 'undefined' && I18N.web_conn_error_short) ? I18N.web_conn_error_short : '', 'error', 2500, scope);
     }
 }
 
