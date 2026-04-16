@@ -11,6 +11,7 @@ from core.i18n import _, get_user_lang, I18nFilter
 from core import config
 from core.config import MANAGED_SERVICES
 from core.auth import is_allowed, send_access_denied_message, ALLOWED_USERS, ADMIN_USER_ID
+from core.rbac import get_role_level as get_user_role_level
 from core.messaging import delete_previous_message
 from core.shared_state import LAST_MESSAGE_IDS
 
@@ -19,6 +20,7 @@ _docker_descriptions_cache = {}
 
 # Regex for valid service/container names: alphanumeric, hyphens, underscores, dots, @, /
 _VALID_NAME_RE = re.compile(r'^[a-zA-Z0-9._@/:-]+$')
+_DISPLAYABLE_SERVICE_STATUSES = {"running", "stopped", "active"}
 
 def _validate_name(name: str) -> str:
     """Validate a service or container name to prevent command injection."""
@@ -38,27 +40,13 @@ def _validate_managed_target(name: str, s_type: str) -> str:
             return str(item.get("name"))
     raise ValueError(f"Target is not managed: {safe_name!r} ({s_type})")
 
+
+def _is_displayable_service_status(status: str) -> bool:
+    return status in _DISPLAYABLE_SERVICE_STATUSES
+
 # --- Helpers ---
 
-def get_user_role_level(user_id):
-    """
-    Returns permission level:
-    0: View only (Users)
-    1: Start/Restart only (Admins)
-    2: Full Control (Main Admin)
-    """
-    if user_id == ADMIN_USER_ID:
-        return 2
-        
-    user_data = ALLOWED_USERS.get(user_id)
-    if not user_data:
-        return 0
-        
-    group = user_data.get("group", "users") if isinstance(user_data, dict) else user_data
-    
-    if group == "admins":
-        return 1
-    return 0
+# get_user_role_level imported from core.rbac (see top of file)
 
 # --- Backend Logic ---
 
@@ -70,6 +58,9 @@ def get_systemd_status(service_name):
         # Use stdout/stderr pipe for compatibility with older python (capture_output added in 3.7)
         result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
         if result.returncode != 0:
+            combined_output = f"{result.stdout}\n{result.stderr}".lower()
+            if any(marker in combined_output for marker in ["not-found", "not found", "could not be found", "no such file"]):
+                return "not_found"
             return "unknown"
         
         props = {}
@@ -185,46 +176,58 @@ def discover_all_docker_containers():
     return containers
 
 def get_all_available_services():
-    """Get all available services/containers with their managed status"""
-    managed_names = {s["name"]: s["type"] for s in MANAGED_SERVICES}
-    
+    """Get all available installed services/containers with their managed status."""
+    managed_targets = {(str(s.get("name")), str(s.get("type", "systemd"))) for s in MANAGED_SERVICES}
+
     result = []
-    
+
     # Systemd services
     systemd_services = discover_all_systemd_services()
     for name in systemd_services:
         status = get_systemd_status(name)
-        if status != "not_found":
+        if _is_displayable_service_status(status):
             result.append({
                 "name": name,
                 "type": "systemd",
                 "status": status,
-                "managed": name in managed_names
+                "managed": (name, "systemd") in managed_targets
             })
-    
+
     # Docker containers
     docker_containers = discover_all_docker_containers()
     for name in docker_containers:
         status = get_docker_status(name)
-        if status != "not_found":
+        if _is_displayable_service_status(status):
             result.append({
                 "name": name,
                 "type": "docker",
                 "status": status,
-                "managed": name in managed_names
+                "managed": (name, "docker") in managed_targets
             })
-    
+
     # Sort: managed first, then by name
     result.sort(key=lambda x: (not x["managed"], x["name"].lower()))
     return result
 
 def add_managed_service(name, sType):
-    """Add a service to MANAGED_SERVICES config"""
-    # Check if already managed
+    """Add only реально существующую service/container в MANAGED_SERVICES."""
+    try:
+        name = _validate_name(name)
+    except ValueError:
+        return False, "Invalid name"
+
+    sType = str(sType or "systemd").strip().lower()
+    if sType not in {"systemd", "docker"}:
+        return False, "Invalid service type"
+
+    current_status = get_systemd_status(name) if sType == "systemd" else get_docker_status(name)
+    if not _is_displayable_service_status(current_status):
+        return False, "Service/container is not installed"
+
     for s in config.MANAGED_SERVICES:
-        if s["name"] == name:
+        if s.get("name") == name and s.get("type", "systemd") == sType:
             return False, "Already managed"
-    
+
     config.MANAGED_SERVICES.append({"name": name, "type": sType})
     save_managed_services()
     return True, "Added"
@@ -250,14 +253,14 @@ def get_all_services_status():
         for s in services:
             name = s.get("name")
             sType = s.get("type", "systemd")
-            
+
             status = "unknown"
             if sType == "systemd":
                 status = get_systemd_status(name)
             elif sType == "docker":
                 status = get_docker_status(name)
-                
-            if status != "not_found":
+
+            if _is_displayable_service_status(status):
                 results.append({
                     "name": name,
                     "type": sType,
@@ -400,7 +403,6 @@ async def get_docker_image_from_container(container_name):
 
 async def get_docker_hub_description(image_name):
     """Get description from Docker Hub API"""
-    global _docker_descriptions_cache  # noqa: F824
     
     # Check cache first
     if image_name in _docker_descriptions_cache:

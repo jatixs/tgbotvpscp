@@ -1,5 +1,14 @@
 /* /core/static/js/reset_password.js */
 
+function getCsrfToken() {
+    const prefix = 'csrf_token=';
+    const cookie = document.cookie
+        .split(';')
+        .map(part => part.trim())
+        .find(part => part.startsWith(prefix));
+    return cookie ? decodeURIComponent(cookie.slice(prefix.length)) : '';
+}
+
 document.addEventListener('DOMContentLoaded', () => {
     // --- Локализация ---
     const pageTitle = document.getElementById('page-title');
@@ -207,14 +216,17 @@ document.addEventListener('DOMContentLoaded', () => {
             // Используем глобальную переменную RESET_TOKEN, внедренную в HTML
             const token = (typeof RESET_TOKEN !== 'undefined') ? RESET_TOKEN : (new URLSearchParams(window.location.search).get('token'));
 
+            const csrfToken = getCsrfToken();
             const res = await fetch('/api/reset/confirm', {
                 method: 'POST',
                 headers: {
-                    'Content-Type': 'application/json'
+                    'Content-Type': 'application/json',
+                    'X-CSRF-Token': csrfToken
                 },
                 body: JSON.stringify({
                     token: token,
-                    password: pwd
+                    password: pwd,
+                    csrf_token: csrfToken
                 })
             });
 
