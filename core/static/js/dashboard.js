@@ -1129,7 +1129,7 @@ function updateNodeDetailsUI(data) {
     removeModalLoading();
     const inputContainer = document.getElementById('nodeNameInputContainer');
     if (inputContainer && inputContainer.classList.contains('hidden')) {
-        document.getElementById('modalNodeName').innerText = data.name;
+        document.getElementById('modalNodeName').innerText = decryptData(data.name);
     }
 
     document.getElementById('modalNodeIp').innerText = decryptData(data.ip);
