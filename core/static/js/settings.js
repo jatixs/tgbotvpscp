@@ -1121,31 +1121,58 @@ function renderNotifNodeDetail() {
         <div class="flex items-center justify-between bg-gray-50 dark:bg-black/20 p-4 rounded-xl hover:bg-gray-100 dark:hover:bg-black/30 transition border border-gray-200 dark:border-white/5 cursor-pointer" onclick="document.getElementById('n_alert_${t}_downtime').click()">
             <span class="text-sm font-medium text-gray-900 dark:text-white">${tDowntime}</span>
             <label class="relative inline-flex items-center cursor-pointer" onclick="event.stopPropagation()">
-                <input type="checkbox" id="n_alert_${t}_downtime" class="sr-only peer" onchange="triggerAutoSave()" ${isChecked('downtime') ? 'checked' : ''}>
+                <input type="checkbox" id="n_alert_${t}_downtime" class="sr-only peer" onchange="triggerAutoSave('node_detail')" ${isChecked('downtime') ? 'checked' : ''}>
                 <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-green-500"></div>
             </label>
         </div>
         <div class="flex items-center justify-between bg-gray-50 dark:bg-black/20 p-4 rounded-xl hover:bg-gray-100 dark:hover:bg-black/30 transition border border-gray-200 dark:border-white/5 cursor-pointer" onclick="document.getElementById('n_alert_${t}_node_resources').click()">
             <span class="text-sm font-medium text-gray-900 dark:text-white">${tRes}</span>
             <label class="relative inline-flex items-center cursor-pointer" onclick="event.stopPropagation()">
-                <input type="checkbox" id="n_alert_${t}_node_resources" class="sr-only peer" onchange="triggerAutoSave()" ${isChecked('node_resources') ? 'checked' : ''}>
+                <input type="checkbox" id="n_alert_${t}_node_resources" class="sr-only peer" onchange="triggerAutoSave('node_detail')" ${isChecked('node_resources') ? 'checked' : ''}>
                 <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-green-500"></div>
             </label>
         </div>
         <div class="flex items-center justify-between bg-gray-50 dark:bg-black/20 p-4 rounded-xl hover:bg-gray-100 dark:hover:bg-black/30 transition border border-gray-200 dark:border-white/5 cursor-pointer" onclick="document.getElementById('n_alert_${t}_node_logins').click()">
             <span class="text-sm font-medium text-gray-900 dark:text-white">${tLogins}</span>
             <label class="relative inline-flex items-center cursor-pointer" onclick="event.stopPropagation()">
-                <input type="checkbox" id="n_alert_${t}_node_logins" class="sr-only peer" onchange="triggerAutoSave()" ${isChecked('node_logins') ? 'checked' : ''}>
+                <input type="checkbox" id="n_alert_${t}_node_logins" class="sr-only peer" onchange="triggerAutoSave('node_detail')" ${isChecked('node_logins') ? 'checked' : ''}>
                 <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-green-500"></div>
             </label>
         </div>
+        <div id="notifStatusNodeDetail" class="flex min-h-[50px] items-center justify-center gap-2 rounded-xl border border-dashed border-gray-200 dark:border-white/5 bg-gray-50/60 dark:bg-black/10 px-4 py-3 text-center text-xs font-semibold text-gray-500 dark:text-gray-400 opacity-0 translate-y-4 transition-all duration-300"></div>
     `;
 }
 
 let notifStatusHideTimer = null;
 
-function showNotifStatus(message, state = 'neutral', autoHideMs = 1800) {
-    const statusEl = document.getElementById('notifStatus');
+function getNotifStatusElement(scope = 'agent') {
+    if (scope === 'node_detail') return document.getElementById('notifStatusNodeDetail');
+    if (scope === 'nodes_global') return document.getElementById('notifStatusNodesGlobal');
+    return document.getElementById('notifStatusAgent');
+}
+
+function resetNotifStatusElement(statusEl) {
+    if (!statusEl) return;
+    statusEl.classList.remove(
+        'opacity-100', 'translate-y-0',
+        'text-gray-500', 'dark:text-gray-400',
+        'text-green-500', 'text-green-600', 'dark:text-green-400',
+        'text-red-500', 'text-red-600', 'dark:text-red-400',
+        'bg-gray-100/80', 'dark:bg-white/5',
+        'bg-green-100', 'dark:bg-green-500/20',
+        'bg-red-100', 'dark:bg-red-900/20'
+    );
+    statusEl.classList.add('opacity-0', 'translate-y-4');
+    statusEl.innerHTML = '';
+}
+
+function showNotifStatus(message, state = 'neutral', autoHideMs = 1800, scope = 'agent') {
+    const statusEls = [
+        document.getElementById('notifStatusAgent'),
+        document.getElementById('notifStatusNodesGlobal'),
+        document.getElementById('notifStatusNodeDetail')
+    ];
+    const statusEl = getNotifStatusElement(scope);
     if (!statusEl) return;
 
     if (notifStatusHideTimer) {
@@ -1153,8 +1180,14 @@ function showNotifStatus(message, state = 'neutral', autoHideMs = 1800) {
         notifStatusHideTimer = null;
     }
 
+    statusEls.forEach((element) => {
+        if (element && element !== statusEl) {
+            resetNotifStatusElement(element);
+        }
+    });
+
     statusEl.classList.remove(
-        'hidden', 'opacity-0', 'opacity-100', 'translate-y-1', 'translate-y-0',
+        'opacity-0', 'opacity-100', 'translate-y-4', 'translate-y-0',
         'text-gray-500', 'dark:text-gray-400',
         'text-green-500', 'text-green-600', 'dark:text-green-400',
         'text-red-500', 'text-red-600', 'dark:text-red-400',
@@ -1175,23 +1208,17 @@ function showNotifStatus(message, state = 'neutral', autoHideMs = 1800) {
         error: '<svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M6 18L18 6M6 6l12 12"/></svg>'
     };
     statusEl.innerHTML = (icons[state] || '') + '<span>' + message + '</span>';
-    statusEl.classList.add('inline-flex', 'opacity-100', 'translate-y-0', ...(stateClasses[state] || stateClasses.neutral));
+    statusEl.classList.add('opacity-100', 'translate-y-0', ...(stateClasses[state] || stateClasses.neutral));
 
     if (autoHideMs > 0) {
         notifStatusHideTimer = setTimeout(() => {
-            statusEl.classList.remove('opacity-100', 'translate-y-0');
-            statusEl.classList.add('opacity-0', 'translate-y-1');
-
-            setTimeout(() => {
-                statusEl.classList.add('hidden');
-                statusEl.innerHTML = '';
-            }, 250);
+            resetNotifStatusElement(statusEl);
         }, autoHideMs);
     }
 }
 
-async function triggerAutoSave() {
-    showNotifStatus((typeof I18N !== 'undefined' && I18N.web_saving_btn) ? I18N.web_saving_btn : 'Saving...', 'neutral', 0);
+async function triggerAutoSave(scope = 'agent') {
+    showNotifStatus((typeof I18N !== 'undefined' && I18N.web_saving_btn) ? I18N.web_saving_btn : 'Saving...', 'neutral', 0, scope);
 
     const data = {
         resources: document.getElementById('alert_resources')?.checked || false,
@@ -1226,13 +1253,13 @@ async function triggerAutoSave() {
         });
 
         if (res.ok) {
-            showNotifStatus((typeof I18N !== 'undefined' && I18N.web_saved_btn) ? I18N.web_saved_btn : 'Saved!', 'success', 1600);
+            showNotifStatus((typeof I18N !== 'undefined' && I18N.web_saved_btn) ? I18N.web_saved_btn : 'Saved!', 'success', 1600, scope);
         } else {
-            showNotifStatus((typeof I18N !== 'undefined' && I18N.web_error_short) ? I18N.web_error_short : 'Error', 'error', 2500);
+            showNotifStatus((typeof I18N !== 'undefined' && I18N.web_error_short) ? I18N.web_error_short : 'Error', 'error', 2500, scope);
         }
     } catch (e) {
         console.error(e);
-        showNotifStatus((typeof I18N !== 'undefined' && I18N.web_conn_error_short) ? I18N.web_conn_error_short : 'Conn Error', 'error', 2500);
+        showNotifStatus((typeof I18N !== 'undefined' && I18N.web_conn_error_short) ? I18N.web_conn_error_short : 'Conn Error', 'error', 2500, scope);
     }
 }
 
