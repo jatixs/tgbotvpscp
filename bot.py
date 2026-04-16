@@ -222,8 +222,8 @@ async def toggle_kb_category(callback: types.CallbackQuery):
     if not configurable:
         await callback.answer()
         return
-    all_on = all(config.KEYBOARD_CONFIG.get(cfg, True) for _, cfg in configurable)
-    for _, config_key in configurable:
+    all_on = all(config.KEYBOARD_CONFIG.get(cfg, True) for _btn, cfg in configurable)
+    for _btn, config_key in configurable:
         config.KEYBOARD_CONFIG[config_key] = not all_on
     config.save_keyboard_config(config.KEYBOARD_CONFIG)
     new_markup = keyboards.get_keyboard_settings_inline(lang)
