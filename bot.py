@@ -23,7 +23,8 @@ from modules import (
 from core.i18n import _, I18nFilter, get_language_keyboard
 from core import i18n
 from core import config, shared_state, auth, utils, keyboards, messaging
-from core import nodes_db, server
+from core import nodes_db
+from core.web.app import start_web_server
 import asyncio
 import logging
 import signal
@@ -205,6 +206,34 @@ async def configure_menu_handler(message: types.Message):
     await message.answer(text, reply_markup=markup, parse_mode="HTML")
 
 
+@dp.callback_query(F.data.startswith("toggle_kb_cat_"))
+async def toggle_kb_category(callback: types.CallbackQuery):
+    user_id = callback.from_user.id
+    lang = i18n.get_user_lang(user_id)
+    if not auth.is_allowed(user_id, "manage_users"):
+        await callback.answer(_("access_denied_no_rights", lang), show_alert=True)
+        return
+    cat_key = callback.data.replace("toggle_kb_cat_", "")
+    configurable = [
+        (btn_key, keyboards.BTN_CONFIG_MAP[btn_key])
+        for btn_key in keyboards.CATEGORY_MAP.get(cat_key, [])
+        if btn_key in keyboards.BTN_CONFIG_MAP
+    ]
+    if not configurable:
+        await callback.answer()
+        return
+    all_on = all(config.KEYBOARD_CONFIG.get(cfg, True) for _, cfg in configurable)
+    for _, config_key in configurable:
+        config.KEYBOARD_CONFIG[config_key] = not all_on
+    config.save_keyboard_config(config.KEYBOARD_CONFIG)
+    new_markup = keyboards.get_keyboard_settings_inline(lang)
+    try:
+        await callback.message.edit_reply_markup(reply_markup=new_markup)
+    except TelegramBadRequest:
+        pass
+    await callback.answer()
+
+
 @dp.callback_query(F.data.startswith("toggle_kb_"))
 async def toggle_kb_config(callback: types.CallbackQuery):
     user_id = callback.from_user.id
@@ -295,7 +324,6 @@ async def shutdown(dispatcher: Dispatcher, bot_instance: Bot, web_runner=None):
             logging.warning("Web server cleanup timed out.")
         except Exception as e:
             logging.error(f"Web server cleanup error: {e}")
-    await server.cleanup_server()
     cancelled_tasks = []
     for task in list(background_tasks):
         if task and (not task.done()):
@@ -336,7 +364,7 @@ async def main():
         # Теперь эта логика обрабатывается в watchdog.py
         load_modules()
         logging.info("Starting Agent Web Server...")
-        web_runner = await server.start_web_server(bot)
+        web_runner = await start_web_server(bot)
         if not web_runner:
             logging.warning("Web Server NOT started.")
         logging.info("Starting polling...")
