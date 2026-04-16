@@ -280,6 +280,7 @@ LONG_RUNNING_COMMANDS = {"speedtest", "update"}
 # Agent health tracking
 AGENT_DOWN_SINCE = None
 AGENT_DOWN_ALERT_SENT = False
+AGENT_STABLE_SINCE = None  # Timestamp when agent first came back up; used to confirm stable recovery
 LAST_AGENT_LANG = AGENT_ALERT_LANG if AGENT_ALERT_LANG in {"ru", "en"} else "ru"
 
 EXTERNAL_IP_CACHE = None 
@@ -1315,7 +1316,7 @@ def build_agent_recovery_alert(node_name, downtime):
 
 
 def send_heartbeat():
-    global AGENT_DOWN_SINCE, AGENT_DOWN_ALERT_SENT, LAST_AGENT_LANG
+    global AGENT_DOWN_SINCE, AGENT_DOWN_ALERT_SENT, AGENT_STABLE_SINCE, LAST_AGENT_LANG
     url = f"{AGENT_BASE_URL}/api/heartbeat"
     current_results = list(PENDING_RESULTS)
     current_ssh_events = list(SSH_EVENTS)
@@ -1377,18 +1378,28 @@ def send_heartbeat():
                 else:
                     execute_command(task)
 
-            # Heartbeat delivery succeeded - reset down state and notify recovery if needed
+            # Heartbeat delivery succeeded - wait for stable recovery before notifying
             if AGENT_DOWN_SINCE is not None:
-                downtime = time.time() - AGENT_DOWN_SINCE
-                node_name = get_node_name_for_alert()
+                now = time.time()
+                if AGENT_STABLE_SINCE is None:
+                    AGENT_STABLE_SINCE = now
+                    logging.info("Agent became reachable again, waiting for stability confirmation")
+                elif now - AGENT_STABLE_SINCE >= AGENT_ALERT_DELAY_SECONDS:
+                    # Agent has been consistently reachable long enough - declare recovery
+                    downtime = now - AGENT_DOWN_SINCE
+                    node_name = get_node_name_for_alert()
 
-                if AGENT_DOWN_ALERT_SENT:
-                    recovery_message = build_agent_recovery_alert(node_name, downtime)
-                    send_critical_telegram_alert(recovery_message)
-                    logging.info(f"Agent recovered after {format_downtime(downtime)} downtime")
+                    if AGENT_DOWN_ALERT_SENT:
+                        recovery_message = build_agent_recovery_alert(node_name, downtime)
+                        send_critical_telegram_alert(recovery_message)
+                        logging.info(f"Agent recovered after {format_downtime(downtime)} downtime")
 
-                AGENT_DOWN_SINCE = None
-                AGENT_DOWN_ALERT_SENT = False
+                    AGENT_DOWN_SINCE = None
+                    AGENT_DOWN_ALERT_SENT = False
+                    AGENT_STABLE_SINCE = None
+            else:
+                # No ongoing downtime - reset stability tracking
+                AGENT_STABLE_SINCE = None
         else:
             logging.warning(f"Server returned status: {response.status_code} {response.text}")
 
@@ -1398,6 +1409,7 @@ def send_heartbeat():
                 if AGENT_DOWN_SINCE is None:
                     AGENT_DOWN_SINCE = current_time
                     logging.warning("Agent detected as unreachable")
+                AGENT_STABLE_SINCE = None  # Any failure cancels the stability window
 
                 downtime = current_time - AGENT_DOWN_SINCE
                 if downtime >= AGENT_ALERT_DELAY_SECONDS and not AGENT_DOWN_ALERT_SENT:
@@ -1414,6 +1426,7 @@ def send_heartbeat():
         if AGENT_DOWN_SINCE is None:
             AGENT_DOWN_SINCE = current_time
             logging.warning("Agent detected as unreachable")
+        AGENT_STABLE_SINCE = None  # Any failure cancels the stability window
 
         downtime = current_time - AGENT_DOWN_SINCE
         if downtime >= AGENT_ALERT_DELAY_SECONDS and not AGENT_DOWN_ALERT_SENT:
