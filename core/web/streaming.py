@@ -54,6 +54,24 @@ def _session_expired(current_token: str | None) -> bool:
     return bool(current_token and current_token not in SERVER_SESSIONS)
 
 
+def _encrypt_node_stats_for_web(stats: dict[str, Any] | None) -> dict[str, Any]:
+    payload = dict(stats or {})
+    ping = payload.get("ping")
+    payload["ping"] = encrypt_for_web(ping) if ping is not None else ""
+    return payload
+
+
+def _encrypt_node_services_for_web(services: list[dict[str, Any]] | None) -> list[dict[str, Any]]:
+    return [
+        {
+            "name": encrypt_for_web(service.get("name", "")),
+            "type": encrypt_for_web(service.get("type", "systemd")),
+            "status": encrypt_for_web(service.get("status", "")),
+        }
+        for service in (services or [])
+    ]
+
+
 def _safe_agent_ip() -> str:
     return getattr(shared_state, "AGENT_IP_CACHE", "Loading...")
 
@@ -517,10 +535,13 @@ async def handle_sse_node_details(request: web.Request) -> web.StreamResponse:
     if not token:
         return web.Response(status=400)
 
+    current_token = request.cookies.get(COOKIE_NAME)
+
     response = web.StreamResponse(status=200, reason="OK")
     response.headers["Content-Type"] = "text/event-stream"
     response.headers["Cache-Control"] = "no-cache"
     response.headers["Connection"] = "keep-alive"
+    response.headers["X-Accel-Buffering"] = "no"
     await response.prepare(request)
 
     shutdown_event = request.app.get("shutdown_event")
@@ -539,16 +560,27 @@ async def handle_sse_node_details(request: web.Request) -> web.StreamResponse:
             except Exception:
                 break
 
+            if _session_expired(current_token):
+                try:
+                    await response.write(b"event: session_status\ndata: expired\n\n")
+                except Exception:
+                    pass
+                break
+
             node = await nodes_db.get_node_by_token(token)
             if node:
+                last_seen = node.get("last_seen", 0)
+                is_restarting = node.get("is_restarting", False)
+                status = "restarting" if is_restarting else "online" if time.time() - last_seen < current_config.NODE_OFFLINE_TIMEOUT else "offline"
                 payload = {
-                    "name": node.get("name"),
+                    "name": encrypt_for_web(node.get("name")),
                     "ip": encrypt_for_web(node.get("ip")),
-                    "stats": node.get("stats"),
+                    "stats": _encrypt_node_stats_for_web(node.get("stats")),
                     "history": node.get("history", []),
                     "token": encrypt_for_web(token),
-                    "last_seen": node.get("last_seen", 0),
-                    "is_restarting": node.get("is_restarting", False),
+                    "last_seen": last_seen,
+                    "is_restarting": is_restarting,
+                    "status": status,
                 }
                 try:
                     await _write_sse(response, "node_details", payload)
@@ -575,6 +607,84 @@ async def handle_sse_node_details(request: web.Request) -> web.StreamResponse:
     except Exception as exc:
         if "closing transport" not in str(exc) and "'NoneType' object" not in str(exc):
             logging.error("SSE node details error: %s", exc)
+
+    return response
+
+
+@routes.get("/api/events/node/services")
+async def handle_sse_node_services(request: web.Request) -> web.StreamResponse:
+    if not _is_sse_request(request):
+        return _build_plain_api_notice(request.path)
+
+    user = get_current_user(request)
+    if not user:
+        return web.Response(status=401)
+
+    token = decrypt_for_web(request.query.get("token"))
+    if not token:
+        return web.Response(status=400)
+
+    current_token = request.cookies.get(COOKIE_NAME)
+    response = web.StreamResponse(status=200, reason="OK")
+    response.headers["Content-Type"] = "text/event-stream"
+    response.headers["Cache-Control"] = "no-cache"
+    response.headers["Connection"] = "keep-alive"
+    response.headers["X-Accel-Buffering"] = "no"
+    await response.prepare(request)
+
+    shutdown_event = request.app.get("shutdown_event")
+    try:
+        while True:
+            if shared_state.IS_RESTARTING:
+                try:
+                    await response.write(b"event: shutdown\ndata: restarting\n\n")
+                except Exception:
+                    pass
+                break
+
+            try:
+                if request.transport is None or request.transport.is_closing():
+                    break
+            except Exception:
+                break
+
+            if _session_expired(current_token):
+                try:
+                    await response.write(b"event: session_status\ndata: expired\n\n")
+                except Exception:
+                    pass
+                break
+
+            node = await nodes_db.get_node_by_token(token)
+            if not node:
+                try:
+                    await _write_sse(response, "error", {"error": "Node not found"})
+                except (ConnectionResetError, BrokenPipeError, ConnectionError):
+                    pass
+                break
+
+            try:
+                payload = {"services": _encrypt_node_services_for_web(node.get("services", []))}
+                await _write_sse(response, "node_services", payload)
+            except (ConnectionResetError, BrokenPipeError, ConnectionError):
+                break
+            except Exception as exc:
+                logging.error("SSE node services fetch error: %s", exc)
+
+            if shutdown_event:
+                try:
+                    if not shared_state.IS_RESTARTING:
+                        await asyncio.wait_for(shutdown_event.wait(), timeout=3.0)
+                        break
+                except asyncio.TimeoutError:
+                    pass
+            else:
+                await asyncio.sleep(3)
+    except asyncio.CancelledError:
+        pass
+    except Exception as exc:
+        if "closing transport" not in str(exc) and "'NoneType' object" not in str(exc):
+            logging.error("SSE node services error: %s", exc)
 
     return response
 
@@ -930,6 +1040,7 @@ __all__ = [
     "handle_sse_stream",
     "handle_sse_logs",
     "handle_sse_node_details",
+    "handle_sse_node_services",
     "handle_sse_services",
     "handle_terminal_ws",
 ]
