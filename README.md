@@ -337,7 +337,6 @@ http://YOUR_SERVER_IP:8080
 │   ├── middlewares.py       # Middleware бота
 │   ├── models.py            # ORM модели (Tortoise)
 │   ├── nodes_db.py          # База данных нод
-│   ├── server.py            # Запуск API сервера
 │   ├── shared_state.py      # Мост Bot ↔ Web
 │   ├── tasks.py             # Фоновые задачи
 │   ├── utils.py             # Утилиты
