@@ -190,6 +190,8 @@ async def handle_terminal_page(request: web.Request) -> web.StreamResponse:
     user = web_auth.get_current_user(request)
     if not user:
         raise web.HTTPFound("/login")
+    if not _is_admin(user):
+        raise web.HTTPFound("/")
 
     lang = get_user_lang(int(user["id"]))
     prefill_ip = request.query.get("ip", "")

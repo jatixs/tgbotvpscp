@@ -375,8 +375,8 @@ async def api_read_notifications(request: web.Request) -> web.StreamResponse:
 @routes.post("/api/notifications/clear")
 async def api_clear_notifications(request: web.Request) -> web.StreamResponse:
     user = get_current_user(request)
-    if not user:
-        return web.json_response({"error": "Unauthorized"}, status=401)
+    if not user or not _is_admin(user):
+        return web.json_response({"error": "Admin required"}, status=403)
 
     shared_state.WEB_NOTIFICATIONS.clear()
     shared_state.WEB_USER_LAST_READ.clear()

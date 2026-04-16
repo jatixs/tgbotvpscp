@@ -150,7 +150,7 @@ def is_allowed(user_id, command=None):
         or command.startswith("node_cmd_")
     ):
         return is_admin_group
-    return True
+    return False
 
 
 async def refresh_user_names(bot: Bot):
