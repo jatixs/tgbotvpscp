@@ -77,7 +77,6 @@ register_module(reboot, root_only=True)  # Root only
 core/
 ├── config.py               # Central configuration
 ├── auth.py                 # Authorization system (Telegram)
-├── server.py               # Compatibility (legacy bridge)
 ├── i18n.py                 # Internationalization
 ├── keyboards.py            # UI element generation
 ├── messaging.py            # Notification system

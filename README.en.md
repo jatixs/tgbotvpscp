@@ -340,7 +340,6 @@ Automatic detection:
 │   ├── middlewares.py       # Bot middlewares
 │   ├── models.py            # ORM models (Tortoise)
 │   ├── nodes_db.py          # Node database
-│   ├── server.py            # API server bootstrap
 │   ├── shared_state.py      # Bot ↔ Web state bridge
 │   ├── tasks.py             # Background tasks
 │   ├── utils.py             # Utilities
