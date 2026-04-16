@@ -5,6 +5,7 @@ on:
     branches: [ "main", "develop", "release/*", "feature/*", "hotfix/*" ]
   pull_request:
     branches: [ "main", "develop", "release/*", "feature/*", "hotfix/*" ]
+  workflow_dispatch:
 
 jobs:
   bandit:
@@ -23,4 +24,4 @@ jobs:
         run: pip install bandit
 
       - name: 🛡️ Run Bandit Scan
-        run: bandit -r . -ll -iii # -r . сканирует весь проект, -ll показывает проблемы среднего уровня и выше, -iii показывает проблемы низкого уровня и выше
+        run: bandit -r . -ll # -r . сканирует весь проект, -ll показывает проблемы среднего уровня и выше
