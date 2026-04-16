@@ -1315,7 +1315,7 @@ def build_agent_recovery_alert(node_name, downtime):
 
 
 def send_heartbeat():
-    global PENDING_RESULTS, SSH_EVENTS, AGENT_DOWN_SINCE, AGENT_DOWN_ALERT_SENT, LAST_AGENT_LANG  # noqa: F824
+    global AGENT_DOWN_SINCE, AGENT_DOWN_ALERT_SENT, LAST_AGENT_LANG
     url = f"{AGENT_BASE_URL}/api/heartbeat"
     current_results = list(PENDING_RESULTS)
     current_ssh_events = list(SSH_EVENTS)

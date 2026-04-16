@@ -5,11 +5,42 @@
 <h1 align="center">📝 Telegram VPS Management Bot — Changelog</h1>
 
 <p align="center">
-	<img src="https://img.shields.io/badge/version-v1.21.0-blue?style=flat-square" alt="Version 1.21.0"/>
-	<img src="https://img.shields.io/badge/build-71-purple?style=flat-square" alt="Build 71"/>
-	<img src="https://img.shields.io/badge/date-April%2008%202026-green?style=flat-square" alt="Date April 08 2026"/>
+    <img src="https://img.shields.io/badge/version-v1.22.0-blue?style=flat-square" alt="Version 1.22.0"/>
+    <img src="https://img.shields.io/badge/build-72-purple?style=flat-square" alt="Build 72"/>
+    <img src="https://img.shields.io/badge/date-April%2016%202026-green?style=flat-square" alt="Date April 16 2026"/>
 	<img src="https://img.shields.io/badge/status-stable-green?style=flat-square" alt="Status Stable"/>
 </p>
+
+---
+## [1.22.0] - 2026-04-16
+
+### 🚀 Added:
+* **Charts:** Added `zoom` and `pan` support for interactive chart navigation in the WebUI.
+* **Charts:** Prepared backend support for selectable time ranges across all chart types.
+* **Statistics:** Implemented backend historical metric collection and rotation logic for future chart periodization.
+
+### ⚙️ Architecture & Refactoring:
+* **Core/Web:** Decomposed the monolithic `core/server.py` into a modular routing layer under `core/web/` (`app.py`, `middlewares.py`, `auth.py`, `api_nodes.py`, `api_system.py`, `views.py`, `streaming.py`).
+* **Background Tasks:** Extracted `agent_monitor` and `cleanup_monitor` loops into `core/tasks.py`.
+* **Technical Debt:** Removed massive code duplication and unresolved git merge artifacts.
+
+### 🛡️ Security:
+* **Web Terminal:** Fixed SSRF in `handle_terminal_ws` by strictly validating the target IP against registered nodes only.
+* **CSRF:** Implemented global `csrf_middleware` protection for all mutating API endpoints.
+* **Sessions:** Prevented Stored XSS by sanitizing `User-Agent` headers before storing them in sessions.
+* **Cookies:** Hardened session cookies with the `secure=True` flag to reduce MitM risk.
+* **Telegram Auth:** Reduced Telegram auth token TTL from 24 hours to 15 minutes to mitigate replay attacks.
+* **Logs:** Fixed the Symlink / Arbitrary File Deletion vulnerability in `handle_clear_logs`.
+* **Passwords:** Reworked default password validation to use `PasswordHasher`, mitigating timing attacks.
+
+### ⚡ Performance & Infrastructure:
+* **SQLite:** Wrapped blocking `bot.db` queries in `asyncio.to_thread` to avoid blocking the Event Loop.
+* **Docker:** Secured web server port binding to `127.0.0.1:8080:8080`, preventing direct bypass of WAF and rate limiting.
+* **Dependencies:** Pinned strict dependency versions in `requirements.txt`.
+
+### 🔧 Fixed:
+* **UI:** Applied miscellaneous visual fixes for `save` badges.
+* **Documentation:** Updated project documentation to match the new architecture and the 1.22.0 release.
 
 ---
 ## [1.21.0] - 2026-04-08
@@ -546,7 +577,7 @@ Into the core of the web server (`core/server.py `) added a number of new APIs a
 
 ### 🔧 Fixed:
 
-* **Dependencies:** Added `aiohttp` library to `requirements.txt`, required for the API server.
+* **Dependencies:** Added `aiohttp` library to `requirements.txt`, required for the aiohttp-based API.
 * **Logging:** Optimized log structure for Node client mode.
 
 ---
