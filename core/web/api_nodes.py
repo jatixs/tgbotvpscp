@@ -21,12 +21,12 @@ from ..i18n import STRINGS, get_text as _, get_user_lang
 from ..messaging import send_alert
 from ..utils import decrypt_for_web, encrypt_for_web, get_app_version, get_country_flag, get_server_timezone_label, get_web_key
 from .auth import COOKIE_NAME, SERVER_SESSIONS, get_current_user
+from ..rbac import build_user_role_js, get_role_level as get_user_role_level, is_admin as _is_admin
 from modules.services import (
     add_managed_service,
     get_all_available_services,
     get_all_services_status,
     get_service_info,
-    get_user_role_level,
     perform_service_action,
     remove_managed_service,
 )
@@ -192,10 +192,6 @@ def _get_avatar_html(user: dict[str, Any]) -> str:
     if raw.startswith("http"):
         return f'<img src="{raw}" alt="ava" class="w-6 h-6 rounded-full flex-shrink-0">'
     return f'<span class="text-lg leading-none select-none">{raw}</span>'
-
-
-def _is_admin(user: dict[str, Any]) -> bool:
-    return user.get("role") == "admins" or int(user.get("id", 0)) == ADMIN_USER_ID
 
 
 async def _require_user(request: web.Request) -> dict[str, Any] | None:
@@ -469,7 +465,7 @@ async def handle_nodes_monitor_page(request: web.Request) -> web.StreamResponse:
         "cache_ver": CACHE_VER,
         "user_avatar": _get_avatar_html(user),
         "user_name": user.get("first_name", "User"),
-        "user_role_js": f"const USER_ROLE = '{role}'; const IS_MAIN_ADMIN = {str(user_id == ADMIN_USER_ID).lower()}; const WEB_KEY = '{get_web_key()}';",
+        "user_role_js": build_user_role_js(role, user_id),
         "web_monitor_title": _("web_nodes_monitor_title", lang),
         "web_mass_actions": _("web_nodes_monitor_mass_actions", lang),
         "web_select_all": _("web_nodes_monitor_select_all", lang),

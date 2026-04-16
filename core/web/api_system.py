@@ -24,19 +24,12 @@ from ..i18n import get_text as _, get_user_lang, set_user_lang
 from ..shared_state import ALERTS_CONFIG, ALLOWED_USERS, USER_NAMES
 from ..utils import generate_favicons, save_alerts_config
 from .auth import get_current_user
+from ..rbac import is_admin as _is_admin, is_root as _is_main_admin
 from modules import update as update_module
 from modules import traffic as traffic_module
 from .. import shared_state
 
 routes = web.RouteTableDef()
-
-
-def _is_admin(user: dict[str, Any]) -> bool:
-    return bool(user.get("role") == "admins" or int(user.get("id", 0)) == ADMIN_USER_ID)
-
-
-def _is_main_admin(user: dict[str, Any]) -> bool:
-    return int(user.get("id", 0)) == ADMIN_USER_ID
 
 
 def _read_log_tail_sync(log_path: str, limit: int = 300) -> list[str]:

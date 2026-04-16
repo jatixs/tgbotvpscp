@@ -11,6 +11,7 @@ from core.i18n import _, get_user_lang, I18nFilter
 from core import config
 from core.config import MANAGED_SERVICES
 from core.auth import is_allowed, send_access_denied_message, ALLOWED_USERS, ADMIN_USER_ID
+from core.rbac import get_role_level as get_user_role_level
 from core.messaging import delete_previous_message
 from core.shared_state import LAST_MESSAGE_IDS
 
@@ -45,25 +46,7 @@ def _is_displayable_service_status(status: str) -> bool:
 
 # --- Helpers ---
 
-def get_user_role_level(user_id):
-    """
-    Returns permission level:
-    0: View only (Users)
-    1: Start/Restart only (Admins)
-    2: Full Control (Main Admin)
-    """
-    if user_id == ADMIN_USER_ID:
-        return 2
-        
-    user_data = ALLOWED_USERS.get(user_id)
-    if not user_data:
-        return 0
-        
-    group = user_data.get("group", "users") if isinstance(user_data, dict) else user_data
-    
-    if group == "admins":
-        return 1
-    return 0
+# get_user_role_level imported from core.rbac (see top of file)
 
 # --- Backend Logic ---
 

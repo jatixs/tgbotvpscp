@@ -17,9 +17,9 @@ from .. import nodes_db, shared_state
 from ..config import ADMIN_USER_ID, BASE_DIR, DEFAULT_LANGUAGE, TG_BOT_NAME
 from ..i18n import get_text as _, get_user_lang
 from ..keyboards import BTN_CONFIG_MAP
+from ..rbac import ROLE_USER, build_user_role_js, get_role_level, is_admin as _is_admin, is_root as _is_root
 from ..utils import encrypt_for_web, generate_favicons, get_app_version, get_web_key
 from modules import traffic as traffic_module
-from modules.services import get_user_role_level
 from . import auth as web_auth
 
 routes = web.RouteTableDef()
@@ -247,9 +247,9 @@ async def handle_dashboard(request: web.Request) -> web.StreamResponse:
         1 for node in all_nodes.values() if time.time() - node.get("last_seen", 0) < current_config.NODE_OFFLINE_TIMEOUT
     )
 
-    role = str(user.get("role", "users"))
-    is_main_admin = user_id == ADMIN_USER_ID
-    is_admin = role == "admins" or is_main_admin
+    role = str(user.get("role", ROLE_USER))
+    is_main_admin = _is_root(user)
+    is_admin = _is_admin(user)
 
     if is_main_admin:
         role_text = _("web_role_owner", lang)
@@ -342,7 +342,7 @@ async def handle_dashboard(request: web.Request) -> web.StreamResponse:
         "web_services_search": _("web_services_search", lang),
         "web_services_info_title": _("web_services_info_title", lang),
         "web_services_info_loading": _("web_services_info_loading", lang),
-        "user_role_level": get_user_role_level(user_id),
+        "user_role_level": get_role_level(user_id),
         "web_disk": _("web_disk", lang),
         "web_rx": _("web_rx", lang),
         "web_tx": _("web_tx", lang),
@@ -384,7 +384,7 @@ async def handle_dashboard(request: web.Request) -> web.StreamResponse:
         "web_node_last_seen_label": _("web_node_last_seen", lang),
         "web_node_traffic": _("web_node_traffic", lang),
         "web_reset_traffic_btn": _("web_reset_traffic_btn", lang),
-        "user_role_js": f"const USER_ROLE = '{role}'; const IS_MAIN_ADMIN = {str(is_main_admin).lower()}; const WEB_KEY = '{get_web_key()}';",
+        "user_role_js": build_user_role_js(role, user_id),
         "is_main_admin": is_main_admin,
         "reset_allowed": can_reset,
         "web_search_placeholder": _("web_search_placeholder", lang),
@@ -493,8 +493,8 @@ async def handle_nodes_monitor_page(request: web.Request) -> web.StreamResponse:
 
     user_id = int(user["id"])
     lang = get_user_lang(user_id)
-    role = str(user.get("role", "users"))
-    is_admin = role == "admins" or user_id == ADMIN_USER_ID
+    role = str(user.get("role", ROLE_USER))
+    is_admin = _is_admin(user)
     if not is_admin:
         raise web.HTTPFound("/")
 
@@ -515,7 +515,7 @@ async def handle_nodes_monitor_page(request: web.Request) -> web.StreamResponse:
         "cache_ver": CACHE_VER,
         "user_avatar": _get_avatar_html(user),
         "user_name": user.get("first_name", "User"),
-        "user_role_js": f"const USER_ROLE = '{role}'; const IS_MAIN_ADMIN = {str(user_id == ADMIN_USER_ID).lower()}; const WEB_KEY = '{get_web_key()}';",
+        "user_role_js": build_user_role_js(role, user_id),
         "web_monitor_title": _("web_nodes_monitor_title", lang),
         "web_mass_actions": _("web_nodes_monitor_mass_actions", lang),
         "web_select_all": _("web_nodes_monitor_select_all", lang),
@@ -620,9 +620,9 @@ async def handle_settings_page(request: web.Request) -> web.StreamResponse:
         raise web.HTTPFound("/login")
 
     user_id = int(user["id"])
-    role = str(user.get("role", "users"))
-    is_main_admin = user_id == ADMIN_USER_ID
-    is_admin = role == "admins" or is_main_admin
+    role = str(user.get("role", ROLE_USER))
+    is_main_admin = _is_root(user)
+    is_admin = _is_admin(user)
     lang = get_user_lang(user_id)
     user_alerts = shared_state.ALERTS_CONFIG.get(user_id, {})
     web_meta = getattr(current_config, "WEB_METADATA", {})
@@ -886,7 +886,7 @@ async def handle_settings_page(request: web.Request) -> web.StreamResponse:
         "web_sessions_view_all": _("web_sessions_view_all", lang),
         "web_sessions_revoke_all": _("web_sessions_revoke_all", lang),
         "web_sessions_modal_title": _("web_sessions_modal_title", lang),
-        "user_role_js": f"const USER_ROLE = '{role}'; const IS_MAIN_ADMIN = {str(is_main_admin).lower()}; const WEB_KEY = '{get_web_key()}';",
+        "user_role_js": build_user_role_js(role, user_id),
         "is_main_admin": is_main_admin,
         "reset_allowed": can_reset,
         "check_resources": "checked" if user_alerts.get("resources", False) else "",
