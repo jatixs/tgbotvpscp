@@ -20,7 +20,7 @@ from ..config import ADMIN_USER_ID, BASE_DIR, NODE_OFFLINE_TIMEOUT, TG_BOT_NAME,
 from ..i18n import STRINGS, get_text as _, get_user_lang
 from ..messaging import send_alert
 from ..utils import decrypt_for_web, encrypt_for_web, get_app_version, get_country_flag, get_server_timezone_label, get_web_key
-from .auth import get_current_user
+from .auth import COOKIE_NAME, SERVER_SESSIONS, get_current_user
 from modules.services import (
     add_managed_service,
     get_all_available_services,
@@ -51,12 +51,69 @@ ALLOWED_NODE_COMMANDS: Final[set[str]] = {
     "services_list",
 }
 ALLOWED_SERVICE_ACTIONS: Final[set[str]] = {"start", "stop", "restart"}
+SSE_ACCEPT_HEADER: Final[str] = "text/event-stream"
+NODES_MONITOR_STREAM_INTERVAL: Final[float] = 10.0
 
 
 def _mask_ip(ip: str) -> str:
     if not isinstance(ip, str) or len(ip) < 4:
         return "***"
     return ip[:4] + "*" * max(0, len(ip) - 4)
+
+
+def _is_sse_request(request: web.Request) -> bool:
+    accept_header = request.headers.get("Accept", "")
+    return SSE_ACCEPT_HEADER in accept_header.lower()
+
+
+def _build_plain_api_notice(path: str) -> web.Response:
+    message = (
+        f"Это обычный HTTP/HTTPS-запрос.\n"
+        f"Маршрут {path} является внутренним SSE-endpoint и не предназначен для прямого открытия в браузере.\n"
+        f"Используйте WebUI или специализированный клиент ({SSE_ACCEPT_HEADER})."
+    )
+    return web.Response(text=message, content_type="text/plain", status=406)
+
+
+async def _write_sse(response: web.StreamResponse, event: str, data: Any) -> None:
+    payload = json.dumps(data)
+    await response.write(f"event: {event}\ndata: {payload}\n\n".encode("utf-8"))
+
+
+def _session_expired(current_token: str | None) -> bool:
+    return bool(current_token and current_token not in SERVER_SESSIONS)
+
+
+def _build_nodes_monitor_payload(all_nodes: dict[str, dict[str, Any]], *, now: float) -> dict[str, list[dict[str, Any]]]:
+    nodes_data: list[dict[str, Any]] = []
+
+    for token, node in all_nodes.items():
+        last_seen = node.get("last_seen", 0)
+        is_restarting = node.get("is_restarting", False)
+        status = "restarting" if is_restarting else "online" if now - last_seen < NODE_OFFLINE_TIMEOUT else "offline"
+        stats = node.get("stats", {})
+        ping = stats.get("ping")
+
+        nodes_data.append(
+            {
+                "token": encrypt_for_web(token),
+                "name": encrypt_for_web(node.get("name", "Unknown")),
+                "ip": encrypt_for_web(node.get("ip", "Unknown")),
+                "status": status,
+                "cpu": stats.get("cpu", 0),
+                "ram": stats.get("ram", 0),
+                "disk": stats.get("disk", 0),
+                "uptime": stats.get("uptime", 0),
+                "ping": encrypt_for_web(ping) if ping is not None else "",
+                "traffic": {
+                    "rx": stats.get("net_rx", 0),
+                    "tx": stats.get("net_tx", 0),
+                },
+                "last_seen": last_seen,
+            }
+        )
+
+    return {"nodes": nodes_data}
 
 
 async def process_node_result_background(
@@ -516,45 +573,75 @@ async def handle_nodes_monitor_page(request: web.Request) -> web.StreamResponse:
 
 @routes.get("/api/nodes/monitor/list")
 async def handle_nodes_monitor_list(request: web.Request) -> web.StreamResponse:
-    """Return extended node data for the monitoring page."""
-    user = await _require_user(request)
+    """Stream extended node data for the monitoring page via SSE."""
+    if not _is_sse_request(request):
+        return _build_plain_api_notice(request.path)
+
+    user = get_current_user(request)
     if not user:
-        return web.json_response({"error": "Unauthorized"}, status=401)
+        return web.Response(status=401)
+
+    current_token = request.cookies.get(COOKIE_NAME)
+    response = web.StreamResponse(status=200, reason="OK")
+    response.headers["Content-Type"] = "text/event-stream"
+    response.headers["Cache-Control"] = "no-cache"
+    response.headers["Connection"] = "keep-alive"
+    response.headers["X-Accel-Buffering"] = "no"
+    await response.prepare(request)
+
+    shutdown_event = request.app.get("shutdown_event")
 
     try:
-        all_nodes = await nodes_db.get_all_nodes()
-        nodes_data: list[dict[str, Any]] = []
-        now = time.time()
+        while True:
+            if shared_state.IS_RESTARTING:
+                try:
+                    await response.write(b"event: shutdown\ndata: restarting\n\n")
+                except Exception:
+                    pass
+                break
 
-        for token, node in all_nodes.items():
-            last_seen = node.get("last_seen", 0)
-            is_restarting = node.get("is_restarting", False)
-            status = "restarting" if is_restarting else "online" if now - last_seen < NODE_OFFLINE_TIMEOUT else "offline"
-            stats = node.get("stats", {})
+            try:
+                if request.transport is None or request.transport.is_closing():
+                    break
+            except Exception:
+                break
 
-            nodes_data.append(
-                {
-                    "token": encrypt_for_web(token),
-                    "name": node.get("name", "Unknown"),
-                    "ip": node.get("ip", "Unknown"),
-                    "status": status,
-                    "cpu": stats.get("cpu", 0),
-                    "ram": stats.get("ram", 0),
-                    "disk": stats.get("disk", 0),
-                    "uptime": stats.get("uptime", 0),
-                    "ping": stats.get("ping"),
-                    "traffic": {
-                        "rx": stats.get("net_rx", 0),
-                        "tx": stats.get("net_tx", 0),
-                    },
-                    "last_seen": last_seen,
-                }
-            )
+            if _session_expired(current_token):
+                try:
+                    await response.write(b"event: session_status\ndata: expired\n\n")
+                except Exception:
+                    pass
+                break
 
-        return web.json_response({"nodes": nodes_data})
+            try:
+                all_nodes = await nodes_db.get_all_nodes()
+                payload = _build_nodes_monitor_payload(all_nodes, now=time.time())
+                await _write_sse(response, "nodes_list", payload)
+            except (ConnectionResetError, BrokenPipeError, ConnectionError):
+                break
+            except Exception as exc:
+                logging.error("SSE nodes monitor list error: %s", exc)
+                try:
+                    await _write_sse(response, "error", {"error": "Internal Server Error"})
+                except Exception:
+                    pass
+
+            if shutdown_event:
+                try:
+                    if not shared_state.IS_RESTARTING:
+                        await asyncio.wait_for(shutdown_event.wait(), timeout=NODES_MONITOR_STREAM_INTERVAL)
+                        break
+                except asyncio.TimeoutError:
+                    pass
+            else:
+                await asyncio.sleep(NODES_MONITOR_STREAM_INTERVAL)
+    except asyncio.CancelledError:
+        pass
     except Exception as exc:
-        logging.error("Error in handle_nodes_monitor_list: %s", exc)
-        return web.json_response({"error": str(exc), "nodes": []}, status=500)
+        if "closing transport" not in str(exc) and "'NoneType' object" not in str(exc):
+            logging.error("SSE nodes monitor stream error: %s", exc)
+
+    return response
 
 
 @routes.get("/api/nodes/monitor/detail")

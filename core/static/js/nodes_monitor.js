@@ -12,16 +12,111 @@ let selectedNodes = new Set();
 let currentNodeToken = null;
 let modalResChart = null;
 let modalNetChart = null;
-let updateInterval = null;
-let modalUpdateInterval = null;
+let nodesMonitorSSESource = null;
+let nodeDetailSSESource = null;
+let nodeServicesSSESource = null;
+
+function decryptData(text) {
+    if (!text) return "";
+    if (typeof WEB_KEY === 'undefined' || !WEB_KEY) return text;
+    try {
+        const decoded = atob(text);
+        let result = "";
+        for (let index = 0; index < decoded.length; index++) {
+            const keyChar = WEB_KEY[index % WEB_KEY.length];
+            result += String.fromCharCode(decoded.charCodeAt(index) ^ keyChar.charCodeAt(0));
+        }
+        return result;
+    } catch (error) {
+        console.error('Decryption error:', error);
+        return text;
+    }
+}
+
+function normalizeNode(node) {
+    const decryptedName = decryptData(node.name) || 'Unknown';
+    const decryptedIp = decryptData(node.ip) || '-';
+    const decryptedPing = decryptData(node.ping);
+
+    return {
+        ...node,
+        name: decryptedName,
+        ip: decryptedIp,
+        ping: decryptedPing !== '' && decryptedPing != null && !Number.isNaN(Number(decryptedPing))
+            ? Number(decryptedPing)
+            : null,
+    };
+}
+
+function stopNodesMonitorStream() {
+    if (nodesMonitorSSESource) {
+        nodesMonitorSSESource.close();
+        nodesMonitorSSESource = null;
+    }
+}
+
+function stopNodeDetailStream() {
+    if (nodeDetailSSESource) {
+        nodeDetailSSESource.close();
+        nodeDetailSSESource = null;
+    }
+}
+
+function stopNodeServicesStream() {
+    if (nodeServicesSSESource) {
+        nodeServicesSSESource.close();
+        nodeServicesSSESource = null;
+    }
+}
+
+function stopNodeModalStreams() {
+    stopNodeDetailStream();
+    stopNodeServicesStream();
+}
+
+function connectNodesMonitorStream() {
+    stopNodesMonitorStream();
+
+    if (typeof EventSource === 'undefined') {
+        console.error('EventSource is not supported in this browser');
+        return;
+    }
+
+    nodesMonitorSSESource = new EventSource('/api/nodes/monitor/list');
+
+    nodesMonitorSSESource.addEventListener('nodes_list', (event) => {
+        try {
+            const data = JSON.parse(event.data);
+            allNodesData = Array.isArray(data.nodes) ? data.nodes.map(normalizeNode) : [];
+            selectedNodes = new Set([...selectedNodes].filter(token => allNodesData.some(node => node.token === token)));
+            updateStats();
+            renderNodes();
+        } catch (error) {
+            console.error('Error parsing nodes monitor SSE payload:', error);
+        }
+    });
+
+    nodesMonitorSSESource.addEventListener('session_status', (event) => {
+        if (event.data === 'expired') {
+            stopNodesMonitorStream();
+            window.location.href = '/login';
+        }
+    });
+
+    nodesMonitorSSESource.addEventListener('shutdown', () => {
+        stopNodesMonitorStream();
+    });
+
+    nodesMonitorSSESource.onerror = () => {
+        if (nodesMonitorSSESource?.readyState === EventSource.CLOSED) {
+            stopNodesMonitorStream();
+        }
+    };
+}
 
 // Initialize function for SPA navigation
 function initNodesMonitor() {
-    // Clear previous interval if exists
-    if (updateInterval) {
-        clearInterval(updateInterval);
-        updateInterval = null;
-    }
+    stopNodesMonitorStream();
     
     // Reset state
     allNodesData = [];
@@ -42,11 +137,8 @@ function initNodesMonitor() {
         modalNetChart = null;
     }
     
-    // Load nodes
-    loadNodes();
-    
-    // Start auto-refresh
-    updateInterval = setInterval(loadNodes, 10000);
+    // Subscribe to node updates
+    connectNodesMonitorStream();
     
     // Setup theme
     if (typeof applyThemeUI === 'function') {
@@ -65,25 +157,10 @@ document.addEventListener('DOMContentLoaded', () => {
     initNodesMonitor();
 });
 
-// Load all nodes data
-async function loadNodes() {
-    try {
-        const response = await fetch('/api/nodes/monitor/list');
-        if (!response.ok) {
-            if (response.status === 401) {
-                window.location.href = '/login';
-                return;
-            }
-            throw new Error('Failed to load nodes');
-        }
-        const data = await response.json();
-        allNodesData = data.nodes || [];
-        updateStats();
-        renderNodes();
-    } catch (error) {
-        console.error('Error loading nodes:', error);
-    }
-}
+window.addEventListener('beforeunload', () => {
+    stopNodesMonitorStream();
+    stopNodeModalStreams();
+});
 
 // Update stats counters
 function updateStats() {
@@ -459,7 +536,7 @@ async function massCommand(cmd) {
             }
         }
         showAlert(I18N?.modal_title_alert || 'Alert', I18N?.web_commands_sent || 'Commands sent to all selected nodes');
-        loadNodes();
+        connectNodesMonitorStream();
     });
 }
 
@@ -474,7 +551,7 @@ async function quickReboot(token) {
         async () => {
             await sendNodeCommand(token, 'reboot');
             showAlert(I18N?.modal_title_alert || 'Alert', I18N?.web_reboot_sent || 'Reboot command sent');
-            loadNodes();
+            connectNodesMonitorStream();
         }
     );
 }
@@ -490,17 +567,9 @@ async function openNodeDetail(token) {
         modal.classList.remove('hidden');
         modal.classList.add('flex');
     }
-    
-    // Load node details
-    await loadNodeDetails(token);
-    
-    // Start auto-refresh for modal (every 5 seconds)
-    if (modalUpdateInterval) clearInterval(modalUpdateInterval);
-    modalUpdateInterval = setInterval(() => {
-        if (currentNodeToken) {
-            loadNodeDetails(currentNodeToken);
-        }
-    }, 5000);
+
+    connectNodeDetailStream(token);
+    connectNodeServicesStream(token);
 }
 
 function closeNodeDetailModal() {
@@ -512,12 +581,8 @@ function closeNodeDetailModal() {
         modal.classList.remove('flex');
     }
     currentNodeToken = null;
-    
-    // Stop modal auto-refresh
-    if (modalUpdateInterval) {
-        clearInterval(modalUpdateInterval);
-        modalUpdateInterval = null;
-    }
+
+    stopNodeModalStreams();
     
     // Destroy charts
     if (modalResChart) {
@@ -530,41 +595,67 @@ function closeNodeDetailModal() {
     }
 }
 
-async function loadNodeDetails(token) {
-    try {
-        const response = await fetch(`/api/nodes/monitor/detail?token=${encodeURIComponent(token)}`);
-        if (!response.ok) throw new Error('Failed to load node details');
-        
-        const data = await response.json();
-        updateNodeModal(data);
-        loadNodeServices(token);
-    } catch (error) {
-        console.error('Error loading node details:', error);
-    }
+function connectNodeDetailStream(token) {
+    stopNodeDetailStream();
+
+    nodeDetailSSESource = new EventSource(`/api/events/node?token=${encodeURIComponent(token)}`);
+
+    nodeDetailSSESource.addEventListener('node_details', (event) => {
+        try {
+            const data = JSON.parse(event.data);
+            updateNodeModal(data);
+        } catch (error) {
+            console.error('Node detail SSE parse error:', error);
+        }
+    });
+
+    nodeDetailSSESource.addEventListener('session_status', (event) => {
+        if (event.data === 'expired') {
+            stopNodeModalStreams();
+            window.location.href = '/login';
+        }
+    });
+
+    nodeDetailSSESource.addEventListener('shutdown', () => {
+        stopNodeDetailStream();
+    });
+
+    nodeDetailSSESource.onerror = () => {
+        if (nodeDetailSSESource?.readyState === EventSource.CLOSED) {
+            stopNodeDetailStream();
+        }
+    };
 }
 
 function updateNodeModal(data) {
-    document.getElementById('modalNodeTitle').textContent = data.name || 'Unknown';
-    document.getElementById('modalNodeIp').textContent = data.ip || '-';
+    document.getElementById('modalNodeTitle').textContent = decryptData(data.name) || 'Unknown';
+    document.getElementById('modalNodeIp').textContent = decryptData(data.ip) || '-';
     
     // Update ping badge in modal
     const pingBadge = document.getElementById('modalNodePingBadge');
     const stats = data.stats || {};
-    if (stats.ping != null && !isNaN(stats.ping)) {
-        pingBadge.className = `inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold ${getPingBadgeClass(stats.ping)}`;
-        pingBadge.textContent = parseFloat(stats.ping) + 'ms';
+    const pingValue = decryptData(stats.ping);
+    if (pingValue !== '' && pingValue != null && !isNaN(pingValue)) {
+        pingBadge.className = `inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold ${getPingBadgeClass(Number(pingValue))}`;
+        pingBadge.textContent = parseFloat(pingValue) + 'ms';
     } else {
         pingBadge.className = 'hidden';
         pingBadge.textContent = '';
     }
     
+    const isRestarting = data.status === 'restarting';
     const isOnline = data.status === 'online';
     const statusIcon = document.getElementById('modalNodeStatusIcon');
     const statusBadge = document.getElementById('modalNodeStatusBadge');
     const statusDot = document.getElementById('modalNodeStatusDot');
     const statusText = document.getElementById('modalNodeStatus');
     
-    if (isOnline) {
+    if (isRestarting) {
+        statusIcon.className = 'p-2 bg-blue-100 dark:bg-blue-500/20 rounded-lg text-blue-600 dark:text-blue-400';
+        statusBadge.className = 'flex items-center gap-1 text-blue-600 dark:text-blue-400';
+        statusDot.className = 'w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse';
+        statusText.textContent = I18N?.web_node_status_restarting || 'Restarting';
+    } else if (isOnline) {
         statusIcon.className = 'p-2 bg-green-100 dark:bg-green-500/20 rounded-lg text-green-600 dark:text-green-400';
         statusBadge.className = 'flex items-center gap-1 text-green-600 dark:text-green-400';
         statusDot.className = 'w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse';
@@ -776,27 +867,62 @@ function updateModalCharts(history) {
     }
 }
 
-async function loadNodeServices(token) {
+function connectNodeServicesStream(token) {
+    stopNodeServicesStream();
+
+    const container = document.getElementById('modalServicesContainer');
+    if (container) {
+        container.innerHTML = `<div class="text-center py-4 text-gray-400">${I18N?.web_services_loading || I18N?.web_loading || 'Loading'}</div>`;
+    }
+
+    nodeServicesSSESource = new EventSource(`/api/events/node/services?token=${encodeURIComponent(token)}`);
+
+    nodeServicesSSESource.addEventListener('node_services', (event) => {
+        try {
+            const data = JSON.parse(event.data);
+            const services = (data.services || []).map((service) => ({
+                name: decryptData(service.name),
+                type: decryptData(service.type) || 'systemd',
+                status: decryptData(service.status),
+            }));
+            renderNodeServices(token, services);
+        } catch (error) {
+            console.error('Node services SSE parse error:', error);
+        }
+    });
+
+    nodeServicesSSESource.addEventListener('session_status', (event) => {
+        if (event.data === 'expired') {
+            stopNodeModalStreams();
+            window.location.href = '/login';
+        }
+    });
+
+    nodeServicesSSESource.addEventListener('shutdown', () => {
+        stopNodeServicesStream();
+    });
+
+    nodeServicesSSESource.onerror = () => {
+        if (nodeServicesSSESource?.readyState === EventSource.CLOSED) {
+            stopNodeServicesStream();
+        }
+    };
+}
+
+function renderNodeServices(token, services) {
     const container = document.getElementById('modalServicesContainer');
     const btnContainer = document.getElementById('modalServicesToggle');
-    try {
-        const response = await fetch(`/api/nodes/monitor/services?token=${encodeURIComponent(token)}`);
-        if (!response.ok) throw new Error('Failed to load services');
-        
-        const data = await response.json();
-        const services = data.services || [];
-        
-        if (services.length === 0) {
-            container.innerHTML = `<div class="col-span-full text-center py-4 text-gray-400">${I18N?.web_services_empty || 'No services'}</div>`;
-            if (btnContainer) btnContainer.classList.add('hidden');
-            return;
-        }
-        
-        const INITIAL_SHOW = 4;
-        const showAll = container.dataset.showAll === 'true';
-        const displayServices = showAll ? services : services.slice(0, INITIAL_SHOW);
-        
-        container.innerHTML = displayServices.map(svc => `
+    if (services.length === 0) {
+        container.innerHTML = `<div class="col-span-full text-center py-4 text-gray-400">${I18N?.web_services_empty || 'No services'}</div>`;
+        if (btnContainer) btnContainer.classList.add('hidden');
+        return;
+    }
+
+    const INITIAL_SHOW = 4;
+    const showAll = container.dataset.showAll === 'true';
+    const displayServices = showAll ? services : services.slice(0, INITIAL_SHOW);
+
+    container.innerHTML = displayServices.map(svc => `
             <div class="flex items-center justify-between bg-white/50 dark:bg-black/30 p-2 rounded-lg">
                 <div class="flex items-center gap-2">
                     <span class="${svc.status === 'running' ? 'text-green-500' : 'text-red-500'}">●</span>
@@ -822,31 +948,26 @@ async function loadNodeServices(token) {
                 </div>
             </div>
         `).join('');
-        
-        // Show/hide toggle button
-        if (btnContainer) {
-            if (services.length > INITIAL_SHOW) {
-                btnContainer.classList.remove('hidden');
-                const btn = btnContainer.querySelector('button');
-                const blurOverlay = btnContainer.querySelector('.services-blur-overlay');
-                if (btn) {
-                    if (showAll) {
-                        btn.classList.add('expanded');
-                        if (blurOverlay) blurOverlay.style.display = 'none';
-                        btn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 transition-transform duration-300" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" /></svg> ${I18N?.web_show_less || 'Show Less'}`;
-                    } else {
-                        btn.classList.remove('expanded');
-                        if (blurOverlay) blurOverlay.style.display = '';
-                        btn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 transition-transform duration-300" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" /></svg> ${I18N?.web_show_more || 'Show More'} (${services.length - INITIAL_SHOW})`;
-                    }
+
+    if (btnContainer) {
+        if (services.length > INITIAL_SHOW) {
+            btnContainer.classList.remove('hidden');
+            const btn = btnContainer.querySelector('button');
+            const blurOverlay = btnContainer.querySelector('.services-blur-overlay');
+            if (btn) {
+                if (showAll) {
+                    btn.classList.add('expanded');
+                    if (blurOverlay) blurOverlay.style.display = 'none';
+                    btn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 transition-transform duration-300" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" /></svg> ${I18N?.web_show_less || 'Show Less'}`;
+                } else {
+                    btn.classList.remove('expanded');
+                    if (blurOverlay) blurOverlay.style.display = '';
+                    btn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 transition-transform duration-300" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" /></svg> ${I18N?.web_show_more || 'Show More'} (${services.length - INITIAL_SHOW})`;
                 }
-            } else {
-                btnContainer.classList.add('hidden');
             }
+        } else {
+            btnContainer.classList.add('hidden');
         }
-    } catch (error) {
-        container.innerHTML = `<div class="col-span-full text-center py-4 text-red-400">${I18N?.web_error || 'Error'}</div>`;
-        if (btnContainer) btnContainer.classList.add('hidden');
     }
 }
 
@@ -854,12 +975,14 @@ function toggleServicesDisplay() {
     const container = document.getElementById('modalServicesContainer');
     const isShowingAll = container.dataset.showAll === 'true';
     container.dataset.showAll = !isShowingAll;
-    loadNodeServices(currentNodeToken);
+    if (currentNodeToken) {
+        connectNodeServicesStream(currentNodeToken);
+    }
 }
 
 function refreshNodeServices() {
     if (currentNodeToken) {
-        loadNodeServices(currentNodeToken);
+        connectNodeServicesStream(currentNodeToken);
     }
 }
 
@@ -878,7 +1001,7 @@ function nodeCommand(cmd) {
                 await sendNodeCommand(currentNodeToken, cmd);
                 showAlert(I18N?.modal_title_alert || 'Alert', I18N?.web_command_sent || 'Command sent');
                 closeNodeDetailModal();
-                loadNodes();
+                connectNodesMonitorStream();
             }
         );
     } else {
@@ -899,7 +1022,7 @@ async function nodeServiceAction(token, service, action, type = 'systemd') {
         if (!response.ok) throw new Error('Service action failed');
         
         showAlert(I18N?.modal_title_alert || 'Alert', I18N?.web_command_sent || 'Command sent');
-        setTimeout(() => loadNodeServices(token), 2000);
+        setTimeout(() => connectNodeServicesStream(token), 2000);
     } catch (error) {
         showAlert(I18N?.modal_title_error || 'Error', error.message);
     }
@@ -922,7 +1045,7 @@ async function sendNodeCommand(token, command) {
 
 // Refresh
 function refreshAllNodes() {
-    loadNodes();
+    connectNodesMonitorStream();
 }
 
 // Utility functions
