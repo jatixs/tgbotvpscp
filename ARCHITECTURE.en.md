@@ -340,8 +340,8 @@ core/web/
 ├── app.py              # Initialization, routing, lifecycle
 ├── auth.py             # Authentication (password, magic link, Telegram widget)
 ├── middlewares.py      # WAF, Rate Limiting, CSRF Protection
-├── api_nodes.py        # REST API for nodes (heartbeat, CRUD, commands)
-├── api_system.py       # REST API for settings, logs, users
+├── api_nodes.py        # aiohttp-based API for nodes (heartbeat, CRUD, commands)
+├── api_system.py       # aiohttp-based API for settings, logs, users
 ├── streaming.py        # Server-Sent Events (3 streams)
 └── views.py            # HTML pages (Jinja2 rendering)
 ```
@@ -422,6 +422,10 @@ Detected attacks:
 #### **api_nodes.py** — Node Management API
 **Purpose:** CRUD operations and heartbeat protocol
 
+**Note:**
+- `GET /api` and `GET /api/` return an API JSON index instead of metrics.
+- Opening `GET /api/events*` directly in a browser is not supported; these routes are internal SSE streams for WebUI only.
+
 **Key Endpoint — `/api/heartbeat`:**
 - Nodes send status with HMAC signature
 - Updates metrics: CPU, RAM, Disk, Uptime, Network Speed
@@ -430,14 +434,22 @@ Detected attacks:
 
 **Endpoints:**
 ```
+GET  /api/heartbeat                     — Health probe
+POST /api/heartbeat                     — Node heartbeat with HMAC signature
 GET  /api/nodes/list                    — Node list (encrypted)
 POST /api/nodes/add                     — Add node
 POST /api/nodes/delete                  — Delete node
 POST /api/nodes/rename                  — Rename (admin only)
 GET  /api/nodes/monitor/list            — Data for monitoring page
 GET  /api/nodes/monitor/detail?token=   — Specific node details
+GET  /api/nodes/monitor/services        — Specific node services
 POST /api/nodes/monitor/command         — Send command to node
 POST /api/nodes/monitor/service_action  — Manage service on node
+GET  /api/services                      — Managed services list
+GET  /api/services/available            — Available services list
+GET  /api/services/info/{name}          — Service details
+POST /api/services/{action}             — Start/Stop/Restart service
+POST /api/services/manage               — Add/remove service from monitoring
 ```
 
 ---
@@ -455,10 +467,12 @@ POST /api/settings/save        — Save notifications (alerts)
 POST /api/settings/system      — CPU/RAM/Disk thresholds
 POST /api/settings/keyboard    — Bot button visibility
 POST /api/settings/metadata    — Favicon, Title, Description (SEO)
+POST /api/settings/language    — Switch WebUI language
 
 POST /api/users/action         — Add/delete users
-GET  /api/sessions             — Active web sessions
+GET  /api/sessions/list        — Active web sessions
 POST /api/sessions/revoke      — Revoke session
+POST /api/sessions/revoke_all  — Revoke all other sessions
 
 GET  /api/update/check         — Check updates (GitHub)
 POST /api/update/run           — Run update
@@ -466,6 +480,8 @@ POST /api/update/run           — Run update
 GET  /api/notifications/list   — Notification list
 POST /api/notifications/read   — Mark as read
 POST /api/notifications/clear  — Clear all
+POST /api/traffic/reset        — Reset traffic statistics
+GET  /api/agent/ipv4           — Agent IPv4 addresses
 ```
 
 ---
@@ -473,7 +489,7 @@ POST /api/notifications/clear  — Clear all
 #### **streaming.py** — Server-Sent Events
 **Purpose:** Real-time updates without WebSocket
 
-**Three SSE Streams:**
+**SSE Streams:**
 
 **1. `GET /api/events` — Main stream:**
 - `agent_stats` — CPU, RAM, Disk, Network, chart history
@@ -487,6 +503,12 @@ POST /api/notifications/clear  — Clear all
 **3. `GET /api/events/node` — Specific node details:**
 - Statistics and chart data
 - Updates via `?token=...` parameter
+
+**4. `GET /api/events/services` — Service Manager stream:**
+- Real-time systemd service states
+- Updates for the Service Manager page
+
+**Restriction:** a regular browser navigation to `GET /api/events*` returns informational text instead of metrics. Proper usage requires `EventSource` with `Accept: text/event-stream`. Likewise, `GET /api/terminal/ws` requires `Upgrade: websocket` and returns `426 Upgrade Required` for a plain HTTP request.
 
 **Encryption:** All data encrypted with XOR + Base64 via `encrypt_for_web()` before sending.
 

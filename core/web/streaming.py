@@ -24,6 +24,30 @@ from modules.services import get_all_services_status
 routes = web.RouteTableDef()
 
 KEEPALIVE_INTERVAL: Final[int] = 25
+SSE_ACCEPT_HEADER: Final[str] = "text/event-stream"
+
+
+def _build_plain_api_notice(path: str, stream_kind: str = "SSE") -> web.Response:
+    message = (
+        f"Это обычный HTTP/HTTPS-запрос.\n"
+        f"Маршрут {path} является внутренним {stream_kind}-endpoint и не предназначен для прямого открытия в браузере.\n"
+        f"Используйте WebUI или специализированный клиент ({SSE_ACCEPT_HEADER})."
+    )
+    return web.Response(text=message, content_type="text/plain", status=406)
+
+
+def _is_sse_request(request: web.Request) -> bool:
+    accept_header = request.headers.get("Accept", "")
+    return SSE_ACCEPT_HEADER in accept_header.lower()
+
+
+def _build_websocket_notice(path: str) -> web.Response:
+    message = (
+        f"Это обычный HTTP/HTTPS-запрос.\n"
+        f"Маршрут {path} является внутренним WebSocket-endpoint и не предназначен для прямого открытия в браузере.\n"
+        "Используйте WebUI или WebSocket-клиент с Upgrade: websocket."
+    )
+    return web.Response(text=message, content_type="text/plain", status=426)
 
 
 def _session_expired(current_token: str | None) -> bool:
@@ -117,6 +141,9 @@ async def _write_sse(response: web.StreamResponse, event: str, data: Any) -> Non
 
 @routes.get("/api/events")
 async def handle_sse_stream(request: web.Request) -> web.StreamResponse:
+    if not _is_sse_request(request):
+        return _build_plain_api_notice(request.path)
+
     user = get_current_user(request)
     if not user:
         return web.Response(status=401)
@@ -273,6 +300,9 @@ async def handle_sse_stream(request: web.Request) -> web.StreamResponse:
 
 @routes.get("/api/events/logs")
 async def handle_sse_logs(request: web.Request) -> web.StreamResponse:
+    if not _is_sse_request(request):
+        return _build_plain_api_notice(request.path)
+
     user = get_current_user(request)
     if not user or user["role"] != "admins":
         return web.Response(status=403)
@@ -465,6 +495,9 @@ async def handle_sse_logs(request: web.Request) -> web.StreamResponse:
 
 @routes.get("/api/events/node")
 async def handle_sse_node_details(request: web.Request) -> web.StreamResponse:
+    if not _is_sse_request(request):
+        return _build_plain_api_notice(request.path)
+
     user = get_current_user(request)
     if not user:
         return web.Response(status=401)
@@ -538,6 +571,9 @@ async def handle_sse_node_details(request: web.Request) -> web.StreamResponse:
 @routes.get("/api/events/services")
 async def handle_sse_services(request: web.Request) -> web.StreamResponse:
     """SSE endpoint for services status updates."""
+    if not _is_sse_request(request):
+        return _build_plain_api_notice(request.path)
+
     user = get_current_user(request)
     if not user:
         return web.Response(status=401)
@@ -750,6 +786,11 @@ async def handle_terminal_stats(request: web.Request) -> web.StreamResponse:
 
 @routes.get("/api/terminal/ws")
 async def handle_terminal_ws(request: web.Request) -> web.StreamResponse:
+    ws_probe = web.WebSocketResponse()
+    ws_ready = ws_probe.can_prepare(request)
+    if not ws_ready.ok:
+        return _build_websocket_notice(request.path)
+
     user = get_current_user(request)
     if not user:
         return web.Response(status=401)

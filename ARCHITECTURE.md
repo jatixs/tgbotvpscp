@@ -340,8 +340,8 @@ core/web/
 ├── app.py              # Инициализация, маршрутизация, lifecycle
 ├── auth.py             # Аутентификация (пароль, magic link, Telegram widget)
 ├── middlewares.py      # WAF, Rate Limiting, CSRF Protection
-├── api_nodes.py        # REST API для нод (heartbeat, CRUD, команды)
-├── api_system.py       # REST API для настроек, логов, пользователей
+├── api_nodes.py        # API на базе aiohttp для нод (heartbeat, CRUD, команды)
+├── api_system.py       # API на базе aiohttp для настроек, логов, пользователей
 ├── streaming.py        # Server-Sent Events (3 потока)
 └── views.py            # HTML-страницы (Jinja2 рендеринг)
 ```
@@ -422,6 +422,10 @@ streaming_routes → SSE потоки
 #### **api_nodes.py** — API управления нодами
 **Назначение:** CRUD операции и heartbeat протокол
 
+**Примечание:**
+- `GET /api` и `GET /api/` возвращают JSON-индекс API, а не метрики.
+- Прямой переход браузером на `GET /api/events*` не должен использоваться: эти маршруты работают только как внутренние SSE-потоки WebUI.
+
 **Ключевой эндпоинт — `/api/heartbeat`:**
 - Ноды отправляют статус с HMAC-подписью
 - Обновляет метрики: CPU, RAM, Disk, Uptime, Network Speed
@@ -430,14 +434,22 @@ streaming_routes → SSE потоки
 
 **Эндпоинты:**
 ```
+GET  /api/heartbeat                     — Health probe
+POST /api/heartbeat                     — Heartbeat от ноды с HMAC-подписью
 GET  /api/nodes/list                    — Список нод (зашифровано)
 POST /api/nodes/add                     — Добавить ноду
 POST /api/nodes/delete                  — Удалить ноду
 POST /api/nodes/rename                  — Переименовать (admin only)
 GET  /api/nodes/monitor/list            — Данные для страницы мониторинга
 GET  /api/nodes/monitor/detail?token=   — Детали конкретной ноды
+GET  /api/nodes/monitor/services        — Сервисы конкретной ноды
 POST /api/nodes/monitor/command         — Отправить команду на ноду
 POST /api/nodes/monitor/service_action  — Управление сервисом на ноде
+GET  /api/services                      — Список управляемых сервисов
+GET  /api/services/available            — Список доступных сервисов
+GET  /api/services/info/{name}          — Детали сервиса
+POST /api/services/{action}             — Start/Stop/Restart сервиса
+POST /api/services/manage               — Добавить/удалить сервис из мониторинга
 ```
 
 ---
@@ -455,10 +467,12 @@ POST /api/settings/save        — Сохранить уведомления (а
 POST /api/settings/system      — Пороги CPU/RAM/Disk
 POST /api/settings/keyboard    — Видимость кнопок бота
 POST /api/settings/metadata    — Favicon, Title, Description (SEO)
+POST /api/settings/language    — Смена языка WebUI
 
 POST /api/users/action         — Добавление/удаление пользователей
-GET  /api/sessions             — Активные веб-сессии
+GET  /api/sessions/list        — Активные веб-сессии
 POST /api/sessions/revoke      — Отзыв сессии
+POST /api/sessions/revoke_all  — Отзыв всех остальных сессий
 
 GET  /api/update/check         — Проверка обновлений (GitHub)
 POST /api/update/run           — Запуск обновления
@@ -466,6 +480,8 @@ POST /api/update/run           — Запуск обновления
 GET  /api/notifications/list   — Список уведомлений
 POST /api/notifications/read   — Отметить прочитанным
 POST /api/notifications/clear  — Очистить все
+POST /api/traffic/reset        — Сброс статистики трафика
+GET  /api/agent/ipv4           — IPv4 адреса агента
 ```
 
 ---
@@ -473,7 +489,7 @@ POST /api/notifications/clear  — Очистить все
 #### **streaming.py** — Server-Sent Events
 **Назначение:** Real-time обновления без WebSocket
 
-**Три SSE-потока:**
+**SSE-потоки:**
 
 **1. `GET /api/events` — Главный поток:**
 - `agent_stats` — CPU, RAM, Disk, Network, история для графиков
@@ -487,6 +503,12 @@ POST /api/notifications/clear  — Очистить все
 **3. `GET /api/events/node` — Детали конкретной ноды:**
 - Статистика и данные для графиков
 - Обновления через параметр `?token=...`
+
+**4. `GET /api/events/services` — Поток менеджера сервисов:**
+- Статусы systemd-сервисов в реальном времени
+- Обновления для страницы Service Manager
+
+**Ограничение:** при обычном переходе из браузера `GET /api/events*` возвращает информационный текст, а не метрики. Для работы требуется `EventSource` с `Accept: text/event-stream`. Аналогично `GET /api/terminal/ws` требует `Upgrade: websocket` и для обычного HTTP-запроса отвечает `426 Upgrade Required`.
 
 **Шифрование:** Все данные шифруются XOR + Base64 через `encrypt_for_web()` перед отправкой.
 
