@@ -968,11 +968,21 @@ function escapeHtml(text) {
     return div.innerHTML;
 }
 
+function resolveLocalizedMessage(message) {
+    if (typeof message !== 'string') return message;
+
+    const localizedKeyMatch = message.match(/^\[([a-z0-9_]+)\]$/i);
+    if (!localizedKeyMatch) return message;
+
+    const localizedValue = I18N?.[localizedKeyMatch[1]];
+    return localizedValue || message;
+}
+
 // Modal functions
 function showAlert(title, message) {
     const modal = document.getElementById('systemModal');
     document.getElementById('sysModalTitle').textContent = title;
-    document.getElementById('sysModalMessage').textContent = message;
+    document.getElementById('sysModalMessage').textContent = resolveLocalizedMessage(message);
     document.getElementById('sysModalCancel').classList.add('hidden');
     document.getElementById('sysModalOk').onclick = () => closeSystemModal(null);
     if (typeof animateModalOpen === 'function') {
@@ -986,7 +996,7 @@ function showAlert(title, message) {
 function showConfirm(title, message, onConfirm) {
     const modal = document.getElementById('systemModal');
     document.getElementById('sysModalTitle').textContent = title;
-    document.getElementById('sysModalMessage').textContent = message;
+    document.getElementById('sysModalMessage').textContent = resolveLocalizedMessage(message);
     document.getElementById('sysModalCancel').classList.remove('hidden');
     document.getElementById('sysModalCancel').onclick = () => closeSystemModal(null);
     document.getElementById('sysModalOk').onclick = () => {
