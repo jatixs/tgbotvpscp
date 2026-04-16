@@ -217,7 +217,7 @@ def process_startup_flags():
 def send_or_edit_telegram_alert(
     message_key: str, alert_type: str, message_id_to_edit=None, **kwargs
 ):
-    global last_alert_times, status_alert_message_id
+    global status_alert_message_id
     load_user_settings()
     
     current_time = time.time()
@@ -368,7 +368,6 @@ def parse_systemd_timestamp(ts_str):
 
 
 def check_bot_service_systemd():
-    global bot_service_was_down_or_activating, status_alert_message_id, current_reported_state, last_service_start_dt
     actual_state = "unknown"
     status_output_full = "N/A"
     current_start_dt = None
@@ -412,7 +411,6 @@ def check_bot_service_systemd():
 
 
 def check_bot_service_docker():
-    global bot_service_was_down_or_activating, status_alert_message_id, current_reported_state
     if not docker_client:
         return
     actual_state = "unknown"
