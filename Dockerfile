@@ -1,7 +1,13 @@
 FROM python:3.10-slim-bookworm
 
-# ДОБАВЛЕНО: gcc и python3-dev в этот список
-RUN apt-get update && apt-get install -y \
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update \
+    && apt-get dist-upgrade -y \
+    && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    openssl \
+    libssl3 \
     python3-yaml \
     iperf3 \
     git \
@@ -16,6 +22,8 @@ RUN apt-get update && apt-get install -y \
     coreutils \
     gcc \
     python3-dev \
+    && dpkg-query -W openssl libssl3 \
+    && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
 RUN pip install --no-cache-dir --upgrade pip setuptools wheel && \
