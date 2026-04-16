@@ -18,6 +18,7 @@ from ..config import BASE_DIR, DEFAULT_LANGUAGE, DEPLOY_MODE
 from ..i18n import get_user_lang
 from ..utils import decrypt_for_web, encrypt_for_web, get_host_path
 from .auth import COOKIE_NAME, SERVER_SESSIONS, get_current_user
+from ..rbac import is_admin as _is_admin
 from modules import traffic as traffic_module
 from modules.services import get_all_services_status
 
@@ -174,8 +175,8 @@ async def handle_sse_stream(request: web.Request) -> web.StreamResponse:
         return _build_plain_api_notice(request.path)
 
     user = get_current_user(request)
-    if not user:
-        return web.Response(status=401)
+    if not user or not _is_admin(user):
+        return web.Response(status=403)
 
     current_token = request.cookies.get(COOKIE_NAME)
     response = web.StreamResponse(status=200, reason="OK")
@@ -333,7 +334,7 @@ async def handle_sse_logs(request: web.Request) -> web.StreamResponse:
         return _build_plain_api_notice(request.path)
 
     user = get_current_user(request)
-    if not user or user["role"] != "admins":
+    if not user or not _is_admin(user):
         return web.Response(status=403)
 
     log_type = request.query.get("type", "bot")
@@ -528,8 +529,8 @@ async def handle_sse_node_details(request: web.Request) -> web.StreamResponse:
         return _build_plain_api_notice(request.path)
 
     user = get_current_user(request)
-    if not user:
-        return web.Response(status=401)
+    if not user or not _is_admin(user):
+        return web.Response(status=403)
 
     token = decrypt_for_web(request.query.get("token"))
     if not token:
@@ -617,8 +618,8 @@ async def handle_sse_node_services(request: web.Request) -> web.StreamResponse:
         return _build_plain_api_notice(request.path)
 
     user = get_current_user(request)
-    if not user:
-        return web.Response(status=401)
+    if not user or not _is_admin(user):
+        return web.Response(status=403)
 
     token = decrypt_for_web(request.query.get("token"))
     if not token:
@@ -696,8 +697,8 @@ async def handle_sse_services(request: web.Request) -> web.StreamResponse:
         return _build_plain_api_notice(request.path)
 
     user = get_current_user(request)
-    if not user:
-        return web.Response(status=401)
+    if not user or not _is_admin(user):
+        return web.Response(status=403)
 
     current_token = request.cookies.get(COOKIE_NAME)
     response = web.StreamResponse(status=200, reason="OK")
@@ -782,8 +783,8 @@ async def _forward_ws_stream(stream: Any, ws_client: web.WebSocketResponse) -> N
 @routes.get("/api/terminal/creds")
 async def handle_get_terminal_creds(request: web.Request) -> web.StreamResponse:
     user = get_current_user(request)
-    if not user:
-        return web.json_response({"status": "error", "error": "Unauthorized"}, status=401)
+    if not user or not _is_admin(user):
+        return web.json_response({"status": "error", "error": "Admin required"}, status=403)
 
     ip = str(request.query.get("ip", "")).strip()
     if not ip:
@@ -812,8 +813,8 @@ async def handle_get_terminal_creds(request: web.Request) -> web.StreamResponse:
 @routes.post("/api/terminal/creds")
 async def handle_save_terminal_creds(request: web.Request) -> web.StreamResponse:
     user = get_current_user(request)
-    if not user:
-        return web.json_response({"status": "error", "error": "Unauthorized"}, status=401)
+    if not user or not _is_admin(user):
+        return web.json_response({"status": "error", "error": "Admin required"}, status=403)
 
     try:
         data = await request.json()
@@ -846,8 +847,8 @@ async def handle_save_terminal_creds(request: web.Request) -> web.StreamResponse
 @routes.get("/api/terminal/stats")
 async def handle_terminal_stats(request: web.Request) -> web.StreamResponse:
     user = get_current_user(request)
-    if not user:
-        return web.json_response({"error": "Unauthorized"}, status=401)
+    if not user or not _is_admin(user):
+        return web.json_response({"error": "Admin required"}, status=403)
 
     ip = str(request.query.get("ip", "")).strip()
     if not ip:
@@ -913,8 +914,8 @@ async def handle_terminal_ws(request: web.Request) -> web.StreamResponse:
         return _build_websocket_notice(request.path)
 
     user = get_current_user(request)
-    if not user:
-        return web.Response(status=401)
+    if not user or not _is_admin(user):
+        return web.Response(status=403)
 
     ws_client = web.WebSocketResponse(heartbeat=30.0, autoping=True, autoclose=True)
     await ws_client.prepare(request)

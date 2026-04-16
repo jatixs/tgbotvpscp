@@ -329,6 +329,8 @@ async def handle_nodes_list_json(request: web.Request) -> web.StreamResponse:
     user = await _require_user(request)
     if not user:
         return web.json_response({"error": "Unauthorized"}, status=401)
+    if not _is_admin(user):
+        return web.json_response({"error": "Admin required"}, status=403)
 
     all_nodes = await nodes_db.get_all_nodes()
     nodes_data: list[dict[str, Any]] = []
@@ -414,8 +416,8 @@ async def handle_node_delete(request: web.Request) -> web.StreamResponse:
 @routes.post("/api/nodes/rename")
 async def handle_node_rename(request: web.Request) -> web.StreamResponse:
     user = await _require_user(request)
-    if not user or int(user["id"]) != ADMIN_USER_ID:
-        return web.json_response({"error": "Only Main Admin required"}, status=403)
+    if not user or not _is_admin(user):
+        return web.json_response({"error": "Admin required"}, status=403)
 
     try:
         data = await request.json()
@@ -646,6 +648,8 @@ async def handle_nodes_monitor_detail(request: web.Request) -> web.StreamRespons
     user = await _require_user(request)
     if not user:
         return web.json_response({"error": "Unauthorized"}, status=401)
+    if not _is_admin(user):
+        return web.json_response({"error": "Admin required"}, status=403)
 
     token = decrypt_for_web(request.query.get("token"))
     if not token:
@@ -680,6 +684,8 @@ async def handle_nodes_monitor_services(request: web.Request) -> web.StreamRespo
     user = await _require_user(request)
     if not user:
         return web.json_response({"error": "Unauthorized"}, status=401)
+    if not _is_admin(user):
+        return web.json_response({"error": "Admin required"}, status=403)
 
     token = decrypt_for_web(request.query.get("token"))
     if not token:
