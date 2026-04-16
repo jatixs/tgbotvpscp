@@ -102,6 +102,15 @@ def is_allowed(user_id, command=None):
         "toggle_alert_bans",
         "alert_downtime_stub",
         "language",
+        "settings",
+        "backups",
+        "services",
+        # BUTTON_KEY aliases used by modules
+        "btn_uptime",
+        "btn_traffic",
+        "btn_selftest",
+        "btn_notifications",
+        "btn_backups",
     ]
     admin_only_commands = [
         "manage_users",
@@ -119,6 +128,15 @@ def is_allowed(user_id, command=None):
         "nodes",
         "node_add_new",
         "nodes_list_refresh",
+        "enable_services",
+        # BUTTON_KEY aliases used by modules
+        "btn_users",
+        "btn_speedtest",
+        "btn_top",
+        "btn_xray",
+        "btn_vless",
+        "btn_nodes",
+        "btn_services",
     ]
     root_only_commands = [
         "reboot_confirm",
@@ -129,6 +147,14 @@ def is_allowed(user_id, command=None):
         "restart",
         "update",
         "optimize",
+        # BUTTON_KEY aliases used by modules
+        "btn_sshlog",
+        "btn_fail2ban",
+        "btn_logs",
+        "btn_update",
+        "btn_restart",
+        "btn_reboot",
+        "btn_optimize",
     ]
     if command in user_commands:
         return True
