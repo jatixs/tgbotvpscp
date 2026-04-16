@@ -5,11 +5,18 @@
 <h1 align="center">📝 Telegram VPS Management Bot — Changelog</h1>
 
 <p align="center">
-    <img src="https://img.shields.io/badge/version-v1.22.0-blue?style=flat-square" alt="Version 1.22.0"/>
-    <img src="https://img.shields.io/badge/build-72-purple?style=flat-square" alt="Build 72"/>
-    <img src="https://img.shields.io/badge/date-April%2016%202026-green?style=flat-square" alt="Date April 16 2026"/>
+    <img src="https://img.shields.io/badge/version-v1.22.1-blue?style=flat-square" alt="Version 1.22.1"/>
+    <img src="https://img.shields.io/badge/build-73-purple?style=flat-square" alt="Build 73"/>
+    <img src="https://img.shields.io/badge/date-April%2017%202026-green?style=flat-square" alt="Date April 17 2026"/>
 	<img src="https://img.shields.io/badge/status-stable-green?style=flat-square" alt="Status Stable"/>
 </p>
+
+---
+## [1.22.1] - 2026-04-17
+
+### 🔧 Fixed:
+* **Dashboard:** Fixed encrypted raw value being displayed instead of the node name in the modal header (`dashboard.js` — added `decryptData` call for `data.name`).
+* **Bot:** Fixed flake8 F823 error in `bot.py` — the throwaway variable `_` in `for _, cfg in configurable` conflicted with the imported translation function `_`. Renamed to `_btn`.
 
 ---
 ## [1.22.0] - 2026-04-16
