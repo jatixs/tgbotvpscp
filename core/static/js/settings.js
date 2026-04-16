@@ -1274,7 +1274,7 @@ const btnCategories = {
     },
     "management": {
         titleKey: "web_kb_cat_management",
-        keys: ["enable_nodes", "enable_users", "enable_update", "enable_optimize"]
+        keys: ["enable_nodes", "enable_users", "enable_services", "enable_update", "enable_optimize"]
     },
     "system": {
         titleKey: "web_kb_cat_system",
@@ -1327,6 +1327,19 @@ function renderKeyboardPreview() {
     }
 }
 
+window.toggleCategoryKeyboard = async function (catKey) {
+    const catData = btnCategories[catKey];
+    if (!catData) return;
+    const keys = catData.keys.filter(k => KEYBOARD_CONFIG.hasOwnProperty(k));
+    const allEnabled = keys.length > 0 && keys.every(k => KEYBOARD_CONFIG[k]);
+    const newVal = !allEnabled;
+    keys.forEach(key => { KEYBOARD_CONFIG[key] = newVal; });
+    renderKeyboardModalContent();
+    renderKeyboardPreview();
+    updateBulkButtonsUI();
+    await triggerKeyboardSave(true);
+};
+
 function renderKeyboardModalContent() {
     const container = document.getElementById('keyboardModalContent');
     if (!container || typeof KEYBOARD_CONFIG === 'undefined') return;
@@ -1334,13 +1347,28 @@ function renderKeyboardModalContent() {
     let html = '';
     for (const [catKey, catData] of Object.entries(btnCategories)) {
         const categoryKeys = catData.keys.filter(k => KEYBOARD_CONFIG.hasOwnProperty(k));
-        if (categoryKeys.length > 0) {
-            const title = (typeof I18N !== 'undefined' && I18N[catData.titleKey]) ? I18N[catData.titleKey] : catKey;
-            html += `<div class="mb-2"><h4 class="text-sm font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3 ml-1">${title}</h4><div class="grid grid-cols-1 sm:grid-cols-2 gap-3">`;
-            categoryKeys.forEach(key => {
-                const enabled = KEYBOARD_CONFIG[key];
-                const label = (typeof I18N !== 'undefined' && I18N[`lbl_${key}`]) ? I18N[`lbl_${key}`] : key;
-                html += `
+        if (categoryKeys.length === 0) continue;
+
+        const title = (typeof I18N !== 'undefined' && I18N[catData.titleKey]) ? I18N[catData.titleKey] : catKey;
+        const enabledCount = categoryKeys.filter(k => KEYBOARD_CONFIG[k]).length;
+        const totalCount = categoryKeys.length;
+        const allOn = enabledCount === totalCount;
+        const badgeColor = enabledCount === 0
+            ? 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 border-red-200 dark:border-red-500/30 hover:bg-red-200 dark:hover:bg-red-900/50'
+            : allOn
+                ? 'bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400 border-green-200 dark:border-green-500/30 hover:bg-green-200 dark:hover:bg-green-900/50'
+                : 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-600 dark:text-yellow-400 border-yellow-200 dark:border-yellow-500/30 hover:bg-yellow-200 dark:hover:bg-yellow-900/50';
+
+        html += `<div class="mb-2">`;
+        html += `<div class="flex items-center justify-between mb-3">`;
+        html += `<h4 class="text-sm font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider ml-1">${title}</h4>`;
+        html += `<button onclick="toggleCategoryKeyboard('${catKey}')" class="text-xs px-2 py-0.5 rounded-full border transition ${badgeColor}">${enabledCount}/${totalCount}</button>`;
+        html += `</div>`;
+        html += `<div class="grid grid-cols-1 sm:grid-cols-2 gap-3">`;
+        categoryKeys.forEach(key => {
+            const enabled = KEYBOARD_CONFIG[key];
+            const label = (typeof I18N !== 'undefined' && I18N[`lbl_${key}`]) ? I18N[`lbl_${key}`] : key;
+            html += `
                 <div class="flex items-center justify-between bg-gray-50 dark:bg-black/20 p-3 rounded-xl hover:bg-gray-100 dark:hover:bg-black/30 transition border border-gray-200 dark:border-white/5 cursor-pointer select-none" onclick="document.getElementById('${key}').click(); triggerKeyboardSave();">
                     <span class="text-sm font-medium text-gray-900 dark:text-white truncate pr-2" title="${label}">${label}</span>
                     <label class="relative inline-flex items-center cursor-pointer flex-shrink-0" onclick="event.stopPropagation(); triggerKeyboardSave();">
@@ -1348,9 +1376,8 @@ function renderKeyboardModalContent() {
                         <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-blue-600"></div>
                     </label>
                 </div>`;
-            });
-            html += `</div></div><div class="h-px bg-gray-200 dark:bg-white/5 last:hidden"></div>`;
-        }
+        });
+        html += `</div></div><div class="h-px bg-gray-200 dark:bg-white/5 last:hidden"></div>`;
     }
     container.innerHTML = html;
 }
