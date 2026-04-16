@@ -116,6 +116,35 @@ def _render_html_response(template_name: str, context: dict[str, Any], request: 
     return response
 
 
+def _build_api_root_notice() -> web.Response:
+    return web.json_response(
+        {
+            "status": "info",
+            "message": "Это обычный HTTP/HTTPS-запрос. Базовый путь /api не отдает метрики или потоковые данные напрямую.",
+            "usage": "Используйте документированные endpoints из README.md и ARCHITECTURE.md.",
+            "routes": {
+                "auth": "/api/login/*, /api/auth/*, /api/sessions/*",
+                "nodes": "/api/heartbeat, /api/nodes/*",
+                "system": "/api/logs/*, /api/settings/*, /api/update/*, /api/notifications/*",
+                "services": "/api/services*",
+                "streaming": "/api/events*",
+                "terminal": "/api/terminal/*",
+            },
+            "note": "SSE endpoints require Accept: text/event-stream. WebSocket endpoint requires Upgrade: websocket.",
+        }
+    )
+
+
+@routes.get("/api")
+async def handle_api_root_no_slash(request: web.Request) -> web.StreamResponse:
+    return _build_api_root_notice()
+
+
+@routes.get("/api/")
+async def handle_api_root(request: web.Request) -> web.StreamResponse:
+    return _build_api_root_notice()
+
+
 @routes.get("/site.webmanifest")
 async def handle_manifest(request: web.Request) -> web.StreamResponse:
     await _ensure_generated_favicons()

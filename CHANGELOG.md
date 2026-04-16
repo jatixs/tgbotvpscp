@@ -5,11 +5,42 @@
 <h1 align="center">📝 Telegram VPS Management Bot — Список изменений</h1>
 
 <p align="center">
-	<img src="https://img.shields.io/badge/version-v1.21.0-blue?style=flat-square" alt="Version 1.21.0"/>
-	<img src="https://img.shields.io/badge/build-71-purple?style=flat-square" alt="Build 71"/>
-	<img src="https://img.shields.io/badge/date-Апрель%2008%202026-green?style=flat-square" alt="Date April 08 2026"/>
+    <img src="https://img.shields.io/badge/version-v1.22.0-blue?style=flat-square" alt="Version 1.22.0"/>
+    <img src="https://img.shields.io/badge/build-72-purple?style=flat-square" alt="Build 72"/>
+    <img src="https://img.shields.io/badge/date-Апрель%2016%202026-green?style=flat-square" alt="Date April 16 2026"/>
 	<img src="https://img.shields.io/badge/status-stable-green?style=flat-square" alt="Status Stable"/>
 </p>
+
+---
+## [1.22.0] - 2026-04-16
+
+### 🚀 Добавлено:
+* **Графики:** Добавлена поддержка `zoom` и `pan` для интерактивной навигации по графикам в WebUI.
+* **Графики:** На бэкенде подготовлена поддержка выбора периода отображения статистики для всех типов графиков.
+* **Статистика:** На бэкенде реализован сбор исторических метрик и ротация данных для будущей периодизации графиков.
+
+### ⚙️ Архитектура и рефакторинг:
+* **Core/Web:** Монолитный `core/server.py` декомпозирован на модульную структуру маршрутов в `core/web/` (`app.py`, `middlewares.py`, `auth.py`, `api_nodes.py`, `api_system.py`, `views.py`, `streaming.py`).
+* **Фоновые задачи:** Циклы `agent_monitor` и `cleanup_monitor` вынесены в `core/tasks.py`.
+* **Технический долг:** Удалено массивное дублирование кода и артефакты незавершенных git merge-конфликтов.
+
+### 🛡️ Безопасность:
+* **Web Terminal:** Закрыта SSRF-уязвимость в `handle_terminal_ws` за счет строгой валидации целевого IP только по зарегистрированным нодам.
+* **CSRF:** Внедрена глобальная защита `csrf_middleware` для всех mutating API endpoint-ов.
+* **Сессии:** Предотвращен Stored XSS через санитизацию заголовка `User-Agent` перед сохранением в сессию.
+* **Cookies:** Сессионные cookie усилены флагом `secure=True` для защиты от MitM-сценариев.
+* **Telegram Auth:** Снижено TTL токена авторизации Telegram с 24 часов до 15 минут для снижения риска replay-атак.
+* **Логи:** Исправлена уязвимость Symlink / Arbitrary File Deletion в `handle_clear_logs`.
+* **Пароли:** Проверка дефолтного пароля переведена на `PasswordHasher`, что устраняет риск timing-атак.
+
+### ⚡ Производительность и инфраструктура:
+* **SQLite:** Блокирующие запросы к `bot.db` обернуты в `asyncio.to_thread`, чтобы не блокировать Event Loop.
+* **Docker:** Порт веб-сервера закреплен на `127.0.0.1:8080:8080`, что исключает обход WAF/Rate Limit через прямой внешний доступ.
+* **Dependencies:** Зафиксированы строгие версии зависимостей в `requirements.txt`.
+
+### 🔧 Исправлено:
+* **UI:** Внесены визуальные правки бейджей сохранения (`save` badges).
+* **Документация:** Обновлены сопроводительные документы под новую архитектуру и релиз 1.22.0.
 
 ---
 ## [1.21.0] - 2026-04-08
@@ -547,7 +578,7 @@
 
 ### 🔧 Исправлено:
 
-* **Зависимости:** В `requirements.txt` добавлена библиотека `aiohttp`, необходимая для работы API-сервера.
+* **Зависимости:** В `requirements.txt` добавлена библиотека `aiohttp`, необходимая для работы API на базе aiohttp.
 * **Логирование:** Оптимизирована структура логов для режима Node-клиента.
 
 ---

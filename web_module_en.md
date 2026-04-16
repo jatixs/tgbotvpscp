@@ -39,7 +39,7 @@ core/messaging.py (Telegram notifications)
 
 ## 🚀 Option 1: Adding an API Endpoint
 
-If you need a REST API (JSON), add a handler to `core/web/api_system.py`.
+If you need a JSON API built on `aiohttp`, add a handler to `core/web/api_system.py`.
 
 ### Step 1: Create Handler
 

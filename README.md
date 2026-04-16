@@ -129,7 +129,7 @@
 │  🤖 Telegram Bot (Main Agent)                   │
 │  ├── 📊 SQLite DB (nodes, users, metrics)       │
 │  ├── 🌐 Web Dashboard (Aiohttp + SSE)            │
-│  ├── 🔌 API Server (REST + Real-time)           │
+│  ├── 🔌 API на базе aiohttp (HTTP + Real-time)  │
 │  └── ⏰ Background Tasks (monitoring, alerts)    │
 └─────────────────────────────────────────────────┘
               ↓         ↓         ↓
@@ -253,6 +253,74 @@ http://YOUR_SERVER_IP:8080
 - Node logs (для каждой ноды отдельно)
 - Audit logs (события безопасности)
 
+### API Endpoints
+
+**Важно:**
+- `GET /api` и `GET /api/` возвращают JSON-индекс с описанием групп маршрутов и не отдают метрики.
+- `GET /api/events`, `GET /api/events/logs`, `GET /api/events/node`, `GET /api/events/services` являются внутренними SSE-потоками и не предназначены для прямого открытия в браузере.
+- Для SSE требуется клиент с заголовком `Accept: text/event-stream` (`EventSource` в WebUI).
+- `GET /api/terminal/ws` является внутренним WebSocket endpoint и для обычного HTTP-запроса возвращает `426 Upgrade Required`.
+
+**Auth API:**
+- `POST /api/login/request` — запрос magic link через Telegram
+- `POST /api/login/password` — вход по логину и паролю
+- `GET /api/login/magic` — вход по magic link
+- `POST /api/auth/telegram` — вход через Telegram widget
+- `POST /api/login/reset` — запрос сброса пароля
+- `POST /api/reset/confirm` — подтверждение сброса пароля
+- `GET /api/security/telegram_only_mode` — текущее состояние режима Telegram-only
+- `POST /api/security/telegram_only_mode` — переключение режима Telegram-only
+- `GET /api/sessions/list` — список активных веб-сессий
+- `POST /api/sessions/revoke` — отзыв одной сессии
+- `POST /api/sessions/revoke_all` — отзыв всех остальных сессий
+- `POST /api/settings/password` — смена пароля веб-панели
+
+**Node API:**
+- `GET /api/heartbeat` — health probe для агента/нод
+- `POST /api/heartbeat` — heartbeat от ноды с HMAC-подписью
+- `GET /api/nodes/list` — список нод
+- `POST /api/nodes/add` — добавить ноду
+- `POST /api/nodes/delete` — удалить ноду
+- `POST /api/nodes/rename` — переименовать ноду
+- `GET /api/nodes/monitor/list` — данные страницы мониторинга
+- `GET /api/nodes/monitor/detail?token=...` — детали конкретной ноды
+- `GET /api/nodes/monitor/services?token=...` — сервисы конкретной ноды
+- `POST /api/nodes/monitor/command` — отправить команду на ноду
+- `POST /api/nodes/monitor/service_action` — действие над сервисом ноды
+
+**System API:**
+- `GET /api/logs` — последние строки bot log
+- `GET /api/logs/system` — системные логи
+- `POST /api/logs/clear` — очистка логов
+- `POST /api/settings/save` — сохранение настроек уведомлений
+- `POST /api/settings/system` — сохранение системных порогов
+- `POST /api/settings/keyboard` — сохранение конфигурации клавиатуры
+- `POST /api/settings/metadata` — сохранение web metadata
+- `POST /api/settings/language` — смена языка WebUI
+- `POST /api/users/action` — управление пользователями
+- `GET /api/update/check` — проверка обновлений
+- `POST /api/update/run` — запуск обновления
+- `GET /api/notifications/list` — список уведомлений
+- `POST /api/notifications/read` — отметить уведомления прочитанными
+- `POST /api/notifications/clear` — очистить уведомления
+- `POST /api/traffic/reset` — сброс статистики трафика
+- `GET /api/services` — список управляемых сервисов
+- `GET /api/services/available` — список доступных сервисов
+- `GET /api/services/info/{name}` — информация о сервисе
+- `POST /api/services/{action}` — действие над сервисом (`start|stop|restart`)
+- `POST /api/services/manage` — добавить или удалить сервис из мониторинга
+
+**Streaming / Internal API:**
+- `GET /api/events` — основной SSE поток dashboard
+- `GET /api/events/logs` — SSE поток логов
+- `GET /api/events/node` — SSE поток детальной карточки ноды
+- `GET /api/events/services` — SSE поток менеджера сервисов
+- `GET /api/agent/ipv4` — список IPv4 адресов агента
+- `GET /api/terminal/creds` — загрузка сохраненных SSH credentials
+- `POST /api/terminal/creds` — сохранение SSH credentials
+- `GET /api/terminal/stats` — статистика сервера для web terminal
+- `GET /api/terminal/ws` — WebSocket endpoint терминала
+
 ### PWA Features
 
 **Установка как приложение:**
@@ -344,8 +412,8 @@ http://YOUR_SERVER_IP:8080
 │   │   ├── app.py           # Маршруты и инициализация
 │   │   ├── auth.py          # Web-авторизация (пароль/magic link/Telegram)
 │   │   ├── middlewares.py   # WAF, CSRF, Rate Limiting
-│   │   ├── api_nodes.py     # REST API нод
-│   │   ├── api_system.py    # REST API системы
+│   │   ├── api_nodes.py     # API нод на базе aiohttp
+│   │   ├── api_system.py    # Системный API на базе aiohttp
 │   │   ├── streaming.py     # SSE потоки
 │   │   └── views.py         # Jinja2 HTML страницы
 │   ├── static/              # CSS, JS

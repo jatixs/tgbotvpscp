@@ -39,7 +39,7 @@ core/messaging.py (Telegram уведомления)
 
 ## 🚀 Вариант 1: Добавление API-эндпоинта
 
-Если вам нужен REST API (JSON), добавьте хендлер в `core/web/api_system.py`.
+Если вам нужен JSON API на базе `aiohttp`, добавьте хендлер в `core/web/api_system.py`.
 
 ### Шаг 1: Создание хендлера
 

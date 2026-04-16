@@ -256,6 +256,74 @@ http://YOUR_SERVER_IP:8080
 - Node logs (separate for each node)
 - Audit logs (security events)
 
+### API Endpoints
+
+**Important:**
+- `GET /api` and `GET /api/` return a JSON index with route groups and do not expose metrics.
+- `GET /api/events`, `GET /api/events/logs`, `GET /api/events/node`, and `GET /api/events/services` are internal SSE streams and are not meant to be opened directly in a browser.
+- SSE endpoints require a client that sends `Accept: text/event-stream` (`EventSource` in WebUI).
+- `GET /api/terminal/ws` is an internal WebSocket endpoint and returns `426 Upgrade Required` for a regular HTTP request.
+
+**Auth API:**
+- `POST /api/login/request` — request a magic link via Telegram
+- `POST /api/login/password` — login with username and password
+- `GET /api/login/magic` — login via magic link
+- `POST /api/auth/telegram` — login via Telegram widget
+- `POST /api/login/reset` — request password reset
+- `POST /api/reset/confirm` — confirm password reset
+- `GET /api/security/telegram_only_mode` — get Telegram-only mode state
+- `POST /api/security/telegram_only_mode` — toggle Telegram-only mode
+- `GET /api/sessions/list` — list active web sessions
+- `POST /api/sessions/revoke` — revoke one session
+- `POST /api/sessions/revoke_all` — revoke all other sessions
+- `POST /api/settings/password` — change web panel password
+
+**Node API:**
+- `GET /api/heartbeat` — health probe for agent/node
+- `POST /api/heartbeat` — node heartbeat with HMAC signature
+- `GET /api/nodes/list` — list nodes
+- `POST /api/nodes/add` — add node
+- `POST /api/nodes/delete` — delete node
+- `POST /api/nodes/rename` — rename node
+- `GET /api/nodes/monitor/list` — monitoring page data
+- `GET /api/nodes/monitor/detail?token=...` — specific node details
+- `GET /api/nodes/monitor/services?token=...` — specific node services
+- `POST /api/nodes/monitor/command` — send command to node
+- `POST /api/nodes/monitor/service_action` — perform node service action
+
+**System API:**
+- `GET /api/logs` — bot log tail
+- `GET /api/logs/system` — system logs
+- `POST /api/logs/clear` — clear logs
+- `POST /api/settings/save` — save alert settings
+- `POST /api/settings/system` — save system thresholds
+- `POST /api/settings/keyboard` — save keyboard configuration
+- `POST /api/settings/metadata` — save web metadata
+- `POST /api/settings/language` — switch WebUI language
+- `POST /api/users/action` — manage users
+- `GET /api/update/check` — check updates
+- `POST /api/update/run` — run update
+- `GET /api/notifications/list` — list notifications
+- `POST /api/notifications/read` — mark notifications as read
+- `POST /api/notifications/clear` — clear notifications
+- `POST /api/traffic/reset` — reset traffic statistics
+- `GET /api/services` — managed services list
+- `GET /api/services/available` — available services list
+- `GET /api/services/info/{name}` — service info
+- `POST /api/services/{action}` — service action (`start|stop|restart`)
+- `POST /api/services/manage` — add or remove service from monitoring
+
+**Streaming / Internal API:**
+- `GET /api/events` — main dashboard SSE stream
+- `GET /api/events/logs` — logs SSE stream
+- `GET /api/events/node` — node details SSE stream
+- `GET /api/events/services` — service manager SSE stream
+- `GET /api/agent/ipv4` — agent IPv4 list
+- `GET /api/terminal/creds` — load saved SSH credentials
+- `POST /api/terminal/creds` — save SSH credentials
+- `GET /api/terminal/stats` — server stats for web terminal
+- `GET /api/terminal/ws` — terminal WebSocket endpoint
+
 ### PWA Features
 
 **Install as app:**
@@ -347,8 +415,8 @@ Automatic detection:
 │   │   ├── app.py           # Routes & init
 │   │   ├── auth.py          # Web auth (password/magic link/Telegram)
 │   │   ├── middlewares.py   # WAF, CSRF, Rate Limiting
-│   │   ├── api_nodes.py     # Nodes REST API
-│   │   ├── api_system.py    # System REST API
+│   │   ├── api_nodes.py     # aiohttp-based node API
+│   │   ├── api_system.py    # aiohttp-based system API
 │   │   ├── streaming.py     # SSE streams
 │   │   └── views.py         # Jinja2 HTML pages
 │   ├── static/              # CSS, JS
