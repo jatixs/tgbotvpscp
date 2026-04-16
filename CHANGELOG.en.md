@@ -18,11 +18,13 @@
 * **Charts:** Added `zoom` and `pan` support for interactive chart navigation in the WebUI.
 * **Charts:** Prepared backend support for selectable time ranges across all chart types.
 * **Statistics:** Implemented backend historical metric collection and rotation logic for future chart periodization.
+* **Bot Menu / WebUI:** Category sections are now automatically hidden when all buttons within them are disabled by the user (supported in both the bot and the WebUI settings page).
 
 ### ⚙️ Architecture & Refactoring:
 * **Core/Web:** Decomposed the monolithic `core/server.py` into a modular routing layer under `core/web/` (`app.py`, `middlewares.py`, `auth.py`, `api_nodes.py`, `api_system.py`, `views.py`, `streaming.py`).
 * **Background Tasks:** Extracted `agent_monitor` and `cleanup_monitor` loops into `core/tasks.py`.
 * **Technical Debt:** Removed massive code duplication and unresolved git merge artifacts.
+* **RBAC:** Created a centralized `core/rbac.py` module with a role model (`ROLE_USER` / `ROLE_ADMIN`). All web modules (`api_nodes.py`, `api_system.py`, `streaming.py`) have been migrated to use it instead of scattered ad-hoc checks.
 
 ### 🛡️ Security:
 * **Web Terminal:** Fixed SSRF in `handle_terminal_ws` by strictly validating the target IP against registered nodes only.
@@ -32,15 +34,18 @@
 * **Telegram Auth:** Reduced Telegram auth token TTL from 24 hours to 15 minutes to mitigate replay attacks.
 * **Logs:** Fixed the Symlink / Arbitrary File Deletion vulnerability in `handle_clear_logs`.
 * **Passwords:** Reworked default password validation to use `PasswordHasher`, mitigating timing attacks.
+* **Auth:** Fixed fail-open in `core/auth.py` — `is_allowed()` now returns `False` by default instead of `True`; added `btn_*` aliases for all commands to their respective role lists; fixed the `"fall2ban"` → `"fail2ban"` typo in the root-only commands list.
 
 ### ⚡ Performance & Infrastructure:
 * **SQLite:** Wrapped blocking `bot.db` queries in `asyncio.to_thread` to avoid blocking the Event Loop.
-* **Docker:** Secured web server port binding to `127.0.0.1:8080:8080`, preventing direct bypass of WAF and rate limiting.
+* **Docker:** Secured web server port binding to `127.0.0.1:8080:8080`, preventing direct bypass of WAF and rate limiting. (thanks [@artemkaa_2001](https://github.com/artemkaa2001)).
 * **Dependencies:** Pinned strict dependency versions in `requirements.txt`.
 
 ### 🔧 Fixed:
 * **UI:** Applied miscellaneous visual fixes for `save` badges.
 * **Documentation:** Updated project documentation to match the new architecture and the 1.22.0 release.
+* **Backups:** Fixed 8 logical bugs in `modules/backups.py`: removed a broken `delete_previous_message` stub; fixed the `IS_SERVER_REBOOT` flag during manual traffic restore; fixed text rendering order (title before explanation) in menus; `backup_interval_reset` now preserves the ON/OFF timer state; fixed incorrect `BACKUP_LAST_INTERVAL` decrement; removed duplicate auth check in `_refresh_timer_settings`.
+* **Nodes — duplicate alerts:** Fixed duplicate `alert_agent_down` / `alert_agent_recovered` notifications in `node/node.py`. Added `AGENT_STABLE_SINCE`: a recovery alert is only sent after the agent has been consistently reachable for `AGENT_ALERT_DELAY_SECONDS`; any failure resets the stability window without touching the original `AGENT_DOWN_SINCE`.
 
 ---
 ## [1.21.0] - 2026-04-08
