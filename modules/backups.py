@@ -14,7 +14,6 @@ from core import i18n as i18n_module
 from core import config
 from core import utils as core_utils
 from core.auth import is_allowed, send_access_denied_message
-from core.messaging import delete_previous_message
 from core.shared_state import LAST_MESSAGE_IDS
 from core.keyboards import get_backups_menu_keyboard, get_backup_timer_settings_keyboard
 from core.utils import format_traffic
@@ -100,14 +99,14 @@ def _create_zip_from_dir(backup_dir: str, prefix: str, source_dir: str, skip_dir
 
 def _create_backup_file(backup_type: str):
     if backup_type == "traffic":
-        before = set(_list_backup_files("traffic"))
         rx, tx = traffic_module.get_current_traffic_total()
+        timestamp = int(time.time())
         traffic_module.save_backup_file(rx, tx)
-        after = _list_backup_files("traffic")
-        for path in after:
-            if path not in before:
-                return path
-        return after[0] if after else None
+        expected = os.path.join(config.TRAFFIC_BACKUP_DIR, f"traffic_backup_{timestamp}.json")
+        if os.path.exists(expected):
+            return expected
+        files = _list_backup_files("traffic")
+        return files[0] if files else None
 
     if backup_type == "config":
         created = _create_zip_from_dir(config.CONFIG_BACKUP_DIR, "config", config.CONFIG_DIR)
@@ -189,9 +188,7 @@ def _adjust_backup_interval(direction: int) -> int:
         else:
             new_value = current * 2
     else:
-        if current < BACKUP_INTERVAL_STEP:
-            new_value = 0
-        elif current <= BACKUP_INTERVAL_STEP:
+        if current <= BACKUP_INTERVAL_STEP:
             new_value = 0
         elif current <= BACKUP_INTERVAL_THRESHOLD:
             new_value = current - BACKUP_INTERVAL_STEP
@@ -199,9 +196,12 @@ def _adjust_backup_interval(direction: int) -> int:
             new_value = current // 2
 
     new_value = _normalize_interval(new_value)
-    payload = {"BACKUP_INTERVAL": new_value}
+    payload: dict = {"BACKUP_INTERVAL": new_value}
     if new_value >= BACKUP_INTERVAL_STEP:
         payload["BACKUP_LAST_INTERVAL"] = new_value
+    elif current >= BACKUP_INTERVAL_STEP:
+        # Going from enabled to 0 via "-" — preserve last known enabled interval for toggle-on
+        payload["BACKUP_LAST_INTERVAL"] = current
     config.save_system_config(payload)
     return new_value
 
@@ -295,7 +295,8 @@ def _restore_backup_file(backup_type: str, filepath: str) -> bool:
         counters = psutil.net_io_counters()
         traffic_module.TRAFFIC_OFFSET["rx"] = backup_rx - counters.bytes_recv
         traffic_module.TRAFFIC_OFFSET["tx"] = backup_tx - counters.bytes_sent
-        traffic_module.IS_SERVER_REBOOT = True
+        # Manual restore uses bot-restart accounting (counters not reset), not server-reboot mode
+        traffic_module.IS_SERVER_REBOOT = False
         traffic_module.save_backup_file(backup_rx, backup_tx)
         return True
 
@@ -427,13 +428,6 @@ async def backups_main_menu_handler(message: types.Message):
         await send_access_denied_message(message.bot, user_id, chat_id, "settings")
         return
 
-    await delete_previous_message(
-        user_id,
-        list(LAST_MESSAGE_IDS.get(user_id, {}).keys()),
-        chat_id,
-        message.bot,
-    )
-
     text = _get_backups_menu_text(lang)
     kb = get_backups_menu_keyboard(lang, get_text("backup_interval_value", lang, value=_get_auto_interval_label(lang)))
     
@@ -459,7 +453,7 @@ async def backup_interval_inc_handler(callback: types.CallbackQuery):
 
     new_value = _adjust_backup_interval(1)
     await callback.answer(get_text("backup_interval_changed", lang, value=_format_interval_human(new_value, lang)))
-    await backup_timer_settings_handler(callback)
+    await _refresh_timer_settings(callback)
 
 
 async def backup_interval_dec_handler(callback: types.CallbackQuery):
@@ -474,7 +468,15 @@ async def backup_interval_dec_handler(callback: types.CallbackQuery):
         await callback.answer(get_text("backup_interval_disabled_notice", lang))
     else:
         await callback.answer(get_text("backup_interval_changed", lang, value=_format_interval_human(new_value, lang)))
-    await backup_timer_settings_handler(callback)
+    await _refresh_timer_settings(callback)
+
+
+async def _refresh_timer_settings(callback: types.CallbackQuery):
+    """Re-render the timer settings view without re-checking auth."""
+    lang = get_user_lang(callback.from_user.id)
+    text = _get_timer_settings_text(lang)
+    kb = get_backup_timer_settings_keyboard(lang, _is_autobackup_enabled())
+    await callback.message.edit_text(text, reply_markup=kb, parse_mode="HTML")
 
 
 async def backup_timer_settings_handler(callback: types.CallbackQuery):
@@ -483,10 +485,7 @@ async def backup_timer_settings_handler(callback: types.CallbackQuery):
     if not _is_settings_allowed(user_id):
         await callback.answer(get_text("access_denied_generic", lang), show_alert=True)
         return
-
-    text = _get_timer_settings_text(lang)
-    kb = get_backup_timer_settings_keyboard(lang, _is_autobackup_enabled())
-    await callback.message.edit_text(text, reply_markup=kb, parse_mode="HTML")
+    await _refresh_timer_settings(callback)
 
 
 async def backup_toggle_enabled_handler(callback: types.CallbackQuery):
@@ -501,7 +500,7 @@ async def backup_toggle_enabled_handler(callback: types.CallbackQuery):
         await callback.answer(get_text("backup_toggle_enabled_toast", lang, value=_format_interval_human(value, lang)))
     else:
         await callback.answer(get_text("backup_toggle_disabled_toast", lang))
-    await backup_timer_settings_handler(callback)
+    await _refresh_timer_settings(callback)
 
 
 async def backup_interval_noop_handler(callback: types.CallbackQuery):
@@ -525,10 +524,14 @@ async def backup_interval_reset_handler(callback: types.CallbackQuery):
         await callback.answer(get_text("access_denied_generic", lang), show_alert=True)
         return
 
-    default_value = int(config.DEFAULT_CONFIG.get("BACKUP_INTERVAL", 300))
-    config.save_system_config({"BACKUP_INTERVAL": default_value})
-    await callback.answer(get_text("backup_interval_reset_done", lang, value=_format_interval_human(default_value, lang)))
-    await backup_timer_settings_handler(callback)
+    default_interval = int(config.DEFAULT_CONFIG.get("BACKUP_INTERVAL", 300))
+    was_enabled = _is_autobackup_enabled()
+    # Reset interval value but preserve enabled/disabled state
+    payload: dict = {"BACKUP_LAST_INTERVAL": default_interval}
+    payload["BACKUP_INTERVAL"] = default_interval if was_enabled else 0
+    config.save_system_config(payload)
+    await callback.answer(get_text("backup_interval_reset_done", lang, value=_format_interval_human(default_interval, lang)))
+    await _refresh_timer_settings(callback)
 
 
 async def open_backup_delete_menu_handler(callback: types.CallbackQuery):
@@ -581,9 +584,9 @@ async def _show_backup_ui(callback: types.CallbackQuery, backup_type: str):
     auto_interval = _get_auto_interval_label(lang)
     backups = _list_backup_files(backup_type)
     cfg = BACKUP_TYPES[backup_type]
-    explanation = get_text(cfg["explanation_key"], lang, auto_interval=auto_interval)
     header = get_text(cfg["title_key"], lang)
-    text = f"{explanation}\n{header}\n"
+    explanation = get_text(cfg["explanation_key"], lang, auto_interval=auto_interval)
+    text = f"{header}\n{explanation}"
 
     buttons = []
 
@@ -732,4 +735,8 @@ async def restore_backup_handler(callback: types.CallbackQuery):
     await _show_backup_ui(callback, backup_type)
 
 async def close_menu_handler(callback: types.CallbackQuery):
-    await callback.message.delete()
+    await callback.answer()
+    try:
+        await callback.message.delete()
+    except Exception:
+        pass

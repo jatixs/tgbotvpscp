@@ -5,12 +5,12 @@
 <h1 align="center">🤖 VPS Manager Telegram Bot</h1>
 
 <p align="center">
-  <b>v1.21.0</b> — профессиональная экосистема для мониторинга и управления серверной инфраструктурой<br>
+  <b>v1.22.0</b> — профессиональная экосистема для мониторинга и управления серверной инфраструктурой<br>
 </p>
 
 <p align="center">
-  <a href="https://github.com/jatixs/tgbotvpscp/releases/latest"><img src="https://img.shields.io/badge/version-v1.21.0-blue?style=flat-square" alt="Version 1.21.0"/></a>
-  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/build-70-purple?style=flat-square" alt="Build 70"/></a>
+  <a href="https://github.com/jatixs/tgbotvpscp/releases/latest"><img src="https://img.shields.io/badge/version-v1.22.0-blue?style=flat-square" alt="Version 1.22.0"/></a>
+  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/build-72-purple?style=flat-square" alt="Build 72"/></a>
   <a href="https://www.python.org/"><img src="https://img.shields.io/badge/python-3.10%2B-green?style=flat-square" alt="Python 3.10+"/></a>
   <a href="https://choosealicense.com/licenses/gpl-3.0/"><img src="https://img.shields.io/badge/license-GPL--3.0-lightgrey?style=flat-square" alt="License GPL-3.0"/></a>
   <a href="https://github.com/aiogram/aiogram"><img src="https://img.shields.io/badge/aiogram-3.x-orange?style=flat-square" alt="Aiogram 3.x"/></a>
@@ -129,7 +129,7 @@
 │  🤖 Telegram Bot (Main Agent)                   │
 │  ├── 📊 SQLite DB (nodes, users, metrics)       │
 │  ├── 🌐 Web Dashboard (Aiohttp + SSE)            │
-│  ├── 🔌 API Server (REST + Real-time)           │
+│  ├── 🔌 API на базе aiohttp (HTTP + Real-time)  │
 │  └── ⏰ Background Tasks (monitoring, alerts)    │
 └─────────────────────────────────────────────────┘
               ↓         ↓         ↓
@@ -253,6 +253,74 @@ http://YOUR_SERVER_IP:8080
 - Node logs (для каждой ноды отдельно)
 - Audit logs (события безопасности)
 
+### API Endpoints
+
+**Важно:**
+- `GET /api` и `GET /api/` возвращают JSON-индекс с описанием групп маршрутов и не отдают метрики.
+- `GET /api/events`, `GET /api/events/logs`, `GET /api/events/node`, `GET /api/events/services` являются внутренними SSE-потоками и не предназначены для прямого открытия в браузере.
+- Для SSE требуется клиент с заголовком `Accept: text/event-stream` (`EventSource` в WebUI).
+- `GET /api/terminal/ws` является внутренним WebSocket endpoint и для обычного HTTP-запроса возвращает `426 Upgrade Required`.
+
+**Auth API:**
+- `POST /api/login/request` — запрос magic link через Telegram
+- `POST /api/login/password` — вход по логину и паролю
+- `GET /api/login/magic` — вход по magic link
+- `POST /api/auth/telegram` — вход через Telegram widget
+- `POST /api/login/reset` — запрос сброса пароля
+- `POST /api/reset/confirm` — подтверждение сброса пароля
+- `GET /api/security/telegram_only_mode` — текущее состояние режима Telegram-only
+- `POST /api/security/telegram_only_mode` — переключение режима Telegram-only
+- `GET /api/sessions/list` — список активных веб-сессий
+- `POST /api/sessions/revoke` — отзыв одной сессии
+- `POST /api/sessions/revoke_all` — отзыв всех остальных сессий
+- `POST /api/settings/password` — смена пароля веб-панели
+
+**Node API:**
+- `GET /api/heartbeat` — health probe для агента/нод
+- `POST /api/heartbeat` — heartbeat от ноды с HMAC-подписью
+- `GET /api/nodes/list` — список нод
+- `POST /api/nodes/add` — добавить ноду
+- `POST /api/nodes/delete` — удалить ноду
+- `POST /api/nodes/rename` — переименовать ноду
+- `GET /api/nodes/monitor/list` — данные страницы мониторинга
+- `GET /api/nodes/monitor/detail?token=...` — детали конкретной ноды
+- `GET /api/nodes/monitor/services?token=...` — сервисы конкретной ноды
+- `POST /api/nodes/monitor/command` — отправить команду на ноду
+- `POST /api/nodes/monitor/service_action` — действие над сервисом ноды
+
+**System API:**
+- `GET /api/logs` — последние строки bot log
+- `GET /api/logs/system` — системные логи
+- `POST /api/logs/clear` — очистка логов
+- `POST /api/settings/save` — сохранение настроек уведомлений
+- `POST /api/settings/system` — сохранение системных порогов
+- `POST /api/settings/keyboard` — сохранение конфигурации клавиатуры
+- `POST /api/settings/metadata` — сохранение web metadata
+- `POST /api/settings/language` — смена языка WebUI
+- `POST /api/users/action` — управление пользователями
+- `GET /api/update/check` — проверка обновлений
+- `POST /api/update/run` — запуск обновления
+- `GET /api/notifications/list` — список уведомлений
+- `POST /api/notifications/read` — отметить уведомления прочитанными
+- `POST /api/notifications/clear` — очистить уведомления
+- `POST /api/traffic/reset` — сброс статистики трафика
+- `GET /api/services` — список управляемых сервисов
+- `GET /api/services/available` — список доступных сервисов
+- `GET /api/services/info/{name}` — информация о сервисе
+- `POST /api/services/{action}` — действие над сервисом (`start|stop|restart`)
+- `POST /api/services/manage` — добавить или удалить сервис из мониторинга
+
+**Streaming / Internal API:**
+- `GET /api/events` — основной SSE поток dashboard
+- `GET /api/events/logs` — SSE поток логов
+- `GET /api/events/node` — SSE поток детальной карточки ноды
+- `GET /api/events/services` — SSE поток менеджера сервисов
+- `GET /api/agent/ipv4` — список IPv4 адресов агента
+- `GET /api/terminal/creds` — загрузка сохраненных SSH credentials
+- `POST /api/terminal/creds` — сохранение SSH credentials
+- `GET /api/terminal/stats` — статистика сервера для web terminal
+- `GET /api/terminal/ws` — WebSocket endpoint терминала
+
 ### PWA Features
 
 **Установка как приложение:**
@@ -329,23 +397,36 @@ http://YOUR_SERVER_IP:8080
 ├── Dockerfile               # Образ контейнера
 ├── deploy.sh                # Установщик
 ├── core/                    # Ядро системы
-│   ├── server.py            # Web-сервер + API
+│   ├── config.py            # Загрузка конфигурации
 │   ├── auth.py              # Авторизация
 │   ├── i18n.py              # Мультиязычность
 │   ├── keyboards.py         # UI генератор
 │   ├── messaging.py         # Уведомления
-│   ├── utils.py             # Утилиты
+│   ├── middlewares.py       # Middleware бота
+│   ├── models.py            # ORM модели (Tortoise)
 │   ├── nodes_db.py          # База данных нод
+│   ├── shared_state.py      # Мост Bot ↔ Web
+│   ├── tasks.py             # Фоновые задачи
+│   ├── utils.py             # Утилиты
+│   ├── web/                 # Web-слой (aiohttp)
+│   │   ├── app.py           # Маршруты и инициализация
+│   │   ├── auth.py          # Web-авторизация (пароль/magic link/Telegram)
+│   │   ├── middlewares.py   # WAF, CSRF, Rate Limiting
+│   │   ├── api_nodes.py     # API нод на базе aiohttp
+│   │   ├── api_system.py    # Системный API на базе aiohttp
+│   │   ├── streaming.py     # SSE потоки
+│   │   └── views.py         # Jinja2 HTML страницы
 │   ├── static/              # CSS, JS
 │   └── templates/           # HTML шаблоны
-├── modules/                 # Функциональные модули
+├── modules/                 # Функциональные модули (18 модулей)
 │   ├── selftest.py          # Сводка о сервере
 │   ├── traffic.py           # Мониторинг трафика
 │   ├── services.py          # Менеджер сервисов
 │   ├── nodes.py             # Управление нодами
 │   ├── users.py             # Управление пользователями
+│   ├── backups.py           # Менеджер бэкапов
 │   ├── notifications.py     # Фоновые алерты
-│   └── ...                  # +15 модулей
+│   └── ...                  # +11 модулей
 └── node/                    # Клиент для удаленных серверов
     └── node.py              # Агент ноды
 ```
@@ -359,7 +440,8 @@ http://YOUR_SERVER_IP:8080
 ### Руководства
 
 - 📘 [**ARCHITECTURE.md**](ARCHITECTURE.md) — Полная архитектура проекта
-- 🧩 [**custom_module.md**](custom_module.md) — Создание своего модуля
+- 🧩 [**custom_module.md**](custom_module.md) — Создание модуля для бота
+- 🌐 [**web_module.md**](web_module.md) — Создание веб-модуля (WebUI + Бот)
 - 📝 [**CHANGELOG.md**](CHANGELOG.md) — История изменений
 
 ### Полезные команды
@@ -523,8 +605,8 @@ python bot.py
 ---
 
 <p align="center">
-  <b>Версия:</b> 1.21.0 (Build 71)<br>
-  <b>Дата обновления:</b> 3 Февраля 2026 г.<br>
+  <b>Версия:</b> 1.22.0 (Build 72)<br>
+  <b>Дата обновления:</b> 15 Апреля 2026 г.<br>
   <b>Статус:</b> Релиз<br>
   <br>
   Сделано с ❤️ для сообщества DevOps
