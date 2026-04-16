@@ -1062,7 +1062,7 @@ window.notifGoBack = function() {
 function renderNotifNodesList() {
     const container = document.getElementById('notifNodesListContainer');
     if (!container || !NODES_DATA || NODES_DATA.length === 0) {
-        container.innerHTML = `<div class="text-center text-gray-500 py-4">${I18N.web_no_nodes || 'No nodes'}</div>`;
+        container.innerHTML = `<div class="text-center text-gray-500 py-4">${I18N.web_no_nodes || ''}</div>`;
         return;
     }
 
@@ -1113,9 +1113,9 @@ function renderNotifNodeDetail() {
         return USER_ALERTS ? USER_ALERTS[type] || false : false;
     };
 
-    const tDowntime = I18N.notifications_alert_name_downtime || 'Downtime';
-    const tRes = I18N.notifications_alert_name_res || 'Resources';
-    const tLogins = I18N.notifications_alert_name_logins || 'SSH Auth';
+    const tDowntime = I18N.notifications_alert_name_downtime || '';
+    const tRes = I18N.notifications_alert_name_res || '';
+    const tLogins = I18N.notifications_alert_name_logins || '';
 
     container.innerHTML = `
         <div class="flex items-center justify-between bg-gray-50 dark:bg-black/20 p-4 rounded-xl hover:bg-gray-100 dark:hover:bg-black/30 transition border border-gray-200 dark:border-white/5 cursor-pointer" onclick="document.getElementById('n_alert_${t}_downtime').click()">
@@ -1218,7 +1218,7 @@ function showNotifStatus(message, state = 'neutral', autoHideMs = 1800, scope = 
 }
 
 async function triggerAutoSave(scope = 'agent') {
-    showNotifStatus((typeof I18N !== 'undefined' && I18N.web_saving_btn) ? I18N.web_saving_btn : 'Saving...', 'neutral', 0, scope);
+    showNotifStatus((typeof I18N !== 'undefined' && I18N.web_saving_btn) ? I18N.web_saving_btn : '', 'neutral', 0, scope);
 
     const data = {
         resources: document.getElementById('alert_resources')?.checked || false,
@@ -1253,13 +1253,13 @@ async function triggerAutoSave(scope = 'agent') {
         });
 
         if (res.ok) {
-            showNotifStatus((typeof I18N !== 'undefined' && I18N.web_saved_btn) ? I18N.web_saved_btn : 'Saved!', 'success', 1600, scope);
+            showNotifStatus((typeof I18N !== 'undefined' && I18N.web_saved_btn) ? I18N.web_saved_btn : '', 'success', 1600, scope);
         } else {
-            showNotifStatus((typeof I18N !== 'undefined' && I18N.web_error_short) ? I18N.web_error_short : 'Error', 'error', 2500, scope);
+            showNotifStatus((typeof I18N !== 'undefined' && I18N.web_error_short) ? I18N.web_error_short : '', 'error', 2500, scope);
         }
     } catch (e) {
         console.error(e);
-        showNotifStatus((typeof I18N !== 'undefined' && I18N.web_conn_error_short) ? I18N.web_conn_error_short : 'Conn Error', 'error', 2500, scope);
+        showNotifStatus((typeof I18N !== 'undefined' && I18N.web_conn_error_short) ? I18N.web_conn_error_short : '', 'error', 2500, scope);
     }
 }
 

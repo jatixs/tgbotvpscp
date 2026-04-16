@@ -296,7 +296,7 @@ async def handle_dashboard(request: web.Request) -> web.StreamResponse:
         ]
         nodes_json = json.dumps(nlist)
 
-    vnc_nodes = [{"name": _("web_notif_global_group_agent", lang) or "Agent", "ip": _agent_ip()}]
+    vnc_nodes = [{"name": _("web_notif_global_group_agent", lang), "ip": _agent_ip()}]
     for node_token, node in all_nodes.items():
         ip = node.get("ip", "")
         if ip:
@@ -315,7 +315,7 @@ async def handle_dashboard(request: web.Request) -> web.StreamResponse:
         "pwa_version": getattr(current_config, "INSTALLED_VERSION", display_version) or display_version,
         "role_badge": role_badge_html,
         "vnc_nodes": vnc_nodes,
-        "web_vnc_select_server": _("web_vnc_select_server", lang) or "Выберите сервер для VNC",
+        "web_vnc_select_server": _("web_vnc_select_server", lang),
         "cache_ver": CACHE_VER,
         "web_dashboard_title": _("web_dashboard_title", lang),
         "user_avatar": _get_avatar_html(user),
@@ -399,6 +399,8 @@ async def handle_dashboard(request: web.Request) -> web.StreamResponse:
             "web_access_denied": _("web_access_denied", lang),
             "web_copied": _("web_copied", lang),
             "web_no_notifications": _("web_no_notifications", lang),
+            "web_notif_source_agent": _("web_notif_source_agent", lang),
+            "web_notif_source_node": _("web_notif_source_node", lang),
             "web_clear_notifications": _("web_clear_notifications", lang),
             "web_notifications_cleared": _("web_notifications_cleared", lang),
             "modal_title_alert": _("modal_title_alert", lang),
@@ -709,6 +711,8 @@ async def handle_settings_page(request: web.Request) -> web.StreamResponse:
         "web_update_started": _("web_update_started", lang),
         "web_update_error": _("web_update_error", lang),
         "web_no_notifications": _("web_no_notifications", lang),
+        "web_notif_source_agent": _("web_notif_source_agent", lang),
+        "web_notif_source_node": _("web_notif_source_node", lang),
         "web_clear_notifications": _("web_clear_notifications", lang),
         "web_sessions_title": _("web_sessions_title", lang),
         "web_session_current": _("web_session_current", lang),
@@ -812,6 +816,7 @@ async def handle_settings_page(request: web.Request) -> web.StreamResponse:
         "web_notif_btn_global_subtitle": _("web_notif_btn_global_subtitle", lang),
         "web_notif_btn_nodes": _("web_notif_btn_nodes", lang),
         "web_notif_btn_nodes_subtitle": _("web_notif_btn_nodes_subtitle", lang),
+        "web_notif_node_label": _("web_notif_node_label", lang),
         "web_notif_global_group_agent": _("web_notif_global_group_agent", lang),
         "web_notif_global_group_nodes": _("web_notif_global_group_nodes", lang),
         "web_notif_nodes_list_title": _("web_notif_nodes_list_title", lang),
