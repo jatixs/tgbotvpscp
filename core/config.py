@@ -277,6 +277,8 @@ def save_system_config(new_config: dict):
             SERVICES_INTERVAL = int(new_config["SERVICES_INTERVAL"])
         if "PING_INTERVAL" in new_config:
             PING_INTERVAL = int(new_config["PING_INTERVAL"])
+        if "RESOURCE_CHECK_INTERVAL" in new_config:
+            RESOURCE_CHECK_INTERVAL = int(new_config["RESOURCE_CHECK_INTERVAL"])
         if "NODE_OFFLINE_TIMEOUT" in new_config:
             NODE_OFFLINE_TIMEOUT = int(new_config["NODE_OFFLINE_TIMEOUT"])
         if "CPU_THRESHOLD" in new_config:
@@ -285,6 +287,8 @@ def save_system_config(new_config: dict):
             RAM_THRESHOLD = float(new_config["RAM_THRESHOLD"])
         if "DISK_THRESHOLD" in new_config:
             DISK_THRESHOLD = float(new_config["DISK_THRESHOLD"])
+        if "RESOURCE_ALERT_COOLDOWN" in new_config:
+            RESOURCE_ALERT_COOLDOWN = int(new_config["RESOURCE_ALERT_COOLDOWN"])
         
         # --- UPDATE METADATA ---
         if "WEB_METADATA" in new_config:
