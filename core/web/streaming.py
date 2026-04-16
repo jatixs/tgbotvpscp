@@ -70,6 +70,17 @@ def _normalize_host(host: str) -> str:
         return raw_host
 
 
+def _is_local_terminal_stats_target(host: str, agent_ip: str) -> bool:
+    normalized_host = _normalize_host(host)
+    if normalized_host in {_normalize_host(agent_ip), "127.0.0.1", "localhost"}:
+        return True
+
+    try:
+        return ipaddress.ip_address(normalized_host).is_unspecified
+    except ValueError:
+        return False
+
+
 async def _is_allowed_terminal_host(host: str) -> bool:
     normalized_host = _normalize_host(host)
     if normalized_host == "127.0.0.1":
@@ -734,7 +745,7 @@ async def handle_terminal_stats(request: web.Request) -> web.StreamResponse:
 
     try:
         safe_agent_ip = _safe_agent_ip()
-        if ip in {safe_agent_ip, "127.0.0.1", "localhost", "0.0.0.0"}:
+        if _is_local_terminal_stats_target(ip, safe_agent_ip):
             import psutil
 
             cpu = psutil.cpu_percent(interval=None)
