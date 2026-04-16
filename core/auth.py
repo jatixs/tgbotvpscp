@@ -141,7 +141,7 @@ def is_allowed(user_id, command=None):
     root_only_commands = [
         "reboot_confirm",
         "reboot",
-        "fall2ban",
+        "fail2ban",
         "sshlog",
         "logs",
         "restart",
