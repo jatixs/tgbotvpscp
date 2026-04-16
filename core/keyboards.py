@@ -29,6 +29,28 @@ BTN_CONFIG_MAP = {
     "btn_nodes": "enable_nodes",
     "btn_services": "enable_services",
 }
+
+# Buttons that require Admin or Root role
+ADMIN_ONLY_BTNS = [
+    "btn_users",
+    "btn_speedtest",
+    "btn_top",
+    "btn_xray",
+    "btn_vless",
+    "btn_nodes",
+]
+# Buttons that require Root role AND root install mode
+ROOT_ONLY_BTNS = [
+    "btn_sshlog",
+    "btn_fail2ban",
+    "btn_logs",
+    "btn_update",
+    "btn_restart",
+    "btn_reboot",
+    "btn_optimize",
+]
+# Categories whose buttons can be toggled in settings (excludes cat_settings)
+CONFIGURABLE_CATEGORIES = ["cat_monitoring", "cat_management", "cat_security", "cat_tools"]
 CATEGORY_MAP = {
     "cat_monitoring": [
         "btn_selftest",
@@ -52,19 +74,47 @@ CATEGORY_MAP = {
 }
 
 
+def _is_user_admin(user_id: int) -> bool:
+    """Return True if user_id has admin or root role."""
+    return user_id == ADMIN_USER_ID or (
+        ALLOWED_USERS.get(user_id, {}).get("group") == "admins"
+        if isinstance(ALLOWED_USERS.get(user_id), dict)
+        else ALLOWED_USERS.get(user_id) == "admins"
+    )
+
+
+def _category_has_visible_buttons(category_key: str, user_id: int) -> bool:
+    """Return True if at least one button in the category is visible to this user."""
+    is_admin = _is_user_admin(user_id)
+    is_root_mode = INSTALL_MODE == "root"
+    for btn_key in CATEGORY_MAP.get(category_key, []):
+        config_key = BTN_CONFIG_MAP.get(btn_key)
+        if config_key and not KEYBOARD_CONFIG.get(config_key, True):
+            continue
+        if btn_key in ADMIN_ONLY_BTNS and not is_admin:
+            continue
+        if btn_key in ROOT_ONLY_BTNS and not (is_root_mode and is_admin):
+            continue
+        return True
+    return False
+
+
 def get_main_reply_keyboard(user_id: int) -> ReplyKeyboardMarkup:
     lang = get_user_lang(user_id)
-    keyboard_layout = [
-        [
-            KeyboardButton(text=_("cat_monitoring", lang)),
-            KeyboardButton(text=_("cat_management", lang)),
-        ],
-        [
-            KeyboardButton(text=_("cat_security", lang)),
-            KeyboardButton(text=_("cat_tools", lang)),
-        ],
-        [KeyboardButton(text=_("cat_settings", lang))],
+    category_pairs = [
+        ("cat_monitoring", "cat_management"),
+        ("cat_security", "cat_tools"),
     ]
+    keyboard_layout = []
+    for cat_a, cat_b in category_pairs:
+        row = []
+        if _category_has_visible_buttons(cat_a, user_id):
+            row.append(KeyboardButton(text=_(cat_a, lang)))
+        if _category_has_visible_buttons(cat_b, user_id):
+            row.append(KeyboardButton(text=_(cat_b, lang)))
+        if row:
+            keyboard_layout.append(row)
+    keyboard_layout.append([KeyboardButton(text=_("cat_settings", lang))])
     return ReplyKeyboardMarkup(
         keyboard=keyboard_layout,
         resize_keyboard=True,
@@ -75,29 +125,8 @@ def get_main_reply_keyboard(user_id: int) -> ReplyKeyboardMarkup:
 
 def get_subcategory_keyboard(category_key: str, user_id: int) -> ReplyKeyboardMarkup:
     lang = get_user_lang(user_id)
-    is_admin = user_id == ADMIN_USER_ID or (
-        ALLOWED_USERS.get(user_id, {}).get("group") == "admins"
-        if isinstance(ALLOWED_USERS.get(user_id), dict)
-        else ALLOWED_USERS.get(user_id) == "admins"
-    )
+    is_admin = _is_user_admin(user_id)
     is_root_mode = INSTALL_MODE == "root"
-    admin_only = [
-        "btn_users",
-        "btn_speedtest",
-        "btn_top",
-        "btn_xray",
-        "btn_vless",
-        "btn_nodes",
-    ]
-    root_only = [
-        "btn_sshlog",
-        "btn_fail2ban",
-        "btn_logs",
-        "btn_update",
-        "btn_restart",
-        "btn_reboot",
-        "btn_optimize",
-    ]
     buttons_in_category = CATEGORY_MAP.get(category_key, [])
     keyboard_rows = []
     current_row = []
@@ -105,9 +134,9 @@ def get_subcategory_keyboard(category_key: str, user_id: int) -> ReplyKeyboardMa
         config_key = BTN_CONFIG_MAP.get(btn_key)
         if config_key and (not KEYBOARD_CONFIG.get(config_key, True)):
             continue
-        if btn_key in admin_only and (not is_admin):
+        if btn_key in ADMIN_ONLY_BTNS and (not is_admin):
             continue
-        if btn_key in root_only and (not (is_root_mode and is_admin)):
+        if btn_key in ROOT_ONLY_BTNS and (not (is_root_mode and is_admin)):
             continue
         current_row.append(KeyboardButton(text=_(btn_key, lang)))
         if len(current_row) == 2:
@@ -125,24 +154,43 @@ def get_subcategory_keyboard(category_key: str, user_id: int) -> ReplyKeyboardMa
 
 
 def get_keyboard_settings_inline(lang: str) -> InlineKeyboardMarkup:
-    buttons = []
-    for btn_key, config_key in BTN_CONFIG_MAP.items():
-        is_enabled = KEYBOARD_CONFIG.get(config_key, True)
-        status_icon = "✅" if is_enabled else "❌"
-        btn_label = _(btn_key, lang)
-        text = f"{status_icon} {btn_label}"
-        callback_data = f"toggle_kb_{config_key}"
-        buttons.append(InlineKeyboardButton(text=text, callback_data=callback_data))
-    rows = []
-    for i in range(0, len(buttons), 2):
-        rows.append(buttons[i : i + 2])
-    rows.append(
-        [
-            InlineKeyboardButton(
-                text=_("btn_back", lang), callback_data="close_kb_settings", style="primary"
-            )
+    rows: list[list[InlineKeyboardButton]] = []
+    for cat_key in CONFIGURABLE_CATEGORIES:
+        configurable = [
+            (btn_key, BTN_CONFIG_MAP[btn_key])
+            for btn_key in CATEGORY_MAP.get(cat_key, [])
+            if btn_key in BTN_CONFIG_MAP
         ]
-    )
+        if not configurable:
+            continue
+        all_on = all(KEYBOARD_CONFIG.get(cfg, True) for _, cfg in configurable)
+        cat_icon = "✅" if all_on else "❌"
+        rows.append([
+            InlineKeyboardButton(
+                text=f"{cat_icon} {_(cat_key, lang)}",
+                callback_data=f"toggle_kb_cat_{cat_key}",
+            )
+        ])
+        btn_row: list[InlineKeyboardButton] = []
+        for btn_key, config_key in configurable:
+            is_enabled = KEYBOARD_CONFIG.get(config_key, True)
+            icon = "✅" if is_enabled else "❌"
+            btn_row.append(
+                InlineKeyboardButton(
+                    text=f"{icon} {_(btn_key, lang)}",
+                    callback_data=f"toggle_kb_{config_key}",
+                )
+            )
+            if len(btn_row) == 2:
+                rows.append(btn_row)
+                btn_row = []
+        if btn_row:
+            rows.append(btn_row)
+    rows.append([
+        InlineKeyboardButton(
+            text=_("btn_back", lang), callback_data="close_kb_settings", style="primary"
+        )
+    ])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
