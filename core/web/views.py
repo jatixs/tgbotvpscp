@@ -714,6 +714,7 @@ async def handle_settings_page(request: web.Request) -> web.StreamResponse:
         "web_notif_source_agent": _("web_notif_source_agent", lang),
         "web_notif_source_node": _("web_notif_source_node", lang),
         "web_clear_notifications": _("web_clear_notifications", lang),
+        "web_clear_notif_confirm": _("web_clear_notifications", lang) + "?",
         "web_sessions_title": _("web_sessions_title", lang),
         "web_session_current": _("web_session_current", lang),
         "web_session_revoke": _("web_session_revoke", lang),
