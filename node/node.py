@@ -1285,9 +1285,31 @@ def _save_agent_alert_state(state):
     os.replace(temp_path, AGENT_ALERT_STATE_FILE)
 
 
+def _get_node_alert_state(state, node_name):
+    node_state = state.get(node_name)
+    if isinstance(node_state, dict):
+        return node_state
+    return {
+        'incident_active': False,
+        'down_sent': False,
+        'last_down_alert_at': 0,
+        'last_recovery_alert_at': 0,
+    }
+
+
+def _prune_finished_incident(node_state):
+    last_recovery_alert_at = float(node_state.get('last_recovery_alert_at', 0) or 0)
+    pending_kind = node_state.get('pending_kind')
+    if pending_kind == 'recovery':
+        return
+    if node_state.get('incident_active'):
+        return
+    if last_recovery_alert_at and time.time() - last_recovery_alert_at > AGENT_ALERT_DEDUP_SECONDS:
+        node_state.clear()
+
+
 def _reserve_agent_alert(alert_kind, node_name):
     now = time.time()
-    state_key = f"{node_name}:{alert_kind}"
     reservation_id = f"{os.getpid()}:{threading.get_ident()}:{int(now * 1000)}"
 
     if not _acquire_agent_alert_lock():
@@ -1296,17 +1318,27 @@ def _reserve_agent_alert(alert_kind, node_name):
 
     try:
         state = _load_agent_alert_state()
-        previous = state.get(state_key)
-        if isinstance(previous, dict):
-            previous_ts = float(previous.get('timestamp', 0) or 0)
-            if now - previous_ts < AGENT_ALERT_DEDUP_SECONDS:
+        node_state = _get_node_alert_state(state, node_name)
+        _prune_finished_incident(node_state)
+
+        if alert_kind == 'down':
+            if node_state.get('incident_active') and node_state.get('down_sent'):
+                return None
+            node_state['incident_active'] = True
+        elif alert_kind == 'recovery':
+            if not node_state.get('incident_active') or not node_state.get('down_sent'):
+                return None
+            if node_state.get('pending_kind') == 'recovery':
+                return None
+        else:
+            last_sent_at = float(node_state.get(f'last_{alert_kind}_alert_at', 0) or 0)
+            if last_sent_at and now - last_sent_at < AGENT_ALERT_DEDUP_SECONDS:
                 return None
 
-        state[state_key] = {
-            'timestamp': now,
-            'status': 'pending',
-            'reservation_id': reservation_id,
-        }
+        node_state['pending_kind'] = alert_kind
+        node_state['pending_since'] = now
+        node_state['reservation_id'] = reservation_id
+        state[node_name] = node_state
         _save_agent_alert_state(state)
         return reservation_id
     finally:
@@ -1314,23 +1346,61 @@ def _reserve_agent_alert(alert_kind, node_name):
 
 
 def _finalize_agent_alert(alert_kind, node_name, reservation_id, sent):
-    state_key = f"{node_name}:{alert_kind}"
     if not _acquire_agent_alert_lock():
         return
 
     try:
         state = _load_agent_alert_state()
-        current = state.get(state_key)
-        if not isinstance(current, dict) or current.get('reservation_id') != reservation_id:
+        node_state = state.get(node_name)
+        if not isinstance(node_state, dict) or node_state.get('reservation_id') != reservation_id:
             return
 
-        if sent:
-            current['status'] = 'sent'
-            current['timestamp'] = time.time()
-            state[state_key] = current
-        else:
-            state.pop(state_key, None)
+        node_state.pop('pending_kind', None)
+        node_state.pop('pending_since', None)
+        node_state.pop('reservation_id', None)
 
+        if sent:
+            now = time.time()
+            if alert_kind == 'down':
+                node_state['incident_active'] = True
+                node_state['down_sent'] = True
+                node_state['last_down_alert_at'] = now
+            elif alert_kind == 'recovery':
+                node_state['incident_active'] = False
+                node_state['down_sent'] = False
+                node_state['last_recovery_alert_at'] = now
+            else:
+                node_state[f'last_{alert_kind}_alert_at'] = now
+        elif alert_kind == 'down' and not node_state.get('down_sent'):
+            node_state['incident_active'] = True
+
+        _prune_finished_incident(node_state)
+        if node_state:
+            state[node_name] = node_state
+        else:
+            state.pop(node_name, None)
+        _save_agent_alert_state(state)
+    finally:
+        _release_agent_alert_lock()
+
+
+def clear_agent_alert_incident(node_name):
+    if not _acquire_agent_alert_lock():
+        return
+
+    try:
+        state = _load_agent_alert_state()
+        node_state = _get_node_alert_state(state, node_name)
+        node_state['incident_active'] = False
+        node_state['down_sent'] = False
+        node_state.pop('pending_kind', None)
+        node_state.pop('pending_since', None)
+        node_state.pop('reservation_id', None)
+        _prune_finished_incident(node_state)
+        if node_state:
+            state[node_name] = node_state
+        else:
+            state.pop(node_name, None)
         _save_agent_alert_state(state)
     finally:
         _release_agent_alert_lock()
@@ -1378,6 +1448,15 @@ def format_downtime_localized(seconds, lang):
     if minutes > 0:
         return f"{hours} часов {minutes} минут"
     return f"{hours} часов"
+
+
+def summarize_http_error_body(body, limit=160):
+    if not body:
+        return ""
+    compact = re.sub(r"\s+", " ", str(body)).strip()
+    if len(compact) <= limit:
+        return compact
+    return f"{compact[:limit]}..."
 
 
 def get_node_name_for_alert():
@@ -1443,9 +1522,6 @@ def send_heartbeat():
     agent_is_healthy = check_agent_health()
     agent_status = "online" if agent_is_healthy else "unreachable"
     
-    if not agent_is_healthy:
-        logging.warning("Agent detected as unreachable")
-    
     payload_dict = {
         "stats": get_system_stats(),
         "results": current_results,
@@ -1504,6 +1580,8 @@ def send_heartbeat():
                         recovery_message = build_agent_recovery_alert(node_name, downtime)
                         if send_deduplicated_agent_alert("recovery", node_name, recovery_message):
                             logging.info(f"Agent recovered after {format_downtime(downtime)} downtime")
+                    else:
+                        clear_agent_alert_incident(node_name)
 
                     AGENT_DOWN_SINCE = None
                     AGENT_DOWN_ALERT_SENT = False
@@ -1512,7 +1590,8 @@ def send_heartbeat():
                 # No ongoing downtime - reset stability tracking
                 AGENT_STABLE_SINCE = None
         else:
-            logging.warning(f"Server returned status: {response.status_code} {response.text}")
+            response_summary = summarize_http_error_body(response.text)
+            logging.warning(f"Server returned status: {response.status_code} {response_summary}")
 
             # Treat only server-side failures as downtime; 4xx means reachable but misconfigured/request issue
             if response.status_code >= 500:
