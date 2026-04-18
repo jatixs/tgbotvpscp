@@ -5,11 +5,20 @@
 <h1 align="center">📝 Telegram VPS Management Bot — Список изменений</h1>
 
 <p align="center">
-    <img src="https://img.shields.io/badge/version-v1.22.2-blue?style=flat-square" alt="Version 1.22.2"/>
-    <img src="https://img.shields.io/badge/build-74-purple?style=flat-square" alt="Build 74"/>
-    <img src="https://img.shields.io/badge/date-Апрель%2018%202026-green?style=flat-square" alt="Date April 18 2026"/>
+    <img src="https://img.shields.io/badge/version-v1.22.3-blue?style=flat-square" alt="Version 1.22.3"/>
+    <img src="https://img.shields.io/badge/build-75-purple?style=flat-square" alt="Build 75"/>
+    <img src="https://img.shields.io/badge/date-Апрель%2019%202026-green?style=flat-square" alt="Date April 19 2026"/>
 	<img src="https://img.shields.io/badge/status-stable-green?style=flat-square" alt="Status Stable"/>
 </p>
+
+---
+## [1.22.3] - 2026-04-19
+
+### 🔒 Безопасность / Зависимости:
+* **aiohttp 3.13.3 → 3.13.4:** Исправлены CVE-2026-34515 (information disclosure), CVE-2026-34516 (DoS через избыточные multipart-заголовки), CVE-2026-34520 (header injection), CVE-2026-34525 (security bypass через несколько Host-заголовков).
+* **cryptography 46.0.5 → 46.0.7:** Исправлены CVE-2026-39892 (buffer overflow через non-contiguous buffer), CVE-2026-34073 (security bypass через неправильную валидацию DNS name constraints).
+* **Pillow 12.1.1 → 12.2.0:** Исправлен CVE-2026-40192 (FITS GZIP decompression bomb, severity HIGH).
+* **requests 2.32.4 → 2.33.0:** Исправлен CVE-2026-25645 (security bypass через предсказуемое создание временных файлов).
 
 ---
 ## [1.22.2] - 2026-04-18
