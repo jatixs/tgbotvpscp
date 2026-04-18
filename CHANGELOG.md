@@ -15,7 +15,7 @@
 ## [1.22.3] - 2026-04-19
 
 ### 🔒 Безопасность / Зависимости:
-* **aiohttp 3.13.3 → 3.13.4:** Исправлены CVE-2026-34515 (information disclosure), CVE-2026-34516 (DoS через избыточные multipart-заголовки), CVE-2026-34520 (header injection), CVE-2026-34525 (security bypass через несколько Host-заголовков).
+* **aiohttp 3.13.3 → 3.13.4:** Исправлены CVE-2026-34514 (header injection via content_type), CVE-2026-34515 (information disclosure via static resource handler), CVE-2026-34516 (DoS через избыточные multipart-заголовки), CVE-2026-34517 (DoS через очень большие multipart-поля), CVE-2026-34518 (information disclosure via Cookie/Proxy-Authorization headers при редиректах), CVE-2026-34519 (header injection via reason), CVE-2026-34520 (header injection), CVE-2026-34525 (security bypass через несколько Host-заголовков), CVE-2026-22815 (DoS через недостаточную обработку header/trailer).
 * **cryptography 46.0.5 → 46.0.7:** Исправлены CVE-2026-39892 (buffer overflow через non-contiguous buffer), CVE-2026-34073 (security bypass через неправильную валидацию DNS name constraints).
 * **Pillow 12.1.1 → 12.2.0:** Исправлен CVE-2026-40192 (FITS GZIP decompression bomb, severity HIGH).
 * **requests 2.32.4 → 2.33.0:** Исправлен CVE-2026-25645 (security bypass через предсказуемое создание временных файлов).

@@ -15,7 +15,7 @@
 ## [1.22.3] - 2026-04-19
 
 ### 🔒 Security / Dependencies:
-* **aiohttp 3.13.3 → 3.13.4:** Fixed CVE-2026-34515 (information disclosure via static resource handler), CVE-2026-34516 (DoS via excessive multipart headers), CVE-2026-34520 (header injection), CVE-2026-34525 (security bypass via multiple Host headers).
+* **aiohttp 3.13.3 → 3.13.4:** Fixed CVE-2026-34514 (header injection via content_type), CVE-2026-34515 (information disclosure via static resource handler), CVE-2026-34516 (DoS via excessive multipart headers), CVE-2026-34517 (DoS via large multipart form fields), CVE-2026-34518 (information disclosure via retained Cookie/Proxy-Authorization headers during redirects), CVE-2026-34519 (header injection via reason parameter), CVE-2026-34520 (header injection), CVE-2026-34525 (security bypass via multiple Host headers), CVE-2026-22815 (DoS via insufficient header/trailer handling).
 * **cryptography 46.0.5 → 46.0.7:** Fixed CVE-2026-39892 (buffer overflow via non-contiguous buffer in API), CVE-2026-34073 (security bypass via improper DNS name constraint validation).
 * **Pillow 12.1.1 → 12.2.0:** Fixed CVE-2026-40192 (FITS GZIP decompression bomb, severity HIGH).
 * **requests 2.32.4 → 2.33.0:** Fixed CVE-2026-25645 (security bypass via predictable temporary file creation).
