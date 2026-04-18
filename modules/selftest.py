@@ -32,6 +32,50 @@ def register_handlers(dp: Dispatcher):
     dp.message(I18nFilter(BUTTON_KEY))(selftest_handler)
 
 
+async def get_external_ips_for_selftest() -> tuple[str, str, bool]:
+    endpoints = {
+        "ipv4": [
+            "https://api.ipify.org",
+            "https://ipv4.icanhazip.com",
+            "https://ifconfig.me/ip",
+        ],
+        "ipv6": [
+            "https://api6.ipify.org",
+            "https://ipv6.icanhazip.com",
+            "https://ifconfig.me/ip",
+        ],
+    }
+
+    results = {"ipv4": "", "ipv6": ""}
+
+    async def fetch_ip(session: aiohttp.ClientSession, family: str) -> str:
+        for url in endpoints[family]:
+            try:
+                async with session.get(url, timeout=2) as resp:
+                    if resp.status != 200:
+                        continue
+                    candidate = (await resp.text()).strip()
+                    if not candidate:
+                        continue
+                    if family == "ipv4" and ":" not in candidate:
+                        return candidate
+                    if family == "ipv6" and ":" in candidate:
+                        return candidate
+            except Exception:
+                continue
+        return ""
+
+    connector = aiohttp.TCPConnector(family=0, ssl=False)
+    async with aiohttp.ClientSession(connector=connector) as session:
+        results["ipv4"], results["ipv6"] = await asyncio.gather(
+            fetch_ip(session, "ipv4"),
+            fetch_ip(session, "ipv6"),
+        )
+
+    inet_ok = bool(results["ipv4"] or results["ipv6"])
+    return results["ipv4"], results["ipv6"], inet_ok
+
+
 async def get_ip_data_full(ip: str):
     if not ip or ip in ["localhost", "127.0.0.1", "::1"]:
         return "🏠", None
@@ -211,19 +255,19 @@ async def selftest_handler(message: types.Message):
         rx_fmt = format_traffic(counters.bytes_recv, lang)
         tx_fmt = format_traffic(counters.bytes_sent, lang)
 
-        ip = "n/a"
+        ip_fail = _("selftest_ip_fail", lang)
+        ip_v4 = ip_fail
+        ip_v6 = ip_fail
         ping = "n/a"
         inet_status = _("selftest_inet_fail", lang)
-        
-        try:
-            async with aiohttp.ClientSession() as session:
-                async with session.get("http://ifconfig.me/ip", timeout=2) as resp:
-                    if resp.status == 200:
-                        ip = await resp.text()
-                        ip = ip.strip()
-                        inet_status = _("selftest_inet_ok", lang)
-        except Exception:
-            pass
+
+        fetched_ipv4, fetched_ipv6, inet_ok = await get_external_ips_for_selftest()
+        if fetched_ipv4:
+            ip_v4 = fetched_ipv4
+        if fetched_ipv6:
+            ip_v6 = fetched_ipv6
+        if inet_ok:
+            inet_status = _("selftest_inet_ok", lang)
         
         # Measure ping: ICMP first (accurate), HTTP fallback if blocked
         import subprocess
@@ -274,7 +318,8 @@ async def selftest_handler(message: types.Message):
             uptime=uptime_str,
             inet_status=inet_status,
             ping=ping,
-            ip=ip,
+            ipv4=ip_v4,
+            ipv6=ip_v6,
             rx=rx_fmt,
             tx=tx_fmt,
         )

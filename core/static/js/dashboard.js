@@ -151,6 +151,8 @@ window.initDashboard = function () {
     if (document.getElementById('logsContainer')) {
         switchLogType('bot');
     }
+
+    initDashboardUptimeTooltip();
 };
 
 function cleanupDashboardSources() {
@@ -647,6 +649,32 @@ function updateAgentStatsUI(data) {
             const uptimeEl = document.getElementById('stat_uptime');
             if (uptimeEl) uptimeEl.innerText = formatUptime(data.stats.boot_time);
 
+            const hintUptime = document.getElementById('hint-uptime');
+            if (hintUptime) {
+                const avail = data.stats.agent_availability || {};
+                const fmtDt = (ts) => ts ? new Date(ts * 1000).toLocaleString() : '—';
+
+                const mkRow = (label, value, valueClass) => `
+                    <div class="flex items-center justify-between py-2">
+                        <span class="text-[10px] text-gray-500 font-bold uppercase tracking-wider shrink-0 mr-3">${escapeHtml(label)}</span>
+                        <span class="font-mono text-sm font-bold ${valueClass || 'text-gray-700 dark:text-gray-200'} text-right">${escapeHtml(String(value))}</span>
+                    </div>`;
+
+                hintUptime.innerHTML = `
+                    <div class="mb-2 pb-2 border-b border-gray-200 dark:border-white/10">
+                        <p class="text-sm font-bold text-gray-900 dark:text-white">${escapeHtml(I18N?.web_avail_header || 'Uptime / Downtime')}</p>
+                    </div>
+                    <div class="flex flex-col divide-y divide-gray-100 dark:divide-white/5">
+                        ${mkRow(I18N?.web_agent_uptime_os || 'Current OS Uptime', data.stats.boot_time ? formatUptime(data.stats.boot_time) : '—')}
+                        ${mkRow(I18N?.web_nodes_monitor_last_outage || 'Last outage', fmtDt(avail.last_downtime_at))}
+                        ${mkRow(I18N?.web_nodes_monitor_last_reboot || 'Last reboot', fmtDt(avail.last_reboot_at))}
+                        ${mkRow(I18N?.web_nodes_monitor_total_uptime || 'Total uptime', formatDuration(avail.total_online_secs))}
+                        ${mkRow(I18N?.web_agent_downtime || 'Downtime', formatDuration(avail.total_downtime_secs), 'text-red-600 dark:text-red-400')}
+                        ${mkRow(I18N?.web_nodes_monitor_internet_downtime || 'Internet downtime', formatDuration(avail.internet_downtime_secs), 'text-amber-600 dark:text-amber-400')}
+                        ${mkRow(I18N?.web_nodes_monitor_physical_downtime || 'Physical downtime', formatDuration(avail.physical_downtime_secs), 'text-violet-600 dark:text-violet-400')}
+                    </div>`;
+            }
+
             const ipEl = document.getElementById('agentIp');
             if (ipEl && data.stats.ip) ipEl.innerText = decryptData(data.stats.ip);
 
@@ -872,6 +900,20 @@ function formatUptime(bt) {
     return `${m}${unitM}`;
 }
 
+function formatDuration(seconds) {
+    if (!seconds) return '0m';
+    const s = Math.floor(seconds);
+    const d = Math.floor(s / 86400);
+    const h = Math.floor((s % 86400) / 3600);
+    const m = Math.floor((s % 3600) / 60);
+    const unitD = (typeof I18N !== 'undefined' && I18N.web_time_d) ? I18N.web_time_d : 'd';
+    const unitH = (typeof I18N !== 'undefined' && I18N.web_time_h) ? I18N.web_time_h : 'h';
+    const unitM = (typeof I18N !== 'undefined' && I18N.web_time_m) ? I18N.web_time_m : 'm';
+    if (d > 0) return `${d}${unitD} ${h}${unitH}`;
+    if (h > 0) return `${h}${unitH} ${m}${unitM}`;
+    return `${m}${unitM}`;
+}
+
 function setLogLoading() {
     const container = document.getElementById('logsContainer');
     if (!container) return;
@@ -1040,7 +1082,7 @@ function setModalLoading() {
     const modal = document.getElementById('nodeModal');
     if (!modal) return;
 
-    const fields = ['modalNodeName', 'modalNodeIp', 'modalToken', 'modalNodeUptime', 'modalNodeRam', 'modalNodeDisk', 'modalNodeTraffic'];
+    const fields = ['modalNodeName', 'modalNodeIp', 'modalToken', 'modalNodeUptime', 'modalNodeRam', 'modalNodeDisk', 'modalNodeTraffic', 'dashboardAvailabilityCurrentUptime', 'dashboardAvailabilityLastOutage', 'dashboardAvailabilityLastReboot', 'dashboardAvailabilityTotalUptime', 'dashboardAvailabilityTotalDowntime', 'dashboardAvailabilityInternetDowntime', 'dashboardAvailabilityPhysicalDowntime', 'dashboardAvailabilityNote'];
     fields.forEach(id => {
         const el = document.getElementById(id);
         if (el) el.innerText = '...';
@@ -1072,6 +1114,83 @@ function setModalLoading() {
     card.appendChild(loader);
     void loader.offsetWidth;
     loader.classList.remove('opacity-0');
+}
+
+function initDashboardUptimeTooltip() {
+    const trigger = document.getElementById('dashboardModalUptimeTrigger');
+    const popover = document.getElementById('dashboardAvailabilityPopover');
+    if (!trigger || !popover || trigger.dataset.tooltipInit) return;
+    trigger.dataset.tooltipInit = '1';
+
+    let leaveTimeout = null;
+
+    function isVisible() {
+        return !popover.classList.contains('hidden');
+    }
+
+    function positionAndShow() {
+        const rect = trigger.getBoundingClientRect();
+        const popW = 288;
+        const vpW = window.innerWidth;
+        const vpH = window.innerHeight;
+
+        popover.classList.remove('hidden');
+        popover.style.opacity = '0';
+
+        let left = rect.left;
+        if (left + popW > vpW - 16) left = vpW - popW - 16;
+        if (left < 8) left = 8;
+
+        const spaceBelow = vpH - rect.bottom - 8;
+        const spaceAbove = rect.top - 8;
+        let top;
+        if (spaceBelow >= 260 || spaceBelow >= spaceAbove) {
+            top = rect.bottom + 8;
+        } else {
+            top = rect.top - 260;
+        }
+        popover.style.top = top + 'px';
+        popover.style.left = left + 'px';
+
+        trigger.setAttribute('aria-expanded', 'true');
+        requestAnimationFrame(() => { popover.style.opacity = '1'; });
+    }
+
+    function hidePopover() {
+        popover.style.opacity = '0';
+        trigger.setAttribute('aria-expanded', 'false');
+        setTimeout(() => {
+            if (popover.style.opacity === '0') popover.classList.add('hidden');
+        }, 150);
+    }
+
+    trigger.addEventListener('mouseenter', () => { clearTimeout(leaveTimeout); positionAndShow(); });
+    trigger.addEventListener('mouseleave', () => { leaveTimeout = setTimeout(hidePopover, 100); });
+    popover.addEventListener('mouseenter', () => { clearTimeout(leaveTimeout); });
+    popover.addEventListener('mouseleave', () => { leaveTimeout = setTimeout(hidePopover, 100); });
+
+    trigger.addEventListener('click', (e) => {
+        if (isVisible()) hidePopover(); else positionAndShow();
+        e.stopPropagation();
+    });
+    trigger.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); if (isVisible()) hidePopover(); else positionAndShow(); }
+        if (e.key === 'Escape') hidePopover();
+    });
+    document.addEventListener('click', (e) => {
+        if (!trigger.contains(e.target) && !popover.contains(e.target)) { if (isVisible()) hidePopover(); }
+    });
+    window.addEventListener('resize', () => { if (isVisible()) positionAndShow(); });
+
+    window.hideDashboardAvailabilityPopover = hidePopover;
+}
+
+function getDashboardAvailabilityNote(availability) {
+    if (!availability || !availability.has_ongoing_outage) return '';
+    if (availability.ongoing_outage_kind === 'physical') {
+        return `${I18N?.web_nodes_monitor_outage_rebooting || 'Current outage is caused by a reboot'}: ${availability.current_downtime}`;
+    }
+    return `${I18N?.web_nodes_monitor_outage_pending || 'The reason will be determined after the node reconnects'}: ${availability.current_downtime}`;
 }
 
 function removeModalLoading() {
@@ -1139,13 +1258,9 @@ function updateNodeDetailsUI(data) {
     }
 
     const stats = data.stats || {};
+    const availability = data.availability || {};
 
-    if (stats.uptime) {
-        const bootTimestamp = (Date.now() / 1000) - stats.uptime;
-        document.getElementById('modalNodeUptime').innerText = formatUptime(bootTimestamp);
-    } else {
-        document.getElementById('modalNodeUptime').innerText = "-";
-    }
+    document.getElementById('modalNodeUptime').innerText = availability.current_uptime || (stats.uptime ? formatUptime((Date.now() / 1000) - stats.uptime) : '-');
 
     if (stats.ram_total) {
         const ramUsed = stats.ram_used || 0;
@@ -1166,6 +1281,23 @@ function updateNodeDetailsUI(data) {
     } else {
         document.getElementById('modalNodeTraffic').innerText = "-";
     }
+
+    document.getElementById('dashboardAvailabilityLabelCurrentUptime').innerText = I18N?.web_nodes_monitor_current_uptime || 'Current uptime';
+    document.getElementById('dashboardAvailabilityLabelLastOutage').innerText = I18N?.web_nodes_monitor_last_outage || 'Last outage';
+    document.getElementById('dashboardAvailabilityLabelLastReboot').innerText = I18N?.web_nodes_monitor_last_reboot || 'Last reboot';
+    document.getElementById('dashboardAvailabilityLabelTotalUptime').innerText = I18N?.web_nodes_monitor_total_uptime || 'Total uptime';
+    document.getElementById('dashboardAvailabilityLabelTotalDowntime').innerText = I18N?.web_nodes_monitor_total_downtime || 'Total downtime';
+    document.getElementById('dashboardAvailabilityLabelInternetDowntime').innerText = I18N?.web_nodes_monitor_internet_downtime || 'Internet downtime';
+    document.getElementById('dashboardAvailabilityLabelPhysicalDowntime').innerText = I18N?.web_nodes_monitor_physical_downtime || 'Physical downtime';
+
+    document.getElementById('dashboardAvailabilityCurrentUptime').innerText = availability.current_uptime || '-';
+    document.getElementById('dashboardAvailabilityLastOutage').innerText = availability.last_downtime || '-';
+    document.getElementById('dashboardAvailabilityLastReboot').innerText = availability.last_reboot || '-';
+    document.getElementById('dashboardAvailabilityTotalUptime').innerText = availability.total_uptime || '-';
+    document.getElementById('dashboardAvailabilityTotalDowntime').innerText = availability.total_downtime || '-';
+    document.getElementById('dashboardAvailabilityInternetDowntime').innerText = availability.internet_downtime || '-';
+    document.getElementById('dashboardAvailabilityPhysicalDowntime').innerText = availability.physical_downtime || '-';
+    document.getElementById('dashboardAvailabilityNote').innerText = getDashboardAvailabilityNote(availability);
 
     const lastSeen = data.last_seen || 0;
     const now = Math.floor(Date.now() / 1000);
@@ -1188,6 +1320,7 @@ function closeNodeModal() {
         animateModalClose(modal);
     }
     removeModalLoading();
+    if (typeof window.hideDashboardAvailabilityPopover === 'function') window.hideDashboardAvailabilityPopover();
     if (nodeSSESource) {
         nodeSSESource.close();
         nodeSSESource = null;

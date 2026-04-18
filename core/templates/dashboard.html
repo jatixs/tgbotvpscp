@@ -215,14 +215,18 @@
     <main class="max-w-7xl mx-auto px-4 mt-4 sm:mt-8 relative z-10">
         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6 sm:mb-8">
             <div
-                class="bg-white/60 dark:bg-white/5 backdrop-blur-md border border-white/40 dark:border-white/10 rounded-2xl p-5 shadow-lg dark:shadow-none flex flex-col justify-between h-32 relative overflow-hidden group hover:scale-[1.02] transition duration-300">
+                class="bg-white/60 dark:bg-white/5 backdrop-blur-md border border-white/40 dark:border-white/10 rounded-2xl p-5 shadow-lg dark:shadow-none flex flex-col justify-between h-32 relative overflow-hidden group hover:scale-[1.02] transition duration-300 cursor-help"
+                onclick="toggleHint(event, 'hint-uptime')">
                 <div
                     class="absolute right-[-20px] top-[-20px] w-24 h-24 bg-blue-500/10 rounded-full blur-2xl group-hover:bg-blue-500/20 transition">
                 </div>
                 <div class="flex justify-between items-start">
                     <div>
-                        <p class="text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-1">{{
-                            web_uptime }}</p>
+                        <div class="flex items-center gap-1">
+                            <p class="text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-1">{{
+                                web_uptime }}</p>
+                            <div id="hint-uptime" class="hidden"></div>
+                        </div>
                         <h3 class="text-xl font-bold text-gray-900 dark:text-white" id="stat_uptime">{{ web_loading }}
                         </h3>
                     </div>
@@ -691,8 +695,13 @@
             <div class="p-4 sm:p-6 overflow-y-auto no-scrollbar flex-1">
                 <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4 mb-6">
                     <div
-                        class="bg-gray-50 dark:bg-black/20 p-2.5 rounded-xl border border-gray-200 dark:border-white/5 text-center">
-                        <div class="text-[10px] text-gray-500 font-bold uppercase tracking-wider mb-1">{{ web_uptime }}
+                        class="bg-gray-50 dark:bg-black/20 p-2.5 rounded-xl border border-gray-200 dark:border-white/5 text-center cursor-pointer hover:border-blue-400 dark:hover:border-blue-500/60 hover:bg-blue-50/50 dark:hover:bg-blue-500/10 transition-colors select-none"
+                        id="dashboardModalUptimeTrigger" tabindex="0" role="button" aria-haspopup="true" aria-expanded="false">
+                        <div class="text-[10px] text-gray-500 font-bold uppercase tracking-wider mb-1 flex items-center justify-center gap-1">
+                            <span>{{ web_uptime }}</span>
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 text-blue-400 dark:text-blue-500 opacity-80" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
                         </div>
                         <div class="font-mono text-sm font-bold text-gray-700 dark:text-gray-200" id="modalNodeUptime">-
                         </div>
@@ -719,6 +728,7 @@
                             id="modalNodeTraffic">-</div>
                     </div>
                 </div>
+
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6 mb-6">
                     <div
                         class="h-[200px] bg-white/50 dark:bg-black/20 rounded-xl p-4 border border-gray-100 dark:border-white/5">
@@ -846,6 +856,43 @@
             </div>
         </div>
     </div>
+    <!-- Dashboard Availability Popover (hover/tap hint on uptime cell) -->
+    <div id="dashboardAvailabilityPopover"
+         class="fixed z-[9999] hidden w-80 max-w-[calc(100vw-32px)] bg-white dark:bg-gray-800 border border-gray-200 dark:border-white/10 rounded-xl shadow-2xl p-4 transition-[opacity] duration-150 opacity-0 pointer-events-auto"
+         role="tooltip">
+        <div class="flex flex-col divide-y divide-gray-100 dark:divide-white/5">
+            <div class="flex items-center justify-between py-2 first:pt-0">
+                <span class="text-[10px] text-gray-500 font-bold uppercase tracking-wider shrink-0 mr-3" id="dashboardAvailabilityLabelCurrentUptime">-</span>
+                <span class="font-mono text-sm font-bold text-gray-700 dark:text-gray-200 text-right" id="dashboardAvailabilityCurrentUptime">-</span>
+            </div>
+            <div class="flex items-center justify-between py-2">
+                <span class="text-[10px] text-gray-500 font-bold uppercase tracking-wider shrink-0 mr-3" id="dashboardAvailabilityLabelLastOutage">-</span>
+                <span class="font-mono text-sm font-bold text-gray-700 dark:text-gray-200 text-right" id="dashboardAvailabilityLastOutage">-</span>
+            </div>
+            <div class="flex items-center justify-between py-2">
+                <span class="text-[10px] text-gray-500 font-bold uppercase tracking-wider shrink-0 mr-3" id="dashboardAvailabilityLabelLastReboot">-</span>
+                <span class="font-mono text-sm font-bold text-gray-700 dark:text-gray-200 text-right" id="dashboardAvailabilityLastReboot">-</span>
+            </div>
+            <div class="flex items-center justify-between py-2">
+                <span class="text-[10px] text-gray-500 font-bold uppercase tracking-wider shrink-0 mr-3" id="dashboardAvailabilityLabelTotalUptime">-</span>
+                <span class="font-mono text-sm font-bold text-gray-700 dark:text-gray-200 text-right" id="dashboardAvailabilityTotalUptime">-</span>
+            </div>
+            <div class="flex items-center justify-between py-2">
+                <span class="text-[10px] text-gray-500 font-bold uppercase tracking-wider shrink-0 mr-3" id="dashboardAvailabilityLabelTotalDowntime">-</span>
+                <span class="font-mono text-sm font-bold text-red-600 dark:text-red-400 text-right" id="dashboardAvailabilityTotalDowntime">-</span>
+            </div>
+            <div class="flex items-center justify-between py-2">
+                <span class="text-[10px] text-gray-500 font-bold uppercase tracking-wider shrink-0 mr-3" id="dashboardAvailabilityLabelInternetDowntime">-</span>
+                <span class="font-mono text-sm font-bold text-amber-600 dark:text-amber-400 text-right" id="dashboardAvailabilityInternetDowntime">-</span>
+            </div>
+            <div class="flex items-center justify-between py-2">
+                <span class="text-[10px] text-gray-500 font-bold uppercase tracking-wider shrink-0 mr-3" id="dashboardAvailabilityLabelPhysicalDowntime">-</span>
+                <span class="font-mono text-sm font-bold text-violet-600 dark:text-violet-400 text-right" id="dashboardAvailabilityPhysicalDowntime">-</span>
+            </div>
+        </div>
+        <div id="dashboardAvailabilityNote" class="mt-2 text-xs text-gray-400 dark:text-gray-500 text-right"></div>
+    </div>
+
     <!-- Services Edit Modal -->
     <div id="servicesEditModal"
         class="fixed inset-0 z-[150] hidden items-center justify-center bg-black/60 backdrop-blur-sm p-4 sm:p-6"

@@ -15,12 +15,19 @@
 ## [1.22.2] - 2026-04-18
 
 ### 🔧 Fixed:
+* **Uptime / Bot:** The `uptime` module has been reworked to match the node uptime report format. It now displays a full 7-field report: Current OS Uptime, Last Outage, Last Reboot, Total Working Time, Total Downtime, Internet Downtime, Physical Unavailability.
+* **Uptime / Backend:** Added accumulation of `total_online_seconds` and `total_internet_downtime_seconds` in the `agent_monitor` loop, persistent DB save every 60 seconds, and state restoration via `load_agent_availability_async` in `bot.py`.
+* **WebUI / Dashboard:** The uptime card hint on the main page has been reworked into a full 7-field report matching nodes; added `formatDuration` helper function.
+* **WebUI / Nodes Monitor:** The uptime popover now uses full `I18N` localization; status row removed from all uptime popovers and hints.
 * **WAF / WebUI:** Eliminated false positive `403 {"error": "Malicious request detected"}` responses for legitimate login and server update requests.
 * **WAF:** Narrowed `COMMAND_INJECTION` signatures so ordinary `form-urlencoded` and `JSON` requests are no longer blocked because of `&`, `;`, or `|` in safe contexts.
 * **WAF / Nodes:** Excluded the trusted internal `/api/heartbeat` endpoint from WAF inspection so node heartbeats, logs, and diagnostic output cannot trigger false `SQL_INJECTION` / `XSS` / `COMMAND_INJECTION` blocks.
 * **WAF:** Corrected regex escaping for the `XSS` and `PATH_TRAVERSAL` signatures so the protection targets real attacks without breaking normal WebUI flows.
 * **Nodes / Notifications:** Strengthened `alert_agent_down` / `alert_agent_recovered` deduplication in `node/node.py` into incident-state tracking. A node now emits only one `down` alert for an active outage and only one `recovery` alert after that outage is conclusively closed, even when the connection flaps, the process restarts, or parallel node instances race.
+* **Nodes / Uptime:** Reworked node availability tracking. The server now accumulates total uptime and downtime, records the last outage and last reboot timestamps, and separates internet downtime from physical unavailability using heartbeat gaps and `boot_time`.
+* **Bot / WebUI / Dashboard:** The `Uptime / Downtime` report is now shown consistently in the node action button, offline details, nodes monitor, and dashboard node modals.
 * **Nodes / Logging:** Removed noisy repeated `Agent detected as unreachable` log entries and shortened Cloudflare `502` HTML responses in node logs to a compact summary instead of dumping the full error page.
+* **Selftest:** External IP output in selftest now uses the `IPv4 / IPv6` format, and internet status is considered healthy when at least one address family is reachable.
 * **ORM / Encryption:** Closed the fail-open path in `EncryptedTextField` (`core/models.py`) — encryption and decryption failures now raise explicit exceptions instead of writing or returning plaintext.
 * **Configuration / Keys:** Removed unsafe encryption key storage in `config/security.key`; the application now requires `DATA_ENCRYPTION_KEY` from the environment and fails fast if the key is missing or invalid.
 * **Logging:** `RedactingFormatter` now always masks tokens, IP addresses, hashes, and identifiers even in debug mode; raw logs are only possible with explicit `UNSAFE_LOGGING=true`.

@@ -346,6 +346,10 @@ async def shutdown(dispatcher: Dispatcher, bot_instance: Bot, web_runner=None):
         logging.error(f"DB connections close error: {e}")
     if getattr(bot_instance, "session", None):
         await bot_instance.session.close()
+    try:
+        await utils.save_agent_availability_async()
+    except Exception:
+        pass
     logging.info("Bot stopped successfully.")
 
 
@@ -359,6 +363,7 @@ async def main():
         await utils.load_alerts_config_async()
         await utils.load_services_config_async()
         await i18n.load_user_settings_async()
+        await utils.load_agent_availability_async()
         asyncio.create_task(auth.refresh_user_names(bot))
         # Убраны вызовы utils.initial_reboot_check и utils.initial_restart_check
         # Теперь эта логика обрабатывается в watchdog.py
