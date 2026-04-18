@@ -316,7 +316,6 @@ def _apply_system_config(data):
 
 
 async def load_system_config_async():
-    global TRAFFIC_INTERVAL, BACKUP_INTERVAL, BACKUP_LAST_INTERVAL, SERVICES_INTERVAL, PING_INTERVAL, RESOURCE_CHECK_INTERVAL, CPU_THRESHOLD, RAM_THRESHOLD, DISK_THRESHOLD, RESOURCE_ALERT_COOLDOWN, NODE_OFFLINE_TIMEOUT, WEB_METADATA
     try:
         data = await get_bot_config("system_config", {})
         if data:
