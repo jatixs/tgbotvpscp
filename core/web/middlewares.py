@@ -18,6 +18,7 @@ RATE_LIMITED_METHODS: Final[set[str]] = {"POST", "PUT", "DELETE"}
 WAF_INSPECT_METHODS: Final[set[str]] = {"POST", "PUT", "PATCH", "DELETE"}
 CSRF_PROTECTED_METHODS: Final[set[str]] = {"POST", "PUT", "DELETE"}
 CSRF_EXCLUDED_PATHS: Final[set[str]] = {"/api/heartbeat"}
+WAF_EXCLUDED_PATHS: Final[set[str]] = {"/api/heartbeat"}
 CSRF_EXCLUDED_PREFIXES: Final[tuple[str, ...]] = ("/api/login/",)
 WAF_INSPECT_CONTENT_TYPES: Final[set[str]] = {
     "application/json",
@@ -196,6 +197,9 @@ async def csrf_middleware(request: web.Request, handler: Handler) -> web.StreamR
 @web.middleware
 async def waf_middleware(request: web.Request, handler: Handler) -> web.StreamResponse:
     """Inspect API payloads and reject obviously malicious requests."""
+    if request.path in WAF_EXCLUDED_PATHS:
+        return await handler(request)
+
     if request.method not in WAF_INSPECT_METHODS:
         return await handler(request)
 
