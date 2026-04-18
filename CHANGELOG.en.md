@@ -5,11 +5,20 @@
 <h1 align="center">📝 Telegram VPS Management Bot — Changelog</h1>
 
 <p align="center">
-    <img src="https://img.shields.io/badge/version-v1.22.1-blue?style=flat-square" alt="Version 1.22.1"/>
-    <img src="https://img.shields.io/badge/build-73-purple?style=flat-square" alt="Build 73"/>
-    <img src="https://img.shields.io/badge/date-April%2017%202026-green?style=flat-square" alt="Date April 17 2026"/>
+    <img src="https://img.shields.io/badge/version-v1.22.2-blue?style=flat-square" alt="Version 1.22.2"/>
+    <img src="https://img.shields.io/badge/build-74-purple?style=flat-square" alt="Build 74"/>
+    <img src="https://img.shields.io/badge/date-April%2018%202026-green?style=flat-square" alt="Date April 18 2026"/>
 	<img src="https://img.shields.io/badge/status-stable-green?style=flat-square" alt="Status Stable"/>
 </p>
+
+---
+## [1.22.2] - 2026-04-18
+
+### 🔧 Fixed:
+* **WAF / WebUI:** Eliminated false positive `403 {"error": "Malicious request detected"}` responses for legitimate login and server update requests. This fix closes GitHub Issue #68.
+* **WAF:** Narrowed `COMMAND_INJECTION` signatures so ordinary `form-urlencoded` and `JSON` requests are no longer blocked because of `&`, `;`, or `|` in safe contexts.
+* **WAF / Nodes:** Excluded the trusted internal `/api/heartbeat` endpoint from WAF inspection so node heartbeats, logs, and diagnostic output cannot trigger false `SQL_INJECTION` / `XSS` / `COMMAND_INJECTION` blocks.
+* **WAF:** Corrected regex escaping for the `XSS` and `PATH_TRAVERSAL` signatures so the protection targets real attacks without breaking normal WebUI flows.
 
 ---
 ## [1.22.1] - 2026-04-17

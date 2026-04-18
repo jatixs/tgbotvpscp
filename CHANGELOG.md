@@ -5,11 +5,20 @@
 <h1 align="center">📝 Telegram VPS Management Bot — Список изменений</h1>
 
 <p align="center">
-    <img src="https://img.shields.io/badge/version-v1.22.1-blue?style=flat-square" alt="Version 1.22.1"/>
-    <img src="https://img.shields.io/badge/build-73-purple?style=flat-square" alt="Build 73"/>
-    <img src="https://img.shields.io/badge/date-Апрель%2017%202026-green?style=flat-square" alt="Date April 17 2026"/>
+    <img src="https://img.shields.io/badge/version-v1.22.2-blue?style=flat-square" alt="Version 1.22.2"/>
+    <img src="https://img.shields.io/badge/build-74-purple?style=flat-square" alt="Build 74"/>
+    <img src="https://img.shields.io/badge/date-Апрель%2018%202026-green?style=flat-square" alt="Date April 18 2026"/>
 	<img src="https://img.shields.io/badge/status-stable-green?style=flat-square" alt="Status Stable"/>
 </p>
+
+---
+## [1.22.2] - 2026-04-18
+
+### 🔧 Исправлено:
+* **WAF / WebUI:** Устранены ложные срабатывания `403 {"error": "Malicious request detected"}` на легитимных запросах авторизации и обновления сервера. Исправление закрывает GitHub Issue #68.
+* **WAF:** Сигнатуры `COMMAND_INJECTION` сужены, чтобы обычные `form-urlencoded` и `JSON` запросы больше не блокировались из-за символов `&`, `;` и `|` в безопасном контексте.
+* **WAF / Ноды:** Внутренний доверенный endpoint `/api/heartbeat`, через который ноды отправляют heartbeat и диагностические данные, исключён из WAF-проверки, чтобы логи и служебный вывод не вызывали ложные блокировки `SQL_INJECTION` / `XSS` / `COMMAND_INJECTION`.
+* **WAF:** Исправлено экранирование regex-паттернов для `XSS` и `PATH_TRAVERSAL`, чтобы защита детектировала реальные атаки, не ломая нормальную работу WebUI.
 
 ---
 ## [1.22.1] - 2026-04-17
