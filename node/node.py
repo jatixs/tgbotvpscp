@@ -248,10 +248,13 @@ except ValueError:
 AGENT_ALERT_STATE_FILE = os.path.join(CONFIG_DIR, '.agent_alert_state.json')
 AGENT_ALERT_STATE_LOCK_DIR = os.path.join(CONFIG_DIR, '.agent_alert_state.lock')
 AGENT_ALERT_DEDUP_SECONDS = max(AGENT_ALERT_DELAY_SECONDS, UPDATE_INTERVAL * 3, 60)
+AGENT_ALERT_META_FILE = os.path.join(CONFIG_DIR, '.agent_alert_meta.json')
 
 if not AGENT_BASE_URL or not AGENT_TOKEN:
     logging.error("CRITICAL: AGENT_BASE_URL or AGENT_TOKEN not found in .env")
     sys.exit(1)
+
+OWN_NODE_TOKEN_HASH = hashlib.sha256(AGENT_TOKEN.encode()).hexdigest()
 
 # Parse critical alert targets if provided.
 # Supports numeric chat IDs (e.g. -100123...) and string targets (e.g. @channel_username).
@@ -287,6 +290,7 @@ AGENT_DOWN_SINCE = None
 AGENT_DOWN_ALERT_SENT = False
 AGENT_STABLE_SINCE = None  # Timestamp when agent first came back up; used to confirm stable recovery
 LAST_AGENT_LANG = AGENT_ALERT_LANG if AGENT_ALERT_LANG in {"ru", "en"} else "ru"
+CACHED_ALERT_REPORTER_HASH = None
 LAST_HTTP_ERROR_SIGNATURE = None
 LAST_HTTP_ERROR_LOGGED_AT = 0.0
 SUPPRESSED_HTTP_ERROR_COUNT = 0
@@ -1289,6 +1293,56 @@ def _save_agent_alert_state(state):
     os.replace(temp_path, AGENT_ALERT_STATE_FILE)
 
 
+def load_agent_alert_meta():
+    try:
+        with open(AGENT_ALERT_META_FILE, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+            if isinstance(data, dict):
+                return data
+    except FileNotFoundError:
+        return {}
+    except Exception as e:
+        logging.debug(f"Failed to load alert meta: {e}")
+    return {}
+
+
+def save_agent_alert_meta(meta):
+    temp_path = f"{AGENT_ALERT_META_FILE}.{os.getpid()}.tmp"
+    with open(temp_path, 'w', encoding='utf-8') as f:
+        json.dump(meta, f)
+    os.replace(temp_path, AGENT_ALERT_META_FILE)
+
+
+def get_cached_alert_reporter_hash():
+    global CACHED_ALERT_REPORTER_HASH
+    if CACHED_ALERT_REPORTER_HASH:
+        return CACHED_ALERT_REPORTER_HASH
+    meta = load_agent_alert_meta()
+    reporter_hash = meta.get('alert_reporter_hash')
+    if isinstance(reporter_hash, str) and reporter_hash:
+        CACHED_ALERT_REPORTER_HASH = reporter_hash
+    return CACHED_ALERT_REPORTER_HASH
+
+
+def update_cached_alert_reporter_hash(reporter_hash):
+    global CACHED_ALERT_REPORTER_HASH
+    if not isinstance(reporter_hash, str) or not reporter_hash:
+        return
+    if reporter_hash == CACHED_ALERT_REPORTER_HASH:
+        return
+    CACHED_ALERT_REPORTER_HASH = reporter_hash
+    meta = load_agent_alert_meta()
+    meta['alert_reporter_hash'] = reporter_hash
+    save_agent_alert_meta(meta)
+
+
+def is_alert_reporter_node():
+    reporter_hash = get_cached_alert_reporter_hash()
+    if not reporter_hash:
+        return True
+    return reporter_hash == OWN_NODE_TOKEN_HASH
+
+
 def _get_node_alert_state(state, node_name):
     node_state = state.get(node_name)
     if isinstance(node_state, dict):
@@ -1411,6 +1465,10 @@ def clear_agent_alert_incident(node_name):
 
 
 def send_deduplicated_agent_alert(alert_kind, node_name, message):
+    if not is_alert_reporter_node():
+        logging.info(f"Skipping agent {alert_kind} alert on node {node_name}: another node is selected as reporter")
+        return False
+
     reservation_id = _reserve_agent_alert(alert_kind, node_name)
     if reservation_id is None:
         logging.info(f"Duplicate agent {alert_kind} alert suppressed for node {node_name}")
@@ -1596,6 +1654,10 @@ def send_heartbeat():
             if response_lang in {"ru", "en"} and response_lang != LAST_AGENT_LANG:
                 LAST_AGENT_LANG = response_lang
                 logging.info(f"Updated alert language from agent: {LAST_AGENT_LANG}")
+
+            response_reporter_hash = data.get("agent_alert_reporter_hash")
+            if isinstance(response_reporter_hash, str) and response_reporter_hash:
+                update_cached_alert_reporter_hash(response_reporter_hash)
 
             PENDING_RESULTS.clear()
             SSH_EVENTS.clear()

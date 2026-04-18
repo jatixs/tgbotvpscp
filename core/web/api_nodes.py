@@ -84,6 +84,23 @@ def _session_expired(current_token: str | None) -> bool:
     return bool(current_token and current_token not in SERVER_SESSIONS)
 
 
+def _get_alert_reporter_hash(all_nodes: dict[str, dict[str, Any]], *, now: float) -> str:
+    online_tokens: list[str] = []
+    fallback_tokens: list[str] = []
+
+    for token, node in all_nodes.items():
+        fallback_tokens.append(token)
+        last_seen = float(node.get("last_seen", 0) or 0)
+        if now - last_seen < NODE_OFFLINE_TIMEOUT:
+            online_tokens.append(token)
+
+    selected_tokens = sorted(online_tokens or fallback_tokens)
+    if not selected_tokens:
+        return ""
+
+    return hashlib.sha256(selected_tokens[0].encode()).hexdigest()
+
+
 def _build_nodes_monitor_payload(all_nodes: dict[str, dict[str, Any]], *, now: float) -> dict[str, list[dict[str, Any]]]:
     nodes_data: list[dict[str, Any]] = []
 
@@ -317,11 +334,21 @@ async def handle_heartbeat(request: web.Request) -> web.StreamResponse:
     if tasks_to_send:
         await nodes_db.clear_node_tasks(token)
 
+    all_nodes = await nodes_db.get_all_nodes()
+    alert_reporter_hash = _get_alert_reporter_hash(all_nodes, now=time.time())
+
     alert_lang = get_user_lang(ADMIN_USER_ID)
     if alert_lang not in STRINGS:
         alert_lang = DEFAULT_LANGUAGE
 
-    return web.json_response({"status": "ok", "tasks": tasks_to_send, "alert_lang": alert_lang})
+    return web.json_response(
+        {
+            "status": "ok",
+            "tasks": tasks_to_send,
+            "alert_lang": alert_lang,
+            "agent_alert_reporter_hash": alert_reporter_hash,
+        }
+    )
 
 
 @routes.get("/api/nodes/list")
