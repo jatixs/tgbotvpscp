@@ -16,7 +16,7 @@ from .. import config as current_config
 from .. import nodes_db, shared_state
 from ..config import BASE_DIR, DEFAULT_LANGUAGE, DEPLOY_MODE
 from ..i18n import get_user_lang
-from ..utils import decrypt_for_web, encrypt_for_web, get_host_path
+from ..utils import decrypt_for_web, encrypt_for_web, get_host_path, get_node_uptime_snapshot
 from .auth import COOKIE_NAME, SERVER_SESSIONS, get_current_user
 from ..rbac import is_admin as _is_admin
 from modules import traffic as traffic_module
@@ -221,6 +221,16 @@ async def handle_sse_stream(request: web.Request) -> web.StreamResponse:
                 "net_sent": 0,
                 "net_recv": 0,
                 "boot_time": 0,
+                "bot_start_time": shared_state.AGENT_BOT_START_TIME,
+                "agent_availability": {
+                    "current_uptime_since": shared_state.AGENT_AVAILABILITY.get("status_since", shared_state.AGENT_BOT_START_TIME),
+                    "last_downtime_at": shared_state.AGENT_AVAILABILITY.get("last_downtime_at", 0),
+                    "last_reboot_at": shared_state.AGENT_AVAILABILITY.get("last_reboot_at", 0),
+                    "total_online_secs": shared_state.AGENT_AVAILABILITY.get("total_online_seconds", 0),
+                    "total_downtime_secs": shared_state.AGENT_AVAILABILITY.get("total_downtime_seconds", 0),
+                    "internet_downtime_secs": shared_state.AGENT_AVAILABILITY.get("total_internet_downtime_seconds", 0),
+                    "physical_downtime_secs": max(0.0, float(shared_state.AGENT_AVAILABILITY.get("total_downtime_seconds", 0)) - float(shared_state.AGENT_AVAILABILITY.get("total_internet_downtime_seconds", 0))),
+                },
             }
 
             try:
@@ -537,6 +547,7 @@ async def handle_sse_node_details(request: web.Request) -> web.StreamResponse:
         return web.Response(status=400)
 
     current_token = request.cookies.get(COOKIE_NAME)
+    lang = get_user_lang(int(user["id"]))
 
     response = web.StreamResponse(status=200, reason="OK")
     response.headers["Content-Type"] = "text/event-stream"
@@ -582,6 +593,7 @@ async def handle_sse_node_details(request: web.Request) -> web.StreamResponse:
                     "last_seen": last_seen,
                     "is_restarting": is_restarting,
                     "status": status,
+                    "availability": get_node_uptime_snapshot(node, lang, current_config.NODE_OFFLINE_TIMEOUT, time.time()),
                 }
                 try:
                     await _write_sse(response, "node_details", payload)

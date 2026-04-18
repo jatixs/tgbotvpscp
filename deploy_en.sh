@@ -315,6 +315,37 @@ load_cached_env() {
 
     ensure_data_encryption_key
 }
+
+fetch_node_name_from_agent() {
+    local agent_url="${1%/}"
+    local node_token="$2"
+    local response=""
+
+    if [ -z "$agent_url" ] || [ -z "$node_token" ]; then
+        return 0
+    fi
+
+    response=$(curl -fsS --connect-timeout 5 --max-time 10 -H "X-Node-Token: ${node_token}" "${agent_url}/api/node/bootstrap" 2>/dev/null) || return 0
+    printf '%s' "$response" | "${PYTHON_BIN}" -c 'import json, sys; data = json.load(sys.stdin); print((data.get("node_name") or "").strip())' 2>/dev/null || true
+}
+
+resolve_node_name_defaults() {
+    local current_name="$1"
+    local current_mode="$2"
+    local agent_url="$3"
+    local node_token="$4"
+    local resolved_name="$current_name"
+    local resolved_mode="$current_mode"
+
+    if [ -z "$resolved_name" ]; then
+        resolved_name=$(fetch_node_name_from_agent "$agent_url" "$node_token")
+        resolved_mode="agent"
+    elif [ -z "$resolved_mode" ]; then
+        resolved_mode="manual"
+    fi
+
+    printf '%s\n%s\n' "$resolved_name" "$resolved_mode"
+}
 cleanup_common_trash() {
     if [ -d "$BOT_INSTALL_PATH/.github" ]; then sudo rm -rf "$BOT_INSTALL_PATH/.github"; fi
     if [ -d "$BOT_INSTALL_PATH/assets" ]; then sudo rm -rf "$BOT_INSTALL_PATH/assets"; fi
@@ -920,11 +951,22 @@ install_node_logic() {
     load_cached_env
     msg_question "Agent URL (http://IP:8080): " AGENT_URL
     msg_question "Token: " NODE_TOKEN
+    local saved_node_name=""
+    local saved_node_name_sync_mode=""
+    if [ -f "/tmp/tgbot_env.bak" ]; then
+        saved_node_name=$(grep "^NODE_NAME=" "/tmp/tgbot_env.bak" | cut -d'=' -f2- | tr -d '"')
+        saved_node_name_sync_mode=$(grep "^NODE_NAME_SYNC_MODE=" "/tmp/tgbot_env.bak" | cut -d'=' -f2- | tr -d '"' | xargs)
+    fi
+    mapfile -t node_name_defaults < <(resolve_node_name_defaults "$saved_node_name" "$saved_node_name_sync_mode" "$AGENT_URL" "$NODE_TOKEN")
+    local initial_node_name="${node_name_defaults[0]}"
+    local initial_node_name_sync_mode="${node_name_defaults[1]}"
     local ver="Unknown"; if [ -f "$README_FILE" ]; then ver=$(grep -oP 'img\.shields\.io/badge/version-v\K[\d\.]+' "$README_FILE"); fi
     sudo bash -c "cat > ${ENV_FILE}" <<EOF
 MODE=node
 AGENT_BASE_URL="${AGENT_URL}"
 AGENT_TOKEN="${NODE_TOKEN}"
+NODE_NAME="${initial_node_name}"
+NODE_NAME_SYNC_MODE="${initial_node_name_sync_mode:-agent}"
 NODE_UPDATE_INTERVAL=5
 INSTALLED_VERSION="${ver}"
 EOF
@@ -933,22 +975,17 @@ EOF
     if [[ "$RESTORE_CHOICE" =~ ^[Yy]$ ]] && [ -f "/tmp/tgbot_env.bak" ]; then
         local saved_bot_token=$(grep "^BOT_TOKEN=" "/tmp/tgbot_env.bak" | cut -d'=' -f2- | tr -d '"' | xargs)
         local saved_chat_ids=$(grep "^CRITICAL_ALERT_CHAT_IDS=" "/tmp/tgbot_env.bak" | cut -d'=' -f2- | tr -d '"' | xargs)
-        local saved_node_name=$(grep "^NODE_NAME=" "/tmp/tgbot_env.bak" | cut -d'=' -f2- | tr -d '"')
         local saved_delay=$(grep "^AGENT_ALERT_DELAY_SECONDS=" "/tmp/tgbot_env.bak" | cut -d'=' -f2- | tr -d '"')
         
         # Ask user if monitoring variables are missing or empty
         local need_bot_token=""
         local need_chat_ids=""
-        local need_node_name=""
         
         if [ -z "$saved_bot_token" ]; then
             need_bot_token="yes"
         fi
         if [ -z "$saved_chat_ids" ]; then
             need_chat_ids="yes"
-        fi
-        if [ -z "$saved_node_name" ]; then
-            need_node_name="yes"
         fi
         
         # If any monitoring variable is missing, ask if user wants to configure them
@@ -957,7 +994,6 @@ EOF
             echo -e "${C_YELLOW}⚠️  Found empty variables for agent monitoring:${C_RESET}"
             [ -n "$need_bot_token" ] && echo -e "  • BOT_TOKEN (bot token)"
             [ -n "$need_chat_ids" ] && echo -e "  • CRITICAL_ALERT_CHAT_IDS (chat IDs for alerts)"
-            [ -n "$need_node_name" ] && echo -e "  • NODE_NAME (node name)"
             echo ""
             read -p "$(echo -e "${C_CYAN}❓ Configure agent monitoring now? (y/n) [n]: ${C_RESET}")" setup_monitoring
             setup_monitoring=${setup_monitoring:-n}
@@ -979,10 +1015,6 @@ EOF
                 if [ -n "$need_chat_ids" ]; then
                     read -p "Enter CRITICAL_ALERT_CHAT_IDS (comma-separated): " saved_chat_ids
                 fi
-                
-                if [ -n "$need_node_name" ]; then
-                    read -p "Enter NODE_NAME (name of this node): " saved_node_name
-                fi
             fi
         fi
         
@@ -992,7 +1024,6 @@ EOF
             echo "# Agent Monitoring Configuration" | sudo tee -a "${ENV_FILE}" > /dev/null
             echo "BOT_TOKEN=\"${saved_bot_token}\"" | sudo tee -a "${ENV_FILE}" > /dev/null
             echo "CRITICAL_ALERT_CHAT_IDS=\"${saved_chat_ids}\"" | sudo tee -a "${ENV_FILE}" > /dev/null
-            echo "NODE_NAME=\"${saved_node_name}\"" | sudo tee -a "${ENV_FILE}" > /dev/null
             [ -n "$saved_delay" ] && echo "AGENT_ALERT_DELAY_SECONDS=\"${saved_delay}\"" | sudo tee -a "${ENV_FILE}" > /dev/null
             msg_info "✓ Monitoring variables added to .env"
         fi
@@ -1142,7 +1173,10 @@ toggle_agent_monitoring() {
     local current_bot_token=$(grep '^BOT_TOKEN=' "${ENV_FILE}" | tail -n 1 | cut -d'=' -f2- | tr -d '"' | xargs)
     local current_chat_ids=$(grep '^CRITICAL_ALERT_CHAT_IDS=' "${ENV_FILE}" | tail -n 1 | cut -d'=' -f2- | tr -d '"' | xargs)
     local current_node_name=$(grep '^NODE_NAME=' "${ENV_FILE}" | tail -n 1 | cut -d'=' -f2- | tr -d '"')
+    local current_node_name_sync_mode=$(grep '^NODE_NAME_SYNC_MODE=' "${ENV_FILE}" | tail -n 1 | cut -d'=' -f2- | tr -d '"' | xargs)
     local current_delay=$(grep '^AGENT_ALERT_DELAY_SECONDS=' "${ENV_FILE}" | tail -n 1 | cut -d'=' -f2- | tr -d '"' | xargs)
+    local current_agent_url=$(grep '^AGENT_BASE_URL=' "${ENV_FILE}" | tail -n 1 | cut -d'=' -f2- | tr -d '"' | xargs)
+    local current_agent_token=$(grep '^AGENT_TOKEN=' "${ENV_FILE}" | tail -n 1 | cut -d'=' -f2- | tr -d '"' | xargs)
     local status=$(check_agent_monitoring_status)
 
     if [ "$status" == "on" ]; then
@@ -1153,7 +1187,6 @@ toggle_agent_monitoring() {
         sed -i '/^BOT_TOKEN=/d' "${ENV_FILE}"
         sed -i '/^CRITICAL_ALERT_CHAT_IDS=/d' "${ENV_FILE}"
         sed -i '/^AGENT_ALERT_DELAY_SECONDS=/d' "${ENV_FILE}"
-        sed -i '/^NODE_NAME=/d' "${ENV_FILE}"
         msg_success "Agent monitoring disabled. Variables removed from .env"
         local deploy_mode=$(grep '^DEPLOY_MODE=' "${ENV_FILE}" | cut -d'=' -f2 | tr -d '"')
         if [ "$deploy_mode" == "docker" ]; then
@@ -1187,7 +1220,7 @@ toggle_agent_monitoring() {
         echo -e "  1. BOT_TOKEN - your Telegram bot token"
         echo -e "  2. CRITICAL_ALERT_CHAT_IDS - chat IDs for critical alerts (comma-separated)"
         echo -e "  3. AGENT_ALERT_DELAY_SECONDS - delay before sending alert (in seconds)"
-        echo -e "  4. NODE_NAME - name of this node"
+        echo -e "  4. NODE_NAME - name of this node (leave empty to sync from the agent)"
         echo ""
         echo -e "${C_YELLOW}Important:${C_RESET} do not use another bot's chat_id (Telegram blocks bot-to-bot messaging)."
         echo ""
@@ -1195,6 +1228,14 @@ toggle_agent_monitoring() {
         echo -e "  • Send /start to @userinfobot"
         echo -e "  • Or add the bot to a group and use /start"
         echo ""
+
+        local resolved_agent_node_name=""
+        if [ -z "$current_node_name" ]; then
+            resolved_agent_node_name=$(fetch_node_name_from_agent "$current_agent_url" "$current_agent_token")
+            if [ -n "$resolved_agent_node_name" ]; then
+                msg_info "Using node name from agent: ${resolved_agent_node_name}"
+            fi
+        fi
 
         read -p "Enter BOT_TOKEN [current: ${current_bot_token:-empty}]: " bot_token
         if [ -z "$bot_token" ]; then
@@ -1214,9 +1255,16 @@ toggle_agent_monitoring() {
             return
         fi
 
-        read -p "Enter NODE_NAME [current: ${current_node_name:-Node}]: " node_name
+        read -p "Enter NODE_NAME [current: ${current_node_name:-${resolved_agent_node_name:-Node}}]: " node_name
         if [ -z "$node_name" ]; then
-            node_name="${current_node_name:-Node}"
+            node_name="${current_node_name:-${resolved_agent_node_name:-Node}}"
+        fi
+
+        local node_name_sync_mode="manual"
+        if [ -z "$current_node_name" ] && [ -n "$resolved_agent_node_name" ] && [ "$node_name" = "$resolved_agent_node_name" ]; then
+            node_name_sync_mode="agent"
+        elif [ -n "$current_node_name_sync_mode" ] && [ "$node_name" = "$current_node_name" ]; then
+            node_name_sync_mode="$current_node_name_sync_mode"
         fi
 
         read -p "Enter AGENT_ALERT_DELAY_SECONDS [current: ${current_delay:-15}]: " alert_delay
@@ -1231,12 +1279,14 @@ toggle_agent_monitoring() {
         sed -i '/^CRITICAL_ALERT_CHAT_IDS=/d' "${ENV_FILE}"
         sed -i '/^AGENT_ALERT_DELAY_SECONDS=/d' "${ENV_FILE}"
         sed -i '/^NODE_NAME=/d' "${ENV_FILE}"
+        sed -i '/^NODE_NAME_SYNC_MODE=/d' "${ENV_FILE}"
         echo "" >> "${ENV_FILE}"
         echo "DEBUG=\"false\"" >> "${ENV_FILE}"
         echo "BOT_TOKEN=\"${bot_token}\"" >> "${ENV_FILE}"
         echo "CRITICAL_ALERT_CHAT_IDS=\"${chat_ids}\"" >> "${ENV_FILE}"
         echo "AGENT_ALERT_DELAY_SECONDS=\"${alert_delay}\"" >> "${ENV_FILE}"
         echo "NODE_NAME=\"${node_name}\"" >> "${ENV_FILE}"
+        echo "NODE_NAME_SYNC_MODE=\"${node_name_sync_mode}\"" >> "${ENV_FILE}"
 
         msg_success "Agent monitoring enabled/updated!"
         local deploy_mode=$(grep '^DEPLOY_MODE=' "${ENV_FILE}" | cut -d'=' -f2 | tr -d '"')

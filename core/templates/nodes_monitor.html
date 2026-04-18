@@ -205,8 +205,14 @@
                 <div class="p-4 sm:p-6 overflow-y-auto custom-scrollbar flex-1">
                     <!-- Quick Stats -->
                     <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
-                        <div class="bg-gray-50 dark:bg-black/20 p-3 rounded-xl border border-gray-200 dark:border-white/5 text-center">
-                            <div class="text-[10px] text-gray-500 font-bold uppercase tracking-wider mb-1">{{ web_uptime }}</div>
+                        <div class="bg-gray-50 dark:bg-black/20 p-3 rounded-xl border border-gray-200 dark:border-white/5 text-center cursor-pointer hover:border-blue-400 dark:hover:border-blue-500/60 hover:bg-blue-50/50 dark:hover:bg-blue-500/10 transition-colors select-none"
+                             id="modalUptimeTrigger" tabindex="0" role="button" aria-haspopup="true" aria-expanded="false">
+                            <div class="text-[10px] text-gray-500 font-bold uppercase tracking-wider mb-1 flex items-center justify-center gap-1">
+                                <span>{{ web_uptime }}</span>
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 text-blue-400 dark:text-blue-500 opacity-80" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                </svg>
+                            </div>
                             <div class="font-mono text-sm font-bold text-gray-700 dark:text-gray-200" id="modalUptime">-</div>
                         </div>
                         <div class="bg-gray-50 dark:bg-black/20 p-3 rounded-xl border border-gray-200 dark:border-white/5 text-center">
@@ -222,6 +228,8 @@
                             <div class="font-mono text-sm font-bold text-green-600 dark:text-green-400" id="modalDisk">-</div>
                         </div>
                     </div>
+
+
 
                     <!-- Charts Row -->
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
@@ -286,6 +294,47 @@
                     </div>
                 </div>
             </div>
+        </div>
+
+        <!-- Availability Popover (hover/tap hint on uptime cell) -->
+        <div id="availabilityPopover"
+             class="fixed z-[9999] hidden w-80 max-w-[calc(100vw-32px)] bg-white dark:bg-gray-800 border border-gray-200 dark:border-white/10 rounded-xl shadow-2xl p-4 transition-[opacity] duration-150 opacity-0 pointer-events-auto"
+             role="tooltip">
+            <!-- Header: title -->
+            <div class="mb-2 pb-2 border-b border-gray-200 dark:border-white/10">
+                <p class="text-sm font-bold text-gray-900 dark:text-white" id="availabilityPopoverTitle">Аптайм / Даунтайм</p>
+            </div>
+            <div class="flex flex-col divide-y divide-gray-100 dark:divide-white/5">
+                <div class="flex items-center justify-between py-2 first:pt-0">
+                    <span class="text-[10px] text-gray-500 font-bold uppercase tracking-wider shrink-0 mr-3" id="availabilityLabelCurrentUptime">-</span>
+                    <span class="font-mono text-sm font-bold text-gray-700 dark:text-gray-200 text-right" id="modalAvailabilityCurrentUptime">-</span>
+                </div>
+                <div class="flex items-center justify-between py-2">
+                    <span class="text-[10px] text-gray-500 font-bold uppercase tracking-wider shrink-0 mr-3" id="availabilityLabelLastOutage">-</span>
+                    <span class="font-mono text-sm font-bold text-gray-700 dark:text-gray-200 text-right" id="modalAvailabilityLastOutage">-</span>
+                </div>
+                <div class="flex items-center justify-between py-2">
+                    <span class="text-[10px] text-gray-500 font-bold uppercase tracking-wider shrink-0 mr-3" id="availabilityLabelLastReboot">-</span>
+                    <span class="font-mono text-sm font-bold text-gray-700 dark:text-gray-200 text-right" id="modalAvailabilityLastReboot">-</span>
+                </div>
+                <div class="flex items-center justify-between py-2">
+                    <span class="text-[10px] text-gray-500 font-bold uppercase tracking-wider shrink-0 mr-3" id="availabilityLabelTotalUptime">-</span>
+                    <span class="font-mono text-sm font-bold text-gray-700 dark:text-gray-200 text-right" id="modalAvailabilityTotalUptime">-</span>
+                </div>
+                <div class="flex items-center justify-between py-2">
+                    <span class="text-[10px] text-gray-500 font-bold uppercase tracking-wider shrink-0 mr-3" id="availabilityLabelTotalDowntime">-</span>
+                    <span class="font-mono text-sm font-bold text-red-600 dark:text-red-400 text-right" id="modalAvailabilityTotalDowntime">-</span>
+                </div>
+                <div class="flex items-center justify-between py-2">
+                    <span class="text-[10px] text-gray-500 font-bold uppercase tracking-wider shrink-0 mr-3" id="availabilityLabelInternetDowntime">-</span>
+                    <span class="font-mono text-sm font-bold text-amber-600 dark:text-amber-400 text-right" id="modalAvailabilityInternetDowntime">-</span>
+                </div>
+                <div class="flex items-center justify-between py-2">
+                    <span class="text-[10px] text-gray-500 font-bold uppercase tracking-wider shrink-0 mr-3" id="availabilityLabelPhysicalDowntime">-</span>
+                    <span class="font-mono text-sm font-bold text-violet-600 dark:text-violet-400 text-right" id="modalAvailabilityPhysicalDowntime">-</span>
+                </div>
+            </div>
+            <div id="modalAvailabilityNote" class="mt-2 text-xs text-gray-400 dark:text-gray-500 text-right"></div>
         </div>
 
         <!-- Filter Modal -->

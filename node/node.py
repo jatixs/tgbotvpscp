@@ -34,6 +34,80 @@ def load_config():
     return config
 
 
+def get_env_value(var_name):
+    if not os.path.exists(ENV_FILE):
+        return ""
+
+    try:
+        with open(ENV_FILE, 'r', encoding='utf-8') as f:
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith('#') and '=' in line:
+                    key, value = line.split('=', 1)
+                    if key.strip() == var_name:
+                        return value.strip().strip('"').strip("'")
+    except Exception:
+        return ""
+
+    return ""
+
+
+def upsert_env_value(var_name, value):
+    safe_value = str(value or "").replace('\r', ' ').replace('\n', ' ')
+    new_line = f'{var_name}="{safe_value}"\n'
+    lines = []
+    found = False
+
+    if os.path.exists(ENV_FILE):
+        with open(ENV_FILE, 'r', encoding='utf-8') as f:
+            lines = f.readlines()
+
+    for idx, line in enumerate(lines):
+        stripped = line.strip()
+        if stripped and not stripped.startswith('#') and '=' in stripped:
+            key = stripped.split('=', 1)[0].strip()
+            if key == var_name:
+                lines[idx] = new_line
+                found = True
+                break
+
+    if not found:
+        if lines and not lines[-1].endswith('\n'):
+            lines[-1] += '\n'
+        lines.append(new_line)
+
+    with open(ENV_FILE, 'w', encoding='utf-8') as f:
+        f.writelines(lines)
+
+
+def sync_node_name_from_agent(agent_node_name):
+    normalized_name = str(agent_node_name or '').strip()
+    if not normalized_name:
+        return
+
+    current_node_name = get_env_value('NODE_NAME').strip()
+    sync_mode = get_env_value('NODE_NAME_SYNC_MODE').strip().lower()
+    should_sync = sync_mode == 'agent' or not current_node_name
+
+    if not should_sync:
+        if current_node_name:
+            CONF['NODE_NAME'] = current_node_name
+        return
+
+    if current_node_name == normalized_name and sync_mode == 'agent':
+        CONF['NODE_NAME'] = normalized_name
+        return
+
+    try:
+        upsert_env_value('NODE_NAME', normalized_name)
+        upsert_env_value('NODE_NAME_SYNC_MODE', 'agent')
+        CONF['NODE_NAME'] = normalized_name
+        CONF['NODE_NAME_SYNC_MODE'] = 'agent'
+        logging.info(f"Synchronized NODE_NAME from agent: {normalized_name}")
+    except Exception as e:
+        logging.warning(f"Failed to synchronize NODE_NAME from agent: {e}")
+
+
 def ensure_env_variables():
     """
     Check and add missing environment variables to .env file for nodes.
@@ -54,6 +128,7 @@ def ensure_env_variables():
         "CRITICAL_ALERT_CHAT_IDS",
         "AGENT_ALERT_DELAY_SECONDS",
         "NODE_NAME",
+        "NODE_NAME_SYNC_MODE",
     ]
     
     try:
@@ -697,6 +772,7 @@ def get_system_stats():
             "net_rx_speed": round(net_rx_speed, 2),
             "net_tx_speed": round(net_tx_speed, 2),
             "uptime": int(time.time() - psutil.boot_time()),
+            "boot_time": int(psutil.boot_time()),
             "process_cpu": get_top_processes('cpu'),
             "process_ram": get_top_processes('ram'),
             "external_ip": ext_ip,
@@ -889,19 +965,36 @@ def execute_command(task):
 
         elif cmd == "selftest":
             stats = get_system_stats()
-            try:
-                ext_ip = stats.get("external_ip")
-                if not ext_ip:
+
+            # Fetch IPv4
+            ext_ipv4 = stats.get("external_ip") or ""
+            if not ext_ipv4:
+                try:
                     proc = subprocess.Popen(
-                        ["curl", "-4", "-s", "--max-time", "2", "ifconfig.me"],
+                        ["curl", "-4", "-s", "--max-time", "3", "ifconfig.me"],
                         stdout=subprocess.PIPE,
                         stderr=subprocess.PIPE
                     )
                     stdout, _ = proc.communicate()
-                    ext_ip = stdout.decode().strip()
+                    ext_ipv4 = stdout.decode().strip()
+                except Exception:
+                    ext_ipv4 = ""
+
+            # Fetch IPv6
+            ext_ipv6 = ""
+            try:
+                proc = subprocess.Popen(
+                    ["curl", "-6", "-s", "--max-time", "3", "ifconfig.me"],
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE
+                )
+                stdout, _ = proc.communicate()
+                candidate = stdout.decode().strip()
+                if ":" in candidate:
+                    ext_ipv6 = candidate
             except Exception:
-                ext_ip = "N/A"
-            
+                ext_ipv6 = ""
+
             ping_val = "0"
             inet_ok = False
             try:
@@ -945,7 +1038,8 @@ def execute_command(task):
                     "uptime": uptime_str,
                     "inet_status": {"key": "selftest_inet_ok"} if inet_ok else {"key": "selftest_inet_fail"},
                     "ping": ping_val,
-                    "ip": ext_ip,
+                    "ipv4": ext_ipv4 or "N/A",
+                    "ipv6": ext_ipv6 or "N/A",
                     "rx": rx_total,
                     "tx": tx_total
                 }
@@ -1674,6 +1768,8 @@ def send_heartbeat():
         if response.status_code == 200:
             flush_suppressed_http_error_logs()
             data = response.json()
+
+            sync_node_name_from_agent(data.get("node_name", ""))
 
             # Agent provides preferred language while online; keep it cached for offline alerts.
             response_lang = data.get("alert_lang")
