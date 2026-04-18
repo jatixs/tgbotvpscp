@@ -31,16 +31,16 @@ WAF_ATTACK_PATTERNS: Final[tuple[tuple[str, str], ...]] = (
     (r"(?i)(%20|\\s)(or|and)(\\s|%20)+.*=", "SQL_INJECTION"),
     (r"(?i)<script[^>]*>.*?</script>", "XSS"),
     (r"(?i)javascript:", "XSS"),
-    (r"(?i)on\\w+\\s*=", "XSS"),
+    (r"(?i)on\w+\s*=", "XSS"),
     (r"(?i)<iframe[^>]*>", "XSS"),
     (r"(?i)<embed[^>]*>", "XSS"),
     (r"(?i)<object[^>]*>", "XSS"),
-    (r"\\.\\./", "PATH_TRAVERSAL"),
-    (r"\\.\\.\\\\", "PATH_TRAVERSAL"),
+    (r"\.\./", "PATH_TRAVERSAL"),
+    (r"\.\.\\", "PATH_TRAVERSAL"),
     (r"%2e%2e/", "PATH_TRAVERSAL"),
-    (r"%2e%2e\\\\", "PATH_TRAVERSAL"),
-    (r"[;&|`]", "COMMAND_INJECTION"),
-    (r"(?i)(bash|sh|cmd|powershell|wget|curl)\\s", "COMMAND_INJECTION"),
+    (r"%2e%2e\\", "PATH_TRAVERSAL"),
+    (r"(?i)[;|]\s*(?:ls|cat|id|whoami|wget|curl|bash|sh|cmd|python3?|perl|ruby|php|nc|netcat|chmod|chown|sudo|su|rm|mv|cp|echo|tee|awk|sed|find)\b", "COMMAND_INJECTION"),
+    (r"(?i)\b(wget|curl)\s+https?://", "COMMAND_INJECTION"),
 )
 
 
