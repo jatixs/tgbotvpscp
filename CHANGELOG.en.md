@@ -19,6 +19,8 @@
 * **WAF:** Narrowed `COMMAND_INJECTION` signatures so ordinary `form-urlencoded` and `JSON` requests are no longer blocked because of `&`, `;`, or `|` in safe contexts.
 * **WAF / Nodes:** Excluded the trusted internal `/api/heartbeat` endpoint from WAF inspection so node heartbeats, logs, and diagnostic output cannot trigger false `SQL_INJECTION` / `XSS` / `COMMAND_INJECTION` blocks.
 * **WAF:** Corrected regex escaping for the `XSS` and `PATH_TRAVERSAL` signatures so the protection targets real attacks without breaking normal WebUI flows.
+* **Nodes / Notifications:** Strengthened `alert_agent_down` / `alert_agent_recovered` deduplication in `node/node.py` into incident-state tracking. A node now emits only one `down` alert for an active outage and only one `recovery` alert after that outage is conclusively closed, even when the connection flaps, the process restarts, or parallel node instances race.
+* **Nodes / Logging:** Removed noisy repeated `Agent detected as unreachable` log entries and shortened Cloudflare `502` HTML responses in node logs to a compact summary instead of dumping the full error page.
 * **ORM / Encryption:** Closed the fail-open path in `EncryptedTextField` (`core/models.py`) — encryption and decryption failures now raise explicit exceptions instead of writing or returning plaintext.
 * **Configuration / Keys:** Removed unsafe encryption key storage in `config/security.key`; the application now requires `DATA_ENCRYPTION_KEY` from the environment and fails fast if the key is missing or invalid.
 * **Logging:** `RedactingFormatter` now always masks tokens, IP addresses, hashes, and identifiers even in debug mode; raw logs are only possible with explicit `UNSAFE_LOGGING=true`.
@@ -26,6 +28,8 @@
 * **Docker / Compose:** Removed dangerous `privileged`, `pid: host`, `network_mode: host`, `/:/host`, and direct `docker.sock` access; Docker API access now goes through `Tecnativa Docker Socket Proxy` with reduced permissions.
 * **Deploy:** Updated `deploy.sh` and `deploy_en.sh` to migrate legacy encryption keys into `.env`, generate `DATA_ENCRYPTION_KEY` for new installs, and emit a hardened `docker-compose.yml`.
 * **Dependencies:** Further pinned key Python dependency versions to reduce supply-chain drift and improve reproducible builds.
+* **CI / Dependencies:** Fixed the `aiogram` / `aiohttp` installation conflict in GitHub Actions. `requirements.txt` now uses a compatible and secure dependency set, so `pip install -r requirements.txt` and `safety` checks should no longer fail with `ResolutionImpossible` or outdated vulnerable pins.
+* **Configuration / Linting:** Fixed the `F824` error in `core/config.py` by removing an unnecessary `global` declaration from `load_system_config_async()`, which was breaking the Python validation step in CI.
 
 ---
 ## [1.22.1] - 2026-04-17

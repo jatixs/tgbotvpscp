@@ -287,6 +287,10 @@ AGENT_DOWN_SINCE = None
 AGENT_DOWN_ALERT_SENT = False
 AGENT_STABLE_SINCE = None  # Timestamp when agent first came back up; used to confirm stable recovery
 LAST_AGENT_LANG = AGENT_ALERT_LANG if AGENT_ALERT_LANG in {"ru", "en"} else "ru"
+LAST_HTTP_ERROR_SIGNATURE = None
+LAST_HTTP_ERROR_LOGGED_AT = 0.0
+SUPPRESSED_HTTP_ERROR_COUNT = 0
+HTTP_ERROR_LOG_COOLDOWN_SECONDS = max(UPDATE_INTERVAL * 4, 30)
 
 EXTERNAL_IP_CACHE = None 
 
@@ -1453,10 +1457,50 @@ def format_downtime_localized(seconds, lang):
 def summarize_http_error_body(body, limit=160):
     if not body:
         return ""
-    compact = re.sub(r"\s+", " ", str(body)).strip()
+    body_text = str(body)
+    title_match = re.search(r"<title>(.*?)</title>", body_text, flags=re.IGNORECASE | re.DOTALL)
+    if title_match:
+        title = re.sub(r"\s+", " ", title_match.group(1)).strip()
+        if title:
+            return title
+    compact = re.sub(r"\s+", " ", body_text).strip()
     if len(compact) <= limit:
         return compact
     return f"{compact[:limit]}..."
+
+
+def flush_suppressed_http_error_logs():
+    global LAST_HTTP_ERROR_SIGNATURE, LAST_HTTP_ERROR_LOGGED_AT, SUPPRESSED_HTTP_ERROR_COUNT
+    if LAST_HTTP_ERROR_SIGNATURE and SUPPRESSED_HTTP_ERROR_COUNT > 0:
+        logging.warning(
+            f"Previous server error repeated {SUPPRESSED_HTTP_ERROR_COUNT} more time(s): {LAST_HTTP_ERROR_SIGNATURE}"
+        )
+    LAST_HTTP_ERROR_SIGNATURE = None
+    LAST_HTTP_ERROR_LOGGED_AT = 0.0
+    SUPPRESSED_HTTP_ERROR_COUNT = 0
+
+
+def log_http_error(status_code, body):
+    global LAST_HTTP_ERROR_SIGNATURE, LAST_HTTP_ERROR_LOGGED_AT, SUPPRESSED_HTTP_ERROR_COUNT
+
+    response_summary = summarize_http_error_body(body)
+    signature = f"{status_code} {response_summary}".strip()
+    now = time.time()
+
+    if signature == LAST_HTTP_ERROR_SIGNATURE and now - LAST_HTTP_ERROR_LOGGED_AT < HTTP_ERROR_LOG_COOLDOWN_SECONDS:
+        SUPPRESSED_HTTP_ERROR_COUNT += 1
+        LAST_HTTP_ERROR_LOGGED_AT = now
+        return
+
+    if LAST_HTTP_ERROR_SIGNATURE and SUPPRESSED_HTTP_ERROR_COUNT > 0:
+        logging.warning(
+            f"Previous server error repeated {SUPPRESSED_HTTP_ERROR_COUNT} more time(s): {LAST_HTTP_ERROR_SIGNATURE}"
+        )
+
+    LAST_HTTP_ERROR_SIGNATURE = signature
+    LAST_HTTP_ERROR_LOGGED_AT = now
+    SUPPRESSED_HTTP_ERROR_COUNT = 0
+    logging.warning(f"Server returned status: {signature}")
 
 
 def get_node_name_for_alert():
@@ -1544,6 +1588,7 @@ def send_heartbeat():
     try:
         response = requests.post(url, data=payload_bytes, headers=headers, timeout=5)
         if response.status_code == 200:
+            flush_suppressed_http_error_logs()
             data = response.json()
 
             # Agent provides preferred language while online; keep it cached for offline alerts.
@@ -1590,8 +1635,7 @@ def send_heartbeat():
                 # No ongoing downtime - reset stability tracking
                 AGENT_STABLE_SINCE = None
         else:
-            response_summary = summarize_http_error_body(response.text)
-            logging.warning(f"Server returned status: {response.status_code} {response_summary}")
+            log_http_error(response.status_code, response.text)
 
             # Treat only server-side failures as downtime; 4xx means reachable but misconfigured/request issue
             if response.status_code >= 500:
@@ -1610,6 +1654,7 @@ def send_heartbeat():
                         AGENT_DOWN_ALERT_SENT = True
                         logging.warning(f"Critical alert sent: Agent down for {format_downtime(downtime)}")
     except Exception as e:
+        flush_suppressed_http_error_logs()
         logging.error(f"Connection error: {e}")
 
         current_time = time.time()
