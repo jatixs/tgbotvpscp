@@ -791,7 +791,7 @@ async def handle_get_terminal_creds(request: web.Request) -> web.StreamResponse:
         return web.json_response({"status": "error", "error": "Missing IP"}, status=400)
 
     try:
-        creds = await asyncio.to_thread(current_config.get_bot_config, "terminal_creds", {})
+        creds = await current_config.get_bot_config("terminal_creds", {})
         uid_str = str(user["id"])
         if isinstance(creds, dict) and uid_str in creds and ip in creds[uid_str]:
             saved = creds[uid_str][ip]
@@ -822,7 +822,7 @@ async def handle_save_terminal_creds(request: web.Request) -> web.StreamResponse
         if not ip:
             return web.json_response({"status": "error", "error": "Missing IP"}, status=400)
 
-        creds = await asyncio.to_thread(current_config.get_bot_config, "terminal_creds", {})
+        creds = await current_config.get_bot_config("terminal_creds", {})
         if not isinstance(creds, dict):
             creds = {}
 
@@ -837,7 +837,7 @@ async def handle_save_terminal_creds(request: web.Request) -> web.StreamResponse
             "password": str(data.get("password", "")),
             "private_key": str(data.get("private_key", "")),
         }
-        await asyncio.to_thread(current_config.set_bot_config, "terminal_creds", creds)
+        await current_config.set_bot_config("terminal_creds", creds)
         return web.json_response({"status": "ok"})
     except Exception as exc:
         logging.error("Terminal creds save failed: %s", exc)
@@ -946,7 +946,7 @@ async def handle_terminal_ws(request: web.Request) -> web.StreamResponse:
         rows = int(message.get("rows", 24))
 
         if use_saved and host:
-            creds = await asyncio.to_thread(current_config.get_bot_config, "terminal_creds", {})
+            creds = await current_config.get_bot_config("terminal_creds", {})
             uid_str = str(user["id"])
             if isinstance(creds, dict) and uid_str in creds and host in creds[uid_str]:
                 saved_cred = creds[uid_str][host]

@@ -27,6 +27,7 @@ VENV_PATH="${BOT_INSTALL_PATH}/venv"
 README_FILE="${BOT_INSTALL_PATH}/README.md"
 DOCKER_COMPOSE_FILE="${BOT_INSTALL_PATH}/docker-compose.yml"
 ENV_FILE="${BOT_INSTALL_PATH}/.env"
+LEGACY_SECURITY_KEY_FILE="${BOT_INSTALL_PATH}/config/security.key"
 
 GITHUB_REPO="jatixs/tgbotvpscp"
 GITHUB_REPO_URL="https://github.com/${GITHUB_REPO}.git"
@@ -40,6 +41,26 @@ msg_question() {
     if [ -z "${!var_name}" ]; then
         read -p "$(echo -e "${C_YELLOW}❓ $prompt${C_RESET}")" $var_name
     fi
+}
+
+generate_fernet_key() {
+    "${PYTHON_BIN}" - <<'PY'
+import base64
+import os
+
+print(base64.urlsafe_b64encode(os.urandom(32)).decode())
+PY
+}
+
+ensure_data_encryption_key() {
+    if [ -n "$DATA_ENCRYPTION_KEY" ]; then
+        export DATA_ENCRYPTION_KEY
+        return 0
+    fi
+
+    DATA_ENCRYPTION_KEY=$(generate_fernet_key)
+    export DATA_ENCRYPTION_KEY
+    msg_warning "DATA_ENCRYPTION_KEY отсутствовал. Сгенерирован новый ключ шифрования."
 }
 
 spinner() {
@@ -229,6 +250,11 @@ setup_repo_and_dirs() {
     cd /
     msg_info "Подготовка файлов (Ветка: ${GIT_BRANCH})..."
     if [ -f "${ENV_FILE}" ]; then cp "${ENV_FILE}" /tmp/tgbot_env.bak; fi
+    if [ -z "$DATA_ENCRYPTION_KEY" ] && [ -f "${LEGACY_SECURITY_KEY_FILE}" ]; then
+        DATA_ENCRYPTION_KEY=$(tr -d '\r\n' < "${LEGACY_SECURITY_KEY_FILE}")
+        export DATA_ENCRYPTION_KEY
+        msg_info "Найден legacy security.key. Ключ будет перенесен в .env."
+    fi
     if [ -d "${BOT_INSTALL_PATH}" ]; then run_with_spinner "Удаление старых файлов" sudo rm -rf "${BOT_INSTALL_PATH}"; fi
     sudo mkdir -p ${BOT_INSTALL_PATH}
     run_with_spinner "Клонирование репозитория" sudo git clone --branch "${GIT_BRANCH}" "${GITHUB_REPO_URL}" "${BOT_INSTALL_PATH}" || exit 1
@@ -255,6 +281,7 @@ load_cached_env() {
             [ -z "$N" ] && N=$(get_env_val "TG_BOT_NAME")
             [ -z "$P" ] && P=$(get_env_val "WEB_SERVER_PORT")
             [ -z "$SENTRY_DSN" ] && SENTRY_DSN=$(get_env_val "SENTRY_DSN")
+            [ -z "$DATA_ENCRYPTION_KEY" ] && DATA_ENCRYPTION_KEY=$(get_env_val "DATA_ENCRYPTION_KEY")
             if [ -z "$W" ]; then
                 local val=$(get_env_val "ENABLE_WEB_UI")
                 if [[ "$val" == "false" ]]; then W="n"; else W="y"; fi
@@ -265,6 +292,8 @@ load_cached_env() {
             msg_info "Восстановление пропущено."
         fi
     fi
+
+    ensure_data_encryption_key
 }
 cleanup_common_trash() {
     if [ -d "$BOT_INSTALL_PATH/.github" ]; then sudo rm -rf "$BOT_INSTALL_PATH/.github"; fi
@@ -445,6 +474,7 @@ ask_env_details() {
             SETUP_HTTPS="false"
         fi
     fi
+    ensure_data_encryption_key
     export T A U N WEB_PORT ENABLE_WEB SETUP_HTTPS HTTPS_DOMAIN HTTPS_EMAIL HTTPS_PORT GEN_PASS SENTRY_DSN
 }
 
@@ -461,11 +491,14 @@ write_env_file() {
     local web_domain=""
     if [ -n "$HTTPS_DOMAIN" ]; then web_domain="${HTTPS_DOMAIN}"; fi
 
+    ensure_data_encryption_key
+
     sudo bash -c "cat > ${ENV_FILE}" <<EOF
 TG_BOT_TOKEN="${T}"
 TG_ADMIN_ID="${A}"
 TG_ADMIN_USERNAME="${U}"
 TG_BOT_NAME="${N}"
+DATA_ENCRYPTION_KEY="${DATA_ENCRYPTION_KEY}"
 WEB_SERVER_HOST="0.0.0.0"
 WEB_SERVER_PORT="${WEB_PORT}"
 INSTALL_MODE="${im}"
@@ -508,6 +541,7 @@ ensure_env_variables() {
     # List of variables with their default values
     # Format: "VAR_NAME|default_value|description"
     local ENV_VARS=(
+        "DATA_ENCRYPTION_KEY||Ключ шифрования данных"
         "WEB_SERVER_HOST|0.0.0.0|Хост веб-сервера"
         "WEB_SERVER_PORT|8080|Порт веб-сервера"
         "INSTALL_MODE|secure|Режим установки"
@@ -523,8 +557,17 @@ ensure_env_variables() {
         local var_desc=$(echo "$var_entry" | cut -d'|' -f3)
         
         if ! grep -q "^${var_name}=" "${ENV_FILE}"; then
-            echo -e "${C_YELLOW}  + Добавлена переменная ${var_name}=${default_val}${C_RESET}"
-            sudo bash -c "echo '${var_name}=\"${default_val}\"' >> ${ENV_FILE}"
+            if [ "$var_name" == "DATA_ENCRYPTION_KEY" ]; then
+                if [ -z "$DATA_ENCRYPTION_KEY" ] && [ -f "${LEGACY_SECURITY_KEY_FILE}" ]; then
+                    DATA_ENCRYPTION_KEY=$(tr -d '\r\n' < "${LEGACY_SECURITY_KEY_FILE}")
+                fi
+                ensure_data_encryption_key
+                echo -e "${C_YELLOW}  + Добавлена переменная ${var_name}=[REDACTED]${C_RESET}"
+                sudo bash -c "echo '${var_name}=\"${DATA_ENCRYPTION_KEY}\"' >> ${ENV_FILE}"
+            else
+                echo -e "${C_YELLOW}  + Добавлена переменная ${var_name}=${default_val}${C_RESET}"
+                sudo bash -c "echo '${var_name}=\"${default_val}\"' >> ${ENV_FILE}"
+            fi
             changes_made=true
         fi
     done
@@ -581,27 +624,71 @@ x-bot-base: &bot-base
   image: tg-vps-bot:latest
   restart: always
   env_file: .env
+    depends_on:
+        docker-proxy:
+            condition: service_started
+    environment:
+        DOCKER_HOST: tcp://docker-proxy:2375
+        DEPLOY_MODE: docker
+    security_opt:
+        - no-new-privileges:true
+    cap_drop:
+        - ALL
+    tmpfs:
+        - /tmp
+    networks:
+        - app
+        - docker-api
 services:
+    docker-proxy:
+        image: tecnativa/docker-socket-proxy:0.3.0
+        container_name: tg-docker-proxy
+        restart: always
+        read_only: true
+        security_opt:
+            - no-new-privileges:true
+        cap_drop:
+            - ALL
+        tmpfs:
+            - /run
+            - /tmp
+        environment:
+            CONTAINERS: 1
+            EVENTS: 1
+            INFO: 1
+            PING: 1
+            POST: 1
+            VERSION: 1
+            IMAGES: 0
+            NETWORKS: 0
+            SERVICES: 0
+            TASKS: 0
+            VOLUMES: 0
+            SYSTEM: 0
+            NODES: 0
+            SECRETS: 0
+            SWARM: 0
+        volumes:
+            - /var/run/docker.sock:/var/run/docker.sock:ro
+        networks:
+            - docker-api
   bot-secure:
     <<: *bot-base
     container_name: tg-bot-secure
     profiles: ["secure"]
     user: "tgbot"
     ports:
-      - "${WEB_PORT}:${WEB_PORT}"
+            - "127.0.0.1:${WEB_PORT}:${WEB_PORT}"
     environment:
       - INSTALL_MODE=secure
-      - DEPLOY_MODE=docker
       - TG_BOT_CONTAINER_NAME=tg-bot-secure
     volumes:
       - ./config:/opt/tg-bot/config
       - ./logs/bot:/opt/tg-bot/logs/bot
-      - /var/run/docker.sock:/var/run/docker.sock:ro
       - /proc/uptime:/proc_host/uptime:ro
       - /proc/stat:/proc_host/stat:ro
       - /proc/meminfo:/proc_host/meminfo:ro
       - /proc/net/dev:/proc_host/net/dev:ro
-    cap_drop: [ALL]
     cap_add: [NET_RAW]
   bot-root:
     <<: *bot-base
@@ -609,30 +696,33 @@ services:
     profiles: ["root"]
     user: "root"
     ports:
-      - "${WEB_PORT}:${WEB_PORT}"
+            - "127.0.0.1:${WEB_PORT}:${WEB_PORT}"
     environment:
       - INSTALL_MODE=root
-      - DEPLOY_MODE=docker
       - TG_BOT_CONTAINER_NAME=tg-bot-root
-    privileged: true
-    pid: "host"
-    network_mode: "host"
-    ipc: "host"
     volumes:
       - ./config:/opt/tg-bot/config
       - ./logs/bot:/opt/tg-bot/logs/bot
-      - /:/host
-      - /var/run/docker.sock:/var/run/docker.sock:ro
+            - /proc/uptime:/proc_host/uptime:ro
+            - /proc/stat:/proc_host/stat:ro
+            - /proc/meminfo:/proc_host/meminfo:ro
+            - /proc/net/dev:/proc_host/net/dev:ro
+            - /etc/hostname:/host/etc/hostname:ro
+            - /etc/os-release:/host/etc/os-release:ro
   watchdog:
     <<: *bot-base
     container_name: tg-watchdog
     command: python watchdog.py
     user: "root"
-    restart: always
     volumes:
       - ./config:/opt/tg-bot/config
       - ./logs/watchdog:/opt/tg-bot/logs/watchdog
-      - /var/run/docker.sock:/var/run/docker.sock:ro
+networks:
+    app:
+        driver: bridge
+    docker-api:
+        driver: bridge
+        internal: true
 EOF
 }
 

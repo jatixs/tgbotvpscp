@@ -10,7 +10,7 @@ from argon2 import PasswordHasher
 from . import config
 from .i18n import _
 from .config import ADMIN_USER_ID, ADMIN_USERNAME, INSTALL_MODE
-from .config import get_bot_config, set_bot_config
+from .config import get_bot_config_sync, set_bot_config_sync
 from .shared_state import ALLOWED_USERS, USER_NAMES, LAST_MESSAGE_IDS
 from .messaging import delete_previous_message
 from .utils import escape_html
@@ -20,7 +20,7 @@ def load_users():
     try:
         ALLOWED_USERS.clear()
         USER_NAMES.clear()
-        data = get_bot_config("users", {})
+        data = get_bot_config_sync("users", {})
         if data:
             for user in data.get("allowed_users", []):
                 uid = int(user["id"])
@@ -75,7 +75,71 @@ def save_users():
             "allowed_users": allowed_users_to_save,
             "user_names": user_names_to_save,
         }
-        set_bot_config("users", data)
+        set_bot_config_sync("users", data)
+    except Exception as e:
+        logging.error(f"Ошибка сохранения пользователей: {e}", exc_info=True)
+
+
+async def load_users_async():
+    try:
+        ALLOWED_USERS.clear()
+        USER_NAMES.clear()
+        data = await config.get_bot_config("users", {})
+        if data:
+            for user in data.get("allowed_users", []):
+                uid = int(user["id"])
+                group = user.get("group", "users")
+                password_hash = user.get("password_hash", None)
+                ALLOWED_USERS[uid] = {"group": group, "password_hash": password_hash}
+            USER_NAMES.update(data.get("user_names", {}))
+        else:
+            logging.info("Users config empty. Инициализация.")
+        if ADMIN_USER_ID not in ALLOWED_USERS:
+            logging.info(f"Главный админ ID {ADMIN_USER_ID} не найден, добавляю.")
+            initial_pass = os.environ.get("TG_WEB_INITIAL_PASSWORD")
+            if initial_pass:
+                logging.info("Использую сгенерированный пароль.")
+                ph = PasswordHasher()
+                p_hash = ph.hash(initial_pass)
+            else:
+                logging.warning(
+                    "Случайный пароль не найден. Использую дефолтный ('admin')."
+                )
+                ph = PasswordHasher()
+                p_hash = ph.hash("admin")
+            ALLOWED_USERS[ADMIN_USER_ID] = {"group": "admins", "password_hash": p_hash}
+            USER_NAMES[str(ADMIN_USER_ID)] = _(
+                "default_admin_name", config.DEFAULT_LANGUAGE
+            )
+            await save_users_async()
+        elif isinstance(ALLOWED_USERS[ADMIN_USER_ID], str):
+            ALLOWED_USERS[ADMIN_USER_ID] = {"group": "admins", "password_hash": None}
+        logging.info(f"Пользователи загружены: {len(ALLOWED_USERS)}")
+    except Exception as e:
+        logging.error(f"Критическая ошибка загрузки пользователей: {e}", exc_info=True)
+        ALLOWED_USERS[ADMIN_USER_ID] = {"group": "admins", "password_hash": None}
+        await save_users_async()
+
+
+async def save_users_async():
+    try:
+        user_names_to_save = {str(k): v for k, v in USER_NAMES.items()}
+        allowed_users_to_save = []
+        for uid, data in ALLOWED_USERS.items():
+            if isinstance(data, str):
+                group = data
+                p_hash = None
+            else:
+                group = data.get("group", "users")
+                p_hash = data.get("password_hash")
+            allowed_users_to_save.append(
+                {"id": int(uid), "group": group, "password_hash": p_hash}
+            )
+        data = {
+            "allowed_users": allowed_users_to_save,
+            "user_names": user_names_to_save,
+        }
+        await config.set_bot_config("users", data)
     except Exception as e:
         logging.error(f"Ошибка сохранения пользователей: {e}", exc_info=True)
 
@@ -218,7 +282,7 @@ async def refresh_user_names(bot: Bot):
             except Exception as e:
                 logging.error(f"Ошибка при обновлении имени {uid}: {e}")
     if needs_save:
-        save_users()
+        await save_users_async()
 
 
 async def get_user_name(bot: Bot, user_id: int) -> str:
@@ -248,18 +312,18 @@ async def get_user_name(bot: Bot, user_id: int) -> str:
         if fetched_name:
             new_name = escape_html(fetched_name)
             USER_NAMES[uid_str] = new_name
-            save_users()
+            await save_users_async()
             return new_name
         else:
             if cached_name != new_name:
                 USER_NAMES[uid_str] = new_name
-                save_users()
+                await save_users_async()
             return new_name
     except Exception as e:
         logging.error(f"Ошибка получения имени для ID {user_id}: {e}")
         if cached_name != new_name:
             USER_NAMES[uid_str] = new_name
-            save_users()
+            await save_users_async()
         return new_name
 
 
