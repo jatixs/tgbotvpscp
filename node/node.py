@@ -291,6 +291,7 @@ AGENT_DOWN_ALERT_SENT = False
 AGENT_STABLE_SINCE = None  # Timestamp when agent first came back up; used to confirm stable recovery
 LAST_AGENT_LANG = AGENT_ALERT_LANG if AGENT_ALERT_LANG in {"ru", "en"} else "ru"
 CACHED_ALERT_REPORTER_HASH = None
+SKIPPED_AGENT_ALERT_LOGS = set()
 LAST_HTTP_ERROR_SIGNATURE = None
 LAST_HTTP_ERROR_LOGGED_AT = 0.0
 SUPPRESSED_HTTP_ERROR_COUNT = 0
@@ -1343,6 +1344,27 @@ def is_alert_reporter_node():
     return reporter_hash == OWN_NODE_TOKEN_HASH
 
 
+def _clear_skipped_agent_alert_logs(node_name, alert_kind=None):
+    global SKIPPED_AGENT_ALERT_LOGS
+    SKIPPED_AGENT_ALERT_LOGS = {
+        key for key in SKIPPED_AGENT_ALERT_LOGS
+        if key[0] != node_name or (alert_kind is not None and key[1] != alert_kind)
+    }
+
+
+def _log_skipped_agent_alert_once(alert_kind, node_name):
+    reporter_hash = get_cached_alert_reporter_hash() or "unknown"
+    log_key = (node_name, alert_kind, reporter_hash)
+    if log_key in SKIPPED_AGENT_ALERT_LOGS:
+        return
+
+    _clear_skipped_agent_alert_logs(node_name, alert_kind)
+    SKIPPED_AGENT_ALERT_LOGS.add(log_key)
+    logging.info(
+        f"Skipping agent {alert_kind} alert on node {node_name}: another node is selected as reporter"
+    )
+
+
 def _get_node_alert_state(state, node_name):
     node_state = state.get(node_name)
     if isinstance(node_state, dict):
@@ -1463,11 +1485,15 @@ def clear_agent_alert_incident(node_name):
     finally:
         _release_agent_alert_lock()
 
+    _clear_skipped_agent_alert_logs(node_name)
+
 
 def send_deduplicated_agent_alert(alert_kind, node_name, message):
     if not is_alert_reporter_node():
-        logging.info(f"Skipping agent {alert_kind} alert on node {node_name}: another node is selected as reporter")
+        _log_skipped_agent_alert_once(alert_kind, node_name)
         return False
+
+    _clear_skipped_agent_alert_logs(node_name, alert_kind)
 
     reservation_id = _reserve_agent_alert(alert_kind, node_name)
     if reservation_id is None:
