@@ -5,11 +5,20 @@
 <h1 align="center">📝 Telegram VPS Management Bot — Changelog</h1>
 
 <p align="center">
-    <img src="https://img.shields.io/badge/version-v1.22.2-blue?style=flat-square" alt="Version 1.22.2"/>
-    <img src="https://img.shields.io/badge/build-74-purple?style=flat-square" alt="Build 74"/>
-    <img src="https://img.shields.io/badge/date-April%2018%202026-green?style=flat-square" alt="Date April 18 2026"/>
+    <img src="https://img.shields.io/badge/version-v1.22.3-blue?style=flat-square" alt="Version 1.22.3"/>
+    <img src="https://img.shields.io/badge/build-75-purple?style=flat-square" alt="Build 75"/>
+    <img src="https://img.shields.io/badge/date-April%2019%202026-green?style=flat-square" alt="Date April 19 2026"/>
 	<img src="https://img.shields.io/badge/status-stable-green?style=flat-square" alt="Status Stable"/>
 </p>
+
+---
+## [1.22.3] - 2026-04-19
+
+### 🔒 Security / Dependencies:
+* **aiohttp 3.13.3 → 3.13.4:** Fixed CVE-2026-34515 (information disclosure via static resource handler), CVE-2026-34516 (DoS via excessive multipart headers), CVE-2026-34520 (header injection), CVE-2026-34525 (security bypass via multiple Host headers).
+* **cryptography 46.0.5 → 46.0.7:** Fixed CVE-2026-39892 (buffer overflow via non-contiguous buffer in API), CVE-2026-34073 (security bypass via improper DNS name constraint validation).
+* **Pillow 12.1.1 → 12.2.0:** Fixed CVE-2026-40192 (FITS GZIP decompression bomb, severity HIGH).
+* **requests 2.32.4 → 2.33.0:** Fixed CVE-2026-25645 (security bypass via predictable temporary file creation).
 
 ---
 ## [1.22.2] - 2026-04-18
