@@ -52,7 +52,27 @@ print(base64.urlsafe_b64encode(os.urandom(32)).decode())
 PY
 }
 
+is_node_context() {
+    if [ "${FORCE_NODE_MODE:-no}" = "yes" ]; then
+        return 0
+    fi
+    if [ "${IS_NODE:-no}" = "yes" ]; then
+        return 0
+    fi
+    if [ -f "${ENV_FILE}" ] && grep -q '^MODE=node' "${ENV_FILE}"; then
+        return 0
+    fi
+    if [ -f "/tmp/tgbot_env.bak" ] && grep -q '^MODE=node' "/tmp/tgbot_env.bak"; then
+        return 0
+    fi
+    return 1
+}
+
 ensure_data_encryption_key() {
+    if is_node_context; then
+        return 0
+    fi
+
     if [ -n "$DATA_ENCRYPTION_KEY" ]; then
         export DATA_ENCRYPTION_KEY
         return 0
@@ -541,7 +561,6 @@ ensure_env_variables() {
     # List of variables with their default values
     # Format: "VAR_NAME|default_value|description"
     local ENV_VARS=(
-        "DATA_ENCRYPTION_KEY||Ключ шифрования данных"
         "WEB_SERVER_HOST|0.0.0.0|Хост веб-сервера"
         "WEB_SERVER_PORT|8080|Порт веб-сервера"
         "INSTALL_MODE|secure|Режим установки"
@@ -550,6 +569,10 @@ ensure_env_variables() {
         "DEBUG|false|Режим отладки"
         "TG_BOT_NAME|VPS Bot|Имя бота"
     )
+
+    if ! is_node_context; then
+        ENV_VARS=("DATA_ENCRYPTION_KEY||Ключ шифрования данных" "${ENV_VARS[@]}")
+    fi
     
     for var_entry in "${ENV_VARS[@]}"; do
         local var_name=$(echo "$var_entry" | cut -d'|' -f1)
@@ -885,6 +908,7 @@ EOF
 
 install_node_logic() {
     echo -e "\n${C_BOLD}=== Установка НОДЫ ===${C_RESET}"
+    FORCE_NODE_MODE="yes"
     if [ -n "$AUTO_AGENT_URL" ]; then AGENT_URL="$AUTO_AGENT_URL"; fi
     if [ -n "$AUTO_NODE_TOKEN" ]; then NODE_TOKEN="$AUTO_NODE_TOKEN"; fi
     common_install_steps
@@ -1007,6 +1031,7 @@ EOF
     sudo systemctl daemon-reload; sudo systemctl enable ${NODE_SERVICE_NAME}
     cleanup_for_node "установки"  
     run_with_spinner "Запуск Ноды" sudo systemctl restart ${NODE_SERVICE_NAME}
+    FORCE_NODE_MODE="no"
     msg_success "Нода установлена!"
 }
 
