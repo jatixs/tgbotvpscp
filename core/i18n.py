@@ -6,7 +6,7 @@ from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from . import config as core_config
 from . import shared_state
 from functools import lru_cache
-from .config import get_bot_config, set_bot_config
+from .config import get_bot_config_sync, set_bot_config_sync
 
 STRINGS = {
     "ru": {
@@ -1646,7 +1646,7 @@ STRINGS = {
 
 def load_user_settings():
     try:
-        settings = get_bot_config("user_settings", {})
+        settings = get_bot_config_sync("user_settings", {})
         if settings:
             loaded_data_int_keys = {int(k): v for k, v in settings.items()}
             shared_state.USER_SETTINGS.clear()
@@ -1664,7 +1664,34 @@ def load_user_settings():
 def save_user_settings():
     try:
         settings_to_save = {str(k): v for k, v in shared_state.USER_SETTINGS.items()}
-        set_bot_config("user_settings", settings_to_save)
+        set_bot_config_sync("user_settings", settings_to_save)
+        logging.debug("Настройки пользователей (языки) сохранены.")
+    except Exception as e:
+        safe_e = str(e).replace("\n", " ").replace("\r", "")
+        logging.error(f"Ошибка сохранения user_settings: {safe_e}")
+
+
+async def load_user_settings_async():
+    try:
+        settings = await core_config.get_bot_config("user_settings", {})
+        if settings:
+            loaded_data_int_keys = {int(k): v for k, v in settings.items()}
+            shared_state.USER_SETTINGS.clear()
+            shared_state.USER_SETTINGS.update(loaded_data_int_keys)
+            logging.info("Настройки пользователей (языки) загружены из bot.db.")
+        else:
+            shared_state.USER_SETTINGS.clear()
+            logging.info("Настройки пользователей (языки) не найдены или пусты.")
+    except Exception as e:
+        safe_e = str(e).replace("\n", " ").replace("\r", "")
+        logging.error(f"Ошибка загрузки user_settings: {safe_e}")
+        shared_state.USER_SETTINGS.clear()
+
+
+async def save_user_settings_async():
+    try:
+        settings_to_save = {str(k): v for k, v in shared_state.USER_SETTINGS.items()}
+        await core_config.set_bot_config("user_settings", settings_to_save)
         logging.debug("Настройки пользователей (языки) сохранены.")
     except Exception as e:
         safe_e = str(e).replace("\n", " ").replace("\r", "")
@@ -1705,6 +1732,25 @@ def set_user_lang(user_id: int | str | None, lang: str):
         shared_state.USER_SETTINGS[user_id] = {}
     shared_state.USER_SETTINGS[user_id]["lang"] = lang
     save_user_settings()
+    logging.info(f"Язык для пользователя {user_id} изменен на '{lang}' и сохранен.")
+
+
+async def set_user_lang_async(user_id: int | str | None, lang: str):
+    if user_id is None:
+        logging.warning("set_user_lang_async вызван с user_id=None. Сохранение отменено.")
+        return
+    if not isinstance(user_id, int):
+        try:
+            user_id = int(user_id)
+        except (ValueError, TypeError):
+            logging.error(
+                f"set_user_lang_async вызван с нечисловым user_id: {user_id}. Сохранение отменено."
+            )
+            return
+    if user_id not in shared_state.USER_SETTINGS:
+        shared_state.USER_SETTINGS[user_id] = {}
+    shared_state.USER_SETTINGS[user_id]["lang"] = lang
+    await save_user_settings_async()
     logging.info(f"Язык для пользователя {user_id} изменен на '{lang}' и сохранен.")
 
 

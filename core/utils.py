@@ -30,7 +30,7 @@ from .config import (
     CIPHER_SUITE,
     DATA_ENCRYPTION_KEY,
 )
-from .config import get_bot_config, set_bot_config
+from .config import get_bot_config_sync, set_bot_config_sync
 
 
 def anonymize_user(user_id: int, username: str = None) -> str:
@@ -122,7 +122,7 @@ def get_host_path(path: str) -> str:
 
 def load_alerts_config():
     try:
-        loaded_data = get_bot_config("alerts_config", {})
+        loaded_data = get_bot_config_sync("alerts_config", {})
         if loaded_data:
             loaded_data_int_keys = {int(k): v for k, v in loaded_data.items()}
             shared_state.ALERTS_CONFIG.clear()
@@ -139,7 +139,31 @@ def load_alerts_config():
 def save_alerts_config():
     try:
         config_to_save = {str(k): v for k, v in shared_state.ALERTS_CONFIG.items()}
-        set_bot_config("alerts_config", config_to_save)
+        set_bot_config_sync("alerts_config", config_to_save)
+    except Exception as e:
+        logging.error(f"Error saving alerts config: {e}")
+
+
+async def load_alerts_config_async():
+    try:
+        loaded_data = await config.get_bot_config("alerts_config", {})
+        if loaded_data:
+            loaded_data_int_keys = {int(k): v for k, v in loaded_data.items()}
+            shared_state.ALERTS_CONFIG.clear()
+            shared_state.ALERTS_CONFIG.update(loaded_data_int_keys)
+            logging.info("Alerts config loaded from bot.db.")
+        else:
+            shared_state.ALERTS_CONFIG.clear()
+            logging.info("Alerts config empty or not found.")
+    except Exception as e:
+        logging.error(f"Error loading alerts config: {e}")
+        shared_state.ALERTS_CONFIG.clear()
+
+
+async def save_alerts_config_async():
+    try:
+        config_to_save = {str(k): v for k, v in shared_state.ALERTS_CONFIG.items()}
+        await config.set_bot_config("alerts_config", config_to_save)
     except Exception as e:
         logging.error(f"Error saving alerts config: {e}")
 
@@ -156,7 +180,7 @@ def load_services_config():
     ]
     
     try:
-        loaded_data = config_module.get_bot_config("services", [])
+        loaded_data = config_module.get_bot_config_sync("services", [])
         if loaded_data and isinstance(loaded_data, list):
             # Replace MANAGED_SERVICES with loaded data
             config_module.MANAGED_SERVICES.clear()
@@ -179,7 +203,48 @@ def save_services_config():
     """Save managed services to encrypted config file"""
     from core import config as config_module
     try:
-        config_module.set_bot_config("services", config_module.MANAGED_SERVICES)
+        config_module.set_bot_config_sync("services", config_module.MANAGED_SERVICES)
+        logging.info(f"Services config saved to bot.db: {len(config_module.MANAGED_SERVICES)} services.")
+        return True
+    except Exception as e:
+        logging.error(f"Error saving services config: {e}")
+        return False
+
+
+async def load_services_config_async():
+    """Load managed services from encrypted config file."""
+    from core import config as config_module
+
+    critical_services = [
+        {"name": "sshd", "type": "systemd"},
+        {"name": "ssh", "type": "systemd"},
+        {"name": "fail2ban", "type": "systemd"},
+    ]
+
+    try:
+        loaded_data = await config_module.get_bot_config("services", [])
+        if loaded_data and isinstance(loaded_data, list):
+            config_module.MANAGED_SERVICES.clear()
+            config_module.MANAGED_SERVICES.extend(loaded_data)
+            logging.info(f"Services config loaded from bot.db: {len(loaded_data)} services.")
+        else:
+            logging.info("Services config empty or not found, using defaults.")
+    except Exception as e:
+        logging.error(f"Error loading services config: {e}")
+
+    existing_names = {service.get("name") for service in config_module.MANAGED_SERVICES}
+    for critical_service in critical_services:
+        if critical_service["name"] not in existing_names:
+            config_module.MANAGED_SERVICES.insert(0, critical_service)
+            logging.info(f"Re-added critical service: {critical_service['name']}")
+
+
+async def save_services_config_async():
+    """Save managed services to encrypted config file."""
+    from core import config as config_module
+
+    try:
+        await config_module.set_bot_config("services", config_module.MANAGED_SERVICES)
         logging.info(f"Services config saved to bot.db: {len(config_module.MANAGED_SERVICES)} services.")
         return True
     except Exception as e:

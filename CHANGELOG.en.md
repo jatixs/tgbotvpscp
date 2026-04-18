@@ -15,10 +15,17 @@
 ## [1.22.2] - 2026-04-18
 
 ### 🔧 Fixed:
-* **WAF / WebUI:** Eliminated false positive `403 {"error": "Malicious request detected"}` responses for legitimate login and server update requests. This fix closes GitHub Issue #68.
+* **WAF / WebUI:** Eliminated false positive `403 {"error": "Malicious request detected"}` responses for legitimate login and server update requests.
 * **WAF:** Narrowed `COMMAND_INJECTION` signatures so ordinary `form-urlencoded` and `JSON` requests are no longer blocked because of `&`, `;`, or `|` in safe contexts.
 * **WAF / Nodes:** Excluded the trusted internal `/api/heartbeat` endpoint from WAF inspection so node heartbeats, logs, and diagnostic output cannot trigger false `SQL_INJECTION` / `XSS` / `COMMAND_INJECTION` blocks.
 * **WAF:** Corrected regex escaping for the `XSS` and `PATH_TRAVERSAL` signatures so the protection targets real attacks without breaking normal WebUI flows.
+* **ORM / Encryption:** Closed the fail-open path in `EncryptedTextField` (`core/models.py`) — encryption and decryption failures now raise explicit exceptions instead of writing or returning plaintext.
+* **Configuration / Keys:** Removed unsafe encryption key storage in `config/security.key`; the application now requires `DATA_ENCRYPTION_KEY` from the environment and fails fast if the key is missing or invalid.
+* **Logging:** `RedactingFormatter` now always masks tokens, IP addresses, hashes, and identifiers even in debug mode; raw logs are only possible with explicit `UNSAFE_LOGGING=true`.
+* **SQLite / Event Loop:** Migrated `core/config.py` from synchronous `sqlite3` to `aiosqlite`; config load/save paths are now async, and hot bot and WebUI paths were switched to direct `await` usage instead of `to_thread` workarounds.
+* **Docker / Compose:** Removed dangerous `privileged`, `pid: host`, `network_mode: host`, `/:/host`, and direct `docker.sock` access; Docker API access now goes through `Tecnativa Docker Socket Proxy` with reduced permissions.
+* **Deploy:** Updated `deploy.sh` and `deploy_en.sh` to migrate legacy encryption keys into `.env`, generate `DATA_ENCRYPTION_KEY` for new installs, and emit a hardened `docker-compose.yml`.
+* **Dependencies:** Further pinned key Python dependency versions to reduce supply-chain drift and improve reproducible builds.
 
 ---
 ## [1.22.1] - 2026-04-17
