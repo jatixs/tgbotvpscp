@@ -19,6 +19,7 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 ENV_FILE = os.path.join(BASE_DIR, '.env')
 CONFIG_DIR = os.path.join(BASE_DIR, 'config')
 SPEEDTEST_MODE_FILE = os.path.join(CONFIG_DIR, '.speedtest_mode')
+os.makedirs(CONFIG_DIR, exist_ok=True)
 
 def load_config():
     config = {}
@@ -243,6 +244,10 @@ try:
     AGENT_ALERT_LANG = CONF.get("AGENT_ALERT_LANG", "ru").lower()
 except ValueError:
     AGENT_ALERT_LANG = "ru"
+
+AGENT_ALERT_STATE_FILE = os.path.join(CONFIG_DIR, '.agent_alert_state.json')
+AGENT_ALERT_STATE_LOCK_DIR = os.path.join(CONFIG_DIR, '.agent_alert_state.lock')
+AGENT_ALERT_DEDUP_SECONDS = max(AGENT_ALERT_DELAY_SECONDS, UPDATE_INTERVAL * 3, 60)
 
 if not AGENT_BASE_URL or not AGENT_TOKEN:
     logging.error("CRITICAL: AGENT_BASE_URL or AGENT_TOKEN not found in .env")
@@ -1239,6 +1244,112 @@ def send_critical_telegram_alert(message):
     return success_count > 0
 
 
+def _acquire_agent_alert_lock():
+    for _ in range(10):
+        try:
+            os.mkdir(AGENT_ALERT_STATE_LOCK_DIR)
+            return True
+        except FileExistsError:
+            time.sleep(0.1)
+        except Exception as e:
+            logging.debug(f"Failed to acquire alert lock: {e}")
+            return False
+    return False
+
+
+def _release_agent_alert_lock():
+    try:
+        os.rmdir(AGENT_ALERT_STATE_LOCK_DIR)
+    except FileNotFoundError:
+        pass
+    except Exception as e:
+        logging.debug(f"Failed to release alert lock: {e}")
+
+
+def _load_agent_alert_state():
+    try:
+        with open(AGENT_ALERT_STATE_FILE, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+            return data if isinstance(data, dict) else {}
+    except FileNotFoundError:
+        return {}
+    except Exception as e:
+        logging.debug(f"Failed to load alert state: {e}")
+        return {}
+
+
+def _save_agent_alert_state(state):
+    temp_path = f"{AGENT_ALERT_STATE_FILE}.{os.getpid()}.tmp"
+    with open(temp_path, 'w', encoding='utf-8') as f:
+        json.dump(state, f)
+    os.replace(temp_path, AGENT_ALERT_STATE_FILE)
+
+
+def _reserve_agent_alert(alert_kind, node_name):
+    now = time.time()
+    state_key = f"{node_name}:{alert_kind}"
+    reservation_id = f"{os.getpid()}:{threading.get_ident()}:{int(now * 1000)}"
+
+    if not _acquire_agent_alert_lock():
+        logging.warning(f"Alert dedup lock unavailable, sending {alert_kind} alert without deduplication")
+        return reservation_id
+
+    try:
+        state = _load_agent_alert_state()
+        previous = state.get(state_key)
+        if isinstance(previous, dict):
+            previous_ts = float(previous.get('timestamp', 0) or 0)
+            if now - previous_ts < AGENT_ALERT_DEDUP_SECONDS:
+                return None
+
+        state[state_key] = {
+            'timestamp': now,
+            'status': 'pending',
+            'reservation_id': reservation_id,
+        }
+        _save_agent_alert_state(state)
+        return reservation_id
+    finally:
+        _release_agent_alert_lock()
+
+
+def _finalize_agent_alert(alert_kind, node_name, reservation_id, sent):
+    state_key = f"{node_name}:{alert_kind}"
+    if not _acquire_agent_alert_lock():
+        return
+
+    try:
+        state = _load_agent_alert_state()
+        current = state.get(state_key)
+        if not isinstance(current, dict) or current.get('reservation_id') != reservation_id:
+            return
+
+        if sent:
+            current['status'] = 'sent'
+            current['timestamp'] = time.time()
+            state[state_key] = current
+        else:
+            state.pop(state_key, None)
+
+        _save_agent_alert_state(state)
+    finally:
+        _release_agent_alert_lock()
+
+
+def send_deduplicated_agent_alert(alert_kind, node_name, message):
+    reservation_id = _reserve_agent_alert(alert_kind, node_name)
+    if reservation_id is None:
+        logging.info(f"Duplicate agent {alert_kind} alert suppressed for node {node_name}")
+        return False
+
+    sent = False
+    try:
+        sent = send_critical_telegram_alert(message)
+        return sent
+    finally:
+        _finalize_agent_alert(alert_kind, node_name, reservation_id, sent)
+
+
 def format_downtime(seconds):
     return format_downtime_localized(seconds, LAST_AGENT_LANG)
 
@@ -1391,8 +1502,8 @@ def send_heartbeat():
 
                     if AGENT_DOWN_ALERT_SENT:
                         recovery_message = build_agent_recovery_alert(node_name, downtime)
-                        send_critical_telegram_alert(recovery_message)
-                        logging.info(f"Agent recovered after {format_downtime(downtime)} downtime")
+                        if send_deduplicated_agent_alert("recovery", node_name, recovery_message):
+                            logging.info(f"Agent recovered after {format_downtime(downtime)} downtime")
 
                     AGENT_DOWN_SINCE = None
                     AGENT_DOWN_ALERT_SENT = False
@@ -1416,7 +1527,7 @@ def send_heartbeat():
                     node_name = get_node_name_for_alert()
                     alert_message = build_agent_down_alert(node_name)
 
-                    if send_critical_telegram_alert(alert_message):
+                    if send_deduplicated_agent_alert("down", node_name, alert_message):
                         AGENT_DOWN_ALERT_SENT = True
                         logging.warning(f"Critical alert sent: Agent down for {format_downtime(downtime)}")
     except Exception as e:
@@ -1433,7 +1544,7 @@ def send_heartbeat():
             node_name = get_node_name_for_alert()
             alert_message = build_agent_down_alert(node_name)
 
-            if send_critical_telegram_alert(alert_message):
+            if send_deduplicated_agent_alert("down", node_name, alert_message):
                 AGENT_DOWN_ALERT_SENT = True
                 logging.warning(f"Critical alert sent: Agent down for {format_downtime(downtime)}")
 
