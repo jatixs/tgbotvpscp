@@ -6,9 +6,86 @@ import os
 import hashlib
 from tortoise import Tortoise
 from .models import Node
-from .config import CONFIG_DIR, TORTOISE_ORM
+from .config import CONFIG_DIR, NODE_OFFLINE_TIMEOUT, TORTOISE_ORM
 
 LEGACY_JSON_PATH = os.path.join(CONFIG_DIR, "nodes.json")
+
+
+def _coerce_float(value, default: float = 0.0) -> float:
+    try:
+        return float(value or 0)
+    except (TypeError, ValueError):
+        return default
+
+
+def _build_default_availability_state(now: float) -> dict:
+    return {
+        "status": "unknown",
+        "status_since": now,
+        "tracking_since": now,
+        "total_online_seconds": 0.0,
+        "total_downtime_seconds": 0.0,
+        "total_internet_downtime_seconds": 0.0,
+        "total_physical_downtime_seconds": 0.0,
+        "current_downtime_started_at": 0.0,
+        "current_downtime_kind": "",
+        "last_downtime_at": 0.0,
+        "last_downtime_recovered_at": 0.0,
+        "last_internet_downtime_at": 0.0,
+        "last_physical_downtime_at": 0.0,
+        "last_reboot_at": 0.0,
+        "last_boot_time": 0.0,
+    }
+
+
+def _normalize_availability_state(raw_state, *, now: float) -> dict:
+    state = _build_default_availability_state(now)
+    if isinstance(raw_state, dict):
+        state.update(raw_state)
+
+    for key in (
+        "status_since",
+        "tracking_since",
+        "total_online_seconds",
+        "total_downtime_seconds",
+        "total_internet_downtime_seconds",
+        "total_physical_downtime_seconds",
+        "current_downtime_started_at",
+        "last_downtime_at",
+        "last_downtime_recovered_at",
+        "last_internet_downtime_at",
+        "last_physical_downtime_at",
+        "last_reboot_at",
+        "last_boot_time",
+    ):
+        state[key] = _coerce_float(state.get(key), 0.0)
+
+    if state.get("status") not in {"unknown", "online", "offline"}:
+        state["status"] = "unknown"
+
+    if not state["tracking_since"]:
+        state["tracking_since"] = now
+
+    return state
+
+
+def _detect_reboot(prev_stats: dict, current_stats: dict, availability_state: dict) -> tuple[bool, float]:
+    prev_boot_time = _coerce_float((prev_stats or {}).get("boot_time"), 0.0)
+    current_boot_time = _coerce_float((current_stats or {}).get("boot_time"), 0.0)
+    last_boot_time = _coerce_float(availability_state.get("last_boot_time"), 0.0)
+
+    if prev_boot_time and current_boot_time and abs(current_boot_time - prev_boot_time) > 1:
+        return True, current_boot_time
+
+    if last_boot_time and current_boot_time and abs(current_boot_time - last_boot_time) > 1:
+        return True, current_boot_time
+
+    prev_uptime = _coerce_float((prev_stats or {}).get("uptime"), 0.0)
+    current_uptime = _coerce_float((current_stats or {}).get("uptime"), 0.0)
+    if prev_uptime > 0 and current_uptime > 0 and current_uptime + 60 < prev_uptime:
+        return True, max(0.0, time.time() - current_uptime)
+
+    return False, 0.0
 
 
 def _get_token_hash(token: str) -> str:
@@ -128,9 +205,58 @@ async def update_node_heartbeat(token: str, ip: str, stats: dict):
     node = await Node.get_or_none(token_hash=t_hash)
     if not node:
         return
+    now = time.time()
+    prev_last_seen = _coerce_float(node.last_seen, 0.0)
+    prev_stats = node.stats or {}
+    extra = node.extra_state or {}
+    availability = _normalize_availability_state(
+        extra.get("availability"),
+        now=_coerce_float(node.created_at, now) or now,
+    )
+    offline_gap_detected = prev_last_seen > 0 and (now - prev_last_seen) >= NODE_OFFLINE_TIMEOUT
+
+    reboot_detected, reboot_at = _detect_reboot(prev_stats, stats, availability)
+    current_boot_time = _coerce_float(stats.get("boot_time"), 0.0)
+    if reboot_detected and reboot_at:
+        availability["last_reboot_at"] = reboot_at
+    if current_boot_time:
+        availability["last_boot_time"] = current_boot_time
+
+    if availability.get("status") == "offline" or offline_gap_detected:
+        if availability.get("status") == "online":
+            status_since = _coerce_float(availability.get("status_since"), prev_last_seen)
+            availability["total_online_seconds"] += max(0.0, prev_last_seen - status_since)
+        downtime_started_at = (
+            _coerce_float(availability.get("current_downtime_started_at"), 0.0)
+            or (_coerce_float(availability.get("status_since"), 0.0) if availability.get("status") == "offline" else 0.0)
+            or prev_last_seen
+            or now
+        )
+        downtime_seconds = max(0.0, now - downtime_started_at)
+        downtime_kind = "physical" if reboot_detected else "internet"
+
+        availability["total_downtime_seconds"] += downtime_seconds
+        if downtime_kind == "physical":
+            availability["total_physical_downtime_seconds"] += downtime_seconds
+            availability["last_physical_downtime_at"] = downtime_started_at
+        else:
+            availability["total_internet_downtime_seconds"] += downtime_seconds
+            availability["last_internet_downtime_at"] = downtime_started_at
+
+        availability["last_downtime_at"] = downtime_started_at
+        availability["last_downtime_recovered_at"] = now
+        availability["current_downtime_started_at"] = 0.0
+        availability["current_downtime_kind"] = downtime_kind
+
+        availability["status"] = "online"
+        availability["status_since"] = now
+    elif availability.get("status") != "online":
+        availability["status"] = "online"
+        availability["status_since"] = now
+
     history = node.history or []
     point = {
-        "t": int(time.time()),
+        "t": int(now),
         "c": stats.get("cpu", 0),
         "r": stats.get("ram", 0),
         "rx": stats.get("net_rx", 0),
@@ -139,11 +265,44 @@ async def update_node_heartbeat(token: str, ip: str, stats: dict):
     history.append(point)
     if len(history) > 60:
         history = history[-60:]
-    node.last_seen = time.time()
+    extra["availability"] = availability
+    node.last_seen = now
     node.ip = ip
     node.stats = stats
     node.history = history
+    node.extra_state = extra
     await node.save()
+
+
+async def mark_node_offline(token: str, offline_at: float | None = None):
+    t_hash = _get_token_hash(token)
+    node = await Node.get_or_none(token_hash=t_hash)
+    if not node:
+        return False
+
+    now = _coerce_float(offline_at, time.time()) or time.time()
+    extra = node.extra_state or {}
+    availability = _normalize_availability_state(
+        extra.get("availability"),
+        now=_coerce_float(node.created_at, now) or now,
+    )
+
+    if availability.get("status") != "offline":
+        if availability.get("status") == "online":
+            status_since = _coerce_float(availability.get("status_since"), now)
+            availability["total_online_seconds"] += max(0.0, now - status_since)
+
+        availability["status"] = "offline"
+        availability["status_since"] = now
+        availability["current_downtime_started_at"] = now
+        availability["current_downtime_kind"] = ""
+        availability["last_downtime_at"] = now
+
+        extra["availability"] = availability
+        node.extra_state = extra
+        await node.save()
+
+    return True
 
 
 async def update_node_task(token: str, task: dict):

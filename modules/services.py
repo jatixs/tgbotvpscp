@@ -246,6 +246,40 @@ def save_managed_services():
     from core.utils import save_services_config
     return save_services_config()
 
+
+async def save_managed_services_async():
+    """Save MANAGED_SERVICES to encrypted config file without blocking the event loop."""
+    from core.utils import save_services_config_async
+
+    return await save_services_config_async()
+
+
+async def add_managed_service_async(name, sType):
+    name = _validate_name(name)
+    if sType not in {"systemd", "docker"}:
+        return False, "Invalid service type"
+
+    current_status = get_systemd_status(name) if sType == "systemd" else get_docker_status(name)
+    if not _is_displayable_service_status(current_status):
+        return False, "Service/container is not installed"
+
+    for service in config.MANAGED_SERVICES:
+        if service.get("name") == name and service.get("type", "systemd") == sType:
+            return False, "Already managed"
+
+    config.MANAGED_SERVICES.append({"name": name, "type": sType})
+    await save_managed_services_async()
+    return True, "Added"
+
+
+async def remove_managed_service_async(name):
+    for i, s in enumerate(config.MANAGED_SERVICES):
+        if s["name"] == name:
+            config.MANAGED_SERVICES.pop(i)
+            await save_managed_services_async()
+            return True, "Removed"
+    return False, "Not found"
+
 def get_all_services_status():
     try:
         services = MANAGED_SERVICES
@@ -836,7 +870,7 @@ async def cq_service_add(callback: types.CallbackQuery):
     sType = parts[2]
     name = parts[3]
     
-    success, msg = add_managed_service(name, sType)
+    success, msg = await add_managed_service_async(name, sType)
     
     if success:
         await callback.answer(_("services_added", lang, name=name), show_alert=True)
@@ -938,7 +972,7 @@ async def cq_service_remove(callback: types.CallbackQuery):
     
     name = parts[2]
     
-    success, msg = remove_managed_service(name)
+    success, msg = await remove_managed_service_async(name)
     
     if success:
         await callback.answer(_("services_removed", lang, name=name), show_alert=True)

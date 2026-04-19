@@ -17,7 +17,7 @@ from argon2 import PasswordHasher, exceptions as argon2_exceptions
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
 from .. import config as current_config
-from ..auth import save_users
+from ..auth import save_users_async
 from ..config import (
     ADMIN_USER_ID,
     ADMIN_USERNAME,
@@ -379,7 +379,7 @@ async def handle_login_page(request: web.Request) -> web.StreamResponse:
 @routes.post("/api/login/request")
 async def handle_login_request(request: web.Request) -> web.StreamResponse:
     """Send a one-time magic login link via Telegram."""
-    settings = await asyncio.to_thread(current_config.get_bot_config, "security_settings", {})
+    settings = await current_config.get_bot_config("security_settings", {})
     if settings.get("telegram_only_mode", False):
         return web.Response(text="Only Telegram widget login is allowed", status=403)
 
@@ -423,7 +423,7 @@ async def handle_login_request(request: web.Request) -> web.StreamResponse:
 @routes.post("/api/login/password")
 async def handle_login_password(request: web.Request) -> web.StreamResponse:
     """Authenticate the main admin by password and create a web session."""
-    settings = await asyncio.to_thread(current_config.get_bot_config, "security_settings", {})
+    settings = await current_config.get_bot_config("security_settings", {})
     if settings.get("telegram_only_mode", False):
         return web.Response(
             text="Password login disabled. Only Telegram widget login is allowed.",
@@ -675,7 +675,7 @@ async def handle_reset_confirm(request: web.Request) -> web.StreamResponse:
             current_user["password_hash"] = new_hash
             ALLOWED_USERS[user_id] = current_user
 
-        save_users()
+        await save_users_async()
         RESET_TOKENS.pop(token, None)
         return web.json_response({"status": "ok"})
     except Exception:
@@ -687,7 +687,7 @@ async def handle_reset_confirm(request: web.Request) -> web.StreamResponse:
 async def handle_get_telegram_only_mode(request: web.Request) -> web.StreamResponse:
     """Return whether Telegram-only login mode is enabled."""
     try:
-        settings = await asyncio.to_thread(current_config.get_bot_config, "security_settings", {})
+        settings = await current_config.get_bot_config("security_settings", {})
         enabled = bool(settings.get("telegram_only_mode", False))
         return web.json_response({"enabled": enabled})
     except Exception:
@@ -707,11 +707,11 @@ async def handle_set_telegram_only_mode(request: web.Request) -> web.StreamRespo
     try:
         data = await request.json()
         enabled = bool(data.get("enabled", False))
-        settings = await asyncio.to_thread(current_config.get_bot_config, "security_settings", {})
+        settings = await current_config.get_bot_config("security_settings", {})
         if not isinstance(settings, dict):
             settings = {}
         settings["telegram_only_mode"] = enabled
-        await asyncio.to_thread(current_config.set_bot_config, "security_settings", settings)
+        await current_config.set_bot_config("security_settings", settings)
         return web.json_response({"status": "ok", "enabled": enabled})
     except Exception:
         logging.exception("Failed to update telegram_only_mode")
@@ -838,7 +838,7 @@ async def handle_change_password(request: web.Request) -> web.StreamResponse:
             current_user["password_hash"] = new_hash
             ALLOWED_USERS[ADMIN_USER_ID] = current_user
 
-        await asyncio.to_thread(save_users)
+        await save_users_async()
         return web.json_response({"status": "ok"})
     except Exception:
         logging.exception("Password change failed")

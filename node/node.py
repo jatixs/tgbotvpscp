@@ -19,6 +19,7 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 ENV_FILE = os.path.join(BASE_DIR, '.env')
 CONFIG_DIR = os.path.join(BASE_DIR, 'config')
 SPEEDTEST_MODE_FILE = os.path.join(CONFIG_DIR, '.speedtest_mode')
+os.makedirs(CONFIG_DIR, exist_ok=True)
 
 def load_config():
     config = {}
@@ -31,6 +32,80 @@ def load_config():
                     value = value.strip().strip('"').strip("'")
                     config[key.strip()] = value
     return config
+
+
+def get_env_value(var_name):
+    if not os.path.exists(ENV_FILE):
+        return ""
+
+    try:
+        with open(ENV_FILE, 'r', encoding='utf-8') as f:
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith('#') and '=' in line:
+                    key, value = line.split('=', 1)
+                    if key.strip() == var_name:
+                        return value.strip().strip('"').strip("'")
+    except Exception:
+        return ""
+
+    return ""
+
+
+def upsert_env_value(var_name, value):
+    safe_value = str(value or "").replace('\r', ' ').replace('\n', ' ')
+    new_line = f'{var_name}="{safe_value}"\n'
+    lines = []
+    found = False
+
+    if os.path.exists(ENV_FILE):
+        with open(ENV_FILE, 'r', encoding='utf-8') as f:
+            lines = f.readlines()
+
+    for idx, line in enumerate(lines):
+        stripped = line.strip()
+        if stripped and not stripped.startswith('#') and '=' in stripped:
+            key = stripped.split('=', 1)[0].strip()
+            if key == var_name:
+                lines[idx] = new_line
+                found = True
+                break
+
+    if not found:
+        if lines and not lines[-1].endswith('\n'):
+            lines[-1] += '\n'
+        lines.append(new_line)
+
+    with open(ENV_FILE, 'w', encoding='utf-8') as f:
+        f.writelines(lines)
+
+
+def sync_node_name_from_agent(agent_node_name):
+    normalized_name = str(agent_node_name or '').strip()
+    if not normalized_name:
+        return
+
+    current_node_name = get_env_value('NODE_NAME').strip()
+    sync_mode = get_env_value('NODE_NAME_SYNC_MODE').strip().lower()
+    should_sync = sync_mode == 'agent' or not current_node_name
+
+    if not should_sync:
+        if current_node_name:
+            CONF['NODE_NAME'] = current_node_name
+        return
+
+    if current_node_name == normalized_name and sync_mode == 'agent':
+        CONF['NODE_NAME'] = normalized_name
+        return
+
+    try:
+        upsert_env_value('NODE_NAME', normalized_name)
+        upsert_env_value('NODE_NAME_SYNC_MODE', 'agent')
+        CONF['NODE_NAME'] = normalized_name
+        CONF['NODE_NAME_SYNC_MODE'] = 'agent'
+        logging.info(f"Synchronized NODE_NAME from agent: {normalized_name}")
+    except Exception as e:
+        logging.warning(f"Failed to synchronize NODE_NAME from agent: {e}")
 
 
 def ensure_env_variables():
@@ -53,6 +128,7 @@ def ensure_env_variables():
         "CRITICAL_ALERT_CHAT_IDS",
         "AGENT_ALERT_DELAY_SECONDS",
         "NODE_NAME",
+        "NODE_NAME_SYNC_MODE",
     ]
     
     try:
@@ -244,9 +320,16 @@ try:
 except ValueError:
     AGENT_ALERT_LANG = "ru"
 
+AGENT_ALERT_STATE_FILE = os.path.join(CONFIG_DIR, '.agent_alert_state.json')
+AGENT_ALERT_STATE_LOCK_DIR = os.path.join(CONFIG_DIR, '.agent_alert_state.lock')
+AGENT_ALERT_DEDUP_SECONDS = max(AGENT_ALERT_DELAY_SECONDS, UPDATE_INTERVAL * 3, 60)
+AGENT_ALERT_META_FILE = os.path.join(CONFIG_DIR, '.agent_alert_meta.json')
+
 if not AGENT_BASE_URL or not AGENT_TOKEN:
     logging.error("CRITICAL: AGENT_BASE_URL or AGENT_TOKEN not found in .env")
     sys.exit(1)
+
+OWN_NODE_TOKEN_HASH = hashlib.sha256(AGENT_TOKEN.encode()).hexdigest()
 
 # Parse critical alert targets if provided.
 # Supports numeric chat IDs (e.g. -100123...) and string targets (e.g. @channel_username).
@@ -282,6 +365,12 @@ AGENT_DOWN_SINCE = None
 AGENT_DOWN_ALERT_SENT = False
 AGENT_STABLE_SINCE = None  # Timestamp when agent first came back up; used to confirm stable recovery
 LAST_AGENT_LANG = AGENT_ALERT_LANG if AGENT_ALERT_LANG in {"ru", "en"} else "ru"
+CACHED_ALERT_REPORTER_HASH = None
+SKIPPED_AGENT_ALERT_LOGS = set()
+LAST_HTTP_ERROR_SIGNATURE = None
+LAST_HTTP_ERROR_LOGGED_AT = 0.0
+SUPPRESSED_HTTP_ERROR_COUNT = 0
+HTTP_ERROR_LOG_COOLDOWN_SECONDS = max(UPDATE_INTERVAL * 4, 30)
 
 EXTERNAL_IP_CACHE = None 
 
@@ -683,6 +772,7 @@ def get_system_stats():
             "net_rx_speed": round(net_rx_speed, 2),
             "net_tx_speed": round(net_tx_speed, 2),
             "uptime": int(time.time() - psutil.boot_time()),
+            "boot_time": int(psutil.boot_time()),
             "process_cpu": get_top_processes('cpu'),
             "process_ram": get_top_processes('ram'),
             "external_ip": ext_ip,
@@ -875,19 +965,36 @@ def execute_command(task):
 
         elif cmd == "selftest":
             stats = get_system_stats()
-            try:
-                ext_ip = stats.get("external_ip")
-                if not ext_ip:
+
+            # Fetch IPv4
+            ext_ipv4 = stats.get("external_ip") or ""
+            if not ext_ipv4:
+                try:
                     proc = subprocess.Popen(
-                        ["curl", "-4", "-s", "--max-time", "2", "ifconfig.me"],
+                        ["curl", "-4", "-s", "--max-time", "3", "ifconfig.me"],
                         stdout=subprocess.PIPE,
                         stderr=subprocess.PIPE
                     )
                     stdout, _ = proc.communicate()
-                    ext_ip = stdout.decode().strip()
+                    ext_ipv4 = stdout.decode().strip()
+                except Exception:
+                    ext_ipv4 = ""
+
+            # Fetch IPv6
+            ext_ipv6 = ""
+            try:
+                proc = subprocess.Popen(
+                    ["curl", "-6", "-s", "--max-time", "3", "ifconfig.me"],
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE
+                )
+                stdout, _ = proc.communicate()
+                candidate = stdout.decode().strip()
+                if ":" in candidate:
+                    ext_ipv6 = candidate
             except Exception:
-                ext_ip = "N/A"
-            
+                ext_ipv6 = ""
+
             ping_val = "0"
             inet_ok = False
             try:
@@ -931,7 +1038,8 @@ def execute_command(task):
                     "uptime": uptime_str,
                     "inet_status": {"key": "selftest_inet_ok"} if inet_ok else {"key": "selftest_inet_fail"},
                     "ping": ping_val,
-                    "ip": ext_ip,
+                    "ipv4": ext_ipv4 or "N/A",
+                    "ipv6": ext_ipv6 or "N/A",
                     "rx": rx_total,
                     "tx": tx_total
                 }
@@ -1239,6 +1347,261 @@ def send_critical_telegram_alert(message):
     return success_count > 0
 
 
+def _acquire_agent_alert_lock():
+    for _ in range(10):
+        try:
+            os.mkdir(AGENT_ALERT_STATE_LOCK_DIR)
+            return True
+        except FileExistsError:
+            time.sleep(0.1)
+        except Exception as e:
+            logging.debug(f"Failed to acquire alert lock: {e}")
+            return False
+    return False
+
+
+def _release_agent_alert_lock():
+    try:
+        os.rmdir(AGENT_ALERT_STATE_LOCK_DIR)
+    except FileNotFoundError:
+        pass
+    except Exception as e:
+        logging.debug(f"Failed to release alert lock: {e}")
+
+
+def _load_agent_alert_state():
+    try:
+        with open(AGENT_ALERT_STATE_FILE, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+            return data if isinstance(data, dict) else {}
+    except FileNotFoundError:
+        return {}
+    except Exception as e:
+        logging.debug(f"Failed to load alert state: {e}")
+        return {}
+
+
+def _save_agent_alert_state(state):
+    temp_path = f"{AGENT_ALERT_STATE_FILE}.{os.getpid()}.tmp"
+    with open(temp_path, 'w', encoding='utf-8') as f:
+        json.dump(state, f)
+    os.replace(temp_path, AGENT_ALERT_STATE_FILE)
+
+
+def load_agent_alert_meta():
+    try:
+        with open(AGENT_ALERT_META_FILE, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+            if isinstance(data, dict):
+                return data
+    except FileNotFoundError:
+        return {}
+    except Exception as e:
+        logging.debug(f"Failed to load alert meta: {e}")
+    return {}
+
+
+def save_agent_alert_meta(meta):
+    temp_path = f"{AGENT_ALERT_META_FILE}.{os.getpid()}.tmp"
+    with open(temp_path, 'w', encoding='utf-8') as f:
+        json.dump(meta, f)
+    os.replace(temp_path, AGENT_ALERT_META_FILE)
+
+
+def get_cached_alert_reporter_hash():
+    global CACHED_ALERT_REPORTER_HASH
+    if CACHED_ALERT_REPORTER_HASH:
+        return CACHED_ALERT_REPORTER_HASH
+    meta = load_agent_alert_meta()
+    reporter_hash = meta.get('alert_reporter_hash')
+    if isinstance(reporter_hash, str) and reporter_hash:
+        CACHED_ALERT_REPORTER_HASH = reporter_hash
+    return CACHED_ALERT_REPORTER_HASH
+
+
+def update_cached_alert_reporter_hash(reporter_hash):
+    global CACHED_ALERT_REPORTER_HASH
+    if not isinstance(reporter_hash, str) or not reporter_hash:
+        return
+    if reporter_hash == CACHED_ALERT_REPORTER_HASH:
+        return
+    CACHED_ALERT_REPORTER_HASH = reporter_hash
+    meta = load_agent_alert_meta()
+    meta['alert_reporter_hash'] = reporter_hash
+    save_agent_alert_meta(meta)
+
+
+def is_alert_reporter_node():
+    reporter_hash = get_cached_alert_reporter_hash()
+    if not reporter_hash:
+        return True
+    return reporter_hash == OWN_NODE_TOKEN_HASH
+
+
+def _clear_skipped_agent_alert_logs(node_name, alert_kind=None):
+    global SKIPPED_AGENT_ALERT_LOGS
+    SKIPPED_AGENT_ALERT_LOGS = {
+        key for key in SKIPPED_AGENT_ALERT_LOGS
+        if key[0] != node_name or (alert_kind is not None and key[1] != alert_kind)
+    }
+
+
+def _log_skipped_agent_alert_once(alert_kind, node_name):
+    reporter_hash = get_cached_alert_reporter_hash() or "unknown"
+    log_key = (node_name, alert_kind, reporter_hash)
+    if log_key in SKIPPED_AGENT_ALERT_LOGS:
+        return
+
+    _clear_skipped_agent_alert_logs(node_name, alert_kind)
+    SKIPPED_AGENT_ALERT_LOGS.add(log_key)
+    logging.info(
+        f"Skipping agent {alert_kind} alert on node {node_name}: another node is selected as reporter"
+    )
+
+
+def _get_node_alert_state(state, node_name):
+    node_state = state.get(node_name)
+    if isinstance(node_state, dict):
+        return node_state
+    return {
+        'incident_active': False,
+        'down_sent': False,
+        'last_down_alert_at': 0,
+        'last_recovery_alert_at': 0,
+    }
+
+
+def _prune_finished_incident(node_state):
+    last_recovery_alert_at = float(node_state.get('last_recovery_alert_at', 0) or 0)
+    pending_kind = node_state.get('pending_kind')
+    if pending_kind == 'recovery':
+        return
+    if node_state.get('incident_active'):
+        return
+    if last_recovery_alert_at and time.time() - last_recovery_alert_at > AGENT_ALERT_DEDUP_SECONDS:
+        node_state.clear()
+
+
+def _reserve_agent_alert(alert_kind, node_name):
+    now = time.time()
+    reservation_id = f"{os.getpid()}:{threading.get_ident()}:{int(now * 1000)}"
+
+    if not _acquire_agent_alert_lock():
+        logging.warning(f"Alert dedup lock unavailable, sending {alert_kind} alert without deduplication")
+        return reservation_id
+
+    try:
+        state = _load_agent_alert_state()
+        node_state = _get_node_alert_state(state, node_name)
+        _prune_finished_incident(node_state)
+
+        if alert_kind == 'down':
+            if node_state.get('incident_active') and node_state.get('down_sent'):
+                return None
+            node_state['incident_active'] = True
+        elif alert_kind == 'recovery':
+            if not node_state.get('incident_active') or not node_state.get('down_sent'):
+                return None
+            if node_state.get('pending_kind') == 'recovery':
+                return None
+        else:
+            last_sent_at = float(node_state.get(f'last_{alert_kind}_alert_at', 0) or 0)
+            if last_sent_at and now - last_sent_at < AGENT_ALERT_DEDUP_SECONDS:
+                return None
+
+        node_state['pending_kind'] = alert_kind
+        node_state['pending_since'] = now
+        node_state['reservation_id'] = reservation_id
+        state[node_name] = node_state
+        _save_agent_alert_state(state)
+        return reservation_id
+    finally:
+        _release_agent_alert_lock()
+
+
+def _finalize_agent_alert(alert_kind, node_name, reservation_id, sent):
+    if not _acquire_agent_alert_lock():
+        return
+
+    try:
+        state = _load_agent_alert_state()
+        node_state = state.get(node_name)
+        if not isinstance(node_state, dict) or node_state.get('reservation_id') != reservation_id:
+            return
+
+        node_state.pop('pending_kind', None)
+        node_state.pop('pending_since', None)
+        node_state.pop('reservation_id', None)
+
+        if sent:
+            now = time.time()
+            if alert_kind == 'down':
+                node_state['incident_active'] = True
+                node_state['down_sent'] = True
+                node_state['last_down_alert_at'] = now
+            elif alert_kind == 'recovery':
+                node_state['incident_active'] = False
+                node_state['down_sent'] = False
+                node_state['last_recovery_alert_at'] = now
+            else:
+                node_state[f'last_{alert_kind}_alert_at'] = now
+        elif alert_kind == 'down' and not node_state.get('down_sent'):
+            node_state['incident_active'] = True
+
+        _prune_finished_incident(node_state)
+        if node_state:
+            state[node_name] = node_state
+        else:
+            state.pop(node_name, None)
+        _save_agent_alert_state(state)
+    finally:
+        _release_agent_alert_lock()
+
+
+def clear_agent_alert_incident(node_name):
+    if not _acquire_agent_alert_lock():
+        return
+
+    try:
+        state = _load_agent_alert_state()
+        node_state = _get_node_alert_state(state, node_name)
+        node_state['incident_active'] = False
+        node_state['down_sent'] = False
+        node_state.pop('pending_kind', None)
+        node_state.pop('pending_since', None)
+        node_state.pop('reservation_id', None)
+        _prune_finished_incident(node_state)
+        if node_state:
+            state[node_name] = node_state
+        else:
+            state.pop(node_name, None)
+        _save_agent_alert_state(state)
+    finally:
+        _release_agent_alert_lock()
+
+    _clear_skipped_agent_alert_logs(node_name)
+
+
+def send_deduplicated_agent_alert(alert_kind, node_name, message):
+    if not is_alert_reporter_node():
+        _log_skipped_agent_alert_once(alert_kind, node_name)
+        return False
+
+    _clear_skipped_agent_alert_logs(node_name, alert_kind)
+
+    reservation_id = _reserve_agent_alert(alert_kind, node_name)
+    if reservation_id is None:
+        logging.info(f"Duplicate agent {alert_kind} alert suppressed for node {node_name}")
+        return False
+
+    sent = False
+    try:
+        sent = send_critical_telegram_alert(message)
+        return sent
+    finally:
+        _finalize_agent_alert(alert_kind, node_name, reservation_id, sent)
+
+
 def format_downtime(seconds):
     return format_downtime_localized(seconds, LAST_AGENT_LANG)
 
@@ -1267,6 +1630,55 @@ def format_downtime_localized(seconds, lang):
     if minutes > 0:
         return f"{hours} часов {minutes} минут"
     return f"{hours} часов"
+
+
+def summarize_http_error_body(body, limit=160):
+    if not body:
+        return ""
+    body_text = str(body)
+    title_match = re.search(r"<title>(.*?)</title>", body_text, flags=re.IGNORECASE | re.DOTALL)
+    if title_match:
+        title = re.sub(r"\s+", " ", title_match.group(1)).strip()
+        if title:
+            return title
+    compact = re.sub(r"\s+", " ", body_text).strip()
+    if len(compact) <= limit:
+        return compact
+    return f"{compact[:limit]}..."
+
+
+def flush_suppressed_http_error_logs():
+    global LAST_HTTP_ERROR_SIGNATURE, LAST_HTTP_ERROR_LOGGED_AT, SUPPRESSED_HTTP_ERROR_COUNT
+    if LAST_HTTP_ERROR_SIGNATURE and SUPPRESSED_HTTP_ERROR_COUNT > 0:
+        logging.warning(
+            f"Previous server error repeated {SUPPRESSED_HTTP_ERROR_COUNT} more time(s): {LAST_HTTP_ERROR_SIGNATURE}"
+        )
+    LAST_HTTP_ERROR_SIGNATURE = None
+    LAST_HTTP_ERROR_LOGGED_AT = 0.0
+    SUPPRESSED_HTTP_ERROR_COUNT = 0
+
+
+def log_http_error(status_code, body):
+    global LAST_HTTP_ERROR_SIGNATURE, LAST_HTTP_ERROR_LOGGED_AT, SUPPRESSED_HTTP_ERROR_COUNT
+
+    response_summary = summarize_http_error_body(body)
+    signature = f"{status_code} {response_summary}".strip()
+    now = time.time()
+
+    if signature == LAST_HTTP_ERROR_SIGNATURE and now - LAST_HTTP_ERROR_LOGGED_AT < HTTP_ERROR_LOG_COOLDOWN_SECONDS:
+        SUPPRESSED_HTTP_ERROR_COUNT += 1
+        LAST_HTTP_ERROR_LOGGED_AT = now
+        return
+
+    if LAST_HTTP_ERROR_SIGNATURE and SUPPRESSED_HTTP_ERROR_COUNT > 0:
+        logging.warning(
+            f"Previous server error repeated {SUPPRESSED_HTTP_ERROR_COUNT} more time(s): {LAST_HTTP_ERROR_SIGNATURE}"
+        )
+
+    LAST_HTTP_ERROR_SIGNATURE = signature
+    LAST_HTTP_ERROR_LOGGED_AT = now
+    SUPPRESSED_HTTP_ERROR_COUNT = 0
+    logging.warning(f"Server returned status: {signature}")
 
 
 def get_node_name_for_alert():
@@ -1332,9 +1744,6 @@ def send_heartbeat():
     agent_is_healthy = check_agent_health()
     agent_status = "online" if agent_is_healthy else "unreachable"
     
-    if not agent_is_healthy:
-        logging.warning("Agent detected as unreachable")
-    
     payload_dict = {
         "stats": get_system_stats(),
         "results": current_results,
@@ -1357,13 +1766,20 @@ def send_heartbeat():
     try:
         response = requests.post(url, data=payload_bytes, headers=headers, timeout=5)
         if response.status_code == 200:
+            flush_suppressed_http_error_logs()
             data = response.json()
+
+            sync_node_name_from_agent(data.get("node_name", ""))
 
             # Agent provides preferred language while online; keep it cached for offline alerts.
             response_lang = data.get("alert_lang")
             if response_lang in {"ru", "en"} and response_lang != LAST_AGENT_LANG:
                 LAST_AGENT_LANG = response_lang
                 logging.info(f"Updated alert language from agent: {LAST_AGENT_LANG}")
+
+            response_reporter_hash = data.get("agent_alert_reporter_hash")
+            if isinstance(response_reporter_hash, str) and response_reporter_hash:
+                update_cached_alert_reporter_hash(response_reporter_hash)
 
             PENDING_RESULTS.clear()
             SSH_EVENTS.clear()
@@ -1391,8 +1807,10 @@ def send_heartbeat():
 
                     if AGENT_DOWN_ALERT_SENT:
                         recovery_message = build_agent_recovery_alert(node_name, downtime)
-                        send_critical_telegram_alert(recovery_message)
-                        logging.info(f"Agent recovered after {format_downtime(downtime)} downtime")
+                        if send_deduplicated_agent_alert("recovery", node_name, recovery_message):
+                            logging.info(f"Agent recovered after {format_downtime(downtime)} downtime")
+                    else:
+                        clear_agent_alert_incident(node_name)
 
                     AGENT_DOWN_SINCE = None
                     AGENT_DOWN_ALERT_SENT = False
@@ -1401,7 +1819,7 @@ def send_heartbeat():
                 # No ongoing downtime - reset stability tracking
                 AGENT_STABLE_SINCE = None
         else:
-            logging.warning(f"Server returned status: {response.status_code} {response.text}")
+            log_http_error(response.status_code, response.text)
 
             # Treat only server-side failures as downtime; 4xx means reachable but misconfigured/request issue
             if response.status_code >= 500:
@@ -1416,10 +1834,11 @@ def send_heartbeat():
                     node_name = get_node_name_for_alert()
                     alert_message = build_agent_down_alert(node_name)
 
-                    if send_critical_telegram_alert(alert_message):
+                    if send_deduplicated_agent_alert("down", node_name, alert_message):
                         AGENT_DOWN_ALERT_SENT = True
                         logging.warning(f"Critical alert sent: Agent down for {format_downtime(downtime)}")
     except Exception as e:
+        flush_suppressed_http_error_logs()
         logging.error(f"Connection error: {e}")
 
         current_time = time.time()
@@ -1433,7 +1852,7 @@ def send_heartbeat():
             node_name = get_node_name_for_alert()
             alert_message = build_agent_down_alert(node_name)
 
-            if send_critical_telegram_alert(alert_message):
+            if send_deduplicated_agent_alert("down", node_name, alert_message):
                 AGENT_DOWN_ALERT_SENT = True
                 logging.warning(f"Critical alert sent: Agent down for {format_downtime(downtime)}")
 

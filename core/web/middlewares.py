@@ -18,6 +18,7 @@ RATE_LIMITED_METHODS: Final[set[str]] = {"POST", "PUT", "DELETE"}
 WAF_INSPECT_METHODS: Final[set[str]] = {"POST", "PUT", "PATCH", "DELETE"}
 CSRF_PROTECTED_METHODS: Final[set[str]] = {"POST", "PUT", "DELETE"}
 CSRF_EXCLUDED_PATHS: Final[set[str]] = {"/api/heartbeat"}
+WAF_EXCLUDED_PATHS: Final[set[str]] = {"/api/heartbeat"}
 CSRF_EXCLUDED_PREFIXES: Final[tuple[str, ...]] = ("/api/login/",)
 WAF_INSPECT_CONTENT_TYPES: Final[set[str]] = {
     "application/json",
@@ -31,16 +32,16 @@ WAF_ATTACK_PATTERNS: Final[tuple[tuple[str, str], ...]] = (
     (r"(?i)(%20|\\s)(or|and)(\\s|%20)+.*=", "SQL_INJECTION"),
     (r"(?i)<script[^>]*>.*?</script>", "XSS"),
     (r"(?i)javascript:", "XSS"),
-    (r"(?i)on\\w+\\s*=", "XSS"),
+    (r"(?i)on\w+\s*=", "XSS"),
     (r"(?i)<iframe[^>]*>", "XSS"),
     (r"(?i)<embed[^>]*>", "XSS"),
     (r"(?i)<object[^>]*>", "XSS"),
-    (r"\\.\\./", "PATH_TRAVERSAL"),
-    (r"\\.\\.\\\\", "PATH_TRAVERSAL"),
+    (r"\.\./", "PATH_TRAVERSAL"),
+    (r"\.\.\\", "PATH_TRAVERSAL"),
     (r"%2e%2e/", "PATH_TRAVERSAL"),
-    (r"%2e%2e\\\\", "PATH_TRAVERSAL"),
-    (r"[;&|`]", "COMMAND_INJECTION"),
-    (r"(?i)(bash|sh|cmd|powershell|wget|curl)\\s", "COMMAND_INJECTION"),
+    (r"%2e%2e\\", "PATH_TRAVERSAL"),
+    (r"(?i)[;|]\s*(?:ls|cat|id|whoami|wget|curl|bash|sh|cmd|python3?|perl|ruby|php|nc|netcat|chmod|chown|sudo|su|rm|mv|cp|echo|tee|awk|sed|find)\b", "COMMAND_INJECTION"),
+    (r"(?i)\b(wget|curl)\s+https?://", "COMMAND_INJECTION"),
 )
 
 
@@ -196,6 +197,9 @@ async def csrf_middleware(request: web.Request, handler: Handler) -> web.StreamR
 @web.middleware
 async def waf_middleware(request: web.Request, handler: Handler) -> web.StreamResponse:
     """Inspect API payloads and reject obviously malicious requests."""
+    if request.path in WAF_EXCLUDED_PATHS:
+        return await handler(request)
+
     if request.method not in WAF_INSPECT_METHODS:
         return await handler(request)
 
