@@ -1,7 +1,12 @@
 from tortoise import fields, models
+from cryptography.fernet import InvalidToken
 from core.config import CIPHER_SUITE
 import json
 import time
+
+
+class EncryptionOperationError(ValueError):
+    pass
 
 
 class EncryptedTextField(fields.TextField):
@@ -10,17 +15,19 @@ class EncryptedTextField(fields.TextField):
         if value is None:
             return None
         try:
-            return CIPHER_SUITE.encrypt(str(value).encode()).decode()
-        except Exception:
-            return value
+            return CIPHER_SUITE.encrypt(str(value).encode("utf-8")).decode("utf-8")
+        except Exception as exc:
+            raise EncryptionOperationError("Failed to encrypt ORM field value") from exc
 
     def to_python_value(self, value):
         if value is None:
             return None
         try:
-            return CIPHER_SUITE.decrypt(str(value).encode()).decode()
-        except Exception:
-            return value
+            return CIPHER_SUITE.decrypt(str(value).encode("utf-8")).decode("utf-8")
+        except InvalidToken as exc:
+            raise EncryptionOperationError("Encrypted ORM field contains invalid ciphertext") from exc
+        except Exception as exc:
+            raise EncryptionOperationError("Failed to decrypt ORM field value") from exc
 
 
 class Node(models.Model):

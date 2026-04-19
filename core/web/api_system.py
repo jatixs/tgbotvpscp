@@ -10,7 +10,7 @@ from typing import Any
 from aiohttp import web
 
 from .. import config as current_config
-from ..auth import get_user_name, save_users
+from ..auth import get_user_name, save_users_async
 from ..config import (
     ADMIN_USER_ID,
     BOT_LOG_DIR,
@@ -18,11 +18,13 @@ from ..config import (
     NODE_LOG_DIR,
     WATCHDOG_LOG_DIR,
     save_keyboard_config,
+    save_keyboard_config_async,
     save_system_config,
+    save_system_config_async,
 )
-from ..i18n import get_text as _, get_user_lang, set_user_lang
+from ..i18n import get_text as _, get_user_lang, set_user_lang_async
 from ..shared_state import ALERTS_CONFIG, ALLOWED_USERS, USER_NAMES
-from ..utils import generate_favicons, save_alerts_config
+from ..utils import generate_favicons, save_alerts_config, save_alerts_config_async
 from .auth import get_current_user
 from ..rbac import is_admin as _is_admin, is_root as _is_main_admin
 from modules import update as update_module
@@ -149,7 +151,7 @@ async def handle_save_notifications(request: web.Request) -> web.StreamResponse:
         for key, value in data.items():
             ALERTS_CONFIG[uid][key] = bool(value)
 
-        await asyncio.to_thread(save_alerts_config)
+        await save_alerts_config_async()
         return web.json_response({"status": "ok"})
     except Exception as exc:
         logging.error("Internal API error: %s", exc)
@@ -164,7 +166,7 @@ async def handle_save_system_config(request: web.Request) -> web.StreamResponse:
 
     try:
         data = await request.json()
-        await asyncio.to_thread(save_system_config, data)
+        await save_system_config_async(data)
         return web.json_response({"status": "ok"})
     except Exception as exc:
         logging.error("Internal API error: %s", exc)
@@ -179,7 +181,7 @@ async def handle_save_keyboard_config(request: web.Request) -> web.StreamRespons
 
     try:
         data = await request.json()
-        await asyncio.to_thread(save_keyboard_config, data)
+        await save_keyboard_config_async(data)
         return web.json_response({"status": "ok"})
     except Exception as exc:
         logging.error("Internal API error: %s", exc)
@@ -215,7 +217,7 @@ async def handle_save_metadata(request: web.Request) -> web.StreamResponse:
             await asyncio.to_thread(generate_favicons, new_favicon_url, static_fav_dir)
 
         current_config.WEB_METADATA = new_meta
-        await asyncio.to_thread(save_system_config, {"WEB_METADATA": new_meta})
+        await save_system_config_async({"WEB_METADATA": new_meta})
         return web.json_response({"status": "ok"})
     except Exception as exc:
         logging.error("Internal API error: %s", exc)
@@ -232,7 +234,7 @@ async def handle_set_language(request: web.Request) -> web.StreamResponse:
         data = await request.json()
         lang = data.get("lang")
         if lang in ["ru", "en"]:
-            await asyncio.to_thread(set_user_lang, int(user["id"]), lang)
+            await set_user_lang_async(int(user["id"]), lang)
             return web.json_response({"status": "ok"})
         return web.json_response({"error": "Invalid language"}, status=400)
     except Exception as exc:
@@ -258,8 +260,8 @@ async def handle_user_action(request: web.Request) -> web.StreamResponse:
                 del ALLOWED_USERS[target_id]
                 USER_NAMES.pop(str(target_id), None)
                 ALERTS_CONFIG.pop(target_id, None)
-                await asyncio.to_thread(save_users)
-                await asyncio.to_thread(save_alerts_config)
+                await save_users_async()
+                await save_alerts_config_async()
                 return web.json_response({"status": "ok"})
             return web.json_response({"error": "Not found"}, status=404)
 
@@ -277,7 +279,7 @@ async def handle_user_action(request: web.Request) -> web.StreamResponse:
             else:
                 USER_NAMES[str(target_id)] = f"User {target_id}"
 
-            await asyncio.to_thread(save_users)
+            await save_users_async()
             return web.json_response({"status": "ok", "name": USER_NAMES.get(str(target_id))})
 
         return web.json_response({"error": "Unknown"}, status=400)

@@ -91,6 +91,10 @@ async def agent_monitor() -> None:
     shared_state.AGENT_PING_CACHE = ping_result if ping_result else "n/a"
     shared_state.AGENT_PING_LAST_UPDATE = time.time()
 
+    _db_save_interval = 60.0
+    _last_db_save = time.time()
+    _internet_down_since: float = 0.0
+
     while True:
         try:
             cpu = psutil.cpu_percent(interval=None)
@@ -107,11 +111,34 @@ async def agent_monitor() -> None:
                 }
             )
 
+            # Accumulate online time
+            shared_state.AGENT_AVAILABILITY["total_online_seconds"] = (
+                float(shared_state.AGENT_AVAILABILITY.get("total_online_seconds", 0)) + 2
+            )
+
             ping_interval = getattr(current_config, "PING_INTERVAL", 30)
             if time.time() - shared_state.AGENT_PING_LAST_UPDATE > ping_interval:
                 ping_result = await measure_agent_ping()
                 shared_state.AGENT_PING_CACHE = ping_result if ping_result else "n/a"
                 shared_state.AGENT_PING_LAST_UPDATE = time.time()
+                if ping_result is None:
+                    if _internet_down_since == 0.0:
+                        _internet_down_since = time.time()
+                elif _internet_down_since > 0.0:
+                    duration = time.time() - _internet_down_since
+                    shared_state.AGENT_AVAILABILITY["total_internet_downtime_seconds"] = (
+                        float(shared_state.AGENT_AVAILABILITY.get("total_internet_downtime_seconds", 0)) + duration
+                    )
+                    _internet_down_since = 0.0
+
+            # Periodic DB save
+            if time.time() - _last_db_save > _db_save_interval:
+                try:
+                    shared_state.AGENT_AVAILABILITY["session_end_time"] = time.time()
+                    await current_config.set_bot_config("agent_availability", dict(shared_state.AGENT_AVAILABILITY))
+                    _last_db_save = time.time()
+                except Exception:
+                    pass
         except asyncio.CancelledError:
             raise
         except Exception:

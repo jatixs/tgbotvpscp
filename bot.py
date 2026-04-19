@@ -118,7 +118,7 @@ async def show_main_menu(
     )
     if is_first_start:
         await messaging.send_support_message(bot, user_id, lang)
-        i18n.set_user_lang(user_id, lang)
+        await i18n.set_user_lang_async(user_id, lang)
     if str(user_id) not in shared_state.USER_NAMES:
         asyncio.create_task(auth.refresh_user_names(bot))
     menu_text = _("main_menu_welcome", user_id)
@@ -225,7 +225,7 @@ async def toggle_kb_category(callback: types.CallbackQuery):
     all_on = all(config.KEYBOARD_CONFIG.get(cfg, True) for _btn, cfg in configurable)
     for _btn, config_key in configurable:
         config.KEYBOARD_CONFIG[config_key] = not all_on
-    config.save_keyboard_config(config.KEYBOARD_CONFIG)
+    await config.save_keyboard_config_async(config.KEYBOARD_CONFIG)
     new_markup = keyboards.get_keyboard_settings_inline(lang)
     try:
         await callback.message.edit_reply_markup(reply_markup=new_markup)
@@ -244,7 +244,7 @@ async def toggle_kb_config(callback: types.CallbackQuery):
     config_key = callback.data.replace("toggle_kb_", "")
     current_val = config.KEYBOARD_CONFIG.get(config_key, True)
     config.KEYBOARD_CONFIG[config_key] = not current_val
-    config.save_keyboard_config(config.KEYBOARD_CONFIG)
+    await config.save_keyboard_config_async(config.KEYBOARD_CONFIG)
     new_markup = keyboards.get_keyboard_settings_inline(lang)
     try:
         await callback.message.edit_reply_markup(reply_markup=new_markup)
@@ -279,7 +279,7 @@ async def set_language_callback(callback: types.CallbackQuery, state: FSMContext
     lang = callback.data.split("_")[-1]
     if lang not in i18n.STRINGS:
         lang = config.DEFAULT_LANGUAGE
-    i18n.set_user_lang(user_id, lang)
+    await i18n.set_user_lang_async(user_id, lang)
     await callback.answer(_("language_selected", lang))
     await show_main_menu(
         user_id, callback.message.chat.id, state, callback.message.message_id
@@ -346,6 +346,10 @@ async def shutdown(dispatcher: Dispatcher, bot_instance: Bot, web_runner=None):
         logging.error(f"DB connections close error: {e}")
     if getattr(bot_instance, "session", None):
         await bot_instance.session.close()
+    try:
+        await utils.save_agent_availability_async()
+    except Exception:
+        pass
     logging.info("Bot stopped successfully.")
 
 
@@ -355,10 +359,11 @@ async def main():
     try:
         logging.info(f"Bot starting in mode: {config.INSTALL_MODE.upper()}")
         await nodes_db.init_db()
-        await asyncio.to_thread(auth.load_users)
-        await asyncio.to_thread(utils.load_alerts_config)
-        await asyncio.to_thread(utils.load_services_config)
-        await asyncio.to_thread(i18n.load_user_settings)
+        await auth.load_users_async()
+        await utils.load_alerts_config_async()
+        await utils.load_services_config_async()
+        await i18n.load_user_settings_async()
+        await utils.load_agent_availability_async()
         asyncio.create_task(auth.refresh_user_names(bot))
         # Убраны вызовы utils.initial_reboot_check и utils.initial_restart_check
         # Теперь эта логика обрабатывается в watchdog.py
