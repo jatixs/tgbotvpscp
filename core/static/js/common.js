@@ -352,6 +352,7 @@ document.addEventListener("DOMContentLoaded", () => {
     initHolidayMood();
     initHapticsToggle();
     initAddNodeLogic();
+    initBrandEasterEgg();
     if (document.getElementById('logsContainer')) {
         if (typeof window.switchLogType === 'function') {
             window.switchLogType('bot');
@@ -539,6 +540,72 @@ function closeToast(el) {
 }
 window.showToast = showToast;
 window.closeToast = closeToast;
+
+function launchBrandEasterEgg() {
+    const overlay = document.createElement('div');
+    overlay.className = 'pointer-events-none fixed inset-0 z-[9998] overflow-hidden';
+    document.body.appendChild(overlay);
+
+    const glyphs = ['✨', '🚀', '🖥️', '⚡', '🌟'];
+    for (let index = 0; index < 18; index += 1) {
+        const sparkle = document.createElement('div');
+        sparkle.textContent = glyphs[index % glyphs.length];
+        sparkle.style.position = 'absolute';
+        sparkle.style.left = `${8 + Math.random() * 84}%`;
+        sparkle.style.top = `${10 + Math.random() * 22}%`;
+        sparkle.style.fontSize = `${16 + Math.random() * 16}px`;
+        sparkle.style.opacity = '0';
+        sparkle.style.transform = 'translateY(8px) scale(0.8) rotate(0deg)';
+        sparkle.style.transition = 'transform 900ms ease, opacity 900ms ease';
+        sparkle.style.filter = 'drop-shadow(0 8px 24px rgba(59,130,246,0.35))';
+        overlay.appendChild(sparkle);
+
+        setTimeout(() => {
+            sparkle.style.opacity = '1';
+            sparkle.style.transform = `translateY(${-24 - Math.random() * 36}px) scale(${1 + Math.random() * 0.45}) rotate(${(-25 + Math.random() * 50).toFixed(0)}deg)`;
+        }, index * 35);
+    }
+
+    setTimeout(() => overlay.remove(), 1500);
+
+    const isRu = (document.documentElement.lang || 'ru').toLowerCase().startsWith('ru');
+    showToast(isRu ? 'Пасхалка найдена: панель одобряет любопытных.' : 'Easter egg found: the panel approves curious minds.');
+
+    if (window.playHaptic) {
+        window.playHaptic([25, 40, 25]);
+    }
+}
+
+function initBrandEasterEgg() {
+    const brandEl = document.querySelector('[data-i18n="web_brand_name"]');
+    if (!brandEl || brandEl.dataset.easterEggBound === 'true') return;
+
+    let clickCount = 0;
+    let resetTimer = null;
+    let cooldown = false;
+
+    brandEl.dataset.easterEggBound = 'true';
+    brandEl.classList.add('select-none');
+
+    brandEl.addEventListener('click', () => {
+        if (cooldown) return;
+
+        clickCount += 1;
+        clearTimeout(resetTimer);
+        resetTimer = setTimeout(() => {
+            clickCount = 0;
+        }, 2200);
+
+        if (clickCount < 7) return;
+
+        clickCount = 0;
+        cooldown = true;
+        launchBrandEasterEgg();
+        setTimeout(() => {
+            cooldown = false;
+        }, 2500);
+    });
+}
 
 function toggleHint(e, id) {
     if (e) e.stopPropagation();

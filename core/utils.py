@@ -30,7 +30,7 @@ from .config import (
     CIPHER_SUITE,
     DATA_ENCRYPTION_KEY,
 )
-from .config import get_bot_config, set_bot_config
+from .config import get_bot_config_sync, set_bot_config_sync
 
 
 def anonymize_user(user_id: int, username: str = None) -> str:
@@ -122,7 +122,7 @@ def get_host_path(path: str) -> str:
 
 def load_alerts_config():
     try:
-        loaded_data = get_bot_config("alerts_config", {})
+        loaded_data = get_bot_config_sync("alerts_config", {})
         if loaded_data:
             loaded_data_int_keys = {int(k): v for k, v in loaded_data.items()}
             shared_state.ALERTS_CONFIG.clear()
@@ -139,7 +139,69 @@ def load_alerts_config():
 def save_alerts_config():
     try:
         config_to_save = {str(k): v for k, v in shared_state.ALERTS_CONFIG.items()}
-        set_bot_config("alerts_config", config_to_save)
+        set_bot_config_sync("alerts_config", config_to_save)
+    except Exception as e:
+        logging.error(f"Error saving alerts config: {e}")
+
+
+async def load_alerts_config_async():
+    try:
+        loaded_data = await config.get_bot_config("alerts_config", {})
+        if loaded_data:
+            loaded_data_int_keys = {int(k): v for k, v in loaded_data.items()}
+            shared_state.ALERTS_CONFIG.clear()
+            shared_state.ALERTS_CONFIG.update(loaded_data_int_keys)
+            logging.info("Alerts config loaded from bot.db.")
+        else:
+            shared_state.ALERTS_CONFIG.clear()
+            logging.info("Alerts config empty or not found.")
+    except Exception as e:
+        logging.error(f"Error loading alerts config: {e}")
+        shared_state.ALERTS_CONFIG.clear()
+
+
+async def load_agent_availability_async() -> None:
+    """Load and initialize agent availability tracking from the DB."""
+    try:
+        import psutil as _psutil
+        saved = await config.get_bot_config("agent_availability", {})
+        if saved and isinstance(saved, dict):
+            shared_state.AGENT_AVAILABILITY.update(saved)
+
+        # Detect gap between last graceful shutdown and current startup
+        session_end = _coerce_float(shared_state.AGENT_AVAILABILITY.get("session_end_time"), 0.0)
+        bot_start = shared_state.AGENT_BOT_START_TIME
+        if session_end > 0 and bot_start > session_end:
+            gap = bot_start - session_end
+            shared_state.AGENT_AVAILABILITY["total_downtime_seconds"] = (
+                _coerce_float(shared_state.AGENT_AVAILABILITY.get("total_downtime_seconds"), 0.0) + gap
+            )
+            shared_state.AGENT_AVAILABILITY["last_downtime_at"] = session_end
+
+        shared_state.AGENT_AVAILABILITY["last_reboot_at"] = _psutil.boot_time()
+        shared_state.AGENT_AVAILABILITY["status_since"] = bot_start
+        shared_state.AGENT_AVAILABILITY["session_end_time"] = 0.0
+
+        await config.set_bot_config("agent_availability", dict(shared_state.AGENT_AVAILABILITY))
+        logging.info("Agent availability loaded from bot.db.")
+    except Exception as e:
+        logging.error(f"Error loading agent availability: {e}")
+
+
+async def save_agent_availability_async() -> None:
+    """Save agent availability state before shutdown."""
+    try:
+        shared_state.AGENT_AVAILABILITY["session_end_time"] = time.time()
+        await config.set_bot_config("agent_availability", dict(shared_state.AGENT_AVAILABILITY))
+        logging.info("Agent availability saved to bot.db.")
+    except Exception as e:
+        logging.error(f"Error saving agent availability: {e}")
+
+
+async def save_alerts_config_async():
+    try:
+        config_to_save = {str(k): v for k, v in shared_state.ALERTS_CONFIG.items()}
+        await config.set_bot_config("alerts_config", config_to_save)
     except Exception as e:
         logging.error(f"Error saving alerts config: {e}")
 
@@ -156,7 +218,7 @@ def load_services_config():
     ]
     
     try:
-        loaded_data = config_module.get_bot_config("services", [])
+        loaded_data = config_module.get_bot_config_sync("services", [])
         if loaded_data and isinstance(loaded_data, list):
             # Replace MANAGED_SERVICES with loaded data
             config_module.MANAGED_SERVICES.clear()
@@ -179,7 +241,48 @@ def save_services_config():
     """Save managed services to encrypted config file"""
     from core import config as config_module
     try:
-        config_module.set_bot_config("services", config_module.MANAGED_SERVICES)
+        config_module.set_bot_config_sync("services", config_module.MANAGED_SERVICES)
+        logging.info(f"Services config saved to bot.db: {len(config_module.MANAGED_SERVICES)} services.")
+        return True
+    except Exception as e:
+        logging.error(f"Error saving services config: {e}")
+        return False
+
+
+async def load_services_config_async():
+    """Load managed services from encrypted config file."""
+    from core import config as config_module
+
+    critical_services = [
+        {"name": "sshd", "type": "systemd"},
+        {"name": "ssh", "type": "systemd"},
+        {"name": "fail2ban", "type": "systemd"},
+    ]
+
+    try:
+        loaded_data = await config_module.get_bot_config("services", [])
+        if loaded_data and isinstance(loaded_data, list):
+            config_module.MANAGED_SERVICES.clear()
+            config_module.MANAGED_SERVICES.extend(loaded_data)
+            logging.info(f"Services config loaded from bot.db: {len(loaded_data)} services.")
+        else:
+            logging.info("Services config empty or not found, using defaults.")
+    except Exception as e:
+        logging.error(f"Error loading services config: {e}")
+
+    existing_names = {service.get("name") for service in config_module.MANAGED_SERVICES}
+    for critical_service in critical_services:
+        if critical_service["name"] not in existing_names:
+            config_module.MANAGED_SERVICES.insert(0, critical_service)
+            logging.info(f"Re-added critical service: {critical_service['name']}")
+
+
+async def save_services_config_async():
+    """Save managed services to encrypted config file."""
+    from core import config as config_module
+
+    try:
+        await config_module.set_bot_config("services", config_module.MANAGED_SERVICES)
         logging.info(f"Services config saved to bot.db: {len(config_module.MANAGED_SERVICES)} services.")
         return True
     except Exception as e:
@@ -326,6 +429,126 @@ def format_uptime(seconds, lang: str):
         parts.append(f"{hours}{hour_unit}")
     parts.append(f"{minutes}{min_unit}")
     return " ".join(parts)
+
+
+def _coerce_float(value, default: float = 0.0) -> float:
+    try:
+        return float(value or 0)
+    except (ValueError, TypeError):
+        return default
+
+
+def format_node_event_time(timestamp: float, lang: str) -> str:
+    if _coerce_float(timestamp, 0.0) <= 0:
+        return get_text("node_uptime_not_recorded", lang)
+    try:
+        return datetime.fromtimestamp(float(timestamp)).strftime("%Y-%m-%d %H:%M:%S")
+    except Exception:
+        return get_text("node_uptime_not_recorded", lang)
+
+
+def get_node_runtime_status(node: dict, offline_timeout: float, now: float | None = None) -> str:
+    if now is None:
+        now = time.time()
+    last_seen = _coerce_float((node or {}).get("last_seen"), 0.0)
+    if (node or {}).get("is_restarting"):
+        return "restarting"
+    if last_seen <= 0 or now - last_seen >= offline_timeout:
+        return "offline"
+    return "online"
+
+
+def get_node_uptime_snapshot(node: dict, lang: str, offline_timeout: float, now: float | None = None) -> dict[str, Any]:
+    if now is None:
+        now = time.time()
+
+    node = node or {}
+    stats = node.get("stats", {}) or {}
+    availability = node.get("availability", {}) or {}
+    status = get_node_runtime_status(node, offline_timeout, now)
+
+    total_online = _coerce_float(availability.get("total_online_seconds"), 0.0)
+    total_downtime = _coerce_float(availability.get("total_downtime_seconds"), 0.0)
+    internet_downtime = _coerce_float(availability.get("total_internet_downtime_seconds"), 0.0)
+    physical_downtime = _coerce_float(availability.get("total_physical_downtime_seconds"), 0.0)
+    status_since = _coerce_float(availability.get("status_since"), 0.0)
+    current_downtime_started_at = _coerce_float(availability.get("current_downtime_started_at"), 0.0)
+
+    if status == "online" and status_since > 0:
+        total_online += max(0.0, now - status_since)
+
+    ongoing_downtime = 0.0
+    ongoing_outage_kind = ""
+    if status in {"offline", "restarting"}:
+        ongoing_downtime = max(
+            0.0,
+            now
+            - (
+                current_downtime_started_at
+                or status_since
+                or _coerce_float(node.get("last_seen"), 0.0)
+                or now
+            ),
+        )
+        total_downtime += ongoing_downtime
+        if status == "restarting":
+            physical_downtime += ongoing_downtime
+            ongoing_outage_kind = "physical"
+        else:
+            ongoing_outage_kind = "pending"
+
+    return {
+        "status": status,
+        "current_uptime": format_uptime(stats.get("uptime", 0), lang),
+        "last_downtime": format_node_event_time(availability.get("last_downtime_at"), lang),
+        "last_reboot": format_node_event_time(availability.get("last_reboot_at"), lang),
+        "total_uptime": format_uptime(total_online, lang),
+        "total_downtime": format_uptime(total_downtime, lang),
+        "internet_downtime": format_uptime(internet_downtime, lang),
+        "physical_downtime": format_uptime(physical_downtime, lang),
+        "current_downtime": format_uptime(ongoing_downtime, lang),
+        "has_ongoing_outage": ongoing_downtime > 0,
+        "ongoing_outage_kind": ongoing_outage_kind,
+    }
+
+
+def build_node_uptime_report(node: dict, lang: str, offline_timeout: float) -> str:
+    snapshot = get_node_uptime_snapshot(node, lang, offline_timeout)
+    extra = ""
+    if snapshot["has_ongoing_outage"]:
+        if snapshot["ongoing_outage_kind"] == "physical":
+            extra = "\n\n" + get_text(
+                "node_uptime_rebooting_now",
+                lang,
+                current_downtime=snapshot["current_downtime"],
+            )
+        else:
+            extra = "\n\n" + get_text(
+                "node_uptime_pending_reason",
+                lang,
+                current_downtime=snapshot["current_downtime"],
+            )
+
+    status_key = {
+        "online": "node_uptime_status_online",
+        "offline": "node_uptime_status_offline",
+        "restarting": "node_uptime_status_restarting",
+    }[snapshot["status"]]
+
+    return get_text(
+        "node_uptime_report",
+        lang,
+        name=escape_html(node.get("name", "Unknown")),
+        status=get_text(status_key, lang),
+        current_uptime=snapshot["current_uptime"],
+        last_downtime=snapshot["last_downtime"],
+        last_reboot=snapshot["last_reboot"],
+        total_uptime=snapshot["total_uptime"],
+        total_downtime=snapshot["total_downtime"],
+        internet_downtime=snapshot["internet_downtime"],
+        physical_downtime=snapshot["physical_downtime"],
+        extra=extra,
+    )
 
 
 def get_server_timezone_label():

@@ -19,7 +19,7 @@ from .. import nodes_db, shared_state
 from ..config import ADMIN_USER_ID, BASE_DIR, NODE_OFFLINE_TIMEOUT, TG_BOT_NAME, WEB_SERVER_HOST, WEB_SERVER_PORT, DEFAULT_LANGUAGE
 from ..i18n import STRINGS, get_text as _, get_user_lang
 from ..messaging import send_alert
-from ..utils import decrypt_for_web, encrypt_for_web, get_app_version, get_country_flag, get_server_timezone_label, get_web_key
+from ..utils import decrypt_for_web, encrypt_for_web, get_app_version, get_country_flag, get_node_uptime_snapshot, get_server_timezone_label, get_web_key
 from .auth import COOKIE_NAME, SERVER_SESSIONS, get_current_user
 from ..rbac import build_user_role_js, get_role_level as get_user_role_level, is_admin as _is_admin
 from modules.services import (
@@ -84,7 +84,24 @@ def _session_expired(current_token: str | None) -> bool:
     return bool(current_token and current_token not in SERVER_SESSIONS)
 
 
-def _build_nodes_monitor_payload(all_nodes: dict[str, dict[str, Any]], *, now: float) -> dict[str, list[dict[str, Any]]]:
+def _get_alert_reporter_hash(all_nodes: dict[str, dict[str, Any]], *, now: float) -> str:
+    online_tokens: list[str] = []
+    fallback_tokens: list[str] = []
+
+    for token, node in all_nodes.items():
+        fallback_tokens.append(token)
+        last_seen = float(node.get("last_seen", 0) or 0)
+        if now - last_seen < NODE_OFFLINE_TIMEOUT:
+            online_tokens.append(token)
+
+    selected_tokens = sorted(online_tokens or fallback_tokens)
+    if not selected_tokens:
+        return ""
+
+    return hashlib.sha256(selected_tokens[0].encode()).hexdigest()
+
+
+def _build_nodes_monitor_payload(all_nodes: dict[str, dict[str, Any]], *, now: float, lang: str) -> dict[str, list[dict[str, Any]]]:
     nodes_data: list[dict[str, Any]] = []
 
     for token, node in all_nodes.items():
@@ -93,6 +110,7 @@ def _build_nodes_monitor_payload(all_nodes: dict[str, dict[str, Any]], *, now: f
         status = "restarting" if is_restarting else "online" if now - last_seen < NODE_OFFLINE_TIMEOUT else "offline"
         stats = node.get("stats", {})
         ping = stats.get("ping")
+        availability = get_node_uptime_snapshot(node, lang, NODE_OFFLINE_TIMEOUT, now)
 
         nodes_data.append(
             {
@@ -110,6 +128,7 @@ def _build_nodes_monitor_payload(all_nodes: dict[str, dict[str, Any]], *, now: f
                     "tx": stats.get("net_tx", 0),
                 },
                 "last_seen": last_seen,
+                "availability": availability,
             }
         )
 
@@ -204,6 +223,24 @@ async def _require_user(request: web.Request) -> dict[str, Any] | None:
 @routes.get("/api/heartbeat")
 async def handle_heartbeat_probe(request: web.Request) -> web.StreamResponse:
     return web.json_response({"status": "ok"})
+
+
+@routes.get("/api/node/bootstrap")
+async def handle_node_bootstrap(request: web.Request) -> web.StreamResponse:
+    token = (request.headers.get("X-Node-Token") or "").strip()
+    if not token:
+        return web.json_response({"error": "Token missing"}, status=401)
+
+    node = await nodes_db.get_node_by_token(token)
+    if not node:
+        return web.json_response({"error": "Auth fail"}, status=401)
+
+    return web.json_response(
+        {
+            "status": "ok",
+            "node_name": node.get("name", ""),
+        }
+    )
 
 
 @routes.post("/api/heartbeat")
@@ -317,11 +354,22 @@ async def handle_heartbeat(request: web.Request) -> web.StreamResponse:
     if tasks_to_send:
         await nodes_db.clear_node_tasks(token)
 
+    all_nodes = await nodes_db.get_all_nodes()
+    alert_reporter_hash = _get_alert_reporter_hash(all_nodes, now=time.time())
+
     alert_lang = get_user_lang(ADMIN_USER_ID)
     if alert_lang not in STRINGS:
         alert_lang = DEFAULT_LANGUAGE
 
-    return web.json_response({"status": "ok", "tasks": tasks_to_send, "alert_lang": alert_lang})
+    return web.json_response(
+        {
+            "status": "ok",
+            "tasks": tasks_to_send,
+            "alert_lang": alert_lang,
+            "agent_alert_reporter_hash": alert_reporter_hash,
+            "node_name": (current_node or node).get("name", ""),
+        }
+    )
 
 
 @routes.get("/api/nodes/list")
@@ -333,6 +381,7 @@ async def handle_nodes_list_json(request: web.Request) -> web.StreamResponse:
         return web.json_response({"error": "Admin required"}, status=403)
 
     all_nodes = await nodes_db.get_all_nodes()
+    lang = get_user_lang(int(user["id"]))
     nodes_data: list[dict[str, Any]] = []
     now = time.time()
 
@@ -341,6 +390,7 @@ async def handle_nodes_list_json(request: web.Request) -> web.StreamResponse:
         is_restarting = node.get("is_restarting", False)
         status = "restarting" if is_restarting else "online" if now - last_seen < NODE_OFFLINE_TIMEOUT else "offline"
         stats = node.get("stats", {})
+        availability = get_node_uptime_snapshot(node, lang, NODE_OFFLINE_TIMEOUT, now)
 
         nodes_data.append(
             {
@@ -351,6 +401,7 @@ async def handle_nodes_list_json(request: web.Request) -> web.StreamResponse:
                 "cpu": stats.get("cpu", 0),
                 "ram": stats.get("ram", 0),
                 "disk": stats.get("disk", 0),
+                "availability": availability,
             }
         )
 
@@ -554,6 +605,15 @@ async def handle_nodes_monitor_page(request: web.Request) -> web.StreamResponse:
                 "web_commands_sent": _("web_commands_sent", lang),
                 "web_reboot_sent": _("web_reboot_sent", lang),
                 "web_node_modal_loading": _("web_node_modal_loading", lang),
+                "web_nodes_monitor_current_uptime": _("web_nodes_monitor_current_uptime", lang),
+                "web_nodes_monitor_last_outage": _("web_nodes_monitor_last_outage", lang),
+                "web_nodes_monitor_last_reboot": _("web_nodes_monitor_last_reboot", lang),
+                "web_nodes_monitor_total_uptime": _("web_nodes_monitor_total_uptime", lang),
+                "web_nodes_monitor_total_downtime": _("web_nodes_monitor_total_downtime", lang),
+                "web_nodes_monitor_internet_downtime": _("web_nodes_monitor_internet_downtime", lang),
+                "web_nodes_monitor_physical_downtime": _("web_nodes_monitor_physical_downtime", lang),
+                "web_nodes_monitor_outage_pending": _("web_nodes_monitor_outage_pending", lang),
+                "web_nodes_monitor_outage_rebooting": _("web_nodes_monitor_outage_rebooting", lang),
                 "unit_bytes": _("unit_bytes", lang),
                 "unit_kb": _("unit_kb", lang),
                 "unit_mb": _("unit_mb", lang),
@@ -578,6 +638,7 @@ async def handle_nodes_monitor_list(request: web.Request) -> web.StreamResponse:
     user = get_current_user(request)
     if not user:
         return web.Response(status=401)
+    lang = get_user_lang(int(user["id"]))
 
     current_token = request.cookies.get(COOKIE_NAME)
     response = web.StreamResponse(status=200, reason="OK")
@@ -613,7 +674,7 @@ async def handle_nodes_monitor_list(request: web.Request) -> web.StreamResponse:
 
             try:
                 all_nodes = await nodes_db.get_all_nodes()
-                payload = _build_nodes_monitor_payload(all_nodes, now=time.time())
+                payload = _build_nodes_monitor_payload(all_nodes, now=time.time(), lang=lang)
                 await _write_sse(response, "nodes_list", payload)
             except (ConnectionResetError, BrokenPipeError, ConnectionError):
                 break
@@ -663,6 +724,7 @@ async def handle_nodes_monitor_detail(request: web.Request) -> web.StreamRespons
     last_seen = node.get("last_seen", 0)
     is_restarting = node.get("is_restarting", False)
     status = "restarting" if is_restarting else "online" if now - last_seen < NODE_OFFLINE_TIMEOUT else "offline"
+    lang = get_user_lang(int(user["id"]))
 
     return web.json_response(
         {
@@ -674,6 +736,7 @@ async def handle_nodes_monitor_detail(request: web.Request) -> web.StreamRespons
             "token": encrypt_for_web(token),
             "last_seen": last_seen,
             "services": node.get("services", []),
+            "availability": get_node_uptime_snapshot(node, lang, NODE_OFFLINE_TIMEOUT, now),
         }
     )
 

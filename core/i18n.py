@@ -6,7 +6,7 @@ from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from . import config as core_config
 from . import shared_state
 from functools import lru_cache
-from .config import get_bot_config, set_bot_config
+from .config import get_bot_config_sync, set_bot_config_sync
 
 STRINGS = {
     "ru": {
@@ -284,7 +284,7 @@ STRINGS = {
         "selftest_ssh_read_error": "⏳ Ошибка чтения логов: {error}",
         "selftest_ssh_root_only": "\n\n📄 <b>Последний SSH-вход:</b>\n<i>Информация доступна только в режиме root</i>",
         "selftest_results_header": "🛠 <b>Состояние сервера:</b>\n\n",
-        "selftest_results_body": "✅ Бот работает\n📊 Процессор: <b>{cpu:.1f}%</b>\n💾 ОЗУ: <b>{mem:.1f}%</b>\n💽 ПЗУ: <b>{disk:.1f}%</b>\n⏱ Время работы: <b>{uptime}</b>\n{inet_status}\n⌛ Задержка (8.8.8.8): <b>{ping} мс</b>\n🌐 Внешний IP: <code>{ip}</code>\n📡 Трафик ⬇ <b>{rx}</b> / ⬆ <b>{tx}</b>",
+        "selftest_results_body": "✅ Бот работает\n📊 Процессор: <b>{cpu:.1f}%</b>\n💾 ОЗУ: <b>{mem:.1f}%</b>\n💽 ПЗУ: <b>{disk:.1f}%</b>\n⏱ Время работы: <b>{uptime}</b>\n{inet_status}\n⌛ Задержка (8.8.8.8): <b>{ping} мс</b>\n🌐 Внешний IP: <code>{ipv4}</code> / <code>{ipv6}</code>\n📡 Трафик ⬇ <b>{rx}</b> / ⬆ <b>{tx}</b>",
         "speedtest_start": "🚀 <b>Запуск iperf3...</b>\n\nИщу ближайший сервер. Это может занять до 30-40 секунд.",
         "speedtest_results": "🚀 <b>Speedtest Результаты (iperf3):</b>\n\n⬇️ <b>Скачивание:</b> {dl:.2f} Мбит/с\n⬆️ <b>Загрузка:</b> {ul:.2f} Мбит/с\n⏱️ <b>Пинг:</b> {ping:.2f} мс\n\n🌍 <b>Локация:</b> {server}\n🏢 <b>Сервер:</b> {provider}",
         "speedtest_fail": "❌ Ошибка при запуске speedtest:\n<pre>{error}</pre>",
@@ -335,6 +335,14 @@ STRINGS = {
         "update_fail": "❌ Ошибка при обновлении (Код: {code}):\n<pre>{error}</pre>",
         "uptime_text": "⏱ Время работы: <b>{uptime}</b>",
         "uptime_fail": "⚠️ Ошибка получения аптайма: {error}",
+        "agent_uptime_report": "<b>Аптайм / Даунтайм: Главный сервер</b>\nТекущий аптайм ОС: <b>{os_uptime}</b>\nПоследнее падение: <b>{last_downtime}</b>\nПоследняя перезагрузка: <b>{last_reboot}</b>\nОбщее время работы: <b>{total_uptime}</b>\nВремя простоя: <b>{total_downtime}</b>\nПростой по интернету: <b>{internet_downtime}</b>\nФизическая недоступность: <b>{physical_downtime}</b>",
+        "node_uptime_report": "<b>Аптайм / Даунтайм: {name}</b>\nТекущий аптайм ОС: <b>{current_uptime}</b>\nПоследнее падение: <b>{last_downtime}</b>\nПоследняя перезагрузка: <b>{last_reboot}</b>\nОбщее время работы: <b>{total_uptime}</b>\nВремя простоя: <b>{total_downtime}</b>\nПростой по интернету: <b>{internet_downtime}</b>\nФизическая недоступность: <b>{physical_downtime}</b>{extra}",
+        "node_uptime_not_recorded": "не зафиксировано",
+        "node_uptime_status_online": "В сети",
+        "node_uptime_status_offline": "Не в сети",
+        "node_uptime_status_restarting": "Перезагружается",
+        "node_uptime_pending_reason": "⏳ Текущий простой: <b>{current_downtime}</b>\nПричина будет определена после восстановления связи.",
+        "node_uptime_rebooting_now": "🔄 Текущий простой из-за перезагрузки: <b>{current_downtime}</b>",
         "vless_prompt_file": "📤 <b>Отправьте файл конфигурации Xray (JSON)</b>\n\n<i>Важно: файл должен содержать рабочую конфигурацию outbound с Reality.</i>",
         "vless_error_not_json": "⛔ <b>Ошибка:</b> Файл должен быть формата <code>.json</code>.\n\nПопробуйте отправить файл еще раз.",
         "vless_prompt_name": "✅ Файл JSON получен.\n\nТеперь <b>введите имя</b> для этой VLESS-ссылки (например, 'My_Server_1'):",
@@ -357,7 +365,7 @@ STRINGS = {
         "node_status_offline": "Не в сети 🔴",
         "node_status_restarting": "Перезагружается 🔵",
         "node_last_seen": "Активность: {time}",
-        "node_details_offline": "🔴 <b>Сервер: {name}</b>\nСтатус: <b>Не в сети</b>\nПоследний отклик: <b>{last_seen}</b>\nIP: {ip}\n\n📊 <b>Последние известные данные:</b>\nCPU: {cpu}%\nRAM: {ram}%\nDisk: {disk}%",
+        "node_details_offline": "🔴 <b>Сервер: {name}</b>\nСтатус: <b>Не в сети</b>\nПоследний отклик: <b>{last_seen}</b>\nIP: {ip}\n\n📊 <b>Последние известные данные:</b>\nCPU: {cpu}%\nRAM: {ram}%\nDisk: {disk}%\n\n{uptime_report}",
         "node_restarting_alert": "🔵 Сервер '{name}' перезагружается. Пожалуйста, подождите 1-2 минуты.",
         "node_management_menu": "🟢 <b>Управление сервером: {name}</b>\nIP: {ip}\nUptime: {uptime}\n\nВыберите действие:",
         "node_cmd_sent": "Команда '{cmd}' отправлена на сервер '{name}'.",
@@ -514,6 +522,8 @@ STRINGS = {
         "web_hint_cpu_usage": "Текущая нагрузка на центральный процессор.",
         "web_hint_ram_usage": "Текущее использование оперативной памяти.",
         "web_hint_disk_usage": "Текущее использование дискового пространства.",
+        "web_hint_uptime_bot_uptime": "Аптайм бота",
+        "web_hint_uptime_bot_started": "Бот запущен",
         "web_hint_traffic_in": "Входящий по интерфейсам",
         "web_hint_traffic_out": "Исходящий по интерфейсам",
         "web_default_pass_alert": "⚠️ Внимание! Используется стандартный пароль ('admin'). Рекомендуется сменить его в настройках.",
@@ -762,6 +772,21 @@ STRINGS = {
         "web_nodes_monitor_traffic_in": "Вход",
         "web_nodes_monitor_traffic_out": "Выход",
         "web_nodes_monitor_uptime": "Аптайм",
+        "web_avail_header": "Аптайм / Даунтайм",
+        "web_avail_status": "Статус",
+        "web_avail_online": "🟢 В сети",
+        "web_avail_offline": "🔴 Оффлайн",
+        "web_agent_uptime_os": "Текущий аптайм ОС",
+        "web_agent_downtime": "Время простоя",
+        "web_nodes_monitor_current_uptime": "Текущий аптайм",
+        "web_nodes_monitor_last_outage": "Последнее падение",
+        "web_nodes_monitor_last_reboot": "Последняя перезагрузка",
+        "web_nodes_monitor_total_uptime": "Общее время работы",
+        "web_nodes_monitor_total_downtime": "Общий простой",
+        "web_nodes_monitor_internet_downtime": "Простой по интернету",
+        "web_nodes_monitor_physical_downtime": "Физическая недоступность",
+        "web_nodes_monitor_outage_pending": "Причина будет определена после восстановления связи",
+        "web_nodes_monitor_outage_rebooting": "Текущий простой вызван перезагрузкой",
         "web_nodes_monitor_details": "Подробнее",
         "web_nodes_monitor_detail_title": "Детали ноды",
         "web_nodes_monitor_tab_stats": "Статистика",
@@ -1091,7 +1116,7 @@ STRINGS = {
         "selftest_ssh_read_error": "⏳ Error reading logs: {error}",
         "selftest_ssh_root_only": "\n\n📄 <b>Last SSH login:</b>\n<i>Info available in root mode only</i>",
         "selftest_results_header": "🛠 <b>Server Status:</b>\n\n",
-        "selftest_results_body": "✅ Bot is running\n📊 CPU: <b>{cpu:.1f}%</b>\n💾 RAM: <b>{mem:.1f}%</b>\n💽 Disk: <b>{disk:.1f}%</b>\n⏱ Uptime: <b>{uptime}</b>\n{inet_status}\n⌛ Ping (8.8.8.8): <b>{ping} ms</b>\n🌐 External IP: <code>{ip}</code>\n📡 Traffic ⬇ <b>{rx}</b> / ⬆ <b>{tx}</b>",
+        "selftest_results_body": "✅ Bot is running\n📊 CPU: <b>{cpu:.1f}%</b>\n💾 RAM: <b>{mem:.1f}%</b>\n💽 Disk: <b>{disk:.1f}%</b>\n⏱ Uptime: <b>{uptime}</b>\n{inet_status}\n⌛ Ping (8.8.8.8): <b>{ping} ms</b>\n🌐 External IP: <code>{ipv4}</code> / <code>{ipv6}</code>\n📡 Traffic ⬇ <b>{rx}</b> / ⬆ <b>{tx}</b>",
         "speedtest_start": "🚀 <b>Starting iperf3...</b>\n\nFinding the closest server. This may take 30-40 seconds.",
         "speedtest_results": "🚀 <b>Speedtest Results (iperf3):</b>\n\n⬇️ <b>Download:</b> {dl:.2f} Mbps\n⬆️ <b>Upload:</b> {ul:.2f} Mbps\n⏱️ <b>Ping:</b> {ping:.2f} ms\n\n🌍 <b>Location:</b> {server}\n🏢 <b>Server:</b> {provider}",
         "speedtest_fail": "❌ Error running speedtest:\n<pre>{error}</pre>",
@@ -1142,6 +1167,14 @@ STRINGS = {
         "update_fail": "❌ Error during update (Code: {code}):\n<pre>{error}</pre>",
         "uptime_text": "⏱ Uptime: <b>{uptime}</b>",
         "uptime_fail": "⚠️ Error getting uptime: {error}",
+        "agent_uptime_report": "<b>Uptime / Downtime: Main Server</b>\nCurrent OS uptime: <b>{os_uptime}</b>\nLast outage: <b>{last_downtime}</b>\nLast reboot: <b>{last_reboot}</b>\nTotal working time: <b>{total_uptime}</b>\nTotal downtime: <b>{total_downtime}</b>\nInternet downtime: <b>{internet_downtime}</b>\nPhysical unavailability: <b>{physical_downtime}</b>",
+        "node_uptime_report": "<b>Uptime / Downtime: {name}</b>\nCurrent OS uptime: <b>{current_uptime}</b>\nLast outage: <b>{last_downtime}</b>\nLast reboot: <b>{last_reboot}</b>\nTotal working time: <b>{total_uptime}</b>\nTotal downtime: <b>{total_downtime}</b>\nInternet downtime: <b>{internet_downtime}</b>\nPhysical unavailability: <b>{physical_downtime}</b>{extra}",
+        "node_uptime_not_recorded": "not recorded",
+        "node_uptime_status_online": "Online",
+        "node_uptime_status_offline": "Offline",
+        "node_uptime_status_restarting": "Restarting",
+        "node_uptime_pending_reason": "⏳ Current outage: <b>{current_downtime}</b>\nThe reason will be determined after the node reconnects.",
+        "node_uptime_rebooting_now": "🔄 Current reboot downtime: <b>{current_downtime}</b>",
         "vless_prompt_file": "📤 <b>Send your Xray configuration file (JSON)</b>\n\n<i>Important: The file must contain a working outbound configuration with Reality.</i>",
         "vless_error_not_json": "⛔ <b>Error:</b> File must be in <code>.json</code> format.\n\nPlease try sending the file again.",
         "vless_prompt_name": "✅ JSON file received.\n\nNow, <b>enter a name</b> for this VLESS link (e.g., 'My_Server_1'):",
@@ -1164,7 +1197,7 @@ STRINGS = {
         "node_status_offline": "Offline 🔴",
         "node_status_restarting": "Restarting 🔵",
         "node_last_seen": "Last active: {time}",
-        "node_details_offline": "🔴 <b>Server: {name}</b>\nStatus: <b>Offline</b>\nLast Seen: <b>{last_seen}</b>\nIP: {ip}\n\n📊 <b>Last Known Stats:</b>\nCPU: {cpu}%\nRAM: {ram}%\nDisk: {disk}%",
+        "node_details_offline": "🔴 <b>Server: {name}</b>\nStatus: <b>Offline</b>\nLast Seen: <b>{last_seen}</b>\nIP: {ip}\n\n📊 <b>Last Known Stats:</b>\nCPU: {cpu}%\nRAM: {ram}%\nDisk: {disk}%\n\n{uptime_report}",
         "node_restarting_alert": "🔵 Server '{name}' is restarting. Please wait 1-2 minutes.",
         "node_management_menu": "🟢 <b>Managing Server: {name}</b>\nIP: {ip}\nUptime: {uptime}\n\nSelect an action:",
         "node_cmd_sent": "Command '{cmd}' sent to server '{name}'.",
@@ -1380,6 +1413,8 @@ STRINGS = {
         "web_hint_cpu_usage": "Current utilization of the Central Processing Unit.",
         "web_hint_ram_usage": "Current RAM utilization (in percentage).",
         "web_hint_disk_usage": "Current disk space usage (on the root partition '/').",
+        "web_hint_uptime_bot_uptime": "Bot uptime",
+        "web_hint_uptime_bot_started": "Bot started",
         "web_hint_traffic_in": "Inbound by Interface",
         "web_hint_traffic_out": "Outbound by Interface",
         "web_pass_wrong_current": "Invalid current password",
@@ -1578,6 +1613,21 @@ STRINGS = {
         "web_nodes_monitor_traffic_in": "In",
         "web_nodes_monitor_traffic_out": "Out",
         "web_nodes_monitor_uptime": "Uptime",
+        "web_avail_header": "Uptime / Downtime",
+        "web_avail_status": "Status",
+        "web_avail_online": "🟢 Online",
+        "web_avail_offline": "🔴 Offline",
+        "web_agent_uptime_os": "Current OS Uptime",
+        "web_agent_downtime": "Downtime",
+        "web_nodes_monitor_current_uptime": "Current uptime",
+        "web_nodes_monitor_last_outage": "Last outage",
+        "web_nodes_monitor_last_reboot": "Last reboot",
+        "web_nodes_monitor_total_uptime": "Total uptime",
+        "web_nodes_monitor_total_downtime": "Total downtime",
+        "web_nodes_monitor_internet_downtime": "Internet downtime",
+        "web_nodes_monitor_physical_downtime": "Physical downtime",
+        "web_nodes_monitor_outage_pending": "The reason will be determined after the node reconnects",
+        "web_nodes_monitor_outage_rebooting": "Current outage is caused by a reboot",
         "web_nodes_monitor_details": "Details",
         "web_nodes_monitor_detail_title": "Node Details",
         "web_nodes_monitor_tab_stats": "Statistics",
@@ -1646,7 +1696,7 @@ STRINGS = {
 
 def load_user_settings():
     try:
-        settings = get_bot_config("user_settings", {})
+        settings = get_bot_config_sync("user_settings", {})
         if settings:
             loaded_data_int_keys = {int(k): v for k, v in settings.items()}
             shared_state.USER_SETTINGS.clear()
@@ -1664,7 +1714,34 @@ def load_user_settings():
 def save_user_settings():
     try:
         settings_to_save = {str(k): v for k, v in shared_state.USER_SETTINGS.items()}
-        set_bot_config("user_settings", settings_to_save)
+        set_bot_config_sync("user_settings", settings_to_save)
+        logging.debug("Настройки пользователей (языки) сохранены.")
+    except Exception as e:
+        safe_e = str(e).replace("\n", " ").replace("\r", "")
+        logging.error(f"Ошибка сохранения user_settings: {safe_e}")
+
+
+async def load_user_settings_async():
+    try:
+        settings = await core_config.get_bot_config("user_settings", {})
+        if settings:
+            loaded_data_int_keys = {int(k): v for k, v in settings.items()}
+            shared_state.USER_SETTINGS.clear()
+            shared_state.USER_SETTINGS.update(loaded_data_int_keys)
+            logging.info("Настройки пользователей (языки) загружены из bot.db.")
+        else:
+            shared_state.USER_SETTINGS.clear()
+            logging.info("Настройки пользователей (языки) не найдены или пусты.")
+    except Exception as e:
+        safe_e = str(e).replace("\n", " ").replace("\r", "")
+        logging.error(f"Ошибка загрузки user_settings: {safe_e}")
+        shared_state.USER_SETTINGS.clear()
+
+
+async def save_user_settings_async():
+    try:
+        settings_to_save = {str(k): v for k, v in shared_state.USER_SETTINGS.items()}
+        await core_config.set_bot_config("user_settings", settings_to_save)
         logging.debug("Настройки пользователей (языки) сохранены.")
     except Exception as e:
         safe_e = str(e).replace("\n", " ").replace("\r", "")
@@ -1705,6 +1782,25 @@ def set_user_lang(user_id: int | str | None, lang: str):
         shared_state.USER_SETTINGS[user_id] = {}
     shared_state.USER_SETTINGS[user_id]["lang"] = lang
     save_user_settings()
+    logging.info(f"Язык для пользователя {user_id} изменен на '{lang}' и сохранен.")
+
+
+async def set_user_lang_async(user_id: int | str | None, lang: str):
+    if user_id is None:
+        logging.warning("set_user_lang_async вызван с user_id=None. Сохранение отменено.")
+        return
+    if not isinstance(user_id, int):
+        try:
+            user_id = int(user_id)
+        except (ValueError, TypeError):
+            logging.error(
+                f"set_user_lang_async вызван с нечисловым user_id: {user_id}. Сохранение отменено."
+            )
+            return
+    if user_id not in shared_state.USER_SETTINGS:
+        shared_state.USER_SETTINGS[user_id] = {}
+    shared_state.USER_SETTINGS[user_id]["lang"] = lang
+    await save_user_settings_async()
     logging.info(f"Язык для пользователя {user_id} изменен на '{lang}' и сохранен.")
 
 

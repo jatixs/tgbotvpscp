@@ -14,7 +14,7 @@ from core.auth import (
     is_allowed,
     send_access_denied_message,
     refresh_user_names,
-    save_users,
+    save_users_async,
     get_user_name,
 )
 from core.messaging import delete_previous_message
@@ -322,13 +322,13 @@ async def cq_delete_user_confirm(callback: types.CallbackQuery):
         USER_NAMES.pop(str(user_id_to_delete), None)
         ALERTS_CONFIG.pop(user_id_to_delete, None)
         shared_state.USER_SETTINGS.pop(user_id_to_delete, None)
-        save_users()
-        from core.utils import save_alerts_config
+        await save_users_async()
+        from core.utils import save_alerts_config_async
 
-        save_alerts_config()
-        from core.i18n import save_user_settings
+        await save_alerts_config_async()
+        from core.i18n import save_user_settings_async
 
-        save_user_settings()
+        await save_user_settings_async()
         logging.info(
             f"Админ {admin_id} удалил пользователя {deleted_user_name} ({user_id_to_delete}) из группы '{deleted_group_key}'"
         )
@@ -405,13 +405,13 @@ async def cq_confirm_self_delete(callback: types.CallbackQuery):
         USER_NAMES.pop(str(user_id_to_delete), None)
         ALERTS_CONFIG.pop(user_id_to_delete, None)
         shared_state.USER_SETTINGS.pop(user_id_to_delete, None)
-        save_users()
-        from core.utils import save_alerts_config
+        await save_users_async()
+        from core.utils import save_alerts_config_async
 
-        save_alerts_config()
-        from core.i18n import save_user_settings
+        await save_alerts_config_async()
+        from core.i18n import save_user_settings_async
 
-        save_user_settings()
+        await save_user_settings_async()
         logging.info(
             f"Пользователь {deleted_user_name} ({user_id_to_delete}) удалил себя из группы '{deleted_group_key}'"
         )
@@ -503,7 +503,7 @@ async def cq_set_group_existing(callback: types.CallbackQuery, state: FSMContext
             return
         old_group_key = ALLOWED_USERS[user_id_to_change]
         ALLOWED_USERS[user_id_to_change] = new_group_key
-        save_users()
+        await save_users_async()
         user_name = USER_NAMES.get(str(user_id_to_change), f"ID: {user_id_to_change}")
         logging.info(
             f"Админ {admin_id} изменил группу для {user_name} ({user_id_to_change}) с '{old_group_key}' на '{new_group_key}'"
