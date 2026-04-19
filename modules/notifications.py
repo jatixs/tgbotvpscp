@@ -22,7 +22,7 @@ from core.shared_state import (
     LAST_RESOURCE_ALERT_TIME,
 )
 from core.utils import (
-    save_alerts_config,
+    save_alerts_config_async,
     get_server_timezone_label,
     escape_html,
     get_host_path,
@@ -205,7 +205,7 @@ async def cq_toggle_all_agent(callback: types.CallbackQuery):
     for k in agent_keys:
         ALERTS_CONFIG[user_id][k] = new_state
         
-    save_alerts_config()
+    await save_alerts_config_async()
     
     await callback.message.edit_reply_markup(
         reply_markup=get_notifications_global_keyboard(user_id)
@@ -243,7 +243,7 @@ async def cq_toggle_all_nodes(callback: types.CallbackQuery):
             if override_key in user_conf:
                 del user_conf[override_key]
         
-    save_alerts_config()
+    await save_alerts_config_async()
     
     await callback.message.edit_reply_markup(
         reply_markup=get_notifications_global_keyboard(user_id)
@@ -268,7 +268,7 @@ async def cq_toggle_alert(callback: types.CallbackQuery):
     # Toggle logic
     new_state = not ALERTS_CONFIG[user_id].get(alert_type, False)
     ALERTS_CONFIG[user_id][alert_type] = new_state
-    save_alerts_config()
+    await save_alerts_config_async()
     
     # Refresh Global Menu
     await callback.message.edit_reply_markup(
@@ -330,7 +330,7 @@ async def sync_node_global_state(user_id: int, alert_type: str):
             k = f"node_{token}_{alert_type}"
             if k in user_conf:
                 del user_conf[k]
-        save_alerts_config()
+        await save_alerts_config_async()
         
     elif disabled_count == total_nodes:
         # All nodes are OFF -> Set Global OFF, remove overrides
@@ -339,7 +339,7 @@ async def sync_node_global_state(user_id: int, alert_type: str):
             k = f"node_{token}_{alert_type}"
             if k in user_conf:
                 del user_conf[k]
-        save_alerts_config()
+        await save_alerts_config_async()
 
 
 async def cq_toggle_node_alert(callback: types.CallbackQuery):
@@ -384,7 +384,7 @@ async def cq_toggle_node_alert(callback: types.CallbackQuery):
     new_val = not current_val
     user_conf[override_key] = new_val
     
-    save_alerts_config()
+    await save_alerts_config_async()
     
     await sync_node_global_state(user_id, alert_type)
     

@@ -27,6 +27,7 @@ VENV_PATH="${BOT_INSTALL_PATH}/venv"
 README_FILE="${BOT_INSTALL_PATH}/README.md"
 DOCKER_COMPOSE_FILE="${BOT_INSTALL_PATH}/docker-compose.yml"
 ENV_FILE="${BOT_INSTALL_PATH}/.env"
+LEGACY_SECURITY_KEY_FILE="${BOT_INSTALL_PATH}/config/security.key"
 
 GITHUB_REPO="jatixs/tgbotvpscp"
 GITHUB_REPO_URL="https://github.com/${GITHUB_REPO}.git"
@@ -40,6 +41,46 @@ msg_question() {
     if [ -z "${!var_name}" ]; then
         read -p "$(echo -e "${C_YELLOW}❓ $prompt${C_RESET}")" $var_name
     fi
+}
+
+generate_fernet_key() {
+    "${PYTHON_BIN}" - <<'PY'
+import base64
+import os
+
+print(base64.urlsafe_b64encode(os.urandom(32)).decode())
+PY
+}
+
+is_node_context() {
+    if [ "${FORCE_NODE_MODE:-no}" = "yes" ]; then
+        return 0
+    fi
+    if [ "${IS_NODE:-no}" = "yes" ]; then
+        return 0
+    fi
+    if [ -f "${ENV_FILE}" ] && grep -q '^MODE=node' "${ENV_FILE}"; then
+        return 0
+    fi
+    if [ -f "/tmp/tgbot_env.bak" ] && grep -q '^MODE=node' "/tmp/tgbot_env.bak"; then
+        return 0
+    fi
+    return 1
+}
+
+ensure_data_encryption_key() {
+    if is_node_context; then
+        return 0
+    fi
+
+    if [ -n "$DATA_ENCRYPTION_KEY" ]; then
+        export DATA_ENCRYPTION_KEY
+        return 0
+    fi
+
+    DATA_ENCRYPTION_KEY=$(generate_fernet_key)
+    export DATA_ENCRYPTION_KEY
+    msg_warning "DATA_ENCRYPTION_KEY отсутствовал. Сгенерирован новый ключ шифрования."
 }
 
 spinner() {
@@ -229,6 +270,11 @@ setup_repo_and_dirs() {
     cd /
     msg_info "Подготовка файлов (Ветка: ${GIT_BRANCH})..."
     if [ -f "${ENV_FILE}" ]; then cp "${ENV_FILE}" /tmp/tgbot_env.bak; fi
+    if [ -z "$DATA_ENCRYPTION_KEY" ] && [ -f "${LEGACY_SECURITY_KEY_FILE}" ]; then
+        DATA_ENCRYPTION_KEY=$(tr -d '\r\n' < "${LEGACY_SECURITY_KEY_FILE}")
+        export DATA_ENCRYPTION_KEY
+        msg_info "Найден legacy security.key. Ключ будет перенесен в .env."
+    fi
     if [ -d "${BOT_INSTALL_PATH}" ]; then run_with_spinner "Удаление старых файлов" sudo rm -rf "${BOT_INSTALL_PATH}"; fi
     sudo mkdir -p ${BOT_INSTALL_PATH}
     run_with_spinner "Клонирование репозитория" sudo git clone --branch "${GIT_BRANCH}" "${GITHUB_REPO_URL}" "${BOT_INSTALL_PATH}" || exit 1
@@ -255,6 +301,7 @@ load_cached_env() {
             [ -z "$N" ] && N=$(get_env_val "TG_BOT_NAME")
             [ -z "$P" ] && P=$(get_env_val "WEB_SERVER_PORT")
             [ -z "$SENTRY_DSN" ] && SENTRY_DSN=$(get_env_val "SENTRY_DSN")
+            [ -z "$DATA_ENCRYPTION_KEY" ] && DATA_ENCRYPTION_KEY=$(get_env_val "DATA_ENCRYPTION_KEY")
             if [ -z "$W" ]; then
                 local val=$(get_env_val "ENABLE_WEB_UI")
                 if [[ "$val" == "false" ]]; then W="n"; else W="y"; fi
@@ -265,6 +312,39 @@ load_cached_env() {
             msg_info "Восстановление пропущено."
         fi
     fi
+
+    ensure_data_encryption_key
+}
+
+fetch_node_name_from_agent() {
+    local agent_url="${1%/}"
+    local node_token="$2"
+    local response=""
+
+    if [ -z "$agent_url" ] || [ -z "$node_token" ]; then
+        return 0
+    fi
+
+    response=$(curl -fsS --connect-timeout 5 --max-time 10 -H "X-Node-Token: ${node_token}" "${agent_url}/api/node/bootstrap" 2>/dev/null) || return 0
+    printf '%s' "$response" | "${PYTHON_BIN}" -c 'import json, sys; data = json.load(sys.stdin); print((data.get("node_name") or "").strip())' 2>/dev/null || true
+}
+
+resolve_node_name_defaults() {
+    local current_name="$1"
+    local current_mode="$2"
+    local agent_url="$3"
+    local node_token="$4"
+    local resolved_name="$current_name"
+    local resolved_mode="$current_mode"
+
+    if [ -z "$resolved_name" ]; then
+        resolved_name=$(fetch_node_name_from_agent "$agent_url" "$node_token")
+        resolved_mode="agent"
+    elif [ -z "$resolved_mode" ]; then
+        resolved_mode="manual"
+    fi
+
+    printf '%s\n%s\n' "$resolved_name" "$resolved_mode"
 }
 cleanup_common_trash() {
     if [ -d "$BOT_INSTALL_PATH/.github" ]; then sudo rm -rf "$BOT_INSTALL_PATH/.github"; fi
@@ -445,6 +525,7 @@ ask_env_details() {
             SETUP_HTTPS="false"
         fi
     fi
+    ensure_data_encryption_key
     export T A U N WEB_PORT ENABLE_WEB SETUP_HTTPS HTTPS_DOMAIN HTTPS_EMAIL HTTPS_PORT GEN_PASS SENTRY_DSN
 }
 
@@ -461,11 +542,14 @@ write_env_file() {
     local web_domain=""
     if [ -n "$HTTPS_DOMAIN" ]; then web_domain="${HTTPS_DOMAIN}"; fi
 
+    ensure_data_encryption_key
+
     sudo bash -c "cat > ${ENV_FILE}" <<EOF
 TG_BOT_TOKEN="${T}"
 TG_ADMIN_ID="${A}"
 TG_ADMIN_USERNAME="${U}"
 TG_BOT_NAME="${N}"
+DATA_ENCRYPTION_KEY="${DATA_ENCRYPTION_KEY}"
 WEB_SERVER_HOST="0.0.0.0"
 WEB_SERVER_PORT="${WEB_PORT}"
 INSTALL_MODE="${im}"
@@ -516,6 +600,10 @@ ensure_env_variables() {
         "DEBUG|false|Режим отладки"
         "TG_BOT_NAME|VPS Bot|Имя бота"
     )
+
+    if ! is_node_context; then
+        ENV_VARS=("DATA_ENCRYPTION_KEY||Ключ шифрования данных" "${ENV_VARS[@]}")
+    fi
     
     for var_entry in "${ENV_VARS[@]}"; do
         local var_name=$(echo "$var_entry" | cut -d'|' -f1)
@@ -523,8 +611,17 @@ ensure_env_variables() {
         local var_desc=$(echo "$var_entry" | cut -d'|' -f3)
         
         if ! grep -q "^${var_name}=" "${ENV_FILE}"; then
-            echo -e "${C_YELLOW}  + Добавлена переменная ${var_name}=${default_val}${C_RESET}"
-            sudo bash -c "echo '${var_name}=\"${default_val}\"' >> ${ENV_FILE}"
+            if [ "$var_name" == "DATA_ENCRYPTION_KEY" ]; then
+                if [ -z "$DATA_ENCRYPTION_KEY" ] && [ -f "${LEGACY_SECURITY_KEY_FILE}" ]; then
+                    DATA_ENCRYPTION_KEY=$(tr -d '\r\n' < "${LEGACY_SECURITY_KEY_FILE}")
+                fi
+                ensure_data_encryption_key
+                echo -e "${C_YELLOW}  + Добавлена переменная ${var_name}=[REDACTED]${C_RESET}"
+                sudo bash -c "echo '${var_name}=\"${DATA_ENCRYPTION_KEY}\"' >> ${ENV_FILE}"
+            else
+                echo -e "${C_YELLOW}  + Добавлена переменная ${var_name}=${default_val}${C_RESET}"
+                sudo bash -c "echo '${var_name}=\"${default_val}\"' >> ${ENV_FILE}"
+            fi
             changes_made=true
         fi
     done
@@ -561,7 +658,7 @@ create_dockerfile() {
     sudo tee "${BOT_INSTALL_PATH}/Dockerfile" > /dev/null <<'EOF'
 FROM python:3.10-slim-bookworm
 RUN apt-get update && apt-get install -y python3-yaml iperf3 git curl wget sudo procps iputils-ping net-tools gnupg docker.io coreutils && rm -rf /var/lib/apt/lists/*
-RUN pip install --no-cache-dir --upgrade pip setuptools wheel && pip install --no-cache-dir docker aiohttp aiosqlite argon2-cffi sentry-sdk tortoise-orm aerich cryptography tomlkit
+RUN pip install --no-cache-dir --upgrade pip setuptools wheel && pip install --no-cache-dir docker aiohttp==3.13.3 aiosqlite argon2-cffi sentry-sdk tortoise-orm aerich cryptography tomlkit
 RUN groupadd -g 1001 tgbot && useradd -u 1001 -g 1001 -m -s /bin/bash tgbot && echo "tgbot ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
 WORKDIR /opt/tg-bot
 COPY requirements.txt .
@@ -581,27 +678,71 @@ x-bot-base: &bot-base
   image: tg-vps-bot:latest
   restart: always
   env_file: .env
+    depends_on:
+        docker-proxy:
+            condition: service_started
+    environment:
+        DOCKER_HOST: tcp://docker-proxy:2375
+        DEPLOY_MODE: docker
+    security_opt:
+        - no-new-privileges:true
+    cap_drop:
+        - ALL
+    tmpfs:
+        - /tmp
+    networks:
+        - app
+        - docker-api
 services:
+    docker-proxy:
+        image: tecnativa/docker-socket-proxy:0.3.0
+        container_name: tg-docker-proxy
+        restart: always
+        read_only: true
+        security_opt:
+            - no-new-privileges:true
+        cap_drop:
+            - ALL
+        tmpfs:
+            - /run
+            - /tmp
+        environment:
+            CONTAINERS: 1
+            EVENTS: 1
+            INFO: 1
+            PING: 1
+            POST: 1
+            VERSION: 1
+            IMAGES: 0
+            NETWORKS: 0
+            SERVICES: 0
+            TASKS: 0
+            VOLUMES: 0
+            SYSTEM: 0
+            NODES: 0
+            SECRETS: 0
+            SWARM: 0
+        volumes:
+            - /var/run/docker.sock:/var/run/docker.sock:ro
+        networks:
+            - docker-api
   bot-secure:
     <<: *bot-base
     container_name: tg-bot-secure
     profiles: ["secure"]
     user: "tgbot"
     ports:
-      - "${WEB_PORT}:${WEB_PORT}"
+            - "127.0.0.1:${WEB_PORT}:${WEB_PORT}"
     environment:
       - INSTALL_MODE=secure
-      - DEPLOY_MODE=docker
       - TG_BOT_CONTAINER_NAME=tg-bot-secure
     volumes:
       - ./config:/opt/tg-bot/config
       - ./logs/bot:/opt/tg-bot/logs/bot
-      - /var/run/docker.sock:/var/run/docker.sock:ro
       - /proc/uptime:/proc_host/uptime:ro
       - /proc/stat:/proc_host/stat:ro
       - /proc/meminfo:/proc_host/meminfo:ro
       - /proc/net/dev:/proc_host/net/dev:ro
-    cap_drop: [ALL]
     cap_add: [NET_RAW]
   bot-root:
     <<: *bot-base
@@ -609,30 +750,33 @@ services:
     profiles: ["root"]
     user: "root"
     ports:
-      - "${WEB_PORT}:${WEB_PORT}"
+            - "127.0.0.1:${WEB_PORT}:${WEB_PORT}"
     environment:
       - INSTALL_MODE=root
-      - DEPLOY_MODE=docker
       - TG_BOT_CONTAINER_NAME=tg-bot-root
-    privileged: true
-    pid: "host"
-    network_mode: "host"
-    ipc: "host"
     volumes:
       - ./config:/opt/tg-bot/config
       - ./logs/bot:/opt/tg-bot/logs/bot
-      - /:/host
-      - /var/run/docker.sock:/var/run/docker.sock:ro
+            - /proc/uptime:/proc_host/uptime:ro
+            - /proc/stat:/proc_host/stat:ro
+            - /proc/meminfo:/proc_host/meminfo:ro
+            - /proc/net/dev:/proc_host/net/dev:ro
+            - /etc/hostname:/host/etc/hostname:ro
+            - /etc/os-release:/host/etc/os-release:ro
   watchdog:
     <<: *bot-base
     container_name: tg-watchdog
     command: python watchdog.py
     user: "root"
-    restart: always
     volumes:
       - ./config:/opt/tg-bot/config
       - ./logs/watchdog:/opt/tg-bot/logs/watchdog
-      - /var/run/docker.sock:/var/run/docker.sock:ro
+networks:
+    app:
+        driver: bridge
+    docker-api:
+        driver: bridge
+        internal: true
 EOF
 }
 
@@ -795,6 +939,7 @@ EOF
 
 install_node_logic() {
     echo -e "\n${C_BOLD}=== Установка НОДЫ ===${C_RESET}"
+    FORCE_NODE_MODE="yes"
     if [ -n "$AUTO_AGENT_URL" ]; then AGENT_URL="$AUTO_AGENT_URL"; fi
     if [ -n "$AUTO_NODE_TOKEN" ]; then NODE_TOKEN="$AUTO_NODE_TOKEN"; fi
     common_install_steps
@@ -820,11 +965,22 @@ install_node_logic() {
     load_cached_env
     msg_question "Agent URL (http://IP:8080): " AGENT_URL
     msg_question "Token: " NODE_TOKEN
+    local saved_node_name=""
+    local saved_node_name_sync_mode=""
+    if [ -f "/tmp/tgbot_env.bak" ]; then
+        saved_node_name=$(grep "^NODE_NAME=" "/tmp/tgbot_env.bak" | cut -d'=' -f2- | tr -d '"')
+        saved_node_name_sync_mode=$(grep "^NODE_NAME_SYNC_MODE=" "/tmp/tgbot_env.bak" | cut -d'=' -f2- | tr -d '"' | xargs)
+    fi
+    mapfile -t node_name_defaults < <(resolve_node_name_defaults "$saved_node_name" "$saved_node_name_sync_mode" "$AGENT_URL" "$NODE_TOKEN")
+    local initial_node_name="${node_name_defaults[0]}"
+    local initial_node_name_sync_mode="${node_name_defaults[1]}"
     local ver="Unknown"; if [ -f "$README_FILE" ]; then ver=$(grep -oP 'img\.shields\.io/badge/version-v\K[\d\.]+' "$README_FILE"); fi
     sudo bash -c "cat > ${ENV_FILE}" <<EOF
 MODE=node
 AGENT_BASE_URL="${AGENT_URL}"
 AGENT_TOKEN="${NODE_TOKEN}"
+NODE_NAME="${initial_node_name}"
+NODE_NAME_SYNC_MODE="${initial_node_name_sync_mode:-agent}"
 NODE_UPDATE_INTERVAL=5
 INSTALLED_VERSION="${ver}"
 EOF
@@ -833,22 +989,17 @@ EOF
     if [[ "$RESTORE_CHOICE" =~ ^[Yy]$ ]] && [ -f "/tmp/tgbot_env.bak" ]; then
         local saved_bot_token=$(grep "^BOT_TOKEN=" "/tmp/tgbot_env.bak" | cut -d'=' -f2- | tr -d '"' | xargs)
         local saved_chat_ids=$(grep "^CRITICAL_ALERT_CHAT_IDS=" "/tmp/tgbot_env.bak" | cut -d'=' -f2- | tr -d '"' | xargs)
-        local saved_node_name=$(grep "^NODE_NAME=" "/tmp/tgbot_env.bak" | cut -d'=' -f2- | tr -d '"')
         local saved_delay=$(grep "^AGENT_ALERT_DELAY_SECONDS=" "/tmp/tgbot_env.bak" | cut -d'=' -f2- | tr -d '"')
         
         # Ask user if monitoring variables are missing or empty
         local need_bot_token=""
         local need_chat_ids=""
-        local need_node_name=""
         
         if [ -z "$saved_bot_token" ]; then
             need_bot_token="yes"
         fi
         if [ -z "$saved_chat_ids" ]; then
             need_chat_ids="yes"
-        fi
-        if [ -z "$saved_node_name" ]; then
-            need_node_name="yes"
         fi
         
         # If any monitoring variable is missing, ask if user wants to configure them
@@ -857,7 +1008,6 @@ EOF
             echo -e "${C_YELLOW}⚠️  Обнаружены пустые переменные для мониторинга агента:${C_RESET}"
             [ -n "$need_bot_token" ] && echo -e "  • BOT_TOKEN (токен бота)"
             [ -n "$need_chat_ids" ] && echo -e "  • CRITICAL_ALERT_CHAT_IDS (ID чатов для алертов)"
-            [ -n "$need_node_name" ] && echo -e "  • NODE_NAME (имя ноды)"
             echo ""
             read -p "$(echo -e "${C_CYAN}❓ Настроить мониторинг агента сейчас? (y/n) [n]: ${C_RESET}")" setup_monitoring
             setup_monitoring=${setup_monitoring:-n}
@@ -879,10 +1029,6 @@ EOF
                 if [ -n "$need_chat_ids" ]; then
                     read -p "Введите CRITICAL_ALERT_CHAT_IDS (через запятую): " saved_chat_ids
                 fi
-                
-                if [ -n "$need_node_name" ]; then
-                    read -p "Введите NODE_NAME (имя этой ноды): " saved_node_name
-                fi
             fi
         fi
         
@@ -892,7 +1038,6 @@ EOF
             echo "# Agent Monitoring Configuration" | sudo tee -a "${ENV_FILE}" > /dev/null
             echo "BOT_TOKEN=\"${saved_bot_token}\"" | sudo tee -a "${ENV_FILE}" > /dev/null
             echo "CRITICAL_ALERT_CHAT_IDS=\"${saved_chat_ids}\"" | sudo tee -a "${ENV_FILE}" > /dev/null
-            echo "NODE_NAME=\"${saved_node_name}\"" | sudo tee -a "${ENV_FILE}" > /dev/null
             [ -n "$saved_delay" ] && echo "AGENT_ALERT_DELAY_SECONDS=\"${saved_delay}\"" | sudo tee -a "${ENV_FILE}" > /dev/null
             msg_info "✓ Переменные мониторинга добавлены в .env"
         fi
@@ -917,6 +1062,7 @@ EOF
     sudo systemctl daemon-reload; sudo systemctl enable ${NODE_SERVICE_NAME}
     cleanup_for_node "установки"  
     run_with_spinner "Запуск Ноды" sudo systemctl restart ${NODE_SERVICE_NAME}
+    FORCE_NODE_MODE="no"
     msg_success "Нода установлена!"
 }
 
@@ -1056,7 +1202,10 @@ toggle_agent_monitoring() {
     local current_bot_token=$(grep '^BOT_TOKEN=' "${ENV_FILE}" | tail -n 1 | cut -d'=' -f2- | tr -d '"' | xargs)
     local current_chat_ids=$(grep '^CRITICAL_ALERT_CHAT_IDS=' "${ENV_FILE}" | tail -n 1 | cut -d'=' -f2- | tr -d '"' | xargs)
     local current_node_name=$(grep '^NODE_NAME=' "${ENV_FILE}" | tail -n 1 | cut -d'=' -f2- | tr -d '"')
+    local current_node_name_sync_mode=$(grep '^NODE_NAME_SYNC_MODE=' "${ENV_FILE}" | tail -n 1 | cut -d'=' -f2- | tr -d '"' | xargs)
     local current_delay=$(grep '^AGENT_ALERT_DELAY_SECONDS=' "${ENV_FILE}" | tail -n 1 | cut -d'=' -f2- | tr -d '"' | xargs)
+    local current_agent_url=$(grep '^AGENT_BASE_URL=' "${ENV_FILE}" | tail -n 1 | cut -d'=' -f2- | tr -d '"' | xargs)
+    local current_agent_token=$(grep '^AGENT_TOKEN=' "${ENV_FILE}" | tail -n 1 | cut -d'=' -f2- | tr -d '"' | xargs)
     local status=$(check_agent_monitoring_status)
 
     if [ "$status" == "вкл" ]; then
@@ -1067,7 +1216,6 @@ toggle_agent_monitoring() {
         sed -i '/^BOT_TOKEN=/d' "${ENV_FILE}"
         sed -i '/^CRITICAL_ALERT_CHAT_IDS=/d' "${ENV_FILE}"
         sed -i '/^AGENT_ALERT_DELAY_SECONDS=/d' "${ENV_FILE}"
-        sed -i '/^NODE_NAME=/d' "${ENV_FILE}"
         msg_success "Мониторинг агента отключен. Переменные удалены из .env"
         local deploy_mode=$(grep '^DEPLOY_MODE=' "${ENV_FILE}" | cut -d'=' -f2 | tr -d '"')
         if [ "$deploy_mode" == "docker" ]; then
@@ -1101,7 +1249,7 @@ toggle_agent_monitoring() {
         echo -e "  1. BOT_TOKEN - токен вашего Telegram бота"
         echo -e "  2. CRITICAL_ALERT_CHAT_IDS - ID чатов для критических алертов (через запятую)"
         echo -e "  3. AGENT_ALERT_DELAY_SECONDS - задержка перед отправкой алерта (в секундах)"
-        echo -e "  4. NODE_NAME - имя этой ноды"
+        echo -e "  4. NODE_NAME - имя этой ноды (если оставить пустым, будет синхронизироваться с агентом)"
         echo ""
         echo -e "${C_YELLOW}Важно:${C_RESET} не используйте chat_id другого бота (Telegram блокирует отправку боту от бота)."
         echo ""
@@ -1109,6 +1257,14 @@ toggle_agent_monitoring() {
         echo -e "  • Напишите боту @userinfobot команду /start"
         echo -e "  • Или добавьте бота в группу и используйте /start"
         echo ""
+
+        local resolved_agent_node_name=""
+        if [ -z "$current_node_name" ]; then
+            resolved_agent_node_name=$(fetch_node_name_from_agent "$current_agent_url" "$current_agent_token")
+            if [ -n "$resolved_agent_node_name" ]; then
+                msg_info "Будет использовано имя ноды с агента: ${resolved_agent_node_name}"
+            fi
+        fi
 
         read -p "Введите BOT_TOKEN [текущее: ${current_bot_token:-пусто}]: " bot_token
         if [ -z "$bot_token" ]; then
@@ -1128,9 +1284,16 @@ toggle_agent_monitoring() {
             return
         fi
 
-        read -p "Введите NODE_NAME [текущее: ${current_node_name:-Node}]: " node_name
+        read -p "Введите NODE_NAME [текущее: ${current_node_name:-${resolved_agent_node_name:-Node}}]: " node_name
         if [ -z "$node_name" ]; then
-            node_name="${current_node_name:-Node}"
+            node_name="${current_node_name:-${resolved_agent_node_name:-Node}}"
+        fi
+
+        local node_name_sync_mode="manual"
+        if [ -z "$current_node_name" ] && [ -n "$resolved_agent_node_name" ] && [ "$node_name" = "$resolved_agent_node_name" ]; then
+            node_name_sync_mode="agent"
+        elif [ -n "$current_node_name_sync_mode" ] && [ "$node_name" = "$current_node_name" ]; then
+            node_name_sync_mode="$current_node_name_sync_mode"
         fi
 
         read -p "Введите AGENT_ALERT_DELAY_SECONDS [текущее: ${current_delay:-15}]: " alert_delay
@@ -1145,12 +1308,14 @@ toggle_agent_monitoring() {
         sed -i '/^CRITICAL_ALERT_CHAT_IDS=/d' "${ENV_FILE}"
         sed -i '/^AGENT_ALERT_DELAY_SECONDS=/d' "${ENV_FILE}"
         sed -i '/^NODE_NAME=/d' "${ENV_FILE}"
+        sed -i '/^NODE_NAME_SYNC_MODE=/d' "${ENV_FILE}"
         echo "" >> "${ENV_FILE}"
         echo "DEBUG=\"false\"" >> "${ENV_FILE}"
         echo "BOT_TOKEN=\"${bot_token}\"" >> "${ENV_FILE}"
         echo "CRITICAL_ALERT_CHAT_IDS=\"${chat_ids}\"" >> "${ENV_FILE}"
         echo "AGENT_ALERT_DELAY_SECONDS=\"${alert_delay}\"" >> "${ENV_FILE}"
         echo "NODE_NAME=\"${node_name}\"" >> "${ENV_FILE}"
+        echo "NODE_NAME_SYNC_MODE=\"${node_name_sync_mode}\"" >> "${ENV_FILE}"
 
         msg_success "Мониторинг агента включен/обновлен!"
         local deploy_mode=$(grep '^DEPLOY_MODE=' "${ENV_FILE}" | cut -d'=' -f2 | tr -d '"')

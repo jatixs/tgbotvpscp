@@ -1,3 +1,4 @@
+import asyncio
 import os
 import sys
 import json
@@ -5,7 +6,8 @@ import logging
 import logging.handlers
 import re
 from datetime import datetime
-from cryptography.fernet import Fernet
+import aiosqlite
+from cryptography.fernet import Fernet, InvalidToken
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 LOG_DIR = os.path.join(BASE_DIR, "logs")
@@ -30,73 +32,123 @@ os.makedirs(NODES_BACKUP_DIR, exist_ok=True)
 BOT_DB_PATH = os.path.join(CONFIG_DIR, "bot.db")
 REBOOT_FLAG_FILE = os.path.join(CONFIG_DIR, "reboot_flag.txt")
 RESTART_FLAG_FILE = os.path.join(CONFIG_DIR, "restart_flag.txt")
-SECURITY_KEY_FILE = os.path.join(CONFIG_DIR, "security.key")
 
 
 def load_or_create_key():
-    if os.path.exists(SECURITY_KEY_FILE):
-        with open(SECURITY_KEY_FILE, "rb") as f:
-            return f.read()
-    else:
-        key = Fernet.generate_key()
-        with open(SECURITY_KEY_FILE, "wb") as f:
-            f.write(key)
-        try:
-            os.chmod(SECURITY_KEY_FILE, 384)
-        except Exception:
-            pass
-        return key
+    raw_key = os.environ.get("DATA_ENCRYPTION_KEY")
+    if not raw_key:
+        raise RuntimeError(
+            "DATA_ENCRYPTION_KEY env var is required. Refusing to start without an encryption key."
+        )
+
+    key = raw_key.strip().encode("utf-8")
+    try:
+        Fernet(key)
+    except (ValueError, TypeError) as exc:
+        raise RuntimeError(
+            "DATA_ENCRYPTION_KEY must contain a valid Fernet key."
+        ) from exc
+
+    return key
 
 
 DATA_ENCRYPTION_KEY = load_or_create_key()
 CIPHER_SUITE = Fernet(DATA_ENCRYPTION_KEY)
 
 
-import sqlite3
-
-def init_bot_db():
+def _run_async_compat(coro, operation_name: str):
     try:
-        with sqlite3.connect(BOT_DB_PATH) as conn:
-            cursor = conn.cursor()
-            cursor.execute('''
+        asyncio.get_running_loop()
+    except RuntimeError:
+        return asyncio.run(coro)
+    raise RuntimeError(
+        f"{operation_name} must be awaited in async code. "
+        f"Use the async API instead of the sync compatibility wrapper."
+    )
+
+
+def _normalize_db_blob(value):
+    if isinstance(value, bytes):
+        return value
+    if isinstance(value, str):
+        return value.encode("utf-8")
+    return bytes(value)
+
+
+def _decode_config_blob(config_key: str, raw_value):
+    raw_bytes = _normalize_db_blob(raw_value)
+
+    try:
+        decrypted = CIPHER_SUITE.decrypt(raw_bytes)
+        return json.loads(decrypted.decode("utf-8"))
+    except InvalidToken:
+        try:
+            return json.loads(raw_bytes.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise ValueError(
+                f"Config value '{config_key}' is neither valid Fernet ciphertext nor valid JSON."
+            ) from exc
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise ValueError(f"Config value '{config_key}' could not be decoded.") from exc
+
+
+async def init_bot_db():
+    try:
+        async with aiosqlite.connect(BOT_DB_PATH) as conn:
+            await conn.execute(
+                '''
                 CREATE TABLE IF NOT EXISTS bot_config (
                     key TEXT PRIMARY KEY,
                     value BLOB
                 )
-            ''')
-            conn.commit()
-    except Exception as e:
-        logging.error(f"Error initializing bot.db: {e}")
+                '''
+            )
+            await conn.commit()
+    except Exception as exc:
+        logging.critical("Error initializing bot.db: %s", exc)
+        raise RuntimeError("Failed to initialize bot.db") from exc
 
-init_bot_db()
 
-def get_bot_config(key: str, default=None):
+def init_bot_db_sync():
+    return _run_async_compat(init_bot_db(), "init_bot_db()")
+
+
+async def get_bot_config(key: str, default=None):
     try:
-        with sqlite3.connect(BOT_DB_PATH) as conn:
-            cursor = conn.cursor()
-            cursor.execute("SELECT value FROM bot_config WHERE key = ?", (key,))
-            row = cursor.fetchone()
-            if row:
-                try:
-                    decrypted = CIPHER_SUITE.decrypt(row[0])
-                    return json.loads(decrypted.decode("utf-8"))
-                except Exception:
-                    # Fallback for unencrypted blobs if any
-                    return json.loads(row[0].decode("utf-8"))
+        async with aiosqlite.connect(BOT_DB_PATH) as conn:
+            async with conn.execute(
+                "SELECT value FROM bot_config WHERE key = ?",
+                (key,),
+            ) as cursor:
+                row = await cursor.fetchone()
+        if row:
+            return _decode_config_blob(key, row[0])
     except Exception as e:
         logging.error(f"Error loading bot config {key}: {e}")
     return default if default is not None else {}
 
-def set_bot_config(key: str, data: dict | list):
+
+def get_bot_config_sync(key: str, default=None):
+    return _run_async_compat(get_bot_config(key, default), f"get_bot_config({key!r})")
+
+
+async def set_bot_config(key: str, data: dict | list):
     try:
         json_str = json.dumps(data, indent=4, ensure_ascii=False)
         encrypted = CIPHER_SUITE.encrypt(json_str.encode("utf-8"))
-        with sqlite3.connect(BOT_DB_PATH) as conn:
-            cursor = conn.cursor()
-            cursor.execute("INSERT OR REPLACE INTO bot_config (key, value) VALUES (?, ?)", (key, encrypted))
-            conn.commit()
+        async with aiosqlite.connect(BOT_DB_PATH) as conn:
+            await conn.execute(
+                "INSERT OR REPLACE INTO bot_config (key, value) VALUES (?, ?)",
+                (key, encrypted),
+            )
+            await conn.commit()
     except Exception as e:
         logging.error(f"Error saving bot config {key}: {e}")
+        raise
+
+
+def set_bot_config_sync(key: str, data: dict | list):
+    return _run_async_compat(set_bot_config(key, data), f"set_bot_config({key!r}, ...)")
 
 def _migrate_json_to_db():
     migration_map = {
@@ -123,15 +175,17 @@ def _migrate_json_to_db():
                 except Exception:
                     data = json.loads(raw.decode("utf-8"))
                 
-                set_bot_config(key, data)
+                set_bot_config_sync(key, data)
                 os.rename(file_path, file_path + ".bak")
                 logging.info(f"Migrated {file_path} to DB key '{key}'")
             except Exception as e:
                 logging.error(f"Failed to migrate {file_path}: {e}")
 
+init_bot_db_sync()
 _migrate_json_to_db()
 
 DEBUG_MODE = os.environ.get("DEBUG", "false").lower() == "true"
+UNSAFE_LOGGING = os.environ.get("UNSAFE_LOGGING", "false").lower() == "true"
 TOKEN = os.environ.get("TG_BOT_TOKEN")
 INSTALL_MODE = os.environ.get("INSTALL_MODE", "secure")
 DEPLOY_MODE = os.environ.get("DEPLOY_MODE", "systemd")
@@ -242,29 +296,41 @@ KEYBOARD_CONFIG = DEFAULT_KEYBOARD_CONFIG.copy()
 WEB_METADATA = {}
 # ---------------------------------
 
-def load_system_config():
+def _apply_system_config(data):
     global TRAFFIC_INTERVAL, BACKUP_INTERVAL, BACKUP_LAST_INTERVAL, SERVICES_INTERVAL, PING_INTERVAL, RESOURCE_CHECK_INTERVAL, CPU_THRESHOLD, RAM_THRESHOLD, DISK_THRESHOLD, RESOURCE_ALERT_COOLDOWN, NODE_OFFLINE_TIMEOUT, WEB_METADATA
+    if not data:
+        return
+
+    TRAFFIC_INTERVAL = data.get("TRAFFIC_INTERVAL", DEFAULT_CONFIG["TRAFFIC_INTERVAL"])
+    BACKUP_INTERVAL = data.get("BACKUP_INTERVAL", DEFAULT_CONFIG["BACKUP_INTERVAL"])
+    BACKUP_LAST_INTERVAL = data.get("BACKUP_LAST_INTERVAL", DEFAULT_CONFIG["BACKUP_LAST_INTERVAL"])
+    SERVICES_INTERVAL = data.get("SERVICES_INTERVAL", DEFAULT_CONFIG["SERVICES_INTERVAL"])
+    PING_INTERVAL = data.get("PING_INTERVAL", DEFAULT_CONFIG["PING_INTERVAL"])
+    RESOURCE_CHECK_INTERVAL = data.get("RESOURCE_CHECK_INTERVAL", DEFAULT_CONFIG["RESOURCE_CHECK_INTERVAL"])
+    CPU_THRESHOLD = data.get("CPU_THRESHOLD", DEFAULT_CONFIG["CPU_THRESHOLD"])
+    RAM_THRESHOLD = data.get("RAM_THRESHOLD", DEFAULT_CONFIG["RAM_THRESHOLD"])
+    DISK_THRESHOLD = data.get("DISK_THRESHOLD", DEFAULT_CONFIG["DISK_THRESHOLD"])
+    RESOURCE_ALERT_COOLDOWN = data.get("RESOURCE_ALERT_COOLDOWN", DEFAULT_CONFIG["RESOURCE_ALERT_COOLDOWN"])
+    NODE_OFFLINE_TIMEOUT = data.get("NODE_OFFLINE_TIMEOUT", DEFAULT_CONFIG["NODE_OFFLINE_TIMEOUT"])
+    WEB_METADATA = data.get("WEB_METADATA", {})
+
+
+async def load_system_config_async():
     try:
-        data = get_bot_config("system_config", {})
+        data = await get_bot_config("system_config", {})
         if data:
-            TRAFFIC_INTERVAL = data.get("TRAFFIC_INTERVAL", DEFAULT_CONFIG["TRAFFIC_INTERVAL"])
-            BACKUP_INTERVAL = data.get("BACKUP_INTERVAL", DEFAULT_CONFIG["BACKUP_INTERVAL"])
-            BACKUP_LAST_INTERVAL = data.get("BACKUP_LAST_INTERVAL", DEFAULT_CONFIG["BACKUP_LAST_INTERVAL"])
-            SERVICES_INTERVAL = data.get("SERVICES_INTERVAL", DEFAULT_CONFIG["SERVICES_INTERVAL"])
-            PING_INTERVAL = data.get("PING_INTERVAL", DEFAULT_CONFIG["PING_INTERVAL"])
-            RESOURCE_CHECK_INTERVAL = data.get("RESOURCE_CHECK_INTERVAL", DEFAULT_CONFIG["RESOURCE_CHECK_INTERVAL"])
-            CPU_THRESHOLD = data.get("CPU_THRESHOLD", DEFAULT_CONFIG["CPU_THRESHOLD"])
-            RAM_THRESHOLD = data.get("RAM_THRESHOLD", DEFAULT_CONFIG["RAM_THRESHOLD"])
-            DISK_THRESHOLD = data.get("DISK_THRESHOLD", DEFAULT_CONFIG["DISK_THRESHOLD"])
-            RESOURCE_ALERT_COOLDOWN = data.get("RESOURCE_ALERT_COOLDOWN", DEFAULT_CONFIG["RESOURCE_ALERT_COOLDOWN"])
-            NODE_OFFLINE_TIMEOUT = data.get("NODE_OFFLINE_TIMEOUT", DEFAULT_CONFIG["NODE_OFFLINE_TIMEOUT"])
-            WEB_METADATA = data.get("WEB_METADATA", {})
+            _apply_system_config(data)
             logging.info("System config loaded successfully from bot.db.")
     except Exception as e:
         logging.error(f"Error loading system config: {e}")
 
 
-def save_system_config(new_config: dict):
+def load_system_config():
+    # Sync compatibility for CLI/import paths. Async runtime should use await load_system_config_async().
+    return _run_async_compat(load_system_config_async(), "load_system_config_async()")
+
+
+async def save_system_config_async(new_config: dict):
     global TRAFFIC_INTERVAL, BACKUP_INTERVAL, BACKUP_LAST_INTERVAL, SERVICES_INTERVAL, PING_INTERVAL, RESOURCE_CHECK_INTERVAL, CPU_THRESHOLD, RAM_THRESHOLD, DISK_THRESHOLD, RESOURCE_ALERT_COOLDOWN, NODE_OFFLINE_TIMEOUT, WEB_METADATA
     try:
         if "TRAFFIC_INTERVAL" in new_config:
@@ -309,16 +375,21 @@ def save_system_config(new_config: dict):
             "NODE_OFFLINE_TIMEOUT": NODE_OFFLINE_TIMEOUT,
             "WEB_METADATA": WEB_METADATA,
         }
-        set_bot_config("system_config", config_to_save)
+        await set_bot_config("system_config", config_to_save)
         logging.info("System config saved.")
     except Exception as e:
         logging.error(f"Error saving system config: {e}")
 
 
-def load_keyboard_config():
+def save_system_config(new_config: dict):
+    # Sync compatibility for CLI/import paths. Async runtime should use await save_system_config_async(...).
+    return _run_async_compat(save_system_config_async(new_config), "save_system_config_async(...)")
+
+
+async def load_keyboard_config_async():
     global KEYBOARD_CONFIG
     try:
-        data = get_bot_config("keyboard_config", {})
+        data = await get_bot_config("keyboard_config", {})
         if data:
             new_config = KEYBOARD_CONFIG.copy()
             new_config.update(data)
@@ -332,15 +403,25 @@ def load_keyboard_config():
         logging.error(f"Error loading keyboard config: {e}")
 
 
-def save_keyboard_config(new_config: dict):
+def load_keyboard_config():
+    # Sync compatibility for CLI/import paths. Async runtime should use await load_keyboard_config_async().
+    return _run_async_compat(load_keyboard_config_async(), "load_keyboard_config_async()")
+
+
+async def save_keyboard_config_async(new_config: dict):
     try:
         for key in DEFAULT_KEYBOARD_CONFIG:
             if key in new_config:
                 KEYBOARD_CONFIG[key] = bool(new_config[key])
-        set_bot_config("keyboard_config", KEYBOARD_CONFIG)
+        await set_bot_config("keyboard_config", KEYBOARD_CONFIG)
         logging.info("Keyboard config saved to bot.db.")
     except Exception as e:
         logging.error(f"Error saving keyboard config: {e}")
+
+
+def save_keyboard_config(new_config: dict):
+    # Sync compatibility for CLI/import paths. Async runtime should use await save_keyboard_config_async(...).
+    return _run_async_compat(save_keyboard_config_async(new_config), "save_keyboard_config_async(...)")
 
 
 load_system_config()
@@ -355,7 +436,7 @@ class RedactingFormatter(logging.Formatter):
 
     def format(self, record):
         msg = self.orig_formatter.format(record)
-        if DEBUG_MODE:
+        if UNSAFE_LOGGING:
             return msg
         msg = re.sub("\\d{8,10}:[\\w-]{35}", "[TOKEN_REDACTED]", msg)
         ip_pattern = "\\b(?!(?:127\\.0\\.0\\.1|0\\.0\\.0\\.0|localhost))(?:\\d{1,3}\\.){3}\\d{1,3}\\b"
@@ -389,7 +470,7 @@ def setup_logging(log_directory, log_filename_prefix):
     logger.addHandler(console_handler)
     mode_name = "DEBUG" if DEBUG_MODE else "RELEASE"
     logging.info(
-        f"Logging initialized. Mode: {mode_name}. Sensitive data redaction: {('OFF' if DEBUG_MODE else 'ON')}"
+        f"Logging initialized. Mode: {mode_name}. Sensitive data redaction: {('OFF' if UNSAFE_LOGGING else 'ON')}"
     )
 
 

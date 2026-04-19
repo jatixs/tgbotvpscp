@@ -177,7 +177,7 @@ def _format_interval_human(seconds: int, lang: str) -> str:
     return " ".join(parts)
 
 
-def _adjust_backup_interval(direction: int) -> int:
+async def _adjust_backup_interval(direction: int) -> int:
     current = int(getattr(config, "BACKUP_INTERVAL", 0) or 0)
 
     if direction > 0:
@@ -202,14 +202,14 @@ def _adjust_backup_interval(direction: int) -> int:
     elif current >= BACKUP_INTERVAL_STEP:
         # Going from enabled to 0 via "-" — preserve last known enabled interval for toggle-on
         payload["BACKUP_LAST_INTERVAL"] = current
-    config.save_system_config(payload)
+    await config.save_system_config_async(payload)
     return new_value
 
 
-def _toggle_autobackup() -> tuple[bool, int]:
+async def _toggle_autobackup() -> tuple[bool, int]:
     current = int(getattr(config, "BACKUP_INTERVAL", 0) or 0)
     if current >= BACKUP_INTERVAL_STEP:
-        config.save_system_config({
+        await config.save_system_config_async({
             "BACKUP_LAST_INTERVAL": current,
             "BACKUP_INTERVAL": 0,
         })
@@ -222,7 +222,7 @@ def _toggle_autobackup() -> tuple[bool, int]:
     if last_value < BACKUP_INTERVAL_STEP:
         last_value = BACKUP_INTERVAL_STEP
 
-    config.save_system_config({
+    await config.save_system_config_async({
         "BACKUP_INTERVAL": last_value,
         "BACKUP_LAST_INTERVAL": last_value,
     })
@@ -451,7 +451,7 @@ async def backup_interval_inc_handler(callback: types.CallbackQuery):
         await callback.answer(get_text("access_denied_generic", lang), show_alert=True)
         return
 
-    new_value = _adjust_backup_interval(1)
+    new_value = await _adjust_backup_interval(1)
     await callback.answer(get_text("backup_interval_changed", lang, value=_format_interval_human(new_value, lang)))
     await _refresh_timer_settings(callback)
 
@@ -463,7 +463,7 @@ async def backup_interval_dec_handler(callback: types.CallbackQuery):
         await callback.answer(get_text("access_denied_generic", lang), show_alert=True)
         return
 
-    new_value = _adjust_backup_interval(-1)
+    new_value = await _adjust_backup_interval(-1)
     if new_value < BACKUP_INTERVAL_STEP:
         await callback.answer(get_text("backup_interval_disabled_notice", lang))
     else:
@@ -495,7 +495,7 @@ async def backup_toggle_enabled_handler(callback: types.CallbackQuery):
         await callback.answer(get_text("access_denied_generic", lang), show_alert=True)
         return
 
-    enabled, value = _toggle_autobackup()
+    enabled, value = await _toggle_autobackup()
     if enabled:
         await callback.answer(get_text("backup_toggle_enabled_toast", lang, value=_format_interval_human(value, lang)))
     else:
@@ -529,7 +529,7 @@ async def backup_interval_reset_handler(callback: types.CallbackQuery):
     # Reset interval value but preserve enabled/disabled state
     payload: dict = {"BACKUP_LAST_INTERVAL": default_interval}
     payload["BACKUP_INTERVAL"] = default_interval if was_enabled else 0
-    config.save_system_config(payload)
+    await config.save_system_config_async(payload)
     await callback.answer(get_text("backup_interval_reset_done", lang, value=_format_interval_human(default_interval, lang)))
     await _refresh_timer_settings(callback)
 

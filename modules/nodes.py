@@ -24,7 +24,7 @@ from core.keyboards import (
     get_node_services_keyboard,
     get_node_service_actions_keyboard,
 )
-from core.utils import format_uptime
+from core.utils import build_node_uptime_report, format_uptime
 
 BUTTON_KEY = "btn_nodes"
 AGENT_START_TIME = time.time()
@@ -146,6 +146,7 @@ async def cq_node_select(callback: types.CallbackQuery):
             cpu=stats.get("cpu", "?"),
             ram=stats.get("ram", "?"),
             disk=stats.get("disk", "?"),
+            uptime_report=build_node_uptime_report(node, lang, config.NODE_OFFLINE_TIMEOUT),
         )
         await callback.message.edit_text(
             text,
@@ -326,6 +327,14 @@ async def cq_node_command(callback: types.CallbackQuery):
     node = await nodes_db.get_node_by_token(token)
     if not node:
         await callback.answer("Error: Node not found", show_alert=True)
+        return
+    if cmd == "uptime":
+        await callback.message.edit_text(
+            build_node_uptime_report(node, lang, config.NODE_OFFLINE_TIMEOUT),
+            reply_markup=get_back_keyboard(lang, f"node_select_{token}"),
+            parse_mode="HTML",
+        )
+        await callback.answer()
         return
     if cmd == "reboot":
         await nodes_db.update_node_extra(token, "is_restarting", True)
@@ -602,6 +611,8 @@ async def nodes_monitor(bot: Bot):
                 is_dead = (
                     now - last_seen >= config.NODE_OFFLINE_TIMEOUT and last_seen > 0
                 )
+                if is_dead:
+                    await nodes_db.mark_node_offline(token, last_seen)
                 if is_startup_grace:
                     if not is_dead and is_offline_alert_sent:
                         await nodes_db.update_node_extra(token, "is_offline_alert_sent", False)
