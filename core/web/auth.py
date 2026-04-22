@@ -383,8 +383,11 @@ async def handle_login_request(request: web.Request) -> web.StreamResponse:
     if settings.get("telegram_only_mode", False):
         return web.Response(text="Only Telegram widget login is allowed", status=403)
 
-    data = await request.post()
     try:
+        if request.content_type == 'application/json':
+            data = await request.json()
+        else:
+            data = await request.post()
         user_id = int(data.get("user_id", 0))
     except Exception:
         user_id = 0
