@@ -398,8 +398,8 @@ async def handle_login_request(request: web.Request) -> web.StreamResponse:
     login_token = secrets.token_urlsafe(32)
     AUTH_TOKENS[login_token] = {"user_id": user_id, "created_at": time.time()}
 
-    host = request.headers.get("Host", f"{WEB_SERVER_HOST}:{WEB_SERVER_PORT}")
-    proto = "https" if request.headers.get("X-Forwarded-Proto") == "https" else "http"
+    host = request.headers.get("X-Forwarded-Host") or request.headers.get("Host", f"{WEB_SERVER_HOST}:{WEB_SERVER_PORT}")
+    proto = "https" if request.headers.get("X-Forwarded-Proto") == "https" else request.scheme
     link = f"{proto}://{host}/api/login/magic?token={login_token}"
 
     bot = request.app.get("bot")
