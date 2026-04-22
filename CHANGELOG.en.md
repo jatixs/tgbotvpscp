@@ -5,11 +5,16 @@
 <h1 align="center">📝 Telegram VPS Management Bot — Changelog</h1>
 
 <p align="center">
-    <img src="https://img.shields.io/badge/version-v1.22.2-blue?style=flat-square" alt="Version 1.22.2"/>
+    <img src="https://img.shields.io/badge/version-v1.22.3-blue?style=flat-square" alt="Version 1.22.3"/>
     <img src="https://img.shields.io/badge/build-74-purple?style=flat-square" alt="Build 74"/>
-    <img src="https://img.shields.io/badge/date-April%2018%202026-green?style=flat-square" alt="Date April 18 2026"/>
+    <img src="https://img.shields.io/badge/date-April%2022%202026-green?style=flat-square" alt="Date April 22 2026"/>
 	<img src="https://img.shields.io/badge/status-stable-green?style=flat-square" alt="Status Stable"/>
 </p>
+
+---
+## [1.22.3] - 2026-04-22
+### 🔧 Fixed:
+* **Magic-Link:** Fixed the generation of a WebUI login link from a bot (without a domain). Issue: #69
 
 ---
 ## [1.22.2] - 2026-04-18
