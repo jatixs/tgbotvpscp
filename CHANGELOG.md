@@ -5,13 +5,18 @@
 <h1 align="center">📝 Telegram VPS Management Bot — Список изменений</h1>
 
 <p align="center">
-    <img src="https://img.shields.io/badge/version-v1.22.2-blue?style=flat-square" alt="Version 1.22.2"/>
+    <img src="https://img.shields.io/badge/version-v1.22.3-blue?style=flat-square" alt="Version 1.22.3"/>
     <img src="https://img.shields.io/badge/build-74-purple?style=flat-square" alt="Build 74"/>
-    <img src="https://img.shields.io/badge/date-Апрель%2018%202026-green?style=flat-square" alt="Date April 18 2026"/>
+    <img src="https://img.shields.io/badge/date-Апрель%2018%222026-green?style=flat-square" alt="Date April 22 2026"/>
 	<img src="https://img.shields.io/badge/status-stable-green?style=flat-square" alt="Status Stable"/>
 </p>
 
 ---
+## [1.22.3] - 2026-04-22
+### 🔧 Исправлено:
+* **Magic-Link:** Исправлено генерация ссылки для входа в WebUI из бота (без домена). Issue: #69
+---
+
 ## [1.22.2] - 2026-04-18
 
 ### ✨ Улучшено:
