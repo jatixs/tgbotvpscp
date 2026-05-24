@@ -5,11 +5,20 @@
 <h1 align="center">📝 Telegram VPS Management Bot — Список изменений</h1>
 
 <p align="center">
-    <img src="https://img.shields.io/badge/version-v1.22.2-blue?style=flat-square" alt="Version 1.22.2"/>
-    <img src="https://img.shields.io/badge/build-74-purple?style=flat-square" alt="Build 74"/>
-    <img src="https://img.shields.io/badge/date-Апрель%2018%202026-green?style=flat-square" alt="Date April 18 2026"/>
+    <img src="https://img.shields.io/badge/version-v1.22.4-blue?style=flat-square" alt="Version 1.22.4"/>
+    <img src="https://img.shields.io/badge/build-75-purple?style=flat-square" alt="Build 75"/>
+    <img src="https://img.shields.io/badge/date-Май%2024%202026-green?style=flat-square" alt="Date May 24 2026"/>
 	<img src="https://img.shields.io/badge/status-stable-green?style=flat-square" alt="Status Stable"/>
 </p>
+
+---
+## [1.22.4] - 2026-05-24
+
+### 🔧 Исправлено:
+* **Deploy:** Исправлена синтаксическая ошибка отступов в блоке генерации `docker-compose.yml` внутри скриптов установки `deploy.sh` и `deploy_en.sh`, из-за которой установка и запуск Docker контейнеров завершались ошибкой YAML (mapping values are not allowed in this context). (issue #72)
+* **Auth / WebUI:** Исправлена проблема с бесконечным редиректом на страницу авторизации при доступе по HTTP; флаги `secure=True` и `samesite="Strict"` для сессионных cookie теперь устанавливаются динамически только при наличии HTTPS-соединения. (issue #69)
+* **Nodes / WebUI:** Исправлен баг с попыткой шифрования передаваемого имени ноды, из-за которого было невозможно создать новую ноду. (issue #71)
+* **Nodes / WebUI:** Исправлена работа алгоритма XOR-шифрования данных для веб-интерфейса. Теперь корректно поддерживаются любые символы UTF-8, включая эмодзи (например, 🇷🇺) при именовании нод, благодаря переходу на побайтовое шифрование через `TextEncoder`/`TextDecoder`.
 
 ---
 ## [1.22.2] - 2026-04-18

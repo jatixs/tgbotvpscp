@@ -8,7 +8,6 @@ import time
 class EncryptionOperationError(ValueError):
     pass
 
-
 class EncryptedTextField(fields.TextField):
 
     def to_db_value(self, value, instance):
@@ -24,8 +23,8 @@ class EncryptedTextField(fields.TextField):
             return None
         try:
             return CIPHER_SUITE.decrypt(str(value).encode("utf-8")).decode("utf-8")
-        except InvalidToken as exc:
-            raise EncryptionOperationError("Encrypted ORM field contains invalid ciphertext") from exc
+        except InvalidToken:
+            return str(value)
         except Exception as exc:
             raise EncryptionOperationError("Failed to decrypt ORM field value") from exc
 

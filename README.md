@@ -5,12 +5,12 @@
 <h1 align="center">🤖 VPS Manager Telegram Bot</h1>
 
 <p align="center">
-  <b>v1.22.2</b> — профессиональная экосистема для мониторинга и управления серверной инфраструктурой<br>
+  <b>v1.22.4</b> — профессиональная экосистема для мониторинга и управления серверной инфраструктурой<br>
 </p>
 
 <p align="center">
-  <a href="https://github.com/jatixs/tgbotvpscp/releases/latest"><img src="https://img.shields.io/badge/version-v1.22.2-blue?style=flat-square" alt="Version 1.22.2"/></a>
-  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/build-74-purple?style=flat-square" alt="Build 74"/></a>
+  <a href="https://github.com/jatixs/tgbotvpscp/releases/latest"><img src="https://img.shields.io/badge/version-v1.22.4-blue?style=flat-square" alt="Version 1.22.4"/></a>
+  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/build-75-purple?style=flat-square" alt="Build 75"/></a>
   <a href="https://www.python.org/"><img src="https://img.shields.io/badge/python-3.10%2B-green?style=flat-square" alt="Python 3.10+"/></a>
   <a href="https://choosealicense.com/licenses/gpl-3.0/"><img src="https://img.shields.io/badge/license-GPL--3.0-lightgrey?style=flat-square" alt="License GPL-3.0"/></a>
   <a href="https://github.com/aiogram/aiogram"><img src="https://img.shields.io/badge/aiogram-3.x-orange?style=flat-square" alt="Aiogram 3.x"/></a>
@@ -605,8 +605,8 @@ python bot.py
 ---
 
 <p align="center">
-  <b>Версия:</b> 1.22.0 (Build 72)<br>
-  <b>Дата обновления:</b> 15 Апреля 2026 г.<br>
+  <b>Версия:</b> 1.22.4 (Build 75)<br>
+  <b>Дата обновления:</b> 24 Мая 2026 г.<br>
   <b>Статус:</b> Релиз<br>
   <br>
   Сделано с ❤️ для сообщества DevOps

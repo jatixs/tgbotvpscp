@@ -21,12 +21,12 @@ function decryptData(text) {
     if (typeof WEB_KEY === 'undefined' || !WEB_KEY) return text;
     try {
         const decoded = atob(text);
-        let result = "";
+        const bytes = new Uint8Array(decoded.length);
         for (let index = 0; index < decoded.length; index++) {
-            const keyChar = WEB_KEY[index % WEB_KEY.length];
-            result += String.fromCharCode(decoded.charCodeAt(index) ^ keyChar.charCodeAt(0));
+            const keyChar = WEB_KEY.charCodeAt(index % WEB_KEY.length);
+            bytes[index] = decoded.charCodeAt(index) ^ keyChar;
         }
-        return result;
+        return new TextDecoder().decode(bytes);
     } catch (error) {
         console.error('Decryption error:', error);
         return text;
@@ -317,7 +317,16 @@ function renderNodes() {
         return;
     }
     
-    container.innerHTML = filtered.map(node => createNodeCard(node)).join('');
+    const newHtml = filtered.map(node => createNodeCard(node)).join('');
+    
+    // Try to update in-place to prevent flicker
+    const tempContainer = container.cloneNode(false);
+    tempContainer.innerHTML = newHtml;
+    
+    if (!updateDOM(container, tempContainer)) {
+        // Fallback if structural changes occurred
+        container.innerHTML = newHtml;
+    }
 }
 
 // Get ping badge CSS classes based on latency value
@@ -369,7 +378,7 @@ function createNodeCard(node) {
                            ${isSelected ? 'checked' : ''} 
                            onchange="toggleNodeSelection('${node.token}', this)">
                     <div>
-                        <h3 class="font-bold text-gray-900 dark:text-white text-sm">${escapeHtml(node.name)}</h3>
+                        <h3 class="font-bold text-gray-900 dark:text-white text-sm">${typeof replaceEmojisWithFlagsHTML === 'function' ? replaceEmojisWithFlagsHTML(escapeHtml(node.name)) : escapeHtml(node.name)}</h3>
                         <div class="flex items-center gap-1.5">
                             <span class="text-xs text-gray-500 dark:text-gray-400">${node.ip || '-'}</span>
                             ${node.ping != null && !isNaN(node.ping) ? `<span class="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold ${getPingBadgeClass(node.ping)}">${parseFloat(node.ping)}ms</span>` : ''}
@@ -723,8 +732,17 @@ function connectNodeDetailStream(token) {
 }
 
 function updateNodeModal(data) {
-    document.getElementById('modalNodeTitle').textContent = decryptData(data.name) || 'Unknown';
-    document.getElementById('modalNodeIp').textContent = decryptData(data.ip) || '-';
+    const newTitleHtml = typeof replaceEmojisWithFlagsHTML === 'function' ? replaceEmojisWithFlagsHTML(escapeHtml(decryptData(data.name) || 'Unknown')) : escapeHtml(decryptData(data.name) || 'Unknown');
+    const modalTitleEl = document.getElementById('modalNodeTitle');
+    const tempTitle = modalTitleEl.cloneNode(false);
+    tempTitle.innerHTML = newTitleHtml;
+    if (!updateDOM(modalTitleEl, tempTitle)) {
+        modalTitleEl.innerHTML = newTitleHtml;
+    }
+    
+    const newIp = decryptData(data.ip) || '-';
+    const ipEl = document.getElementById('modalNodeIp');
+    if (ipEl.textContent !== newIp) ipEl.textContent = newIp;
     
     // Update ping badge in modal
     const pingBadge = document.getElementById('modalNodePingBadge');
