@@ -227,13 +227,14 @@ def _set_csrf_cookie(
     token: str | None = None,
 ) -> str:
     token = token or generate_csrf_token()
+    is_secure = request.scheme == "https" or request.headers.get("X-Forwarded-Proto") == "https"
     response.set_cookie(
         CSRF_TOKEN_COOKIE,
         token,
         max_age=CSRF_TOKEN_TTL,
-        secure=True,
+        secure=is_secure,
         httponly=False,
-        samesite="Strict",
+        samesite="Strict" if is_secure else "Lax",
     )
     response.headers["X-CSRF-Token"] = token
     return token
@@ -265,13 +266,14 @@ def _set_session_cookie(
     session_token: str,
     max_age: int,
 ) -> None:
+    is_secure = request.scheme == "https" or request.headers.get("X-Forwarded-Proto") == "https"
     response.set_cookie(
         COOKIE_NAME,
         session_token,
         max_age=max_age,
         httponly=True,
-        secure=True,
-        samesite="Strict",
+        secure=is_secure,
+        samesite="Strict" if is_secure else "Lax",
     )
 
 
@@ -536,9 +538,10 @@ async def handle_logout(request: web.Request) -> web.StreamResponse:
     if session_token:
         SERVER_SESSIONS.pop(session_token, None)
 
+    is_secure = request.scheme == "https" or request.headers.get("X-Forwarded-Proto") == "https"
     response = web.HTTPFound("/login")
-    response.del_cookie(COOKIE_NAME, secure=True, httponly=True, samesite="Strict")
-    response.del_cookie(CSRF_TOKEN_COOKIE, secure=True, samesite="Strict")
+    response.del_cookie(COOKIE_NAME, secure=is_secure, httponly=True, samesite="Strict" if is_secure else "Lax")
+    response.del_cookie(CSRF_TOKEN_COOKIE, secure=is_secure, samesite="Strict" if is_secure else "Lax")
     return response
 
 
