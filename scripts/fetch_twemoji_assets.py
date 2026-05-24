@@ -15,6 +15,7 @@ STATIC_VENDOR = REPO_ROOT / "core" / "static" / "vendor" / "twemoji"
 TARGET_JS = STATIC_JS / "twemoji.min.js"
 TARGET_SVG = STATIC_VENDOR / "svg"
 NPM_REGISTRY = "https://registry.npmjs.org/twemoji"
+TWEMOJI_JS_URL = "https://cdn.jsdelivr.net/npm/twemoji@latest/dist/twemoji.min.js"
 USER_AGENT = "python-twemoji-fetch/1.0"
 
 
@@ -30,30 +31,26 @@ def download_tarball(url):
         return response.read()
 
 
+def download_file(url, target_path):
+    request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
+    with urllib.request.urlopen(request, timeout=120) as response, target_path.open("wb") as out_file:
+        out_file.write(response.read())
+
+
 def extract_twemoji_files(tarball_bytes):
     with tarfile.open(fileobj=io.BytesIO(tarball_bytes), mode="r:gz") as tar:
-        js_member = None
         svg_members = []
 
         for member in tar.getmembers():
             if member.isdir():
                 continue
-            if member.name.endswith("twemoji.min.js"):
-                js_member = member
             if (member.name.startswith("package/svg/") or member.name.startswith("package/assets/svg/")) and member.name.endswith(".svg"):
                 svg_members.append(member)
 
-        if js_member is None:
-            raise RuntimeError("twemoji.min.js was not found in the npm package tarball.")
-
-        STATIC_JS.mkdir(parents=True, exist_ok=True)
-        TARGET_SVG.mkdir(parents=True, exist_ok=True)
-
-        with tar.extractfile(js_member) as source, TARGET_JS.open("wb") as out_file:
-            out_file.write(source.read())
-
         if not svg_members:
             raise RuntimeError("No SVG assets were found in the Twemoji package tarball.")
+
+        TARGET_SVG.mkdir(parents=True, exist_ok=True)
 
         for member in svg_members:
             if member.name.startswith("package/svg/"):
@@ -76,7 +73,9 @@ def main():
         raise RuntimeError("Unable to determine the latest Twemoji version from npm metadata.")
 
     tarball_url = metadata["versions"][latest]["dist"]["tarball"]
-    print(f"Downloading Twemoji {latest} from: {tarball_url}")
+    print(f"Downloading Twemoji JS from: {TWEMOJI_JS_URL}")
+    download_file(TWEMOJI_JS_URL, TARGET_JS)
+    print(f"Downloading Twemoji SVG assets from npm tarball: {tarball_url}")
     tarball_bytes = download_tarball(tarball_url)
     svg_count = extract_twemoji_files(tarball_bytes)
     print(f"Installed local Twemoji JS and {svg_count} SVG assets.")
