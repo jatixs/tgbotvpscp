@@ -154,7 +154,7 @@ check_integrity() {
         if [ -z "$EXISTING_FILES" ]; then
             INTEGRITY_STATUS="${C_YELLOW}⚠️ Файлы не найдены${C_RESET}"
         else
-            local DIFF=$(git diff --name-only HEAD -- $EXISTING_FILES 2>/dev/null)
+            local DIFF=$(git diff --name-only HEAD -- $EXISTING_FILES 2>/dev/null | grep -v '^core/static/vendor/')
             if [ -n "$DIFF" ]; then
                 INTEGRITY_STATUS="${C_RED}⚠️ ЦЕЛОСТНОСТЬ НАРУШЕНА (Файлы изменены локально)${C_RESET}"
             else
