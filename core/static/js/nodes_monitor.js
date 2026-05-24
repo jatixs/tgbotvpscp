@@ -21,12 +21,12 @@ function decryptData(text) {
     if (typeof WEB_KEY === 'undefined' || !WEB_KEY) return text;
     try {
         const decoded = atob(text);
-        let result = "";
+        const bytes = new Uint8Array(decoded.length);
         for (let index = 0; index < decoded.length; index++) {
-            const keyChar = WEB_KEY[index % WEB_KEY.length];
-            result += String.fromCharCode(decoded.charCodeAt(index) ^ keyChar.charCodeAt(0));
+            const keyChar = WEB_KEY.charCodeAt(index % WEB_KEY.length);
+            bytes[index] = decoded.charCodeAt(index) ^ keyChar;
         }
-        return result;
+        return new TextDecoder().decode(bytes);
     } catch (error) {
         console.error('Decryption error:', error);
         return text;

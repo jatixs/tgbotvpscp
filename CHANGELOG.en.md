@@ -18,6 +18,7 @@
 * **Deploy:** Fixed incorrect indentation in the `docker-compose.yml` generation block within the `deploy.sh` and `deploy_en.sh` installation scripts. This previously caused YAML parsing errors ("mapping values are not allowed in this context") preventing successful Docker container startup.(issue #72)
 * **Auth / WebUI:** Fixed an infinite redirect loop on the login page when accessing via HTTP; `secure=True` and `samesite="Strict"` session cookie flags are now applied dynamically only during HTTPS connections. (Issue #69)
 * **Nodes / WebUI:** Fixed a bug involving the attempted encryption of the node name, which previously prevented new nodes from being successfully created. (issue #71)
+* **Nodes / WebUI:** Fixed the XOR data encryption algorithm for the web interface. Full UTF-8 support is now established by switching to byte-based encryption via `TextEncoder`/`TextDecoder`, allowing the use of emojis (e.g., 🇷🇺) and multi-byte characters in node names without corruption.
 
 ---
 ## [1.22.2] - 2026-04-18
