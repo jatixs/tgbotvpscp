@@ -5,11 +5,17 @@
 <h1 align="center">📝 Telegram VPS Management Bot — Changelog</h1>
 
 <p align="center">
-    <img src="https://img.shields.io/badge/version-v1.22.2-blue?style=flat-square" alt="Version 1.22.2"/>
-    <img src="https://img.shields.io/badge/build-74-purple?style=flat-square" alt="Build 74"/>
-    <img src="https://img.shields.io/badge/date-April%2018%202026-green?style=flat-square" alt="Date April 18 2026"/>
+    <img src="https://img.shields.io/badge/version-v1.22.4-blue?style=flat-square" alt="Version 1.22.4"/>
+    <img src="https://img.shields.io/badge/build-75-purple?style=flat-square" alt="Build 75"/>
+    <img src="https://img.shields.io/badge/date-May%2024%202026-green?style=flat-square" alt="Date May 24 2026"/>
 	<img src="https://img.shields.io/badge/status-stable-green?style=flat-square" alt="Status Stable"/>
 </p>
+
+---
+## [1.22.4] - 2026-05-24
+
+### 🔧 Fixed:
+* **Deploy:** Fixed incorrect indentation in the `docker-compose.yml` generation block within the `deploy.sh` and `deploy_en.sh` installation scripts. This previously caused YAML parsing errors ("mapping values are not allowed in this context") preventing successful Docker container startup.
 
 ---
 ## [1.22.2] - 2026-04-18
