@@ -867,6 +867,7 @@ install_systemd_logic() {
         run_with_spinner "Updating pip" sudo -u ${SERVICE_USER} "${VENV_PATH}/bin/pip" install --upgrade pip setuptools wheel
         run_with_spinner "Installing dependencies" sudo -u ${SERVICE_USER} "${VENV_PATH}/bin/pip" install -r "${BOT_INSTALL_PATH}/requirements.txt"
         run_with_spinner "Installing tomlkit" sudo -u ${SERVICE_USER} "${VENV_PATH}/bin/pip" install tomlkit
+        run_with_spinner "Installing local Twemoji assets" sudo -u ${SERVICE_USER} "${VENV_PATH}/bin/python" "${BOT_INSTALL_PATH}/scripts/fetch_twemoji_assets.py"
         exec_cmd="sudo -u ${SERVICE_USER}"
     else
         setup_repo_and_dirs "root"
@@ -874,6 +875,7 @@ install_systemd_logic() {
         run_with_spinner "Updating pip" "${VENV_PATH}/bin/pip" install --upgrade pip setuptools wheel
         run_with_spinner "Installing dependencies" "${VENV_PATH}/bin/pip" install -r "${BOT_INSTALL_PATH}/requirements.txt"
         run_with_spinner "Installing tomlkit" "${VENV_PATH}/bin/pip" install tomlkit
+        run_with_spinner "Installing local Twemoji assets" $exec_cmd "${VENV_PATH}/bin/python" "${BOT_INSTALL_PATH}/scripts/fetch_twemoji_assets.py"
         exec_cmd=""
     fi
 
