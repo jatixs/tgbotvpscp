@@ -85,8 +85,10 @@
                     </div>
                     <h1 class="text-3xl font-bold text-gray-900 dark:text-white tracking-tight"
                         data-i18n="web_brand_name">{{ web_brand_name }}</h1>
-                    <p class="text-sm text-gray-500 dark:text-gray-400 mt-2"
-                       data-i18n="login_secure_gateway">Secure Gateway</p>
+                    <div class="flex items-center justify-center gap-1.5 mt-2 text-sm text-gray-500 dark:text-gray-400">
+                        <svg id="gateway-icon" xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"></svg>
+                        <span id="gateway-text" data-i18n="login_secure_gateway">Secure Gateway</span>
+                    </div>
                 </div>
                 {{ default_pass_alert | safe }}
                 <div id="forms-container">
@@ -384,5 +386,29 @@
                 crossorigin="anonymous"></script>
         <script src="/static/js/common.js?v={{ web_version }}"></script>
         <script src="/static/js/login.js?v={{ web_version }}"></script>
+        <script>
+            document.addEventListener("DOMContentLoaded", () => {
+                const isSecure = window.location.protocol === 'https:';
+                const iconPath = document.getElementById('gateway-icon');
+                const textEl = document.getElementById('gateway-text');
+                
+                if (isSecure) {
+                    iconPath.innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />';
+                    iconPath.classList.add('text-green-500');
+                    textEl.setAttribute('data-i18n', 'login_secure_gateway');
+                } else {
+                    iconPath.innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 2.944a11.955 11.955 0 018.618 3.04A12.02 12.02 0 0021 9c0 5.591-3.824 10.29-9 11.622C6.824 19.29 3 14.591 3 9c0-1.042.133-2.052.382-3.016A11.955 11.955 0 0112 2.944z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 9l6 6m0-6l-6 6" />';
+                    iconPath.classList.add('text-red-500');
+                    textEl.setAttribute('data-i18n', 'login_insecure_gateway');
+                }
+                
+                if(typeof I18N !== 'undefined' && typeof CURRENT_LANG !== 'undefined') {
+                    const key = textEl.getAttribute('data-i18n');
+                    if(I18N[CURRENT_LANG] && I18N[CURRENT_LANG][key]) {
+                        textEl.innerHTML = I18N[CURRENT_LANG][key];
+                    }
+                }
+            });
+        </script>
     </body>
 </html>
