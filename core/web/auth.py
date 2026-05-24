@@ -10,6 +10,7 @@ import secrets
 import time
 from pathlib import Path
 from typing import Any, Final
+from urllib.parse import parse_qsl
 
 from aiohttp import web
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
@@ -220,6 +221,45 @@ def check_telegram_auth(data: dict[str, Any], bot_token: str) -> bool:
     return time.time() - auth_date <= 900
 
 
+def check_webapp_auth(init_data: str, bot_token: str) -> dict[str, Any] | None:
+    """Validate Telegram Mini App (Web App) initData payload."""
+    try:
+        parsed_data = dict(parse_qsl(init_data))
+        provided_hash = parsed_data.pop("hash", None)
+        if not provided_hash:
+            return None
+
+        data_check_string = "\n".join(
+            f"{key}={value}" for key, value in sorted(parsed_data.items())
+        )
+        secret_key = hmac.new(
+            b"WebAppData",
+            bot_token.encode("utf-8"),
+            hashlib.sha256,
+        ).digest()
+        calculated_hash = hmac.new(
+            secret_key,
+            data_check_string.encode("utf-8"),
+            hashlib.sha256,
+        ).hexdigest()
+
+        if not hmac.compare_digest(calculated_hash, provided_hash):
+            return None
+
+        auth_date = int(parsed_data.get("auth_date", 0))
+        if time.time() - auth_date > 86400:  # 24 hours
+            return None
+
+        user_json = parsed_data.get("user")
+        if not user_json:
+            return None
+            
+        return json.loads(user_json)
+    except Exception:
+        logging.exception("Web App auth validation failed")
+        return None
+
+
 def _set_csrf_cookie(
     response: web.StreamResponse,
     request: web.Request,
@@ -227,13 +267,14 @@ def _set_csrf_cookie(
     token: str | None = None,
 ) -> str:
     token = token or generate_csrf_token()
+    is_secure = request.scheme == "https" or request.headers.get("X-Forwarded-Proto") == "https"
     response.set_cookie(
         CSRF_TOKEN_COOKIE,
         token,
         max_age=CSRF_TOKEN_TTL,
-        secure=True,
+        secure=is_secure,
         httponly=False,
-        samesite="Strict",
+        samesite="Strict" if is_secure else "Lax",
     )
     response.headers["X-CSRF-Token"] = token
     return token
@@ -265,13 +306,14 @@ def _set_session_cookie(
     session_token: str,
     max_age: int,
 ) -> None:
+    is_secure = request.scheme == "https" or request.headers.get("X-Forwarded-Proto") == "https"
     response.set_cookie(
         COOKIE_NAME,
         session_token,
         max_age=max_age,
         httponly=True,
-        secure=True,
-        samesite="Strict",
+        secure=is_secure,
+        samesite="Strict" if is_secure else "Lax",
     )
 
 
@@ -529,6 +571,44 @@ async def handle_telegram_auth(request: web.Request) -> web.StreamResponse:
         return web.json_response({"error": "Internal Server Error"}, status=500)
 
 
+@routes.post("/api/auth/webapp")
+async def handle_webapp_auth(request: web.Request) -> web.StreamResponse:
+    """Authenticate a user through Telegram Mini App initData."""
+    try:
+        data = await request.json()
+        init_data = data.get("initData")
+        if not init_data:
+            return web.json_response({"error": "Missing initData"}, status=400)
+
+        user_data = check_webapp_auth(init_data, TOKEN)
+        if not user_data:
+            return web.json_response({"error": "Invalid signature or expired"}, status=403)
+
+        user_id = int(user_data.get("id"))
+        if user_id not in ALLOWED_USERS:
+            return web.json_response({"error": "User not allowed"}, status=403)
+
+        session_token = _create_session(
+            request=request,
+            user_id=user_id,
+            max_age=SESSION_TTL_MAGIC,
+            photo_url=user_data.get("photo_url"),
+        )
+        csrf_token = generate_csrf_token()
+        response = web.json_response({"status": "ok", "csrf_token": csrf_token})
+        _set_session_cookie(
+            response,
+            request=request,
+            session_token=session_token,
+            max_age=SESSION_TTL_MAGIC,
+        )
+        _set_csrf_cookie(response, request, token=csrf_token)
+        return response
+    except Exception:
+        logging.exception("Web App auth failed")
+        return web.json_response({"error": "Internal Server Error"}, status=500)
+
+
 @routes.post("/logout")
 async def handle_logout(request: web.Request) -> web.StreamResponse:
     """Destroy the current web session and redirect to login."""
@@ -536,9 +616,10 @@ async def handle_logout(request: web.Request) -> web.StreamResponse:
     if session_token:
         SERVER_SESSIONS.pop(session_token, None)
 
+    is_secure = request.scheme == "https" or request.headers.get("X-Forwarded-Proto") == "https"
     response = web.HTTPFound("/login")
-    response.del_cookie(COOKIE_NAME, secure=True, httponly=True, samesite="Strict")
-    response.del_cookie(CSRF_TOKEN_COOKIE, secure=True, samesite="Strict")
+    response.del_cookie(COOKIE_NAME, secure=is_secure, httponly=True, samesite="Strict" if is_secure else "Lax")
+    response.del_cookie(CSRF_TOKEN_COOKIE, secure=is_secure, samesite="Strict" if is_secure else "Lax")
     return response
 
 
