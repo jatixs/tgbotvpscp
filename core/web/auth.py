@@ -10,6 +10,7 @@ import secrets
 import time
 from pathlib import Path
 from typing import Any, Final
+from urllib.parse import parse_qsl
 
 from aiohttp import web
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
@@ -218,6 +219,45 @@ def check_telegram_auth(data: dict[str, Any], bot_token: str) -> bool:
 
     auth_date = int(auth_data.get("auth_date", 0))
     return time.time() - auth_date <= 900
+
+
+def check_webapp_auth(init_data: str, bot_token: str) -> dict[str, Any] | None:
+    """Validate Telegram Mini App (Web App) initData payload."""
+    try:
+        parsed_data = dict(parse_qsl(init_data))
+        provided_hash = parsed_data.pop("hash", None)
+        if not provided_hash:
+            return None
+
+        data_check_string = "\n".join(
+            f"{key}={value}" for key, value in sorted(parsed_data.items())
+        )
+        secret_key = hmac.new(
+            b"WebAppData",
+            bot_token.encode("utf-8"),
+            hashlib.sha256,
+        ).digest()
+        calculated_hash = hmac.new(
+            secret_key,
+            data_check_string.encode("utf-8"),
+            hashlib.sha256,
+        ).hexdigest()
+
+        if not hmac.compare_digest(calculated_hash, provided_hash):
+            return None
+
+        auth_date = int(parsed_data.get("auth_date", 0))
+        if time.time() - auth_date > 86400:  # 24 hours
+            return None
+
+        user_json = parsed_data.get("user")
+        if not user_json:
+            return None
+            
+        return json.loads(user_json)
+    except Exception:
+        logging.exception("Web App auth validation failed")
+        return None
 
 
 def _set_csrf_cookie(
@@ -528,6 +568,44 @@ async def handle_telegram_auth(request: web.Request) -> web.StreamResponse:
         return response
     except Exception:
         logging.exception("Telegram auth failed")
+        return web.json_response({"error": "Internal Server Error"}, status=500)
+
+
+@routes.post("/api/auth/webapp")
+async def handle_webapp_auth(request: web.Request) -> web.StreamResponse:
+    """Authenticate a user through Telegram Mini App initData."""
+    try:
+        data = await request.json()
+        init_data = data.get("initData")
+        if not init_data:
+            return web.json_response({"error": "Missing initData"}, status=400)
+
+        user_data = check_webapp_auth(init_data, TOKEN)
+        if not user_data:
+            return web.json_response({"error": "Invalid signature or expired"}, status=403)
+
+        user_id = int(user_data.get("id"))
+        if user_id not in ALLOWED_USERS:
+            return web.json_response({"error": "User not allowed"}, status=403)
+
+        session_token = _create_session(
+            request=request,
+            user_id=user_id,
+            max_age=SESSION_TTL_MAGIC,
+            photo_url=user_data.get("photo_url"),
+        )
+        csrf_token = generate_csrf_token()
+        response = web.json_response({"status": "ok", "csrf_token": csrf_token})
+        _set_session_cookie(
+            response,
+            request=request,
+            session_token=session_token,
+            max_age=SESSION_TTL_MAGIC,
+        )
+        _set_csrf_cookie(response, request, token=csrf_token)
+        return response
+    except Exception:
+        logging.exception("Web App auth failed")
         return web.json_response({"error": "Internal Server Error"}, status=500)
 
 

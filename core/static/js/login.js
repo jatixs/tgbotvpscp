@@ -358,6 +358,38 @@ async function submitNewPassword() {
 
 // --- Initialization ---
 document.addEventListener("DOMContentLoaded", () => {
+    // 0. Check for Telegram Mini App (Web App) initData
+    if (window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.initData) {
+        const initData = window.Telegram.WebApp.initData;
+        const mainCard = document.getElementById('main-card');
+        if (mainCard) {
+            mainCard.innerHTML = `
+                <div class="flex flex-col items-center justify-center py-12">
+                    <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mb-4"></div>
+                    <p class="text-gray-500 dark:text-gray-400 font-medium">Authenticating via Telegram...</p>
+                </div>
+            `;
+        }
+        fetch('/api/auth/webapp', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ initData: initData })
+        }).then(res => res.json().then(data => ({ status: res.status, ok: res.ok, body: data })))
+          .then(res => {
+            if (res.ok) {
+                window.location.reload();
+            } else {
+                throw new Error(res.body.error || "Web App auth failed");
+            }
+        }).catch(e => {
+            console.error(e);
+            if (window.showModalAlert) window.showModalAlert(String(e), 'Web App Auth Error');
+            else alert("Error: " + e);
+            setTimeout(() => window.location.reload(), 3000); // Reload to show normal form
+        });
+        return; // Prevent other initialization if we are authenticating via Web App
+    }
+
     const loginOrSeparator = document.getElementById('login-or-separator');
     const passwordLoginToggleBtn = document.getElementById('password-login-toggle-btn');
 
