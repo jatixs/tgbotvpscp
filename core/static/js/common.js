@@ -442,14 +442,83 @@ function updateHapticsUI() {
     }
 }
 
-function parsePageEmojis() {
+function parsePageEmojis(element) {
     if (window.twemoji) {
-        window.twemoji.parse(document.body, {
+        window.twemoji.parse(element || document.body, {
+            callback: function(icon, options, variant) {
+                if (icon.length === 11 && /^1f1[e-f][0-9a-f]-1f1[e-f][0-9a-f]$/.test(icon)) {
+                    const code1 = parseInt(icon.substring(0, 5), 16);
+                    const code2 = parseInt(icon.substring(6, 11), 16);
+                    const char1 = String.fromCharCode(code1 - 0x1f1e6 + 97);
+                    const char2 = String.fromCharCode(code2 - 0x1f1e6 + 97);
+                    return 'https://flagcdn.com/' + char1 + char2 + '.svg';
+                }
+                return ''.concat(options.base, options.folder, '/', icon, options.ext);
+            },
+            attributes: function(icon, variant) {
+                if (icon.length === 11 && /^1f1[e-f][0-9a-f]-1f1[e-f][0-9a-f]$/.test(icon)) {
+                    return {
+                        class: 'emoji flagcdn',
+                        style: 'width: 1.4em; height: 1em; object-fit: cover; border-radius: 2px; display: inline-block; vertical-align: -0.1em; box-shadow: 0 1px 2px rgba(0,0,0,0.1)'
+                    };
+                }
+            },
             folder: 'svg',
             ext: '.svg',
             base: 'https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/'
         });
     }
+}
+
+function replaceEmojisWithFlagsHTML(text) {
+    if (!text) return text;
+    const regex = /([\uD83C][\uDDE6-\uDDFF]){2}/g;
+    return text.replace(regex, function(match) {
+        const code1 = match.codePointAt(0);
+        const code2 = match.codePointAt(2);
+        const char1 = String.fromCharCode(code1 - 0x1F1E6 + 97);
+        const char2 = String.fromCharCode(code2 - 0x1F1E6 + 97);
+        return `<img src="https://flagcdn.com/${char1}${char2}.svg" class="emoji flagcdn" style="width: 1.4em; height: 1em; object-fit: cover; border-radius: 2px; display: inline-block; vertical-align: -0.1em; box-shadow: 0 1px 2px rgba(0,0,0,0.1)" alt="${match}" />`;
+    });
+}
+
+function updateDOM(oldNode, newNode) {
+    if (!oldNode || !newNode) return false;
+    if (oldNode.nodeType !== newNode.nodeType) return false;
+    if (oldNode.nodeType === 3) { // Node.TEXT_NODE
+        if (oldNode.textContent !== newNode.textContent) oldNode.textContent = newNode.textContent;
+        return true;
+    }
+    if (oldNode.nodeName !== newNode.nodeName) return false;
+    
+    if (newNode.attributes) {
+        for (let i = 0; i < newNode.attributes.length; i++) {
+            const attr = newNode.attributes[i];
+            if (oldNode.getAttribute(attr.name) !== attr.value) {
+                oldNode.setAttribute(attr.name, attr.value);
+            }
+        }
+    }
+    if (oldNode.attributes) {
+        for (let i = oldNode.attributes.length - 1; i >= 0; i--) {
+            const attr = oldNode.attributes[i];
+            if (!newNode.hasAttribute(attr.name)) {
+                oldNode.removeAttribute(attr.name);
+            }
+        }
+    }
+    
+    if (oldNode.nodeName === 'INPUT' && (oldNode.type === 'checkbox' || oldNode.type === 'radio')) {
+        if (oldNode.checked !== newNode.hasAttribute('checked')) {
+            oldNode.checked = newNode.hasAttribute('checked');
+        }
+    }
+    
+    if (oldNode.childNodes.length !== newNode.childNodes.length) return false;
+    for (let i = 0; i < oldNode.childNodes.length; i++) {
+        if (!updateDOM(oldNode.childNodes[i], newNode.childNodes[i])) return false;
+    }
+    return true;
 }
 
 async function setLanguage(lang) {
@@ -951,6 +1020,7 @@ function checkSessionStatus() {
 }
 
 let lastUnreadCount = -1;
+let lastNotificationsJson = "";
 
 function initNotifications() {
     if (window.location.pathname === '/login' || window.location.pathname.startsWith('/reset_password')) return;
@@ -1184,6 +1254,10 @@ function updateNotifUI(list, count) {
         else clearBtn.classList.add('hidden');
     }
 
+    const listJson = JSON.stringify(list);
+    if (listJson === lastNotificationsJson) return;
+    lastNotificationsJson = listJson;
+
     if (list.length === 0) {
         setSafeHTML(listContainer, `<div class="p-4 text-center text-gray-500 text-sm">${escapeHtml((typeof I18N !== 'undefined' ? I18N.web_no_notifications : "No notifications"))}</div>`);
     } else {
@@ -1207,6 +1281,7 @@ function updateNotifUI(list, count) {
                 .replace(/&lt;b&gt;/gi, "<b>")
                 .replace(/&lt;\/b&gt;/gi, "</b>")
                 .replace(/\n/g, "<br>");
+            cleanText = replaceEmojisWithFlagsHTML(cleanText);
 
             div.innerHTML = `
                 <div class="flex justify-between items-start mb-1">

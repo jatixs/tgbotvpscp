@@ -280,7 +280,20 @@ setup_repo_and_dirs() {
     run_with_spinner "Клонирование репозитория" sudo git clone --branch "${GIT_BRANCH}" "${GITHUB_REPO_URL}" "${BOT_INSTALL_PATH}" || exit 1
     if [ -f "/tmp/tgbot_env.bak" ]; then sudo cp /tmp/tgbot_env.bak "${ENV_FILE}"; fi
     sudo mkdir -p "${BOT_INSTALL_PATH}/logs/bot" "${BOT_INSTALL_PATH}/logs/watchdog" "${BOT_INSTALL_PATH}/logs/node" "${BOT_INSTALL_PATH}/config"
+    download_vendor_assets
     sudo chown -R ${owner_user}:${owner_user} ${BOT_INSTALL_PATH}
+}
+
+download_vendor_assets() {
+    msg_info "Загрузка локальных JS/CSS зависимостей..."
+    local vendor_dir="${BOT_INSTALL_PATH}/core/static/vendor"
+    sudo mkdir -p "${vendor_dir}"
+    
+    run_with_spinner "Загрузка Twemoji" sudo curl -sSLo "${vendor_dir}/twemoji.min.js" "https://unpkg.com/@twemoji/api@15.1.0/dist/twemoji.min.js"
+    run_with_spinner "Загрузка Chart.js" sudo curl -sSLo "${vendor_dir}/chart.umd.min.js" "https://cdn.jsdelivr.net/npm/chart.js"
+    run_with_spinner "Загрузка xterm.js" sudo curl -sSLo "${vendor_dir}/xterm.js" "https://cdn.jsdelivr.net/npm/xterm/lib/xterm.js"
+    run_with_spinner "Загрузка xterm.css" sudo curl -sSLo "${vendor_dir}/xterm.css" "https://cdn.jsdelivr.net/npm/xterm/css/xterm.css"
+    run_with_spinner "Загрузка xterm-addon-fit" sudo curl -sSLo "${vendor_dir}/xterm-addon-fit.js" "https://cdn.jsdelivr.net/npm/xterm-addon-fit/lib/xterm-addon-fit.js"
 }
 
 load_cached_env() {
@@ -1121,6 +1134,11 @@ update_bot() {
 
     # Check and add missing environment variables
     ensure_env_variables
+
+    download_vendor_assets
+    if [ -f "${ENV_FILE}" ] && grep -q "INSTALL_MODE=secure" "${ENV_FILE}"; then
+        sudo chown -R ${SERVICE_USER}:${SERVICE_USER} "${BOT_INSTALL_PATH}/core/static/vendor" 2>/dev/null || true
+    fi
 
     local current_mode=$(grep '^DEPLOY_MODE=' "${ENV_FILE}" | cut -d'=' -f2 | tr -d '"')
     

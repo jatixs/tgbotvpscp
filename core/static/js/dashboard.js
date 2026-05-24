@@ -497,7 +497,7 @@ function renderNextNodeBatch() {
                     </div>
                     <div class="min-w-0 flex-1">
                         <div class="flex items-center gap-2">
-                            <div data-ref="name" class="font-bold text-sm text-gray-900 dark:text-white truncate group-hover:text-blue-600 dark:group-hover:text-blue-400 transition">${escapeHtml(node.name)}</div>
+                            <div data-ref="name" class="font-bold text-sm text-gray-900 dark:text-white truncate group-hover:text-blue-600 dark:group-hover:text-blue-400 transition">${replaceEmojisWithFlagsHTML(escapeHtml(node.name))}</div>
                             <div data-ref="status-badge" class="sm:hidden px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider ${ui.statusBg}">${ui.statusText}</div>
                         </div>
                         <div data-ref="ip" class="text-[10px] sm:text-xs font-mono text-gray-400 truncate">${escapeHtml(displayIp)}</div>
@@ -1249,10 +1249,18 @@ function updateNodeDetailsUI(data) {
     removeModalLoading();
     const inputContainer = document.getElementById('nodeNameInputContainer');
     if (inputContainer && inputContainer.classList.contains('hidden')) {
-        document.getElementById('modalNodeName').innerText = decryptData(data.name);
+        const newTitleHtml = replaceEmojisWithFlagsHTML(escapeHtml(decryptData(data.name)));
+        const titleEl = document.getElementById('modalNodeName');
+        const tempTitle = titleEl.cloneNode(false);
+        tempTitle.innerHTML = newTitleHtml;
+        if (!updateDOM(titleEl, tempTitle)) {
+            titleEl.innerHTML = newTitleHtml;
+        }
     }
 
-    document.getElementById('modalNodeIp').innerText = decryptData(data.ip);
+    const newIp = decryptData(data.ip);
+    const ipEl = document.getElementById('modalNodeIp');
+    if (ipEl.innerText !== newIp) ipEl.innerText = newIp;
     const tokenEl = document.getElementById('modalToken');
     if (tokenEl) {
         tokenEl.innerText = decryptData(data.token);
@@ -1357,7 +1365,7 @@ window.saveNodeRename = async function () {
     const nameInput = document.getElementById('modalNodeNameInput');
     const newName = nameInput.value.trim();
     if (!newName || !currentNodeToken) return;
-    document.getElementById('modalNodeName').innerText = newName;
+    document.getElementById('modalNodeName').innerHTML = replaceEmojisWithFlagsHTML(escapeHtml(newName));
     cancelNodeRename();
 
     try {
