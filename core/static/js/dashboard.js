@@ -57,12 +57,12 @@ function decryptData(text) {
     if (typeof WEB_KEY === 'undefined' || !WEB_KEY) return text;
     try {
         const decoded = atob(text);
-        let result = "";
+        const bytes = new Uint8Array(decoded.length);
         for (let i = 0; i < decoded.length; i++) {
-            const keyChar = WEB_KEY[i % WEB_KEY.length];
-            result += String.fromCharCode(decoded.charCodeAt(i) ^ keyChar.charCodeAt(0));
+            const keyChar = WEB_KEY.charCodeAt(i % WEB_KEY.length);
+            bytes[i] = decoded.charCodeAt(i) ^ keyChar;
         }
-        return result;
+        return new TextDecoder().decode(bytes);
     } catch (e) {
         console.error("Decryption error:", e);
         return text;
@@ -73,10 +73,11 @@ function encryptData(text) {
     if (!text) return "";
     if (typeof WEB_KEY === 'undefined' || !WEB_KEY) return text;
     try {
+        const bytes = new TextEncoder().encode(text);
         let result = "";
-        for (let i = 0; i < text.length; i++) {
-            const keyChar = WEB_KEY[i % WEB_KEY.length];
-            result += String.fromCharCode(text.charCodeAt(i) ^ keyChar.charCodeAt(0));
+        for (let i = 0; i < bytes.length; i++) {
+            const keyChar = WEB_KEY.charCodeAt(i % WEB_KEY.length);
+            result += String.fromCharCode(bytes[i] ^ keyChar);
         }
         return btoa(result);
     } catch (e) {

@@ -70,14 +70,13 @@ def encrypt_for_web(text: str) -> str:
     if not text:
         return ""
     try:
-        key = get_web_key()
-        text_str = str(text)
-        encrypted_chars = []
-        for i in range(len(text_str)):
-            key_char = key[i % len(key)]
-            encrypted_char = chr(ord(text_str[i]) ^ ord(key_char))
-            encrypted_chars.append(encrypted_char)
-        return base64.b64encode("".join(encrypted_chars).encode()).decode()
+        key = get_web_key().encode("utf-8")
+        text_bytes = str(text).encode("utf-8")
+        encrypted_bytes = bytearray()
+        for i in range(len(text_bytes)):
+            key_byte = key[i % len(key)]
+            encrypted_bytes.append(text_bytes[i] ^ key_byte)
+        return base64.b64encode(encrypted_bytes).decode("utf-8")
     except Exception as e:
         logging.error(f"Web encrypt error: {e}")
         return str(text)
@@ -87,14 +86,13 @@ def decrypt_for_web(text: str) -> str:
     if not text:
         return ""
     try:
-        key = get_web_key()
-        decoded_str = base64.b64decode(text).decode()
-        decrypted_chars = []
-        for i in range(len(decoded_str)):
-            key_char = key[i % len(key)]
-            decrypted_char = chr(ord(decoded_str[i]) ^ ord(key_char))
-            decrypted_chars.append(decrypted_char)
-        return "".join(decrypted_chars)
+        key = get_web_key().encode("utf-8")
+        decoded_bytes = base64.b64decode(text)
+        decrypted_bytes = bytearray()
+        for i in range(len(decoded_bytes)):
+            key_byte = key[i % len(key)]
+            decrypted_bytes.append(decoded_bytes[i] ^ key_byte)
+        return decrypted_bytes.decode("utf-8")
     except Exception as e:
         logging.error(f"Web decrypt error: {e}")
         return text
