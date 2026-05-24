@@ -7,12 +7,12 @@ function decryptData(text) {
     if (typeof WEB_KEY === 'undefined' || !WEB_KEY) return text;
     try {
         const decoded = atob(text);
-        let result = "";
+        const bytes = new Uint8Array(decoded.length);
         for (let i = 0; i < decoded.length; i++) {
-            const keyChar = WEB_KEY[i % WEB_KEY.length];
-            result += String.fromCharCode(decoded.charCodeAt(i) ^ keyChar.charCodeAt(0));
+            const keyChar = WEB_KEY.charCodeAt(i % WEB_KEY.length);
+            bytes[i] = decoded.charCodeAt(i) ^ keyChar;
         }
-        return result;
+        return new TextDecoder().decode(bytes);
     } catch (e) {
         console.error("Decryption error:", e);
         return text;
@@ -23,10 +23,11 @@ function encryptData(text) {
     if (!text) return "";
     if (typeof WEB_KEY === 'undefined' || !WEB_KEY) return text;
     try {
+        const bytes = new TextEncoder().encode(text);
         let result = "";
-        for (let i = 0; i < text.length; i++) {
-            const keyChar = WEB_KEY[i % WEB_KEY.length];
-            result += String.fromCharCode(text.charCodeAt(i) ^ keyChar.charCodeAt(0));
+        for (let i = 0; i < bytes.length; i++) {
+            const keyChar = WEB_KEY.charCodeAt(i % WEB_KEY.length);
+            result += String.fromCharCode(bytes[i] ^ keyChar);
         }
         return btoa(result);
     } catch (e) {
@@ -1354,15 +1355,18 @@ function renderKeyboardModalContent() {
         const totalCount = categoryKeys.length;
         const allOn = enabledCount === totalCount;
         const badgeColor = enabledCount === 0
-            ? 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 border-red-200 dark:border-red-500/30 hover:bg-red-200 dark:hover:bg-red-900/50'
+            ? 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 hover:bg-red-200 dark:hover:bg-red-900/50'
             : allOn
-                ? 'bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400 border-green-200 dark:border-green-500/30 hover:bg-green-200 dark:hover:bg-green-900/50'
-                : 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-600 dark:text-yellow-400 border-yellow-200 dark:border-yellow-500/30 hover:bg-yellow-200 dark:hover:bg-yellow-900/50';
+                ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 hover:bg-green-200 dark:hover:bg-green-900/50'
+                : 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400 hover:bg-yellow-200 dark:hover:bg-yellow-900/50';
 
         html += `<div class="mb-2">`;
         html += `<div class="flex items-center justify-between mb-3">`;
         html += `<h4 class="text-sm font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider ml-1">${title}</h4>`;
-        html += `<button onclick="toggleCategoryKeyboard('${catKey}')" class="text-xs px-2 py-0.5 rounded-full border transition ${badgeColor}">${enabledCount}/${totalCount}</button>`;
+        html += `<button id="kb-badge-${catKey}" onclick="toggleCategoryKeyboard('${catKey}')" class="flex items-center justify-center gap-1.5 text-xs font-bold px-3 py-1 rounded-lg transition-all duration-200 cursor-pointer shadow-sm hover:shadow active:scale-95 select-none ${badgeColor}" title="Toggle All">
+                    <span>${enabledCount}/${totalCount}</span>
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5 opacity-60" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" /></svg>
+                 </button>`;
         html += `</div>`;
         html += `<div class="grid grid-cols-1 sm:grid-cols-2 gap-3">`;
         categoryKeys.forEach(key => {
@@ -1501,6 +1505,47 @@ function updateBulkButtonsUI() {
     };
     setDeactivated(btnEnable, status.allEnabled);
     setDeactivated(btnDisable, status.allDisabled);
+    updateCategoryBadges();
+}
+
+function updateCategoryBadges() {
+    if (typeof KEYBOARD_CONFIG === 'undefined' || typeof btnCategories === 'undefined') return;
+
+    for (const [catKey, catData] of Object.entries(btnCategories)) {
+        const badgeBtn = document.getElementById(`kb-badge-${catKey}`);
+        if (!badgeBtn) continue;
+
+        const categoryKeys = catData.keys.filter(k => KEYBOARD_CONFIG.hasOwnProperty(k));
+        if (categoryKeys.length === 0) continue;
+
+        const enabledCount = categoryKeys.filter(k => KEYBOARD_CONFIG[k]).length;
+        const totalCount = categoryKeys.length;
+        const allOn = enabledCount === totalCount;
+        
+        const colorClasses = [
+            'bg-red-100', 'dark:bg-red-900/30', 'text-red-700', 'dark:text-red-400', 'hover:bg-red-200', 'dark:hover:bg-red-900/50',
+            'bg-green-100', 'dark:bg-green-900/30', 'text-green-700', 'dark:text-green-400', 'hover:bg-green-200', 'dark:hover:bg-green-900/50',
+            'bg-yellow-100', 'dark:bg-yellow-900/30', 'text-yellow-700', 'dark:text-yellow-400', 'hover:bg-yellow-200', 'dark:hover:bg-yellow-900/50'
+        ];
+        
+        badgeBtn.classList.remove(...colorClasses);
+        
+        let newColorClasses = [];
+        if (enabledCount === 0) {
+            newColorClasses = ['bg-red-100', 'dark:bg-red-900/30', 'text-red-700', 'dark:text-red-400', 'hover:bg-red-200', 'dark:hover:bg-red-900/50'];
+        } else if (allOn) {
+            newColorClasses = ['bg-green-100', 'dark:bg-green-900/30', 'text-green-700', 'dark:text-green-400', 'hover:bg-green-200', 'dark:hover:bg-green-900/50'];
+        } else {
+            newColorClasses = ['bg-yellow-100', 'dark:bg-yellow-900/30', 'text-yellow-700', 'dark:text-yellow-400', 'hover:bg-yellow-200', 'dark:hover:bg-yellow-900/50'];
+        }
+        
+        badgeBtn.classList.add(...newColorClasses);
+        
+        const span = badgeBtn.querySelector('span');
+        if (span) {
+            span.innerText = `${enabledCount}/${totalCount}`;
+        }
+    }
 }
 
 function animateBulkButton(btnId, state, originalText) {
