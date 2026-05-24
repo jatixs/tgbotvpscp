@@ -547,6 +547,9 @@ function renderNextNodeBatch() {
     }).join('');
 
     container.insertAdjacentHTML('beforeend', html);
+    if (typeof window.parseEmojisInElement === 'function') {
+        window.parseEmojisInElement(container);
+    }
     renderedCount += batch.length;
 }
 
