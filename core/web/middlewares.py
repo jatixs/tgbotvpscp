@@ -19,7 +19,7 @@ WAF_INSPECT_METHODS: Final[set[str]] = {"POST", "PUT", "PATCH", "DELETE"}
 CSRF_PROTECTED_METHODS: Final[set[str]] = {"POST", "PUT", "DELETE"}
 CSRF_EXCLUDED_PATHS: Final[set[str]] = {"/api/heartbeat"}
 WAF_EXCLUDED_PATHS: Final[set[str]] = {"/api/heartbeat"}
-CSRF_EXCLUDED_PREFIXES: Final[tuple[str, ...]] = ("/api/login/",)
+CSRF_EXCLUDED_PREFIXES: Final[tuple[str, ...]] = ("/api/login/", "/api/auth/")
 WAF_INSPECT_CONTENT_TYPES: Final[set[str]] = {
     "application/json",
     "application/x-www-form-urlencoded",
