@@ -678,61 +678,61 @@ x-bot-base: &bot-base
   image: tg-vps-bot:latest
   restart: always
   env_file: .env
-    depends_on:
-        docker-proxy:
-            condition: service_started
-    environment:
-        DOCKER_HOST: tcp://docker-proxy:2375
-        DEPLOY_MODE: docker
-    security_opt:
-        - no-new-privileges:true
-    cap_drop:
-        - ALL
-    tmpfs:
-        - /tmp
-    networks:
-        - app
-        - docker-api
-services:
+  depends_on:
     docker-proxy:
-        image: tecnativa/docker-socket-proxy:0.3.0
-        container_name: tg-docker-proxy
-        restart: always
-        read_only: true
-        security_opt:
-            - no-new-privileges:true
-        cap_drop:
-            - ALL
-        tmpfs:
-            - /run
-            - /tmp
-        environment:
-            CONTAINERS: 1
-            EVENTS: 1
-            INFO: 1
-            PING: 1
-            POST: 1
-            VERSION: 1
-            IMAGES: 0
-            NETWORKS: 0
-            SERVICES: 0
-            TASKS: 0
-            VOLUMES: 0
-            SYSTEM: 0
-            NODES: 0
-            SECRETS: 0
-            SWARM: 0
-        volumes:
-            - /var/run/docker.sock:/var/run/docker.sock:ro
-        networks:
-            - docker-api
+      condition: service_started
+  environment:
+    DOCKER_HOST: tcp://docker-proxy:2375
+    DEPLOY_MODE: docker
+  security_opt:
+    - no-new-privileges:true
+  cap_drop:
+    - ALL
+  tmpfs:
+    - /tmp
+  networks:
+    - app
+    - docker-api
+services:
+  docker-proxy:
+    image: tecnativa/docker-socket-proxy:0.3.0
+    container_name: tg-docker-proxy
+    restart: always
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    tmpfs:
+      - /run
+      - /tmp
+    environment:
+      CONTAINERS: 1
+      EVENTS: 1
+      INFO: 1
+      PING: 1
+      POST: 1
+      VERSION: 1
+      IMAGES: 0
+      NETWORKS: 0
+      SERVICES: 0
+      TASKS: 0
+      VOLUMES: 0
+      SYSTEM: 0
+      NODES: 0
+      SECRETS: 0
+      SWARM: 0
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - docker-api
   bot-secure:
     <<: *bot-base
     container_name: tg-bot-secure
     profiles: ["secure"]
     user: "tgbot"
     ports:
-            - "127.0.0.1:${WEB_PORT}:${WEB_PORT}"
+      - "127.0.0.1:\${WEB_PORT}:\${WEB_PORT}"
     environment:
       - INSTALL_MODE=secure
       - TG_BOT_CONTAINER_NAME=tg-bot-secure
@@ -743,26 +743,27 @@ services:
       - /proc/stat:/proc_host/stat:ro
       - /proc/meminfo:/proc_host/meminfo:ro
       - /proc/net/dev:/proc_host/net/dev:ro
-    cap_add: [NET_RAW]
+    cap_add:
+      - NET_RAW
   bot-root:
     <<: *bot-base
     container_name: tg-bot-root
     profiles: ["root"]
     user: "root"
     ports:
-            - "127.0.0.1:${WEB_PORT}:${WEB_PORT}"
+      - "127.0.0.1:\${WEB_PORT}:\${WEB_PORT}"
     environment:
       - INSTALL_MODE=root
       - TG_BOT_CONTAINER_NAME=tg-bot-root
     volumes:
       - ./config:/opt/tg-bot/config
       - ./logs/bot:/opt/tg-bot/logs/bot
-            - /proc/uptime:/proc_host/uptime:ro
-            - /proc/stat:/proc_host/stat:ro
-            - /proc/meminfo:/proc_host/meminfo:ro
-            - /proc/net/dev:/proc_host/net/dev:ro
-            - /etc/hostname:/host/etc/hostname:ro
-            - /etc/os-release:/host/etc/os-release:ro
+      - /proc/uptime:/proc_host/uptime:ro
+      - /proc/stat:/proc_host/stat:ro
+      - /proc/meminfo:/proc_host/meminfo:ro
+      - /proc/net/dev:/proc_host/net/dev:ro
+      - /etc/hostname:/host/etc/hostname:ro
+      - /etc/os-release:/host/etc/os-release:ro
   watchdog:
     <<: *bot-base
     container_name: tg-watchdog
@@ -772,11 +773,11 @@ services:
       - ./config:/opt/tg-bot/config
       - ./logs/watchdog:/opt/tg-bot/logs/watchdog
 networks:
-    app:
-        driver: bridge
-    docker-api:
-        driver: bridge
-        internal: true
+  app:
+    driver: bridge
+  docker-api:
+    driver: bridge
+    internal: true
 EOF
 }
 
