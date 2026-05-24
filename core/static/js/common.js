@@ -345,7 +345,6 @@ document.addEventListener("DOMContentLoaded", () => {
     } else {
         parsePageEmojis();
     }
-    setupEmojiMutationObserver();
     initGlobalLazyLoad();
     initNotifications();
     initSSE();
@@ -448,47 +447,9 @@ function parsePageEmojis() {
         window.twemoji.parse(document.body, {
             folder: 'svg',
             ext: '.svg',
-            base: '/static/vendor/twemoji/'
+            base: 'https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/'
         });
     }
-}
-
-function parseEmojisInElement(element) {
-    if (window.twemoji && element) {
-        window.twemoji.parse(element, {
-            folder: 'svg',
-            ext: '.svg',
-            base: '/static/vendor/twemoji/'
-        });
-    }
-}
-
-function setupEmojiMutationObserver() {
-    if (!window.twemoji || !window.MutationObserver) {
-        return;
-    }
-
-    const observer = new MutationObserver((mutations) => {
-        for (const mutation of mutations) {
-            mutation.addedNodes.forEach((node) => {
-                if (node.nodeType === Node.ELEMENT_NODE) {
-                    window.twemoji.parse(node, {
-                        folder: 'svg',
-                        ext: '.svg',
-                        base: '/static/vendor/twemoji/'
-                    });
-                } else if (node.nodeType === Node.TEXT_NODE && node.parentNode) {
-                    window.twemoji.parse(node.parentNode, {
-                        folder: 'svg',
-                        ext: '.svg',
-                        base: '/static/vendor/twemoji/'
-                    });
-                }
-            });
-        }
-    });
-
-    observer.observe(document.body, { childList: true, subtree: true });
 }
 
 async function setLanguage(lang) {
@@ -556,9 +517,6 @@ function showToast(message) {
     const closeBtn = `<button onclick="closeToast(this.closest('div'))" class="text-gray-400 hover:text-gray-600 dark:hover:text-white transition p-1 rounded-lg hover:bg-black/5 dark:hover:bg-white/10 ml-1 flex-shrink-0"><svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg></button>`;
     toast.innerHTML = `${icon}<div class="flex-1 min-w-0"><p class="text-sm font-medium text-gray-900 dark:text-white leading-snug break-words">${message}</p></div>${closeBtn}`;
     container.appendChild(toast);
-    if (typeof parseEmojisInElement === 'function') {
-        parseEmojisInElement(toast);
-    }
     requestAnimationFrame(() => {
         requestAnimationFrame(() => {
             toast.classList.remove('translate-y-10', 'opacity-0');
@@ -1261,7 +1219,6 @@ function updateNotifUI(list, count) {
                     ${cleanText}
                 </div>`;
             listContainer.appendChild(div);
-            parseEmojisInElement(div);
         });
     }
 }
