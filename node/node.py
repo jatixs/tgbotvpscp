@@ -1781,8 +1781,16 @@ def send_heartbeat():
             if isinstance(response_reporter_hash, str) and response_reporter_hash:
                 update_cached_alert_reporter_hash(response_reporter_hash)
 
-            PENDING_RESULTS.clear()
-            SSH_EVENTS.clear()
+            for r in current_results:
+                try:
+                    PENDING_RESULTS.remove(r)
+                except ValueError:
+                    pass
+            for e in current_ssh_events:
+                try:
+                    SSH_EVENTS.remove(e)
+                except ValueError:
+                    pass
 
             tasks = data.get("tasks", [])
             for task in tasks:
