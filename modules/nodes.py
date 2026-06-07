@@ -329,12 +329,35 @@ async def cq_node_command(callback: types.CallbackQuery):
         await callback.answer("Error: Node not found", show_alert=True)
         return
     if cmd == "uptime":
+        avail = node.get("availability", {})
+        total_downtime = float(avail.get("total_downtime_seconds", 0))
+        
+        inline_kb = []
+        if total_downtime > 0 and user_id == config.ADMIN_USER_ID:
+            inline_kb.append([InlineKeyboardButton(text=_("btn_reset_uptime", lang), callback_data=f"node_cmd_{token}_resetuptime")])
+        inline_kb.append([InlineKeyboardButton(text=_("btn_back", lang), callback_data=f"node_select_{token}", style="primary")])
+        
         await callback.message.edit_text(
             build_node_uptime_report(node, lang, config.NODE_OFFLINE_TIMEOUT),
-            reply_markup=get_back_keyboard(lang, f"node_select_{token}"),
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=inline_kb),
             parse_mode="HTML",
         )
         await callback.answer()
+        return
+    if cmd == "resetuptime":
+        if user_id != config.ADMIN_USER_ID:
+            await callback.answer(_("access_denied_generic", lang), show_alert=True)
+            return
+        await nodes_db.reset_node_availability(token)
+        await callback.answer(_("uptime_reset_success", lang), show_alert=True)
+        # Re-fetch node to get updated counters
+        node = await nodes_db.get_node_by_token(token)
+        inline_kb = [[InlineKeyboardButton(text=_("btn_back", lang), callback_data=f"node_select_{token}", style="primary")]]
+        await callback.message.edit_text(
+            build_node_uptime_report(node, lang, config.NODE_OFFLINE_TIMEOUT),
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=inline_kb),
+            parse_mode="HTML",
+        )
         return
     if cmd == "reboot":
         await nodes_db.update_node_extra(token, "is_restarting", True)
@@ -365,6 +388,7 @@ async def cq_node_command(callback: types.CallbackQuery):
         await nodes_db.update_node_task(token, {"command": cmd, "user_id": user_id})
         await callback.answer()
         return
+
     await nodes_db.update_node_task(token, {"command": cmd, "user_id": user_id})
     cmd_map = {
         "selftest": "btn_selftest",

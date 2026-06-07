@@ -169,14 +169,24 @@ async def load_agent_availability_async() -> None:
         # Detect gap between last graceful shutdown and current startup
         session_end = _coerce_float(shared_state.AGENT_AVAILABILITY.get("session_end_time"), 0.0)
         bot_start = shared_state.AGENT_BOT_START_TIME
+        current_boot_time = _psutil.boot_time()
+        last_reboot_at = _coerce_float(shared_state.AGENT_AVAILABILITY.get("last_reboot_at"), 0.0)
+        reboot_detected = last_reboot_at > 0 and abs(current_boot_time - last_reboot_at) > 10.0
+
         if session_end > 0 and bot_start > session_end:
             gap = bot_start - session_end
-            shared_state.AGENT_AVAILABILITY["total_downtime_seconds"] = (
-                _coerce_float(shared_state.AGENT_AVAILABILITY.get("total_downtime_seconds"), 0.0) + gap
-            )
-            shared_state.AGENT_AVAILABILITY["last_downtime_at"] = session_end
+            # Ignore short gaps (< 60s) if there was no OS reboot (i.e. simple bot restart)
+            if gap >= 60.0 or reboot_detected:
+                shared_state.AGENT_AVAILABILITY["total_downtime_seconds"] = (
+                    _coerce_float(shared_state.AGENT_AVAILABILITY.get("total_downtime_seconds"), 0.0) + gap
+                )
+                shared_state.AGENT_AVAILABILITY["last_downtime_at"] = session_end
+                if reboot_detected:
+                    shared_state.AGENT_AVAILABILITY["total_physical_downtime_seconds"] = (
+                        _coerce_float(shared_state.AGENT_AVAILABILITY.get("total_physical_downtime_seconds"), 0.0) + gap
+                    )
 
-        shared_state.AGENT_AVAILABILITY["last_reboot_at"] = _psutil.boot_time()
+        shared_state.AGENT_AVAILABILITY["last_reboot_at"] = current_boot_time
         shared_state.AGENT_AVAILABILITY["status_since"] = bot_start
         shared_state.AGENT_AVAILABILITY["session_end_time"] = 0.0
 
@@ -194,6 +204,32 @@ async def save_agent_availability_async() -> None:
         logging.info("Agent availability saved to bot.db.")
     except Exception as e:
         logging.error(f"Error saving agent availability: {e}")
+
+
+async def reset_agent_availability_async() -> None:
+    """Reset agent availability state to default system values."""
+    try:
+        import psutil as _psutil
+        shared_state.AGENT_AVAILABILITY.clear()
+        
+        now = time.time()
+        shared_state.AGENT_AVAILABILITY["last_reboot_at"] = _psutil.boot_time()
+        shared_state.AGENT_AVAILABILITY["status_since"] = shared_state.AGENT_BOT_START_TIME
+        shared_state.AGENT_AVAILABILITY["session_end_time"] = 0.0
+        shared_state.AGENT_AVAILABILITY["total_online_seconds"] = max(0.0, now - shared_state.AGENT_BOT_START_TIME)
+        shared_state.AGENT_AVAILABILITY["total_downtime_seconds"] = 0.0
+        shared_state.AGENT_AVAILABILITY["total_internet_downtime_seconds"] = 0.0
+        shared_state.AGENT_AVAILABILITY["total_physical_downtime_seconds"] = 0.0
+        shared_state.AGENT_AVAILABILITY["last_downtime_at"] = 0.0
+        shared_state.AGENT_AVAILABILITY["last_downtime_recovered_at"] = 0.0
+        shared_state.AGENT_AVAILABILITY["last_internet_downtime_at"] = 0.0
+        shared_state.AGENT_AVAILABILITY["last_physical_downtime_at"] = 0.0
+        shared_state.AGENT_AVAILABILITY["current_downtime_started_at"] = 0.0
+        
+        await config.set_bot_config("agent_availability", dict(shared_state.AGENT_AVAILABILITY))
+        logging.info("Agent availability reset to default system values.")
+    except Exception as e:
+        logging.error(f"Error resetting agent availability: {e}")
 
 
 async def save_alerts_config_async():

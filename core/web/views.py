@@ -386,6 +386,7 @@ async def handle_dashboard(request: web.Request) -> web.StreamResponse:
         "web_node_last_seen_label": _("web_node_last_seen", lang),
         "web_node_traffic": _("web_node_traffic", lang),
         "web_reset_traffic_btn": _("web_reset_traffic_btn", lang),
+        "web_reset_uptime": _("web_reset_uptime", lang),
         "user_role_js": build_user_role_js(role, user_id),
         "is_main_admin": is_main_admin,
         "reset_allowed": can_reset,
@@ -498,6 +499,10 @@ async def handle_dashboard(request: web.Request) -> web.StreamResponse:
             "web_services_status_stopped": _("web_services_status_stopped", lang),
             "web_services_status_unknown": _("web_services_status_unknown", lang),
             "modal_title_error": _("modal_title_error", lang),
+            "web_reset_uptime": _("web_reset_uptime", lang),
+            "web_reset_uptime_confirm": _("web_reset_uptime_confirm", lang),
+            "uptime_reset_success": _("uptime_reset_success", lang),
+            "web_error_short": _("web_error_short", lang),
         }),
     }
 

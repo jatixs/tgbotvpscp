@@ -301,8 +301,18 @@
              class="fixed z-[9999] hidden w-80 max-w-[calc(100vw-32px)] bg-white dark:bg-gray-800 border border-gray-200 dark:border-white/10 rounded-xl shadow-2xl p-4 transition-[opacity] duration-150 opacity-0 pointer-events-auto"
              role="tooltip">
             <!-- Header: title -->
-            <div class="mb-2 pb-2 border-b border-gray-200 dark:border-white/10">
-                <p class="text-sm font-bold text-gray-900 dark:text-white" id="availabilityPopoverTitle">Аптайм / Даунтайм</p>
+            <div class="mb-2 pb-2 border-b border-gray-200 dark:border-white/10 flex justify-between items-center">
+                <p class="text-sm font-bold text-gray-900 dark:text-white uppercase">{{ web_uptime }}</p>
+                <div class="flex items-center gap-2">
+                    <button onclick="resetNodeUptime()" class="text-[10px] font-bold text-blue-600 hover:text-blue-500 bg-blue-100/50 hover:bg-blue-100 dark:bg-blue-900/30 dark:hover:bg-blue-900/50 px-2 py-1 rounded transition-colors hidden" id="modalAvailabilityResetBtn">
+                        {{ web_reset_uptime }}
+                    </button>
+                    <button onclick="if(typeof hideAvailabilityPopover === 'function') hideAvailabilityPopover()" class="text-gray-400 hover:text-gray-600 dark:hover:text-white transition">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                    </button>
+                </div>
             </div>
             <div class="flex flex-col divide-y divide-gray-100 dark:divide-white/5">
                 <div class="flex items-center justify-between py-2 first:pt-0">

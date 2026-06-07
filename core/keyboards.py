@@ -657,11 +657,11 @@ def get_node_management_keyboard(
                 text=_("node_btn_rename", lang), callback_data=f"node_rename_{token}"
             )
         )
-    row4.append(
-        InlineKeyboardButton(
-            text=_("btn_node_update_system", lang), callback_data=f"node_cmd_{token}_update"
+        row4.append(
+            InlineKeyboardButton(
+                text=_("btn_node_update_system", lang), callback_data=f"node_cmd_{token}_update"
+            )
         )
-    )
     row5 = [
         InlineKeyboardButton(
             text=_("btn_reboot", lang), callback_data=f"node_cmd_{token}_reboot"
