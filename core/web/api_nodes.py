@@ -12,6 +12,7 @@ from typing import Any, Final
 
 from aiohttp import web
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+from aiogram.exceptions import TelegramRetryAfter
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
 from .. import config as current_config
@@ -153,9 +154,10 @@ async def process_node_result_background(
         return
 
     final_text = text
+    lang = get_user_lang(user_id)  # Получаем язык пользователя один раз
+    
     if isinstance(text, dict) and text.get("type") == "i18n":
         try:
-            lang = get_user_lang(user_id)
             key = text.get("key")
             params = text.get("params", {})
             resolved_params: dict[str, Any] = {}
@@ -197,11 +199,22 @@ async def process_node_result_background(
                     pass
                 return
 
-        await bot.send_message(
-            chat_id=user_id,
-            text=_("node_response_template", user_id, name=node_name, text=final_text),
-            parse_mode="HTML",
-        )
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                await bot.send_message(
+                    chat_id=user_id,
+                    text=_("node_response_template", lang, name=node_name, text=final_text),
+                    parse_mode="HTML",
+                )
+                break  # Успешно отправлено
+            except TelegramRetryAfter as e:
+                # Если упёрлись в лимит - ждём указанное телеграмом время и повторяем
+                await asyncio.sleep(e.retry_after)
+            except Exception as exc:
+                logging.error("Background send error: %s", exc)
+                break
+
     except Exception as exc:
         logging.error("Background send error: %s", exc)
 
