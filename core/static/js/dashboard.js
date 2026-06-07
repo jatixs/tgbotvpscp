@@ -662,10 +662,7 @@ function updateAgentStatsUI(data) {
                     </div>`;
 
                 hintUptime.innerHTML = `
-                    <div class="mb-2 pb-2 border-b border-gray-200 dark:border-white/10">
-                        <p class="text-sm font-bold text-gray-900 dark:text-white">${escapeHtml(I18N?.web_avail_header || 'Uptime / Downtime')}</p>
-                    </div>
-                    <div class="flex flex-col divide-y divide-gray-100 dark:divide-white/5">
+                    <div class="flex flex-col divide-y divide-gray-100 dark:divide-white/5 mt-2">
                         ${mkRow(I18N?.web_agent_uptime_os || 'Current OS Uptime', data.stats.boot_time ? formatUptime(data.stats.boot_time) : '—')}
                         ${mkRow(I18N?.web_nodes_monitor_last_outage || 'Last outage', fmtDt(avail.last_downtime_at))}
                         ${mkRow(I18N?.web_nodes_monitor_last_reboot || 'Last reboot', fmtDt(avail.last_reboot_at))}
@@ -673,7 +670,18 @@ function updateAgentStatsUI(data) {
                         ${mkRow(I18N?.web_agent_downtime || 'Downtime', formatDuration(avail.total_downtime_secs), 'text-red-600 dark:text-red-400')}
                         ${mkRow(I18N?.web_nodes_monitor_internet_downtime || 'Internet downtime', formatDuration(avail.internet_downtime_secs), 'text-amber-600 dark:text-amber-400')}
                         ${mkRow(I18N?.web_nodes_monitor_physical_downtime || 'Physical downtime', formatDuration(avail.physical_downtime_secs), 'text-violet-600 dark:text-violet-400')}
+                    </div>
+                    <div class="mt-3 flex justify-end">
+                        <button onclick="resetAgentUptime()" class="text-xs font-bold text-blue-600 hover:text-blue-500 bg-blue-100/50 hover:bg-blue-100 dark:bg-blue-900/30 dark:hover:bg-blue-900/50 px-3 py-1 rounded transition-colors hidden" id="agentHintResetBtn">
+                            ${escapeHtml(I18N?.web_reset_uptime || 'Reset Uptime')}
+                        </button>
                     </div>`;
+
+                // Handle reset button visibility based on whether we are at system defaults
+                const isDefault = (avail.total_downtime_secs || 0) === 0;
+                if (!isDefault && typeof USER_ROLE !== 'undefined' && USER_ROLE === 'admins') {
+                    document.getElementById('agentHintResetBtn')?.classList.remove('hidden');
+                }
             }
 
             const ipEl = document.getElementById('agentIp');
@@ -1307,6 +1315,14 @@ function updateNodeDetailsUI(data) {
     document.getElementById('dashboardAvailabilityInternetDowntime').innerText = availability.internet_downtime || '-';
     document.getElementById('dashboardAvailabilityPhysicalDowntime').innerText = availability.physical_downtime || '-';
     document.getElementById('dashboardAvailabilityNote').innerText = getDashboardAvailabilityNote(availability);
+
+    // Handle reset button visibility based on whether we are at system defaults
+    const isDefault = (availability.total_downtime_secs || 0) === 0;
+    const resetBtn = document.getElementById('dashboardAvailabilityResetBtn');
+    if (resetBtn) {
+        if (!isDefault) resetBtn.classList.remove('hidden');
+        else resetBtn.classList.add('hidden');
+    }
 
     const lastSeen = data.last_seen || 0;
     const now = Math.floor(Date.now() / 1000);
@@ -2710,6 +2726,47 @@ function updateServiceItemState(name, isNowManaged) {
     btn.onclick = function () { toggleServiceManaged(name, btn.dataset.type || 'systemd', isNowManaged, this); };
 }
 
+window.resetAgentUptime = async function() {
+    if (!await window.showModalConfirm(I18N.web_reset_uptime_confirm, I18N.modal_title_confirm)) return;
+
+    try {
+        const res = await fetch('/api/system/reset-uptime', { method: 'POST' });
+        if (res.ok) {
+            if (window.showToast) window.showToast(I18N.uptime_reset_success);
+        } else {
+            const data = await res.json();
+            const errorShort = (typeof I18N !== 'undefined' && I18N.web_error_short) ? I18N.web_error_short : "Error";
+            await window.showModalAlert(data.error || "Failed", errorShort);
+        }
+    } catch (e) {
+        const errorShort = (typeof I18N !== 'undefined' && I18N.web_error_short) ? I18N.web_error_short : "Error";
+        await window.showModalAlert(String(e), errorShort);
+    }
+};
+
+window.resetNodeUptime = async function() {
+    if (!currentNodeToken) return;
+    if (!await window.showModalConfirm(I18N.web_reset_uptime_confirm, I18N.modal_title_confirm)) return;
+
+    try {
+        const res = await fetch('/api/nodes/reset-uptime', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ token: currentNodeToken })
+        });
+        if (res.ok) {
+            if (window.showToast) window.showToast(I18N.uptime_reset_success);
+            if (typeof window.hideDashboardAvailabilityPopover === 'function') window.hideDashboardAvailabilityPopover();
+        } else {
+            const data = await res.json();
+            const errorShort = (typeof I18N !== 'undefined' && I18N.web_error_short) ? I18N.web_error_short : "Error";
+            await window.showModalAlert(data.error || "Failed", errorShort);
+        }
+    } catch (e) {
+        const errorShort = (typeof I18N !== 'undefined' && I18N.web_error_short) ? I18N.web_error_short : "Error";
+        await window.showModalAlert(String(e), errorShort);
+    }
+};
 // Init when DOM loaded
 document.addEventListener('DOMContentLoaded', () => {
     // Initial load via fetch, then SSE will be started automatically
