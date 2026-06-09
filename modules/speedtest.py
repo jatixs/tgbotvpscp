@@ -3,7 +3,6 @@ import re
 import logging
 import json
 import platform
-import shlex
 import os
 import time
 import aiohttp
@@ -48,7 +47,6 @@ def get_speedtest_mode() -> str:
     if _SPEEDTEST_MODE_CACHE is not None:
         return _SPEEDTEST_MODE_CACHE
     
-    # Check config file first
     if os.path.exists(SPEEDTEST_MODE_FILE):
         try:
             with open(SPEEDTEST_MODE_FILE, 'r') as f:
@@ -59,7 +57,6 @@ def get_speedtest_mode() -> str:
         except Exception:
             pass
     
-    # Check if Ookla speedtest is available
     try:
         import subprocess
         result = subprocess.run(['speedtest', '--version'], capture_output=True, timeout=5)
@@ -69,9 +66,7 @@ def get_speedtest_mode() -> str:
     except Exception:
         pass
     
-    # Check if iperf3 is available
     try:
-        import subprocess
         import shutil
         if shutil.which('iperf3'):
             _SPEEDTEST_MODE_CACHE = 'IPERF3'
@@ -79,7 +74,6 @@ def get_speedtest_mode() -> str:
     except Exception:
         pass
     
-    # Neither tool is installed - need auto-detection based on geo
     _SPEEDTEST_MODE_CACHE = 'AUTO'
     return _SPEEDTEST_MODE_CACHE
 
@@ -124,22 +118,21 @@ async def edit_status_safe(
 
 
 async def get_ping_async(host: str) -> Optional[float]:
-    safe_host = shlex.quote(host)
     os_type = platform.system().lower()
     
-    # Try ICMP ping first
     if os_type == "windows":
-        cmd = f"ping -n {PING_COUNT} -w {PING_TIMEOUT_SEC * 1000} {safe_host}"
-        regex = "Average = ([\\d.]+)ms"
+        cmd = ["ping", "-n", str(PING_COUNT), "-w", str(PING_TIMEOUT_SEC * 1000), host]
+        regex = r"Average = ([\d.]+)ms"
     elif os_type == "linux":
-        cmd = f"ping -c {PING_COUNT} -W {PING_TIMEOUT_SEC} {safe_host}"
-        regex = "rtt min/avg/max/mdev = [\\d.]+/([\\d.]+)/"
+        cmd = ["ping", "-c", str(PING_COUNT), "-W", str(PING_TIMEOUT_SEC), host]
+        regex = r"rtt min/avg/max/mdev = [\d.]+/([\d.]+)/"
     else:
-        cmd = f"ping -c {PING_COUNT} -t {PING_TIMEOUT_SEC} {safe_host}"
-        regex = "round-trip min/avg/max/stddev = [\\d.]+/([\\d.]+)/"
+        cmd = ["ping", "-c", str(PING_COUNT), "-t", str(PING_TIMEOUT_SEC), host]
+        regex = r"round-trip min/avg/max/stddev = [\d.]+/([\d.]+)/"
+        
     try:
-        proc = await asyncio.create_subprocess_shell(
-            cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
+        proc = await asyncio.create_subprocess_exec(
+            "ping", *cmd[1:], stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
         )
         stdout, _ = await proc.communicate()
         output = stdout.decode("utf-8", "ignore")
@@ -167,14 +160,13 @@ async def get_vps_location() -> Tuple[Optional[str], Optional[str], Optional[str
     try:
         async with aiohttp.ClientSession() as session:
             try:
-                async with session.get(
-                    "https://api.ipify.org?format=json", timeout=5
-                ) as resp:
+                async with session.get("https://api.ipify.org?format=json", timeout=5) as resp:
                     if resp.status == 200:
                         data = await resp.json()
                         ip = data.get("ip")
             except Exception as e:
                 logging.debug(f"IP fetch failed (ipify): {e}")
+                
             if not ip:
                 try:
                     async with session.get("https://ipinfo.io/ip", timeout=5) as resp:
@@ -182,6 +174,7 @@ async def get_vps_location() -> Tuple[Optional[str], Optional[str], Optional[str
                             ip = (await resp.text()).strip()
                 except Exception as e:
                     logging.debug(f"IP fetch failed (ipinfo): {e}")
+                    
             if ip:
                 try:
                     async with session.get(
@@ -193,9 +186,7 @@ async def get_vps_location() -> Tuple[Optional[str], Optional[str], Optional[str
                             if data.get("status") == "success":
                                 country_code = data.get("countryCode")
                                 continent = data.get("continent")
-                                logging.info(
-                                    f"Detected VPS Location: {country_code} ({continent})"
-                                )
+                                logging.info(f"Detected VPS Location: {country_code} ({continent})")
                 except Exception as e:
                     logging.debug(f"Geo fetch failed: {e}")
     except Exception as e:
@@ -210,6 +201,10 @@ def is_ip_address(host: str) -> bool:
     except ValueError:
         return False
 
+def _write_cache_file(path: str, content: str):
+    """Синхронная запись файла для запуска через to_thread"""
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(content)
 
 async def fetch_servers_async(vps_country_code: Optional[str]) -> List[Dict[str, Any]]:
     servers_list = []
@@ -222,8 +217,7 @@ async def fetch_servers_async(vps_country_code: Optional[str]) -> List[Dict[str,
                 async with session.get(RU_SERVER_LIST_URL, timeout=10) as resp:
                     if resp.status == 200:
                         content = await resp.text()
-                        with open(LOCAL_RU_CACHE_FILE, "w", encoding="utf-8") as f:
-                            f.write(content)
+                        await asyncio.to_thread(_write_cache_file, LOCAL_RU_CACHE_FILE, content)
             except Exception as e:
                 logging.debug(f"Failed to fetch RU list: {e}")
                 if os.path.exists(LOCAL_RU_CACHE_FILE):
@@ -249,14 +243,15 @@ async def fetch_servers_async(vps_country_code: Optional[str]) -> List[Dict[str,
                     return servers_list
                 except Exception as e:
                     logging.error(f"Error parsing RU list: {e}")
+                    
         try:
             async with session.get(SERVER_LIST_URL, timeout=10) as resp:
                 if resp.status == 200:
                     content = await resp.text()
-                    with open(LOCAL_CACHE_FILE, "w", encoding="utf-8") as f:
-                        f.write(content)
+                    await asyncio.to_thread(_write_cache_file, LOCAL_CACHE_FILE, content)
         except Exception as e:
             logging.debug(f"Failed to fetch global list: {e}")
+            
         if os.path.exists(LOCAL_CACHE_FILE):
             try:
                 with open(LOCAL_CACHE_FILE, "r", encoding="utf-8") as f:
@@ -288,30 +283,30 @@ async def find_best_servers_async(
     servers: list, vps_country_code: Optional[str], vps_continent: Optional[str]
 ) -> List[Tuple[float, Dict[str, Any]]]:
     to_check = servers[:MAX_SERVERS_TO_PING]
-    tasks = []
-    for s in to_check:
-        tasks.append(get_ping_async(s["host"]))
-    pings = await asyncio.gather(*tasks)
+    
+    sem = asyncio.Semaphore(15)
+    
+    async def bounded_ping(server_data):
+        async with sem:
+            ping_val = await get_ping_async(server_data["host"])
+            return ping_val, server_data
+            
+    tasks = [bounded_ping(s) for s in to_check]
+    completed_pings = await asyncio.gather(*tasks)
+    
     results = []
-    for i, ping in enumerate(pings):
+    for ping, server_data in completed_pings:
         if ping is not None:
-            server_data = to_check[i]
-            continent_match_key = (
-                0 if server_data.get("continent") == vps_continent else 1
-            )
-            country_match_key = (
-                0 if server_data.get("country") == vps_country_code else 1
-            )
+            continent_match_key = 0 if server_data.get("continent") == vps_continent else 1
+            country_match_key = 0 if server_data.get("country") == vps_country_code else 1
             is_ip_key = is_ip_address(server_data["host"])
-            results.append(
-                (continent_match_key, country_match_key, is_ip_key, ping, server_data)
-            )
+            results.append((continent_match_key, country_match_key, is_ip_key, ping, server_data))
+            
     results.sort(key=lambda x: (x[0], x[1], x[2], x[3]))
     final_results = [(item[3], item[4]) for item in results]
+    
     if final_results:
-        logging.info(
-            f"Best server found: {final_results[0][1]['host']} ({final_results[0][0]:.2f} ms)"
-        )
+        logging.info(f"Best server found: {final_results[0][1]['host']} ({final_results[0][0]:.2f} ms)")
     return final_results
 
 
@@ -340,8 +335,6 @@ async def run_iperf_test_async(
 ) -> str:
     host = server["host"]
     port = str(server["port"])
-    safe_host = shlex.quote(host)
-    safe_port = shlex.quote(port)
     logging.info(f"Starting iperf3 test on {host}:{port}...")
     await edit_status_safe(
         bot,
@@ -350,62 +343,49 @@ async def run_iperf_test_async(
         _("speedtest_status_testing", lang, host=escape_html(host), ping=f"{ping:.2f}"),
         lang,
     )
-    cmd_dl = f"iperf3 -c {safe_host} -p {safe_port} -J -t {IPERF_TEST_DURATION} -R -4"
-    cmd_ul = f"iperf3 -c {safe_host} -p {safe_port} -J -t {IPERF_TEST_DURATION} -4"
+    
+    cmd_dl = ["-c", host, "-p", port, "-J", "-t", str(IPERF_TEST_DURATION), "-R", "-4"]
+    cmd_ul = ["-c", host, "-p", port, "-J", "-t", str(IPERF_TEST_DURATION), "-4"]
+    
     results = {"download": 0.0, "upload": 0.0, "ping": ping}
     await edit_status_safe(
         bot,
         chat_id,
         message_id,
-        _(
-            "speedtest_status_downloading",
-            lang,
-            host=escape_html(host),
-            ping=f"{ping:.2f}",
-        ),
+        _("speedtest_status_downloading", lang, host=escape_html(host), ping=f"{ping:.2f}"),
         lang,
     )
     try:
-        proc = await asyncio.create_subprocess_shell(
-            cmd_dl, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
+        proc = await asyncio.create_subprocess_exec(
+            "iperf3", *cmd_dl, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
         )
-        out, err = await asyncio.wait_for(
-            proc.communicate(), timeout=IPERF_PROCESS_TIMEOUT
-        )
+        out, err = await asyncio.wait_for(proc.communicate(), timeout=IPERF_PROCESS_TIMEOUT)
         if proc.returncode != 0:
             return _handle_iperf_error_output(out, err, proc.returncode, "download")
         try:
             data = json.loads(out)
             if "sum_received" not in data["end"]:
                 return f"DOWNLOAD_FAIL: No sum_received in final report"
-            results["download"] = (
-                data["end"]["sum_received"]["bits_per_second"] / 1000000
-            )
+            results["download"] = data["end"]["sum_received"]["bits_per_second"] / 1000000
             logging.info(f"Download speed: {results['download']:.2f} Mbps")
         except json.JSONDecodeError:
             return f"DOWNLOAD_FAIL: JSON Decode Error"
     except Exception as e:
         logging.error(f"DL Error: {e}")
         return str(e)
+        
     await edit_status_safe(
         bot,
         chat_id,
         message_id,
-        _(
-            "speedtest_status_uploading",
-            lang,
-            host=escape_html(host),
-            ping=f"{ping:.2f}",
-        ),
+        _("speedtest_status_uploading", lang, host=escape_html(host), ping=f"{ping:.2f}"),
         lang,
     )
     try:
-        proc = await asyncio.create_subprocess_shell(
-            cmd_ul, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
+        proc = await asyncio.create_subprocess_exec(
+            "iperf3", *cmd_ul, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
         )
-        out, err = await asyncio.wait_for(
-            proc.communicate(), timeout=IPERF_PROCESS_TIMEOUT
-        )
+        out, err = await asyncio.wait_for(proc.communicate(), timeout=IPERF_PROCESS_TIMEOUT)
         if proc.returncode != 0:
             return _handle_iperf_error_output(out, err, proc.returncode, "upload")
         try:
@@ -419,6 +399,7 @@ async def run_iperf_test_async(
     except Exception as e:
         logging.error(f"UL Error: {e}")
         return str(e)
+        
     loc = f"{server.get('country')} {server.get('city')}"
     return _(
         "speedtest_results",
@@ -433,11 +414,11 @@ async def run_iperf_test_async(
 
 async def run_ookla_speedtest(bot: Bot, chat_id: int, message_id: int, lang: str) -> str:
     """Run Ookla Speedtest CLI and return formatted result"""
-    cmd = "speedtest --accept-license --accept-gdpr --format=json"
+    cmd = ["--accept-license", "--accept-gdpr", "--format=json"]
     
     try:
-        proc = await asyncio.create_subprocess_shell(
-            cmd, 
+        proc = await asyncio.create_subprocess_exec(
+            "speedtest", *cmd, 
             stdout=asyncio.subprocess.PIPE, 
             stderr=asyncio.subprocess.PIPE
         )
