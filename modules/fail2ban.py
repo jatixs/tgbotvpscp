@@ -52,30 +52,37 @@ async def fail2ban_handler(message: types.Message):
         for line in reversed(lines):
             if "fail2ban.actions" not in line:
                 continue
-            match = re.search(
-                "(\\d{4}-\\d{2}-\\d{2}\\s\\d{2}:\\d{2}:\\d{2},\\d{3}).*fail2ban\\.actions.* Ban\\s+(\\S+)",
-                line,
-            )
+            match = re.search(r"fail2ban\.actions.*? Ban\s+(\S+)", line)
             if match:
-                ts, ip = match.groups()
+                ip = match.group(1)
                 flag = await get_country_flag(ip)
-                try:
-                    dt = datetime.strptime(ts, "%Y-%m-%d %H:%M:%S,%f")
-                    entries.append(
-                        _(
-                            "f2b_ban_entry",
-                            lang,
-                            ban_type=_("f2b_banned", lang),
-                            flag=flag,
-                            ip=ip,
-                            time=dt.strftime("%H:%M:%S"),
-                            tz=tz,
-                            date=dt.strftime("%d.%m.%Y"),
-                        )
+                time_str = "??"
+                date_str = "??"
+                
+                dt_match = re.search(r"(\d{4}-\d{2}-\d{2})[\sT](\d{2}:\d{2}:\d{2})", line)
+                if dt_match:
+                    d_raw = dt_match.group(1)
+                    time_str = dt_match.group(2)
+                    d_parts = d_raw.split("-")
+                    date_str = f"{d_parts[2]}.{d_parts[1]}.{d_parts[0]}"
+                else:
+                    syslog_match = re.search(r"([A-Za-z]{3}\s+\d+)\s+(\d{2}:\d{2}:\d{2})", line)
+                    if syslog_match:
+                        date_str = syslog_match.group(1)
+                        time_str = syslog_match.group(2)
+                        
+                entries.append(
+                    _(
+                        "f2b_ban_entry",
+                        lang,
+                        ban_type=_("f2b_banned", lang),
+                        flag=flag,
+                        ip=ip,
+                        time=time_str,
+                        tz=tz,
+                        date=date_str,
                     )
-                except Exception as e:
-                    logging.debug(f"Fail2Ban parse error: {e}")
-                    continue
+                )
             if len(entries) >= 10:
                 break
         if entries:

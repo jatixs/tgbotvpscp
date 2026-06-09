@@ -1006,16 +1006,15 @@ async def handle_login_page(request: web.Request) -> web.StreamResponse:
 
     current_data = i18n_all.get(lang, i18n_all["en"])
     injection = f"{json.dumps(current_data)};\n        const I18N_ALL = {json.dumps(i18n_all)}"
-    alert = ""
-    if web_auth.is_default_password_active(ADMIN_USER_ID):
-        alert = f'<div class="mb-4 p-3 bg-yellow-500/20 border border-yellow-500/50 rounded-xl flex items-start gap-3"><svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-yellow-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg><span class="text-xs text-yellow-200 font-medium" data-i18n="web_default_pass_alert">{_("web_default_pass_alert", lang)}</span></div>'
+    is_default_pass = web_auth.is_default_password_active(ADMIN_USER_ID)
 
     context = {
         "web_title": page_title,
         "web_favicon": web_meta.get("favicon", "/static/favicon.ico"),
         "web_meta_desc": web_meta.get("description", ""),
         "web_meta_keywords": web_meta.get("keywords", ""),
-        "default_pass_alert": alert,
+        "is_default_pass": is_default_pass,
+        "web_default_pass_alert": _("web_default_pass_alert", lang),
         "error_block": "",
         "bot_username": web_auth.BOT_USERNAME_CACHE or "",
         "web_version": CACHE_VER,
