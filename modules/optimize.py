@@ -33,9 +33,41 @@ async def optimize_handler(message: types.Message):
     await delete_previous_message(user_id, command, chat_id, message.bot)
     sent_message = await message.answer(_("optimize_start", lang), parse_mode="HTML")
     LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = sent_message.message_id
-    cmd = "bash -c \"apt update && apt full-upgrade -y && apt autoremove --purge -y && apt autoclean -y && journalctl --vacuum-time=2d && rm -rf /var/tmp/* /tmp/* /root/.cache/* && DEBIAN_FRONTEND=noninteractive apt install preload cpufrequtils zram-tools -y && systemctl enable preload && systemctl start preload && echo 'vm.swappiness=10' | tee -a /etc/sysctl.conf && echo 'vm.vfs_cache_pressure=50' | tee -a /etc/sysctl.conf && sysctl -p && systemctl restart systemd-journald && systemctl daemon-reexec\""
-    process = await asyncio.create_subprocess_shell(
-        cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
+    optimization_script = """
+apt update && apt full-upgrade -y && apt autoremove --purge -y && apt autoclean -y
+journalctl --vacuum-time=2d && rm -rf /var/tmp/* /tmp/* /root/.cache/*
+
+apt autoremove --purge snapd -y && rm -rf /var/cache/snapd/ && rm -rf ~/snap
+
+DEBIAN_FRONTEND=noninteractive apt install preload cpufrequtils zram-tools -y
+systemctl enable preload && systemctl start preload
+
+sed -i '/vm.swappiness/d' /etc/sysctl.conf
+sed -i '/vm.vfs_cache_pressure/d' /etc/sysctl.conf
+sed -i '/net.core.default_qdisc/d' /etc/sysctl.conf
+sed -i '/net.ipv4.tcp_congestion_control/d' /etc/sysctl.conf
+
+echo 'vm.swappiness=10' >> /etc/sysctl.conf
+echo 'vm.vfs_cache_pressure=50' >> /etc/sysctl.conf
+echo 'net.core.default_qdisc=fq' >> /etc/sysctl.conf
+echo 'net.ipv4.tcp_congestion_control=bbr' >> /etc/sysctl.conf
+sysctl -p
+
+sed -i '/^UseDNS/d' /etc/ssh/sshd_config
+sed -i 's/#UseDNS yes/UseDNS no/' /etc/ssh/sshd_config
+echo "UseDNS no" >> /etc/ssh/sshd_config
+systemctl restart ssh
+
+if [ -f /etc/nginx/nginx.conf ]; then
+    sed -i 's/worker_processes.*/worker_processes auto;/' /etc/nginx/nginx.conf
+    sed -i 's/worker_connections.*/worker_connections 2048;/' /etc/nginx/nginx.conf
+    systemctl restart nginx
+fi
+
+systemctl restart systemd-journald && systemctl daemon-reexec
+"""
+    process = await asyncio.create_subprocess_exec(
+        "bash", "-c", optimization_script, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
     )
     stdout, stderr = await process.communicate()
     output = stdout.decode("utf-8", errors="ignore")

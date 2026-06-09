@@ -235,15 +235,18 @@ async def update_node_heartbeat(token: str, ip: str, stats: dict):
         downtime_seconds = max(0.0, now - downtime_started_at)
         downtime_kind = "physical" if reboot_detected else "internet"
 
-        availability["total_downtime_seconds"] += downtime_seconds
-        if downtime_kind == "physical":
-            availability["total_physical_downtime_seconds"] += downtime_seconds
-            availability["last_physical_downtime_at"] = downtime_started_at
-        else:
-            availability["total_internet_downtime_seconds"] += downtime_seconds
-            availability["last_internet_downtime_at"] = downtime_started_at
+        # Ignore short gaps (< 60s) if there was no OS reboot
+        if downtime_seconds >= 60.0 or downtime_kind == "physical":
+            availability["total_downtime_seconds"] += downtime_seconds
+            if downtime_kind == "physical":
+                availability["total_physical_downtime_seconds"] += downtime_seconds
+                availability["last_physical_downtime_at"] = downtime_started_at
+            else:
+                availability["total_internet_downtime_seconds"] += downtime_seconds
+                availability["last_internet_downtime_at"] = downtime_started_at
 
-        availability["last_downtime_at"] = downtime_started_at
+            availability["last_downtime_at"] = downtime_started_at
+        
         availability["last_downtime_recovered_at"] = now
         availability["current_downtime_started_at"] = 0.0
         availability["current_downtime_kind"] = downtime_kind
@@ -272,6 +275,36 @@ async def update_node_heartbeat(token: str, ip: str, stats: dict):
     node.history = history
     node.extra_state = extra
     await node.save()
+
+
+async def reset_node_availability(token: str) -> bool:
+    t_hash = _get_token_hash(token)
+    node = await Node.get_or_none(token_hash=t_hash)
+    if not node:
+        return False
+
+    now = time.time()
+    extra = node.extra_state or {}
+    
+    # Reset all counters but maintain current status
+    availability = extra.get("availability", {})
+    current_status = availability.get("status", "unknown")
+    
+    new_availability = _build_default_availability_state(now)
+    new_availability["status"] = current_status
+    if current_status != "unknown":
+        new_availability["status_since"] = now
+    
+    if node.stats:
+        current_boot_time = _coerce_float(node.stats.get("boot_time"), 0.0)
+        if current_boot_time:
+            new_availability["last_boot_time"] = current_boot_time
+            new_availability["last_reboot_at"] = current_boot_time
+            
+    extra["availability"] = new_availability
+    node.extra_state = extra
+    await node.save()
+    return True
 
 
 async def mark_node_offline(token: str, offline_at: float | None = None):
