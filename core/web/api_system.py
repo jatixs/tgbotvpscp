@@ -24,7 +24,7 @@ from ..config import (
 )
 from ..i18n import get_text as _, get_user_lang, set_user_lang_async
 from ..shared_state import ALERTS_CONFIG, ALLOWED_USERS, USER_NAMES
-from ..utils import generate_favicons, save_alerts_config, save_alerts_config_async, reset_agent_availability_async
+from ..utils import generate_favicons, save_alerts_config_async, reset_agent_availability_async
 from .auth import get_current_user
 from ..rbac import is_admin as _is_admin, is_root as _is_main_admin
 from modules import update as update_module

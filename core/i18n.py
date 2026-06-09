@@ -966,7 +966,6 @@ STRINGS = {
         "btn_reset_uptime": "🔄 Reset Downtime",
         "uptime_reset_success": "✅ Downtime successfully reset to system values!",
         "btn_speedtest": "🚀 Speedtest",
-        "btn_reboot": "🔁 Reboot",
         "btn_top": "🔥 Top",
         "btn_xray": "🩻 Update X-ray",
         "btn_sshlog": "📜 SSH Log",

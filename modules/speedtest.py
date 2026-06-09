@@ -132,7 +132,7 @@ async def get_ping_async(host: str) -> Optional[float]:
         
     try:
         proc = await asyncio.create_subprocess_exec(
-            *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
+            "ping", *cmd[1:], stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
         )
         stdout, _ = await proc.communicate()
         output = stdout.decode("utf-8", "ignore")
@@ -344,8 +344,8 @@ async def run_iperf_test_async(
         lang,
     )
     
-    cmd_dl = ["iperf3", "-c", host, "-p", port, "-J", "-t", str(IPERF_TEST_DURATION), "-R", "-4"]
-    cmd_ul = ["iperf3", "-c", host, "-p", port, "-J", "-t", str(IPERF_TEST_DURATION), "-4"]
+    cmd_dl = ["-c", host, "-p", port, "-J", "-t", str(IPERF_TEST_DURATION), "-R", "-4"]
+    cmd_ul = ["-c", host, "-p", port, "-J", "-t", str(IPERF_TEST_DURATION), "-4"]
     
     results = {"download": 0.0, "upload": 0.0, "ping": ping}
     await edit_status_safe(
@@ -357,7 +357,7 @@ async def run_iperf_test_async(
     )
     try:
         proc = await asyncio.create_subprocess_exec(
-            *cmd_dl, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
+            "iperf3", *cmd_dl, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
         )
         out, err = await asyncio.wait_for(proc.communicate(), timeout=IPERF_PROCESS_TIMEOUT)
         if proc.returncode != 0:
@@ -383,7 +383,7 @@ async def run_iperf_test_async(
     )
     try:
         proc = await asyncio.create_subprocess_exec(
-            *cmd_ul, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
+            "iperf3", *cmd_ul, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
         )
         out, err = await asyncio.wait_for(proc.communicate(), timeout=IPERF_PROCESS_TIMEOUT)
         if proc.returncode != 0:
@@ -414,11 +414,11 @@ async def run_iperf_test_async(
 
 async def run_ookla_speedtest(bot: Bot, chat_id: int, message_id: int, lang: str) -> str:
     """Run Ookla Speedtest CLI and return formatted result"""
-    cmd = ["speedtest", "--accept-license", "--accept-gdpr", "--format=json"]
+    cmd = ["--accept-license", "--accept-gdpr", "--format=json"]
     
     try:
         proc = await asyncio.create_subprocess_exec(
-            *cmd, 
+            "speedtest", *cmd, 
             stdout=asyncio.subprocess.PIPE, 
             stderr=asyncio.subprocess.PIPE
         )
