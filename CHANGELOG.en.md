@@ -5,11 +5,27 @@
 <h1 align="center">📝 Telegram VPS Management Bot — Changelog</h1>
 
 <p align="center">
-    <img src="https://img.shields.io/badge/version-v1.22.4-blue?style=flat-square" alt="Version 1.22.4"/>
-    <img src="https://img.shields.io/badge/build-75-purple?style=flat-square" alt="Build 75"/>
-    <img src="https://img.shields.io/badge/date-May%2024%202026-green?style=flat-square" alt="Date May 24 2026"/>
+<p align="center">
+    <img src="https://img.shields.io/badge/version-v1.22.5-blue?style=flat-square" alt="Version 1.22.5"/>
+    <img src="https://img.shields.io/badge/build-76-purple?style=flat-square" alt="Build 76"/>
+    <img src="https://img.shields.io/badge/date-Jun%2008%202026-green?style=flat-square" alt="Date Jun 08 2026"/>
 	<img src="https://img.shields.io/badge/status-stable-green?style=flat-square" alt="Status Stable"/>
 </p>
+
+---
+## [1.22.5] - 2026-06-08
+
+### 🚀 Added:
+* **Uptime:** Added the ability to reset the uptime and downtime counters of the main server and nodes to system values via the WebUI (button in details) and Telegram bot (inline button). The reset button is now conditionally displayed only if there is accumulated downtime (counters are not at system defaults). Updated the button UI layout in the WebUI for consistency.
+
+### ⚡ Performance and Optimization:
+* **Speedtest:** Added `asyncio.Semaphore` to cap concurrent ping subprocesses (max 15), preventing CPU spikes and "Too many open files" errors on low-end servers.
+* **Speedtest / Security:** Replaced `create_subprocess_shell` with `create_subprocess_exec` for `iperf3` and `ping` commands to improve security and execution efficiency.
+* **Speedtest / I/O:** Moved blocking file I/O operations (writing server cache files) to `asyncio.to_thread` to prevent event loop blocking.
+
+### 🔧 Fixed:
+* **Nodes / Telegram API:** In `api_nodes.py`, added handling for `TelegramRetryAfter` in `process_node_result_background` with a retry loop. This prevents results (like speedtest) from being dropped when multiple nodes reply simultaneously and hit Telegram API limits.
+* **Nodes / Heartbeat:** Fixed a race condition in the agent's `send_heartbeat` function in `node.py`. Instead of blindly calling `.clear()` on `PENDING_RESULTS` and `SSH_EVENTS`, it now safely removes only the specific items that were successfully transmitted to the server.
 
 ---
 ## [1.22.4] - 2026-05-24

@@ -24,7 +24,7 @@ from ..config import (
 )
 from ..i18n import get_text as _, get_user_lang, set_user_lang_async
 from ..shared_state import ALERTS_CONFIG, ALLOWED_USERS, USER_NAMES
-from ..utils import generate_favicons, save_alerts_config, save_alerts_config_async
+from ..utils import generate_favicons, save_alerts_config_async, reset_agent_availability_async
 from .auth import get_current_user
 from ..rbac import is_admin as _is_admin, is_root as _is_main_admin
 from modules import update as update_module
@@ -404,6 +404,20 @@ async def handle_reset_traffic(request: web.Request) -> web.StreamResponse:
         except Exception:
             logging.exception("Failed to remove traffic backup files")
 
+        return web.json_response({"status": "ok"})
+    except Exception as exc:
+        logging.error("Internal API error: %s", exc)
+        return web.json_response({"error": "Internal Server Error"}, status=500)
+
+
+@routes.post("/api/system/reset-uptime")
+async def api_reset_agent_uptime(request: web.Request) -> web.StreamResponse:
+    user = get_current_user(request)
+    if not user or not _is_admin(user):
+        return web.json_response({"error": "Admin required"}, status=403)
+
+    try:
+        await reset_agent_availability_async()
         return web.json_response({"status": "ok"})
     except Exception as exc:
         logging.error("Internal API error: %s", exc)

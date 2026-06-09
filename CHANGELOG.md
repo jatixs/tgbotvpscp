@@ -5,11 +5,27 @@
 <h1 align="center">📝 Telegram VPS Management Bot — Список изменений</h1>
 
 <p align="center">
-    <img src="https://img.shields.io/badge/version-v1.22.4-blue?style=flat-square" alt="Version 1.22.4"/>
-    <img src="https://img.shields.io/badge/build-75-purple?style=flat-square" alt="Build 75"/>
-    <img src="https://img.shields.io/badge/date-Май%2024%202026-green?style=flat-square" alt="Date May 24 2026"/>
+<p align="center">
+    <img src="https://img.shields.io/badge/version-v1.22.5-blue?style=flat-square" alt="Version 1.22.5"/>
+    <img src="https://img.shields.io/badge/build-76-purple?style=flat-square" alt="Build 76"/>
+    <img src="https://img.shields.io/badge/date-Июнь%2008%202026-green?style=flat-square" alt="Date Jun 08 2026"/>
 	<img src="https://img.shields.io/badge/status-stable-green?style=flat-square" alt="Status Stable"/>
 </p>
+
+---
+## [1.22.5] - 2026-06-08
+
+### 🚀 Добавлено:
+* **Uptime:** Добавлена возможность сброса счетчиков аптайма и даунтайма главного сервера и нод до системных значений через WebUI (в модальных окнах) и бота Telegram (инлайн-кнопка). Кнопка сброса теперь отображается только в том случае, если есть накопленный даунтайм (счетчики не равны системным значениям). Изменен дизайн отображения кнопки в WebUI для унификации интерфейса.
+
+### ⚡ Производительность и оптимизация:
+* **Speedtest:** Добавлен `asyncio.Semaphore` для ограничения количества одновременных процессов ping (до 15), что предотвращает скачки нагрузки на CPU и ошибки "Too many open files" на слабых серверах.
+* **Speedtest / Безопасность:** Заменен `create_subprocess_shell` на `create_subprocess_exec` для команд `iperf3` и `ping` для повышения безопасности и эффективности выполнения.
+* **Speedtest / I/O:** Блокирующие операции файлового ввода/вывода (запись файлов кэша серверов) перенесены в `asyncio.to_thread`, чтобы не блокировать цикл обработки событий (event loop).
+
+### 🔧 Исправлено:
+* **Nodes / Telegram API:** В `api_nodes.py` добавлена обработка исключения `TelegramRetryAfter` в `process_node_result_background` с циклом повторных попыток. Это предотвращает потерю результатов (например, speedtest), когда несколько нод отвечают одновременно и упираются в лимиты API Telegram.
+* **Nodes / Heartbeat:** В агенте `node.py` устранено состояние гонки (race condition) в функции `send_heartbeat`. Вместо слепого вызова `.clear()` для `PENDING_RESULTS` и `SSH_EVENTS`, теперь безопасно удаляются только те элементы, которые были успешно переданы на сервер.
 
 ---
 ## [1.22.4] - 2026-05-24
