@@ -203,31 +203,45 @@ async def process_vless_link(message: types.Message, state: FSMContext):
         json_bytes = json_data.encode("utf-8")
         json_file = BufferedInputFile(json_bytes, filename=f"{custom_name or 'vless_config'}.json")
         
-        qr = qrcode.QRCode(
-            version=1,
-            error_correction=qrcode.constants.ERROR_CORRECT_L,
-            box_size=10,
-            border=4,
+        qr_file = None
+        try:
+            qr = qrcode.QRCode(
+                version=None,
+                error_correction=qrcode.constants.ERROR_CORRECT_L,
+                box_size=10,
+                border=4,
+            )
+            qr.add_data(message.text.strip())
+            qr.make(fit=True)
+            img = qr.make_image(fill_color="black", back_color="white")
+            img_buffer = io.BytesIO()
+            img.save(img_buffer, format="PNG")
+            img_buffer.seek(0)
+            qr_file = BufferedInputFile(img_buffer.read(), filename="vless_qr.png")
+        except Exception as qr_e:
+            logging.warning(f"Could not generate QR code: {qr_e}")
+            
+        caption_text = _(
+            "vless_success_caption",
+            lang,
+            name=escape_html(custom_name),
+            url=escape_html(message.text.strip()),
         )
-        qr.add_data(message.text.strip())
-        qr.make(fit=True)
-        img = qr.make_image(fill_color="black", back_color="white")
-        img_buffer = io.BytesIO()
-        img.save(img_buffer, format="PNG")
-        img_buffer.seek(0)
-        qr_file = BufferedInputFile(img_buffer.read(), filename="vless_qr.png")
         
-        await message.bot.send_photo(
-            chat_id=message.chat.id,
-            photo=qr_file,
-            caption=_(
-                "vless_success_caption",
-                lang,
-                name=escape_html(custom_name),
-                url=escape_html(message.text.strip()),
-            ),
-            parse_mode="HTML",
-        )
+        if qr_file:
+            await message.bot.send_photo(
+                chat_id=message.chat.id,
+                photo=qr_file,
+                caption=caption_text,
+                parse_mode="HTML",
+            )
+        else:
+            await message.bot.send_message(
+                chat_id=message.chat.id,
+                text=caption_text,
+                parse_mode="HTML",
+                disable_web_page_preview=True
+            )
         
         await message.bot.send_document(
             chat_id=message.chat.id,
@@ -284,30 +298,45 @@ async def process_vless_name(message: types.Message, state: FSMContext):
             )
             await state.clear()
             return
-        qr = qrcode.QRCode(
-            version=1,
-            error_correction=qrcode.constants.ERROR_CORRECT_L,
-            box_size=10,
-            border=4,
+        qr_file = None
+        try:
+            qr = qrcode.QRCode(
+                version=None,
+                error_correction=qrcode.constants.ERROR_CORRECT_L,
+                box_size=10,
+                border=4,
+            )
+            qr.add_data(vless_url)
+            qr.make(fit=True)
+            img = qr.make_image(fill_color="black", back_color="white")
+            img_buffer = io.BytesIO()
+            img.save(img_buffer, format="PNG")
+            img_buffer.seek(0)
+            qr_file = BufferedInputFile(img_buffer.read(), filename="vless_qr.png")
+        except Exception as qr_e:
+            logging.warning(f"Could not generate QR code: {qr_e}")
+
+        caption_text = _(
+            "vless_success_caption",
+            lang,
+            name=escape_html(custom_name),
+            url=escape_html(vless_url),
         )
-        qr.add_data(vless_url)
-        qr.make(fit=True)
-        img = qr.make_image(fill_color="black", back_color="white")
-        img_buffer = io.BytesIO()
-        img.save(img_buffer, format="PNG")
-        img_buffer.seek(0)
-        qr_file = BufferedInputFile(img_buffer.read(), filename="vless_qr.png")
-        await message.bot.send_photo(
-            chat_id=message.chat.id,
-            photo=qr_file,
-            caption=_(
-                "vless_success_caption",
-                lang,
-                name=escape_html(custom_name),
-                url=escape_html(vless_url),
-            ),
-            parse_mode="HTML",
-        )
+
+        if qr_file:
+            await message.bot.send_photo(
+                chat_id=message.chat.id,
+                photo=qr_file,
+                caption=caption_text,
+                parse_mode="HTML",
+            )
+        else:
+            await message.bot.send_message(
+                chat_id=message.chat.id,
+                text=caption_text,
+                parse_mode="HTML",
+                disable_web_page_preview=True
+            )
         sent_message = await message.answer(
             _("vless_menu_return", lang), reply_markup=get_main_reply_keyboard(user_id)
         )
