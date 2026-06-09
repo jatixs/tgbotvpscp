@@ -424,6 +424,58 @@ def convert_json_to_vless(json_data, custom_name):
         return f"Error: {e}"
 
 
+def convert_vless_to_json(vless_link):
+    try:
+        parsed = urllib.parse.urlparse(vless_link)
+        if parsed.scheme != "vless":
+            raise ValueError("Invalid scheme")
+        uuid = parsed.username
+        address = parsed.hostname
+        port = parsed.port
+        params = dict(urllib.parse.parse_qsl(parsed.query))
+        name = urllib.parse.unquote(parsed.fragment)
+
+        json_template = {
+            "outbounds": [
+                {
+                    "protocol": "vless",
+                    "settings": {
+                        "vnext": [
+                            {
+                                "address": address,
+                                "port": port,
+                                "users": [
+                                    {
+                                        "id": uuid,
+                                        "encryption": "none"
+                                    }
+                                ]
+                            }
+                        ]
+                    },
+                    "streamSettings": {
+                        "network": params.get("type", "tcp"),
+                        "security": params.get("security", "reality"),
+                        "realitySettings": {
+                            "serverName": params.get("sni", params.get("host", "")),
+                            "publicKey": params.get("pbk", ""),
+                            "shortId": params.get("sid", ""),
+                            "fingerprint": params.get("fp", "chrome")
+                        }
+                    }
+                }
+            ]
+        }
+        
+        if "flow" in params:
+            json_template["outbounds"][0]["settings"]["vnext"][0]["users"][0]["flow"] = params["flow"]
+            
+        return json.dumps(json_template, indent=2), name
+    except Exception as e:
+        logging.error(f"VLESS parse error: {e}")
+        raise ValueError(f"Failed to parse VLESS link: {e}")
+
+
 def format_traffic(bytes_value, lang: str):
     units = [
         get_text("unit_bytes", lang),
