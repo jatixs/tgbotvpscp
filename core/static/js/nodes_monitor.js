@@ -804,6 +804,14 @@ function updateNodeModal(data) {
     document.getElementById('modalAvailabilityPhysicalDowntime').textContent = availability.physical_downtime || '-';
     document.getElementById('modalAvailabilityNote').textContent = getAvailabilityNote(availability);
     
+    // Handle reset button visibility based on whether we are at system defaults
+    const isDefault = (availability.total_downtime_secs || 0) === 0;
+    const resetBtn = document.getElementById('modalAvailabilityResetBtn');
+    if (resetBtn) {
+        if (!isDefault) resetBtn.classList.remove('hidden');
+        else resetBtn.classList.add('hidden');
+    }
+
     // Update charts
     updateModalCharts(data.history || []);
 }
