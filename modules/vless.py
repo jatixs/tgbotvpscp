@@ -222,10 +222,9 @@ async def process_vless_link(message: types.Message, state: FSMContext):
             logging.warning(f"Could not generate QR code: {qr_e}")
             
         caption_text = _(
-            "vless_success_caption",
+            "vless_success_json_caption",
             lang,
-            name=escape_html(custom_name),
-            url=escape_html(message.text.strip()),
+            name=escape_html(custom_name)
         )
         
         if qr_file:
