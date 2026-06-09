@@ -435,6 +435,7 @@ def convert_vless_to_json(vless_link):
         params = dict(urllib.parse.parse_qsl(parsed.query))
         name = urllib.parse.unquote(parsed.fragment)
 
+        net_type = params.get("type", "tcp")
         json_template = {
             "outbounds": [
                 {
@@ -454,19 +455,69 @@ def convert_vless_to_json(vless_link):
                         ]
                     },
                     "streamSettings": {
-                        "network": params.get("type", "tcp"),
+                        "network": net_type,
                         "security": params.get("security", "reality"),
-                        "realitySettings": {
-                            "serverName": params.get("sni", params.get("host", "")),
-                            "publicKey": params.get("pbk", ""),
-                            "shortId": params.get("sid", ""),
-                            "fingerprint": params.get("fp", "chrome")
-                        }
                     }
                 }
             ]
         }
         
+        # Security settings
+        if params.get("security") == "reality":
+            reality_settings = {
+                "serverName": params.get("sni", params.get("host", "")),
+                "publicKey": params.get("pbk", ""),
+                "shortId": params.get("sid", ""),
+                "fingerprint": params.get("fp", "chrome")
+            }
+            if "spx" in params:
+                reality_settings["spiderX"] = params["spx"]
+            if "pqv" in params:
+                reality_settings["pqv"] = params["pqv"]
+            json_template["outbounds"][0]["streamSettings"]["realitySettings"] = reality_settings
+        elif params.get("security") == "tls":
+            json_template["outbounds"][0]["streamSettings"]["tlsSettings"] = {
+                "serverName": params.get("sni", params.get("host", "")),
+                "fingerprint": params.get("fp", "chrome")
+            }
+
+        # Network settings
+        if net_type == "xhttp":
+            xhttp_settings = {
+                "path": params.get("path", "/"),
+                "host": params.get("host", ""),
+                "mode": params.get("mode", "auto")
+            }
+            if "extra" in params:
+                try:
+                    xhttp_settings["extra"] = json.loads(params["extra"])
+                except:
+                    pass
+            json_template["outbounds"][0]["streamSettings"]["xhttpSettings"] = xhttp_settings
+        elif net_type == "ws":
+            json_template["outbounds"][0]["streamSettings"]["wsSettings"] = {
+                "path": params.get("path", "/"),
+                "headers": {
+                    "Host": params.get("host", "")
+                }
+            }
+        elif net_type == "grpc":
+            json_template["outbounds"][0]["streamSettings"]["grpcSettings"] = {
+                "serviceName": params.get("serviceName", params.get("path", ""))
+            }
+        elif net_type == "tcp" and params.get("headerType") == "http":
+            json_template["outbounds"][0]["streamSettings"]["tcpSettings"] = {
+                "header": {
+                    "type": "http",
+                    "request": {
+                        "path": [params.get("path", "/")],
+                        "headers": {
+                            "Host": [params.get("host", "")]
+                        }
+                    }
+                }
+            }
+            
         if "flow" in params:
             json_template["outbounds"][0]["settings"]["vnext"][0]["users"][0]["flow"] = params["flow"]
             
