@@ -608,7 +608,7 @@ If you find this project useful, support it:
 
 <p align="center">
   <b>Version:</b> 1.22.5 (Build 76)<br>
-  <b>License:</b> MIT License<br>
+  <b>License:</b>GPL-3.0 license<br>
   <b>Status:</b> Stable<br>
   <br>
   Made with ❤️ for the DevOps community
