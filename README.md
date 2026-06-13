@@ -605,7 +605,7 @@ python bot.py
 
 <p align="center">
   <b>Версия:</b> 1.22.5 (Build 76)<br>
-  <b>Лицензия:</b> MIT License<br>
+  <b>Лицензия:</b> GPL-3.0 license<br>
   <b>Статус:</b> Релиз<br>
   <br>
   Сделано с ❤️ для сообщества DevOps
