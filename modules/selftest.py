@@ -7,7 +7,7 @@ import re
 import time
 from datetime import datetime, timezone, timedelta
 from aiogram import Dispatcher, types, F
-from aiogram.types import KeyboardButton
+from aiogram.types import KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
 from core.i18n import _, I18nFilter, get_user_lang
 from core import config
 from core.auth import is_allowed, send_access_denied_message
@@ -375,7 +375,18 @@ async def selftest_handler(message: types.Message):
 
         full_text = f"{header}{body}{ssh_info}"
 
-        await loading_msg.edit_text(full_text, parse_mode="HTML")
+        markup = InlineKeyboardMarkup(
+            inline_keyboard=[
+                [
+                    InlineKeyboardButton(
+                        text=_("btn_memstats_check", lang),
+                        callback_data="cmd_memstats"
+                    )
+                ]
+            ]
+        )
+
+        await loading_msg.edit_text(full_text, parse_mode="HTML", reply_markup=markup)
         LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = loading_msg.message_id
 
     except Exception as e:
