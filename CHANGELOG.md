@@ -6,7 +6,7 @@
 
 <p align="center">
 <p align="center">
-    <img src="https://img.shields.io/badge/version-v1.22.6-blue?style=flat-square" alt="Version 1.22.6"/>
+    <img src="https://img.shields.io/badge/version-v1.23.0-blue?style=flat-square" alt="Version 1.23.0"/>
     <img src="https://img.shields.io/badge/build-77-purple?style=flat-square" alt="Build 77"/>
     <img src="https://img.shields.io/badge/date-Июнь%2014%202026-green?style=flat-square" alt="Date Jun 14 2026"/>
 	<img src="https://img.shields.io/badge/status-stable-green?style=flat-square" alt="Status Stable"/>

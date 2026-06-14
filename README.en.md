@@ -607,7 +607,7 @@ If you find this project useful, support it:
 ---
 
 <p align="center">
-  <b>Version:</b> 1.22.6 (Build 77)<br>
+  <b>Version:</b> 1.23.0 (Build 77)<br>
   <b>License:</b>GPL-3.0 license<br>
   <b>Status:</b> Stable<br>
   <br>

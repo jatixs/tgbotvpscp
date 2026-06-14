@@ -604,7 +604,7 @@ python bot.py
 ---
 
 <p align="center">
-  <b>Версия:</b> 1.22.6 (Build 77)<br>
+  <b>Версия:</b> 1.23.0 (Build 77)<br>
   <b>Лицензия:</b> GPL-3.0 license<br>
   <b>Статус:</b> Релиз<br>
   <br>
