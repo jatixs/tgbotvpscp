@@ -302,6 +302,25 @@ function getCsrfToken() {
     window.__csrfFetchPatched = true;
 })();
 
+(function patchResponseJson() {
+    if (typeof Response === 'undefined' || window.__jsonParsePatched) return;
+    const originalJson = Response.prototype.json;
+    Response.prototype.json = async function() {
+        try {
+            return await originalJson.call(this);
+        } catch (e) {
+            if (e instanceof SyntaxError && e.message.includes("Unexpected token")) {
+                const friendlyMessage = (typeof I18N !== 'undefined' && I18N.web_json_parse_error) ? I18N.web_json_parse_error : "Ошибка сервера: неверный формат ответа (возможно, сессия истекла или сервер недоступен).";
+                const err = new Error(friendlyMessage);
+                err.original = e;
+                throw err;
+            }
+            throw e;
+        }
+    };
+    window.__jsonParsePatched = true;
+})();
+
 const themes = ['dark', 'light', 'system'];
 let currentTheme = localStorage.getItem('theme') || 'system';
 let latestNotificationTime = Math.floor(Date.now() / 1000);
