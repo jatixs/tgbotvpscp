@@ -29,7 +29,7 @@ RUN apt-get update \
 RUN pip install --no-cache-dir --upgrade pip setuptools wheel && \
     pip install --no-cache-dir \
     docker \
-    aiohttp==3.14.0 \
+    aiohttp==3.13.4 \
     aiosqlite \
     argon2-cffi \
     sentry-sdk \
