@@ -322,11 +322,27 @@ async def unrecognized_message_handler(message: types.Message):
     lang = i18n.get_user_lang(user_id)
     try:
         import aiohttp
+        import urllib.parse
         async with aiohttp.ClientSession() as session:
             async with session.get("https://uselessfacts.jsph.pl/api/v2/facts/random") as resp:
                 if resp.status == 200:
                     data = await resp.json()
                     fact = data.get("text", "")
+                    
+                    if fact and lang != "en":
+                        # Translate the fact if the user's language is not English
+                        try:
+                            translate_url = f"https://translate.googleapis.com/translate_a/single?client=gtx&sl=en&tl={lang}&dt=t&q={urllib.parse.quote(fact)}"
+                            async with session.get(translate_url) as tr_resp:
+                                if tr_resp.status == 200:
+                                    tr_data = await tr_resp.json()
+                                    if tr_data and isinstance(tr_data, list) and len(tr_data) > 0:
+                                        translated_text = "".join([part[0] for part in tr_data[0] if part[0]])
+                                        if translated_text:
+                                            fact = translated_text
+                        except Exception as tr_e:
+                            logging.error(f"Translation API error: {tr_e}")
+
                     if fact:
                         text = i18n._("unrecognized_command_fact", lang, fact=fact)
                     else:
