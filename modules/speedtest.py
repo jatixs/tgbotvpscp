@@ -117,6 +117,26 @@ async def edit_status_safe(
         return None
 
 
+async def speedtest_progress_updater(
+    bot: Bot, chat_id: int, message_id: int, start_time: float, lang: str, prefix: str = "⏳ Speedtest..."
+):
+    from aiogram.exceptions import TelegramRetryAfter
+    while True:
+        await asyncio.sleep(3)
+        elapsed = int(time.time() - start_time)
+        try:
+            await bot.edit_message_text(
+                f"{prefix} ({elapsed}s)", 
+                chat_id=chat_id, 
+                message_id=message_id, 
+                parse_mode="HTML"
+            )
+        except TelegramRetryAfter as e:
+            await asyncio.sleep(e.retry_after)
+        except Exception:
+            pass
+
+
 async def get_ping_async(host: str) -> Optional[float]:
     os_type = platform.system().lower()
     
@@ -355,6 +375,7 @@ async def run_iperf_test_async(
         _("speedtest_status_downloading", lang, host=escape_html(host), ping=f"{ping:.2f}"),
         lang,
     )
+    dl_updater = asyncio.create_task(speedtest_progress_updater(bot, chat_id, message_id, time.time(), lang, "⏳ Testing Download..."))
     try:
         proc = await asyncio.create_subprocess_exec(
             "iperf3", *cmd_dl, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
@@ -373,6 +394,8 @@ async def run_iperf_test_async(
     except Exception as e:
         logging.error(f"DL Error: {e}")
         return str(e)
+    finally:
+        dl_updater.cancel()
         
     await edit_status_safe(
         bot,
@@ -381,6 +404,7 @@ async def run_iperf_test_async(
         _("speedtest_status_uploading", lang, host=escape_html(host), ping=f"{ping:.2f}"),
         lang,
     )
+    ul_updater = asyncio.create_task(speedtest_progress_updater(bot, chat_id, message_id, time.time(), lang, "⏳ Testing Upload..."))
     try:
         proc = await asyncio.create_subprocess_exec(
             "iperf3", *cmd_ul, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
@@ -399,6 +423,8 @@ async def run_iperf_test_async(
     except Exception as e:
         logging.error(f"UL Error: {e}")
         return str(e)
+    finally:
+        ul_updater.cancel()
         
     loc = f"{server.get('country')} {server.get('city')}"
     return _(
@@ -415,6 +441,7 @@ async def run_iperf_test_async(
 async def run_ookla_speedtest(bot: Bot, chat_id: int, message_id: int, lang: str) -> str:
     """Run Ookla Speedtest CLI and return formatted result"""
     cmd = ["--accept-license", "--accept-gdpr", "--format=json"]
+    updater = asyncio.create_task(speedtest_progress_updater(bot, chat_id, message_id, time.time(), lang, "⏳ Speedtest Ookla..."))
     
     try:
         proc = await asyncio.create_subprocess_exec(
@@ -461,6 +488,8 @@ async def run_ookla_speedtest(bot: Bot, chat_id: int, message_id: int, lang: str
     except Exception as e:
         logging.error(f"Ookla speedtest error: {e}")
         return _("speedtest_fail", lang, error=str(e))
+    finally:
+        updater.cancel()
 
 
 async def speedtest_handler(message: types.Message):
