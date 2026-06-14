@@ -6,11 +6,25 @@
 
 <p align="center">
 <p align="center">
-    <img src="https://img.shields.io/badge/version-v1.22.5-blue?style=flat-square" alt="Version 1.22.5"/>
-    <img src="https://img.shields.io/badge/build-76-purple?style=flat-square" alt="Build 76"/>
-    <img src="https://img.shields.io/badge/date-Jun%2008%202026-green?style=flat-square" alt="Date Jun 08 2026"/>
+    <img src="https://img.shields.io/badge/version-v1.22.6-blue?style=flat-square" alt="Version 1.22.6"/>
+    <img src="https://img.shields.io/badge/build-77-purple?style=flat-square" alt="Build 77"/>
+    <img src="https://img.shields.io/badge/date-Jun%2014%202026-green?style=flat-square" alt="Date Jun 14 2026"/>
 	<img src="https://img.shields.io/badge/status-stable-green?style=flat-square" alt="Status Stable"/>
 </p>
+
+---
+## [1.22.6] - 2026-06-14
+
+### 🚀 Architecture & Memory Management:
+* **Memory Orchestrator:** Implemented an "Orchestrator" system (`core/orchestrator.py`) for dynamic unloading of unused modules (Garbage Collection). The bot now lazy-loads heavy modules on demand and unloads them after 5 minutes of inactivity, saving RAM on low-end VPS.
+* **Absolute Resource Metrics:** The `selftest` module now collects actual CPU/RAM consumption of the bot process itself, allowing administrators to accurately track the bot's resource footprint (`/memstats`).
+
+### ✨ UI/UX Improvements:
+* **Chat Cleanup (AutoDelete):** Added `AutoDeleteMessageMiddleware` to instantly delete user text commands and menu button presses, keeping the chat clean and clutter-free.
+* **Duplicate Removal (Smart Cleanup):** Activated the `delete_previous_message` feature. When a command is called again, the bot correctly finds and deletes its previous response to *that specific* command, making navigation pleasant and concise.
+* **Keyboard Protection:** Completely rewrote menu invocation logic to prevent a Telegram client bug where the ABC keyboard would overlap custom bot buttons. The bot now sends the new menu *before* deleting the old one.
+* **Inline Button TTL:** Added `CallbackTTLMiddleware` (30 seconds). Clicking an outdated inline button will now trigger a gentle notification to refresh data, and the stale menu will be removed.
+* **Less Intrusive Greeting:** Returning to the main menu now displays a short "📂 Main menu:" instead of a long greeting. The full welcome message is reserved for the `/start` command.
 
 ---
 ## [1.22.5] - 2026-06-08
