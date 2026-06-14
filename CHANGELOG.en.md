@@ -29,6 +29,9 @@
 * **Selftest Module Updates:** Added an inline "🔄 Update status" button to dynamically refresh server statistics without resending the message.
 * **CPU Frequency Formatting:** CPU frequency in `/selftest` is now dynamically formatted (Hz, KHz, MHz, GHz) and accurately shows the effectively used frequency proportional to the current CPU load.
 
+### 📖 Documentation:
+* **Architecture & Modules:** Updated `ARCHITECTURE.en.md` and `custom_module_en.md` to reflect recent architectural changes: added `core/orchestrator.py` (Memory Orchestrator), described new `AutoDeleteMessageMiddleware` and `CallbackTTLMiddleware`, added the uselessfacts fallback handler, and updated the module registration process via `MODULE_CONFIG`.
+
 ---
 ## [1.22.5] - 2026-06-08
 
