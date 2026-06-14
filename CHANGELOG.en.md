@@ -13,7 +13,7 @@
 </p>
 
 ---
-## [1.22.6] - 2026-06-14
+## [1.23.0] - 2026-06-14
 
 ### 🚀 Architecture & Memory Management:
 * **Memory Orchestrator:** Implemented an "Orchestrator" system (`core/orchestrator.py`) for dynamic unloading of unused modules (Garbage Collection). The bot now lazy-loads heavy modules on demand and unloads them after 5 minutes of inactivity, saving RAM on low-end VPS.
@@ -25,6 +25,9 @@
 * **Keyboard Protection:** Completely rewrote menu invocation logic to prevent a Telegram client bug where the ABC keyboard would overlap custom bot buttons. The bot now sends the new menu *before* deleting the old one.
 * **Inline Button TTL:** Added `CallbackTTLMiddleware` (30 seconds). Clicking an outdated inline button will now trigger a gentle notification to refresh data, and the stale menu will be removed.
 * **Less Intrusive Greeting:** Returning to the main menu now displays a short "📂 Main menu:" instead of a long greeting. The full welcome message is reserved for the `/start` command.
+* **Easter Eggs & Facts:** Sending an unknown command or text to the bot will now trigger a random interesting fact response. Includes a built-in translator (Google Translate API) to seamlessly translate facts to the user's language.
+* **Selftest Module Updates:** Added an inline "🔄 Update status" button to dynamically refresh server statistics without resending the message.
+* **CPU Frequency Formatting:** CPU frequency in `/selftest` is now dynamically formatted (Hz, KHz, MHz, GHz) and accurately shows the effectively used frequency proportional to the current CPU load.
 
 ---
 ## [1.22.5] - 2026-06-08
