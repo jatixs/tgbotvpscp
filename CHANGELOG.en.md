@@ -15,29 +15,24 @@
 ---
 ## [1.23.0] - 2026-06-14
 
-### 🚀 Architecture & Memory Management:
-* **Memory Orchestrator:** Implemented an "Orchestrator" system (`core/orchestrator.py`) for dynamic unloading of unused modules (Garbage Collection). The bot now lazy-loads heavy modules on demand and unloads them after 5 minutes of inactivity, saving RAM on low-end VPS.
-* **Absolute Resource Metrics:** The `selftest` module now collects actual CPU/RAM consumption of the bot process itself, allowing administrators to accurately track the bot's resource footprint (`/memstats`).
+### 🚀 Core & Architecture:
+* **Memory Orchestrator:** Implemented `core/orchestrator.py` for dynamic memory management (Garbage Collection). Heavy modules are now lazy-loaded and unloaded after 5 minutes of inactivity, saving RAM on low-end VPS.
+* **Self-Diagnostics:** The `/selftest` module now collects the actual resource consumption of the bot process itself, and CPU frequency is dynamically formatted based on real-time load. Added an interactive "Update status" button.
 
-### ✨ UI/UX Improvements:
-* **Chat Cleanup (AutoDelete):** Added `AutoDeleteMessageMiddleware` to instantly delete user text commands and menu button presses, keeping the chat clean and clutter-free.
-* **Duplicate Removal (Smart Cleanup):** Activated the `delete_previous_message` feature. When a command is called again, the bot correctly finds and deletes its previous response to *that specific* command, making navigation pleasant and concise.
-* **Keyboard Protection:** Completely rewrote menu invocation logic to prevent a Telegram client bug where the ABC keyboard would overlap custom bot buttons. The bot now sends the new menu *before* deleting the old one.
-* **Interactive Optimization:** The "Optimization" script has been completely rewritten. Before executing, the bot now offers a convenient inline menu with checkboxes (saving state between sessions), allowing you to select specific modules to apply (e.g., skip Snapd removal or Nginx tuning).
-* **Inline Button TTL:** Added `CallbackTTLMiddleware` (30 seconds). Clicking an outdated inline button will now trigger a gentle notification to refresh data, and the stale menu will be removed.
-* **Less Intrusive Greeting:** Returning to the main menu now displays a short "📂 Main menu:" instead of a long greeting. The full welcome message is reserved for the `/start` command.
-* **Easter Eggs & Facts:** Sending an unknown command or text to the bot will now trigger a random interesting fact response. Includes a built-in translator (Google Translate API) to seamlessly translate facts to the user's language. The typing animation uses the `sendMessageDraft` method.
-* **Selftest Module Updates:** Added an inline "🔄 Update status" button to dynamically refresh server statistics without resending the message.
-* **CPU Frequency Formatting:** CPU frequency in `/selftest` is now dynamically formatted (Hz, KHz, MHz, GHz) and accurately shows the effectively used frequency proportional to the current CPU load.
-* **Interactive Speedtest:** Integrated background timers for the Speedtest command. Now, when running a test (locally or on a remote node), the bot sends a message with a ticking timer, smoothly replacing it with the final report upon completion. Compliant with `FloodWait` (Telegram API) rate limits.
-* **WebUI Resource Alerts:** Added dynamic warning indicators to the WebUI dashboard. If resource consumption (CPU, RAM, Disk) reaches configured limits, a neat warning sign ⚠️ appears next to the metric name, and the progress bar turns orange. At peak values, the indicators turn red.
-* **Minor UI Tweaks:** Synchronized colors for the "Total Traffic" (RX/TX) widget on the dashboard to match other charts (green for inbound, blue for outbound).
+### 🤖 Telegram Bot UI/UX:
+* **Chat Hygiene (Smart Cleanup):** Introduced `AutoDeleteMessageMiddleware` to instantly delete user commands, alongside a smart deletion logic for old bot responses. The chat is no longer cluttered with duplicate messages.
+* **Interface Protection:** Rewrote menu invocation logic to prevent the system keyboard from overlapping Telegram inline buttons. Added `CallbackTTLMiddleware` to automatically expire and remove stale menus (older than 30 seconds).
+* **Interactivity:** The Optimization script now uses an interactive inline menu with state-preserving checkboxes. Background Speedtests now feature a live ticking timer, fully compliant with Telegram API rate limits.
+* **Ergonomics & Easter Eggs:** Returning to the main menu is now less intrusive (no long greeting). Added a fallback handler for unknown commands that displays random interesting facts with a live typing animation and auto-translation.
 
-### 📦 Dependencies and Packages:
-* **Library Updates:** All Python packages in `requirements.txt` and `Dockerfile` have been bumped to their latest mutually compatible versions (e.g., `aiogram` to 3.28.2, `tortoise-orm` to 0.25.4, `aiohttp` to 3.13.5).
+### 🌐 WebUI & Dashboard:
+* **Drag-and-Drop & Sorting:** Integrated SortableJS to support manual node sorting via Drag & Drop, plus a dropdown menu for automatic sorting (by lowest ping or alphabetical). Custom order is saved automatically.
+* **Anomaly Monitoring (Alerts):** Added dynamic warning indicators (⚠️) to the WebUI dashboard. Progress bars now turn orange or red when CPU, RAM, or Disk consumption reaches the configured limits.
+* **Design & Grid Alignment:** Synchronized chart colors across the dashboard. The RX/TX traffic columns have been completely redesigned with minimalist icons, unit headers, and strict grid alignment with other metrics (CPU/RAM/DISK).
 
-### 📖 Documentation:
-* **Architecture & Modules:** Updated `ARCHITECTURE.en.md` and `custom_module_en.md` to reflect recent architectural changes: added `core/orchestrator.py` (Memory Orchestrator), described new `AutoDeleteMessageMiddleware` and `CallbackTTLMiddleware`, added the uselessfacts fallback handler, and updated the module registration process via `MODULE_CONFIG`.
+### 📦 Dependencies & Documentation:
+* **Libraries:** Bumped all Python packages to their latest stable and compatible versions (aiogram 3.28.2, tortoise-orm 0.25.4, aiohttp 3.13.5, etc.).
+* **Documentation:** Updated `ARCHITECTURE.en.md` and `custom_module_en.md` to reflect the new Memory Orchestrator, Middlewares, and the updated plugin registration system.
 
 ---
 ## [1.22.5] - 2026-06-08
