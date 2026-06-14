@@ -171,12 +171,7 @@ async def traffic_handler(message: types.Message):
                 await message.bot.delete_message(chat_id=chat_id, message_id=msg_id)
             except Exception:
                 pass
-    await delete_previous_message(
-        user_id,
-        list(shared_state.LAST_MESSAGE_IDS.get(user_id, {}).keys()),
-        chat_id,
-        message.bot,
-    )
+    await delete_previous_message(user_id, command, chat_id, message.bot)
 
     try:
         counters = await asyncio.to_thread(psutil.net_io_counters)

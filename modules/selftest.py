@@ -234,12 +234,7 @@ async def selftest_handler(message: types.Message):
         await send_access_denied_message(message.bot, user_id, chat_id, command)
         return
 
-    await delete_previous_message(
-        user_id,
-        list(LAST_MESSAGE_IDS.get(user_id, {}).keys()),
-        chat_id,
-        message.bot,
-    )
+    await delete_previous_message(user_id, command, chat_id, message.bot)
 
     loading_msg = await message.answer(_("selftest_gathering_info", lang))
 

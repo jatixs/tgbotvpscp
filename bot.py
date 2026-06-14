@@ -110,7 +110,7 @@ async def show_main_menu(
             pass
     await messaging.delete_previous_message(
         user_id,
-        list(shared_state.LAST_MESSAGE_IDS.get(user_id, {}).keys()),
+        ["menu", "subcategory"],
         chat_id,
         bot,
     )
