@@ -250,17 +250,18 @@
                 <div class="flex justify-between items-start">
                     <div>
                         <div class="flex items-center gap-1">
-                            <p class="text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-1">
-                                {{ web_cpu }}</p>
+                            <p class="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-1">
+                                {{ web_cpu }}
+                                <svg id="warn-cpu" class="hidden w-3.5 h-3.5 text-red-500" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+                                    <path fill-rule="evenodd" d="M9.401 3.003c1.155-2 4.043-2 5.197 0l7.355 12.748c1.154 2-.29 4.5-2.599 4.5H4.645c-2.309 0-3.752-2.5-2.598-4.5L9.4 3.003zM12 8.25a.75.75 0 01.75.75v3.75a.75.75 0 01-1.5 0V9a.75.75 0 01.75-.75zm0 8.25a.75.75 0 100-1.5.75.75 0 000 1.5z" clip-rule="evenodd" />
+                                </svg>
+                            </p>
                             <div id="hint-cpu" class="hidden">{{ web_hint_cpu_usage }}</div>
                         </div>
                         <h3 class="text-2xl font-black text-indigo-600 dark:text-indigo-400" id="stat_cpu">0%</h3>
                     </div>
                     <div id="icon-cpu"
                         class="p-2 bg-indigo-100 dark:bg-indigo-500/20 rounded-xl text-indigo-600 dark:text-indigo-400 relative">
-                        <svg id="warn-cpu" class="hidden absolute -top-1.5 -right-1.5 w-5 h-5 text-red-500 drop-shadow-md" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
-                            <path fill-rule="evenodd" d="M9.401 3.003c1.155-2 4.043-2 5.197 0l7.355 12.748c1.154 2-.29 4.5-2.599 4.5H4.645c-2.309 0-3.752-2.5-2.598-4.5L9.4 3.003zM12 8.25a.75.75 0 01.75.75v3.75a.75.75 0 01-1.5 0V9a.75.75 0 01.75-.75zm0 8.25a.75.75 0 100-1.5.75.75 0 000 1.5z" clip-rule="evenodd" />
-                        </svg>
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24"
                             stroke="currentColor">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -281,17 +282,18 @@
                 <div class="flex justify-between items-start">
                     <div>
                         <div class="flex items-center gap-1">
-                            <p class="text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-1">
-                                {{ web_ram }}</p>
+                            <p class="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-1">
+                                {{ web_ram }}
+                                <svg id="warn-ram" class="hidden w-3.5 h-3.5 text-red-500" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+                                    <path fill-rule="evenodd" d="M9.401 3.003c1.155-2 4.043-2 5.197 0l7.355 12.748c1.154 2-.29 4.5-2.599 4.5H4.645c-2.309 0-3.752-2.5-2.598-4.5L9.4 3.003zM12 8.25a.75.75 0 01.75.75v3.75a.75.75 0 01-1.5 0V9a.75.75 0 01.75-.75zm0 8.25a.75.75 0 100-1.5.75.75 0 000 1.5z" clip-rule="evenodd" />
+                                </svg>
+                            </p>
                             <div id="hint-ram" class="hidden">{{ web_hint_ram_usage }}</div>
                         </div>
                         <h3 class="text-2xl font-black text-purple-600 dark:text-purple-400" id="stat_ram">0%</h3>
                     </div>
                     <div id="icon-ram"
                         class="p-2 bg-purple-100 dark:bg-purple-500/20 rounded-xl text-purple-600 dark:text-purple-400 relative">
-                        <svg id="warn-ram" class="hidden absolute -top-1.5 -right-1.5 w-5 h-5 text-red-500 drop-shadow-md" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
-                            <path fill-rule="evenodd" d="M9.401 3.003c1.155-2 4.043-2 5.197 0l7.355 12.748c1.154 2-.29 4.5-2.599 4.5H4.645c-2.309 0-3.752-2.5-2.598-4.5L9.4 3.003zM12 8.25a.75.75 0 01.75.75v3.75a.75.75 0 01-1.5 0V9a.75.75 0 01.75-.75zm0 8.25a.75.75 0 100-1.5.75.75 0 000 1.5z" clip-rule="evenodd" />
-                        </svg>
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24"
                             stroke="currentColor">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -312,16 +314,17 @@
                 <div class="flex justify-between items-start">
                     <div>
                         <div class="flex items-center gap-1">
-                            <p class="text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-1">
-                                {{ web_disk }}</p>
+                            <p class="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-1">
+                                {{ web_disk }}
+                                <svg id="warn-disk" class="hidden w-3.5 h-3.5 text-red-500" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+                                    <path fill-rule="evenodd" d="M9.401 3.003c1.155-2 4.043-2 5.197 0l7.355 12.748c1.154 2-.29 4.5-2.599 4.5H4.645c-2.309 0-3.752-2.5-2.598-4.5L9.4 3.003zM12 8.25a.75.75 0 01.75.75v3.75a.75.75 0 01-1.5 0V9a.75.75 0 01.75-.75zm0 8.25a.75.75 0 100-1.5.75.75 0 000 1.5z" clip-rule="evenodd" />
+                                </svg>
+                            </p>
                             <div id="hint-disk" class="hidden">{{ web_hint_disk_usage }}</div>
                         </div>
                         <h3 class="text-2xl font-black text-green-600 dark:text-green-400" id="stat_disk">0%</h3>
                     </div>
                     <div id="icon-disk" class="p-2 bg-green-100 dark:bg-green-500/20 rounded-xl text-green-600 dark:text-green-400 relative">
-                        <svg id="warn-disk" class="hidden absolute -top-1.5 -right-1.5 w-5 h-5 text-red-500 drop-shadow-md" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
-                            <path fill-rule="evenodd" d="M9.401 3.003c1.155-2 4.043-2 5.197 0l7.355 12.748c1.154 2-.29 4.5-2.599 4.5H4.645c-2.309 0-3.752-2.5-2.598-4.5L9.4 3.003zM12 8.25a.75.75 0 01.75.75v3.75a.75.75 0 01-1.5 0V9a.75.75 0 01.75-.75zm0 8.25a.75.75 0 100-1.5.75.75 0 000 1.5z" clip-rule="evenodd" />
-                        </svg>
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24"
                             stroke="currentColor">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
