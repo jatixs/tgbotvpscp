@@ -199,6 +199,23 @@ async def process_node_result_background(
                     pass
                 return
 
+        if cmd == "speedtest":
+            key = f"{token}_{user_id}"
+            active_test = getattr(shared_state, "ACTIVE_NODE_SPEEDTESTS", {}).get(key)
+            if active_test:
+                try:
+                    await bot.edit_message_text(
+                        text=_("node_response_template", lang, name=node_name, text=final_text),
+                        chat_id=active_test["chat_id"],
+                        message_id=active_test["message_id"],
+                        parse_mode="HTML"
+                    )
+                    getattr(shared_state, "ACTIVE_NODE_SPEEDTESTS", {}).pop(key, None)
+                    return
+                except Exception:
+                    getattr(shared_state, "ACTIVE_NODE_SPEEDTESTS", {}).pop(key, None)
+                    pass  # Fallback to sending new message
+
         max_retries = 3
         for attempt in range(max_retries):
             try:
