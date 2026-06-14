@@ -245,9 +245,16 @@ async def _generate_selftest_data(lang: str) -> tuple[str, InlineKeyboardMarkup]
     bot_cpu_pct = p.cpu_percent()
     freq = psutil.cpu_freq()
     if freq and freq.current > 0:
+        def format_freq(mhz: float) -> str:
+            if mhz == 0: return "0 Hz"
+            if mhz >= 1000: return f"{mhz/1000:.2f} GHz"
+            elif mhz >= 1: return f"{mhz:.1f} MHz".replace(".0 ", " ")
+            elif mhz >= 0.001: return f"{mhz*1000:.1f} KHz".replace(".0 ", " ")
+            else: return f"{mhz*1000000:.0f} Hz"
+            
         used_freq_total = (freq.current * cpu_total_pct) / 100
-        cpu_val = f"{int(used_freq_total)} MHz"
-        cpu_bot = f"{freq.current * bot_cpu_pct / 100:.2f} MHz"
+        cpu_val = format_freq(used_freq_total)
+        cpu_bot = format_freq((freq.current * bot_cpu_pct) / 100)
     else:
         cpu_val = f"{cpu_total_pct:.1f}%"
         cpu_bot = f"{bot_cpu_pct:.1f}%"
