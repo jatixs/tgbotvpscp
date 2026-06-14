@@ -294,6 +294,7 @@ download_vendor_assets() {
     run_with_spinner "Загрузка xterm.js" sudo curl -sSLo "${vendor_dir}/xterm.js" "https://cdn.jsdelivr.net/npm/xterm/lib/xterm.js"
     run_with_spinner "Загрузка xterm.css" sudo curl -sSLo "${vendor_dir}/xterm.css" "https://cdn.jsdelivr.net/npm/xterm/css/xterm.css"
     run_with_spinner "Загрузка xterm-addon-fit" sudo curl -sSLo "${vendor_dir}/xterm-addon-fit.js" "https://cdn.jsdelivr.net/npm/xterm-addon-fit/lib/xterm-addon-fit.js"
+    run_with_spinner "Загрузка SortableJS" sudo curl -sSLo "${vendor_dir}/sortable.min.js" "https://cdn.jsdelivr.net/npm/sortablejs@latest/Sortable.min.js"
 }
 
 load_cached_env() {

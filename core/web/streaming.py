@@ -294,6 +294,7 @@ async def handle_sse_stream(request: web.Request) -> web.StreamResponse:
                         "cpu": stats.get("cpu", 0),
                         "ram": stats.get("ram", 0),
                         "disk": stats.get("disk", 0),
+                        "ping": encrypt_for_web(stats.get("ping", "")),
                         "net_rx_speed": stats.get("net_rx_speed", 0),
                         "net_tx_speed": stats.get("net_tx_speed", 0),
                     }
