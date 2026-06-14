@@ -315,7 +315,7 @@ async def memstats_callback(callback: types.CallbackQuery):
 
 
 # ─── Catch-all / Unrecognized Message Handler ────────────────────────────
-@dp.message()
+# Note: Registered manually in main() after orchestrator setup so it acts as a true fallback
 async def unrecognized_message_handler(message: types.Message):
     """Fallback handler for any unrecognized text/commands. Fetches a useless fact."""
     user_id = message.from_user.id
@@ -419,6 +419,9 @@ async def main():
         # ─── Memory Orchestrator: setup + start GC ───
         await orchestrator.setup()
         await orchestrator.start_gc()
+
+        # Register the catch-all handler LAST so it doesn't intercept module commands
+        dp.message.register(unrecognized_message_handler)
 
         logging.info("Starting Agent Web Server...")
         web_runner = await start_web_server(bot)
