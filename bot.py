@@ -313,6 +313,31 @@ async def memstats_callback(callback: types.CallbackQuery):
     await callback.message.answer(text, parse_mode="HTML")
     await callback.answer()
 
+
+# ─── Catch-all / Unrecognized Message Handler ────────────────────────────
+@dp.message()
+async def unrecognized_message_handler(message: types.Message):
+    """Fallback handler for any unrecognized text/commands. Fetches a useless fact."""
+    user_id = message.from_user.id
+    lang = i18n.get_user_lang(user_id)
+    try:
+        import aiohttp
+        async with aiohttp.ClientSession() as session:
+            async with session.get("https://uselessfacts.jsph.pl/api/v2/facts/random") as resp:
+                if resp.status == 200:
+                    data = await resp.json()
+                    fact = data.get("text", "")
+                    if fact:
+                        text = i18n._("unrecognized_command_fact", lang, fact=fact)
+                    else:
+                        text = i18n._("unrecognized_command", lang)
+                    await message.answer(text, parse_mode="HTML")
+                else:
+                    await message.answer(i18n._("unrecognized_command", lang), parse_mode="HTML")
+    except Exception as e:
+        logging.error(f"Failed to fetch useless fact: {e}")
+        await message.answer(i18n._("unrecognized_command", lang), parse_mode="HTML")
+
 async def shutdown(dispatcher: Dispatcher, bot_instance: Bot, web_runner=None):
     logging.info("Shutdown signal received. Stopping services...")
     try:
