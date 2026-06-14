@@ -411,17 +411,6 @@ function updateVisibleNodes(elements, dataList) {
             txElVal.innerText = txP[0] || '0.00';
             txElUnit.innerText = txP[1] || 'Kbps';
         }
-        
-        const stText = el.querySelector('[data-ref="status-text"]');
-        if (stText) {
-            stText.innerText = ui.statusText;
-            stText.className = `text-[10px] font-bold ${ui.statusTextClass} mb-0.5`;
-        }
-        const stBadge = el.querySelector('[data-ref="status-badge"]');
-        if (stBadge) {
-            stBadge.innerText = ui.statusText;
-            stBadge.className = `sm:hidden px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider ${ui.statusBg}`;
-        }
 
         const stDot = el.querySelector('[data-ref="status-dot"]');
         if (stDot) {
@@ -591,6 +580,9 @@ function renderNextNodeBatch() {
     const lblRx = (typeof I18N !== 'undefined' && I18N.web_label_rx) ? I18N.web_label_rx : "ВХ";
     const lblTx = (typeof I18N !== 'undefined' && I18N.web_label_tx) ? I18N.web_label_tx : "ИСХ";
 
+    const sortMode = localStorage.getItem('dashboardSortMode') || 'custom';
+    const dragHandleClass = sortMode === 'custom' ? '' : 'hidden ';
+
     const html = batch.map(node => {
         const ui = getNodeUiParams(node);
         const displayIp = decryptData(node.ip);
@@ -617,8 +609,8 @@ function renderNextNodeBatch() {
             
             <div class="p-3 sm:p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
                 
-                <div class="flex items-center gap-3 min-w-0">
-                    <div class="drag-handle p-2 -ml-2 text-gray-300 hover:text-gray-500 dark:text-white/20 dark:hover:text-white/50 cursor-grab active:cursor-grabbing transition" onclick="event.stopPropagation()">
+                <div class="flex flex-1 items-center gap-3 min-w-0">
+                    <div class="${dragHandleClass}drag-handle p-2 -ml-2 text-gray-300 hover:text-gray-500 dark:text-white/20 dark:hover:text-white/50 cursor-grab active:cursor-grabbing transition" onclick="event.stopPropagation()">
                         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8 9h8M8 15h8"/></svg>
                     </div>
                     <div class="relative shrink-0 flex items-center justify-center w-8 h-8 rounded-full bg-gray-100 dark:bg-black/20">
@@ -628,7 +620,6 @@ function renderNextNodeBatch() {
                     <div class="min-w-0 flex-1">
                         <div class="flex items-center gap-2">
                             <div data-ref="name" class="font-bold text-sm text-gray-900 dark:text-white truncate group-hover:text-blue-600 dark:group-hover:text-blue-400 transition">${replaceEmojisWithFlagsHTML(escapeHtml(node.name))}</div>
-                            <div data-ref="status-badge" class="sm:hidden px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider ${ui.statusBg}">${ui.statusText}</div>
                         </div>
                         <div class="flex items-center gap-2 mt-1">
                             <div data-ref="ip" class="text-[10px] sm:text-xs font-mono text-gray-400 truncate">${escapeHtml(displayIp)}</div>
@@ -655,24 +646,19 @@ function renderNextNodeBatch() {
                     </div>
 
                     <div class="text-center flex-1 sm:flex-none" style="width:55px;min-width:55px">
-                        <div class="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">${lblRx}</div>
-                        <div class="relative">
-                            <div data-ref="rx-val" class="text-xs font-mono font-bold text-green-500 dark:text-green-400" style="font-variant-numeric:tabular-nums">${rxVal}</div>
-                            <div data-ref="rx-unit" class="text-[9px] text-gray-400 dark:text-gray-500 uppercase font-bold absolute left-0 right-0 top-full mt-[-2px]">${rxUnit}</div>
+                        <div class="flex items-center justify-center gap-0.5 mb-0.5">
+                            <svg class="w-3 h-3 text-green-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 14l-7 7m0 0l-7-7m7 7V3"/></svg>
+                            <span data-ref="rx-unit" class="text-[9px] font-bold text-gray-400 uppercase tracking-wider">${rxUnit}</span>
                         </div>
+                        <div data-ref="rx-val" class="text-xs font-mono font-bold text-green-500 dark:text-green-400" style="font-variant-numeric:tabular-nums">${rxVal}</div>
                     </div>
 
                     <div class="text-center flex-1 sm:flex-none" style="width:55px;min-width:55px">
-                        <div class="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">${lblTx}</div>
-                        <div class="relative">
-                            <div data-ref="tx-val" class="text-xs font-mono font-bold text-blue-500 dark:text-blue-400" style="font-variant-numeric:tabular-nums">${txVal}</div>
-                            <div data-ref="tx-unit" class="text-[9px] text-gray-400 dark:text-gray-500 uppercase font-bold absolute left-0 right-0 top-full mt-[-2px]">${txUnit}</div>
+                        <div class="flex items-center justify-center gap-0.5 mb-0.5">
+                            <svg class="w-3 h-3 text-blue-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 10l7-7m0 0l7 7m-7-7v18"/></svg>
+                            <span data-ref="tx-unit" class="text-[9px] font-bold text-gray-400 uppercase tracking-wider">${txUnit}</span>
                         </div>
-                    </div>
-
-                    <div class="hidden sm:block text-right ml-2 pl-3 border-l border-gray-200 dark:border-white/10" style="width:70px;min-width:70px">
-                        <div data-ref="status-text" class="text-[10px] font-bold ${ui.statusTextClass} mb-0.5">${ui.statusText}</div>
-                        <div class="text-[9px] text-gray-300 dark:text-gray-600">${lblStatus}</div>
+                        <div data-ref="tx-val" class="text-xs font-mono font-bold text-blue-500 dark:text-blue-400" style="font-variant-numeric:tabular-nums">${txVal}</div>
                     </div>
                 </div>
             </div>

@@ -544,9 +544,9 @@
                             placeholder="{{ web_search_placeholder }}">
                     </div>
                     <select id="nodeSortSelect" class="w-full sm:w-auto px-4 py-2 bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-xl text-sm font-medium text-gray-700 dark:text-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 cursor-pointer transition-all duration-300">
-                        <option value="custom">✋ {{ web_filter_sort_custom }}</option>
-                        <option value="ping">⚡ {{ web_filter_sort_ping }}</option>
-                        <option value="name">🔤 {{ web_filter_sort_name }}</option>
+                        <option class="dark:bg-gray-800" value="custom">✋ {{ web_filter_sort_custom }}</option>
+                        <option class="dark:bg-gray-800" value="ping">⚡ {{ web_filter_sort_ping }}</option>
+                        <option class="dark:bg-gray-800" value="name">🔤 {{ web_filter_sort_name }}</option>
                     </select>
                 </div>
                 <div class="space-y-3 pr-2 pb-3" id="nodesList">
