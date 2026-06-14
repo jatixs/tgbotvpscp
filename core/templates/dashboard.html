@@ -35,6 +35,7 @@
     <script src="/static/vendor/twemoji.min.js"></script>
     <script src="/static/vendor/chart.js"></script>
     <script src="/static/vendor/chartjs-plugin-zoom.min.js"></script>
+    <script src="/static/vendor/sortable.min.js"></script>
     <link rel="stylesheet" href="/static/css/style.css?v={{ web_version }}">
 </head>
 
@@ -529,17 +530,24 @@
                             web_stats_active }}: <span id="nodesActive">{{ active_nodes }}</span></span>
                     </div>
                 </div>
-                <div class="mb-4 relative group">
-                    <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                        <svg class="h-4 w-4 text-gray-400 group-focus-within:text-blue-500 transition-colors duration-300"
-                            xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                        </svg>
+                <div class="mb-4 flex flex-col sm:flex-row gap-2">
+                    <div class="relative group flex-1">
+                        <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                            <svg class="h-4 w-4 text-gray-400 group-focus-within:text-blue-500 transition-colors duration-300"
+                                xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                            </svg>
+                        </div>
+                        <input type="text" id="nodeSearch"
+                            class="w-full pl-10 pr-4 py-2 bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 transition-all duration-300 placeholder-gray-400 text-gray-900 dark:text-white"
+                            placeholder="{{ web_search_placeholder }}">
                     </div>
-                    <input type="text" id="nodeSearch"
-                        class="w-full pl-10 pr-4 py-2 bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 transition-all duration-300 placeholder-gray-400 text-gray-900 dark:text-white"
-                        placeholder="{{ web_search_placeholder }}">
+                    <select id="nodeSortSelect" class="w-full sm:w-auto px-4 py-2 bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-xl text-sm font-medium text-gray-700 dark:text-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 cursor-pointer transition-all duration-300">
+                        <option value="custom">✋ {{ web_filter_sort_custom }}</option>
+                        <option value="ping">⚡ {{ web_filter_sort_ping }}</option>
+                        <option value="name">🔤 {{ web_filter_sort_name }}</option>
+                    </select>
                 </div>
                 <div class="space-y-3 pr-2 pb-3" id="nodesList">
                     <div class="text-center py-8 text-gray-400 dark:text-gray-500 text-sm">

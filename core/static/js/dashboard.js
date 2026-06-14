@@ -310,6 +310,38 @@ function updateNodesListUI(data) {
             newList = allNodesData;
         }
 
+        // Применяем сортировку
+        const sortSelect = document.getElementById('nodeSortSelect');
+        const sortMode = sortSelect ? sortSelect.value : (localStorage.getItem('dashboardSortMode') || 'custom');
+        if (sortSelect && sortSelect.value !== sortMode) {
+            sortSelect.value = sortMode;
+        }
+
+        if (sortMode === 'ping') {
+            newList.sort((a, b) => {
+                const pingA = (a.ping != null && a.ping !== '') ? parseFloat(a.ping) : Infinity;
+                const pingB = (b.ping != null && b.ping !== '') ? parseFloat(b.ping) : Infinity;
+                return pingA - pingB;
+            });
+        } else if (sortMode === 'name') {
+            newList.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+        } else {
+            // custom
+            const orderStr = localStorage.getItem('dashboardNodeOrder');
+            if (orderStr) {
+                try {
+                    const order = JSON.parse(orderStr);
+                    newList.sort((a, b) => {
+                        let idxA = order.indexOf(a.token);
+                        let idxB = order.indexOf(b.token);
+                        if (idxA === -1) idxA = Infinity;
+                        if (idxB === -1) idxB = Infinity;
+                        return idxA - idxB;
+                    });
+                } catch(e){}
+            }
+        }
+
         const container = document.getElementById('nodesList');
         const currentElements = container ? Array.from(container.children).filter(el => el.hasAttribute('data-token')) : [];
 
@@ -396,6 +428,20 @@ function updateVisibleNodes(elements, dataList) {
             stDot.className = `w-2.5 h-2.5 rounded-full ${ui.statusColor}`;
         }
 
+        const pingBdg = el.querySelector('[data-ref="ping-badge"]');
+        if (pingBdg) {
+            const pingVal = nodeData.ping != null && nodeData.ping !== '' && !isNaN(nodeData.ping) ? parseFloat(nodeData.ping) : null;
+            if (pingVal !== null) {
+                let pingColor = 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400';
+                if (pingVal >= 50 && pingVal < 150) pingColor = 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400';
+                else if (pingVal >= 150) pingColor = 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400';
+                pingBdg.className = `inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold ${pingColor}`;
+                pingBdg.innerText = pingVal + 'ms';
+            } else {
+                pingBdg.className = 'hidden';
+            }
+        }
+
         const stPing = el.querySelector('[data-ref="status-ping"]');
         if (stPing) {
             if (nodeData.status === 'online') {
@@ -414,17 +460,60 @@ function filterAndRenderNodes() {
     const searchInput = document.getElementById('nodeSearch');
     const query = searchInput ? searchInput.value.trim().toLowerCase() : "";
 
+    let newList = [];
     if (query) {
-        currentRenderList = allNodesData.filter(node => {
+        newList = allNodesData.filter(node => {
             const name = (node.name || "").toLowerCase();
             const ip = (decryptData(node.ip) || "").toLowerCase();
             return name.includes(query) || ip.includes(query);
         });
     } else {
-        currentRenderList = allNodesData;
+        newList = allNodesData;
     }
+
+    // Применяем сортировку
+    const sortSelect = document.getElementById('nodeSortSelect');
+    const sortMode = sortSelect ? sortSelect.value : (localStorage.getItem('dashboardSortMode') || 'custom');
+    if (sortMode === 'ping') {
+        newList.sort((a, b) => {
+            const pingA = (a.ping != null && a.ping !== '') ? parseFloat(a.ping) : Infinity;
+            const pingB = (b.ping != null && b.ping !== '') ? parseFloat(b.ping) : Infinity;
+            return pingA - pingB;
+        });
+    } else if (sortMode === 'name') {
+        newList.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+    } else {
+        const orderStr = localStorage.getItem('dashboardNodeOrder');
+        if (orderStr) {
+            try {
+                const order = JSON.parse(orderStr);
+                newList.sort((a, b) => {
+                    let idxA = order.indexOf(a.token);
+                    let idxB = order.indexOf(b.token);
+                    if (idxA === -1) idxA = Infinity;
+                    if (idxB === -1) idxB = Infinity;
+                    return idxA - idxB;
+                });
+            } catch(e){}
+        }
+    }
+    
+    currentRenderList = newList;
     renderNodesList();
 }
+
+window.setDashboardSort = function(mode) {
+    localStorage.setItem('dashboardSortMode', mode);
+    filterAndRenderNodes();
+};
+
+document.addEventListener('DOMContentLoaded', () => {
+    const sortSelect = document.getElementById('nodeSortSelect');
+    if (sortSelect) {
+        sortSelect.value = localStorage.getItem('dashboardSortMode') || 'custom';
+        sortSelect.addEventListener('change', (e) => window.setDashboardSort(e.target.value));
+    }
+});
 
 function updateNodesScrollMode(container, count) {
     if (count > 3) {
@@ -458,6 +547,33 @@ function renderNodesList() {
     renderedCount = 0;
     updateNodesScrollMode(container, currentRenderList.length);
     renderNextNodeBatch();
+    
+    // Инициализация Drag and Drop
+    if (typeof Sortable !== 'undefined') {
+        const sortMode = localStorage.getItem('dashboardSortMode') || 'custom';
+        if (window.dashboardSortable) {
+            window.dashboardSortable.destroy();
+        }
+        window.dashboardSortable = Sortable.create(container, {
+            handle: '.drag-handle',
+            animation: 150,
+            disabled: sortMode !== 'custom',
+            onEnd: function () {
+                const newOrder = Array.from(container.querySelectorAll('[data-token]')).map(el => el.getAttribute('data-token'));
+                localStorage.setItem('dashboardNodeOrder', JSON.stringify(newOrder));
+                // Обновляем currentRenderList чтобы избежать мерцания при следующем SSE
+                const orderMap = {};
+                newOrder.forEach((t, i) => orderMap[t] = i);
+                currentRenderList.sort((a, b) => {
+                    let idxA = orderMap[a.token];
+                    let idxB = orderMap[b.token];
+                    if (idxA === undefined) idxA = Infinity;
+                    if (idxB === undefined) idxB = Infinity;
+                    return idxA - idxB;
+                });
+            }
+        });
+    }
 }
 
 function renderNextNodeBatch() {
@@ -485,12 +601,26 @@ function renderNextNodeBatch() {
         const txVal = txP[0] || '0.00';
         const txUnit = txP[1] || 'Kbps';
 
+        const pingVal = node.ping != null && node.ping !== '' && !isNaN(node.ping) ? parseFloat(node.ping) : null;
+        let pingHtml = '';
+        if (pingVal !== null) {
+            let pingColor = 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400';
+            if (pingVal >= 50 && pingVal < 150) pingColor = 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400';
+            else if (pingVal >= 150) pingColor = 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400';
+            pingHtml = `<span data-ref="ping-badge" class="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold ${pingColor}">${pingVal}ms</span>`;
+        } else {
+            pingHtml = `<span data-ref="ping-badge" class="hidden"></span>`;
+        }
+
         return `
         <div data-token="${escapeHtml(node.token)}" class="bg-white dark:bg-white/5 hover:bg-gray-50 dark:hover:bg-white/10 transition-all duration-200 rounded-xl border border-gray-100 dark:border-white/5 cursor-pointer shadow-sm hover:shadow-md group animate-fade-in-up" onclick="openNodeDetails('${escapeHtml(node.token)}', '${ui.statusColor}')">
             
             <div class="p-3 sm:p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
                 
                 <div class="flex items-center gap-3 min-w-0">
+                    <div class="drag-handle p-2 -ml-2 text-gray-300 hover:text-gray-500 dark:text-white/20 dark:hover:text-white/50 cursor-grab active:cursor-grabbing transition" onclick="event.stopPropagation()">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8 9h8M8 15h8"/></svg>
+                    </div>
                     <div class="relative shrink-0 flex items-center justify-center w-8 h-8 rounded-full bg-gray-100 dark:bg-black/20">
                         <div data-ref="status-dot" class="w-2.5 h-2.5 rounded-full ${ui.statusColor}"></div>
                         <div data-ref="status-ping" class="absolute w-2.5 h-2.5 rounded-full ${ui.statusColor} animate-ping opacity-75" style="${node.status === 'online' ? '' : 'display:none'}"></div>
@@ -500,7 +630,10 @@ function renderNextNodeBatch() {
                             <div data-ref="name" class="font-bold text-sm text-gray-900 dark:text-white truncate group-hover:text-blue-600 dark:group-hover:text-blue-400 transition">${replaceEmojisWithFlagsHTML(escapeHtml(node.name))}</div>
                             <div data-ref="status-badge" class="sm:hidden px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider ${ui.statusBg}">${ui.statusText}</div>
                         </div>
-                        <div data-ref="ip" class="text-[10px] sm:text-xs font-mono text-gray-400 truncate">${escapeHtml(displayIp)}</div>
+                        <div class="flex items-center gap-2 mt-1">
+                            <div data-ref="ip" class="text-[10px] sm:text-xs font-mono text-gray-400 truncate">${escapeHtml(displayIp)}</div>
+                            ${pingHtml}
+                        </div>
                     </div>
                 </div>
 
