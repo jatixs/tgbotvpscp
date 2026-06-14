@@ -10,7 +10,9 @@ ALERTS_CONFIG = {}
 USER_SETTINGS = {}
 NODES = {}
 NODE_TRAFFIC_MONITORS = {}
+ACTIVE_NODE_SPEEDTESTS = {}
 AUTH_TOKENS = {}
+OPTIMIZE_STATE = {}
 RESOURCE_ALERT_STATE = {"cpu": False, "ram": False, "disk": False}
 LAST_RESOURCE_ALERT_TIME = {"cpu": 0, "ram": 0, "disk": 0}
 AGENT_FLAG = "🏳️"
@@ -24,3 +26,7 @@ WEB_NOTIFICATIONS = deque(maxlen=50)
 WEB_USER_LAST_READ = {}
 RECENT_SSH_LOGINS = {}
 IS_RESTARTING = False
+
+# --- Memory Orchestrator ---
+# Reference to the global orchestrator instance (set at startup in bot.py)
+ORCHESTRATOR = None

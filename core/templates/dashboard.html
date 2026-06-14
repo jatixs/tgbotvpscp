@@ -29,11 +29,13 @@
         window.i18n.btn_restart = "{{ web_services_btn_restart }}";
         window.USER_ROLE_LEVEL = {{ user_role_level }};
         const I18N = {{ i18n_json | safe }};
+        const SYS_CONFIG = {{ config_json | safe }};
         {{ user_role_js | safe }}
     </script>
     <script src="/static/vendor/twemoji.min.js"></script>
     <script src="/static/vendor/chart.js"></script>
     <script src="/static/vendor/chartjs-plugin-zoom.min.js"></script>
+    <script src="/static/vendor/sortable.min.js"></script>
     <link rel="stylesheet" href="/static/css/style.css?v={{ web_version }}">
 </head>
 
@@ -249,14 +251,18 @@
                 <div class="flex justify-between items-start">
                     <div>
                         <div class="flex items-center gap-1">
-                            <p class="text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-1">
-                                {{ web_cpu }}</p>
+                            <p class="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-1">
+                                {{ web_cpu }}
+                                <svg id="warn-cpu" class="hidden w-3.5 h-3.5 text-red-500" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+                                    <path fill-rule="evenodd" d="M9.401 3.003c1.155-2 4.043-2 5.197 0l7.355 12.748c1.154 2-.29 4.5-2.599 4.5H4.645c-2.309 0-3.752-2.5-2.598-4.5L9.4 3.003zM12 8.25a.75.75 0 01.75.75v3.75a.75.75 0 01-1.5 0V9a.75.75 0 01.75-.75zm0 8.25a.75.75 0 100-1.5.75.75 0 000 1.5z" clip-rule="evenodd" />
+                                </svg>
+                            </p>
                             <div id="hint-cpu" class="hidden">{{ web_hint_cpu_usage }}</div>
                         </div>
                         <h3 class="text-2xl font-black text-indigo-600 dark:text-indigo-400" id="stat_cpu">0%</h3>
                     </div>
-                    <div
-                        class="p-2 bg-indigo-100 dark:bg-indigo-500/20 rounded-xl text-indigo-600 dark:text-indigo-400">
+                    <div id="icon-cpu"
+                        class="p-2 bg-indigo-100 dark:bg-indigo-500/20 rounded-xl text-indigo-600 dark:text-indigo-400 relative">
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24"
                             stroke="currentColor">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -277,14 +283,18 @@
                 <div class="flex justify-between items-start">
                     <div>
                         <div class="flex items-center gap-1">
-                            <p class="text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-1">
-                                {{ web_ram }}</p>
+                            <p class="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-1">
+                                {{ web_ram }}
+                                <svg id="warn-ram" class="hidden w-3.5 h-3.5 text-red-500" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+                                    <path fill-rule="evenodd" d="M9.401 3.003c1.155-2 4.043-2 5.197 0l7.355 12.748c1.154 2-.29 4.5-2.599 4.5H4.645c-2.309 0-3.752-2.5-2.598-4.5L9.4 3.003zM12 8.25a.75.75 0 01.75.75v3.75a.75.75 0 01-1.5 0V9a.75.75 0 01.75-.75zm0 8.25a.75.75 0 100-1.5.75.75 0 000 1.5z" clip-rule="evenodd" />
+                                </svg>
+                            </p>
                             <div id="hint-ram" class="hidden">{{ web_hint_ram_usage }}</div>
                         </div>
                         <h3 class="text-2xl font-black text-purple-600 dark:text-purple-400" id="stat_ram">0%</h3>
                     </div>
-                    <div
-                        class="p-2 bg-purple-100 dark:bg-purple-500/20 rounded-xl text-purple-600 dark:text-purple-400">
+                    <div id="icon-ram"
+                        class="p-2 bg-purple-100 dark:bg-purple-500/20 rounded-xl text-purple-600 dark:text-purple-400 relative">
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24"
                             stroke="currentColor">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -305,13 +315,17 @@
                 <div class="flex justify-between items-start">
                     <div>
                         <div class="flex items-center gap-1">
-                            <p class="text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-1">
-                                {{ web_disk }}</p>
+                            <p class="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-1">
+                                {{ web_disk }}
+                                <svg id="warn-disk" class="hidden w-3.5 h-3.5 text-red-500" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+                                    <path fill-rule="evenodd" d="M9.401 3.003c1.155-2 4.043-2 5.197 0l7.355 12.748c1.154 2-.29 4.5-2.599 4.5H4.645c-2.309 0-3.752-2.5-2.598-4.5L9.4 3.003zM12 8.25a.75.75 0 01.75.75v3.75a.75.75 0 01-1.5 0V9a.75.75 0 01.75-.75zm0 8.25a.75.75 0 100-1.5.75.75 0 000 1.5z" clip-rule="evenodd" />
+                                </svg>
+                            </p>
                             <div id="hint-disk" class="hidden">{{ web_hint_disk_usage }}</div>
                         </div>
                         <h3 class="text-2xl font-black text-green-600 dark:text-green-400" id="stat_disk">0%</h3>
                     </div>
-                    <div class="p-2 bg-green-100 dark:bg-green-500/20 rounded-xl text-green-600 dark:text-green-400">
+                    <div id="icon-disk" class="p-2 bg-green-100 dark:bg-green-500/20 rounded-xl text-green-600 dark:text-green-400 relative">
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24"
                             stroke="currentColor">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -397,7 +411,7 @@
                             <span class="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">{{
                                 web_tx }}</span>
                             <div id="hint-tx" class="hidden">{{ web_hint_traffic_out }}</div>
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-orange-500" fill="none"
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-blue-500" fill="none"
                                 viewBox="0 0 24 24" stroke="currentColor">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                     d="M5 10l7-7m0 0l7 7m-7-7v18" />
@@ -412,7 +426,7 @@
                             <span class="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">{{
                                 web_rx }}</span>
                             <div id="hint-rx" class="hidden">{{ web_hint_traffic_in }}</div>
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-cyan-500" fill="none"
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-green-500" fill="none"
                                 viewBox="0 0 24 24" stroke="currentColor">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                     d="M19 14l-7 7m0 0l-7-7m7 7V3" />
@@ -428,9 +442,9 @@
                         <span>{{ web_upload }}</span>
                     </div>
                     <div class="w-full h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden flex">
-                        <div id="trafficBarRx" class="h-full bg-cyan-500 transition-all duration-500"
+                        <div id="trafficBarRx" class="h-full bg-green-500 transition-all duration-500"
                             style="width: 50%"></div>
-                        <div id="trafficBarTx" class="h-full bg-orange-500 transition-all duration-500"
+                        <div id="trafficBarTx" class="h-full bg-blue-500 transition-all duration-500"
                             style="width: 50%"></div>
                     </div>
                 </div>
@@ -507,16 +521,7 @@
                         {{ web_node_mgmt_title }}
                     </h3>
                     <div class="flex gap-2">
-                        <a href="/nodes"
-                            class="monitor-link-btn px-2 py-1 rounded text-xs font-bold transition flex items-center gap-1"
-                            title="{{ web_monitor_title }}">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24"
-                                stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                    d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                            </svg>
-                            <span class="hidden sm:inline">{{ web_monitor_btn }}</span>
-                        </a>
+
                         <span
                             class="px-2 py-1 bg-gray-100 dark:bg-gray-700 rounded text-xs font-bold text-gray-600 dark:text-gray-300">{{
                             web_stats_total }}: <span id="nodesTotal">{{ nodes_count }}</span></span>
@@ -525,17 +530,24 @@
                             web_stats_active }}: <span id="nodesActive">{{ active_nodes }}</span></span>
                     </div>
                 </div>
-                <div class="mb-4 relative group">
-                    <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                        <svg class="h-4 w-4 text-gray-400 group-focus-within:text-blue-500 transition-colors duration-300"
-                            xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                        </svg>
+                <div class="mb-4 flex flex-col sm:flex-row gap-2">
+                    <div class="relative group flex-1">
+                        <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                            <svg class="h-4 w-4 text-gray-400 group-focus-within:text-blue-500 transition-colors duration-300"
+                                xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                            </svg>
+                        </div>
+                        <input type="text" id="nodeSearch"
+                            class="w-full pl-10 pr-4 py-2 bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 transition-all duration-300 placeholder-gray-400 text-gray-900 dark:text-white"
+                            placeholder="{{ web_search_placeholder }}">
                     </div>
-                    <input type="text" id="nodeSearch"
-                        class="w-full pl-10 pr-4 py-2 bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 transition-all duration-300 placeholder-gray-400 text-gray-900 dark:text-white"
-                        placeholder="{{ web_search_placeholder }}">
+                    <select id="nodeSortSelect" class="w-full sm:w-auto px-4 py-2 bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-xl text-sm font-medium text-gray-700 dark:text-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 cursor-pointer transition-all duration-300">
+                        <option class="dark:bg-gray-800" value="custom">✋ {{ web_filter_sort_custom }}</option>
+                        <option class="dark:bg-gray-800" value="ping">⚡ {{ web_filter_sort_ping }}</option>
+                        <option class="dark:bg-gray-800" value="name">🔤 {{ web_filter_sort_name }}</option>
+                    </select>
                 </div>
                 <div class="space-y-3 pr-2 pb-3" id="nodesList">
                     <div class="text-center py-8 text-gray-400 dark:text-gray-500 text-sm">
@@ -550,8 +562,21 @@
                         {{ web_nodes_loading }}
                     </div>
                 </div>
-                <div class="mt-4 pt-4 border-t border-gray-200 dark:border-white/5 flex justify-end">{{ node_action_btn
-                    | safe }}</div>
+                <div class="mt-4 pt-4 border-t border-gray-200 dark:border-white/5 flex justify-between items-center gap-3">
+                    <a href="/nodes"
+                        class="monitor-link-btn inline-flex items-center gap-2 py-1.5 px-3 rounded-lg text-xs font-bold transition shadow-lg shadow-purple-500/20"
+                        title="{{ web_monitor_title }}">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="none" viewBox="0 0 24 24"
+                            stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                        </svg>
+                        <span>{{ web_monitor_btn }}</span>
+                    </a>
+                    <div class="flex justify-end">
+                        {{ node_action_btn | safe }}
+                    </div>
+                </div>
             </div>
             <div
                 class="bg-white/60 dark:bg-white/5 backdrop-blur-md border border-white/40 dark:border-white/10 rounded-2xl p-6 shadow-lg dark:shadow-none flex flex-col relative overflow-hidden lazy-block">

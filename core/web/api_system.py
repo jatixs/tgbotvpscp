@@ -27,8 +27,7 @@ from ..shared_state import ALERTS_CONFIG, ALLOWED_USERS, USER_NAMES
 from ..utils import generate_favicons, save_alerts_config_async, reset_agent_availability_async
 from .auth import get_current_user
 from ..rbac import is_admin as _is_admin, is_root as _is_main_admin
-from modules import update as update_module
-from modules import traffic as traffic_module
+# Lazy imports for modules
 from .. import shared_state
 
 routes = web.RouteTableDef()
@@ -295,6 +294,7 @@ async def api_check_update(request: web.Request) -> web.StreamResponse:
         return web.json_response({"error": "Unauthorized"}, status=401)
 
     try:
+        from modules import update as update_module
         info = await update_module.get_update_info()
         if len(info) == 4:
             local_ver, remote_ver, target_branch, update_available = info
@@ -329,6 +329,7 @@ async def api_run_update(request: web.Request) -> web.StreamResponse:
         if not branch:
             return web.json_response({"error": "No branch specified"}, status=400)
 
+        from modules import update as update_module
         await update_module.execute_bot_update(branch.replace("origin/", ""), restart_source="web:admin")
         return web.json_response({"status": "Update started, server restarting..."})
     except Exception as exc:
@@ -392,6 +393,7 @@ async def handle_reset_traffic(request: web.Request) -> web.StreamResponse:
         return web.json_response({"error": "Admin required"}, status=403)
 
     try:
+        from modules import traffic as traffic_module
         traffic_module.TRAFFIC_OFFSET["rx"] = 0
         traffic_module.TRAFFIC_OFFSET["tx"] = 0
 
