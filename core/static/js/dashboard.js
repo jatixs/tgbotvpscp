@@ -550,6 +550,34 @@ function renderNextNodeBatch() {
     renderedCount += batch.length;
 }
 
+function applyAgentWarning(type, val, threshold, def) {
+    const warnIcon = document.getElementById(`warn-${type}`);
+    const statEl = document.getElementById(`stat_${type}`);
+    const progEl = document.getElementById(`prog_${type}`);
+    const iconContainer = document.getElementById(`icon-${type}`);
+    if (!warnIcon || !statEl || !progEl) return;
+    
+    const isPeak = val >= Math.max(threshold, 95) || val >= threshold + 5;
+    const isWarn = val >= threshold;
+
+    if (isPeak) {
+        warnIcon.classList.remove('hidden');
+        statEl.className = `text-2xl font-black text-red-600 dark:text-red-400`;
+        progEl.className = `h-1.5 rounded-full transition-all duration-1000 ease-out bg-red-500`;
+        if (iconContainer) iconContainer.className = `p-2 rounded-xl relative bg-red-100 dark:bg-red-500/20 text-red-600 dark:text-red-400`;
+    } else if (isWarn) {
+        warnIcon.classList.remove('hidden');
+        statEl.className = `text-2xl font-black text-orange-500 dark:text-orange-400`;
+        progEl.className = `h-1.5 rounded-full transition-all duration-1000 ease-out bg-orange-500`;
+        if (iconContainer) iconContainer.className = `p-2 rounded-xl relative bg-orange-100 dark:bg-orange-500/20 text-orange-600 dark:text-orange-400`;
+    } else {
+        warnIcon.classList.add('hidden');
+        statEl.className = `text-2xl font-black ${def.text}`;
+        progEl.className = `h-1.5 rounded-full transition-all duration-1000 ease-out ${def.bg}`;
+        if (iconContainer) iconContainer.className = `p-2 rounded-xl relative ${def.iconBg} ${def.text}`;
+    }
+}
+
 function updateAgentStatsUI(data) {
     try {
         const freeIcon = `<svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 inline mb-0.5 opacity-60" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>`;
@@ -569,7 +597,16 @@ function updateAgentStatsUI(data) {
                     hintCpu.innerHTML = formatProcessList(data.stats.process_cpu, title, "text-blue-500");
                 }
             }
-            if (progCpu) progCpu.style.width = data.stats.cpu + "%";
+            if (progCpu) {
+                progCpu.style.width = data.stats.cpu + "%";
+                if (typeof SYS_CONFIG !== 'undefined') {
+                    applyAgentWarning('cpu', data.stats.cpu, SYS_CONFIG.cpu_threshold || 90, {
+                        text: 'text-indigo-600 dark:text-indigo-400',
+                        bg: 'bg-indigo-500',
+                        iconBg: 'bg-indigo-100 dark:bg-indigo-500/20'
+                    });
+                }
+            }
 
             const ramEl = document.getElementById('stat_ram');
             const progRam = document.getElementById('prog_ram');
@@ -585,7 +622,16 @@ function updateAgentStatsUI(data) {
                     hintRam.innerHTML = formatProcessList(data.stats.process_ram, title, "text-purple-500");
                 }
             }
-            if (progRam) progRam.style.width = data.stats.ram + "%";
+            if (progRam) {
+                progRam.style.width = data.stats.ram + "%";
+                if (typeof SYS_CONFIG !== 'undefined') {
+                    applyAgentWarning('ram', data.stats.ram, SYS_CONFIG.ram_threshold || 90, {
+                        text: 'text-purple-600 dark:text-purple-400',
+                        bg: 'bg-purple-500',
+                        iconBg: 'bg-purple-100 dark:bg-purple-500/20'
+                    });
+                }
+            }
 
             const diskEl = document.getElementById('stat_disk');
             const progDisk = document.getElementById('prog_disk');
@@ -601,7 +647,16 @@ function updateAgentStatsUI(data) {
                     hintDisk.innerHTML = formatProcessList(data.stats.process_disk, title, "text-emerald-500");
                 }
             }
-            if (progDisk) progDisk.style.width = data.stats.disk + "%";
+            if (progDisk) {
+                progDisk.style.width = data.stats.disk + "%";
+                if (typeof SYS_CONFIG !== 'undefined') {
+                    applyAgentWarning('disk', data.stats.disk, SYS_CONFIG.disk_threshold || 95, {
+                        text: 'text-green-600 dark:text-green-400',
+                        bg: 'bg-green-500',
+                        iconBg: 'bg-green-100 dark:bg-green-500/20'
+                    });
+                }
+            }
 
             let rxSpeed = 0,
                 txSpeed = 0;
