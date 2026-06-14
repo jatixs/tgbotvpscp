@@ -157,6 +157,8 @@ async def _execute_optimization(callback: types.CallbackQuery, selected_ids: lis
         await callback.answer()
         return
 
+    await callback.answer()
+    
     # Delete the menu message
     try:
         await callback.message.delete()
@@ -207,5 +209,3 @@ async def _execute_optimization(callback: types.CallbackQuery, selected_ids: lis
         logging.warning("Оптимизация: бот перезагружен системой, ответ не отправлен.")
     except Exception as e:
         logging.error(f"Ошибка отправки отчета оптимизации: {e}")
-        
-    await callback.answer()
