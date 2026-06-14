@@ -17,7 +17,7 @@ from core.auth import is_allowed, send_access_denied_message
 from core.shared_state import LAST_MESSAGE_IDS
 from core.keyboards import get_backups_menu_keyboard, get_backup_timer_settings_keyboard
 from core.utils import format_traffic
-from modules import traffic as traffic_module
+# Lazy import traffic_module when needed
 
 BUTTON_KEY = "btn_backups"
 MAX_BACKUPS_PER_TYPE = 5
@@ -99,6 +99,7 @@ def _create_zip_from_dir(backup_dir: str, prefix: str, source_dir: str, skip_dir
 
 def _create_backup_file(backup_type: str):
     if backup_type == "traffic":
+        from modules import traffic as traffic_module
         rx, tx = traffic_module.get_current_traffic_total()
         timestamp = int(time.time())
         traffic_module.save_backup_file(rx, tx)
@@ -293,6 +294,7 @@ def _restore_backup_file(backup_type: str, filepath: str) -> bool:
         backup_rx = int(data.get("rx", 0))
         backup_tx = int(data.get("tx", 0))
         counters = psutil.net_io_counters()
+        from modules import traffic as traffic_module
         traffic_module.TRAFFIC_OFFSET["rx"] = backup_rx - counters.bytes_recv
         traffic_module.TRAFFIC_OFFSET["tx"] = backup_tx - counters.bytes_sent
         # Manual restore uses bot-restart accounting (counters not reset), not server-reboot mode

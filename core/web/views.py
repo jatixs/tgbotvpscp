@@ -19,7 +19,7 @@ from ..i18n import get_text as _, get_user_lang
 from ..keyboards import BTN_CONFIG_MAP
 from ..rbac import ROLE_USER, build_user_role_js, get_role_level, is_admin as _is_admin, is_root as _is_root
 from ..utils import encrypt_for_web, generate_favicons, get_app_version, get_web_key
-from modules import traffic as traffic_module
+# Lazy import traffic_module when needed
 from . import auth as web_auth
 
 routes = web.RouteTableDef()
@@ -304,6 +304,7 @@ async def handle_dashboard(request: web.Request) -> web.StreamResponse:
         if ip:
             vnc_nodes.append({"name": node.get("name", "Unknown"), "ip": ip})
 
+    from modules import traffic as traffic_module
     can_reset = traffic_module.can_reset_traffic()
 
     context = {

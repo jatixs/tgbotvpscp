@@ -1,25 +1,5 @@
 from core.middlewares import SpamThrottleMiddleware
-from modules import (
-    selftest,
-    traffic,
-    uptime,
-    notifications,
-    users,
-    vless,
-    speedtest,
-    top,
-    xray,
-    sshlog,
-    fail2ban,
-    logs,
-    update,
-    reboot,
-    restart,
-    optimize,
-    nodes,
-    backups,
-    services,
-)
+from core.orchestrator import ModuleOrchestrator, ModuleTier
 from core.i18n import _, I18nFilter, get_language_keyboard
 from core import i18n
 from core import config, shared_state, auth, utils, keyboards, messaging
@@ -60,22 +40,38 @@ dp.message.middleware(SpamThrottleMiddleware())
 dp.callback_query.middleware(SpamThrottleMiddleware())
 background_tasks = set()
 
+# ─── Module Tier Configuration ───────────────────────────────────────────
+# Tier 0 (ALWAYS_ON): loaded at startup, never unloaded.
+# Tier 1 (ON_DEMAND): loaded on first use, unloaded after 5 min inactivity.
+MODULE_CONFIG = {
+    # Tier 0: Always-on — alert system + node monitoring
+    "modules.notifications": {"tier": ModuleTier.ALWAYS_ON},
+    "modules.nodes":         {"tier": ModuleTier.ALWAYS_ON},
 
-def register_module(module, admin_only=False, root_only=False):
-    try:
-        if hasattr(module, "register_handlers"):
-            module.register_handlers(dp)
-        else:
-            logging.warning(f"Module '{module.__name__}' has no register_handlers().")
-        if hasattr(module, "start_background_tasks"):
-            tasks = module.start_background_tasks(bot)
-            for task in tasks:
-                background_tasks.add(task)
-        logging.info(f"Module '{module.__name__}' successfully registered.")
-    except Exception as e:
-        logging.error(
-            f"Error registering module '{module.__name__}': {e}", exc_info=True
-        )
+    # Tier 1: On-demand — loaded when user triggers the command
+    "modules.selftest":  {"tier": ModuleTier.ON_DEMAND},
+    "modules.uptime":    {"tier": ModuleTier.ON_DEMAND},
+    "modules.traffic":   {"tier": ModuleTier.ON_DEMAND},
+    "modules.users":     {"tier": ModuleTier.ON_DEMAND},
+    "modules.speedtest": {"tier": ModuleTier.ON_DEMAND},
+    "modules.top":       {"tier": ModuleTier.ON_DEMAND},
+    "modules.vless":     {"tier": ModuleTier.ON_DEMAND},
+    "modules.xray":      {"tier": ModuleTier.ON_DEMAND},
+    "modules.services":  {"tier": ModuleTier.ON_DEMAND},
+    "modules.sshlog":    {"tier": ModuleTier.ON_DEMAND},
+    "modules.fail2ban":  {"tier": ModuleTier.ON_DEMAND},
+    "modules.logs":      {"tier": ModuleTier.ON_DEMAND},
+    "modules.update":    {"tier": ModuleTier.ON_DEMAND},
+    "modules.restart":   {"tier": ModuleTier.ON_DEMAND},
+    "modules.reboot":    {"tier": ModuleTier.ON_DEMAND},
+    "modules.optimize":  {"tier": ModuleTier.ON_DEMAND},
+    "modules.backups":   {"tier": ModuleTier.ON_DEMAND},
+}
+
+UNLOAD_TTL = int(os.environ.get("MODULE_UNLOAD_TTL", 300))  # 5 min default
+
+orchestrator = ModuleOrchestrator(dp, bot, MODULE_CONFIG, unload_ttl=UNLOAD_TTL)
+shared_state.ORCHESTRATOR = orchestrator
 
 
 async def show_main_menu(
@@ -286,28 +282,15 @@ async def set_language_callback(callback: types.CallbackQuery, state: FSMContext
     )
 
 
-def load_modules():
-    logging.info("Loading modules...")
-    register_module(selftest)
-    register_module(uptime)
-    register_module(traffic)
-    register_module(notifications)
-    register_module(users, admin_only=True)
-    register_module(speedtest, admin_only=True)
-    register_module(top, admin_only=True)
-    register_module(vless, admin_only=True)
-    register_module(xray, admin_only=True)
-    register_module(nodes, admin_only=True)
-    register_module(services, admin_only=True)
-    register_module(sshlog, root_only=True)
-    register_module(fail2ban, root_only=True)
-    register_module(logs, root_only=True)
-    register_module(update, root_only=True)
-    register_module(restart, root_only=True)
-    register_module(reboot, root_only=True)
-    register_module(optimize, root_only=True)
-    register_module(backups)
-    logging.info("All modules loaded.")
+# ─── /memstats command ───────────────────────────────────────────────────
+@dp.message(Command("memstats"))
+async def memstats_handler(message: types.Message):
+    """Show Memory Orchestrator stats (admin only)."""
+    user_id = message.from_user.id
+    if user_id != config.ADMIN_USER_ID:
+        return
+    text = orchestrator.format_stats()
+    await message.answer(text, parse_mode="HTML")
 
 
 async def shutdown(dispatcher: Dispatcher, bot_instance: Bot, web_runner=None):
@@ -324,8 +307,12 @@ async def shutdown(dispatcher: Dispatcher, bot_instance: Bot, web_runner=None):
             logging.warning("Web server cleanup timed out.")
         except Exception as e:
             logging.error(f"Web server cleanup error: {e}")
+    # Shutdown orchestrator
+    await orchestrator.shutdown()
+    # Cancel all background tasks (both orchestrator + legacy)
+    all_tasks = background_tasks | orchestrator.background_tasks
     cancelled_tasks = []
-    for task in list(background_tasks):
+    for task in list(all_tasks):
         if task and (not task.done()):
             task.cancel()
             cancelled_tasks.append(task)
@@ -367,7 +354,11 @@ async def main():
         asyncio.create_task(auth.refresh_user_names(bot))
         # Убраны вызовы utils.initial_reboot_check и utils.initial_restart_check
         # Теперь эта логика обрабатывается в watchdog.py
-        load_modules()
+
+        # ─── Memory Orchestrator: setup + start GC ───
+        await orchestrator.setup()
+        await orchestrator.start_gc()
+
         logging.info("Starting Agent Web Server...")
         web_runner = await start_web_server(bot)
         if not web_runner:
