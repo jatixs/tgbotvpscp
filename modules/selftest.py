@@ -244,10 +244,45 @@ async def selftest_handler(message: types.Message):
     loading_msg = await message.answer(_("selftest_gathering_info", lang))
 
     try:
-        cpu = psutil.cpu_percent(interval=0.5)
+        p = psutil.Process()
+        cpu_total_pct = psutil.cpu_percent(interval=0.5)
+        bot_cpu_pct = p.cpu_percent()
+        freq = psutil.cpu_freq()
+        if freq and freq.current > 0:
+            cpu_val = f"{int(freq.current)} MHz"
+            cpu_bot = f"{freq.current * bot_cpu_pct / 100:.2f} MHz"
+        else:
+            cpu_val = f"{cpu_total_pct:.1f}%"
+            cpu_bot = f"{bot_cpu_pct:.1f}%"
+
         _mem = psutil.virtual_memory()
-        ram = round((_mem.total - _mem.available) / _mem.total * 100, 1) if _mem.total > 0 else 0
-        disk = psutil.disk_usage(get_host_path("/")).percent
+        mem_val_mb = (_mem.total - _mem.available) / (1024 * 1024)
+        mem_bot_mb = p.memory_info().rss / (1024 * 1024)
+        mem_val = f"{mem_val_mb:.1f} MB"
+        mem_bot = f"{mem_bot_mb:.1f} MB"
+
+        disk_sys = psutil.disk_usage(get_host_path("/"))
+        disk_val_gb = disk_sys.used / (1024 ** 3)
+        disk_val = f"{disk_val_gb:.1f} GB"
+
+        def get_dir_size(path):
+            total = 0
+            try:
+                for dirpath, _, filenames in os.walk(path):
+                    for f in filenames:
+                        fp = os.path.join(dirpath, f)
+                        if not os.path.islink(fp):
+                            try:
+                                total += os.path.getsize(fp)
+                            except Exception:
+                                pass
+            except Exception:
+                pass
+            return total
+        
+        bot_disk_bytes = await asyncio.to_thread(get_dir_size, config.BASE_DIR)
+        disk_bot = f"{bot_disk_bytes / (1024 * 1024):.1f} MB"
+
         uptime_seconds = time.time() - psutil.boot_time()
         uptime_str = format_uptime(uptime_seconds, lang)
 
@@ -259,15 +294,26 @@ async def selftest_handler(message: types.Message):
         ip_v4 = ip_fail
         ip_v6 = ip_fail
         ping = "n/a"
-        inet_status = _("selftest_inet_fail", lang)
 
-        fetched_ipv4, fetched_ipv6, inet_ok = await get_external_ips_for_selftest()
+        fetched_ipv4, fetched_ipv6, _ = await get_external_ips_for_selftest()
         if fetched_ipv4:
             ip_v4 = fetched_ipv4
         if fetched_ipv6:
             ip_v6 = fetched_ipv6
-        if inet_ok:
-            inet_status = _("selftest_inet_ok", lang)
+
+        from node.db import nodes_db
+        all_nodes = await nodes_db.get_all_nodes()
+        total_nodes = len(all_nodes)
+        online_nodes = sum(
+            1 for node in all_nodes.values()
+            if time.time() - node.get("last_seen", 0) < config.NODE_OFFLINE_TIMEOUT
+        )
+        if total_nodes == 0:
+            inet_status = _("selftest_nodes_none", lang)
+        elif online_nodes == total_nodes:
+            inet_status = _("selftest_nodes_all_online", lang, online=online_nodes, total=total_nodes)
+        else:
+            inet_status = _("selftest_nodes_some_offline", lang, online=online_nodes, total=total_nodes)
         
         # Measure ping: ICMP first (accurate), HTTP fallback if blocked
         import subprocess
@@ -312,9 +358,12 @@ async def selftest_handler(message: types.Message):
         body = _(
             "selftest_results_body",
             lang,
-            cpu=cpu,
-            mem=ram,
-            disk=disk,
+            cpu_val=cpu_val,
+            cpu_bot=cpu_bot,
+            mem_val=mem_val,
+            mem_bot=mem_bot,
+            disk_val=disk_val,
+            disk_bot=disk_bot,
             uptime=uptime_str,
             inet_status=inet_status,
             ping=ping,
