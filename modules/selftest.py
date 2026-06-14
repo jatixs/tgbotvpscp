@@ -301,7 +301,7 @@ async def selftest_handler(message: types.Message):
         if fetched_ipv6:
             ip_v6 = fetched_ipv6
 
-        from node.db import nodes_db
+        from core import nodes_db
         all_nodes = await nodes_db.get_all_nodes()
         total_nodes = len(all_nodes)
         online_nodes = sum(
@@ -309,11 +309,11 @@ async def selftest_handler(message: types.Message):
             if time.time() - node.get("last_seen", 0) < config.NODE_OFFLINE_TIMEOUT
         )
         if total_nodes == 0:
-            inet_status = _("selftest_nodes_none", lang)
+            inet_status = ""
         elif online_nodes == total_nodes:
-            inet_status = _("selftest_nodes_all_online", lang, online=online_nodes, total=total_nodes)
+            inet_status = _("selftest_nodes_all_online", lang, online=online_nodes, total=total_nodes) + "\n"
         else:
-            inet_status = _("selftest_nodes_some_offline", lang, online=online_nodes, total=total_nodes)
+            inet_status = _("selftest_nodes_some_offline", lang, online=online_nodes, total=total_nodes) + "\n"
         
         # Measure ping: ICMP first (accurate), HTTP fallback if blocked
         import subprocess
