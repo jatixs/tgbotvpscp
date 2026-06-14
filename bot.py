@@ -292,6 +292,15 @@ async def memstats_handler(message: types.Message):
     text = orchestrator.format_stats()
     await message.answer(text, parse_mode="HTML")
 
+@dp.callback_query(F.data == "cmd_memstats")
+async def memstats_callback(callback: types.CallbackQuery):
+    user_id = callback.from_user.id
+    if user_id != config.ADMIN_USER_ID:
+        await callback.answer("⛔ Access denied", show_alert=True)
+        return
+    text = orchestrator.format_stats()
+    await callback.message.answer(text, parse_mode="HTML")
+    await callback.answer()
 
 async def shutdown(dispatcher: Dispatcher, bot_instance: Bot, web_runner=None):
     logging.info("Shutdown signal received. Stopping services...")
