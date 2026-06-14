@@ -310,6 +310,38 @@ function updateNodesListUI(data) {
             newList = allNodesData;
         }
 
+        // Применяем сортировку
+        const sortSelect = document.getElementById('nodeSortSelect');
+        const sortMode = sortSelect ? sortSelect.value : (localStorage.getItem('dashboardSortMode') || 'custom');
+        if (sortSelect && sortSelect.value !== sortMode) {
+            sortSelect.value = sortMode;
+        }
+
+        if (sortMode === 'ping') {
+            newList.sort((a, b) => {
+                const pingA = (a.ping != null && a.ping !== '') ? parseFloat(a.ping) : Infinity;
+                const pingB = (b.ping != null && b.ping !== '') ? parseFloat(b.ping) : Infinity;
+                return pingA - pingB;
+            });
+        } else if (sortMode === 'name') {
+            newList.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+        } else {
+            // custom
+            const orderStr = localStorage.getItem('dashboardNodeOrder');
+            if (orderStr) {
+                try {
+                    const order = JSON.parse(orderStr);
+                    newList.sort((a, b) => {
+                        let idxA = order.indexOf(a.token);
+                        let idxB = order.indexOf(b.token);
+                        if (idxA === -1) idxA = Infinity;
+                        if (idxB === -1) idxB = Infinity;
+                        return idxA - idxB;
+                    });
+                } catch(e){}
+            }
+        }
+
         const container = document.getElementById('nodesList');
         const currentElements = container ? Array.from(container.children).filter(el => el.hasAttribute('data-token')) : [];
 
@@ -379,21 +411,24 @@ function updateVisibleNodes(elements, dataList) {
             txElVal.innerText = txP[0] || '0.00';
             txElUnit.innerText = txP[1] || 'Kbps';
         }
-        
-        const stText = el.querySelector('[data-ref="status-text"]');
-        if (stText) {
-            stText.innerText = ui.statusText;
-            stText.className = `text-[10px] font-bold ${ui.statusTextClass} mb-0.5`;
-        }
-        const stBadge = el.querySelector('[data-ref="status-badge"]');
-        if (stBadge) {
-            stBadge.innerText = ui.statusText;
-            stBadge.className = `sm:hidden px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider ${ui.statusBg}`;
-        }
 
         const stDot = el.querySelector('[data-ref="status-dot"]');
         if (stDot) {
             stDot.className = `w-2.5 h-2.5 rounded-full ${ui.statusColor}`;
+        }
+
+        const pingBdg = el.querySelector('[data-ref="ping-badge"]');
+        if (pingBdg) {
+            const pingVal = nodeData.ping != null && nodeData.ping !== '' && !isNaN(nodeData.ping) ? parseFloat(nodeData.ping) : null;
+            if (pingVal !== null) {
+                let pingColor = 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400';
+                if (pingVal >= 50 && pingVal < 150) pingColor = 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400';
+                else if (pingVal >= 150) pingColor = 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400';
+                pingBdg.className = `inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold ${pingColor}`;
+                pingBdg.innerText = pingVal + 'ms';
+            } else {
+                pingBdg.className = 'hidden';
+            }
         }
 
         const stPing = el.querySelector('[data-ref="status-ping"]');
@@ -414,17 +449,60 @@ function filterAndRenderNodes() {
     const searchInput = document.getElementById('nodeSearch');
     const query = searchInput ? searchInput.value.trim().toLowerCase() : "";
 
+    let newList = [];
     if (query) {
-        currentRenderList = allNodesData.filter(node => {
+        newList = allNodesData.filter(node => {
             const name = (node.name || "").toLowerCase();
             const ip = (decryptData(node.ip) || "").toLowerCase();
             return name.includes(query) || ip.includes(query);
         });
     } else {
-        currentRenderList = allNodesData;
+        newList = allNodesData;
     }
+
+    // Применяем сортировку
+    const sortSelect = document.getElementById('nodeSortSelect');
+    const sortMode = sortSelect ? sortSelect.value : (localStorage.getItem('dashboardSortMode') || 'custom');
+    if (sortMode === 'ping') {
+        newList.sort((a, b) => {
+            const pingA = (a.ping != null && a.ping !== '') ? parseFloat(a.ping) : Infinity;
+            const pingB = (b.ping != null && b.ping !== '') ? parseFloat(b.ping) : Infinity;
+            return pingA - pingB;
+        });
+    } else if (sortMode === 'name') {
+        newList.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+    } else {
+        const orderStr = localStorage.getItem('dashboardNodeOrder');
+        if (orderStr) {
+            try {
+                const order = JSON.parse(orderStr);
+                newList.sort((a, b) => {
+                    let idxA = order.indexOf(a.token);
+                    let idxB = order.indexOf(b.token);
+                    if (idxA === -1) idxA = Infinity;
+                    if (idxB === -1) idxB = Infinity;
+                    return idxA - idxB;
+                });
+            } catch(e){}
+        }
+    }
+    
+    currentRenderList = newList;
     renderNodesList();
 }
+
+window.setDashboardSort = function(mode) {
+    localStorage.setItem('dashboardSortMode', mode);
+    filterAndRenderNodes();
+};
+
+document.addEventListener('DOMContentLoaded', () => {
+    const sortSelect = document.getElementById('nodeSortSelect');
+    if (sortSelect) {
+        sortSelect.value = localStorage.getItem('dashboardSortMode') || 'custom';
+        sortSelect.addEventListener('change', (e) => window.setDashboardSort(e.target.value));
+    }
+});
 
 function updateNodesScrollMode(container, count) {
     if (count > 3) {
@@ -458,6 +536,33 @@ function renderNodesList() {
     renderedCount = 0;
     updateNodesScrollMode(container, currentRenderList.length);
     renderNextNodeBatch();
+    
+    // Инициализация Drag and Drop
+    if (typeof Sortable !== 'undefined') {
+        const sortMode = localStorage.getItem('dashboardSortMode') || 'custom';
+        if (window.dashboardSortable) {
+            window.dashboardSortable.destroy();
+        }
+        window.dashboardSortable = Sortable.create(container, {
+            handle: '.drag-handle',
+            animation: 150,
+            disabled: sortMode !== 'custom',
+            onEnd: function () {
+                const newOrder = Array.from(container.querySelectorAll('[data-token]')).map(el => el.getAttribute('data-token'));
+                localStorage.setItem('dashboardNodeOrder', JSON.stringify(newOrder));
+                // Обновляем currentRenderList чтобы избежать мерцания при следующем SSE
+                const orderMap = {};
+                newOrder.forEach((t, i) => orderMap[t] = i);
+                currentRenderList.sort((a, b) => {
+                    let idxA = orderMap[a.token];
+                    let idxB = orderMap[b.token];
+                    if (idxA === undefined) idxA = Infinity;
+                    if (idxB === undefined) idxB = Infinity;
+                    return idxA - idxB;
+                });
+            }
+        });
+    }
 }
 
 function renderNextNodeBatch() {
@@ -475,6 +580,9 @@ function renderNextNodeBatch() {
     const lblRx = (typeof I18N !== 'undefined' && I18N.web_label_rx) ? I18N.web_label_rx : "ВХ";
     const lblTx = (typeof I18N !== 'undefined' && I18N.web_label_tx) ? I18N.web_label_tx : "ИСХ";
 
+    const sortMode = localStorage.getItem('dashboardSortMode') || 'custom';
+    const dragHandleClass = sortMode === 'custom' ? '' : 'hidden ';
+
     const html = batch.map(node => {
         const ui = getNodeUiParams(node);
         const displayIp = decryptData(node.ip);
@@ -485,12 +593,26 @@ function renderNextNodeBatch() {
         const txVal = txP[0] || '0.00';
         const txUnit = txP[1] || 'Kbps';
 
+        const pingVal = node.ping != null && node.ping !== '' && !isNaN(node.ping) ? parseFloat(node.ping) : null;
+        let pingHtml = '';
+        if (pingVal !== null) {
+            let pingColor = 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400';
+            if (pingVal >= 50 && pingVal < 150) pingColor = 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400';
+            else if (pingVal >= 150) pingColor = 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400';
+            pingHtml = `<span data-ref="ping-badge" class="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold ${pingColor}">${pingVal}ms</span>`;
+        } else {
+            pingHtml = `<span data-ref="ping-badge" class="hidden"></span>`;
+        }
+
         return `
         <div data-token="${escapeHtml(node.token)}" class="bg-white dark:bg-white/5 hover:bg-gray-50 dark:hover:bg-white/10 transition-all duration-200 rounded-xl border border-gray-100 dark:border-white/5 cursor-pointer shadow-sm hover:shadow-md group animate-fade-in-up" onclick="openNodeDetails('${escapeHtml(node.token)}', '${ui.statusColor}')">
             
             <div class="p-3 sm:p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
                 
-                <div class="flex items-center gap-3 min-w-0">
+                <div class="flex flex-1 items-center gap-3 min-w-0">
+                    <div class="${dragHandleClass}drag-handle p-2 -ml-2 text-gray-300 hover:text-gray-500 dark:text-white/20 dark:hover:text-white/50 cursor-grab active:cursor-grabbing transition" onclick="event.stopPropagation()">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8 9h8M8 15h8"/></svg>
+                    </div>
                     <div class="relative shrink-0 flex items-center justify-center w-8 h-8 rounded-full bg-gray-100 dark:bg-black/20">
                         <div data-ref="status-dot" class="w-2.5 h-2.5 rounded-full ${ui.statusColor}"></div>
                         <div data-ref="status-ping" class="absolute w-2.5 h-2.5 rounded-full ${ui.statusColor} animate-ping opacity-75" style="${node.status === 'online' ? '' : 'display:none'}"></div>
@@ -498,9 +620,11 @@ function renderNextNodeBatch() {
                     <div class="min-w-0 flex-1">
                         <div class="flex items-center gap-2">
                             <div data-ref="name" class="font-bold text-sm text-gray-900 dark:text-white truncate group-hover:text-blue-600 dark:group-hover:text-blue-400 transition">${replaceEmojisWithFlagsHTML(escapeHtml(node.name))}</div>
-                            <div data-ref="status-badge" class="sm:hidden px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider ${ui.statusBg}">${ui.statusText}</div>
                         </div>
-                        <div data-ref="ip" class="text-[10px] sm:text-xs font-mono text-gray-400 truncate">${escapeHtml(displayIp)}</div>
+                        <div class="flex items-center gap-2 mt-1">
+                            <div data-ref="ip" class="text-[10px] sm:text-xs font-mono text-gray-400 truncate">${escapeHtml(displayIp)}</div>
+                            ${pingHtml}
+                        </div>
                     </div>
                 </div>
 
@@ -522,24 +646,19 @@ function renderNextNodeBatch() {
                     </div>
 
                     <div class="text-center flex-1 sm:flex-none" style="width:55px;min-width:55px">
-                        <div class="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">${lblRx}</div>
-                        <div class="relative">
-                            <div data-ref="rx-val" class="text-xs font-mono font-bold text-green-500 dark:text-green-400" style="font-variant-numeric:tabular-nums">${rxVal}</div>
-                            <div data-ref="rx-unit" class="text-[9px] text-gray-400 dark:text-gray-500 uppercase font-bold absolute left-0 right-0 top-full mt-[-2px]">${rxUnit}</div>
+                        <div class="flex items-center justify-center gap-0.5 mb-0.5">
+                            <svg class="w-3 h-3 text-green-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 14l-7 7m0 0l-7-7m7 7V3"/></svg>
+                            <span data-ref="rx-unit" class="text-[9px] font-bold text-gray-400 uppercase tracking-wider">${rxUnit}</span>
                         </div>
+                        <div data-ref="rx-val" class="text-xs font-mono font-bold text-green-500 dark:text-green-400" style="font-variant-numeric:tabular-nums">${rxVal}</div>
                     </div>
 
                     <div class="text-center flex-1 sm:flex-none" style="width:55px;min-width:55px">
-                        <div class="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">${lblTx}</div>
-                        <div class="relative">
-                            <div data-ref="tx-val" class="text-xs font-mono font-bold text-blue-500 dark:text-blue-400" style="font-variant-numeric:tabular-nums">${txVal}</div>
-                            <div data-ref="tx-unit" class="text-[9px] text-gray-400 dark:text-gray-500 uppercase font-bold absolute left-0 right-0 top-full mt-[-2px]">${txUnit}</div>
+                        <div class="flex items-center justify-center gap-0.5 mb-0.5">
+                            <svg class="w-3 h-3 text-blue-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 10l7-7m0 0l7 7m-7-7v18"/></svg>
+                            <span data-ref="tx-unit" class="text-[9px] font-bold text-gray-400 uppercase tracking-wider">${txUnit}</span>
                         </div>
-                    </div>
-
-                    <div class="hidden sm:block text-right ml-2 pl-3 border-l border-gray-200 dark:border-white/10" style="width:70px;min-width:70px">
-                        <div data-ref="status-text" class="text-[10px] font-bold ${ui.statusTextClass} mb-0.5">${ui.statusText}</div>
-                        <div class="text-[9px] text-gray-300 dark:text-gray-600">${lblStatus}</div>
+                        <div data-ref="tx-val" class="text-xs font-mono font-bold text-blue-500 dark:text-blue-400" style="font-variant-numeric:tabular-nums">${txVal}</div>
                     </div>
                 </div>
             </div>
@@ -548,6 +667,34 @@ function renderNextNodeBatch() {
 
     container.insertAdjacentHTML('beforeend', html);
     renderedCount += batch.length;
+}
+
+function applyAgentWarning(type, val, threshold, def) {
+    const warnIcon = document.getElementById(`warn-${type}`);
+    const statEl = document.getElementById(`stat_${type}`);
+    const progEl = document.getElementById(`prog_${type}`);
+    const iconContainer = document.getElementById(`icon-${type}`);
+    if (!warnIcon || !statEl || !progEl) return;
+    
+    const isPeak = val >= Math.max(threshold, 95) || val >= threshold + 5;
+    const isWarn = val >= threshold;
+
+    if (isPeak) {
+        warnIcon.classList.remove('hidden');
+        statEl.className = `text-2xl font-black text-red-600 dark:text-red-400`;
+        progEl.className = `h-1.5 rounded-full transition-all duration-1000 ease-out bg-red-500`;
+        if (iconContainer) iconContainer.className = `p-2 rounded-xl relative bg-red-100 dark:bg-red-500/20 text-red-600 dark:text-red-400`;
+    } else if (isWarn) {
+        warnIcon.classList.remove('hidden');
+        statEl.className = `text-2xl font-black text-orange-500 dark:text-orange-400`;
+        progEl.className = `h-1.5 rounded-full transition-all duration-1000 ease-out bg-orange-500`;
+        if (iconContainer) iconContainer.className = `p-2 rounded-xl relative bg-orange-100 dark:bg-orange-500/20 text-orange-600 dark:text-orange-400`;
+    } else {
+        warnIcon.classList.add('hidden');
+        statEl.className = `text-2xl font-black ${def.text}`;
+        progEl.className = `h-1.5 rounded-full transition-all duration-1000 ease-out ${def.bg}`;
+        if (iconContainer) iconContainer.className = `p-2 rounded-xl relative ${def.iconBg} ${def.text}`;
+    }
 }
 
 function updateAgentStatsUI(data) {
@@ -569,7 +716,16 @@ function updateAgentStatsUI(data) {
                     hintCpu.innerHTML = formatProcessList(data.stats.process_cpu, title, "text-blue-500");
                 }
             }
-            if (progCpu) progCpu.style.width = data.stats.cpu + "%";
+            if (progCpu) {
+                progCpu.style.width = data.stats.cpu + "%";
+                if (typeof SYS_CONFIG !== 'undefined') {
+                    applyAgentWarning('cpu', data.stats.cpu, SYS_CONFIG.cpu_threshold || 90, {
+                        text: 'text-indigo-600 dark:text-indigo-400',
+                        bg: 'bg-indigo-500',
+                        iconBg: 'bg-indigo-100 dark:bg-indigo-500/20'
+                    });
+                }
+            }
 
             const ramEl = document.getElementById('stat_ram');
             const progRam = document.getElementById('prog_ram');
@@ -585,7 +741,16 @@ function updateAgentStatsUI(data) {
                     hintRam.innerHTML = formatProcessList(data.stats.process_ram, title, "text-purple-500");
                 }
             }
-            if (progRam) progRam.style.width = data.stats.ram + "%";
+            if (progRam) {
+                progRam.style.width = data.stats.ram + "%";
+                if (typeof SYS_CONFIG !== 'undefined') {
+                    applyAgentWarning('ram', data.stats.ram, SYS_CONFIG.ram_threshold || 90, {
+                        text: 'text-purple-600 dark:text-purple-400',
+                        bg: 'bg-purple-500',
+                        iconBg: 'bg-purple-100 dark:bg-purple-500/20'
+                    });
+                }
+            }
 
             const diskEl = document.getElementById('stat_disk');
             const progDisk = document.getElementById('prog_disk');
@@ -601,7 +766,16 @@ function updateAgentStatsUI(data) {
                     hintDisk.innerHTML = formatProcessList(data.stats.process_disk, title, "text-emerald-500");
                 }
             }
-            if (progDisk) progDisk.style.width = data.stats.disk + "%";
+            if (progDisk) {
+                progDisk.style.width = data.stats.disk + "%";
+                if (typeof SYS_CONFIG !== 'undefined') {
+                    applyAgentWarning('disk', data.stats.disk, SYS_CONFIG.disk_threshold || 95, {
+                        text: 'text-green-600 dark:text-green-400',
+                        bg: 'bg-green-500',
+                        iconBg: 'bg-green-100 dark:bg-green-500/20'
+                    });
+                }
+            }
 
             let rxSpeed = 0,
                 txSpeed = 0;
@@ -626,12 +800,12 @@ function updateAgentStatsUI(data) {
                 const hintRx = document.getElementById('hint-rx');
                 if (hintRx) {
                     const title = (typeof I18N !== 'undefined' && I18N.web_hint_traffic_in) ? I18N.web_hint_traffic_in : "Inbound Traffic";
-                    hintRx.innerHTML = formatInterfaceList(data.stats.interfaces, 'rx', title, "text-cyan-500");
+                    hintRx.innerHTML = formatInterfaceList(data.stats.interfaces, 'rx', title, "text-green-500");
                 }
                 const hintTx = document.getElementById('hint-tx');
                 if (hintTx) {
                     const title = (typeof I18N !== 'undefined' && I18N.web_hint_traffic_out) ? I18N.web_hint_traffic_out : "Outbound Traffic";
-                    hintTx.innerHTML = formatInterfaceList(data.stats.interfaces, 'tx', title, "text-orange-500");
+                    hintTx.innerHTML = formatInterfaceList(data.stats.interfaces, 'tx', title, "text-blue-500");
                 }
             }
 

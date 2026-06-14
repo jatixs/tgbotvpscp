@@ -19,8 +19,9 @@ from ..i18n import get_user_lang
 from ..utils import decrypt_for_web, encrypt_for_web, get_host_path, get_node_uptime_snapshot
 from .auth import COOKIE_NAME, SERVER_SESSIONS, get_current_user
 from ..rbac import is_admin as _is_admin
-from modules import traffic as traffic_module
-from modules.services import get_all_services_status
+# Lazy imports: traffic_module and services are loaded on-demand
+# from modules import traffic as traffic_module
+# from modules.services import get_all_services_status
 
 routes = web.RouteTableDef()
 
@@ -234,6 +235,7 @@ async def handle_sse_stream(request: web.Request) -> web.StreamResponse:
             }
 
             try:
+                from modules import traffic as traffic_module
                 rx_total, tx_total = traffic_module.get_current_traffic_total()
                 net_if = psutil.net_io_counters(pernic=True)
                 mem = psutil.virtual_memory()
@@ -292,6 +294,7 @@ async def handle_sse_stream(request: web.Request) -> web.StreamResponse:
                         "cpu": stats.get("cpu", 0),
                         "ram": stats.get("ram", 0),
                         "disk": stats.get("disk", 0),
+                        "ping": encrypt_for_web(stats.get("ping", "")),
                         "net_rx_speed": stats.get("net_rx_speed", 0),
                         "net_tx_speed": stats.get("net_tx_speed", 0),
                     }
@@ -744,6 +747,7 @@ async def handle_sse_services(request: web.Request) -> web.StreamResponse:
                 break
 
             try:
+                from modules.services import get_all_services_status
                 services = await asyncio.to_thread(get_all_services_status)
                 encrypted_services = [
                     {

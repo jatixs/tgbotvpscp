@@ -1,25 +1,5 @@
-from core.middlewares import SpamThrottleMiddleware
-from modules import (
-    selftest,
-    traffic,
-    uptime,
-    notifications,
-    users,
-    vless,
-    speedtest,
-    top,
-    xray,
-    sshlog,
-    fail2ban,
-    logs,
-    update,
-    reboot,
-    restart,
-    optimize,
-    nodes,
-    backups,
-    services,
-)
+from core.middlewares import SpamThrottleMiddleware, AutoDeleteMessageMiddleware, CallbackTTLMiddleware
+from core.orchestrator import ModuleOrchestrator, ModuleTier
 from core.i18n import _, I18nFilter, get_language_keyboard
 from core import i18n
 from core import config, shared_state, auth, utils, keyboards, messaging
@@ -57,25 +37,43 @@ bot = Bot(token=config.TOKEN)
 storage = MemoryStorage()
 dp = Dispatcher(storage=storage)
 dp.message.middleware(SpamThrottleMiddleware())
+dp.message.middleware(AutoDeleteMessageMiddleware())
 dp.callback_query.middleware(SpamThrottleMiddleware())
+dp.callback_query.middleware(CallbackTTLMiddleware())
 background_tasks = set()
 
+# ─── Module Tier Configuration ───────────────────────────────────────────
+# Tier 0 (ALWAYS_ON): loaded at startup, never unloaded.
+# Tier 1 (ON_DEMAND): loaded on first use, unloaded after 5 min inactivity.
+MODULE_CONFIG = {
+    # Tier 0: Always-on — alert system + node monitoring
+    "modules.notifications": {"tier": ModuleTier.ALWAYS_ON},
+    "modules.nodes":         {"tier": ModuleTier.ALWAYS_ON},
 
-def register_module(module, admin_only=False, root_only=False):
-    try:
-        if hasattr(module, "register_handlers"):
-            module.register_handlers(dp)
-        else:
-            logging.warning(f"Module '{module.__name__}' has no register_handlers().")
-        if hasattr(module, "start_background_tasks"):
-            tasks = module.start_background_tasks(bot)
-            for task in tasks:
-                background_tasks.add(task)
-        logging.info(f"Module '{module.__name__}' successfully registered.")
-    except Exception as e:
-        logging.error(
-            f"Error registering module '{module.__name__}': {e}", exc_info=True
-        )
+    # Tier 1: On-demand — loaded when user triggers the command
+    "modules.selftest":  {"tier": ModuleTier.ON_DEMAND},
+    "modules.uptime":    {"tier": ModuleTier.ON_DEMAND},
+    "modules.traffic":   {"tier": ModuleTier.ON_DEMAND},
+    "modules.users":     {"tier": ModuleTier.ON_DEMAND},
+    "modules.speedtest": {"tier": ModuleTier.ON_DEMAND},
+    "modules.top":       {"tier": ModuleTier.ON_DEMAND},
+    "modules.vless":     {"tier": ModuleTier.ON_DEMAND},
+    "modules.xray":      {"tier": ModuleTier.ON_DEMAND},
+    "modules.services":  {"tier": ModuleTier.ON_DEMAND},
+    "modules.sshlog":    {"tier": ModuleTier.ON_DEMAND},
+    "modules.fail2ban":  {"tier": ModuleTier.ON_DEMAND},
+    "modules.logs":      {"tier": ModuleTier.ON_DEMAND},
+    "modules.update":    {"tier": ModuleTier.ON_DEMAND},
+    "modules.restart":   {"tier": ModuleTier.ON_DEMAND},
+    "modules.reboot":    {"tier": ModuleTier.ON_DEMAND},
+    "modules.optimize":  {"tier": ModuleTier.ON_DEMAND},
+    "modules.backups":   {"tier": ModuleTier.ON_DEMAND},
+}
+
+UNLOAD_TTL = int(os.environ.get("MODULE_UNLOAD_TTL", 300))  # 5 min default
+
+orchestrator = ModuleOrchestrator(dp, bot, MODULE_CONFIG, unload_ttl=UNLOAD_TTL)
+shared_state.ORCHESTRATOR = orchestrator
 
 
 async def show_main_menu(
@@ -105,27 +103,30 @@ async def show_main_menu(
             return
         await auth.send_access_denied_message(bot, user_id, chat_id, command)
         return
-    if message_id_to_delete:
-        try:
-            await bot.delete_message(chat_id=chat_id, message_id=message_id_to_delete)
-        except TelegramBadRequest:
-            pass
-    await messaging.delete_previous_message(
-        user_id,
-        list(shared_state.LAST_MESSAGE_IDS.get(user_id, {}).keys()),
-        chat_id,
-        bot,
-    )
     if is_first_start:
         await messaging.send_support_message(bot, user_id, lang)
         await i18n.set_user_lang_async(user_id, lang)
     if str(user_id) not in shared_state.USER_NAMES:
         asyncio.create_task(auth.refresh_user_names(bot))
-    menu_text = _("main_menu_welcome", user_id)
+    if is_start_command:
+        menu_text = _("main_menu_welcome", lang)
+    else:
+        menu_text = _("main_menu_return", lang)
     reply_markup = keyboards.get_main_reply_keyboard(user_id)
     try:
         sent_message = await bot.send_message(
             chat_id, menu_text, reply_markup=reply_markup
+        )
+        if message_id_to_delete:
+            try:
+                await bot.delete_message(chat_id=chat_id, message_id=message_id_to_delete)
+            except TelegramBadRequest:
+                pass
+        await messaging.delete_previous_message(
+            user_id,
+            ["menu", "subcategory"],
+            chat_id,
+            bot,
         )
         shared_state.LAST_MESSAGE_IDS.setdefault(user_id, {})[
             command
@@ -189,6 +190,12 @@ async def _show_subcategory(message: types.Message, category_key: str):
     cat_name = _(category_key, lang)
     text = _("cat_choose_action", lang, category=cat_name)
     sent = await message.answer(text, reply_markup=markup, parse_mode="HTML")
+    await messaging.delete_previous_message(
+        user_id,
+        ["menu", "subcategory"],
+        message.chat.id,
+        message.bot,
+    )
     shared_state.LAST_MESSAGE_IDS.setdefault(user_id, {})[
         "subcategory"
     ] = sent.message_id
@@ -286,29 +293,107 @@ async def set_language_callback(callback: types.CallbackQuery, state: FSMContext
     )
 
 
-def load_modules():
-    logging.info("Loading modules...")
-    register_module(selftest)
-    register_module(uptime)
-    register_module(traffic)
-    register_module(notifications)
-    register_module(users, admin_only=True)
-    register_module(speedtest, admin_only=True)
-    register_module(top, admin_only=True)
-    register_module(vless, admin_only=True)
-    register_module(xray, admin_only=True)
-    register_module(nodes, admin_only=True)
-    register_module(services, admin_only=True)
-    register_module(sshlog, root_only=True)
-    register_module(fail2ban, root_only=True)
-    register_module(logs, root_only=True)
-    register_module(update, root_only=True)
-    register_module(restart, root_only=True)
-    register_module(reboot, root_only=True)
-    register_module(optimize, root_only=True)
-    register_module(backups)
-    logging.info("All modules loaded.")
+# ─── /memstats command ───────────────────────────────────────────────────
+@dp.message(Command("memstats"))
+async def memstats_handler(message: types.Message):
+    """Show Memory Orchestrator stats (admin only)."""
+    user_id = message.from_user.id
+    if user_id != config.ADMIN_USER_ID:
+        return
+    await messaging.delete_previous_message(user_id, "memstats", message.chat.id, message.bot)
+    text = orchestrator.format_stats()
+    msg = await message.answer(text, parse_mode="HTML")
+    from core.shared_state import LAST_MESSAGE_IDS
+    LAST_MESSAGE_IDS.setdefault(user_id, {})["memstats"] = msg.message_id
 
+@dp.callback_query(F.data == "cmd_memstats")
+async def memstats_callback(callback: types.CallbackQuery):
+    user_id = callback.from_user.id
+    if user_id != config.ADMIN_USER_ID:
+        await callback.answer("⛔ Access denied", show_alert=True)
+        return
+    await messaging.delete_previous_message(user_id, "memstats", callback.message.chat.id, callback.bot)
+    text = orchestrator.format_stats()
+    msg = await callback.message.answer(text, parse_mode="HTML")
+    from core.shared_state import LAST_MESSAGE_IDS
+    LAST_MESSAGE_IDS.setdefault(user_id, {})["memstats"] = msg.message_id
+    await callback.answer()
+
+
+# ─── Catch-all / Unrecognized Message Handler ────────────────────────────
+# Note: Registered manually in main() after orchestrator setup so it acts as a true fallback
+async def unrecognized_message_handler(message: types.Message):
+    """Fallback handler for any unrecognized text/commands. Fetches a useless fact."""
+    user_id = message.from_user.id
+    lang = i18n.get_user_lang(user_id)
+    try:
+        import aiohttp
+        import urllib.parse
+        async with aiohttp.ClientSession() as session:
+            async with session.get("https://uselessfacts.jsph.pl/api/v2/facts/random") as resp:
+                if resp.status == 200:
+                    data = await resp.json()
+                    fact = data.get("text", "")
+                    
+                    if fact and lang != "en":
+                        # Translate the fact if the user's language is not English
+                        try:
+                            translate_url = f"https://translate.googleapis.com/translate_a/single?client=gtx&sl=en&tl={lang}&dt=t&q={urllib.parse.quote(fact)}"
+                            async with session.get(translate_url) as tr_resp:
+                                if tr_resp.status == 200:
+                                    tr_data = await tr_resp.json()
+                                    if tr_data and isinstance(tr_data, list) and len(tr_data) > 0:
+                                        translated_text = "".join([part[0] for part in tr_data[0] if part[0]])
+                                        if translated_text:
+                                            fact = translated_text
+                        except Exception as tr_e:
+                            logging.error(f"Translation API error: {tr_e}")
+
+                    if fact:
+                        import html
+                        safe_fact = html.escape(fact)
+                        base_str = i18n._("unrecognized_command_fact", lang, fact="")
+                        prefix_part = base_str.replace("</i>", "")
+                        suffix_part = "</i>"
+
+                        import time
+                        import asyncio
+                        draft_id = int(time.time() * 1000) % 2147483647
+                        chat_id = message.chat.id
+                        bot_token = message.bot.token
+                        api_url = f"https://api.telegram.org/bot{bot_token}/sendMessageDraft"
+                        
+                        full_text = ""
+                        chunk_size = 6
+                        chunk_delay = 0.04
+                        draft_interval = 0.08
+                        last_draft_ts = 0.0
+                        
+                        for i in range(0, len(safe_fact), chunk_size):
+                            chunk = safe_fact[i:i+chunk_size]
+                            full_text += chunk
+                            now = time.monotonic()
+                            if now - last_draft_ts >= draft_interval:
+                                try:
+                                    await session.post(api_url, json={
+                                        "chat_id": chat_id,
+                                        "draft_id": draft_id,
+                                        "text": prefix_part + full_text + suffix_part,
+                                        "parse_mode": "HTML"
+                                    })
+                                except Exception:
+                                    pass
+                                last_draft_ts = now
+                            await asyncio.sleep(chunk_delay)
+                            
+                        final_text = i18n._("unrecognized_command_fact", lang, fact=safe_fact)
+                        await message.answer(final_text, parse_mode="HTML")
+                    else:
+                        text = i18n._("unrecognized_command", lang)
+                        await message.answer(text, parse_mode="HTML")
+    except Exception as e:
+        logging.error(f"Failed to fetch useless fact: {e}")
+        await message.answer(i18n._("unrecognized_command", lang), parse_mode="HTML")
 
 async def shutdown(dispatcher: Dispatcher, bot_instance: Bot, web_runner=None):
     logging.info("Shutdown signal received. Stopping services...")
@@ -324,8 +409,12 @@ async def shutdown(dispatcher: Dispatcher, bot_instance: Bot, web_runner=None):
             logging.warning("Web server cleanup timed out.")
         except Exception as e:
             logging.error(f"Web server cleanup error: {e}")
+    # Shutdown orchestrator
+    await orchestrator.shutdown()
+    # Cancel all background tasks (both orchestrator + legacy)
+    all_tasks = background_tasks | orchestrator.background_tasks
     cancelled_tasks = []
-    for task in list(background_tasks):
+    for task in list(all_tasks):
         if task and (not task.done()):
             task.cancel()
             cancelled_tasks.append(task)
@@ -367,7 +456,14 @@ async def main():
         asyncio.create_task(auth.refresh_user_names(bot))
         # Убраны вызовы utils.initial_reboot_check и utils.initial_restart_check
         # Теперь эта логика обрабатывается в watchdog.py
-        load_modules()
+
+        # ─── Memory Orchestrator: setup + start GC ───
+        await orchestrator.setup()
+        await orchestrator.start_gc()
+
+        # Register the catch-all handler LAST so it doesn't intercept module commands
+        dp.message.register(unrecognized_message_handler)
+
         logging.info("Starting Agent Web Server...")
         web_runner = await start_web_server(bot)
         if not web_runner:
