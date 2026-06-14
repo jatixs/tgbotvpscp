@@ -300,8 +300,10 @@ async def memstats_handler(message: types.Message):
     user_id = message.from_user.id
     if user_id != config.ADMIN_USER_ID:
         return
+    await messaging.delete_previous_message(user_id, "memstats", message.chat.id, message.bot)
     text = orchestrator.format_stats()
-    await message.answer(text, parse_mode="HTML")
+    msg = await message.answer(text, parse_mode="HTML")
+    messaging.save_message_id(user_id, "memstats", msg.message_id)
 
 @dp.callback_query(F.data == "cmd_memstats")
 async def memstats_callback(callback: types.CallbackQuery):
@@ -309,8 +311,10 @@ async def memstats_callback(callback: types.CallbackQuery):
     if user_id != config.ADMIN_USER_ID:
         await callback.answer("⛔ Access denied", show_alert=True)
         return
+    await messaging.delete_previous_message(user_id, "memstats", callback.message.chat.id, callback.bot)
     text = orchestrator.format_stats()
-    await callback.message.answer(text, parse_mode="HTML")
+    msg = await callback.message.answer(text, parse_mode="HTML")
+    messaging.save_message_id(user_id, "memstats", msg.message_id)
     await callback.answer()
 
 
