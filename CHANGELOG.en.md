@@ -17,12 +17,15 @@
 
 ### 🚀 Core & Architecture:
 * **Memory Orchestrator:** Implemented `core/orchestrator.py` for dynamic memory management (Garbage Collection). Heavy modules are now lazy-loaded and unloaded after 5 minutes of inactivity, saving RAM on low-end VPS.
-* **Self-Diagnostics:** The `/selftest` module now collects the actual resource consumption of the bot process itself, and CPU frequency is dynamically formatted based on real-time load. Added an interactive "Update status" button.
+* **Self-Diagnostics:** The diagnostics module now collects the actual resource consumption of the bot process itself. System metrics (including CPU frequency) have been shifted from general percentages to absolute values to more accurately reflect real-time load. Added an interactive "Update status" button.
+* **VPS Optimization:** Introduced a powerful interactive module for system tuning (BBR configuration, Swap setup, cache/log cleanup, snapd removal, Nginx tuning). Options are seamlessly selected via an inline menu with state-preserving checkboxes.
 
 ### 🤖 Telegram Bot UI/UX:
 * **Chat Hygiene (Smart Cleanup):** Introduced `AutoDeleteMessageMiddleware` to instantly delete user commands, alongside a smart deletion logic for old bot responses. The chat is no longer cluttered with duplicate messages.
+* **Top Processes:** Completely redesigned the module's interface. The output of the top 10 server processes by CPU and RAM consumption is now formatted as a compact ASCII table perfectly optimized for mobile screens.
+* **Anti-Spam (SpamThrottle):** Completely reimagined the `SpamThrottleMiddleware` protection layer. The rate-limiting logic has been improved to provide more reliable protection against flooding and API overload.
 * **Interface Protection:** Rewrote menu invocation logic to prevent the system keyboard from overlapping Telegram inline buttons. Added `CallbackTTLMiddleware` to automatically expire and remove stale menus (older than 30 seconds).
-* **Interactivity:** The Optimization script now uses an interactive inline menu with state-preserving checkboxes. Background Speedtests now feature a live ticking timer, fully compliant with Telegram API rate limits.
+* **Interactivity:** Background Speedtests now feature a live ticking timer, fully compliant with Telegram API rate limits.
 * **Ergonomics & Easter Eggs:** Returning to the main menu is now less intrusive (no long greeting). Added a fallback handler for unknown commands that displays random interesting facts with a live typing animation and auto-translation.
 
 ### 🌐 WebUI & Dashboard:

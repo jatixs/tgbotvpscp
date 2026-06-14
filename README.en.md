@@ -61,14 +61,21 @@
 - ✅ **Fully Asynchronous** — AsyncIO, aiohttp, aiosqlite
 - ✅ **Low Footprint** — ~100MB RAM per agent
 - ✅ **Ring Buffers** — memory optimization via deque
-- ✅ **Garbage Collection** — automatic cleanup
+- ✅ **Memory Orchestrator** <sup>NEW</sup> — dynamic unloading of unused modules
 
 ### 🖥 Multi-Server Management
 
 - ✅ **Unlimited Nodes** — scalable architecture
 - ✅ **Real-time Metrics** — CPU, RAM, Disk, Network
 - ✅ **Remote Execution** — commands on any server
+- ✅ **System Optimization** <sup>NEW</sup> — interactive VPS tuning module (BBR, Swap, cache cleanup)
 - ✅ **Centralized Dashboard** — unified control panel
+
+### 🤖 Smart Telegram UX
+
+- ✅ **Smart Cleanup** <sup>NEW</sup> — auto-deletes user commands and stale bot menus to keep the chat clean
+- ✅ **Anti-Spam Protection** <sup>NEW</sup> — built-in SpamThrottle to protect Telegram API limits
+- ✅ **Interactive Widgets** — inline menus with state-preserving checkboxes and live timers
 
 ### 🛡️ Enterprise-Grade Security
 
@@ -86,6 +93,8 @@
 - ✅ **Dark Theme** — automatic switching
 - ✅ **Responsive Design** — mobile-first approach
 - ✅ **Real-time Charts** — Chart.js visualization
+- ✅ **Drag & Drop** <sup>NEW</sup> — manual and automatic server sorting
+- ✅ **Smart Indicators** <sup>NEW</sup> — visual alerts during peak resource loads
 
 ### ⚙️ Service Manager
 
@@ -236,6 +245,8 @@ http://YOUR_SERVER_IP:8080
 - List of all nodes with statuses
 - Network traffic (current and historical)
 - Quick actions (reboot, update)
+- Drag & Drop node sorting <sup>NEW</sup>
+- Visual alerts (⚠️) during peak loads <sup>NEW</sup>
 
 #### ⚙️ Settings
 - **Alerts Config** — notification thresholds (CPU 80%, RAM 90%, Disk 85%)
