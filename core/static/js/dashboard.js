@@ -681,12 +681,12 @@ function updateAgentStatsUI(data) {
                 const hintRx = document.getElementById('hint-rx');
                 if (hintRx) {
                     const title = (typeof I18N !== 'undefined' && I18N.web_hint_traffic_in) ? I18N.web_hint_traffic_in : "Inbound Traffic";
-                    hintRx.innerHTML = formatInterfaceList(data.stats.interfaces, 'rx', title, "text-cyan-500");
+                    hintRx.innerHTML = formatInterfaceList(data.stats.interfaces, 'rx', title, "text-green-500");
                 }
                 const hintTx = document.getElementById('hint-tx');
                 if (hintTx) {
                     const title = (typeof I18N !== 'undefined' && I18N.web_hint_traffic_out) ? I18N.web_hint_traffic_out : "Outbound Traffic";
-                    hintTx.innerHTML = formatInterfaceList(data.stats.interfaces, 'tx', title, "text-orange-500");
+                    hintTx.innerHTML = formatInterfaceList(data.stats.interfaces, 'tx', title, "text-blue-500");
                 }
             }
 
