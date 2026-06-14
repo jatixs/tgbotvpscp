@@ -92,6 +92,9 @@ class CallbackTTLMiddleware(BaseMiddleware):
         event: CallbackQuery,
         data: Dict[str, Any],
     ) -> Any:
+        if event.data in ["selftest_refresh"]:
+            return await handler(event, data)
+            
         if event.message and event.message.date:
             now = datetime.now(timezone.utc)
             msg_date = event.message.date
