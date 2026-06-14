@@ -103,17 +103,6 @@ async def show_main_menu(
             return
         await auth.send_access_denied_message(bot, user_id, chat_id, command)
         return
-    if message_id_to_delete:
-        try:
-            await bot.delete_message(chat_id=chat_id, message_id=message_id_to_delete)
-        except TelegramBadRequest:
-            pass
-    await messaging.delete_previous_message(
-        user_id,
-        ["menu", "subcategory"],
-        chat_id,
-        bot,
-    )
     if is_first_start:
         await messaging.send_support_message(bot, user_id, lang)
         await i18n.set_user_lang_async(user_id, lang)
@@ -127,6 +116,17 @@ async def show_main_menu(
     try:
         sent_message = await bot.send_message(
             chat_id, menu_text, reply_markup=reply_markup
+        )
+        if message_id_to_delete:
+            try:
+                await bot.delete_message(chat_id=chat_id, message_id=message_id_to_delete)
+            except TelegramBadRequest:
+                pass
+        await messaging.delete_previous_message(
+            user_id,
+            ["menu", "subcategory"],
+            chat_id,
+            bot,
         )
         shared_state.LAST_MESSAGE_IDS.setdefault(user_id, {})[
             command
@@ -190,6 +190,12 @@ async def _show_subcategory(message: types.Message, category_key: str):
     cat_name = _(category_key, lang)
     text = _("cat_choose_action", lang, category=cat_name)
     sent = await message.answer(text, reply_markup=markup, parse_mode="HTML")
+    await messaging.delete_previous_message(
+        user_id,
+        ["menu", "subcategory"],
+        message.chat.id,
+        message.bot,
+    )
     shared_state.LAST_MESSAGE_IDS.setdefault(user_id, {})[
         "subcategory"
     ] = sent.message_id
