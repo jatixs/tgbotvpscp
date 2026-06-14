@@ -28,6 +28,10 @@
 * **Easter Eggs & Facts:** Sending an unknown command or text to the bot will now trigger a random interesting fact response. Includes a built-in translator (Google Translate API) to seamlessly translate facts to the user's language.
 * **Selftest Module Updates:** Added an inline "🔄 Update status" button to dynamically refresh server statistics without resending the message.
 * **CPU Frequency Formatting:** CPU frequency in `/selftest` is now dynamically formatted (Hz, KHz, MHz, GHz) and accurately shows the effectively used frequency proportional to the current CPU load.
+* **Interactive Speedtest:** Integrated background timers for the Speedtest command. Now, when running a test (locally or on a remote node), the bot sends a message with a ticking timer, smoothly replacing it with the final report upon completion. Compliant with `FloodWait` (Telegram API) rate limits.
+
+### 📦 Dependencies and Packages:
+* **Library Updates:** All Python packages in `requirements.txt` and `Dockerfile` have been bumped to their latest mutually compatible versions (e.g., `aiogram` to 3.28.2, `tortoise-orm` to 0.25.4, `aiohttp` to 3.13.5).
 
 ### 📖 Documentation:
 * **Architecture & Modules:** Updated `ARCHITECTURE.en.md` and `custom_module_en.md` to reflect recent architectural changes: added `core/orchestrator.py` (Memory Orchestrator), described new `AutoDeleteMessageMiddleware` and `CallbackTTLMiddleware`, added the uselessfacts fallback handler, and updated the module registration process via `MODULE_CONFIG`.
