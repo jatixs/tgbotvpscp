@@ -78,11 +78,12 @@ class AutoDeleteMessageMiddleware(BaseMiddleware):
         event: Message,
         data: Dict[str, Any],
     ) -> Any:
+        response = await handler(event, data)
         try:
             await event.delete()
         except Exception:
             pass
-        return await handler(event, data)
+        return response
 
 class CallbackTTLMiddleware(BaseMiddleware):
     async def __call__(
