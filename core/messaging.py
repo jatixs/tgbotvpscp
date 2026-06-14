@@ -12,7 +12,21 @@ from . import shared_state
 
 
 async def delete_previous_message(user_id: int, command, chat_id: int, bot: Bot):
-    pass
+    try:
+        if not isinstance(command, list):
+            command = [command]
+            
+        user_msgs = LAST_MESSAGE_IDS.get(user_id, {})
+        for cmd in command:
+            msg_id = user_msgs.get(cmd)
+            if msg_id:
+                try:
+                    await bot.delete_message(chat_id=chat_id, message_id=msg_id)
+                except Exception:
+                    pass
+                user_msgs.pop(cmd, None)
+    except Exception as e:
+        logging.error(f"Error deleting previous messages: {e}")
 
 
 async def send_support_message(bot: Bot, user_id: int, lang: str):

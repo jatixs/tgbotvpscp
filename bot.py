@@ -1,4 +1,4 @@
-from core.middlewares import SpamThrottleMiddleware
+from core.middlewares import SpamThrottleMiddleware, AutoDeleteMessageMiddleware, CallbackTTLMiddleware
 from core.orchestrator import ModuleOrchestrator, ModuleTier
 from core.i18n import _, I18nFilter, get_language_keyboard
 from core import i18n
@@ -37,7 +37,9 @@ bot = Bot(token=config.TOKEN)
 storage = MemoryStorage()
 dp = Dispatcher(storage=storage)
 dp.message.middleware(SpamThrottleMiddleware())
+dp.message.middleware(AutoDeleteMessageMiddleware())
 dp.callback_query.middleware(SpamThrottleMiddleware())
+dp.callback_query.middleware(CallbackTTLMiddleware())
 background_tasks = set()
 
 # ─── Module Tier Configuration ───────────────────────────────────────────
