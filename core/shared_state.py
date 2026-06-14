@@ -24,3 +24,7 @@ WEB_NOTIFICATIONS = deque(maxlen=50)
 WEB_USER_LAST_READ = {}
 RECENT_SSH_LOGINS = {}
 IS_RESTARTING = False
+
+# --- Memory Orchestrator ---
+# Reference to the global orchestrator instance (set at startup in bot.py)
+ORCHESTRATOR = None
