@@ -119,7 +119,10 @@ async def show_main_menu(
         await i18n.set_user_lang_async(user_id, lang)
     if str(user_id) not in shared_state.USER_NAMES:
         asyncio.create_task(auth.refresh_user_names(bot))
-    menu_text = _("main_menu_welcome", user_id)
+    if is_start_command:
+        menu_text = _("main_menu_welcome", lang)
+    else:
+        menu_text = _("main_menu_return", lang)
     reply_markup = keyboards.get_main_reply_keyboard(user_id)
     try:
         sent_message = await bot.send_message(
