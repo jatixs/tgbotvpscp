@@ -5,11 +5,11 @@
 <h1 align="center">🤖 VPS Manager Telegram Bot</h1>
 
 <p align="center">
-  <b>v1.22.5</b> — профессиональная экосистема для мониторинга и управления серверной инфраструктурой<br>
+  <b>v1.23.0</b> — профессиональная экосистема для мониторинга и управления серверной инфраструктурой<br>
   (Systemd / Docker / API / WebUI / PWA / Multi-Node / Remote SSH / Backup Manager)<br><br>
 
-  <a href="https://github.com/jatixs/tgbotvpscp/releases/latest"><img src="https://img.shields.io/badge/version-v1.22.5-blue?style=flat-square" alt="Version 1.22.5"/></a>
-  <a href="https://github.com/jatixs/tgbotvpscp/releases/latest"><img src="https://img.shields.io/badge/build-76-purple?style=flat-square" alt="Build 76"/></a>
+  <a href="https://github.com/jatixs/tgbotvpscp/releases/latest"><img src="https://img.shields.io/badge/version-v1.23.0-blue?style=flat-square" alt="Version 1.23.0"/></a>
+  <a href="https://github.com/jatixs/tgbotvpscp/releases/latest"><img src="https://img.shields.io/badge/build-77-purple?style=flat-square" alt="Build 77"/></a>
   <a href="https://www.python.org/"><img src="https://img.shields.io/badge/python-3.10%2B-green?style=flat-square" alt="Python 3.10+"/></a>
   <a href="https://choosealicense.com/licenses/gpl-3.0/"><img src="https://img.shields.io/badge/license-GPL--3.0-lightgrey?style=flat-square" alt="License GPL-3.0"/></a>
   <a href="https://github.com/aiogram/aiogram"><img src="https://img.shields.io/badge/aiogram-3.x-orange?style=flat-square" alt="Aiogram 3.x"/></a>
@@ -61,14 +61,21 @@
 - ✅ **Полная асинхронность** — AsyncIO, aiohttp, aiosqlite
 - ✅ **Низкое потребление** — ~100MB RAM на агенте
 - ✅ **Кольцевые буферы** — оптимизация памяти через deque
-- ✅ **Garbage Collection** — автоматическая очистка
+- ✅ **Memory Orchestrator** <sup>NEW</sup> — динамическая выгрузка неиспользуемых модулей
 
 ### 🖥 Мульти-серверное управление
 
 - ✅ **Неограниченное количество нод** — масштабируемая архитектура
 - ✅ **Real-time метрики** — CPU, RAM, Disk, Network
 - ✅ **Удаленное выполнение** — команды на любом сервере
+- ✅ **Оптимизация системы** <sup>NEW</sup> — интерактивный модуль настройки VPS (BBR, Swap, очистка кэша)
 - ✅ **Централизованный dashboard** — единая панель управления
+
+### 🤖 Умный Telegram-интерфейс
+
+- ✅ **Smart Cleanup** <sup>NEW</sup> — автоматическая очистка чата от команд пользователя и старых меню
+- ✅ **Защита от флуда** <sup>NEW</sup> — встроенный SpamThrottle для защиты Telegram API
+- ✅ **Интерактивные виджеты** — меню с сохранением состояния (чекбоксы) и живыми таймерами
 
 ### 🛡️ Безопасность Enterprise-класса
 
@@ -86,6 +93,8 @@
 - ✅ **Темная тема** — автоматическое переключение
 - ✅ **Адаптивный дизайн** — Mobile-first подход
 - ✅ **Графики в реальном времени** — Chart.js визуализация
+- ✅ **Drag & Drop** <sup>NEW</sup> — ручная и автоматическая сортировка серверов
+- ✅ **Умные алерты** <sup>NEW</sup> — визуальные предупреждения о критических нагрузках
 
 ### ⚙️ Менеджер сервисов 
 
@@ -230,9 +239,11 @@ http://YOUR_SERVER_IP:8080
 
 #### 📊 Dashboard
 - Real-time графики CPU/RAM/Disk
-- Список всех нод с статусами
+- Список всех нод с текущими статусами
 - Сетевой трафик (текущий и исторический)
 - Быстрые действия (перезагрузка, обновление)
+- Drag & Drop сортировка нод <sup>NEW</sup>
+- Визуальные алерты (⚠️) при пиковых нагрузках <sup>NEW</sup>
 
 #### ⚙️ Settings
 - **Alerts Config** — пороги уведомлений (CPU 80%, RAM 90%, Disk 85%)
@@ -604,7 +615,7 @@ python bot.py
 ---
 
 <p align="center">
-  <b>Версия:</b> 1.22.5 (Build 76)<br>
+  <b>Версия:</b> 1.23.0 (Build 77)<br>
   <b>Лицензия:</b> GPL-3.0 license<br>
   <b>Статус:</b> Релиз<br>
   <br>

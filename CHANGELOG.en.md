@@ -6,11 +6,36 @@
 
 <p align="center">
 <p align="center">
-    <img src="https://img.shields.io/badge/version-v1.22.5-blue?style=flat-square" alt="Version 1.22.5"/>
-    <img src="https://img.shields.io/badge/build-76-purple?style=flat-square" alt="Build 76"/>
-    <img src="https://img.shields.io/badge/date-Jun%2008%202026-green?style=flat-square" alt="Date Jun 08 2026"/>
+    <img src="https://img.shields.io/badge/version-v1.23.0-blue?style=flat-square" alt="Version 1.23.0"/>
+    <img src="https://img.shields.io/badge/build-77-purple?style=flat-square" alt="Build 77"/>
+    <img src="https://img.shields.io/badge/date-Jun%2014%202026-green?style=flat-square" alt="Date Jun 14 2026"/>
 	<img src="https://img.shields.io/badge/status-stable-green?style=flat-square" alt="Status Stable"/>
 </p>
+
+---
+## [1.23.0] - 2026-06-14
+
+### 🚀 Core & Architecture:
+* **Memory Orchestrator:** Implemented `core/orchestrator.py` for dynamic memory management (Garbage Collection). Heavy modules are now lazy-loaded and unloaded after 5 minutes of inactivity, saving RAM on low-end VPS.
+* **Self-Diagnostics:** The diagnostics module now collects the actual resource consumption of the bot process itself. System metrics (including CPU frequency) have been shifted from general percentages to absolute values to more accurately reflect real-time load. Added an interactive "Update status" button.
+* **VPS Optimization:** Introduced a powerful interactive module for system tuning (BBR configuration, Swap setup, cache/log cleanup, snapd removal, Nginx tuning). Options are seamlessly selected via an inline menu with state-preserving checkboxes.
+
+### 🤖 Telegram Bot UI/UX:
+* **Chat Hygiene (Smart Cleanup):** Introduced `AutoDeleteMessageMiddleware` to instantly delete user commands, alongside a smart deletion logic for old bot responses. The chat is no longer cluttered with duplicate messages.
+* **Top Processes:** Completely redesigned the module's interface. The output of the top 10 server processes by CPU and RAM consumption is now formatted as a compact ASCII table perfectly optimized for mobile screens.
+* **Anti-Spam (SpamThrottle):** Completely reimagined the `SpamThrottleMiddleware` protection layer. The rate-limiting logic has been improved to provide more reliable protection against flooding and API overload.
+* **Interface Protection:** Rewrote menu invocation logic to prevent the system keyboard from overlapping Telegram inline buttons. Added `CallbackTTLMiddleware` to automatically expire and remove stale menus (older than 30 seconds).
+* **Interactivity:** Background Speedtests now feature a live ticking timer, fully compliant with Telegram API rate limits.
+* **Ergonomics & Easter Eggs:** Returning to the main menu is now less intrusive (no long greeting). Added a fallback handler for unknown commands that displays random interesting facts with a live typing animation and auto-translation.
+
+### 🌐 WebUI & Dashboard:
+* **Drag-and-Drop & Sorting:** Integrated SortableJS to support manual node sorting via Drag & Drop, plus a dropdown menu for automatic sorting (by lowest ping or alphabetical). Custom order is saved automatically.
+* **Anomaly Monitoring (Alerts):** Added dynamic warning indicators (⚠️) to the WebUI dashboard. Progress bars now turn orange or red when CPU, RAM, or Disk consumption reaches the configured limits.
+* **Design & Grid Alignment:** Synchronized chart colors across the dashboard. The RX/TX traffic columns have been completely redesigned with minimalist icons, unit headers, and strict grid alignment with other metrics (CPU/RAM/DISK).
+
+### 📦 Dependencies & Documentation:
+* **Libraries:** Bumped all Python packages to their latest stable and compatible versions (aiogram 3.28.2, tortoise-orm 0.25.4, aiohttp 3.13.5, etc.).
+* **Documentation:** Updated `ARCHITECTURE.en.md` and `custom_module_en.md` to reflect the new Memory Orchestrator, Middlewares, and the updated plugin registration system.
 
 ---
 ## [1.22.5] - 2026-06-08

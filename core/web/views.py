@@ -19,7 +19,7 @@ from ..i18n import get_text as _, get_user_lang
 from ..keyboards import BTN_CONFIG_MAP
 from ..rbac import ROLE_USER, build_user_role_js, get_role_level, is_admin as _is_admin, is_root as _is_root
 from ..utils import encrypt_for_web, generate_favicons, get_app_version, get_web_key
-from modules import traffic as traffic_module
+# Lazy import traffic_module when needed
 from . import auth as web_auth
 
 routes = web.RouteTableDef()
@@ -266,7 +266,7 @@ async def handle_dashboard(request: web.Request) -> web.StreamResponse:
     node_action_btn = ""
     settings_btn = ""
     if is_main_admin:
-        node_action_btn = f"""<button onclick="openAddNodeModal()" class="inline-flex items-center gap-1.5 py-1.5 px-3 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold transition shadow-lg shadow-blue-500/20"><svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path></svg>{_('web_add_node_section', lang)}</button>"""
+        node_action_btn = f"""<button onclick="openAddNodeModal()" class="inline-flex items-center gap-2 py-1.5 px-3 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold transition shadow-lg shadow-blue-500/20"><svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path></svg>{_('web_add_node_section', lang)}</button>"""
         settings_btn = f'<a href="/settings" class="flex items-center justify-center w-8 h-8 rounded-lg hover:bg-black/5 dark:hover:bg-white/10 transition text-gray-600 dark:text-gray-400" title="{_("web_settings_button", lang)}"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg></a>'
 
     clean_version = APP_VERSION.lstrip("v")
@@ -304,6 +304,7 @@ async def handle_dashboard(request: web.Request) -> web.StreamResponse:
         if ip:
             vnc_nodes.append({"name": node.get("name", "Unknown"), "ip": ip})
 
+    from modules import traffic as traffic_module
     can_reset = traffic_module.can_reset_traffic()
 
     context = {
@@ -351,6 +352,11 @@ async def handle_dashboard(request: web.Request) -> web.StreamResponse:
         "web_download": _("web_download", lang),
         "web_upload": _("web_upload", lang),
         "web_node_mgmt_title": _("web_node_mgmt_title", lang),
+        "web_monitor_btn": _("web_monitor_btn", lang),
+        "web_monitor_title": _("web_monitor_title", lang),
+        "web_filter_sort_name": _("web_nodes_monitor_filter_sort_name", lang),
+        "web_filter_sort_ping": _("web_nodes_monitor_filter_sort_ping", lang),
+        "web_filter_sort_custom": _("web_nodes_monitor_filter_sort_custom", lang),
         "web_logs_title": _("web_logs_title", lang),
         "web_logs_footer": _("web_logs_footer", lang),
         "web_loading": _("web_loading", lang),
@@ -391,6 +397,11 @@ async def handle_dashboard(request: web.Request) -> web.StreamResponse:
         "is_main_admin": is_main_admin,
         "reset_allowed": can_reset,
         "web_search_placeholder": _("web_search_placeholder", lang),
+        "config_json": json.dumps({
+            "cpu_threshold": float(current_config.CPU_THRESHOLD),
+            "ram_threshold": float(current_config.RAM_THRESHOLD),
+            "disk_threshold": float(current_config.DISK_THRESHOLD),
+        }),
         "i18n_json": json.dumps({
             "web_cpu": _("web_cpu", lang),
             "web_ram": _("web_ram", lang),
@@ -563,6 +574,7 @@ async def handle_nodes_monitor_page(request: web.Request) -> web.StreamResponse:
         "web_filter_sort_cpu": _("web_nodes_monitor_filter_sort_cpu", lang),
         "web_filter_sort_ram": _("web_nodes_monitor_filter_sort_ram", lang),
         "web_filter_sort_ping": _("web_nodes_monitor_filter_sort_ping", lang),
+        "web_filter_sort_custom": _("web_nodes_monitor_filter_sort_custom", lang),
         "web_filter_reset": _("web_nodes_monitor_filter_reset", lang),
         "web_filter_apply": _("web_nodes_monitor_filter_apply", lang),
         "web_loading": _("web_loading", lang),

@@ -14,7 +14,7 @@ from core.i18n import _, I18nFilter, get_user_lang
 from core import config
 from core.auth import is_allowed, send_access_denied_message
 from core.messaging import delete_previous_message, send_alert
-from core.shared_state import LAST_MESSAGE_IDS, NODE_TRAFFIC_MONITORS
+from core.shared_state import LAST_MESSAGE_IDS, NODE_TRAFFIC_MONITORS, ACTIVE_NODE_SPEEDTESTS
 from core import nodes_db
 from core.keyboards import (
     get_nodes_list_keyboard,
@@ -63,7 +63,10 @@ def start_background_tasks(bot: Bot) -> list[asyncio.Task]:
     task_traffic = asyncio.create_task(
         node_traffic_scheduler(bot), name="NodesTrafficScheduler"
     )
-    return [task_monitor, task_traffic]
+    task_speedtest = asyncio.create_task(
+        node_speedtest_progress_task(bot), name="NodesSpeedtestScheduler"
+    )
+    return [task_monitor, task_traffic, task_speedtest]
 
 
 async def _prepare_nodes_data():
@@ -401,6 +404,15 @@ async def cq_node_command(callback: types.CallbackQuery):
     }
     cmd_name = _(cmd_map.get(cmd, cmd), lang)
     node_name = html.escape(node.get("name", "Unknown"))
+    
+    if cmd == "speedtest":
+        msg = await callback.message.answer(f"⏳ Выполнение Speedtest на ноде <b>{node_name}</b>...", parse_mode="HTML")
+        ACTIVE_NODE_SPEEDTESTS[f"{token}_{user_id}"] = {
+            "chat_id": msg.chat.id,
+            "message_id": msg.message_id,
+            "start_time": time.time()
+        }
+
     await callback.answer(
         _("node_cmd_sent", lang, cmd=cmd_name, name=node_name), show_alert=False
     )
@@ -587,6 +599,37 @@ async def cq_node_service_action(callback: types.CallbackQuery):
     # Return to services list after short delay
     await asyncio.sleep(1)
     await cq_node_services(callback)
+
+
+async def node_speedtest_progress_task(bot: Bot):
+    from aiogram.exceptions import TelegramRetryAfter
+    while True:
+        try:
+            await asyncio.sleep(3)
+            if not ACTIVE_NODE_SPEEDTESTS:
+                continue
+            now = time.time()
+            for key, data in list(ACTIVE_NODE_SPEEDTESTS.items()):
+                elapsed = int(now - data["start_time"])
+                if elapsed > 150:  # Timeout 2.5 mins
+                    ACTIVE_NODE_SPEEDTESTS.pop(key, None)
+                    continue
+                try:
+                    await bot.edit_message_text(
+                        f"⏳ Выполнение Speedtest... ({elapsed} сек)",
+                        chat_id=data["chat_id"],
+                        message_id=data["message_id"],
+                        parse_mode="HTML"
+                    )
+                except TelegramRetryAfter as e:
+                    await asyncio.sleep(e.retry_after)
+                except Exception:
+                    pass
+        except asyncio.CancelledError:
+            break
+        except Exception as e:
+            logging.error(f"node_speedtest_progress_task error: {e}")
+            await asyncio.sleep(5)
 
 
 async def node_traffic_scheduler(bot: Bot):

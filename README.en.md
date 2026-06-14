@@ -5,11 +5,11 @@
 <h1 align="center">🤖 VPS Manager Telegram Bot</h1>
 
 <p align="center">
-  <b>v1.22.5</b> — enterprise-grade ecosystem for monitoring and managing server infrastructure<br>
+  <b>v1.23.0</b> — enterprise-grade ecosystem for monitoring and managing server infrastructure<br>
   (Systemd / Docker / API / WebUI / PWA / Multi-Node / Remote SSH / Backup Manager)<br><br>
 
-  <a href="https://github.com/jatixs/tgbotvpscp/releases/latest"><img src="https://img.shields.io/badge/version-v1.22.5-blue?style=flat-square" alt="Version 1.22.5"/></a>
-  <a href="https://github.com/jatixs/tgbotvpscp/releases/latest"><img src="https://img.shields.io/badge/build-76-purple?style=flat-square" alt="Build 76"/></a>
+  <a href="https://github.com/jatixs/tgbotvpscp/releases/latest"><img src="https://img.shields.io/badge/version-v1.23.0-blue?style=flat-square" alt="Version 1.23.0"/></a>
+  <a href="https://github.com/jatixs/tgbotvpscp/releases/latest"><img src="https://img.shields.io/badge/build-77-purple?style=flat-square" alt="Build 77"/></a>
   <a href="https://www.python.org/"><img src="https://img.shields.io/badge/python-3.10%2B-green?style=flat-square" alt="Python 3.10+"/></a>
   <a href="https://choosealicense.com/licenses/gpl-3.0/"><img src="https://img.shields.io/badge/license-GPL--3.0-lightgrey?style=flat-square" alt="License GPL-3.0"/></a>
   <a href="https://github.com/aiogram/aiogram"><img src="https://img.shields.io/badge/aiogram-3.x-orange?style=flat-square" alt="Aiogram 3.x"/></a>
@@ -61,14 +61,21 @@
 - ✅ **Fully Asynchronous** — AsyncIO, aiohttp, aiosqlite
 - ✅ **Low Footprint** — ~100MB RAM per agent
 - ✅ **Ring Buffers** — memory optimization via deque
-- ✅ **Garbage Collection** — automatic cleanup
+- ✅ **Memory Orchestrator** <sup>NEW</sup> — dynamic unloading of unused modules
 
 ### 🖥 Multi-Server Management
 
 - ✅ **Unlimited Nodes** — scalable architecture
 - ✅ **Real-time Metrics** — CPU, RAM, Disk, Network
 - ✅ **Remote Execution** — commands on any server
+- ✅ **System Optimization** <sup>NEW</sup> — interactive VPS tuning module (BBR, Swap, cache cleanup)
 - ✅ **Centralized Dashboard** — unified control panel
+
+### 🤖 Smart Telegram UX
+
+- ✅ **Smart Cleanup** <sup>NEW</sup> — auto-deletes user commands and stale bot menus to keep the chat clean
+- ✅ **Anti-Spam Protection** <sup>NEW</sup> — built-in SpamThrottle to protect Telegram API limits
+- ✅ **Interactive Widgets** — inline menus with state-preserving checkboxes and live timers
 
 ### 🛡️ Enterprise-Grade Security
 
@@ -86,6 +93,8 @@
 - ✅ **Dark Theme** — automatic switching
 - ✅ **Responsive Design** — mobile-first approach
 - ✅ **Real-time Charts** — Chart.js visualization
+- ✅ **Drag & Drop** <sup>NEW</sup> — manual and automatic server sorting
+- ✅ **Smart Indicators** <sup>NEW</sup> — visual alerts during peak resource loads
 
 ### ⚙️ Service Manager
 
@@ -236,6 +245,8 @@ http://YOUR_SERVER_IP:8080
 - List of all nodes with statuses
 - Network traffic (current and historical)
 - Quick actions (reboot, update)
+- Drag & Drop node sorting <sup>NEW</sup>
+- Visual alerts (⚠️) during peak loads <sup>NEW</sup>
 
 #### ⚙️ Settings
 - **Alerts Config** — notification thresholds (CPU 80%, RAM 90%, Disk 85%)
@@ -607,7 +618,7 @@ If you find this project useful, support it:
 ---
 
 <p align="center">
-  <b>Version:</b> 1.22.5 (Build 76)<br>
+  <b>Version:</b> 1.23.0 (Build 77)<br>
   <b>License:</b>GPL-3.0 license<br>
   <b>Status:</b> Stable<br>
   <br>
