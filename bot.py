@@ -351,6 +351,38 @@ async def unrecognized_message_handler(message: types.Message):
                         text = i18n._("unrecognized_command_fact", lang, fact=fact)
                     else:
                         text = i18n._("unrecognized_command", lang)
+
+                    draft_text = text.replace("<i>", "").replace("</i>", "")
+                    
+                    import time
+                    import asyncio
+                    draft_id = int(time.time() * 1000) % 2147483647
+                    chat_id = message.chat.id
+                    bot_token = message.bot.token
+                    api_url = f"https://api.telegram.org/bot{bot_token}/sendMessageDraft"
+                    
+                    full_text = ""
+                    chunk_size = 6
+                    chunk_delay = 0.04
+                    draft_interval = 0.08
+                    last_draft_ts = 0.0
+                    
+                    for i in range(0, len(draft_text), chunk_size):
+                        chunk = draft_text[i:i+chunk_size]
+                        full_text += chunk
+                        now = time.monotonic()
+                        if now - last_draft_ts >= draft_interval:
+                            try:
+                                await session.post(api_url, json={
+                                    "chat_id": chat_id,
+                                    "draft_id": draft_id,
+                                    "text": full_text
+                                })
+                            except Exception:
+                                pass
+                            last_draft_ts = now
+                        await asyncio.sleep(chunk_delay)
+                        
                     await message.answer(text, parse_mode="HTML")
                 else:
                     await message.answer(i18n._("unrecognized_command", lang), parse_mode="HTML")
