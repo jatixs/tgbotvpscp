@@ -104,32 +104,16 @@ STRINGS = {
 
 **File:** `/opt/tg-bot/bot.py`
 
-1. **Add import:**
+Find the `MODULE_CONFIG` dictionary and add your module:
 
 ```python
-from modules import (
-    selftest, traffic, uptime, notifications, users, vless,
-    speedtest, top, xray, sshlog, fail2ban, logs, update, reboot, restart,
-    optimize, nodes, backups, services,
-    my_feature,  # <--- your module
-)
-```
-
-2. **Register in `load_modules()`:**
-
-```python
-def load_modules():
+MODULE_CONFIG = {
     # ... other modules ...
-
-    # OPTION 1: Available to all authorized users
-    register_module(my_feature)
-
-    # OPTION 2: Admins only
-    # register_module(my_feature, admin_only=True)
-
-    # OPTION 3: Root only
-    # register_module(my_feature, root_only=True)
+    "modules.my_feature": {"tier": ModuleTier.ON_DEMAND},  # <--- your module
+}
 ```
+
+*Note:* The Orchestrator (`core/orchestrator.py`) will automatically discover your module, lazy-load it on the first call, and register its handlers. This approach helps save RAM.
 
 ---
 

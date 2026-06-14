@@ -104,32 +104,16 @@ STRINGS = {
 
 **Файл:** `/opt/tg-bot/bot.py`
 
-1. **Добавьте импорт:**
+Найдите словарь `MODULE_CONFIG` и добавьте ваш модуль:
 
 ```python
-from modules import (
-    selftest, traffic, uptime, notifications, users, vless,
-    speedtest, top, xray, sshlog, fail2ban, logs, update, reboot, restart,
-    optimize, nodes, backups, services,
-    my_feature,  # <--- ваш модуль
-)
-```
-
-2. **Зарегистрируйте в `load_modules()`:**
-
-```python
-def load_modules():
+MODULE_CONFIG = {
     # ... другие модули ...
-
-    # ВАРИАНТ 1: Доступно всем авторизованным пользователям
-    register_module(my_feature)
-
-    # ВАРИАНТ 2: Только для Админов
-    # register_module(my_feature, admin_only=True)
-
-    # ВАРИАНТ 3: Только для Root
-    # register_module(my_feature, root_only=True)
+    "modules.my_feature": {"tier": ModuleTier.ON_DEMAND},  # <--- ваш модуль
+}
 ```
+
+*Примечание:* Оркестратор (`core/orchestrator.py`) автоматически найдет ваш модуль, загрузит его при первом вызове (Lazy Loading) и зарегистрирует обработчики. Это позволяет экономить оперативную память.
 
 ---
 

@@ -43,6 +43,7 @@
 - Handle lifecycle events (startup/shutdown)
 - Integrate with Sentry for error monitoring
 - Categorized menu: Monitoring, Management, Security, Tools, Settings
+- Fallback handler for unrecognized commands (returns random interesting facts from uselessfacts API, seamlessly translated via Google Translate)
 
 **Module Registration:**
 ```python
@@ -84,6 +85,7 @@ core/
 ├── utils.py                # Helper utilities
 ├── nodes_db.py             # Node database (Tortoise ORM)
 ├── models.py               # ORM models
+├── orchestrator.py         # Memory Orchestrator (Lazy Loading / GC)
 ├── shared_state.py         # Global state (in-memory)
 ├── tasks.py                # Background tasks (monitoring, cleanup)
 ├── web/                    # 🌐 Web server (details below)
@@ -233,10 +235,16 @@ STRINGS = {
 #### **middlewares.py** — Middleware Layer (Telegram)
 **Purpose:** Request processing before bot handler invocation
 
-**SpamThrottleMiddleware:**
+**1. SpamThrottleMiddleware:**
 - Flood protection (max 1 request per second per user)
 - Last request time stored in memory
 - Applied globally for messages and callback queries
+
+**2. AutoDeleteMessageMiddleware:**
+- Automatically deletes user commands and button presses to keep the chat clean
+
+**3. CallbackTTLMiddleware:**
+- Protects against stale inline buttons (30 seconds) with automatic refresh notifications
 
 ---
 
@@ -290,6 +298,17 @@ STRINGS = {
 - `TrafficLog` — Network traffic logs
 
 **Migrations:** Managed via Aerich (`aerich.ini`)
+
+---
+
+#### **orchestrator.py** — Memory Orchestrator
+**Purpose:** Dynamic module loading management to save RAM
+
+**Functions:**
+- Lazy Loading of "heavy" modules (e.g., matplotlib in speedtest)
+- Unloading modules from memory after 5 minutes of inactivity (Garbage Collection)
+- Protection against RAM exhaustion on low-end VPS
+- Management of dependencies and handler registration (aiogram)
 
 ---
 
