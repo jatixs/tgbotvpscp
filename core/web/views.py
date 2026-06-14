@@ -392,6 +392,11 @@ async def handle_dashboard(request: web.Request) -> web.StreamResponse:
         "is_main_admin": is_main_admin,
         "reset_allowed": can_reset,
         "web_search_placeholder": _("web_search_placeholder", lang),
+        "config_json": json.dumps({
+            "cpu_threshold": float(current_config.CPU_THRESHOLD),
+            "ram_threshold": float(current_config.RAM_THRESHOLD),
+            "disk_threshold": float(current_config.DISK_THRESHOLD),
+        }),
         "i18n_json": json.dumps({
             "web_cpu": _("web_cpu", lang),
             "web_ram": _("web_ram", lang),
