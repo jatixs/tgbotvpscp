@@ -29,6 +29,8 @@
 * **Selftest Module Updates:** Added an inline "🔄 Update status" button to dynamically refresh server statistics without resending the message.
 * **CPU Frequency Formatting:** CPU frequency in `/selftest` is now dynamically formatted (Hz, KHz, MHz, GHz) and accurately shows the effectively used frequency proportional to the current CPU load.
 * **Interactive Speedtest:** Integrated background timers for the Speedtest command. Now, when running a test (locally or on a remote node), the bot sends a message with a ticking timer, smoothly replacing it with the final report upon completion. Compliant with `FloodWait` (Telegram API) rate limits.
+* **WebUI Resource Alerts:** Added dynamic warning indicators to the WebUI dashboard. If resource consumption (CPU, RAM, Disk) reaches configured limits, a neat warning sign ⚠️ appears next to the metric name, and the progress bar turns orange. At peak values, the indicators turn red.
+* **Minor UI Tweaks:** Synchronized colors for the "Total Traffic" (RX/TX) widget on the dashboard to match other charts (green for inbound, blue for outbound).
 
 ### 📦 Dependencies and Packages:
 * **Library Updates:** All Python packages in `requirements.txt` and `Dockerfile` have been bumped to their latest mutually compatible versions (e.g., `aiogram` to 3.28.2, `tortoise-orm` to 0.25.4, `aiohttp` to 3.13.5).
