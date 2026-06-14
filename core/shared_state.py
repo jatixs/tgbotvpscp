@@ -12,6 +12,7 @@ NODES = {}
 NODE_TRAFFIC_MONITORS = {}
 ACTIVE_NODE_SPEEDTESTS = {}
 AUTH_TOKENS = {}
+OPTIMIZE_STATE = {}
 RESOURCE_ALERT_STATE = {"cpu": False, "ram": False, "disk": False}
 LAST_RESOURCE_ALERT_TIME = {"cpu": 0, "ram": 0, "disk": 0}
 AGENT_FLAG = "🏳️"
