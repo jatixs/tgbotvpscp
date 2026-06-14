@@ -15,6 +15,7 @@ gc.collect() is called to free memory.
 import asyncio
 import gc
 import importlib
+import inspect
 import logging
 import os
 import sys
@@ -24,6 +25,18 @@ from enum import Enum
 from typing import Any, Optional
 
 import psutil
+
+
+def _filter_kwargs(func, kwargs: dict) -> dict:
+    """Filters kwargs to only pass arguments that the target function actually accepts."""
+    sig = inspect.signature(func)
+    if any(p.kind == inspect.Parameter.VAR_KEYWORD for p in sig.parameters.values()):
+        return kwargs
+    valid_keys = {
+        p.name for p in sig.parameters.values()
+        if p.kind in (inspect.Parameter.POSITIONAL_OR_KEYWORD, inspect.Parameter.KEYWORD_ONLY)
+    }
+    return {k: v for k, v in kwargs.items() if k in valid_keys}
 
 
 class ModuleTier(Enum):
@@ -302,7 +315,8 @@ class ModuleOrchestrator:
             async def proxy_callback_handler(callback, *args, **kwargs):
                 module = await orchestrator.ensure_loaded(module_name)
                 real_handler = getattr(module, func_name)
-                return await real_handler(callback, *args, **kwargs)
+                filtered_kwargs = _filter_kwargs(real_handler, kwargs)
+                return await real_handler(callback, *args, **filtered_kwargs)
             proxy_callback_handler.__name__ = f"proxy_{module_name}_{func_name}"
             proxy_callback_handler.__qualname__ = f"proxy_{module_name}_{func_name}"
             return proxy_callback_handler
@@ -310,7 +324,8 @@ class ModuleOrchestrator:
             async def proxy_message_handler(message, *args, **kwargs):
                 module = await orchestrator.ensure_loaded(module_name)
                 real_handler = getattr(module, func_name)
-                return await real_handler(message, *args, **kwargs)
+                filtered_kwargs = _filter_kwargs(real_handler, kwargs)
+                return await real_handler(message, *args, **filtered_kwargs)
             proxy_message_handler.__name__ = f"proxy_{module_name}_{func_name}"
             proxy_message_handler.__qualname__ = f"proxy_{module_name}_{func_name}"
             return proxy_message_handler
