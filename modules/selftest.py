@@ -295,7 +295,7 @@ async def selftest_handler(message: types.Message):
         ip_v6 = ip_fail
         ping = "n/a"
 
-        fetched_ipv4, fetched_ipv6, _ = await get_external_ips_for_selftest()
+        fetched_ipv4, fetched_ipv6, _inet_ok = await get_external_ips_for_selftest()
         if fetched_ipv4:
             ip_v4 = fetched_ipv4
         if fetched_ipv6:
