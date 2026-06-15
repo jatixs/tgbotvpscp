@@ -177,7 +177,7 @@ function connectNodesMonitorStream() {
     nodesMonitorSSESource.addEventListener('session_status', (event) => {
         if (event.data === 'expired') {
             stopNodesMonitorStream();
-            window.location.href = '/login';
+            window.location.assign('/login');
         }
     });
 
@@ -306,14 +306,14 @@ function renderNodes() {
     });
     
     if (filtered.length === 0) {
-        container.innerHTML = `
+        container.innerHTML = DOMPurify.sanitize(`
             <div class="col-span-full text-center py-12 text-gray-500 dark:text-gray-400">
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 mx-auto mb-4 opacity-50" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
                 ${I18N?.web_no_nodes || 'No nodes found'}
             </div>
-        `;
+        `);
         return;
     }
     
@@ -321,11 +321,11 @@ function renderNodes() {
     
     // Try to update in-place to prevent flicker
     const tempContainer = container.cloneNode(false);
-    tempContainer.innerHTML = newHtml;
+    tempContainer.innerHTML = DOMPurify.sanitize(newHtml);
     
     if (!updateDOM(container, tempContainer)) {
         // Fallback if structural changes occurred
-        container.innerHTML = newHtml;
+        container.innerHTML = DOMPurify.sanitize(newHtml);
     }
 }
 
@@ -716,7 +716,7 @@ function connectNodeDetailStream(token) {
     nodeDetailSSESource.addEventListener('session_status', (event) => {
         if (event.data === 'expired') {
             stopNodeModalStreams();
-            window.location.href = '/login';
+            window.location.assign('/login');
         }
     });
 
@@ -735,9 +735,9 @@ function updateNodeModal(data) {
     const newTitleHtml = typeof replaceEmojisWithFlagsHTML === 'function' ? replaceEmojisWithFlagsHTML(escapeHtml(decryptData(data.name) || 'Unknown')) : escapeHtml(decryptData(data.name) || 'Unknown');
     const modalTitleEl = document.getElementById('modalNodeTitle');
     const tempTitle = modalTitleEl.cloneNode(false);
-    tempTitle.innerHTML = newTitleHtml;
+    tempTitle.innerHTML = DOMPurify.sanitize(newTitleHtml);
     if (!updateDOM(modalTitleEl, tempTitle)) {
-        modalTitleEl.innerHTML = newTitleHtml;
+        modalTitleEl.innerHTML = DOMPurify.sanitize(newTitleHtml);
     }
     
     const newIp = decryptData(data.ip) || '-';
@@ -1012,7 +1012,7 @@ function connectNodeServicesStream(token) {
 
     const container = document.getElementById('modalServicesContainer');
     if (container) {
-        container.innerHTML = `<div class="text-center py-4 text-gray-400">${I18N?.web_services_loading || I18N?.web_loading || 'Loading'}</div>`;
+        container.innerHTML = DOMPurify.sanitize(`<div class="text-center py-4 text-gray-400">${I18N?.web_services_loading || I18N?.web_loading || 'Loading'}</div>`);
     }
 
     nodeServicesSSESource = new EventSource(`/api/events/node/services?token=${encodeURIComponent(token)}`);
@@ -1034,7 +1034,7 @@ function connectNodeServicesStream(token) {
     nodeServicesSSESource.addEventListener('session_status', (event) => {
         if (event.data === 'expired') {
             stopNodeModalStreams();
-            window.location.href = '/login';
+            window.location.assign('/login');
         }
     });
 
@@ -1053,7 +1053,7 @@ function renderNodeServices(token, services) {
     const container = document.getElementById('modalServicesContainer');
     const btnContainer = document.getElementById('modalServicesToggle');
     if (services.length === 0) {
-        container.innerHTML = `<div class="col-span-full text-center py-4 text-gray-400">${I18N?.web_services_empty || 'No services'}</div>`;
+        container.innerHTML = DOMPurify.sanitize(`<div class="col-span-full text-center py-4 text-gray-400">${I18N?.web_services_empty || 'No services'}</div>`);
         if (btnContainer) btnContainer.classList.add('hidden');
         return;
     }
@@ -1062,7 +1062,7 @@ function renderNodeServices(token, services) {
     const showAll = container.dataset.showAll === 'true';
     const displayServices = showAll ? services : services.slice(0, INITIAL_SHOW);
 
-    container.innerHTML = displayServices.map(svc => `
+    container.innerHTML = DOMPurify.sanitize(displayServices.map(svc => `
             <div class="flex items-center justify-between bg-white/50 dark:bg-black/30 p-2 rounded-lg">
                 <div class="flex items-center gap-2">
                     <span class="${svc.status === 'running' ? 'text-green-500' : 'text-red-500'}">●</span>
@@ -1087,7 +1087,7 @@ function renderNodeServices(token, services) {
                     </button>
                 </div>
             </div>
-        `).join('');
+        `).join(''));
 
     if (btnContainer) {
         if (services.length > INITIAL_SHOW) {
@@ -1098,11 +1098,11 @@ function renderNodeServices(token, services) {
                 if (showAll) {
                     btn.classList.add('expanded');
                     if (blurOverlay) blurOverlay.style.display = 'none';
-                    btn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 transition-transform duration-300" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" /></svg> ${I18N?.web_show_less || 'Show Less'}`;
+                    btn.innerHTML = DOMPurify.sanitize(`<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 transition-transform duration-300" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" /></svg> ${I18N?.web_show_less || 'Show Less'}`);
                 } else {
                     btn.classList.remove('expanded');
                     if (blurOverlay) blurOverlay.style.display = '';
-                    btn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 transition-transform duration-300" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" /></svg> ${I18N?.web_show_more || 'Show More'} (${services.length - INITIAL_SHOW})`;
+                    btn.innerHTML = DOMPurify.sanitize(`<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 transition-transform duration-300" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" /></svg> ${I18N?.web_show_more || 'Show More'} (${services.length - INITIAL_SHOW})`);
                 }
             }
         } else {

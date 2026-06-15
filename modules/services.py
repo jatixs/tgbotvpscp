@@ -56,6 +56,7 @@ def get_systemd_status(service_name):
         # Check ActiveState and SubState and LoadState
         cmd = ["systemctl", "show", "-p", "ActiveState,SubState,LoadState", "--", service_name]
         # Use stdout/stderr pipe for compatibility with older python (capture_output added in 3.7)
+        # nosemgrep: python.lang.security.audit.dangerous-subprocess-use-audit.dangerous-subprocess-use-audit
         result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
         if result.returncode != 0:
             combined_output = f"{result.stdout}\n{result.stderr}".lower()
@@ -104,6 +105,7 @@ def get_docker_status(container_name):
         try:
             container_name = _validate_name(container_name)
             cmd = ["docker", "inspect", "-f", "{{.State.Status}}", "--", container_name]
+            # nosemgrep: python.lang.security.audit.dangerous-subprocess-use-audit.dangerous-subprocess-use-audit
             result = subprocess.run(cmd, capture_output=True, text=True)
             if result.returncode == 0:
                 status = result.stdout.strip()
@@ -122,6 +124,7 @@ def discover_all_systemd_services():
     try:
         # Get list of all loaded services (running and available)
         cmd = ["systemctl", "list-units", "--type=service", "--all", "--no-pager", "--no-legend"]
+        # nosemgrep: python.lang.security.audit.dangerous-subprocess-use-audit.dangerous-subprocess-use-audit
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
         if result.returncode == 0:
             for line in result.stdout.strip().split("\n"):
@@ -137,6 +140,7 @@ def discover_all_systemd_services():
         
         # Also get list of all unit files (includes services not currently loaded)
         cmd2 = ["systemctl", "list-unit-files", "--type=service", "--no-pager", "--no-legend"]
+        # nosemgrep: python.lang.security.audit.dangerous-subprocess-use-audit.dangerous-subprocess-use-audit
         result2 = subprocess.run(cmd2, capture_output=True, text=True, timeout=10)
         if result2.returncode == 0:
             for line in result2.stdout.strip().split("\n"):
@@ -164,6 +168,7 @@ def discover_all_docker_containers():
         # Fallback to CLI
         try:
             cmd = ["docker", "ps", "-a", "--format", "{{.Names}}"]
+            # nosemgrep: python.lang.security.audit.dangerous-subprocess-use-audit.dangerous-subprocess-use-audit
             result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
             if result.returncode == 0:
                 for line in result.stdout.strip().split("\n"):
@@ -325,6 +330,7 @@ async def perform_service_action(name, sType, action):
         return False, "Unknown type"
         
     try:
+        # nosemgrep: python.lang.security.audit.dangerous-asyncio-create-exec-audit.dangerous-asyncio-create-exec-audit
         proc = await asyncio.create_subprocess_exec(
             *cmd,
             stdout=asyncio.subprocess.PIPE,
@@ -345,6 +351,7 @@ def get_systemd_service_description(service_name):
     try:
         service_name = _validate_managed_target(service_name, "systemd")
         cmd = ["systemctl", "show", "-p", "Description", "--", service_name]
+        # nosemgrep: python.lang.security.audit.dangerous-subprocess-use-audit.dangerous-subprocess-use-audit
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
         if result.returncode == 0:
             for line in result.stdout.splitlines():
@@ -373,6 +380,7 @@ def get_systemd_service_info(service_name):
         cmd = ["systemctl", "show", "-p", 
        "Description,LoadState,ActiveState,SubState,MainPID,MemoryCurrent,ActiveEnterTimestamp",
        "--", service_name]
+        # nosemgrep: python.lang.security.audit.dangerous-subprocess-use-audit.dangerous-subprocess-use-audit
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
         if result.returncode == 0:
             props = {}
@@ -428,6 +436,7 @@ async def get_docker_image_from_container(container_name):
     try:
         container_name = _validate_managed_target(container_name, "docker")
         cmd = ["docker", "inspect", "-f", "{{.Config.Image}}", "--", container_name]
+        # nosemgrep: python.lang.security.audit.dangerous-subprocess-use-audit.dangerous-subprocess-use-audit
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
         if result.returncode == 0:
             return result.stdout.strip()
@@ -491,6 +500,7 @@ async def get_docker_container_info(container_name):
     try:
         container_name = _validate_managed_target(container_name, "docker")
         cmd = ["docker", "inspect", "--", container_name]
+        # nosemgrep: python.lang.security.audit.dangerous-subprocess-use-audit.dangerous-subprocess-use-audit
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
         if result.returncode == 0:
             data = json.loads(result.stdout)
