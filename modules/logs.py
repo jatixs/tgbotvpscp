@@ -1,7 +1,7 @@
 import asyncio
 import logging
 import os
-from aiogram import F, types, Router, Dispatcher
+from aiogram import F, types, Dispatcher
 from aiogram.fsm.context import FSMContext
 from aiogram.types import KeyboardButton
 from core.config import INSTALL_MODE, DEPLOY_MODE, DEFAULT_LANGUAGE
@@ -17,13 +17,9 @@ def get_button() -> KeyboardButton:
 
 
 def register_handlers(dp: Dispatcher):
-    dp.include_router(router)
+    dp.message(I18nFilter(BUTTON_KEY))(logs_handler)
 
 
-router = Router()
-
-
-@router.message(I18nFilter(BUTTON_KEY))
 async def logs_handler(message: types.Message, state: FSMContext):
     user_id = message.from_user.id
     await state.clear()
