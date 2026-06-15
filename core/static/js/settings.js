@@ -711,7 +711,7 @@ function renderUsers() {
                 <td class="px-2 sm:px-4 py-3"><span class="px-1.5 sm:px-2 py-0.5 rounded text-[9px] sm:text-[10px] uppercase font-bold border ${badgeClass}">${escapeHtml(u.role)}</span></td>
                 <td class="px-2 sm:px-4 py-3 font-mono text-[10px] sm:text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">${u.id}</td>
                 <td class="px-2 sm:px-4 py-3 text-right">
-                    <button onclick="deleteUser(${u.id}, '${escapeHtml(u.name)}')" class="text-red-500 hover:text-red-700 dark:hover:text-red-300 transition p-1" title="Delete">
+                    <button data-action="delete-user" data-id="${u.id}" data-name="${escapeHtml(u.name)}" class="text-red-500 hover:text-red-700 dark:hover:text-red-300 transition p-1" title="Delete">
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
                     </button>
                 </td>
@@ -815,23 +815,23 @@ function renderNodes() {
                 <div id="disp_name_${n.token}" class="flex items-center gap-2 max-w-[120px] sm:max-w-none">
                     <span class="truncate block" title="${escapeHtml(n.name)}">${escapeHtml(n.name)}</span>
                     ${isMainAdmin ? `
-                    <button onclick="startNodeRename('${n.token}')" class="text-gray-400 hover:text-blue-500 p-1 flex-shrink-0 transition-colors">
+                    <button data-action="start-node-rename" data-token="${n.token}" class="text-gray-400 hover:text-blue-500 p-1 flex-shrink-0 transition-colors">
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
                     </button>
                     ` : ''}
                 </div>
                 <div id="edit_name_${n.token}" class="hidden flex items-center gap-1">
-                    <input type="text" id="input_name_${n.token}" value="${escapeHtml(n.name)}" class="bg-white dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded px-2 py-1 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-blue-500 w-24 sm:w-48 transition-all" onkeydown="handleSettingsRenameKeydown(event, '${n.token}')">
+                    <input type="text" id="input_name_${n.token}" value="${escapeHtml(n.name)}" class="bg-white dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded px-2 py-1 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-blue-500 w-24 sm:w-48 transition-all" data-action="node-rename-keydown" data-token="${n.token}">
                     <div class="flex items-center flex-shrink-0">
-                        <button onclick="saveNodeRename('${n.token}')" class="text-green-500 hover:text-green-600 p-1"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg></button>
-                        <button onclick="cancelNodeRename('${n.token}')" class="text-red-500 hover:text-red-600 p-1"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg></button>
+                        <button data-action="save-node-rename" data-token="${n.token}" class="text-green-500 hover:text-green-600 p-1"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg></button>
+                        <button data-action="cancel-node-rename" data-token="${n.token}" class="text-red-500 hover:text-red-600 p-1"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg></button>
                     </div>
                 </div>
             </td>
             <td class="px-2 sm:px-4 py-3 text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">${escapeHtml(decryptedIp) || 'Unknown'}</td>
             <td class="px-2 sm:px-4 py-3 font-mono text-[10px] text-gray-400 dark:text-gray-500 truncate max-w-[80px]" title="${escapeHtml(decryptedToken)}">${escapeHtml(decryptedToken).substring(0, 8)}...</td>
             <td class="px-2 sm:px-4 py-3 text-right">
-                <button onclick="deleteNode('${n.token}')" class="text-red-500 hover:text-red-700 dark:hover:text-red-300 transition p-1" title="Delete">
+                <button data-action="delete-node" data-token="${n.token}" class="text-red-500 hover:text-red-700 dark:hover:text-red-300 transition p-1" title="Delete">
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
                 </button>
             </td>
@@ -1075,7 +1075,7 @@ function renderNotifNodesList() {
 
     container.innerHTML = DOMPurify.sanitize(NODES_DATA.map(n => {
         return `
-        <button onclick="currentNodeForNotif='${n.token}'; switchNotifView('node_detail')" class="flex items-center justify-between w-full bg-gray-50 dark:bg-black/20 p-4 rounded-xl hover:bg-gray-100 dark:hover:bg-black/30 transition border border-gray-200 dark:border-white/5 cursor-pointer group">
+        <button data-action="switch-notif-view" data-token="${n.token}" class="flex items-center justify-between w-full bg-gray-50 dark:bg-black/20 p-4 rounded-xl hover:bg-gray-100 dark:hover:bg-black/30 transition border border-gray-200 dark:border-white/5 cursor-pointer group">
             <div class="flex items-center gap-3 min-w-0">
                 <span class="text-2xl group-hover:scale-110 transition-transform flex-shrink-0">🖥</span>
                 <span class="text-sm font-bold text-gray-900 dark:text-white text-left truncate">${escapeHtml(n.name)}</span>
@@ -1120,29 +1120,34 @@ function renderNotifNodeDetail() {
         return USER_ALERTS ? USER_ALERTS[type] || false : false;
     };
 
-    const tDowntime = I18N.notifications_alert_name_downtime || '';
-    const tRes = I18N.notifications_alert_name_res || '';
-    const tLogins = I18N.notifications_alert_name_logins || '';
-
     container.innerHTML = DOMPurify.sanitize(`
-        <div class="flex items-center justify-between bg-gray-50 dark:bg-black/20 p-4 rounded-xl hover:bg-gray-100 dark:hover:bg-black/30 transition border border-gray-200 dark:border-white/5 cursor-pointer" onclick="document.getElementById('n_alert_${t}_downtime').click()">
-            <span class="text-sm font-medium text-gray-900 dark:text-white">${tDowntime}</span>
-            <label class="relative inline-flex items-center cursor-pointer" onclick="event.stopPropagation()">
-                <input type="checkbox" id="n_alert_${t}_downtime" class="sr-only peer" onchange="triggerAutoSave('node_detail')" ${isChecked('downtime') ? 'checked' : ''}>
+        <div class="flex items-center justify-between bg-gray-50 dark:bg-black/20 p-4 rounded-xl hover:bg-gray-100 dark:hover:bg-black/30 transition border border-gray-200 dark:border-white/5 cursor-pointer" data-action="click-alert-toggle" data-target="n_alert_${t}_downtime">
+            <div>
+                <div class="text-sm font-bold text-gray-900 dark:text-white">${I18N.web_notif_downtime || 'Downtime Alert'}</div>
+                <div class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">${I18N.web_notif_downtime_desc || 'Notify when node goes offline'}</div>
+            </div>
+            <label class="relative inline-flex items-center cursor-pointer" data-action="stop-propagation">
+                <input type="checkbox" id="n_alert_${t}_downtime" class="sr-only peer" data-action="trigger-auto-save" data-view="node_detail" ${isChecked('downtime') ? 'checked' : ''}>
                 <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-green-500"></div>
             </label>
         </div>
-        <div class="flex items-center justify-between bg-gray-50 dark:bg-black/20 p-4 rounded-xl hover:bg-gray-100 dark:hover:bg-black/30 transition border border-gray-200 dark:border-white/5 cursor-pointer" onclick="document.getElementById('n_alert_${t}_node_resources').click()">
-            <span class="text-sm font-medium text-gray-900 dark:text-white">${tRes}</span>
-            <label class="relative inline-flex items-center cursor-pointer" onclick="event.stopPropagation()">
-                <input type="checkbox" id="n_alert_${t}_node_resources" class="sr-only peer" onchange="triggerAutoSave('node_detail')" ${isChecked('node_resources') ? 'checked' : ''}>
+        <div class="flex items-center justify-between bg-gray-50 dark:bg-black/20 p-4 rounded-xl hover:bg-gray-100 dark:hover:bg-black/30 transition border border-gray-200 dark:border-white/5 cursor-pointer" data-action="click-alert-toggle" data-target="n_alert_${t}_node_resources">
+            <div>
+                <div class="text-sm font-bold text-gray-900 dark:text-white">${I18N.web_notif_resources || 'High Resource Usage'}</div>
+                <div class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">${I18N.web_notif_resources_desc || 'CPU/RAM > 90%'}</div>
+            </div>
+            <label class="relative inline-flex items-center cursor-pointer" data-action="stop-propagation">
+                <input type="checkbox" id="n_alert_${t}_node_resources" class="sr-only peer" data-action="trigger-auto-save" data-view="node_detail" ${isChecked('node_resources') ? 'checked' : ''}>
                 <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-green-500"></div>
             </label>
         </div>
-        <div class="flex items-center justify-between bg-gray-50 dark:bg-black/20 p-4 rounded-xl hover:bg-gray-100 dark:hover:bg-black/30 transition border border-gray-200 dark:border-white/5 cursor-pointer" onclick="document.getElementById('n_alert_${t}_node_logins').click()">
-            <span class="text-sm font-medium text-gray-900 dark:text-white">${tLogins}</span>
-            <label class="relative inline-flex items-center cursor-pointer" onclick="event.stopPropagation()">
-                <input type="checkbox" id="n_alert_${t}_node_logins" class="sr-only peer" onchange="triggerAutoSave('node_detail')" ${isChecked('node_logins') ? 'checked' : ''}>
+        <div class="flex items-center justify-between bg-gray-50 dark:bg-black/20 p-4 rounded-xl hover:bg-gray-100 dark:hover:bg-black/30 transition border border-gray-200 dark:border-white/5 cursor-pointer" data-action="click-alert-toggle" data-target="n_alert_${t}_node_logins">
+            <div>
+                <div class="text-sm font-bold text-gray-900 dark:text-white">${I18N.web_notif_logins || 'SSH Logins'}</div>
+                <div class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">${I18N.web_notif_logins_desc || 'Successful SSH connections'}</div>
+            </div>
+            <label class="relative inline-flex items-center cursor-pointer" data-action="stop-propagation">
+                <input type="checkbox" id="n_alert_${t}_node_logins" class="sr-only peer" data-action="trigger-auto-save" data-view="node_detail" ${isChecked('node_logins') ? 'checked' : ''}>
                 <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-green-500"></div>
             </label>
         </div>
@@ -1369,7 +1374,7 @@ function renderKeyboardModalContent() {
         html += `<div class="mb-2">`;
         html += `<div class="flex items-center justify-between mb-3">`;
         html += `<h4 class="text-sm font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider ml-1">${title}</h4>`;
-        html += `<button id="kb-badge-${catKey}" onclick="toggleCategoryKeyboard('${catKey}')" class="flex items-center justify-center gap-1.5 text-xs font-bold px-3 py-1 rounded-lg transition-all duration-200 cursor-pointer shadow-sm hover:shadow active:scale-95 select-none ${badgeColor}" title="Toggle All">
+        html += `<button id="kb-badge-${catKey}" data-action="toggle-category-keyboard" data-cat="${catKey}" class="flex items-center justify-center gap-1.5 text-xs font-bold px-3 py-1 rounded-lg transition-all duration-200 cursor-pointer shadow-sm hover:shadow active:scale-95 select-none ${badgeColor}" title="Toggle All">
                     <span>${enabledCount}/${totalCount}</span>
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5 opacity-60" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" /></svg>
                  </button>`;
@@ -1379,10 +1384,10 @@ function renderKeyboardModalContent() {
             const enabled = KEYBOARD_CONFIG[key];
             const label = (typeof I18N !== 'undefined' && I18N[`lbl_${key}`]) ? I18N[`lbl_${key}`] : key;
             html += `
-                <div class="flex items-center justify-between bg-gray-50 dark:bg-black/20 p-3 rounded-xl hover:bg-gray-100 dark:hover:bg-black/30 transition border border-gray-200 dark:border-white/5 cursor-pointer select-none" onclick="document.getElementById('${key}').click();">
+                <div class="flex items-center justify-between bg-gray-50 dark:bg-black/20 p-3 rounded-xl hover:bg-gray-100 dark:hover:bg-black/30 transition border border-gray-200 dark:border-white/5 cursor-pointer select-none" data-action="click-alert-toggle" data-target="${key}">
                     <span class="text-sm font-medium text-gray-900 dark:text-white truncate pr-2" title="${label}">${label}</span>
-                    <label class="relative inline-flex items-center cursor-pointer flex-shrink-0" onclick="event.stopPropagation();">
-                        <input type="checkbox" id="${key}" class="sr-only peer" onchange="triggerKeyboardSave()" ${enabled ? 'checked' : ''}>
+                    <label class="relative inline-flex items-center cursor-pointer flex-shrink-0" data-action="stop-propagation">
+                        <input type="checkbox" id="${key}" class="sr-only peer" data-action="trigger-keyboard-save" ${enabled ? 'checked' : ''}>
                         <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-blue-600"></div>
                     </label>
                 </div>`;
@@ -1752,7 +1757,7 @@ function renderSessionItem(s) {
         <div class="flex-shrink-0 ml-2">
             ${isCurrent ?
             `<span class="px-2 py-1 bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400 text-[10px] font-bold uppercase rounded-lg tracking-wider">${I18N.web_session_current || 'Current'}</span>` :
-            `<button onclick="revokeSession('${s.id}')" class="p-2 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition" title="${I18N.web_session_revoke || 'Revoke'}">
+            `<button data-action="revoke-session" data-id="${s.id}" class="p-2 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition" title="${I18N.web_session_revoke || 'Revoke'}">
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                     </svg>
@@ -2136,3 +2141,47 @@ if (typeof window.initSettings === 'function') {
         loadTelegramOnlyMode();
     };
 }
+
+// Global CustomEvent delegation for settings.js
+document.addEventListener('app:action:delete-user', e => {
+    deleteUser(e.detail.target.getAttribute('data-id'), e.detail.target.getAttribute('data-name'));
+});
+document.addEventListener('app:action:start-node-rename', e => {
+    startNodeRename(e.detail.target.getAttribute('data-token'));
+});
+document.addEventListener('app:action:node-rename-keydown', e => {
+    handleSettingsRenameKeydown(e.detail.originalEvent, e.detail.target.getAttribute('data-token'));
+});
+document.addEventListener('app:action:save-node-rename', e => {
+    saveNodeRename(e.detail.target.getAttribute('data-token'));
+});
+document.addEventListener('app:action:cancel-node-rename', e => {
+    cancelNodeRename(e.detail.target.getAttribute('data-token'));
+});
+document.addEventListener('app:action:delete-node', e => {
+    deleteNode(e.detail.target.getAttribute('data-token'));
+});
+document.addEventListener('app:action:switch-notif-view', e => {
+    currentNodeForNotif = e.detail.target.getAttribute('data-token');
+    switchNotifView('node_detail');
+});
+document.addEventListener('app:action:click-alert-toggle', e => {
+    document.getElementById(e.detail.target.getAttribute('data-target')).click();
+});
+document.addEventListener('app:action:stop-propagation', e => {
+    e.detail.originalEvent.stopPropagation();
+});
+document.addEventListener('app:action:toggle-category-keyboard', e => {
+    toggleCategoryKeyboard(e.detail.target.getAttribute('data-cat'));
+});
+document.addEventListener('app:action:revoke-session', e => {
+    revokeSession(e.detail.target.getAttribute('data-id'));
+});
+
+// For inputs/checkboxes that trigger onchange
+document.addEventListener('app:change:trigger-auto-save', e => {
+    triggerAutoSave(e.detail.target.getAttribute('data-view'));
+});
+document.addEventListener('app:change:trigger-keyboard-save', e => {
+    triggerKeyboardSave();
+});
