@@ -2757,11 +2757,13 @@ async function loadAgentIpv4() {
         if (!secondary.length) {
             elEmpty?.classList.remove('hidden');
         } else if (elList) {
-            elList.innerHTML = DOMPurify.sanitize(secondary.map(ip => `
+            const rawHtml = secondary.map(ip => `
         <li class="bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-xl px-3 py-2 font-mono text-xs select-all">
           ${escapeHtml(ip)}
         </li>
-      `).join(''));
+      `).join('');
+            const safeHtml = DOMPurify.sanitize('<ul>' + rawHtml + '</ul>');
+            elList.innerHTML = safeHtml.replace(/<\/?ul[^>]*>/ig, '');
         }
     } catch (e) {
         console.error('Error loading IPs:', e);

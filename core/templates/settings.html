@@ -713,21 +713,23 @@
                     <div class="bg-white/60 dark:bg-white/5 backdrop-blur-md border border-white/40 dark:border-white/10 rounded-2xl p-6 shadow-lg dark:shadow-none lazy-block">
                         <div>
                             <div class="flex justify-between items-center mb-4">
-                                <h2 class="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
-                                    <svg xmlns="http://www.w3.org/2000/svg"
-                                         class="h-6 w-6 text-gray-500"
-                                         fill="none"
-                                         viewBox="0 0 24 24"
-                                         stroke="currentColor">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
-                                    </svg>
-                                    {{ web_keyboard_title }}
+                                <h2 class="text-lg sm:text-xl font-bold text-gray-900 dark:text-white flex items-center justify-between sm:justify-start gap-2 sm:gap-3 w-full min-w-0">
+                                    <div class="flex items-center gap-2 min-w-0">
+                                        <svg xmlns="http://www.w3.org/2000/svg"
+                                             class="h-5 w-5 sm:h-6 sm:w-6 text-gray-500 shrink-0"
+                                             fill="none"
+                                             viewBox="0 0 24 24"
+                                             stroke="currentColor">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
+                                        </svg>
+                                        <span class="truncate">{{ web_keyboard_title }}</span>
+                                    </div>
+                                    <span id="keyboardPreview" class="inline-flex items-center shrink-0"></span>
                                 </h2>
                                 <span id="keyboardStatus"
                                       class="text-xs font-medium text-gray-500 dark:text-gray-400 transition-opacity opacity-0"></span>
                             </div>
                             <p class="text-sm text-gray-500 dark:text-gray-400 mb-4">{{ web_kb_desc }}</p>
-                            <div id="keyboardPreview" class="flex flex-wrap gap-2 mb-4"></div>
                         </div>
                         <div>
                             <button onclick="openKeyboardModal()"
