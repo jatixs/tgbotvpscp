@@ -1,9 +1,29 @@
 /* /core/static/js/common.js */
 
-// Configure DOMPurify globally to allow our inline event handlers
-if (typeof DOMPurify !== 'undefined') {
-    DOMPurify.setConfig({ ADD_ATTR: ['onclick', 'onchange', 'onkeyup', 'onkeydown', 'oninput'] });
-}
+// Global Event Delegation setup
+document.addEventListener('click', e => {
+    const actionEl = e.target.closest('[data-action]');
+    if (!actionEl) return;
+    const action = actionEl.getAttribute('data-action');
+    const event = new CustomEvent(`app:action:${action}`, { bubbles: true, detail: { target: actionEl, originalEvent: e } });
+    actionEl.dispatchEvent(event);
+});
+
+document.addEventListener('change', e => {
+    const actionEl = e.target.closest('[data-action]');
+    if (!actionEl) return;
+    const action = actionEl.getAttribute('data-action');
+    const event = new CustomEvent(`app:change:${action}`, { bubbles: true, detail: { target: actionEl, originalEvent: e } });
+    actionEl.dispatchEvent(event);
+});
+
+document.addEventListener('keydown', e => {
+    const actionEl = e.target.closest('[data-action]');
+    if (!actionEl) return;
+    const action = actionEl.getAttribute('data-action');
+    const event = new CustomEvent(`app:action:${action}`, { bubbles: true, detail: { target: actionEl, originalEvent: e } });
+    actionEl.dispatchEvent(event);
+});
 
 // Security: Safe HTML helpers
 function getSecureRandom() {
@@ -611,7 +631,7 @@ function showToast(message) {
     const toast = document.createElement('div');
     toast.className = 'pointer-events-auto flex items-center gap-3 px-4 py-3 rounded-2xl shadow-xl backdrop-blur-md border transition-all duration-500 ease-out transform translate-y-10 opacity-0 bg-white/90 dark:bg-gray-800/90 border-gray-200 dark:border-white/10 w-auto max-w-sm';
     const icon = `<div class="p-1.5 rounded-full bg-blue-100 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400 flex-shrink-0"><svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg></div>`;
-    const closeBtn = `<button onclick="closeToast(this.closest('div'))" class="text-gray-400 hover:text-gray-600 dark:hover:text-white transition p-1 rounded-lg hover:bg-black/5 dark:hover:bg-white/10 ml-1 flex-shrink-0"><svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg></button>`;
+    const closeBtn = `<button data-action="close-toast" class="text-gray-400 hover:text-gray-600 dark:hover:text-white transition p-1 rounded-lg hover:bg-black/5 dark:hover:bg-white/10 ml-1 flex-shrink-0"><svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg></button>`;
     toast.innerHTML = DOMPurify.sanitize(`${icon}<div class="flex-1 min-w-0"><p class="text-sm font-medium text-gray-900 dark:text-white leading-snug break-words">${message}</p></div>${closeBtn}`);
     container.appendChild(toast);
     requestAnimationFrame(() => {
@@ -637,6 +657,10 @@ function closeToast(el) {
 }
 window.showToast = showToast;
 window.closeToast = closeToast;
+
+document.addEventListener('app:action:close-toast', e => {
+    closeToast(e.detail.target.closest('div'));
+});
 
 function launchBrandEasterEgg() {
     const overlay = document.createElement('div');
@@ -1138,7 +1162,7 @@ function handleConnectionError() {
             </svg>
             <span class="text-sm font-bold text-red-900 dark:text-red-100">${msg}</span>
         </div>
-        <button onclick="retrySSEStream()" class="w-full py-1.5 px-3 bg-red-200 hover:bg-red-300 dark:bg-red-800 dark:hover:bg-red-700 text-red-900 dark:text-red-100 rounded-lg text-xs font-bold transition flex items-center justify-center gap-2">
+        <button data-action="retry-sse" class="w-full py-1.5 px-3 bg-red-200 hover:bg-red-300 dark:bg-red-800 dark:hover:bg-red-700 text-red-900 dark:text-red-100 rounded-lg text-xs font-bold transition flex items-center justify-center gap-2">
             <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
             </svg>
@@ -1166,6 +1190,12 @@ function retrySSEStream() {
         }
     }, 5000);
 }
+
+window.retrySSEStream = retrySSEStream;
+
+document.addEventListener('app:action:retry-sse', () => {
+    retrySSEStream();
+});
 
 function handleFatalConnectionError() {
     if (document.getElementById('fatal-error-overlay')) return;

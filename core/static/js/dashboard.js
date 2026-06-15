@@ -605,12 +605,12 @@ function renderNextNodeBatch() {
         }
 
         return `
-        <div data-token="${escapeHtml(node.token)}" class="bg-white dark:bg-white/5 hover:bg-gray-50 dark:hover:bg-white/10 transition-all duration-200 rounded-xl border border-gray-100 dark:border-white/5 cursor-pointer shadow-sm hover:shadow-md group animate-fade-in-up" onclick="openNodeDetails('${escapeHtml(node.token)}', '${ui.statusColor}')">
+        <div data-token="${escapeHtml(node.token)}" class="bg-white dark:bg-white/5 hover:bg-gray-50 dark:hover:bg-white/10 transition-all duration-200 rounded-xl border border-gray-100 dark:border-white/5 cursor-pointer shadow-sm hover:shadow-md group animate-fade-in-up" data-action="open-node-details" data-color="${ui.statusColor}">
             
             <div class="p-3 sm:p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
                 
                 <div class="flex flex-1 items-center gap-3 min-w-0">
-                    <div class="${dragHandleClass}drag-handle p-2 -ml-2 text-gray-300 hover:text-gray-500 dark:text-white/20 dark:hover:text-white/50 cursor-grab active:cursor-grabbing transition" onclick="event.stopPropagation()">
+                    <div class="${dragHandleClass}drag-handle p-2 -ml-2 text-gray-300 hover:text-gray-500 dark:text-white/20 dark:hover:text-white/50 cursor-grab active:cursor-grabbing transition" data-action="stop-propagation">
                         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8 9h8M8 15h8"/></svg>
                     </div>
                     <div class="relative shrink-0 flex items-center justify-center w-8 h-8 rounded-full bg-gray-100 dark:bg-black/20">
@@ -846,7 +846,7 @@ function updateAgentStatsUI(data) {
                         ${mkRow(I18N?.web_nodes_monitor_physical_downtime || 'Physical downtime', formatDuration(avail.physical_downtime_secs), 'text-violet-600 dark:text-violet-400')}
                     </div>
                     <div class="mt-3 flex justify-end">
-                        <button onclick="resetAgentUptime()" class="text-xs font-bold text-blue-600 hover:text-blue-500 bg-blue-100/50 hover:bg-blue-100 dark:bg-blue-900/30 dark:hover:bg-blue-900/50 px-3 py-1 rounded transition-colors hidden" id="agentHintResetBtn">
+                        <button data-action="reset-agent-uptime" class="text-xs font-bold text-blue-600 hover:text-blue-500 bg-blue-100/50 hover:bg-blue-100 dark:bg-blue-900/30 dark:hover:bg-blue-900/50 px-3 py-1 rounded transition-colors hidden" id="agentHintResetBtn">
                             ${escapeHtml(I18N?.web_reset_uptime || 'Reset Uptime')}
                         </button>
                     </div>`);
@@ -2053,7 +2053,7 @@ function renderServices(services, forceRender = false) {
             // Show Start only if NOT running
             if (!isRunning) {
                 buttonsHtml += `
-                    <button onclick="event.stopPropagation(); controlService('${item.name}', '${item.type}', 'start')" class="group w-8 h-8 flex items-center justify-center rounded-lg bg-green-500/20 hover:bg-green-700 transition-all duration-200 hover:scale-110 hover:shadow-lg hover:shadow-green-500/30 active:scale-95" title="${window.i18n.btn_start}">
+                    <button data-action="control-service" data-name="${item.name}" data-type="${item.type}" data-cmd="start" class="group w-8 h-8 flex items-center justify-center rounded-lg bg-green-500/20 hover:bg-green-700 transition-all duration-200 hover:scale-110 hover:shadow-lg hover:shadow-green-500/30 active:scale-95" title="${window.i18n.btn_start}">
                          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-green-500 group-hover:text-white transition-colors" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
                     </button>
                 `;
@@ -2061,7 +2061,7 @@ function renderServices(services, forceRender = false) {
             // Show Restart only if running
             if (isRunning) {
                 buttonsHtml += `
-                    <button onclick="event.stopPropagation(); controlService('${item.name}', '${item.type}', 'restart')" class="group w-8 h-8 flex items-center justify-center rounded-lg bg-blue-500/20 hover:bg-blue-700 transition-all duration-200 hover:scale-110 hover:shadow-lg hover:shadow-blue-500/30 active:scale-95" title="${window.i18n.btn_restart}">
+                    <button data-action="control-service" data-name="${item.name}" data-type="${item.type}" data-cmd="restart" class="group w-8 h-8 flex items-center justify-center rounded-lg bg-blue-500/20 hover:bg-blue-700 transition-all duration-200 hover:scale-110 hover:shadow-lg hover:shadow-blue-500/30 active:scale-95" title="${window.i18n.btn_restart}">
                          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-blue-500 group-hover:text-white group-hover:animate-spin transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
                     </button>
                 `;
@@ -2070,7 +2070,7 @@ function renderServices(services, forceRender = false) {
         if (roleLevel >= 2 && isRunning) {
             // Show Stop only if running
             buttonsHtml += `
-                <button onclick="event.stopPropagation(); controlService('${item.name}', '${item.type}', 'stop')" class="group w-8 h-8 flex items-center justify-center rounded-lg bg-red-500/20 hover:bg-red-700 transition-all duration-200 hover:scale-110 hover:shadow-lg hover:shadow-red-500/30 active:scale-95" title="${window.i18n.btn_stop}">
+                <button data-action="control-service" data-name="${item.name}" data-type="${item.type}" data-cmd="stop" class="group w-8 h-8 flex items-center justify-center rounded-lg bg-red-500/20 hover:bg-red-700 transition-all duration-200 hover:scale-110 hover:shadow-lg hover:shadow-red-500/30 active:scale-95" title="${window.i18n.btn_stop}">
                      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-red-500 group-hover:text-white transition-colors" fill="currentColor" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="1"/></svg>
                 </button>
             `;
@@ -2198,7 +2198,7 @@ function filterServices(query) {
                 suggestionHtml = `
                     <div class="layout-suggestion-main text-center py-2 col-span-full">
                         <span class="text-gray-400">${suggestionText}: </span>
-                        <button onclick="applyLayoutSuggestionMain('${layoutCheck.converted}')" 
+                        <button data-action="apply-layout-suggestion-main" data-layout="${layoutCheck.converted}" 
                                 class="text-blue-500 hover:text-blue-400 font-medium hover:underline">
                             "${layoutCheck.converted}"
                         </button>
@@ -2303,7 +2303,7 @@ async function searchGlobalServices(query, managedMatchCount) {
             let addButtonHtml = '';
             if (roleLevel >= 2) {
                 addButtonHtml = `
-                    <button onclick="addServiceFromSearch('${item.name}', '${item.type}')" 
+                    <button data-action="add-service-search" data-name="${item.name}" data-type="${item.type}" 
                             class="w-8 h-8 flex items-center justify-center rounded-lg bg-green-500/20 hover:bg-green-600 transition-all duration-200 hover:scale-110 active:scale-95"
                             title="${I18N.web_services_btn_add || 'Add'}">
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-green-500 hover:text-white transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
@@ -2617,7 +2617,7 @@ function renderServicesEditList(services) {
                 </div>
                 <button id="srv-btn-${safeId}" 
                         data-type="${s.type}"
-                        onclick="toggleServiceManaged('${s.name}', '${s.type}', ${isManaged}, this)" 
+                        data-action="toggle-service-managed" data-name="${s.name}" data-type="${s.type}" data-managed="${isManaged}" 
                         class="srv-manage-btn px-2 py-1 rounded-lg text-xs font-medium transition min-w-[60px] flex items-center justify-center gap-1 flex-shrink-0 ${buttonClasses}">
                     <span class="btn-text">${isManaged ? (I18N.web_services_btn_remove || 'Remove') : (I18N.web_services_btn_add || 'Add')}</span>
                     <svg class="btn-spinner hidden animate-spin h-3 w-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
@@ -2679,7 +2679,7 @@ function filterServicesEditList(query) {
                 suggestionHtml = `
                     <div class="layout-suggestion text-center py-2">
                         <span class="text-gray-400">${suggestionText}: </span>
-                        <button onclick="applyLayoutSuggestion('${layoutCheck.converted}')" 
+                        <button data-action="apply-layout-suggestion" data-layout="${layoutCheck.converted}" 
                                 class="text-blue-500 hover:text-blue-400 font-medium hover:underline">
                             "${layoutCheck.converted}"
                         </button>
@@ -2947,4 +2947,29 @@ window.resetNodeUptime = async function() {
 document.addEventListener('DOMContentLoaded', () => {
     // Initial load via fetch, then SSE will be started automatically
     loadServices();
+});
+
+// Global CustomEvent delegation for dashboard.js
+document.addEventListener('app:action:open-node-details', e => {
+    openNodeDetails(e.detail.target.getAttribute('data-token'), e.detail.target.getAttribute('data-color'));
+});
+document.addEventListener('app:action:reset-agent-uptime', e => {
+    resetAgentUptime();
+});
+document.addEventListener('app:action:control-service', e => {
+    e.detail.originalEvent.stopPropagation();
+    controlService(e.detail.target.getAttribute('data-name'), e.detail.target.getAttribute('data-type'), e.detail.target.getAttribute('data-cmd'));
+});
+document.addEventListener('app:action:apply-layout-suggestion-main', e => {
+    applyLayoutSuggestionMain(e.detail.target.getAttribute('data-layout'));
+});
+document.addEventListener('app:action:apply-layout-suggestion', e => {
+    applyLayoutSuggestion(e.detail.target.getAttribute('data-layout'));
+});
+document.addEventListener('app:action:add-service-search', e => {
+    addServiceFromSearch(e.detail.target.getAttribute('data-name'), e.detail.target.getAttribute('data-type'));
+});
+document.addEventListener('app:action:toggle-service-managed', e => {
+    const isManaged = e.detail.target.getAttribute('data-managed') === 'true';
+    toggleServiceManaged(e.detail.target.getAttribute('data-name'), e.detail.target.getAttribute('data-type'), isManaged, e.detail.target);
 });

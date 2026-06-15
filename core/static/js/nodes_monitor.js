@@ -376,7 +376,7 @@ function createNodeCard(node) {
                 <div class="flex items-center gap-3">
                     <input type="checkbox" class="node-checkbox rounded border-gray-300 dark:border-gray-600 text-blue-600 focus:ring-blue-500" 
                            ${isSelected ? 'checked' : ''} 
-                           onchange="toggleNodeSelection('${node.token}', this)">
+                           data-action="toggle-node-selection" data-token="${node.token}">
                     <div>
                         <h3 class="font-bold text-gray-900 dark:text-white text-sm">${typeof replaceEmojisWithFlagsHTML === 'function' ? replaceEmojisWithFlagsHTML(escapeHtml(node.name)) : escapeHtml(node.name)}</h3>
                         <div class="flex items-center gap-1.5">
@@ -459,10 +459,10 @@ function createNodeCard(node) {
             
             <!-- Actions -->
             <div class="px-4 pb-4 mb-3 pt-1 flex gap-2">
-                <button onclick="openNodeDetail('${node.token}')" class="flex-1 px-3 py-2 bg-blue-100 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400 rounded-xl text-xs font-bold hover:bg-blue-200 dark:hover:bg-blue-500/30 transition">
+                <button data-action="open-node-detail" data-token="${node.token}" class="flex-1 px-3 py-2 bg-blue-100 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400 rounded-xl text-xs font-bold hover:bg-blue-200 dark:hover:bg-blue-500/30 transition">
                     ${I18N?.web_node_details || 'Node Details'}
                 </button>
-                <button onclick="quickReboot('${node.token}')" class="node-reboot-btn px-3 py-2 text-red-600 dark:text-red-400 rounded-xl text-xs font-bold hover:bg-red-200 transition" title="Reboot">
+                <button data-action="quick-reboot" data-token="${node.token}" class="node-reboot-btn px-3 py-2 text-red-600 dark:text-red-400 rounded-xl text-xs font-bold hover:bg-red-200 transition" title="Reboot">
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                     </svg>
@@ -1070,12 +1070,12 @@ function renderNodeServices(token, services) {
                     ${svc.type === 'docker' ? '<span class="text-xs text-blue-500">🐳</span>' : ''}
                 </div>
                 <div class="flex gap-1">
-                    <button onclick="nodeServiceAction('${token}', '${svc.name}', 'restart', '${svc.type || 'systemd'}')" class="p-1 text-yellow-600 dark:text-yellow-400 hover:bg-yellow-100 dark:hover:bg-yellow-500/20 rounded" title="Restart">
+                    <button data-action="node-service-action" data-token="${token}" data-name="${svc.name}" data-cmd="restart" data-type="${svc.type || 'systemd'}" class="p-1 text-yellow-600 dark:text-yellow-400 hover:bg-yellow-100 dark:hover:bg-yellow-500/20 rounded" title="Restart">
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                         </svg>
                     </button>
-                    <button onclick="nodeServiceAction('${token}', '${svc.name}', '${svc.status === 'running' ? 'stop' : 'start'}', '${svc.type || 'systemd'}')" 
+                    <button data-action="node-service-action" data-token="${token}" data-name="${svc.name}" data-cmd="${svc.status === 'running' ? 'stop' : 'start'}" data-type="${svc.type || 'systemd'}" 
                             class="p-1 ${svc.status === 'running' ? 'text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-500/20' : 'text-green-600 dark:text-green-400 hover:bg-green-100 dark:hover:bg-green-500/20'} rounded"
                             title="${svc.status === 'running' ? 'Stop' : 'Start'}">
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -1313,3 +1313,16 @@ function updateThemeIcons() {
     document.getElementById('iconSun')?.classList.toggle('hidden', isDark || theme === 'system');
     document.getElementById('iconSystem')?.classList.toggle('hidden', theme !== 'system');
 }
+// Global CustomEvent delegation for nodes_monitor.js
+document.addEventListener('app:change:toggle-node-selection', e => {
+    toggleNodeSelection(e.detail.target.getAttribute('data-token'), e.detail.target);
+});
+document.addEventListener('app:action:open-node-detail', e => {
+    openNodeDetail(e.detail.target.getAttribute('data-token'));
+});
+document.addEventListener('app:action:quick-reboot', e => {
+    quickReboot(e.detail.target.getAttribute('data-token'));
+});
+document.addEventListener('app:action:node-service-action', e => {
+    nodeServiceAction(e.detail.target.getAttribute('data-token'), e.detail.target.getAttribute('data-name'), e.detail.target.getAttribute('data-cmd'), e.detail.target.getAttribute('data-type'));
+});
