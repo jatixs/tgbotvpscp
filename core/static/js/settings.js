@@ -702,7 +702,7 @@ function renderUsers() {
     section.classList.remove('hidden');
 
     if (USERS_DATA.length > 0) {
-        tbody.innerHTML = DOMPurify.sanitize(USERS_DATA.map(u => {
+        const rawHtml = USERS_DATA.map(u => {
             const isAdmin = u.role === 'admins';
             const badgeClass = isAdmin ? 'border-green-500/30 bg-green-100 dark:bg-green-500/20 text-green-600 dark:text-green-400' : 'border-blue-500/30 bg-blue-100 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400';
             return `
@@ -716,11 +716,14 @@ function renderUsers() {
                     </button>
                 </td>
             </tr>`;
-        }).join(''));
+        }).join('');
+        const safeTable = DOMPurify.sanitize('<table><tbody>' + rawHtml + '</tbody></table>');
+        tbody.innerHTML = safeTable.replace(/<\/?table[^>]*>/ig, '').replace(/<\/?tbody[^>]*>/ig, '');
         if (typeof window.parsePageEmojis === 'function') window.parsePageEmojis();
     } else {
         const noUsers = (typeof I18N !== 'undefined' && I18N.web_no_users) ? I18N.web_no_users : "No users";
-        tbody.innerHTML = DOMPurify.sanitize(`<tr><td colspan="4" class="px-4 py-3 text-center text-gray-500 text-xs">${noUsers}</td></tr>`);
+        const safeTable = DOMPurify.sanitize('<table><tbody><tr><td colspan="4" class="px-4 py-3 text-center text-gray-500 text-xs">' + noUsers + '</td></tr></tbody></table>');
+        tbody.innerHTML = safeTable.replace(/<\/?table[^>]*>/ig, '').replace(/<\/?tbody[^>]*>/ig, '');
     }
 }
 
@@ -802,7 +805,7 @@ function renderNodes() {
     section.classList.remove('hidden');
 
     if (NODES_DATA.length > 0) {
-        tbody.innerHTML = DOMPurify.sanitize(NODES_DATA.map(n => {
+        const rawHtml = NODES_DATA.map(n => {
             const decryptedIp = decryptData(n.ip);
             const decryptedToken = decryptData(n.token);
 
@@ -833,10 +836,13 @@ function renderNodes() {
                 </button>
             </td>
         </tr>`;
-        }).join(''));
+        }).join('');
+        const safeTable = DOMPurify.sanitize('<table><tbody>' + rawHtml + '</tbody></table>');
+        tbody.innerHTML = safeTable.replace(/<\/?table[^>]*>/ig, '').replace(/<\/?tbody[^>]*>/ig, '');
         if (typeof window.parsePageEmojis === 'function') window.parsePageEmojis();
     } else {
-        tbody.innerHTML = DOMPurify.sanitize(`<tr><td colspan="4" class="px-4 py-3 text-center text-gray-500 text-xs">${I18N.web_no_nodes}</td></tr>`);
+        const safeTable = DOMPurify.sanitize('<table><tbody><tr><td colspan="4" class="px-4 py-3 text-center text-gray-500 text-xs">' + I18N.web_no_nodes + '</td></tr></tbody></table>');
+        tbody.innerHTML = safeTable.replace(/<\/?table[^>]*>/ig, '').replace(/<\/?tbody[^>]*>/ig, '');
     }
 }
 window.startNodeRename = function (token) {
@@ -1373,10 +1379,10 @@ function renderKeyboardModalContent() {
             const enabled = KEYBOARD_CONFIG[key];
             const label = (typeof I18N !== 'undefined' && I18N[`lbl_${key}`]) ? I18N[`lbl_${key}`] : key;
             html += `
-                <div class="flex items-center justify-between bg-gray-50 dark:bg-black/20 p-3 rounded-xl hover:bg-gray-100 dark:hover:bg-black/30 transition border border-gray-200 dark:border-white/5 cursor-pointer select-none" onclick="document.getElementById('${key}').click(); triggerKeyboardSave();">
+                <div class="flex items-center justify-between bg-gray-50 dark:bg-black/20 p-3 rounded-xl hover:bg-gray-100 dark:hover:bg-black/30 transition border border-gray-200 dark:border-white/5 cursor-pointer select-none" onclick="document.getElementById('${key}').click();">
                     <span class="text-sm font-medium text-gray-900 dark:text-white truncate pr-2" title="${label}">${label}</span>
-                    <label class="relative inline-flex items-center cursor-pointer flex-shrink-0" onclick="event.stopPropagation(); triggerKeyboardSave();">
-                        <input type="checkbox" id="${key}" class="sr-only peer" ${enabled ? 'checked' : ''}>
+                    <label class="relative inline-flex items-center cursor-pointer flex-shrink-0" onclick="event.stopPropagation();">
+                        <input type="checkbox" id="${key}" class="sr-only peer" onchange="triggerKeyboardSave()" ${enabled ? 'checked' : ''}>
                         <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-blue-600"></div>
                     </label>
                 </div>`;

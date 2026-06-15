@@ -1,5 +1,10 @@
 /* /core/static/js/common.js */
 
+// Configure DOMPurify globally to allow our inline event handlers
+if (typeof DOMPurify !== 'undefined') {
+    DOMPurify.setConfig({ ADD_ATTR: ['onclick', 'onchange', 'onkeyup', 'onkeydown', 'oninput'] });
+}
+
 // Security: Safe HTML helpers
 function getSecureRandom() {
     return window.crypto.getRandomValues(new Uint32Array(1))[0] / 4294967295;
