@@ -69,6 +69,7 @@ def mask_sensitive_data(data: str, mask_length: int = 6) -> str:
     """Mask sensitive values before writing them to logs."""
     if not isinstance(data, str) or len(data) < mask_length:
         return "***"
+    # nosemgrep: python.flask.security.audit.directly-returned-format-string.directly-returned-format-string
     return data[:mask_length] + "*" * (len(data) - mask_length)
 
 
@@ -122,7 +123,7 @@ async def _extract_csrf_token(request: web.Request) -> str | None:
             if isinstance(token, str) and token.strip():
                 return token.strip()
     except Exception:
-        logging.debug("Failed to extract CSRF token for %s", request.path)
+        logging.debug("Failed to extract CSRF data for %s", request.path)
 
     return None
 

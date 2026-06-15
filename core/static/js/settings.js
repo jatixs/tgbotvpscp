@@ -103,7 +103,7 @@ window.initSettings = function () {
             newBtn.disabled = true;
             const spinner = '<svg class="animate-spin h-4 w-4 text-gray-500 inline-block mr-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>';
             const checkingText = (typeof I18N !== 'undefined' && I18N.web_update_checking) ? I18N.web_update_checking : "Checking...";
-            updateStatusArea.innerHTML = `${spinner} <span class="text-gray-500">${checkingText}</span>`;
+            updateStatusArea.innerHTML = DOMPurify.sanitize(`${spinner} <span class="text-gray-500">${checkingText}</span>`);
             if (btnDoUpdate) btnDoUpdate.classList.add('d-none');
 
             try {
@@ -114,16 +114,16 @@ window.initSettings = function () {
                 if (data.update_available) {
                     const infoText = (I18N.web_update_info || "Current: {local} -> New: {remote}").replace('{local}', 'v' + data.local_version).replace('{remote}', 'v' + data.remote_version);
                     const updateAvailTitle = (typeof I18N !== 'undefined' && I18N.web_update_available_title) ? I18N.web_update_available_title : "Update Available!";
-                    updateStatusArea.innerHTML = `<div><div class="font-bold text-green-600 dark:text-green-400">${updateAvailTitle}</div><div class="text-xs text-gray-500 dark:text-gray-400 mt-1">${infoText}</div></div>`;
+                    updateStatusArea.innerHTML = DOMPurify.sanitize(`<div><div class="font-bold text-green-600 dark:text-green-400">${updateAvailTitle}</div><div class="text-xs text-gray-500 dark:text-gray-400 mt-1">${infoText}</div></div>`);
                     targetBranch = data.target_branch;
                     if (btnDoUpdate) btnDoUpdate.classList.remove('d-none');
                 } else {
                     const uptodateText = (I18N.web_update_uptodate || "Latest version installed ({version})").replace('{version}', 'v' + data.local_version);
-                    updateStatusArea.innerHTML = `<span class="text-gray-500 dark:text-gray-400 text-sm"><i class="fas fa-check-circle text-green-500 mr-1"></i> ${uptodateText}</span>`;
+                    updateStatusArea.innerHTML = DOMPurify.sanitize(`<span class="text-gray-500 dark:text-gray-400 text-sm"><i class="fas fa-check-circle text-green-500 mr-1"></i> ${uptodateText}</span>`);
                 }
             } catch (error) {
                 const errorText = (I18N.web_update_error || "Error: {error}").replace('{error}', error.message);
-                updateStatusArea.innerHTML = `<span class="text-red-500 text-sm"><i class="fas fa-exclamation-triangle mr-1"></i> ${errorText}</span>`;
+                updateStatusArea.innerHTML = DOMPurify.sanitize(`<span class="text-red-500 text-sm"><i class="fas fa-exclamation-triangle mr-1"></i> ${errorText}</span>`);
             } finally {
                 newBtn.disabled = false;
             }
@@ -144,7 +144,7 @@ window.initSettings = function () {
             if (updateProgress) updateProgress.classList.remove('d-none');
 
             const updatingText = (typeof I18N !== 'undefined' && I18N.web_update_started) ? I18N.web_update_started : "Updating...";
-            updateStatusArea.innerHTML = `<span class="text-blue-600 dark:text-blue-400 font-medium animate-pulse">${updatingText}</span>`;
+            updateStatusArea.innerHTML = DOMPurify.sanitize(`<span class="text-blue-600 dark:text-blue-400 font-medium animate-pulse">${updatingText}</span>`);
 
             try {
                 const response = await fetch('/api/update/run', {
@@ -166,7 +166,7 @@ window.initSettings = function () {
                 setTimeout(() => location.reload(), 15000);
             } catch (error) {
                 const errorText = (I18N.web_update_error || "Error: {error}").replace('{error}', error.message);
-                updateStatusArea.innerHTML = `<span class="text-red-500 text-sm">${errorText}</span>`;
+                updateStatusArea.innerHTML = DOMPurify.sanitize(`<span class="text-red-500 text-sm">${errorText}</span>`);
                 if (updateProgress) updateProgress.classList.add('d-none');
                 if (currentCheckBtn) currentCheckBtn.disabled = false;
                 newBtnDo.disabled = false;
@@ -596,7 +596,7 @@ async function clearLogs() {
 
     btn.disabled = true;
 
-    btn.innerHTML = `<div class="flex items-center justify-center w-full h-full"><svg class="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg></div>`;
+    btn.innerHTML = DOMPurify.sanitize(`<div class="flex items-center justify-center w-full h-full"><svg class="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg></div>`);
 
     try {
         const res = await fetch('/api/logs/clear', {
@@ -608,10 +608,10 @@ async function clearLogs() {
             btn.classList.remove(...redClasses);
             btn.classList.add(...greenClasses);
 
-            btn.innerHTML = `<div class="flex items-center justify-center gap-2 w-full h-full"><svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-white shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg> <span class="whitespace-nowrap text-[10px] font-bold uppercase tracking-wider leading-4">${I18N.web_logs_cleared_alert}</span></div>`;
+            btn.innerHTML = DOMPurify.sanitize(`<div class="flex items-center justify-center gap-2 w-full h-full"><svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-white shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg> <span class="whitespace-nowrap text-[10px] font-bold uppercase tracking-wider leading-4">${I18N.web_logs_cleared_alert}</span></div>`);
 
             setTimeout(() => {
-                btn.innerHTML = originalHTML;
+                btn.innerHTML = DOMPurify.sanitize(originalHTML);
                 btn.classList.remove(...greenClasses);
                 btn.classList.add(...redClasses);
 
@@ -625,7 +625,7 @@ async function clearLogs() {
             await window.showModalAlert(I18N.web_error.replace('{error}', data.error || "Failed"), errorShort);
 
             btn.disabled = false;
-            btn.innerHTML = originalHTML;
+            btn.innerHTML = DOMPurify.sanitize(originalHTML);
             btn.style.width = '';
             btn.style.height = '';
         }
@@ -634,7 +634,7 @@ async function clearLogs() {
         await window.showModalAlert(I18N.web_conn_error.replace('{error}', e), connErrTitle);
 
         btn.disabled = false;
-        btn.innerHTML = originalHTML;
+        btn.innerHTML = DOMPurify.sanitize(originalHTML);
         btn.style.width = '';
         btn.style.height = '';
     }
@@ -654,7 +654,7 @@ async function resetTrafficSettings() {
 
     btn.disabled = true;
 
-    btn.innerHTML = `<div class="flex items-center justify-center w-full h-full"><svg class="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg></div>`;
+    btn.innerHTML = DOMPurify.sanitize(`<div class="flex items-center justify-center w-full h-full"><svg class="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg></div>`);
 
     try {
         const res = await fetch('/api/traffic/reset', { method: 'POST' });
@@ -664,10 +664,10 @@ async function resetTrafficSettings() {
 
             const doneText = (typeof I18N !== 'undefined' && I18N.web_traffic_reset_no_emoji) ? I18N.web_traffic_reset_no_emoji : "Done!";
 
-            btn.innerHTML = `<div class="flex items-center justify-center gap-2 w-full h-full"><svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-white shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg> <span class="whitespace-nowrap text-[10px] font-bold uppercase tracking-wider leading-4">${doneText}</span></div>`;
+            btn.innerHTML = DOMPurify.sanitize(`<div class="flex items-center justify-center gap-2 w-full h-full"><svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-white shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg> <span class="whitespace-nowrap text-[10px] font-bold uppercase tracking-wider leading-4">${doneText}</span></div>`);
 
             setTimeout(() => {
-                btn.innerHTML = originalHTML;
+                btn.innerHTML = DOMPurify.sanitize(originalHTML);
                 btn.classList.remove(...greenClasses);
                 btn.classList.add(...redClasses);
 
@@ -681,7 +681,7 @@ async function resetTrafficSettings() {
             await window.showModalAlert(I18N.web_error.replace('{error}', data.error || "Failed"), errorShort);
 
             btn.disabled = false;
-            btn.innerHTML = originalHTML;
+            btn.innerHTML = DOMPurify.sanitize(originalHTML);
             btn.style.width = '';
             btn.style.height = '';
         }
@@ -690,7 +690,7 @@ async function resetTrafficSettings() {
         await window.showModalAlert(I18N.web_conn_error.replace('{error}', e), errorShort);
 
         btn.disabled = false;
-        btn.innerHTML = originalHTML;
+        btn.innerHTML = DOMPurify.sanitize(originalHTML);
         btn.style.width = '';
         btn.style.height = '';
     }
@@ -702,8 +702,8 @@ function renderUsers() {
     section.classList.remove('hidden');
 
     if (USERS_DATA.length > 0) {
-        tbody.innerHTML = USERS_DATA.map(u => {
-            const isAdmin = u.role === 'admins';
+        tbody.innerHTML = DOMPurify.sanitize(USERS_DATA.map(u => {
+            const isAdmin = u.role === 'admins');
             const badgeClass = isAdmin ? 'border-green-500/30 bg-green-100 dark:bg-green-500/20 text-green-600 dark:text-green-400' : 'border-blue-500/30 bg-blue-100 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400';
             return `
             <tr class="border-b border-gray-100 dark:border-white/5 hover:bg-gray-50 dark:hover:bg-white/5 transition">
@@ -720,7 +720,7 @@ function renderUsers() {
         if (typeof window.parsePageEmojis === 'function') window.parsePageEmojis();
     } else {
         const noUsers = (typeof I18N !== 'undefined' && I18N.web_no_users) ? I18N.web_no_users : "No users";
-        tbody.innerHTML = `<tr><td colspan="4" class="px-4 py-3 text-center text-gray-500 text-xs">${noUsers}</td></tr>`;
+        tbody.innerHTML = DOMPurify.sanitize(`<tr><td colspan="4" class="px-4 py-3 text-center text-gray-500 text-xs">${noUsers}</td></tr>`);
     }
 }
 
@@ -802,8 +802,8 @@ function renderNodes() {
     section.classList.remove('hidden');
 
     if (NODES_DATA.length > 0) {
-        tbody.innerHTML = NODES_DATA.map(n => {
-            const decryptedIp = decryptData(n.ip);
+        tbody.innerHTML = DOMPurify.sanitize(NODES_DATA.map(n => {
+            const decryptedIp = decryptData(n.ip));
             const decryptedToken = decryptData(n.token);
 
             return `
@@ -836,7 +836,7 @@ function renderNodes() {
         }).join('');
         if (typeof window.parsePageEmojis === 'function') window.parsePageEmojis();
     } else {
-        tbody.innerHTML = `<tr><td colspan="4" class="px-4 py-3 text-center text-gray-500 text-xs">${I18N.web_no_nodes}</td></tr>`;
+        tbody.innerHTML = DOMPurify.sanitize(`<tr><td colspan="4" class="px-4 py-3 text-center text-gray-500 text-xs">${I18N.web_no_nodes}</td></tr>`);
     }
 }
 window.startNodeRename = function (token) {
@@ -1063,13 +1063,13 @@ window.notifGoBack = function() {
 function renderNotifNodesList() {
     const container = document.getElementById('notifNodesListContainer');
     if (!container || !NODES_DATA || NODES_DATA.length === 0) {
-        container.innerHTML = `<div class="text-center text-gray-500 py-4">${I18N.web_no_nodes || ''}</div>`;
+        container.innerHTML = DOMPurify.sanitize(`<div class="text-center text-gray-500 py-4">${I18N.web_no_nodes || ''}</div>`);
         return;
     }
 
-    container.innerHTML = NODES_DATA.map(n => {
+    container.innerHTML = DOMPurify.sanitize(NODES_DATA.map(n => {
         return `
-        <button onclick="currentNodeForNotif='${n.token}'; switchNotifView('node_detail')" class="flex items-center justify-between w-full bg-gray-50 dark:bg-black/20 p-4 rounded-xl hover:bg-gray-100 dark:hover:bg-black/30 transition border border-gray-200 dark:border-white/5 cursor-pointer group">
+        <button onclick="currentNodeForNotif='${n.token}'); switchNotifView('node_detail')" class="flex items-center justify-between w-full bg-gray-50 dark:bg-black/20 p-4 rounded-xl hover:bg-gray-100 dark:hover:bg-black/30 transition border border-gray-200 dark:border-white/5 cursor-pointer group">
             <div class="flex items-center gap-3 min-w-0">
                 <span class="text-2xl group-hover:scale-110 transition-transform flex-shrink-0">🖥</span>
                 <span class="text-sm font-bold text-gray-900 dark:text-white text-left truncate">${escapeHtml(n.name)}</span>
@@ -1118,7 +1118,7 @@ function renderNotifNodeDetail() {
     const tRes = I18N.notifications_alert_name_res || '';
     const tLogins = I18N.notifications_alert_name_logins || '';
 
-    container.innerHTML = `
+    container.innerHTML = DOMPurify.sanitize(`
         <div class="flex items-center justify-between bg-gray-50 dark:bg-black/20 p-4 rounded-xl hover:bg-gray-100 dark:hover:bg-black/30 transition border border-gray-200 dark:border-white/5 cursor-pointer" onclick="document.getElementById('n_alert_${t}_downtime').click()">
             <span class="text-sm font-medium text-gray-900 dark:text-white">${tDowntime}</span>
             <label class="relative inline-flex items-center cursor-pointer" onclick="event.stopPropagation()">
@@ -1141,7 +1141,7 @@ function renderNotifNodeDetail() {
             </label>
         </div>
         <div id="notifStatusNodeDetail" class="flex min-h-[50px] items-center justify-center gap-2 rounded-xl border border-dashed border-gray-200 dark:border-white/5 bg-gray-50/60 dark:bg-black/10 px-4 py-3 text-center text-xs font-semibold text-gray-500 dark:text-gray-400 opacity-0 translate-y-4 transition-all duration-300"></div>
-    `;
+    `);
 }
 
 let notifStatusHideTimer = null;
@@ -1164,7 +1164,7 @@ function resetNotifStatusElement(statusEl) {
         'bg-red-100', 'dark:bg-red-900/20'
     );
     statusEl.classList.add('opacity-0', 'translate-y-4');
-    statusEl.innerHTML = '';
+    statusEl.innerHTML = DOMPurify.sanitize('');
 }
 
 function showNotifStatus(message, state = 'neutral', autoHideMs = 1800, scope = 'agent') {
@@ -1208,7 +1208,7 @@ function showNotifStatus(message, state = 'neutral', autoHideMs = 1800, scope = 
         success: '<svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/></svg>',
         error: '<svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M6 18L18 6M6 6l12 12"/></svg>'
     };
-    statusEl.innerHTML = (icons[state] || '') + '<span>' + message + '</span>';
+    statusEl.innerHTML = DOMPurify.sanitize((icons[state] || '') + '<span>' + message + '</span>');
     statusEl.classList.add('opacity-100', 'translate-y-0', ...(stateClasses[state] || stateClasses.neutral));
 
     if (autoHideMs > 0) {
@@ -1320,7 +1320,7 @@ function renderKeyboardPreview() {
         startVal = parseInt(prevEl.innerText) || 0;
     }
 
-    container.innerHTML = `<span class="px-3 py-1 rounded-full bg-green-100 dark:bg-green-500/20 text-green-700 dark:text-green-300 text-xs font-bold border border-green-200 dark:border-green-500/20">${activeText} <span id="kbActiveCount">${startVal}</span> / ${totalAll}</span>`;
+    container.innerHTML = DOMPurify.sanitize(`<span class="px-3 py-1 rounded-full bg-green-100 dark:bg-green-500/20 text-green-700 dark:text-green-300 text-xs font-bold border border-green-200 dark:border-green-500/20">${activeText} <span id="kbActiveCount">${startVal}</span> / ${totalAll}</span>`);
 
     const countEl = document.getElementById('kbActiveCount');
     if (countEl) {
@@ -1383,7 +1383,7 @@ function renderKeyboardModalContent() {
         });
         html += `</div></div><div class="h-px bg-gray-200 dark:bg-white/5 last:hidden"></div>`;
     }
-    container.innerHTML = html;
+    container.innerHTML = DOMPurify.sanitize(html);
 }
 
 window.openKeyboardModal = function () {
@@ -1420,11 +1420,11 @@ function updateDoneButtonState(state) {
     btn.classList.remove(...defaultClasses, ...savingClasses, ...savedClasses);
 
     if (state === 'saving') {
-        btn.innerHTML = `<svg class="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> ${savingText}`;
+        btn.innerHTML = DOMPurify.sanitize(`<svg class="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> ${savingText}`);
         btn.classList.add(...savingClasses);
         btn.disabled = true;
     } else if (state === 'saved') {
-        btn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" /></svg> ${savedText}`;
+        btn.innerHTML = DOMPurify.sanitize(`<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" /></svg> ${savedText}`);
         btn.classList.add(...savedClasses);
         btn.disabled = false;
     } else {
@@ -1553,10 +1553,10 @@ function animateBulkButton(btnId, state, originalText) {
     if (!btn) return;
 
     if (state === 'loading') {
-        btn.innerHTML = `<svg class="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>`;
+        btn.innerHTML = DOMPurify.sanitize(`<svg class="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>`);
         btn.disabled = true;
     } else if (state === 'success') {
-        btn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg>`;
+        btn.innerHTML = DOMPurify.sanitize(`<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg>`);
         btn.disabled = true;
     } else {
         btn.textContent = originalText;
@@ -1649,7 +1649,7 @@ async function fetchSessions() {
         }
     } catch (e) {
         const errorLoading = (typeof I18N !== 'undefined' && I18N.web_error_loading_sessions) ? I18N.web_error_loading_sessions : "Error loading sessions";
-        container.innerHTML = `<div class="text-red-500 text-sm text-center">${errorLoading}</div>`;
+        container.innerHTML = DOMPurify.sanitize(`<div class="text-red-500 text-sm text-center">${errorLoading}</div>`);
     }
 }
 
@@ -1659,10 +1659,10 @@ function renderSessionsMainWidget(sessions) {
 
     const currentSession = sessions.find(s => s.current);
     if (currentSession) {
-        container.innerHTML = `${renderSessionItem(currentSession)}`;
+        container.innerHTML = DOMPurify.sanitize(`${renderSessionItem(currentSession)}`);
     } else {
         const noSessions = (typeof I18N !== 'undefined' && I18N.web_no_sessions) ? I18N.web_no_sessions : "No active sessions";
-        container.innerHTML = `<div class="text-gray-500 text-sm text-center">${noSessions}</div>`;
+        container.innerHTML = DOMPurify.sanitize(`<div class="text-gray-500 text-sm text-center">${noSessions}</div>`);
     }
 }
 
@@ -1763,9 +1763,9 @@ window.openSessionsModal = function () {
 
     if (modal && content) {
         if (ALL_SESSIONS.length > 0) {
-            content.innerHTML = ALL_SESSIONS.map(s => renderSessionItem(s)).join('');
+            content.innerHTML = DOMPurify.sanitize(ALL_SESSIONS.map(s => renderSessionItem(s)).join(''));
         } else {
-            content.innerHTML = `<div class="text-center text-gray-500 py-4">No sessions</div>`;
+            content.innerHTML = DOMPurify.sanitize(`<div class="text-center text-gray-500 py-4">No sessions</div>`);
         }
 
         if (ALL_SESSIONS.length <= 1 && btnRevokeAll) {
@@ -1775,7 +1775,7 @@ window.openSessionsModal = function () {
             btnRevokeAll.disabled = false;
             btnRevokeAll.classList.remove('opacity-50', 'cursor-not-allowed');
             const originalText = I18N.web_sessions_revoke_all || "Revoke all other";
-            btnRevokeAll.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg> ${originalText}`;
+            btnRevokeAll.innerHTML = DOMPurify.sanitize(`<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg> ${originalText}`);
             btnRevokeAll.className = "w-full py-3 bg-red-600 hover:bg-red-500 text-white rounded-xl font-bold shadow-lg shadow-red-500/20 transition-all duration-300 active:scale-[0.98] flex items-center justify-center gap-2";
         }
         animateModalOpen(modal);
@@ -1806,7 +1806,7 @@ async function revokeSession(token) {
             await fetchSessions();
             const content = document.getElementById('sessionsModalContent');
             if (content && !document.getElementById('sessionsModal').classList.contains('hidden')) {
-                content.innerHTML = ALL_SESSIONS.map(s => renderSessionItem(s)).join('');
+                content.innerHTML = DOMPurify.sanitize(ALL_SESSIONS.map(s => renderSessionItem(s)).join(''));
                 const btnRevokeAll = document.getElementById('btnRevokeAllSessions');
                 if (ALL_SESSIONS.length <= 1 && btnRevokeAll) {
                     btnRevokeAll.disabled = true;
@@ -1832,7 +1832,7 @@ async function revokeAllSessions() {
 
     if (btn) {
         btn.disabled = true;
-        btn.innerHTML = `<svg class="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>`;
+        btn.innerHTML = DOMPurify.sanitize(`<svg class="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>`);
     }
 
     try {
@@ -1845,12 +1845,12 @@ async function revokeAllSessions() {
         if (res.ok) {
             if (btn) {
                 btn.className = "w-full py-3 bg-green-600 text-white rounded-xl font-bold shadow-lg shadow-green-500/20 transition-all duration-300 flex items-center justify-center gap-2";
-                btn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" /></svg> ${I18N.web_sessions_revoked_alert}`;
+                btn.innerHTML = DOMPurify.sanitize(`<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" /></svg> ${I18N.web_sessions_revoked_alert}`);
             }
             await fetchSessions();
             const content = document.getElementById('sessionsModalContent');
             if (content) {
-                content.innerHTML = ALL_SESSIONS.map(s => renderSessionItem(s)).join('');
+                content.innerHTML = DOMPurify.sanitize(ALL_SESSIONS.map(s => renderSessionItem(s)).join(''));
             }
             setTimeout(() => {
                 if (btn) {
@@ -1864,14 +1864,14 @@ async function revokeAllSessions() {
             await window.showModalAlert(data.error || "Failed", errorShort);
             if (btn) {
                 btn.disabled = false;
-                btn.innerHTML = originalText;
+                btn.innerHTML = DOMPurify.sanitize(originalText);
             }
         }
     } catch (e) {
         console.error(e);
         if (btn) {
             btn.disabled = false;
-            btn.innerHTML = originalText;
+            btn.innerHTML = DOMPurify.sanitize(originalText);
         }
     }
 }
@@ -1934,7 +1934,7 @@ window.saveMetaData = async function () {
     // 2. Анимация кнопки (Loading)
     const originalText = btn.innerHTML;
     btn.disabled = true;
-    btn.innerHTML = `<svg class="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>`;
+    btn.innerHTML = DOMPurify.sanitize(`<svg class="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>`);
 
     // Сбор данных
     const data = {
@@ -1980,21 +1980,21 @@ window.saveMetaData = async function () {
                 location.reload();
             } else {
                 closeMetaModal();
-                btn.innerHTML = originalText;
+                btn.innerHTML = DOMPurify.sanitize(originalText);
                 btn.disabled = false;
             }
         } else {
             // Ошибка API
             const errorTitle = (typeof I18N !== 'undefined' && I18N.web_error_short) ? I18N.web_error_short : "Error";
             await window.showModalAlert(json.error || "Failed to save", errorTitle);
-            btn.innerHTML = originalText;
+            btn.innerHTML = DOMPurify.sanitize(originalText);
             btn.disabled = false;
         }
     } catch (e) {
         // Ошибка сети
         const errorTitle = (typeof I18N !== 'undefined' && I18N.web_conn_error_short) ? I18N.web_conn_error_short : "Conn Error";
         await window.showModalAlert(e.message || e.toString(), errorTitle);
-        btn.innerHTML = originalText;
+        btn.innerHTML = DOMPurify.sanitize(originalText);
         btn.disabled = false;
     }
 };

@@ -294,6 +294,7 @@ download_vendor_assets() {
     run_with_spinner "Downloading xterm.js" sudo curl -sSLo "${vendor_dir}/xterm.js" "https://cdn.jsdelivr.net/npm/xterm/lib/xterm.js"
     run_with_spinner "Downloading xterm.css" sudo curl -sSLo "${vendor_dir}/xterm.css" "https://cdn.jsdelivr.net/npm/xterm/css/xterm.css"
     run_with_spinner "Downloading xterm-addon-fit" sudo curl -sSLo "${vendor_dir}/xterm-addon-fit.js" "https://cdn.jsdelivr.net/npm/xterm-addon-fit/lib/xterm-addon-fit.js"
+    run_with_spinner "Downloading DOMPurify" sudo curl -sSLo "${vendor_dir}/dompurify.min.js" "https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.6/purify.min.js"
 }
 
 load_cached_env() {

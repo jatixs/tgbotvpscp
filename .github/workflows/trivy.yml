@@ -16,7 +16,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
       # Сборка образа для сканирования (без пуша)
       - name: Build Docker image
@@ -24,7 +24,7 @@ jobs:
 
       # Запуск сканирования Trivy
       - name: Run Trivy vulnerability scanner
-        uses: aquasecurity/trivy-action@master
+        uses: aquasecurity/trivy-action@476e4fdcdc675b65ce75e8c3440b48d7a494f0e5 # master
         with:
           image-ref: 'tg-vps-bot:${{ github.sha }}'
           format: 'sarif'
@@ -34,6 +34,6 @@ jobs:
 
       # Загрузка результатов в GitHub Security
       - name: Upload Trivy scan results to GitHub Security tab
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@b0c4fd77f6c559021d78430ec4d0d169ae74a4eb # v3
         with:
           sarif_file: 'trivy-results.sarif'
