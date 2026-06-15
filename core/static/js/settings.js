@@ -703,7 +703,7 @@ function renderUsers() {
 
     if (USERS_DATA.length > 0) {
         tbody.innerHTML = DOMPurify.sanitize(USERS_DATA.map(u => {
-            const isAdmin = u.role === 'admins');
+            const isAdmin = u.role === 'admins';
             const badgeClass = isAdmin ? 'border-green-500/30 bg-green-100 dark:bg-green-500/20 text-green-600 dark:text-green-400' : 'border-blue-500/30 bg-blue-100 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400';
             return `
             <tr class="border-b border-gray-100 dark:border-white/5 hover:bg-gray-50 dark:hover:bg-white/5 transition">
@@ -716,7 +716,7 @@ function renderUsers() {
                     </button>
                 </td>
             </tr>`;
-        }).join('');
+        }).join(''));
         if (typeof window.parsePageEmojis === 'function') window.parsePageEmojis();
     } else {
         const noUsers = (typeof I18N !== 'undefined' && I18N.web_no_users) ? I18N.web_no_users : "No users";
@@ -803,7 +803,7 @@ function renderNodes() {
 
     if (NODES_DATA.length > 0) {
         tbody.innerHTML = DOMPurify.sanitize(NODES_DATA.map(n => {
-            const decryptedIp = decryptData(n.ip));
+            const decryptedIp = decryptData(n.ip);
             const decryptedToken = decryptData(n.token);
 
             return `
@@ -833,7 +833,7 @@ function renderNodes() {
                 </button>
             </td>
         </tr>`;
-        }).join('');
+        }).join(''));
         if (typeof window.parsePageEmojis === 'function') window.parsePageEmojis();
     } else {
         tbody.innerHTML = DOMPurify.sanitize(`<tr><td colspan="4" class="px-4 py-3 text-center text-gray-500 text-xs">${I18N.web_no_nodes}</td></tr>`);
@@ -1069,14 +1069,14 @@ function renderNotifNodesList() {
 
     container.innerHTML = DOMPurify.sanitize(NODES_DATA.map(n => {
         return `
-        <button onclick="currentNodeForNotif='${n.token}'); switchNotifView('node_detail')" class="flex items-center justify-between w-full bg-gray-50 dark:bg-black/20 p-4 rounded-xl hover:bg-gray-100 dark:hover:bg-black/30 transition border border-gray-200 dark:border-white/5 cursor-pointer group">
+        <button onclick="currentNodeForNotif='${n.token}'; switchNotifView('node_detail')" class="flex items-center justify-between w-full bg-gray-50 dark:bg-black/20 p-4 rounded-xl hover:bg-gray-100 dark:hover:bg-black/30 transition border border-gray-200 dark:border-white/5 cursor-pointer group">
             <div class="flex items-center gap-3 min-w-0">
                 <span class="text-2xl group-hover:scale-110 transition-transform flex-shrink-0">🖥</span>
                 <span class="text-sm font-bold text-gray-900 dark:text-white text-left truncate">${escapeHtml(n.name)}</span>
             </div>
             <svg class="w-5 h-5 text-gray-400 group-hover:text-blue-500 transition-colors flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
         </button>`;
-    }).join('');
+    }).join(''));
 }
 
 function renderNotifNodeDetail() {
