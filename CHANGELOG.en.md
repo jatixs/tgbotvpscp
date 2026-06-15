@@ -6,11 +6,17 @@
 
 <p align="center">
 <p align="center">
-    <img src="https://img.shields.io/badge/version-v1.23.0-blue?style=flat-square" alt="Version 1.23.0"/>
-    <img src="https://img.shields.io/badge/build-77-purple?style=flat-square" alt="Build 77"/>
-    <img src="https://img.shields.io/badge/date-Jun%2014%202026-green?style=flat-square" alt="Date Jun 14 2026"/>
+    <img src="https://img.shields.io/badge/version-v1.23.1-blue?style=flat-square" alt="Version 1.23.1"/>
+    <img src="https://img.shields.io/badge/build-78-purple?style=flat-square" alt="Build 78"/>
+    <img src="https://img.shields.io/badge/date-Jun%2015%202026-green?style=flat-square" alt="Date Jun 15 2026"/>
 	<img src="https://img.shields.io/badge/status-stable-green?style=flat-square" alt="Status Stable"/>
 </p>
+
+---
+## [1.23.1] - 2026-06-15
+
+### 🐛 Bug Fixes:
+* **Logs:** Fixed a bug where clicking the "Logs" button resulted in an "Unknown command" easter egg. The issue was caused by an incompatibility between `aiogram.Router` in `logs.py` and the new Memory Orchestrator. The handler was refactored to use standard dispatcher registration, restoring proper proxying and lazy-loading.
 
 ---
 ## [1.23.0] - 2026-06-14
