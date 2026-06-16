@@ -350,7 +350,7 @@ function getCsrfToken() {
     window.__jsonParsePatched = true;
 })();
 
-const themes = ['dark', 'light', 'system'];
+const themes = ['dark', 'light', 'system', 'amoled'];
 let currentTheme = localStorage.getItem('theme') || 'system';
 let latestNotificationTime = Math.floor(Date.now() / 1000);
 const pageCache = new Map();
@@ -1405,7 +1405,7 @@ window.closeMobileSettings = closeMobileSettings;
 window.toggleMobileSettings = toggleMobileSettings;
 
 function toggleTheme() {
-    const themes = ["system", "dark", "light"];
+    const themes = ["system", "dark", "light", "amoled"];
     let currentTheme = localStorage.getItem("theme");
     if (!currentTheme) currentTheme = "system";
 
@@ -1418,19 +1418,22 @@ function toggleTheme() {
 function setThemeDirect(theme, event) {
     if (event) event.stopPropagation();
     localStorage.setItem("theme", theme);
-    document.documentElement.classList.toggle('dark', theme === 'dark' || (theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches));
+    document.documentElement.classList.toggle('dark', theme === 'dark' || theme === 'amoled' || (theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches));
+    document.documentElement.classList.toggle('amoled', theme === 'amoled');
     applyThemeUI(theme);
     window.dispatchEvent(new Event("themeChanged"));
 }
 
 function applyThemeUI(t) {
     if (!t) return;
-    ['iconMoon', 'iconSun', 'iconSystem'].forEach(id => document.getElementById(id)?.classList.add('hidden'));
+    ['iconMoon', 'iconSun', 'iconSystem', 'iconAmoled'].forEach(id => document.getElementById(id)?.classList.add('hidden'));
     
     if (t === 'dark') {
         document.getElementById('iconMoon')?.classList.remove('hidden');
     } else if (t === 'light') {
         document.getElementById('iconSun')?.classList.remove('hidden');
+    } else if (t === 'amoled') {
+        document.getElementById('iconAmoled')?.classList.remove('hidden');
     } else {
         document.getElementById('iconSystem')?.classList.remove('hidden');
     }
@@ -1439,7 +1442,7 @@ function applyThemeUI(t) {
     const baseClasses = ["text-gray-500", "hover:text-gray-700", "dark:text-gray-400", "dark:hover:text-gray-200", "hover:bg-gray-200", "dark:hover:bg-gray-800"];
     const activeClasses = ["bg-white", "dark:bg-gray-600", "shadow-sm", "text-gray-900", "dark:text-white"];
     
-    ['mThemeSys', 'mThemeDark', 'mThemeLight'].forEach(id => {
+    ['mThemeSys', 'mThemeDark', 'mThemeLight', 'mThemeAmoled'].forEach(id => {
         const el = document.getElementById(id);
         if (el) {
             el.classList.remove(...activeClasses);
@@ -1448,7 +1451,7 @@ function applyThemeUI(t) {
     });
 
     const activeEl = document.getElementById(
-        t === 'light' ? 'mThemeLight' : t === 'dark' ? 'mThemeDark' : 'mThemeSys'
+        t === 'light' ? 'mThemeLight' : t === 'dark' ? 'mThemeDark' : t === 'amoled' ? 'mThemeAmoled' : 'mThemeSys'
     );
     if (activeEl) {
         activeEl.classList.remove(...baseClasses);
@@ -1984,6 +1987,7 @@ function togglePerfMode() {
     if (typeof showToast === 'function') {
         showToast(isPerfMode ? (I18N?.web_perf_mode_on || 'Light mode enabled') : (I18N?.web_perf_mode_off || 'Light mode disabled'));
     }
+    if (window.playHaptic) playHaptic([8, 40, 10]);
 }
 
 function toggleA11yMode() {
@@ -1992,6 +1996,7 @@ function toggleA11yMode() {
     if (typeof showToast === 'function') {
         showToast(isA11yMode ? (I18N?.web_a11y_mode_on || 'Accessibility mode enabled') : (I18N?.web_a11y_mode_off || 'Accessibility mode disabled'));
     }
+    if (window.playHaptic) playHaptic([8, 40, 10]);
 }
 
 window.togglePerfMode = togglePerfMode;
