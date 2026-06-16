@@ -13,7 +13,7 @@ from .auth import verify_csrf_token
 
 MAX_API_REQUESTS: Final[int] = 100
 API_RATE_WINDOW: Final[int] = 60
-MAX_REQUEST_BODY_BYTES: Final[int] = 10_000
+MAX_REQUEST_BODY_BYTES: Final[int] = 5_000_000
 RATE_LIMITED_METHODS: Final[set[str]] = {"POST", "PUT", "DELETE"}
 WAF_INSPECT_METHODS: Final[set[str]] = {"POST", "PUT", "PATCH", "DELETE"}
 CSRF_PROTECTED_METHODS: Final[set[str]] = {"POST", "PUT", "DELETE"}
