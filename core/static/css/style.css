@@ -897,3 +897,29 @@ html.dark .telegram-only-overlay-badge {
 #mHapticsCheckbox+div::after {
 	transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.3s ease;
 }
+
+/* --- Режимы производительности и доступности --- */
+
+/* Light-версия (Perf-mode) */
+html.perf-mode *,
+html.perf-mode *:before,
+html.perf-mode *:after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    backdrop-filter: none !important;
+    box-shadow: none !important;
+}
+
+html.perf-mode .animate-float,
+html.perf-mode .animate-blob,
+html.perf-mode #snow-container,
+html.perf-mode .lights-garland {
+    display: none !important;
+}
+
+/* Версия для слабовидящих (A11y-mode) */
+html.a11y-mode {
+    font-size: 115% !important;
+    filter: contrast(125%) saturate(110%);
+}

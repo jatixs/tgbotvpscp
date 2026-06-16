@@ -36,6 +36,16 @@ window.tailwind.config = {
         } else {
             document.documentElement.classList.remove('dark');
         }
+
+        const perfMode = localStorage.getItem('perf_mode') === '1';
+        if (perfMode) {
+            document.documentElement.classList.add('perf-mode');
+        }
+
+        const a11yMode = localStorage.getItem('a11y_mode') === '1';
+        if (a11yMode) {
+            document.documentElement.classList.add('a11y-mode');
+        }
     } catch (e) {
         console.error(e);
     }
