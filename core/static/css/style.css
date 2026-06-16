@@ -923,3 +923,46 @@ html.a11y-mode {
     font-size: 115% !important;
     filter: contrast(125%) saturate(110%);
 }
+
+/* Активные состояния кнопок режимов */
+html.perf-mode [data-action="toggle-perf-mode"] {
+    background-color: rgba(234, 179, 8, 0.15) !important;
+}
+html.dark.perf-mode [data-action="toggle-perf-mode"] {
+    background-color: rgba(234, 179, 8, 0.25) !important;
+}
+
+html.a11y-mode [data-action="toggle-a11y-mode"] {
+    background-color: rgba(59, 130, 246, 0.15) !important;
+}
+html.dark.a11y-mode [data-action="toggle-a11y-mode"] {
+    background-color: rgba(59, 130, 246, 0.25) !important;
+}
+
+/* --- Скрытие элементов на десктопе и мобилках --- */
+@media (min-width: 1024px) {
+    .hide-on-desktop {
+        display: none !important;
+    }
+}
+
+@media (max-width: 1023px) {
+    .hide-on-mobile {
+        display: none !important;
+    }
+}
+
+/* --- AMOLED Mode --- */
+html.amoled {
+    background-color: #000000 !important;
+}
+html.amoled body {
+    background-color: #000000 !important;
+}
+html.amoled .dark\:bg-gray-900,
+html.amoled .dark\:bg-gray-800 {
+    background-color: #000000 !important;
+}
+html.amoled .dark\:bg-black\/30 {
+    background-color: rgba(0, 0, 0, 0.5) !important;
+}

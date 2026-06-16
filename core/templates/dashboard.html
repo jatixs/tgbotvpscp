@@ -42,19 +42,6 @@
 
 <body
     class="bg-gray-100 text-gray-900 dark:bg-gray-900 dark:text-gray-100 font-sans selection:bg-blue-500/30 pb-10 overflow-x-hidden">
-    <style>
-        @media (min-width: 1024px) {
-            .hide-on-desktop {
-                display: none !important;
-            }
-        }
-
-        @media (max-width: 1023px) {
-            .hide-on-mobile {
-                display: none !important;
-            }
-        }
-    </style>
     <div
         class="fixed top-[-10%] left-[-10%] w-96 h-96 rounded-full mix-blend-multiply dark:mix-blend-screen filter blur-3xl animate-float pointer-events-none opacity-70 dark:opacity-100 bg-blue-300 dark:bg-blue-600/20">
     </div>
@@ -75,10 +62,10 @@
             </div>
             <div class="flex items-center gap-1 sm:gap-4 shrink-0">
                 <div class="hide-on-mobile flex items-center gap-1 sm:gap-2 mr-1 sm:mr-0">
-                    <button data-action="toggle-perf-mode" title="Toggle Light Mode" aria-label="Toggle Light Mode" class="p-1.5 sm:p-2 rounded-full hover:bg-black/5 dark:hover:bg-white/10 transition text-yellow-500 hover:text-yellow-600 dark:hover:text-yellow-400 hover:scale-110 focus:ring-2 focus:ring-yellow-500 focus:outline-none">
+                    <button data-action="toggle-perf-mode" title="Toggle Light Mode" aria-label="Toggle Light Mode" class="p-1.5 sm:p-2 rounded-full hover:bg-black/5 dark:hover:bg-white/10 transition active:scale-95 text-yellow-500 hover:text-yellow-600 dark:hover:text-yellow-400 hover:scale-110 focus:ring-2 focus:ring-yellow-500 focus:outline-none">
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 sm:h-5 sm:w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
                     </button>
-                    <button data-action="toggle-a11y-mode" title="Toggle Accessibility Mode" aria-label="Toggle Accessibility Mode" class="p-1.5 sm:p-2 rounded-full hover:bg-black/5 dark:hover:bg-white/10 transition text-blue-500 hover:text-blue-600 dark:hover:text-blue-400 hover:scale-110 focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                    <button data-action="toggle-a11y-mode" title="Toggle Accessibility Mode" aria-label="Toggle Accessibility Mode" class="p-1.5 sm:p-2 rounded-full hover:bg-black/5 dark:hover:bg-white/10 transition active:scale-95 text-blue-500 hover:text-blue-600 dark:hover:text-blue-400 hover:scale-110 focus:ring-2 focus:ring-blue-500 focus:outline-none">
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 sm:h-5 sm:w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
                     </button>
                 </div>
@@ -158,6 +145,11 @@
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                             d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
                     </svg>
+                    <svg id="iconAmoled" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 hidden" fill="none"
+                        viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M12 22C6.477 22 2 17.523 2 12S6.477 2 12 2s10 4.477 10 10-4.477 10-10 10zm0-2V4a8 8 0 100 16z" />
+                    </svg>
                 </button>
 
                 <!-- Mobile Settings Dropdown -->
@@ -191,6 +183,9 @@
                                     <button onclick="setThemeDirect('light', event)" class="p-1.5 rounded-md transition-colors leading-none" id="mThemeLight">
                                         <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" /></svg>
                                     </button>
+                                    <button onclick="setThemeDirect('amoled', event)" class="p-1.5 rounded-md transition-colors leading-none" id="mThemeAmoled">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 22C6.477 22 2 17.523 2 12S6.477 2 12 2s10 4.477 10 10-4.477 10-10 10zm0-2V4a8 8 0 100 16z" /></svg>
+                                    </button>
                                 </div>
                             </div>
                             <div onclick="toggleHaptics()"
@@ -202,10 +197,10 @@
                                 </label>
                             </div>
                             <div class="w-full px-4 py-2 flex items-center justify-center gap-3 border-t border-gray-100 dark:border-white/5">
-                                <button data-action="toggle-perf-mode" title="Toggle Light Mode" class="p-2 rounded-xl bg-gray-200/50 dark:bg-black/30 transition-colors text-yellow-500 hover:bg-black/5 dark:hover:bg-white/10 w-full flex justify-center">
+                                <button data-action="toggle-perf-mode" title="Toggle Light Mode" class="p-2 rounded-xl bg-gray-200/50 dark:bg-black/30 transition text-yellow-500 hover:bg-black/5 dark:hover:bg-white/10 w-full flex justify-center active:scale-95">
                                     <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
                                 </button>
-                                <button data-action="toggle-a11y-mode" title="Toggle Accessibility Mode" class="p-2 rounded-xl bg-gray-200/50 dark:bg-black/30 transition-colors text-blue-500 hover:bg-black/5 dark:hover:bg-white/10 w-full flex justify-center">
+                                <button data-action="toggle-a11y-mode" title="Toggle Accessibility Mode" class="p-2 rounded-xl bg-gray-200/50 dark:bg-black/30 transition text-blue-500 hover:bg-black/5 dark:hover:bg-white/10 w-full flex justify-center active:scale-95">
                                     <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
                                 </button>
                             </div>
