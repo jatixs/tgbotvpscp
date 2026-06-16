@@ -267,6 +267,8 @@ async def handle_dashboard(request: web.Request) -> web.StreamResponse:
     settings_btn = ""
     if is_main_admin:
         node_action_btn = f"""<button onclick="openAddNodeModal()" class="inline-flex items-center gap-2 py-1.5 px-3 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold transition shadow-lg shadow-blue-500/20"><svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path></svg>{_('web_add_node_section', lang)}</button>"""
+        
+    if is_admin:
         settings_btn = f'<a href="/settings" class="flex items-center justify-center w-8 h-8 rounded-lg hover:bg-black/5 dark:hover:bg-white/10 transition text-gray-600 dark:text-gray-400" title="{_("web_settings_button", lang)}"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg></a>'
 
     clean_version = APP_VERSION.lstrip("v")
@@ -482,6 +484,10 @@ async def handle_dashboard(request: web.Request) -> web.StreamResponse:
             "web_fatal_conn": _("web_fatal_conn", lang),
             "web_server_rebooting": _("web_server_rebooting", lang),
             "web_reloading_page": _("web_reloading_page", lang),
+            "web_perf_mode_on": _("web_perf_mode_on", lang),
+            "web_perf_mode_off": _("web_perf_mode_off", lang),
+            "web_a11y_mode_on": _("web_a11y_mode_on", lang),
+            "web_a11y_mode_off": _("web_a11y_mode_off", lang),
             "web_node_rename_success": _("web_node_rename_success", lang),
             "web_node_rename_error": _("web_node_rename_error", lang),
             "web_traffic_reset_confirm": _("web_traffic_reset_confirm", lang),
@@ -542,6 +548,11 @@ async def handle_nodes_monitor_page(request: web.Request) -> web.StreamResponse:
     clean_version = APP_VERSION.lstrip("v")
     display_version = f"v{clean_version}"
 
+    settings_btn = ""
+    if is_admin:
+        settings_btn = f'<a href="/settings" class="flex items-center justify-center w-8 h-8 rounded-lg hover:bg-black/5 dark:hover:bg-white/10 transition text-gray-600 dark:text-gray-400" title="{_("web_settings_button", lang)}"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg></a>'
+
+
     context = {
         "lang": lang,
         "web_title": page_title,
@@ -584,6 +595,7 @@ async def handle_nodes_monitor_page(request: web.Request) -> web.StreamResponse:
         "web_network_chart": _("web_nodes_monitor_network_chart", lang),
         "web_services_title": _("web_nodes_monitor_tab_services", lang),
         "web_live": _("web_live", lang),
+        "settings_btn": settings_btn,
         "web_cpu": _("web_nodes_monitor_cpu", lang),
         "web_ram": _("web_nodes_monitor_ram", lang),
         "web_disk": _("web_nodes_monitor_disk", lang),
@@ -610,6 +622,10 @@ async def handle_nodes_monitor_page(request: web.Request) -> web.StreamResponse:
             "web_time_h": _("unit_hour_short", lang),
             "web_time_m": _("unit_minute_short", lang),
             "web_node_status_online": _("web_nodes_monitor_online", lang),
+            "web_perf_mode_on": _("web_perf_mode_on", lang),
+            "web_perf_mode_off": _("web_perf_mode_off", lang),
+            "web_a11y_mode_on": _("web_a11y_mode_on", lang),
+            "web_a11y_mode_off": _("web_a11y_mode_off", lang),
             "web_node_status_offline": _("web_nodes_monitor_offline", lang),
             "web_node_status_restarting": _("web_node_restarting", lang),
             "web_nodes_monitor_select_nodes": _("web_nodes_monitor_select_nodes", lang),
@@ -798,6 +814,10 @@ async def handle_settings_page(request: web.Request) -> web.StreamResponse:
         "web_fatal_conn": _("web_fatal_conn", lang),
         "web_server_rebooting": _("web_server_rebooting", lang),
         "web_reloading_page": _("web_reloading_page", lang),
+        "web_perf_mode_on": _("web_perf_mode_on", lang),
+        "web_perf_mode_off": _("web_perf_mode_off", lang),
+        "web_a11y_mode_on": _("web_a11y_mode_on", lang),
+        "web_a11y_mode_off": _("web_a11y_mode_off", lang),
         "web_node_rename_success": _("web_node_rename_success", lang),
         "web_node_rename_error": _("web_node_rename_error", lang),
         "web_traffic_reset_confirm": _("web_traffic_reset_confirm", lang),

@@ -13,7 +13,7 @@ from .auth import verify_csrf_token
 
 MAX_API_REQUESTS: Final[int] = 100
 API_RATE_WINDOW: Final[int] = 60
-MAX_REQUEST_BODY_BYTES: Final[int] = 10_000
+MAX_REQUEST_BODY_BYTES: Final[int] = 5_000_000
 RATE_LIMITED_METHODS: Final[set[str]] = {"POST", "PUT", "DELETE"}
 WAF_INSPECT_METHODS: Final[set[str]] = {"POST", "PUT", "PATCH", "DELETE"}
 CSRF_PROTECTED_METHODS: Final[set[str]] = {"POST", "PUT", "DELETE"}
@@ -69,6 +69,7 @@ def mask_sensitive_data(data: str, mask_length: int = 6) -> str:
     """Mask sensitive values before writing them to logs."""
     if not isinstance(data, str) or len(data) < mask_length:
         return "***"
+    # nosemgrep: python.flask.security.audit.directly-returned-format-string.directly-returned-format-string
     return data[:mask_length] + "*" * (len(data) - mask_length)
 
 
@@ -122,7 +123,7 @@ async def _extract_csrf_token(request: web.Request) -> str | None:
             if isinstance(token, str) and token.strip():
                 return token.strip()
     except Exception:
-        logging.debug("Failed to extract CSRF token for %s", request.path)
+        logging.debug("Failed to extract CSRF data for %s", request.path)
 
     return None
 

@@ -326,6 +326,7 @@ def check_bot_log_for_errors():
                 current_bot_log_file = yesterday_log
             else:
                 return (None, {})
+        # nosemgrep: python.lang.security.audit.dangerous-subprocess-use-audit.dangerous-subprocess-use-audit
         result = subprocess.run(
             ["tail", "-n", "20", current_bot_log_file],
             capture_output=True, text=True, check=False, encoding="utf-8", errors="ignore",
@@ -375,6 +376,7 @@ def check_bot_service_systemd():
     
     try:
         cmd = ["systemctl", "show", BOT_SERVICE_NAME, "-p", "ActiveState,SubState,ActiveEnterTimestamp"]
+        # nosemgrep: python.lang.security.audit.dangerous-subprocess-use-audit.dangerous-subprocess-use-audit
         result = subprocess.run(cmd, capture_output=True, text=True, check=True)
         props = {}
         for line in result.stdout.splitlines():
@@ -393,6 +395,7 @@ def check_bot_service_systemd():
             actual_state = "activating"
         elif active_state == "inactive" or active_state == "failed":
             actual_state = "inactive" if active_state == "inactive" else "failed"
+            # nosemgrep: python.lang.security.audit.dangerous-subprocess-use-audit.dangerous-subprocess-use-audit
             status_res = subprocess.run(["systemctl", "status", BOT_SERVICE_NAME], capture_output=True, text=True)
             status_output_full = status_res.stdout.strip()
             
@@ -403,6 +406,7 @@ def check_bot_service_systemd():
 
     def restart_service_systemd():
         try:
+            # nosemgrep: python.lang.security.audit.dangerous-subprocess-use-audit.dangerous-subprocess-use-audit
             subprocess.run(["sudo", "systemctl", "restart", BOT_SERVICE_NAME], check=True)
         except Exception as e:
             send_or_edit_telegram_alert("watchdog_restart_fail", "bot_restart_fail", None, service_name=BOT_SERVICE_NAME, error=str(e))

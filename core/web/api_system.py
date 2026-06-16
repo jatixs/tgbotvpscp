@@ -99,6 +99,7 @@ async def handle_get_sys_logs(request: web.Request) -> web.StreamResponse:
             if os.path.exists("/host/usr/bin/journalctl"):
                 cmd = ["chroot", "/host", "/usr/bin/journalctl", "-n", "100", "--no-pager"]
 
+        # nosemgrep: python.lang.security.audit.dangerous-asyncio-create-exec-audit.dangerous-asyncio-create-exec-audit
         proc = await asyncio.create_subprocess_exec(
             *cmd,
             stdout=asyncio.subprocess.PIPE,

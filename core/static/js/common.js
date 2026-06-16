@@ -1,6 +1,35 @@
 /* /core/static/js/common.js */
 
+// Global Event Delegation setup
+document.addEventListener('click', e => {
+    const actionEl = e.target.closest('[data-action]');
+    if (!actionEl) return;
+    const action = actionEl.getAttribute('data-action');
+    const event = new CustomEvent(`app:action:${action}`, { bubbles: true, detail: { target: actionEl, originalEvent: e } });
+    actionEl.dispatchEvent(event);
+});
+
+document.addEventListener('change', e => {
+    const actionEl = e.target.closest('[data-action]');
+    if (!actionEl) return;
+    const action = actionEl.getAttribute('data-action');
+    const event = new CustomEvent(`app:change:${action}`, { bubbles: true, detail: { target: actionEl, originalEvent: e } });
+    actionEl.dispatchEvent(event);
+});
+
+document.addEventListener('keydown', e => {
+    const actionEl = e.target.closest('[data-action]');
+    if (!actionEl) return;
+    const action = actionEl.getAttribute('data-action');
+    const event = new CustomEvent(`app:action:${action}`, { bubbles: true, detail: { target: actionEl, originalEvent: e } });
+    actionEl.dispatchEvent(event);
+});
+
 // Security: Safe HTML helpers
+function getSecureRandom() {
+    return window.crypto.getRandomValues(new Uint32Array(1))[0] / 4294967295;
+}
+
 function escapeHtml(text) {
     const map = {
         '&': '&amp;',
@@ -19,7 +48,7 @@ function setSafeText(element, text) {
 
 function setSafeHTML(element, html) {
     if (!element) return;
-    element.innerHTML = html;  // Only use with trusted HTML
+    element.innerHTML = DOMPurify.sanitize(html);  // Only use with trusted HTML
 }
 
 window.__chartRegistry = window.__chartRegistry || {};
@@ -321,7 +350,7 @@ function getCsrfToken() {
     window.__jsonParsePatched = true;
 })();
 
-const themes = ['dark', 'light', 'system'];
+const themes = ['dark', 'light', 'system', 'amoled'];
 let currentTheme = localStorage.getItem('theme') || 'system';
 let latestNotificationTime = Math.floor(Date.now() / 1000);
 const pageCache = new Map();
@@ -602,8 +631,8 @@ function showToast(message) {
     const toast = document.createElement('div');
     toast.className = 'pointer-events-auto flex items-center gap-3 px-4 py-3 rounded-2xl shadow-xl backdrop-blur-md border transition-all duration-500 ease-out transform translate-y-10 opacity-0 bg-white/90 dark:bg-gray-800/90 border-gray-200 dark:border-white/10 w-auto max-w-sm';
     const icon = `<div class="p-1.5 rounded-full bg-blue-100 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400 flex-shrink-0"><svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg></div>`;
-    const closeBtn = `<button onclick="closeToast(this.closest('div'))" class="text-gray-400 hover:text-gray-600 dark:hover:text-white transition p-1 rounded-lg hover:bg-black/5 dark:hover:bg-white/10 ml-1 flex-shrink-0"><svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg></button>`;
-    toast.innerHTML = `${icon}<div class="flex-1 min-w-0"><p class="text-sm font-medium text-gray-900 dark:text-white leading-snug break-words">${message}</p></div>${closeBtn}`;
+    const closeBtn = `<button data-action="close-toast" class="text-gray-400 hover:text-gray-600 dark:hover:text-white transition p-1 rounded-lg hover:bg-black/5 dark:hover:bg-white/10 ml-1 flex-shrink-0"><svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg></button>`;
+    toast.innerHTML = DOMPurify.sanitize(`${icon}<div class="flex-1 min-w-0"><p class="text-sm font-medium text-gray-900 dark:text-white leading-snug break-words">${message}</p></div>${closeBtn}`);
     container.appendChild(toast);
     requestAnimationFrame(() => {
         requestAnimationFrame(() => {
@@ -629,6 +658,10 @@ function closeToast(el) {
 window.showToast = showToast;
 window.closeToast = closeToast;
 
+document.addEventListener('app:action:close-toast', e => {
+    closeToast(e.detail.target.closest('div'));
+});
+
 function launchBrandEasterEgg() {
     const overlay = document.createElement('div');
     overlay.className = 'pointer-events-none fixed inset-0 z-[9998] overflow-hidden';
@@ -639,9 +672,9 @@ function launchBrandEasterEgg() {
         const sparkle = document.createElement('div');
         sparkle.textContent = glyphs[index % glyphs.length];
         sparkle.style.position = 'absolute';
-        sparkle.style.left = `${8 + Math.random() * 84}%`;
-        sparkle.style.top = `${10 + Math.random() * 22}%`;
-        sparkle.style.fontSize = `${16 + Math.random() * 16}px`;
+        sparkle.style.left = `${8 + getSecureRandom() * 84}%`;
+        sparkle.style.top = `${10 + getSecureRandom() * 22}%`;
+        sparkle.style.fontSize = `${16 + getSecureRandom() * 16}px`;
         sparkle.style.opacity = '0';
         sparkle.style.transform = 'translateY(8px) scale(0.8) rotate(0deg)';
         sparkle.style.transition = 'transform 900ms ease, opacity 900ms ease';
@@ -650,7 +683,7 @@ function launchBrandEasterEgg() {
 
         setTimeout(() => {
             sparkle.style.opacity = '1';
-            sparkle.style.transform = `translateY(${-24 - Math.random() * 36}px) scale(${1 + Math.random() * 0.45}) rotate(${(-25 + Math.random() * 50).toFixed(0)}deg)`;
+            sparkle.style.transform = `translateY(${-24 - getSecureRandom() * 36}px) scale(${1 + getSecureRandom() * 0.45}) rotate(${(-25 + getSecureRandom() * 50).toFixed(0)}deg)`;
         }, index * 35);
     }
 
@@ -704,7 +737,7 @@ function toggleHint(e, id) {
     const c = document.getElementById('hintModalContent');
 
     if (m && c) {
-        c.innerHTML = el.innerHTML;
+        c.innerHTML = DOMPurify.sanitize(el.innerHTML);
 
         let titleEl = el.closest('.flex')?.querySelector('span, label, p, h3');
         if (!titleEl) {
@@ -787,7 +820,7 @@ async function addNodeDash() {
     if (btn) {
         btn.style.width = getComputedStyle(btn).width;
         btn.disabled = true;
-        btn.innerHTML = `<svg class="animate-spin h-5 w-5 mx-auto" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>`;
+        btn.innerHTML = DOMPurify.sanitize(`<svg class="animate-spin h-5 w-5 mx-auto" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>`);
     }
 
     try {
@@ -825,7 +858,7 @@ async function addNodeDash() {
         window.showModalAlert(e, errTxt);
     } finally {
         if (btn) {
-            btn.innerHTML = originalHTML;
+            btn.innerHTML = DOMPurify.sanitize(originalHTML);
             btn.style.width = '';
             validateNodeInput();
         }
@@ -845,7 +878,7 @@ function initHolidayMood() {
         const holidayBtn = document.createElement('button');
         holidayBtn.id = 'holidayBtn';
         holidayBtn.className = 'flex items-center justify-center w-8 h-8 rounded-lg hover:bg-black/5 dark:hover:bg-white/10 transition text-gray-600 dark:text-gray-400 mr-1';
-        holidayBtn.innerHTML = `<svg viewBox="0 0 24 24" class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="2" x2="12" y2="22"></line><line x1="20" y1="12" x2="4" y2="12"></line><line x1="17.66" y1="6.34" x2="6.34" y2="17.66"></line><line x1="17.66" y1="17.66" x2="6.34" y2="6.34"></line><polyline points="9 4 12 7 15 4"></polyline><polyline points="15 20 12 17 9 20"></polyline><polyline points="20 9 17 12 20 15"></polyline><polyline points="4 15 7 12 4 9"></polyline></svg>`;
+        holidayBtn.innerHTML = DOMPurify.sanitize(`<svg viewBox="0 0 24 24" class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="2" x2="12" y2="22"></line><line x1="20" y1="12" x2="4" y2="12"></line><line x1="17.66" y1="6.34" x2="6.34" y2="17.66"></line><line x1="17.66" y1="17.66" x2="6.34" y2="6.34"></line><polyline points="9 4 12 7 15 4"></polyline><polyline points="15 20 12 17 9 20"></polyline><polyline points="20 9 17 12 20 15"></polyline><polyline points="4 15 7 12 4 9"></polyline></svg>`);
         holidayBtn.onclick = toggleHolidayMood;
         themeBtn.parentNode.insertBefore(holidayBtn, themeBtn);
     }
@@ -912,11 +945,11 @@ function startSnow() {
     snowInterval = setInterval(() => {
         const s = document.createElement('div');
         s.className = 'snowflake';
-        s.innerText = icons[Math.floor(Math.random() * icons.length)];
-        s.style.left = Math.random() * 100 + 'vw';
-        s.style.animationDuration = (Math.random() * 3 + 4) + 's';
-        s.style.opacity = Math.random() * 0.7;
-        s.style.fontSize = (Math.random() * 8 + 8) + 'px';
+        s.innerText = icons[Math.floor(getSecureRandom() * icons.length)];
+        s.style.left = getSecureRandom() * 100 + 'vw';
+        s.style.animationDuration = (getSecureRandom() * 3 + 4) + 's';
+        s.style.opacity = getSecureRandom() * 0.7;
+        s.style.fontSize = (getSecureRandom() * 8 + 8) + 'px';
         container.appendChild(s);
         setTimeout(() => s.remove(), 6000);
     }, 300);
@@ -1081,7 +1114,7 @@ function handleSessionExpired() {
     overlay.id = 'session-expired-overlay';
     overlay.className = 'fixed inset-0 z-[9999] bg-white/30 dark:bg-black/50 backdrop-blur-md flex items-center justify-center p-4 transition-opacity duration-300 opacity-0';
 
-    overlay.innerHTML = `
+    overlay.innerHTML = DOMPurify.sanitize(`
         <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl p-8 max-w-sm w-full text-center border border-gray-200 dark:border-white/10 transform scale-95 transition-transform duration-300">
             <div class="mb-4 text-red-500 mx-auto bg-red-100 dark:bg-red-900/20 w-16 h-16 flex items-center justify-center rounded-full">
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -1094,7 +1127,7 @@ function handleSessionExpired() {
                 ${btnText}
             </a>
         </div>
-    `;
+    `);
 
     document.body.appendChild(overlay);
     document.body.style.overflow = 'hidden';
@@ -1122,20 +1155,20 @@ function handleConnectionError() {
     toast.id = 'conn-error-toast';
     toast.className = 'pointer-events-auto flex flex-col gap-2 px-4 py-3 rounded-2xl shadow-xl backdrop-blur-md border bg-red-50/90 dark:bg-red-900/90 border-red-200 dark:border-red-800 w-auto max-w-sm transition-all duration-300 transform translate-y-0 opacity-100 mb-2';
 
-    toast.innerHTML = `
+    toast.innerHTML = DOMPurify.sanitize(`
         <div class="flex items-center gap-2">
             <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-red-600 dark:text-red-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
             </svg>
             <span class="text-sm font-bold text-red-900 dark:text-red-100">${msg}</span>
         </div>
-        <button onclick="retrySSEStream()" class="w-full py-1.5 px-3 bg-red-200 hover:bg-red-300 dark:bg-red-800 dark:hover:bg-red-700 text-red-900 dark:text-red-100 rounded-lg text-xs font-bold transition flex items-center justify-center gap-2">
+        <button data-action="retry-sse" class="w-full py-1.5 px-3 bg-red-200 hover:bg-red-300 dark:bg-red-800 dark:hover:bg-red-700 text-red-900 dark:text-red-100 rounded-lg text-xs font-bold transition flex items-center justify-center gap-2">
             <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
             </svg>
             ${btnText}
         </button>
-    `;
+    `);
 
     toastContainer.appendChild(toast);
 }
@@ -1157,6 +1190,12 @@ function retrySSEStream() {
         }
     }, 5000);
 }
+
+window.retrySSEStream = retrySSEStream;
+
+document.addEventListener('app:action:retry-sse', () => {
+    retrySSEStream();
+});
 
 function handleFatalConnectionError() {
     if (document.getElementById('fatal-error-overlay')) return;
@@ -1217,7 +1256,7 @@ function createBlurOverlay(id, content) {
     const overlay = document.createElement('div');
     overlay.id = id;
     overlay.className = 'fixed inset-0 z-[10000] bg-white/60 dark:bg-gray-900/80 backdrop-blur-lg flex items-center justify-center p-4 transition-opacity duration-500 opacity-0';
-    overlay.innerHTML = `<div class="text-center">${content}</div>`;
+    overlay.innerHTML = DOMPurify.sanitize(`<div class="text-center">${content}</div>`);
 
     document.body.appendChild(overlay);
     document.body.style.overflow = 'hidden';
@@ -1280,7 +1319,7 @@ function updateNotifUI(list, count) {
     if (list.length === 0) {
         setSafeHTML(listContainer, `<div class="p-4 text-center text-gray-500 text-sm">${escapeHtml((typeof I18N !== 'undefined' ? I18N.web_no_notifications : "No notifications"))}</div>`);
     } else {
-        listContainer.innerHTML = "";
+        listContainer.innerHTML = DOMPurify.sanitize("");
         list.forEach(n => {
             const div = document.createElement('div');
             div.className = "px-4 py-3 border-b border-gray-100 dark:border-white/5 hover:bg-gray-50 dark:hover:bg-white/5 transition last:border-0 group";
@@ -1302,7 +1341,7 @@ function updateNotifUI(list, count) {
                 .replace(/\n/g, "<br>");
             cleanText = replaceEmojisWithFlagsHTML(cleanText);
 
-            div.innerHTML = `
+            div.innerHTML = DOMPurify.sanitize(`
                 <div class="flex justify-between items-start mb-1">
                     <div class="flex items-center">
                         ${badgeHtml}
@@ -1311,7 +1350,7 @@ function updateNotifUI(list, count) {
                 </div>
                 <div class="text-sm text-gray-700 dark:text-gray-300 leading-snug break-words group-hover:text-gray-900 dark:group-hover:text-white transition-colors">
                     ${cleanText}
-                </div>`;
+                </div>`);
             listContainer.appendChild(div);
         });
     }
@@ -1366,7 +1405,7 @@ window.closeMobileSettings = closeMobileSettings;
 window.toggleMobileSettings = toggleMobileSettings;
 
 function toggleTheme() {
-    const themes = ["system", "dark", "light"];
+    const themes = ["system", "dark", "light", "amoled"];
     let currentTheme = localStorage.getItem("theme");
     if (!currentTheme) currentTheme = "system";
 
@@ -1379,19 +1418,22 @@ function toggleTheme() {
 function setThemeDirect(theme, event) {
     if (event) event.stopPropagation();
     localStorage.setItem("theme", theme);
-    document.documentElement.classList.toggle('dark', theme === 'dark' || (theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches));
+    document.documentElement.classList.toggle('dark', theme === 'dark' || theme === 'amoled' || (theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches));
+    document.documentElement.classList.toggle('amoled', theme === 'amoled');
     applyThemeUI(theme);
     window.dispatchEvent(new Event("themeChanged"));
 }
 
 function applyThemeUI(t) {
     if (!t) return;
-    ['iconMoon', 'iconSun', 'iconSystem'].forEach(id => document.getElementById(id)?.classList.add('hidden'));
+    ['iconMoon', 'iconSun', 'iconSystem', 'iconAmoled'].forEach(id => document.getElementById(id)?.classList.add('hidden'));
     
     if (t === 'dark') {
         document.getElementById('iconMoon')?.classList.remove('hidden');
     } else if (t === 'light') {
         document.getElementById('iconSun')?.classList.remove('hidden');
+    } else if (t === 'amoled') {
+        document.getElementById('iconAmoled')?.classList.remove('hidden');
     } else {
         document.getElementById('iconSystem')?.classList.remove('hidden');
     }
@@ -1400,7 +1442,7 @@ function applyThemeUI(t) {
     const baseClasses = ["text-gray-500", "hover:text-gray-700", "dark:text-gray-400", "dark:hover:text-gray-200", "hover:bg-gray-200", "dark:hover:bg-gray-800"];
     const activeClasses = ["bg-white", "dark:bg-gray-600", "shadow-sm", "text-gray-900", "dark:text-white"];
     
-    ['mThemeSys', 'mThemeDark', 'mThemeLight'].forEach(id => {
+    ['mThemeSys', 'mThemeDark', 'mThemeLight', 'mThemeAmoled'].forEach(id => {
         const el = document.getElementById(id);
         if (el) {
             el.classList.remove(...activeClasses);
@@ -1409,7 +1451,7 @@ function applyThemeUI(t) {
     });
 
     const activeEl = document.getElementById(
-        t === 'light' ? 'mThemeLight' : t === 'dark' ? 'mThemeDark' : 'mThemeSys'
+        t === 'light' ? 'mThemeLight' : t === 'dark' ? 'mThemeDark' : t === 'amoled' ? 'mThemeAmoled' : 'mThemeSys'
     );
     if (activeEl) {
         activeEl.classList.remove(...baseClasses);
@@ -1720,9 +1762,9 @@ document.addEventListener('click', async (e) => {
             });
 
             setTimeout(() => {
-                currentMain.innerHTML = newMain.innerHTML;
+                currentMain.innerHTML = DOMPurify.sanitize(newMain.innerHTML);
                 currentMain.className = newMain.className;
-                currentNav.innerHTML = newNav.innerHTML;
+                currentNav.innerHTML = DOMPurify.sanitize(newNav.innerHTML);
                 currentNav.className = newNav.className;
 
                 const scripts = doc.querySelectorAll('script');
@@ -1784,11 +1826,21 @@ document.addEventListener('click', async (e) => {
                 setTimeout(() => progressBar.remove(), 200);
             }, 200);
         } else {
-            window.location.href = url;
+            const safeUrl = new URL(url, window.location.origin);
+            if (safeUrl.origin === window.location.origin) {
+                window.location.assign(safeUrl.href);
+            } else {
+                window.location.assign('/');
+            }
         }
     } catch (error) {
         console.error("SPA Error:", error);
-        window.location.href = url;
+        const safeUrl = new URL(url, window.location.origin);
+        if (safeUrl.origin === window.location.origin) {
+            window.location.assign(safeUrl.href);
+        } else {
+            window.location.assign('/');
+        }
     }
 });
 
@@ -1811,7 +1863,7 @@ async function clearLogs() {
     const hoverClasses = ['hover:pr-4', 'group'];
 
     btn.disabled = true;
-    btn.innerHTML = `<svg class="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> ${I18N.web_logs_clearing}`;
+    btn.innerHTML = DOMPurify.sanitize(`<svg class="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> ${I18N.web_logs_clearing}`);
 
     try {
         const res = await fetch('/api/logs/clear', {
@@ -1828,10 +1880,10 @@ async function clearLogs() {
             btn.classList.remove(...hoverClasses);
             btn.classList.add(...greenClasses);
             const doneText = (typeof I18N !== 'undefined' && I18N.web_logs_cleared_alert) ? I18N.web_logs_cleared_alert : "Cleared!";
-            btn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg> <span class="font-bold text-xs uppercase ml-1">${doneText}</span>`;
+            btn.innerHTML = DOMPurify.sanitize(`<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg> <span class="font-bold text-xs uppercase ml-1">${doneText}</span>`);
 
             setTimeout(() => {
-                btn.innerHTML = originalHTML;
+                btn.innerHTML = DOMPurify.sanitize(originalHTML);
                 btn.classList.remove(...greenClasses);
                 btn.classList.add(...redClasses);
                 btn.classList.add(...hoverClasses);
@@ -1842,13 +1894,13 @@ async function clearLogs() {
             const errorShort = (typeof I18N !== 'undefined' && I18N.web_error_short) ? I18N.web_error_short : "Error";
             await window.showModalAlert(I18N.web_error.replace('{error}', data.error || "Failed"), errorShort);
             btn.disabled = false;
-            btn.innerHTML = originalHTML;
+            btn.innerHTML = DOMPurify.sanitize(originalHTML);
         }
     } catch (e) {
         const errorShort = (typeof I18N !== 'undefined' && I18N.web_conn_error_short) ? I18N.web_conn_error_short : "Conn Error";
         await window.showModalAlert(I18N.web_conn_error.replace('{error}', e), errorShort);
         btn.disabled = false;
-        btn.innerHTML = originalHTML;
+        btn.innerHTML = DOMPurify.sanitize(originalHTML);
     }
 }
 
@@ -1864,7 +1916,7 @@ async function resetTrafficSettings() {
     const hoverClasses = ['hover:pr-4', 'group'];
 
     btn.disabled = true;
-    btn.innerHTML = `<svg class="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>`;
+    btn.innerHTML = DOMPurify.sanitize(`<svg class="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>`);
 
     try {
         const res = await fetch('/api/traffic/reset', {
@@ -1875,10 +1927,10 @@ async function resetTrafficSettings() {
             btn.classList.remove(...hoverClasses);
             btn.classList.add(...greenClasses);
             const doneText = (typeof I18N !== 'undefined' && I18N.web_traffic_reset_no_emoji) ? I18N.web_traffic_reset_no_emoji : "Done!";
-            btn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg> <span class="font-bold text-xs uppercase ml-1">${doneText}</span>`;
+            btn.innerHTML = DOMPurify.sanitize(`<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg> <span class="font-bold text-xs uppercase ml-1">${doneText}</span>`);
 
             setTimeout(() => {
-                btn.innerHTML = originalHTML;
+                btn.innerHTML = DOMPurify.sanitize(originalHTML);
                 btn.classList.remove(...greenClasses);
                 btn.classList.add(...redClasses);
                 btn.classList.add(...hoverClasses);
@@ -1889,13 +1941,13 @@ async function resetTrafficSettings() {
             const errorShort = (typeof I18N !== 'undefined' && I18N.web_error_short) ? I18N.web_error_short : "Error";
             await window.showModalAlert(I18N.web_error.replace('{error}', data.error || "Failed"), errorShort);
             btn.disabled = false;
-            btn.innerHTML = originalHTML;
+            btn.innerHTML = DOMPurify.sanitize(originalHTML);
         }
     } catch (e) {
         const errorShort = (typeof I18N !== 'undefined' && I18N.web_conn_error_short) ? I18N.web_conn_error_short : "Conn Error";
         await window.showModalAlert(I18N.web_conn_error.replace('{error}', e), errorShort);
         btn.disabled = false;
-        btn.innerHTML = originalHTML;
+        btn.innerHTML = DOMPurify.sanitize(originalHTML);
     }
 }
 
@@ -1927,4 +1979,29 @@ document.addEventListener('keydown', (e) => {
         });
     }
 });
+
+// --- UI Modes Toggles (Perf Mode & A11y Mode) ---
+function togglePerfMode() {
+    const isPerfMode = document.documentElement.classList.toggle('perf-mode');
+    localStorage.setItem('perf_mode', isPerfMode ? '1' : '0');
+    if (typeof showToast === 'function') {
+        showToast(isPerfMode ? (I18N?.web_perf_mode_on || 'Light mode enabled') : (I18N?.web_perf_mode_off || 'Light mode disabled'));
+    }
+    if (window.playHaptic) playHaptic([8, 40, 10]);
+}
+
+function toggleA11yMode() {
+    const isA11yMode = document.documentElement.classList.toggle('a11y-mode');
+    localStorage.setItem('a11y_mode', isA11yMode ? '1' : '0');
+    if (typeof showToast === 'function') {
+        showToast(isA11yMode ? (I18N?.web_a11y_mode_on || 'Accessibility mode enabled') : (I18N?.web_a11y_mode_off || 'Accessibility mode disabled'));
+    }
+    if (window.playHaptic) playHaptic([8, 40, 10]);
+}
+
+window.togglePerfMode = togglePerfMode;
+window.toggleA11yMode = toggleA11yMode;
+
+document.addEventListener('app:action:toggle-perf-mode', () => togglePerfMode());
+document.addEventListener('app:action:toggle-a11y-mode', () => toggleA11yMode());
 
