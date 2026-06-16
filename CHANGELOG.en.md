@@ -6,11 +6,29 @@
 
 <p align="center">
 <p align="center">
-    <img src="https://img.shields.io/badge/version-v1.23.1-blue?style=flat-square" alt="Version 1.23.1"/>
-    <img src="https://img.shields.io/badge/build-78-purple?style=flat-square" alt="Build 78"/>
-    <img src="https://img.shields.io/badge/date-Jun%2015%202026-green?style=flat-square" alt="Date Jun 15 2026"/>
+    <img src="https://img.shields.io/badge/version-v1.23.2-blue?style=flat-square" alt="Version 1.23.2"/>
+    <img src="https://img.shields.io/badge/build-79-purple?style=flat-square" alt="Build 79"/>
+    <img src="https://img.shields.io/badge/date-Jun%2016%202026-green?style=flat-square" alt="Date Jun 16 2026"/>
 	<img src="https://img.shields.io/badge/status-stable-green?style=flat-square" alt="Status Stable"/>
 </p>
+
+---
+## [1.23.2] - 2026-06-16
+
+### 🛡️ Security & CI/CD:
+* **XSS Protection (DOMPurify):** Integrated the `DOMPurify` library for strict client-side sanitization of HTML content before rendering dynamic elements (modals, buttons with loaders).
+* **Open Redirect Protection:** Added strict validation of `window.location.origin` in the client-side SPA routing (link click interception) to block unauthorized redirects to third-party domains.
+* **Supply Chain Security:** Versions for all GitHub Actions (`checkout`, `setup-python`, `shellcheck`, `gitleaks`, `trivy`) are now pinned to full commit SHA hashes instead of mutable tags (`@v4`, `@master`).
+* **Static Analysis (SAST):** Resolved Semgrep false-positives in safe `subprocess_exec` calls and log formatters.
+
+### ✨ Improved (UX/UI):
+* **AMOLED Theme:** Added a new deep dark theme specifically designed for OLED screens, saving battery and providing a perfect true black background (`#000000`).
+* **Responsiveness:** Completely redesigned the logic for displaying the header and mobile menu (Wand button) for the Settings and Nodes Monitor sections. Tools now correctly hide on desktop and show on mobile devices via pure CSS.
+* **Mode Buttons UX:** System mode toggle buttons ("Light Version" and "Visually Impaired") now feature a semi-transparent active background state and a press animation (active scale).
+* **Haptic Feedback:** Integrated tactile feedback (smartphone vibration) when interacting with system mode toggles.
+
+### 🔧 Fixed:
+* **Theme Persistence:** Fixed a bug in `theme_init.js` where the selected theme (especially AMOLED) was sporadically reset to light mode during navigation within the dashboard.
 
 ---
 ## [1.23.1] - 2026-06-15
