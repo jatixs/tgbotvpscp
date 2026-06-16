@@ -1977,3 +1977,26 @@ document.addEventListener('keydown', (e) => {
     }
 });
 
+// --- UI Modes Toggles (Perf Mode & A11y Mode) ---
+function togglePerfMode() {
+    const isPerfMode = document.documentElement.classList.toggle('perf-mode');
+    localStorage.setItem('perf_mode', isPerfMode ? '1' : '0');
+    if (typeof showToast === 'function') {
+        showToast(isPerfMode ? (I18N?.web_perf_mode_on || 'Light mode enabled') : (I18N?.web_perf_mode_off || 'Light mode disabled'));
+    }
+}
+
+function toggleA11yMode() {
+    const isA11yMode = document.documentElement.classList.toggle('a11y-mode');
+    localStorage.setItem('a11y_mode', isA11yMode ? '1' : '0');
+    if (typeof showToast === 'function') {
+        showToast(isA11yMode ? (I18N?.web_a11y_mode_on || 'Accessibility mode enabled') : (I18N?.web_a11y_mode_off || 'Accessibility mode disabled'));
+    }
+}
+
+window.togglePerfMode = togglePerfMode;
+window.toggleA11yMode = toggleA11yMode;
+
+document.addEventListener('app:action:toggle-perf-mode', () => togglePerfMode());
+document.addEventListener('app:action:toggle-a11y-mode', () => toggleA11yMode());
+

@@ -58,6 +58,7 @@
                     <span class="font-bold text-lg whitespace-nowrap truncate">{{ web_settings_page_title }}</span>
                 </div>
                 <div class="flex items-center gap-1 sm:gap-4 shrink-0">
+
                     <div class="relative group">
                         <button id="notifBtn"
                                 class="notif-btn flex items-center justify-center w-8 h-8 rounded-lg hover:bg-black/5 dark:hover:bg-white/10 transition text-gray-600 dark:text-gray-400">
@@ -135,6 +136,7 @@
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
                         </svg>
                     </button>
+
                     <form action="/logout" method="POST" class="inline-block">
                         <button type="submit"
                                 class="flex items-center justify-center w-8 h-8 rounded-lg hover:bg-red-100 dark:hover:bg-red-900/30 text-gray-500 dark:text-gray-400 hover:text-red-600 dark:hover:text-red-400 transition"
@@ -1209,6 +1211,8 @@
         </div>
     </div>
 </div>
+        </div>
+
         <script src="/static/js/common.js?v={{ web_version }}"></script>
         <script src="/static/js/settings.js?v={{ web_version }}"></script>
     </body>
