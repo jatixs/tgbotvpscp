@@ -24,11 +24,8 @@
 ### ✨ Improved (UX/UI):
 * **AMOLED Theme:** Added a new deep dark theme specifically designed for OLED screens, saving battery and providing a perfect true black background (`#000000`).
 * **Responsiveness:** Completely redesigned the logic for displaying the header and mobile menu (Wand button) for the Settings and Nodes Monitor sections. Tools now correctly hide on desktop and show on mobile devices via pure CSS.
-* **Mode Buttons UX:** System mode toggle buttons ("Light Version" and "Visually Impaired") now feature a semi-transparent active background state and a press animation (active scale).
-* **Haptic Feedback:** Integrated tactile feedback (smartphone vibration) when interacting with system mode toggles.
-
-### 🔧 Fixed:
-* **Theme Persistence:** Fixed a bug in `theme_init.js` where the selected theme (especially AMOLED) was sporadically reset to light mode during navigation within the dashboard.
+* **Accessibility (Inclusive Design):** Added a new feature for visually impaired users, allowing them to adapt interface elements for a more comfortable experience.
+* **Performance (Light Version):** The client-side WebUI now supports a "Light Version" mode, enabling pages to load and run significantly faster on low-end hardware.
 
 ---
 ## [1.23.1] - 2026-06-15
