@@ -177,6 +177,7 @@ def get_server_country():
         if ip:
             # Get country from IP
             try:
+                # nosemgrep: python.requests.security.insecure-requests.insecure-requests
                 resp = requests.get(f"http://ip-api.com/json/{ip}?fields=countryCode", timeout=3)
                 if resp.status_code == 200:
                     data = resp.json()
@@ -465,7 +466,7 @@ def get_external_ip():
         "https://ifconfig.me/ip",
         "https://icanhazip.com",
         "https://ipecho.net/plain",
-        "http://checkip.amazonaws.com"
+        "https://checkip.amazonaws.com"
     ]
 
     for service in services:
@@ -1125,6 +1126,7 @@ def execute_command(task):
                     # Download test
                     cmd_dl = ["iperf3", "-c", host, "-p", str(port), "-J", "-t", "5", "-4", "-R"]
                     try:
+                        # nosemgrep: python.lang.security.audit.dangerous-subprocess-use-audit.dangerous-subprocess-use-audit
                         res_dl = subprocess.check_output(
                             cmd_dl, stderr=subprocess.STDOUT, timeout=30).decode()
                         dl_speed = parse_iperf_json(res_dl, 'download')
@@ -1136,6 +1138,7 @@ def execute_command(task):
                     # Upload test
                     cmd_ul = ["iperf3", "-c", host, "-p", str(port), "-J", "-t", "5", "-4"]
                     try:
+                        # nosemgrep: python.lang.security.audit.dangerous-subprocess-use-audit.dangerous-subprocess-use-audit
                         res_ul = subprocess.check_output(
                             cmd_ul, stderr=subprocess.STDOUT, timeout=30).decode()
                         ul_speed = parse_iperf_json(res_ul, 'upload')

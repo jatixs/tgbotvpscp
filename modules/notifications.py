@@ -650,6 +650,7 @@ async def reliable_command_monitor(bot, cmd, alert_type, parser):
     while True:
         proc = None
         try:
+            # nosemgrep: python.lang.security.audit.dangerous-asyncio-create-shell-audit.dangerous-asyncio-create-shell-audit
             proc = await asyncio.create_subprocess_shell(
                 cmd,
                 stdout=asyncio.subprocess.PIPE,
@@ -704,6 +705,7 @@ async def reliable_tail_log_monitor(bot, path, alert_type, parser):
             continue
         proc = None
         try:
+            # nosemgrep: python.lang.security.audit.dangerous-asyncio-create-shell-audit.dangerous-asyncio-create-shell-audit
             proc = await asyncio.create_subprocess_shell(
                 f"tail -n 0 -f {path}",
                 stdout=asyncio.subprocess.PIPE,

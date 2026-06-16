@@ -125,7 +125,7 @@ function setLoginLanguage(lang) {
                 const key = el.getAttribute('data-i18n');
                 if (dict[key]) {
                     if (el.tagName === 'INPUT') el.placeholder = dict[key];
-                    else el.innerHTML = dict[key];
+                    else el.innerHTML = DOMPurify.sanitize(dict[key]);
                 }
                 el.style.opacity = '1';
             });
@@ -251,7 +251,7 @@ async function requestPasswordReset() {
             const btnText = (I18N && I18N.login_go_to_bot) || "Go to Bot";
             const botLink = (typeof BOT_USERNAME !== 'undefined' && BOT_USERNAME) ? `https://t.me/${BOT_USERNAME}` : "#";
 
-            container.innerHTML = `
+            container.innerHTML = DOMPurify.sanitize(`
                 <div class="text-center py-8 animate-fade-in-up">
                     <div class="w-16 h-16 bg-blue-500/10 rounded-full flex items-center justify-center mx-auto mb-4 border border-blue-500/20">
                         <svg class="w-8 h-8 text-blue-500 ml-[-2px] mt-[2px]" fill="currentColor" viewBox="0 0 24 24">
@@ -262,7 +262,7 @@ async function requestPasswordReset() {
                     <p class="text-sm text-gray-500 dark:text-gray-400">${desc}</p>
                     <a href="${botLink}" target="_blank" class="inline-block mt-6 px-6 py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-xl font-bold transition shadow-lg shadow-blue-500/20">${btnText}</a>
                 </div>
-            `;
+            `);
         } else {
             if (data.error === 'not_found' && errorBlock) {
                 const errMsg = (I18N && I18N.login_error_user_not_found) || "User not found.";
@@ -333,7 +333,7 @@ async function submitNewPassword() {
             const desc = (I18N && I18N.reset_success_desc) || "Password changed successfully.";
             const btnText = (I18N && I18N.web_login_btn) || "Login";
 
-            container.innerHTML = `
+            container.innerHTML = DOMPurify.sanitize(`
                 <div class="text-center py-8 animate-fade-in-up">
                     <div class="w-16 h-16 bg-green-500/20 rounded-full flex items-center justify-center mx-auto mb-4 border border-green-500/30">
                         <svg class="w-8 h-8 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
@@ -342,7 +342,7 @@ async function submitNewPassword() {
                     <p class="text-sm text-gray-300">${desc}</p>
                     <a href="/login" class="w-full block text-center mt-6 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 rounded-xl font-bold text-white shadow-lg transition">${btnText}</a>
                 </div>
-            `;
+            `);
             window.history.replaceState({}, document.title, "/login");
         } else {
             if (window.showModalAlert) await window.showModalAlert("Error: " + data.error, errTitle);
@@ -363,12 +363,12 @@ document.addEventListener("DOMContentLoaded", () => {
         const initData = window.Telegram.WebApp.initData;
         const mainCard = document.getElementById('main-card');
         if (mainCard) {
-            mainCard.innerHTML = `
+            mainCard.innerHTML = DOMPurify.sanitize(`
                 <div class="flex flex-col items-center justify-center py-12">
                     <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mb-4"></div>
                     <p class="text-gray-500 dark:text-gray-400 font-medium">Authenticating via Telegram...</p>
                 </div>
-            `;
+            `);
         }
         fetch('/api/auth/webapp', {
             method: 'POST',
@@ -433,7 +433,7 @@ document.addEventListener("DOMContentLoaded", () => {
             const key = el.getAttribute('data-i18n');
             if (I18N[key]) {
                 if (el.tagName === 'INPUT') el.placeholder = I18N[key];
-                else el.innerHTML = I18N[key];
+                else el.innerHTML = DOMPurify.sanitize(I18N[key]);
             }
             if (el.title && I18N[key]) el.title = I18N[key];
         });
@@ -458,7 +458,7 @@ document.addEventListener("DOMContentLoaded", () => {
         const botLink = (typeof BOT_USERNAME !== 'undefined' && BOT_USERNAME) ? `https://t.me/${BOT_USERNAME}` : "#";
 
         // ИСПРАВЛЕНО: Иконка "Синий самолетик" и для Magic Link тоже
-        formsContainer.innerHTML = `
+        formsContainer.innerHTML = DOMPurify.sanitize(`
             <div class="text-center py-8 animate-fade-in-up">
                 <div class="w-16 h-16 bg-blue-500/10 rounded-full flex items-center justify-center mx-auto mb-4 border border-blue-500/20">
                     <svg class="w-8 h-8 text-blue-500 ml-[-2px] mt-[2px]" fill="currentColor" viewBox="0 0 24 24">
@@ -469,7 +469,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 <p class="text-sm text-gray-500 dark:text-gray-400">${desc}</p>
                 <a href="${botLink}" target="_blank" class="inline-block mt-6 px-6 py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-xl font-bold transition shadow-lg shadow-blue-500/20">${btnText}</a>
             </div>
-        `;
+        `);
     } else if (urlParams.get('token')) {
         toggleForms('set-password');
     }
