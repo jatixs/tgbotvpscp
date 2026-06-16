@@ -527,12 +527,12 @@ function renderNodesList() {
         if (searchInput && searchInput.value.trim().length > 0 && allNodesData.length > 0) {
             emptyText = (typeof I18N !== 'undefined' && I18N.web_search_nothing_found) ? I18N.web_search_nothing_found : "Nothing found";
         }
-        container.innerHTML = `<div class="text-center py-8 text-gray-400 dark:text-gray-500 text-sm">${emptyText}</div>`;
+        container.innerHTML = DOMPurify.sanitize(`<div class="text-center py-8 text-gray-400 dark:text-gray-500 text-sm">${emptyText}</div>`);
         updateNodesScrollMode(container, 0);
         return;
     }
 
-    container.innerHTML = '';
+    container.innerHTML = DOMPurify.sanitize('');
     renderedCount = 0;
     updateNodesScrollMode(container, currentRenderList.length);
     renderNextNodeBatch();
@@ -605,12 +605,12 @@ function renderNextNodeBatch() {
         }
 
         return `
-        <div data-token="${escapeHtml(node.token)}" class="bg-white dark:bg-white/5 hover:bg-gray-50 dark:hover:bg-white/10 transition-all duration-200 rounded-xl border border-gray-100 dark:border-white/5 cursor-pointer shadow-sm hover:shadow-md group animate-fade-in-up" onclick="openNodeDetails('${escapeHtml(node.token)}', '${ui.statusColor}')">
+        <div data-token="${escapeHtml(node.token)}" class="bg-white dark:bg-white/5 hover:bg-gray-50 dark:hover:bg-white/10 transition-all duration-200 rounded-xl border border-gray-100 dark:border-white/5 cursor-pointer shadow-sm hover:shadow-md group animate-fade-in-up" data-action="open-node-details" data-color="${ui.statusColor}">
             
             <div class="p-3 sm:p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
                 
                 <div class="flex flex-1 items-center gap-3 min-w-0">
-                    <div class="${dragHandleClass}drag-handle p-2 -ml-2 text-gray-300 hover:text-gray-500 dark:text-white/20 dark:hover:text-white/50 cursor-grab active:cursor-grabbing transition" onclick="event.stopPropagation()">
+                    <div class="${dragHandleClass}drag-handle p-2 -ml-2 text-gray-300 hover:text-gray-500 dark:text-white/20 dark:hover:text-white/50 cursor-grab active:cursor-grabbing transition" data-action="stop-propagation">
                         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8 9h8M8 15h8"/></svg>
                     </div>
                     <div class="relative shrink-0 flex items-center justify-center w-8 h-8 rounded-full bg-gray-100 dark:bg-black/20">
@@ -709,11 +709,11 @@ function updateAgentStatsUI(data) {
                 if (data.stats.cpu_freq) {
                     html += ` <span class="text-xs font-normal opacity-60">/ ${formatHz(data.stats.cpu_freq)}</span>`;
                 }
-                cpuEl.innerHTML = html;
+                cpuEl.innerHTML = DOMPurify.sanitize(html);
                 const hintCpu = document.getElementById('hint-cpu');
                 if (hintCpu) {
                     const title = (typeof I18N !== 'undefined' && I18N.web_top_cpu) ? I18N.web_top_cpu : "Top CPU Consumers";
-                    hintCpu.innerHTML = formatProcessList(data.stats.process_cpu, title, "text-blue-500");
+                    hintCpu.innerHTML = DOMPurify.sanitize(formatProcessList(data.stats.process_cpu, title, "text-blue-500"));
                 }
             }
             if (progCpu) {
@@ -734,11 +734,11 @@ function updateAgentStatsUI(data) {
                 if (data.stats.ram_used !== undefined) {
                     html += ` <span class="text-xs font-normal opacity-60">/ ${formatBytes(data.stats.ram_total - data.stats.ram_used)} ${freeIcon}</span>`;
                 }
-                ramEl.innerHTML = html;
+                ramEl.innerHTML = DOMPurify.sanitize(html);
                 const hintRam = document.getElementById('hint-ram');
                 if (hintRam) {
                     const title = (typeof I18N !== 'undefined' && I18N.web_top_ram) ? I18N.web_top_ram : "Top Memory Consumers";
-                    hintRam.innerHTML = formatProcessList(data.stats.process_ram, title, "text-purple-500");
+                    hintRam.innerHTML = DOMPurify.sanitize(formatProcessList(data.stats.process_ram, title, "text-purple-500"));
                 }
             }
             if (progRam) {
@@ -759,11 +759,11 @@ function updateAgentStatsUI(data) {
                 if (data.stats.disk_free) {
                     html += ` <span class="text-xs font-normal opacity-60">/ ${formatBytes(data.stats.disk_free)} ${freeIcon}</span>`;
                 }
-                diskEl.innerHTML = html;
+                diskEl.innerHTML = DOMPurify.sanitize(html);
                 const hintDisk = document.getElementById('hint-disk');
                 if (hintDisk) {
                     const title = (typeof I18N !== 'undefined' && I18N.web_top_disk) ? I18N.web_top_disk : "Top I/O Usage";
-                    hintDisk.innerHTML = formatProcessList(data.stats.process_disk, title, "text-emerald-500");
+                    hintDisk.innerHTML = DOMPurify.sanitize(formatProcessList(data.stats.process_disk, title, "text-emerald-500"));
                 }
             }
             if (progDisk) {
@@ -791,21 +791,21 @@ function updateAgentStatsUI(data) {
 
             const speedStyle = "text-xs text-gray-400 font-normal ml-2 pl-2 border-l border-gray-300 dark:border-white/20";
             const rxEl = document.getElementById('stat_net_recv');
-            if (rxEl) rxEl.innerHTML = `${formatBytes(data.stats.net_recv)} <span class="${speedStyle}">${formatSpeed(rxSpeed)}</span>`;
+            if (rxEl) rxEl.innerHTML = DOMPurify.sanitize(`${formatBytes(data.stats.net_recv)} <span class="${speedStyle}">${formatSpeed(rxSpeed)}</span>`);
 
             const txEl = document.getElementById('stat_net_sent');
-            if (txEl) txEl.innerHTML = `${formatBytes(data.stats.net_sent)} <span class="${speedStyle}">${formatSpeed(txSpeed)}</span>`;
+            if (txEl) txEl.innerHTML = DOMPurify.sanitize(`${formatBytes(data.stats.net_sent)} <span class="${speedStyle}">${formatSpeed(txSpeed)}</span>`);
 
             if (data.stats.interfaces) {
                 const hintRx = document.getElementById('hint-rx');
                 if (hintRx) {
                     const title = (typeof I18N !== 'undefined' && I18N.web_hint_traffic_in) ? I18N.web_hint_traffic_in : "Inbound Traffic";
-                    hintRx.innerHTML = formatInterfaceList(data.stats.interfaces, 'rx', title, "text-green-500");
+                    hintRx.innerHTML = DOMPurify.sanitize(formatInterfaceList(data.stats.interfaces, 'rx', title, "text-green-500"));
                 }
                 const hintTx = document.getElementById('hint-tx');
                 if (hintTx) {
                     const title = (typeof I18N !== 'undefined' && I18N.web_hint_traffic_out) ? I18N.web_hint_traffic_out : "Outbound Traffic";
-                    hintTx.innerHTML = formatInterfaceList(data.stats.interfaces, 'tx', title, "text-blue-500");
+                    hintTx.innerHTML = DOMPurify.sanitize(formatInterfaceList(data.stats.interfaces, 'tx', title, "text-blue-500"));
                 }
             }
 
@@ -835,7 +835,7 @@ function updateAgentStatsUI(data) {
                         <span class="font-mono text-sm font-bold ${valueClass || 'text-gray-700 dark:text-gray-200'} text-right">${escapeHtml(String(value))}</span>
                     </div>`;
 
-                hintUptime.innerHTML = `
+                hintUptime.innerHTML = DOMPurify.sanitize(`
                     <div class="flex flex-col divide-y divide-gray-100 dark:divide-white/5 mt-2">
                         ${mkRow(I18N?.web_agent_uptime_os || 'Current OS Uptime', data.stats.boot_time ? formatUptime(data.stats.boot_time) : '—')}
                         ${mkRow(I18N?.web_nodes_monitor_last_outage || 'Last outage', fmtDt(avail.last_downtime_at))}
@@ -846,10 +846,10 @@ function updateAgentStatsUI(data) {
                         ${mkRow(I18N?.web_nodes_monitor_physical_downtime || 'Physical downtime', formatDuration(avail.physical_downtime_secs), 'text-violet-600 dark:text-violet-400')}
                     </div>
                     <div class="mt-3 flex justify-end">
-                        <button onclick="resetAgentUptime()" class="text-xs font-bold text-blue-600 hover:text-blue-500 bg-blue-100/50 hover:bg-blue-100 dark:bg-blue-900/30 dark:hover:bg-blue-900/50 px-3 py-1 rounded transition-colors hidden" id="agentHintResetBtn">
+                        <button data-action="reset-agent-uptime" class="text-xs font-bold text-blue-600 hover:text-blue-500 bg-blue-100/50 hover:bg-blue-100 dark:bg-blue-900/30 dark:hover:bg-blue-900/50 px-3 py-1 rounded transition-colors hidden" id="agentHintResetBtn">
                             ${escapeHtml(I18N?.web_reset_uptime || 'Reset Uptime')}
                         </button>
-                    </div>`;
+                    </div>`);
 
                 // Handle reset button visibility based on whether we are at system defaults
                 const isDefault = (avail.total_downtime_secs || 0) === 0;
@@ -1111,13 +1111,13 @@ function setLogLoading() {
     loader.id = 'log-loader';
     loader.className = 'absolute inset-0 z-50 flex flex-col items-center justify-center bg-white/90 dark:bg-gray-900/90 backdrop-blur-sm transition-opacity duration-300 opacity-0';
 
-    loader.innerHTML = `
+    loader.innerHTML = DOMPurify.sanitize(`
         <svg class="animate-spin h-10 w-10 text-blue-600 dark:text-blue-400 mb-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
             <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
             <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
         </svg>
         <span class="text-sm font-medium text-gray-600 dark:text-gray-300 animate-pulse">${escapeHtml(loadingText)}</span>
-    `;
+    `);
 
     container.appendChild(loader);
     void loader.offsetWidth;
@@ -1153,12 +1153,12 @@ window.switchLogType = function (type) {
     if (typeof USER_ROLE !== 'undefined' && USER_ROLE !== 'admins') {
         if (overlay) overlay.classList.remove('hidden');
         if (!container.innerHTML.includes('blur')) {
-            container.innerHTML = generateDummyLogs();
+            container.innerHTML = DOMPurify.sanitize(generateDummyLogs());
             container.scrollTop = 0;
         }
         return;
     }
-    container.innerHTML = '';
+    container.innerHTML = DOMPurify.sanitize('');
 
     const oldEmpty = document.getElementById('empty-logs-state');
     if (oldEmpty) oldEmpty.remove();
@@ -1286,13 +1286,13 @@ function setModalLoading() {
     const loader = document.createElement('div');
     loader.id = 'node-modal-loader';
     loader.className = 'absolute inset-0 z-50 flex flex-col items-center justify-center bg-white/60 dark:bg-gray-900/60 backdrop-blur-md rounded-2xl transition-opacity duration-300 opacity-0';
-    loader.innerHTML = `
+    loader.innerHTML = DOMPurify.sanitize(`
         <svg class="animate-spin h-10 w-10 text-blue-600 dark:text-blue-400 mb-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
             <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
             <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
         </svg>
         <span class="text-sm font-medium text-gray-600 dark:text-gray-300 animate-pulse">${escapeHtml(loadingText)}</span>
-    `;
+    `);
 
     card.appendChild(loader);
     void loader.offsetWidth;
@@ -1434,9 +1434,9 @@ function updateNodeDetailsUI(data) {
         const newTitleHtml = replaceEmojisWithFlagsHTML(escapeHtml(decryptData(data.name)));
         const titleEl = document.getElementById('modalNodeName');
         const tempTitle = titleEl.cloneNode(false);
-        tempTitle.innerHTML = newTitleHtml;
+        tempTitle.innerHTML = DOMPurify.sanitize(newTitleHtml);
         if (!updateDOM(titleEl, tempTitle)) {
-            titleEl.innerHTML = newTitleHtml;
+            titleEl.innerHTML = DOMPurify.sanitize(newTitleHtml);
         }
     }
 
@@ -1979,7 +1979,7 @@ function loadServices() {
         })
         .then(data => {
             if (!data) {
-                container.innerHTML = `<div class="col-span-full text-center text-gray-400 py-4">${window.i18n.services_empty || 'Services not available'}</div>`;
+                container.innerHTML = DOMPurify.sanitize(`<div class="col-span-full text-center text-gray-400 py-4">${window.i18n.services_empty || 'Services not available'}</div>`);
                 return;
             }
             if (data.error) {
@@ -1992,7 +1992,7 @@ function loadServices() {
         })
         .catch(err => {
             console.error('Error loading services:', err);
-            container.innerHTML = `<div class="col-span-full text-center text-gray-400 py-4">${window.i18n.services_empty || 'Services not available'}</div>`;
+            container.innerHTML = DOMPurify.sanitize(`<div class="col-span-full text-center text-gray-400 py-4">${window.i18n.services_empty || 'Services not available'}</div>`);
         });
 }
 
@@ -2022,7 +2022,7 @@ function renderServices(services, forceRender = false) {
         return;
     }
 
-    container.innerHTML = '';
+    container.innerHTML = DOMPurify.sanitize('');
 
     // Store services for filtering
     window._servicesData = services;
@@ -2033,7 +2033,7 @@ function renderServices(services, forceRender = false) {
     }
 
     if (services.length === 0) {
-        container.innerHTML = `<div class="col-span-full text-center text-gray-500 py-4">${window.i18n.services_empty}</div>`;
+        container.innerHTML = DOMPurify.sanitize(`<div class="col-span-full text-center text-gray-500 py-4">${window.i18n.services_empty}</div>`);
         return;
     }
 
@@ -2053,7 +2053,7 @@ function renderServices(services, forceRender = false) {
             // Show Start only if NOT running
             if (!isRunning) {
                 buttonsHtml += `
-                    <button onclick="event.stopPropagation(); controlService('${item.name}', '${item.type}', 'start')" class="group w-8 h-8 flex items-center justify-center rounded-lg bg-green-500/20 hover:bg-green-700 transition-all duration-200 hover:scale-110 hover:shadow-lg hover:shadow-green-500/30 active:scale-95" title="${window.i18n.btn_start}">
+                    <button data-action="control-service" data-name="${item.name}" data-type="${item.type}" data-cmd="start" class="group w-8 h-8 flex items-center justify-center rounded-lg bg-green-500/20 hover:bg-green-700 transition-all duration-200 hover:scale-110 hover:shadow-lg hover:shadow-green-500/30 active:scale-95" title="${window.i18n.btn_start}">
                          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-green-500 group-hover:text-white transition-colors" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
                     </button>
                 `;
@@ -2061,7 +2061,7 @@ function renderServices(services, forceRender = false) {
             // Show Restart only if running
             if (isRunning) {
                 buttonsHtml += `
-                    <button onclick="event.stopPropagation(); controlService('${item.name}', '${item.type}', 'restart')" class="group w-8 h-8 flex items-center justify-center rounded-lg bg-blue-500/20 hover:bg-blue-700 transition-all duration-200 hover:scale-110 hover:shadow-lg hover:shadow-blue-500/30 active:scale-95" title="${window.i18n.btn_restart}">
+                    <button data-action="control-service" data-name="${item.name}" data-type="${item.type}" data-cmd="restart" class="group w-8 h-8 flex items-center justify-center rounded-lg bg-blue-500/20 hover:bg-blue-700 transition-all duration-200 hover:scale-110 hover:shadow-lg hover:shadow-blue-500/30 active:scale-95" title="${window.i18n.btn_restart}">
                          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-blue-500 group-hover:text-white group-hover:animate-spin transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
                     </button>
                 `;
@@ -2070,7 +2070,7 @@ function renderServices(services, forceRender = false) {
         if (roleLevel >= 2 && isRunning) {
             // Show Stop only if running
             buttonsHtml += `
-                <button onclick="event.stopPropagation(); controlService('${item.name}', '${item.type}', 'stop')" class="group w-8 h-8 flex items-center justify-center rounded-lg bg-red-500/20 hover:bg-red-700 transition-all duration-200 hover:scale-110 hover:shadow-lg hover:shadow-red-500/30 active:scale-95" title="${window.i18n.btn_stop}">
+                <button data-action="control-service" data-name="${item.name}" data-type="${item.type}" data-cmd="stop" class="group w-8 h-8 flex items-center justify-center rounded-lg bg-red-500/20 hover:bg-red-700 transition-all duration-200 hover:scale-110 hover:shadow-lg hover:shadow-red-500/30 active:scale-95" title="${window.i18n.btn_stop}">
                      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-red-500 group-hover:text-white transition-colors" fill="currentColor" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="1"/></svg>
                 </button>
             `;
@@ -2083,7 +2083,7 @@ function renderServices(services, forceRender = false) {
         card.dataset.type = item.type;
         card.onclick = () => openServiceInfoModal(item.name, item.type);
 
-        card.innerHTML = `
+        card.innerHTML = DOMPurify.sanitize(`
             <div class="flex items-center gap-3 min-w-0">
                 <div class="w-2.5 h-2.5 rounded-full bg-${colorClass}-500 shadow-[0_0_6px_rgba(var(--color-${colorClass}-500),0.6)] flex-shrink-0"></div>
                 <div class="min-w-0">
@@ -2094,7 +2094,7 @@ function renderServices(services, forceRender = false) {
             <div class="flex items-center gap-1.5 flex-shrink-0">
                 ${buttonsHtml}
             </div>
-        `;
+        `);
         container.appendChild(card);
     });
 }
@@ -2160,13 +2160,13 @@ function filterServices(query) {
         if (!loadingEl) {
             loadingEl = document.createElement('div');
             loadingEl.className = 'search-loading col-span-full flex items-center justify-center gap-2 py-4 text-gray-400';
-            loadingEl.innerHTML = `
+            loadingEl.innerHTML = DOMPurify.sanitize(`
                 <svg class="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                     <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                     <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                 </svg>
                 <span>${I18N.web_searching || 'Searching...'}</span>
-            `;
+            `);
             container.appendChild(loadingEl);
         }
 
@@ -2198,7 +2198,7 @@ function filterServices(query) {
                 suggestionHtml = `
                     <div class="layout-suggestion-main text-center py-2 col-span-full">
                         <span class="text-gray-400">${suggestionText}: </span>
-                        <button onclick="applyLayoutSuggestionMain('${layoutCheck.converted}')" 
+                        <button data-action="apply-layout-suggestion-main" data-layout="${layoutCheck.converted}" 
                                 class="text-blue-500 hover:text-blue-400 font-medium hover:underline">
                             "${layoutCheck.converted}"
                         </button>
@@ -2303,7 +2303,7 @@ async function searchGlobalServices(query, managedMatchCount) {
             let addButtonHtml = '';
             if (roleLevel >= 2) {
                 addButtonHtml = `
-                    <button onclick="addServiceFromSearch('${item.name}', '${item.type}')" 
+                    <button data-action="add-service-search" data-name="${item.name}" data-type="${item.type}" 
                             class="w-8 h-8 flex items-center justify-center rounded-lg bg-green-500/20 hover:bg-green-600 transition-all duration-200 hover:scale-110 active:scale-95"
                             title="${I18N.web_services_btn_add || 'Add'}">
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-green-500 hover:text-white transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
@@ -2313,7 +2313,7 @@ async function searchGlobalServices(query, managedMatchCount) {
                 `;
             }
 
-            card.innerHTML = `
+            card.innerHTML = DOMPurify.sanitize(`
                 <div class="flex items-center gap-3 min-w-0">
                     <div class="w-2.5 h-2.5 rounded-full bg-${colorClass}-500 shadow-[0_0_6px_rgba(var(--color-${colorClass}-500),0.6)] flex-shrink-0"></div>
                     <div class="min-w-0">
@@ -2324,7 +2324,7 @@ async function searchGlobalServices(query, managedMatchCount) {
                 <div class="flex items-center gap-1.5 flex-shrink-0">
                     ${addButtonHtml}
                 </div>
-            `;
+            `);
             container.appendChild(card);
         });
 
@@ -2380,13 +2380,13 @@ function openServiceInfoModal(name, type) {
     if (title) title.innerText = name;
 
     // Show loading
-    content.innerHTML = `<div class="text-center py-4 text-gray-400">
+    content.innerHTML = DOMPurify.sanitize(`<div class="text-center py-4 text-gray-400">
         <svg class="animate-spin h-6 w-6 mx-auto mb-2 text-blue-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
             <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
             <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
         </svg>
         ${I18N.web_services_info_loading || 'Loading...'}
-    </div>`;
+    </div>`);
 
     // Open modal with animation
     if (typeof animateModalOpen === 'function') {
@@ -2405,7 +2405,7 @@ function openServiceInfoModal(name, type) {
         })
         .catch(err => {
             console.error('Error fetching service info:', err);
-            content.innerHTML = `<div class="text-center py-4 text-red-500">${err.message}</div>`;
+            content.innerHTML = DOMPurify.sanitize(`<div class="text-center py-4 text-red-500">${err.message}</div>`);
         });
 }
 
@@ -2491,7 +2491,7 @@ function renderServiceInfo(info) {
         </div>`);
     }
 
-    content.innerHTML = `
+    content.innerHTML = DOMPurify.sanitize(`
         <div class="space-y-3">
             <!-- Status row -->
             <div class="flex items-center justify-between">
@@ -2508,7 +2508,7 @@ function renderServiceInfo(info) {
             </div>
             ` : ''}
         </div>
-    `;
+    `);
 }
 
 async function controlService(name, type, action) {
@@ -2561,14 +2561,14 @@ function closeServicesEditModal() {
 
 async function loadAvailableServices() {
     const container = document.getElementById('servicesEditList');
-    container.innerHTML = `
+    container.innerHTML = DOMPurify.sanitize(`
         <div class="flex items-center justify-center gap-2 py-8 text-gray-400">
             <svg class="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                 <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                 <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
             </svg>
             <span>${I18N.web_loading || 'Loading...'}</span>
-        </div>`;
+        </div>`);
 
     try {
         const res = await fetch('/api/services/available');
@@ -2581,7 +2581,7 @@ async function loadAvailableServices() {
         renderServicesEditList(data);
     } catch (err) {
         console.error('Error loading available services:', err);
-        container.innerHTML = `<div class="text-center py-8 text-red-500">${err.message}</div>`;
+        container.innerHTML = DOMPurify.sanitize(`<div class="text-center py-8 text-red-500">${err.message}</div>`);
     }
 }
 
@@ -2589,7 +2589,7 @@ function renderServicesEditList(services) {
     const container = document.getElementById('servicesEditList');
 
     if (!services || services.length === 0) {
-        container.innerHTML = `<div class="text-center py-8 text-gray-400">${I18N.web_services_none_found || 'No services found'}</div>`;
+        container.innerHTML = DOMPurify.sanitize(`<div class="text-center py-8 text-gray-400">${I18N.web_services_none_found || 'No services found'}</div>`);
         return;
     }
 
@@ -2617,7 +2617,7 @@ function renderServicesEditList(services) {
                 </div>
                 <button id="srv-btn-${safeId}" 
                         data-type="${s.type}"
-                        onclick="toggleServiceManaged('${s.name}', '${s.type}', ${isManaged}, this)" 
+                        data-action="toggle-service-managed" data-name="${s.name}" data-type="${s.type}" data-managed="${isManaged}" 
                         class="srv-manage-btn px-2 py-1 rounded-lg text-xs font-medium transition min-w-[60px] flex items-center justify-center gap-1 flex-shrink-0 ${buttonClasses}">
                     <span class="btn-text">${isManaged ? (I18N.web_services_btn_remove || 'Remove') : (I18N.web_services_btn_add || 'Add')}</span>
                     <svg class="btn-spinner hidden animate-spin h-3 w-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
@@ -2630,7 +2630,7 @@ function renderServicesEditList(services) {
     }
 
     html += '</div>';
-    container.innerHTML = html;
+    container.innerHTML = DOMPurify.sanitize(html);
 }
 
 // Filter services in Edit modal
@@ -2679,7 +2679,7 @@ function filterServicesEditList(query) {
                 suggestionHtml = `
                     <div class="layout-suggestion text-center py-2">
                         <span class="text-gray-400">${suggestionText}: </span>
-                        <button onclick="applyLayoutSuggestion('${layoutCheck.converted}')" 
+                        <button data-action="apply-layout-suggestion" data-layout="${layoutCheck.converted}" 
                                 class="text-blue-500 hover:text-blue-400 font-medium hover:underline">
                             "${layoutCheck.converted}"
                         </button>
@@ -2691,10 +2691,10 @@ function filterServicesEditList(query) {
 
         const msg = document.createElement('div');
         msg.className = 'no-search-results-edit text-center text-gray-400 py-4';
-        msg.innerHTML = `
+        msg.innerHTML = DOMPurify.sanitize(`
             ${suggestionHtml}
             <div class="mt-1">${I18N.web_services_none_found || 'No services found'}</div>
-        `;
+        `);
         grid.parentElement.appendChild(msg);
     }
 }
@@ -2739,7 +2739,7 @@ async function loadAgentIpv4() {
     const elError = document.getElementById('agentIpsError');
     elError?.classList.add('hidden');
     elEmpty?.classList.add('hidden');
-    if (elList) elList.innerHTML = '';
+    if (elList) elList.innerHTML = DOMPurify.sanitize('');
     if (elLoading) elLoading.classList.remove('hidden');
 
     try {
@@ -2757,11 +2757,13 @@ async function loadAgentIpv4() {
         if (!secondary.length) {
             elEmpty?.classList.remove('hidden');
         } else if (elList) {
-            elList.innerHTML = secondary.map(ip => `
+            const rawHtml = secondary.map(ip => `
         <li class="bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-xl px-3 py-2 font-mono text-xs select-all">
           ${escapeHtml(ip)}
         </li>
       `).join('');
+            const safeHtml = DOMPurify.sanitize('<ul>' + rawHtml + '</ul>');
+            elList.innerHTML = safeHtml.replace(/<\/?ul[^>]*>/ig, '');
         }
     } catch (e) {
         console.error('Error loading IPs:', e);
@@ -2945,4 +2947,29 @@ window.resetNodeUptime = async function() {
 document.addEventListener('DOMContentLoaded', () => {
     // Initial load via fetch, then SSE will be started automatically
     loadServices();
+});
+
+// Global CustomEvent delegation for dashboard.js
+document.addEventListener('app:action:open-node-details', e => {
+    openNodeDetails(e.detail.target.getAttribute('data-token'), e.detail.target.getAttribute('data-color'));
+});
+document.addEventListener('app:action:reset-agent-uptime', e => {
+    resetAgentUptime();
+});
+document.addEventListener('app:action:control-service', e => {
+    e.detail.originalEvent.stopPropagation();
+    controlService(e.detail.target.getAttribute('data-name'), e.detail.target.getAttribute('data-type'), e.detail.target.getAttribute('data-cmd'));
+});
+document.addEventListener('app:action:apply-layout-suggestion-main', e => {
+    applyLayoutSuggestionMain(e.detail.target.getAttribute('data-layout'));
+});
+document.addEventListener('app:action:apply-layout-suggestion', e => {
+    applyLayoutSuggestion(e.detail.target.getAttribute('data-layout'));
+});
+document.addEventListener('app:action:add-service-search', e => {
+    addServiceFromSearch(e.detail.target.getAttribute('data-name'), e.detail.target.getAttribute('data-type'));
+});
+document.addEventListener('app:action:toggle-service-managed', e => {
+    const isManaged = e.detail.target.getAttribute('data-managed') === 'true';
+    toggleServiceManaged(e.detail.target.getAttribute('data-name'), e.detail.target.getAttribute('data-type'), isManaged, e.detail.target);
 });

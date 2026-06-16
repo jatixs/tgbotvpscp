@@ -244,7 +244,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 document.getElementById('btn-text').innerHTML = checkIcon + redirText;
 
                 setTimeout(() => {
-                    window.location.href = '/login';
+                    window.location.assign('/login');
                 }, 1000);
             } else {
                 const errPrefix = (typeof I18N !== 'undefined' && I18N.web_error) ? I18N.web_error : "Error";
