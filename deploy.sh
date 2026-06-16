@@ -209,6 +209,7 @@ setup_nginx_proxy() {
 server {
     listen ${HTTPS_PORT} ssl http2;
     server_name ${HTTPS_DOMAIN};
+    client_max_body_size 50m;
 
     # SSL
     ssl_certificate /etc/letsencrypt/live/${HTTPS_DOMAIN}/fullchain.pem;

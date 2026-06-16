@@ -27,6 +27,8 @@
 * **Accessibility (Inclusive Design):** Added a new feature for visually impaired users, allowing them to adapt interface elements for a more comfortable experience.
 * **Performance (Light Version):** The client-side WebUI now supports a "Light Version" mode, enabling pages to load and run significantly faster on low-end hardware.
 
+### 🔧 Fixed:
+* **Favicon Upload:** Resolved the "Request too large" bug when uploading custom favicons. The strict WAF limit on the request body size has been increased from 10KB to 5MB, and the Nginx `client_max_body_size` limit has been adjusted, allowing seamless transmission of Base64 images.
 ---
 ## [1.23.1] - 2026-06-15
 
