@@ -177,6 +177,11 @@ async def process_node_result_background(
         return
 
     try:
+        if cmd == "selftest":
+            header_str = _("selftest_results_header", lang)
+            if final_text.startswith(header_str):
+                final_text = final_text[len(header_str):]
+
         if cmd == "traffic":
             monitors = getattr(shared_state, "NODE_TRAFFIC_MONITORS", {})
             if user_id not in monitors:
