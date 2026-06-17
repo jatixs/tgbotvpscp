@@ -398,6 +398,7 @@ async def handle_heartbeat(request: web.Request) -> web.StreamResponse:
             "alert_lang": alert_lang,
             "agent_alert_reporter_hash": alert_reporter_hash,
             "node_name": (current_node or node).get("name", ""),
+            "ping_interval": getattr(current_config, "PING_INTERVAL", 30),
         }
     )
 
@@ -407,8 +408,6 @@ async def handle_nodes_list_json(request: web.Request) -> web.StreamResponse:
     user = await _require_user(request)
     if not user:
         return web.json_response({"error": "Unauthorized"}, status=401)
-    if not _is_admin(user):
-        return web.json_response({"error": "Admin required"}, status=403)
 
     all_nodes = await nodes_db.get_all_nodes()
     lang = get_user_lang(int(user["id"]))
@@ -739,8 +738,6 @@ async def handle_nodes_monitor_detail(request: web.Request) -> web.StreamRespons
     user = await _require_user(request)
     if not user:
         return web.json_response({"error": "Unauthorized"}, status=401)
-    if not _is_admin(user):
-        return web.json_response({"error": "Admin required"}, status=403)
 
     token = decrypt_for_web(request.query.get("token"))
     if not token:
@@ -777,8 +774,6 @@ async def handle_nodes_monitor_services(request: web.Request) -> web.StreamRespo
     user = await _require_user(request)
     if not user:
         return web.json_response({"error": "Unauthorized"}, status=401)
-    if not _is_admin(user):
-        return web.json_response({"error": "Admin required"}, status=403)
 
     token = decrypt_for_web(request.query.get("token"))
     if not token:

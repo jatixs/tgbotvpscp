@@ -1264,5 +1264,44 @@
 
         <script src="/static/js/common.js?v={{ web_version }}"></script>
         <script src="/static/js/settings.js?v={{ web_version }}"></script>
+        <script>
+            document.addEventListener('DOMContentLoaded', () => {
+                if (typeof USER_ROLE !== 'undefined' && USER_ROLE !== 'admins') {
+                    const mainContent = document.querySelector('main');
+                    if (mainContent) {
+                        mainContent.style.filter = 'blur(8px)';
+                        mainContent.style.pointerEvents = 'none';
+                        mainContent.style.userSelect = 'none';
+                        
+                        const overlay = document.createElement('div');
+                        overlay.className = 'fixed inset-0 z-50 flex flex-col items-center justify-center bg-white/20 dark:bg-black/20 backdrop-blur-sm';
+                        
+                        const title = (typeof I18N !== 'undefined' && I18N.web_access_denied) ? I18N.web_access_denied : "Access Denied";
+                        const desc = (typeof I18N !== 'undefined' && I18N.web_access_denied_desc) ? I18N.web_access_denied_desc : "You don't have permission to view settings";
+                        
+                        overlay.innerHTML = `
+                            <div class="flex flex-col items-center justify-center h-full text-center px-4 animate-fade-in-up select-none">
+                                <div class="bg-white/50 dark:bg-black/20 backdrop-blur-md p-8 rounded-3xl border border-white/40 dark:border-white/10 shadow-xl flex flex-col items-center max-w-sm w-full">
+                                    <div class="bg-red-50 dark:bg-red-500/10 p-5 rounded-full mb-5 text-red-500">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-10 w-10" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                                        </svg>
+                                    </div>
+                                    <h2 class="text-xl font-bold text-gray-900 dark:text-white mb-2">${title}</h2>
+                                    <p class="text-sm font-medium text-gray-600 dark:text-gray-400 mb-6">${desc}</p>
+                                    <a href="/" class="w-full px-4 py-3 bg-gray-900 dark:bg-white text-white dark:text-gray-900 rounded-xl font-bold hover:bg-gray-800 dark:hover:bg-gray-100 transition-colors">
+                                        ${(typeof I18N !== 'undefined' && I18N.web_back) ? I18N.web_back : 'Back'}
+                                    </a>
+                                </div>
+                            </div>
+                        `;
+                        document.body.appendChild(overlay);
+                        
+                        // Disable scrolling
+                        document.body.style.overflow = 'hidden';
+                    }
+                }
+            });
+        </script>
     </body>
 </html>

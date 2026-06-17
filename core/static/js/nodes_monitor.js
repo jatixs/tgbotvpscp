@@ -374,9 +374,11 @@ function createNodeCard(node) {
             <!-- Header -->
             <div class="p-4 border-b border-gray-100 dark:border-white/5 flex items-center justify-between">
                 <div class="flex items-center gap-3">
+                    ${(typeof USER_ROLE !== 'undefined' && USER_ROLE !== 'users') ? `
                     <input type="checkbox" class="node-checkbox rounded border-gray-300 dark:border-gray-600 text-blue-600 focus:ring-blue-500" 
                            ${isSelected ? 'checked' : ''} 
                            data-action="toggle-node-selection" data-token="${node.token}">
+                    ` : ''}
                     <div>
                         <h3 class="font-bold text-gray-900 dark:text-white text-sm">${typeof replaceEmojisWithFlagsHTML === 'function' ? replaceEmojisWithFlagsHTML(escapeHtml(node.name)) : escapeHtml(node.name)}</h3>
                         <div class="flex items-center gap-1.5">
@@ -462,11 +464,12 @@ function createNodeCard(node) {
                 <button data-action="open-node-detail" data-token="${node.token}" class="flex-1 px-3 py-2 bg-blue-100 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400 rounded-xl text-xs font-bold hover:bg-blue-200 dark:hover:bg-blue-500/30 transition">
                     ${I18N?.web_node_details || 'Node Details'}
                 </button>
+                ${(typeof USER_ROLE !== 'undefined' && USER_ROLE !== 'users') ? `
                 <button data-action="quick-reboot" data-token="${node.token}" class="node-reboot-btn px-3 py-2 text-red-600 dark:text-red-400 rounded-xl text-xs font-bold hover:bg-red-200 transition" title="Reboot">
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                     </svg>
-                </button>
+                </button>` : ''}
             </div>
         </div>
     `;
@@ -808,7 +811,7 @@ function updateNodeModal(data) {
     const isDefault = (availability.total_downtime_secs || 0) === 0;
     const resetBtn = document.getElementById('modalAvailabilityResetBtn');
     if (resetBtn) {
-        if (!isDefault) resetBtn.classList.remove('hidden');
+        if (!isDefault && typeof USER_ROLE !== 'undefined' && USER_ROLE !== 'users') resetBtn.classList.remove('hidden');
         else resetBtn.classList.add('hidden');
     }
 
@@ -1069,6 +1072,7 @@ function renderNodeServices(token, services) {
                     <span class="text-sm font-medium text-gray-700 dark:text-gray-300">${escapeHtml(svc.name)}</span>
                     ${svc.type === 'docker' ? '<span class="text-xs text-blue-500">🐳</span>' : ''}
                 </div>
+                ${(window.USER_ROLE_LEVEL || 0) >= 1 ? `
                 <div class="flex gap-1">
                     <button data-action="node-service-action" data-token="${token}" data-name="${svc.name}" data-cmd="restart" data-type="${svc.type || 'systemd'}" class="p-1 text-yellow-600 dark:text-yellow-400 hover:bg-yellow-100 dark:hover:bg-yellow-500/20 rounded" title="Restart">
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -1086,6 +1090,7 @@ function renderNodeServices(token, services) {
                         </svg>
                     </button>
                 </div>
+                ` : ''}
             </div>
         `).join(''));
 
