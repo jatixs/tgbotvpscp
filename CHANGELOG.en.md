@@ -6,11 +6,20 @@
 
 <p align="center">
 <p align="center">
-    <img src="https://img.shields.io/badge/version-v1.23.2-blue?style=flat-square" alt="Version 1.23.2"/>
-    <img src="https://img.shields.io/badge/build-79-purple?style=flat-square" alt="Build 79"/>
-    <img src="https://img.shields.io/badge/date-Jun%2016%202026-green?style=flat-square" alt="Date Jun 16 2026"/>
+    <img src="https://img.shields.io/badge/version-v1.23.3-blue?style=flat-square" alt="Version 1.23.3"/>
+    <img src="https://img.shields.io/badge/build-80-purple?style=flat-square" alt="Build 80"/>
+    <img src="https://img.shields.io/badge/date-Jun%2017%202026-green?style=flat-square" alt="Date Jun 17 2026"/>
 	<img src="https://img.shields.io/badge/status-stable-green?style=flat-square" alt="Status Stable"/>
 </p>
+
+---
+## [1.23.3] - 2026-06-17
+
+### 🚀 Added / Improved:
+* **Network Monitoring (Ping):** The ping measurement mechanism on nodes has been migrated from `ICMP` to `HTTP` (`HEAD` request), resolving the issue of ICMP packets being blocked by strict firewalls and making measurements more accurate and stable.
+* **Node Management:** Node ping frequency is now synchronized with the `PING_INTERVAL` parameter from the general panel settings. Nodes cache the result and save traffic by not sending redundant requests on every heartbeat.
+* **WebUI (Sorting):** The standard `<select>` for node sorting has been replaced with a Custom Dropdown supporting custom icons for a more modern look. Adjusted spacing and icon positioning.
+* **WebUI (Dashboard & Monitoring):** A colored badge displaying the current node ping has been added to node cards. Implemented a unified visual style for ping display across the main page and the monitoring section.
 
 ---
 ## [1.23.2] - 2026-06-16
