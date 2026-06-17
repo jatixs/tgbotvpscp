@@ -307,7 +307,7 @@ async def handle_dashboard(request: web.Request) -> web.StreamResponse:
             vnc_nodes.append({"name": node.get("name", "Unknown"), "ip": ip})
 
     from modules import traffic as traffic_module
-    can_reset = traffic_module.can_reset_traffic()
+    can_reset = traffic_module.can_reset_traffic() and is_main_admin
 
     context = {
         "web_title": page_title,
@@ -536,8 +536,6 @@ async def handle_nodes_monitor_page(request: web.Request) -> web.StreamResponse:
     lang = get_user_lang(user_id)
     role = str(user.get("role", ROLE_USER))
     is_admin = _is_admin(user)
-    if not is_admin:
-        raise web.HTTPFound("/")
 
     web_meta = getattr(current_config, "WEB_METADATA", {})
     custom_title = web_meta.get("title", "")
@@ -562,6 +560,7 @@ async def handle_nodes_monitor_page(request: web.Request) -> web.StreamResponse:
         "user_avatar": _get_avatar_html(user),
         "user_name": user.get("first_name", "User"),
         "user_role_js": build_user_role_js(role, user_id),
+        "user_is_admin": is_admin,
         "web_monitor_title": _("web_nodes_monitor_title", lang),
         "web_mass_actions": _("web_nodes_monitor_mass_actions", lang),
         "web_select_all": _("web_nodes_monitor_select_all", lang),
@@ -725,6 +724,10 @@ async def handle_settings_page(request: web.Request) -> web.StreamResponse:
     keyboard_config_json = json.dumps(current_config.KEYBOARD_CONFIG)
 
     i18n_data = {
+        "web_access_denied": _("web_access_denied", lang),
+        "access_denied_no_rights": _("access_denied_no_rights", lang),
+        "web_access_denied_desc": _("web_access_denied_desc", lang),
+        "web_back": _("web_back", lang),
         "web_saving_btn": _("web_saving_btn", lang),
         "web_saved_btn": _("web_saved_btn", lang),
         "web_haptics_on": _("web_haptics_on", lang),

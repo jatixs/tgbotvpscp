@@ -1069,6 +1069,7 @@ function renderNodeServices(token, services) {
                     <span class="text-sm font-medium text-gray-700 dark:text-gray-300">${escapeHtml(svc.name)}</span>
                     ${svc.type === 'docker' ? '<span class="text-xs text-blue-500">🐳</span>' : ''}
                 </div>
+                ${(window.USER_ROLE_LEVEL || 0) >= 1 ? `
                 <div class="flex gap-1">
                     <button data-action="node-service-action" data-token="${token}" data-name="${svc.name}" data-cmd="restart" data-type="${svc.type || 'systemd'}" class="p-1 text-yellow-600 dark:text-yellow-400 hover:bg-yellow-100 dark:hover:bg-yellow-500/20 rounded" title="Restart">
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -1086,6 +1087,7 @@ function renderNodeServices(token, services) {
                         </svg>
                     </button>
                 </div>
+                ` : ''}
             </div>
         `).join(''));
 
