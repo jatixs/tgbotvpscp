@@ -384,17 +384,10 @@
                                         <div id="hint-ping-set" class="hidden">{{ web_hint_ping_interval }}</div>
                                     </div>
                                 </div>
-                                <div class="flex items-center gap-2">
-                                    <input type="number"
-                                           id="conf_ping"
-                                           value="{{ val_ping }}"
-                                           class="w-full bg-white dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/50 text-gray-900 dark:text-white transition-all">
-                                    <div class="flex items-center bg-gray-100 dark:bg-black/40 p-1 rounded-xl shrink-0">
-                                        <input type="hidden" id="conf_ping_method" value="{{ val_ping_method }}">
-                                        <button type="button" onclick="setPingMethod('HTTP')" id="btnPingHTTP" class="px-4 py-1.5 text-xs font-bold rounded-lg transition-colors {{ 'bg-blue-500/20 text-blue-600 dark:text-blue-400 ring-1 ring-blue-500/50 shadow-sm' if val_ping_method == 'HTTP' else 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200' }}">HTTP</button>
-                                        <button type="button" onclick="setPingMethod('ICMP')" id="btnPingICMP" class="px-4 py-1.5 text-xs font-bold rounded-lg transition-colors {{ 'bg-blue-500/20 text-blue-600 dark:text-blue-400 ring-1 ring-blue-500/50 shadow-sm' if val_ping_method == 'ICMP' else 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200' }}">ICMP</button>
-                                    </div>
-                                </div>
+                                <input type="number"
+                                       id="conf_ping"
+                                       value="{{ val_ping }}"
+                                       class="w-full bg-white dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/50 text-gray-900 dark:text-white transition-all">
                                 <div class="text-red-500 text-xs mt-1 hidden" id="error_conf_ping"></div>
                             </div>
                             <div>

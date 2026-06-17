@@ -375,7 +375,6 @@ HTTP_ERROR_LOG_COOLDOWN_SECONDS = max(UPDATE_INTERVAL * 4, 30)
 
 EXTERNAL_IP_CACHE = None 
 GLOBAL_PING_INTERVAL = 30
-GLOBAL_PING_METHOD = "HTTP"
 LAST_PING_TIME = 0.0
 LAST_PING_MS = "n/a"
 
@@ -734,30 +733,15 @@ def get_system_stats():
             'last_tx_speed': net_tx_speed
         }
         
-        global LAST_PING_TIME, LAST_PING_MS, GLOBAL_PING_METHOD
+        global LAST_PING_TIME, LAST_PING_MS
         if now - LAST_PING_TIME >= GLOBAL_PING_INTERVAL or LAST_PING_MS == "n/a":
             try:
                 t1 = time.time()
-                if GLOBAL_PING_METHOD == "ICMP":
-                    if platform.system().lower() == "windows":
-                        cmd = ["ping", "-n", "1", "-w", "2000", "8.8.8.8"]
-                        pattern = r"[=<](\d+)\s*ms"
-                    else:
-                        cmd = ["ping", "-c", "1", "-W", "2", "8.8.8.8"]
-                        pattern = r"time=([\d\.]+)\s*ms"
-                    
-                    proc = subprocess.run(cmd, capture_output=True, timeout=5)
-                    ping_match = re.search(pattern, proc.stdout.decode(errors="ignore"))
-                    if ping_match:
-                        LAST_PING_MS = round(float(ping_match.group(1)), 1)
-                    else:
-                        LAST_PING_MS = "n/a"
+                resp = requests.head("https://www.google.com", timeout=3)
+                if resp.status_code == 200:
+                    LAST_PING_MS = round((time.time() - t1) * 1000, 1)
                 else:
-                    resp = requests.head("https://www.google.com", timeout=3)
-                    if resp.status_code in (200, 204, 301, 302, 403, 405):
-                        LAST_PING_MS = round((time.time() - t1) * 1000, 1)
-                    else:
-                        LAST_PING_MS = "n/a"
+                    LAST_PING_MS = "n/a"
             except Exception:
                 LAST_PING_MS = "n/a"
             LAST_PING_TIME = now
@@ -1791,13 +1775,7 @@ def send_heartbeat():
                 global GLOBAL_PING_INTERVAL
                 try:
                     GLOBAL_PING_INTERVAL = int(data["ping_interval"])
-                except Exception:
-                    pass
-            if "ping_method" in data:
-                global GLOBAL_PING_METHOD
-                try:
-                    GLOBAL_PING_METHOD = str(data["ping_method"]).upper()
-                except Exception:
+                except (ValueError, TypeError):
                     pass
 
             response_reporter_hash = data.get("agent_alert_reporter_hash")
