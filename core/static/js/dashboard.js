@@ -294,6 +294,7 @@ function updateNodesListUI(data) {
         allNodesData = (data.nodes || []).map(node => {
             node.rxSpeed = node.net_rx_speed || 0;
             node.txSpeed = node.net_tx_speed || 0;
+            node.ping = decryptData(node.ping);
             return node;
         });
         const searchInput = document.getElementById('nodeSearch');
@@ -646,10 +647,10 @@ function renderNextNodeBatch() {
                     <div class="min-w-0 flex-1">
                         <div class="flex items-center gap-2">
                             <div data-ref="name" class="font-bold text-sm text-gray-900 dark:text-white truncate group-hover:text-blue-600 dark:group-hover:text-blue-400 transition">${replaceEmojisWithFlagsHTML(escapeHtml(node.name))}</div>
-                            ${pingHtml}
                         </div>
                         <div class="flex items-center gap-2 mt-1">
                             <div data-ref="ip" class="text-[10px] sm:text-xs font-mono text-gray-400 truncate">${escapeHtml(displayIp)}</div>
+                            ${pingHtml}
                         </div>
                     </div>
                 </div>
