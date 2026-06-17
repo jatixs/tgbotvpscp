@@ -1054,14 +1054,11 @@ def execute_command(task):
 
             result_payload = {
                 "type": "i18n",
-                "key": "selftest_results_body",
+                "key": "node_selftest_results_body",
                 "params": {
                     "cpu_val": cpu_val,
-                    "cpu_bot": "N/A",
                     "mem_val": mem_val,
-                    "mem_bot": "N/A",
                     "disk_val": disk_val,
-                    "disk_bot": "N/A",
                     "uptime": uptime_str,
                     "inet_status": {"key": "selftest_inet_ok"} if inet_ok else {"key": "selftest_inet_fail"},
                     "ping": ping_val,
