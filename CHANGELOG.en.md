@@ -6,11 +6,17 @@
 
 <p align="center">
 <p align="center">
-    <img src="https://img.shields.io/badge/version-v1.23.3-blue?style=flat-square" alt="Version 1.23.3"/>
-    <img src="https://img.shields.io/badge/build-80-purple?style=flat-square" alt="Build 80"/>
+    <img src="https://img.shields.io/badge/version-v1.23.4-blue?style=flat-square" alt="Version 1.23.4"/>
+    <img src="https://img.shields.io/badge/build-81-purple?style=flat-square" alt="Build 81"/>
     <img src="https://img.shields.io/badge/date-Jun%2017%202026-green?style=flat-square" alt="Date Jun 17 2026"/>
 	<img src="https://img.shields.io/badge/status-stable-green?style=flat-square" alt="Status Stable"/>
 </p>
+
+---
+## [1.23.4] - 2026-06-17
+
+### 🔧 Fixed:
+* **Nodes / Selftest:** Fixed node selftest command output. The i18n template `selftest_results_body` parameter names did not match those sent by the node agent (`cpu`/`mem`/`disk` instead of `cpu_val`/`mem_val`/`disk_val`), causing unresolved placeholders in the message. Added missing parameters `cpu_bot`, `mem_bot`, `disk_bot` (displayed as "N/A" since the bot process does not run on nodes). CPU, RAM, and Disk values are now formatted in human-readable units (GHz/MHz, MB, GB) matching the main selftest output.
 
 ---
 ## [1.23.3] - 2026-06-17

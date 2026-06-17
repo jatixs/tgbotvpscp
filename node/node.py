@@ -1020,14 +1020,48 @@ def execute_command(task):
             uptime_str = format_uptime_simple(stats.get('uptime', 0))
             rx_total = format_bytes_simple(stats.get('net_rx', 0))
             tx_total = format_bytes_simple(stats.get('net_tx', 0))
-            
+
+            # Format CPU value
+            cpu_pct = stats.get('cpu', 0)
+            freq = stats.get('cpu_freq', 0)
+            if freq and freq > 0:
+                used_freq = (freq * cpu_pct) / 100
+                if used_freq >= 1000:
+                    cpu_val = f"{used_freq/1000:.2f} GHz"
+                elif used_freq >= 1:
+                    cpu_val = f"{used_freq:.1f} MHz"
+                else:
+                    cpu_val = f"{cpu_pct:.1f}%"
+            else:
+                cpu_val = f"{cpu_pct:.1f}%"
+
+            # Format RAM value
+            ram_total = stats.get('ram_total', 0)
+            ram_used = stats.get('ram_used', 0)
+            if ram_used > 0:
+                mem_val = f"{ram_used / (1024 * 1024):.1f} MB"
+            else:
+                mem_val = f"{stats.get('ram', 0):.1f}%"
+
+            # Format Disk value
+            disk_total = stats.get('disk_total', 0)
+            disk_free = stats.get('disk_free', 0)
+            if disk_total > 0:
+                disk_used = disk_total - disk_free
+                disk_val = f"{disk_used / (1024 ** 3):.1f} GB"
+            else:
+                disk_val = f"{stats.get('disk', 0):.1f}%"
+
             result_payload = {
                 "type": "i18n",
                 "key": "selftest_results_body",
                 "params": {
-                    "cpu": stats.get('cpu', 0),
-                    "mem": stats.get('ram', 0),
-                    "disk": stats.get('disk', 0),
+                    "cpu_val": cpu_val,
+                    "cpu_bot": "N/A",
+                    "mem_val": mem_val,
+                    "mem_bot": "N/A",
+                    "disk_val": disk_val,
+                    "disk_bot": "N/A",
                     "uptime": uptime_str,
                     "inet_status": {"key": "selftest_inet_ok"} if inet_ok else {"key": "selftest_inet_fail"},
                     "ping": ping_val,
