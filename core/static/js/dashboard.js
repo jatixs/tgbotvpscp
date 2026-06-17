@@ -294,6 +294,8 @@ function updateNodesListUI(data) {
         allNodesData = (data.nodes || []).map(node => {
             node.rxSpeed = node.net_rx_speed || 0;
             node.txSpeed = node.net_tx_speed || 0;
+            const decryptedPing = typeof decryptData === 'function' ? decryptData(node.ping) : node.ping;
+            node.ping = decryptedPing !== '' && decryptedPing != null && !Number.isNaN(Number(decryptedPing)) ? Number(decryptedPing) : null;
             return node;
         });
         const searchInput = document.getElementById('nodeSearch');
@@ -491,16 +493,42 @@ function filterAndRenderNodes() {
     renderNodesList();
 }
 
+window.isActivelySorting = false;
+
 window.setDashboardSort = function(mode) {
     localStorage.setItem('dashboardSortMode', mode);
+    window.isActivelySorting = (mode === 'custom');
     filterAndRenderNodes();
 };
 
+window.selectNodeSort = function(mode, text) {
+    const menu = document.getElementById('nodeSortMenu');
+    if (menu) menu.classList.add('hidden');
+    
+    const selectedTextEl = document.getElementById('nodeSortSelectedText');
+    if (selectedTextEl) selectedTextEl.textContent = text;
+    
+    window.setDashboardSort(mode);
+};
+
+document.addEventListener('click', function(e) {
+    const btn = document.getElementById('nodeSortBtn');
+    const menu = document.getElementById('nodeSortMenu');
+    if (btn && menu && !btn.contains(e.target) && !menu.contains(e.target)) {
+        menu.classList.add('hidden');
+    }
+});
+
 document.addEventListener('DOMContentLoaded', () => {
-    const sortSelect = document.getElementById('nodeSortSelect');
-    if (sortSelect) {
-        sortSelect.value = localStorage.getItem('dashboardSortMode') || 'custom';
-        sortSelect.addEventListener('change', (e) => window.setDashboardSort(e.target.value));
+    const wrapper = document.getElementById('nodeSortDropdownWrapper');
+    if (wrapper) {
+        const sortMode = localStorage.getItem('dashboardSortMode') || 'custom';
+        const selectedTextEl = document.getElementById('nodeSortSelectedText');
+        if (selectedTextEl) {
+            if (sortMode === 'ping') selectedTextEl.textContent = wrapper.dataset.txtPing;
+            else if (sortMode === 'name') selectedTextEl.textContent = wrapper.dataset.txtName;
+            else selectedTextEl.textContent = wrapper.dataset.txtCustom;
+        }
     }
 });
 
@@ -581,7 +609,7 @@ function renderNextNodeBatch() {
     const lblTx = (typeof I18N !== 'undefined' && I18N.web_label_tx) ? I18N.web_label_tx : "ИСХ";
 
     const sortMode = localStorage.getItem('dashboardSortMode') || 'custom';
-    const dragHandleClass = sortMode === 'custom' ? '' : 'hidden ';
+    const dragHandleClass = (sortMode === 'custom' && window.isActivelySorting) ? '' : 'hidden ';
 
     const html = batch.map(node => {
         const ui = getNodeUiParams(node);

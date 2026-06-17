@@ -176,8 +176,8 @@ async def handle_sse_stream(request: web.Request) -> web.StreamResponse:
         return _build_plain_api_notice(request.path)
 
     user = get_current_user(request)
-    if not user or not _is_admin(user):
-        return web.Response(status=403)
+    if not user:
+        return web.Response(status=401)
 
     current_token = request.cookies.get(COOKIE_NAME)
     response = web.StreamResponse(status=200, reason="OK")
@@ -542,8 +542,8 @@ async def handle_sse_node_details(request: web.Request) -> web.StreamResponse:
         return _build_plain_api_notice(request.path)
 
     user = get_current_user(request)
-    if not user or not _is_admin(user):
-        return web.Response(status=403)
+    if not user:
+        return web.Response(status=401)
 
     token = decrypt_for_web(request.query.get("token"))
     if not token:
@@ -633,8 +633,8 @@ async def handle_sse_node_services(request: web.Request) -> web.StreamResponse:
         return _build_plain_api_notice(request.path)
 
     user = get_current_user(request)
-    if not user or not _is_admin(user):
-        return web.Response(status=403)
+    if not user:
+        return web.Response(status=401)
 
     token = decrypt_for_web(request.query.get("token"))
     if not token:
@@ -712,8 +712,8 @@ async def handle_sse_services(request: web.Request) -> web.StreamResponse:
         return _build_plain_api_notice(request.path)
 
     user = get_current_user(request)
-    if not user or not _is_admin(user):
-        return web.Response(status=403)
+    if not user:
+        return web.Response(status=401)
 
     current_token = request.cookies.get(COOKIE_NAME)
     response = web.StreamResponse(status=200, reason="OK")
