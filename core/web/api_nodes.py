@@ -398,6 +398,7 @@ async def handle_heartbeat(request: web.Request) -> web.StreamResponse:
             "alert_lang": alert_lang,
             "agent_alert_reporter_hash": alert_reporter_hash,
             "node_name": (current_node or node).get("name", ""),
+            "ping_interval": getattr(current_config, "PING_INTERVAL", 30),
         }
     )
 
