@@ -6,11 +6,20 @@
 
 <p align="center">
 <p align="center">
-    <img src="https://img.shields.io/badge/version-v1.23.2-blue?style=flat-square" alt="Version 1.23.2"/>
-    <img src="https://img.shields.io/badge/build-79-purple?style=flat-square" alt="Build 79"/>
-    <img src="https://img.shields.io/badge/date-Июнь%2016%202026-green?style=flat-square" alt="Date Jun 16 2026"/>
+    <img src="https://img.shields.io/badge/version-v1.23.3-blue?style=flat-square" alt="Version 1.23.3"/>
+    <img src="https://img.shields.io/badge/build-80-purple?style=flat-square" alt="Build 80"/>
+    <img src="https://img.shields.io/badge/date-Июнь%2017%202026-green?style=flat-square" alt="Date Jun 17 2026"/>
 	<img src="https://img.shields.io/badge/status-stable-green?style=flat-square" alt="Status Stable"/>
 </p>
+
+---
+## [1.23.3] - 2026-06-17
+
+### 🚀 Добавлено / Улучшено:
+* **Мониторинг Сети (Ping):** Механизм измерения пинга на нодах переведен с `ICMP` на `HTTP` (`HEAD`-запрос), что решает проблему блокировки ICMP-пакетов строгими файрволами и делает замеры более точными и стабильными.
+* **Управление Нодами:** Частота замера пинга нодами теперь синхронизируется с параметром `PING_INTERVAL` из общих настроек панели. Ноды кэшируют результат и экономят трафик, не отправляя избыточные запросы при каждом хартбите.
+* **WebUI (Сортировка):** Стандартный `<select>` сортировки нод заменен на кастомный выпадающий список (Custom Dropdown) с поддержкой кастомных иконок для более современного внешнего вида. Улучшены отступы и расположение иконок.
+* **WebUI (Дашборд и Мониторинг):** В карточки нод добавлен цветной бейдж, отображающий текущий пинг ноды. Реализован единый визуальный стиль отображения пинга для главной страницы и раздела мониторинга.
 
 ---
 ## [1.23.2] - 2026-06-16

@@ -69,6 +69,7 @@
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 sm:h-5 sm:w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
                     </button>
                 </div>
+                {% if is_main_admin %}
                 <button onclick="openVncModal()"
                     class="flex items-center justify-center h-8 px-2 sm:px-3 rounded-lg hover:bg-black/5 dark:hover:bg-white/10 transition text-gray-600 dark:text-gray-400 font-medium text-xs sm:text-sm gap-1 whitespace-nowrap"
                     title="VNC / Terminal">
@@ -79,6 +80,7 @@
                     </svg>
                     <span class="hidden sm:inline" data-i18n="web_terminal_btn">VNC</span>
                 </button>
+                {% endif %}
                 {{ settings_btn | safe }}
                 <div class="relative group">
                     <button id="notifBtn"
@@ -555,11 +557,37 @@
                             class="w-full pl-10 pr-4 py-2 bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 transition-all duration-300 placeholder-gray-400 text-gray-900 dark:text-white"
                             placeholder="{{ web_search_placeholder }}">
                     </div>
-                    <select id="nodeSortSelect" class="w-full sm:w-auto px-4 py-2 bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-xl text-sm font-medium text-gray-700 dark:text-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 cursor-pointer transition-all duration-300">
-                        <option class="dark:bg-gray-800" value="custom">✋ {{ web_filter_sort_custom }}</option>
-                        <option class="dark:bg-gray-800" value="ping">⚡ {{ web_filter_sort_ping }}</option>
-                        <option class="dark:bg-gray-800" value="name">🔤 {{ web_filter_sort_name }}</option>
-                    </select>
+                    <div class="relative w-full sm:w-auto" id="nodeSortDropdownWrapper" data-txt-custom="{{ web_filter_sort_custom }}" data-txt-ping="{{ web_filter_sort_ping }}" data-txt-name="{{ web_filter_sort_name }}">
+                        <button id="nodeSortBtn" onclick="document.getElementById('nodeSortMenu').classList.toggle('hidden')" class="w-full sm:w-auto px-4 py-2 bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-xl text-sm font-medium text-gray-700 dark:text-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 transition-all duration-300 flex items-center justify-between gap-3 whitespace-nowrap">
+                            <svg class="h-4 w-4 text-gray-500 dark:text-gray-400 shrink-0" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4h13M3 8h9m-9 4h6m4 0l4-4m0 0l4 4m-4-4v12" />
+                            </svg>
+                            <span id="nodeSortSelectedText" class="truncate">{{ web_filter_sort_custom }}</span>
+                            <svg class="h-4 w-4 text-gray-400 shrink-0" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                            </svg>
+                        </button>
+                        <div id="nodeSortMenu" class="hidden absolute right-0 mt-2 w-full sm:w-48 bg-white dark:bg-gray-800 border border-gray-100 dark:border-white/10 rounded-xl shadow-xl z-50 overflow-hidden">
+                            <button onclick="selectNodeSort('custom', '{{ web_filter_sort_custom }}')" class="w-full text-left px-4 py-2.5 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-white/5 flex items-center gap-3 transition-colors">
+                                <svg class="h-4 w-4 text-gray-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 11.5V14m0-2.5v-6a1.5 1.5 0 113 0m-3 6a1.5 1.5 0 00-3 0v2a7.5 7.5 0 0015 0v-5a1.5 1.5 0 00-3 0m-6-3V11m0-5.5v-1a1.5 1.5 0 013 0v1m0 0V11m0-5.5a1.5 1.5 0 013 0v3m0 0V11" />
+                                </svg>
+                                {{ web_filter_sort_custom }}
+                            </button>
+                            <button onclick="selectNodeSort('ping', '{{ web_filter_sort_ping }}')" class="w-full text-left px-4 py-2.5 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-white/5 flex items-center gap-3 transition-colors border-t border-gray-50 dark:border-white/5">
+                                <svg class="h-4 w-4 text-gray-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                                </svg>
+                                {{ web_filter_sort_ping }}
+                            </button>
+                            <button onclick="selectNodeSort('name', '{{ web_filter_sort_name }}')" class="w-full text-left px-4 py-2.5 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-white/5 flex items-center gap-3 transition-colors border-t border-gray-50 dark:border-white/5">
+                                <svg class="h-4 w-4 text-gray-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4h13M3 8h9m-9 4h6m4 0l4-4m0 0l4 4m-4-4v12" />
+                                </svg>
+                                {{ web_filter_sort_name }}
+                            </button>
+                        </div>
+                    </div>
                 </div>
                 <div class="space-y-3 pr-2 pb-3" id="nodesList">
                     <div class="text-center py-8 text-gray-400 dark:text-gray-500 text-sm">
