@@ -374,6 +374,9 @@ SUPPRESSED_HTTP_ERROR_COUNT = 0
 HTTP_ERROR_LOG_COOLDOWN_SECONDS = max(UPDATE_INTERVAL * 4, 30)
 
 EXTERNAL_IP_CACHE = None 
+GLOBAL_PING_INTERVAL = 30
+LAST_PING_TIME = 0.0
+LAST_PING_MS = "n/a"
 
 class SSHMonitor:
     def __init__(self):
@@ -730,31 +733,20 @@ def get_system_stats():
             'last_tx_speed': net_tx_speed
         }
         
-        # Measure ping: try ICMP first (faster/accurate), fallback to HTTPS if blocked
-        ping_ms = None
-        
-        # Try ICMP ping first
-        try:
-            proc = subprocess.Popen(
-                ["ping", "-c", "1", "-W", "2", "8.8.8.8"],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE
-            )
-            stdout, _ = proc.communicate(timeout=5)
-            ping_match = re.search(r"time=([\d\.]+)\s*ms", stdout.decode())
-            if ping_match:
-                ping_ms = round(float(ping_match.group(1)), 1)
-        except Exception:
-            pass
-        
-        if ping_ms is None:
+        global LAST_PING_TIME, LAST_PING_MS
+        if now - LAST_PING_TIME >= GLOBAL_PING_INTERVAL or LAST_PING_MS == "n/a":
             try:
                 t1 = time.time()
                 resp = requests.head("https://www.google.com", timeout=3)
                 if resp.status_code == 200:
-                    ping_ms = round((time.time() - t1) * 1000, 1)
+                    LAST_PING_MS = round((time.time() - t1) * 1000, 1)
+                else:
+                    LAST_PING_MS = "n/a"
             except Exception:
-                pass
+                LAST_PING_MS = "n/a"
+            LAST_PING_TIME = now
+            
+        ping_ms = LAST_PING_MS
         
         ram_used = mem.total - mem.available
         ram_pct = round(ram_used / mem.total * 100, 1) if mem.total > 0 else 0
@@ -1774,11 +1766,17 @@ def send_heartbeat():
 
             sync_node_name_from_agent(data.get("node_name", ""))
 
-            # Agent provides preferred language while online; keep it cached for offline alerts.
             response_lang = data.get("alert_lang")
             if response_lang in {"ru", "en"} and response_lang != LAST_AGENT_LANG:
                 LAST_AGENT_LANG = response_lang
                 logging.info(f"Updated alert language from agent: {LAST_AGENT_LANG}")
+
+            if "ping_interval" in data:
+                global GLOBAL_PING_INTERVAL
+                try:
+                    GLOBAL_PING_INTERVAL = int(data["ping_interval"])
+                except (ValueError, TypeError):
+                    pass
 
             response_reporter_hash = data.get("agent_alert_reporter_hash")
             if isinstance(response_reporter_hash, str) and response_reporter_hash:
