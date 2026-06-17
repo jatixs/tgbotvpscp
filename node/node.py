@@ -738,25 +738,12 @@ def get_system_stats():
         if now - LAST_PING_TIME >= GLOBAL_PING_INTERVAL or LAST_PING_MS == "n/a":
             try:
                 t1 = time.time()
-                ping_target = get_env_value("PING_TARGET") or "google"
-                target_ip = "1.1.1.1" if ping_target == "cloudflare" else "8.8.8.8"
-                target_http = "https://www.cloudflare.com" if ping_target == "cloudflare" else "https://www.google.com"
-
-                if ping_target == "agent":
-                    agent_url = get_env_value("AGENT_BASE_URL")
-                    if agent_url:
-                        target_http = agent_url
-                        target_ip = agent_url.split("://")[-1].split(":")[0].split("/")[0]
-                    else:
-                        target_http = "https://www.google.com"
-                        target_ip = "8.8.8.8"
-
                 if GLOBAL_PING_METHOD == "ICMP":
                     if platform.system().lower() == "windows":
-                        cmd = ["ping", "-n", "1", "-w", "2000", target_ip]
+                        cmd = ["ping", "-n", "1", "-w", "2000", "8.8.8.8"]
                         pattern = r"[=<](\d+)\s*ms"
                     else:
-                        cmd = ["ping", "-c", "1", "-W", "2", target_ip]
+                        cmd = ["ping", "-c", "1", "-W", "2", "8.8.8.8"]
                         pattern = r"time=([\d\.]+)\s*ms"
                     
                     proc = subprocess.run(cmd, capture_output=True, timeout=5)
@@ -766,7 +753,7 @@ def get_system_stats():
                     else:
                         LAST_PING_MS = "n/a"
                 else:
-                    resp = requests.head(target_http, timeout=3)
+                    resp = requests.head("https://www.google.com", timeout=3)
                     if resp.status_code in (200, 204, 301, 302, 403, 405):
                         LAST_PING_MS = round((time.time() - t1) * 1000, 1)
                     else:

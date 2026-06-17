@@ -1354,59 +1354,6 @@ toggle_agent_monitoring() {
     fi
 }
 
-change_ping_server() {
-    clear
-    echo -e "${C_BLUE}${C_BOLD}=== Выбор сервера для пинга ===${C_RESET}"
-    echo "1) Google (8.8.8.8 / google.com) [По умолчанию]"
-    echo "2) Cloudflare (1.1.1.1 / cloudflare.com)"
-    if [ "$IS_NODE" == "yes" ]; then
-        echo "3) Между агентом и нодами (пинговать сервер агента)"
-    fi
-    echo "0) Отмена"
-    read -p "Выберите сервер: " srv_choice
-    local pt=""
-    case $srv_choice in
-        1) pt="google" ;;
-        2) pt="cloudflare" ;;
-        3) 
-           if [ "$IS_NODE" == "yes" ]; then
-               pt="agent"
-           else
-               msg_error "Неверный выбор"
-               sleep 1
-               return
-           fi
-           ;;
-        0) return ;;
-        *) msg_error "Неверный выбор"; sleep 1; return ;;
-    esac
-
-    if [ -f "${ENV_FILE}" ]; then
-        sed -i '/^PING_TARGET=/d' "${ENV_FILE}"
-        echo "PING_TARGET=\"${pt}\"" >> "${ENV_FILE}"
-        msg_success "Сервер пинга изменён на: $pt"
-        
-        if [ "$IS_NODE" == "yes" ]; then
-            msg_info "Перезапуск ноды..."
-            sudo systemctl restart ${NODE_SERVICE_NAME}
-        else
-            local deploy_mode=$(grep '^DEPLOY_MODE=' "${ENV_FILE}" | cut -d'=' -f2 | tr -d '"')
-            if [ "$deploy_mode" == "docker" ]; then
-                msg_info "Перезапуск Docker контейнера..."
-                local dc_cmd=""; if sudo docker compose version &>/dev/null; then dc_cmd="docker compose"; else dc_cmd="docker-compose"; fi
-                cd "${BOT_INSTALL_PATH}" && sudo $dc_cmd restart
-            else
-                msg_info "Перезапуск агента..."
-                sudo systemctl restart ${SERVICE_NAME}
-            fi
-        fi
-        sleep 2
-    else
-        msg_error "Файл .env не найден!"
-        sleep 2
-    fi
-}
-
 main_menu() {
     local local_version=$(get_local_version)
     while true; do
@@ -1439,8 +1386,6 @@ main_menu() {
             echo -e "${C_YELLOW}  8) Мониторинг агента (${monitoring_status})${C_RESET}"
         fi
         
-        echo "  9) Изменить сервер пинга"
-        
         echo "  0) Выход"
         echo "--------------------------------------------------------"
         read -p "$(echo -e "${C_BOLD}Ваш выбор: ${C_RESET}")" choice
@@ -1453,7 +1398,6 @@ main_menu() {
             6) uninstall_bot; install_docker_logic "root"; read -p "Нажмите Enter..." ;;
             7) if [ "$IS_NODE" == "yes" ]; then uninstall_bot; install_node_logic; read -p "Нажмите Enter..."; else msg_error "Пункт доступен только в режиме НОДЫ."; sleep 2; fi ;;
             8) if [ "$IS_NODE" == "yes" ]; then toggle_agent_monitoring; read -p "Нажмите Enter..."; fi ;;
-            9) change_ping_server ;;
             0) break ;;
         esac
     done
