@@ -31,29 +31,24 @@ BACKGROUND_TASKS_KEY = "background_tasks"
 
 
 async def measure_agent_ping() -> str | None:
-    """Measure agent connectivity using the configured method (HTTP or ICMP)."""
-    method = getattr(current_config, "PING_METHOD", "HTTP").upper()
-    
-    if method == "ICMP":
-        try:
-            if platform.system().lower() == "windows":
-                cmd = ["ping", "-n", "1", "-w", "2000", "8.8.8.8"]
-                pattern = r"[=<](\d+)\s*ms"
-            else:
-                cmd = ["ping", "-c", "1", "-W", "2", "8.8.8.8"]
-                pattern = r"time=([\d\.]+)\s*ms"
+    """Measure agent connectivity using ICMP first and HTTPS as fallback."""
+    try:
+        if platform.system().lower() == "windows":
+            cmd = ["ping", "-n", "1", "-w", "2000", "8.8.8.8"]
+            pattern = r"[=<](\d+)\s*ms"
+        else:
+            cmd = ["ping", "-c", "1", "-W", "2", "8.8.8.8"]
+            pattern = r"time=([\d\.]+)\s*ms"
 
-            proc = await asyncio.to_thread(
-                lambda: subprocess.run(cmd, capture_output=True, timeout=5)
-            )
-            ping_match = re.search(pattern, proc.stdout.decode(errors="ignore"))
-            if ping_match:
-                return str(round(float(ping_match.group(1)), 1))
-        except Exception:
-            pass
-        return None
+        proc = await asyncio.to_thread(
+            lambda: subprocess.run(cmd, capture_output=True, timeout=5)
+        )
+        ping_match = re.search(pattern, proc.stdout.decode(errors="ignore"))
+        if ping_match:
+            return str(round(float(ping_match.group(1)), 1))
+    except Exception:
+        pass
 
-    # HTTP Method (default)
     targets = [
         "https://www.google.com",
         "https://www.cloudflare.com",
@@ -65,9 +60,9 @@ async def measure_agent_ping() -> str | None:
         try:
             started_at = time.time()
             async with aiohttp.ClientSession(timeout=timeout) as session:
-                async with session.head(target, allow_redirects=False) as response:
+                async with session.get(target, allow_redirects=False) as response:
                     await response.read()
-                    if response.status in {200, 204, 301, 302, 403, 405}:
+                    if response.status in {200, 204, 301, 302, 403}:
                         return str(int((time.time() - started_at) * 1000))
         except Exception:
             continue

@@ -393,37 +393,7 @@ function initSystemSettingsTracking() {
             }
         });
     }
-    const pingMethodEl = document.getElementById('conf_ping_method');
-    if (pingMethodEl) {
-        initialConfig['intervals']['conf_ping_method'] = pingMethodEl.value;
-    }
 }
-
-window.setPingMethod = function(method) {
-    const input = document.getElementById('conf_ping_method');
-    if (input) {
-        input.value = method;
-        
-        const btnHTTP = document.getElementById('btnPingHTTP');
-        const btnICMP = document.getElementById('btnPingICMP');
-        
-        const activeClasses = ['bg-blue-500/20', 'text-blue-600', 'dark:text-blue-400', 'ring-1', 'ring-blue-500/50', 'shadow-sm'];
-        const inactiveClasses = ['text-gray-500', 'hover:text-gray-700', 'dark:text-gray-400', 'dark:hover:text-gray-200'];
-        
-        if (method === 'HTTP') {
-            btnHTTP.classList.remove(...inactiveClasses);
-            btnHTTP.classList.add(...activeClasses);
-            btnICMP.classList.remove(...activeClasses);
-            btnICMP.classList.add(...inactiveClasses);
-        } else {
-            btnICMP.classList.remove(...inactiveClasses);
-            btnICMP.classList.add(...activeClasses);
-            btnHTTP.classList.remove(...activeClasses);
-            btnHTTP.classList.add(...inactiveClasses);
-        }
-        checkForChanges('intervals');
-    }
-};
 
 function initChangePasswordUI() {
     const ids = ['pass_current', 'pass_new', 'pass_confirm'];
@@ -506,14 +476,6 @@ function checkForChanges(groupName) {
             }
         }
     });
-
-    if (groupName === 'intervals') {
-        const pmEl = document.getElementById('conf_ping_method');
-        if (pmEl && pmEl.value != initialConfig[groupName]['conf_ping_method']) {
-            hasChanges = true;
-        }
-    }
-
     toggleSaveButton(config.btnId, hasChanges);
 }
 
@@ -573,14 +535,13 @@ async function saveSystemConfig(groupName) {
     }
 
     const data = {
-        CPU_THRESHOLD: document.getElementById('conf_cpu') ? document.getElementById('conf_cpu').value : undefined,
-        RAM_THRESHOLD: document.getElementById('conf_ram') ? document.getElementById('conf_ram').value : undefined,
-        DISK_THRESHOLD: document.getElementById('conf_disk') ? document.getElementById('conf_disk').value : undefined,
-        TRAFFIC_INTERVAL: document.getElementById('conf_traffic') ? document.getElementById('conf_traffic').value : undefined,
-        SERVICES_INTERVAL: document.getElementById('conf_services') ? document.getElementById('conf_services').value : undefined,
-        PING_INTERVAL: document.getElementById('conf_ping') ? document.getElementById('conf_ping').value : undefined,
-        PING_METHOD: document.getElementById('conf_ping_method') ? document.getElementById('conf_ping_method').value : undefined,
-        NODE_OFFLINE_TIMEOUT: document.getElementById('conf_timeout') ? document.getElementById('conf_timeout').value : undefined
+        CPU_THRESHOLD: document.getElementById('conf_cpu').value,
+        RAM_THRESHOLD: document.getElementById('conf_ram').value,
+        DISK_THRESHOLD: document.getElementById('conf_disk').value,
+        TRAFFIC_INTERVAL: document.getElementById('conf_traffic').value,
+        SERVICES_INTERVAL: document.getElementById('conf_services').value,
+        PING_INTERVAL: document.getElementById('conf_ping').value,
+        NODE_OFFLINE_TIMEOUT: document.getElementById('conf_timeout').value
     };
 
     try {
@@ -597,10 +558,6 @@ async function saveSystemConfig(groupName) {
                     const el = document.getElementById(id);
                     if (el) initialConfig[grp][id] = el.value;
                 });
-            }
-            if (groupName === 'intervals') {
-                const pmEl = document.getElementById('conf_ping_method');
-                if (pmEl) initialConfig['intervals']['conf_ping_method'] = pmEl.value;
             }
             btn.innerText = I18N.web_saved_btn;
             btn.classList.remove('bg-blue-600', 'hover:bg-blue-500', 'bg-gray-200', 'dark:bg-gray-700');
