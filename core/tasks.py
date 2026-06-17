@@ -31,16 +31,18 @@ BACKGROUND_TASKS_KEY = "background_tasks"
 
 
 async def measure_agent_ping() -> str | None:
-    """Measure agent connectivity using the configured method (HTTP or ICMP)."""
+    """Measure agent connectivity using the configured method (HTTP or ICMP) and target."""
     method = getattr(current_config, "PING_METHOD", "HTTP").upper()
+    ping_target = os.environ.get("PING_TARGET", "google")
+    target_ip = "1.1.1.1" if ping_target == "cloudflare" else "8.8.8.8"
     
     if method == "ICMP":
         try:
             if platform.system().lower() == "windows":
-                cmd = ["ping", "-n", "1", "-w", "2000", "8.8.8.8"]
+                cmd = ["ping", "-n", "1", "-w", "2000", target_ip]
                 pattern = r"[=<](\d+)\s*ms"
             else:
-                cmd = ["ping", "-c", "1", "-W", "2", "8.8.8.8"]
+                cmd = ["ping", "-c", "1", "-W", "2", target_ip]
                 pattern = r"time=([\d\.]+)\s*ms"
 
             proc = await asyncio.to_thread(
@@ -53,12 +55,12 @@ async def measure_agent_ping() -> str | None:
             pass
         return None
 
-    # HTTP Method (default)
-    targets = [
-        "https://www.google.com",
-        "https://www.cloudflare.com",
-        "https://1.1.1.1",
-    ]
+    # HTTP Method
+    if ping_target == "cloudflare":
+        targets = ["https://www.cloudflare.com", "https://1.1.1.1"]
+    else:
+        targets = ["https://www.google.com", "https://8.8.8.8"]
+        
     timeout = aiohttp.ClientTimeout(total=AGENT_PING_TIMEOUT)
 
     for target in targets:
