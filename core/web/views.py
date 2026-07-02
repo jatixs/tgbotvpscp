@@ -536,6 +536,17 @@ async def handle_nodes_monitor_page(request: web.Request) -> web.StreamResponse:
     lang = get_user_lang(user_id)
     role = str(user.get("role", ROLE_USER))
     is_admin = _is_admin(user)
+    is_main_admin = _is_root(user)
+
+    if is_main_admin:
+        role_text = _("web_role_owner", lang)
+        role_badge_html = f'<span class="role-badge-owner hidden sm:inline-flex px-2 py-0.5 rounded text-[10px] border uppercase font-bold">{role_text}</span>'
+    elif role == "admins":
+        role_text = _("web_role_admins", lang)
+        role_badge_html = f'<span class="role-badge-admin hidden sm:inline-flex px-2 py-0.5 rounded text-[10px] border uppercase font-bold">{role_text}</span>'
+    else:
+        role_text = _("web_role_users", lang)
+        role_badge_html = f'<span class="role-badge-user hidden sm:inline-flex px-2 py-0.5 rounded text-[10px] border uppercase font-bold">{role_text}</span>'
 
     web_meta = getattr(current_config, "WEB_METADATA", {})
     custom_title = web_meta.get("title", "")
@@ -561,6 +572,7 @@ async def handle_nodes_monitor_page(request: web.Request) -> web.StreamResponse:
         "user_name": user.get("first_name", "User"),
         "user_role_js": build_user_role_js(role, user_id),
         "user_is_admin": is_admin,
+        "role_badge": role_badge_html,
         "web_monitor_title": _("web_nodes_monitor_title", lang),
         "web_mass_actions": _("web_nodes_monitor_mass_actions", lang),
         "web_select_all": _("web_nodes_monitor_select_all", lang),
@@ -590,6 +602,8 @@ async def handle_nodes_monitor_page(request: web.Request) -> web.StreamResponse:
         "web_loading": _("web_loading", lang),
         "web_stats_total": _("web_stats_total", lang),
         "web_uptime": _("web_nodes_monitor_uptime", lang),
+        "web_notifications_title": _("web_notifications_title", lang),
+        "web_clear_notifications": _("web_clear_notifications", lang),
         "web_resources_chart": _("web_nodes_monitor_resources_chart", lang),
         "web_network_chart": _("web_nodes_monitor_network_chart", lang),
         "web_services_title": _("web_nodes_monitor_tab_services", lang),
@@ -628,6 +642,13 @@ async def handle_nodes_monitor_page(request: web.Request) -> web.StreamResponse:
             "web_node_status_offline": _("web_nodes_monitor_offline", lang),
             "web_node_status_restarting": _("web_node_restarting", lang),
             "web_nodes_monitor_select_nodes": _("web_nodes_monitor_select_nodes", lang),
+            "web_notifications_title": _("web_notifications_title", lang),
+            "web_clear_notifications": _("web_clear_notifications", lang),
+            "web_no_notifications": _("web_no_notifications", lang),
+            "web_notifications_cleared": _("web_notifications_cleared", lang),
+            "web_notif_source_agent": _("web_notif_source_agent", lang),
+            "web_notif_source_node": _("web_notif_source_node", lang),
+            "web_clear_notif_confirm": _("web_clear_notifications", lang) + "?",
             "web_nodes_monitor_confirm_mass_reboot": _("web_nodes_monitor_confirm_mass_reboot", lang),
             "web_nodes_monitor_confirm_mass_command": _("web_nodes_monitor_confirm_mass_command", lang),
             "web_reboot_node_confirm": _("web_nodes_monitor_confirm_reboot", lang),
@@ -671,6 +692,25 @@ async def handle_nodes_monitor_page(request: web.Request) -> web.StreamResponse:
             "web_avail_status": _("web_avail_status", lang),
             "web_avail_online": _("web_avail_online", lang),
             "web_avail_offline": _("web_avail_offline", lang),
+            "unit_kbps": _("unit_kbps", lang),
+            "unit_mbps": _("unit_mbps", lang),
+            "unit_gbps": _("unit_gbps", lang),
+            "web_haptics_on": _("web_haptics_on", lang),
+            "web_haptics_off": _("web_haptics_off", lang),
+            "web_copied": _("web_copied", lang),
+            "web_error_short": _("web_error_short", lang),
+            "web_weak_conn": _("web_weak_conn", lang),
+            "web_session_expired": _("web_session_expired", lang),
+            "web_please_relogin": _("web_please_relogin", lang),
+            "web_login_btn": _("web_login_btn", lang),
+            "web_conn_problem": _("web_conn_problem", lang),
+            "web_refresh_stream": _("web_refresh_stream", lang),
+            "web_fatal_conn": _("web_fatal_conn", lang),
+            "web_reloading_page": _("web_reloading_page", lang),
+            "web_server_rebooting": _("web_server_rebooting", lang),
+            "web_nodes_monitor_filter_reset": _("web_nodes_monitor_filter_reset", lang),
+            "modal_btn_ok": _("modal_btn_ok", lang),
+            "modal_btn_cancel": _("modal_btn_cancel", lang),
         }),
     }
 
