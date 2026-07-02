@@ -892,18 +892,15 @@ def execute_command(task):
         elif cmd == "traffic":
             net = psutil.net_io_counters()
             now = time.time()
-            
-            rx_total = format_bytes_simple(net.bytes_recv)
-            tx_total = format_bytes_simple(net.bytes_sent)
-            
+
             speed_rx_val = "0.00"
             speed_tx_val = "0.00"
-            
+
             if LAST_TRAFFIC_STATS:
                 prev_rx = LAST_TRAFFIC_STATS.get('rx', 0)
                 prev_tx = LAST_TRAFFIC_STATS.get('tx', 0)
                 prev_time = LAST_TRAFFIC_STATS.get('time', 0)
-                
+
                 dt = now - prev_time
                 if dt > 0:
                     rx_speed = (net.bytes_recv - prev_rx) * 8 / (1024 * 1024) / dt
@@ -916,13 +913,13 @@ def execute_command(task):
                 'tx': net.bytes_sent,
                 'time': now
             }
-            
+
             result_payload = {
                 "type": "i18n",
-                "key": "traffic_report_node", 
+                "key": "traffic_report_node",
                 "params": {
-                    "rx": rx_total,
-                    "tx": tx_total,
+                    "rx": {"format": "traffic", "value": net.bytes_recv},
+                    "tx": {"format": "traffic", "value": net.bytes_sent},
                     "speed_rx": speed_rx_val,
                     "speed_tx": speed_tx_val
                 }
@@ -931,28 +928,62 @@ def execute_command(task):
         elif cmd == "top":
             try:
                 proc = subprocess.Popen(
-                    ["ps", "-eo", "user,pid,%cpu,%mem,comm", "--sort=-%cpu"],
+                    ["ps", "-eo", "pid,user,%cpu,%mem,time,comm", "--sort=-%cpu"],
                     stdout=subprocess.PIPE,
                     stderr=subprocess.PIPE
                 )
                 stdout, _ = proc.communicate()
                 all_lines = stdout.decode().split('\n')
-                res = '\n'.join(all_lines[:11])  # Head -n 11
-                
-                safe_res = res.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-                
+                # Skip the header line (first line), take up to 10 data lines
+                data_lines = [l for l in all_lines[1:] if l.strip()][:10]
+
+                table_lines = []
+                table_lines.append(f"{'PID':<7} {'USER':<8} {'CPU':>4} {'RAM':>4} {'TIME':>5} CMD")
+                table_lines.append("-" * 42)
+
+                for line in data_lines:
+                    parts = line.split(None, 5)
+                    if len(parts) >= 6:
+                        p_pid, p_user, p_cpu, p_mem, p_time, p_command = parts
+
+                        if len(p_user) > 7:
+                            p_user = p_user[:6] + "+"
+
+                        short_cmd = p_command.split()[0].split('/')[-1]
+                        if len(short_cmd) > 10:
+                            short_cmd = short_cmd[:9] + "\u2026"
+
+                        try:
+                            cpu_val = float(p_cpu)
+                            cpu_str = f"{cpu_val:.1f}" if cpu_val < 100 else f"{int(cpu_val)}"
+                        except ValueError:
+                            cpu_str = p_cpu[:4]
+
+                        try:
+                            mem_val = float(p_mem)
+                            mem_str = f"{mem_val:.1f}" if mem_val < 100 else f"{int(mem_val)}"
+                        except ValueError:
+                            mem_str = p_mem[:4]
+
+                        time_str = p_time[:5]
+                        # HTML-escape the command name
+                        safe_cmd = short_cmd.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+                        table_lines.append(f"{p_pid:<7} {p_user:<8} {cpu_str:>4} {mem_str:>4} {time_str:>5} {safe_cmd}")
+
+                output_str = "<pre>" + "\n".join(table_lines) + "</pre>"
+
                 result_payload = {
                     "type": "i18n",
                     "key": "top_header",
                     "params": {
-                        "output": safe_res
+                        "output": output_str
                     }
                 }
-                
+
             except Exception as e:
                 result_payload = {
-                    "type": "i18n", 
-                    "key": "error_with_details", 
+                    "type": "i18n",
+                    "key": "error_with_details",
                     "params": {"error": str(e)}
                 }
 
@@ -1018,8 +1049,8 @@ def execute_command(task):
                 kernel = "N/A"
             
             uptime_str = format_uptime_simple(stats.get('uptime', 0))
-            rx_total = format_bytes_simple(stats.get('net_rx', 0))
-            tx_total = format_bytes_simple(stats.get('net_tx', 0))
+            rx_raw = stats.get('net_rx', 0)
+            tx_raw = stats.get('net_tx', 0)
 
             # Format CPU value
             cpu_pct = stats.get('cpu', 0)
@@ -1059,13 +1090,13 @@ def execute_command(task):
                     "cpu_val": cpu_val,
                     "mem_val": mem_val,
                     "disk_val": disk_val,
-                    "uptime": uptime_str,
+                    "uptime": {"format": "uptime", "value": stats.get('uptime', 0)},
                     "inet_status": {"key": "selftest_inet_ok"} if inet_ok else {"key": "selftest_inet_fail"},
                     "ping": ping_val,
                     "ipv4": ext_ipv4 or "N/A",
                     "ipv6": ext_ipv6 or "N/A",
-                    "rx": rx_total,
-                    "tx": tx_total
+                    "rx": {"format": "traffic", "value": rx_raw},
+                    "tx": {"format": "traffic", "value": tx_raw}
                 }
             }
 

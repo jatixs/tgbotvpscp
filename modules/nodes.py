@@ -406,11 +406,15 @@ async def cq_node_command(callback: types.CallbackQuery):
     node_name = html.escape(node.get("name", "Unknown"))
     
     if cmd == "speedtest":
-        msg = await callback.message.answer(f"⏳ Выполнение Speedtest на ноде <b>{node_name}</b>...", parse_mode="HTML")
+        msg = await callback.message.answer(
+            _("speedtest_progress_node", lang, name=node_name, elapsed=0),
+            parse_mode="HTML"
+        )
         ACTIVE_NODE_SPEEDTESTS[f"{token}_{user_id}"] = {
             "chat_id": msg.chat.id,
             "message_id": msg.message_id,
-            "start_time": time.time()
+            "start_time": time.time(),
+            "node_name": node_name,
         }
 
     await callback.answer(
@@ -614,9 +618,27 @@ async def node_speedtest_progress_task(bot: Bot):
                 if elapsed > 150:  # Timeout 2.5 mins
                     ACTIVE_NODE_SPEEDTESTS.pop(key, None)
                     continue
+                node_name_disp = data.get("node_name", "Node")
+                # Determine lang from key (format: token_user_id)
                 try:
+                    user_id_from_key = int(key.split("_")[-1])
+                    lang_for_notif = get_user_lang(user_id_from_key)
+                except Exception:
+                    lang_for_notif = "ru"
+                try:
+                    phase_cycle = (
+                        "speedtest_progress_ping",
+                        "speedtest_progress_downloading",
+                        "speedtest_progress_uploading",
+                    )
+                    phase_index = min(len(phase_cycle) - 1, elapsed // 7)
                     await bot.edit_message_text(
-                        f"⏳ Выполнение Speedtest... ({elapsed} сек)",
+                        _(
+                            phase_cycle[phase_index],
+                            lang_for_notif,
+                            name=node_name_disp,
+                            elapsed=elapsed,
+                        ),
                         chat_id=data["chat_id"],
                         message_id=data["message_id"],
                         parse_mode="HTML"
