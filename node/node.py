@@ -13,6 +13,7 @@ import json
 import html
 import collections
 import threading
+import socket
 from datetime import datetime
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -375,6 +376,8 @@ HTTP_ERROR_LOG_COOLDOWN_SECONDS = max(UPDATE_INTERVAL * 4, 30)
 
 EXTERNAL_IP_CACHE = None 
 GLOBAL_PING_INTERVAL = 30
+GLOBAL_PING_MODE = "http"
+GLOBAL_PING_TARGET = "google"
 LAST_PING_TIME = 0.0
 LAST_PING_MS = "n/a"
 
@@ -698,6 +701,24 @@ def get_top_processes(metric):
         logging.error(f"Error getting top processes: {e}")
         return "n/a"
 
+def _do_icmp_ping(target_ip="8.8.8.8"):
+    import platform
+    try:
+        if platform.system().lower() == "windows":
+            cmd = ["ping", "-n", "1", "-w", "2000", target_ip]
+            pattern = r"[=<](\d+)\s*ms"
+        else:
+            cmd = ["ping", "-c", "1", "-W", "2", target_ip]
+            pattern = r"time=([\d\.]+)\s*ms"
+
+        proc = subprocess.run(cmd, capture_output=True, timeout=5)
+        ping_match = re.search(pattern, proc.stdout.decode(errors="ignore"))
+        if ping_match:
+            return float(ping_match.group(1))
+    except Exception:
+        pass
+    return None
+
 def get_system_stats():
     global _HEARTBEAT_NET_STATS
     try:
@@ -733,17 +754,64 @@ def get_system_stats():
             'last_tx_speed': net_tx_speed
         }
         
-        global LAST_PING_TIME, LAST_PING_MS
+        global LAST_PING_TIME, LAST_PING_MS, GLOBAL_PING_MODE, GLOBAL_PING_TARGET
         if now - LAST_PING_TIME >= GLOBAL_PING_INTERVAL or LAST_PING_MS == "n/a":
-            try:
-                t1 = time.time()
-                resp = requests.head("https://www.google.com", timeout=3)
-                if resp.status_code == 200:
-                    LAST_PING_MS = round((time.time() - t1) * 1000, 1)
+            t1 = time.time()
+            success = False
+            
+            target_ip = "8.8.8.8"
+            target_http = "https://www.google.com"
+            target_port = 53
+            
+            if GLOBAL_PING_TARGET == "cloudflare":
+                target_ip = "1.1.1.1"
+                target_http = "https://www.cloudflare.com"
+            elif GLOBAL_PING_TARGET == "internal":
+                target_http = f"{AGENT_BASE_URL.rstrip('/')}/health"
+                target_port = 80
+                try:
+                    from urllib.parse import urlparse
+                    parsed = urlparse(AGENT_BASE_URL)
+                    target_ip = socket.gethostbyname(parsed.hostname) if parsed.hostname else "8.8.8.8"
+                    target_port = parsed.port if parsed.port else (443 if parsed.scheme == "https" else 80)
+                except Exception:
+                    pass
+
+            ping_mode = GLOBAL_PING_MODE
+            if ping_mode == "icmp":
+                icmp_ms = _do_icmp_ping(target_ip)
+                if icmp_ms is not None:
+                    LAST_PING_MS = round(icmp_ms, 1)
+                    success = True
+                else:
+                    ping_mode = "http"
+
+            if not success and ping_mode == "tcp":
+                try:
+                    t_tcp = time.time()
+                    with socket.create_connection((target_ip, target_port), timeout=3):
+                        LAST_PING_MS = round((time.time() - t_tcp) * 1000, 1)
+                        success = True
+                except Exception:
+                    ping_mode = "http"
+            
+            if not success and ping_mode == "http":
+                try:
+                    t_http = time.time()
+                    resp = requests.head(target_http, timeout=3)
+                    if resp.status_code in {200, 204, 301, 302, 403, 404, 405, 500}:
+                        LAST_PING_MS = round((time.time() - t_http) * 1000, 1)
+                        success = True
+                except Exception:
+                    pass
+            
+            if not success:
+                icmp_ms = _do_icmp_ping(target_ip)
+                if icmp_ms is not None:
+                    LAST_PING_MS = round(icmp_ms, 1)
                 else:
                     LAST_PING_MS = "n/a"
-            except Exception:
-                LAST_PING_MS = "n/a"
+                    
             LAST_PING_TIME = now
             
         ping_ms = LAST_PING_MS
@@ -1834,11 +1902,15 @@ def send_heartbeat():
                 logging.info(f"Updated alert language from agent: {LAST_AGENT_LANG}")
 
             if "ping_interval" in data:
-                global GLOBAL_PING_INTERVAL
+                global GLOBAL_PING_INTERVAL, GLOBAL_PING_MODE, GLOBAL_PING_TARGET
                 try:
                     GLOBAL_PING_INTERVAL = int(data["ping_interval"])
                 except (ValueError, TypeError):
                     pass
+            if "ping_mode" in data:
+                GLOBAL_PING_MODE = str(data["ping_mode"])
+            if "ping_target" in data:
+                GLOBAL_PING_TARGET = str(data["ping_target"])
 
             response_reporter_hash = data.get("agent_alert_reporter_hash")
             if isinstance(response_reporter_hash, str) and response_reporter_hash:

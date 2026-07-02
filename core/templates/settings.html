@@ -23,6 +23,7 @@
         const I18N = {{ i18n_json | safe }};
         const USERS_DATA = {{ users_data_json | safe }};
         const NODES_DATA = {{ nodes_data_json | safe }};
+        window.HAS_ACTIVE_NODES = {{ val_has_active_nodes }};
         const KEYBOARD_CONFIG = {{ keyboard_config_json | safe }};
         let USER_ALERTS = {{ user_alerts_json | safe }};
         {{ user_role_js | safe }}
@@ -384,10 +385,24 @@
                                         <div id="hint-ping-set" class="hidden">{{ web_hint_ping_interval }}</div>
                                     </div>
                                 </div>
-                                <input type="number"
-                                       id="conf_ping"
-                                       value="{{ val_ping }}"
-                                       class="w-full bg-white dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/50 text-gray-900 dark:text-white transition-all">
+                                <div class="flex items-center gap-2">
+                                    <input type="number"
+                                           id="conf_ping"
+                                           value="{{ val_ping }}"
+                                           class="w-full bg-white dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/50 text-gray-900 dark:text-white transition-all">
+                                    
+                                    <div class="flex bg-gray-100 dark:bg-black/40 p-1 rounded-xl shrink-0" id="conf_ping_mode_group">
+                                        <button type="button" data-mode="http" class="px-3 py-1.5 text-xs font-medium rounded-lg transition-colors {{ 'bg-white dark:bg-gray-800 shadow text-gray-900 dark:text-white' if val_ping_mode == 'http' else 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200' }}">HTTP</button>
+                                        <button type="button" data-mode="tcp" class="px-3 py-1.5 text-xs font-medium rounded-lg transition-colors {{ 'bg-white dark:bg-gray-800 shadow text-gray-900 dark:text-white' if val_ping_mode == 'tcp' else 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200' }}">TCP</button>
+                                        <button type="button" data-mode="icmp" class="px-3 py-1.5 text-xs font-medium rounded-lg transition-colors {{ 'bg-white dark:bg-gray-800 shadow text-gray-900 dark:text-white' if val_ping_mode == 'icmp' else 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200' }}">ICMP</button>
+                                        <input type="hidden" id="conf_ping_mode" value="{{ val_ping_mode }}">
+                                    </div>
+                                    <button type="button" onclick="window.openPingTargetModal()" class="flex items-center gap-1.5 bg-white dark:bg-black/20 border border-gray-200 dark:border-white/10 hover:bg-gray-50 dark:hover:bg-white/5 rounded-xl px-3 py-2 text-sm font-medium transition-colors shrink-0 text-gray-700 dark:text-gray-300">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-gray-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg>
+                                        <span id="label_ping_server" class="i18n-text">Сервер</span>
+                                    </button>
+                                    <input type="hidden" id="conf_ping_target" value="{{ val_ping_target }}">
+                                </div>
                                 <div class="text-red-500 text-xs mt-1 hidden" id="error_conf_ping"></div>
                             </div>
                             <div>
@@ -1303,5 +1318,54 @@
                 }
             });
         </script>
+        
+        <!-- Ping Target Modal -->
+        <div id="pingTargetModal"
+             onclick="if(event.target === this) closePingTargetModal()"
+             class="fixed inset-0 z-[150] hidden items-center justify-center bg-black/50 dark:bg-black/80 backdrop-blur-sm p-4">
+            <div class="bg-white dark:bg-gray-800 border border-white/20 dark:border-white/10 rounded-2xl shadow-2xl w-full max-w-sm relative flex flex-col backdrop-blur-xl">
+                <div class="p-4 border-b border-gray-200 dark:border-white/5 flex justify-between items-center rounded-t-2xl">
+                    <h3 class="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-indigo-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg>
+                        <span class="i18n-text" id="web_ping_target_title">Цель пинга</span>
+                    </h3>
+                    <button onclick="closePingTargetModal()"
+                            class="text-gray-400 hover:text-gray-600 dark:hover:text-white transition p-1">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                    </button>
+                </div>
+                <div class="p-5 space-y-4 text-left">
+                    <label class="flex items-center px-5 py-4 border border-gray-200 dark:border-white/10 rounded-2xl cursor-pointer hover:bg-gray-50 dark:hover:bg-white/5 transition-colors">
+                        <input type="radio" name="ping_target_radio" value="google" class="ml-1 w-5 h-5 flex-shrink-0 text-blue-600 border-gray-300 focus:ring-blue-500 dark:bg-black/20 dark:border-white/10">
+                        <div class="ml-4 flex-1">
+                            <span class="block text-sm font-bold text-gray-900 dark:text-white">Google</span>
+                            <span class="block text-xs text-gray-500 dark:text-gray-400">8.8.8.8 / google.com</span>
+                        </div>
+                    </label>
+                    <label class="flex items-center px-5 py-4 border border-gray-200 dark:border-white/10 rounded-2xl cursor-pointer hover:bg-gray-50 dark:hover:bg-white/5 transition-colors">
+                        <input type="radio" name="ping_target_radio" value="cloudflare" class="ml-1 w-5 h-5 flex-shrink-0 text-blue-600 border-gray-300 focus:ring-blue-500 dark:bg-black/20 dark:border-white/10">
+                        <div class="ml-4 flex-1">
+                            <span class="block text-sm font-bold text-gray-900 dark:text-white">Cloudflare</span>
+                            <span class="block text-xs text-gray-500 dark:text-gray-400">1.1.1.1 / cloudflare.com</span>
+                        </div>
+                    </label>
+                    <label id="ping_target_internal_label" class="flex items-center px-5 py-4 border border-gray-200 dark:border-white/10 rounded-2xl cursor-pointer hover:bg-gray-50 dark:hover:bg-white/5 transition-colors">
+                        <input type="radio" name="ping_target_radio" value="internal" class="ml-1 w-5 h-5 flex-shrink-0 text-blue-600 border-gray-300 focus:ring-blue-500 dark:bg-black/20 dark:border-white/10">
+                        <div class="ml-4 flex-1">
+                            <span class="block text-sm font-bold text-gray-900 dark:text-white i18n-text" id="web_ping_target_internal">Между серверами</span>
+                            <span class="block text-xs text-gray-500 dark:text-gray-400 i18n-text" id="web_ping_target_internal_desc">Агент &harr; Ноды</span>
+                        </div>
+                    </label>
+                </div>
+                <div class="p-5 border-t border-gray-200 dark:border-white/5 bg-gray-50/50 dark:bg-black/20 rounded-b-2xl">
+                    <button onclick="window.savePingTargetModal()"
+                            class="w-full py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-xl font-bold shadow-lg shadow-blue-500/20 transition-all duration-300 active:scale-[0.98] flex items-center justify-center gap-2">
+                        <span class="i18n-text" id="web_apply">Применить</span>
+                    </button>
+                </div>
+            </div>
+        </div>
     </body>
 </html>

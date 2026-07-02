@@ -579,6 +579,8 @@ async def handle_nodes_monitor_page(request: web.Request) -> web.StreamResponse:
         "web_select_all": _("web_nodes_monitor_select_all", lang),
         "web_mass_selftest": _("web_nodes_monitor_mass_selftest", lang),
         "web_mass_reboot": _("web_nodes_monitor_mass_reboot", lang),
+        "val_ping_mode": getattr(current_config, "PING_MODE", "http"),
+        "val_ping_target": getattr(current_config, "PING_TARGET", "google"),
         "web_refresh": _("web_refresh", lang),
         "web_search_placeholder": _("web_nodes_monitor_search", lang),
         "web_filter_all": _("web_nodes_monitor_filter_all", lang),
@@ -888,6 +890,18 @@ async def handle_settings_page(request: web.Request) -> web.StreamResponse:
     if custom_title:
         page_title = f"{_('web_settings_page_title', lang)} - {custom_title}"
 
+    has_active_nodes = False
+    try:
+        all_nodes = await nodes_db.get_all_nodes()
+        timeout_sec = getattr(current_config, "NODE_OFFLINE_TIMEOUT", 120)
+        now = __import__('time').time()
+        for n in all_nodes.values():
+            if now - n.get("last_seen", 0) < timeout_sec and not n.get("is_restarting"):
+                has_active_nodes = True
+                break
+    except Exception:
+        pass
+
     context = {
         "web_title": page_title,
         "web_favicon": web_meta.get("favicon", "/static/favicon.ico"),
@@ -895,6 +909,7 @@ async def handle_settings_page(request: web.Request) -> web.StreamResponse:
         "web_meta_desc": web_meta.get("description", ""),
         "web_meta_keywords": web_meta.get("keywords", ""),
         "meta_locked": meta_locked,
+        "val_has_active_nodes": "true" if has_active_nodes else "false",
         "web_seo_btn_short": _("web_seo_btn_short", lang),
         "web_seo_btn_long": _("web_seo_btn_long", lang),
         "web_seo_modal_title": _("web_seo_modal_title", lang),
@@ -918,6 +933,8 @@ async def handle_settings_page(request: web.Request) -> web.StreamResponse:
         "val_traffic": str(current_config.TRAFFIC_INTERVAL),
         "val_services": str(getattr(current_config, "SERVICES_INTERVAL", 5)),
         "val_ping": str(getattr(current_config, "PING_INTERVAL", 30)),
+        "val_ping_mode": getattr(current_config, "PING_MODE", "http"),
+        "val_ping_target": getattr(current_config, "PING_TARGET", "google"),
         "val_timeout": str(current_config.NODE_OFFLINE_TIMEOUT),
         "web_settings_page_title": _("web_settings_page_title", lang),
         "web_back": _("web_back", lang),

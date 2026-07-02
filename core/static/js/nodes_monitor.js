@@ -43,8 +43,8 @@ function normalizeNode(node) {
         ...node,
         name: decryptedName,
         ip: decryptedIp,
-        ping: decryptedPing !== '' && decryptedPing != null && !Number.isNaN(Number(decryptedPing))
-            ? Number(decryptedPing)
+        ping: decryptedPing !== '' && decryptedPing != null
+            ? (decryptedPing === 'n/a' ? 'n/a' : Number(decryptedPing))
             : null,
         availability: node.availability || null,
     };
@@ -358,6 +358,7 @@ function renderNodes() {
 
 // Get ping badge CSS classes based on latency value
 function getPingBadgeClass(ping) {
+    if (ping === 'n/a' || Number.isNaN(Number(ping))) return 'bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400';
     if (ping < 50) return 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400';
     if (ping < 150) return 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400';
     return 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400';
@@ -410,7 +411,7 @@ function createNodeCard(node) {
                         <h3 class="font-bold text-gray-900 dark:text-white text-sm">${typeof replaceEmojisWithFlagsHTML === 'function' ? replaceEmojisWithFlagsHTML(escapeHtml(node.name)) : escapeHtml(node.name)}</h3>
                         <div class="flex items-center gap-1.5">
                             <span class="text-xs text-gray-500 dark:text-gray-400">${node.ip || '-'}</span>
-                            ${node.ping != null && !isNaN(node.ping) ? `<span class="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold ${getPingBadgeClass(node.ping)}">${parseFloat(node.ping)}ms</span>` : ''}
+                            ${node.ping != null ? (node.ping === 'n/a' ? `<span onclick="window.showPingErrorModal(event)" class="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold cursor-pointer hover:opacity-80 transition-opacity ${getPingBadgeClass(node.ping)}" title="Click for details">n/a</span>` : `<span class="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold ${getPingBadgeClass(node.ping)}">${parseFloat(node.ping)}ms</span>`) : ''}
                         </div>
                     </div>
                 </div>
@@ -779,9 +780,18 @@ function updateNodeModal(data) {
     const pingBadge = document.getElementById('modalNodePingBadge');
     const stats = data.stats || {};
     const pingValue = decryptData(stats.ping);
-    if (pingValue !== '' && pingValue != null && !isNaN(pingValue)) {
-        pingBadge.className = `inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold ${getPingBadgeClass(Number(pingValue))}`;
-        pingBadge.textContent = parseFloat(pingValue) + 'ms';
+    if (pingValue !== '' && pingValue != null) {
+        if (pingValue === 'n/a') {
+            pingBadge.className = `inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold cursor-pointer hover:opacity-80 transition-opacity ${getPingBadgeClass(pingValue)}`;
+            pingBadge.textContent = 'n/a';
+            pingBadge.onclick = window.showPingErrorModal;
+            pingBadge.title = "Click for details";
+        } else {
+            pingBadge.className = `inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold ${getPingBadgeClass(pingValue)}`;
+            pingBadge.textContent = parseFloat(pingValue) + 'ms';
+            pingBadge.onclick = null;
+            pingBadge.title = "";
+        }
     } else {
         pingBadge.className = 'hidden';
         pingBadge.textContent = '';
@@ -1408,3 +1418,41 @@ document.addEventListener('app:action:quick-reboot', e => {
     quickReboot(e.detail.target.getAttribute('data-token'));
 });
 // node-service-action is handled by the listener at the top of this file (with confirmation dialog)
+
+window.showPingErrorModal = function(event) {
+    if (event) {
+        event.stopPropagation();
+    }
+    const mode = window.GLOBAL_PING_MODE || "http";
+    const title = (typeof I18N !== 'undefined' && I18N.web_ping_error_title) ? I18N.web_ping_error_title : "Error: ping unavailable";
+    const desc = (typeof I18N !== 'undefined' && I18N.web_ping_error_desc) ? I18N.web_ping_error_desc : "The system could not measure network latency.";
+    const btnText = (typeof I18N !== 'undefined' && I18N.web_ping_how_to_fix_btn) ? I18N.web_ping_how_to_fix_btn : "How to fix?";
+    
+    let fixText = "";
+    if (mode === "tcp") {
+        fixText = (typeof I18N !== 'undefined' && I18N.web_ping_fix_tcp) ? I18N.web_ping_fix_tcp : "TCP mode selected. Check firewall for port 53 out.";
+    } else {
+        fixText = (typeof I18N !== 'undefined' && I18N.web_ping_fix_http) ? I18N.web_ping_fix_http : "HTTP mode selected. Check firewall for port 443 out.";
+    }
+
+    const htmlContent = `
+        <div class="text-sm text-gray-700 dark:text-gray-300 mb-4">${desc}</div>
+        <details class="group bg-gray-50 dark:bg-black/20 rounded-lg border border-gray-200 dark:border-white/10 overflow-hidden">
+            <summary class="px-4 py-3 cursor-pointer font-medium text-sm text-gray-900 dark:text-white flex items-center justify-between select-none">
+                ${btnText}
+                <svg class="w-4 h-4 transform transition-transform group-open:rotate-180 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                </svg>
+            </summary>
+            <div class="px-4 pb-4 pt-1 text-sm text-gray-600 dark:text-gray-400 border-t border-gray-100 dark:border-white/5">
+                ${fixText}
+            </div>
+        </details>
+    `;
+
+    if (window.showModalAlert) {
+        window.showModalAlert(htmlContent, title);
+    } else {
+        alert(title + "\\n\\n" + desc);
+    }
+};
