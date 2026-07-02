@@ -66,7 +66,7 @@ async def measure_agent_ping() -> str | None:
         all_nodes = await nodes_db.get_all_nodes()
         timeout_sec = getattr(current_config, "NODE_OFFLINE_TIMEOUT", 120)
         now = time.time()
-        online_nodes = [n for n in all_nodes if now - n.get("last_seen", 0) < timeout_sec and not n.get("is_restarting")]
+        online_nodes = [n for n in all_nodes.values() if now - n.get("last_seen", 0) < timeout_sec and not n.get("is_restarting")]
         if not online_nodes:
             return None
         target_node = online_nodes[0]
