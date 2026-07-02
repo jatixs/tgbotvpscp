@@ -232,6 +232,25 @@ function initNodesMonitor() {
 window.initNodesMonitor = initNodesMonitor;
 window.toggleServicesDisplay = toggleServicesDisplay;
 
+// Wire service action buttons rendered inside the modal
+document.addEventListener('app:action:node-service-action', (e) => {
+    const el = e.detail?.target;
+    if (!el) return;
+    const token = el.dataset.token;
+    const name = el.dataset.name;
+    const cmd = el.dataset.cmd;
+    const type = el.dataset.type || 'systemd';
+    if (!token || !name || !cmd) return;
+
+    showConfirm(
+        I18N?.modal_title_confirm || 'Confirm',
+        (I18N?.web_service_confirm || 'Execute {action} for {name}?')
+            .replace('{action}', cmd)
+            .replace('{name}', name),
+        () => nodeServiceAction(token, name, cmd, type)
+    );
+});
+
 // Initialize on page load
 document.addEventListener('DOMContentLoaded', () => {
     initNodesMonitor();
