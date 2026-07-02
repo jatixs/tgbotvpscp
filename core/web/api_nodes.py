@@ -20,7 +20,7 @@ from .. import nodes_db, shared_state
 from ..config import ADMIN_USER_ID, BASE_DIR, NODE_OFFLINE_TIMEOUT, TG_BOT_NAME, WEB_SERVER_HOST, WEB_SERVER_PORT, DEFAULT_LANGUAGE
 from ..i18n import STRINGS, get_text as _, get_user_lang
 from ..messaging import send_alert
-from ..utils import decrypt_for_web, encrypt_for_web, get_app_version, get_country_flag, get_node_uptime_snapshot, get_server_timezone_label, get_web_key
+from ..utils import decrypt_for_web, encrypt_for_web, format_traffic, format_uptime, get_app_version, get_country_flag, get_node_uptime_snapshot, get_server_timezone_label, get_web_key
 from .auth import COOKIE_NAME, SERVER_SESSIONS, get_current_user
 from ..rbac import build_user_role_js, get_role_level as get_user_role_level, is_admin as _is_admin
 from modules.services import (
@@ -164,6 +164,15 @@ async def process_node_result_background(
             for param_key, param_value in params.items():
                 if isinstance(param_value, dict) and "key" in param_value:
                     resolved_params[param_key] = _(param_value["key"], lang, **param_value.get("params", {}))
+                elif isinstance(param_value, dict) and "format" in param_value:
+                    fmt = param_value["format"]
+                    val = param_value.get("value", 0)
+                    if fmt == "traffic":
+                        resolved_params[param_key] = format_traffic(val, lang)
+                    elif fmt == "uptime":
+                        resolved_params[param_key] = format_uptime(val, lang)
+                    else:
+                        resolved_params[param_key] = str(val)
                 else:
                     resolved_params[param_key] = param_value
             final_text = _(key, lang, **resolved_params)
@@ -667,7 +676,8 @@ async def handle_nodes_monitor_list(request: web.Request) -> web.StreamResponse:
     user = get_current_user(request)
     if not user:
         return web.Response(status=401)
-    lang = get_user_lang(int(user["id"]))
+    user_id = int(user["id"])
+    lang = get_user_lang(user_id)
 
     current_token = request.cookies.get(COOKIE_NAME)
     response = web.StreamResponse(status=200, reason="OK")

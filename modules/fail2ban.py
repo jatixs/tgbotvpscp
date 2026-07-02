@@ -1,6 +1,7 @@
 import asyncio
 import os
 import re
+import shlex
 import logging
 from datetime import datetime
 from aiogram import Dispatcher, types
@@ -40,17 +41,19 @@ async def fail2ban_handler(message: types.Message):
         LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = sent.message_id
         return
     try:
-        proc = await asyncio.create_subprocess_exec(
-            "tail", "-n", "50", log_file,
+        # Use grep to find Ban entries directly (not limited to last N lines)
+        cmd = f"grep -h 'fail2ban.actions' {shlex.quote(log_file)} 2>/dev/null | grep ' Ban '"
+        proc = await asyncio.create_subprocess_shell(
+            cmd,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )
-        out, stderr_dummy = await proc.communicate()
+        out, stderr = await proc.communicate()
         lines = out.decode("utf-8", "ignore").split("\n")
         entries = []
         tz = get_server_timezone_label()
         for line in reversed(lines):
-            if "fail2ban.actions" not in line:
+            if not line.strip():
                 continue
             match = re.search(r"fail2ban\.actions.*? Ban\s+(\S+)", line)
             if match:
