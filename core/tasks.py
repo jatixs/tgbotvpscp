@@ -30,14 +30,13 @@ AGENT_PING_TIMEOUT = 5
 BACKGROUND_TASKS_KEY = "background_tasks"
 
 
-async def measure_agent_ping() -> str | None:
-    """Measure agent connectivity using ICMP first and HTTPS as fallback."""
+async def _do_icmp_ping(target_ip: str = "8.8.8.8") -> str | None:
     try:
         if platform.system().lower() == "windows":
-            cmd = ["ping", "-n", "1", "-w", "2000", "8.8.8.8"]
+            cmd = ["ping", "-n", "1", "-w", "2000", target_ip]
             pattern = r"[=<](\d+)\s*ms"
         else:
-            cmd = ["ping", "-c", "1", "-W", "2", "8.8.8.8"]
+            cmd = ["ping", "-c", "1", "-W", "2", target_ip]
             pattern = r"time=([\d\.]+)\s*ms"
 
         proc = await asyncio.to_thread(
@@ -48,24 +47,78 @@ async def measure_agent_ping() -> str | None:
             return str(round(float(ping_match.group(1)), 1))
     except Exception:
         pass
+    return None
 
-    targets = [
-        "https://www.google.com",
-        "https://www.cloudflare.com",
-        "https://1.1.1.1",
-    ]
-    timeout = aiohttp.ClientTimeout(total=AGENT_PING_TIMEOUT)
+async def measure_agent_ping() -> str | None:
+    """Measure agent connectivity using selected mode with fallbacks."""
+    ping_mode = getattr(current_config, "PING_MODE", "http")
+    ping_target = getattr(current_config, "PING_TARGET", "google")
+    
+    target_ip = "8.8.8.8"
+    target_http = "https://www.google.com"
+    target_port = 53
+    
+    if ping_target == "cloudflare":
+        target_ip = "1.1.1.1"
+        target_http = "https://www.cloudflare.com"
+    elif ping_target == "internal":
+        from core import nodes_db
+        all_nodes = await nodes_db.get_all_nodes()
+        timeout_sec = getattr(current_config, "NODE_OFFLINE_TIMEOUT", 120)
+        now = time.time()
+        online_nodes = [n for n in all_nodes if now - n.get("last_seen", 0) < timeout_sec and not n.get("is_restarting")]
+        if not online_nodes:
+            return None
+        target_node = online_nodes[0]
+        node_ip = target_node.get("ip", "")
+        if not node_ip or node_ip == "Unknown":
+            return None
+        target_ip = node_ip
+        target_http = f"http://{node_ip}"
+        target_port = 80
 
-    for target in targets:
+    if ping_mode == "icmp":
+        icmp_res = await _do_icmp_ping(target_ip)
+        if icmp_res is not None:
+            return icmp_res
+        ping_mode = "http"
+
+    if ping_mode == "tcp":
         try:
             started_at = time.time()
-            async with aiohttp.ClientSession(timeout=timeout) as session:
-                async with session.get(target, allow_redirects=False) as response:
-                    await response.read()
-                    if response.status in {200, 204, 301, 302, 403}:
-                        return str(int((time.time() - started_at) * 1000))
+            _, writer = await asyncio.wait_for(
+                asyncio.open_connection(target_ip, target_port),
+                timeout=AGENT_PING_TIMEOUT
+            )
+            tcp_time = str(int((time.time() - started_at) * 1000))
+            writer.close()
+            await writer.wait_closed()
+            return tcp_time
         except Exception:
-            continue
+            ping_mode = "http"
+            
+    if ping_mode == "http":
+        targets = [target_http] if ping_target == "internal" else [
+            target_http,
+            "https://www.google.com" if ping_target != "google" else "https://www.cloudflare.com",
+        ]
+        timeout_obj = aiohttp.ClientTimeout(total=AGENT_PING_TIMEOUT)
+
+        for target in targets:
+            try:
+                started_at = time.time()
+                async with aiohttp.ClientSession(timeout=timeout_obj) as session:
+                    async with session.get(target, allow_redirects=False) as response:
+                        await response.read()
+                        if response.status in {200, 204, 301, 302, 403, 404, 500}:
+                            return str(int((time.time() - started_at) * 1000))
+            except Exception:
+                continue
+
+    # Final fallback if everything else failed
+    icmp_res = await _do_icmp_ping(target_ip)
+    if icmp_res is not None:
+        return icmp_res
 
     return None
 

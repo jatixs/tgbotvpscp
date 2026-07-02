@@ -374,7 +374,7 @@ const groups = {
         btnId: 'saveThresholdsBtn'
     },
     intervals: {
-        ids: ['conf_traffic', 'conf_services', 'conf_ping', 'conf_timeout'],
+        ids: ['conf_traffic', 'conf_services', 'conf_ping', 'conf_ping_mode', 'conf_timeout'],
         btnId: 'saveIntervalsBtn'
     }
 };
@@ -391,6 +391,32 @@ function initSystemSettingsTracking() {
                 el.addEventListener('input', () => checkForChanges(groupName));
                 el.addEventListener('change', () => checkForChanges(groupName));
             }
+        });
+    }
+
+    // Ping Mode Toggle Logic
+    const pingModeGroup = document.getElementById('conf_ping_mode_group');
+    if (pingModeGroup) {
+        const pingModeInput = document.getElementById('conf_ping_mode');
+        const buttons = pingModeGroup.querySelectorAll('button');
+        
+        buttons.forEach(btn => {
+            btn.addEventListener('click', () => {
+                const mode = btn.dataset.mode;
+                pingModeInput.value = mode;
+                
+                // Update active state
+                buttons.forEach(b => {
+                    if (b.dataset.mode === mode) {
+                        b.className = 'px-3 py-1.5 text-xs font-medium rounded-lg transition-colors bg-white dark:bg-gray-800 shadow text-gray-900 dark:text-white';
+                    } else {
+                        b.className = 'px-3 py-1.5 text-xs font-medium rounded-lg transition-colors text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200';
+                    }
+                });
+                
+                // Trigger change
+                checkForChanges('intervals');
+            });
         });
     }
 }
@@ -541,6 +567,8 @@ async function saveSystemConfig(groupName) {
         TRAFFIC_INTERVAL: document.getElementById('conf_traffic').value,
         SERVICES_INTERVAL: document.getElementById('conf_services').value,
         PING_INTERVAL: document.getElementById('conf_ping').value,
+        PING_MODE: document.getElementById('conf_ping_mode').value,
+        PING_TARGET: document.getElementById('conf_ping_target').value,
         NODE_OFFLINE_TIMEOUT: document.getElementById('conf_timeout').value
     };
 
@@ -2185,3 +2213,66 @@ document.addEventListener('app:change:trigger-auto-save', e => {
 document.addEventListener('app:change:trigger-keyboard-save', e => {
     triggerKeyboardSave();
 });
+
+window.openPingTargetModal = function() {
+    const modal = document.getElementById('pingTargetModal');
+    const currentTarget = document.getElementById('conf_ping_target').value || 'google';
+
+    const hasNodes = window.HAS_ACTIVE_NODES || false;
+    const internalLabel = document.getElementById('ping_target_internal_label');
+    if (internalLabel) {
+        if (!hasNodes) {
+            internalLabel.classList.add('opacity-50', 'pointer-events-none');
+            internalLabel.title = (typeof I18N !== 'undefined' && I18N.web_ping_target_no_nodes) ? I18N.web_ping_target_no_nodes : "No active nodes available";
+        } else {
+            internalLabel.classList.remove('opacity-50', 'pointer-events-none');
+            internalLabel.title = "";
+        }
+    }
+
+    const radios = document.getElementsByName('ping_target_radio');
+    for(let r of radios) {
+        if(r.value === currentTarget) {
+            r.checked = true;
+        }
+        if (r.value === 'internal' && !hasNodes) {
+             r.disabled = true;
+             if (currentTarget === 'internal') {
+                 // fallback
+                 document.querySelector('input[name="ping_target_radio"][value="google"]').checked = true;
+             }
+        }
+    }
+
+    if (modal) {
+        animateModalOpen(modal);
+    }
+};
+
+window.closePingTargetModal = function() {
+    const modal = document.getElementById('pingTargetModal');
+    if (modal) {
+        animateModalClose(modal);
+    }
+};
+
+window.savePingTargetModal = function() {
+    const selected = document.querySelector('input[name="ping_target_radio"]:checked');
+    if (selected) {
+        const val = selected.value;
+        const hiddenInput = document.getElementById('conf_ping_target');
+        const btnLabel = document.getElementById('label_ping_server');
+        
+        if (hiddenInput.value !== val) {
+            hiddenInput.value = val;
+            triggerAutoSave('intervals');
+            
+            let text = "Сервер";
+            if (val === "google") text = "Google";
+            if (val === "cloudflare") text = "Cloudflare";
+            if (val === "internal") text = (typeof I18N !== 'undefined' && I18N.web_ping_target_internal) ? I18N.web_ping_target_internal : "Internal";
+            if (btnLabel) btnLabel.textContent = text;
+        }
+    }
+    window.closePingTargetModal();
+};

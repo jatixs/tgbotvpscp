@@ -21,6 +21,7 @@
         const I18N = {{ i18n_json | safe }};
         {{ user_role_js | safe }}
         window.USER_ROLE_LEVEL = {{ user_role_level }};
+        window.GLOBAL_PING_MODE = "{{ val_ping_mode }}";
         </script>
         <script src="/static/vendor/twemoji.min.js" crossorigin="anonymous"></script>
         <script src="/static/vendor/chart.js"></script>
