@@ -1087,22 +1087,21 @@ def execute_command(task):
             except Exception:
                 ext_ipv6 = ""
 
-            ping_val = "0"
-            inet_ok = False
-            try:
-                proc = subprocess.Popen(
-                    ["ping", "-c", "1", "-W", "1", "8.8.8.8"],
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE
-                )
-                stdout, _ = proc.communicate()
-                ping_res = stdout.decode()
-                ping_match = re.search(r"time=([\d\.]+) ms", ping_res)
-                if ping_match:
-                    ping_val = ping_match.group(1)
-                    inet_ok = True
-            except Exception:
-                pass
+            ping_target_conf = GLOBAL_PING_TARGET
+            if ping_target_conf == "cloudflare":
+                ping_target_label = "1.1.1.1"
+            elif ping_target_conf == "internal":
+                try:
+                    from urllib.parse import urlparse
+                    parsed = urlparse(AGENT_BASE_URL)
+                    ping_target_label = parsed.hostname if parsed.hostname else {"key": "selftest_target_agent"}
+                except Exception:
+                    ping_target_label = {"key": "selftest_target_agent"}
+            else:
+                ping_target_label = "8.8.8.8"
+
+            ping_val = str(LAST_PING_MS)
+            inet_ok = ping_val != "n/a"
 
             try:
                 # Security: Use exec instead of shell
@@ -1160,6 +1159,7 @@ def execute_command(task):
                     "disk_val": disk_val,
                     "uptime": {"format": "uptime", "value": stats.get('uptime', 0)},
                     "inet_status": {"key": "selftest_inet_ok"} if inet_ok else {"key": "selftest_inet_fail"},
+                    "ping_target": ping_target_label,
                     "ping": ping_val,
                     "ipv4": ext_ipv4 or "N/A",
                     "ipv6": ext_ipv6 or "N/A",
