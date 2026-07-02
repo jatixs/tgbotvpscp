@@ -15,6 +15,7 @@ let modalNetChart = null;
 let nodesMonitorSSESource = null;
 let nodeDetailSSESource = null;
 let nodeServicesSSESource = null;
+let _lastServicesCache = null; // cached services for stable DOM updates
 
 function decryptData(text) {
     if (!text) return "";
@@ -705,6 +706,7 @@ function closeNodeDetailModal() {
         modal.classList.remove('flex');
     }
     currentNodeToken = null;
+    _lastServicesCache = null; // reset so next node gets a fresh render
 
     if (typeof window.hideAvailabilityPopover === 'function') window.hideAvailabilityPopover();
 
@@ -1074,7 +1076,9 @@ function connectNodeServicesStream(token) {
 function renderNodeServices(token, services) {
     const container = document.getElementById('modalServicesContainer');
     const btnContainer = document.getElementById('modalServicesToggle');
+
     if (services.length === 0) {
+        _lastServicesCache = null;
         container.innerHTML = DOMPurify.sanitize(`<div class="col-span-full text-center py-4 text-gray-400">${I18N?.web_services_empty || 'No services'}</div>`);
         if (btnContainer) btnContainer.classList.add('hidden');
         return;
@@ -1084,10 +1088,53 @@ function renderNodeServices(token, services) {
     const showAll = container.dataset.showAll === 'true';
     const displayServices = showAll ? services : services.slice(0, INITIAL_SHOW);
 
+    // Build a structural key: names + types must match for in-place update
+    const structureKey = displayServices.map(s => `${s.name}|${s.type}`).join(',');
+    const prevCache = _lastServicesCache;
+    const prevStructureKey = prevCache ? prevCache.structureKey : null;
+    const prevShowAll = prevCache ? prevCache.showAll : null;
+
+    if (structureKey === prevStructureKey && showAll === prevShowAll) {
+        // Structure unchanged — only patch status indicators and start/stop button in-place
+        const rows = container.querySelectorAll('[data-svc-name]');
+        rows.forEach(row => {
+            const svcName = row.dataset.svcName;
+            const svc = displayServices.find(s => s.name === svcName);
+            if (!svc) return;
+
+            const dot = row.querySelector('[data-svc-dot]');
+            if (dot) {
+                dot.className = svc.status === 'running' ? 'text-green-500' : 'text-red-500';
+            }
+
+            const toggleBtn = row.querySelector('[data-svc-toggle]');
+            if (toggleBtn) {
+                const isRunning = svc.status === 'running';
+                const newCmd = isRunning ? 'stop' : 'start';
+                const newTitle = isRunning ? 'Stop' : 'Start';
+                const iconStop = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 10a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z" />';
+                const iconStart = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />';
+
+                toggleBtn.dataset.cmd = newCmd;
+                toggleBtn.title = newTitle;
+                toggleBtn.className = `p-1 ${isRunning ? 'text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-500/20' : 'text-green-600 dark:text-green-400 hover:bg-green-100 dark:hover:bg-green-500/20'} rounded`;
+                const svg = toggleBtn.querySelector('svg');
+                if (svg) svg.innerHTML = DOMPurify.sanitize(isRunning ? iconStop : iconStart);
+            }
+        });
+
+        // Update cache statuses
+        _lastServicesCache.statuses = displayServices.map(s => s.status);
+        return;
+    }
+
+    // Structure changed (new services, count changed, or showAll toggled) — full re-render
+    _lastServicesCache = { structureKey, showAll, statuses: displayServices.map(s => s.status) };
+
     container.innerHTML = DOMPurify.sanitize(displayServices.map(svc => `
-            <div class="flex items-center justify-between bg-white/50 dark:bg-black/30 p-2 rounded-lg">
+            <div class="flex items-center justify-between bg-white/50 dark:bg-black/30 p-2 rounded-lg" data-svc-name="${escapeHtml(svc.name)}">
                 <div class="flex items-center gap-2">
-                    <span class="${svc.status === 'running' ? 'text-green-500' : 'text-red-500'}">●</span>
+                    <span data-svc-dot class="${svc.status === 'running' ? 'text-green-500' : 'text-red-500'}">●</span>
                     <span class="text-sm font-medium text-gray-700 dark:text-gray-300">${escapeHtml(svc.name)}</span>
                     ${svc.type === 'docker' ? '<span class="text-xs text-blue-500">🐳</span>' : ''}
                 </div>
@@ -1098,7 +1145,7 @@ function renderNodeServices(token, services) {
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                         </svg>
                     </button>
-                    <button data-action="node-service-action" data-token="${token}" data-name="${svc.name}" data-cmd="${svc.status === 'running' ? 'stop' : 'start'}" data-type="${svc.type || 'systemd'}" 
+                    <button data-svc-toggle data-action="node-service-action" data-token="${token}" data-name="${svc.name}" data-cmd="${svc.status === 'running' ? 'stop' : 'start'}" data-type="${svc.type || 'systemd'}" 
                             class="p-1 ${svc.status === 'running' ? 'text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-500/20' : 'text-green-600 dark:text-green-400 hover:bg-green-100 dark:hover:bg-green-500/20'} rounded"
                             title="${svc.status === 'running' ? 'Stop' : 'Start'}">
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -1347,6 +1394,4 @@ document.addEventListener('app:action:open-node-detail', e => {
 document.addEventListener('app:action:quick-reboot', e => {
     quickReboot(e.detail.target.getAttribute('data-token'));
 });
-document.addEventListener('app:action:node-service-action', e => {
-    nodeServiceAction(e.detail.target.getAttribute('data-token'), e.detail.target.getAttribute('data-name'), e.detail.target.getAttribute('data-cmd'), e.detail.target.getAttribute('data-type'));
-});
+// node-service-action is handled by the listener at the top of this file (with confirmation dialog)

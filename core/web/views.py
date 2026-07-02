@@ -571,6 +571,7 @@ async def handle_nodes_monitor_page(request: web.Request) -> web.StreamResponse:
         "user_avatar": _get_avatar_html(user),
         "user_name": user.get("first_name", "User"),
         "user_role_js": build_user_role_js(role, user_id),
+        "user_role_level": get_role_level(user_id),
         "user_is_admin": is_admin,
         "role_badge": role_badge_html,
         "web_monitor_title": _("web_nodes_monitor_title", lang),
