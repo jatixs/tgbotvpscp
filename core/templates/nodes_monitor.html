@@ -20,6 +20,7 @@
         window.i18n = window.i18n || {};
         const I18N = {{ i18n_json | safe }};
         {{ user_role_js | safe }}
+        window.USER_ROLE_LEVEL = {{ user_role_level }};
         </script>
         <script src="/static/vendor/twemoji.min.js" crossorigin="anonymous"></script>
         <script src="/static/vendor/chart.js"></script>
@@ -350,6 +351,7 @@
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                             </svg>
                             {{ btn_reboot }}
+                        </button>
                     </div>
                     {% endif %}
                 </div>
