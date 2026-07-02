@@ -243,10 +243,17 @@ document.addEventListener('app:action:node-service-action', (e) => {
     const type = el.dataset.type || 'systemd';
     if (!token || !name || !cmd) return;
 
+    const cmdLabels = {
+        restart: I18N?.web_service_restart || 'restart',
+        stop:    I18N?.web_service_stop    || 'stop',
+        start:   I18N?.web_service_start   || 'start',
+    };
+    const actionLabel = cmdLabels[cmd] || cmd;
+
     showConfirm(
         I18N?.modal_title_confirm || 'Confirm',
         (I18N?.web_service_confirm || 'Execute {action} for {name}?')
-            .replace('{action}', cmd)
+            .replace('{action}', actionLabel)
             .replace('{name}', name),
         () => nodeServiceAction(token, name, cmd, type)
     );
@@ -1107,11 +1114,16 @@ function renderNodeServices(token, services) {
                 dot.className = svc.status === 'running' ? 'text-green-500' : 'text-red-500';
             }
 
-            const toggleBtn = row.querySelector('[data-svc-toggle]');
+            const toggleBtn = row.querySelector('[data-svc-toggle="true"]');
             if (toggleBtn) {
                 const isRunning = svc.status === 'running';
                 const newCmd = isRunning ? 'stop' : 'start';
-                const newTitle = isRunning ? 'Stop' : 'Start';
+                // Localized titles for the toggle button
+                const newTitle = isRunning
+                    ? (I18N?.web_service_stop || 'Stop')
+                    : (I18N?.web_service_start || 'Start');
+                // Hardcoded SVG paths — no user input, safe to set without DOMPurify
+                // (DOMPurify strips SVG stroke-* attributes in HTML context)
                 const iconStop = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 10a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z" />';
                 const iconStart = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />';
 
@@ -1119,7 +1131,8 @@ function renderNodeServices(token, services) {
                 toggleBtn.title = newTitle;
                 toggleBtn.className = `p-1 ${isRunning ? 'text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-500/20' : 'text-green-600 dark:text-green-400 hover:bg-green-100 dark:hover:bg-green-500/20'} rounded`;
                 const svg = toggleBtn.querySelector('svg');
-                if (svg) svg.innerHTML = DOMPurify.sanitize(isRunning ? iconStop : iconStart);
+                // Direct innerHTML assignment — safe for hardcoded SVG paths
+                if (svg) svg.innerHTML = isRunning ? iconStop : iconStart;
             }
         });
 
@@ -1134,7 +1147,7 @@ function renderNodeServices(token, services) {
     container.innerHTML = DOMPurify.sanitize(displayServices.map(svc => `
             <div class="flex items-center justify-between bg-white/50 dark:bg-black/30 p-2 rounded-lg" data-svc-name="${escapeHtml(svc.name)}">
                 <div class="flex items-center gap-2">
-                    <span data-svc-dot class="${svc.status === 'running' ? 'text-green-500' : 'text-red-500'}">●</span>
+                    <span data-svc-dot="true" class="${svc.status === 'running' ? 'text-green-500' : 'text-red-500'}">●</span>
                     <span class="text-sm font-medium text-gray-700 dark:text-gray-300">${escapeHtml(svc.name)}</span>
                     ${svc.type === 'docker' ? '<span class="text-xs text-blue-500">🐳</span>' : ''}
                 </div>
@@ -1145,9 +1158,9 @@ function renderNodeServices(token, services) {
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                         </svg>
                     </button>
-                    <button data-svc-toggle data-action="node-service-action" data-token="${token}" data-name="${svc.name}" data-cmd="${svc.status === 'running' ? 'stop' : 'start'}" data-type="${svc.type || 'systemd'}" 
+                    <button data-svc-toggle="true" data-action="node-service-action" data-token="${token}" data-name="${svc.name}" data-cmd="${svc.status === 'running' ? 'stop' : 'start'}" data-type="${svc.type || 'systemd'}" 
                             class="p-1 ${svc.status === 'running' ? 'text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-500/20' : 'text-green-600 dark:text-green-400 hover:bg-green-100 dark:hover:bg-green-500/20'} rounded"
-                            title="${svc.status === 'running' ? 'Stop' : 'Start'}">
+                            title="${svc.status === 'running' ? (I18N?.web_service_stop || 'Stop') : (I18N?.web_service_start || 'Start')}">
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             ${svc.status === 'running' 
                                 ? '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 10a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z" />'
