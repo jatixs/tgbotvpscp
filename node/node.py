@@ -754,7 +754,7 @@ def get_system_stats():
             'last_tx_speed': net_tx_speed
         }
         
-        global LAST_PING_TIME, LAST_PING_MS, GLOBAL_PING_MODE, GLOBAL_PING_TARGET
+        global LAST_PING_TIME, LAST_PING_MS
         if now - LAST_PING_TIME >= GLOBAL_PING_INTERVAL or LAST_PING_MS == "n/a":
             t1 = time.time()
             success = False
