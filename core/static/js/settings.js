@@ -1151,7 +1151,7 @@ function renderNotifNodeDetail() {
     container.innerHTML = DOMPurify.sanitize(`
         <div class="flex items-center justify-between bg-gray-50 dark:bg-black/20 p-4 rounded-xl hover:bg-gray-100 dark:hover:bg-black/30 transition border border-gray-200 dark:border-white/5 cursor-pointer" data-action="click-alert-toggle" data-target="n_alert_${t}_downtime">
             <div>
-                <div class="text-sm font-bold text-gray-900 dark:text-white">${I18N.web_notif_downtime || 'Downtime Alert'}</div>
+                <div class="text-sm font-bold text-gray-900 dark:text-white">${I18N.notifications_alert_name_downtime || 'Downtime Alert'}</div>
                 <div class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">${I18N.web_notif_downtime_desc || 'Notify when node goes offline'}</div>
             </div>
             <label class="relative inline-flex items-center cursor-pointer" data-action="stop-propagation">
@@ -1161,7 +1161,7 @@ function renderNotifNodeDetail() {
         </div>
         <div class="flex items-center justify-between bg-gray-50 dark:bg-black/20 p-4 rounded-xl hover:bg-gray-100 dark:hover:bg-black/30 transition border border-gray-200 dark:border-white/5 cursor-pointer" data-action="click-alert-toggle" data-target="n_alert_${t}_node_resources">
             <div>
-                <div class="text-sm font-bold text-gray-900 dark:text-white">${I18N.web_notif_resources || 'High Resource Usage'}</div>
+                <div class="text-sm font-bold text-gray-900 dark:text-white">${I18N.notifications_alert_name_res || 'High Resource Usage'}</div>
                 <div class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">${I18N.web_notif_resources_desc || 'CPU/RAM > 90%'}</div>
             </div>
             <label class="relative inline-flex items-center cursor-pointer" data-action="stop-propagation">
@@ -1171,7 +1171,7 @@ function renderNotifNodeDetail() {
         </div>
         <div class="flex items-center justify-between bg-gray-50 dark:bg-black/20 p-4 rounded-xl hover:bg-gray-100 dark:hover:bg-black/30 transition border border-gray-200 dark:border-white/5 cursor-pointer" data-action="click-alert-toggle" data-target="n_alert_${t}_node_logins">
             <div>
-                <div class="text-sm font-bold text-gray-900 dark:text-white">${I18N.web_notif_logins || 'SSH Logins'}</div>
+                <div class="text-sm font-bold text-gray-900 dark:text-white">${I18N.notifications_alert_name_logins || 'SSH Logins'}</div>
                 <div class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">${I18N.web_notif_logins_desc || 'Successful SSH connections'}</div>
             </div>
             <label class="relative inline-flex items-center cursor-pointer" data-action="stop-propagation">
@@ -1179,7 +1179,15 @@ function renderNotifNodeDetail() {
                 <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-green-500"></div>
             </label>
         </div>
-        <div id="notifStatusNodeDetail" class="flex min-h-[50px] items-center justify-center gap-2 rounded-xl border border-dashed border-gray-200 dark:border-white/5 bg-gray-50/60 dark:bg-black/10 px-4 py-3 text-center text-xs font-semibold text-gray-500 dark:text-gray-400 opacity-0 translate-y-4 transition-all duration-300"></div>
+        <div class="flex items-center justify-between bg-gray-50 dark:bg-black/20 p-4 rounded-xl hover:bg-gray-100 dark:hover:bg-black/30 transition border border-gray-200 dark:border-white/5 cursor-pointer" data-action="click-alert-toggle" data-target="n_alert_${t}_billing">
+            <div>
+                <div class="text-sm font-bold text-gray-900 dark:text-white">${I18N.billing_toggle_reminder || 'Billing Notifications'}</div>
+            </div>
+            <label class="relative inline-flex items-center cursor-pointer" data-action="stop-propagation">
+                <input type="checkbox" id="n_alert_${t}_billing" class="sr-only peer" data-action="trigger-auto-save" data-view="node_detail" ${node && node.reminder_enabled ? 'checked' : ''}>
+                <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-green-500"></div>
+            </label>
+        </div>
     `);
 }
 
@@ -1194,16 +1202,13 @@ function getNotifStatusElement(scope = 'agent') {
 function resetNotifStatusElement(statusEl) {
     if (!statusEl) return;
     statusEl.classList.remove(
-        'opacity-100', 'translate-y-0',
-        'text-gray-500', 'dark:text-gray-400',
-        'text-green-500', 'text-green-600', 'dark:text-green-400',
-        'text-red-500', 'text-red-600', 'dark:text-red-400',
-        'bg-gray-100/80', 'dark:bg-white/5',
-        'bg-green-100', 'dark:bg-green-500/20',
-        'bg-red-100', 'dark:bg-red-900/20'
+        'opacity-100',
+        'text-gray-500', 'bg-gray-200', 'dark:text-gray-400', 'dark:bg-white/10',
+        'text-green-700', 'bg-green-100', 'dark:text-green-300', 'dark:bg-green-900/30',
+        'text-red-700', 'bg-red-100', 'dark:text-red-300', 'dark:bg-red-900/30'
     );
-    statusEl.classList.add('opacity-0', 'translate-y-4');
-    statusEl.innerHTML = DOMPurify.sanitize('');
+    statusEl.classList.add('opacity-0');
+    // Do not clear innerHTML immediately to allow opacity transition to play smoothly
 }
 
 function showNotifStatus(message, state = 'neutral', autoHideMs = 1800, scope = 'agent') {
@@ -1227,28 +1232,34 @@ function showNotifStatus(message, state = 'neutral', autoHideMs = 1800, scope = 
     });
 
     statusEl.classList.remove(
-        'opacity-0', 'opacity-100', 'translate-y-4', 'translate-y-0',
-        'text-gray-500', 'dark:text-gray-400',
-        'text-green-500', 'text-green-600', 'dark:text-green-400',
-        'text-red-500', 'text-red-600', 'dark:text-red-400',
-        'bg-gray-100/80', 'dark:bg-white/5',
-        'bg-green-100', 'dark:bg-green-500/20',
-        'bg-red-100', 'dark:bg-red-900/20'
+        'opacity-0', 'opacity-100',
+        'text-gray-500', 'bg-gray-200', 'dark:text-gray-400', 'dark:bg-white/10',
+        'text-green-700', 'bg-green-100', 'dark:text-green-300', 'dark:bg-green-900/30',
+        'text-red-700', 'bg-red-100', 'dark:text-red-300', 'dark:bg-red-900/30'
     );
 
     const stateClasses = {
-        neutral: ['text-gray-500', 'dark:text-gray-400', 'bg-gray-100/80', 'dark:bg-white/5'],
-        success: ['text-green-600', 'dark:text-green-400', 'bg-green-100', 'dark:bg-green-500/20'],
-        error: ['text-red-600', 'dark:text-red-400', 'bg-red-100', 'dark:bg-red-900/20']
+        neutral: ['text-gray-500', 'bg-gray-200', 'dark:text-gray-400', 'dark:bg-white/10'],
+        success: ['text-green-700', 'bg-green-100', 'dark:text-green-300', 'dark:bg-green-900/30'],
+        error: ['text-red-700', 'bg-red-100', 'dark:text-red-300', 'dark:bg-red-900/30']
     };
 
     const icons = {
-        neutral: '',
-        success: '<svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/></svg>',
-        error: '<svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M6 18L18 6M6 6l12 12"/></svg>'
+        neutral: '<svg class="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>',
+        success: '<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"/></svg>',
+        error: '<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M6 18L18 6M6 6l12 12"/></svg>'
     };
-    statusEl.innerHTML = DOMPurify.sanitize((icons[state] || '') + '<span>' + message + '</span>');
-    statusEl.classList.add('opacity-100', 'translate-y-0', ...(stateClasses[state] || stateClasses.neutral));
+    
+    // For saving state, only show icon without text to keep badge small
+    let innerHtml = (icons[state] || '');
+    if (state !== 'neutral') {
+         innerHtml += '<span>' + message + '</span>';
+    } else {
+         innerHtml += '<span>' + message + '</span>';
+    }
+    
+    statusEl.innerHTML = DOMPurify.sanitize(innerHtml);
+    statusEl.classList.add('opacity-100', ...(stateClasses[state] || stateClasses.neutral));
 
     if (autoHideMs > 0) {
         notifStatusHideTimer = setTimeout(() => {
@@ -1267,6 +1278,7 @@ async function triggerAutoSave(scope = 'agent') {
         downtime: document.getElementById('alert_downtime')?.checked || false,
         node_resources: document.getElementById('alert_node_resources')?.checked || false,
         node_logins: document.getElementById('alert_node_logins')?.checked || false,
+        master_billing: document.getElementById('alert_master_billing')?.checked || false,
     };
     
     if (typeof USER_ALERTS === 'undefined') window.USER_ALERTS = {};
@@ -1277,10 +1289,12 @@ async function triggerAutoSave(scope = 'agent') {
         const nDowntime = document.getElementById(`n_alert_${t}_downtime`)?.checked;
         const nRes = document.getElementById(`n_alert_${t}_node_resources`)?.checked;
         const nLogins = document.getElementById(`n_alert_${t}_node_logins`)?.checked;
+        const nBilling = document.getElementById(`n_alert_${t}_billing`)?.checked;
         
         if (nDowntime !== undefined) { data[`node_${t}_downtime`] = nDowntime; USER_ALERTS[`node_${t}_downtime`] = nDowntime; }
         if (nRes !== undefined) { data[`node_${t}_node_resources`] = nRes; USER_ALERTS[`node_${t}_node_resources`] = nRes; }
         if (nLogins !== undefined) { data[`node_${t}_node_logins`] = nLogins; USER_ALERTS[`node_${t}_node_logins`] = nLogins; }
+        if (nBilling !== undefined) { data[`node_${t}_billing`] = nBilling; }
     }
 
     try {
@@ -1314,7 +1328,7 @@ const btnCategories = {
     },
     "management": {
         titleKey: "web_kb_cat_management",
-        keys: ["enable_nodes", "enable_users", "enable_services", "enable_update", "enable_optimize"]
+        keys: ["enable_nodes", "enable_users", "enable_services", "enable_update", "enable_optimize", "enable_billing"]
     },
     "system": {
         titleKey: "web_kb_cat_system",

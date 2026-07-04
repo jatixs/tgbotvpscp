@@ -97,7 +97,8 @@ class CallbackTTLMiddleware(BaseMiddleware):
             
         if event.message and event.message.date:
             now = datetime.now(timezone.utc)
-            msg_date = event.message.date
+            # Use edit_date if available so the timer resets on every menu update!
+            msg_date = event.message.edit_date or event.message.date
             if msg_date.tzinfo is None:
                 msg_date = msg_date.replace(tzinfo=timezone.utc)
             if (now - msg_date).total_seconds() > 30:
