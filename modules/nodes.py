@@ -50,6 +50,18 @@ class MasterBillingStates(StatesGroup):
     waiting_for_date_shift = State()
 
 
+def _fmt_billing_amount(amount, currency: str, lang: str) -> str:
+    """Format billing amount: None→not-set, 0→free, else '{amount} {currency}'."""
+    if amount is None:
+        return _("billing_date_not_set", lang)
+    try:
+        if float(amount) == 0.0:
+            return _("billing_free", lang)
+    except (TypeError, ValueError):
+        pass
+    return f"{amount} {currency}"
+
+
 def get_button() -> KeyboardButton:
     return KeyboardButton(text=_(BUTTON_KEY, config.DEFAULT_LANGUAGE))
 
@@ -157,7 +169,7 @@ async def billing_handler(message: types.Message):
     else:
         date_str = _("billing_date_not_set", lang)
         
-    amount_str = f"{amount} {currency}" if amount is not None else _("billing_date_not_set", lang)
+    amount_str = _fmt_billing_amount(amount, currency, lang)
     master_name = _("master_server_name", lang)
     
     text = _("billing_menu_text", lang, name=master_name, amount=amount_str, date=date_str)
@@ -1025,12 +1037,12 @@ async def cq_node_billing(callback: types.CallbackQuery):
     keyboard = get_node_billing_keyboard(token, node, lang)
     
     provider = node.get("provider_name") or "Unknown"
-    amount = node.get("billing_amount") or 0.0
+    amount = node.get("billing_amount")
     currency = node.get("currency") or "$"
     date = node.get("next_payment_date")
     date_str = date.strftime("%d.%m.%Y") if date else _("billing_date_not_set", lang)
     
-    amount_str = f"{amount} {currency}" if amount else _("billing_date_not_set", lang)
+    amount_str = _fmt_billing_amount(amount, currency, lang)
     node_name = node.get("name", "Unknown")
     text = _("billing_menu_text_node", lang, name=node_name, provider=provider, amount=amount_str, date=date_str)
     
@@ -1086,7 +1098,7 @@ async def process_billing_amount(message: types.Message, state: FSMContext):
             menu_msg_id = data.get("menu_msg_id")
             if menu_msg_id:
                 currency = getattr(node_obj, "billing_currency", "$")
-                amount_str = f"{amount} {currency}"
+                amount_str = _fmt_billing_amount(amount, currency, lang)
                 date_val = getattr(node_obj, "next_payment_date", None)
                 date_str = date_val.strftime("%d.%m.%Y") if date_val else _("billing_date_not_set", lang)
                 
@@ -1094,9 +1106,9 @@ async def process_billing_amount(message: types.Message, state: FSMContext):
                 clean_text = _("billing_menu_text_node", lang, name=node_obj.name, provider=provider, amount=amount_str, date=date_str)
                 toast_text = clean_text + "\n\n✅ <b>Данные обновлены!</b>"
                 
-                from core.keyboards import get_billing_node_settings_keyboard
-                keyboard = get_billing_node_settings_keyboard(token, dict(node_obj), lang)
-                
+                from core.keyboards import get_node_billing_keyboard
+                keyboard = get_node_billing_keyboard(token, dict(node_obj), lang)
+
                 await message.bot.edit_message_text(toast_text, chat_id=message.chat.id, message_id=menu_msg_id, reply_markup=keyboard, parse_mode="HTML")
                 
                 async def remove_toast(cid, mid, txt, kb):
@@ -1168,6 +1180,16 @@ async def process_billing_date_shift(message: types.Message, state: FSMContext):
                 except: pass
             asyncio.create_task(del_temp(temp))
             return
+
+    today = datetime.datetime.now(datetime.timezone.utc).date()
+    if target_date is not None and target_date.date() < today:
+        temp = await message.answer(_("billing_date_past_error", lang))
+        async def del_temp_date(m):
+            await asyncio.sleep(3)
+            try: await m.delete()
+            except: pass
+        asyncio.create_task(del_temp_date(temp))
+        return
             
     t_hash = nodes_db._get_token_hash(token)
     node_obj = await nodes_db.Node.get_or_none(token_hash=t_hash)
@@ -1175,26 +1197,36 @@ async def process_billing_date_shift(message: types.Message, state: FSMContext):
         from tortoise.exceptions import OperationalError
         try:
             if target_date:
-                node_obj.next_payment_date = target_date
+                new_date = target_date
             else:
                 current_date = getattr(node_obj, "next_payment_date", None) or datetime.datetime.now(datetime.timezone.utc)
-                node_obj.next_payment_date = current_date + datetime.timedelta(days=days)
+                new_date = current_date + datetime.timedelta(days=days)
+                if new_date.date() < today:
+                    temp = await message.answer(_("billing_date_past_error", lang))
+                    async def del_temp_r(m):
+                        await asyncio.sleep(3)
+                        try: await m.delete()
+                        except: pass
+                    asyncio.create_task(del_temp_r(temp))
+                    await state.clear()
+                    return
+            node_obj.next_payment_date = new_date
             await node_obj.save(update_fields=["next_payment_date"])
             
             menu_msg_id = data.get("menu_msg_id")
             if menu_msg_id:
                 amount_val = getattr(node_obj, "billing_amount", None)
                 currency = getattr(node_obj, "billing_currency", "$")
-                amount_str = f"{amount_val} {currency}" if amount_val is not None else _("billing_date_not_set", lang)
+                amount_str = _fmt_billing_amount(amount_val, currency, lang)
                 date_str = node_obj.next_payment_date.strftime("%d.%m.%Y")
                 
                 provider = getattr(node_obj, "provider_name") or "Unknown"
                 clean_text = _("billing_menu_text_node", lang, name=node_obj.name, provider=provider, amount=amount_str, date=date_str)
                 toast_text = clean_text + "\n\n✅ <b>Данные сохранены!</b>"
                 
-                from core.keyboards import get_billing_node_settings_keyboard
-                keyboard = get_billing_node_settings_keyboard(token, dict(node_obj), lang)
-                
+                from core.keyboards import get_node_billing_keyboard
+                keyboard = get_node_billing_keyboard(token, dict(node_obj), lang)
+
                 await message.bot.edit_message_text(toast_text, chat_id=message.chat.id, message_id=menu_msg_id, reply_markup=keyboard, parse_mode="HTML")
                 
                 async def remove_toast(cid, mid, txt, kb):
@@ -1249,7 +1281,7 @@ async def cq_master_billing_menu(callback: types.CallbackQuery):
     else:
         date_str = _("billing_date_not_set", lang)
         
-    amount_str = f"{amount} {currency}" if amount is not None else _("billing_date_not_set", lang)
+    amount_str = _fmt_billing_amount(amount, currency, lang)
     master_name = _("master_server_name", lang)
     
     text = _("billing_menu_text", lang, name=master_name, amount=amount_str, date=date_str)
@@ -1303,7 +1335,7 @@ async def process_master_billing_amount(message: types.Message, state: FSMContex
     menu_msg_id = data.get("menu_msg_id")
     if menu_msg_id:
         currency = master_billing.get("currency", "$")
-        amount_str = f"{amount} {currency}"
+        amount_str = _fmt_billing_amount(amount, currency, lang)
         
         next_date_iso = master_billing.get("next_payment_date")
         if next_date_iso:
@@ -1388,6 +1420,16 @@ async def process_master_billing_date_shift(message: types.Message, state: FSMCo
                 except: pass
             asyncio.create_task(del_temp(temp))
             return
+
+    today = datetime.datetime.now(datetime.timezone.utc).date()
+    if target_date is not None and target_date.date() < today:
+        temp = await message.answer(_("billing_date_past_error", lang))
+        async def del_temp_date(m):
+            await asyncio.sleep(3)
+            try: await m.delete()
+            except: pass
+        asyncio.create_task(del_temp_date(temp))
+        return
     
     from core.config import get_bot_config, set_bot_config
     
@@ -1401,8 +1443,17 @@ async def process_master_billing_date_shift(message: types.Message, state: FSMCo
             current_date = datetime.datetime.fromisoformat(next_date_iso)
         else:
             current_date = datetime.datetime.now(datetime.timezone.utc)
-            
+        
         new_date = current_date + datetime.timedelta(days=days)
+        if new_date.date() < today:
+            temp = await message.answer(_("billing_date_past_error", lang))
+            async def del_temp_r(m):
+                await asyncio.sleep(3)
+                try: await m.delete()
+                except: pass
+            asyncio.create_task(del_temp_r(temp))
+            await state.clear()
+            return
         
     master_billing["next_payment_date"] = new_date.isoformat()
     await set_bot_config("master_billing", master_billing)
@@ -1411,7 +1462,7 @@ async def process_master_billing_date_shift(message: types.Message, state: FSMCo
     if menu_msg_id:
         amount_val = master_billing.get("amount")
         currency = master_billing.get("currency", "$")
-        amount_str = f"{amount_val} {currency}" if amount_val is not None else _("billing_date_not_set", lang)
+        amount_str = _fmt_billing_amount(amount_val, currency, lang)
         date_str = new_date.strftime("%d.%m.%Y")
         master_name = _("master_server_name", lang)
         
@@ -1563,15 +1614,15 @@ async def cq_billing_set_currency(callback: types.CallbackQuery, state: FSMConte
     if node_obj:
         node_obj.currency = currency
         await node_obj.save(update_fields=["currency"])
-        await callback.answer(_("billing_currency_success", lang, currency=currency), show_alert=True)
-        node = await nodes_db.get_node(token)
+        await callback.answer(_("billing_currency_success", lang, currency=currency))
+        node = await nodes_db.get_node_by_token(token)
         if node:
             keyboard = get_node_billing_keyboard(token, node, lang)
             provider = node.get("provider_name") or "Unknown"
-            amount = node.get("billing_amount") or 0.0
+            amount = node.get("billing_amount")
             date = node.get("next_payment_date")
             date_str = date.strftime("%d.%m.%Y") if date else _("billing_date_not_set", lang)
-            amount_str = f"{amount} {currency}" if amount else _("billing_date_not_set", lang)
+            amount_str = _fmt_billing_amount(amount, currency, lang)
             node_name = node.get("name", "Unknown")
             text = _("billing_menu_text_node", lang, name=node_name, provider=provider, amount=amount_str, date=date_str)
             await callback.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
@@ -1603,7 +1654,7 @@ async def cq_master_billing_set_currency(callback: types.CallbackQuery, state: F
             date_str = date
     else:
         date_str = _("billing_date_not_set", lang)
-    amount_str = f"{amount} {currency}" if amount else _("billing_date_not_set", lang)
+    amount_str = _fmt_billing_amount(amount, currency, lang)
     master_name = _("master_server_name", lang)
     text = _("billing_menu_text", lang, name=master_name, amount=amount_str, date=date_str)
     
