@@ -863,6 +863,7 @@ EOF
     elif [ ! -d "${BOT_INSTALL_PATH}/migrations" ]; then
         _run "'$aerich_bin' -c '$aerich_cfg' init-db" >/dev/null 2>&1 || true
     else
+        _run "'$aerich_bin' -c '$aerich_cfg' migrate --name update" >/dev/null 2>&1 || true
         _run "'$aerich_bin' -c '$aerich_cfg' upgrade" >/dev/null 2>&1 || true
     fi
 
@@ -1187,6 +1188,7 @@ EOF
     if [ "$current_mode" == "docker" ]; then
          local mode=$(grep '^INSTALL_MODE=' "${ENV_FILE}" | cut -d'=' -f2 | tr -d '"')
          local cn="tg-bot-${mode}"
+         sudo $dc_cmd --profile "${mode}" exec -T ${cn} aerich migrate --name update >/dev/null 2>&1 || true
          sudo $dc_cmd --profile "${mode}" exec -T ${cn} aerich upgrade >/dev/null 2>&1
          sudo $dc_cmd --profile "${mode}" exec -T ${cn} python migrate.py $MIGRATE_ARGS >/dev/null 2>&1
          

@@ -902,6 +902,14 @@ STRINGS = {
         "web_ping_target_internal_desc": "Агент ↔ Ноды",
         "web_ping_target_no_nodes": "Нет активных нод для этого режима",
         "web_apply": "Применить",
+        "billing_setup": "Настроить биллинг",
+        "billing_change_amount": "Изменить сумму",
+        "billing_shift_date": "Сдвинуть дату оплаты",
+        "billing_prompt_amount": "Введите новую сумму к оплате:",
+        "billing_prompt_date_shift": "На сколько дней сдвинуть дату оплаты? (Введите число или выберите вариант)",
+        "billing_notification": "⚠️ Напоминание об оплате! Сервер: {node_name} ({provider}). К оплате: {amount} {currency} до {date}.",
+        "btn_billing": "💳 Биллинг",
+        "billing_toggle_reminder": "Уведомления",
     },
 
     "en": {
@@ -1798,6 +1806,14 @@ STRINGS = {
         "web_ping_how_to_fix_btn": "How to fix?",
         "web_ping_fix_tcp": "<b>TCP</b> mode is selected.<br><br>1. Ensure your provider's firewall does not block outbound traffic to port <b>53</b>.<br>2. Make sure the <code>ping</code> utility is installed (the system tried an ICMP fallback, but it also failed).",
         "web_ping_fix_http": "<b>HTTP</b> mode is selected.<br><br>1. Ensure the server has internet access (port <b>443</b>).<br>2. Make sure the <code>ping</code> utility is installed (the system tried an ICMP fallback, but it also failed).",
+        "billing_setup": "Setup billing",
+        "billing_change_amount": "Change amount",
+        "billing_shift_date": "Shift payment date",
+        "billing_prompt_amount": "Enter the new billing amount:",
+        "billing_prompt_date_shift": "How many days to shift the payment date? (Enter a number)",
+        "billing_notification": "⚠️ Payment reminder! Server: {node_name} ({provider}). To pay: {amount} {currency} by {date}.",
+        "btn_billing": "💳 Billing",
+        "billing_toggle_reminder": "Reminders",
     },
 }
 

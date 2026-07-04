@@ -672,8 +672,45 @@ def get_node_management_keyboard(
             text=_("btn_back", lang), callback_data="nodes_list_refresh", style="primary"
         )
     ]
-    layout = [row1, row2, row3, row4, row5, row6]
+    layout = [row1, row2, row3, row4]
+    if user_id == ADMIN_USER_ID:
+        layout.append([
+            InlineKeyboardButton(
+                text=_("btn_billing", lang), callback_data=f"node_billing_{token}"
+            )
+        ])
+    layout.extend([row5, row6])
     return InlineKeyboardMarkup(inline_keyboard=layout)
+
+
+def get_node_billing_keyboard(token: str, node: dict, lang: str) -> InlineKeyboardMarkup:
+    reminder_enabled = node.get("reminder_enabled", False)
+    status_icon = "✅" if reminder_enabled else "❌"
+    
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text=_("billing_change_amount", lang), callback_data=f"billing_change_amount_{token}"
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text=_("billing_shift_date", lang), callback_data=f"billing_shift_date_{token}"
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text=f"{_('billing_toggle_reminder', lang)} : {status_icon}", callback_data=f"billing_toggle_reminder_{token}"
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text=_("btn_back", lang), callback_data=f"node_select_{token}", style="primary"
+                )
+            ]
+        ]
+    )
 
 
 def get_node_services_keyboard(token: str, services: list, lang: str) -> InlineKeyboardMarkup:

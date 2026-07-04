@@ -41,6 +41,12 @@ class Node(models.Model):
     history = fields.JSONField(default=list)
     tasks = fields.JSONField(default=list)
     extra_state = fields.JSONField(default=dict)
+    is_cloud = fields.BooleanField(default=False)
+    provider_name = fields.CharField(max_length=100, null=True)
+    next_payment_date = fields.DatetimeField(null=True)
+    billing_amount = fields.FloatField(null=True)
+    currency = fields.CharField(max_length=10, default="$")
+    reminder_enabled = fields.BooleanField(default=False)
 
     class Meta:
         table = "nodes"
