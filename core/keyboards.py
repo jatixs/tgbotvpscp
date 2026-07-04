@@ -397,7 +397,7 @@ def get_notifications_start_keyboard(user_id: int):
     )
 
 
-def get_notifications_global_keyboard(user_id: int):
+def get_notifications_global_keyboard(user_id: int, master_billing_enabled: bool = False):
     lang = get_user_lang(user_id)
     user_config = ALERTS_CONFIG.get(user_id, {})
     
@@ -410,7 +410,7 @@ def get_notifications_global_keyboard(user_id: int):
     nodes_down_enabled = user_config.get("downtime", False)
     nodes_res_enabled = user_config.get("node_resources", False)
     nodes_ssh_enabled = user_config.get("node_logins", False)
-    
+        
     status_yes = _("status_enabled", lang)
     status_no = _("status_disabled", lang)
     
@@ -446,6 +446,12 @@ def get_notifications_global_keyboard(user_id: int):
                         status=status_yes if bans_enabled else status_no,
                     ),
                     callback_data="toggle_alert_bans",
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text=f"{status_yes if master_billing_enabled else status_no} 💳 {_('billing_toggle_reminder', lang)}",
+                    callback_data="master_billing_toggle_reminder",
                 )
             ],
             # Nodes Global Section
@@ -510,9 +516,10 @@ def get_notifications_nodes_list_keyboard(nodes_dict: dict, lang: str):
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
-def get_notifications_node_settings_keyboard(token: str, node_name: str, user_id: int):
+def get_notifications_node_settings_keyboard(token: str, node: dict, user_id: int):
     lang = get_user_lang(user_id)
     user_config = ALERTS_CONFIG.get(user_id, {})
+    node_name = node.get("name", "Unknown")
     
     # Downtime
     key_down = f"node_{token}_downtime"
@@ -562,6 +569,12 @@ def get_notifications_node_settings_keyboard(token: str, node_name: str, user_id
                 InlineKeyboardButton(
                     text=f"{_('alerts_menu_logins', lang, status='')} : {status_ssh}",
                     callback_data=f"toggle_node_{token}_node_logins",
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text=f"{_('status_enabled', lang) if node.get('reminder_enabled', False) else _('status_disabled', lang)} 💳 {_('billing_toggle_reminder', lang)}",
+                    callback_data=f"billing_toggle_reminder_{token}",
                 )
             ],
             [
@@ -704,12 +717,29 @@ def get_node_billing_keyboard(token: str, node: dict, lang: str) -> InlineKeyboa
             ],
             [
                 InlineKeyboardButton(
-                    text=f"{_('billing_toggle_reminder', lang)} : {status_icon}", callback_data=f"billing_toggle_reminder_{token}"
+                    text=_("btn_back", lang), callback_data=f"node_select_{token}", style="primary"
+                )
+            ]
+        ]
+    )
+
+
+def get_master_billing_keyboard(master_billing: dict, lang: str) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text=_("billing_change_amount", lang), callback_data="master_billing_change_amount"
                 )
             ],
             [
                 InlineKeyboardButton(
-                    text=_("btn_back", lang), callback_data=f"node_select_{token}", style="primary"
+                    text=_("billing_shift_date", lang), callback_data="master_billing_shift_date"
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text=_("btn_back", lang), callback_data="back_to_menu", style="primary"
                 )
             ]
         ]

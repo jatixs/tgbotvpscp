@@ -238,6 +238,7 @@ DEFAULT_KEYBOARD_CONFIG = {
     "enable_nodes": True,
     "enable_optimize": True,
     "enable_services": True,
+    "enable_billing": True,
 }
 
 # --- MANAGED SERVICES CONFIG ---

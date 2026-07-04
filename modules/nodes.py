@@ -24,6 +24,7 @@ from core.keyboards import (
     get_node_services_keyboard,
     get_node_service_actions_keyboard,
     get_node_billing_keyboard,
+    get_master_billing_keyboard,
 )
 from core.utils import build_node_uptime_report, format_uptime
 import aiohttp
@@ -44,12 +45,18 @@ class NodeBillingStates(StatesGroup):
     waiting_for_date_shift = State()
 
 
+class MasterBillingStates(StatesGroup):
+    waiting_for_amount = State()
+    waiting_for_date_shift = State()
+
+
 def get_button() -> KeyboardButton:
     return KeyboardButton(text=_(BUTTON_KEY, config.DEFAULT_LANGUAGE))
 
 
 def register_handlers(dp: Dispatcher):
     dp.message(I18nFilter(BUTTON_KEY))(nodes_handler)
+    dp.message(I18nFilter("btn_billing"))(billing_handler)
     dp.callback_query(F.data == "nodes_list_refresh")(cq_nodes_list_refresh)
     dp.callback_query(F.data == "node_add_new")(cq_add_node_start)
     dp.message(StateFilter(AddNodeStates.waiting_for_name))(process_node_name)
@@ -69,6 +76,12 @@ def register_handlers(dp: Dispatcher):
     dp.callback_query(F.data.startswith("billing_toggle_reminder_"))(cq_billing_toggle_reminder)
     dp.message(StateFilter(NodeBillingStates.waiting_for_amount))(process_billing_amount)
     dp.message(StateFilter(NodeBillingStates.waiting_for_date_shift))(process_billing_date_shift)
+    dp.callback_query(F.data == "master_billing_menu")(cq_master_billing_menu)
+    dp.callback_query(F.data == "master_billing_change_amount")(cq_master_billing_change_amount)
+    dp.callback_query(F.data == "master_billing_shift_date")(cq_master_billing_shift_date)
+    dp.callback_query(F.data == "master_billing_toggle_reminder")(cq_master_billing_toggle_reminder)
+    dp.message(StateFilter(MasterBillingStates.waiting_for_amount))(process_master_billing_amount)
+    dp.message(StateFilter(MasterBillingStates.waiting_for_date_shift))(process_master_billing_date_shift)
 
 
 def start_background_tasks(bot: Bot) -> list[asyncio.Task]:
@@ -116,6 +129,38 @@ async def nodes_handler(message: types.Message):
         _("nodes_menu_header", lang), reply_markup=keyboard, parse_mode="HTML"
     )
     LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = sent_message.message_id
+
+
+async def billing_handler(message: types.Message):
+    user_id = message.from_user.id
+    lang = get_user_lang(user_id)
+    if user_id != config.ADMIN_USER_ID:
+        await send_access_denied_message(message.bot, user_id, message.chat.id, "billing")
+        return
+    await delete_previous_message(user_id, "billing", message.chat.id, message.bot)
+    
+    from core.config import get_bot_config
+    master_billing = await get_bot_config("master_billing", {})
+    
+    amount = master_billing.get("amount")
+    next_date_iso = master_billing.get("next_payment_date")
+    currency = master_billing.get("currency", "$")
+    
+    if next_date_iso:
+        import datetime
+        dt = datetime.datetime.fromisoformat(next_date_iso)
+        date_str = dt.strftime("%d.%m.%Y")
+    else:
+        date_str = _("billing_date_not_set", lang)
+        
+    amount_str = f"{amount} {currency}" if amount is not None else _("billing_date_not_set", lang)
+    master_name = _("master_server_name", lang)
+    
+    text = _("billing_menu_text", lang, name=master_name, amount=amount_str, date=date_str)
+    
+    keyboard = get_master_billing_keyboard(master_billing, lang)
+    sent_message = await message.answer(text, reply_markup=keyboard, parse_mode="HTML")
+    LAST_MESSAGE_IDS.setdefault(user_id, {})["billing"] = sent_message.message_id
 
 
 async def cq_nodes_list_refresh(callback: types.CallbackQuery):
@@ -979,9 +1024,11 @@ async def cq_node_billing(callback: types.CallbackQuery):
     amount = node.get("billing_amount") or 0.0
     currency = node.get("currency") or "$"
     date = node.get("next_payment_date")
-    date_str = date.strftime("%Y-%m-%d %H:%M") if date else _("billing_date_not_set", lang)
+    date_str = date.strftime("%d.%m.%Y") if date else _("billing_date_not_set", lang)
     
-    text = _("billing_notification", lang, node_name=node.get("name"), provider=provider, amount=amount, currency=currency, date=date_str)
+    amount_str = f"{amount} {currency}" if amount else _("billing_date_not_set", lang)
+    node_name = node.get("name", "Unknown")
+    text = _("billing_menu_text_node", lang, name=node_name, provider=provider, amount=amount_str, date=date_str)
     
     await callback.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
     await callback.answer()
@@ -991,8 +1038,8 @@ async def cq_billing_change_amount(callback: types.CallbackQuery, state: FSMCont
     lang = get_user_lang(user_id)
     token = callback.data.split("_")[3]
     await state.set_state(NodeBillingStates.waiting_for_amount)
-    await state.update_data(billing_token=token)
-    await callback.message.answer(_("billing_prompt_amount", lang))
+    msg = await callback.message.answer(_("billing_prompt_amount", lang))
+    await state.update_data(billing_token=token, menu_msg_id=callback.message.message_id, prompt_msg_id=msg.message_id)
     await callback.answer()
 
 async def process_billing_amount(message: types.Message, state: FSMContext):
@@ -1003,10 +1050,25 @@ async def process_billing_amount(message: types.Message, state: FSMContext):
     if not token:
         await state.clear()
         return
+        
+    try: await message.delete()
+    except: pass
+    
+    prompt_msg_id = data.get("prompt_msg_id")
+    if prompt_msg_id:
+        try: await message.bot.delete_message(chat_id=message.chat.id, message_id=prompt_msg_id)
+        except: pass
+
+    import asyncio
     try:
         amount = float(message.text.replace(",", "."))
     except ValueError:
-        await message.answer("Invalid format. Please enter a number.")
+        temp = await message.answer("Invalid format. Please enter a number.")
+        async def del_temp(m):
+            await asyncio.sleep(3)
+            try: await m.delete()
+            except: pass
+        asyncio.create_task(del_temp(temp))
         return
     
     t_hash = nodes_db._get_token_hash(token)
@@ -1016,9 +1078,30 @@ async def process_billing_amount(message: types.Message, state: FSMContext):
         try:
             node_obj.billing_amount = amount
             await node_obj.save(update_fields=["billing_amount"])
-            await message.answer("Amount saved!")
+            
+            menu_msg_id = data.get("menu_msg_id")
+            if menu_msg_id:
+                currency = getattr(node_obj, "billing_currency", "$")
+                amount_str = f"{amount} {currency}"
+                date_val = getattr(node_obj, "next_payment_date", None)
+                date_str = date_val.strftime("%d.%m.%Y") if date_val else _("billing_date_not_set", lang)
+                
+                provider = getattr(node_obj, "provider_name") or "Unknown"
+                clean_text = _("billing_menu_text_node", lang, name=node_obj.name, provider=provider, amount=amount_str, date=date_str)
+                toast_text = clean_text + "\n\n✅ <b>Данные обновлены!</b>"
+                
+                from core.keyboards import get_billing_node_settings_keyboard
+                keyboard = get_billing_node_settings_keyboard(token, dict(node_obj), lang)
+                
+                await message.bot.edit_message_text(toast_text, chat_id=message.chat.id, message_id=menu_msg_id, reply_markup=keyboard, parse_mode="HTML")
+                
+                async def remove_toast(cid, mid, txt, kb):
+                    await asyncio.sleep(3)
+                    try: await message.bot.edit_message_text(txt, chat_id=cid, message_id=mid, reply_markup=kb, parse_mode="HTML")
+                    except: pass
+                asyncio.create_task(remove_toast(message.chat.id, menu_msg_id, clean_text, keyboard))
         except OperationalError:
-            await message.answer("Database schema is outdated. Please wait for the migration to apply or run aerich upgrade.")
+            pass
     await state.clear()
 
 async def cq_billing_shift_date(callback: types.CallbackQuery, state: FSMContext):
@@ -1026,8 +1109,8 @@ async def cq_billing_shift_date(callback: types.CallbackQuery, state: FSMContext
     lang = get_user_lang(user_id)
     token = callback.data.split("_")[3]
     await state.set_state(NodeBillingStates.waiting_for_date_shift)
-    await state.update_data(billing_token=token)
-    await callback.message.answer(_("billing_prompt_date_shift", lang))
+    msg = await callback.message.answer(_("billing_prompt_date_shift", lang))
+    await state.update_data(billing_token=token, menu_msg_id=callback.message.message_id, prompt_msg_id=msg.message_id)
     await callback.answer()
 
 async def process_billing_date_shift(message: types.Message, state: FSMContext):
@@ -1038,24 +1121,85 @@ async def process_billing_date_shift(message: types.Message, state: FSMContext):
     if not token:
         await state.clear()
         return
-    try:
-        days = int(message.text)
-    except ValueError:
-        await message.answer("Invalid format. Please enter a number of days.")
-        return
+        
+    try: await message.delete()
+    except: pass
     
+    prompt_msg_id = data.get("prompt_msg_id")
+    if prompt_msg_id:
+        try: await message.bot.delete_message(chat_id=message.chat.id, message_id=prompt_msg_id)
+        except: pass
+
+    import datetime
+    import asyncio
+    text = message.text.strip()
+    target_date = None
+    days = None
+    
+    if "." in text:
+        parts = text.split(".")
+        if len(parts) >= 2:
+            try:
+                day = int(parts[0])
+                month = int(parts[1])
+                now_utc = datetime.datetime.now(datetime.timezone.utc)
+                year = now_utc.year
+                if len(parts) == 3:
+                    if len(parts[2]) == 2:
+                        year = 2000 + int(parts[2])
+                    else:
+                        year = int(parts[2])
+                target_date = datetime.datetime(year, month, day, tzinfo=datetime.timezone.utc)
+            except ValueError:
+                pass
+                
+    if target_date is None:
+        try:
+            days = int(text)
+        except ValueError:
+            temp = await message.answer("Неверный формат. Введите число дней или дату (ДД.ММ.ГГГГ).")
+            async def del_temp(m):
+                await asyncio.sleep(3)
+                try: await m.delete()
+                except: pass
+            asyncio.create_task(del_temp(temp))
+            return
+            
     t_hash = nodes_db._get_token_hash(token)
     node_obj = await nodes_db.Node.get_or_none(token_hash=t_hash)
     if node_obj:
-        import datetime
         from tortoise.exceptions import OperationalError
         try:
-            current_date = getattr(node_obj, "next_payment_date", None) or datetime.datetime.now(datetime.timezone.utc)
-            node_obj.next_payment_date = current_date + datetime.timedelta(days=days)
+            if target_date:
+                node_obj.next_payment_date = target_date
+            else:
+                current_date = getattr(node_obj, "next_payment_date", None) or datetime.datetime.now(datetime.timezone.utc)
+                node_obj.next_payment_date = current_date + datetime.timedelta(days=days)
             await node_obj.save(update_fields=["next_payment_date"])
-            await message.answer("Date shifted!")
+            
+            menu_msg_id = data.get("menu_msg_id")
+            if menu_msg_id:
+                amount_val = getattr(node_obj, "billing_amount", None)
+                currency = getattr(node_obj, "billing_currency", "$")
+                amount_str = f"{amount_val} {currency}" if amount_val is not None else _("billing_date_not_set", lang)
+                date_str = node_obj.next_payment_date.strftime("%d.%m.%Y")
+                
+                provider = getattr(node_obj, "provider_name") or "Unknown"
+                clean_text = _("billing_menu_text_node", lang, name=node_obj.name, provider=provider, amount=amount_str, date=date_str)
+                toast_text = clean_text + "\n\n✅ <b>Данные сохранены!</b>"
+                
+                from core.keyboards import get_billing_node_settings_keyboard
+                keyboard = get_billing_node_settings_keyboard(token, dict(node_obj), lang)
+                
+                await message.bot.edit_message_text(toast_text, chat_id=message.chat.id, message_id=menu_msg_id, reply_markup=keyboard, parse_mode="HTML")
+                
+                async def remove_toast(cid, mid, txt, kb):
+                    await asyncio.sleep(3)
+                    try: await message.bot.edit_message_text(txt, chat_id=cid, message_id=mid, reply_markup=kb, parse_mode="HTML")
+                    except: pass
+                asyncio.create_task(remove_toast(message.chat.id, menu_msg_id, clean_text, keyboard))
         except OperationalError:
-            await message.answer("Database schema is outdated. Please wait for the migration to apply or run aerich upgrade.")
+            pass
     await state.clear()
 
 async def cq_billing_toggle_reminder(callback: types.CallbackQuery):
@@ -1068,16 +1212,277 @@ async def cq_billing_toggle_reminder(callback: types.CallbackQuery):
             current = getattr(node_obj, "reminder_enabled", False)
             node_obj.reminder_enabled = not current
             await node_obj.save(update_fields=["reminder_enabled"])
-            await cq_node_billing(callback)
+            
+            from core.keyboards import get_notifications_node_settings_keyboard
+            await callback.message.edit_reply_markup(
+                reply_markup=get_notifications_node_settings_keyboard(
+                    token, dict(node_obj), callback.from_user.id
+                )
+            )
+            await callback.answer()
         except OperationalError:
             await callback.answer("Database schema is outdated. Please run aerich upgrade.", show_alert=True)
     else:
         await callback.answer("Node not found")
 
+
+# --- MASTER BILLING HANDLERS ---
+
+async def cq_master_billing_menu(callback: types.CallbackQuery):
+    user_id = callback.from_user.id
+    lang = get_user_lang(user_id)
+    from core.config import get_bot_config
+    master_billing = await get_bot_config("master_billing", {})
+    
+    amount = master_billing.get("amount")
+    next_date_iso = master_billing.get("next_payment_date")
+    currency = master_billing.get("currency", "$")
+    
+    if next_date_iso:
+        import datetime
+        dt = datetime.datetime.fromisoformat(next_date_iso)
+        date_str = dt.strftime("%d.%m.%Y")
+    else:
+        date_str = _("billing_date_not_set", lang)
+        
+    amount_str = f"{amount} {currency}" if amount is not None else _("billing_date_not_set", lang)
+    master_name = _("master_server_name", lang)
+    
+    text = _("billing_menu_text", lang, name=master_name, amount=amount_str, date=date_str)
+    
+    keyboard = get_master_billing_keyboard(master_billing, lang)
+    try:
+        await callback.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
+    except Exception as e:
+        pass
+    await callback.answer()
+
+
+async def cq_master_billing_change_amount(callback: types.CallbackQuery, state: FSMContext):
+    user_id = callback.from_user.id
+    lang = get_user_lang(user_id)
+    await state.set_state(MasterBillingStates.waiting_for_amount)
+    msg = await callback.message.answer(_("billing_prompt_amount", lang))
+    await state.update_data(menu_msg_id=callback.message.message_id, prompt_msg_id=msg.message_id)
+    await callback.answer()
+
+async def process_master_billing_amount(message: types.Message, state: FSMContext):
+    user_id = message.from_user.id
+    lang = get_user_lang(user_id)
+    data = await state.get_data()
+    
+    try: await message.delete()
+    except: pass
+    
+    prompt_msg_id = data.get("prompt_msg_id")
+    if prompt_msg_id:
+        try: await message.bot.delete_message(chat_id=message.chat.id, message_id=prompt_msg_id)
+        except: pass
+
+    import asyncio
+    try:
+        amount = float(message.text.replace(",", "."))
+    except ValueError:
+        temp = await message.answer("Invalid format. Please enter a number.")
+        async def del_temp(m):
+            await asyncio.sleep(3)
+            try: await m.delete()
+            except: pass
+        asyncio.create_task(del_temp(temp))
+        return
+    
+    from core.config import get_bot_config, set_bot_config
+    master_billing = await get_bot_config("master_billing", {})
+    master_billing["amount"] = amount
+    await set_bot_config("master_billing", master_billing)
+    
+    menu_msg_id = data.get("menu_msg_id")
+    if menu_msg_id:
+        currency = master_billing.get("currency", "$")
+        amount_str = f"{amount} {currency}"
+        
+        next_date_iso = master_billing.get("next_payment_date")
+        if next_date_iso:
+            import datetime
+            dt = datetime.datetime.fromisoformat(next_date_iso)
+            date_str = dt.strftime("%d.%m.%Y")
+        else:
+            date_str = _("billing_date_not_set", lang)
+            
+        master_name = _("master_server_name", lang)
+        clean_text = _("billing_menu_text", lang, name=master_name, amount=amount_str, date=date_str)
+        toast_text = clean_text + "\n\n✅ <b>Данные обновлены!</b>"
+        
+        from core.keyboards import get_master_billing_keyboard
+        keyboard = get_master_billing_keyboard(master_billing, lang)
+        
+        try:
+            await message.bot.edit_message_text(toast_text, chat_id=message.chat.id, message_id=menu_msg_id, reply_markup=keyboard, parse_mode="HTML")
+            
+            async def remove_toast(cid, mid, txt, kb):
+                await asyncio.sleep(3)
+                try: await message.bot.edit_message_text(txt, chat_id=cid, message_id=mid, reply_markup=kb, parse_mode="HTML")
+                except: pass
+            asyncio.create_task(remove_toast(message.chat.id, menu_msg_id, clean_text, keyboard))
+        except Exception:
+            pass
+            
+    await state.clear()
+
+async def cq_master_billing_shift_date(callback: types.CallbackQuery, state: FSMContext):
+    user_id = callback.from_user.id
+    lang = get_user_lang(user_id)
+    await state.set_state(MasterBillingStates.waiting_for_date_shift)
+    msg = await callback.message.answer(_("billing_prompt_date_shift", lang))
+    await state.update_data(menu_msg_id=callback.message.message_id, prompt_msg_id=msg.message_id)
+    await callback.answer()
+
+async def process_master_billing_date_shift(message: types.Message, state: FSMContext):
+    user_id = message.from_user.id
+    lang = get_user_lang(user_id)
+    data = await state.get_data()
+    
+    try: await message.delete()
+    except: pass
+    
+    prompt_msg_id = data.get("prompt_msg_id")
+    if prompt_msg_id:
+        try: await message.bot.delete_message(chat_id=message.chat.id, message_id=prompt_msg_id)
+        except: pass
+
+    import datetime
+    import asyncio
+    text = message.text.strip()
+    target_date = None
+    days = None
+    
+    if "." in text:
+        parts = text.split(".")
+        if len(parts) >= 2:
+            try:
+                day = int(parts[0])
+                month = int(parts[1])
+                now_utc = datetime.datetime.now(datetime.timezone.utc)
+                year = now_utc.year
+                if len(parts) == 3:
+                    if len(parts[2]) == 2:
+                        year = 2000 + int(parts[2])
+                    else:
+                        year = int(parts[2])
+                target_date = datetime.datetime(year, month, day, tzinfo=datetime.timezone.utc)
+            except ValueError:
+                pass
+                
+    if target_date is None:
+        try:
+            days = int(text)
+        except ValueError:
+            temp = await message.answer("Неверный формат. Введите число дней или дату (ДД.ММ.ГГГГ).")
+            async def del_temp(m):
+                await asyncio.sleep(3)
+                try: await m.delete()
+                except: pass
+            asyncio.create_task(del_temp(temp))
+            return
+    
+    from core.config import get_bot_config, set_bot_config
+    
+    master_billing = await get_bot_config("master_billing", {})
+    
+    if target_date:
+        new_date = target_date
+    else:
+        next_date_iso = master_billing.get("next_payment_date")
+        if next_date_iso:
+            current_date = datetime.datetime.fromisoformat(next_date_iso)
+        else:
+            current_date = datetime.datetime.now(datetime.timezone.utc)
+            
+        new_date = current_date + datetime.timedelta(days=days)
+        
+    master_billing["next_payment_date"] = new_date.isoformat()
+    await set_bot_config("master_billing", master_billing)
+    
+    menu_msg_id = data.get("menu_msg_id")
+    if menu_msg_id:
+        amount_val = master_billing.get("amount")
+        currency = master_billing.get("currency", "$")
+        amount_str = f"{amount_val} {currency}" if amount_val is not None else _("billing_date_not_set", lang)
+        date_str = new_date.strftime("%d.%m.%Y")
+        master_name = _("master_server_name", lang)
+        
+        clean_text = _("billing_menu_text", lang, name=master_name, amount=amount_str, date=date_str)
+        toast_text = clean_text + "\n\n✅ <b>Данные сохранены!</b>"
+        
+        from core.keyboards import get_master_billing_keyboard
+        keyboard = get_master_billing_keyboard(master_billing, lang)
+        
+        try:
+            await message.bot.edit_message_text(toast_text, chat_id=message.chat.id, message_id=menu_msg_id, reply_markup=keyboard, parse_mode="HTML")
+            
+            async def remove_toast(cid, mid, txt, kb):
+                await asyncio.sleep(3)
+                try: await message.bot.edit_message_text(txt, chat_id=cid, message_id=mid, reply_markup=kb, parse_mode="HTML")
+                except: pass
+            asyncio.create_task(remove_toast(message.chat.id, menu_msg_id, clean_text, keyboard))
+        except Exception:
+            pass
+
+    await state.clear()
+
+async def cq_master_billing_toggle_reminder(callback: types.CallbackQuery):
+    from core.config import get_bot_config, set_bot_config
+    master_billing = await get_bot_config("master_billing", {})
+    current = master_billing.get("reminder_enabled", False)
+    master_billing["reminder_enabled"] = not current
+    await set_bot_config("master_billing", master_billing)
+    
+    from core.keyboards import get_notifications_global_keyboard
+    await callback.message.edit_reply_markup(
+        reply_markup=get_notifications_global_keyboard(callback.from_user.id, not current)
+    )
+    await callback.answer()
+
+
 async def billing_reminders_task(bot: Bot):
     await asyncio.sleep(10)
+    import datetime
+    from core.config import get_bot_config, set_bot_config
     while True:
         try:
+            # Check master server billing
+            try:
+                master_billing = await get_bot_config("master_billing", {})
+                if master_billing.get("reminder_enabled", False):
+                    next_date_iso = master_billing.get("next_payment_date")
+                    if next_date_iso:
+                        next_date = datetime.datetime.fromisoformat(next_date_iso)
+                        now = datetime.datetime.now(datetime.timezone.utc)
+                        time_left = next_date - now
+                        if datetime.timedelta(days=0) < time_left <= datetime.timedelta(days=3):
+                            # Ensure we don't spam. Check last notified
+                            last_notified = master_billing.get("last_notified")
+                            should_notify = True
+                            if last_notified:
+                                ln_dt = datetime.datetime.fromisoformat(last_notified)
+                                if now - ln_dt < datetime.timedelta(hours=24):
+                                    should_notify = False
+                            
+                            if should_notify:
+                                amount = master_billing.get("amount", 0.0)
+                                currency = master_billing.get("currency", "$")
+                                master_name = _("master_server_name", config.DEFAULT_LANGUAGE)
+                                text = (
+                                    f"⚠️ Напоминание об оплате! Сервер: 💻 {master_name}.\n"
+                                    f"К оплате: {amount} {currency} до {next_date.strftime('%d.%m.%Y')}."
+                                )
+                                await bot.send_message(config.ADMIN_USER_ID, text)
+                                master_billing["last_notified"] = now.isoformat()
+                                await set_bot_config("master_billing", master_billing)
+            except Exception as e:
+                logging.error(f"Master Billing reminders task error: {e}")
+
+            # Check nodes billing
             nodes = await nodes_db.Node.all()
             for node_obj in nodes:
                 provider_name = getattr(node_obj, "provider_name", None)
@@ -1110,12 +1515,14 @@ async def billing_reminders_task(bot: Bot):
                     delta = payment_date - now
                     if datetime.timedelta(0) < delta <= datetime.timedelta(days=3):
                         lang = get_user_lang(config.ADMIN_USER_ID)
-                        date_str = payment_date.strftime("%Y-%m-%d %H:%M")
+                        date_str = payment_date.strftime("%d.%m.%Y")
                         node_name = getattr(node_obj, "name", "Unknown")
                         billing_amount = getattr(node_obj, "billing_amount", 0.0)
                         currency = getattr(node_obj, "currency", "$")
-                        text = _("billing_notification", lang, node_name=node_name, provider=provider_name, amount=billing_amount, currency=currency, date=date_str)
-                        await send_alert(bot, text)
+                        amount_str = f"{billing_amount} {currency}" if billing_amount else _("billing_date_not_set", lang)
+                        node_title = f"{node_name} ({provider_name})"
+                        text = _("billing_menu_text", lang, name=node_title, amount=amount_str, date=date_str)
+                        await bot.send_message(config.ADMIN_USER_ID, text)
                         node_obj.reminder_enabled = False
                         await node_obj.save(update_fields=["reminder_enabled"])
         except Exception as e:

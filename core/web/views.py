@@ -736,6 +736,10 @@ async def handle_settings_page(request: web.Request) -> web.StreamResponse:
     meta_locked = web_meta.get("locked", False)
     users_json = "null"
     nodes_json = "null"
+    
+    from core.config import get_bot_config
+    mb_config = await get_bot_config("master_billing") or {}
+    master_billing_enabled = mb_config.get("reminder_enabled", False)
 
     if is_admin:
         ulist = [
@@ -758,6 +762,7 @@ async def handle_settings_page(request: web.Request) -> web.StreamResponse:
                 "token": encrypt_for_web(token),
                 "name": node.get("name", "Unknown"),
                 "ip": encrypt_for_web(node.get("ip", "Unknown")),
+                "reminder_enabled": node.get("reminder_enabled", False),
             }
             for token, node in all_nodes.items()
         ]
@@ -939,6 +944,9 @@ async def handle_settings_page(request: web.Request) -> web.StreamResponse:
         "web_settings_page_title": _("web_settings_page_title", lang),
         "web_back": _("web_back", lang),
         "web_notif_section": _("web_notif_section", lang),
+        "web_notif_downtime_desc": _("web_notif_downtime_desc", lang),
+        "web_notif_resources_desc": _("web_notif_resources_desc", lang),
+        "web_notif_logins_desc": _("web_notif_logins_desc", lang),
         "notifications_alert_name_res": _("notifications_alert_name_res", lang),
         "notifications_alert_name_logins": _("notifications_alert_name_logins", lang),
         "notifications_alert_name_bans": _("notifications_alert_name_bans", lang),
@@ -1023,6 +1031,8 @@ async def handle_settings_page(request: web.Request) -> web.StreamResponse:
         "check_logins": "checked" if user_alerts.get("logins", False) else "",
         "check_bans": "checked" if user_alerts.get("bans", False) else "",
         "check_downtime": "checked" if user_alerts.get("downtime", False) else "",
+        "check_master_billing": "checked" if master_billing_enabled else "",
+        "billing_toggle_reminder": _("billing_toggle_reminder", lang),
         "user_alerts": user_alerts,
         "user_alerts_json": json.dumps(user_alerts),
         "i18n_json": json.dumps(i18n_data),
