@@ -2027,7 +2027,11 @@ window.getBillingBadgeHtml = function(daysLeft) {
     } else if (daysLeft <= 7) {
         badgeClass = "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400";
     }
-    const txt = daysLeft < 0 ? (I18N?.web_billing_expired || "Expired!") : (I18N?.web_billing_badge_days || "{days} дней").replace("{days}", daysLeft);
+    const isSmall = typeof window !== 'undefined' && window.innerWidth <= 380;
+    const daysTemplate = isSmall
+        ? (I18N?.web_billing_badge_days_short || "{days} д.")
+        : (I18N?.web_billing_badge_days || "{days} дней");
+    const txt = daysLeft < 0 ? (I18N?.web_billing_expired || "Expired!") : daysTemplate.replace("{days}", daysLeft);
     return `<span class="px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider ml-1.5 shadow-sm border border-black/5 dark:border-white/5 ${badgeClass}">${txt}</span>`;
 };
 
@@ -2066,7 +2070,7 @@ window.showBillingModal = function(name, amount, currency, dateStr, daysLeft) {
                 <span class="text-sm font-bold text-gray-900 dark:text-white bg-white dark:bg-black/40 px-2 py-0.5 rounded shadow-sm border border-gray-100 dark:border-white/5">${dateVal}</span>
             </div>
             <div class="flex justify-between items-center">
-                <span class="text-sm text-gray-500 dark:text-gray-400 font-medium">Статус:</span>
+                <span class="text-sm text-gray-500 dark:text-gray-400 font-medium">${I18N?.web_billing_status || 'Статус:'}</span>
                 ${statusHtml}
             </div>
         </div>

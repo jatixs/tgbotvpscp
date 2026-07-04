@@ -1589,7 +1589,7 @@ async def cq_master_billing_set_currency(callback: types.CallbackQuery, state: F
     mb["currency"] = currency
     await set_bot_config("master_billing", mb)
     
-    await callback.answer(_("billing_currency_success", lang, currency=currency), show_alert=True)
+    await callback.answer(_("billing_currency_success", lang, currency=currency))
     
     keyboard = get_master_billing_keyboard(mb, lang)
     amount = mb.get("amount") or 0.0
@@ -1604,7 +1604,8 @@ async def cq_master_billing_set_currency(callback: types.CallbackQuery, state: F
     else:
         date_str = _("billing_date_not_set", lang)
     amount_str = f"{amount} {currency}" if amount else _("billing_date_not_set", lang)
-    text = _("billing_menu_text_master", lang, amount=amount_str, date=date_str)
+    master_name = _("master_server_name", lang)
+    text = _("billing_menu_text", lang, name=master_name, amount=amount_str, date=date_str)
     
     await callback.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
 
