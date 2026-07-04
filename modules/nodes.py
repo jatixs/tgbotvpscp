@@ -1007,9 +1007,13 @@ async def process_billing_amount(message: types.Message, state: FSMContext):
     t_hash = nodes_db._get_token_hash(token)
     node_obj = await nodes_db.Node.get_or_none(token_hash=t_hash)
     if node_obj:
-        node_obj.billing_amount = amount
-        await node_obj.save(update_fields=["billing_amount"])
-        await message.answer("Amount saved!")
+        from tortoise.exceptions import OperationalError
+        try:
+            node_obj.billing_amount = amount
+            await node_obj.save(update_fields=["billing_amount"])
+            await message.answer("Amount saved!")
+        except OperationalError:
+            await message.answer("Database schema is outdated. Please wait for the migration to apply or run aerich upgrade.")
     await state.clear()
 
 async def cq_billing_shift_date(callback: types.CallbackQuery, state: FSMContext):
@@ -1039,10 +1043,14 @@ async def process_billing_date_shift(message: types.Message, state: FSMContext):
     node_obj = await nodes_db.Node.get_or_none(token_hash=t_hash)
     if node_obj:
         import datetime
-        current_date = node_obj.next_payment_date or datetime.datetime.now(datetime.timezone.utc)
-        node_obj.next_payment_date = current_date + datetime.timedelta(days=days)
-        await node_obj.save(update_fields=["next_payment_date"])
-        await message.answer("Date shifted!")
+        from tortoise.exceptions import OperationalError
+        try:
+            current_date = getattr(node_obj, "next_payment_date", None) or datetime.datetime.now(datetime.timezone.utc)
+            node_obj.next_payment_date = current_date + datetime.timedelta(days=days)
+            await node_obj.save(update_fields=["next_payment_date"])
+            await message.answer("Date shifted!")
+        except OperationalError:
+            await message.answer("Database schema is outdated. Please wait for the migration to apply or run aerich upgrade.")
     await state.clear()
 
 async def cq_billing_toggle_reminder(callback: types.CallbackQuery):
@@ -1050,9 +1058,14 @@ async def cq_billing_toggle_reminder(callback: types.CallbackQuery):
     t_hash = nodes_db._get_token_hash(token)
     node_obj = await nodes_db.Node.get_or_none(token_hash=t_hash)
     if node_obj:
-        node_obj.reminder_enabled = not node_obj.reminder_enabled
-        await node_obj.save(update_fields=["reminder_enabled"])
-        await cq_node_billing(callback)
+        from tortoise.exceptions import OperationalError
+        try:
+            current = getattr(node_obj, "reminder_enabled", False)
+            node_obj.reminder_enabled = not current
+            await node_obj.save(update_fields=["reminder_enabled"])
+            await cq_node_billing(callback)
+        except OperationalError:
+            await callback.answer("Database schema is outdated. Please run aerich upgrade.", show_alert=True)
     else:
         await callback.answer("Node not found")
 
