@@ -188,7 +188,7 @@ async def update_node_name(token: str, new_name: str):
     node = await Node.get_or_none(token_hash=t_hash)
     if node:
         node.name = new_name
-        await node.save()
+        await node.save(update_fields=["name"])
         logging.info(f"Node renamed to: {new_name}")
         return True
     return False
@@ -274,7 +274,7 @@ async def update_node_heartbeat(token: str, ip: str, stats: dict):
     node.stats = stats
     node.history = history
     node.extra_state = extra
-    await node.save()
+    await node.save(update_fields=["last_seen", "ip", "stats", "history", "extra_state"])
 
 
 async def reset_node_availability(token: str) -> bool:
@@ -303,7 +303,7 @@ async def reset_node_availability(token: str) -> bool:
             
     extra["availability"] = new_availability
     node.extra_state = extra
-    await node.save()
+    await node.save(update_fields=["extra_state"])
     return True
 
 
@@ -333,7 +333,7 @@ async def mark_node_offline(token: str, offline_at: float | None = None):
 
         extra["availability"] = availability
         node.extra_state = extra
-        await node.save()
+        await node.save(update_fields=["extra_state"])
 
     return True
 
@@ -345,7 +345,7 @@ async def update_node_task(token: str, task: dict):
         tasks = node.tasks or []
         tasks.append(task)
         node.tasks = tasks
-        await node.save()
+        await node.save(update_fields=["tasks"])
 
 
 async def clear_node_tasks(token: str):
@@ -353,7 +353,7 @@ async def clear_node_tasks(token: str):
     node = await Node.get_or_none(token_hash=t_hash)
     if node:
         node.tasks = []
-        await node.save()
+        await node.save(update_fields=["tasks"])
 
 
 async def update_node_extra(token: str, key: str, value):
@@ -363,4 +363,4 @@ async def update_node_extra(token: str, key: str, value):
         extra = node.extra_state or {}
         extra[key] = value
         node.extra_state = extra
-        await node.save()
+        await node.save(update_fields=["extra_state"])

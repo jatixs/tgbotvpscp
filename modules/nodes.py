@@ -1008,7 +1008,7 @@ async def process_billing_amount(message: types.Message, state: FSMContext):
     node_obj = await nodes_db.Node.get_or_none(token_hash=t_hash)
     if node_obj:
         node_obj.billing_amount = amount
-        await node_obj.save()
+        await node_obj.save(update_fields=["billing_amount"])
         await message.answer("Amount saved!")
     await state.clear()
 
@@ -1041,7 +1041,7 @@ async def process_billing_date_shift(message: types.Message, state: FSMContext):
         import datetime
         current_date = node_obj.next_payment_date or datetime.datetime.now(datetime.timezone.utc)
         node_obj.next_payment_date = current_date + datetime.timedelta(days=days)
-        await node_obj.save()
+        await node_obj.save(update_fields=["next_payment_date"])
         await message.answer("Date shifted!")
     await state.clear()
 
@@ -1051,7 +1051,7 @@ async def cq_billing_toggle_reminder(callback: types.CallbackQuery):
     node_obj = await nodes_db.Node.get_or_none(token_hash=t_hash)
     if node_obj:
         node_obj.reminder_enabled = not node_obj.reminder_enabled
-        await node_obj.save()
+        await node_obj.save(update_fields=["reminder_enabled"])
         await cq_node_billing(callback)
     else:
         await callback.answer("Node not found")
@@ -1072,7 +1072,7 @@ async def billing_reminders_task(bot: Bot):
                                     if isp:
                                         node_obj.provider_name = isp
                                         node_obj.is_cloud = True
-                                        await node_obj.save()
+                                        await node_obj.save(update_fields=["provider_name", "is_cloud"])
                     except Exception as e:
                         logging.error(f"Error detecting provider for {node_obj.ip}: {e}")
                 
@@ -1090,7 +1090,7 @@ async def billing_reminders_task(bot: Bot):
                         text = _("billing_notification", lang, node_name=node_obj.name, provider=node_obj.provider_name, amount=node_obj.billing_amount, currency=node_obj.currency, date=date_str)
                         await send_alert(bot, text)
                         node_obj.reminder_enabled = False
-                        await node_obj.save()
+                        await node_obj.save(update_fields=["reminder_enabled"])
         except Exception as e:
             logging.error(f"Billing reminders task error: {e}")
         
