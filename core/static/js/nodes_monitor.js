@@ -771,41 +771,40 @@ function updateNodeModal(data) {
     if (!updateDOM(modalTitleEl, tempTitle)) {
         modalTitleEl.innerHTML = DOMPurify.sanitize(newTitleHtml);
     }
+    if (typeof parsePageEmojis === 'function') parsePageEmojis(modalTitleEl);
     
     const nameContainer = modalTitleEl.parentElement;
     if (nameContainer) {
-        let badgeEl = document.getElementById('monitorNodeBillingBadge');
-        if (!badgeEl) {
-            badgeEl = document.createElement('div');
-            badgeEl.id = 'monitorNodeBillingBadge';
-            nameContainer.appendChild(badgeEl);
-        }
-        const isSet = data.billing_amount !== null && data.billing_amount !== undefined;
-        if (isSet || data.next_payment_date) {
-            const daysLeft = window.calculateDaysLeft ? window.calculateDaysLeft(data.next_payment_date) : null;
-            badgeEl.innerHTML = DOMPurify.sanitize(`
-                <button class="flex items-center justify-center h-6 px-1.5 sm:px-2 rounded-lg border border-gray-200 dark:border-white/10 hover:bg-black/5 dark:hover:bg-white/10 transition text-gray-600 dark:text-gray-400 font-medium text-[10px] sm:text-xs gap-1 whitespace-nowrap group ml-2">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-gray-500 group-hover:text-blue-500 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
-                    </svg>
-                    ${window.getBillingBadgeHtml ? window.getBillingBadgeHtml(daysLeft) : ''}
-                </button>
-            `);
-            const badgeBtn = badgeEl.querySelector('button');
-            if (badgeBtn) {
-                badgeBtn.onclick = () => {
-                    window.showBillingModal(
-                        decryptData(data.name) || 'Unknown',
-                        data.billing_amount !== null && data.billing_amount !== undefined ? data.billing_amount : null,
-                        data.currency || '$',
-                        data.next_payment_date || null,
-                        daysLeft
-                    );
-                };
+        const badgeEl = document.getElementById('monitorNodeBillingBadge');
+        if (badgeEl) {
+            const isSet = data.billing_amount !== null && data.billing_amount !== undefined;
+            if (isSet || data.next_payment_date) {
+                const daysLeft = window.calculateDaysLeft ? window.calculateDaysLeft(data.next_payment_date) : null;
+                const billingIconColor = daysLeft === null ? 'text-gray-400' : daysLeft < 0 ? 'text-red-500 dark:text-red-400' : daysLeft <= 6 ? 'text-yellow-500 dark:text-yellow-400' : 'text-green-500 dark:text-green-400';
+                badgeEl.innerHTML = DOMPurify.sanitize(`
+                    <button class="flex items-center h-5 px-1.5 rounded border border-gray-200 dark:border-white/10 hover:bg-black/5 dark:hover:bg-white/10 transition text-gray-500 dark:text-gray-400 text-[10px] gap-1 whitespace-nowrap group">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5 ${billingIconColor} transition-colors flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+                        </svg>
+                        ${window.getBillingBadgeHtml ? window.getBillingBadgeHtml(daysLeft) : ''}
+                    </button>
+                `);
+                const badgeBtn = badgeEl.querySelector('button');
+                if (badgeBtn) {
+                    badgeBtn.onclick = () => {
+                        window.showBillingModal(
+                            decryptData(data.name) || 'Unknown',
+                            data.billing_amount !== null && data.billing_amount !== undefined ? data.billing_amount : null,
+                            data.currency || '$',
+                            data.next_payment_date || null,
+                            daysLeft
+                        );
+                    };
+                }
+                badgeEl.classList.remove('hidden');
+            } else {
+                badgeEl.classList.add('hidden');
             }
-            badgeEl.style.display = 'block';
-        } else {
-            badgeEl.style.display = 'none';
         }
     }
     
@@ -1091,6 +1090,7 @@ function connectNodeServicesStream(token) {
     const container = document.getElementById('modalServicesContainer');
     if (container) {
         container.innerHTML = DOMPurify.sanitize(`<div class="text-center py-4 text-gray-400">${I18N?.web_services_loading || I18N?.web_loading || 'Loading'}</div>`);
+        _lastServicesCache = null; // force full re-render on next data event
     }
 
     nodeServicesSSESource = new EventSource(`/api/events/node/services?token=${encodeURIComponent(token)}`);

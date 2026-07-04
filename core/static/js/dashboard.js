@@ -1466,6 +1466,7 @@ function updateNodeDetailsUI(data) {
         if (!updateDOM(titleEl, tempTitle)) {
             titleEl.innerHTML = DOMPurify.sanitize(newTitleHtml);
         }
+        if (typeof parsePageEmojis === 'function') parsePageEmojis(titleEl);
         
         const nameContainer = document.getElementById('nodeNameContainer');
         if (nameContainer) {
@@ -1478,9 +1479,10 @@ function updateNodeDetailsUI(data) {
             const isSet = data.billing_amount !== null && data.billing_amount !== undefined;
             if (isSet || data.next_payment_date) {
                 const daysLeft = window.calculateDaysLeft ? window.calculateDaysLeft(data.next_payment_date) : null;
+                const billingIconColor = daysLeft === null ? 'text-gray-400' : daysLeft < 0 ? 'text-red-500 dark:text-red-400' : daysLeft <= 6 ? 'text-yellow-500 dark:text-yellow-400' : 'text-green-500 dark:text-green-400';
                 badgeEl.innerHTML = DOMPurify.sanitize(`
                     <button class="flex items-center justify-center h-6 px-1.5 sm:px-2 rounded-lg border border-gray-200 dark:border-white/10 hover:bg-black/5 dark:hover:bg-white/10 transition text-gray-600 dark:text-gray-400 font-medium text-[10px] sm:text-xs gap-1 whitespace-nowrap group ml-2">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-gray-500 group-hover:text-blue-500 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 ${billingIconColor} transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
                         </svg>
                         ${window.getBillingBadgeHtml ? window.getBillingBadgeHtml(daysLeft) : ''}
