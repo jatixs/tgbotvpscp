@@ -409,7 +409,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // Unlock Vibration API on first interaction
     const unlockHaptics = () => {
-        if (navigator.vibrate) navigator.vibrate(0);
+        try { if (navigator.vibrate) navigator.vibrate(0); } catch (e) {}
         document.body.removeEventListener('touchstart', unlockHaptics);
         document.body.removeEventListener('click', unlockHaptics);
     };
@@ -507,7 +507,7 @@ function parsePageEmojis(element) {
                 if (icon.length === 11 && /^1f1[e-f][0-9a-f]-1f1[e-f][0-9a-f]$/.test(icon)) {
                     return {
                         class: 'emoji flagcdn',
-                        style: 'width: 1.4em; height: 1em; object-fit: cover; border-radius: 2px; display: inline-block; vertical-align: -0.1em; box-shadow: 0 1px 2px rgba(0,0,0,0.1)'
+                        style: 'width: 1.4em; height: 1em; object-fit: cover; border-radius: 2px; display: inline-block; vertical-align: middle; box-shadow: 0 1px 2px rgba(0,0,0,0.1)'
                     };
                 }
             },
@@ -526,7 +526,7 @@ function replaceEmojisWithFlagsHTML(text) {
         const code2 = match.codePointAt(2);
         const char1 = String.fromCharCode(code1 - 0x1F1E6 + 97);
         const char2 = String.fromCharCode(code2 - 0x1F1E6 + 97);
-        return `<img src="https://flagcdn.com/${char1}${char2}.svg" class="emoji flagcdn" style="width: 1.4em; height: 1em; object-fit: cover; border-radius: 2px; display: inline-block; vertical-align: -0.1em; box-shadow: 0 1px 2px rgba(0,0,0,0.1)" alt="${match}" />`;
+        return `<img src="https://flagcdn.com/${char1}${char2}.svg" class="emoji flagcdn" style="width: 1.4em; height: 1em; object-fit: cover; border-radius: 2px; display: inline-block; vertical-align: middle; box-shadow: 0 1px 2px rgba(0,0,0,0.1)" alt="${match}" />`;
     });
 }
 
@@ -2112,7 +2112,7 @@ window.renderHeaderBilling = function() {
             <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-gray-500 group-hover:text-blue-500 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
             </svg>
-            ${getBillingBadgeHtml(daysLeft)}
+            <span class="hidden sm:inline-flex">${getBillingBadgeHtml(daysLeft)}</span>
         </button>
     `;
     container.innerHTML = DOMPurify.sanitize(btnHtml);
