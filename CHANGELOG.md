@@ -6,14 +6,14 @@
 
 <p align="center">
 <p align="center">
-    <img src="https://img.shields.io/badge/version-v1.23.4-blue?style=flat-square" alt="Version 1.23.4"/>
-    <img src="https://img.shields.io/badge/build-81-purple?style=flat-square" alt="Build 81"/>
-    <img src="https://img.shields.io/badge/date-Июнь%2017%202026-green?style=flat-square" alt="Date Jun 17 2026"/>
+    <img src="https://img.shields.io/badge/version-v1.24.0-blue?style=flat-square" alt="Version 1.24.0"/>
+    <img src="https://img.shields.io/badge/build-82-purple?style=flat-square" alt="Build 82"/>
+    <img src="https://img.shields.io/badge/date-Июль%2004%202026-green?style=flat-square" alt="Date Jul 04 2026"/>
 	<img src="https://img.shields.io/badge/status-stable-green?style=flat-square" alt="Status Stable"/>
 </p>
 
 ---
-## [1.23.4] - 2026-06-17
+## [1.24.0] - 2026-07-04
 
 ### 🔧 Исправлено:
 * **Ноды / Selftest:** Исправлен вывод ответа от ноды при выполнении команды `selftest`. Параметры i18n-шаблона `selftest_results_body` не совпадали с именами, отправляемыми агентом ноды (`cpu`/`mem`/`disk` вместо `cpu_val`/`mem_val`/`disk_val`), что приводило к неподставленным плейсхолдерам в сообщении. Добавлены недостающие параметры `cpu_bot`, `mem_bot`, `disk_bot` (отображаются как "N/A", т.к. бот не запущен на ноде). Значения CPU, RAM и Disk теперь форматируются в человекочитаемые единицы (GHz/MHz, MB, GB) по аналогии с основным selftest.
