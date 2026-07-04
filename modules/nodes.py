@@ -72,12 +72,16 @@ def register_handlers(dp: Dispatcher):
     dp.callback_query(F.data.startswith("node_cmd_"))(cq_node_command)
     dp.callback_query(F.data.startswith("node_billing_"))(cq_node_billing)
     dp.callback_query(F.data.startswith("billing_change_amount_"))(cq_billing_change_amount)
+    dp.callback_query(F.data.startswith("billing_change_currency_"))(cq_billing_change_currency)
+    dp.callback_query(F.data.startswith("billing_set_cur_"))(cq_billing_set_currency)
     dp.callback_query(F.data.startswith("billing_shift_date_"))(cq_billing_shift_date)
     dp.callback_query(F.data.startswith("billing_toggle_reminder_"))(cq_billing_toggle_reminder)
     dp.message(StateFilter(NodeBillingStates.waiting_for_amount))(process_billing_amount)
     dp.message(StateFilter(NodeBillingStates.waiting_for_date_shift))(process_billing_date_shift)
     dp.callback_query(F.data == "master_billing_menu")(cq_master_billing_menu)
     dp.callback_query(F.data == "master_billing_change_amount")(cq_master_billing_change_amount)
+    dp.callback_query(F.data == "master_billing_change_currency")(cq_master_billing_change_currency)
+    dp.callback_query(F.data.startswith("master_billing_set_cur_"))(cq_master_billing_set_currency)
     dp.callback_query(F.data == "master_billing_shift_date")(cq_master_billing_shift_date)
     dp.callback_query(F.data == "master_billing_toggle_reminder")(cq_master_billing_toggle_reminder)
     dp.message(StateFilter(MasterBillingStates.waiting_for_amount))(process_master_billing_amount)
@@ -1529,3 +1533,77 @@ async def billing_reminders_task(bot: Bot):
             logging.error(f"Billing reminders task error: {e}")
         
         await asyncio.sleep(86400)
+
+async def cq_billing_change_currency(callback: types.CallbackQuery, state: FSMContext):
+    from core.keyboards import get_billing_currency_keyboard
+    user_id = callback.from_user.id
+    lang = get_user_lang(user_id)
+    token = callback.data.split("_")[3]
+    keyboard = get_billing_currency_keyboard(token, is_master=False, lang=lang)
+    await callback.message.edit_text(_("billing_change_currency", lang), reply_markup=keyboard)
+    await callback.answer()
+
+async def cq_master_billing_change_currency(callback: types.CallbackQuery, state: FSMContext):
+    from core.keyboards import get_billing_currency_keyboard
+    user_id = callback.from_user.id
+    lang = get_user_lang(user_id)
+    keyboard = get_billing_currency_keyboard(token="", is_master=True, lang=lang)
+    await callback.message.edit_text(_("billing_change_currency", lang), reply_markup=keyboard)
+    await callback.answer()
+
+async def cq_billing_set_currency(callback: types.CallbackQuery, state: FSMContext):
+    user_id = callback.from_user.id
+    lang = get_user_lang(user_id)
+    parts = callback.data.split("_")
+    token = parts[3]
+    currency = parts[4]
+    
+    t_hash = nodes_db._get_token_hash(token)
+    node_obj = await nodes_db.Node.get_or_none(token_hash=t_hash)
+    if node_obj:
+        node_obj.currency = currency
+        await node_obj.save(update_fields=["currency"])
+        await callback.answer(_("billing_currency_success", lang, currency=currency), show_alert=True)
+        node = await nodes_db.get_node(token)
+        if node:
+            keyboard = get_node_billing_keyboard(token, node, lang)
+            provider = node.get("provider_name") or "Unknown"
+            amount = node.get("billing_amount") or 0.0
+            date = node.get("next_payment_date")
+            date_str = date.strftime("%d.%m.%Y") if date else _("billing_date_not_set", lang)
+            amount_str = f"{amount} {currency}" if amount else _("billing_date_not_set", lang)
+            node_name = node.get("name", "Unknown")
+            text = _("billing_menu_text_node", lang, name=node_name, provider=provider, amount=amount_str, date=date_str)
+            await callback.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
+            return
+    await callback.answer()
+
+async def cq_master_billing_set_currency(callback: types.CallbackQuery, state: FSMContext):
+    user_id = callback.from_user.id
+    lang = get_user_lang(user_id)
+    parts = callback.data.split("_")
+    currency = parts[4]
+    
+    mb = await get_bot_config("master_billing") or {}
+    mb["currency"] = currency
+    await set_bot_config("master_billing", mb)
+    
+    await callback.answer(_("billing_currency_success", lang, currency=currency), show_alert=True)
+    
+    keyboard = get_master_billing_keyboard(mb, lang)
+    amount = mb.get("amount") or 0.0
+    date = mb.get("next_payment_date")
+    if date:
+        try:
+            import datetime
+            date_obj = datetime.datetime.fromisoformat(date)
+            date_str = date_obj.strftime("%d.%m.%Y")
+        except:
+            date_str = date
+    else:
+        date_str = _("billing_date_not_set", lang)
+    amount_str = f"{amount} {currency}" if amount else _("billing_date_not_set", lang)
+    text = _("billing_menu_text_master", lang, amount=amount_str, date=date_str)
+    
+    await callback.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
+

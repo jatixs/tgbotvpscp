@@ -705,9 +705,13 @@ def get_node_billing_keyboard(token: str, node: dict, lang: str) -> InlineKeyboa
     
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [
                 InlineKeyboardButton(
                     text=_("billing_change_amount", lang), callback_data=f"billing_change_amount_{token}"
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text=_("billing_change_currency", lang), callback_data=f"billing_change_currency_{token}"
                 )
             ],
             [
@@ -727,9 +731,13 @@ def get_node_billing_keyboard(token: str, node: dict, lang: str) -> InlineKeyboa
 def get_master_billing_keyboard(master_billing: dict, lang: str) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [
                 InlineKeyboardButton(
                     text=_("billing_change_amount", lang), callback_data="master_billing_change_amount"
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text=_("billing_change_currency", lang), callback_data="master_billing_change_currency"
                 )
             ],
             [
@@ -740,6 +748,35 @@ def get_master_billing_keyboard(master_billing: dict, lang: str) -> InlineKeyboa
             [
                 InlineKeyboardButton(
                     text=_("btn_back", lang), callback_data="back_to_menu", style="primary"
+                )
+            ]
+        ]
+    )
+
+
+def get_billing_currency_keyboard(token: str, is_master: bool, lang: str) -> InlineKeyboardMarkup:
+    cb_prefix = "master_billing_set_cur_" if is_master else f"billing_set_cur_{token}_"
+    back_cb = "master_billing_menu" if is_master else f"node_billing_{token}"
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text=_("billing_currency_eur", lang), callback_data=f"{cb_prefix}€"
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text=_("billing_currency_usd", lang), callback_data=f"{cb_prefix}$"
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text=_("billing_currency_rub", lang), callback_data=f"{cb_prefix}₽"
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text=_("btn_back", lang), callback_data=back_cb, style="primary"
                 )
             ]
         ]
