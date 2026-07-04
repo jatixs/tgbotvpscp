@@ -15,6 +15,20 @@
 ---
 ## [1.24.0] - 2026-07-04
 
+### 🚀 Added / Improved:
+* **Billing System:** Introduced a comprehensive payment reminder system for servers. The bot can now automatically notify the administrator about expiring node and master server rentals (3 days before expiration).
+* **Billing Management (Bot):** Added billing configuration buttons to the server management menus. Administrators can now set the payment amount, select currency (Euro, Dollar, Ruble), and shift the next payment date directly from Telegram.
+* **WebUI (Dashboard & Nodes):** Integrated server rental status display into the web panel. The panel header and node cards now feature informative localized badges showing the remaining days (or "Expired!" status).
+* **WebUI (Rental Details):** Added a modern modal window displaying server rental details (cost, next payment date). 
+
+### 🔧 Fixed:
+* **WebUI (Security):** Resolved a conflict between click handlers and the `DOMPurify` sanitizer. Events are now correctly bound via JS scripts, restoring functionality to modal windows securely.
+* **Core (Timezones):** Fixed an error in `middlewares.py` (`AttributeError: 'int' object has no attribute 'tzinfo'`) that caused crashes when processing outdated callback queries.
+* **Database:** Added safe, automatic migrations to the DB schema (`nodes_db.py`) to support billing fields (`billing_amount`, `currency`, `next_payment_date`, `reminder_enabled`) without data loss.
+
+---
+## [1.23.4] - 2026-06-17
+
 ### 🔧 Fixed:
 * **Nodes / Selftest:** Fixed node selftest command output. The i18n template `selftest_results_body` parameter names did not match those sent by the node agent (`cpu`/`mem`/`disk` instead of `cpu_val`/`mem_val`/`disk_val`), causing unresolved placeholders in the message. Added missing parameters `cpu_bot`, `mem_bot`, `disk_bot` (displayed as "N/A" since the bot process does not run on nodes). CPU, RAM, and Disk values are now formatted in human-readable units (GHz/MHz, MB, GB) matching the main selftest output.
 
