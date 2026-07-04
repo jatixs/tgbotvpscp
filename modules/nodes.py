@@ -1579,6 +1579,7 @@ async def cq_billing_set_currency(callback: types.CallbackQuery, state: FSMConte
     await callback.answer()
 
 async def cq_master_billing_set_currency(callback: types.CallbackQuery, state: FSMContext):
+    from core.config import get_bot_config, set_bot_config
     user_id = callback.from_user.id
     lang = get_user_lang(user_id)
     parts = callback.data.split("_")

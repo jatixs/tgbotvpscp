@@ -705,6 +705,7 @@ def get_node_billing_keyboard(token: str, node: dict, lang: str) -> InlineKeyboa
     
     return InlineKeyboardMarkup(
         inline_keyboard=[
+            [
                 InlineKeyboardButton(
                     text=_("billing_change_amount", lang), callback_data=f"billing_change_amount_{token}"
                 )
@@ -731,6 +732,7 @@ def get_node_billing_keyboard(token: str, node: dict, lang: str) -> InlineKeyboa
 def get_master_billing_keyboard(master_billing: dict, lang: str) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
+            [
                 InlineKeyboardButton(
                     text=_("billing_change_amount", lang), callback_data="master_billing_change_amount"
                 )

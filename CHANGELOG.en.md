@@ -16,18 +16,30 @@
 ## [1.24.0] - 2026-07-04
 
 ### 🚀 Added / Improved:
-* **Billing System:** Introduced a comprehensive payment reminder system for servers. The bot can now automatically notify the administrator about expiring node and master server rentals (3 days before expiration).
-* **Billing Management (Bot):** Added billing configuration buttons to the server management menus. Administrators can now set the payment amount, select currency (Euro, Dollar, Ruble), and shift the next payment date directly from Telegram.
-* **WebUI (Dashboard & Nodes):** Integrated server rental status display into the web panel. The panel header and node cards now feature informative localized badges showing the remaining days (or "Expired!" status).
-* **WebUI (Rental Details):** Added a modern modal window displaying server rental details (cost, next payment date). 
+* **Billing System:** Introduced a comprehensive server payment reminder system. For each node and the master server (main VPS), an admin can now set a rental cost, select a currency (€ / $ / ₽), and configure the next payment date.
+* **Automatic Billing Notifications:** The background task `billing_reminders_task` automatically detects the node's hosting provider via `ip-api.com` and sends the administrator an alert 3 days before the end of the paid period.
+* **Billing Management (Bot):** A "Billing" button (Admin only) has been added to both the node management menu and the master server menu. From Telegram, an admin can set the amount, choose a currency (Euro, Dollar, Ruble), and shift the payment date. A reminder toggle is available both per-node and globally in the notification settings.
+* **WebUI (Rental Badges):** The web panel header and node cards now display informative bilingual badges showing the number of days remaining until the next payment, or an "Overdue!" status.
+* **WebUI (Rental Details Modal):** A new modal window has been added with full rental details: provider name, cost with currency, and the next payment date.
+* **Database (Billing — Auto Migrations):** The `Node` model has been extended with the fields `is_cloud`, `provider_name`, `next_payment_date`, `billing_amount`, `currency`, and `reminder_enabled`. An automatic migration mechanism via `ALTER TABLE` runs on every startup, ensuring zero data loss on updates.
+* **Deployment (Billing):** The `deploy.sh` and `deploy_en.sh` scripts have been updated to automatically run `aerich migrate` + `aerich upgrade` during updates, guaranteeing DB schema consistency without manual intervention.
+* **Ping Method Selector:** A toggle for the node latency measurement method has been added to the WebUI settings: `ICMP` (traditional) or `HTTP` (`HEAD` request). The `HTTP` method resolves the issue of ICMP packets being blocked by strict firewalls.
+* **Node Agent (Ping Method):** The `node.py` agent has been updated to support both ping methods. The setting is synchronized from the server; the agent adapts its measurement algorithm and output format to the selected method.
+* **Selftest (Ping):** The ping value in the bot's self-diagnostics (`selftest`) now correctly reflects the active measurement method.
+* **WebUI (Node Monitor — Data):** Billing fields (`billing_amount`, `currency`, `next_payment_date`, `reminder_enabled`) have been added to the Node Monitor API responses and templates, ensuring full rental status visibility on the monitoring page.
+* **WebUI (Node Monitor — SSE):** Fixed an issue with the SSE channel responsible for pre-rendering the Services tab on the node monitoring page. Data is now displayed immediately upon page load.
+* **Localization & Formatting:** Fixed and extended i18n keys for nodes, selftest, speedtest, and fail2ban. Output units have been switched to absolute values (MiB/GiB/MHz) for accurate representation of real system metrics.
 
 ### 🔧 Fixed:
-* **WebUI (Security):** Resolved a conflict between click handlers and the `DOMPurify` sanitizer. Events are now correctly bound via JS scripts, restoring functionality to modal windows securely.
-* **Core (Timezones):** Fixed an error in `middlewares.py` (`AttributeError: 'int' object has no attribute 'tzinfo'`) that caused crashes when processing outdated callback queries.
-* **Database:** Added safe, automatic migrations to the DB schema (`nodes_db.py`) to support billing fields (`billing_amount`, `currency`, `next_payment_date`, `reminder_enabled`) without data loss.
+* **WebUI (Billing — DOMPurify):** Billing button click handlers have been refactored from inline `onclick` attributes to dynamic JS bindings, preventing `DOMPurify` from stripping the handlers as part of XSS protection.
+* **WebUI (Templates — master_billing_json):** Added injection of the `master_billing_json` global variable into `dashboard.html`, `nodes_monitor.html`, and `settings.html`. Its absence caused the billing badge in the header to not render.
+* **Core / Middlewares:** Fixed `AttributeError: 'int' object has no attribute 'tzinfo'` in `CallbackTTLMiddleware` when processing stale callback queries that contained integer timestamps instead of `datetime` objects.
+* **WebUI (Settings — 500 Error):** Resolved a 500 Internal Server Error on the `/api/settings/save` endpoint. Added missing i18n keys for the settings section.
+* **WebUI (Settings — Responsiveness):** The settings page layout has been reworked to render correctly on narrow mobile screens.
+* **Nodes / Agent:** Removed unused global variables from `node.py`, eliminating linter warnings during module import.
 
 ---
-## [1.23.4] - 2026-06-17
+## [1.23.4] - 2026-07-02
 
 ### 🔧 Fixed:
 * **Nodes / Selftest:** Fixed node selftest command output. The i18n template `selftest_results_body` parameter names did not match those sent by the node agent (`cpu`/`mem`/`disk` instead of `cpu_val`/`mem_val`/`disk_val`), causing unresolved placeholders in the message. Added missing parameters `cpu_bot`, `mem_bot`, `disk_bot` (displayed as "N/A" since the bot process does not run on nodes). CPU, RAM, and Disk values are now formatted in human-readable units (GHz/MHz, MB, GB) matching the main selftest output.
