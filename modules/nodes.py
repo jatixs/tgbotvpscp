@@ -1062,10 +1062,15 @@ async def billing_reminders_task(bot: Bot):
         try:
             nodes = await nodes_db.Node.all()
             for node_obj in nodes:
-                if not node_obj.provider_name and node_obj.ip and node_obj.ip != "Unknown":
+                provider_name = getattr(node_obj, "provider_name", None)
+                ip = getattr(node_obj, "ip", None)
+                reminder_enabled = getattr(node_obj, "reminder_enabled", False)
+                next_payment_date = getattr(node_obj, "next_payment_date", None)
+                
+                if not provider_name and ip and ip != "Unknown":
                     try:
                         async with aiohttp.ClientSession() as session:
-                            async with session.get(f"http://ip-api.com/json/{node_obj.ip}") as resp:
+                            async with session.get(f"http://ip-api.com/json/{ip}") as resp:
                                 if resp.status == 200:
                                     data = await resp.json()
                                     isp = data.get("isp") or data.get("org")
@@ -1073,21 +1078,25 @@ async def billing_reminders_task(bot: Bot):
                                         node_obj.provider_name = isp
                                         node_obj.is_cloud = True
                                         await node_obj.save(update_fields=["provider_name", "is_cloud"])
+                                        provider_name = isp
                     except Exception as e:
-                        logging.error(f"Error detecting provider for {node_obj.ip}: {e}")
+                        logging.error(f"Error detecting provider for {ip}: {e}")
                 
-                if node_obj.reminder_enabled and node_obj.next_payment_date:
+                if reminder_enabled and next_payment_date:
                     import datetime
                     now = datetime.datetime.now(datetime.timezone.utc)
-                    if node_obj.next_payment_date.tzinfo is None:
-                        payment_date = node_obj.next_payment_date.replace(tzinfo=datetime.timezone.utc)
+                    if next_payment_date.tzinfo is None:
+                        payment_date = next_payment_date.replace(tzinfo=datetime.timezone.utc)
                     else:
-                        payment_date = node_obj.next_payment_date
+                        payment_date = next_payment_date
                     delta = payment_date - now
                     if datetime.timedelta(0) < delta <= datetime.timedelta(days=3):
                         lang = get_user_lang(config.ADMIN_USER_ID)
                         date_str = payment_date.strftime("%Y-%m-%d %H:%M")
-                        text = _("billing_notification", lang, node_name=node_obj.name, provider=node_obj.provider_name, amount=node_obj.billing_amount, currency=node_obj.currency, date=date_str)
+                        node_name = getattr(node_obj, "name", "Unknown")
+                        billing_amount = getattr(node_obj, "billing_amount", 0.0)
+                        currency = getattr(node_obj, "currency", "$")
+                        text = _("billing_notification", lang, node_name=node_name, provider=provider_name, amount=billing_amount, currency=currency, date=date_str)
                         await send_alert(bot, text)
                         node_obj.reminder_enabled = False
                         await node_obj.save(update_fields=["reminder_enabled"])
