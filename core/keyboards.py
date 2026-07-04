@@ -28,6 +28,7 @@ BTN_CONFIG_MAP = {
     "btn_notifications": "enable_notifications",
     "btn_nodes": "enable_nodes",
     "btn_services": "enable_services",
+    "btn_billing": "enable_billing",
 }
 
 # Buttons that require Admin or Root role
@@ -38,6 +39,7 @@ ADMIN_ONLY_BTNS = [
     "btn_xray",
     "btn_vless",
     "btn_nodes",
+    "btn_billing",
 ]
 # Buttons that require Root role AND root install mode
 ROOT_ONLY_BTNS = [
@@ -67,6 +69,7 @@ CATEGORY_MAP = {
         "btn_optimize",
         "btn_restart",
         "btn_reboot",
+        "btn_billing",
     ],
     "cat_security": ["btn_sshlog", "btn_fail2ban", "btn_logs"],
     "cat_tools": ["btn_xray", "btn_vless", "btn_notifications"],
@@ -673,7 +676,7 @@ def get_node_management_keyboard(
         )
     ]
     layout = [row1, row2, row3, row4]
-    if user_id == ADMIN_USER_ID:
+    if user_id == ADMIN_USER_ID and KEYBOARD_CONFIG.get("enable_billing", True):
         layout.append([
             InlineKeyboardButton(
                 text=_("btn_billing", lang), callback_data=f"node_billing_{token}"
