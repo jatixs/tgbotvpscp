@@ -2130,3 +2130,79 @@ document.addEventListener('DOMContentLoaded', () => {
         renderHeaderBilling();
     }
 });
+
+window.showModal = function(options) {
+    const { title, content, buttons } = options;
+    const modalId = 'dynamicModal_' + Math.random().toString(36).substr(2, 9);
+    
+    const modal = document.createElement('div');
+    modal.id = modalId;
+    modal.className = "fixed inset-0 z-[9999] hidden items-center justify-center bg-black/50 dark:bg-black/80 backdrop-blur-sm p-4";
+    modal.onclick = (e) => { if (e.target === modal) window.closeDynamicModal(modalId); };
+    
+    let buttonsHtml = '';
+    if (buttons && buttons.length > 0) {
+        buttonsHtml = `<div class="p-4 border-t border-gray-200 dark:border-white/5 flex justify-end gap-2 rounded-b-2xl">`;
+        buttons.forEach((btn, idx) => {
+            buttonsHtml += `<button id="${modalId}_btn_${idx}" class="px-4 py-2 rounded-xl text-sm font-bold shadow-sm transition ${btn.class || 'bg-gray-200 text-gray-800 hover:bg-gray-300 dark:bg-gray-700 dark:text-white dark:hover:bg-gray-600'}">${btn.text}</button>`;
+        });
+        buttonsHtml += `</div>`;
+    }
+
+    modal.innerHTML = `
+        <div class="bg-white dark:bg-gray-800 border border-white/20 dark:border-white/10 rounded-2xl shadow-2xl w-full max-w-md relative flex flex-col" style="transition: opacity 0.2s ease-out, transform 0.2s ease-out;">
+            <div class="p-4 border-b border-gray-200 dark:border-white/5 flex justify-between items-center rounded-t-2xl">
+                <h3 class="text-lg font-bold text-gray-900 dark:text-white">${title || ''}</h3>
+                <button id="${modalId}_close_btn" class="text-gray-400 hover:text-gray-600 dark:hover:text-white transition p-1">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                </button>
+            </div>
+            <div class="p-5 text-sm text-gray-700 dark:text-gray-300">
+                ${content || ''}
+            </div>
+            ${buttonsHtml}
+        </div>
+    `;
+    
+    document.body.appendChild(modal);
+    
+    const closeBtn = document.getElementById(`${modalId}_close_btn`);
+    if (closeBtn) {
+        closeBtn.onclick = () => window.closeDynamicModal(modalId);
+    }
+    
+    if (buttons && buttons.length > 0) {
+        buttons.forEach((btn, idx) => {
+            const btnEl = document.getElementById(`${modalId}_btn_${idx}`);
+            if (btnEl) {
+                btnEl.onclick = () => {
+                    if (btn.onClick) btn.onClick();
+                    if (btn.close) window.closeDynamicModal(modalId);
+                };
+            }
+        });
+    }
+    
+    if (typeof animateModalOpen === 'function') {
+        animateModalOpen(modal);
+    } else {
+        modal.classList.remove('hidden');
+        modal.classList.add('flex');
+    }
+};
+
+window.closeDynamicModal = function(id) {
+    const modal = document.getElementById(id);
+    if (modal) {
+        if (typeof animateModalClose === 'function') {
+            animateModalClose(modal);
+            setTimeout(() => {
+                if (modal.parentNode) modal.parentNode.removeChild(modal);
+            }, 300);
+        } else {
+            if (modal.parentNode) modal.parentNode.removeChild(modal);
+        }
+    }
+};
