@@ -23,8 +23,10 @@ from core.keyboards import (
     get_back_keyboard,
     get_node_services_keyboard,
     get_node_service_actions_keyboard,
+    get_node_billing_keyboard,
 )
 from core.utils import build_node_uptime_report, format_uptime
+import aiohttp
 
 BUTTON_KEY = "btn_nodes"
 AGENT_START_TIME = time.time()
@@ -35,6 +37,11 @@ class AddNodeStates(StatesGroup):
 
 class RenameNodeStates(StatesGroup):
     waiting_for_new_name = State()
+
+
+class NodeBillingStates(StatesGroup):
+    waiting_for_amount = State()
+    waiting_for_date_shift = State()
 
 
 def get_button() -> KeyboardButton:
@@ -56,6 +63,12 @@ def register_handlers(dp: Dispatcher):
     dp.callback_query(F.data.startswith("nsd_"))(cq_node_service_detail)
     dp.callback_query(F.data.startswith("nsa_"))(cq_node_service_action)
     dp.callback_query(F.data.startswith("node_cmd_"))(cq_node_command)
+    dp.callback_query(F.data.startswith("node_billing_"))(cq_node_billing)
+    dp.callback_query(F.data.startswith("billing_change_amount_"))(cq_billing_change_amount)
+    dp.callback_query(F.data.startswith("billing_shift_date_"))(cq_billing_shift_date)
+    dp.callback_query(F.data.startswith("billing_toggle_reminder_"))(cq_billing_toggle_reminder)
+    dp.message(StateFilter(NodeBillingStates.waiting_for_amount))(process_billing_amount)
+    dp.message(StateFilter(NodeBillingStates.waiting_for_date_shift))(process_billing_date_shift)
 
 
 def start_background_tasks(bot: Bot) -> list[asyncio.Task]:
@@ -66,7 +79,10 @@ def start_background_tasks(bot: Bot) -> list[asyncio.Task]:
     task_speedtest = asyncio.create_task(
         node_speedtest_progress_task(bot), name="NodesSpeedtestScheduler"
     )
-    return [task_monitor, task_traffic, task_speedtest]
+    task_billing = asyncio.create_task(
+        billing_reminders_task(bot), name="NodesBillingReminders"
+    )
+    return [task_monitor, task_traffic, task_speedtest, task_billing]
 
 
 async def _prepare_nodes_data():
@@ -939,3 +955,143 @@ async def cq_node_service_action(callback: types.CallbackQuery):
     # Wait a bit then refresh services list
     await asyncio.sleep(3)
     await cq_node_services(callback)
+
+
+async def cq_node_billing(callback: types.CallbackQuery):
+    user_id = callback.from_user.id
+    if user_id != config.ADMIN_USER_ID:
+        await callback.answer(_("access_denied_generic", get_user_lang(user_id)), show_alert=True)
+        return
+    token = callback.data.split("_")[2]
+    node = await nodes_db.get_node_by_token(token)
+    if not node:
+        await callback.answer("Node not found", show_alert=True)
+        return
+    
+    lang = get_user_lang(user_id)
+    keyboard = get_node_billing_keyboard(token, node, lang)
+    
+    provider = node.get("provider_name") or "Unknown"
+    amount = node.get("billing_amount") or 0.0
+    currency = node.get("currency") or "$"
+    date = node.get("next_payment_date")
+    date_str = date.strftime("%Y-%m-%d %H:%M") if date else "Not set"
+    
+    text = _("billing_notification", lang, node_name=node.get("name"), provider=provider, amount=amount, currency=currency, date=date_str)
+    
+    await callback.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
+
+async def cq_billing_change_amount(callback: types.CallbackQuery, state: FSMContext):
+    user_id = callback.from_user.id
+    lang = get_user_lang(user_id)
+    token = callback.data.split("_")[3]
+    await state.set_state(NodeBillingStates.waiting_for_amount)
+    await state.update_data(billing_token=token)
+    await callback.message.answer(_("billing_prompt_amount", lang))
+    await callback.answer()
+
+async def process_billing_amount(message: types.Message, state: FSMContext):
+    user_id = message.from_user.id
+    lang = get_user_lang(user_id)
+    data = await state.get_data()
+    token = data.get("billing_token")
+    if not token:
+        await state.clear()
+        return
+    try:
+        amount = float(message.text.replace(",", "."))
+    except ValueError:
+        await message.answer("Invalid format. Please enter a number.")
+        return
+    
+    t_hash = nodes_db._get_token_hash(token)
+    node_obj = await nodes_db.Node.get_or_none(token_hash=t_hash)
+    if node_obj:
+        node_obj.billing_amount = amount
+        await node_obj.save()
+        await message.answer("Amount saved!")
+    await state.clear()
+
+async def cq_billing_shift_date(callback: types.CallbackQuery, state: FSMContext):
+    user_id = callback.from_user.id
+    lang = get_user_lang(user_id)
+    token = callback.data.split("_")[3]
+    await state.set_state(NodeBillingStates.waiting_for_date_shift)
+    await state.update_data(billing_token=token)
+    await callback.message.answer(_("billing_prompt_date_shift", lang))
+    await callback.answer()
+
+async def process_billing_date_shift(message: types.Message, state: FSMContext):
+    user_id = message.from_user.id
+    lang = get_user_lang(user_id)
+    data = await state.get_data()
+    token = data.get("billing_token")
+    if not token:
+        await state.clear()
+        return
+    try:
+        days = int(message.text)
+    except ValueError:
+        await message.answer("Invalid format. Please enter a number of days.")
+        return
+    
+    t_hash = nodes_db._get_token_hash(token)
+    node_obj = await nodes_db.Node.get_or_none(token_hash=t_hash)
+    if node_obj:
+        import datetime
+        current_date = node_obj.next_payment_date or datetime.datetime.now(datetime.timezone.utc)
+        node_obj.next_payment_date = current_date + datetime.timedelta(days=days)
+        await node_obj.save()
+        await message.answer("Date shifted!")
+    await state.clear()
+
+async def cq_billing_toggle_reminder(callback: types.CallbackQuery):
+    token = callback.data.split("_")[3]
+    t_hash = nodes_db._get_token_hash(token)
+    node_obj = await nodes_db.Node.get_or_none(token_hash=t_hash)
+    if node_obj:
+        node_obj.reminder_enabled = not node_obj.reminder_enabled
+        await node_obj.save()
+        await cq_node_billing(callback)
+    else:
+        await callback.answer("Node not found")
+
+async def billing_reminders_task(bot: Bot):
+    await asyncio.sleep(10)
+    while True:
+        try:
+            nodes = await nodes_db.Node.all()
+            for node_obj in nodes:
+                if not node_obj.provider_name and node_obj.ip and node_obj.ip != "Unknown":
+                    try:
+                        async with aiohttp.ClientSession() as session:
+                            async with session.get(f"http://ip-api.com/json/{node_obj.ip}") as resp:
+                                if resp.status == 200:
+                                    data = await resp.json()
+                                    isp = data.get("isp") or data.get("org")
+                                    if isp:
+                                        node_obj.provider_name = isp
+                                        node_obj.is_cloud = True
+                                        await node_obj.save()
+                    except Exception as e:
+                        logging.error(f"Error detecting provider for {node_obj.ip}: {e}")
+                
+                if node_obj.reminder_enabled and node_obj.next_payment_date:
+                    import datetime
+                    now = datetime.datetime.now(datetime.timezone.utc)
+                    if node_obj.next_payment_date.tzinfo is None:
+                        payment_date = node_obj.next_payment_date.replace(tzinfo=datetime.timezone.utc)
+                    else:
+                        payment_date = node_obj.next_payment_date
+                    delta = payment_date - now
+                    if datetime.timedelta(0) < delta <= datetime.timedelta(days=3):
+                        lang = get_user_lang(config.ADMIN_USER_ID)
+                        date_str = payment_date.strftime("%Y-%m-%d %H:%M")
+                        text = _("billing_notification", lang, node_name=node_obj.name, provider=node_obj.provider_name, amount=node_obj.billing_amount, currency=node_obj.currency, date=date_str)
+                        await send_alert(bot, text)
+                        node_obj.reminder_enabled = False
+                        await node_obj.save()
+        except Exception as e:
+            logging.error(f"Billing reminders task error: {e}")
+        
+        await asyncio.sleep(86400)
