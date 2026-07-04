@@ -963,7 +963,11 @@ async def cq_node_billing(callback: types.CallbackQuery):
         await callback.answer(_("access_denied_generic", get_user_lang(user_id)), show_alert=True)
         return
     token = callback.data.split("_")[2]
-    node = await nodes_db.get_node_by_token(token)
+    try:
+        node = await nodes_db.get_node_by_token(token)
+    except Exception:
+        await callback.answer("Database schema is outdated. Please restart the bot.", show_alert=True)
+        return
     if not node:
         await callback.answer("Node not found", show_alert=True)
         return
@@ -975,11 +979,12 @@ async def cq_node_billing(callback: types.CallbackQuery):
     amount = node.get("billing_amount") or 0.0
     currency = node.get("currency") or "$"
     date = node.get("next_payment_date")
-    date_str = date.strftime("%Y-%m-%d %H:%M") if date else "Not set"
+    date_str = date.strftime("%Y-%m-%d %H:%M") if date else _("billing_date_not_set", lang)
     
     text = _("billing_notification", lang, node_name=node.get("name"), provider=provider, amount=amount, currency=currency, date=date_str)
     
     await callback.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
+    await callback.answer()
 
 async def cq_billing_change_amount(callback: types.CallbackQuery, state: FSMContext):
     user_id = callback.from_user.id
