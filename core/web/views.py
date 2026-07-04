@@ -295,6 +295,10 @@ async def handle_dashboard(request: web.Request) -> web.StreamResponse:
                 "token": encrypt_for_web(token),
                 "name": node.get("name", "Unknown"),
                 "ip": encrypt_for_web(node.get("ip", "Unknown")),
+                "billing_amount": node.get("billing_amount"),
+                "currency": node.get("currency", "$"),
+                "next_payment_date": node.get("next_payment_date").isoformat() if hasattr(node.get("next_payment_date"), "isoformat") else str(node.get("next_payment_date")) if node.get("next_payment_date") else None,
+                "provider_name": node.get("provider_name", "Unknown")
             }
             for token, node in all_nodes.items()
         ]
@@ -308,8 +312,13 @@ async def handle_dashboard(request: web.Request) -> web.StreamResponse:
 
     from modules import traffic as traffic_module
     can_reset = traffic_module.can_reset_traffic() and is_main_admin
+    
+    from core.config import get_bot_config
+    mb_config = await get_bot_config("master_billing") or {}
+    master_billing_json = json.dumps(mb_config)
 
     context = {
+        "master_billing_json": master_billing_json,
         "web_title": page_title,
         "web_favicon": web_meta.get("favicon", "/static/favicon.ico"),
         "web_meta_desc": web_meta.get("description", ""),
@@ -419,6 +428,13 @@ async def handle_dashboard(request: web.Request) -> web.StreamResponse:
             "web_notif_source_node": _("web_notif_source_node", lang),
             "web_clear_notifications": _("web_clear_notifications", lang),
             "web_notifications_cleared": _("web_notifications_cleared", lang),
+            "web_billing_modal_title": _("web_billing_modal_title", lang),
+            "web_billing_amount": _("web_billing_amount", lang),
+            "web_billing_date": _("web_billing_date", lang),
+            "web_billing_days_left": _("web_billing_days_left", lang),
+            "web_billing_expired": _("web_billing_expired", lang),
+            "web_billing_not_set": _("web_billing_not_set", lang),
+            "web_billing_bot_hint": _("web_billing_bot_hint", lang),
             "modal_title_alert": _("modal_title_alert", lang),
             "modal_title_confirm": _("modal_title_confirm", lang),
             "web_clear_notif_confirm": _("web_clear_notifications", lang) + "?",
@@ -763,6 +779,10 @@ async def handle_settings_page(request: web.Request) -> web.StreamResponse:
                 "name": node.get("name", "Unknown"),
                 "ip": encrypt_for_web(node.get("ip", "Unknown")),
                 "reminder_enabled": node.get("reminder_enabled", False),
+                "billing_amount": node.get("billing_amount"),
+                "currency": node.get("currency", "$"),
+                "next_payment_date": node.get("next_payment_date").isoformat() if hasattr(node.get("next_payment_date"), "isoformat") else str(node.get("next_payment_date")) if node.get("next_payment_date") else None,
+                "provider_name": node.get("provider_name", "Unknown")
             }
             for token, node in all_nodes.items()
         ]
@@ -886,6 +906,13 @@ async def handle_settings_page(request: web.Request) -> web.StreamResponse:
         "web_node_delete_confirm": _("web_node_delete_confirm", lang),
         "modal_title_info": _("modal_title_info", lang),
         "notif_node_settings_title": _("web_notif_node_settings_title", lang),
+        "web_billing_modal_title": _("web_billing_modal_title", lang),
+        "web_billing_amount": _("web_billing_amount", lang),
+        "web_billing_date": _("web_billing_date", lang),
+        "web_billing_days_left": _("web_billing_days_left", lang),
+        "web_billing_expired": _("web_billing_expired", lang),
+        "web_billing_not_set": _("web_billing_not_set", lang),
+        "web_billing_bot_hint": _("web_billing_bot_hint", lang),
     }
     for btn_key, conf_key in BTN_CONFIG_MAP.items():
         i18n_data[f"lbl_{conf_key}"] = _(btn_key, lang)
@@ -931,6 +958,7 @@ async def handle_settings_page(request: web.Request) -> web.StreamResponse:
         "user_avatar": _get_avatar_html(user),
         "users_data_json": users_json,
         "nodes_data_json": nodes_json,
+        "master_billing_json": json.dumps(mb_config),
         "keyboard_config_json": keyboard_config_json,
         "val_cpu": str(current_config.CPU_THRESHOLD),
         "val_ram": str(current_config.RAM_THRESHOLD),

@@ -597,6 +597,9 @@ async def handle_sse_node_details(request: web.Request) -> web.StreamResponse:
                     "is_restarting": is_restarting,
                     "status": status,
                     "availability": get_node_uptime_snapshot(node, lang, current_config.NODE_OFFLINE_TIMEOUT, time.time()),
+                    "billing_amount": node.get("billing_amount"),
+                    "currency": node.get("currency", "$"),
+                    "next_payment_date": node.get("next_payment_date").isoformat() if hasattr(node.get("next_payment_date"), "isoformat") else str(node.get("next_payment_date")) if node.get("next_payment_date") else None,
                 }
                 try:
                     await _write_sse(response, "node_details", payload)

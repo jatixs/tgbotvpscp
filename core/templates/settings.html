@@ -21,6 +21,7 @@
         <script src="/static/js/theme_init.js?v={{ web_version }}"></script>
         <script>
         const I18N = {{ i18n_json | safe }};
+        const master_billing_json = {{ master_billing_json | safe | default('null') }};
         const USERS_DATA = {{ users_data_json | safe }};
         const NODES_DATA = {{ nodes_data_json | safe }};
         window.HAS_ACTIVE_NODES = {{ val_has_active_nodes }};
@@ -59,7 +60,7 @@
                     <span class="font-bold text-lg whitespace-nowrap truncate">{{ web_settings_page_title }}</span>
                 </div>
                 <div class="flex items-center gap-1 sm:gap-4 shrink-0">
-
+                    <div id="headerBillingContainer"></div>
                     <div class="relative group">
                         <button id="notifBtn"
                                 class="notif-btn flex items-center justify-center w-8 h-8 rounded-lg hover:bg-black/5 dark:hover:bg-white/10 transition text-gray-600 dark:text-gray-400">
