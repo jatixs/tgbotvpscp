@@ -99,8 +99,12 @@ class CallbackTTLMiddleware(BaseMiddleware):
             now = datetime.now(timezone.utc)
             # Use edit_date if available so the timer resets on every menu update!
             msg_date = event.message.edit_date or event.message.date
-            if msg_date.tzinfo is None:
+            
+            if isinstance(msg_date, int) or isinstance(msg_date, float):
+                msg_date = datetime.fromtimestamp(msg_date, tz=timezone.utc)
+            elif msg_date.tzinfo is None:
                 msg_date = msg_date.replace(tzinfo=timezone.utc)
+                
             if (now - msg_date).total_seconds() > 30:
                 lang = get_user_lang(event.from_user.id)
                 try:

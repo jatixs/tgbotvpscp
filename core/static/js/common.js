@@ -2005,3 +2005,128 @@ window.toggleA11yMode = toggleA11yMode;
 document.addEventListener('app:action:toggle-perf-mode', () => togglePerfMode());
 document.addEventListener('app:action:toggle-a11y-mode', () => toggleA11yMode());
 
+// --- Billing UI Logic ---
+
+window.calculateDaysLeft = function(isoDateString) {
+    if (!isoDateString) return null;
+    const targetDate = new Date(isoDateString);
+    if (isNaN(targetDate)) return null;
+    const now = new Date();
+    const diffMs = targetDate - now;
+    const days = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+    return days;
+};
+
+window.getBillingBadgeHtml = function(daysLeft) {
+    if (daysLeft === null) return '';
+    let badgeClass = "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400";
+    if (daysLeft < 0) {
+        badgeClass = "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400";
+    } else if (daysLeft <= 3) {
+        badgeClass = "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400";
+    } else if (daysLeft <= 7) {
+        badgeClass = "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400";
+    }
+    const txt = daysLeft < 0 ? (I18N?.web_billing_expired || "Expired!") : `${daysLeft}d`;
+    return `<span class="px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider ml-1.5 shadow-sm border border-black/5 dark:border-white/5 ${badgeClass}">${txt}</span>`;
+};
+
+window.showBillingModal = function(name, amount, currency, dateStr, daysLeft) {
+    const title = I18N?.web_billing_modal_title || "Детали оплаты";
+    const amountLbl = I18N?.web_billing_amount || "Сумма к оплате:";
+    const dateLbl = I18N?.web_billing_date || "Дата оплаты:";
+    const hintText = I18N?.web_billing_bot_hint || "Управлять настройками оплаты можно в Telegram-боте.";
+    
+    let daysTxt = "";
+    if (daysLeft !== null) {
+        if (daysLeft < 0) {
+            daysTxt = I18N?.web_billing_expired || "Просрочено!";
+        } else {
+            daysTxt = (I18N?.web_billing_days_left || "Осталось дней: {days}").replace("{days}", daysLeft);
+        }
+    } else {
+        daysTxt = I18N?.web_billing_not_set || "Не установлена";
+    }
+    
+    const amountVal = amount !== null && amount !== undefined ? `${amount} ${currency}` : (I18N?.web_billing_not_set || "Не установлена");
+    const dateVal = dateStr ? new Date(dateStr).toLocaleDateString() : (I18N?.web_billing_not_set || "Не установлена");
+
+    const contentHtml = `
+        <div class="mb-4 text-center">
+            <h3 class="text-xl font-black text-gray-900 dark:text-white">${name}</h3>
+        </div>
+        <div class="bg-gray-50 dark:bg-black/20 rounded-xl p-4 space-y-3 border border-gray-100 dark:border-white/5 shadow-inner">
+            <div class="flex justify-between items-center border-b border-gray-200 dark:border-white/10 pb-2">
+                <span class="text-sm text-gray-500 dark:text-gray-400 font-medium">${amountLbl}</span>
+                <span class="text-sm font-bold text-gray-900 dark:text-white bg-white dark:bg-black/40 px-2 py-0.5 rounded shadow-sm border border-gray-100 dark:border-white/5">${amountVal}</span>
+            </div>
+            <div class="flex justify-between items-center border-b border-gray-200 dark:border-white/10 pb-2">
+                <span class="text-sm text-gray-500 dark:text-gray-400 font-medium">${dateLbl}</span>
+                <span class="text-sm font-bold text-gray-900 dark:text-white bg-white dark:bg-black/40 px-2 py-0.5 rounded shadow-sm border border-gray-100 dark:border-white/5">${dateVal}</span>
+            </div>
+            <div class="flex justify-between items-center">
+                <span class="text-sm text-gray-500 dark:text-gray-400 font-medium">Статус:</span>
+                ${window.getBillingBadgeHtml(daysLeft) || `<span class="text-xs text-gray-400 font-medium">${daysTxt}</span>`}
+            </div>
+        </div>
+        <div class="mt-5 p-3 rounded-xl bg-blue-50/50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800/30 flex gap-3 items-start">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-blue-500 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <p class="text-xs text-blue-800 dark:text-blue-300 leading-relaxed font-medium">${hintText}</p>
+        </div>
+    `;
+
+    showModal({
+        title: title,
+        content: contentHtml,
+        buttons: [
+            { text: I18N?.modal_btn_ok || "OK", class: "btn-primary w-full", close: true }
+        ]
+    });
+};
+
+window.renderHeaderBilling = function() {
+    if (typeof master_billing_json === 'undefined' || !master_billing_json) return;
+    const container = document.getElementById('headerBillingContainer');
+    if (!container) return;
+    
+    let isSet = master_billing_json.amount !== null && master_billing_json.amount !== undefined;
+    let daysLeft = null;
+    
+    if (master_billing_json.next_payment_date) {
+        daysLeft = calculateDaysLeft(master_billing_json.next_payment_date);
+    }
+    
+    // Only show the header icon if billing is enabled or data exists.
+    if (!isSet && !master_billing_json.next_payment_date) return;
+    
+    let btnHtml = `
+        <button class="flex items-center justify-center h-8 px-2 sm:px-3 rounded-lg hover:bg-black/5 dark:hover:bg-white/10 transition text-gray-600 dark:text-gray-400 font-medium text-xs sm:text-sm gap-1 whitespace-nowrap group"
+                title="${I18N?.web_billing_modal_title || 'Детали оплаты'}">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-gray-500 group-hover:text-blue-500 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+            </svg>
+            ${getBillingBadgeHtml(daysLeft)}
+        </button>
+    `;
+    container.innerHTML = DOMPurify.sanitize(btnHtml);
+    const badgeBtn = container.querySelector('button');
+    if (badgeBtn) {
+        badgeBtn.onclick = () => {
+            showBillingModal(
+                I18N?.master_server_name || "Мой сервер (Агент)",
+                master_billing_json.amount !== null && master_billing_json.amount !== undefined ? master_billing_json.amount : null,
+                master_billing_json.currency || '$',
+                master_billing_json.next_payment_date || null,
+                daysLeft
+            );
+        };
+    }
+};
+
+document.addEventListener('DOMContentLoaded', () => {
+    if (typeof renderHeaderBilling === 'function') {
+        renderHeaderBilling();
+    }
+});

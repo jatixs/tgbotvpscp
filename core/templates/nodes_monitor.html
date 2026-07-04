@@ -19,6 +19,7 @@
         <script>
         window.i18n = window.i18n || {};
         const I18N = {{ i18n_json | safe }};
+        const master_billing_json = {{ master_billing_json | safe | default('null') }};
         {{ user_role_js | safe }}
         window.USER_ROLE_LEVEL = {{ user_role_level }};
         window.GLOBAL_PING_MODE = "{{ val_ping_mode }}";
@@ -73,6 +74,7 @@
                     </button>
                     {% endif %}
                     {{ settings_btn | safe }}
+                    <div id="headerBillingContainer"></div>
                     <div class="relative group">
                         <button id="notifBtn"
                             class="notif-btn flex items-center justify-center w-8 h-8 rounded-lg hover:bg-black/5 dark:hover:bg-white/10 transition text-gray-600 dark:text-gray-400">
