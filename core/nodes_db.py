@@ -98,7 +98,37 @@ async def init_db():
     await Tortoise.init(config=TORTOISE_ORM)
     await Tortoise.generate_schemas()
     logging.info(f"ORM initialized. DB: {TORTOISE_ORM['connections']['default']}")
+    await _ensure_billing_columns()
     await _migrate_from_json_if_needed()
+
+
+async def _ensure_billing_columns():
+    """Add billing-related columns to the nodes table if they are missing."""
+    conn = Tortoise.get_connection("default")
+    try:
+        rows = await conn.execute_query("PRAGMA table_info(nodes)")
+        existing = {row["name"] for row in rows[1]} if rows[1] else set()
+    except Exception:
+        return
+
+    migrations = [
+        ("is_cloud", "BOOL NOT NULL DEFAULT 0"),
+        ("provider_name", "VARCHAR(100) NULL"),
+        ("next_payment_date", "TIMESTAMP NULL"),
+        ("billing_amount", "REAL NULL"),
+        ("currency", "VARCHAR(10) NOT NULL DEFAULT '$'"),
+        ("reminder_enabled", "BOOL NOT NULL DEFAULT 0"),
+    ]
+
+    for col_name, col_def in migrations:
+        if col_name not in existing:
+            try:
+                await conn.execute_query(
+                    f"ALTER TABLE nodes ADD COLUMN {col_name} {col_def}"
+                )
+                logging.info(f"✅ Added column '{col_name}' to nodes table.")
+            except Exception as e:
+                logging.warning(f"Column '{col_name}' migration skipped: {e}")
 
 
 async def _migrate_from_json_if_needed():
@@ -148,6 +178,12 @@ async def get_all_nodes():
             "stats": node.stats,
             "tasks": node.tasks,
             "history": node.history,
+            "provider_name": getattr(node, "provider_name", None),
+            "is_cloud": getattr(node, "is_cloud", False),
+            "billing_amount": getattr(node, "billing_amount", None),
+            "currency": getattr(node, "currency", "$"),
+            "next_payment_date": getattr(node, "next_payment_date", None),
+            "reminder_enabled": getattr(node, "reminder_enabled", False),
             **node.extra_state,
         }
     return result
@@ -166,6 +202,12 @@ async def get_node_by_token(token: str):
             "stats": node.stats,
             "tasks": node.tasks,
             "history": node.history,
+            "provider_name": getattr(node, "provider_name", None),
+            "is_cloud": getattr(node, "is_cloud", False),
+            "billing_amount": getattr(node, "billing_amount", None),
+            "currency": getattr(node, "currency", "$"),
+            "next_payment_date": getattr(node, "next_payment_date", None),
+            "reminder_enabled": getattr(node, "reminder_enabled", False),
         }
         return {**base, **node.extra_state}
     return None

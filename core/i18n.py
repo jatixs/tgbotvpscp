@@ -910,6 +910,7 @@ STRINGS = {
         "billing_notification": "⚠️ Напоминание об оплате! Сервер: {node_name} ({provider}). К оплате: {amount} {currency} до {date}.",
         "btn_billing": "💳 Биллинг",
         "billing_toggle_reminder": "Уведомления",
+        "billing_date_not_set": "Не установлена",
     },
 
     "en": {
@@ -1814,6 +1815,7 @@ STRINGS = {
         "billing_notification": "⚠️ Payment reminder! Server: {node_name} ({provider}). To pay: {amount} {currency} by {date}.",
         "btn_billing": "💳 Billing",
         "billing_toggle_reminder": "Reminders",
+        "billing_date_not_set": "Not set",
     },
 }
 
