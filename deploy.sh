@@ -665,7 +665,7 @@ ensure_env_variables() {
 }
 
 check_docker_deps() {
-    if ! command -v docker &> /dev/null; then curl -sSL https:
+    if ! command -v docker &> /dev/null; then curl -sSL https://get.docker.com -o /tmp/get-docker.sh; run_with_spinner "Установка Docker" sudo sh /tmp/get-docker.sh; fi
     if command -v docker-compose &> /dev/null; then sudo rm -f $(which docker-compose); fi
 }
 
