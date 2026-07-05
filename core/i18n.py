@@ -446,7 +446,7 @@ STRINGS = {
         "unit_hour_short": "ч",
         "unit_minute_short": "м",
         "unit_second_short": "с",
-        "start_support_message": 'Это open-source проект, автор проекта <a href="https:
+        "start_support_message": 'Это open-source проект, автор проекта <a href="https://t.me/faridshykhaliev">@faridshykhaliev</a>. При желании вы можете поддержать автора. Это мотивирует автора продолжать развивать проект.',
         "start_support_button": " ❤️ Поддержать разработчика",
         "web_add_user_prompt": "Введите Telegram ID пользователя:",
         "web_title": "Web-агент Бота",
