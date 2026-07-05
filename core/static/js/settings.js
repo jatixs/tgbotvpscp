@@ -1254,7 +1254,9 @@ function showNotifStatus(message, state = 'neutral', autoHideMs = 1800, scope = 
          innerHtml += '<span>' + message + '</span>';
     }
     
-    statusEl.innerHTML = DOMPurify.sanitize(innerHtml);
+    const fragment = DOMPurify.sanitize(innerHtml, { RETURN_DOM_FRAGMENT: true });
+    statusEl.textContent = '';
+    statusEl.appendChild(fragment);
     statusEl.classList.add('opacity-100', ...(stateClasses[state] || stateClasses.neutral));
 
     if (autoHideMs > 0) {

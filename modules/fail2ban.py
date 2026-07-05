@@ -42,9 +42,8 @@ async def fail2ban_handler(message: types.Message):
         return
     try:
         # Use grep to find Ban entries directly (not limited to last N lines)
-        cmd = f"grep -h 'fail2ban.actions' {shlex.quote(log_file)} 2>/dev/null | grep ' Ban '"
-        proc = await asyncio.create_subprocess_shell(
-            cmd,
+        proc = await asyncio.create_subprocess_exec(
+            "grep", " Ban ", str(log_file),
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )
