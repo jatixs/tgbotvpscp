@@ -5,11 +5,11 @@
 <h1 align="center">🤖 VPS Manager Telegram Bot</h1>
 
 <p align="center">
-  <b>v1.23.4</b> — профессиональная экосистема для мониторинга и управления серверной инфраструктурой<br>
+  <b>v1.24.0</b> — профессиональная экосистема для мониторинга и управления серверной инфраструктурой<br>
   (Systemd / Docker / API / WebUI / PWA / Multi-Node / Remote SSH / Backup Manager)<br><br>
 
-  <a href="https://github.com/jatixs/tgbotvpscp/releases/latest"><img src="https://img.shields.io/badge/version-v1.23.4-blue?style=flat-square" alt="Version 1.23.4"/></a>
-  <a href="https://github.com/jatixs/tgbotvpscp/releases/latest"><img src="https://img.shields.io/badge/build-81-purple?style=flat-square" alt="Build 81"/></a>
+  <a href="https://github.com/jatixs/tgbotvpscp/releases/latest"><img src="https://img.shields.io/badge/version-v1.24.0-blue?style=flat-square" alt="Version 1.24.0"/></a>
+  <a href="https://github.com/jatixs/tgbotvpscp/releases/latest"><img src="https://img.shields.io/badge/build-83-purple?style=flat-square" alt="Build 83"/></a>
   <a href="https://www.python.org/"><img src="https://img.shields.io/badge/python-3.10%2B-green?style=flat-square" alt="Python 3.10+"/></a>
   <a href="https://choosealicense.com/licenses/gpl-3.0/"><img src="https://img.shields.io/badge/license-GPL--3.0-lightgrey?style=flat-square" alt="License GPL-3.0"/></a>
   <a href="https://github.com/aiogram/aiogram"><img src="https://img.shields.io/badge/aiogram-3.x-orange?style=flat-square" alt="Aiogram 3.x"/></a>
@@ -57,72 +57,64 @@
 ## ⚡ Ключевые возможности
 
 ### 🚀 Производительность
-
 - ✅ **Полная асинхронность** — AsyncIO, aiohttp, aiosqlite
 - ✅ **Низкое потребление** — ~100MB RAM на агенте
 - ✅ **Кольцевые буферы** — оптимизация памяти через deque
-- ✅ **Memory Orchestrator** <sup>NEW</sup> — динамическая выгрузка неиспользуемых модулей
+- ✅ **Memory Orchestrator** — динамическая выгрузка неиспользуемых модулей
 
 ### 🖥 Мульти-серверное управление
-
 - ✅ **Неограниченное количество нод** — масштабируемая архитектура
-- ✅ **Real-time метрики** — CPU, RAM, Disk, Network
-- ✅ **Удаленное выполнение** — команды на любом сервере
-- ✅ **Оптимизация системы** <sup>NEW</sup> — интерактивный модуль настройки VPS (BBR, Swap, очистка кэша)
-- ✅ **Централизованный dashboard** — единая панель управления
+- ✅ **Real-time метрики** — CPU, RAM, Disk, Network (HTTP / ICMP ping)
+- ✅ **Web Terminal (VNC)** — безопасный SSH-доступ прямо из браузера
+- ✅ **Оптимизация системы** — интерактивный модуль настройки VPS (BBR, Swap, очистка кэша)
+
+### 💳 Система биллинга и аренды
+- ✅ **Учет платежей** — отслеживание стоимости аренды нод и мастер-сервера (€/$/₽)
+- ✅ **Умные напоминания** — автоматические алерты за 3 дня до конца оплаты
+- ✅ **Информативные бейджи** — отображение оставшихся дней до оплаты в WebUI
 
 ### 🤖 Умный Telegram-интерфейс
-
-- ✅ **Smart Cleanup** <sup>NEW</sup> — автоматическая очистка чата от команд пользователя и старых меню
-- ✅ **Защита от флуда** <sup>NEW</sup> — встроенный SpamThrottle для защиты Telegram API
+- ✅ **Smart Cleanup** — автоматическая очистка чата от команд и старых меню
+- ✅ **Защита от флуда** — встроенный SpamThrottle для защиты Telegram API
 - ✅ **Интерактивные виджеты** — меню с сохранением состояния (чекбоксы) и живыми таймерами
 
 ### 🛡️ Безопасность Enterprise-класса
-
 - ✅ **WAF** — защита от SQL Injection, XSS, Path Traversal
-- ✅ **Rate Limiting** — защита от DDoS (100 req/min)
-- ✅ **Brute-force Protection** — автоблокировка после 5 попыток
+- ✅ **Rate Limiting & Brute-force Protection** — защита от DDoS и подбора паролей
 - ✅ **Audit Logging** — детальные логи всех событий
-- ✅ **E2E Encryption** — Fernet + XOR шифрование
-- ✅ **RBAC** — роли Root/Admin/User
+- ✅ **Шифрование данных** — Fernet (AES) + XOR + Argon2 для паролей
+- ✅ **DOMPurify** — строгая фильтрация контента на стороне клиента
 
 ### 🎨 Современный веб-интерфейс
-
-- ✅ **PWA** — работает как нативное приложение
-- ✅ **SSE (Server-Sent Events)** — обновления без перезагрузки
-- ✅ **Темная тема** — автоматическое переключение
+- ✅ **PWA** — работает как нативное приложение (поддержка iOS / Android)
+- ✅ **SSE (Server-Sent Events)** — обновления графиков и логов без перезагрузки
+- ✅ **AMOLED & Темная тема** — автоматическое переключение
 - ✅ **Адаптивный дизайн** — Mobile-first подход
-- ✅ **Графики в реальном времени** — Chart.js визуализация
-- ✅ **Drag & Drop** <sup>NEW</sup> — ручная и автоматическая сортировка серверов
-- ✅ **Умные алерты** <sup>NEW</sup> — визуальные предупреждения о критических нагрузках
+- ✅ **Drag & Drop** — ручная и автоматическая сортировка серверов
 
 ### ⚙️ Менеджер сервисов 
-
 - ✅ **Real-time статус** — все systemd сервисы
-- ✅ **SSE стриминг** — обновления каждые 5 секунд
-- ✅ **Start/Stop/Restart** — управление одной кнопкой
-- ✅ **Зашифрованное хранилище** — персистентная конфигурация
+- ✅ **Управление в 1 клик** — Start / Stop / Restart
 - ✅ **Детальная информация** — логи, uptime, PID
 
-### 🔔 Умные уведомления
+### 📦 Менеджер бэкапов и обновлений
+- ✅ **Автоматические бэкапы** — резервное копирование трафика и конфигов по таймеру
+- ✅ **Smart Update** — автоматическое обновление бота и системы напрямую из Telegram
+- ✅ **Автоматические миграции БД** — через \erich\, без потери данных
 
+### 🔔 Умные уведомления
 - ✅ **Настраиваемые пороги** — CPU/RAM/Disk по выбору
-- ✅ **Глобальные и индивидуальные** — для агента и каждой ноды
-- ✅ **Даунтайм алерты** — нода недоступна > 60 сек
-- ✅ **SSH мониторинг** — уведомления о входах
-- ✅ **Fail2Ban интеграция** — блокировка IP
+- ✅ **Даунтайм алерты** — интеллектуальное определение недоступности серверов
+- ✅ **SSH мониторинг** — уведомления о входах (в том числе по SSH-ключам)
+- ✅ **Fail2Ban интеграция** — автоматическая блокировка подозрительных IP
 
 ### 🌐 Интернационализация
-
 - ✅ **Русский язык** — полная локализация
 - ✅ **English** — complete translation
-- ✅ **Переключение на лету** — без перезапуска
+- ✅ **Переключение на лету** — без перезапуска бота
 
 ### 🐳 Docker & DevOps
-
-- ✅ **Docker Compose** — простой деплой
-- ✅ **Два режима** — Root (полный доступ) / Secure (изоляция)
-- ✅ **Автообновление** — git pull + restart
+- ✅ **Docker Compose** — простой деплой (Secure и Root режимы)
 - ✅ **Watchdog** — автоперезапуск при сбое
 - ✅ **Health checks** — мониторинг состояния
 
@@ -615,7 +607,7 @@ python bot.py
 ---
 
 <p align="center">
-  <b>Версия:</b> 1.23.4 (Build 81)<br>
+  <b>Версия:</b> 1.24.0 (Build 83)<br>
   <b>Лицензия:</b> GPL-3.0 license<br>
   <b>Статус:</b> Релиз<br>
   <br>

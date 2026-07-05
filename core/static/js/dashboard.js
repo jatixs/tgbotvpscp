@@ -1,3 +1,7 @@
+/**
+ * Логика главной страницы дашборда.
+ * Обработка карточек нод, сортировки (Drag-and-Drop) и модальных окон детализации.
+ */
 /* /core/static/js/dashboard.js */
 
 // Keyboard layout conversion (RU <-> EN)
@@ -102,12 +106,11 @@ function initScrollAnimations() {
         entries.forEach(entry => {
             if (entry.isIntersecting) {
                 entry.target.classList.add('is-visible');
-                obs.unobserve(entry.target); // Анимируем только один раз
+                obs.unobserve(entry.target);
             }
         });
     }, observerOptions);
 
-    // ИСПРАВЛЕНИЕ: Выбираем только невидимые блоки, чтобы избежать повторной анимации
     const blocks = document.querySelectorAll('.lazy-block:not(.is-visible)');
     blocks.forEach(block => {
         observer.observe(block);
@@ -118,7 +121,6 @@ window.initDashboard = function () {
     cleanupDashboardSources();
     nodesFirstUpdateReceived = false;  // Reset flag on dashboard init
 
-    // Запускаем анимацию блоков
     initScrollAnimations();
 
     if (window.sseSource) {
@@ -139,7 +141,6 @@ window.initDashboard = function () {
             });
         }
 
-        // Lazy Load для списка узлов (Infinite Scroll)
         const listContainer = document.getElementById('nodesList');
         if (listContainer) {
             listContainer.onscroll = function () {
@@ -192,7 +193,6 @@ document.addEventListener("DOMContentLoaded", () => {
     if (document.getElementById('agentChart') || document.getElementById('nodesList')) {
         window.initDashboard();
     } else {
-        // Даже если нет графиков (например, пустая страница), пробуем запустить анимации
         initScrollAnimations();
     }
 });
@@ -312,7 +312,6 @@ function updateNodesListUI(data) {
             newList = allNodesData;
         }
 
-        // Применяем сортировку
         const sortSelect = document.getElementById('nodeSortSelect');
         const sortMode = sortSelect ? sortSelect.value : (localStorage.getItem('dashboardSortMode') || 'custom');
         if (sortSelect && sortSelect.value !== sortMode) {
@@ -462,7 +461,6 @@ function filterAndRenderNodes() {
         newList = allNodesData;
     }
 
-    // Применяем сортировку
     const sortSelect = document.getElementById('nodeSortSelect');
     const sortMode = sortSelect ? sortSelect.value : (localStorage.getItem('dashboardSortMode') || 'custom');
     if (sortMode === 'ping') {
@@ -534,7 +532,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
 function updateNodesScrollMode(container, count) {
     if (count > 3) {
-        // На мобильных карточки выше (flex-col), нужен больший лимит
         const w = window.innerWidth;
         const maxH = w < 640 ? '500px' : w < 1024 ? '420px' : '320px';
         container.style.maxHeight = maxH;
@@ -565,7 +562,6 @@ function renderNodesList() {
     updateNodesScrollMode(container, currentRenderList.length);
     renderNextNodeBatch();
     
-    // Инициализация Drag and Drop
     if (typeof Sortable !== 'undefined') {
         const sortMode = localStorage.getItem('dashboardSortMode') || 'custom';
         if (window.dashboardSortable) {
@@ -578,7 +574,6 @@ function renderNodesList() {
             onEnd: function () {
                 const newOrder = Array.from(container.querySelectorAll('[data-token]')).map(el => el.getAttribute('data-token'));
                 localStorage.setItem('dashboardNodeOrder', JSON.stringify(newOrder));
-                // Обновляем currentRenderList чтобы избежать мерцания при следующем SSE
                 const orderMap = {};
                 newOrder.forEach((t, i) => orderMap[t] = i);
                 currentRenderList.sort((a, b) => {
@@ -1466,6 +1461,45 @@ function updateNodeDetailsUI(data) {
         if (!updateDOM(titleEl, tempTitle)) {
             titleEl.innerHTML = DOMPurify.sanitize(newTitleHtml);
         }
+        if (typeof parsePageEmojis === 'function') parsePageEmojis(titleEl);
+        
+        const nameContainer = document.getElementById('nodeNameContainer');
+        if (nameContainer) {
+            let badgeEl = document.getElementById('nodeBillingBadge');
+            if (!badgeEl) {
+                badgeEl = document.createElement('div');
+                badgeEl.id = 'nodeBillingBadge';
+                nameContainer.appendChild(badgeEl);
+            }
+            const isSet = data.billing_amount !== null && data.billing_amount !== undefined;
+            if (isSet || data.next_payment_date) {
+                const daysLeft = window.calculateDaysLeft ? window.calculateDaysLeft(data.next_payment_date) : null;
+                const billingIconColor = daysLeft === null ? 'text-gray-400' : daysLeft < 0 ? 'text-red-500 dark:text-red-400' : daysLeft <= 6 ? 'text-yellow-500 dark:text-yellow-400' : 'text-green-500 dark:text-green-400';
+                badgeEl.innerHTML = DOMPurify.sanitize(`
+                    <button class="flex items-center justify-center h-6 px-1.5 sm:px-2 rounded-lg hover:bg-black/5 dark:hover:bg-white/10 transition text-gray-600 dark:text-gray-400 font-medium text-[10px] sm:text-xs gap-1 whitespace-nowrap group ml-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 ${billingIconColor} transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+                        </svg>
+                        ${window.getBillingBadgeHtml ? window.getBillingBadgeHtml(daysLeft) : ''}
+                    </button>
+                `);
+                const badgeBtn = badgeEl.querySelector('button');
+                if (badgeBtn) {
+                    badgeBtn.onclick = () => {
+                        window.showBillingModal(
+                            decryptData(data.name),
+                            data.billing_amount !== null && data.billing_amount !== undefined ? data.billing_amount : null,
+                            data.currency || '$',
+                            data.next_payment_date || null,
+                            daysLeft
+                        );
+                    };
+                }
+                badgeEl.style.display = 'block';
+            } else {
+                badgeEl.style.display = 'none';
+            }
+        }
     }
 
     const newIp = decryptData(data.ip);
@@ -1564,7 +1598,6 @@ window.startNodeRename = function () {
         nameDisplay.classList.add('hidden');
         nameInputContainer.classList.remove('hidden');
         nameInput.value = currentName;
-        // ИСПРАВЛЕНИЕ: preventScroll: true
         nameInput.focus({ preventScroll: true });
     }
 };
@@ -1870,59 +1903,9 @@ window.openAddNodeModal = function () {
         if (i) {
             setTimeout(() => {
                 i.focus({ preventScroll: true });
-            }, 150); // Чуть увеличили задержку для надежности на iOS
+            }, 150);
         }
     }
-};
-
-window.animateModalClose = function (modal) {
-    if (!modal) return;
-    const card = modal.firstElementChild;
-    if (card) {
-        card.style.opacity = '0';
-        card.style.transform = 'scale(0.95)';
-    }
-    if (typeof handleModalInputClick !== 'undefined') {
-        modal.removeEventListener('click', handleModalInputClick);
-    }
-
-    setTimeout(() => {
-        modal.classList.add('hidden');
-        modal.classList.remove('flex');
-        if (document.body.style.position === 'fixed') {
-            const scrollY = Math.abs(parseInt(document.body.style.top || '0'));
-            document.body.style.position = '';
-            document.body.style.top = '';
-            document.body.style.width = '';
-            document.body.style.overflow = '';
-
-            // 3. ВАЖНО: Отключаем плавную прокрутку на всем документе перед восстановлением
-            const html = document.documentElement;
-            const originalBehavior = html.style.scrollBehavior;
-            html.style.scrollBehavior = 'auto';
-
-            // 4. Мгновенно прыгаем на место
-            window.scrollTo(0, scrollY);
-
-            // 5. Возвращаем плавность (если была) через небольшой таймаут
-            setTimeout(() => {
-                html.style.scrollBehavior = originalBehavior;
-            }, 50);
-        } else {
-            document.body.style.overflow = '';
-        }
-        modal.style.height = '';
-        modal.style.top = '';
-        modal.style.paddingBottom = '';
-
-        modal.classList.remove('items-start', 'pt-4', 'overflow-y-auto');
-        modal.classList.add('items-center');
-
-        if (card) {
-            card.classList.add('my-auto');
-            card.style.marginBottom = '';
-        }
-    }, 200);
 };
 
 // --- Services Manager ---

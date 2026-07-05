@@ -6,9 +6,14 @@ import time
 
 
 class EncryptionOperationError(ValueError):
+    """Ошибки, возникающие при шифровании/дешифровании данных в БД."""
     pass
 
 class EncryptedTextField(fields.TextField):
+    """
+    Пользовательское поле Tortoise ORM для прозрачного шифрования текстовых данных.
+    Значения шифруются при записи в БД и расшифровываются при чтении.
+    """
 
     def to_db_value(self, value, instance):
         if value is None:
@@ -30,6 +35,10 @@ class EncryptedTextField(fields.TextField):
 
 
 class Node(models.Model):
+    """
+    Модель узла (сервера), подключенного к мастер-боту.
+    Содержит информацию о конфигурации, статистике потребления ресурсов и биллинге.
+    """
     id = fields.IntField(pk=True)
     token_hash = fields.CharField(max_length=64, unique=True, index=True)
     token_safe = EncryptedTextField()
@@ -41,6 +50,12 @@ class Node(models.Model):
     history = fields.JSONField(default=list)
     tasks = fields.JSONField(default=list)
     extra_state = fields.JSONField(default=dict)
+    is_cloud = fields.BooleanField(default=False)
+    provider_name = fields.CharField(max_length=100, null=True)
+    next_payment_date = fields.DatetimeField(null=True)
+    billing_amount = fields.FloatField(null=True)
+    currency = fields.CharField(max_length=10, default="$")
+    reminder_enabled = fields.BooleanField(default=False)
 
     class Meta:
         table = "nodes"

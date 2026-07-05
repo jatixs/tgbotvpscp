@@ -1,3 +1,7 @@
+"""
+REST API контроллеры для системных настроек.
+Обрабатывают изменение конфигурации панели, управление сессиями и аутентификацией.
+"""
 from __future__ import annotations
 
 import asyncio
@@ -149,7 +153,21 @@ async def handle_save_notifications(request: web.Request) -> web.StreamResponse:
             ALERTS_CONFIG[uid] = {}
 
         for key, value in data.items():
-            ALERTS_CONFIG[uid][key] = bool(value)
+            if key == "master_billing":
+                from core.config import get_bot_config, set_bot_config
+                mb = await get_bot_config("master_billing") or {}
+                mb["reminder_enabled"] = bool(value)
+                await set_bot_config("master_billing", mb)
+            elif key.startswith("node_") and key.endswith("_billing"):
+                token = key.replace("node_", "").replace("_billing", "")
+                from core.nodes_db import Node, _get_token_hash
+                t_hash = _get_token_hash(token)
+                node_obj = await Node.get_or_none(token_hash=t_hash)
+                if node_obj:
+                    node_obj.reminder_enabled = bool(value)
+                    await node_obj.save(update_fields=["reminder_enabled"])
+            else:
+                ALERTS_CONFIG[uid][key] = bool(value)
 
         await save_alerts_config_async()
         return web.json_response({"status": "ok"})
