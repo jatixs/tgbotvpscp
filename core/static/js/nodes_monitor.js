@@ -15,6 +15,7 @@ let modalNetChart = null;
 let nodesMonitorSSESource = null;
 let nodeDetailSSESource = null;
 let nodeServicesSSESource = null;
+let _lastServicesCache = null; // cached services for stable DOM updates
 
 function decryptData(text) {
     if (!text) return "";
@@ -42,8 +43,8 @@ function normalizeNode(node) {
         ...node,
         name: decryptedName,
         ip: decryptedIp,
-        ping: decryptedPing !== '' && decryptedPing != null && !Number.isNaN(Number(decryptedPing))
-            ? Number(decryptedPing)
+        ping: decryptedPing !== '' && decryptedPing != null
+            ? (decryptedPing === 'n/a' ? 'n/a' : Number(decryptedPing))
             : null,
         availability: node.availability || null,
     };
@@ -232,6 +233,32 @@ function initNodesMonitor() {
 window.initNodesMonitor = initNodesMonitor;
 window.toggleServicesDisplay = toggleServicesDisplay;
 
+// Wire service action buttons rendered inside the modal
+document.addEventListener('app:action:node-service-action', (e) => {
+    const el = e.detail?.target;
+    if (!el) return;
+    const token = el.dataset.token;
+    const name = el.dataset.name;
+    const cmd = el.dataset.cmd;
+    const type = el.dataset.type || 'systemd';
+    if (!token || !name || !cmd) return;
+
+    const cmdLabels = {
+        restart: I18N?.web_service_restart || 'restart',
+        stop:    I18N?.web_service_stop    || 'stop',
+        start:   I18N?.web_service_start   || 'start',
+    };
+    const actionLabel = cmdLabels[cmd] || cmd;
+
+    showConfirm(
+        I18N?.modal_title_confirm || 'Confirm',
+        (I18N?.web_service_confirm || 'Execute {action} for {name}?')
+            .replace('{action}', actionLabel.toLowerCase())
+            .replace('{name}', name),
+        () => nodeServiceAction(token, name, cmd, type)
+    );
+});
+
 // Initialize on page load
 document.addEventListener('DOMContentLoaded', () => {
     initNodesMonitor();
@@ -331,6 +358,7 @@ function renderNodes() {
 
 // Get ping badge CSS classes based on latency value
 function getPingBadgeClass(ping) {
+    if (ping === 'n/a' || Number.isNaN(Number(ping))) return 'bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400';
     if (ping < 50) return 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400';
     if (ping < 150) return 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400';
     return 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400';
@@ -383,7 +411,7 @@ function createNodeCard(node) {
                         <h3 class="font-bold text-gray-900 dark:text-white text-sm">${typeof replaceEmojisWithFlagsHTML === 'function' ? replaceEmojisWithFlagsHTML(escapeHtml(node.name)) : escapeHtml(node.name)}</h3>
                         <div class="flex items-center gap-1.5">
                             <span class="text-xs text-gray-500 dark:text-gray-400">${node.ip || '-'}</span>
-                            ${node.ping != null && !isNaN(node.ping) ? `<span class="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold ${getPingBadgeClass(node.ping)}">${parseFloat(node.ping)}ms</span>` : ''}
+                            ${node.ping != null ? (node.ping === 'n/a' ? `<span onclick="window.showPingErrorModal(event)" class="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold cursor-pointer hover:opacity-80 transition-opacity ${getPingBadgeClass(node.ping)}" title="Click for details">n/a</span>` : `<span class="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold ${getPingBadgeClass(node.ping)}">${parseFloat(node.ping)}ms</span>`) : ''}
                         </div>
                     </div>
                 </div>
@@ -686,6 +714,7 @@ function closeNodeDetailModal() {
         modal.classList.remove('flex');
     }
     currentNodeToken = null;
+    _lastServicesCache = null; // reset so next node gets a fresh render
 
     if (typeof window.hideAvailabilityPopover === 'function') window.hideAvailabilityPopover();
 
@@ -742,6 +771,42 @@ function updateNodeModal(data) {
     if (!updateDOM(modalTitleEl, tempTitle)) {
         modalTitleEl.innerHTML = DOMPurify.sanitize(newTitleHtml);
     }
+    if (typeof parsePageEmojis === 'function') parsePageEmojis(modalTitleEl);
+    
+    const nameContainer = modalTitleEl.parentElement;
+    if (nameContainer) {
+        const badgeEl = document.getElementById('monitorNodeBillingBadge');
+        if (badgeEl) {
+            const isSet = data.billing_amount !== null && data.billing_amount !== undefined;
+            if (isSet || data.next_payment_date) {
+                const daysLeft = window.calculateDaysLeft ? window.calculateDaysLeft(data.next_payment_date) : null;
+                const billingIconColor = daysLeft === null ? 'text-gray-400' : daysLeft < 0 ? 'text-red-500 dark:text-red-400' : daysLeft <= 6 ? 'text-yellow-500 dark:text-yellow-400' : 'text-green-500 dark:text-green-400';
+                badgeEl.innerHTML = DOMPurify.sanitize(`
+                    <button class="flex items-center h-5 px-1.5 rounded hover:bg-black/5 dark:hover:bg-white/10 transition text-gray-500 dark:text-gray-400 text-[10px] gap-1 whitespace-nowrap group">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5 ${billingIconColor} transition-colors flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+                        </svg>
+                        ${window.getBillingBadgeHtml ? window.getBillingBadgeHtml(daysLeft) : ''}
+                    </button>
+                `);
+                const badgeBtn = badgeEl.querySelector('button');
+                if (badgeBtn) {
+                    badgeBtn.onclick = () => {
+                        window.showBillingModal(
+                            decryptData(data.name) || 'Unknown',
+                            data.billing_amount !== null && data.billing_amount !== undefined ? data.billing_amount : null,
+                            data.currency || '$',
+                            data.next_payment_date || null,
+                            daysLeft
+                        );
+                    };
+                }
+                badgeEl.classList.remove('hidden');
+            } else {
+                badgeEl.classList.add('hidden');
+            }
+        }
+    }
     
     const newIp = decryptData(data.ip) || '-';
     const ipEl = document.getElementById('modalNodeIp');
@@ -751,9 +816,18 @@ function updateNodeModal(data) {
     const pingBadge = document.getElementById('modalNodePingBadge');
     const stats = data.stats || {};
     const pingValue = decryptData(stats.ping);
-    if (pingValue !== '' && pingValue != null && !isNaN(pingValue)) {
-        pingBadge.className = `inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold ${getPingBadgeClass(Number(pingValue))}`;
-        pingBadge.textContent = parseFloat(pingValue) + 'ms';
+    if (pingValue !== '' && pingValue != null) {
+        if (pingValue === 'n/a') {
+            pingBadge.className = `inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold cursor-pointer hover:opacity-80 transition-opacity ${getPingBadgeClass(pingValue)}`;
+            pingBadge.textContent = 'n/a';
+            pingBadge.onclick = window.showPingErrorModal;
+            pingBadge.title = "Click for details";
+        } else {
+            pingBadge.className = `inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold ${getPingBadgeClass(pingValue)}`;
+            pingBadge.textContent = parseFloat(pingValue) + 'ms';
+            pingBadge.onclick = null;
+            pingBadge.title = "";
+        }
     } else {
         pingBadge.className = 'hidden';
         pingBadge.textContent = '';
@@ -862,7 +936,6 @@ function updateModalCharts(history) {
     const tickColor = isDark ? '#9ca3af' : '#6b7280';
     const isMobile = window.innerWidth < 640;
 
-    // Градиенты точь-в-точь как в дашборде
     function getGradient(ctx, color) {
         const gradient = ctx.createLinearGradient(0, 0, 0, 400);
         gradient.addColorStop(0, color.replace('rgb', 'rgba').replace(')', ', 0.5)'));
@@ -875,14 +948,12 @@ function updateModalCharts(history) {
 
     const interactiveOptions = window.buildInteractiveChartOptions ? window.buildInteractiveChartOptions({}) : {};
 
-    // --- Обновление или создание графика ресурсов ---
     if (modalResChart) {
         const applyModalResChartData = () => {
             modalResChart.data.labels = labels;
             modalResChart.data.datasets[0].data = cpuData;
             modalResChart.data.datasets[1].data = ramData;
 
-            // Принудительно обновляем градиенты, чтобы они не пропадали
             modalResChart.data.datasets[0].backgroundColor = getGradient(resCtx, 'rgb(59, 130, 246)');
             modalResChart.data.datasets[1].backgroundColor = getGradient(resCtx, 'rgb(168, 85, 247)');
 
@@ -940,14 +1011,12 @@ function updateModalCharts(history) {
         if (window.attachChartInteractions) window.attachChartInteractions(modalResChart, 'modalResChart');
     }
     
-    // --- Обновление или создание графика сети ---
     if (modalNetChart) {
         const applyModalNetChartData = () => {
             modalNetChart.data.labels = labels;
             modalNetChart.data.datasets[0].data = rxData;
             modalNetChart.data.datasets[1].data = txData;
 
-            // Принудительно обновляем градиенты
             modalNetChart.data.datasets[0].backgroundColor = getGradient(netCtx, 'rgb(34, 197, 94)');
             modalNetChart.data.datasets[1].backgroundColor = getGradient(netCtx, 'rgb(239, 68, 68)');
 
@@ -1016,6 +1085,7 @@ function connectNodeServicesStream(token) {
     const container = document.getElementById('modalServicesContainer');
     if (container) {
         container.innerHTML = DOMPurify.sanitize(`<div class="text-center py-4 text-gray-400">${I18N?.web_services_loading || I18N?.web_loading || 'Loading'}</div>`);
+        _lastServicesCache = null; // force full re-render on next data event
     }
 
     nodeServicesSSESource = new EventSource(`/api/events/node/services?token=${encodeURIComponent(token)}`);
@@ -1055,7 +1125,9 @@ function connectNodeServicesStream(token) {
 function renderNodeServices(token, services) {
     const container = document.getElementById('modalServicesContainer');
     const btnContainer = document.getElementById('modalServicesToggle');
+
     if (services.length === 0) {
+        _lastServicesCache = null;
         container.innerHTML = DOMPurify.sanitize(`<div class="col-span-full text-center py-4 text-gray-400">${I18N?.web_services_empty || 'No services'}</div>`);
         if (btnContainer) btnContainer.classList.add('hidden');
         return;
@@ -1065,10 +1137,59 @@ function renderNodeServices(token, services) {
     const showAll = container.dataset.showAll === 'true';
     const displayServices = showAll ? services : services.slice(0, INITIAL_SHOW);
 
+    // Build a structural key: names + types must match for in-place update
+    const structureKey = displayServices.map(s => `${s.name}|${s.type}`).join(',');
+    const prevCache = _lastServicesCache;
+    const prevStructureKey = prevCache ? prevCache.structureKey : null;
+    const prevShowAll = prevCache ? prevCache.showAll : null;
+
+    if (structureKey === prevStructureKey && showAll === prevShowAll) {
+        // Structure unchanged — only patch status indicators and start/stop button in-place
+        const rows = container.querySelectorAll('[data-svc-name]');
+        rows.forEach(row => {
+            const svcName = row.dataset.svcName;
+            const svc = displayServices.find(s => s.name === svcName);
+            if (!svc) return;
+
+            const dot = row.querySelector('[data-svc-dot]');
+            if (dot) {
+                dot.className = svc.status === 'running' ? 'text-green-500' : 'text-red-500';
+            }
+
+            const toggleBtn = row.querySelector('[data-svc-toggle="true"]');
+            if (toggleBtn) {
+                const isRunning = svc.status === 'running';
+                const newCmd = isRunning ? 'stop' : 'start';
+                // Localized titles for the toggle button
+                const newTitle = isRunning
+                    ? (I18N?.web_service_stop || 'Stop')
+                    : (I18N?.web_service_start || 'Start');
+                // Hardcoded SVG paths — no user input, safe to set without DOMPurify
+                // (DOMPurify strips SVG stroke-* attributes in HTML context)
+                const iconStop = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 10a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z" />';
+                const iconStart = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />';
+
+                toggleBtn.dataset.cmd = newCmd;
+                toggleBtn.title = newTitle;
+                toggleBtn.className = `p-1 ${isRunning ? 'text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-500/20' : 'text-green-600 dark:text-green-400 hover:bg-green-100 dark:hover:bg-green-500/20'} rounded`;
+                const svg = toggleBtn.querySelector('svg');
+                // Direct innerHTML assignment — safe for hardcoded SVG paths
+                if (svg) svg.innerHTML = isRunning ? iconStop : iconStart;
+            }
+        });
+
+        // Update cache statuses
+        _lastServicesCache.statuses = displayServices.map(s => s.status);
+        return;
+    }
+
+    // Structure changed (new services, count changed, or showAll toggled) — full re-render
+    _lastServicesCache = { structureKey, showAll, statuses: displayServices.map(s => s.status) };
+
     container.innerHTML = DOMPurify.sanitize(displayServices.map(svc => `
-            <div class="flex items-center justify-between bg-white/50 dark:bg-black/30 p-2 rounded-lg">
+            <div class="flex items-center justify-between bg-white/50 dark:bg-black/30 p-2 rounded-lg" data-svc-name="${escapeHtml(svc.name)}">
                 <div class="flex items-center gap-2">
-                    <span class="${svc.status === 'running' ? 'text-green-500' : 'text-red-500'}">●</span>
+                    <span data-svc-dot="true" class="${svc.status === 'running' ? 'text-green-500' : 'text-red-500'}">●</span>
                     <span class="text-sm font-medium text-gray-700 dark:text-gray-300">${escapeHtml(svc.name)}</span>
                     ${svc.type === 'docker' ? '<span class="text-xs text-blue-500">🐳</span>' : ''}
                 </div>
@@ -1079,9 +1200,9 @@ function renderNodeServices(token, services) {
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                         </svg>
                     </button>
-                    <button data-action="node-service-action" data-token="${token}" data-name="${svc.name}" data-cmd="${svc.status === 'running' ? 'stop' : 'start'}" data-type="${svc.type || 'systemd'}" 
+                    <button data-svc-toggle="true" data-action="node-service-action" data-token="${token}" data-name="${svc.name}" data-cmd="${svc.status === 'running' ? 'stop' : 'start'}" data-type="${svc.type || 'systemd'}" 
                             class="p-1 ${svc.status === 'running' ? 'text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-500/20' : 'text-green-600 dark:text-green-400 hover:bg-green-100 dark:hover:bg-green-500/20'} rounded"
-                            title="${svc.status === 'running' ? 'Stop' : 'Start'}">
+                            title="${svc.status === 'running' ? (I18N?.web_service_stop || 'Stop') : (I18N?.web_service_start || 'Start')}">
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             ${svc.status === 'running' 
                                 ? '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 10a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z" />'
@@ -1328,6 +1449,42 @@ document.addEventListener('app:action:open-node-detail', e => {
 document.addEventListener('app:action:quick-reboot', e => {
     quickReboot(e.detail.target.getAttribute('data-token'));
 });
-document.addEventListener('app:action:node-service-action', e => {
-    nodeServiceAction(e.detail.target.getAttribute('data-token'), e.detail.target.getAttribute('data-name'), e.detail.target.getAttribute('data-cmd'), e.detail.target.getAttribute('data-type'));
-});
+// node-service-action is handled by the listener at the top of this file (with confirmation dialog)
+
+window.showPingErrorModal = function(event) {
+    if (event) {
+        event.stopPropagation();
+    }
+    const mode = window.GLOBAL_PING_MODE || "http";
+    const title = (typeof I18N !== 'undefined' && I18N.web_ping_error_title) ? I18N.web_ping_error_title : "Error: ping unavailable";
+    const desc = (typeof I18N !== 'undefined' && I18N.web_ping_error_desc) ? I18N.web_ping_error_desc : "The system could not measure network latency.";
+    const btnText = (typeof I18N !== 'undefined' && I18N.web_ping_how_to_fix_btn) ? I18N.web_ping_how_to_fix_btn : "How to fix?";
+    
+    let fixText = "";
+    if (mode === "tcp") {
+        fixText = (typeof I18N !== 'undefined' && I18N.web_ping_fix_tcp) ? I18N.web_ping_fix_tcp : "TCP mode selected. Check firewall for port 53 out.";
+    } else {
+        fixText = (typeof I18N !== 'undefined' && I18N.web_ping_fix_http) ? I18N.web_ping_fix_http : "HTTP mode selected. Check firewall for port 443 out.";
+    }
+
+    const htmlContent = `
+        <div class="text-sm text-gray-700 dark:text-gray-300 mb-4">${desc}</div>
+        <details class="group bg-gray-50 dark:bg-black/20 rounded-lg border border-gray-200 dark:border-white/10 overflow-hidden">
+            <summary class="px-4 py-3 cursor-pointer font-medium text-sm text-gray-900 dark:text-white flex items-center justify-between select-none">
+                ${btnText}
+                <svg class="w-4 h-4 transform transition-transform group-open:rotate-180 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                </svg>
+            </summary>
+            <div class="px-4 pb-4 pt-1 text-sm text-gray-600 dark:text-gray-400 border-t border-gray-100 dark:border-white/5">
+                ${fixText}
+            </div>
+        </details>
+    `;
+
+    if (window.showModalAlert) {
+        window.showModalAlert(htmlContent, title);
+    } else {
+        alert(title + "\\n\\n" + desc);
+    }
+};

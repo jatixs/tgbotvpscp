@@ -1,3 +1,7 @@
+"""
+Утилита миграции базы данных и конфигурации.
+Обеспечивает безопасное обновление схемы БД и шифрование данных при апгрейде.
+"""
 import os
 import json
 import logging
@@ -56,7 +60,7 @@ def migrate_file(filename: str):
     backup_path = os.path.join(CONFIG_DIR, f"{filename}.bak")
 
     if not os.path.exists(file_path):
-        return  # Файла нет, пропускаем
+        return
 
     try:
         with open(file_path, 'r', encoding='utf-8') as f:
@@ -71,7 +75,6 @@ def migrate_file(filename: str):
 
     logger.info(f"🔄 Миграция (шифрование) {filename}...")
 
-    # 1. Создаем бэкап
     try:
         shutil.copy2(file_path, backup_path)
         logger.info(f"   Бэкап создан: {filename}.bak")
@@ -79,13 +82,11 @@ def migrate_file(filename: str):
         logger.error(f"❌ Ошибка создания бэкапа для {filename}: {e}")
         return
 
-    # 2. Шифруем и перезаписываем
     try:
         save_encrypted(file_path, data)
         logger.info(f"   Файл {filename} успешно зашифрован.")
     except Exception as e:
         logger.error(f"❌ Ошибка шифрования {filename}: {e}")
-        # Восстанавливаем из бэкапа при ошибке
         if os.path.exists(backup_path):
             shutil.move(backup_path, file_path)
             logger.warning("   Файл восстановлен из бэкапа.")
@@ -105,7 +106,6 @@ def ensure_env_variables():
     
     logger.info("🔍 Проверка переменных окружения в .env...")
     
-    # Список обязательных переменных с дефолтными значениями
     required_vars = {
         "WEB_SERVER_HOST": "127.0.0.1",
         "WEB_SERVER_PORT": "8080",
@@ -116,7 +116,6 @@ def ensure_env_variables():
         "TG_BOT_NAME": "VPS Bot",
     }
     
-    # Опциональные переменные (добавляются с пустым значением)
     optional_vars = [
         "SENTRY_DSN",
         "TG_ADMIN_USERNAME",
@@ -139,14 +138,12 @@ def ensure_env_variables():
         changes_made = False
         lines_to_add = []
         
-        # Проверяем обязательные переменные
         for var_name, default_val in required_vars.items():
             if var_name not in existing_vars:
                 lines_to_add.append(f'{var_name}="{default_val}"')
                 logger.info(f"  + Добавлена переменная: {var_name}={default_val}")
                 changes_made = True
         
-        # Проверяем опциональные переменные
         for var_name in optional_vars:
             if var_name not in existing_vars:
                 lines_to_add.append(f'{var_name}=""')
@@ -228,7 +225,6 @@ def main():
     logger.info("🚀 Запуск миграции конфигурации...")
     
     try:
-        # Проверка и обновление переменных окружения
         ensure_env_variables()
         
         for filename in FILES_TO_MIGRATE:
