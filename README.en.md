@@ -57,72 +57,64 @@
 ## ⚡ Key Features
 
 ### 🚀 Performance
-
 - ✅ **Fully Asynchronous** — AsyncIO, aiohttp, aiosqlite
 - ✅ **Low Footprint** — ~100MB RAM per agent
 - ✅ **Ring Buffers** — memory optimization via deque
-- ✅ **Memory Orchestrator** <sup>NEW</sup> — dynamic unloading of unused modules
+- ✅ **Memory Orchestrator** — dynamic unloading of unused modules
 
 ### 🖥 Multi-Server Management
-
 - ✅ **Unlimited Nodes** — scalable architecture
-- ✅ **Real-time Metrics** — CPU, RAM, Disk, Network
-- ✅ **Remote Execution** — commands on any server
-- ✅ **System Optimization** <sup>NEW</sup> — interactive VPS tuning module (BBR, Swap, cache cleanup)
-- ✅ **Centralized Dashboard** — unified control panel
+- ✅ **Real-time Metrics** — CPU, RAM, Disk, Network (HTTP / ICMP ping)
+- ✅ **Web Terminal (VNC)** — secure SSH access right from the browser
+- ✅ **System Optimization** — interactive VPS tuning module (BBR, Swap, cache cleanup)
+
+### 💳 Billing & Rental System
+- ✅ **Payment Tracking** — monitor rental costs for nodes and master server (€/$/₽)
+- ✅ **Smart Reminders** — automatic alerts 3 days before the payment deadline
+- ✅ **Informative Badges** — display remaining days until payment in the WebUI
 
 ### 🤖 Smart Telegram UX
-
-- ✅ **Smart Cleanup** <sup>NEW</sup> — auto-deletes user commands and stale bot menus to keep the chat clean
-- ✅ **Anti-Spam Protection** <sup>NEW</sup> — built-in SpamThrottle to protect Telegram API limits
+- ✅ **Smart Cleanup** — auto-deletes user commands and stale bot menus
+- ✅ **Anti-Spam Protection** — built-in SpamThrottle to protect Telegram API limits
 - ✅ **Interactive Widgets** — inline menus with state-preserving checkboxes and live timers
 
 ### 🛡️ Enterprise-Grade Security
-
 - ✅ **WAF** — protection against SQL Injection, XSS, Path Traversal
-- ✅ **Rate Limiting** — DDoS protection (100 req/min)
-- ✅ **Brute-force Protection** — auto-block after 5 attempts
-- ✅ **Audit Logging** — detailed logs of all events
-- ✅ **E2E Encryption** — Fernet + XOR encryption
-- ✅ **RBAC** — Root/Admin/User roles
+- ✅ **Rate Limiting & Brute-force Protection** — DDoS and password-guessing protection
+- ✅ **Audit Logging** — detailed logs of all security events
+- ✅ **Data Encryption** — Fernet (AES) + XOR + Argon2 for passwords
+- ✅ **DOMPurify** — strict client-side content sanitization
 
 ### 🎨 Modern Web Interface
-
-- ✅ **PWA** — works like a native app
-- ✅ **SSE (Server-Sent Events)** — updates without reloading
-- ✅ **Dark Theme** — automatic switching
+- ✅ **PWA** — works like a native app (iOS / Android support)
+- ✅ **SSE (Server-Sent Events)** — real-time charts and logs without reloading
+- ✅ **AMOLED & Dark Theme** — automatic switching
 - ✅ **Responsive Design** — mobile-first approach
-- ✅ **Real-time Charts** — Chart.js visualization
-- ✅ **Drag & Drop** <sup>NEW</sup> — manual and automatic server sorting
-- ✅ **Smart Indicators** <sup>NEW</sup> — visual alerts during peak resource loads
+- ✅ **Drag & Drop** — manual and automatic server sorting
 
 ### ⚙️ Service Manager
-
 - ✅ **Real-time Status** — all systemd services
-- ✅ **SSE Streaming** — updates every 5 seconds
-- ✅ **Start/Stop/Restart** — one-button control
-- ✅ **Encrypted Storage** — persistent configuration
+- ✅ **1-Click Control** — Start / Stop / Restart
 - ✅ **Detailed Info** — logs, uptime, PID
 
-### 🔔 Smart Notifications
+### 📦 Backups & Updates Manager
+- ✅ **Automated Backups** — scheduled backups for traffic and configurations
+- ✅ **Smart Update** — automated bot and system updates directly from Telegram
+- ✅ **Auto DB Migrations** — via \erich\, ensuring zero data loss
 
-- ✅ **Customizable Thresholds** — CPU/RAM/Disk by choice
-- ✅ **Global and Individual** — for agent and each node
-- ✅ **Downtime Alerts** — node unavailable > 60 sec
-- ✅ **SSH Monitoring** — login notifications
-- ✅ **Fail2Ban Integration** — IP blocking
+### 🔔 Smart Notifications
+- ✅ **Customizable Thresholds** — CPU/RAM/Disk limits
+- ✅ **Downtime Alerts** — intelligent server unavailability detection
+- ✅ **SSH Monitoring** — login notifications (including SSH keys)
+- ✅ **Fail2Ban Integration** — blocking suspicious IPs
 
 ### 🌐 Internationalization
-
 - ✅ **Russian** — full localization
 - ✅ **English** — complete translation
 - ✅ **Switch On-the-fly** — no restart needed
 
 ### 🐳 Docker & DevOps
-
-- ✅ **Docker Compose** — easy deployment
-- ✅ **Two Modes** — Root (full access) / Secure (isolation)
-- ✅ **Auto-updates** — git pull + restart
+- ✅ **Docker Compose** — easy deployment (Secure and Root modes)
 - ✅ **Watchdog** — auto-restart on crash
 - ✅ **Health Checks** — state monitoring
 
