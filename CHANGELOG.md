@@ -6,14 +6,19 @@
 
 <p align="center">
 <p align="center">
-    <img src="https://img.shields.io/badge/version-v1.24.0-blue?style=flat-square" alt="Version 1.24.0"/>
-    <img src="https://img.shields.io/badge/build-83-purple?style=flat-square" alt="Build 83"/>
+    <img src="https://img.shields.io/badge/version-v1.24.1-blue?style=flat-square" alt="Version 1.24.1"/>
+    <img src="https://img.shields.io/badge/build-84-purple?style=flat-square" alt="Build 84"/>
     <img src="https://img.shields.io/badge/date-Июль%2005%202026-green?style=flat-square" alt="Date Jul 05 2026"/>
 	<img src="https://img.shields.io/badge/status-stable-green?style=flat-square" alt="Status Stable"/>
 </p>
 
 ---
-## [1.24.0] - 2026-07-05
+## [1.24.1] - 2026-07-05
+
+### 🛡️ Безопасность и SAST:
+* **WebUI (XSS Защита):** Устранены множественные SAST-предупреждения и потенциальные XSS уязвимости. Все вызовы `innerHTML` с пользовательскими данными переведены на использование защищенного `DOMPurify.sanitize(..., { RETURN_DOM_FRAGMENT: true })`.
+* **Уникальные Идентификаторы:** Использование небезопасного `Math.random()` заменено на криптографически стойкий генератор `window.crypto.getRandomValues()` для предотвращения предсказуемости ID модальных окон.
+* **Core / Subprocess:** Усилена безопасность выполнения shell-команд в модуле `fail2ban` и агенте ноды (`node.py`). Потенциально небезопасные вызовы `create_subprocess_shell` и `subprocess.run` переведены на использование `create_subprocess_exec` и статических списков аргументов для предотвращения внедрения вредоносного кода (Shell Injection).
 
 ### 🚀 Добавлено / Улучшено:
 * **Система Биллинга (Billing):** Внедрена комплексная система отслеживания платежей. Для каждой ноды и мастер-сервера теперь можно задать стоимость аренды, выбрать валюту (€ / $ / ₽) и установить дату следующего платежа прямо из Telegram бота.
@@ -40,6 +45,11 @@
 
 ---
 ## [1.23.3] - 2026-06-17
+
+### 🛡️ Безопасность и SAST:
+* **WebUI (XSS Защита):** Устранены множественные SAST-предупреждения и потенциальные XSS уязвимости. Все вызовы `innerHTML` с пользовательскими данными переведены на использование защищенного `DOMPurify.sanitize(..., { RETURN_DOM_FRAGMENT: true })`.
+* **Уникальные Идентификаторы:** Использование небезопасного `Math.random()` заменено на криптографически стойкий генератор `window.crypto.getRandomValues()` для предотвращения предсказуемости ID модальных окон.
+* **Core / Subprocess:** Усилена безопасность выполнения shell-команд в модуле `fail2ban` и агенте ноды (`node.py`). Потенциально небезопасные вызовы `create_subprocess_shell` и `subprocess.run` переведены на использование `create_subprocess_exec` и статических списков аргументов для предотвращения внедрения вредоносного кода (Shell Injection).
 
 ### 🚀 Добавлено / Улучшено:
 * **Мониторинг Сети (Ping):** Механизм измерения пинга на нодах переведен с `ICMP` на `HTTP` (`HEAD`-запрос), что решает проблему блокировки ICMP-пакетов строгими файрволами и делает замеры более точными и стабильными.
