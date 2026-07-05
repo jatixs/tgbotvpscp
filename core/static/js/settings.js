@@ -1,3 +1,7 @@
+/**
+ * Логика страницы настроек WebUI.
+ * Взаимодействие с API для изменения параметров панели, обработка форм и анимаций интерфейса.
+ */
 /* /core/static/js/settings.js */
 
 const isMainAdmin = (typeof IS_MAIN_ADMIN !== 'undefined') ? IS_MAIN_ADMIN : false;
@@ -38,21 +42,22 @@ function encryptData(text) {
 
 // --- LAZY LOAD ANIMATIONS ---
 function initScrollAnimations() {
-    // Запускаем Observer только если ширина экрана < 1024px (мобильные/планшеты)
-    // Это совпадает с медиа-запросом в CSS
+    // Initialize scroll animations
+    // Only run IntersectionObserver if screen width < 1024px (mobile/tablet)
+    // This matches the CSS media query for mobile animations
     if (window.innerWidth >= 1024) return;
 
     const observerOptions = {
         root: null,
         rootMargin: '0px',
-        threshold: 0.1 // Срабатывает при появлении 10% блока
+        threshold: 0.1
     };
 
     const observer = new IntersectionObserver((entries, obs) => {
         entries.forEach(entry => {
             if (entry.isIntersecting) {
                 entry.target.classList.add('is-visible');
-                obs.unobserve(entry.target); // Анимируем 1 раз
+                obs.unobserve(entry.target);
             }
         });
     }, observerOptions);
@@ -65,7 +70,6 @@ function initScrollAnimations() {
 // ----------------------------
 
 window.initSettings = function () {
-    // Инициализация анимаций скролла
     initScrollAnimations();
 
     renderUsers();
@@ -76,7 +80,6 @@ window.initSettings = function () {
     initChangePasswordUI();
     fetchSessions();
 
-    // ИСПРАВЛЕНИЕ: Отключаем принудительный скролл к инпутам на мобильных
     // initInputScrollLogic(); 
 
     const input = document.getElementById('newNodeNameDash');
@@ -196,12 +199,9 @@ function initInputScrollLogic() {
 }
 
 document.addEventListener("DOMContentLoaded", () => {
-    // Запускаем инициализацию, если есть секция пользователей (индикатор страницы настроек)
     if (document.getElementById('usersSection')) {
         window.initSettings();
     } else {
-        // На случай, если что-то пошло не так, все равно пробуем запустить анимации
-        // для блоков, которые могли отрендериться статически
         initScrollAnimations();
     }
 
@@ -374,7 +374,7 @@ const groups = {
         btnId: 'saveThresholdsBtn'
     },
     intervals: {
-        ids: ['conf_traffic', 'conf_services', 'conf_ping', 'conf_timeout'],
+        ids: ['conf_traffic', 'conf_services', 'conf_ping', 'conf_ping_mode', 'conf_timeout'],
         btnId: 'saveIntervalsBtn'
     }
 };
@@ -391,6 +391,32 @@ function initSystemSettingsTracking() {
                 el.addEventListener('input', () => checkForChanges(groupName));
                 el.addEventListener('change', () => checkForChanges(groupName));
             }
+        });
+    }
+
+    // Ping Mode Toggle Logic
+    const pingModeGroup = document.getElementById('conf_ping_mode_group');
+    if (pingModeGroup) {
+        const pingModeInput = document.getElementById('conf_ping_mode');
+        const buttons = pingModeGroup.querySelectorAll('button');
+        
+        buttons.forEach(btn => {
+            btn.addEventListener('click', () => {
+                const mode = btn.dataset.mode;
+                pingModeInput.value = mode;
+                
+                // Update active state
+                buttons.forEach(b => {
+                    if (b.dataset.mode === mode) {
+                        b.className = 'px-3 py-1.5 text-xs font-medium rounded-lg transition-colors bg-white dark:bg-gray-800 shadow text-gray-900 dark:text-white';
+                    } else {
+                        b.className = 'px-3 py-1.5 text-xs font-medium rounded-lg transition-colors text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200';
+                    }
+                });
+                
+                // Trigger change
+                checkForChanges('intervals');
+            });
         });
     }
 }
@@ -541,6 +567,8 @@ async function saveSystemConfig(groupName) {
         TRAFFIC_INTERVAL: document.getElementById('conf_traffic').value,
         SERVICES_INTERVAL: document.getElementById('conf_services').value,
         PING_INTERVAL: document.getElementById('conf_ping').value,
+        PING_MODE: document.getElementById('conf_ping_mode').value,
+        PING_TARGET: document.getElementById('conf_ping_target').value,
         NODE_OFFLINE_TIMEOUT: document.getElementById('conf_timeout').value
     };
 
@@ -850,13 +878,11 @@ window.startNodeRename = function (token) {
     document.getElementById(`edit_name_${token}`).classList.remove('hidden');
     const input = document.getElementById(`input_name_${token}`);
 
-    // ИСПРАВЛЕНИЕ: Фокус без скролла
     input.focus({ preventScroll: true });
 
     const node = NODES_DATA.find(n => n.token === token);
     if (node) input.value = node.name;
 
-    // ИСПРАВЛЕНИЕ: Мы убрали принудительный scrollIntoView
 };
 
 window.cancelNodeRename = function (token) {
@@ -1032,7 +1058,6 @@ window.switchNotifView = function(view) {
 
     currentNotifView = view;
     
-    // Управление видимостью кнопки НАЗАД в шапке
     const backBtn = document.getElementById('notifHeaderBackBtn');
     if (backBtn) {
         if (view === 'menu') {
@@ -1058,7 +1083,6 @@ window.switchNotifView = function(view) {
 };
 
 window.notifGoBack = function() {
-    // Умная логика возврата (если были внутри ноды - вернуть к списку нод)
     if (currentNotifView === 'node_detail') {
         switchNotifView('nodes');
     } else {
@@ -1123,7 +1147,7 @@ function renderNotifNodeDetail() {
     container.innerHTML = DOMPurify.sanitize(`
         <div class="flex items-center justify-between bg-gray-50 dark:bg-black/20 p-4 rounded-xl hover:bg-gray-100 dark:hover:bg-black/30 transition border border-gray-200 dark:border-white/5 cursor-pointer" data-action="click-alert-toggle" data-target="n_alert_${t}_downtime">
             <div>
-                <div class="text-sm font-bold text-gray-900 dark:text-white">${I18N.web_notif_downtime || 'Downtime Alert'}</div>
+                <div class="text-sm font-bold text-gray-900 dark:text-white">${I18N.notifications_alert_name_downtime || 'Downtime Alert'}</div>
                 <div class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">${I18N.web_notif_downtime_desc || 'Notify when node goes offline'}</div>
             </div>
             <label class="relative inline-flex items-center cursor-pointer" data-action="stop-propagation">
@@ -1133,7 +1157,7 @@ function renderNotifNodeDetail() {
         </div>
         <div class="flex items-center justify-between bg-gray-50 dark:bg-black/20 p-4 rounded-xl hover:bg-gray-100 dark:hover:bg-black/30 transition border border-gray-200 dark:border-white/5 cursor-pointer" data-action="click-alert-toggle" data-target="n_alert_${t}_node_resources">
             <div>
-                <div class="text-sm font-bold text-gray-900 dark:text-white">${I18N.web_notif_resources || 'High Resource Usage'}</div>
+                <div class="text-sm font-bold text-gray-900 dark:text-white">${I18N.notifications_alert_name_res || 'High Resource Usage'}</div>
                 <div class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">${I18N.web_notif_resources_desc || 'CPU/RAM > 90%'}</div>
             </div>
             <label class="relative inline-flex items-center cursor-pointer" data-action="stop-propagation">
@@ -1143,7 +1167,7 @@ function renderNotifNodeDetail() {
         </div>
         <div class="flex items-center justify-between bg-gray-50 dark:bg-black/20 p-4 rounded-xl hover:bg-gray-100 dark:hover:bg-black/30 transition border border-gray-200 dark:border-white/5 cursor-pointer" data-action="click-alert-toggle" data-target="n_alert_${t}_node_logins">
             <div>
-                <div class="text-sm font-bold text-gray-900 dark:text-white">${I18N.web_notif_logins || 'SSH Logins'}</div>
+                <div class="text-sm font-bold text-gray-900 dark:text-white">${I18N.notifications_alert_name_logins || 'SSH Logins'}</div>
                 <div class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">${I18N.web_notif_logins_desc || 'Successful SSH connections'}</div>
             </div>
             <label class="relative inline-flex items-center cursor-pointer" data-action="stop-propagation">
@@ -1151,7 +1175,15 @@ function renderNotifNodeDetail() {
                 <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-green-500"></div>
             </label>
         </div>
-        <div id="notifStatusNodeDetail" class="flex min-h-[50px] items-center justify-center gap-2 rounded-xl border border-dashed border-gray-200 dark:border-white/5 bg-gray-50/60 dark:bg-black/10 px-4 py-3 text-center text-xs font-semibold text-gray-500 dark:text-gray-400 opacity-0 translate-y-4 transition-all duration-300"></div>
+        <div class="flex items-center justify-between bg-gray-50 dark:bg-black/20 p-4 rounded-xl hover:bg-gray-100 dark:hover:bg-black/30 transition border border-gray-200 dark:border-white/5 cursor-pointer" data-action="click-alert-toggle" data-target="n_alert_${t}_billing">
+            <div>
+                <div class="text-sm font-bold text-gray-900 dark:text-white">${I18N.billing_toggle_reminder || 'Billing Notifications'}</div>
+            </div>
+            <label class="relative inline-flex items-center cursor-pointer" data-action="stop-propagation">
+                <input type="checkbox" id="n_alert_${t}_billing" class="sr-only peer" data-action="trigger-auto-save" data-view="node_detail" ${node && node.reminder_enabled ? 'checked' : ''}>
+                <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-green-500"></div>
+            </label>
+        </div>
     `);
 }
 
@@ -1166,16 +1198,13 @@ function getNotifStatusElement(scope = 'agent') {
 function resetNotifStatusElement(statusEl) {
     if (!statusEl) return;
     statusEl.classList.remove(
-        'opacity-100', 'translate-y-0',
-        'text-gray-500', 'dark:text-gray-400',
-        'text-green-500', 'text-green-600', 'dark:text-green-400',
-        'text-red-500', 'text-red-600', 'dark:text-red-400',
-        'bg-gray-100/80', 'dark:bg-white/5',
-        'bg-green-100', 'dark:bg-green-500/20',
-        'bg-red-100', 'dark:bg-red-900/20'
+        'opacity-100',
+        'text-gray-500', 'bg-gray-200', 'dark:text-gray-400', 'dark:bg-white/10',
+        'text-green-700', 'bg-green-100', 'dark:text-green-300', 'dark:bg-green-900/30',
+        'text-red-700', 'bg-red-100', 'dark:text-red-300', 'dark:bg-red-900/30'
     );
-    statusEl.classList.add('opacity-0', 'translate-y-4');
-    statusEl.innerHTML = DOMPurify.sanitize('');
+    statusEl.classList.add('opacity-0');
+    // Do not clear innerHTML immediately to allow opacity transition to play smoothly
 }
 
 function showNotifStatus(message, state = 'neutral', autoHideMs = 1800, scope = 'agent') {
@@ -1199,28 +1228,34 @@ function showNotifStatus(message, state = 'neutral', autoHideMs = 1800, scope = 
     });
 
     statusEl.classList.remove(
-        'opacity-0', 'opacity-100', 'translate-y-4', 'translate-y-0',
-        'text-gray-500', 'dark:text-gray-400',
-        'text-green-500', 'text-green-600', 'dark:text-green-400',
-        'text-red-500', 'text-red-600', 'dark:text-red-400',
-        'bg-gray-100/80', 'dark:bg-white/5',
-        'bg-green-100', 'dark:bg-green-500/20',
-        'bg-red-100', 'dark:bg-red-900/20'
+        'opacity-0', 'opacity-100',
+        'text-gray-500', 'bg-gray-200', 'dark:text-gray-400', 'dark:bg-white/10',
+        'text-green-700', 'bg-green-100', 'dark:text-green-300', 'dark:bg-green-900/30',
+        'text-red-700', 'bg-red-100', 'dark:text-red-300', 'dark:bg-red-900/30'
     );
 
     const stateClasses = {
-        neutral: ['text-gray-500', 'dark:text-gray-400', 'bg-gray-100/80', 'dark:bg-white/5'],
-        success: ['text-green-600', 'dark:text-green-400', 'bg-green-100', 'dark:bg-green-500/20'],
-        error: ['text-red-600', 'dark:text-red-400', 'bg-red-100', 'dark:bg-red-900/20']
+        neutral: ['text-gray-500', 'bg-gray-200', 'dark:text-gray-400', 'dark:bg-white/10'],
+        success: ['text-green-700', 'bg-green-100', 'dark:text-green-300', 'dark:bg-green-900/30'],
+        error: ['text-red-700', 'bg-red-100', 'dark:text-red-300', 'dark:bg-red-900/30']
     };
 
     const icons = {
-        neutral: '',
-        success: '<svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/></svg>',
-        error: '<svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M6 18L18 6M6 6l12 12"/></svg>'
+        neutral: '<svg class="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>',
+        success: '<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"/></svg>',
+        error: '<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M6 18L18 6M6 6l12 12"/></svg>'
     };
-    statusEl.innerHTML = DOMPurify.sanitize((icons[state] || '') + '<span>' + message + '</span>');
-    statusEl.classList.add('opacity-100', 'translate-y-0', ...(stateClasses[state] || stateClasses.neutral));
+    
+    // For saving state, only show icon without text to keep badge small
+    let innerHtml = (icons[state] || '');
+    if (state !== 'neutral') {
+         innerHtml += '<span>' + message + '</span>';
+    } else {
+         innerHtml += '<span>' + message + '</span>';
+    }
+    
+    statusEl.innerHTML = DOMPurify.sanitize(innerHtml);
+    statusEl.classList.add('opacity-100', ...(stateClasses[state] || stateClasses.neutral));
 
     if (autoHideMs > 0) {
         notifStatusHideTimer = setTimeout(() => {
@@ -1239,6 +1274,7 @@ async function triggerAutoSave(scope = 'agent') {
         downtime: document.getElementById('alert_downtime')?.checked || false,
         node_resources: document.getElementById('alert_node_resources')?.checked || false,
         node_logins: document.getElementById('alert_node_logins')?.checked || false,
+        master_billing: document.getElementById('alert_master_billing')?.checked || false,
     };
     
     if (typeof USER_ALERTS === 'undefined') window.USER_ALERTS = {};
@@ -1249,10 +1285,12 @@ async function triggerAutoSave(scope = 'agent') {
         const nDowntime = document.getElementById(`n_alert_${t}_downtime`)?.checked;
         const nRes = document.getElementById(`n_alert_${t}_node_resources`)?.checked;
         const nLogins = document.getElementById(`n_alert_${t}_node_logins`)?.checked;
+        const nBilling = document.getElementById(`n_alert_${t}_billing`)?.checked;
         
         if (nDowntime !== undefined) { data[`node_${t}_downtime`] = nDowntime; USER_ALERTS[`node_${t}_downtime`] = nDowntime; }
         if (nRes !== undefined) { data[`node_${t}_node_resources`] = nRes; USER_ALERTS[`node_${t}_node_resources`] = nRes; }
         if (nLogins !== undefined) { data[`node_${t}_node_logins`] = nLogins; USER_ALERTS[`node_${t}_node_logins`] = nLogins; }
+        if (nBilling !== undefined) { data[`node_${t}_billing`] = nBilling; }
     }
 
     try {
@@ -1286,7 +1324,7 @@ const btnCategories = {
     },
     "management": {
         titleKey: "web_kb_cat_management",
-        keys: ["enable_nodes", "enable_users", "enable_services", "enable_update", "enable_optimize"]
+        keys: ["enable_nodes", "enable_users", "enable_services", "enable_update", "enable_optimize", "enable_billing"]
     },
     "system": {
         titleKey: "web_kb_cat_system",
@@ -1931,7 +1969,6 @@ window.saveMetaData = async function () {
     const btn = document.getElementById('btnSaveMeta');
     const locked = document.getElementById('meta_lock_forever').checked;
 
-    // 1. Предупреждение о вечной блокировке
     if (locked) {
         const confirmMsg = (typeof I18N !== 'undefined' && I18N.web_meta_lock_confirm)
             ? I18N.web_meta_lock_confirm
@@ -1942,12 +1979,10 @@ window.saveMetaData = async function () {
         }
     }
 
-    // 2. Анимация кнопки (Loading)
     const originalText = btn.innerHTML;
     btn.disabled = true;
     btn.innerHTML = DOMPurify.sanitize(`<svg class="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>`);
 
-    // Сбор данных
     const data = {
         favicon: document.getElementById('meta_favicon').value.trim(),
         title: document.getElementById('meta_title').value.trim(),
@@ -1963,7 +1998,6 @@ window.saveMetaData = async function () {
             body: JSON.stringify(data)
         });
 
-        // Читаем как текст, чтобы поймать HTML-ошибки (413, 500)
         const responseText = await res.text();
         let json;
         try {
@@ -1974,7 +2008,6 @@ window.saveMetaData = async function () {
         }
 
         if (res.ok) {
-            // Успех
             const successTitle = (typeof I18N !== 'undefined' && I18N.web_success) ? I18N.web_success : "Success";
             const msgNormal = (typeof I18N !== 'undefined' && I18N.web_meta_success)
                 ? I18N.web_meta_success
@@ -1995,14 +2028,12 @@ window.saveMetaData = async function () {
                 btn.disabled = false;
             }
         } else {
-            // Ошибка API
             const errorTitle = (typeof I18N !== 'undefined' && I18N.web_error_short) ? I18N.web_error_short : "Error";
             await window.showModalAlert(json.error || "Failed to save", errorTitle);
             btn.innerHTML = DOMPurify.sanitize(originalText);
             btn.disabled = false;
         }
     } catch (e) {
-        // Ошибка сети
         const errorTitle = (typeof I18N !== 'undefined' && I18N.web_conn_error_short) ? I18N.web_conn_error_short : "Conn Error";
         await window.showModalAlert(e.message || e.toString(), errorTitle);
         btn.innerHTML = DOMPurify.sanitize(originalText);
@@ -2185,3 +2216,66 @@ document.addEventListener('app:change:trigger-auto-save', e => {
 document.addEventListener('app:change:trigger-keyboard-save', e => {
     triggerKeyboardSave();
 });
+
+window.openPingTargetModal = function() {
+    const modal = document.getElementById('pingTargetModal');
+    const currentTarget = document.getElementById('conf_ping_target').value || 'google';
+
+    const hasNodes = window.HAS_ACTIVE_NODES || false;
+    const internalLabel = document.getElementById('ping_target_internal_label');
+    if (internalLabel) {
+        if (!hasNodes) {
+            internalLabel.classList.add('opacity-50', 'pointer-events-none');
+            internalLabel.title = (typeof I18N !== 'undefined' && I18N.web_ping_target_no_nodes) ? I18N.web_ping_target_no_nodes : "No active nodes available";
+        } else {
+            internalLabel.classList.remove('opacity-50', 'pointer-events-none');
+            internalLabel.title = "";
+        }
+    }
+
+    const radios = document.getElementsByName('ping_target_radio');
+    for(let r of radios) {
+        if(r.value === currentTarget) {
+            r.checked = true;
+        }
+        if (r.value === 'internal' && !hasNodes) {
+             r.disabled = true;
+             if (currentTarget === 'internal') {
+                 // fallback
+                 document.querySelector('input[name="ping_target_radio"][value="google"]').checked = true;
+             }
+        }
+    }
+
+    if (modal) {
+        animateModalOpen(modal);
+    }
+};
+
+window.closePingTargetModal = function() {
+    const modal = document.getElementById('pingTargetModal');
+    if (modal) {
+        animateModalClose(modal);
+    }
+};
+
+window.savePingTargetModal = function() {
+    const selected = document.querySelector('input[name="ping_target_radio"]:checked');
+    if (selected) {
+        const val = selected.value;
+        const hiddenInput = document.getElementById('conf_ping_target');
+        const btnLabel = document.getElementById('label_ping_server');
+        
+        if (hiddenInput.value !== val) {
+            hiddenInput.value = val;
+            triggerAutoSave('intervals');
+            
+            let text = "Сервер";
+            if (val === "google") text = "Google";
+            if (val === "cloudflare") text = "Cloudflare";
+            if (val === "internal") text = (typeof I18N !== 'undefined' && I18N.web_ping_target_internal) ? I18N.web_ping_target_internal : "Internal";
+            if (btnLabel) btnLabel.textContent = text;
+        }
+    }
+    window.closePingTargetModal();
+};

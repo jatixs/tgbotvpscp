@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+"""
+Утилита командной строки (CLI) для управления проектом.
+Позволяет добавлять администраторов, сбрасывать пароли, очищать логи и управлять системными службами.
+"""
 import asyncio
 import argparse
 import sys
@@ -18,7 +22,6 @@ if os.path.exists(env_file):
                 line = line.strip()
                 if line and not line.startswith("#") and "=" in line:
                     key, val = line.split("=", 1)
-                    # setdefault чтобы не перезаписать системные переменные, если они уже есть
                     os.environ.setdefault(key, val.strip('"').strip("'"))
     except Exception as e:
         print(f"⚠️ Ошибка чтения .env: {e}")
@@ -42,7 +45,6 @@ async def close_services():
 async def cmd_adduser(args):
     print(f"🔧 Добавление администратора...")
     auth.load_users()
-    # Предполагаем, что add_user работает с текущим хранилищем (JSON или БД)
     if auth.add_user(args.id, "admins", args.name):
         if hasattr(auth, "save_users"):
             auth.save_users()
@@ -101,7 +103,6 @@ async def cmd_restart(args):
 
     try:
         if is_docker:
-            # Для Docker используем subprocess вместо os.system
             result = subprocess.run(
                 ["docker", "compose", "restart"],
                 cwd=os.path.dirname(os.path.abspath(__file__)),
@@ -112,7 +113,6 @@ async def cmd_restart(args):
             if result.returncode != 0:
                 print(f"⚠️ Ошибка перезапуска: {result.stderr}")
         else:
-            # Используем subprocess.run вместо os.system для systemctl
             result = subprocess.run(
                 ["sudo", "systemctl", "restart", "tg-bot"],
                 capture_output=True,
@@ -228,25 +228,25 @@ def main():
 
     subparsers = parser.add_subparsers(dest="command", title="Доступные команды")
 
-    # Команда: adduser
+    # Add new admin user command
     p_add = subparsers.add_parser("adduser", help="Добавить администратора")
     p_add.add_argument("--id", type=int, required=True, help="Telegram ID")
     p_add.add_argument("--name", type=str, default="Admin", help="Имя пользователя")
 
-    # Команда: webpass
+    # Reset web panel password command
     p_pass = subparsers.add_parser("webpass", help="Сбросить пароль Web-панели")
     p_pass.add_argument("--password", type=str, help="Новый пароль (опционально)")
 
-    # Команда: stats
+    # Show database statistics command
     subparsers.add_parser("stats", help="Показать статистику БД")
 
-    # Команда: cleanlogs
+    # Clean old log files command
     subparsers.add_parser("cleanlogs", help="Очистить файлы логов")
 
-    # Команда: restart
+    # Restart bot service command
     subparsers.add_parser("restart", help="Перезапустить бота")
 
-    # Команда: status
+    # Show bot status command
     subparsers.add_parser("status", help="Показать статус бота")
 
     args = parser.parse_args()

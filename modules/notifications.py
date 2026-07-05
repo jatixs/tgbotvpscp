@@ -151,9 +151,14 @@ async def cq_back_to_notif_menu(callback: types.CallbackQuery):
 async def cq_notif_menu_global(callback: types.CallbackQuery):
     user_id = callback.from_user.id
     lang = get_user_lang(user_id)
+    
+    from core.config import get_bot_config
+    master_billing = await get_bot_config("master_billing", {})
+    master_billing_enabled = master_billing.get("reminder_enabled", False)
+    
     await callback.message.edit_text(
         _("notif_global_title", lang),
-        reply_markup=get_notifications_global_keyboard(user_id),
+        reply_markup=get_notifications_global_keyboard(user_id, master_billing_enabled),
         parse_mode="HTML"
     )
     await callback.answer()
@@ -183,7 +188,7 @@ async def cq_notif_select_node(callback: types.CallbackQuery):
     node_name = html.escape(node.get("name", "Unknown"))
     await callback.message.edit_text(
         _("notif_node_settings_title", lang, name=node_name),
-        reply_markup=get_notifications_node_settings_keyboard(token, node_name, user_id),
+        reply_markup=get_notifications_node_settings_keyboard(token, node, user_id),
         parse_mode="HTML"
     )
     await callback.answer()
@@ -206,9 +211,12 @@ async def cq_toggle_all_agent(callback: types.CallbackQuery):
         ALERTS_CONFIG[user_id][k] = new_state
         
     await save_alerts_config_async()
+    from core.config import get_bot_config
+    master_billing = await get_bot_config("master_billing", {})
+    master_billing_enabled = master_billing.get("reminder_enabled", False)
     
     await callback.message.edit_reply_markup(
-        reply_markup=get_notifications_global_keyboard(user_id)
+        reply_markup=get_notifications_global_keyboard(user_id, master_billing_enabled)
     )
     
     status_text = _("notifications_status_on", lang) if new_state else _("notifications_status_off", lang)
@@ -244,9 +252,12 @@ async def cq_toggle_all_nodes(callback: types.CallbackQuery):
                 del user_conf[override_key]
         
     await save_alerts_config_async()
+    from core.config import get_bot_config
+    master_billing = await get_bot_config("master_billing", {})
+    master_billing_enabled = master_billing.get("reminder_enabled", False)
     
     await callback.message.edit_reply_markup(
-        reply_markup=get_notifications_global_keyboard(user_id)
+        reply_markup=get_notifications_global_keyboard(user_id, master_billing_enabled)
     )
     
     status_text = _("notifications_status_on", lang) if new_state else _("notifications_status_off", lang)
@@ -271,8 +282,12 @@ async def cq_toggle_alert(callback: types.CallbackQuery):
     await save_alerts_config_async()
     
     # Refresh Global Menu
+    from core.config import get_bot_config
+    master_billing = await get_bot_config("master_billing", {})
+    master_billing_enabled = master_billing.get("reminder_enabled", False)
+    
     await callback.message.edit_reply_markup(
-        reply_markup=get_notifications_global_keyboard(user_id)
+        reply_markup=get_notifications_global_keyboard(user_id, master_billing_enabled)
     )
     
     map_name = {
@@ -388,8 +403,13 @@ async def cq_toggle_node_alert(callback: types.CallbackQuery):
     
     await sync_node_global_state(user_id, alert_type)
     
+    node = await nodes_db.get_node_by_token(token)
+    if not node:
+        await callback.answer("Node not found", show_alert=True)
+        return
+        
     await callback.message.edit_reply_markup(
-        reply_markup=get_notifications_node_settings_keyboard(token, node_name, user_id)
+        reply_markup=get_notifications_node_settings_keyboard(token, node, user_id)
     )
     
     await callback.answer(

@@ -1,3 +1,7 @@
+"""
+Агент сбора метрик (Node Agent).
+Скрипт, работающий на удаленном сервере (ноде). Собирает системные метрики и передает их мастер-боту по HTTP.
+"""
 import time
 import psutil
 import requests
@@ -13,6 +17,7 @@ import json
 import html
 import collections
 import threading
+import socket
 from datetime import datetime
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -375,6 +380,8 @@ HTTP_ERROR_LOG_COOLDOWN_SECONDS = max(UPDATE_INTERVAL * 4, 30)
 
 EXTERNAL_IP_CACHE = None 
 GLOBAL_PING_INTERVAL = 30
+GLOBAL_PING_MODE = "http"
+GLOBAL_PING_TARGET = "google"
 LAST_PING_TIME = 0.0
 LAST_PING_MS = "n/a"
 
@@ -698,6 +705,24 @@ def get_top_processes(metric):
         logging.error(f"Error getting top processes: {e}")
         return "n/a"
 
+def _do_icmp_ping(target_ip="8.8.8.8"):
+    import platform
+    try:
+        if platform.system().lower() == "windows":
+            cmd = ["ping", "-n", "1", "-w", "2000", target_ip]
+            pattern = r"[=<](\d+)\s*ms"
+        else:
+            cmd = ["ping", "-c", "1", "-W", "2", target_ip]
+            pattern = r"time=([\d\.]+)\s*ms"
+
+        proc = subprocess.run(cmd, capture_output=True, timeout=5)
+        ping_match = re.search(pattern, proc.stdout.decode(errors="ignore"))
+        if ping_match:
+            return float(ping_match.group(1))
+    except Exception:
+        pass
+    return None
+
 def get_system_stats():
     global _HEARTBEAT_NET_STATS
     try:
@@ -735,15 +760,62 @@ def get_system_stats():
         
         global LAST_PING_TIME, LAST_PING_MS
         if now - LAST_PING_TIME >= GLOBAL_PING_INTERVAL or LAST_PING_MS == "n/a":
-            try:
-                t1 = time.time()
-                resp = requests.head("https://www.google.com", timeout=3)
-                if resp.status_code == 200:
-                    LAST_PING_MS = round((time.time() - t1) * 1000, 1)
+            t1 = time.time()
+            success = False
+            
+            target_ip = "8.8.8.8"
+            target_http = "https://www.google.com"
+            target_port = 53
+            
+            if GLOBAL_PING_TARGET == "cloudflare":
+                target_ip = "1.1.1.1"
+                target_http = "https://www.cloudflare.com"
+            elif GLOBAL_PING_TARGET == "internal":
+                target_http = f"{AGENT_BASE_URL.rstrip('/')}/health"
+                target_port = 80
+                try:
+                    from urllib.parse import urlparse
+                    parsed = urlparse(AGENT_BASE_URL)
+                    target_ip = socket.gethostbyname(parsed.hostname) if parsed.hostname else "8.8.8.8"
+                    target_port = parsed.port if parsed.port else (443 if parsed.scheme == "https" else 80)
+                except Exception:
+                    pass
+
+            ping_mode = GLOBAL_PING_MODE
+            if ping_mode == "icmp":
+                icmp_ms = _do_icmp_ping(target_ip)
+                if icmp_ms is not None:
+                    LAST_PING_MS = round(icmp_ms, 1)
+                    success = True
+                else:
+                    ping_mode = "http"
+
+            if not success and ping_mode == "tcp":
+                try:
+                    t_tcp = time.time()
+                    with socket.create_connection((target_ip, target_port), timeout=3):
+                        LAST_PING_MS = round((time.time() - t_tcp) * 1000, 1)
+                        success = True
+                except Exception:
+                    ping_mode = "http"
+            
+            if not success and ping_mode == "http":
+                try:
+                    t_http = time.time()
+                    resp = requests.head(target_http, timeout=3)
+                    if resp.status_code in {200, 204, 301, 302, 403, 404, 405, 500}:
+                        LAST_PING_MS = round((time.time() - t_http) * 1000, 1)
+                        success = True
+                except Exception:
+                    pass
+            
+            if not success:
+                icmp_ms = _do_icmp_ping(target_ip)
+                if icmp_ms is not None:
+                    LAST_PING_MS = round(icmp_ms, 1)
                 else:
                     LAST_PING_MS = "n/a"
-            except Exception:
-                LAST_PING_MS = "n/a"
+                    
             LAST_PING_TIME = now
             
         ping_ms = LAST_PING_MS
@@ -892,18 +964,15 @@ def execute_command(task):
         elif cmd == "traffic":
             net = psutil.net_io_counters()
             now = time.time()
-            
-            rx_total = format_bytes_simple(net.bytes_recv)
-            tx_total = format_bytes_simple(net.bytes_sent)
-            
+
             speed_rx_val = "0.00"
             speed_tx_val = "0.00"
-            
+
             if LAST_TRAFFIC_STATS:
                 prev_rx = LAST_TRAFFIC_STATS.get('rx', 0)
                 prev_tx = LAST_TRAFFIC_STATS.get('tx', 0)
                 prev_time = LAST_TRAFFIC_STATS.get('time', 0)
-                
+
                 dt = now - prev_time
                 if dt > 0:
                     rx_speed = (net.bytes_recv - prev_rx) * 8 / (1024 * 1024) / dt
@@ -916,13 +985,13 @@ def execute_command(task):
                 'tx': net.bytes_sent,
                 'time': now
             }
-            
+
             result_payload = {
                 "type": "i18n",
-                "key": "traffic_report_node", 
+                "key": "traffic_report_node",
                 "params": {
-                    "rx": rx_total,
-                    "tx": tx_total,
+                    "rx": {"format": "traffic", "value": net.bytes_recv},
+                    "tx": {"format": "traffic", "value": net.bytes_sent},
                     "speed_rx": speed_rx_val,
                     "speed_tx": speed_tx_val
                 }
@@ -931,28 +1000,62 @@ def execute_command(task):
         elif cmd == "top":
             try:
                 proc = subprocess.Popen(
-                    ["ps", "-eo", "user,pid,%cpu,%mem,comm", "--sort=-%cpu"],
+                    ["ps", "-eo", "pid,user,%cpu,%mem,time,comm", "--sort=-%cpu"],
                     stdout=subprocess.PIPE,
                     stderr=subprocess.PIPE
                 )
                 stdout, _ = proc.communicate()
                 all_lines = stdout.decode().split('\n')
-                res = '\n'.join(all_lines[:11])  # Head -n 11
-                
-                safe_res = res.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-                
+                # Skip the header line (first line), take up to 10 data lines
+                data_lines = [l for l in all_lines[1:] if l.strip()][:10]
+
+                table_lines = []
+                table_lines.append(f"{'PID':<7} {'USER':<8} {'CPU':>4} {'RAM':>4} {'TIME':>5} CMD")
+                table_lines.append("-" * 42)
+
+                for line in data_lines:
+                    parts = line.split(None, 5)
+                    if len(parts) >= 6:
+                        p_pid, p_user, p_cpu, p_mem, p_time, p_command = parts
+
+                        if len(p_user) > 7:
+                            p_user = p_user[:6] + "+"
+
+                        short_cmd = p_command.split()[0].split('/')[-1]
+                        if len(short_cmd) > 10:
+                            short_cmd = short_cmd[:9] + "\u2026"
+
+                        try:
+                            cpu_val = float(p_cpu)
+                            cpu_str = f"{cpu_val:.1f}" if cpu_val < 100 else f"{int(cpu_val)}"
+                        except ValueError:
+                            cpu_str = p_cpu[:4]
+
+                        try:
+                            mem_val = float(p_mem)
+                            mem_str = f"{mem_val:.1f}" if mem_val < 100 else f"{int(mem_val)}"
+                        except ValueError:
+                            mem_str = p_mem[:4]
+
+                        time_str = p_time[:5]
+                        # HTML-escape the command name
+                        safe_cmd = short_cmd.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+                        table_lines.append(f"{p_pid:<7} {p_user:<8} {cpu_str:>4} {mem_str:>4} {time_str:>5} {safe_cmd}")
+
+                output_str = "<pre>" + "\n".join(table_lines) + "</pre>"
+
                 result_payload = {
                     "type": "i18n",
                     "key": "top_header",
                     "params": {
-                        "output": safe_res
+                        "output": output_str
                     }
                 }
-                
+
             except Exception as e:
                 result_payload = {
-                    "type": "i18n", 
-                    "key": "error_with_details", 
+                    "type": "i18n",
+                    "key": "error_with_details",
                     "params": {"error": str(e)}
                 }
 
@@ -988,22 +1091,21 @@ def execute_command(task):
             except Exception:
                 ext_ipv6 = ""
 
-            ping_val = "0"
-            inet_ok = False
-            try:
-                proc = subprocess.Popen(
-                    ["ping", "-c", "1", "-W", "1", "8.8.8.8"],
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE
-                )
-                stdout, _ = proc.communicate()
-                ping_res = stdout.decode()
-                ping_match = re.search(r"time=([\d\.]+) ms", ping_res)
-                if ping_match:
-                    ping_val = ping_match.group(1)
-                    inet_ok = True
-            except Exception:
-                pass
+            ping_target_conf = GLOBAL_PING_TARGET
+            if ping_target_conf == "cloudflare":
+                ping_target_label = "1.1.1.1"
+            elif ping_target_conf == "internal":
+                try:
+                    from urllib.parse import urlparse
+                    parsed = urlparse(AGENT_BASE_URL)
+                    ping_target_label = parsed.hostname if parsed.hostname else {"key": "selftest_target_agent"}
+                except Exception:
+                    ping_target_label = {"key": "selftest_target_agent"}
+            else:
+                ping_target_label = "8.8.8.8"
+
+            ping_val = str(LAST_PING_MS)
+            inet_ok = ping_val != "n/a"
 
             try:
                 # Security: Use exec instead of shell
@@ -1018,8 +1120,8 @@ def execute_command(task):
                 kernel = "N/A"
             
             uptime_str = format_uptime_simple(stats.get('uptime', 0))
-            rx_total = format_bytes_simple(stats.get('net_rx', 0))
-            tx_total = format_bytes_simple(stats.get('net_tx', 0))
+            rx_raw = stats.get('net_rx', 0)
+            tx_raw = stats.get('net_tx', 0)
 
             # Format CPU value
             cpu_pct = stats.get('cpu', 0)
@@ -1059,13 +1161,14 @@ def execute_command(task):
                     "cpu_val": cpu_val,
                     "mem_val": mem_val,
                     "disk_val": disk_val,
-                    "uptime": uptime_str,
+                    "uptime": {"format": "uptime", "value": stats.get('uptime', 0)},
                     "inet_status": {"key": "selftest_inet_ok"} if inet_ok else {"key": "selftest_inet_fail"},
+                    "ping_target": ping_target_label,
                     "ping": ping_val,
                     "ipv4": ext_ipv4 or "N/A",
                     "ipv6": ext_ipv6 or "N/A",
-                    "rx": rx_total,
-                    "tx": tx_total
+                    "rx": {"format": "traffic", "value": rx_raw},
+                    "tx": {"format": "traffic", "value": tx_raw}
                 }
             }
 
@@ -1803,11 +1906,15 @@ def send_heartbeat():
                 logging.info(f"Updated alert language from agent: {LAST_AGENT_LANG}")
 
             if "ping_interval" in data:
-                global GLOBAL_PING_INTERVAL
+                global GLOBAL_PING_INTERVAL, GLOBAL_PING_MODE, GLOBAL_PING_TARGET
                 try:
                     GLOBAL_PING_INTERVAL = int(data["ping_interval"])
                 except (ValueError, TypeError):
                     pass
+            if "ping_mode" in data:
+                GLOBAL_PING_MODE = str(data["ping_mode"])
+            if "ping_target" in data:
+                GLOBAL_PING_TARGET = str(data["ping_target"])
 
             response_reporter_hash = data.get("agent_alert_reporter_hash")
             if isinstance(response_reporter_hash, str) and response_reporter_hash:
