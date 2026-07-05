@@ -1,3 +1,7 @@
+/**
+ * Логика страницы настроек WebUI.
+ * Взаимодействие с API для изменения параметров панели, обработка форм и анимаций интерфейса.
+ */
 /* /core/static/js/settings.js */
 
 const isMainAdmin = (typeof IS_MAIN_ADMIN !== 'undefined') ? IS_MAIN_ADMIN : false;
@@ -38,21 +42,22 @@ function encryptData(text) {
 
 // --- LAZY LOAD ANIMATIONS ---
 function initScrollAnimations() {
-    // Запускаем Observer только если ширина экрана < 1024px (мобильные/планшеты)
-    // Это совпадает с медиа-запросом в CSS
+    // Initialize scroll animations
+    // Only run IntersectionObserver if screen width < 1024px (mobile/tablet)
+    // This matches the CSS media query for mobile animations
     if (window.innerWidth >= 1024) return;
 
     const observerOptions = {
         root: null,
         rootMargin: '0px',
-        threshold: 0.1 // Срабатывает при появлении 10% блока
+        threshold: 0.1
     };
 
     const observer = new IntersectionObserver((entries, obs) => {
         entries.forEach(entry => {
             if (entry.isIntersecting) {
                 entry.target.classList.add('is-visible');
-                obs.unobserve(entry.target); // Анимируем 1 раз
+                obs.unobserve(entry.target);
             }
         });
     }, observerOptions);
@@ -65,7 +70,6 @@ function initScrollAnimations() {
 // ----------------------------
 
 window.initSettings = function () {
-    // Инициализация анимаций скролла
     initScrollAnimations();
 
     renderUsers();
@@ -76,7 +80,6 @@ window.initSettings = function () {
     initChangePasswordUI();
     fetchSessions();
 
-    // ИСПРАВЛЕНИЕ: Отключаем принудительный скролл к инпутам на мобильных
     // initInputScrollLogic(); 
 
     const input = document.getElementById('newNodeNameDash');
@@ -196,12 +199,9 @@ function initInputScrollLogic() {
 }
 
 document.addEventListener("DOMContentLoaded", () => {
-    // Запускаем инициализацию, если есть секция пользователей (индикатор страницы настроек)
     if (document.getElementById('usersSection')) {
         window.initSettings();
     } else {
-        // На случай, если что-то пошло не так, все равно пробуем запустить анимации
-        // для блоков, которые могли отрендериться статически
         initScrollAnimations();
     }
 
@@ -878,13 +878,11 @@ window.startNodeRename = function (token) {
     document.getElementById(`edit_name_${token}`).classList.remove('hidden');
     const input = document.getElementById(`input_name_${token}`);
 
-    // ИСПРАВЛЕНИЕ: Фокус без скролла
     input.focus({ preventScroll: true });
 
     const node = NODES_DATA.find(n => n.token === token);
     if (node) input.value = node.name;
 
-    // ИСПРАВЛЕНИЕ: Мы убрали принудительный scrollIntoView
 };
 
 window.cancelNodeRename = function (token) {
@@ -1060,7 +1058,6 @@ window.switchNotifView = function(view) {
 
     currentNotifView = view;
     
-    // Управление видимостью кнопки НАЗАД в шапке
     const backBtn = document.getElementById('notifHeaderBackBtn');
     if (backBtn) {
         if (view === 'menu') {
@@ -1086,7 +1083,6 @@ window.switchNotifView = function(view) {
 };
 
 window.notifGoBack = function() {
-    // Умная логика возврата (если были внутри ноды - вернуть к списку нод)
     if (currentNotifView === 'node_detail') {
         switchNotifView('nodes');
     } else {
@@ -1973,7 +1969,6 @@ window.saveMetaData = async function () {
     const btn = document.getElementById('btnSaveMeta');
     const locked = document.getElementById('meta_lock_forever').checked;
 
-    // 1. Предупреждение о вечной блокировке
     if (locked) {
         const confirmMsg = (typeof I18N !== 'undefined' && I18N.web_meta_lock_confirm)
             ? I18N.web_meta_lock_confirm
@@ -1984,12 +1979,10 @@ window.saveMetaData = async function () {
         }
     }
 
-    // 2. Анимация кнопки (Loading)
     const originalText = btn.innerHTML;
     btn.disabled = true;
     btn.innerHTML = DOMPurify.sanitize(`<svg class="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>`);
 
-    // Сбор данных
     const data = {
         favicon: document.getElementById('meta_favicon').value.trim(),
         title: document.getElementById('meta_title').value.trim(),
@@ -2005,7 +1998,6 @@ window.saveMetaData = async function () {
             body: JSON.stringify(data)
         });
 
-        // Читаем как текст, чтобы поймать HTML-ошибки (413, 500)
         const responseText = await res.text();
         let json;
         try {
@@ -2016,7 +2008,6 @@ window.saveMetaData = async function () {
         }
 
         if (res.ok) {
-            // Успех
             const successTitle = (typeof I18N !== 'undefined' && I18N.web_success) ? I18N.web_success : "Success";
             const msgNormal = (typeof I18N !== 'undefined' && I18N.web_meta_success)
                 ? I18N.web_meta_success
@@ -2037,14 +2028,12 @@ window.saveMetaData = async function () {
                 btn.disabled = false;
             }
         } else {
-            // Ошибка API
             const errorTitle = (typeof I18N !== 'undefined' && I18N.web_error_short) ? I18N.web_error_short : "Error";
             await window.showModalAlert(json.error || "Failed to save", errorTitle);
             btn.innerHTML = DOMPurify.sanitize(originalText);
             btn.disabled = false;
         }
     } catch (e) {
-        // Ошибка сети
         const errorTitle = (typeof I18N !== 'undefined' && I18N.web_conn_error_short) ? I18N.web_conn_error_short : "Conn Error";
         await window.showModalAlert(e.message || e.toString(), errorTitle);
         btn.innerHTML = DOMPurify.sanitize(originalText);

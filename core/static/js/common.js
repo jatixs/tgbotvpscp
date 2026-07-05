@@ -1,3 +1,7 @@
+/**
+ * Общие JavaScript утилиты и компоненты веб-панели.
+ * Включает логику уведомлений (тостов), базовые анимации, сайдбар и перехват сетевых ошибок.
+ */
 /* /core/static/js/common.js */
 
 // Global Event Delegation setup
@@ -369,7 +373,7 @@ function initGlobalLazyLoad() {
     const observerOptions = {
         root: null,
         rootMargin: '0px',
-        threshold: 0.1 // 10% видимости
+        threshold: 0.1
     };
 
     const observer = new IntersectionObserver((entries, obs) => {
@@ -462,13 +466,11 @@ function toggleHaptics() {
 function updateHapticsUI() {
     const isEnabled = localStorage.getItem('haptics_enabled') !== 'false';
     
-    // Новый стиль: checkbox peer-checked
     const checkbox = document.getElementById('mHapticsCheckbox');
     if (checkbox) {
         checkbox.checked = isEnabled;
     }
     
-    // Обратная совместимость со старым стилем (если есть)
     const track = document.getElementById('mHapticsTrack');
     const thumb = document.getElementById('mHapticsThumb');
     if (track && thumb) {
@@ -1492,8 +1494,9 @@ function animateModalOpen(modal, isInput = false) {
     const isMobile = window.innerWidth < 640;
     const card = modal.firstElementChild;
 
+    bodyScrollTop = window.scrollY;
+
     if (isMobile) {
-        bodyScrollTop = window.scrollY;
         document.body.style.position = 'fixed';
         document.body.style.top = `-${bodyScrollTop}px`;
         document.body.style.width = '100%';
@@ -1589,19 +1592,29 @@ function animateModalClose(modal) {
         modal.classList.add('hidden');
         modal.classList.remove('flex');
 
+        const scrollYToRestore = (document.body.style.position === 'fixed') 
+            ? Math.abs(parseInt(document.body.style.top || '0')) 
+            : bodyScrollTop;
+
         if (document.body.style.position === 'fixed') {
             document.body.style.position = '';
             document.body.style.top = '';
             document.body.style.width = '';
-            document.body.style.overflow = '';
-            // ИСПРАВЛЕНИЕ: Отключаем плавную прокрутку при восстановлении позиции
-            window.scrollTo({
-                top: bodyScrollTop,
-                behavior: 'auto'
-            });
-        } else {
-            document.body.style.overflow = '';
         }
+        document.body.style.overflow = '';
+
+        // Restore original scroll behavior temporarily
+        const html = document.documentElement;
+        const originalBehavior = html.style.scrollBehavior;
+        html.style.scrollBehavior = 'auto';
+
+        // Instantly jump to the original scroll position
+        window.scrollTo(0, scrollYToRestore);
+
+        // Restore smooth scrolling if it was previously enabled
+        setTimeout(() => {
+            html.style.scrollBehavior = originalBehavior;
+        }, 50);
 
         modal.style.height = '';
         modal.style.top = '';

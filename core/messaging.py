@@ -107,7 +107,7 @@ async def send_alert(
                     "text_map": text_map,
                     "time": time.time(),
                     "type": alert_type,
-                    "source": source, # Добавлено поле source
+                    "source": source,
                 }
             )
     except Exception as e:

@@ -1,3 +1,7 @@
+"""
+REST API контроллеры для управления нодами.
+Обрабатывают запросы веб-интерфейса, связанные с метриками, логами и конфигурацией удаленных серверов.
+"""
 from __future__ import annotations
 
 import asyncio
@@ -154,7 +158,8 @@ async def process_node_result_background(
         return
 
     final_text = text
-    lang = get_user_lang(user_id)  # Получаем язык пользователя один раз
+    # Retrieve user language once to avoid redundant database calls
+    lang = get_user_lang(user_id)
     
     if isinstance(text, dict) and text.get("type") == "i18n":
         try:
@@ -233,9 +238,9 @@ async def process_node_result_background(
                     text=_("node_response_template", lang, name=node_name, text=final_text),
                     parse_mode="HTML",
                 )
-                break  # Успешно отправлено
+                break
             except TelegramRetryAfter as e:
-                # Если упёрлись в лимит - ждём указанное телеграмом время и повторяем
+                # If we hit the rate limit, wait for the requested duration and retry
                 await asyncio.sleep(e.retry_after)
             except Exception as exc:
                 logging.error("Background send error: %s", exc)
