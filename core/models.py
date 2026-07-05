@@ -6,9 +6,14 @@ import time
 
 
 class EncryptionOperationError(ValueError):
+    """Ошибки, возникающие при шифровании/дешифровании данных в БД."""
     pass
 
 class EncryptedTextField(fields.TextField):
+    """
+    Пользовательское поле Tortoise ORM для прозрачного шифрования текстовых данных.
+    Значения шифруются при записи в БД и расшифровываются при чтении.
+    """
 
     def to_db_value(self, value, instance):
         if value is None:
@@ -30,6 +35,10 @@ class EncryptedTextField(fields.TextField):
 
 
 class Node(models.Model):
+    """
+    Модель узла (сервера), подключенного к мастер-боту.
+    Содержит информацию о конфигурации, статистике потребления ресурсов и биллинге.
+    """
     id = fields.IntField(pk=True)
     token_hash = fields.CharField(max_length=64, unique=True, index=True)
     token_safe = EncryptedTextField()

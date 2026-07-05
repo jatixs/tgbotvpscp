@@ -1,3 +1,7 @@
+/**
+ * Логика главной страницы дашборда.
+ * Обработка карточек нод, сортировки (Drag-and-Drop) и модальных окон детализации.
+ */
 /* /core/static/js/dashboard.js */
 
 // Keyboard layout conversion (RU <-> EN)
@@ -102,12 +106,11 @@ function initScrollAnimations() {
         entries.forEach(entry => {
             if (entry.isIntersecting) {
                 entry.target.classList.add('is-visible');
-                obs.unobserve(entry.target); // Анимируем только один раз
+                obs.unobserve(entry.target);
             }
         });
     }, observerOptions);
 
-    // ИСПРАВЛЕНИЕ: Выбираем только невидимые блоки, чтобы избежать повторной анимации
     const blocks = document.querySelectorAll('.lazy-block:not(.is-visible)');
     blocks.forEach(block => {
         observer.observe(block);
@@ -118,7 +121,6 @@ window.initDashboard = function () {
     cleanupDashboardSources();
     nodesFirstUpdateReceived = false;  // Reset flag on dashboard init
 
-    // Запускаем анимацию блоков
     initScrollAnimations();
 
     if (window.sseSource) {
@@ -139,7 +141,6 @@ window.initDashboard = function () {
             });
         }
 
-        // Lazy Load для списка узлов (Infinite Scroll)
         const listContainer = document.getElementById('nodesList');
         if (listContainer) {
             listContainer.onscroll = function () {
@@ -192,7 +193,6 @@ document.addEventListener("DOMContentLoaded", () => {
     if (document.getElementById('agentChart') || document.getElementById('nodesList')) {
         window.initDashboard();
     } else {
-        // Даже если нет графиков (например, пустая страница), пробуем запустить анимации
         initScrollAnimations();
     }
 });
@@ -312,7 +312,6 @@ function updateNodesListUI(data) {
             newList = allNodesData;
         }
 
-        // Применяем сортировку
         const sortSelect = document.getElementById('nodeSortSelect');
         const sortMode = sortSelect ? sortSelect.value : (localStorage.getItem('dashboardSortMode') || 'custom');
         if (sortSelect && sortSelect.value !== sortMode) {
@@ -462,7 +461,6 @@ function filterAndRenderNodes() {
         newList = allNodesData;
     }
 
-    // Применяем сортировку
     const sortSelect = document.getElementById('nodeSortSelect');
     const sortMode = sortSelect ? sortSelect.value : (localStorage.getItem('dashboardSortMode') || 'custom');
     if (sortMode === 'ping') {
@@ -534,7 +532,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
 function updateNodesScrollMode(container, count) {
     if (count > 3) {
-        // На мобильных карточки выше (flex-col), нужен больший лимит
         const w = window.innerWidth;
         const maxH = w < 640 ? '500px' : w < 1024 ? '420px' : '320px';
         container.style.maxHeight = maxH;
@@ -565,7 +562,6 @@ function renderNodesList() {
     updateNodesScrollMode(container, currentRenderList.length);
     renderNextNodeBatch();
     
-    // Инициализация Drag and Drop
     if (typeof Sortable !== 'undefined') {
         const sortMode = localStorage.getItem('dashboardSortMode') || 'custom';
         if (window.dashboardSortable) {
@@ -578,7 +574,6 @@ function renderNodesList() {
             onEnd: function () {
                 const newOrder = Array.from(container.querySelectorAll('[data-token]')).map(el => el.getAttribute('data-token'));
                 localStorage.setItem('dashboardNodeOrder', JSON.stringify(newOrder));
-                // Обновляем currentRenderList чтобы избежать мерцания при следующем SSE
                 const orderMap = {};
                 newOrder.forEach((t, i) => orderMap[t] = i);
                 currentRenderList.sort((a, b) => {
@@ -1603,7 +1598,6 @@ window.startNodeRename = function () {
         nameDisplay.classList.add('hidden');
         nameInputContainer.classList.remove('hidden');
         nameInput.value = currentName;
-        // ИСПРАВЛЕНИЕ: preventScroll: true
         nameInput.focus({ preventScroll: true });
     }
 };
@@ -1909,59 +1903,9 @@ window.openAddNodeModal = function () {
         if (i) {
             setTimeout(() => {
                 i.focus({ preventScroll: true });
-            }, 150); // Чуть увеличили задержку для надежности на iOS
+            }, 150);
         }
     }
-};
-
-window.animateModalClose = function (modal) {
-    if (!modal) return;
-    const card = modal.firstElementChild;
-    if (card) {
-        card.style.opacity = '0';
-        card.style.transform = 'scale(0.95)';
-    }
-    if (typeof handleModalInputClick !== 'undefined') {
-        modal.removeEventListener('click', handleModalInputClick);
-    }
-
-    setTimeout(() => {
-        modal.classList.add('hidden');
-        modal.classList.remove('flex');
-        if (document.body.style.position === 'fixed') {
-            const scrollY = Math.abs(parseInt(document.body.style.top || '0'));
-            document.body.style.position = '';
-            document.body.style.top = '';
-            document.body.style.width = '';
-            document.body.style.overflow = '';
-
-            // 3. ВАЖНО: Отключаем плавную прокрутку на всем документе перед восстановлением
-            const html = document.documentElement;
-            const originalBehavior = html.style.scrollBehavior;
-            html.style.scrollBehavior = 'auto';
-
-            // 4. Мгновенно прыгаем на место
-            window.scrollTo(0, scrollY);
-
-            // 5. Возвращаем плавность (если была) через небольшой таймаут
-            setTimeout(() => {
-                html.style.scrollBehavior = originalBehavior;
-            }, 50);
-        } else {
-            document.body.style.overflow = '';
-        }
-        modal.style.height = '';
-        modal.style.top = '';
-        modal.style.paddingBottom = '';
-
-        modal.classList.remove('items-start', 'pt-4', 'overflow-y-auto');
-        modal.classList.add('items-center');
-
-        if (card) {
-            card.classList.add('my-auto');
-            card.style.marginBottom = '';
-        }
-    }, 200);
 };
 
 // --- Services Manager ---

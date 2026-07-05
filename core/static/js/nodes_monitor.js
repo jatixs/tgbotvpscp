@@ -253,7 +253,7 @@ document.addEventListener('app:action:node-service-action', (e) => {
     showConfirm(
         I18N?.modal_title_confirm || 'Confirm',
         (I18N?.web_service_confirm || 'Execute {action} for {name}?')
-            .replace('{action}', actionLabel)
+            .replace('{action}', actionLabel.toLowerCase())
             .replace('{name}', name),
         () => nodeServiceAction(token, name, cmd, type)
     );
@@ -936,7 +936,6 @@ function updateModalCharts(history) {
     const tickColor = isDark ? '#9ca3af' : '#6b7280';
     const isMobile = window.innerWidth < 640;
 
-    // Градиенты точь-в-точь как в дашборде
     function getGradient(ctx, color) {
         const gradient = ctx.createLinearGradient(0, 0, 0, 400);
         gradient.addColorStop(0, color.replace('rgb', 'rgba').replace(')', ', 0.5)'));
@@ -949,14 +948,12 @@ function updateModalCharts(history) {
 
     const interactiveOptions = window.buildInteractiveChartOptions ? window.buildInteractiveChartOptions({}) : {};
 
-    // --- Обновление или создание графика ресурсов ---
     if (modalResChart) {
         const applyModalResChartData = () => {
             modalResChart.data.labels = labels;
             modalResChart.data.datasets[0].data = cpuData;
             modalResChart.data.datasets[1].data = ramData;
 
-            // Принудительно обновляем градиенты, чтобы они не пропадали
             modalResChart.data.datasets[0].backgroundColor = getGradient(resCtx, 'rgb(59, 130, 246)');
             modalResChart.data.datasets[1].backgroundColor = getGradient(resCtx, 'rgb(168, 85, 247)');
 
@@ -1014,14 +1011,12 @@ function updateModalCharts(history) {
         if (window.attachChartInteractions) window.attachChartInteractions(modalResChart, 'modalResChart');
     }
     
-    // --- Обновление или создание графика сети ---
     if (modalNetChart) {
         const applyModalNetChartData = () => {
             modalNetChart.data.labels = labels;
             modalNetChart.data.datasets[0].data = rxData;
             modalNetChart.data.datasets[1].data = txData;
 
-            // Принудительно обновляем градиенты
             modalNetChart.data.datasets[0].backgroundColor = getGradient(netCtx, 'rgb(34, 197, 94)');
             modalNetChart.data.datasets[1].backgroundColor = getGradient(netCtx, 'rgb(239, 68, 68)');
 
