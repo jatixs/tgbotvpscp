@@ -2019,20 +2019,20 @@ window.calculateDaysLeft = function(isoDateString) {
 
 window.getBillingBadgeHtml = function(daysLeft) {
     if (daysLeft === null) return '';
-    let badgeClass = "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400";
+    let badgeClass = "text-green-700 dark:text-green-400";
     if (daysLeft < 0) {
-        badgeClass = "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400";
+        badgeClass = "text-red-700 dark:text-red-400";
     } else if (daysLeft <= 3) {
-        badgeClass = "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400";
+        badgeClass = "text-red-700 dark:text-red-400";
     } else if (daysLeft <= 7) {
-        badgeClass = "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400";
+        badgeClass = "text-yellow-700 dark:text-yellow-400";
     }
     const isSmall = typeof window !== 'undefined' && window.innerWidth <= 380;
     const daysTemplate = isSmall
         ? (I18N?.web_billing_badge_days_short || "{days} д.")
         : (I18N?.web_billing_badge_days || "{days} дней");
     const txt = daysLeft < 0 ? (I18N?.web_billing_expired || "Expired!") : daysTemplate.replace("{days}", daysLeft);
-    return `<span class="px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider ml-1.5 shadow-sm border border-black/5 dark:border-white/5 ${badgeClass}">${txt}</span>`;
+    return `<span class="px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider ml-1.5 ${badgeClass}">${txt}</span>`;
 };
 
 window.showBillingModal = function(name, amount, currency, dateStr, daysLeft) {
@@ -2044,10 +2044,10 @@ window.showBillingModal = function(name, amount, currency, dateStr, daysLeft) {
     let statusHtml = "";
     if (daysLeft !== null) {
         if (daysLeft < 0) {
-            statusHtml = `<span class="px-2 py-1 rounded text-xs font-bold bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400">${I18N?.web_billing_status_expired || "Просрочен!"}</span>`;
+            statusHtml = `<span class="px-2 py-1 text-xs font-bold text-red-700 dark:text-red-400">${I18N?.web_billing_status_expired || "Просрочен!"}</span>`;
         } else {
             const activeText = (I18N?.web_billing_active_days || "Активен (осталось {days} дней)").replace("{days}", daysLeft);
-            statusHtml = `<span class="px-2 py-1 rounded text-xs font-bold bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">${activeText}</span>`;
+            statusHtml = `<span class="px-2 py-1 text-xs font-bold text-green-700 dark:text-green-400">${activeText}</span>`;
         }
     } else {
         statusHtml = `<span class="text-xs text-gray-400 font-medium">${I18N?.web_billing_not_set || "Не установлена"}</span>`;
