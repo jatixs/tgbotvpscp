@@ -781,14 +781,16 @@ function updateNodeModal(data) {
             if (isSet || data.next_payment_date) {
                 const daysLeft = window.calculateDaysLeft ? window.calculateDaysLeft(data.next_payment_date) : null;
                 const billingIconColor = daysLeft === null ? 'text-gray-400' : daysLeft < 0 ? 'text-red-500 dark:text-red-400' : daysLeft <= 6 ? 'text-yellow-500 dark:text-yellow-400' : 'text-green-500 dark:text-green-400';
-                badgeEl.innerHTML = DOMPurify.sanitize(`
+                const fragment = DOMPurify.sanitize(`
                     <button class="flex items-center h-5 px-1.5 rounded hover:bg-black/5 dark:hover:bg-white/10 transition text-gray-500 dark:text-gray-400 text-[10px] gap-1 whitespace-nowrap group">
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5 ${billingIconColor} transition-colors flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
                         </svg>
                         ${window.getBillingBadgeHtml ? window.getBillingBadgeHtml(daysLeft) : ''}
                     </button>
-                `);
+                `, { RETURN_DOM_FRAGMENT: true });
+                badgeEl.textContent = '';
+                badgeEl.appendChild(fragment);
                 const badgeBtn = badgeEl.querySelector('button');
                 if (badgeBtn) {
                     badgeBtn.onclick = () => {
