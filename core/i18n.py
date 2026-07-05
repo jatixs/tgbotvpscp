@@ -318,7 +318,7 @@ STRINGS = {
         "speedtest_ookla_starting": "🚀 <b>Запуск Speedtest...</b>\n\nЭто может занять до минуты.",
         "speedtest_ookla_results": "🚀 <b>Результаты теста скорости:</b>\n\n⬇️ <b>Скачивание:</b> {dl:.2f} Мбит/с\n⬆️ <b>Загрузка:</b> {ul:.2f} Мбит/с\n⏱️ <b>Пинг:</b> {ping:.1f} мс\n\n🏢 <b>Сервер:</b> {server} ({location})\n🔗 <b>Подробнее:</b> {url}",
         "speedtest_ookla_parse_error": "❌ Ошибка при обработке результатов speedtest: неверный формат ответа.",
-        "speedtest_not_installed": "❌ <b>Speedtest не установлен</b>\n\nДля проведения теста скорости требуется <b>{tool}</b>.\n\nЗапустите скрипт установки:\n<code>bash &lt;(curl -Ls https:
+        "speedtest_not_installed": "❌ <b>Speedtest не установлен</b>\n\nДля проведения теста скорости требуется <b>{tool}</b>.\n\nЗапустите скрипт установки:\n<code>bash &lt;(curl -Ls https://raw.githubusercontent.com/jatixs/tgbotvpscp/main/deploy.sh)</code>\n\nВыберите 'Обновить бота' для автоматической установки.",
         "iperf_fetch_error": "⚠️ Не удалось загрузить список серверов iperf3.",
         "iperf_fetch_error_ru": "⚠️ Не удалось загрузить список российских серверов iperf3.",
         "iperf_parse_error_ru": "⚠️ Ошибка разбора списка российских серверов iperf3 (YAML).",
@@ -375,7 +375,7 @@ STRINGS = {
         "node_uptime_status_restarting": "Перезагружается",
         "node_uptime_pending_reason": "⏳ Текущий простой: <b>{current_downtime}</b>\nПричина будет определена после восстановления связи.",
         "node_uptime_rebooting_now": "🔄 Текущий простой из-за перезагрузки: <b>{current_downtime}</b>",
-        "vless_prompt_file": "📤 <b>Отправьте файл конфигурации Xray (JSON) ИЛИ ссылку vless:
+        "vless_prompt_file": "📤 <b>Отправьте файл конфигурации Xray (JSON) ИЛИ ссылку vless://</b>\n\n<i>Важно: JSON-файл должен содержать рабочую конфигурацию outbound с Reality. Ссылка будет преобразована в JSON для импорта.</i>",
         "vless_error_not_json": "⛔ <b>Ошибка:</b> Файл должен быть формата <code>.json</code>.\n\nПопробуйте отправить файл еще раз.",
         "vless_prompt_name": "✅ Файл JSON получен.\n\nТеперь <b>введите имя</b> для этой VLESS-ссылки (например, 'My_Server_1'):",
         "vless_error_file_processing": "⚠️ Произошла ошибка при обработке файла: {error}",
