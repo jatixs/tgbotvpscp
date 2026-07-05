@@ -709,13 +709,12 @@ def _do_icmp_ping(target_ip="8.8.8.8"):
     import platform
     try:
         if platform.system().lower() == "windows":
-            cmd = ["ping", "-n", "1", "-w", "2000", target_ip]
             pattern = r"[=<](\d+)\s*ms"
+            proc = subprocess.run(["ping", "-n", "1", "-w", "2000", str(target_ip)], capture_output=True, timeout=5)
         else:
-            cmd = ["ping", "-c", "1", "-W", "2", target_ip]
             pattern = r"time=([\d\.]+)\s*ms"
+            proc = subprocess.run(["ping", "-c", "1", "-W", "2", str(target_ip)], capture_output=True, timeout=5)
 
-        proc = subprocess.run(cmd, capture_output=True, timeout=5)
         ping_match = re.search(pattern, proc.stdout.decode(errors="ignore"))
         if ping_match:
             return float(ping_match.group(1))
