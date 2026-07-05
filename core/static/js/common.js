@@ -2119,7 +2119,7 @@ window.renderHeaderBilling = function() {
     // Only show the header icon if billing is enabled or data exists.
     if (!isSet && !master_billing_json.next_payment_date) return;
     
-    let btnHtml = `
+    const fragment = DOMPurify.sanitize(`
         <button class="flex items-center justify-center h-8 px-2 sm:px-3 rounded-lg hover:bg-black/5 dark:hover:bg-white/10 transition text-gray-600 dark:text-gray-400 font-medium text-xs sm:text-sm gap-1 whitespace-nowrap group"
                 title="${I18N?.web_billing_modal_title || 'Детали оплаты'}">
             <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-gray-500 group-hover:text-blue-500 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -2127,8 +2127,9 @@ window.renderHeaderBilling = function() {
             </svg>
             <span class="hidden sm:inline-flex">${getBillingBadgeHtml(daysLeft)}</span>
         </button>
-    `;
-    container.innerHTML = DOMPurify.sanitize(btnHtml);
+    `, { RETURN_DOM_FRAGMENT: true });
+    container.textContent = '';
+    container.appendChild(fragment);
     const badgeBtn = container.querySelector('button');
     if (badgeBtn) {
         badgeBtn.onclick = () => {
@@ -2151,7 +2152,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
 window.showModal = function(options) {
     const { title, content, buttons } = options;
-    const modalId = 'dynamicModal_' + Math.random().toString(36).substr(2, 9);
+    const randomBytes = new Uint32Array(1);
+    window.crypto.getRandomValues(randomBytes);
+    const modalId = 'dynamicModal_' + randomBytes[0].toString(36);
     
     const modal = document.createElement('div');
     modal.id = modalId;
@@ -2167,7 +2170,7 @@ window.showModal = function(options) {
         buttonsHtml += `</div>`;
     }
 
-    modal.innerHTML = `
+    const fragment = DOMPurify.sanitize(`
         <div class="bg-white dark:bg-gray-800 border border-white/20 dark:border-white/10 rounded-2xl shadow-2xl w-full max-w-md relative flex flex-col" style="transition: opacity 0.2s ease-out, transform 0.2s ease-out;">
             <div class="p-4 border-b border-gray-200 dark:border-white/5 flex justify-between items-center rounded-t-2xl">
                 <h3 class="text-lg font-bold text-gray-900 dark:text-white">${title || ''}</h3>
@@ -2182,7 +2185,9 @@ window.showModal = function(options) {
             </div>
             ${buttonsHtml}
         </div>
-    `;
+    `, { RETURN_DOM_FRAGMENT: true });
+    modal.textContent = '';
+    modal.appendChild(fragment);
     
     document.body.appendChild(modal);
     
