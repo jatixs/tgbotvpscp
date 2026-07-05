@@ -5,14 +5,19 @@
 <h1 align="center">📝 Telegram VPS Management Bot — Changelog</h1>
 
 <p align="center">
-<p    <img src="https://img.shields.io/badge/version-v1.24.0-blue?style=flat-square" alt="Version 1.24.0"/>
-    <img src="https://img.shields.io/badge/build-83-purple?style=flat-square" alt="Build 83"/>
+<p    <img src="https://img.shields.io/badge/version-v1.24.1-blue?style=flat-square" alt="Version 1.24.1"/>
+    <img src="https://img.shields.io/badge/build-84-purple?style=flat-square" alt="Build 84"/>
     <img src="https://img.shields.io/badge/date-Jul%2005%202026-green?style=flat-square" alt="Date Jul 05 2026"/>
 	<img src="https://img.shields.io/badge/status-stable-green?style=flat-square" alt="Status Stable"/>
 </p>
 
 ---
-## [1.24.0] - 2026-07-05
+## [1.24.1] - 2026-07-05
+
+### 🛡️ Security & SAST:
+* **WebUI (XSS Protection):** Fixed multiple SAST warnings and potential XSS vulnerabilities. All `innerHTML` assignments involving user data were rewritten using the secure `DOMPurify.sanitize(..., { RETURN_DOM_FRAGMENT: true })` pattern.
+* **Unique Identifiers:** Replaced the cryptographically weak `Math.random()` with the secure `window.crypto.getRandomValues()` generator to prevent predictable IDs in modal windows.
+* **Core / Subprocess:** Hardened shell command execution in the `fail2ban` module and node agent (`node.py`). Potentially unsafe calls to `create_subprocess_shell` and `subprocess.run` were migrated to `create_subprocess_exec` and static argument lists to prevent Shell Injection vulnerabilities.
 
 ### 🚀 Added / Improved:
 * **Billing System:** Introduced a comprehensive payment tracking system. For each node and the master server, an admin can now set a rental cost, select a currency (€ / $ / ₽), and configure the next payment date directly from the Telegram bot.
@@ -39,6 +44,11 @@
 
 ---
 ## [1.23.3] - 2026-06-17
+
+### 🛡️ Security & SAST:
+* **WebUI (XSS Protection):** Fixed multiple SAST warnings and potential XSS vulnerabilities. All `innerHTML` assignments involving user data were rewritten using the secure `DOMPurify.sanitize(..., { RETURN_DOM_FRAGMENT: true })` pattern.
+* **Unique Identifiers:** Replaced the cryptographically weak `Math.random()` with the secure `window.crypto.getRandomValues()` generator to prevent predictable IDs in modal windows.
+* **Core / Subprocess:** Hardened shell command execution in the `fail2ban` module and node agent (`node.py`). Potentially unsafe calls to `create_subprocess_shell` and `subprocess.run` were migrated to `create_subprocess_exec` and static argument lists to prevent Shell Injection vulnerabilities.
 
 ### 🚀 Added / Improved:
 * **Network Monitoring (Ping):** The ping measurement mechanism on nodes has been migrated from `ICMP` to `HTTP` (`HEAD` request), resolving the issue of ICMP packets being blocked by strict firewalls and making measurements more accurate and stable.
