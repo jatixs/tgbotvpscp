@@ -17,13 +17,11 @@ from .config import ADMIN_USER_ID
 from .shared_state import ALLOWED_USERS
 from .utils import get_web_key
 
-# Строковые константы ролей, используемые в ALLOWED_USERS["group"]
 ROLE_USER: str = "users"
 ROLE_ADMIN: str = "admins"
 
 
 # ---------------------------------------------------------------------------
-# Web-контекст: user — dict из серверной сессии {"id": int, "role": str, ...}
 # ---------------------------------------------------------------------------
 
 def is_admin(user: dict[str, Any]) -> bool:
@@ -40,7 +38,6 @@ def is_root(user: dict[str, Any]) -> bool:
 
 
 # ---------------------------------------------------------------------------
-# Bot/service-контекст: принимает Telegram user_id (int)
 # ---------------------------------------------------------------------------
 
 def get_role_level(user_id: int) -> int:
@@ -62,7 +59,6 @@ def get_role_level(user_id: int) -> int:
 
 
 # ---------------------------------------------------------------------------
-# Утилита для шаблонов
 # ---------------------------------------------------------------------------
 
 def build_user_role_js(role: str, user_id: int) -> str:

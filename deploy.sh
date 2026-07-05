@@ -257,7 +257,6 @@ common_install_steps() {
     echo "" > /tmp/${SERVICE_NAME}_install.log
     msg_info "1. Обновление системы..."
     
-    # Удаляем битые симлинки Nginx (оставшиеся от удаленных сайтов), чтобы избежать ошибок apt-get dpkg
     if [ -d "/etc/nginx/sites-enabled" ]; then
         sudo find /etc/nginx/sites-enabled -xtype l -delete 2>/dev/null
     fi
@@ -863,6 +862,7 @@ EOF
     elif [ ! -d "${BOT_INSTALL_PATH}/migrations" ]; then
         _run "'$aerich_bin' -c '$aerich_cfg' init-db" >/dev/null 2>&1 || true
     else
+        _run "'$aerich_bin' -c '$aerich_cfg' migrate --name update" >/dev/null 2>&1 || true
         _run "'$aerich_bin' -c '$aerich_cfg' upgrade" >/dev/null 2>&1 || true
     fi
 
@@ -1111,22 +1111,18 @@ update_bot() {
     
     local new_ver=""
     
-    # 1. Пробуем получить версию из названия ветки (например, release/1.19.0 -> 1.19.0)
     if echo "$GIT_BRANCH" | grep -q "release/"; then
         new_ver=$(echo "$GIT_BRANCH" | grep -oP 'release/\K[\d\.]+')
     fi
     
-    # 2. Если не вышло, ищем последнюю версию в CHANGELOG.md (по формату ## [1.19.0])
     if [ -z "$new_ver" ] && [ -f "${BOT_INSTALL_PATH}/CHANGELOG.md" ]; then
         new_ver=$(grep -oP '^## \[\K[\d\.]+' "${BOT_INSTALL_PATH}/CHANGELOG.md" | head -n 1)
     fi
     
-    # 3. Если и там нет, берем из README.md (как было изначально)
     if [ -z "$new_ver" ] && [ -f "$README_FILE" ]; then
         new_ver=$(grep -oP 'img\.shields\.io/badge/version-v\K[\d\.]+' "$README_FILE")
     fi
 
-    # Обновляем .env
     if [ -n "$new_ver" ] && [ -f "${ENV_FILE}" ]; then
          if grep -q "^INSTALLED_VERSION=" "${ENV_FILE}"; then
              sudo sed -i "s/^INSTALLED_VERSION=.*/INSTALLED_VERSION=\"${new_ver}\"/" "${ENV_FILE}"
@@ -1187,6 +1183,7 @@ EOF
     if [ "$current_mode" == "docker" ]; then
          local mode=$(grep '^INSTALL_MODE=' "${ENV_FILE}" | cut -d'=' -f2 | tr -d '"')
          local cn="tg-bot-${mode}"
+         sudo $dc_cmd --profile "${mode}" exec -T ${cn} aerich migrate --name update >/dev/null 2>&1 || true
          sudo $dc_cmd --profile "${mode}" exec -T ${cn} aerich upgrade >/dev/null 2>&1
          sudo $dc_cmd --profile "${mode}" exec -T ${cn} python migrate.py $MIGRATE_ARGS >/dev/null 2>&1
          
@@ -1231,7 +1228,6 @@ toggle_agent_monitoring() {
     local status=$(check_agent_monitoring_status)
 
     if [ "$status" == "вкл" ]; then
-        # Отключаем мониторинг - удаляем переменные
         msg_warning "Отключение мониторинга агента..."
         sed -i '/^# Agent Monitoring Configuration$/d' "${ENV_FILE}"
         sed -i '/^DEBUG=/d' "${ENV_FILE}"
@@ -1251,7 +1247,6 @@ toggle_agent_monitoring() {
             msg_success "Нода перезапущена"
         fi
     else
-        # Включаем/чинить мониторинг - запрашиваем данные и обновляем переменные
         msg_info "Настройка мониторинга агента..."
         if [ -z "$current_bot_token" ]; then
             msg_warning "BOT_TOKEN отсутствует или пустой в .env"
@@ -1323,7 +1318,6 @@ toggle_agent_monitoring() {
             alert_delay="${current_delay:-15}"
         fi
 
-        # Обновляем переменные в .env
         sed -i '/^# Agent Monitoring Configuration$/d' "${ENV_FILE}"
         sed -i '/^DEBUG=/d' "${ENV_FILE}"
         sed -i '/^BOT_TOKEN=/d' "${ENV_FILE}"
@@ -1380,7 +1374,6 @@ main_menu() {
             echo -e "${C_GREEN}  7) Установить НОДУ (Клиент)${C_RESET}"
         fi
         
-        # Показываем пункт мониторинга агента только для нод
         if [ "$IS_NODE" == "yes" ]; then
             local monitoring_status=$(check_agent_monitoring_status)
             echo -e "${C_YELLOW}  8) Мониторинг агента (${monitoring_status})${C_RESET}"

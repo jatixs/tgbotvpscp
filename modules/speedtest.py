@@ -118,18 +118,32 @@ async def edit_status_safe(
 
 
 async def speedtest_progress_updater(
-    bot: Bot, chat_id: int, message_id: int, start_time: float, lang: str, prefix: str = "⏳ Speedtest..."
+    bot: Bot,
+    chat_id: int,
+    message_id: int,
+    start_time: float,
+    lang: str,
+    key: str = "speedtest_progress_downloading",
+    key_params: dict = None,
+    phase_cycle: tuple[str, ...] | None = None,
+    phase_interval: int = 6,
 ):
     from aiogram.exceptions import TelegramRetryAfter
     while True:
         await asyncio.sleep(3)
         elapsed = int(time.time() - start_time)
+        params = dict(key_params or {})
+        params["elapsed"] = elapsed
+        progress_key = key
+        if phase_cycle:
+            phase_index = min(len(phase_cycle) - 1, elapsed // max(1, phase_interval))
+            progress_key = phase_cycle[phase_index]
         try:
             await bot.edit_message_text(
-                f"{prefix} ({elapsed}s)", 
-                chat_id=chat_id, 
-                message_id=message_id, 
-                parse_mode="HTML"
+                _(progress_key, lang, **params),
+                chat_id=chat_id,
+                message_id=message_id,
+                parse_mode="HTML",
             )
         except TelegramRetryAfter as e:
             await asyncio.sleep(e.retry_after)
@@ -375,7 +389,7 @@ async def run_iperf_test_async(
         _("speedtest_status_downloading", lang, host=escape_html(host), ping=f"{ping:.2f}"),
         lang,
     )
-    dl_updater = asyncio.create_task(speedtest_progress_updater(bot, chat_id, message_id, time.time(), lang, "⏳ Testing Download..."))
+    dl_updater = asyncio.create_task(speedtest_progress_updater(bot, chat_id, message_id, time.time(), lang, "speedtest_progress_downloading"))
     try:
         proc = await asyncio.create_subprocess_exec(
             "iperf3", *cmd_dl, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
@@ -404,7 +418,7 @@ async def run_iperf_test_async(
         _("speedtest_status_uploading", lang, host=escape_html(host), ping=f"{ping:.2f}"),
         lang,
     )
-    ul_updater = asyncio.create_task(speedtest_progress_updater(bot, chat_id, message_id, time.time(), lang, "⏳ Testing Upload..."))
+    ul_updater = asyncio.create_task(speedtest_progress_updater(bot, chat_id, message_id, time.time(), lang, "speedtest_progress_uploading"))
     try:
         proc = await asyncio.create_subprocess_exec(
             "iperf3", *cmd_ul, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
@@ -441,7 +455,22 @@ async def run_iperf_test_async(
 async def run_ookla_speedtest(bot: Bot, chat_id: int, message_id: int, lang: str) -> str:
     """Run Ookla Speedtest CLI and return formatted result"""
     cmd = ["--accept-license", "--accept-gdpr", "--format=json"]
-    updater = asyncio.create_task(speedtest_progress_updater(bot, chat_id, message_id, time.time(), lang, "⏳ Speedtest Ookla..."))
+    updater = asyncio.create_task(
+        speedtest_progress_updater(
+            bot,
+            chat_id,
+            message_id,
+            time.time(),
+            lang,
+            "speedtest_progress_ookla",
+            phase_cycle=(
+                "speedtest_progress_ping",
+                "speedtest_progress_downloading",
+                "speedtest_progress_uploading",
+            ),
+            phase_interval=7,
+        )
+    )
     
     try:
         proc = await asyncio.create_subprocess_exec(
@@ -611,7 +640,13 @@ async def speedtest_iperf3_handler(message: types.Message):
             lang,
             force=True,
         )
-        best_servers = await find_best_servers_async(all_servers, cc, continent)
+        ping_updater = asyncio.create_task(
+            speedtest_progress_updater(message.bot, message.chat.id, msg.message_id, time.time(), lang, "speedtest_progress_ping")
+        )
+        try:
+            best_servers = await find_best_servers_async(all_servers, cc, continent)
+        finally:
+            ping_updater.cancel()
         if not best_servers:
             try:
                 await message.bot.edit_message_text(

@@ -5,15 +5,34 @@
 <h1 align="center">📝 Telegram VPS Management Bot — Changelog</h1>
 
 <p align="center">
-<p align="center">
-    <img src="https://img.shields.io/badge/version-v1.23.4-blue?style=flat-square" alt="Version 1.23.4"/>
-    <img src="https://img.shields.io/badge/build-81-purple?style=flat-square" alt="Build 81"/>
-    <img src="https://img.shields.io/badge/date-Jun%2017%202026-green?style=flat-square" alt="Date Jun 17 2026"/>
+<p    <img src="https://img.shields.io/badge/version-v1.24.0-blue?style=flat-square" alt="Version 1.24.0"/>
+    <img src="https://img.shields.io/badge/build-83-purple?style=flat-square" alt="Build 83"/>
+    <img src="https://img.shields.io/badge/date-Jul%2005%202026-green?style=flat-square" alt="Date Jul 05 2026"/>
 	<img src="https://img.shields.io/badge/status-stable-green?style=flat-square" alt="Status Stable"/>
 </p>
 
 ---
-## [1.23.4] - 2026-06-17
+## [1.24.0] - 2026-07-05
+
+### 🚀 Added / Improved:
+* **Billing System:** Introduced a comprehensive payment tracking system. For each node and the master server, an admin can now set a rental cost, select a currency (€ / $ / ₽), and configure the next payment date directly from the Telegram bot.
+* **Automatic Reminders (Billing):** A background task automatically detects the node's hosting provider (via ip-api) and sends the administrator a warning 3 days before the end of the paid period.
+* **WebUI (Rental and Modal Windows):** Informative badges showing the remaining number of days until payment have been added to node cards and the web panel header. The modal window displays details: provider, cost, and exact payment date.
+* **DB (Auto Migrations):** An automatic migration mechanism via `aerich` has been implemented, guaranteeing correct database schema updates without data loss.
+* **Ping Method Selection:** A switch for the latency measurement method has been added to the WebUI settings: `ICMP` or `HTTP` (`HEAD` request), which solves the problem of ICMP packets being blocked by strict firewalls.
+* **Localization and Language Purity:** Conducted a massive cleanup of the interface. In the Russian localization, more than 35 anglicisms were removed ("CPU/RAM/Disk" → "ЦП/ОЗУ/Диск", "Restart/Stop" → "Перезапуск/Остановка", "Offline" → "Не в сети", etc.). For the English localization, pop-up notifications (toasts) were rewritten to a more natural language (for example, "Lite version enabled" instead of "Light Version: ON").
+* **Design and Aesthetics:** Redundant green backgrounds and outlines for active elements and badges in node modal windows were removed. The design has become more minimalist, strict, and modern.
+
+### 🔧 Fixed:
+* **WebUI (Page Scrolling):** Fixed an unpleasant bug in the dashboard where closing a node details window on desktop devices caused the page to scroll to the very top. Now the scroll position is correctly saved and restored across all device types.
+* **WebUI (Node Monitor — SSE):** Fixed an issue with the Server-Sent Events (SSE) channel responsible for pre-rendering services — data is now displayed instantly.
+* **WebUI (DOMPurify Protection):** Click handlers on billing buttons have been refactored to prevent their accidental removal by the strict anti-XSS filter `DOMPurify`.
+* **Core / Middlewares:** Fixed `AttributeError: 'int' object has no attribute 'tzinfo'` in `CallbackTTLMiddleware` when processing stale callback queries.
+* **WebUI (Responsiveness):** The settings page layout has been reworked and now correctly scales on narrow mobile screens without content cropping.
+* **Nodes / Agent:** Removed unused global variables in `node.py`, eliminating linter warnings on import.
+
+---
+## [1.23.4] - 2026-07-02
 
 ### 🔧 Fixed:
 * **Nodes / Selftest:** Fixed node selftest command output. The i18n template `selftest_results_body` parameter names did not match those sent by the node agent (`cpu`/`mem`/`disk` instead of `cpu_val`/`mem_val`/`disk_val`), causing unresolved placeholders in the message. Added missing parameters `cpu_bot`, `mem_bot`, `disk_bot` (displayed as "N/A" since the bot process does not run on nodes). CPU, RAM, and Disk values are now formatted in human-readable units (GHz/MHz, MB, GB) matching the main selftest output.

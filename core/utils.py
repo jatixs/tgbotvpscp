@@ -1,3 +1,7 @@
+"""
+Вспомогательные утилиты проекта.
+Содержит функции для работы с сетью, логированием, шифрованием и форматированием данных.
+"""
 import os
 import json
 import logging
@@ -1139,7 +1143,6 @@ def clear_old_audit_logs(days_to_keep: int = 90):
                             removed_count += 1
                     except (json.JSONDecodeError, KeyError, ValueError):
                         # Keep corrupted entries
-                        # Сохраняем поврежденные записи -> Keep corrupted entries
                         f_out.write(line)
         
         # Replace original file

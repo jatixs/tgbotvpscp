@@ -1,3 +1,7 @@
+"""
+REST API контроллеры для управления нодами.
+Обрабатывают запросы веб-интерфейса, связанные с метриками, логами и конфигурацией удаленных серверов.
+"""
 from __future__ import annotations
 
 import asyncio
@@ -20,7 +24,7 @@ from .. import nodes_db, shared_state
 from ..config import ADMIN_USER_ID, BASE_DIR, NODE_OFFLINE_TIMEOUT, TG_BOT_NAME, WEB_SERVER_HOST, WEB_SERVER_PORT, DEFAULT_LANGUAGE
 from ..i18n import STRINGS, get_text as _, get_user_lang
 from ..messaging import send_alert
-from ..utils import decrypt_for_web, encrypt_for_web, get_app_version, get_country_flag, get_node_uptime_snapshot, get_server_timezone_label, get_web_key
+from ..utils import decrypt_for_web, encrypt_for_web, format_traffic, format_uptime, get_app_version, get_country_flag, get_node_uptime_snapshot, get_server_timezone_label, get_web_key
 from .auth import COOKIE_NAME, SERVER_SESSIONS, get_current_user
 from ..rbac import build_user_role_js, get_role_level as get_user_role_level, is_admin as _is_admin
 from modules.services import (
@@ -154,7 +158,8 @@ async def process_node_result_background(
         return
 
     final_text = text
-    lang = get_user_lang(user_id)  # Получаем язык пользователя один раз
+    # Retrieve user language once to avoid redundant database calls
+    lang = get_user_lang(user_id)
     
     if isinstance(text, dict) and text.get("type") == "i18n":
         try:
@@ -164,6 +169,15 @@ async def process_node_result_background(
             for param_key, param_value in params.items():
                 if isinstance(param_value, dict) and "key" in param_value:
                     resolved_params[param_key] = _(param_value["key"], lang, **param_value.get("params", {}))
+                elif isinstance(param_value, dict) and "format" in param_value:
+                    fmt = param_value["format"]
+                    val = param_value.get("value", 0)
+                    if fmt == "traffic":
+                        resolved_params[param_key] = format_traffic(val, lang)
+                    elif fmt == "uptime":
+                        resolved_params[param_key] = format_uptime(val, lang)
+                    else:
+                        resolved_params[param_key] = str(val)
                 else:
                     resolved_params[param_key] = param_value
             final_text = _(key, lang, **resolved_params)
@@ -224,9 +238,9 @@ async def process_node_result_background(
                     text=_("node_response_template", lang, name=node_name, text=final_text),
                     parse_mode="HTML",
                 )
-                break  # Успешно отправлено
+                break
             except TelegramRetryAfter as e:
-                # Если упёрлись в лимит - ждём указанное телеграмом время и повторяем
+                # If we hit the rate limit, wait for the requested duration and retry
                 await asyncio.sleep(e.retry_after)
             except Exception as exc:
                 logging.error("Background send error: %s", exc)
@@ -399,6 +413,8 @@ async def handle_heartbeat(request: web.Request) -> web.StreamResponse:
             "agent_alert_reporter_hash": alert_reporter_hash,
             "node_name": (current_node or node).get("name", ""),
             "ping_interval": getattr(current_config, "PING_INTERVAL", 30),
+            "ping_mode": getattr(current_config, "PING_MODE", "http"),
+            "ping_target": getattr(current_config, "PING_TARGET", "google"),
         }
     )
 
@@ -527,6 +543,16 @@ async def handle_nodes_monitor_page(request: web.Request) -> web.StreamResponse:
     role = str(user.get("role", "users"))
     is_admin = _is_admin(user)
 
+    if is_admin and user_id == ADMIN_USER_ID:
+        role_text = _("web_role_owner", lang)
+        role_badge_html = f'<span class="role-badge-owner hidden sm:inline-flex px-2 py-0.5 rounded text-[10px] border uppercase font-bold">{role_text}</span>'
+    elif is_admin:
+        role_text = _("web_role_admins", lang)
+        role_badge_html = f'<span class="role-badge-admin hidden sm:inline-flex px-2 py-0.5 rounded text-[10px] border uppercase font-bold">{role_text}</span>'
+    else:
+        role_text = _("web_role_users", lang)
+        role_badge_html = f'<span class="role-badge-user hidden sm:inline-flex px-2 py-0.5 rounded text-[10px] border uppercase font-bold">{role_text}</span>'
+
     if not is_admin:
         raise web.HTTPFound("/")
 
@@ -548,6 +574,8 @@ async def handle_nodes_monitor_page(request: web.Request) -> web.StreamResponse:
         "user_avatar": _get_avatar_html(user),
         "user_name": user.get("first_name", "User"),
         "user_role_js": build_user_role_js(role, user_id),
+        "role_badge": role_badge_html,
+        "settings_btn": f'<a href="/settings" class="flex items-center justify-center w-8 h-8 rounded-lg hover:bg-black/5 dark:hover:bg-white/10 transition text-gray-600 dark:text-gray-400" title="{_("web_settings_button", lang)}"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg></a>',
         "web_monitor_title": _("web_nodes_monitor_title", lang),
         "web_mass_actions": _("web_nodes_monitor_mass_actions", lang),
         "web_select_all": _("web_nodes_monitor_select_all", lang),
@@ -576,6 +604,10 @@ async def handle_nodes_monitor_page(request: web.Request) -> web.StreamResponse:
         "web_loading": _("web_loading", lang),
         "web_stats_total": _("web_stats_total", lang),
         "web_uptime": _("web_nodes_monitor_uptime", lang),
+        "web_notif_source_agent": _("web_notif_source_agent", lang),
+        "web_notif_source_node": _("web_notif_source_node", lang),
+        "web_notifications_title": _("web_notifications_title", lang),
+        "web_clear_notifications": _("web_clear_notifications", lang),
         "web_resources_chart": _("web_nodes_monitor_resources_chart", lang),
         "web_network_chart": _("web_nodes_monitor_network_chart", lang),
         "web_services_title": _("web_nodes_monitor_tab_services", lang),
@@ -599,6 +631,12 @@ async def handle_nodes_monitor_page(request: web.Request) -> web.StreamResponse:
                 "web_error": _("web_nodes_monitor_error", lang),
                 "web_services_empty": _("web_nodes_monitor_no_services", lang),
                 "web_services_loading": _("web_nodes_monitor_services_loading", lang),
+                "web_notif_source_agent": _("web_notif_source_agent", lang),
+                "web_notif_source_node": _("web_notif_source_node", lang),
+                "web_notifications_title": _("web_notifications_title", lang),
+                "web_clear_notifications": _("web_clear_notifications", lang),
+                "web_no_notifications": _("web_no_notifications", lang),
+                "web_notifications_cleared": _("web_notifications_cleared", lang),
                 "modal_title_alert": _("modal_title_alert", lang),
                 "modal_title_confirm": _("modal_title_confirm", lang),
                 "modal_title_error": _("modal_title_error", lang),
@@ -667,7 +705,8 @@ async def handle_nodes_monitor_list(request: web.Request) -> web.StreamResponse:
     user = get_current_user(request)
     if not user:
         return web.Response(status=401)
-    lang = get_user_lang(int(user["id"]))
+    user_id = int(user["id"])
+    lang = get_user_lang(user_id)
 
     current_token = request.cookies.get(COOKIE_NAME)
     response = web.StreamResponse(status=200, reason="OK")

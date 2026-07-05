@@ -321,37 +321,22 @@ async def _generate_selftest_data(lang: str) -> tuple[str, InlineKeyboardMarkup]
     else:
         inet_status = _("selftest_nodes_some_offline", lang, online=online_nodes, total=total_nodes) + "\n"
     
-    # Measure ping: ICMP first (accurate), HTTP fallback if blocked
-    import platform
-    try:
-        if platform.system().lower() == "windows":
-            cmd = ["ping", "-n", "1", "-w", "2000", "8.8.8.8"]
-            pattern = r"[=<](\d+)\s*ms"
-        else:
-            cmd = ["ping", "-c", "1", "-W", "2", "8.8.8.8"]
-            pattern = r"time=([\d\.]+)\s*ms"
-        
-        # nosemgrep: python.lang.security.audit.dangerous-asyncio-create-exec-audit.dangerous-asyncio-create-exec-audit
-        proc = await asyncio.create_subprocess_exec(
-            *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
-        )
-        stdout, stderr_ignored = await asyncio.wait_for(proc.communicate(), timeout=5)
-        ping_match = re.search(pattern, stdout.decode())
-        if ping_match:
-            ping = str(round(float(ping_match.group(1)), 1))
-    except Exception:
-        pass
+    from core import shared_state
+    ping = getattr(shared_state, "AGENT_PING_CACHE", "n/a")
     
-    # HTTP fallback if ICMP failed
-    if ping == "n/a":
-        try:
-            async with aiohttp.ClientSession() as session:
-                t1 = time.time()
-                async with session.get("http://www.google.com", timeout=2) as resp:
-                    if resp.status == 200:
-                        ping = f"{int((time.time() - t1) * 1000)}"
-        except Exception:
-            pass
+    ping_target_conf = getattr(config, "PING_TARGET", "google")
+    if ping_target_conf == "cloudflare":
+        ping_target_label = "1.1.1.1"
+    elif ping_target_conf == "internal":
+        timeout_sec = getattr(config, "NODE_OFFLINE_TIMEOUT", 120)
+        now = time.time()
+        online_nodes_list = [n for n in all_nodes.values() if now - n.get("last_seen", 0) < timeout_sec and not n.get("is_restarting")]
+        if online_nodes_list:
+            ping_target_label = online_nodes_list[0].get("ip", _("selftest_target_nodes", lang))
+        else:
+            ping_target_label = _("selftest_target_nodes", lang)
+    else:
+        ping_target_label = "8.8.8.8"
 
     ssh_info = ""
     if config.INSTALL_MODE == "root" or os.geteuid() == 0:
@@ -372,6 +357,7 @@ async def _generate_selftest_data(lang: str) -> tuple[str, InlineKeyboardMarkup]
         disk_bot=disk_bot,
         uptime=uptime_str,
         inet_status=inet_status,
+        ping_target=ping_target_label,
         ping=ping,
         ipv4=ip_v4,
         ipv6=ip_v6,

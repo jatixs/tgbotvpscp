@@ -1,3 +1,7 @@
+"""
+Главный файл запуска Telegram-бота.
+Инициализирует диспетчер, подключает middlewares, оркестратор и запускает поллинг.
+"""
 from core.middlewares import SpamThrottleMiddleware, AutoDeleteMessageMiddleware, CallbackTTLMiddleware
 from core.orchestrator import ModuleOrchestrator, ModuleTier
 from core.i18n import _, I18nFilter, get_language_keyboard
@@ -454,8 +458,6 @@ async def main():
         await i18n.load_user_settings_async()
         await utils.load_agent_availability_async()
         asyncio.create_task(auth.refresh_user_names(bot))
-        # Убраны вызовы utils.initial_reboot_check и utils.initial_restart_check
-        # Теперь эта логика обрабатывается в watchdog.py
 
         # ─── Memory Orchestrator: setup + start GC ───
         await orchestrator.setup()
