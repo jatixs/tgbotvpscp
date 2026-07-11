@@ -20,6 +20,7 @@ import asyncio
 import json
 import logging
 import os
+import time
 
 from aiogram import Bot, Dispatcher, F, types
 from aiogram.filters import Command
@@ -37,6 +38,9 @@ ALERT_BOT_TOKEN: str | None = os.getenv("ALERT_BOT_TOKEN")
 
 # Путь к JSON-файлу с ID подписчиков
 SUBSCRIBERS_FILE = os.path.join(config.CONFIG_DIR, "alert_subscribers.json")
+
+# Словарь для антифлуда: user_id -> timestamp
+_user_last_message_time: dict[int, float] = {}
 
 # ─── FSM States для main bot ──────────────────────────────────────────────────
 
@@ -263,13 +267,16 @@ if alert_dp is not None:
             await message.answer(
                 "👋 Добро пожаловать!\n\n"
                 "Вы подписались на уведомления от администратора.\n"
-                "Вы можете написать нам любое сообщение — мы обязательно ответим."
+                "⚠️ <b>Внимание:</b> писать боту можно только <b>в ответ</b> на сообщения от администратора (используйте функцию Telegram «Ответить» / «Reply»).\n"
+                "Обычные сообщения бот не принимает.",
+                parse_mode="HTML"
             )
             logging.info(f"[client_alerts] Новый подписчик: {user_id} ({user_name})")
         else:
             await message.answer(
                 "✅ Вы уже подписаны на уведомления.\n"
-                "Напишите нам любое сообщение — администратор ответит вам."
+                "⚠️ Напоминаем: чтобы написать нам, используйте функцию «Ответить» на любое сообщение от администратора.",
+                parse_mode="HTML"
             )
 
     @alert_dp.message()
@@ -281,10 +288,23 @@ if alert_dp is not None:
         if alert_bot is None:
             return
 
-        # Убеждаемся, что пользователь подписан
-        await _add_subscriber(message.from_user.id)
+        # Проверка, что это ответ на сообщение
+        if not message.reply_to_message:
+            await message.answer("⚠️ Ошибка: пожалуйста, используйте функцию <b>«Ответить»</b> (Reply) на сообщение от администратора, чтобы мы получили ваш ответ.", parse_mode="HTML")
+            return
 
+        # Убеждаемся, что пользователь подписан
         user_id = message.from_user.id
+        await _add_subscriber(user_id)
+
+        # Антифлуд: максимум 1 сообщение в 3 секунды
+        now = time.time()
+        last_time = _user_last_message_time.get(user_id, 0)
+        if now - last_time < 3.0:
+            await message.answer("⏳ Пожалуйста, подождите несколько секунд перед отправкой следующего сообщения.")
+            return
+        _user_last_message_time[user_id] = now
+
         user_name = message.from_user.full_name or f"ID {user_id}"
         username_str = (
             f"@{message.from_user.username}"
@@ -293,7 +313,7 @@ if alert_dp is not None:
         )
 
         ticket_header = (
-            f"📨 <b>Новое сообщение от клиента</b>\n"
+            f"📨 <b>Вам ответили на алерт</b>\n"
             f"👤 <b>{user_name}</b> ({username_str})\n"
             f"🆔 ID: <code>{user_id}</code>\n"
             f"━━━━━━━━━━━━━━━━━━━━━━━━\n"
