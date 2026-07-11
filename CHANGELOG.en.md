@@ -12,6 +12,15 @@
 </p>
 
 ---
+## [1.24.2] - 2026-07-11
+
+### 🚀 Added / Improved:
+* **Client Alerts Module (Gateway Bot):** Completely redesigned the user communication mechanism. Clients now communicate via a dedicated gateway bot (`ALERT_BOT_TOKEN`). Messages are forwarded to the administrator in the main bot as tickets, which can be replied to directly via the inline "Reply" button.
+* **Broadcasts:** Added the ability to send messages (text, photos, videos) to all Gateway Bot subscribers directly from the control panel in Telegram.
+* **Spam Protection (Anti-Flood):** The Alert module now features a built-in anti-flood mechanism. Clients can only contact the bot by using the `Reply` function on a message from the administrator, with a rate limit of 1 message per 3 seconds.
+* **Admin Interface:** Removed legacy commands `/broadcast` and `/alert_subscribers`. All functions have been migrated to a convenient inline menu "Alert Module Control Panel".
+
+---
 ## [1.24.1] - 2026-07-05
 
 ### 🛡️ Security & SAST:
