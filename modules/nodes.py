@@ -66,6 +66,46 @@ def _fmt_billing_amount(amount, currency: str, lang: str) -> str:
     return f"{amount} {currency}"
 
 
+async def _broadcast_node_status_to_clients(event_type: str, changed_node_name: str, current_now: float) -> None:
+    """
+    Отправляет системный алерт через Gateway-бота всем подписчикам
+    с общим списком статусов серверов.
+    """
+    try:
+        from modules.client_alerts import broadcast_system_alert
+        all_nodes = await nodes_db.get_all_nodes()
+        node_list_text = []
+        for n_token, n_data in all_nodes.items():
+            n_name = n_data.get("name", "Unknown")
+            n_last_seen = n_data.get("last_seen", 0)
+            n_restarting = n_data.get("is_restarting", False)
+            n_dead = current_now - n_last_seen >= config.NODE_OFFLINE_TIMEOUT and n_last_seen > 0
+            
+            if n_restarting:
+                n_status = "🔄 Перезагрузка"
+            elif n_dead:
+                n_status = "🔴 Недоступен"
+            else:
+                n_status = "🟢 Онлайн"
+            node_list_text.append(f"  • <b>{n_name}</b> — {n_status}")
+            
+        if event_type == "down":
+            text = (
+                f"⚠️ <b>Внимание, технические неполадки!</b>\n"
+                f"Узел <b>{changed_node_name}</b> стал временно недоступен.\n\n"
+                f"<b>Текущий статус серверов:</b>\n" + "\n".join(node_list_text)
+            )
+        else:
+            text = (
+                f"✅ <b>Отличные новости!</b>\n"
+                f"Узел <b>{changed_node_name}</b> снова в сети и работает в штатном режиме!\n\n"
+                f"<b>Текущий статус серверов:</b>\n" + "\n".join(node_list_text)
+            )
+        await broadcast_system_alert(text)
+    except Exception as e:
+        logging.warning(f"[nodes] Ошибка при отправке статуса серверов клиентам: {e}")
+
+
 def get_button() -> KeyboardButton:
     return KeyboardButton(text=_(BUTTON_KEY, config.DEFAULT_LANGUAGE))
 
