@@ -939,6 +939,11 @@ STRINGS = {
         "billing_menu_text_node": "💳 <b>{name}</b>\n🏢 <b>Провайдер:</b> {provider}\n\n💰 <b>Сумма к оплате:</b> {amount}\n📅 <b>Дата оплаты:</b> {date}",
         "billing_menu_header": "💳 <b>Биллинг серверов</b>\nВыберите сервер для настройки оплаты:",
         "master_server_name": "Мой сервер (Агент)",
+        "alert_node_status_restarting": "🔄 Перезагрузка",
+        "alert_node_status_offline": "🔴 Недоступен",
+        "alert_node_status_online": "🟢 Онлайн",
+        "alert_node_broadcast_down": "⚠️ <b>Внимание, технические неполадки!</b>\nУзел <b>{node_name}</b> стал временно недоступен.\n\n<b>Текущий статус серверов:</b>\n{list}",
+        "alert_node_broadcast_up": "✅ <b>Отличные новости!</b>\nУзел <b>{node_name}</b> снова в сети и работает в штатном режиме!\n\n<b>Текущий статус серверов:</b>\n{list}",
     },
 
     "en": {
@@ -1872,6 +1877,11 @@ STRINGS = {
         "billing_menu_text_node": "💳 <b>{name}</b>\n🏢 <b>Provider:</b> {provider}\n\n💰 <b>Amount due:</b> {amount}\n📅 <b>Payment date:</b> {date}",
         "billing_menu_header": "💳 <b>Server Billing</b>\nSelect a server to manage payments:",
         "master_server_name": "My Server (Agent)",
+        "alert_node_status_restarting": "🔄 Restarting",
+        "alert_node_status_offline": "🔴 Offline",
+        "alert_node_status_online": "🟢 Online",
+        "alert_node_broadcast_down": "⚠️ <b>Attention, technical issues!</b>\nNode <b>{node_name}</b> is temporarily unavailable.\n\n<b>Current Server Status:</b>\n{list}",
+        "alert_node_broadcast_up": "✅ <b>Great news!</b>\nNode <b>{node_name}</b> is back online and operating normally!\n\n<b>Current Server Status:</b>\n{list}",
     },
 }
 
