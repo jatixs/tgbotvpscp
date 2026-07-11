@@ -155,6 +155,22 @@ async def _send_payload_via_alert_bot(chat_id: int, payload: dict, reply_to_mess
         await alert_bot.send_message(chat_id, "⚠️ Неподдерживаемый тип сообщения.", reply_to_message_id=reply_to_message_id)
 
 
+async def broadcast_system_alert(text: str) -> None:
+    """
+    Публичная функция для отправки системных алертов (например, падение ноды)
+    всем подписчикам Gateway-бота.
+    """
+    if alert_bot is None:
+        return
+    subscribers = _load_subscribers()
+    for uid in subscribers:
+        try:
+            await alert_bot.send_message(uid, text, parse_mode="HTML")
+            await asyncio.sleep(0.05)
+        except Exception as e:
+            logging.warning(f"[client_alerts] Ошибка отправки системного алерта -> {uid}: {e}")
+
+
 # ─── Alert Bot: инициализация ─────────────────────────────────────────────────
 
 alert_bot: Bot | None = None
