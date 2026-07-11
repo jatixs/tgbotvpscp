@@ -74,6 +74,7 @@
 - ✅ **Informative Badges** — display remaining days until payment in the WebUI
 
 ### 🤖 Smart Telegram UX
+- ✅ **Support Gateway (Alert Bot)** — dedicated client-facing bot with broadcasting and ticket replies directly from the admin panel, featuring built-in Anti-Flood
 - ✅ **Smart Cleanup** — auto-deletes user commands and stale bot menus
 - ✅ **Anti-Spam Protection** — built-in SpamThrottle to protect Telegram API limits
 - ✅ **Interactive Widgets** — inline menus with state-preserving checkboxes and live timers
