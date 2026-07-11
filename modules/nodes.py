@@ -72,38 +72,44 @@ async def _broadcast_node_status_to_clients(event_type: str, changed_node_name: 
     с общим списком статусов серверов.
     """
     try:
-        from modules.client_alerts import broadcast_system_alert
+        from modules.client_alerts import broadcast_system_alert, alert_bot, _load_subscribers
+        if alert_bot is None:
+            return
+            
         all_nodes = await nodes_db.get_all_nodes()
-        node_list_text = []
-        for n_token, n_data in all_nodes.items():
-            n_name = n_data.get("name", "Unknown")
-            n_last_seen = n_data.get("last_seen", 0)
-            n_restarting = n_data.get("is_restarting", False)
-            n_dead = current_now - n_last_seen >= config.NODE_OFFLINE_TIMEOUT and n_last_seen > 0
+        subscribers = _load_subscribers()
+        
+        for uid in subscribers:
+            lang = get_user_lang(uid)
             
-            if n_restarting:
-                n_status = "🔄 Перезагрузка"
-            elif n_dead:
-                n_status = "🔴 Недоступен"
+            node_list_text = []
+            for n_token, n_data in all_nodes.items():
+                n_name = n_data.get("name", "Unknown")
+                n_last_seen = n_data.get("last_seen", 0)
+                n_restarting = n_data.get("is_restarting", False)
+                n_dead = current_now - n_last_seen >= config.NODE_OFFLINE_TIMEOUT and n_last_seen > 0
+                
+                if n_restarting:
+                    n_status = _("alert_node_status_restarting", lang)
+                elif n_dead:
+                    n_status = _("alert_node_status_offline", lang)
+                else:
+                    n_status = _("alert_node_status_online", lang)
+                node_list_text.append(f"  • <b>{n_name}</b> — {n_status}")
+                
+            if event_type == "down":
+                text = _("alert_node_broadcast_down", lang, node_name=changed_node_name, list="\n".join(node_list_text))
             else:
-                n_status = "🟢 Онлайн"
-            node_list_text.append(f"  • <b>{n_name}</b> — {n_status}")
-            
-        if event_type == "down":
-            text = (
-                f"⚠️ <b>Внимание, технические неполадки!</b>\n"
-                f"Узел <b>{changed_node_name}</b> стал временно недоступен.\n\n"
-                f"<b>Текущий статус серверов:</b>\n" + "\n".join(node_list_text)
-            )
-        else:
-            text = (
-                f"✅ <b>Отличные новости!</b>\n"
-                f"Узел <b>{changed_node_name}</b> снова в сети и работает в штатном режиме!\n\n"
-                f"<b>Текущий статус серверов:</b>\n" + "\n".join(node_list_text)
-            )
-        await broadcast_system_alert(text)
+                text = _("alert_node_broadcast_up", lang, node_name=changed_node_name, list="\n".join(node_list_text))
+                
+            try:
+                await alert_bot.send_message(uid, text, parse_mode="HTML")
+                await asyncio.sleep(0.05)
+            except Exception as e:
+                logging.warning(f"[nodes] Ошибка при отправке статуса серверов клиенту {uid}: {e}")
+                
     except Exception as e:
-        logging.warning(f"[nodes] Ошибка при отправке статуса серверов клиентам: {e}")
+        logging.warning(f"[nodes] Ошибка генерации системного алерта: {e}")
 
 
 def get_button() -> KeyboardButton:
