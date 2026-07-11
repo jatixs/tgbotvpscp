@@ -86,6 +86,71 @@ async def _add_subscriber(user_id: int) -> bool:
     return False
 
 
+# ─── Вспомогательные функции отправки ─────────────────────────────────────────
+
+def _extract_message_payload(message: types.Message) -> dict:
+    """
+    Извлекает из сообщения сериализуемый payload для хранения в FSM state.
+    Использует file_id — они глобальны в Telegram и работают между ботами.
+    """
+    caption = message.caption or ""
+    if message.text:
+        return {"type": "text", "text": message.text}
+    elif message.photo:
+        return {"type": "photo", "file_id": message.photo[-1].file_id, "caption": caption}
+    elif message.video:
+        return {"type": "video", "file_id": message.video.file_id, "caption": caption}
+    elif message.audio:
+        return {"type": "audio", "file_id": message.audio.file_id, "caption": caption}
+    elif message.document:
+        return {"type": "document", "file_id": message.document.file_id, "caption": caption}
+    elif message.voice:
+        return {"type": "voice", "file_id": message.voice.file_id, "caption": caption}
+    elif message.video_note:
+        return {"type": "video_note", "file_id": message.video_note.file_id}
+    elif message.sticker:
+        return {"type": "sticker", "file_id": message.sticker.file_id}
+    elif message.animation:
+        return {"type": "animation", "file_id": message.animation.file_id, "caption": caption}
+    else:
+        return {"type": "unsupported"}
+
+
+async def _send_payload_via_alert_bot(chat_id: int, payload: dict, reply_to_message_id: int = None) -> None:
+    """
+    Отправляет payload через alert_bot в указанный chat_id.
+    Если указан reply_to_message_id — отправляет ответом на конкретное сообщение.
+    """
+    if alert_bot is None:
+        raise RuntimeError("Alert Bot не инициализирован")
+
+    msg_type = payload.get("type", "unsupported")
+    file_id = payload.get("file_id", "")
+    text = payload.get("text", "")
+    caption = payload.get("caption") or None
+
+    if msg_type == "text":
+        await alert_bot.send_message(chat_id, text, reply_to_message_id=reply_to_message_id)
+    elif msg_type == "photo":
+        await alert_bot.send_photo(chat_id, file_id, caption=caption, reply_to_message_id=reply_to_message_id)
+    elif msg_type == "video":
+        await alert_bot.send_video(chat_id, file_id, caption=caption, reply_to_message_id=reply_to_message_id)
+    elif msg_type == "audio":
+        await alert_bot.send_audio(chat_id, file_id, caption=caption, reply_to_message_id=reply_to_message_id)
+    elif msg_type == "document":
+        await alert_bot.send_document(chat_id, file_id, caption=caption, reply_to_message_id=reply_to_message_id)
+    elif msg_type == "voice":
+        await alert_bot.send_voice(chat_id, file_id, caption=caption, reply_to_message_id=reply_to_message_id)
+    elif msg_type == "video_note":
+        await alert_bot.send_video_note(chat_id, file_id, reply_to_message_id=reply_to_message_id)
+    elif msg_type == "sticker":
+        await alert_bot.send_sticker(chat_id, file_id, reply_to_message_id=reply_to_message_id)
+    elif msg_type == "animation":
+        await alert_bot.send_animation(chat_id, file_id, caption=caption, reply_to_message_id=reply_to_message_id)
+    else:
+        await alert_bot.send_message(chat_id, "⚠️ Неподдерживаемый тип сообщения.", reply_to_message_id=reply_to_message_id)
+
+
 # ─── Alert Bot: инициализация ─────────────────────────────────────────────────
 
 alert_bot: Bot | None = None
@@ -135,14 +200,14 @@ def _get_alert_panel_keyboard() -> InlineKeyboardMarkup:
     )
 
 
-def _get_reply_keyboard(client_user_id: int) -> InlineKeyboardMarkup:
+def _get_reply_keyboard(client_user_id: int, client_message_id: int) -> InlineKeyboardMarkup:
     """Inline-кнопка 'Ответить' под входящим тикетом администратора."""
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [
                 InlineKeyboardButton(
                     text="💬 Ответить",
-                    callback_data=f"alert_reply_{client_user_id}",
+                    callback_data=f"alert_reply_{client_user_id}_{client_message_id}",
                 )
             ]
         ]
@@ -247,7 +312,7 @@ if alert_dp is not None:
                 config.ADMIN_USER_ID,
                 ticket_header,
                 parse_mode="HTML",
-                reply_markup=_get_reply_keyboard(user_id),
+                reply_markup=_get_reply_keyboard(user_id, message.message_id),
             )
             if message.text:
                 await main_bot_instance.send_message(
@@ -365,13 +430,14 @@ async def _broadcast_message_received(
     message: types.Message, state: FSMContext
 ) -> None:
     """
-    Получили сообщение для рассылки → запрашиваем подтверждение.
+    Получили сообщение для рассылки → сохраняем payload в FSM state,
+    запрашиваем подтверждение.
     """
+    # Сохраняем контент, а не chat_id/message_id — alert_bot не имеет
+    # доступа к чату главного бота и не может скопировать оттуда сообщение.
+    payload = _extract_message_payload(message)
     subscribers = _load_subscribers()
-    await state.update_data(
-        broadcast_chat_id=message.chat.id,
-        broadcast_message_id=message.message_id,
-    )
+    await state.update_data(broadcast_payload=payload)
     await message.answer(
         f"⚠️ <b>Подтверждение рассылки</b>\n\n"
         f"Это сообщение будет отправлено <b>{len(subscribers)}</b> подписчикам.\n"
@@ -390,11 +456,10 @@ async def _broadcast_confirm(
         return
 
     data = await state.get_data()
-    src_chat_id = data.get("broadcast_chat_id")
-    src_msg_id = data.get("broadcast_message_id")
+    payload = data.get("broadcast_payload")
     await state.clear()
 
-    if not src_chat_id or not src_msg_id:
+    if not payload:
         await callback.answer("⚠️ Данные рассылки утеряны.", show_alert=True)
         return
 
@@ -415,11 +480,7 @@ async def _broadcast_confirm(
 
     for uid in subscribers:
         try:
-            await alert_bot.copy_message(
-                chat_id=uid,
-                from_chat_id=src_chat_id,
-                message_id=src_msg_id,
-            )
+            await _send_payload_via_alert_bot(uid, payload)
             sent_ok += 1
             await asyncio.sleep(0.05)  # rate limit guard
         except Exception as e:
@@ -462,13 +523,15 @@ async def _alert_reply_callback(
         return
 
     try:
-        client_user_id = int(callback.data.split("alert_reply_")[1])
+        parts = callback.data.split("_")
+        client_user_id = int(parts[2])
+        client_message_id = int(parts[3])
     except (IndexError, ValueError):
-        await callback.answer("⚠️ Некорректный ID клиента.", show_alert=True)
+        await callback.answer("⚠️ Некорректный ID клиента или сообщения.", show_alert=True)
         return
 
     await state.set_state(ReplyStates.waiting_reply_text)
-    await state.update_data(reply_to_user_id=client_user_id)
+    await state.update_data(reply_to_user_id=client_user_id, reply_to_message_id=client_message_id)
 
     await callback.answer()
     await callback.message.answer(
@@ -481,10 +544,12 @@ async def _alert_reply_callback(
 
 async def _reply_text_received(message: types.Message, state: FSMContext) -> None:
     """
-    Получили ответ от администратора → пересылаем клиенту через alert_bot.
+    Получили ответ от администратора → пересылаем клиенту через alert_bot
+    используя file_id / текст напрямую (без copy_message).
     """
     data = await state.get_data()
     client_user_id = data.get("reply_to_user_id")
+    client_message_id = data.get("reply_to_message_id")
     await state.clear()
 
     if not client_user_id:
@@ -495,12 +560,9 @@ async def _reply_text_received(message: types.Message, state: FSMContext) -> Non
         await message.answer("⚠️ Alert Bot не активен — ответ невозможен.")
         return
 
+    payload = _extract_message_payload(message)
     try:
-        await alert_bot.copy_message(
-            chat_id=client_user_id,
-            from_chat_id=message.chat.id,
-            message_id=message.message_id,
-        )
+        await _send_payload_via_alert_bot(client_user_id, payload, reply_to_message_id=client_message_id)
         await message.answer(
             f"✅ <b>Ответ отправлен</b> клиенту <code>{client_user_id}</code>.",
             parse_mode="HTML",
