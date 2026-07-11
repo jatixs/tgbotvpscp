@@ -1348,6 +1348,71 @@ toggle_agent_monitoring() {
     fi
 }
 
+manage_alert_module() {
+    clear
+    echo -e "${C_BLUE}${C_BOLD}╔═══════════════════════════════════╗${C_RESET}"
+    echo -e "${C_BLUE}${C_BOLD}║       Управление Alert-модулем    ║${C_RESET}"
+    echo -e "${C_BLUE}${C_BOLD}╚═══════════════════════════════════╝${C_RESET}"
+
+    local current_token=""
+    if [ -f "${ENV_FILE}" ]; then
+        current_token=$(grep '^ALERT_BOT_TOKEN=' "${ENV_FILE}" | cut -d'=' -f2- | tr -d '"')
+    fi
+
+    if [ -n "$current_token" ]; then
+        # Токен уже задан — предлагаем удалить модуль
+        echo -e "  ${C_GREEN}✅ Alert Bot активен (токен задан)${C_RESET}"
+        echo ""
+        echo -e "  ${C_YELLOW}Вы хотите удалить (деактивировать) Alert-модуль?${C_RESET}"
+        echo "  Это удалит ALERT_BOT_TOKEN из .env и перезапустит сервис."
+        echo ""
+        read -p "$(echo -e "${C_BOLD}Подтвердить удаление? (y/n): ${C_RESET}")" confirm
+        if [[ "$confirm" =~ ^[Yy]$ ]]; then
+            # Удаляем строку ALERT_BOT_TOKEN из .env
+            sed -i '/^ALERT_BOT_TOKEN=/d' "${ENV_FILE}"
+            msg_success "ALERT_BOT_TOKEN удалён из .env"
+            # Перезапускаем сервис для применения изменений
+            if systemctl is-active --quiet "${SERVICE_NAME}"; then
+                msg_info "Перезапуск сервиса ${SERVICE_NAME}..."
+                sudo systemctl restart "${SERVICE_NAME}"
+                msg_success "Сервис перезапущен. Alert-модуль деактивирован."
+            else
+                msg_warning "Сервис ${SERVICE_NAME} не запущен. Изменения применятся при следующем запуске."
+            fi
+        else
+            msg_info "Отменено."
+        fi
+    else
+        # Токен не задан — предлагаем установить
+        echo -e "  ${C_YELLOW}⚠️  Alert Bot не активирован (ALERT_BOT_TOKEN не задан)${C_RESET}"
+        echo ""
+        echo "  Для активации нужен токен отдельного Telegram-бота."
+        echo "  Создайте нового бота через @BotFather и скопируйте токен."
+        echo ""
+        read -p "$(echo -e "${C_BOLD}Введите токен Alert Bot (или Enter для отмены): ${C_RESET}")" new_token
+        if [ -z "$new_token" ]; then
+            msg_info "Отменено."
+            return
+        fi
+        # Базовая проверка формата токена (цифры:строка)
+        if ! echo "$new_token" | grep -qE '^[0-9]+:[A-Za-z0-9_-]{35,}$'; then
+            msg_error "Некорректный формат токена. Ожидается: 123456789:ABCdef..."
+            return
+        fi
+        # Сохраняем токен в .env
+        echo "ALERT_BOT_TOKEN=\"${new_token}\"" >> "${ENV_FILE}"
+        msg_success "ALERT_BOT_TOKEN сохранён в .env"
+        # Перезапускаем сервис
+        if systemctl is-active --quiet "${SERVICE_NAME}"; then
+            msg_info "Перезапуск сервиса ${SERVICE_NAME}..."
+            sudo systemctl restart "${SERVICE_NAME}"
+            msg_success "Сервис перезапущен. Alert-модуль активирован!"
+        else
+            msg_warning "Сервис ${SERVICE_NAME} не запущен. Запустите его вручную."
+        fi
+    fi
+}
+
 main_menu() {
     local local_version=$(get_local_version)
     while true; do
@@ -1378,7 +1443,16 @@ main_menu() {
             local monitoring_status=$(check_agent_monitoring_status)
             echo -e "${C_YELLOW}  8) Мониторинг агента (${monitoring_status})${C_RESET}"
         fi
-        
+
+        # Пункт Alert-модуля — только для не-нодового режима
+        if [ "$IS_NODE" != "yes" ]; then
+            local alert_status="не активен"
+            if [ -f "${ENV_FILE}" ] && grep -q '^ALERT_BOT_TOKEN=' "${ENV_FILE}"; then
+                alert_status="${C_GREEN}активен${C_RESET}"
+            fi
+            echo -e "  9) Управление Alert-модулем (${alert_status})"
+        fi
+
         echo "  0) Выход"
         echo "--------------------------------------------------------"
         read -p "$(echo -e "${C_BOLD}Ваш выбор: ${C_RESET}")" choice
@@ -1391,6 +1465,7 @@ main_menu() {
             6) uninstall_bot; install_docker_logic "root"; read -p "Нажмите Enter..." ;;
             7) if [ "$IS_NODE" == "yes" ]; then uninstall_bot; install_node_logic; read -p "Нажмите Enter..."; else msg_error "Пункт доступен только в режиме НОДЫ."; sleep 2; fi ;;
             8) if [ "$IS_NODE" == "yes" ]; then toggle_agent_monitoring; read -p "Нажмите Enter..."; fi ;;
+            9) if [ "$IS_NODE" != "yes" ]; then manage_alert_module; read -p "Нажмите Enter..."; fi ;;
             0) break ;;
         esac
     done
