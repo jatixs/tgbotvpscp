@@ -1,4 +1,5 @@
 import logging
+import os
 from aiogram.types import (
     ReplyKeyboardMarkup,
     KeyboardButton,
@@ -72,7 +73,7 @@ CATEGORY_MAP = {
         "btn_billing",
     ],
     "cat_security": ["btn_sshlog", "btn_fail2ban", "btn_logs"],
-    "cat_tools": ["btn_xray", "btn_vless", "btn_notifications"],
+    "cat_tools": ["btn_xray", "btn_vless", "btn_notifications", "btn_client_alerts"],
     "cat_settings": ["btn_language", "btn_configure_menu", "btn_backups"],
 }
 
@@ -97,6 +98,9 @@ def _category_has_visible_buttons(category_key: str, user_id: int) -> bool:
         if btn_key in ADMIN_ONLY_BTNS and not is_admin:
             continue
         if btn_key in ROOT_ONLY_BTNS and not (is_root_mode and is_admin):
+            continue
+        # btn_client_alerts показывается только если ALERT_BOT_TOKEN задан в окружении
+        if btn_key == "btn_client_alerts" and not os.getenv("ALERT_BOT_TOKEN"):
             continue
         return True
     return False
@@ -140,6 +144,9 @@ def get_subcategory_keyboard(category_key: str, user_id: int) -> ReplyKeyboardMa
         if btn_key in ADMIN_ONLY_BTNS and (not is_admin):
             continue
         if btn_key in ROOT_ONLY_BTNS and (not (is_root_mode and is_admin)):
+            continue
+        # btn_client_alerts показывается только если ALERT_BOT_TOKEN задан в окружении
+        if btn_key == "btn_client_alerts" and not os.getenv("ALERT_BOT_TOKEN"):
             continue
         current_row.append(KeyboardButton(text=_(btn_key, lang)))
         if len(current_row) == 2:
