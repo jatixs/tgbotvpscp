@@ -5,20 +5,21 @@
 <h1 align="center">📝 Telegram VPS Management Bot — Changelog</h1>
 
 <p align="center">
-<p    <img src="https://img.shields.io/badge/version-v1.24.1-blue?style=flat-square" alt="Version 1.24.1"/>
-    <img src="https://img.shields.io/badge/build-84-purple?style=flat-square" alt="Build 84"/>
-    <img src="https://img.shields.io/badge/date-Jul%2005%202026-green?style=flat-square" alt="Date Jul 05 2026"/>
+    <img src="https://img.shields.io/badge/version-v1.24.2-blue?style=flat-square" alt="Version 1.24.2"/>
+    <img src="https://img.shields.io/badge/build-85-purple?style=flat-square" alt="Build 85"/>
+    <img src="https://img.shields.io/badge/date-Jul%2011%202026-green?style=flat-square" alt="Date Jul 11 2026"/>
 	<img src="https://img.shields.io/badge/status-stable-green?style=flat-square" alt="Status Stable"/>
 </p>
 
 ---
 ## [1.24.2] - 2026-07-11
 
-### 🚀 Added / Improved:
-* **Client Alerts Module (Gateway Bot):** Completely redesigned the user communication mechanism. Clients now communicate via a dedicated gateway bot (`ALERT_BOT_TOKEN`). Messages are forwarded to the administrator in the main bot as tickets, which can be replied to directly via the inline "Reply" button.
-* **Broadcasts:** Added the ability to send messages (text, photos, videos) to all Gateway Bot subscribers directly from the control panel in Telegram.
-* **Spam Protection (Anti-Flood):** The Alert module now features a built-in anti-flood mechanism. Clients can only contact the bot by using the `Reply` function on a message from the administrator, with a rate limit of 1 message per 3 seconds.
-* **Admin Interface:** Removed legacy commands `/broadcast` and `/alert_subscribers`. All functions have been migrated to a convenient inline menu "Alert Module Control Panel".
+### 🚀 New Features:
+* **Gateway Bot (Support Gateway):** Introduced a brand new module for communicating with users and clients. You can now launch a second, independent Telegram bot (by setting `ALERT_BOT_TOKEN` in `.env`) that acts as a gateway for your clients.
+  - **Ticket System:** Any messages from clients are forwarded to the administrator in the main bot as convenient tickets. The administrator can reply to them directly with a single click.
+  - **System Notifications:** The Gateway Bot automatically monitors node statuses and sends notifications to clients with a list of servers whenever a failure occurs (node downtime) or is resolved.
+  - **Mass Broadcasts:** Added the ability to send informational messages, photos, and videos to all Gateway Bot subscribers via a convenient inline control panel.
+  - **Anti-Flood & Protection:** Built-in strict spam protection — the bot accepts messages no more than once every 3 seconds and forcibly requires using the "Reply" function to maintain a dialogue, protecting the admin from flood.
 
 ---
 ## [1.24.1] - 2026-07-05
