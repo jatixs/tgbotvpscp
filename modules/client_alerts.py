@@ -432,7 +432,6 @@ async def _cq_panel_broadcast(callback: types.CallbackQuery, state: FSMContext) 
 
     await state.set_state(BroadcastStates.waiting_broadcast_message)
     await state.update_data(panel_message_id=callback.message.message_id)
-    await callback.message.edit_reply_markup(reply_markup=None)
     await callback.answer()
     
     text = (
@@ -591,7 +590,10 @@ async def _broadcast_confirm(
         return
 
     await callback.answer("📤 Рассылка запущена...")
-    await callback.message.edit_reply_markup(reply_markup=None)
+    try:
+        await callback.message.edit_text("⏳ <b>Рассылка запущена...</b>\nПожалуйста, подождите.", parse_mode="HTML", reply_markup=None)
+    except Exception:
+        pass
 
     sent_ok = 0
     sent_fail = 0
