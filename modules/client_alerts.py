@@ -64,7 +64,9 @@ def _load_subscribers() -> dict[int, str]:
             with open(SUBSCRIBERS_FILE, "r", encoding="utf-8") as f:
                 data = json.load(f)
                 if isinstance(data, list):
-                    return {int(uid): f"ID {uid}" for uid in data}
+                    migrated = {int(uid): f"ID {uid}" for uid in data}
+                    _save_subscribers(migrated)
+                    return migrated
                 elif isinstance(data, dict):
                     return {int(k): v for k, v in data.items()}
     except Exception as e:
@@ -478,6 +480,22 @@ async def _cq_panel_subscribers(callback: types.CallbackQuery) -> None:
         start_idx = (page - 1) * PER_PAGE
         end_idx = start_idx + PER_PAGE
         current_items = items[start_idx:end_idx]
+        
+        if alert_bot is not None:
+            updated = False
+            for idx, (uid, name) in enumerate(current_items):
+                if name.startswith("ID "):
+                    try:
+                        chat = await alert_bot.get_chat(uid)
+                        new_name = chat.full_name or f"ID {uid}"
+                        if new_name != name:
+                            subscribers[uid] = new_name
+                            current_items[idx] = (uid, new_name)
+                            updated = True
+                    except Exception:
+                        pass
+            if updated:
+                _save_subscribers(subscribers)
         
         ids_text = "\n".join(f"  • {name} (<code>{uid}</code>)" for uid, name in current_items)
         
