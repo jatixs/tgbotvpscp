@@ -712,7 +712,6 @@ async def _cq_fsm_cancel(callback: types.CallbackQuery, state: FSMContext) -> No
     await state.clear()
     subscribers = _load_subscribers()
     text = (
-        f"❌ Действие отменено.\n\n"
         f"📣 <b>Alert Module — Панель управления</b>\n\n"
         f"👥 Подписчиков: <b>{len(subscribers)}</b>\n"
         f"🤖 Alert Bot: <b>{'активен' if alert_bot else 'не активен'}</b>\n\n"
