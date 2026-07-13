@@ -57,37 +57,39 @@ class ReplyStates(StatesGroup):
 
 # ─── Хранилище подписчиков ────────────────────────────────────────────────────
 
-def _load_subscribers() -> list[int]:
-    """Загрузить список ID подписчиков из JSON-файла."""
+def _load_subscribers() -> dict[int, str]:
+    """Загрузить словарь подписчиков из JSON-файла. Формат: {user_id: user_name}"""
     try:
         if os.path.exists(SUBSCRIBERS_FILE):
             with open(SUBSCRIBERS_FILE, "r", encoding="utf-8") as f:
                 data = json.load(f)
                 if isinstance(data, list):
-                    return [int(uid) for uid in data]
+                    return {int(uid): f"ID {uid}" for uid in data}
+                elif isinstance(data, dict):
+                    return {int(k): v for k, v in data.items()}
     except Exception as e:
         logging.warning(f"[client_alerts] Не удалось загрузить подписчиков: {e}")
-    return []
+    return {}
 
 
-def _save_subscribers(subscribers: list[int]) -> None:
-    """Сохранить список ID подписчиков в JSON-файл."""
+def _save_subscribers(subscribers: dict[int, str]) -> None:
+    """Сохранить словарь подписчиков в JSON-файл."""
     try:
         os.makedirs(os.path.dirname(SUBSCRIBERS_FILE), exist_ok=True)
         with open(SUBSCRIBERS_FILE, "w", encoding="utf-8") as f:
-            json.dump(list(set(subscribers)), f, ensure_ascii=False, indent=2)
+            json.dump(subscribers, f, ensure_ascii=False, indent=2)
     except Exception as e:
         logging.error(f"[client_alerts] Не удалось сохранить подписчиков: {e}")
 
 
-async def _add_subscriber(user_id: int) -> bool:
-    """Добавить подписчика. Возвращает True если добавлен впервые."""
+async def _add_subscriber(user_id: int, user_name: str) -> bool:
+    """Добавить подписчика или обновить имя. Возвращает True если добавлен впервые."""
     subscribers = _load_subscribers()
-    if user_id not in subscribers:
-        subscribers.append(user_id)
+    is_new = user_id not in subscribers
+    if is_new or subscribers[user_id] != user_name:
+        subscribers[user_id] = user_name
         _save_subscribers(subscribers)
-        return True
-    return False
+    return is_new
 
 
 # ─── Вспомогательные функции отправки ─────────────────────────────────────────
@@ -97,9 +99,11 @@ def _extract_message_payload(message: types.Message) -> dict:
     Извлекает из сообщения сериализуемый payload для хранения в FSM state.
     Использует file_id — они глобальны в Telegram и работают между ботами.
     """
-    caption = message.caption or ""
+    caption = message.html_text if message.caption else ""
+    text = message.html_text if message.text else ""
+    
     if message.text:
-        return {"type": "text", "text": message.text}
+        return {"type": "text", "text": text}
     elif message.photo:
         return {"type": "photo", "file_id": message.photo[-1].file_id, "caption": caption}
     elif message.video:
@@ -134,23 +138,23 @@ async def _send_payload_via_alert_bot(chat_id: int, payload: dict, reply_to_mess
     caption = payload.get("caption") or None
 
     if msg_type == "text":
-        await alert_bot.send_message(chat_id, text, reply_to_message_id=reply_to_message_id)
+        await alert_bot.send_message(chat_id, text, parse_mode="HTML", reply_to_message_id=reply_to_message_id)
     elif msg_type == "photo":
-        await alert_bot.send_photo(chat_id, file_id, caption=caption, reply_to_message_id=reply_to_message_id)
+        await alert_bot.send_photo(chat_id, file_id, caption=caption, parse_mode="HTML", reply_to_message_id=reply_to_message_id)
     elif msg_type == "video":
-        await alert_bot.send_video(chat_id, file_id, caption=caption, reply_to_message_id=reply_to_message_id)
+        await alert_bot.send_video(chat_id, file_id, caption=caption, parse_mode="HTML", reply_to_message_id=reply_to_message_id)
     elif msg_type == "audio":
-        await alert_bot.send_audio(chat_id, file_id, caption=caption, reply_to_message_id=reply_to_message_id)
+        await alert_bot.send_audio(chat_id, file_id, caption=caption, parse_mode="HTML", reply_to_message_id=reply_to_message_id)
     elif msg_type == "document":
-        await alert_bot.send_document(chat_id, file_id, caption=caption, reply_to_message_id=reply_to_message_id)
+        await alert_bot.send_document(chat_id, file_id, caption=caption, parse_mode="HTML", reply_to_message_id=reply_to_message_id)
     elif msg_type == "voice":
-        await alert_bot.send_voice(chat_id, file_id, caption=caption, reply_to_message_id=reply_to_message_id)
+        await alert_bot.send_voice(chat_id, file_id, caption=caption, parse_mode="HTML", reply_to_message_id=reply_to_message_id)
     elif msg_type == "video_note":
         await alert_bot.send_video_note(chat_id, file_id, reply_to_message_id=reply_to_message_id)
     elif msg_type == "sticker":
         await alert_bot.send_sticker(chat_id, file_id, reply_to_message_id=reply_to_message_id)
     elif msg_type == "animation":
-        await alert_bot.send_animation(chat_id, file_id, caption=caption, reply_to_message_id=reply_to_message_id)
+        await alert_bot.send_animation(chat_id, file_id, caption=caption, parse_mode="HTML", reply_to_message_id=reply_to_message_id)
     else:
         await alert_bot.send_message(chat_id, "⚠️ Неподдерживаемый тип сообщения.", reply_to_message_id=reply_to_message_id)
 
@@ -212,7 +216,7 @@ def _get_alert_panel_keyboard() -> InlineKeyboardMarkup:
             ],
             [
                 InlineKeyboardButton(
-                    text="🔙 Назад в меню",
+                    text="🔙 В главное меню",
                     callback_data="back_to_menu",
                 ),
             ],
@@ -245,7 +249,7 @@ def _get_broadcast_confirm_keyboard() -> InlineKeyboardMarkup:
                 ),
                 InlineKeyboardButton(
                     text="❌ Отмена",
-                    callback_data="alert_broadcast_cancel",
+                    callback_data="alert_fsm_cancel",
                 ),
             ]
         ]
@@ -276,8 +280,8 @@ if alert_dp is not None:
         Клиент нажимает /start в Alert Bot → подписывается на рассылки.
         """
         user_id = message.from_user.id
-        is_new = await _add_subscriber(user_id)
         user_name = message.from_user.full_name or f"ID {user_id}"
+        is_new = await _add_subscriber(user_id, user_name)
 
         if is_new:
             await message.answer(
@@ -309,9 +313,23 @@ if alert_dp is not None:
             await message.answer("⚠️ Ошибка: пожалуйста, используйте функцию <b>«Ответить»</b> (Reply) на сообщение от администратора, чтобы мы получили ваш ответ.", parse_mode="HTML")
             return
 
+        reply = message.reply_to_message
+        
+        # Проверка ответа самому себе (BUG 5)
+        if reply.from_user.id == message.from_user.id:
+             await message.answer("⚠️ Ошибка: Вы ответили на своё собственное сообщение. Пожалуйста, ответьте на сообщение от администратора.")
+             return
+
+        # Проверка ответа на системное сообщение бота (BUG 6)
+        if reply.from_user.id == alert_bot.id:
+            if reply.text and (reply.text.startswith("⚠️") or reply.text.startswith("✅") or reply.text.startswith("👋") or reply.text.startswith("⏳")):
+                 await message.answer("⚠️ Ошибка: Вы ответили на системное сообщение бота. Пожалуйста, ответьте на сообщение от администратора.")
+                 return
+
         # Убеждаемся, что пользователь подписан
         user_id = message.from_user.id
-        await _add_subscriber(user_id)
+        user_name = message.from_user.full_name or f"ID {user_id}"
+        await _add_subscriber(user_id, user_name)
 
         # Антифлуд: максимум 1 сообщение в 3 секунды
         now = time.time()
@@ -411,15 +429,19 @@ async def _cq_panel_broadcast(callback: types.CallbackQuery, state: FSMContext) 
         return
 
     await state.set_state(BroadcastStates.waiting_broadcast_message)
+    await state.update_data(panel_message_id=callback.message.message_id)
     await callback.message.edit_reply_markup(reply_markup=None)
     await callback.answer()
-    await callback.message.answer(
+    
+    text = (
         f"📣 <b>Рассылка</b>\n\n"
         f"Подписчиков: <b>{len(subscribers)}</b>\n\n"
-        f"Отправьте сообщение для рассылки (текст, фото, видео и т.д.):",
-        parse_mode="HTML",
-        reply_markup=_get_cancel_keyboard(),
+        f"Отправьте сообщение для рассылки (текст, фото, видео и т.д.):"
     )
+    try:
+        await callback.message.edit_text(text, parse_mode="HTML", reply_markup=_get_cancel_keyboard())
+    except Exception:
+        pass
 
 
 async def _cq_panel_subscribers(callback: types.CallbackQuery) -> None:
@@ -430,6 +452,10 @@ async def _cq_panel_subscribers(callback: types.CallbackQuery) -> None:
         await callback.answer("⛔ Нет доступа", show_alert=True)
         return
 
+    page = 1
+    if callback.data.startswith("alert_panel_subscribers_page_"):
+        page = int(callback.data.split("_")[-1])
+
     subscribers = _load_subscribers()
     await callback.answer()
 
@@ -439,23 +465,43 @@ async def _cq_panel_subscribers(callback: types.CallbackQuery) -> None:
             f"📭 Подписчиков пока нет.\n\n"
             f"Выберите действие:"
         )
+        markup = _get_alert_panel_keyboard()
     else:
-        ids_text = "\n".join(f"  • <code>{uid}</code>" for uid in subscribers[:50])
-        suffix = (
-            f"\n  <i>...и ещё {len(subscribers) - 50}</i>"
-            if len(subscribers) > 50 else ""
-        )
+        PER_PAGE = 5
+        items = list(subscribers.items())
+        total_pages = max(1, (len(items) + PER_PAGE - 1) // PER_PAGE)
+        if page > total_pages:
+            page = total_pages
+        if page < 1:
+            page = 1
+            
+        start_idx = (page - 1) * PER_PAGE
+        end_idx = start_idx + PER_PAGE
+        current_items = items[start_idx:end_idx]
+        
+        ids_text = "\n".join(f"  • {name} (<code>{uid}</code>)" for uid, name in current_items)
+        
         text = (
-            f"📣 <b>Alert Module — Панель управления</b>\n\n"
-            f"👥 Подписчиков: <b>{len(subscribers)}</b>\n\n"
-            f"{ids_text}{suffix}\n\n"
-            f"Выберите действие:"
+            f"📣 <b>Alert Module — Подписчики</b>\n\n"
+            f"👥 Всего: <b>{len(subscribers)}</b>\n"
+            f"📄 Страница {page} из {total_pages}\n\n"
+            f"{ids_text}\n"
         )
+        
+        nav_buttons = []
+        if page > 1:
+            nav_buttons.append(InlineKeyboardButton(text="⬅️ Назад", callback_data=f"alert_panel_subscribers_page_{page - 1}"))
+        if page < total_pages:
+            nav_buttons.append(InlineKeyboardButton(text="Вперёд ➡️", callback_data=f"alert_panel_subscribers_page_{page + 1}"))
+            
+        keyboard = []
+        if nav_buttons:
+            keyboard.append(nav_buttons)
+        keyboard.append([InlineKeyboardButton(text="🔙 Назад", callback_data="alert_fsm_cancel")])
+        markup = InlineKeyboardMarkup(inline_keyboard=keyboard)
 
     try:
-        await callback.message.edit_text(
-            text, parse_mode="HTML", reply_markup=_get_alert_panel_keyboard()
-        )
+        await callback.message.edit_text(text, parse_mode="HTML", reply_markup=markup)
     except Exception:
         pass
 
@@ -469,18 +515,36 @@ async def _broadcast_message_received(
     Получили сообщение для рассылки → сохраняем payload в FSM state,
     запрашиваем подтверждение.
     """
-    # Сохраняем контент, а не chat_id/message_id — alert_bot не имеет
-    # доступа к чату главного бота и не может скопировать оттуда сообщение.
     payload = _extract_message_payload(message)
     subscribers = _load_subscribers()
+    
+    data = await state.get_data()
+    panel_message_id = data.get("panel_message_id")
     await state.update_data(broadcast_payload=payload)
-    await message.answer(
+    
+    text = (
         f"⚠️ <b>Подтверждение рассылки</b>\n\n"
         f"Это сообщение будет отправлено <b>{len(subscribers)}</b> подписчикам.\n"
-        f"Продолжить?",
-        parse_mode="HTML",
-        reply_markup=_get_broadcast_confirm_keyboard(),
+        f"Продолжить?"
     )
+
+    try:
+        await message.delete()
+    except Exception:
+        pass
+
+    try:
+        import bot as main_bot_module
+        main_bot_instance: Bot = main_bot_module.bot
+        await main_bot_instance.edit_message_text(
+            chat_id=message.chat.id,
+            message_id=panel_message_id,
+            text=text,
+            parse_mode="HTML",
+            reply_markup=_get_broadcast_confirm_keyboard(),
+        )
+    except Exception:
+        await message.answer(text, parse_mode="HTML", reply_markup=_get_broadcast_confirm_keyboard())
 
 
 async def _broadcast_confirm(
@@ -526,24 +590,13 @@ async def _broadcast_confirm(
     result_text = (
         f"✅ <b>Рассылка завершена</b>\n\n"
         f"📤 Успешно: <b>{sent_ok}</b>\n"
-        f"❌ Ошибок: <b>{sent_fail}</b>"
+        f"❌ Ошибок: <b>{sent_fail}</b>\n\n"
+        f"Выберите действие:"
     )
-    await callback.message.answer(
-        result_text, parse_mode="HTML", reply_markup=_get_alert_panel_keyboard()
-    )
-
-
-async def _broadcast_cancel(
-    callback: types.CallbackQuery, state: FSMContext
-) -> None:
-    """Отмена рассылки (кнопка «Отмена» в подтверждении)."""
-    await state.clear()
-    await callback.message.edit_reply_markup(reply_markup=None)
-    await callback.answer("❌ Рассылка отменена.")
-    await callback.message.answer(
-        "❌ Рассылка отменена.",
-        reply_markup=_get_alert_panel_keyboard(),
-    )
+    try:
+        await callback.message.edit_text(result_text, parse_mode="HTML", reply_markup=_get_alert_panel_keyboard())
+    except Exception:
+        pass
 
 
 # ─── Main Bot: FSM — ответ на тикет ──────────────────────────────────────────
@@ -567,15 +620,18 @@ async def _alert_reply_callback(
         return
 
     await state.set_state(ReplyStates.waiting_reply_text)
-    await state.update_data(reply_to_user_id=client_user_id, reply_to_message_id=client_message_id)
+    await state.update_data(reply_to_user_id=client_user_id, reply_to_message_id=client_message_id, panel_message_id=callback.message.message_id)
 
     await callback.answer()
-    await callback.message.answer(
+    
+    text = (
         f"✏️ <b>Ответ клиенту</b> <code>{client_user_id}</code>\n\n"
-        f"Отправьте ваш ответ (текст, фото, голосовое и т.д.):",
-        parse_mode="HTML",
-        reply_markup=_get_cancel_keyboard(),
+        f"Отправьте ваш ответ (текст, фото, голосовое и т.д.):"
     )
+    try:
+        await callback.message.edit_text(text, parse_mode="HTML", reply_markup=_get_cancel_keyboard())
+    except Exception:
+        pass
 
 
 async def _reply_text_received(message: types.Message, state: FSMContext) -> None:
@@ -586,6 +642,7 @@ async def _reply_text_received(message: types.Message, state: FSMContext) -> Non
     data = await state.get_data()
     client_user_id = data.get("reply_to_user_id")
     client_message_id = data.get("reply_to_message_id")
+    panel_message_id = data.get("panel_message_id")
     await state.clear()
 
     if not client_user_id:
@@ -597,20 +654,32 @@ async def _reply_text_received(message: types.Message, state: FSMContext) -> Non
         return
 
     payload = _extract_message_payload(message)
+    
+    try:
+        await message.delete()
+    except Exception:
+        pass
+
     try:
         await _send_payload_via_alert_bot(client_user_id, payload, reply_to_message_id=client_message_id)
-        await message.answer(
-            f"✅ <b>Ответ отправлен</b> клиенту <code>{client_user_id}</code>.",
-            parse_mode="HTML",
-            reply_markup=_get_alert_panel_keyboard(),
-        )
         logging.info(f"[client_alerts] Ответ отправлен клиенту {client_user_id}.")
+        text = f"✅ <b>Ответ отправлен</b> клиенту <code>{client_user_id}</code>."
     except Exception as e:
         logging.error(f"[client_alerts] Ошибка ответа клиенту {client_user_id}: {e}")
-        await message.answer(
-            f"❌ Ошибка отправки <code>{client_user_id}</code>: {e}",
+        text = f"❌ Ошибка отправки <code>{client_user_id}</code>: {e}"
+
+    try:
+        import bot as main_bot_module
+        main_bot_instance: Bot = main_bot_module.bot
+        await main_bot_instance.edit_message_text(
+            chat_id=message.chat.id,
+            message_id=panel_message_id,
+            text=text + "\n\nВыберите действие:",
             parse_mode="HTML",
+            reply_markup=_get_alert_panel_keyboard()
         )
+    except Exception:
+        await message.answer(text, parse_mode="HTML", reply_markup=_get_alert_panel_keyboard())
 
 
 # ─── Main Bot: общая отмена FSM через кнопку ─────────────────────────────────
@@ -621,12 +690,19 @@ async def _cq_fsm_cancel(callback: types.CallbackQuery, state: FSMContext) -> No
     Сбрасывает состояние и возвращает панель управления.
     """
     await state.clear()
-    await callback.message.edit_reply_markup(reply_markup=None)
-    await callback.answer("Отменено.")
-    await callback.message.answer(
-        "❌ Действие отменено.\n\nВыберите следующее действие:",
-        reply_markup=_get_alert_panel_keyboard(),
+    subscribers = _load_subscribers()
+    text = (
+        f"❌ Действие отменено.\n\n"
+        f"📣 <b>Alert Module — Панель управления</b>\n\n"
+        f"👥 Подписчиков: <b>{len(subscribers)}</b>\n"
+        f"🤖 Alert Bot: <b>{'активен' if alert_bot else 'не активен'}</b>\n\n"
+        f"Выберите действие:"
     )
+    try:
+        await callback.message.edit_text(text, parse_mode="HTML", reply_markup=_get_alert_panel_keyboard())
+    except Exception:
+        pass
+    await callback.answer("Отменено.")
 
 
 # ─── register_handlers + start_background_tasks ───────────────────────────────
@@ -651,13 +727,13 @@ def register_handlers(dp: Dispatcher) -> None:
 
     # Callback: «👥 Подписчики» в панели
     dp.callback_query(F.data == "alert_panel_subscribers")(_cq_panel_subscribers)
+    dp.callback_query(F.data.startswith("alert_panel_subscribers_page_"))(_cq_panel_subscribers)
 
     # FSM: получили сообщение для рассылки
     dp.message(BroadcastStates.waiting_broadcast_message)(_broadcast_message_received)
 
-    # Callbacks подтверждения/отмены рассылки
+    # Callbacks подтверждения рассылки
     dp.callback_query(F.data == "alert_broadcast_confirm")(_broadcast_confirm)
-    dp.callback_query(F.data == "alert_broadcast_cancel")(_broadcast_cancel)
 
     # Callback «💬 Ответить» под входящим тикетом
     dp.callback_query(F.data.startswith("alert_reply_"))(_alert_reply_callback)
