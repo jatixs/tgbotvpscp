@@ -30,7 +30,7 @@ from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 from core import config
-from core.i18n import I18nFilter, get_user_lang
+from core.i18n import I18nFilter, get_user_lang, _
 
 # ─── Константы ────────────────────────────────────────────────────────────────
 
@@ -298,15 +298,16 @@ def _get_cancel_keyboard() -> InlineKeyboardMarkup:
     )
 
 
-def _get_client_main_keyboard() -> types.ReplyKeyboardMarkup:
+def _get_client_main_keyboard(lang: str = "ru") -> types.ReplyKeyboardMarkup:
     """Клавиатура клиента (подписчика) со вшитой кнопкой настроек."""
     return types.ReplyKeyboardMarkup(
-        keyboard=[[types.KeyboardButton(text="⚙️ Настройки")]],
+        keyboard=[[types.KeyboardButton(text=_("alert_btn_settings", lang))]],
         resize_keyboard=True
     )
 
 
 async def _get_client_settings_keyboard(user_id: int) -> InlineKeyboardMarkup:
+    lang = get_user_lang(user_id)
     subscribers = _load_subscribers()
     s_data = subscribers.get(user_id, {})
     mute_all = s_data.get("mute_all", False)
@@ -317,9 +318,9 @@ async def _get_client_settings_keyboard(user_id: int) -> InlineKeyboardMarkup:
     
     keyboard = []
     if mute_all:
-        keyboard.append([InlineKeyboardButton(text="🔕 Уведомления отключены (Вкл)", callback_data="cst_toggle_all")])
+        keyboard.append([InlineKeyboardButton(text=_("alert_btn_notifications_disabled", lang), callback_data="cst_toggle_all")])
     else:
-        keyboard.append([InlineKeyboardButton(text="🔔 Уведомления включены (Выкл)", callback_data="cst_toggle_all")])
+        keyboard.append([InlineKeyboardButton(text=_("alert_btn_notifications_enabled", lang), callback_data="cst_toggle_all")])
         
     if not mute_all:
         for token, n_data in all_nodes.items():
@@ -341,25 +342,22 @@ if alert_dp is not None:
         Клиент нажимает /start в Alert Bot → подписывается на рассылки.
         """
         user_id = message.from_user.id
+        lang = get_user_lang(user_id)
         user_name = message.from_user.full_name or f"ID {user_id}"
         is_new = await _add_subscriber(user_id, user_name)
 
         if is_new:
             await message.answer(
-                "👋 Добро пожаловать!\n\n"
-                "Вы подписались на уведомления от администратора.\n"
-                "⚠️ <b>Внимание:</b> писать боту можно только <b>в ответ</b> на сообщения от администратора (используйте функцию Telegram «Ответить» / «Reply»).\n"
-                "Обычные сообщения бот не принимает.",
+                _("alert_welcome_new", lang),
                 parse_mode="HTML",
-                reply_markup=_get_client_main_keyboard()
+                reply_markup=_get_client_main_keyboard(lang)
             )
             logging.info(f"[client_alerts] Новый подписчик: {user_id} ({user_name})")
         else:
             await message.answer(
-                "✅ Вы уже подписаны на уведомления.\n"
-                "⚠️ Напоминаем: чтобы написать нам, используйте функцию «Ответить» на любое сообщение от администратора.",
+                _("alert_welcome_existing", lang),
                 parse_mode="HTML",
-                reply_markup=_get_client_main_keyboard()
+                reply_markup=_get_client_main_keyboard(lang)
             )
 
     @alert_dp.callback_query(F.data == "cst_toggle_all")
@@ -402,31 +400,32 @@ if alert_dp is not None:
         if alert_bot is None:
             return
 
-        if message.text == "⚙️ Настройки":
+        lang = get_user_lang(message.from_user.id)
+        if message.text == "⚙️ Настройки" or message.text == _("alert_btn_settings", lang):
             user_id = message.from_user.id
             user_name = message.from_user.full_name or f"ID {user_id}"
             await _add_subscriber(user_id, user_name)
             
-            text = "⚙️ <b>Настройки уведомлений</b>\n\nЗдесь вы можете выбрать, от каких серверов получать автоматические системные уведомления."
+            text = _("alert_settings_text", lang)
             await message.answer(text, parse_mode="HTML", reply_markup=await _get_client_settings_keyboard(user_id))
             return
 
         # Проверка, что это ответ на сообщение
         if not message.reply_to_message:
-            await message.answer("⚠️ Ошибка: пожалуйста, используйте функцию <b>«Ответить»</b> (Reply) на сообщение от администратора, чтобы мы получили ваш ответ.", parse_mode="HTML")
+            await message.answer(_("alert_reply_error_not_reply", lang), parse_mode="HTML")
             return
 
         reply = message.reply_to_message
         
         # Проверка ответа самому себе (BUG 5)
         if reply.from_user.id == message.from_user.id:
-             await message.answer("⚠️ Ошибка: Вы ответили на своё собственное сообщение. Пожалуйста, ответьте на сообщение от администратора.")
+             await message.answer(_("alert_reply_error_self", lang))
              return
 
         # Проверка ответа на системное сообщение бота (BUG 6)
         if reply.from_user.id == alert_bot.id:
             if reply.text and (reply.text.startswith("⚠️") or reply.text.startswith("✅") or reply.text.startswith("👋") or reply.text.startswith("⏳")):
-                 await message.answer("⚠️ Ошибка: Вы ответили на системное сообщение бота. Пожалуйста, ответьте на сообщение от администратора.")
+                 await message.answer(_("alert_reply_error_bot", lang))
                  return
 
         # Убеждаемся, что пользователь подписан
@@ -438,7 +437,7 @@ if alert_dp is not None:
         now = time.time()
         last_time = _user_last_message_time.get(user_id, 0)
         if now - last_time < 3.0:
-            await message.answer("⏳ Пожалуйста, подождите несколько секунд перед отправкой следующего сообщения.")
+            await message.answer(_("alert_flood_wait", lang))
             return
         _user_last_message_time[user_id] = now
 
@@ -481,11 +480,11 @@ if alert_dp is not None:
                 # Медиа — форвардим оригинал
                 await message.forward(config.ADMIN_USER_ID)
 
-            await message.answer("✅ Ваше сообщение отправлено. Мы свяжемся с вами.")
+            await message.answer(_("alert_msg_sent", lang))
 
         except Exception as e:
             logging.error(f"[client_alerts] Ошибка пересылки тикета: {e}")
-            await message.answer("⚠️ Произошла ошибка при отправке. Попробуйте позже.")
+            await message.answer("⚠️ Error / Ошибка при отправке. Попробуйте позже.")
 
 
 # ─── Main Bot: панель управления (callback) ───────────────────────────────────
