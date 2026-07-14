@@ -401,7 +401,7 @@ if alert_dp is not None:
             return
 
         lang = get_user_lang(message.from_user.id)
-        if message.text == "⚙️ Настройки" or message.text == _("alert_btn_settings", lang):
+        if message.text in ["⚙️ Настройки", _("alert_btn_settings", lang), "/settings"]:
             user_id = message.from_user.id
             user_name = message.from_user.full_name or f"ID {user_id}"
             await _add_subscriber(user_id, user_name)
