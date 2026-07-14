@@ -647,68 +647,50 @@ def get_nodes_delete_keyboard(nodes_dict: dict, lang: str) -> InlineKeyboardMark
 
 
 def get_node_management_keyboard(
-    token: str, lang: str, user_id: int, is_globally_muted: bool = False
+    token: str, lang: str, user_id: int, is_globally_muted: bool = False, page: int = 1
 ) -> InlineKeyboardMarkup:
-    row1 = [
-        InlineKeyboardButton(
-            text=_("btn_selftest", lang), callback_data=f"node_cmd_{token}_selftest"
-        ),
-        InlineKeyboardButton(
-            text=_("btn_uptime", lang), callback_data=f"node_cmd_{token}_uptime"
-        ),
-    ]
-    row2 = [
-        InlineKeyboardButton(
-            text=_("btn_traffic", lang), callback_data=f"node_cmd_{token}_traffic"
-        ),
-        InlineKeyboardButton(
-            text=_("btn_top", lang), callback_data=f"node_cmd_{token}_top"
-        ),
-    ]
-    row3 = [
-        InlineKeyboardButton(
-            text=_("btn_speedtest", lang), callback_data=f"node_cmd_{token}_speedtest"
-        ),
-        InlineKeyboardButton(
-            text=_("btn_services", lang), callback_data=f"node_services_{token}"
-        ),
-    ]
-    row4 = []
-    if user_id == ADMIN_USER_ID:
-        row4.append(
-            InlineKeyboardButton(
-                text=_("node_btn_rename", lang), callback_data=f"node_rename_{token}"
-            )
-        )
-        is_muted_icon = "🔕" if is_globally_muted else "🔔"
-        row4.append(
-            InlineKeyboardButton(
-                text=f"{is_muted_icon} Alert Bot", callback_data=f"node_global_mute_{token}"
-            )
-        )
-        row4.append(
-            InlineKeyboardButton(
-                text=_("btn_node_update_system", lang), callback_data=f"node_cmd_{token}_update"
-            )
-        )
-    row5 = [
-        InlineKeyboardButton(
-            text=_("btn_reboot", lang), callback_data=f"node_cmd_{token}_reboot"
-        )
-    ]
-    row6 = [
-        InlineKeyboardButton(
-            text=_("btn_back", lang), callback_data="nodes_list_refresh", style="primary"
-        )
-    ]
-    layout = [row1, row2, row3, row4]
-    if user_id == ADMIN_USER_ID and KEYBOARD_CONFIG.get("enable_billing", True):
+    layout = []
+    
+    if page == 1:
         layout.append([
-            InlineKeyboardButton(
-                text=_("btn_billing", lang), callback_data=f"node_billing_{token}"
-            )
+            InlineKeyboardButton(text=_("btn_selftest", lang), callback_data=f"node_cmd_{token}_selftest"),
+            InlineKeyboardButton(text=_("btn_uptime", lang), callback_data=f"node_cmd_{token}_uptime")
         ])
-    layout.extend([row5, row6])
+        layout.append([
+            InlineKeyboardButton(text=_("btn_traffic", lang), callback_data=f"node_cmd_{token}_traffic"),
+            InlineKeyboardButton(text=_("btn_top", lang), callback_data=f"node_cmd_{token}_top")
+        ])
+        layout.append([
+            InlineKeyboardButton(text=_("btn_speedtest", lang), callback_data=f"node_cmd_{token}_speedtest"),
+            InlineKeyboardButton(text=_("btn_services", lang), callback_data=f"node_services_{token}")
+        ])
+        if user_id == ADMIN_USER_ID:
+            layout.append([
+                InlineKeyboardButton(text=_("node_page_next", lang), callback_data=f"node_page_2_{token}")
+            ])
+            
+    elif page == 2 and user_id == ADMIN_USER_ID:
+        is_muted_icon = "🔕" if is_globally_muted else "🔔"
+        layout.append([
+            InlineKeyboardButton(text=_("node_btn_rename", lang), callback_data=f"node_rename_{token}"),
+            InlineKeyboardButton(text=f"{is_muted_icon} " + _("node_btn_alert_bot", lang), callback_data=f"node_global_mute_{token}"),
+            InlineKeyboardButton(text=_("btn_node_update_system", lang), callback_data=f"node_cmd_{token}_update")
+        ])
+        if KEYBOARD_CONFIG.get("enable_billing", True):
+            layout.append([
+                InlineKeyboardButton(text=_("btn_billing", lang), callback_data=f"node_billing_{token}")
+            ])
+        layout.append([
+            InlineKeyboardButton(text=_("btn_reboot", lang), callback_data=f"node_cmd_{token}_reboot")
+        ])
+        layout.append([
+            InlineKeyboardButton(text=_("node_page_prev", lang), callback_data=f"node_page_1_{token}")
+        ])
+
+    layout.append([
+        InlineKeyboardButton(text=_("btn_back", lang), callback_data="nodes_list_refresh")
+    ])
+    
     return InlineKeyboardMarkup(inline_keyboard=layout)
 
 

@@ -131,6 +131,7 @@ def register_handlers(dp: Dispatcher):
     dp.callback_query(F.data == "node_delete_menu")(cq_node_delete_menu)
     dp.callback_query(F.data.startswith("node_delete_confirm_"))(cq_node_delete_confirm)
     dp.callback_query(F.data.startswith("node_select_"))(cq_node_select)
+    dp.callback_query(F.data.startswith("node_page_"))(cq_node_page)
     dp.callback_query(F.data.startswith("node_rename_"))(cq_node_rename)
     dp.message(StateFilter(RenameNodeStates.waiting_for_new_name))(process_node_rename)
     dp.callback_query(F.data.startswith("node_stop_traffic_"))(cq_node_stop_traffic)
@@ -372,6 +373,29 @@ async def process_node_name(message: types.Message, state: FSMContext):
     await state.clear()
 
 
+async def cq_node_page(callback: types.CallbackQuery):
+    user_id = callback.from_user.id
+    lang = get_user_lang(user_id)
+    # data format: node_page_{page}_{token}
+    parts = callback.data.split("_", 3)
+    if len(parts) < 4:
+        return
+    page = int(parts[2])
+    token = parts[3]
+    node = await nodes_db.get_node_by_token(token)
+    if not node:
+        await callback.answer("Node not found", show_alert=True)
+        return
+    from core.keyboards import get_node_management_keyboard
+    is_globally_muted = node.get("global_mute", False)
+    keyboard = get_node_management_keyboard(token, lang, user_id, is_globally_muted, page)
+    try:
+        await callback.message.edit_reply_markup(reply_markup=keyboard)
+    except Exception:
+        pass
+    await callback.answer()
+
+
 async def cq_node_rename(callback: types.CallbackQuery, state: FSMContext):
     user_id = callback.from_user.id
     lang = get_user_lang(user_id)
@@ -414,7 +438,7 @@ async def cq_node_global_mute(callback: types.CallbackQuery):
     from core.i18n import get_user_lang
     lang = get_user_lang(user_id)
     from core.keyboards import get_node_management_keyboard
-    keyboard = get_node_management_keyboard(token, lang, user_id, is_globally_muted)
+    keyboard = get_node_management_keyboard(token, lang, user_id, is_globally_muted, page=2)
     try:
         await callback.message.edit_reply_markup(reply_markup=keyboard)
     except Exception:
