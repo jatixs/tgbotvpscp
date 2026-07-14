@@ -132,7 +132,6 @@ def register_handlers(dp: Dispatcher):
     dp.callback_query(F.data.startswith("node_delete_confirm_"))(cq_node_delete_confirm)
     dp.callback_query(F.data.startswith("node_select_"))(cq_node_select)
     dp.callback_query(F.data.startswith("node_rename_"))(cq_node_rename)
-    dp.callback_query(F.data.startswith("node_global_mute_"))(cq_node_global_mute)
     dp.message(StateFilter(RenameNodeStates.waiting_for_new_name))(process_node_rename)
     dp.callback_query(F.data.startswith("node_stop_traffic_"))(cq_node_stop_traffic)
     dp.callback_query(F.data.startswith("node_services_"))(cq_node_services)
@@ -155,6 +154,7 @@ def register_handlers(dp: Dispatcher):
     dp.callback_query(F.data == "master_billing_toggle_reminder")(cq_master_billing_toggle_reminder)
     dp.message(StateFilter(MasterBillingStates.waiting_for_amount))(process_master_billing_amount)
     dp.message(StateFilter(MasterBillingStates.waiting_for_date_shift))(process_master_billing_date_shift)
+    dp.callback_query(F.data.startswith("node_global_mute_"))(cq_node_global_mute)
 
 
 def start_background_tasks(bot: Bot) -> list[asyncio.Task]:
