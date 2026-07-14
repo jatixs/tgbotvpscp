@@ -395,6 +395,33 @@ async def cq_node_rename(callback: types.CallbackQuery, state: FSMContext):
     await callback.answer()
 
 
+async def cq_node_global_mute(callback: types.CallbackQuery):
+    if callback.from_user.id != config.ADMIN_USER_ID:
+        from core.i18n import get_user_lang, _
+        await callback.answer(_("access_denied", get_user_lang(callback.from_user.id)), show_alert=True)
+        return
+    token = callback.data.replace("node_global_mute_", "")
+    node = await nodes_db.get_node_by_token(token)
+    if not node:
+        await callback.answer("Node not found", show_alert=True)
+        return
+    current = node.get("global_mute", False)
+    await nodes_db.update_node_extra(token, "global_mute", not current)
+    
+    node = await nodes_db.get_node_by_token(token)
+    is_globally_muted = node.get("global_mute", False)
+    user_id = callback.from_user.id
+    from core.i18n import get_user_lang
+    lang = get_user_lang(user_id)
+    from core.keyboards import get_node_management_keyboard
+    keyboard = get_node_management_keyboard(token, lang, user_id, is_globally_muted)
+    try:
+        await callback.message.edit_reply_markup(reply_markup=keyboard)
+    except Exception:
+        pass
+    await callback.answer("Изменено")
+
+
 async def process_node_rename(message: types.Message, state: FSMContext):
     user_id = message.from_user.id
     lang = get_user_lang(user_id)
