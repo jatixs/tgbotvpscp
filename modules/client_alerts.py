@@ -57,24 +57,34 @@ class ReplyStates(StatesGroup):
 
 # ─── Хранилище подписчиков ────────────────────────────────────────────────────
 
-def _load_subscribers() -> dict[int, str]:
-    """Загрузить словарь подписчиков из JSON-файла. Формат: {user_id: user_name}"""
+def _load_subscribers() -> dict[int, dict]:
+    """Загрузить словарь подписчиков из JSON-файла. Формат: {user_id: {"name": user_name, "mute_all": bool, "muted_nodes": list}}"""
     try:
         if os.path.exists(SUBSCRIBERS_FILE):
             with open(SUBSCRIBERS_FILE, "r", encoding="utf-8") as f:
                 data = json.load(f)
                 if isinstance(data, list):
-                    migrated = {int(uid): f"ID {uid}" for uid in data}
+                    migrated = {int(uid): {"name": f"ID {uid}", "mute_all": False, "muted_nodes": []} for uid in data}
                     _save_subscribers(migrated)
                     return migrated
                 elif isinstance(data, dict):
-                    return {int(k): v for k, v in data.items()}
+                    migrated = {}
+                    updated = False
+                    for k, v in data.items():
+                        if isinstance(v, str):
+                            migrated[int(k)] = {"name": v, "mute_all": False, "muted_nodes": []}
+                            updated = True
+                        else:
+                            migrated[int(k)] = v
+                    if updated:
+                        _save_subscribers(migrated)
+                    return migrated
     except Exception as e:
         logging.warning(f"[client_alerts] Не удалось загрузить подписчиков: {e}")
     return {}
 
 
-def _save_subscribers(subscribers: dict[int, str]) -> None:
+def _save_subscribers(subscribers: dict[int, dict]) -> None:
     """Сохранить словарь подписчиков в JSON-файл."""
     try:
         os.makedirs(os.path.dirname(SUBSCRIBERS_FILE), exist_ok=True)
@@ -88,10 +98,26 @@ async def _add_subscriber(user_id: int, user_name: str) -> bool:
     """Добавить подписчика или обновить имя. Возвращает True если добавлен впервые."""
     subscribers = _load_subscribers()
     is_new = user_id not in subscribers
-    if is_new or subscribers[user_id] != user_name:
-        subscribers[user_id] = user_name
+    if is_new:
+        subscribers[user_id] = {"name": user_name, "mute_all": False, "muted_nodes": []}
+        _save_subscribers(subscribers)
+    elif subscribers[user_id].get("name") != user_name:
+        subscribers[user_id]["name"] = user_name
         _save_subscribers(subscribers)
     return is_new
+
+
+def is_node_muted_for_user(user_id: int, node_token: str) -> bool:
+    """Проверяет, заглушил ли пользователь конкретную ноду (или все сразу)."""
+    subscribers = _load_subscribers()
+    s_data = subscribers.get(user_id)
+    if not s_data:
+        return False
+    if s_data.get("mute_all", False):
+        return True
+    if node_token in s_data.get("muted_nodes", []):
+        return True
+    return False
 
 
 # ─── Вспомогательные функции отправки ─────────────────────────────────────────
@@ -272,6 +298,39 @@ def _get_cancel_keyboard() -> InlineKeyboardMarkup:
     )
 
 
+def _get_client_main_keyboard() -> types.ReplyKeyboardMarkup:
+    """Клавиатура клиента (подписчика) со вшитой кнопкой настроек."""
+    return types.ReplyKeyboardMarkup(
+        keyboard=[[types.KeyboardButton(text="⚙️ Настройки")]],
+        resize_keyboard=True
+    )
+
+
+async def _get_client_settings_keyboard(user_id: int) -> InlineKeyboardMarkup:
+    subscribers = _load_subscribers()
+    s_data = subscribers.get(user_id, {})
+    mute_all = s_data.get("mute_all", False)
+    muted_nodes = s_data.get("muted_nodes", [])
+    
+    from core import nodes_db
+    all_nodes = await nodes_db.get_all_nodes()
+    
+    keyboard = []
+    if mute_all:
+        keyboard.append([InlineKeyboardButton(text="🔕 Уведомления отключены (Вкл)", callback_data="cst_toggle_all")])
+    else:
+        keyboard.append([InlineKeyboardButton(text="🔔 Уведомления включены (Выкл)", callback_data="cst_toggle_all")])
+        
+    if not mute_all:
+        for token, n_data in all_nodes.items():
+            name = n_data.get("name", "Unknown")
+            is_muted = token in muted_nodes
+            btn_text = f"🔕 {name}" if is_muted else f"🔔 {name}"
+            keyboard.append([InlineKeyboardButton(text=btn_text, callback_data=f"cst_node_{token}")])
+            
+    return InlineKeyboardMarkup(inline_keyboard=keyboard)
+
+
 # ─── Alert Bot: обработчики ───────────────────────────────────────────────────
 
 if alert_dp is not None:
@@ -291,15 +350,48 @@ if alert_dp is not None:
                 "Вы подписались на уведомления от администратора.\n"
                 "⚠️ <b>Внимание:</b> писать боту можно только <b>в ответ</b> на сообщения от администратора (используйте функцию Telegram «Ответить» / «Reply»).\n"
                 "Обычные сообщения бот не принимает.",
-                parse_mode="HTML"
+                parse_mode="HTML",
+                reply_markup=_get_client_main_keyboard()
             )
             logging.info(f"[client_alerts] Новый подписчик: {user_id} ({user_name})")
         else:
             await message.answer(
                 "✅ Вы уже подписаны на уведомления.\n"
                 "⚠️ Напоминаем: чтобы написать нам, используйте функцию «Ответить» на любое сообщение от администратора.",
-                parse_mode="HTML"
+                parse_mode="HTML",
+                reply_markup=_get_client_main_keyboard()
             )
+
+    @alert_dp.callback_query(F.data == "cst_toggle_all")
+    async def _cq_client_settings_toggle_all(callback: types.CallbackQuery):
+        user_id = callback.from_user.id
+        subscribers = _load_subscribers()
+        if user_id in subscribers:
+            subscribers[user_id]["mute_all"] = not subscribers[user_id].get("mute_all", False)
+            _save_subscribers(subscribers)
+            try:
+                await callback.message.edit_reply_markup(reply_markup=await _get_client_settings_keyboard(user_id))
+            except Exception:
+                pass
+        await callback.answer()
+
+    @alert_dp.callback_query(F.data.startswith("cst_node_"))
+    async def _cq_client_settings_toggle_node(callback: types.CallbackQuery):
+        user_id = callback.from_user.id
+        token = callback.data.replace("cst_node_", "")
+        subscribers = _load_subscribers()
+        if user_id in subscribers:
+            muted_nodes = subscribers[user_id].setdefault("muted_nodes", [])
+            if token in muted_nodes:
+                muted_nodes.remove(token)
+            else:
+                muted_nodes.append(token)
+            _save_subscribers(subscribers)
+            try:
+                await callback.message.edit_reply_markup(reply_markup=await _get_client_settings_keyboard(user_id))
+            except Exception:
+                pass
+        await callback.answer()
 
     @alert_dp.message()
     async def alert_message_handler(message: types.Message) -> None:
@@ -308,6 +400,15 @@ if alert_dp is not None:
         Администратор видит сообщение с inline-кнопкой 'Ответить'.
         """
         if alert_bot is None:
+            return
+
+        if message.text == "⚙️ Настройки":
+            user_id = message.from_user.id
+            user_name = message.from_user.full_name or f"ID {user_id}"
+            await _add_subscriber(user_id, user_name)
+            
+            text = "⚙️ <b>Настройки уведомлений</b>\n\nЗдесь вы можете выбрать, от каких серверов получать автоматические системные уведомления."
+            await message.answer(text, parse_mode="HTML", reply_markup=await _get_client_settings_keyboard(user_id))
             return
 
         # Проверка, что это ответ на сообщение
@@ -482,21 +583,22 @@ async def _cq_panel_subscribers(callback: types.CallbackQuery) -> None:
         
         if alert_bot is not None:
             updated = False
-            for idx, (uid, name) in enumerate(current_items):
+            for idx, (uid, s_data) in enumerate(current_items):
+                name = s_data.get("name", "")
                 if name.startswith("ID "):
                     try:
                         chat = await alert_bot.get_chat(uid)
                         new_name = chat.full_name or f"ID {uid}"
                         if new_name != name:
-                            subscribers[uid] = new_name
-                            current_items[idx] = (uid, new_name)
+                            subscribers[uid]["name"] = new_name
+                            current_items[idx] = (uid, subscribers[uid])
                             updated = True
                     except Exception:
                         pass
             if updated:
                 _save_subscribers(subscribers)
         
-        ids_text = "\n".join(f"  • {name} (<code>{uid}</code>)" for uid, name in current_items)
+        ids_text = "\n".join(f"  • {s_data.get('name', 'Unknown')} (<code>{uid}</code>)" for uid, s_data in current_items)
         
         text = (
             f"📣 <b>Alert Module — Подписчики</b>\n\n"

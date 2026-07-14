@@ -66,20 +66,26 @@ def _fmt_billing_amount(amount, currency: str, lang: str) -> str:
     return f"{amount} {currency}"
 
 
-async def _broadcast_node_status_to_clients(event_type: str, changed_node_name: str, current_now: float) -> None:
+async def _broadcast_node_status_to_clients(event_type: str, changed_node_token: str, changed_node_name: str, current_now: float) -> None:
     """
     Отправляет системный алерт через Gateway-бота всем подписчикам
     с общим списком статусов серверов.
     """
     try:
-        from modules.client_alerts import broadcast_system_alert, alert_bot, _load_subscribers
+        from modules.client_alerts import broadcast_system_alert, alert_bot, _load_subscribers, is_node_muted_for_user
         if alert_bot is None:
             return
             
         all_nodes = await nodes_db.get_all_nodes()
+        if all_nodes.get(changed_node_token, {}).get("global_mute", False):
+            return
+            
         subscribers = _load_subscribers()
         
         for uid in subscribers:
+            if is_node_muted_for_user(uid, changed_node_token):
+                continue
+            
             lang = get_user_lang(uid)
             
             node_list_text = []
@@ -126,6 +132,7 @@ def register_handlers(dp: Dispatcher):
     dp.callback_query(F.data.startswith("node_delete_confirm_"))(cq_node_delete_confirm)
     dp.callback_query(F.data.startswith("node_select_"))(cq_node_select)
     dp.callback_query(F.data.startswith("node_rename_"))(cq_node_rename)
+    dp.callback_query(F.data.startswith("node_global_mute_"))(cq_node_global_mute)
     dp.message(StateFilter(RenameNodeStates.waiting_for_new_name))(process_node_rename)
     dp.callback_query(F.data.startswith("node_stop_traffic_"))(cq_node_stop_traffic)
     dp.callback_query(F.data.startswith("node_services_"))(cq_node_services)
@@ -294,7 +301,7 @@ async def cq_node_select(callback: types.CallbackQuery):
         ip=node.get("ip", "?"),
         uptime=formatted_uptime,
     )
-    keyboard = get_node_management_keyboard(token, lang, user_id)
+    keyboard = get_node_management_keyboard(token, lang, user_id, node.get("global_mute", False))
     await callback.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
 
 
@@ -426,7 +433,7 @@ async def process_node_rename(message: types.Message, state: FSMContext):
             ip=node.get("ip", "?"),
             uptime=formatted_uptime,
         )
-        keyboard = get_node_management_keyboard(token, lang, user_id)
+        keyboard = get_node_management_keyboard(token, lang, user_id, node.get("global_mute", False))
         await message.answer(text, reply_markup=keyboard, parse_mode="HTML")
 
 
@@ -570,7 +577,7 @@ async def cq_node_stop_traffic(callback: types.CallbackQuery):
                     ip=node.get("ip", "?"),
                     uptime=formatted_uptime,
                 )
-                keyboard = get_node_management_keyboard(token, lang, user_id)
+                keyboard = get_node_management_keyboard(token, lang, user_id, node.get("global_mute", False))
                 await callback.message.answer(
                     text, reply_markup=keyboard, parse_mode="HTML"
                 )
@@ -851,7 +858,7 @@ async def nodes_monitor(bot: Bot):
                         token, "is_offline_alert_sent", True
                     )
                     # Рассылка клиентам
-                    asyncio.create_task(_broadcast_node_status_to_clients("down", name, now))
+                    asyncio.create_task(_broadcast_node_status_to_clients("down", token, name, now))
                 elif not is_dead and is_offline_alert_sent:
                     await send_alert(
                         bot,
@@ -863,7 +870,7 @@ async def nodes_monitor(bot: Bot):
                         token, "is_offline_alert_sent", False
                     )
                     # Рассылка клиентам
-                    asyncio.create_task(_broadcast_node_status_to_clients("up", name, now))
+                    asyncio.create_task(_broadcast_node_status_to_clients("up", token, name, now))
                 if not is_dead and is_restarting:
                     await nodes_db.update_node_extra(token, "is_restarting", False)
                 if not is_dead and last_seen > 0:

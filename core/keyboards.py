@@ -647,7 +647,7 @@ def get_nodes_delete_keyboard(nodes_dict: dict, lang: str) -> InlineKeyboardMark
 
 
 def get_node_management_keyboard(
-    token: str, lang: str, user_id: int
+    token: str, lang: str, user_id: int, is_globally_muted: bool = False
 ) -> InlineKeyboardMarkup:
     row1 = [
         InlineKeyboardButton(
@@ -678,6 +678,12 @@ def get_node_management_keyboard(
         row4.append(
             InlineKeyboardButton(
                 text=_("node_btn_rename", lang), callback_data=f"node_rename_{token}"
+            )
+        )
+        is_muted_icon = "🔕" if is_globally_muted else "🔔"
+        row4.append(
+            InlineKeyboardButton(
+                text=f"{is_muted_icon} Alert Bot", callback_data=f"node_global_mute_{token}"
             )
         )
         row4.append(
