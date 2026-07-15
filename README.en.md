@@ -5,11 +5,11 @@
 <h1 align="center">🤖 VPS Manager Telegram Bot</h1>
 
 <p align="center">
-  <b>v1.24.1</b> — a professional ecosystem for monitoring and managing server infrastructure<br>
+  <b>v1.24.2</b> — a professional ecosystem for monitoring and managing server infrastructure<br>
   (Systemd / Docker / API / WebUI / PWA / Multi-Node / Remote SSH / Backup Manager)<br><br>
 
-  <a href="https://github.com/jatixs/tgbotvpscp/releases/latest"><img src="https://img.shields.io/badge/version-v1.24.1-blue?style=flat-square" alt="Version 1.24.1"/></a>
-  <a href="https://github.com/jatixs/tgbotvpscp/releases/latest"><img src="https://img.shields.io/badge/build-84-purple?style=flat-square" alt="Build 84"/></a>
+  <a href="https://github.com/jatixs/tgbotvpscp/releases/latest"><img src="https://img.shields.io/badge/version-v1.24.2-blue?style=flat-square" alt="Version 1.24.2"/></a>
+  <a href="https://github.com/jatixs/tgbotvpscp/releases/latest"><img src="https://img.shields.io/badge/build-85-purple?style=flat-square" alt="Build 85"/></a>
   <a href="https://www.python.org/"><img src="https://img.shields.io/badge/python-3.10%2B-green?style=flat-square" alt="Python 3.10+"/></a>
   <a href="https://choosealicense.com/licenses/gpl-3.0/"><img src="https://img.shields.io/badge/license-GPL--3.0-lightgrey?style=flat-square" alt="License GPL-3.0"/></a>
   <a href="https://github.com/aiogram/aiogram"><img src="https://img.shields.io/badge/aiogram-3.x-orange?style=flat-square" alt="Aiogram 3.x"/></a>
@@ -74,6 +74,7 @@
 - ✅ **Informative Badges** — display remaining days until payment in the WebUI
 
 ### 🤖 Smart Telegram UX
+- ✅ **Support Gateway (Alert Bot)** — dedicated client-facing bot with broadcasting and ticket replies directly from the admin panel, featuring built-in Anti-Flood
 - ✅ **Smart Cleanup** — auto-deletes user commands and stale bot menus
 - ✅ **Anti-Spam Protection** — built-in SpamThrottle to protect Telegram API limits
 - ✅ **Interactive Widgets** — inline menus with state-preserving checkboxes and live timers
@@ -107,6 +108,7 @@
 - ✅ **Downtime Alerts** — intelligent server unavailability detection
 - ✅ **SSH Monitoring** — login notifications (including SSH keys)
 - ✅ **Fail2Ban Integration** — blocking suspicious IPs
+- ✅ **Alert-bot** — is an auxiliary relay bot for notifications and news.
 
 ### 🌐 Internationalization
 - ✅ **Russian** — full localization
@@ -237,8 +239,8 @@ http://YOUR_SERVER_IP:8080
 - List of all nodes with statuses
 - Network traffic (current and historical)
 - Quick actions (reboot, update)
-- Drag & Drop node sorting <sup>NEW</sup>
-- Visual alerts (⚠️) during peak loads <sup>NEW</sup>
+- Drag & Drop node sorting 
+- Visual alerts (⚠️) during peak loads 
 
 #### ⚙️ Settings
 - **Alerts Config** — notification thresholds (CPU 80%, RAM 90%, Disk 85%)
@@ -246,7 +248,7 @@ http://YOUR_SERVER_IP:8080
 - **User Management** — add/remove users
 - **Language** — change interface language
 
-#### ⚙️ Service Manager <sup>NEW</sup>
+#### ⚙️ Service Manager
 - Status of all systemd services
 - Control (Start/Stop/Restart)
 - Add to monitoring
@@ -610,7 +612,7 @@ If you find this project useful, support it:
 ---
 
 <p align="center">
-  <b>Version:</b> 1.24.1 (Build 84)<br>
+  <b>Version:</b> 1.24.2 (Build 85)<br>
   <b>Release Date:</b> July 2026<br>
   <b>License:</b> GPL-3.0 license<br>
   <b>Status:</b> Release<br>
