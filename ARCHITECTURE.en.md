@@ -205,6 +205,11 @@ STRINGS = {
 - Installation mode (`DEPLOY_MODE`: root/secure)
 - Visibility configuration (`KEYBOARD_CONFIG`)
 
+
+**Generation Features:**
+- **Dynamic Pagination:** Buttons are adaptively arranged in a 2-column grid (`get_subcategory_keyboard`).
+- **Visibility Control:** Admins can hide/show modules via `KEYBOARD_CONFIG`.
+- **Role-based Access:** Button filtering based on roles (Root/Admin/User) and deployment mode.
 ---
 
 #### **messaging.py** — Notification System
@@ -571,7 +576,8 @@ modules/
 ├── speedtest.py            # Speed test (iperf3 / Ookla)
 ├── notifications.py        # Background checks and alerts
 ├── users.py                # User management
-├── nodes.py                # Node management (Telegram UI)
+├── client_alerts.py        # Gateway Bot / Alert System (Tickets, Broadcasts)
+├── nodes.py                # Node management (Monitoring, Billing, UI)
 ├── services.py             # System services manager
 ├── backups.py              # Backup manager (Traffic/Config/Logs/Nodes)
 ├── vless.py                # VLESS link generation
@@ -584,6 +590,24 @@ modules/
 ├── restart.py              # Bot restart
 └── optimize.py             # System optimization
 ```
+
+
+#### **client_alerts.py** — Gateway Bot (Support Gateway)
+**Purpose:** A dedicated Telegram bot for client communication, broadcasts, and notifications.
+**Features:**
+- Runs in parallel with the main bot using a separate token (ALERT_BOT_TOKEN).
+- **Ticket System:** Client messages are forwarded to admins as tickets with direct Reply support.
+- **Mass Broadcasts:** Functionality to send informational messages to all clients (subscribers).
+- **Anti-Flood:** Built-in spam protection (Throttle) preventing bot overload.
+- Subscribers and their notification preferences are managed in shared_state.
+
+#### **nodes.py** — Node Management (Telegram UI)
+**Purpose:** Interactive remote server management directly via Telegram bot.
+**Features:**
+- Generate authorization tokens for new nodes in a few clicks.
+- **Billing Tracking:** Built-in tracking of rent days and costs for master server and nodes.
+- Detailed state monitoring (CPU/RAM/Disk/Network) presented in clean cards within Telegram.
+- Delete and rename nodes via interactive menus.
 
 #### Module Interface
 
