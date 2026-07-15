@@ -1,5 +1,6 @@
+# -*- coding: utf-8 -*-
 """
-modules/client_alerts.py — Gateway Bot / Alert System (опциональный модуль).
+modules/client_alerts.py — Gateway Bot / Alert System (optional module).
 
 Архитектура:
   • alert_bot  — второй Telegram-бот (шлюз для клиентов).
@@ -13,7 +14,7 @@ modules/client_alerts.py — Gateway Bot / Alert System (опциональны�
 Активация: задать переменную окружения ALERT_BOT_TOKEN=<токен>.
 Если токен не задан — модуль загружается, но alert_bot не стартует.
 
-Хранилище подписчиков: config/alert_subscribers.json (простой JSON-файл).
+Subscribers Storage: config/alert_subscribers.json (простой JSON-файл).
 """
 
 import asyncio
@@ -32,33 +33,33 @@ from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from core import config
 from core.i18n import I18nFilter, get_user_lang, _
 
-# ─── Константы ────────────────────────────────────────────────────────────────
+# ─── Constants ────────────────────────────────────────────────────────────────
 
 ALERT_BOT_TOKEN: str | None = os.getenv("ALERT_BOT_TOKEN")
 
-# Путь к JSON-файлу с ID подписчиков
+# Path to JSON file with subscriber IDs
 SUBSCRIBERS_FILE = os.path.join(config.CONFIG_DIR, "alert_subscribers.json")
 
-# Словарь для антифлуда: user_id -> timestamp
+# Dictionary for anti-flood: user_id -> timestamp
 _user_last_message_time: dict[int, float] = {}
 
-# ─── FSM States для main bot ──────────────────────────────────────────────────
+# ─── FSM States for main bot ──────────────────────────────────────────────────
 
 
 class BroadcastStates(StatesGroup):
-    """FSM: администратор делает рассылку всем подписчикам Alert Bot."""
+    """FSM: administrator broadcasts to all Alert Bot subscribers."""
     waiting_broadcast_message = State()
 
 
 class ReplyStates(StatesGroup):
-    """FSM: администратор отвечает конкретному пользователю Alert Bot."""
+    """FSM: administrator replies to a specific Alert Bot user."""
     waiting_reply_text = State()
 
 
-# ─── Хранилище подписчиков ────────────────────────────────────────────────────
+# ─── Subscribers Storage ────────────────────────────────────────────────────
 
 def _load_subscribers() -> dict[int, dict]:
-    """Загрузить словарь подписчиков из JSON-файла. Формат: {user_id: {"name": user_name, "mute_all": bool, "muted_nodes": list}}"""
+    """Load subscribers dictionary from JSON file. Format: {user_id: {"name": user_name, "mute_all": bool, "muted_nodes": list}}"""
     try:
         if os.path.exists(SUBSCRIBERS_FILE):
             with open(SUBSCRIBERS_FILE, "r", encoding="utf-8") as f:
@@ -85,7 +86,7 @@ def _load_subscribers() -> dict[int, dict]:
 
 
 def _save_subscribers(subscribers: dict[int, dict]) -> None:
-    """Сохранить словарь подписчиков в JSON-файл."""
+    """Save subscribers dictionary to JSON file."""
     try:
         os.makedirs(os.path.dirname(SUBSCRIBERS_FILE), exist_ok=True)
         with open(SUBSCRIBERS_FILE, "w", encoding="utf-8") as f:
@@ -95,7 +96,7 @@ def _save_subscribers(subscribers: dict[int, dict]) -> None:
 
 
 async def _add_subscriber(user_id: int, user_name: str) -> bool:
-    """Добавить подписчика или обновить имя. Возвращает True если добавлен впервые."""
+    """Add a subscriber or update name. Returns True if added for the first time."""
     subscribers = _load_subscribers()
     is_new = user_id not in subscribers
     if is_new:
@@ -108,7 +109,7 @@ async def _add_subscriber(user_id: int, user_name: str) -> bool:
 
 
 def is_node_muted_for_user(user_id: int, node_token: str) -> bool:
-    """Проверяет, заглушил ли пользователь конкретную ноду (или все сразу)."""
+    """Check if a user has muted a specific node (or all of them at once)."""
     subscribers = _load_subscribers()
     s_data = subscribers.get(user_id)
     if not s_data:
@@ -120,7 +121,7 @@ def is_node_muted_for_user(user_id: int, node_token: str) -> bool:
     return False
 
 
-# ─── Вспомогательные функции отправки ─────────────────────────────────────────
+# ─── Helper Send Functions ─────────────────────────────────────────
 
 def _extract_message_payload(message: types.Message) -> dict:
     """
@@ -203,7 +204,7 @@ async def broadcast_system_alert(text: str) -> None:
             logging.warning(f"[client_alerts] Ошибка отправки системного алерта -> {uid}: {e}")
 
 
-# ─── Alert Bot: инициализация ─────────────────────────────────────────────────
+# ─── Alert Bot: Initialization ─────────────────────────────────────────────────
 
 alert_bot: Bot | None = None
 alert_dp: Dispatcher | None = None
@@ -221,7 +222,7 @@ else:
     logging.info("[client_alerts] ALERT_BOT_TOKEN не задан — Alert Bot отключён.")
 
 
-# ─── Inline-клавиатуры ────────────────────────────────────────────────────────
+# ─── Inline Keyboards ────────────────────────────────────────────────────────
 
 def _get_alert_panel_keyboard() -> InlineKeyboardMarkup:
     """
@@ -253,7 +254,7 @@ def _get_alert_panel_keyboard() -> InlineKeyboardMarkup:
 
 
 def _get_reply_keyboard(client_user_id: int, client_message_id: int) -> InlineKeyboardMarkup:
-    """Inline-кнопка 'Ответить' под входящим тикетом администратора."""
+    """Inline 'Reply' button under incoming administrator ticket."""
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [
@@ -267,7 +268,7 @@ def _get_reply_keyboard(client_user_id: int, client_message_id: int) -> InlineKe
 
 
 def _get_broadcast_confirm_keyboard() -> InlineKeyboardMarkup:
-    """Подтверждение рассылки или отмена."""
+    """Broadcast confirmation or cancellation."""
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [
@@ -285,7 +286,7 @@ def _get_broadcast_confirm_keyboard() -> InlineKeyboardMarkup:
 
 
 def _get_cancel_keyboard() -> InlineKeyboardMarkup:
-    """Кнопка отмены текущего FSM-действия."""
+    """Cancel button for current FSM action."""
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [
@@ -299,7 +300,7 @@ def _get_cancel_keyboard() -> InlineKeyboardMarkup:
 
 
 def _get_client_main_keyboard(lang: str = "ru") -> types.ReplyKeyboardMarkup:
-    """Клавиатура клиента (подписчика) со вшитой кнопкой настроек."""
+    """Client (subscriber) keyboard with built-in settings button."""
     return types.ReplyKeyboardMarkup(
         keyboard=[[types.KeyboardButton(text=_("alert_btn_settings", lang))]],
         resize_keyboard=True
@@ -332,7 +333,7 @@ async def _get_client_settings_keyboard(user_id: int) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=keyboard)
 
 
-# ─── Alert Bot: обработчики ───────────────────────────────────────────────────
+# ─── Alert Bot: Handlers ───────────────────────────────────────────────────
 
 if alert_dp is not None:
 
@@ -410,30 +411,30 @@ if alert_dp is not None:
             await message.answer(text, parse_mode="HTML", reply_markup=await _get_client_settings_keyboard(user_id))
             return
 
-        # Проверка, что это ответ на сообщение
+        # Check that this is a reply to a message
         if not message.reply_to_message:
             await message.answer(_("alert_reply_error_not_reply", lang), parse_mode="HTML")
             return
 
         reply = message.reply_to_message
         
-        # Проверка ответа самому себе (BUG 5)
+        # Check for replying to oneself (BUG 5)
         if reply.from_user.id == message.from_user.id:
              await message.answer(_("alert_reply_error_self", lang))
              return
 
-        # Проверка ответа на системное сообщение бота (BUG 6)
+        # Check for replying to bot's system message (BUG 6)
         if reply.from_user.id == alert_bot.id:
             if reply.text and (reply.text.startswith("⚠️") or reply.text.startswith("✅") or reply.text.startswith("👋") or reply.text.startswith("⏳")):
                  await message.answer(_("alert_reply_error_bot", lang))
                  return
 
-        # Убеждаемся, что пользователь подписан
+        # Ensure user is subscribed
         user_id = message.from_user.id
         user_name = message.from_user.full_name or f"ID {user_id}"
         await _add_subscriber(user_id, user_name)
 
-        # Антифлуд: максимум 1 сообщение в 3 секунды
+        # Anti-flood: max 1 message per 3 seconds
         now = time.time()
         last_time = _user_last_message_time.get(user_id, 0)
         if now - last_time < 3.0:
@@ -455,7 +456,7 @@ if alert_dp is not None:
             f"━━━━━━━━━━━━━━━━━━━━━━━━\n"
         )
 
-        # Lazy import главного бота — избегаем циклических импортов
+        # Lazy import of the main bot to avoid circular imports
         try:
             import bot as main_bot_module
             main_bot_instance: Bot = main_bot_module.bot
@@ -477,7 +478,7 @@ if alert_dp is not None:
                     parse_mode="HTML",
                 )
             else:
-                # Медиа — форвардим оригинал
+                # Media — forward original
                 await message.forward(config.ADMIN_USER_ID)
 
             await message.answer(_("alert_msg_sent", lang))
@@ -487,7 +488,7 @@ if alert_dp is not None:
             await message.answer("⚠️ Error / Ошибка при отправке. Попробуйте позже.")
 
 
-# ─── Main Bot: панель управления (callback) ───────────────────────────────────
+# ─── Main Bot: Control Panel (callback) ───────────────────────────────────
 
 async def _alert_panel_open(message: types.Message, state: FSMContext) -> None:
     """
@@ -497,7 +498,7 @@ async def _alert_panel_open(message: types.Message, state: FSMContext) -> None:
     user_id = message.from_user.id
 
     if user_id != config.ADMIN_USER_ID:
-        # Обычным пользователям — информационное сообщение вместо ошибки
+        # To regular users — info message instead of error
         await message.answer(
             "📣 <b>Alert Bot</b>\n\n"
             "Этот раздел предназначен для отправки обращений администратору.\n"
@@ -624,7 +625,7 @@ async def _cq_panel_subscribers(callback: types.CallbackQuery) -> None:
         pass
 
 
-# ─── Main Bot: FSM — рассылка ─────────────────────────────────────────────────
+# ─── Main Bot: FSM — Broadcast ─────────────────────────────────────────────────
 
 async def _broadcast_message_received(
     message: types.Message, state: FSMContext
@@ -668,7 +669,7 @@ async def _broadcast_message_received(
 async def _broadcast_confirm(
     callback: types.CallbackQuery, state: FSMContext
 ) -> None:
-    """Администратор подтвердил рассылку."""
+    """Administrator confirmed broadcast."""
     if callback.from_user.id != config.ADMIN_USER_ID:
         await callback.answer("⛔ Нет доступа", show_alert=True)
         return
@@ -720,7 +721,7 @@ async def _broadcast_confirm(
         pass
 
 
-# ─── Main Bot: FSM — ответ на тикет ──────────────────────────────────────────
+# ─── Main Bot: FSM — Ticket Reply ──────────────────────────────────────────
 
 async def _alert_reply_callback(
     callback: types.CallbackQuery, state: FSMContext
@@ -803,7 +804,7 @@ async def _reply_text_received(message: types.Message, state: FSMContext) -> Non
         await message.answer(text, parse_mode="HTML", reply_markup=_get_alert_panel_keyboard())
 
 
-# ─── Main Bot: общая отмена FSM через кнопку ─────────────────────────────────
+# ─── Main Bot: General FSM cancellation via button ─────────────────────────────────
 
 async def _cq_fsm_cancel(callback: types.CallbackQuery, state: FSMContext) -> None:
     """
@@ -839,29 +840,29 @@ def register_handlers(dp: Dispatcher) -> None:
         )
         return
 
-    # Кнопка «📣 Написать алерт» → панель управления
+    # Button «📣 Write alert» -> control panel
     dp.message(I18nFilter("btn_client_alerts"))(_alert_panel_open)
 
-    # Callback: «📣 Рассылка» в панели
+    # Callback: «📣 Broadcast» in panel
     dp.callback_query(F.data == "alert_panel_broadcast")(_cq_panel_broadcast)
 
-    # Callback: «👥 Подписчики» в панели
+    # Callback: «👥 Subscribers» in panel
     dp.callback_query(F.data == "alert_panel_subscribers")(_cq_panel_subscribers)
     dp.callback_query(F.data.startswith("alert_panel_subscribers_page_"))(_cq_panel_subscribers)
 
-    # FSM: получили сообщение для рассылки
+    # FSM: received message for broadcast
     dp.message(BroadcastStates.waiting_broadcast_message)(_broadcast_message_received)
 
-    # Callbacks подтверждения рассылки
+    # Broadcast confirmation callbacks
     dp.callback_query(F.data == "alert_broadcast_confirm")(_broadcast_confirm)
 
-    # Callback «💬 Ответить» под входящим тикетом
+    # Callback «💬 Reply» under incoming ticket
     dp.callback_query(F.data.startswith("alert_reply_"))(_alert_reply_callback)
 
-    # FSM: получили ответное сообщение администратора
+    # FSM: received administrator reply message
     dp.message(ReplyStates.waiting_reply_text)(_reply_text_received)
 
-    # Кнопка «❌ Отмена» в любом FSM-режиме
+    # Button «❌ Cancel» in any FSM mode
     dp.callback_query(F.data == "alert_fsm_cancel")(_cq_fsm_cancel)
 
     logging.info(
@@ -885,7 +886,7 @@ def start_background_tasks(bot: Bot) -> list[asyncio.Task]:
         return []
 
     async def _run_alert_polling() -> None:
-        """Запускает поллинг Alert Bot с graceful shutdown."""
+        """Starts Alert Bot polling with graceful shutdown."""
         logging.info("[client_alerts] Запуск поллинга Alert Bot...")
         try:
             await alert_bot.delete_webhook(drop_pending_updates=True)
