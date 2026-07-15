@@ -5,11 +5,11 @@
 <h1 align="center">🤖 VPS Manager Telegram Bot</h1>
 
 <p align="center">
-  <b>v1.24.1</b> — a professional ecosystem for monitoring and managing server infrastructure<br>
+  <b>v1.24.3</b> — a professional ecosystem for monitoring and managing server infrastructure<br>
   (Systemd / Docker / API / WebUI / PWA / Multi-Node / Remote SSH / Backup Manager)<br><br>
 
-  <a href="https://github.com/jatixs/tgbotvpscp/releases/latest"><img src="https://img.shields.io/badge/version-v1.24.1-blue?style=flat-square" alt="Version 1.24.1"/></a>
-  <a href="https://github.com/jatixs/tgbotvpscp/releases/latest"><img src="https://img.shields.io/badge/build-84-purple?style=flat-square" alt="Build 84"/></a>
+  <a href="https://github.com/jatixs/tgbotvpscp/releases/latest"><img src="https://img.shields.io/badge/version-v1.24.3-blue?style=flat-square" alt="Version 1.24.3"/></a>
+  <a href="https://github.com/jatixs/tgbotvpscp/releases/latest"><img src="https://img.shields.io/badge/build-86-purple?style=flat-square" alt="Build 86"/></a>
   <a href="https://www.python.org/"><img src="https://img.shields.io/badge/python-3.10%2B-green?style=flat-square" alt="Python 3.10+"/></a>
   <a href="https://choosealicense.com/licenses/gpl-3.0/"><img src="https://img.shields.io/badge/license-GPL--3.0-lightgrey?style=flat-square" alt="License GPL-3.0"/></a>
   <a href="https://github.com/aiogram/aiogram"><img src="https://img.shields.io/badge/aiogram-3.x-orange?style=flat-square" alt="Aiogram 3.x"/></a>
@@ -74,6 +74,7 @@
 - ✅ **Informative Badges** — display remaining days until payment in the WebUI
 
 ### 🤖 Smart Telegram UX
+- ✅ **Support Gateway (Alert Bot)** — dedicated client-facing bot with broadcasting and ticket replies directly from the admin panel, featuring built-in Anti-Flood
 - ✅ **Smart Cleanup** — auto-deletes user commands and stale bot menus
 - ✅ **Anti-Spam Protection** — built-in SpamThrottle to protect Telegram API limits
 - ✅ **Interactive Widgets** — inline menus with state-preserving checkboxes and live timers
@@ -107,6 +108,7 @@
 - ✅ **Downtime Alerts** — intelligent server unavailability detection
 - ✅ **SSH Monitoring** — login notifications (including SSH keys)
 - ✅ **Fail2Ban Integration** — blocking suspicious IPs
+- ✅ **Alert-bot** — is an auxiliary relay bot for notifications and news.
 
 ### 🌐 Internationalization
 - ✅ **Russian** — full localization
@@ -237,8 +239,8 @@ http://YOUR_SERVER_IP:8080
 - List of all nodes with statuses
 - Network traffic (current and historical)
 - Quick actions (reboot, update)
-- Drag & Drop node sorting <sup>NEW</sup>
-- Visual alerts (⚠️) during peak loads <sup>NEW</sup>
+- Drag & Drop node sorting 
+- Visual alerts (⚠️) during peak loads 
 
 #### ⚙️ Settings
 - **Alerts Config** — notification thresholds (CPU 80%, RAM 90%, Disk 85%)
@@ -246,7 +248,7 @@ http://YOUR_SERVER_IP:8080
 - **User Management** — add/remove users
 - **Language** — change interface language
 
-#### ⚙️ Service Manager <sup>NEW</sup>
+#### ⚙️ Service Manager
 - Status of all systemd services
 - Control (Start/Stop/Restart)
 - Add to monitoring
@@ -271,6 +273,7 @@ http://YOUR_SERVER_IP:8080
 - `POST /api/login/password` — login with username and password
 - `GET /api/login/magic` — login via magic link
 - `POST /api/auth/telegram` — login via Telegram widget
+- POST /api/auth/webapp — WebApp authorization
 - `POST /api/login/reset` — request password reset
 - `POST /api/reset/confirm` — confirm password reset
 - `GET /api/security/telegram_only_mode` — get Telegram-only mode state
@@ -282,11 +285,13 @@ http://YOUR_SERVER_IP:8080
 
 **Node API:**
 - `GET /api/heartbeat` — health probe for agent/node
+- GET /api/node/bootstrap — init script for agent installation
 - `POST /api/heartbeat` — node heartbeat with HMAC signature
 - `GET /api/nodes/list` — list nodes
 - `POST /api/nodes/add` — add node
 - `POST /api/nodes/delete` — delete node
 - `POST /api/nodes/rename` — rename node
+- POST /api/nodes/reset-uptime — reset node uptime stats
 - `GET /api/nodes/monitor/list` — monitoring page data
 - `GET /api/nodes/monitor/detail?token=...` — specific node details
 - `GET /api/nodes/monitor/services?token=...` — specific node services
@@ -303,6 +308,7 @@ http://YOUR_SERVER_IP:8080
 - `POST /api/settings/metadata` — save web metadata
 - `POST /api/settings/language` — switch WebUI language
 - `POST /api/users/action` — manage users
+- POST /api/system/reset-uptime — reset master server uptime stats
 - `GET /api/update/check` — check updates
 - `POST /api/update/run` — run update
 - `GET /api/notifications/list` — list notifications
@@ -319,6 +325,7 @@ http://YOUR_SERVER_IP:8080
 - `GET /api/events` — main dashboard SSE stream
 - `GET /api/events/logs` — logs SSE stream
 - `GET /api/events/node` — node details SSE stream
+- GET /api/events/node/services — SSE stream for node services
 - `GET /api/events/services` — service manager SSE stream
 - `GET /api/agent/ipv4` — agent IPv4 list
 - `GET /api/terminal/creds` — load saved SSH credentials
@@ -423,7 +430,7 @@ Automatic detection:
 │   │   └── views.py         # Jinja2 HTML pages
 │   ├── static/              # CSS, JS
 │   └── templates/           # HTML templates
-├── modules/                 # Functional modules (18 modules)
+├── modules/                 # Functional modules (20 modules)
 │   ├── selftest.py          # Server summary
 │   ├── traffic.py           # Traffic monitoring
 │   ├── services.py          # Service manager
@@ -610,7 +617,7 @@ If you find this project useful, support it:
 ---
 
 <p align="center">
-  <b>Version:</b> 1.24.1 (Build 84)<br>
+  <b>Version:</b> 1.24.3 (Build 86)<br>
   <b>Release Date:</b> July 2026<br>
   <b>License:</b> GPL-3.0 license<br>
   <b>Status:</b> Release<br>
