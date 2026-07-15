@@ -92,7 +92,7 @@ class CallbackTTLMiddleware(BaseMiddleware):
         event: CallbackQuery,
         data: Dict[str, Any],
     ) -> Any:
-        if event.data in ["selftest_refresh", "cmd_memstats"]:
+        if event.data in ["selftest_refresh", "cmd_memstats"] or str(event.data).startswith("alert_reply_"):
             return await handler(event, data)
             
         if event.message and event.message.date:

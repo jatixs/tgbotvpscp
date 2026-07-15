@@ -51,8 +51,9 @@ background_tasks = set()
 # Tier 1 (ON_DEMAND): loaded on first use, unloaded after 5 min inactivity.
 MODULE_CONFIG = {
     # Tier 0: Always-on — alert system + node monitoring
-    "modules.notifications": {"tier": ModuleTier.ALWAYS_ON},
-    "modules.nodes":         {"tier": ModuleTier.ALWAYS_ON},
+    "modules.notifications":   {"tier": ModuleTier.ALWAYS_ON},
+    "modules.nodes":           {"tier": ModuleTier.ALWAYS_ON},
+    "modules.client_alerts":   {"tier": ModuleTier.ALWAYS_ON},
 
     # Tier 1: On-demand — loaded when user triggers the command
     "modules.selftest":  {"tier": ModuleTier.ON_DEMAND},

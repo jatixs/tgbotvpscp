@@ -1326,6 +1326,71 @@ toggle_agent_monitoring() {
     fi
 }
 
+manage_alert_module() {
+    clear
+    echo -e "${C_BLUE}${C_BOLD}╔═══════════════════════════════════╗${C_RESET}"
+    echo -e "${C_BLUE}${C_BOLD}║       Manage Alert Module          ║${C_RESET}"
+    echo -e "${C_BLUE}${C_BOLD}╚═══════════════════════════════════╝${C_RESET}"
+
+    local current_token=""
+    if [ -f "${ENV_FILE}" ]; then
+        current_token=$(grep '^ALERT_BOT_TOKEN=' "${ENV_FILE}" | cut -d'=' -f2- | tr -d '"')
+    fi
+
+    if [ -n "$current_token" ]; then
+        # Token is set — offer to remove the module
+        echo -e "  ${C_GREEN}✅ Alert Bot is active (token is set)${C_RESET}"
+        echo ""
+        echo -e "  ${C_YELLOW}Do you want to uninstall (deactivate) the Alert Module?${C_RESET}"
+        echo "  This will remove ALERT_BOT_TOKEN from .env and restart the service."
+        echo ""
+        read -p "$(echo -e "${C_BOLD}Confirm removal? (y/n): ${C_RESET}")" confirm
+        if [[ "$confirm" =~ ^[Yy]$ ]]; then
+            # Remove ALERT_BOT_TOKEN line from .env
+            sed -i '/^ALERT_BOT_TOKEN=/d' "${ENV_FILE}"
+            msg_success "ALERT_BOT_TOKEN removed from .env"
+            # Restart service to apply changes
+            if systemctl is-active --quiet "${SERVICE_NAME}"; then
+                msg_info "Restarting service ${SERVICE_NAME}..."
+                sudo systemctl restart "${SERVICE_NAME}"
+                msg_success "Service restarted. Alert Module deactivated."
+            else
+                msg_warning "Service ${SERVICE_NAME} is not running. Changes will apply on next start."
+            fi
+        else
+            msg_info "Cancelled."
+        fi
+    else
+        # Token not set — offer to install
+        echo -e "  ${C_YELLOW}⚠️  Alert Bot is not active (ALERT_BOT_TOKEN not set)${C_RESET}"
+        echo ""
+        echo "  To activate, you need a token of a separate Telegram bot."
+        echo "  Create a new bot via @BotFather and copy the token."
+        echo ""
+        read -p "$(echo -e "${C_BOLD}Enter Alert Bot token (or press Enter to cancel): ${C_RESET}")" new_token
+        if [ -z "$new_token" ]; then
+            msg_info "Cancelled."
+            return
+        fi
+        # Basic token format validation (digits:string)
+        if ! echo "$new_token" | grep -qE '^[0-9]+:[A-Za-z0-9_-]{35,}$'; then
+            msg_error "Invalid token format. Expected: 123456789:ABCdef..."
+            return
+        fi
+        # Save token to .env
+        echo "ALERT_BOT_TOKEN=\"${new_token}\"" >> "${ENV_FILE}"
+        msg_success "ALERT_BOT_TOKEN saved to .env"
+        # Restart service
+        if systemctl is-active --quiet "${SERVICE_NAME}"; then
+            msg_info "Restarting service ${SERVICE_NAME}..."
+            sudo systemctl restart "${SERVICE_NAME}"
+            msg_success "Service restarted. Alert Module activated!"
+        else
+            msg_warning "Service ${SERVICE_NAME} is not running. Start it manually."
+        fi
+    fi
+}
+
 main_menu() {
     local local_version=$(get_local_version)
     while true; do
@@ -1357,7 +1422,16 @@ main_menu() {
             local monitoring_status=$(check_agent_monitoring_status)
             echo -e "${C_YELLOW}  8) Agent Monitoring (${monitoring_status})${C_RESET}"
         fi
-        
+
+        # Alert Module option — only for non-node mode
+        if [ "$IS_NODE" != "yes" ]; then
+            local alert_status="not active"
+            if [ -f "${ENV_FILE}" ] && grep -q '^ALERT_BOT_TOKEN=' "${ENV_FILE}"; then
+                alert_status="${C_GREEN}active${C_RESET}"
+            fi
+            echo -e "  9) Manage Alert Module (${alert_status})"
+        fi
+
         echo "  0) Exit"
         echo "--------------------------------------------------------"
         read -p "$(echo -e "${C_BOLD}Your choice: ${C_RESET}")" choice
@@ -1370,6 +1444,7 @@ main_menu() {
             6) uninstall_bot; install_docker_logic "root"; read -p "Press Enter..." ;;
             7) if [ "$IS_NODE" == "yes" ]; then uninstall_bot; install_node_logic; read -p "Press Enter..."; else msg_error "Option available in NODE mode only."; sleep 2; fi ;;
             8) if [ "$IS_NODE" == "yes" ]; then toggle_agent_monitoring; read -p "Press Enter..."; fi ;;
+            9) if [ "$IS_NODE" != "yes" ]; then manage_alert_module; read -p "Press Enter..."; fi ;;
             0) break ;;
         esac
     done
