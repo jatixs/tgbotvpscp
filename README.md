@@ -5,11 +5,11 @@
 <h1 align="center">🤖 VPS Manager Telegram Bot</h1>
 
 <p align="center">
-  <b>v1.24.2</b> — профессиональная экосистема для мониторинга и управления серверной инфраструктурой<br>
+  <b>v1.24.3</b> — профессиональная экосистема для мониторинга и управления серверной инфраструктурой<br>
   (Systemd / Docker / API / WebUI / PWA / Multi-Node / Remote SSH / Backup Manager)<br><br>
 
-  <a href="https://github.com/jatixs/tgbotvpscp/releases/latest"><img src="https://img.shields.io/badge/version-v1.24.2-blue?style=flat-square" alt="Version 1.24.2"/></a>
-  <a href="https://github.com/jatixs/tgbotvpscp/releases/latest"><img src="https://img.shields.io/badge/build-85-purple?style=flat-square" alt="Build 85"/></a>
+  <a href="https://github.com/jatixs/tgbotvpscp/releases/latest"><img src="https://img.shields.io/badge/version-v1.24.3-blue?style=flat-square" alt="Version 1.24.3"/></a>
+  <a href="https://github.com/jatixs/tgbotvpscp/releases/latest"><img src="https://img.shields.io/badge/build-86-purple?style=flat-square" alt="Build 86"/></a>
   <a href="https://www.python.org/"><img src="https://img.shields.io/badge/python-3.10%2B-green?style=flat-square" alt="Python 3.10+"/></a>
   <a href="https://choosealicense.com/licenses/gpl-3.0/"><img src="https://img.shields.io/badge/license-GPL--3.0-lightgrey?style=flat-square" alt="License GPL-3.0"/></a>
   <a href="https://github.com/aiogram/aiogram"><img src="https://img.shields.io/badge/aiogram-3.x-orange?style=flat-square" alt="Aiogram 3.x"/></a>
@@ -270,6 +270,7 @@ http://YOUR_SERVER_IP:8080
 - `POST /api/login/password` — вход по логину и паролю
 - `GET /api/login/magic` — вход по magic link
 - `POST /api/auth/telegram` — вход через Telegram widget
+- POST /api/auth/webapp — Авторизация через Telegram WebApp
 - `POST /api/login/reset` — запрос сброса пароля
 - `POST /api/reset/confirm` — подтверждение сброса пароля
 - `GET /api/security/telegram_only_mode` — текущее состояние режима Telegram-only
@@ -281,11 +282,13 @@ http://YOUR_SERVER_IP:8080
 
 **Node API:**
 - `GET /api/heartbeat` — health probe для агента/нод
+- GET /api/node/bootstrap — скрипт инициализации для установки агента
 - `POST /api/heartbeat` — heartbeat от ноды с HMAC-подписью
 - `GET /api/nodes/list` — список нод
 - `POST /api/nodes/add` — добавить ноду
 - `POST /api/nodes/delete` — удалить ноду
 - `POST /api/nodes/rename` — переименовать ноду
+- POST /api/nodes/reset-uptime — сброс статистики аптайма ноды
 - `GET /api/nodes/monitor/list` — данные страницы мониторинга
 - `GET /api/nodes/monitor/detail?token=...` — детали конкретной ноды
 - `GET /api/nodes/monitor/services?token=...` — сервисы конкретной ноды
@@ -302,6 +305,7 @@ http://YOUR_SERVER_IP:8080
 - `POST /api/settings/metadata` — сохранение web metadata
 - `POST /api/settings/language` — смена языка WebUI
 - `POST /api/users/action` — управление пользователями
+- POST /api/system/reset-uptime — сброс статистики аптайма мастер-сервера
 - `GET /api/update/check` — проверка обновлений
 - `POST /api/update/run` — запуск обновления
 - `GET /api/notifications/list` — список уведомлений
@@ -318,6 +322,7 @@ http://YOUR_SERVER_IP:8080
 - `GET /api/events` — основной SSE поток dashboard
 - `GET /api/events/logs` — SSE поток логов
 - `GET /api/events/node` — SSE поток детальной карточки ноды
+- GET /api/events/node/services — SSE поток статусов сервисов конкретной ноды
 - `GET /api/events/services` — SSE поток менеджера сервисов
 - `GET /api/agent/ipv4` — список IPv4 адресов агента
 - `GET /api/terminal/creds` — загрузка сохраненных SSH credentials
@@ -422,7 +427,7 @@ http://YOUR_SERVER_IP:8080
 │   │   └── views.py         # Jinja2 HTML страницы
 │   ├── static/              # CSS, JS
 │   └── templates/           # HTML шаблоны
-├── modules/                 # Функциональные модули (18 модулей)
+├── modules/                 # Функциональные модули (20 модулей)
 │   ├── selftest.py          # Сводка о сервере
 │   ├── traffic.py           # Мониторинг трафика
 │   ├── services.py          # Менеджер сервисов
@@ -609,7 +614,7 @@ python bot.py
 ---
 
 <p align="center">
-  <b>Версия:</b> 1.24.2 (Build 85)<br>
+  <b>Версия:</b> 1.24.3 (Build 86)<br>
   <b>Лицензия:</b> GPL-3.0 license<br>
   <b>Статус:</b> Релиз<br>
   <br>
