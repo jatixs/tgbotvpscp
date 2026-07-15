@@ -19,7 +19,7 @@
   - **System Notifications:** The Gateway Bot automatically monitors node statuses and sends notifications to clients with a list of servers whenever a failure occurs (node downtime) or is resolved.
   - **Mass Broadcasts:** Added the ability to send informational messages, photos, and videos to all Gateway Bot subscribers via a convenient inline control panel.
   - **Anti-Flood & Protection:** Built-in strict spam protection — the bot accepts messages no more than once every 3 seconds and forcibly requires using the "Reply" function to maintain a dialogue, protecting the admin from flood.
-- **Notification management from Alert Bot:** Convenient notification management button both globally from the main bot for all clients (by node) and on the client side.
+  - **Notification management from Alert Bot:** Convenient notification management button both globally from the main bot for all clients (by node) and on the client side.
 ### ✨ Improved:
 * **Button rotation:** Due to the additional features of the node, the order of the buttons and the ability to flip through the buttons (6 buttons per 1 page) have been changed.
 
