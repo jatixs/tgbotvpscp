@@ -4,14 +4,14 @@
 
 <h1 align="center">📝 Telegram VPS Management Bot — Changelog</h1>
 <p align="center">
-    <img src="https://img.shields.io/badge/version-v1.24.2-blue?style=flat-square" alt="Version 1.24.2"/>
-    <img src="https://img.shields.io/badge/build-85-purple?style=flat-square" alt="Build 85"/>
+    <img src="https://img.shields.io/badge/version-v1.24.3-blue?style=flat-square" alt="Version 1.24.3"/>
+    <img src="https://img.shields.io/badge/build-86-purple?style=flat-square" alt="Build 86"/>
     <img src="https://img.shields.io/badge/date-Jul%2011%202026-green?style=flat-square" alt="Date Jul 11 2026"/>
 	<img src="https://img.shields.io/badge/status-stable-green?style=flat-square" alt="Status Stable"/>
 </p>
 
 ---
-## [1.24.2] - 2026-07-11
+## [1.24.3] - 2026-07-11
 
 ### 🚀 New Features:
 * **Gateway Bot (Support Gateway):** Introduced a brand new module for communicating with users and clients. You can now launch a second, independent Telegram bot (by setting `ALERT_BOT_TOKEN` in `.env`) that acts as a gateway for your clients.
