@@ -56,22 +56,7 @@ let renderedCount = 0;
 const NODES_BATCH_SIZE = 15;
 let nodesFirstUpdateReceived = false;
 
-function decryptData(text) {
-    if (!text) return "";
-    if (typeof WEB_KEY === 'undefined' || !WEB_KEY) return text;
-    try {
-        const decoded = atob(text);
-        const bytes = new Uint8Array(decoded.length);
-        for (let i = 0; i < decoded.length; i++) {
-            const keyChar = WEB_KEY.charCodeAt(i % WEB_KEY.length);
-            bytes[i] = decoded.charCodeAt(i) ^ keyChar;
-        }
-        return new TextDecoder().decode(bytes);
-    } catch (e) {
-        console.error("Decryption error:", e);
-        return text;
-    }
-}
+
 
 function encryptData(text) {
     if (!text) return "";
@@ -1970,24 +1955,7 @@ function loadServices() {
     const container = document.getElementById('services-container');
     if (!container) return;
 
-    fetch('/api/services')
-        .then(res => {
-            if (res.status === 401) {
-                window.location.reload();
-                return;
-            }
-            const contentType = res.headers.get('content-type');
-            if (!contentType || !contentType.includes('application/json')) {
-                console.warn('Services API returned non-JSON response');
-                return null;
-            }
-            if (!res.ok) {
-                return res.json().then(errData => {
-                    throw new Error(errData.error || 'Server Error ' + res.status);
-                });
-            }
-            return res.json();
-        })
+    sseRequest('/api/services', 'services_list')
         .then(data => {
             if (!data) {
                 container.innerHTML = DOMPurify.sanitize(`<div class="col-span-full text-center text-gray-400 py-4">${window.i18n.services_empty || 'Services not available'}</div>`);
@@ -2252,9 +2220,11 @@ async function searchGlobalServices(query, managedMatchCount) {
     try {
         // Use cache or fetch (with search=1 param for read-only access)
         if (!_globalServicesCache) {
-            const res = await fetch('/api/services/available?search=1');
-            if (!res.ok) return;
-            _globalServicesCache = await res.json();
+            try {
+                _globalServicesCache = await sseRequest('/api/services/available?search=1', 'available_services');
+            } catch (err) {
+                return;
+            }
             // Cache expires after 30 seconds
             setTimeout(() => { _globalServicesCache = null; }, 30000);
         }
@@ -2409,8 +2379,7 @@ function openServiceInfoModal(name, type) {
     }
 
     // Fetch service info
-    fetch(`/api/services/info/${encodeURIComponent(name)}?type=${type}`)
-        .then(res => res.json())
+    sseRequest(`/api/services/info/${encodeURIComponent(name)}?type=${type}`, 'service_info')
         .then(info => {
             renderServiceInfo(info);
         })
@@ -2582,12 +2551,7 @@ async function loadAvailableServices() {
         </div>`);
 
     try {
-        const res = await fetch('/api/services/available');
-        const data = await res.json();
-
-        if (!res.ok) {
-            throw new Error(data.error || 'Error');
-        }
+        const data = await sseRequest('/api/services/available', 'available_services');
 
         renderServicesEditList(data);
     } catch (err) {

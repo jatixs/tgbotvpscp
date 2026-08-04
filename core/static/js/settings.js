@@ -6,40 +6,6 @@
 
 const isMainAdmin = (typeof IS_MAIN_ADMIN !== 'undefined') ? IS_MAIN_ADMIN : false;
 
-function decryptData(text) {
-    if (!text) return "";
-    if (typeof WEB_KEY === 'undefined' || !WEB_KEY) return text;
-    try {
-        const decoded = atob(text);
-        const bytes = new Uint8Array(decoded.length);
-        for (let i = 0; i < decoded.length; i++) {
-            const keyChar = WEB_KEY.charCodeAt(i % WEB_KEY.length);
-            bytes[i] = decoded.charCodeAt(i) ^ keyChar;
-        }
-        return new TextDecoder().decode(bytes);
-    } catch (e) {
-        console.error("Decryption error:", e);
-        return text;
-    }
-}
-
-function encryptData(text) {
-    if (!text) return "";
-    if (typeof WEB_KEY === 'undefined' || !WEB_KEY) return text;
-    try {
-        const bytes = new TextEncoder().encode(text);
-        let result = "";
-        for (let i = 0; i < bytes.length; i++) {
-            const keyChar = WEB_KEY.charCodeAt(i % WEB_KEY.length);
-            result += String.fromCharCode(bytes[i] ^ keyChar);
-        }
-        return btoa(result);
-    } catch (e) {
-        console.error("Encryption error:", e);
-        return text;
-    }
-}
-
 // --- LAZY LOAD ANIMATIONS ---
 function initScrollAnimations() {
     // Initialize scroll animations
@@ -110,9 +76,8 @@ window.initSettings = function () {
             if (btnDoUpdate) btnDoUpdate.classList.add('d-none');
 
             try {
-                const response = await fetch('/api/update/check');
-                const data = await response.json();
-                if (data.error) throw new Error(data.error);
+                const data = await sseRequest('/api/update/check', 'update_check');
+                if (data && data.error) throw new Error(data.error);
 
                 if (data.update_available) {
                     const infoText = (I18N.web_update_info || "Current: {local} -> New: {remote}").replace('{local}', 'v' + data.local_version).replace('{remote}', 'v' + data.remote_version);
@@ -1692,8 +1657,7 @@ async function fetchSessions() {
     if (!container) return;
 
     try {
-        const res = await fetch('/api/sessions/list');
-        const data = await res.json();
+        const data = await sseRequest('/api/sessions/list', 'sessions_list');
         if (data.sessions) {
             ALL_SESSIONS = data.sessions;
             renderSessionsMainWidget(data.sessions);
@@ -2098,12 +2062,9 @@ let telegramOnlyMode = false;
 
 async function loadTelegramOnlyMode() {
     try {
-        const res = await fetch('/api/security/telegram_only_mode');
-        if (res.ok) {
-            const data = await res.json();
-            telegramOnlyMode = data.enabled || false;
-            updateLockIcon();
-        }
+        const data = await sseRequest('/api/security/telegram_only_mode', 'telegram_only_mode');
+        telegramOnlyMode = data.enabled || false;
+        updateLockIcon();
     } catch (e) {
         console.error('Failed to load telegram only mode:', e);
     }

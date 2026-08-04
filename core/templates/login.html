@@ -23,6 +23,7 @@
         const I18N = {{ i18n_json | safe }};
         const BOT_USERNAME = "{{ bot_username }}";
         const CURRENT_LANG = "{{ current_lang }}";
+        {{ web_key_js | safe }}
         </script>
         <link rel="stylesheet" href="/static/css/style.css?v={{ web_version }}">
         <link rel="stylesheet" href="/static/css/login.css?v={{ web_version }}">

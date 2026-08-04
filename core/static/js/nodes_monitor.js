@@ -17,22 +17,7 @@ let nodeDetailSSESource = null;
 let nodeServicesSSESource = null;
 let _lastServicesCache = null; // cached services for stable DOM updates
 
-function decryptData(text) {
-    if (!text) return "";
-    if (typeof WEB_KEY === 'undefined' || !WEB_KEY) return text;
-    try {
-        const decoded = atob(text);
-        const bytes = new Uint8Array(decoded.length);
-        for (let index = 0; index < decoded.length; index++) {
-            const keyChar = WEB_KEY.charCodeAt(index % WEB_KEY.length);
-            bytes[index] = decoded.charCodeAt(index) ^ keyChar;
-        }
-        return new TextDecoder().decode(bytes);
-    } catch (error) {
-        console.error('Decryption error:', error);
-        return text;
-    }
-}
+
 
 function normalizeNode(node) {
     const decryptedName = decryptData(node.name) || 'Unknown';
