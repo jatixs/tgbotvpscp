@@ -11,6 +11,7 @@ import urllib.parse
 import time
 import aiohttp
 import base64
+import binascii
 import hashlib
 import requests
 from io import BytesIO
@@ -97,6 +98,9 @@ def decrypt_for_web(text: str) -> str:
             key_byte = key[i % len(key)]
             decrypted_bytes.append(decoded_bytes[i] ^ key_byte)
         return decrypted_bytes.decode("utf-8")
+    except binascii.Error:
+        # Expected if the payload is not base64 encoded
+        return text
     except Exception as e:
         logging.error(f"Web decrypt error: {e}")
         return text
