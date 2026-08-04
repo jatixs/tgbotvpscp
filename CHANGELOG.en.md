@@ -4,11 +4,20 @@
 
 <h1 align="center">📝 Telegram VPS Management Bot — Changelog</h1>
 <p align="center">
-    <img src="https://img.shields.io/badge/version-v1.24.3-blue?style=flat-square" alt="Version 1.24.3"/>
-    <img src="https://img.shields.io/badge/build-86-purple?style=flat-square" alt="Build 86"/>
-    <img src="https://img.shields.io/badge/date-Jul%2011%202026-green?style=flat-square" alt="Date Jul 11 2026"/>
+    <img src="https://img.shields.io/badge/version-v1.24.4-blue?style=flat-square" alt="Version 1.24.4"/>
+    <img src="https://img.shields.io/badge/build-87-purple?style=flat-square" alt="Build 87"/>
+    <img src="https://img.shields.io/badge/date-Aug%2004%202026-green?style=flat-square" alt="Date Aug 04 2026"/>
 	<img src="https://img.shields.io/badge/status-stable-green?style=flat-square" alt="Status Stable"/>
 </p>
+
+---
+## [1.24.4] - 2026-08-04
+
+### ✨ Improved:
+* **WebUI (Ping Target Modal):** Increased spacing between radio buttons and labels for better visual readability.
+* **WebUI (Ping Target Button):** The button next to the HTTP/TCP/ICMP switcher now always displays the currently selected target (Google, Cloudflare, Internal network) instead of static text.
+* **WebUI (Toast Notification):** Selecting a ping target and clicking "Apply" now shows a toast notification with the selected target name.
+* **Localization:** The "Between servers / Agent ↔ Nodes" option has been renamed to "Internal network / Ping to your nodes" (EN) and "Внутренняя сеть / Пинг до ваших нод" (RU) for better clarity. Button and toast are fully localized.
 
 ---
 ## [1.24.3] - 2026-07-11
