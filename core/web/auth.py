@@ -31,7 +31,7 @@ from ..config import (
 )
 from ..i18n import get_text as _, get_user_lang
 from ..shared_state import ALLOWED_USERS, USER_NAMES, AUTH_TOKENS
-from ..utils import encrypt_for_web, decrypt_for_web, decrypt_request_payload, encrypted_json_response
+from ..utils import encrypt_for_web, decrypt_for_web, decrypt_request_payload, encrypted_json_response, get_web_key
 
 routes = web.RouteTableDef()
 
