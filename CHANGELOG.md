@@ -4,11 +4,20 @@
 
 <h1 align="center">📝 Telegram VPS Management Bot — Список изменений</h1>
 <p align="center">
-    <img src="https://img.shields.io/badge/version-v1.24.3-blue?style=flat-square" alt="Version 1.24.3"/>
-    <img src="https://img.shields.io/badge/build-86-purple?style=flat-square" alt="Build 86"/>
-    <img src="https://img.shields.io/badge/date-Июль%2011%202026-green?style=flat-square" alt="Date Jul 11 2026"/>
+    <img src="https://img.shields.io/badge/version-v1.24.4-blue?style=flat-square" alt="Version 1.24.4"/>
+    <img src="https://img.shields.io/badge/build-87-purple?style=flat-square" alt="Build 87"/>
+    <img src="https://img.shields.io/badge/date-Август%2004%202026-green?style=flat-square" alt="Date Aug 04 2026"/>
 	<img src="https://img.shields.io/badge/status-stable-green?style=flat-square" alt="Status Stable"/>
 </p>
+
+---
+## [1.24.4] - 2026-08-04
+
+### ✨ Улучшено:
+* **WebUI (Модальное окно «Цель пинга»):** Увеличен отступ между радиокнопкой и текстом для лучшей визуальной читаемости.
+* **WebUI (Кнопка цели пинга):** Кнопка рядом с переключателем HTTP/TCP/ICMP теперь всегда отображает текущую выбранную цель (Google, Cloudflare, Внутренняя сеть) вместо статичного текста «Сервер».
+* **WebUI (Тост-уведомление):** При выборе цели пинга и нажатии «Применить» теперь отображается тост-уведомление с названием выбранной цели.
+* **Локализация:** Опция «Между серверами / Агент ↔ Ноды» переименована в «Внутренняя сеть / Пинг до ваших нод» (RU) и «Internal network / Ping to your nodes» (EN) для большей ясности. Кнопка и тост полностью локализованы.
 
 ---
 ## [1.24.3] - 2026-07-11
