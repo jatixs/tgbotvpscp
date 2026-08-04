@@ -55,6 +55,110 @@ function setSafeHTML(element, html) {
     element.innerHTML = DOMPurify.sanitize(html);  // Only use with trusted HTML
 }
 
+// Crypto Utilities
+function decryptData(text) {
+    if (!text) return "";
+    if (typeof WEB_KEY === 'undefined' || !WEB_KEY) return text;
+    try {
+        const decoded = atob(text);
+        const bytes = new Uint8Array(decoded.length);
+        for (let i = 0; i < decoded.length; i++) {
+            const keyChar = WEB_KEY.charCodeAt(i % WEB_KEY.length);
+            bytes[i] = decoded.charCodeAt(i) ^ keyChar;
+        }
+        return new TextDecoder().decode(bytes);
+    } catch (e) {
+        console.error("Decryption error:", e);
+        return text;
+    }
+}
+
+function encryptData(text) {
+    if (!text) return "";
+    if (typeof WEB_KEY === 'undefined' || !WEB_KEY) return text;
+    try {
+        const textStr = String(text);
+        const bytes = new TextEncoder().encode(textStr);
+        const encryptedBytes = new Uint8Array(bytes.length);
+        for (let i = 0; i < bytes.length; i++) {
+            const keyChar = WEB_KEY.charCodeAt(i % WEB_KEY.length);
+            encryptedBytes[i] = bytes[i] ^ keyChar;
+        }
+        return btoa(String.fromCharCode.apply(null, encryptedBytes));
+    } catch (e) {
+        console.error("Encryption error:", e);
+        return text;
+    }
+}
+
+function encryptRequestPayload(dataObj) {
+    if (!dataObj) return {};
+    try {
+        const jsonStr = JSON.stringify(dataObj);
+        return { d: encryptData(jsonStr) };
+    } catch (e) {
+        console.error("Failed to encrypt request payload:", e);
+        return dataObj;
+    }
+}
+
+function decryptApiResponse(dataObj) {
+    if (dataObj && dataObj.d) {
+        try {
+            const decryptedStr = decryptData(dataObj.d);
+            return JSON.parse(decryptedStr);
+        } catch (e) {
+            console.error("Failed to decrypt API response:", e);
+            return dataObj;
+        }
+    }
+    return dataObj;
+}
+
+async function secureFetch(url, options = {}) {
+    let reqOptions = { ...options };
+    if (reqOptions.method && reqOptions.method.toUpperCase() !== 'GET' && reqOptions.body) {
+        try {
+            const parsedBody = JSON.parse(reqOptions.body);
+            reqOptions.body = JSON.stringify(encryptRequestPayload(parsedBody));
+        } catch (e) {
+            // body is not JSON or couldn't be parsed, leave as is
+        }
+    }
+    
+    const response = await fetch(url, reqOptions);
+    const originalJson = response.json.bind(response);
+    
+    response.json = async function() {
+        const data = await originalJson();
+        return decryptApiResponse(data);
+    };
+    
+    return response;
+}
+
+function sseRequest(url, eventName) {
+    return new Promise((resolve, reject) => {
+        const source = new EventSource(url);
+        source.addEventListener(eventName, function(e) {
+            try {
+                const data = JSON.parse(e.data);
+                const decrypted = decryptApiResponse(data);
+                source.close();
+                resolve(decrypted);
+            } catch (err) {
+                console.error(`SSE parse error on ${eventName}:`, err);
+                source.close();
+                reject(err);
+            }
+        });
+        source.addEventListener('error', function(e) {
+            source.close();
+            reject(new Error("SSE Error"));
+        });
+    });
+}
+
 window.__chartRegistry = window.__chartRegistry || {};
 
 function ensureChartZoomRegistered() {
@@ -322,6 +426,17 @@ function getCsrfToken() {
                 if (csrfToken && !headers.has('X-CSRF-Token')) {
                     headers.set('X-CSRF-Token', csrfToken);
                 }
+                
+                if (options.body && typeof options.body === 'string') {
+                    try {
+                        const parsedBody = JSON.parse(options.body);
+                        options.body = JSON.stringify(encryptRequestPayload(parsedBody));
+                        headers.set('Content-Type', 'application/json');
+                    } catch (e) {
+                        // ignore non-JSON
+                    }
+                }
+                
                 options = { ...options, headers };
                 if (!options.credentials) {
                     options.credentials = 'same-origin';
@@ -340,7 +455,8 @@ function getCsrfToken() {
     const originalJson = Response.prototype.json;
     Response.prototype.json = async function() {
         try {
-            return await originalJson.call(this);
+            const data = await originalJson.call(this);
+            return decryptApiResponse(data);
         } catch (e) {
             if (e instanceof SyntaxError && e.message.includes("Unexpected token")) {
                 const friendlyMessage = (typeof I18N !== 'undefined' && I18N.web_json_parse_error) ? I18N.web_json_parse_error : "Ошибка сервера: неверный формат ответа (возможно, сессия истекла или сервер недоступен).";

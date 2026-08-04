@@ -102,6 +102,36 @@ def decrypt_for_web(text: str) -> str:
         return text
 
 
+async def decrypt_request_payload(request) -> dict:
+    """
+    Decrypts the payload from a client POST request.
+    Expects body format: {"d": "<encrypted>"} or unencrypted json.
+    """
+    try:
+        data = await request.json()
+        if "d" in data:
+            decrypted_str = decrypt_for_web(data["d"])
+            return json.loads(decrypted_str)
+        return data
+    except Exception as e:
+        logging.error(f"Failed to decrypt request payload: {e}")
+        return {}
+
+
+def encrypted_json_response(data: dict, status: int = 200):
+    """
+    Encrypts the entire JSON response and wraps it in {"d": "..."}.
+    """
+    from aiohttp import web
+    try:
+        json_str = json.dumps(data)
+        encrypted_str = encrypt_for_web(json_str)
+        return web.json_response({"d": encrypted_str}, status=status)
+    except Exception as e:
+        logging.error(f"Failed to encrypt response payload: {e}")
+        return web.json_response(data, status=status)
+
+
 def get_host_path(path: str) -> str:
     if DEPLOY_MODE == "docker":
         if INSTALL_MODE == "root":
