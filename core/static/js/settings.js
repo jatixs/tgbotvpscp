@@ -2268,16 +2268,16 @@ window.savePingTargetModal = function() {
         const hiddenInput = document.getElementById('conf_ping_target');
         const btnLabel = document.getElementById('label_ping_server');
         
+        let text = "Google";
+        if (val === "cloudflare") text = "Cloudflare";
+        if (val === "internal") text = (typeof I18N !== 'undefined' && I18N.web_ping_target_internal) ? I18N.web_ping_target_internal : "Internal network";
+
         if (hiddenInput.value !== val) {
             hiddenInput.value = val;
             triggerAutoSave('intervals');
-            
-            let text = "Сервер";
-            if (val === "google") text = "Google";
-            if (val === "cloudflare") text = "Cloudflare";
-            if (val === "internal") text = (typeof I18N !== 'undefined' && I18N.web_ping_target_internal) ? I18N.web_ping_target_internal : "Internal";
-            if (btnLabel) btnLabel.textContent = text;
         }
+        if (btnLabel) btnLabel.textContent = text;
+        if (window.showToast) window.showToast(text);
     }
     window.closePingTargetModal();
 };
