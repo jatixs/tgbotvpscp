@@ -400,7 +400,7 @@
                                     </div>
                                     <button type="button" onclick="window.openPingTargetModal()" class="flex items-center gap-1.5 bg-white dark:bg-black/20 border border-gray-200 dark:border-white/10 hover:bg-gray-50 dark:hover:bg-white/5 rounded-xl px-3 py-2 text-sm font-medium transition-colors shrink-0 text-gray-700 dark:text-gray-300">
                                         <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-gray-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg>
-                                        <span id="label_ping_server" class="i18n-text">Сервер</span>
+                                        <span id="label_ping_server">{% if val_ping_target == 'cloudflare' %}Cloudflare{% elif val_ping_target == 'internal' %}{{ web_ping_target_internal }}{% else %}Google{% endif %}</span>
                                     </button>
                                     <input type="hidden" id="conf_ping_target" value="{{ val_ping_target }}">
                                 </div>
@@ -1350,25 +1350,25 @@
                     </button>
                 </div>
                 <div class="p-5 space-y-4 text-left">
-                    <label class="flex items-center px-5 py-4 border border-gray-200 dark:border-white/10 rounded-2xl cursor-pointer hover:bg-gray-50 dark:hover:bg-white/5 transition-colors">
-                        <input type="radio" name="ping_target_radio" value="google" class="ml-1 w-5 h-5 flex-shrink-0 text-blue-600 border-gray-300 focus:ring-blue-500 dark:bg-black/20 dark:border-white/10">
-                        <div class="ml-4 flex-1">
+                    <label class="flex items-center gap-4 px-5 py-4 border border-gray-200 dark:border-white/10 rounded-2xl cursor-pointer hover:bg-gray-50 dark:hover:bg-white/5 transition-colors">
+                        <input type="radio" name="ping_target_radio" value="google" class="w-5 h-5 flex-shrink-0 text-blue-600 border-gray-300 focus:ring-blue-500 dark:bg-black/20 dark:border-white/10">
+                        <div class="flex-1">
                             <span class="block text-sm font-bold text-gray-900 dark:text-white">Google</span>
                             <span class="block text-xs text-gray-500 dark:text-gray-400">8.8.8.8 / google.com</span>
                         </div>
                     </label>
-                    <label class="flex items-center px-5 py-4 border border-gray-200 dark:border-white/10 rounded-2xl cursor-pointer hover:bg-gray-50 dark:hover:bg-white/5 transition-colors">
-                        <input type="radio" name="ping_target_radio" value="cloudflare" class="ml-1 w-5 h-5 flex-shrink-0 text-blue-600 border-gray-300 focus:ring-blue-500 dark:bg-black/20 dark:border-white/10">
-                        <div class="ml-4 flex-1">
+                    <label class="flex items-center gap-4 px-5 py-4 border border-gray-200 dark:border-white/10 rounded-2xl cursor-pointer hover:bg-gray-50 dark:hover:bg-white/5 transition-colors">
+                        <input type="radio" name="ping_target_radio" value="cloudflare" class="w-5 h-5 flex-shrink-0 text-blue-600 border-gray-300 focus:ring-blue-500 dark:bg-black/20 dark:border-white/10">
+                        <div class="flex-1">
                             <span class="block text-sm font-bold text-gray-900 dark:text-white">Cloudflare</span>
                             <span class="block text-xs text-gray-500 dark:text-gray-400">1.1.1.1 / cloudflare.com</span>
                         </div>
                     </label>
-                    <label id="ping_target_internal_label" class="flex items-center px-5 py-4 border border-gray-200 dark:border-white/10 rounded-2xl cursor-pointer hover:bg-gray-50 dark:hover:bg-white/5 transition-colors">
-                        <input type="radio" name="ping_target_radio" value="internal" class="ml-1 w-5 h-5 flex-shrink-0 text-blue-600 border-gray-300 focus:ring-blue-500 dark:bg-black/20 dark:border-white/10">
-                        <div class="ml-4 flex-1">
-                            <span class="block text-sm font-bold text-gray-900 dark:text-white i18n-text" id="web_ping_target_internal">Между серверами</span>
-                            <span class="block text-xs text-gray-500 dark:text-gray-400 i18n-text" id="web_ping_target_internal_desc">Агент &harr; Ноды</span>
+                    <label id="ping_target_internal_label" class="flex items-center gap-4 px-5 py-4 border border-gray-200 dark:border-white/10 rounded-2xl cursor-pointer hover:bg-gray-50 dark:hover:bg-white/5 transition-colors">
+                        <input type="radio" name="ping_target_radio" value="internal" class="w-5 h-5 flex-shrink-0 text-blue-600 border-gray-300 focus:ring-blue-500 dark:bg-black/20 dark:border-white/10">
+                        <div class="flex-1">
+                            <span class="block text-sm font-bold text-gray-900 dark:text-white i18n-text" id="web_ping_target_internal">Внутренняя сеть</span>
+                            <span class="block text-xs text-gray-500 dark:text-gray-400 i18n-text" id="web_ping_target_internal_desc">Пинг до ваших нод</span>
                         </div>
                     </label>
                 </div>

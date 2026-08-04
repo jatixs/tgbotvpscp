@@ -947,6 +947,8 @@ async def handle_settings_page(request: web.Request) -> web.StreamResponse:
         "web_billing_active_days": _("web_billing_active_days", lang),
         "web_billing_status_expired": _("web_billing_status_expired", lang),
         "web_billing_status": _("web_billing_status", lang),
+        "web_ping_target_internal": _("web_ping_target_internal", lang),
+        "web_ping_target_no_nodes": _("web_ping_target_no_nodes", lang),
     }
     for btn_key, conf_key in BTN_CONFIG_MAP.items():
         i18n_data[f"lbl_{conf_key}"] = _(btn_key, lang)
@@ -1002,6 +1004,7 @@ async def handle_settings_page(request: web.Request) -> web.StreamResponse:
         "val_ping": str(getattr(current_config, "PING_INTERVAL", 30)),
         "val_ping_mode": getattr(current_config, "PING_MODE", "http"),
         "val_ping_target": getattr(current_config, "PING_TARGET", "google"),
+        "web_ping_target_internal": _("web_ping_target_internal", lang),
         "val_timeout": str(current_config.NODE_OFFLINE_TIMEOUT),
         "web_settings_page_title": _("web_settings_page_title", lang),
         "web_back": _("web_back", lang),
