@@ -17,7 +17,7 @@ from ..tasks import cleanup_server, start_background_tasks
 from .api_nodes import routes as node_routes
 from .api_system import routes as system_routes
 from .auth import routes as auth_routes
-from .middlewares import csrf_middleware, rate_limit_middleware, waf_middleware
+from .middlewares import csrf_middleware, rate_limit_middleware, security_headers_middleware, waf_middleware
 from .streaming import routes as streaming_routes
 from .views import routes as view_routes
 
@@ -40,7 +40,7 @@ async def on_shutdown(app: web.Application) -> None:
 def create_web_app(bot_instance: Bot) -> web.Application:
     """Create and configure the aiohttp application instance."""
     app = web.Application(
-        middlewares=[rate_limit_middleware, csrf_middleware, waf_middleware],
+        middlewares=[security_headers_middleware, rate_limit_middleware, csrf_middleware, waf_middleware],
         client_max_size=MAX_CLIENT_UPLOAD_SIZE,
     )
     app["bot"] = bot_instance

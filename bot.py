@@ -28,7 +28,7 @@ from aiogram.exceptions import TelegramBadRequest
 if config.SENTRY_DSN and config.SENTRY_DSN.strip().startswith("http"):
     try:
         sentry_sdk.init(
-            dsn=config.SENTRY_DSN, traces_sample_rate=1.0, profiles_sample_rate=1.0
+            dsn=config.SENTRY_DSN, traces_sample_rate=0.1, profiles_sample_rate=0.1
         )
         logging.info("Sentry initialized successfully.")
     except Exception as e:
