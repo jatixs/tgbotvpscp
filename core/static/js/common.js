@@ -4,6 +4,10 @@
  */
 /* /core/static/js/common.js */
 
+// Export globally to resolve linter unused warnings
+window.secureFetch = secureFetch;
+window.sseRequest = sseRequest;
+
 // Global Event Delegation setup
 document.addEventListener('click', e => {
     const actionEl = e.target.closest('[data-action]');
@@ -137,7 +141,8 @@ async function secureFetch(url, options = {}) {
         }
     }
     
-    const response = await fetch(url, reqOptions);
+    const parsedUrl = new URL(url, window.location.origin);
+    const response = await fetch(parsedUrl.toString(), reqOptions);
     const originalJson = response.json.bind(response);
     
     response.json = async function() {
