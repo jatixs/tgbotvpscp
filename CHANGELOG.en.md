@@ -4,11 +4,29 @@
 
 <h1 align="center">📝 Telegram VPS Management Bot — Changelog</h1>
 <p align="center">
-    <img src="https://img.shields.io/badge/version-v1.24.3-blue?style=flat-square" alt="Version 1.24.3"/>
-    <img src="https://img.shields.io/badge/build-86-purple?style=flat-square" alt="Build 86"/>
-    <img src="https://img.shields.io/badge/date-Jul%2011%202026-green?style=flat-square" alt="Date Jul 11 2026"/>
+    <img src="https://img.shields.io/badge/version-v1.24.4-blue?style=flat-square" alt="Version 1.24.4"/>
+    <img src="https://img.shields.io/badge/build-87-purple?style=flat-square" alt="Build 87"/>
+    <img src="https://img.shields.io/badge/date-Aug%2016%202026-green?style=flat-square" alt="Date Aug 16 2026"/>
 	<img src="https://img.shields.io/badge/status-stable-green?style=flat-square" alt="Status Stable"/>
 </p>
+
+---
+## [1.24.4] - 2026-08-16
+
+### 🔒 Security & API:
+* **IP Spoofing Protection:** Strengthened the logic for determining the client's real IP address when using proxy servers. The system now strictly verifies request sources, preventing attackers from bypassing IP blocks by forging headers.
+* **Web Interface Security:** Implemented modern security standards (HTTP Security Headers) across all web responses. This protects the control panel from cross-site scripting (XSS), clickjacking, and enforces secure connections (HSTS).
+* **Command Injection Prevention:** Eliminated potential vulnerabilities (Shell Injection) in the SSH log viewer and system monitoring (Top) modules. All requests are now strictly isolated before executing server commands.
+* **Dependencies Update:** Updated system libraries to patch known vulnerabilities, improving overall bot stability and security.
+* **Total Encryption:** All outgoing data from the client to the server (including authorization) is now encrypted on the fly using custom encryption, preventing interception of sensitive information.
+* **Smooth Interface (SSE):** Data loading in the web panel (monitoring, charts) has been migrated to continuous Server-Sent Events. Information now updates instantly without delays or redundant server requests, and all streams are securely encrypted.
+* **Invisible Protection:** A smart request interceptor has been implemented in the browser. It automatically encrypts outgoing packets and decrypts server responses, working completely transparently to the user.
+
+### ✨ Improved:
+* **WebUI (Ping Target Modal):** Increased spacing between radio buttons and labels for better visual readability.
+* **WebUI (Ping Target Button):** The button next to the HTTP/TCP/ICMP switcher now always displays the currently selected target (Google, Cloudflare, Internal network) instead of static text.
+* **WebUI (Toast Notification):** Selecting a ping target and clicking "Apply" now shows a toast notification with the selected target name.
+* **Localization:** The "Between servers / Agent ↔ Nodes" option has been renamed to "Internal network / Ping to your nodes" (EN) and "Внутренняя сеть / Пинг до ваших нод" (RU) for better clarity. Button and toast are fully localized.
 
 ---
 ## [1.24.3] - 2026-07-11
