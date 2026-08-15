@@ -60,13 +60,21 @@ function decryptData(text) {
     if (!text) return "";
     if (typeof WEB_KEY === 'undefined' || !WEB_KEY) return text;
     try {
-        const decoded = atob(text);
-        const bytes = new Uint8Array(decoded.length);
-        for (let i = 0; i < decoded.length; i++) {
-            const keyChar = WEB_KEY.charCodeAt(i % WEB_KEY.length);
-            bytes[i] = decoded.charCodeAt(i) ^ keyChar;
-        }
-        return new TextDecoder().decode(bytes);
+        if (text.indexOf(":") === -1) return text;
+        const parts = text.split(":");
+        const ivHex = parts[0];
+        const ctB64 = parts.slice(1).join(":");
+        
+        const key = CryptoJS.enc.Hex.parse(WEB_KEY);
+        const iv = CryptoJS.enc.Hex.parse(ivHex);
+        
+        const decrypted = CryptoJS.AES.decrypt(ctB64, key, {
+            iv: iv,
+            mode: CryptoJS.mode.CBC,
+            padding: CryptoJS.pad.Pkcs7
+        });
+        
+        return decrypted.toString(CryptoJS.enc.Utf8);
     } catch (e) {
         console.error("Decryption error:", e);
         return text;
@@ -78,13 +86,16 @@ function encryptData(text) {
     if (typeof WEB_KEY === 'undefined' || !WEB_KEY) return text;
     try {
         const textStr = String(text);
-        const bytes = new TextEncoder().encode(textStr);
-        const encryptedBytes = new Uint8Array(bytes.length);
-        for (let i = 0; i < bytes.length; i++) {
-            const keyChar = WEB_KEY.charCodeAt(i % WEB_KEY.length);
-            encryptedBytes[i] = bytes[i] ^ keyChar;
-        }
-        return btoa(String.fromCharCode.apply(null, encryptedBytes));
+        const key = CryptoJS.enc.Hex.parse(WEB_KEY);
+        const iv = CryptoJS.lib.WordArray.random(16);
+        
+        const encrypted = CryptoJS.AES.encrypt(textStr, key, {
+            iv: iv,
+            mode: CryptoJS.mode.CBC,
+            padding: CryptoJS.pad.Pkcs7
+        });
+        
+        return iv.toString(CryptoJS.enc.Hex) + ":" + encrypted.toString();
     } catch (e) {
         console.error("Encryption error:", e);
         return text;
