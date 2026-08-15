@@ -13,6 +13,15 @@
 ---
 ## [1.24.4] - 2026-08-04
 
+### 🔒 Security & API:
+* **IP Spoofing Protection:** Strengthened the logic for determining the client's real IP address when using proxy servers. The system now strictly verifies request sources, preventing attackers from bypassing IP blocks by forging headers.
+* **Web Interface Security:** Implemented modern security standards (HTTP Security Headers) across all web responses. This protects the control panel from cross-site scripting (XSS), clickjacking, and enforces secure connections (HSTS).
+* **Command Injection Prevention:** Eliminated potential vulnerabilities (Shell Injection) in the SSH log viewer and system monitoring (Top) modules. All requests are now strictly isolated before executing server commands.
+* **Dependencies Update:** Updated system libraries to patch known vulnerabilities, improving overall bot stability and security.
+* **Total Encryption:** All outgoing data from the client to the server (including authorization) is now encrypted on the fly using custom encryption, preventing interception of sensitive information.
+* **Smooth Interface (SSE):** Data loading in the web panel (monitoring, charts) has been migrated to continuous Server-Sent Events. Information now updates instantly without delays or redundant server requests, and all streams are securely encrypted.
+* **Invisible Protection:** A smart request interceptor has been implemented in the browser. It automatically encrypts outgoing packets and decrypts server responses, working completely transparently to the user.
+
 ### ✨ Improved:
 * **WebUI (Ping Target Modal):** Increased spacing between radio buttons and labels for better visual readability.
 * **WebUI (Ping Target Button):** The button next to the HTTP/TCP/ICMP switcher now always displays the currently selected target (Google, Cloudflare, Internal network) instead of static text.
