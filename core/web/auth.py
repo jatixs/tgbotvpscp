@@ -44,6 +44,10 @@ SESSION_TTL_PASSWORD: Final[int] = 7 * 24 * 60 * 60
 SESSION_TTL_MAGIC: Final[int] = 30 * 24 * 60 * 60
 MAX_LOGIN_ATTEMPTS: Final[int] = 5
 LOGIN_BLOCK_TIME: Final[int] = 300
+MAX_CSRF_TOKENS: Final[int] = 5_000
+MAX_LOGIN_IPS: Final[int] = 10_000
+MAX_RESET_TOKENS: Final[int] = 100
+MAX_SERVER_SESSIONS: Final[int] = 10_000
 AGENT_FLAG: Final[str] = "🏳️"
 
 TEMPLATE_DIR: Final[Path] = Path(BASE_DIR) / "core" / "templates"
@@ -63,8 +67,17 @@ DEFAULT_ADMIN_PASSWORD_HASH = PASSWORD_HASHER.hash("admin")
 
 def generate_csrf_token() -> str:
     """Generate and store a secure CSRF token with expiry metadata."""
+    now = time.time()
+    if len(CSRF_TOKENS) >= MAX_CSRF_TOKENS:
+        expired = [k for k, v in CSRF_TOKENS.items() if now > v]
+        for k in expired:
+            CSRF_TOKENS.pop(k, None)
+        if len(CSRF_TOKENS) >= MAX_CSRF_TOKENS:
+            oldest = sorted(CSRF_TOKENS, key=CSRF_TOKENS.get)[:len(CSRF_TOKENS) // 2]
+            for k in oldest:
+                CSRF_TOKENS.pop(k, None)
     token = secrets.token_urlsafe(32)
-    CSRF_TOKENS[token] = time.time() + CSRF_TOKEN_TTL
+    CSRF_TOKENS[token] = now + CSRF_TOKEN_TTL
     return token
 
 
@@ -115,6 +128,10 @@ def check_rate_limit(ip: str) -> bool:
     now = time.time()
     attempts = [t for t in LOGIN_ATTEMPTS.get(ip, []) if now - t < LOGIN_BLOCK_TIME]
     LOGIN_ATTEMPTS[ip] = attempts
+    if len(LOGIN_ATTEMPTS) > MAX_LOGIN_IPS:
+        stale = [k for k, v in LOGIN_ATTEMPTS.items() if not v]
+        for k in stale:
+            LOGIN_ATTEMPTS.pop(k, None)
     return len(attempts) < MAX_LOGIN_ATTEMPTS
 
 

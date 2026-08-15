@@ -210,3 +210,8 @@ __marimo__/
 # Project config files (generated at runtime)
 config/nodes.db
 config/security.key
+config/bot.db
+config/*.bak
+*.bak
+.env.*
+!.env.example

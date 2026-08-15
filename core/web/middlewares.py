@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import ipaddress
 import logging
+import os
 import re
 import time
 from collections import defaultdict, deque
@@ -45,24 +47,48 @@ WAF_ATTACK_PATTERNS: Final[tuple[tuple[str, str], ...]] = (
 )
 
 
-def get_client_ip(request: web.Request) -> str:
-    """Return the best-effort client IP, honoring reverse proxy headers."""
-    forwarded_for = request.headers.get("X-Forwarded-For", "").split(",")[0].strip()
-    real_ip = request.headers.get("X-Real-IP", "").strip()
+# Trust proxy headers only from these networks (localhost + Docker default).
+# Override via TRUSTED_PROXIES env var (comma-separated CIDRs).
+_RAW_TRUSTED = os.environ.get("TRUSTED_PROXIES", "127.0.0.0/8,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,::1/128")
+TRUSTED_PROXY_NETS: Final[tuple[ipaddress.IPv4Network | ipaddress.IPv6Network, ...]] = tuple(
+    ipaddress.ip_network(cidr.strip(), strict=False)
+    for cidr in _RAW_TRUSTED.split(",")
+    if cidr.strip()
+)
 
-    if forwarded_for:
-        return forwarded_for
-    if real_ip:
-        return real_ip
 
+def _peer_ip(request: web.Request) -> str:
+    """Get the direct peer IP from the transport layer."""
     if request.transport is None:
         return "127.0.0.1"
-
     peer = request.transport.get_extra_info("peername")
     if isinstance(peer, tuple) and peer:
         return str(peer[0])
-
     return "127.0.0.1"
+
+
+def _is_trusted_proxy(ip: str) -> bool:
+    """Check if a peer IP belongs to a trusted proxy network."""
+    try:
+        addr = ipaddress.ip_address(ip.strip().strip("[]"))
+        return any(addr in net for net in TRUSTED_PROXY_NETS)
+    except ValueError:
+        return False
+
+
+def get_client_ip(request: web.Request) -> str:
+    """Return the best-effort client IP, honoring proxy headers only from trusted sources."""
+    peer = _peer_ip(request)
+
+    if _is_trusted_proxy(peer):
+        forwarded_for = request.headers.get("X-Forwarded-For", "").split(",")[0].strip()
+        real_ip = request.headers.get("X-Real-IP", "").strip()
+        if forwarded_for:
+            return forwarded_for
+        if real_ip:
+            return real_ip
+
+    return peer
 
 
 def mask_sensitive_data(data: str, mask_length: int = 6) -> str:
@@ -247,13 +273,34 @@ async def waf_middleware(request: web.Request, handler: Handler) -> web.StreamRe
                 logging.warning("WAF rejected large decoded body from IP %s", mask_sensitive_data(client_ip))
                 return web.json_response({"error": "Request too large"}, status=413)
 
+
     return await handler(request)
+
+
+@web.middleware
+async def security_headers_middleware(request: web.Request, handler: Handler) -> web.StreamResponse:
+    """Inject standard HTTP security headers on every response."""
+    response = await handler(request)
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("X-Frame-Options", "DENY")
+    response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+    response.headers.setdefault("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
+    response.headers.setdefault("X-XSS-Protection", "0")
+    if request.path.startswith("/api/"):
+        response.headers.setdefault("Cache-Control", "no-store")
+    is_https = request.scheme == "https" or request.headers.get("X-Forwarded-Proto") == "https"
+    if is_https:
+        response.headers.setdefault(
+            "Strict-Transport-Security", "max-age=31536000; includeSubDomains"
+        )
+    return response
 
 
 __all__ = [
     "rate_limit_middleware",
     "csrf_middleware",
     "waf_middleware",
+    "security_headers_middleware",
     "get_client_ip",
     "check_waf_patterns",
     "validate_input_length",
