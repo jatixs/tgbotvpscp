@@ -6,12 +6,12 @@
 <p align="center">
     <img src="https://img.shields.io/badge/version-v1.24.4-blue?style=flat-square" alt="Version 1.24.4"/>
     <img src="https://img.shields.io/badge/build-87-purple?style=flat-square" alt="Build 87"/>
-    <img src="https://img.shields.io/badge/date-Август%2004%202026-green?style=flat-square" alt="Date Aug 04 2026"/>
+    <img src="https://img.shields.io/badge/date-Август%2016%202026-green?style=flat-square" alt="Date Aug 16 2026"/>
 	<img src="https://img.shields.io/badge/status-stable-green?style=flat-square" alt="Status Stable"/>
 </p>
 
 ---
-## [1.24.4] - 2026-08-04
+## [1.24.4] - 2026-08-16
 
 ### 🔒 Безопасность и API:
 * **Защита от подмены IP:** Усилена логика определения реального IP-адреса клиента при использовании прокси-серверов. Теперь система строго проверяет источники запросов, предотвращая возможность обхода блокировок путем подделки IP.
