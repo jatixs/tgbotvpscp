@@ -318,8 +318,10 @@ function updateNodesListUI(data) {
                 try {
                     const order = JSON.parse(orderStr);
                     newList.sort((a, b) => {
-                        let idxA = order.indexOf(a.token);
-                        let idxB = order.indexOf(b.token);
+                        const aDec = typeof decryptData === 'function' ? decryptData(a.token) : a.token;
+                        const bDec = typeof decryptData === 'function' ? decryptData(b.token) : b.token;
+                        let idxA = order.indexOf(aDec);
+                        let idxB = order.indexOf(bDec);
                         if (idxA === -1) idxA = Infinity;
                         if (idxB === -1) idxB = Infinity;
                         return idxA - idxB;
@@ -365,7 +367,16 @@ function updateVisibleNodes(elements, dataList) {
         const el = elements[i];
         const token = el.getAttribute('data-token');
         const nodeData = dataList[i];
-        if (!nodeData || nodeData.token !== token) return false;
+        
+        if (!nodeData) return false;
+        
+        const decryptedCurrentToken = typeof decryptData === 'function' ? decryptData(token) : token;
+        const decryptedNewToken = typeof decryptData === 'function' ? decryptData(nodeData.token) : nodeData.token;
+        if (decryptedCurrentToken !== decryptedNewToken) return false;
+        
+        if (token !== nodeData.token) {
+            el.setAttribute('data-token', escapeHtml(nodeData.token));
+        }
         const ui = getNodeUiParams(nodeData);
         const cpuEl = el.querySelector('[data-ref="cpu-val"]');
         if (cpuEl) {
@@ -462,8 +473,10 @@ function filterAndRenderNodes() {
             try {
                 const order = JSON.parse(orderStr);
                 newList.sort((a, b) => {
-                    let idxA = order.indexOf(a.token);
-                    let idxB = order.indexOf(b.token);
+                    const aDec = typeof decryptData === 'function' ? decryptData(a.token) : a.token;
+                    const bDec = typeof decryptData === 'function' ? decryptData(b.token) : b.token;
+                    let idxA = order.indexOf(aDec);
+                    let idxB = order.indexOf(bDec);
                     if (idxA === -1) idxA = Infinity;
                     if (idxB === -1) idxB = Infinity;
                     return idxA - idxB;
@@ -557,13 +570,18 @@ function renderNodesList() {
             animation: 150,
             disabled: sortMode !== 'custom',
             onEnd: function () {
-                const newOrder = Array.from(container.querySelectorAll('[data-token]')).map(el => el.getAttribute('data-token'));
+                const newOrder = Array.from(container.querySelectorAll('[data-token]')).map(el => {
+                    const t = el.getAttribute('data-token');
+                    return typeof decryptData === 'function' ? decryptData(t) : t;
+                });
                 localStorage.setItem('dashboardNodeOrder', JSON.stringify(newOrder));
                 const orderMap = {};
                 newOrder.forEach((t, i) => orderMap[t] = i);
                 currentRenderList.sort((a, b) => {
-                    let idxA = orderMap[a.token];
-                    let idxB = orderMap[b.token];
+                    const aDec = typeof decryptData === 'function' ? decryptData(a.token) : a.token;
+                    const bDec = typeof decryptData === 'function' ? decryptData(b.token) : b.token;
+                    let idxA = orderMap[aDec];
+                    let idxB = orderMap[bDec];
                     if (idxA === undefined) idxA = Infinity;
                     if (idxB === undefined) idxB = Infinity;
                     return idxA - idxB;
