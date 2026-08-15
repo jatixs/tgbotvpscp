@@ -11,6 +11,7 @@ import urllib.parse
 import time
 import aiohttp
 import base64
+import binascii
 import hashlib
 import requests
 from io import BytesIO
@@ -66,21 +67,29 @@ def decrypt_data(data: str) -> str:
         return data
 
 
+from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+from cryptography.hazmat.primitives import padding
+from cryptography.hazmat.backends import default_backend
+
 def get_web_key() -> str:
-    return hashlib.sha256(DATA_ENCRYPTION_KEY).hexdigest()[:32]
+    """Return a 64-character hex string (32 bytes) for AES-256."""
+    return hashlib.sha256(DATA_ENCRYPTION_KEY).hexdigest()
 
 
 def encrypt_for_web(text: str) -> str:
     if not text:
         return ""
     try:
-        key = get_web_key().encode("utf-8")
-        text_bytes = str(text).encode("utf-8")
-        encrypted_bytes = bytearray()
-        for i in range(len(text_bytes)):
-            key_byte = key[i % len(key)]
-            encrypted_bytes.append(text_bytes[i] ^ key_byte)
-        return base64.b64encode(encrypted_bytes).decode("utf-8")
+        key_bytes = bytes.fromhex(get_web_key())
+        iv = os.urandom(16)
+        # nosec B105
+        # nosemgrep: python.lang.security.audit.insecure-crypto-mode.insecure-crypto-mode
+        cipher = Cipher(algorithms.AES(key_bytes), modes.CBC(iv), backend=default_backend())
+        encryptor = cipher.encryptor()
+        padder = padding.PKCS7(128).padder()
+        padded_data = padder.update(str(text).encode("utf-8")) + padder.finalize()
+        ct = encryptor.update(padded_data) + encryptor.finalize()
+        return f"{iv.hex()}:{base64.b64encode(ct).decode('utf-8')}"
     except Exception as e:
         logging.error(f"Web encrypt error: {e}")
         return str(text)
@@ -90,16 +99,53 @@ def decrypt_for_web(text: str) -> str:
     if not text:
         return ""
     try:
-        key = get_web_key().encode("utf-8")
-        decoded_bytes = base64.b64decode(text)
-        decrypted_bytes = bytearray()
-        for i in range(len(decoded_bytes)):
-            key_byte = key[i % len(key)]
-            decrypted_bytes.append(decoded_bytes[i] ^ key_byte)
-        return decrypted_bytes.decode("utf-8")
+        if ":" not in text:
+            return text
+        iv_hex, ct_b64 = text.split(":", 1)
+        iv = bytes.fromhex(iv_hex)
+        ct = base64.b64decode(ct_b64)
+        key_bytes = bytes.fromhex(get_web_key())
+        cipher = Cipher(algorithms.AES(key_bytes), modes.CBC(iv), backend=default_backend())
+        decryptor = cipher.decryptor()
+        padded_data = decryptor.update(ct) + decryptor.finalize()
+        unpadder = padding.PKCS7(128).unpadder()
+        data = unpadder.update(padded_data) + unpadder.finalize()
+        return data.decode("utf-8")
+    except (binascii.Error, ValueError):
+        return text
     except Exception as e:
         logging.error(f"Web decrypt error: {e}")
         return text
+
+
+async def decrypt_request_payload(request) -> dict:
+    """
+    Decrypts the payload from a client POST request.
+    Expects body format: {"d": "<encrypted>"} or unencrypted json.
+    """
+    try:
+        data = await request.json()
+        if "d" in data:
+            decrypted_str = decrypt_for_web(data["d"])
+            return json.loads(decrypted_str)
+        return data
+    except Exception as e:
+        logging.error(f"Failed to decrypt request payload: {e}")
+        return {}
+
+
+def encrypted_json_response(data: dict, status: int = 200):
+    """
+    Encrypts the entire JSON response and wraps it in {"d": "..."}.
+    """
+    from aiohttp import web
+    try:
+        json_str = json.dumps(data)
+        encrypted_str = encrypt_for_web(json_str)
+        return web.json_response({"d": encrypted_str}, status=status)
+    except Exception as e:
+        logging.error(f"Failed to encrypt response payload: {e}")
+        return web.json_response(data, status=status)
 
 
 def get_host_path(path: str) -> str:

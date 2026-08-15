@@ -401,9 +401,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     const refreshTelegramOnlyMode = async () => {
         try {
-            const res = await fetch('/api/security/telegram_only_mode', { cache: 'no-store' });
-            if (!res.ok) return;
-            const data = await res.json();
+            const data = await sseRequest('/api/security/telegram_only_mode', 'telegram_only_mode');
             const enabled = Boolean(data && data.enabled);
             applyTelegramOnlyMode(enabled);
             localStorage.setItem('telegram_only_mode', enabled ? '1' : '0');
