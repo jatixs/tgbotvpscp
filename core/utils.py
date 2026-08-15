@@ -67,21 +67,27 @@ def decrypt_data(data: str) -> str:
         return data
 
 
+from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+from cryptography.hazmat.primitives import padding
+from cryptography.hazmat.backends import default_backend
+
 def get_web_key() -> str:
-    return hashlib.sha256(DATA_ENCRYPTION_KEY).hexdigest()[:32]
+    """Return a 64-character hex string (32 bytes) for AES-256."""
+    return hashlib.sha256(DATA_ENCRYPTION_KEY).hexdigest()
 
 
 def encrypt_for_web(text: str) -> str:
     if not text:
         return ""
     try:
-        key = get_web_key().encode("utf-8")
-        text_bytes = str(text).encode("utf-8")
-        encrypted_bytes = bytearray()
-        for i in range(len(text_bytes)):
-            key_byte = key[i % len(key)]
-            encrypted_bytes.append(text_bytes[i] ^ key_byte)
-        return base64.b64encode(encrypted_bytes).decode("utf-8")
+        key_bytes = bytes.fromhex(get_web_key())
+        iv = os.urandom(16)
+        cipher = Cipher(algorithms.AES(key_bytes), modes.CBC(iv), backend=default_backend())
+        encryptor = cipher.encryptor()
+        padder = padding.PKCS7(128).padder()
+        padded_data = padder.update(str(text).encode("utf-8")) + padder.finalize()
+        ct = encryptor.update(padded_data) + encryptor.finalize()
+        return f"{iv.hex()}:{base64.b64encode(ct).decode('utf-8')}"
     except Exception as e:
         logging.error(f"Web encrypt error: {e}")
         return str(text)
@@ -91,15 +97,19 @@ def decrypt_for_web(text: str) -> str:
     if not text:
         return ""
     try:
-        key = get_web_key().encode("utf-8")
-        decoded_bytes = base64.b64decode(text)
-        decrypted_bytes = bytearray()
-        for i in range(len(decoded_bytes)):
-            key_byte = key[i % len(key)]
-            decrypted_bytes.append(decoded_bytes[i] ^ key_byte)
-        return decrypted_bytes.decode("utf-8")
+        if ":" not in text:
+            return text
+        iv_hex, ct_b64 = text.split(":", 1)
+        iv = bytes.fromhex(iv_hex)
+        ct = base64.b64decode(ct_b64)
+        key_bytes = bytes.fromhex(get_web_key())
+        cipher = Cipher(algorithms.AES(key_bytes), modes.CBC(iv), backend=default_backend())
+        decryptor = cipher.decryptor()
+        padded_data = decryptor.update(ct) + decryptor.finalize()
+        unpadder = padding.PKCS7(128).unpadder()
+        data = unpadder.update(padded_data) + unpadder.finalize()
+        return data.decode("utf-8")
     except binascii.Error:
-        # Expected if the payload is not base64 encoded
         return text
     except Exception as e:
         logging.error(f"Web decrypt error: {e}")
