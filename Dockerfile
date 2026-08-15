@@ -26,12 +26,13 @@ RUN apt-get update \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-RUN pip install --no-cache-dir --upgrade pip setuptools wheel && \
+RUN pip install --no-cache-dir --upgrade pip 'setuptools>=83.0.0' wheel && \
     pip install --no-cache-dir \
     docker \
-    aiohttp==3.13.5 \
+    aiohttp==3.14.3 \
     aiosqlite \
     argon2-cffi \
+    'msgpack>=1.2.1' \
     sentry-sdk \
     tortoise-orm \
     aerich \
