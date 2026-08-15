@@ -6,12 +6,12 @@
 <p align="center">
     <img src="https://img.shields.io/badge/version-v1.24.4-blue?style=flat-square" alt="Version 1.24.4"/>
     <img src="https://img.shields.io/badge/build-87-purple?style=flat-square" alt="Build 87"/>
-    <img src="https://img.shields.io/badge/date-Aug%2004%202026-green?style=flat-square" alt="Date Aug 04 2026"/>
+    <img src="https://img.shields.io/badge/date-Aug%2016%202026-green?style=flat-square" alt="Date Aug 16 2026"/>
 	<img src="https://img.shields.io/badge/status-stable-green?style=flat-square" alt="Status Stable"/>
 </p>
 
 ---
-## [1.24.4] - 2026-08-04
+## [1.24.4] - 2026-08-16
 
 ### 🔒 Security & API:
 * **IP Spoofing Protection:** Strengthened the logic for determining the client's real IP address when using proxy servers. The system now strictly verifies request sources, preventing attackers from bypassing IP blocks by forging headers.
