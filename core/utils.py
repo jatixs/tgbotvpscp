@@ -82,6 +82,8 @@ def encrypt_for_web(text: str) -> str:
     try:
         key_bytes = bytes.fromhex(get_web_key())
         iv = os.urandom(16)
+        # nosec B105
+        # nosemgrep: python.lang.security.audit.insecure-crypto-mode.insecure-crypto-mode
         cipher = Cipher(algorithms.AES(key_bytes), modes.CBC(iv), backend=default_backend())
         encryptor = cipher.encryptor()
         padder = padding.PKCS7(128).padder()

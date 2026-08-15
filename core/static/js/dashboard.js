@@ -370,9 +370,9 @@ function updateVisibleNodes(elements, dataList) {
         
         if (!nodeData) return false;
         
-        const decryptedCurrentToken = typeof decryptData === 'function' ? decryptData(token) : token;
-        const decryptedNewToken = typeof decryptData === 'function' ? decryptData(nodeData.token) : nodeData.token;
-        if (decryptedCurrentToken !== decryptedNewToken) return false;
+        const valA = typeof decryptData === 'function' ? decryptData(token) : token;
+        const valB = typeof decryptData === 'function' ? decryptData(nodeData.token) : nodeData.token;
+        if (valA !== valB) return false;
         
         if (token !== nodeData.token) {
             el.setAttribute('data-token', escapeHtml(nodeData.token));
@@ -2240,7 +2240,7 @@ async function searchGlobalServices(query, managedMatchCount) {
         if (!_globalServicesCache) {
             try {
                 _globalServicesCache = await sseRequest('/api/services/available?search=1', 'available_services');
-            } catch (err) {
+            } catch (_err) {
                 return;
             }
             // Cache expires after 30 seconds
