@@ -109,7 +109,7 @@ def decrypt_for_web(text: str) -> str:
         unpadder = padding.PKCS7(128).unpadder()
         data = unpadder.update(padded_data) + unpadder.finalize()
         return data.decode("utf-8")
-    except binascii.Error:
+    except (binascii.Error, ValueError):
         return text
     except Exception as e:
         logging.error(f"Web decrypt error: {e}")
