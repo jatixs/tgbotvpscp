@@ -296,6 +296,7 @@ download_vendor_assets() {
     run_with_spinner "Загрузка xterm-addon-fit" sudo curl -sSLo "${vendor_dir}/xterm-addon-fit.js" "https://cdn.jsdelivr.net/npm/xterm-addon-fit/lib/xterm-addon-fit.js"
     run_with_spinner "Загрузка SortableJS" sudo curl -sSLo "${vendor_dir}/sortable.min.js" "https://cdn.jsdelivr.net/npm/sortablejs@latest/Sortable.min.js"
     run_with_spinner "Загрузка DOMPurify" sudo curl -sSLo "${vendor_dir}/dompurify.min.js" "https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.6/purify.min.js"
+    run_with_spinner "Загрузка CryptoJS" sudo curl -sSLo "${vendor_dir}/crypto-js.min.js" "https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"
 }
 
 load_cached_env() {
@@ -673,7 +674,7 @@ create_dockerfile() {
     sudo tee "${BOT_INSTALL_PATH}/Dockerfile" > /dev/null <<'EOF'
 FROM python:3.10-slim-bookworm
 RUN apt-get update && apt-get install -y python3-yaml iperf3 git curl wget sudo procps iputils-ping net-tools gnupg docker.io coreutils && rm -rf /var/lib/apt/lists/*
-RUN pip install --no-cache-dir --upgrade pip setuptools wheel && pip install --no-cache-dir docker aiohttp==3.14.0 aiosqlite argon2-cffi sentry-sdk tortoise-orm aerich cryptography tomlkit
+RUN pip install --no-cache-dir --upgrade pip setuptools wheel && pip install --no-cache-dir docker aiohttp==3.14.3 aiosqlite argon2-cffi sentry-sdk tortoise-orm aerich cryptography tomlkit
 RUN groupadd -g 1001 tgbot && useradd -u 1001 -g 1001 -m -s /bin/bash tgbot && echo "tgbot ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
 WORKDIR /opt/tg-bot
 COPY requirements.txt .

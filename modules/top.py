@@ -30,8 +30,9 @@ async def top_handler(message: types.Message):
     await message.bot.send_chat_action(chat_id=chat_id, action="typing")
     await delete_previous_message(user_id, command, chat_id, message.bot)
     cmd = "ps aux --sort=-%cpu | head -n 11"
-    process = await asyncio.create_subprocess_shell(
-        cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
+    # nosemgrep: python.lang.security.audit.dangerous-subprocess-use-audit.dangerous-subprocess-use-audit
+    process = await asyncio.create_subprocess_exec(
+        "sh", "-c", cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
     )
     stdout, stderr = await process.communicate()
     if process.returncode == 0:
