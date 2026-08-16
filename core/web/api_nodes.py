@@ -24,7 +24,7 @@ from .. import nodes_db, shared_state
 from ..config import ADMIN_USER_ID, BASE_DIR, NODE_OFFLINE_TIMEOUT, TG_BOT_NAME, WEB_SERVER_HOST, WEB_SERVER_PORT, DEFAULT_LANGUAGE
 from ..i18n import STRINGS, get_text as _, get_user_lang
 from ..messaging import send_alert
-from ..utils import decrypt_for_web, encrypt_for_web, format_traffic, format_uptime, get_app_version, get_country_flag, get_node_uptime_snapshot, get_server_timezone_label, get_web_key
+from ..utils import decrypt_for_web, encrypt_for_web, format_traffic, format_uptime, get_app_version, get_country_flag, get_node_uptime_snapshot, get_server_timezone_label, get_web_key, decrypt_request_payload, encrypted_json_response
 from .auth import COOKIE_NAME, SERVER_SESSIONS, get_current_user
 from ..rbac import build_user_role_js, get_role_level as get_user_role_level, is_admin as _is_admin
 from modules.services import (
@@ -423,10 +423,17 @@ async def handle_heartbeat(request: web.Request) -> web.StreamResponse:
 async def handle_nodes_list_json(request: web.Request) -> web.StreamResponse:
     user = await _require_user(request)
     if not user:
-        return web.json_response({"error": "Unauthorized"}, status=401)
+        return web.Response(status=401)
+
+    lang = get_user_lang(int(user["id"]))
+    
+    response = web.StreamResponse(status=200, reason="OK")
+    response.headers["Content-Type"] = "text/event-stream"
+    response.headers["Cache-Control"] = "no-cache"
+    response.headers["Connection"] = "keep-alive"
+    await response.prepare(request)
 
     all_nodes = await nodes_db.get_all_nodes()
-    lang = get_user_lang(int(user["id"]))
     nodes_data: list[dict[str, Any]] = []
     now = time.time()
 
@@ -440,7 +447,7 @@ async def handle_nodes_list_json(request: web.Request) -> web.StreamResponse:
         nodes_data.append(
             {
                 "token": encrypt_for_web(token),
-                "name": node.get("name", "Unknown"),
+                "name": encrypt_for_web(node.get("name", "Unknown")),
                 "ip": encrypt_for_web(node.get("ip", "Unknown")),
                 "status": status,
                 "cpu": stats.get("cpu", 0),
@@ -450,7 +457,15 @@ async def handle_nodes_list_json(request: web.Request) -> web.StreamResponse:
             }
         )
 
-    return web.json_response({"nodes": nodes_data})
+    try:
+        payload = {"nodes": nodes_data}
+        json_data = json.dumps(payload)
+        event_str = f"event: nodes_list\ndata: {json_data}\n\n"
+        await response.write(event_str.encode("utf-8"))
+    except Exception as e:
+        logging.error(f"SSE API /api/nodes/list error: {e}")
+
+    return response
 
 
 @routes.post("/api/nodes/add")
@@ -460,10 +475,10 @@ async def handle_node_add(request: web.Request) -> web.StreamResponse:
         return web.json_response({"error": "Admin required"}, status=403)
 
     try:
-        data = await request.json()
+        data = await decrypt_request_payload(request)
         name = str(data.get("name", "")).strip()
         if not name:
-            return web.json_response({"error": "Name required"}, status=400)
+            return encrypted_json_response({"error": "Name required"}, status=400)
 
         token = await nodes_db.create_node(name)
         host = request.headers.get("Host", f"{WEB_SERVER_HOST}:{WEB_SERVER_PORT}")
@@ -478,7 +493,7 @@ async def handle_node_add(request: web.Request) -> web.StreamResponse:
             f"--agent={proto}://{host} --token={token}"
         )
 
-        return web.json_response(
+        return encrypted_json_response(
             {
                 "status": "ok",
                 "token": encrypt_for_web(token),
@@ -487,7 +502,7 @@ async def handle_node_add(request: web.Request) -> web.StreamResponse:
         )
     except Exception:
         logging.exception("Failed to add node")
-        return web.json_response({"error": "Internal Server Error"}, status=500)
+        return encrypted_json_response({"error": "Internal Server Error"}, status=500)
 
 
 @routes.post("/api/nodes/delete")
@@ -497,10 +512,10 @@ async def handle_node_delete(request: web.Request) -> web.StreamResponse:
         return web.json_response({"error": "Admin required"}, status=403)
 
     try:
-        data = await request.json()
+        data = await decrypt_request_payload(request)
         token = decrypt_for_web(data.get("token"))
         if not token:
-            return web.json_response({"error": "Token required"}, status=400)
+            return encrypted_json_response({"error": "Token required"}, status=400)
 
         await nodes_db.delete_node(token)
         return web.json_response({"status": "ok"})
@@ -516,20 +531,20 @@ async def handle_node_rename(request: web.Request) -> web.StreamResponse:
         return web.json_response({"error": "Admin required"}, status=403)
 
     try:
-        data = await request.json()
+        data = await decrypt_request_payload(request)
         token = decrypt_for_web(data.get("token"))
         new_name = str(data.get("name", "")).strip()
         if not token or not new_name:
-            return web.json_response({"error": "Token and name required"}, status=400)
+            return encrypted_json_response({"error": "Token and name required"}, status=400)
 
         success = await nodes_db.update_node_name(token, new_name)
         if not success:
-            return web.json_response({"error": "Node not found"}, status=404)
+            return encrypted_json_response({"error": "Node not found"}, status=404)
 
-        return web.json_response({"status": "ok"})
+        return encrypted_json_response({"status": "ok"})
     except Exception:
         logging.exception("Failed to rename node")
-        return web.json_response({"error": "Internal Server Error"}, status=500)
+        return encrypted_json_response({"error": "Internal Server Error"}, status=500)
 
 
 async def handle_nodes_monitor_page(request: web.Request) -> web.StreamResponse:
@@ -835,27 +850,27 @@ async def handle_nodes_monitor_command(request: web.Request) -> web.StreamRespon
         return web.json_response({"error": "Admin required"}, status=403)
 
     try:
-        data = await request.json()
+        data = await decrypt_request_payload(request)
         token = decrypt_for_web(data.get("token"))
-        command = str(data.get("command", "")).strip()
+        command = decrypt_for_web(data.get("command"))
 
         if not token or not command:
-            return web.json_response({"error": "Token and command required"}, status=400)
-        if command not in ALLOWED_NODE_COMMANDS:
-            return web.json_response({"error": "Invalid command"}, status=400)
+            return encrypted_json_response({"error": "Token and command required"}, status=400)
+        if command not in ["restart", "reboot"]:
+            return encrypted_json_response({"error": "Invalid command"}, status=400)
 
         node = await nodes_db.get_node_by_token(token)
         if not node:
-            return web.json_response({"error": "Node not found"}, status=404)
+            return encrypted_json_response({"error": "Node not found"}, status=404)
 
         if command == "reboot":
             await nodes_db.update_node_extra(token, "is_restarting", True)
 
         await nodes_db.update_node_task(token, {"command": command, "user_id": int(user["id"])})
-        return web.json_response({"status": "ok"})
+        return encrypted_json_response({"status": "ok"})
     except Exception:
         logging.exception("Failed to queue node command")
-        return web.json_response({"error": "Internal Server Error"}, status=500)
+        return encrypted_json_response({"error": "Internal Server Error"}, status=500)
 
 
 @routes.post("/api/nodes/monitor/service_action")
@@ -868,20 +883,20 @@ async def handle_nodes_monitor_service_action(request: web.Request) -> web.Strea
         return web.json_response({"error": "Admin required"}, status=403)
 
     try:
-        data = await request.json()
+        data = await decrypt_request_payload(request)
         token = decrypt_for_web(data.get("token"))
-        service = str(data.get("service", "")).strip()
-        action = str(data.get("action", "")).strip()
+        service = decrypt_for_web(data.get("service"))
+        action = decrypt_for_web(data.get("action"))
         service_type = str(data.get("type", "systemd")).strip()
 
-        if not token or not service or not action:
-            return web.json_response({"error": "Token, service and action required"}, status=400)
+        if not all([token, service, action]):
+            return encrypted_json_response({"error": "Token, service and action required"}, status=400)
         if action not in ALLOWED_SERVICE_ACTIONS:
-            return web.json_response({"error": "Invalid action"}, status=400)
+            return encrypted_json_response({"error": "Invalid action"}, status=400)
 
         node = await nodes_db.get_node_by_token(token)
         if not node:
-            return web.json_response({"error": "Node not found"}, status=404)
+            return encrypted_json_response({"error": "Node not found"}, status=404)
 
         await nodes_db.update_node_task(
             token,
@@ -893,54 +908,81 @@ async def handle_nodes_monitor_service_action(request: web.Request) -> web.Strea
                 "user_id": int(user["id"]),
             },
         )
-        return web.json_response({"status": "ok"})
+        return encrypted_json_response({"status": "ok"})
     except Exception:
         logging.exception("Failed to queue node service action")
-        return web.json_response({"error": "Internal Server Error"}, status=500)
+        return encrypted_json_response({"error": "Internal Server Error"}, status=500)
 
 
 @routes.get("/api/services")
 async def handle_services_list(request: web.Request) -> web.StreamResponse:
     user = await _require_user(request)
     if not user:
-        return web.json_response({"error": "Unauthorized"}, status=401)
+        return web.Response(status=401)
+
+    response = web.StreamResponse(status=200, reason="OK")
+    response.headers["Content-Type"] = "text/event-stream"
+    response.headers["Cache-Control"] = "no-cache"
+    response.headers["Connection"] = "keep-alive"
+    await response.prepare(request)
 
     try:
         services = await asyncio.to_thread(get_all_services_status)
-        return web.json_response(services)
+        payload = json.dumps(services)
+        event_str = f"event: services_list\ndata: {payload}\n\n"
+        await response.write(event_str.encode("utf-8"))
     except Exception:
         logging.exception("Failed to fetch services list")
-        return web.json_response({"error": "Internal Server Error"}, status=500)
+    
+    return response
 
 
 @routes.get("/api/services/available")
 async def handle_available_services(request: web.Request) -> web.StreamResponse:
     user = await _require_user(request)
     if not user:
-        return web.json_response({"error": "Unauthorized"}, status=401)
+        return web.Response(status=401)
+
+    response = web.StreamResponse(status=200, reason="OK")
+    response.headers["Content-Type"] = "text/event-stream"
+    response.headers["Cache-Control"] = "no-cache"
+    response.headers["Connection"] = "keep-alive"
+    await response.prepare(request)
 
     try:
         services = await asyncio.to_thread(get_all_available_services)
-        return web.json_response(services)
+        payload = json.dumps(services)
+        event_str = f"event: available_services\ndata: {payload}\n\n"
+        await response.write(event_str.encode("utf-8"))
     except Exception:
         logging.exception("Failed to fetch available services")
-        return web.json_response({"error": "Internal Server Error"}, status=500)
+        
+    return response
 
 
 @routes.get(r"/api/services/info/{name:.+}")
 async def handle_service_info(request: web.Request) -> web.StreamResponse:
     user = await _require_user(request)
     if not user:
-        return web.json_response({"error": "Unauthorized"}, status=401)
+        return web.Response(status=401)
+
+    response = web.StreamResponse(status=200, reason="OK")
+    response.headers["Content-Type"] = "text/event-stream"
+    response.headers["Cache-Control"] = "no-cache"
+    response.headers["Connection"] = "keep-alive"
+    await response.prepare(request)
 
     try:
         name = request.match_info.get("name", "")
         service_type = str(request.query.get("type", "systemd")).strip()
         info = await get_service_info(name, service_type)
-        return web.json_response(info)
+        payload = json.dumps(info)
+        event_str = f"event: service_info\ndata: {payload}\n\n"
+        await response.write(event_str.encode("utf-8"))
     except Exception:
         logging.exception("Failed to fetch service info")
-        return web.json_response({"error": "Internal Server Error"}, status=500)
+        
+    return response
 
 
 @routes.post("/api/services/{action}")
@@ -958,24 +1000,26 @@ async def api_control_service(request: web.Request) -> web.StreamResponse:
             return web.json_response({"error": "Access Denied (View Only)"}, status=403)
         if action == "stop" and level < 2:
             return web.json_response({"error": "Access Denied (Stop not allowed)"}, status=403)
-
-        data = await request.json()
-        name = str(data.get("name", "")).strip()
-        service_type = str(data.get("type", "systemd")).strip()
+        data = await decrypt_request_payload(request)
+        name = decrypt_for_web(data.get("name"))
         if not name:
-            return web.json_response({"error": "Name required"}, status=400)
+            name = str(data.get("name", "")).strip()
+        service_type = str(data.get("type", "systemd")).strip()
 
-        found = any(service.get("name") == name for service in current_config.MANAGED_SERVICES)
+        if not name:
+            return encrypted_json_response({"error": "Service name required"}, status=400)
+
+        found = any(s.get("name") == name for s in current_config.MANAGED_SERVICES)
         if not found:
-            return web.json_response({"error": "Service not managed"}, status=403)
+            return encrypted_json_response({"error": "Service not managed"}, status=403)
 
         success, message = await perform_service_action(name, service_type, action)
-        if success:
-            return web.json_response({"status": "ok", "message": message})
-        return web.json_response({"error": message}, status=500)
+        if not success:
+            return encrypted_json_response({"error": "Service action failed", "details": message}, status=400)
+        return encrypted_json_response({"status": "ok", "message": message})
     except Exception:
-        logging.exception("Failed to control service")
-        return web.json_response({"error": "Internal Server Error"}, status=500)
+        logging.exception(f"Failed to perform action {action} on service")
+        return encrypted_json_response({"error": "Internal Server Error"}, status=500)
 
 
 @routes.post("/api/services/manage")
@@ -991,27 +1035,27 @@ async def api_services_manage(request: web.Request) -> web.StreamResponse:
         if level < 2:
             return web.json_response({"error": "Access Denied"}, status=403)
 
-        data = await request.json()
+        data = await decrypt_request_payload(request)
         action = str(data.get("action", "")).strip()
         name = str(data.get("name", "")).strip()
         service_type = str(data.get("type", "systemd")).strip()
 
         if not name:
-            return web.json_response({"error": "Name required"}, status=400)
+            return encrypted_json_response({"error": "Name required"}, status=400)
 
         if action == "add":
             success, message = await asyncio.to_thread(add_managed_service, name, service_type)
         elif action == "remove":
             success, message = await asyncio.to_thread(remove_managed_service, name)
         else:
-            return web.json_response({"error": "Invalid action"}, status=400)
+            return encrypted_json_response({"error": "Invalid action"}, status=400)
 
         if success:
-            return web.json_response({"status": "ok", "message": message})
-        return web.json_response({"error": message}, status=400)
+            return encrypted_json_response({"status": "ok", "message": message})
+        return encrypted_json_response({"error": message}, status=400)
     except Exception:
         logging.exception("Failed to manage services list")
-        return web.json_response({"error": "Internal Server Error"}, status=500)
+        return encrypted_json_response({"error": "Internal Server Error"}, status=500)
 
 
 @routes.post("/api/nodes/reset-uptime")
@@ -1021,19 +1065,19 @@ async def api_reset_node_uptime(request: web.Request) -> web.StreamResponse:
         return web.json_response({"error": "Admin required"}, status=403)
 
     try:
-        data = await request.json()
+        data = await decrypt_request_payload(request)
         token = decrypt_for_web(data.get("token"))
         if not token:
-            return web.json_response({"error": "Token required"}, status=400)
+            return encrypted_json_response({"error": "Token required"}, status=400)
 
         success = await nodes_db.reset_node_availability(token)
         if not success:
-            return web.json_response({"error": "Node not found"}, status=404)
+            return encrypted_json_response({"error": "Node not found"}, status=404)
 
-        return web.json_response({"status": "ok"})
+        return encrypted_json_response({"status": "ok"})
     except Exception:
         logging.exception("Failed to reset node uptime")
-        return web.json_response({"error": "Internal Server Error"}, status=500)
+        return encrypted_json_response({"error": "Internal Server Error"}, status=500)
 
 
 __all__ = [
