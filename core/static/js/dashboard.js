@@ -1429,7 +1429,7 @@ async function openNodeDetails(token, color) {
         nodeSSESource.close();
         nodeSSESource = null;
     }
-    nodeSSESource = new EventSource(`/api/events/node?token=${token}`);
+    nodeSSESource = new EventSource(`/api/events/node?token=${encodeURIComponent(token)}`);
 
     nodeSSESource.addEventListener('node_details', (e) => {
         try {
