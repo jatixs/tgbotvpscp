@@ -4,14 +4,14 @@
 
 <h1 align="center">📝 Telegram VPS Management Bot — Список изменений</h1>
 <p align="center">
-    <img src="https://img.shields.io/badge/version-v1.24.5-blue?style=flat-square" alt="Version 1.24.5"/>
-    <img src="https://img.shields.io/badge/build-88-purple?style=flat-square" alt="Build 88"/>
-    <img src="https://img.shields.io/badge/date-Август%2019%202026-green?style=flat-square" alt="Date Aug 19 2026"/>
+    <img src="https://img.shields.io/badge/version-v1.25.0-blue?style=flat-square" alt="Version 1.25.0"/>
+    <img src="https://img.shields.io/badge/build-89-purple?style=flat-square" alt="Build 89"/>
+    <img src="https://img.shields.io/badge/date-Август%2020%202026-green?style=flat-square" alt="Date Aug 20 2026"/>
 	<img src="https://img.shields.io/badge/status-stable-green?style=flat-square" alt="Status Stable"/>
 </p>
 
 ---
-## [1.24.5] - 2026-08-19
+## [1.25.0] - 2026-08-20
 
 ### 🚀 Новые функции:
 * **WebUI (Конструктор дашборда):** Добавлена новая функциональность кастомной сборки интерфейса! Теперь вы можете перетаскивать виджеты (Drag-and-Drop) на главной странице и менять их местами. Блоки автоматически подгоняют свой размер и ширину, чтобы красиво заполнять свободное пространство без образования пустот. Весь созданный макет автоматически сохраняется для вашего устройства.

@@ -4,14 +4,14 @@
 
 <h1 align="center">📝 Telegram VPS Management Bot — Changelog</h1>
 <p align="center">
-    <img src="https://img.shields.io/badge/version-v1.24.5-blue?style=flat-square" alt="Version 1.24.5"/>
-    <img src="https://img.shields.io/badge/build-88-purple?style=flat-square" alt="Build 88"/>
-    <img src="https://img.shields.io/badge/date-Aug%2019%202026-green?style=flat-square" alt="Date Aug 19 2026"/>
+    <img src="https://img.shields.io/badge/version-v1.25.0-blue?style=flat-square" alt="Version 1.25.0"/>
+    <img src="https://img.shields.io/badge/build-89-purple?style=flat-square" alt="Build 89"/>
+    <img src="https://img.shields.io/badge/date-Aug%2020%202026-green?style=flat-square" alt="Date Aug 20 2026"/>
 	<img src="https://img.shields.io/badge/status-stable-green?style=flat-square" alt="Status Stable"/>
 </p>
 
 ---
-## [1.24.5] - 2026-08-19
+## [1.25.0] - 2026-08-20
 
 ### 🚀 New Features:
 * **WebUI (Dashboard Constructor):** Added a new custom interface building feature! You can now rearrange widgets on the main page using drag-and-drop. Blocks automatically adjust their size and width to elegantly fill empty space without leaving gaps. Your custom layout is automatically saved for your device.
