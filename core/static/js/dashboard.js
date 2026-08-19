@@ -422,7 +422,7 @@ function updateVisibleNodes(elements, dataList) {
                 if (pingVal >= 50 && pingVal < 150) pingColor = 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400';
                 else if (pingVal >= 150) pingColor = 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400';
                 pingBdg.className = `inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold ${pingColor}`;
-                pingBdg.innerText = pingVal + 'ms';
+                pingBdg.innerText = pingVal + ((typeof I18N !== 'undefined' && I18N.web_agent_ping_unit) ? I18N.web_agent_ping_unit : 'ms');
             } else {
                 pingBdg.className = 'hidden';
             }
@@ -625,7 +625,7 @@ function renderNextNodeBatch() {
             let pingColor = 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400';
             if (pingVal >= 50 && pingVal < 150) pingColor = 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400';
             else if (pingVal >= 150) pingColor = 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400';
-            pingHtml = `<span data-ref="ping-badge" class="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold ${pingColor}">${pingVal}ms</span>`;
+            pingHtml = `<span data-ref="ping-badge" class="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold ${pingColor}">${pingVal}${(typeof I18N !== 'undefined' && I18N.web_agent_ping_unit) ? I18N.web_agent_ping_unit : 'ms'}</span>`;
         } else {
             pingHtml = `<span data-ref="ping-badge" class="hidden"></span>`;
         }
