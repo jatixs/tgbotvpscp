@@ -74,7 +74,8 @@ async def measure_agent_ping() -> str | None:
         if not online_nodes:
             return None
         target_node = online_nodes[0]
-        node_ping = target_node.get("ping", "n/a")
+        node_stats = target_node.get("stats", {})
+        node_ping = node_stats.get("ping", "n/a")
         if node_ping != "n/a":
             return str(node_ping)
         return None
