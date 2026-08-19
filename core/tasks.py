@@ -164,11 +164,14 @@ async def agent_monitor() -> None:
             mem = psutil.virtual_memory()
             ram_pct = round((mem.total - mem.available) / mem.total * 100, 1) if mem.total > 0 else 0
             net = psutil.net_io_counters()
+            disk = psutil.disk_usage('/')
+            disk_pct = disk.percent
             AGENT_HISTORY.append(
                 {
                     "t": int(time.time()),
                     "c": cpu,
                     "r": ram_pct,
+                    "d": disk_pct,
                     "rx": net.bytes_recv,
                     "tx": net.bytes_sent,
                 }
