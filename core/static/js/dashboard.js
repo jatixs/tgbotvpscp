@@ -2971,8 +2971,8 @@ document.addEventListener('app:action:toggle-service-managed', e => {
     toggleServiceManaged(e.detail.target.getAttribute('data-name'), e.detail.target.getAttribute('data-type'), isManaged, e.detail.target);
 });
 const DASHBOARD_SIZES = {
-    'small': 'col-span-12 md:col-span-6 lg:col-span-3',
-    'medium': 'col-span-12 md:col-span-6 lg:col-span-4',
+    'small': 'col-span-12 sm:col-span-6 lg:col-span-3',
+    'medium': 'col-span-12 sm:col-span-6 lg:col-span-4',
     'standard': 'col-span-12 lg:col-span-6',
     'wide': 'col-span-12 lg:col-span-8',
     'large': 'col-span-12'
@@ -3067,14 +3067,17 @@ function saveDashboardLayout() {
 
 function autoSizeMovedBlock(item) {
     const blocks = Array.from(document.querySelectorAll('.dashboard-block:not(.hidden-block)'));
+    const spanOf = (size) => size === 'small' ? 3 : size === 'medium' ? 4 : size === 'standard' ? 6 : size === 'wide' ? 8 : 12;
+
+    // Walk only the blocks preceding the dropped item (in its new position) to find
+    // how much of its actual row is already occupied, mirroring CSS grid auto-flow.
     let rowSpace = 0;
-    blocks.forEach(b => {
-        if (b === item) return;
-        const size = b.getAttribute('data-current-size');
-        const span = size === 'small' ? 3 : size === 'medium' ? 4 : size === 'standard' ? 6 : size === 'wide' ? 8 : 12;
-        rowSpace += span;
-        if (rowSpace >= 12) rowSpace = rowSpace % 12;
-    });
+    for (const b of blocks) {
+        if (b === item) break;
+        const span = spanOf(b.getAttribute('data-current-size'));
+        rowSpace = (rowSpace + span > 12) ? span : rowSpace + span;
+    }
+
     const remaining = 12 - rowSpace;
     let newSize = 'standard';
     if (remaining <= 3) newSize = 'small';
