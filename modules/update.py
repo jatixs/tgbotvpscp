@@ -270,7 +270,7 @@ async def run_system_update(callback: types.CallbackQuery):
         base_cmd = "DEBIAN_FRONTEND=noninteractive apt update && DEBIAN_FRONTEND=noninteractive apt upgrade -y && apt autoremove -y"
         cmd_args = ["nsenter", "-t", "1", "-m", "-u", "-i", "-n", "-p", "--", "bash", "-c", base_cmd]
     else:
-        base_cmd = "sudo DEBIAN_FRONTEND=noninteractive apt update && sudo DEBIAN_FRONTEND=noninteractive apt upgrade -y && sudo apt autoremove -y"
+        base_cmd = "sudo /opt/tg-bot/scripts/update_os.sh"
         cmd_args = ["bash", "-c", base_cmd]
 
     code, out, err = await run_command(*cmd_args)

@@ -83,7 +83,7 @@
 - ✅ **WAF** — защита от SQL Injection, XSS, Path Traversal
 - ✅ **Rate Limiting & Brute-force Protection** — защита от DDoS и подбора паролей
 - ✅ **Audit Logging** — детальные логи всех событий
-- ✅ **Шифрование данных** — Fernet (AES) + XOR + Argon2 для паролей
+- ✅ **Шифрование данных** — Fernet (AES) + AES-256-CBC + Argon2 для паролей
 - ✅ **DOMPurify** — строгая фильтрация контента на стороне клиента
 
 ### 🎨 Современный веб-интерфейс
@@ -148,7 +148,7 @@
 - **Database:** SQLite (aiosqlite)
 - **Frontend:** Tailwind CSS, Vanilla JavaScript, Chart.js
 - **Real-time:** Server-Sent Events (SSE)
-- **Security:** Argon2, Fernet, XOR encryption
+- **Security:** Argon2, Fernet, AES-256-CBC encryption
 - **Infrastructure:** Docker, Docker Compose, Systemd
 
 📖 Подробнее: [ARCHITECTURE.md](ARCHITECTURE.md)
@@ -372,7 +372,7 @@ http://YOUR_SERVER_IP:8080
 
 #### 🔹 Уровень 4: Data Encryption
 - **Fernet** — симметричное шифрование конфигов (`users.json`, `services.json`)
-- **XOR + Base64** — легковесное шифрование для веб-клиента (SSE events)
+- **AES-256-CBC + Base64** — шифрование для веб-клиента (SSE events)
 
 #### 🔹 Уровень 5: Audit Logging
 

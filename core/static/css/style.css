@@ -804,26 +804,6 @@ html.dark .monitor-link-btn:hover {
 		margin: 0 4px !important;
 		flex-shrink: 0 !important;
 	}
-
-	html.dark #networkBadgesDivider {
-		background-color: #4b5563 !important;
-		/* Темно-серый цвет для темной темы */
-	}
-
-	/* Уменьшаем размер шрифтов в бейджах для компактности */
-	#agentPingBadge span:first-child {
-		font-size: 0.55rem !important;
-	}
-
-	#agentPing,
-	#agentIp {
-		font-size: 0.625rem !important;
-	}
-
-	#agentIpBadge svg {
-		width: 0.875rem !important;
-		height: 0.875rem !important;
-	}
 }
 
 /* Lock Icon Styles */
@@ -965,4 +945,182 @@ html.amoled .dark\:bg-gray-800 {
 }
 html.amoled .dark\:bg-black\/30 {
     background-color: rgba(0, 0, 0, 0.5) !important;
+}
+
+/* --- Dashboard Edit Mode --- */
+.dashboard-block {
+    position: relative;
+    /* transition is already handled by tailwind classes */
+}
+
+/* Overlay for Edit Mode */
+.dashboard-block .edit-overlay {
+    display: none;
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(4px);
+    z-index: 40;
+    border-radius: inherit;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+
+.edit-mode .dashboard-block {
+    border: 2px dashed rgba(59, 130, 246, 0.5) !important; /* Blue dashed border */
+    cursor: grab;
+}
+
+.edit-mode .dashboard-block:active {
+    cursor: grabbing;
+}
+
+.edit-mode .dashboard-block .edit-overlay {
+    display: flex;
+    opacity: 1;
+}
+
+.edit-overlay button {
+    cursor: pointer;
+    pointer-events: auto; /* Buttons inside overlay should be clickable */
+}
+
+/* Hide animations */
+.dashboard-block.hidden-block {
+    display: none !important;
+}
+
+/* --- Missing Tailwind Grid Classes for Dashboard Customization --- */
+.grid-cols-12 { grid-template-columns: repeat(12, minmax(0, 1fr)); }
+.col-span-12 { grid-column: span 12 / span 12; }
+
+@media (min-width: 640px) {
+    .sm\:col-span-6 { grid-column: span 6 / span 6; }
+}
+
+@media (min-width: 1024px) {
+    .lg\:col-span-3 { grid-column: span 3 / span 3; }
+    .lg\:col-span-4 { grid-column: span 4 / span 4; }
+    .lg\:col-span-6 { grid-column: span 6 / span 6; }
+    .lg\:col-span-8 { grid-column: span 8 / span 8; }
+}
+
+/* --- Dynamic Quick Stats Charts --- */
+.dashboard-block[data-current-size="small"] .quick-stat-bar { display: block; }
+.dashboard-block[data-current-size="small"] .quick-stat-chart { display: none; }
+
+.dashboard-block:not([data-current-size="small"]) .quick-stat-bar { display: none !important; }
+.dashboard-block:not([data-current-size="small"]) .quick-stat-chart { display: block !important; }
+
+/* --- Small Size Dashboard Block Adaptations (Desktop Only) --- */
+@media (min-width: 1024px) {
+    .dashboard-block[data-current-size="small"] {
+        padding: 1rem !important;
+    }
+
+    /* Agent Stats adaptation */
+    .dashboard-block[data-current-size="small"] .agent-stats-chart {
+        display: none !important;
+    }
+    .dashboard-block[data-current-size="small"] .agent-stats-bars {
+        display: flex !important;
+    }
+
+    /* Network Badges */
+    .dashboard-block[data-current-size="small"] #networkBadgesContainer {
+        width: 100%;
+        margin-top: 0.5rem;
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+    .dashboard-block[data-current-size="small"] #networkBadgesContainer > div {
+        width: 100%;
+        justify-content: space-between;
+        padding: 1rem;
+    }
+    .dashboard-block[data-current-size="small"] #networkBadgesDivider {
+        display: none;
+    }
+
+    /* Services Manager */
+    .dashboard-block[data-current-size="small"] #services-container {
+        grid-template-columns: 1fr !important;
+        gap: 0.5rem;
+    }
+
+    /* Node Manager */
+    .dashboard-block[data-current-size="small"] .hidden.lg\:block,
+    .dashboard-block[data-current-size="small"] .hidden.md\:block,
+    .dashboard-block[data-current-size="small"] .hidden.sm\:block {
+        display: none !important;
+    }
+    .dashboard-block[data-current-size="small"] .flex-row > .ml-4 {
+        margin-left: 0.5rem;
+    }
+
+    /* Traffic Stats */
+    .dashboard-block[data-current-size="small"] [data-block-id="traffic_stats"] .text-2xl {
+        font-size: 1.25rem;
+    }
+}
+
+/* Node Manager card columns (base widths, overridden below on narrow block sizes) */
+.node-stat-col {
+    width: 42px;
+    min-width: 42px;
+}
+.node-stat-col-wide {
+    width: 55px;
+    min-width: 55px;
+}
+
+/* Node cards use viewport-based sm: breakpoints, which don't know about the
+   dashboard block's own (container) width, so they must be forced to stack
+   whenever the block itself is resized narrower than "standard". Kept compact
+   (tighter padding/gaps, 3-column stat grid) so this block doesn't grow taller
+   than its row neighbors and stretch them into empty space. */
+@media (min-width: 1024px) {
+    .dashboard-block[data-current-size="small"] #nodesList .node-row,
+    .dashboard-block[data-current-size="medium"] #nodesList .node-row {
+        flex-direction: column !important;
+        align-items: stretch !important;
+        padding: 0.625rem 0.75rem !important;
+        gap: 0.5rem !important;
+    }
+    .dashboard-block[data-current-size="small"] #nodesList .node-stats,
+    .dashboard-block[data-current-size="medium"] #nodesList .node-stats {
+        display: grid !important;
+        grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+        justify-items: center !important;
+        align-items: center !important;
+        row-gap: 0.5rem !important;
+        column-gap: 0.25rem !important;
+        width: 100% !important;
+        margin-top: 0 !important;
+        padding: 0.5rem 0 0 !important;
+    }
+    .dashboard-block[data-current-size="small"] #nodesList .node-stat-col,
+    .dashboard-block[data-current-size="medium"] #nodesList .node-stat-col,
+    .dashboard-block[data-current-size="small"] #nodesList .node-stat-col-wide,
+    .dashboard-block[data-current-size="medium"] #nodesList .node-stat-col-wide {
+        width: 100% !important;
+        min-width: 0 !important;
+    }
+}
+
+
+/* Dashboard block stretch adaptation */
+.dashboard-block {
+    display: flex;
+    flex-direction: column;
+}
+.dashboard-block > * {
+    flex-shrink: 0;
+}
+.dashboard-block .lazy-block {
+    flex: 1 1 auto;
 }
