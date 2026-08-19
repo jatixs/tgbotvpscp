@@ -262,7 +262,7 @@ STRINGS = {
 - `get_country_flag(ip)` — Get country flag by IP (GeoIP)
 
 **Security:**
-- `encrypt_for_web(data)` — XOR + Base64 encryption for SSE
+- `encrypt_for_web(data)` — AES-256-CBC + Base64 encryption for SSE
 - `decrypt_for_web(data)` — Client-side decryption
 - `log_audit_event()` — Audit logging (GDPR compliant)
 - `mask_sensitive_data()` — Mask IPs, tokens, passwords in logs
@@ -534,7 +534,7 @@ GET  /api/agent/ipv4           — Agent IPv4 addresses
 
 **Restriction:** a regular browser navigation to `GET /api/events*` returns informational text instead of metrics. Proper usage requires `EventSource` with `Accept: text/event-stream`. Likewise, `GET /api/terminal/ws` requires `Upgrade: websocket` and returns `426 Upgrade Required` for a plain HTTP request.
 
-**Encryption:** All data encrypted with XOR + Base64 via `encrypt_for_web()` before sending.
+**Encryption:** All data encrypted with AES-256-CBC + Base64 via `encrypt_for_web()` before sending.
 
 ---
 
@@ -558,7 +558,7 @@ GET  /site.webmanifest → PWA manifest (JSON)
     "I18N": { ... },         # Localized strings
     "USER_ROLE": "owner",    # Current user role
     "IS_MAIN_ADMIN": True,   # Is main admin
-    "WEB_KEY": "...",        # XOR decryption key
+    "WEB_KEY": "...",        # AES decryption key
     "CSRF_TOKEN": "...",     # CSRF token
 }
 ```
@@ -668,7 +668,7 @@ def has_subcategory() -> bool:
 - Real-time updates via SSE
 
 **Security:**
-- Data encryption: XOR + Base64 (backend → frontend)
+- Data encryption: AES-256-CBC + Base64 (backend → frontend)
 - Persistent configuration: `config/services.json` (Fernet)
 
 ---
@@ -856,7 +856,7 @@ Send message + store ID for deletion
 ```
 Backend Event (metric, notification)
     ↓
-encrypt_for_web(data) → XOR + Base64
+encrypt_for_web(data) → AES-256-CBC + Base64
     ↓
 Push to WEB_NOTIFICATIONS deque
     ↓
@@ -866,7 +866,7 @@ streaming.py → SSE endpoint checks queue
     ↓
 Frontend EventSource (JavaScript)
     ↓
-decrypt() → XOR + Base64
+decrypt() → AES-256-CBC + Base64
     ↓
 Update DOM in real-time
 ```
@@ -909,7 +909,7 @@ Update DOM in real-time
 - User management, sessions, updates
 
 #### **common.js**
-- `encrypt()` / `decrypt()` — XOR encryption/decryption
+- `encrypt()` / `decrypt()` — AES-256-CBC encryption/decryption
 - `animateModalOpen()` / `animateModalClose()` — Modal animations
 - `showNotification()` — Toast notifications
 - `formatBytes()` — Size formatting
