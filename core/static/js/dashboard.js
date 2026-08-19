@@ -2970,3 +2970,265 @@ document.addEventListener('app:action:toggle-service-managed', e => {
     const isManaged = e.detail.target.getAttribute('data-managed') === 'true';
     toggleServiceManaged(e.detail.target.getAttribute('data-name'), e.detail.target.getAttribute('data-type'), isManaged, e.detail.target);
 });
+const DASHBOARD_SIZES = {
+    'small': 'col-span-12 md:col-span-6 lg:col-span-3',
+    'medium': 'col-span-12 md:col-span-6 lg:col-span-4',
+    'standard': 'col-span-12 lg:col-span-6',
+    'wide': 'col-span-12 lg:col-span-8',
+    'large': 'col-span-12'
+};
+const SIZES_ORDER = ['small', 'medium', 'standard', 'wide', 'large'];
+
+let isDashboardEditMode = false;
+let dashboardSortable = null;
+
+function applyDashboardLayout() {
+    const saved = localStorage.getItem('dashboardLayout');
+    if (!saved) return;
+    try {
+        const layout = JSON.parse(saved);
+        const container = document.getElementById('dashboardBlocksContainer');
+        if (!container) return;
+        layout.forEach(item => {
+            const block = document.querySelector(`[data-block-id="${item.id}"]`);
+            if (block) {
+                container.appendChild(block);
+                if (item.size) {
+                    block.setAttribute('data-current-size', item.size);
+                    Object.values(DASHBOARD_SIZES).forEach(cls => {
+                        cls.split(' ').forEach(c => block.classList.remove(c));
+                    });
+                    DASHBOARD_SIZES[item.size].split(' ').forEach(c => block.classList.add(c));
+                }
+                if (item.hidden) {
+                    block.classList.add('hidden-block');
+                }
+            }
+        });
+    } catch(e) {}
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    applyDashboardLayout();
+});
+
+function initDashboardEditOverlays() {
+    const blocks = document.querySelectorAll('.dashboard-block');
+    blocks.forEach(block => {
+        if (!block.querySelector('.edit-overlay')) {
+            const overlay = document.createElement('div');
+            overlay.className = 'edit-overlay';
+            overlay.innerHTML = `
+                <div class="flex gap-2">
+                    <button onclick="changeDashboardBlockSize(event, this)" class="bg-blue-500 hover:bg-blue-600 text-white text-xs px-3 py-1.5 rounded-lg font-bold transition flex items-center gap-1 shadow-lg">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" /></svg>
+                        ${(typeof I18N !== 'undefined' && I18N.web_widget_size) ? I18N.web_widget_size : 'Размер'}
+                    </button>
+                    <button onclick="hideDashboardBlock(event, this)" class="bg-red-500 hover:bg-red-600 text-white text-xs px-3 py-1.5 rounded-lg font-bold transition flex items-center gap-1 shadow-lg">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" /></svg>
+                        ${(typeof I18N !== 'undefined' && I18N.web_widget_hide) ? I18N.web_widget_hide : 'Скрыть'}
+                    </button>
+                </div>
+            `;
+            block.appendChild(overlay);
+        }
+    });
+}
+
+function saveDashboardLayout() {
+    const blocks = document.querySelectorAll('.dashboard-block');
+    const layout = [];
+    blocks.forEach(block => {
+        layout.push({
+            id: block.getAttribute('data-block-id'),
+            size: block.getAttribute('data-current-size'),
+            hidden: block.classList.contains('hidden-block')
+        });
+    });
+    localStorage.setItem('dashboardLayout', JSON.stringify(layout));
+}
+
+function autoSizeMovedBlock(item) {
+    const blocks = Array.from(document.querySelectorAll('.dashboard-block:not(.hidden-block)'));
+    let rowSpace = 0;
+    blocks.forEach(b => {
+        if (b === item) return;
+        const size = b.getAttribute('data-current-size');
+        const span = size === 'small' ? 3 : size === 'medium' ? 4 : size === 'standard' ? 6 : size === 'wide' ? 8 : 12;
+        rowSpace += span;
+        if (rowSpace >= 12) rowSpace = rowSpace % 12;
+    });
+    const remaining = 12 - rowSpace;
+    let newSize = 'standard';
+    if (remaining <= 3) newSize = 'small';
+    else if (remaining <= 4) newSize = 'medium';
+    else if (remaining <= 6) newSize = 'standard';
+    else if (remaining <= 8) newSize = 'wide';
+    else newSize = 'large';
+    
+    item.setAttribute('data-current-size', newSize);
+    Object.values(DASHBOARD_SIZES).forEach(cls => {
+        cls.split(' ').forEach(c => item.classList.remove(c));
+    });
+    DASHBOARD_SIZES[newSize].split(' ').forEach(c => item.classList.add(c));
+}
+
+function toggleDashboardEditMode() {
+    const container = document.getElementById('dashboardBlocksContainer');
+    const panel = document.getElementById('hiddenBlocksPanel');
+    const btn = document.getElementById('btnEditDashboard');
+    if (!container) return;
+    
+    isDashboardEditMode = !isDashboardEditMode;
+    
+    if (isDashboardEditMode) {
+        initDashboardEditOverlays();
+        container.classList.add('edit-mode');
+        panel.classList.remove('hidden');
+        setTimeout(() => {
+            panel.classList.remove('opacity-0', 'translate-y-10');
+            panel.classList.add('opacity-100', 'translate-y-0');
+        }, 10);
+        
+        btn.classList.add('bg-blue-500', 'text-white');
+        btn.classList.remove('bg-blue-500/10', 'text-blue-600', 'dark:text-blue-400');
+        
+        if (!dashboardSortable) {
+            dashboardSortable = Sortable.create(container, {
+                animation: 300,
+                easing: "cubic-bezier(0.25, 1, 0.5, 1)",
+                handle: '.edit-overlay',
+                ghostClass: 'opacity-50',
+                onEnd: function(evt) {
+                    autoSizeMovedBlock(evt.item);
+                    saveDashboardLayout();
+                    applyDashboardLayout();
+                }
+            });
+        }
+        
+        updateHiddenBlocksPanel();
+    } else {
+        container.classList.remove('edit-mode');
+        panel.classList.remove('opacity-100', 'translate-y-0');
+        panel.classList.add('opacity-0', 'translate-y-10');
+        setTimeout(() => panel.classList.add('hidden'), 300);
+        
+        btn.classList.remove('bg-blue-500', 'text-white');
+        btn.classList.add('bg-blue-500/10', 'text-blue-600', 'dark:text-blue-400');
+        
+        saveDashboardLayout();
+    }
+}
+
+function changeDashboardBlockSize(e, btn) {
+    e.stopPropagation();
+    const block = btn.closest('.dashboard-block');
+    const currentSize = block.getAttribute('data-current-size');
+    let currentIndex = SIZES_ORDER.indexOf(currentSize);
+    
+    if (currentIndex === -1) currentIndex = 2; // default standard
+    
+    const nextIndex = (currentIndex + 1) % SIZES_ORDER.length;
+    const nextSize = SIZES_ORDER[nextIndex];
+    
+    block.setAttribute('data-current-size', nextSize);
+    
+    Object.values(DASHBOARD_SIZES).forEach(classes => {
+        classes.split(' ').forEach(cls => block.classList.remove(cls));
+    });
+    
+    DASHBOARD_SIZES[nextSize].split(' ').forEach(cls => block.classList.add(cls));
+    
+    block.style.transform = 'scale(0.98)';
+    setTimeout(() => block.style.transform = '', 150);
+    
+    saveDashboardLayout();
+}
+
+function hideDashboardBlock(e, btn) {
+    e.stopPropagation();
+    const block = btn.closest('.dashboard-block');
+    
+    block.style.opacity = '0';
+    block.style.transform = 'scale(0.9)';
+    
+    setTimeout(() => {
+        block.classList.add('hidden-block');
+        block.style.opacity = '';
+        block.style.transform = '';
+        saveDashboardLayout();
+        updateHiddenBlocksPanel();
+    }, 300);
+}
+
+function restoreDashboardBlock(blockId) {
+    const block = document.querySelector(`[data-block-id="${blockId}"]`);
+    if (block) {
+        block.classList.remove('hidden-block');
+        block.style.opacity = '0';
+        block.style.transform = 'scale(0.9)';
+        
+        void block.offsetWidth;
+        
+        block.style.opacity = '1';
+        block.style.transform = 'scale(1)';
+        setTimeout(() => {
+            block.style.opacity = '';
+            block.style.transform = '';
+        }, 300);
+        
+        saveDashboardLayout();
+        updateHiddenBlocksPanel();
+    }
+}
+
+function updateHiddenBlocksPanel() {
+    const hiddenBlocks = document.querySelectorAll('.dashboard-block.hidden-block');
+    const list = document.getElementById('hiddenBlocksList');
+    if (!list) return;
+    
+    const existingRows = list.querySelectorAll('.hidden-widget-row');
+    existingRows.forEach(row => row.remove());
+    
+    let emptyMsg = document.getElementById('hiddenBlocksEmpty');
+    if (!emptyMsg) {
+        emptyMsg = document.createElement('div');
+        emptyMsg.id = 'hiddenBlocksEmpty';
+        emptyMsg.className = 'text-xs text-gray-400 italic text-center py-2';
+        list.appendChild(emptyMsg);
+    }
+    emptyMsg.innerText = (typeof I18N !== 'undefined' && I18N.web_hidden_widgets_empty) ? I18N.web_hidden_widgets_empty : 'Нет скрытых виджетов';
+    
+    if (hiddenBlocks.length === 0) {
+        emptyMsg.style.display = 'block';
+    } else {
+        emptyMsg.style.display = 'none';
+        hiddenBlocks.forEach(block => {
+            const blockId = block.getAttribute('data-block-id');
+            const namesMap = {
+                'quick_stats_uptime': (typeof I18N !== 'undefined' && I18N.web_uptime) ? I18N.web_uptime : 'Аптайм',
+                'quick_stats_cpu': 'CPU',
+                'quick_stats_ram': 'RAM',
+                'quick_stats_disk': 'SSD',
+                'agent_stats': (typeof I18N !== 'undefined' && I18N.web_agent_stats_title) ? I18N.web_agent_stats_title : 'График Агента',
+                'traffic_stats': (typeof I18N !== 'undefined' && I18N.web_traffic_total) ? I18N.web_traffic_total : 'Трафик',
+                'services_manager': (typeof I18N !== 'undefined' && I18N.web_services_title) ? I18N.web_services_title : 'Менеджер Сервисов',
+                'nodes_manager': (typeof I18N !== 'undefined' && I18N.web_node_mgmt_title) ? I18N.web_node_mgmt_title : 'Менеджер Нод',
+                'system_logs': (typeof I18N !== 'undefined' && I18N.web_system_logs_title) ? I18N.web_system_logs_title : 'Системные Логи'
+            };
+            const blockName = namesMap[blockId] || blockId;
+            
+            const div = document.createElement('div');
+            div.className = 'hidden-widget-row flex justify-between items-center bg-gray-50 dark:bg-white/5 p-2 rounded-xl border border-gray-100 dark:border-white/5';
+            div.innerHTML = `
+                <span class="text-sm font-medium text-gray-700 dark:text-gray-300">${blockName}</span>
+                <button onclick="restoreDashboardBlock('${blockId}')" class="p-1.5 bg-green-500/20 text-green-600 dark:text-green-400 rounded-lg hover:bg-green-500 hover:text-white transition" title="${(typeof I18N !== 'undefined' && I18N.web_widget_restore) ? I18N.web_widget_restore : 'Восстановить'}">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" /></svg>
+                </button>
+            `;
+            list.appendChild(div);
+        });
+    }
+}
+

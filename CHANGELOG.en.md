@@ -13,6 +13,9 @@
 ---
 ## [1.24.5] - 2026-08-19
 
+### 🚀 New Features:
+* **WebUI (Dashboard Constructor):** Added a new custom interface building feature! You can now rearrange widgets on the main page using drag-and-drop. Blocks automatically adjust their size and width to elegantly fill empty space without leaving gaps. Your custom layout is automatically saved for your device.
+
 ### 🔒 Security & API:
 * **Package Security:** Pinned `setuptools` version (>=83.0.0) across deployment scripts to fix CVE-2025-47273 (Path Traversal) and CVE-2026-59890 (MANIFEST.in bypass).
 * **Sudo Isolation:** Restricted bot user permissions. Removed `NOPASSWD: ALL` (and `apt` access) to prevent privilege escalation, added support for safe bash wrapper scripts.
