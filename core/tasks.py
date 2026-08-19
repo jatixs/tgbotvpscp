@@ -71,13 +71,20 @@ async def measure_agent_ping() -> str | None:
         timeout_sec = getattr(current_config, "NODE_OFFLINE_TIMEOUT", 120)
         now = time.time()
         online_nodes = [n for n in all_nodes.values() if now - n.get("last_seen", 0) < timeout_sec and not n.get("is_restarting")]
-        if not online_nodes:
-            return None
-        target_node = online_nodes[0]
-        node_stats = target_node.get("stats", {})
-        node_ping = node_stats.get("ping", "n/a")
-        if node_ping != "n/a":
-            return str(node_ping)
+        best_ping = None
+        for node in online_nodes:
+            node_stats = node.get("stats", {})
+            ping_val = node_stats.get("ping", "n/a")
+            if ping_val != "n/a":
+                try:
+                    ping_float = float(ping_val)
+                    if best_ping is None or ping_float < best_ping:
+                        best_ping = ping_float
+                except (ValueError, TypeError):
+                    pass
+        
+        if best_ping is not None:
+            return str(round(best_ping, 1)) if best_ping % 1 else str(int(best_ping))
         return None
 
     if ping_mode == "icmp":
