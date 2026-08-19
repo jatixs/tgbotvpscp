@@ -741,7 +741,7 @@ node/
 #### 4️⃣ Data Encryption
 - **Fernet (AES)** — Симметричное шифрование конфигов
   - `users.json`, `services.json`, `alerts_config.json`, `bot.db`
-- **AES-256-CBC + Base64** — Легковесное шифрование для SSE-потоков
+- **AES-256-CBC + Base64** — шифрование для SSE-потоков
 - **HMAC** — Подпись heartbeat-сообщений от нод
 
 #### 5️⃣ Audit Logging

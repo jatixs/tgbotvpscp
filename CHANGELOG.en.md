@@ -349,7 +349,7 @@
 ### 🚀 Service Manager:
 
 * **SSE for Services:** Implemented Server-Sent Events stream for `/api/services` with automatic updates every 5 seconds.
-* **End-to-End Encryption:** Service data is encrypted on the backend (XOR + Base64) and decrypted on the frontend.
+* **End-to-End Encryption:** Service data is encrypted on the backend (AES-256-CBC + Base64) and decrypted on the frontend.
 * **Persistent Configuration:** Service Manager settings are saved to encrypted file `/opt/tg-bot/config/services.json` (Fernet encryption).
 * **Smart Reload:** The service refresh button restarts the SSE connection instead of creating new polling requests.
 * **Detailed Information:** Service info modal styled to match the hint system design.

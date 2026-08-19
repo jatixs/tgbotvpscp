@@ -739,7 +739,7 @@ Attack Patterns:
 #### 4️⃣ Data Encryption
 - **Fernet (AES)** — Symmetric config encryption
   - `users.json`, `services.json`, `alerts_config.json`, `bot.db`
-- **XOR + Base64** — Lightweight encryption for SSE streams
+- **AES-256-CBC + Base64** — Encryption for SSE streams
 - **HMAC** — Heartbeat message signing from nodes
 
 #### 5️⃣ Audit Logging
