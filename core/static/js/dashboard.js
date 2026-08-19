@@ -49,6 +49,11 @@ let logSSESource = null;
 let servicesSSESource = null;
 
 let agentChart = null;
+let quickCpuChart = null;
+let quickRamChart = null;
+let quickDiskChart = null;
+const QUICK_STATS_HISTORY_MAX = 30;
+const quickStatsHistory = { cpu: [], ram: [], disk: [] };
 let allNodesData = [];
 let currentNodeToken = null;
 let currentRenderList = [];
@@ -57,23 +62,6 @@ const NODES_BATCH_SIZE = 15;
 let nodesFirstUpdateReceived = false;
 
 
-
-function encryptData(text) {
-    if (!text) return "";
-    if (typeof WEB_KEY === 'undefined' || !WEB_KEY) return text;
-    try {
-        const bytes = new TextEncoder().encode(text);
-        let result = "";
-        for (let i = 0; i < bytes.length; i++) {
-            const keyChar = WEB_KEY.charCodeAt(i % WEB_KEY.length);
-            result += String.fromCharCode(bytes[i] ^ keyChar);
-        }
-        return btoa(result);
-    } catch (e) {
-        console.error("Encryption error:", e);
-        return text;
-    }
-}
 
 window.addEventListener('themeChanged', () => {
     updateChartsColors();
@@ -633,7 +621,7 @@ function renderNextNodeBatch() {
         return `
         <div data-token="${escapeHtml(node.token)}" class="bg-white dark:bg-white/5 hover:bg-gray-50 dark:hover:bg-white/10 transition-all duration-200 rounded-xl border border-gray-100 dark:border-white/5 cursor-pointer shadow-sm hover:shadow-md group animate-fade-in-up" data-action="open-node-details" data-color="${ui.statusColor}">
             
-            <div class="p-3 sm:p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
+            <div class="node-row p-3 sm:p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
                 
                 <div class="flex flex-1 items-center gap-3 min-w-0">
                     <div class="${dragHandleClass}drag-handle p-2 -ml-2 text-gray-300 hover:text-gray-500 dark:text-white/20 dark:hover:text-white/50 cursor-grab active:cursor-grabbing transition" data-action="stop-propagation">
@@ -654,24 +642,24 @@ function renderNextNodeBatch() {
                     </div>
                 </div>
 
-                <div class="flex flex-wrap sm:flex-nowrap items-center justify-between sm:justify-end gap-x-1 gap-y-5 sm:gap-4 mt-1 sm:mt-0 pt-3 sm:pt-0 border-t border-gray-100 dark:border-white/5 sm:border-0 pb-5 sm:pb-0 w-full sm:w-auto">
+                <div class="node-stats flex flex-wrap sm:flex-nowrap items-center justify-between sm:justify-end gap-x-1 gap-y-5 sm:gap-4 mt-1 sm:mt-0 pt-3 sm:pt-0 border-t border-gray-100 dark:border-white/5 sm:border-0 pb-5 sm:pb-0 w-full sm:w-auto">
                     
-                    <div class="text-center flex-1 sm:flex-none" style="width:42px;min-width:42px">
+                    <div class="node-stat-col text-center flex-1 sm:flex-none">
                         <div class="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">${lblCpu}</div>
                         <div data-ref="cpu-val" class="text-xs font-mono font-bold ${ui.cpuColor}" style="font-variant-numeric:tabular-nums">${ui.cpu}%</div>
                     </div>
 
-                    <div class="text-center flex-1 sm:flex-none" style="width:42px;min-width:42px">
+                    <div class="node-stat-col text-center flex-1 sm:flex-none">
                         <div class="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">${lblRam}</div>
                         <div data-ref="ram-val" class="text-xs font-mono font-bold ${ui.ramColor}" style="font-variant-numeric:tabular-nums">${ui.ram}%</div>
                     </div>
 
-                    <div class="text-center flex-1 sm:flex-none" style="width:42px;min-width:42px">
+                    <div class="node-stat-col text-center flex-1 sm:flex-none">
                         <div class="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">${lblDisk}</div>
                         <div data-ref="disk-val" class="text-xs font-mono font-bold ${ui.diskColor}" style="font-variant-numeric:tabular-nums">${ui.disk}%</div>
                     </div>
 
-                    <div class="text-center flex-1 sm:flex-none" style="width:55px;min-width:55px">
+                    <div class="node-stat-col-wide text-center flex-1 sm:flex-none">
                         <div class="flex items-center justify-center gap-0.5 mb-0.5">
                             <svg class="w-3 h-3 text-green-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 14l-7 7m0 0l-7-7m7 7V3"/></svg>
                             <span data-ref="rx-unit" class="text-[9px] font-bold text-gray-400 uppercase tracking-wider">${rxUnit}</span>
@@ -679,7 +667,7 @@ function renderNextNodeBatch() {
                         <div data-ref="rx-val" class="text-xs font-mono font-bold text-green-500 dark:text-green-400" style="font-variant-numeric:tabular-nums">${rxVal}</div>
                     </div>
 
-                    <div class="text-center flex-1 sm:flex-none" style="width:55px;min-width:55px">
+                    <div class="node-stat-col-wide text-center flex-1 sm:flex-none">
                         <div class="flex items-center justify-center gap-0.5 mb-0.5">
                             <svg class="w-3 h-3 text-blue-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 10l7-7m0 0l7 7m-7-7v18"/></svg>
                             <span data-ref="tx-unit" class="text-[9px] font-bold text-gray-400 uppercase tracking-wider">${txUnit}</span>
@@ -728,6 +716,10 @@ function updateAgentStatsUI(data) {
         const freeIcon = `<svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 inline mb-0.5 opacity-60" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>`;
 
         if (data.stats) {
+            pushQuickStatHistory('cpu', data.stats.cpu);
+            pushQuickStatHistory('ram', data.stats.ram);
+            pushQuickStatHistory('disk', data.stats.disk);
+
             const cpuEl = document.getElementById('stat_cpu');
             const progCpu = document.getElementById('prog_cpu');
             if (cpuEl) {
@@ -850,9 +842,26 @@ function updateAgentStatsUI(data) {
             const uptimeEl = document.getElementById('stat_uptime');
             if (uptimeEl) uptimeEl.innerText = formatUptime(data.stats.boot_time);
 
+            const avail = data.stats.agent_availability || {};
+
+            const uptimeOnlineBar = document.getElementById('uptimeBarOnline');
+            const uptimeDowntimeBar = document.getElementById('uptimeBarDowntime');
+            if (uptimeOnlineBar && uptimeDowntimeBar) {
+                const onlineSecs = avail.total_online_secs || 0;
+                const downSecs = avail.total_downtime_secs || 0;
+                const totalSecs = onlineSecs + downSecs;
+                const onlinePct = totalSecs > 0 ? (onlineSecs / totalSecs) * 100 : 100;
+                uptimeOnlineBar.style.width = onlinePct + '%';
+                uptimeDowntimeBar.style.width = (100 - onlinePct) + '%';
+
+                const onlineLabel = document.getElementById('uptime_online_label');
+                const downtimeLabel = document.getElementById('uptime_downtime_label');
+                if (onlineLabel) onlineLabel.innerText = (I18N?.web_nodes_monitor_total_uptime || 'Total uptime') + ': ' + formatDuration(onlineSecs);
+                if (downtimeLabel) downtimeLabel.innerText = (I18N?.web_agent_downtime || 'Downtime') + ': ' + formatDuration(downSecs);
+            }
+
             const hintUptime = document.getElementById('hint-uptime');
             if (hintUptime) {
-                const avail = data.stats.agent_availability || {};
                 const fmtDt = (ts) => ts ? new Date(ts * 1000).toLocaleString() : '—';
 
                 const mkRow = (label, value, valueClass) => `
@@ -904,6 +913,7 @@ function updateAgentStatsUI(data) {
             }
         }
         renderAgentChart(data.history);
+        updateQuickStatCharts();
     } catch (e) {
         console.error("Agent stats UI error:", e);
     }
@@ -930,6 +940,60 @@ function getGradient(ctx, colorBase) {
     gradient.addColorStop(0, colorBase.replace(')', ', 0.5)').replace('rgb', 'rgba'));
     gradient.addColorStop(1, colorBase.replace(')', ', 0.0)').replace('rgb', 'rgba'));
     return gradient;
+}
+
+function pushQuickStatHistory(key, value) {
+    if (typeof value !== 'number' || Number.isNaN(value)) return;
+    const hist = quickStatsHistory[key];
+    hist.push(value);
+    if (hist.length > QUICK_STATS_HISTORY_MAX) hist.shift();
+}
+
+function renderQuickStatChart(canvasId, existingChart, colorRgb, historyKey) {
+    const canvas = document.getElementById(canvasId);
+    // Skip while the block is sized "small" (canvas hidden, width is 0) - it will be
+    // picked up on the next data tick once the block is resized and becomes visible.
+    if (!canvas || canvas.clientWidth === 0) return existingChart;
+
+    const data = quickStatsHistory[historyKey];
+    if (existingChart) {
+        existingChart.data.labels = data.map(() => '');
+        existingChart.data.datasets[0].data = data.slice();
+        existingChart.update('none');
+        return existingChart;
+    }
+
+    const ctx = canvas.getContext('2d');
+    return new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: data.map(() => ''),
+            datasets: [{
+                data: data.slice(),
+                borderColor: colorRgb,
+                borderWidth: 2,
+                backgroundColor: getGradient(ctx, colorRgb),
+                fill: true
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            animation: false,
+            scales: {
+                x: { display: false },
+                y: { display: false, min: 0, max: 100 }
+            },
+            plugins: { legend: { display: false }, tooltip: { enabled: false } },
+            elements: { line: { tension: 0.4 }, point: { radius: 0 } }
+        }
+    });
+}
+
+function updateQuickStatCharts() {
+    quickCpuChart = renderQuickStatChart('quickCpuChart', quickCpuChart, 'rgb(99, 102, 241)', 'cpu');
+    quickRamChart = renderQuickStatChart('quickRamChart', quickRamChart, 'rgb(168, 85, 247)', 'ram');
+    quickDiskChart = renderQuickStatChart('quickDiskChart', quickDiskChart, 'rgb(34, 197, 94)', 'disk');
 }
 
 function renderAgentChart(history) {
@@ -3091,6 +3155,7 @@ function autoSizeMovedBlock(item) {
         cls.split(' ').forEach(c => item.classList.remove(c));
     });
     DASHBOARD_SIZES[newSize].split(' ').forEach(c => item.classList.add(c));
+    setTimeout(() => updateQuickStatCharts(), 160);
 }
 
 function toggleDashboardEditMode() {
@@ -3162,6 +3227,7 @@ function changeDashboardBlockSize(e, btn) {
     
     block.style.transform = 'scale(0.98)';
     setTimeout(() => block.style.transform = '', 150);
+    setTimeout(() => updateQuickStatCharts(), 160);
     
     saveDashboardLayout();
 }

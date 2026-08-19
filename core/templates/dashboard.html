@@ -264,7 +264,17 @@
                         </svg>
                     </div>
                 </div>
-                <div class="text-xs text-gray-400 dark:text-gray-500 font-mono mt-auto">{{ web_footer_powered }} Python
+                <div class="text-xs text-gray-400 dark:text-gray-500 font-mono mt-auto quick-stat-bar">{{ web_footer_powered }} Python
+                </div>
+                <div class="w-full mt-auto hidden quick-stat-chart">
+                    <div class="flex items-center justify-between text-[10px] font-bold mb-1">
+                        <span class="text-green-500" id="uptime_online_label"></span>
+                        <span class="text-red-500" id="uptime_downtime_label"></span>
+                    </div>
+                    <div class="w-full h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden flex">
+                        <div id="uptimeBarOnline" class="h-full bg-green-500 transition-all duration-500" style="width: 100%"></div>
+                        <div id="uptimeBarDowntime" class="h-full bg-red-500 transition-all duration-500" style="width: 0%"></div>
+                    </div>
                 </div>
             </div>
             <div data-block-id="quick_stats_cpu" data-default-size="small" class="dashboard-block relative col-span-12 sm:col-span-6 lg:col-span-3 bg-white/60 dark:bg-white/5 backdrop-blur-md border border-white/40 dark:border-white/10 rounded-2xl p-5 shadow-lg dark:shadow-none flex flex-col justify-between h-32 overflow-hidden group hover:scale-[1.02] transition-all duration-300 cursor-help"
@@ -408,7 +418,7 @@
                     </div>
 
                 </div>
-                <div class="h-[250px] w-full agent-stats-chart">
+                <div class="flex-1 min-h-[250px] w-full agent-stats-chart">
                     <canvas id="agentChart"></canvas>
                 </div>
 
@@ -553,7 +563,7 @@
                     </div>
                 </div>
                 <!-- Services Grid -->
-                <div id="services-container" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 max-h-[230px] overflow-y-auto custom-scrollbar pr-2 pb-2 content-start">
+                <div id="services-container" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 flex-1 max-h-[400px] overflow-y-auto custom-scrollbar pr-2 pb-2 content-start">
                     <div class="text-center w-full py-8 text-gray-400 text-sm">Loading services...</div>
                 </div>
             </div>
@@ -635,7 +645,7 @@
                         {{ web_nodes_loading }}
                     </div>
                 </div>
-                <div class="mt-4 pt-4 border-t border-gray-200 dark:border-white/5 flex justify-between items-center gap-3">
+                <div class="mt-auto pt-4 border-t border-gray-200 dark:border-white/5 flex justify-between items-center gap-3">
                     <a href="/nodes"
                         class="monitor-link-btn inline-flex items-center gap-2 py-1.5 px-3 rounded-lg text-xs font-bold transition shadow-lg shadow-purple-500/20"
                         title="{{ web_monitor_title }}">
@@ -673,7 +683,7 @@
                     </div>
                 </div>
                 <div
-                    class="flex-1 bg-gray-50 dark:bg-gray-900 rounded-xl p-4 overflow-hidden relative font-mono text-xs border border-gray-200 dark:border-gray-800 shadow-inner group">
+                    class="flex-1 flex flex-col max-h-[400px] bg-gray-50 dark:bg-gray-900 rounded-xl p-4 overflow-hidden relative font-mono text-xs border border-gray-200 dark:border-gray-800 shadow-inner group">
                     <div id="logsOverlay"
                         class="hidden absolute inset-0 z-20 flex items-center justify-center bg-white/10 dark:bg-black/10 backdrop-blur-sm transition-all duration-500">
                         <div
@@ -692,7 +702,7 @@
                         </div>
                     </div>
                     <div id="logsContainer"
-                        class="h-[300px] overflow-y-auto text-gray-700 dark:text-gray-300 space-y-1 custom-scrollbar scroll-smooth relative z-0">
+                        class="flex-1 min-h-0 overflow-y-auto text-gray-700 dark:text-gray-300 space-y-1 custom-scrollbar scroll-smooth relative z-0">
                         <div class="text-gray-600 italic text-center mt-20">{{ web_loading }}</div>
                     </div>
                     <div
