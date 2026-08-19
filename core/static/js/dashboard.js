@@ -2078,7 +2078,11 @@ function renderServices(services, forceRender = false) {
         card.className = 'service-card w-fit bg-gray-50 dark:bg-black/20 rounded-xl px-4 py-3 flex items-center justify-between gap-3 transition hover:bg-gray-100 dark:hover:bg-white/5 cursor-pointer';
         card.dataset.name = item.name;
         card.dataset.type = item.type;
-        card.onclick = () => openServiceInfoModal(item.name, item.type);
+        card.onclick = (e) => {
+            if (!e.target.closest('button')) {
+                openServiceInfoModal(item.name, item.type);
+            }
+        };
 
         card.innerHTML = DOMPurify.sanitize(`
             <div class="flex items-center gap-3 min-w-0">
