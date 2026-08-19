@@ -512,13 +512,13 @@ async function saveSystemConfig(groupName) {
             return;
         }
         if (servicesVal < 2) {
-            showError('conf_services', "Минимум 2 сек.");
+            showError('conf_services', I18N.error_services_interval_low);
             btn.innerText = originalText;
             toggleSaveButton(config.btnId, true);
             return;
         }
         if (pingVal < 10) {
-            showError('conf_ping', "Минимум 10 сек.");
+            showError('conf_ping', I18N.error_ping_interval_low);
             btn.innerText = originalText;
             toggleSaveButton(config.btnId, true);
             return;

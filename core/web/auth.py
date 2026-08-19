@@ -8,23 +8,19 @@ import json
 import logging
 import secrets
 import time
-from pathlib import Path
 from typing import Any, Final
 from urllib.parse import parse_qsl
 
 from aiohttp import web
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from argon2 import PasswordHasher, exceptions as argon2_exceptions
-from jinja2 import Environment, FileSystemLoader, select_autoescape
 
 from .. import config as current_config
 from ..auth import save_users_async
 from ..config import (
     ADMIN_USER_ID,
     ADMIN_USERNAME,
-    BASE_DIR,
     DEFAULT_LANGUAGE,
-    TG_BOT_NAME,
     TOKEN,
     WEB_SERVER_HOST,
     WEB_SERVER_PORT,
@@ -50,13 +46,6 @@ MAX_RESET_TOKENS: Final[int] = 100
 MAX_SERVER_SESSIONS: Final[int] = 10_000
 AGENT_FLAG: Final[str] = "🏳️"
 
-TEMPLATE_DIR: Final[Path] = Path(BASE_DIR) / "core" / "templates"
-JINJA_ENV = Environment(
-    loader=FileSystemLoader(str(TEMPLATE_DIR)),
-    autoescape=select_autoescape(["html", "xml"]),
-)
-
-BOT_USERNAME_CACHE: str | None = None
 SERVER_SESSIONS: dict[str, dict[str, Any]] = {}
 RESET_TOKENS: dict[str, dict[str, Any]] = {}
 CSRF_TOKENS: dict[str, float] = {}
@@ -334,112 +323,6 @@ def _set_session_cookie(
     )
 
 
-async def handle_login_page(request: web.Request) -> web.StreamResponse:
-    """Render the login page for unauthenticated users."""
-    if get_current_user(request):
-        raise web.HTTPFound("/")
-
-    global BOT_USERNAME_CACHE
-    if BOT_USERNAME_CACHE is None:
-        try:
-            bot = request.app.get("bot")
-            if bot is not None:
-                me = await bot.get_me()
-                BOT_USERNAME_CACHE = me.username or ""
-        except Exception:
-            logging.exception("Failed to fetch bot username")
-            BOT_USERNAME_CACHE = ""
-
-    lang_cookie = request.cookies.get("guest_lang", DEFAULT_LANGUAGE)
-    lang = lang_cookie if lang_cookie in {"ru", "en"} else DEFAULT_LANGUAGE
-    web_meta = getattr(current_config, "WEB_METADATA", {})
-    page_title = web_meta.get("title") or TG_BOT_NAME
-
-    keys = [
-        "web_error",
-        "web_conn_error",
-        "modal_title_alert",
-        "modal_title_confirm",
-        "modal_title_prompt",
-        "modal_btn_ok",
-        "modal_btn_cancel",
-        "login_cookie_title",
-        "login_cookie_text",
-        "login_cookie_btn",
-        "login_support_title",
-        "login_support_desc",
-        "login_github_tooltip",
-        "login_support_tooltip",
-        "web_title",
-        "web_current_password",
-        "web_login_btn",
-        "login_forgot_pass",
-        "login_secure_gateway",
-        "login_pass_btn",
-        "login_back_magic",
-        "login_or",
-        "login_reset_title",
-        "login_reset_desc",
-        "login_btn_send_link",
-        "login_btn_back",
-        "btn_back",
-        "login_support_btn_pay",
-        "login_link_sent_title",
-        "login_link_sent_desc",
-        "reset_success_title",
-        "reset_success_desc",
-        "login_error_user_not_found",
-        "web_default_pass_alert",
-        "web_brand_name",
-        "login_telegram_id_label",
-        "login_via_telegram_btn",
-        "web_perf_mode_on",
-        "web_perf_mode_off",
-        "web_a11y_mode_on",
-        "web_a11y_mode_off",
-    ]
-
-    i18n_all: dict[str, dict[str, str]] = {}
-    for locale in ("ru", "en"):
-        localized = {key: _(key, locale) for key in keys}
-        localized["web_error"] = _("web_error", locale, error="")
-        localized["web_conn_error"] = _("web_conn_error", locale, error="")
-        i18n_all[locale] = localized
-
-    current_i18n = i18n_all.get(lang, i18n_all[DEFAULT_LANGUAGE])
-    default_pass_alert = ""
-    if is_default_password_active(ADMIN_USER_ID):
-        default_pass_alert = (
-            '<div class="mb-4 p-3 bg-yellow-500/20 border border-yellow-500/50 rounded-xl flex items-start gap-3">'
-            '<svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-yellow-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">'
-            '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />'
-            '</svg>'
-            f'<span class="text-xs text-yellow-200 font-medium" data-i18n="web_default_pass_alert">{_("web_default_pass_alert", lang)}</span>'
-            '</div>'
-        )
-
-    context = {
-        "web_title": page_title,
-        "web_favicon": web_meta.get("favicon", "/static/favicon.ico"),
-        "web_meta_desc": web_meta.get("description", ""),
-        "web_meta_keywords": web_meta.get("keywords", ""),
-        "default_pass_alert": default_pass_alert,
-        "error_block": "",
-        "bot_username": BOT_USERNAME_CACHE or "",
-        "web_version": str(int(time.time())),
-        "current_lang": lang,
-        "i18n_json": f"{json.dumps(current_i18n)};\n        const I18N_ALL = {json.dumps(i18n_all)}",
-        "login_telegram_id_label": _("login_telegram_id_label", lang),
-        "login_via_telegram_btn": _("login_via_telegram_btn", lang),
-        "web_key_js": f"const WEB_KEY = '{get_web_key()}';",
-    }
-
-    template = JINJA_ENV.get_template("login.html")
-    response = web.Response(text=template.render(**context), content_type="text/html")
-    _set_csrf_cookie(response, request)
-    return response
-
-
 @routes.post("/api/login/request")
 async def handle_login_request(request: web.Request) -> web.StreamResponse:
     """Send a one-time magic login link via Telegram."""
@@ -690,69 +573,6 @@ async def handle_reset_request(request: web.Request) -> web.StreamResponse:
         return encrypted_json_response({"error": "Internal Server Error"}, status=500)
 
 
-async def handle_reset_page_render(request: web.Request) -> web.StreamResponse:
-    """Render the password reset page when the token is still valid."""
-    token = request.query.get("token")
-    if not token or token not in RESET_TOKENS:
-        return web.Response(text="Expired", status=403)
-
-    token_data = RESET_TOKENS[token]
-    if time.time() - float(token_data.get("ts", 0)) > RESET_TOKEN_TTL:
-        RESET_TOKENS.pop(token, None)
-        return web.Response(text="Expired", status=403)
-
-    lang_cookie = request.cookies.get("guest_lang", DEFAULT_LANGUAGE)
-    lang = lang_cookie if lang_cookie in {"ru", "en"} else DEFAULT_LANGUAGE
-    web_meta = getattr(current_config, "WEB_METADATA", {})
-    page_title = web_meta.get("title") or f"Reset Password - {TG_BOT_NAME}"
-
-    i18n_data = {
-        "web_error": _("web_error", lang, error=""),
-        "web_conn_error": _("web_conn_error", lang, error=""),
-        "modal_title_alert": _("modal_title_alert", lang),
-        "modal_title_confirm": _("modal_title_confirm", lang),
-        "modal_title_prompt": _("modal_title_prompt", lang),
-        "modal_btn_ok": _("modal_btn_ok", lang),
-        "modal_btn_cancel": _("modal_btn_cancel", lang),
-        "web_brand_name": _("web_brand_name", lang),
-        "reset_page_title": _("login_reset_title", lang),
-        "web_new_password": _("web_new_password", lang),
-        "web_confirm_password": _("web_confirm_password", lang),
-        "web_save_btn": _("web_save_btn", lang),
-        "pass_strength_weak": _("pass_strength_weak", lang),
-        "pass_strength_fair": _("pass_strength_fair", lang),
-        "pass_strength_good": _("pass_strength_good", lang),
-        "pass_strength_strong": _("pass_strength_strong", lang),
-        "pass_hint_title": _("pass_hint_title", lang),
-        "pass_req_length": _("pass_req_length", lang),
-        "pass_req_num": _("pass_req_num", lang),
-        "pass_match_error": _("pass_match_error", lang),
-        "pass_is_empty": _("pass_is_empty", lang),
-        "web_redirecting": _("web_redirecting", lang),
-        "web_logging_in": _("web_logging_in", lang),
-        "web_perf_mode_on": _("web_perf_mode_on", lang),
-        "web_perf_mode_off": _("web_perf_mode_off", lang),
-        "web_a11y_mode_on": _("web_a11y_mode_on", lang),
-        "web_a11y_mode_off": _("web_a11y_mode_off", lang),
-    }
-
-    context = {
-        "web_title": page_title,
-        "web_favicon": web_meta.get("favicon", "/static/favicon.ico"),
-        "web_meta_desc": web_meta.get("description", ""),
-        "web_meta_keywords": web_meta.get("keywords", ""),
-        "web_version": str(int(time.time())),
-        "token": token,
-        "i18n_json": json.dumps(i18n_data),
-        "web_key_js": f"const WEB_KEY = '{get_web_key()}';",
-    }
-
-    template = JINJA_ENV.get_template("reset_password.html")
-    response = web.Response(text=template.render(**context), content_type="text/html")
-    _set_csrf_cookie(response, request)
-    return response
-
-
 @routes.post("/api/reset/confirm")
 async def handle_reset_confirm(request: web.Request) -> web.StreamResponse:
     """Persist a new admin password after validating the reset token."""
@@ -984,14 +804,12 @@ __all__ = [
     "generate_csrf_token",
     "verify_csrf_token",
     "get_current_user",
-    "handle_login_page",
     "handle_login_request",
     "handle_login_password",
     "handle_magic_login",
     "handle_telegram_auth",
     "handle_logout",
     "handle_reset_request",
-    "handle_reset_page_render",
     "handle_reset_confirm",
     "is_default_password_active",
 ]
