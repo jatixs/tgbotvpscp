@@ -78,8 +78,8 @@ async def measure_agent_ping() -> str | None:
         if not node_ip or node_ip == "Unknown":
             return None
         target_ip = node_ip
-        target_http = f"http://{node_ip}"
-        target_port = 80
+        target_http = f"http://{node_ip}:8080"
+        target_port = 8080
 
     if ping_mode == "icmp":
         icmp_res = await _do_icmp_ping(target_ip)

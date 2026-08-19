@@ -80,13 +80,13 @@ window.initSettings = function () {
                 if (data && data.error) throw new Error(data.error);
 
                 if (data.update_available) {
-                    const infoText = (I18N.web_update_info || "Current: {local} -> New: {remote}").replace('{local}', 'v' + data.local_version).replace('{remote}', 'v' + data.remote_version);
+                    const infoText = (I18N.web_update_info || "Current: {local} -> New: {remote}").replace('{local}', data.local_version).replace('{remote}', data.remote_version);
                     const updateAvailTitle = (typeof I18N !== 'undefined' && I18N.web_update_available_title) ? I18N.web_update_available_title : "Update Available!";
                     updateStatusArea.innerHTML = DOMPurify.sanitize(`<div><div class="font-bold text-green-600 dark:text-green-400">${updateAvailTitle}</div><div class="text-xs text-gray-500 dark:text-gray-400 mt-1">${infoText}</div></div>`);
                     targetBranch = data.target_branch;
                     if (btnDoUpdate) btnDoUpdate.classList.remove('d-none');
                 } else {
-                    const uptodateText = (I18N.web_update_uptodate || "Latest version installed ({version})").replace('{version}', 'v' + data.local_version);
+                    const uptodateText = (I18N.web_update_uptodate || "Latest version installed ({version})").replace('{version}', data.local_version);
                     updateStatusArea.innerHTML = DOMPurify.sanitize(`<span class="text-gray-500 dark:text-gray-400 text-sm"><i class="fas fa-check-circle text-green-500 mr-1"></i> ${uptodateText}</span>`);
                 }
             } catch (error) {
