@@ -4,11 +4,22 @@
 
 <h1 align="center">📝 Telegram VPS Management Bot — Список изменений</h1>
 <p align="center">
-    <img src="https://img.shields.io/badge/version-v1.24.4-blue?style=flat-square" alt="Version 1.24.4"/>
-    <img src="https://img.shields.io/badge/build-87-purple?style=flat-square" alt="Build 87"/>
-    <img src="https://img.shields.io/badge/date-Август%2016%202026-green?style=flat-square" alt="Date Aug 16 2026"/>
+    <img src="https://img.shields.io/badge/version-v1.24.5-blue?style=flat-square" alt="Version 1.24.5"/>
+    <img src="https://img.shields.io/badge/build-88-purple?style=flat-square" alt="Build 88"/>
+    <img src="https://img.shields.io/badge/date-Август%2019%202026-green?style=flat-square" alt="Date Aug 19 2026"/>
 	<img src="https://img.shields.io/badge/status-stable-green?style=flat-square" alt="Status Stable"/>
 </p>
+
+---
+## [1.24.5] - 2026-08-19
+
+### 🔒 Безопасность и API:
+* **Безопасность пакетов:** Жесткая фиксация версии `setuptools` (>=83.0.0) в скриптах развертывания для устранения уязвимостей CVE-2025-47273 (Path Traversal) и CVE-2026-59890 (MANIFEST.in bypass).
+* **Изоляция Sudo:** Права пользователя бота ограничены. Убран `NOPASSWD: ALL` (и доступ к `apt`) для предотвращения эскалации привилегий, добавлена поддержка безопасных bash-скриптов.
+
+### ✨ Улучшено:
+* **WebUI:** Лимит на загрузку файлов снижен с 50 МБ до 5 МБ для защиты от исчерпания памяти (DoS-вектор).
+* **Архитектура:** Устранена потенциальная утечка памяти (Memory Leak) при управлении фоновыми задачами в оркестраторе модулей.
 
 ---
 ## [1.24.4] - 2026-08-16
