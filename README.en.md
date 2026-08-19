@@ -83,7 +83,7 @@
 - ✅ **WAF** — protection against SQL Injection, XSS, Path Traversal
 - ✅ **Rate Limiting & Brute-force Protection** — DDoS and password-guessing protection
 - ✅ **Audit Logging** — detailed logs of all security events
-- ✅ **Data Encryption** — Fernet (AES) + XOR + Argon2 for passwords
+- ✅ **Data Encryption** — Fernet (AES) + AES-256-CBC + Argon2 for passwords
 - ✅ **DOMPurify** — strict client-side content sanitization
 
 ### 🎨 Modern Web Interface
@@ -151,7 +151,7 @@
 - **Database:** SQLite (aiosqlite)
 - **Frontend:** Tailwind CSS, Vanilla JavaScript, Chart.js
 - **Real-time:** Server-Sent Events (SSE)
-- **Security:** Argon2, Fernet, XOR encryption
+- **Security:** Argon2, Fernet, AES-256-CBC encryption
 - **Infrastructure:** Docker, Docker Compose, Systemd
 
 📖 Learn more: [ARCHITECTURE.en.md](ARCHITECTURE.en.md)
@@ -375,7 +375,7 @@ Automatic detection:
 
 #### 🔹 Level 4: Data Encryption
 - **Fernet** — symmetric encryption for configs (`users.json`, `services.json`)
-- **XOR + Base64** — lightweight encryption for web client (SSE events)
+- **AES-256-CBC + Base64** — encryption for web client (SSE events)
 
 #### 🔹 Level 5: Audit Logging
 
