@@ -2983,22 +2983,39 @@ let isDashboardEditMode = false;
 let dashboardSortable = null;
 
 function applyDashboardLayout() {
+    const blocks = document.querySelectorAll('.dashboard-block');
     const saved = localStorage.getItem('dashboardLayout');
-    if (!saved) return;
+    
+    if (!saved) {
+        // Fallback: apply default sizes
+        blocks.forEach(block => {
+            if (!block.getAttribute('data-current-size')) {
+                const defSize = block.getAttribute('data-default-size');
+                if (defSize) block.setAttribute('data-current-size', defSize);
+            }
+        });
+        return;
+    }
+    
     try {
         const layout = JSON.parse(saved);
         const container = document.getElementById('dashboardBlocksContainer');
         if (!container) return;
+        
         layout.forEach(item => {
             const block = document.querySelector(`[data-block-id="${item.id}"]`);
             if (block) {
                 container.appendChild(block);
-                if (item.size) {
-                    block.setAttribute('data-current-size', item.size);
+                
+                const targetSize = item.size || block.getAttribute('data-default-size');
+                if (targetSize) {
+                    block.setAttribute('data-current-size', targetSize);
                     Object.values(DASHBOARD_SIZES).forEach(cls => {
                         cls.split(' ').forEach(c => block.classList.remove(c));
                     });
-                    DASHBOARD_SIZES[item.size].split(' ').forEach(c => block.classList.add(c));
+                    if (DASHBOARD_SIZES[targetSize]) {
+                        DASHBOARD_SIZES[targetSize].split(' ').forEach(c => block.classList.add(c));
+                    }
                 }
                 if (item.hidden) {
                     block.classList.add('hidden-block');
@@ -3020,7 +3037,7 @@ function initDashboardEditOverlays() {
             overlay.className = 'edit-overlay';
             overlay.innerHTML = `
                 <div class="flex gap-2">
-                    <button onclick="changeDashboardBlockSize(event, this)" class="bg-blue-500 hover:bg-blue-600 text-white text-xs px-3 py-1.5 rounded-lg font-bold transition flex items-center gap-1 shadow-lg">
+                    <button onclick="changeDashboardBlockSize(event, this)" class="hidden sm:flex bg-blue-500 hover:bg-blue-600 text-white text-xs px-3 py-1.5 rounded-lg font-bold transition items-center gap-1 shadow-lg">
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" /></svg>
                         ${(typeof I18N !== 'undefined' && I18N.web_widget_size) ? I18N.web_widget_size : 'Размер'}
                     </button>

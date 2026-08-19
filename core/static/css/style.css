@@ -1046,15 +1046,6 @@ html.amoled .dark\:bg-black\/30 {
         display: none;
     }
 
-    /* Font Adjustments */
-    .dashboard-block[data-current-size="small"] h3 {
-        font-size: 1rem !important;
-        line-height: 1.25rem;
-    }
-    .dashboard-block[data-current-size="small"] .text-3xl {
-        font-size: 1.5rem !important;
-    }
-
     /* Services Manager */
     .dashboard-block[data-current-size="small"] #services-container {
         grid-template-columns: 1fr !important;
