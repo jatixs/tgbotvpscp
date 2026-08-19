@@ -264,7 +264,7 @@ STRINGS = {
 - `get_country_flag(ip)` — Получение флага страны по IP (GeoIP)
 
 **Безопасность:**
-- `encrypt_for_web(data)` — XOR + Base64 шифрование для SSE
+- `encrypt_for_web(data)` — AES-256-CBC + Base64 шифрование для SSE
 - `decrypt_for_web(data)` — Расшифровка на стороне клиента
 - `log_audit_event()` — Аудит логирование (GDPR compliant)
 - `mask_sensitive_data()` — Маскировка IP, токенов, паролей в логах
@@ -536,7 +536,7 @@ GET  /api/agent/ipv4           — IPv4 адреса агента
 
 **Ограничение:** при обычном переходе из браузера `GET /api/events*` возвращает информационный текст, а не метрики. Для работы требуется `EventSource` с `Accept: text/event-stream`. Аналогично `GET /api/terminal/ws` требует `Upgrade: websocket` и для обычного HTTP-запроса отвечает `426 Upgrade Required`.
 
-**Шифрование:** Все данные шифруются XOR + Base64 через `encrypt_for_web()` перед отправкой.
+**Шифрование:** Все данные шифруются AES-256-CBC + Base64 через `encrypt_for_web()` перед отправкой.
 
 ---
 
@@ -560,7 +560,7 @@ GET  /site.webmanifest → PWA manifest (JSON)
     "I18N": { ... },         # Локализованные строки
     "USER_ROLE": "owner",    # Роль текущего пользователя
     "IS_MAIN_ADMIN": True,   # Является ли главным админом
-    "WEB_KEY": "...",        # Ключ для XOR-дешифровки
+    "WEB_KEY": "...",        # Ключ для AES-дешифровки
     "CSRF_TOKEN": "...",     # CSRF-токен
 }
 ```
@@ -670,7 +670,7 @@ def has_subcategory() -> bool:
 - Real-time обновления через SSE
 
 **Безопасность:**
-- Шифрование данных: XOR + Base64 (бэкенд → фронтенд)
+- Шифрование данных: AES-256-CBC + Base64 (бэкенд → фронтенд)
 - Персистентная конфигурация: `config/services.json` (Fernet)
 
 ---
@@ -741,7 +741,7 @@ node/
 #### 4️⃣ Data Encryption
 - **Fernet (AES)** — Симметричное шифрование конфигов
   - `users.json`, `services.json`, `alerts_config.json`, `bot.db`
-- **XOR + Base64** — Легковесное шифрование для SSE-потоков
+- **AES-256-CBC + Base64** — шифрование для SSE-потоков
 - **HMAC** — Подпись heartbeat-сообщений от нод
 
 #### 5️⃣ Audit Logging
@@ -858,7 +858,7 @@ Module handler (например, selftest.py)
 ```
 Backend Event (метрика, уведомление)
     ↓
-encrypt_for_web(data) → XOR + Base64
+encrypt_for_web(data) → AES-256-CBC + Base64
     ↓
 Push в WEB_NOTIFICATIONS deque
     ↓
@@ -868,7 +868,7 @@ streaming.py → SSE endpoint проверяет очередь
     ↓
 Frontend EventSource (JavaScript)
     ↓
-decrypt() → XOR + Base64
+decrypt() → AES-256-CBC + Base64
     ↓
 Обновление DOM в реальном времени
 ```
@@ -911,7 +911,7 @@ decrypt() → XOR + Base64
 - Управление пользователями, сессиями, обновлениями
 
 #### **common.js**
-- `encrypt()` / `decrypt()` — XOR шифрование/дешифровка
+- `encrypt()` / `decrypt()` — AES-256-CBC шифрование/дешифровка
 - `animateModalOpen()` / `animateModalClose()` — Анимации модалок
 - `showNotification()` — Toast уведомления
 - `formatBytes()` — Форматирование размеров

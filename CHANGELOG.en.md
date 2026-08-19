@@ -4,11 +4,32 @@
 
 <h1 align="center">📝 Telegram VPS Management Bot — Changelog</h1>
 <p align="center">
-    <img src="https://img.shields.io/badge/version-v1.24.4-blue?style=flat-square" alt="Version 1.24.4"/>
-    <img src="https://img.shields.io/badge/build-87-purple?style=flat-square" alt="Build 87"/>
-    <img src="https://img.shields.io/badge/date-Aug%2016%202026-green?style=flat-square" alt="Date Aug 16 2026"/>
+    <img src="https://img.shields.io/badge/version-v1.24.5-blue?style=flat-square" alt="Version 1.24.5"/>
+    <img src="https://img.shields.io/badge/build-88-purple?style=flat-square" alt="Build 88"/>
+    <img src="https://img.shields.io/badge/date-Aug%2019%202026-green?style=flat-square" alt="Date Aug 19 2026"/>
 	<img src="https://img.shields.io/badge/status-stable-green?style=flat-square" alt="Status Stable"/>
 </p>
+
+---
+## [1.24.5] - 2026-08-19
+
+### 🚀 New Features:
+* **WebUI (Dashboard Constructor):** Added a new custom interface building feature! You can now rearrange widgets on the main page using drag-and-drop. Blocks automatically adjust their size and width to elegantly fill empty space without leaving gaps. Your custom layout is automatically saved for your device.
+* **WebUI (Mini Charts):** Added CPU/RAM/Disk mini load charts to the quick stats block (similar to the traffic chart), plus a clear Uptime/Downtime split-bar visualization.
+
+### 🔒 Security & API:
+* **Package Security:** Pinned `setuptools` version (>=83.0.0) across deployment scripts to fix CVE-2025-47273 (Path Traversal) and CVE-2026-59890 (MANIFEST.in bypass).
+* **Sudo Isolation:** Restricted bot user permissions. Removed `NOPASSWD: ALL` (and `apt` access) to prevent privilege escalation, added support for safe bash wrapper scripts.
+
+### ✨ Improved:
+* **WebUI:** Reduced client upload size limit from 50 MB to 5 MB to protect against memory exhaustion (DoS vector).
+* **Architecture:** Fixed a potential memory leak in background task management within the module orchestrator.
+* **Network Logic:** Completely overhauled the internal ping measurement mechanism. The bot no longer initiates independent requests to nodes (which could be blocked by firewalls), but instead extracts accurate latency data directly from the heartbeat packets of the closest available node.
+* **WebUI (Adaptive Dashboard Grid):** Blocks within the same row are now always height-aligned, and their inner content (services list, node cards, system logs window) correctly adapts to the available space and to manual block resizing, instead of leaving empty stretched areas.
+* **WebUI (Node Cards):** Reworked node card stats layout (CPU/RAM/Disk/traffic) into a compact grid instead of inline styles, rendering correctly at any size of the "Node Management" block.
+
+### 🔧 Fixed:
+* **WebUI (Add Node):** Fixed a conflict between two request-encryption implementations (`encryptData`) in `common.js` and `dashboard.js` — a legacy XOR-based function in `dashboard.js` was shadowing the correct AES-based one, causing the server to fail decrypting the request and return a "Name required" error when adding a node.
 
 ---
 ## [1.24.4] - 2026-08-16
@@ -328,7 +349,7 @@
 ### 🚀 Service Manager:
 
 * **SSE for Services:** Implemented Server-Sent Events stream for `/api/services` with automatic updates every 5 seconds.
-* **End-to-End Encryption:** Service data is encrypted on the backend (XOR + Base64) and decrypted on the frontend.
+* **End-to-End Encryption:** Service data is encrypted on the backend (AES-256-CBC + Base64) and decrypted on the frontend.
 * **Persistent Configuration:** Service Manager settings are saved to encrypted file `/opt/tg-bot/config/services.json` (Fernet encryption).
 * **Smart Reload:** The service refresh button restarts the SSE connection instead of creating new polling requests.
 * **Detailed Information:** Service info modal styled to match the hint system design.

@@ -203,9 +203,12 @@ async def handle_terminal_page(request: web.Request) -> web.StreamResponse:
     page_title = custom_title if custom_title else f"{_('web_terminal_title', lang)} - {TG_BOT_NAME}"
 
     context = {
+        "lang": lang,
         "web_title": page_title,
         "web_brand_name": TG_BOT_NAME,
         "web_version": APP_VERSION,
+        "web_settings_button": _("web_settings_button", lang),
+        "web_help_hotkeys": _("web_help_hotkeys", lang),
         "web_terminal_title": _("web_terminal_title", lang),
         "web_terminal_ip": _("web_terminal_ip", lang),
         "web_terminal_user": _("web_terminal_user", lang),
@@ -322,12 +325,17 @@ async def handle_dashboard(request: web.Request) -> web.StreamResponse:
     master_billing_json = json.dumps(mb_config)
 
     context = {
+        "lang": lang,
         "master_billing_json": master_billing_json,
         "web_title": page_title,
         "web_favicon": web_meta.get("favicon", "/static/favicon.ico"),
         "web_meta_desc": web_meta.get("description", ""),
         "web_meta_keywords": web_meta.get("keywords", ""),
         "meta_locked": meta_locked,
+        "web_toggle_perf_mode": _("web_toggle_perf_mode", lang),
+        "web_toggle_a11y_mode": _("web_toggle_a11y_mode", lang),
+        "web_edit_ui": _("web_edit_ui", lang),
+        "web_vnc_terminal_title": _("web_vnc_terminal_title", lang),
         "web_brand_name": TG_BOT_NAME,
         "web_version": display_version,
         "pwa_version": getattr(current_config, "INSTALLED_VERSION", display_version) or display_version,
@@ -842,6 +850,8 @@ async def handle_settings_page(request: web.Request) -> web.StreamResponse:
         "web_logs_cleared": _("web_logs_cleared", lang),
         "error_traffic_interval_low": _("error_traffic_interval_low", lang),
         "error_traffic_interval_high": _("error_traffic_interval_high", lang),
+        "error_services_interval_low": _("error_services_interval_low", lang),
+        "error_ping_interval_low": _("error_ping_interval_low", lang),
         "web_logs_clearing": _("web_logs_clearing", lang),
         "web_logs_cleared_alert": _("web_logs_cleared_alert", lang),
         "web_pass_changed": _("web_pass_changed", lang),
@@ -971,6 +981,7 @@ async def handle_settings_page(request: web.Request) -> web.StreamResponse:
         pass
 
     context = {
+        "lang": lang,
         "web_title": page_title,
         "web_favicon": web_meta.get("favicon", "/static/favicon.ico"),
         "web_custom_title": web_meta.get("title", ""),
@@ -1164,6 +1175,18 @@ async def handle_login_page(request: web.Request) -> web.StreamResponse:
         "login_secure_gateway",
         "login_telegram_id_label",
         "login_via_telegram_btn",
+        "web_save_btn",
+        "web_saving_btn",
+        "web_logging_in",
+        "web_conn_error_short",
+        "web_error_short",
+        "login_access_denied",
+        "login_unauthorized",
+        "login_go_to_bot",
+        "pass_req_length",
+        "pass_match_error",
+        "login_webapp_auth_failed",
+        "login_webapp_auth_error",
     ]
     i18n_all: dict[str, dict[str, str]] = {}
     for locale in ["ru", "en"]:
@@ -1190,6 +1213,8 @@ async def handle_login_page(request: web.Request) -> web.StreamResponse:
         "i18n_json": injection,
         "login_telegram_id_label": _("login_telegram_id_label", lang),
         "login_via_telegram_btn": _("login_via_telegram_btn", lang),
+        "web_toggle_perf_mode": _("web_toggle_perf_mode", lang),
+        "web_toggle_a11y_mode": _("web_toggle_a11y_mode", lang),
     }
 
     template = JINJA_ENV.get_template("login.html")
@@ -1208,10 +1233,11 @@ async def handle_reset_page_render(request: web.Request) -> web.StreamResponse:
         del web_auth.RESET_TOKENS[token]
         return web.Response(text="Expired", status=403)
 
-    lang = DEFAULT_LANGUAGE
+    lang_cookie = request.cookies.get("guest_lang", DEFAULT_LANGUAGE)
+    lang = lang_cookie if lang_cookie in ("ru", "en") else DEFAULT_LANGUAGE
     web_meta = getattr(current_config, "WEB_METADATA", {})
     custom_title = web_meta.get("title", "")
-    page_title = custom_title if custom_title else f"Reset Password - {TG_BOT_NAME}"
+    page_title = custom_title if custom_title else f"{_('login_reset_title', lang)} - {TG_BOT_NAME}"
     i18n_data = {
         "web_error": _("web_error", lang, error=""),
         "web_conn_error": _("web_conn_error", lang, error=""),
@@ -1236,8 +1262,10 @@ async def handle_reset_page_render(request: web.Request) -> web.StreamResponse:
         "pass_is_empty": _("pass_is_empty", lang),
         "web_redirecting": _("web_redirecting", lang),
         "web_logging_in": _("web_logging_in", lang),
+        "web_saving_btn": _("web_saving_btn", lang),
     }
     context = {
+        "lang": lang,
         "web_title": page_title,
         "web_favicon": web_meta.get("favicon", "/static/favicon.ico"),
         "web_meta_desc": web_meta.get("description", ""),
@@ -1245,6 +1273,8 @@ async def handle_reset_page_render(request: web.Request) -> web.StreamResponse:
         "web_version": CACHE_VER,
         "token": token,
         "i18n_json": json.dumps(i18n_data),
+        "web_toggle_perf_mode": _("web_toggle_perf_mode", lang),
+        "web_toggle_a11y_mode": _("web_toggle_a11y_mode", lang),
     }
     template = JINJA_ENV.get_template("reset_password.html")
     response = web.Response(text=template.render(**context), content_type="text/html")
