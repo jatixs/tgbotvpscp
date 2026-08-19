@@ -20,6 +20,7 @@
 ### ✨ Improved:
 * **WebUI:** Reduced client upload size limit from 50 MB to 5 MB to protect against memory exhaustion (DoS vector).
 * **Architecture:** Fixed a potential memory leak in background task management within the module orchestrator.
+* **Network Logic:** Completely overhauled the internal ping measurement mechanism. The bot no longer initiates independent requests to nodes (which could be blocked by firewalls), but instead extracts accurate latency data directly from the heartbeat packets of the closest available node.
 
 ---
 ## [1.24.4] - 2026-08-16
