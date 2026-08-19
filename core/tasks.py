@@ -74,12 +74,10 @@ async def measure_agent_ping() -> str | None:
         if not online_nodes:
             return None
         target_node = online_nodes[0]
-        node_ip = target_node.get("ip", "")
-        if not node_ip or node_ip == "Unknown":
-            return None
-        target_ip = node_ip
-        target_http = f"http://{node_ip}:8080"
-        target_port = 8080
+        node_ping = target_node.get("ping", "n/a")
+        if node_ping != "n/a":
+            return str(node_ping)
+        return None
 
     if ping_mode == "icmp":
         icmp_res = await _do_icmp_ping(target_ip)
@@ -101,8 +99,8 @@ async def measure_agent_ping() -> str | None:
         except Exception:
             ping_mode = "http"
             
-    if ping_mode == "http":
-        targets = [target_http] if ping_target == "internal" else [
+    if ping_mode == "http" and target_http is not None:
+        targets = [
             target_http,
             "https://www.google.com" if ping_target != "google" else "https://www.cloudflare.com",
         ]
