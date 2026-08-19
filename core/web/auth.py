@@ -46,6 +46,7 @@ MAX_RESET_TOKENS: Final[int] = 100
 MAX_SERVER_SESSIONS: Final[int] = 10_000
 AGENT_FLAG: Final[str] = "🏳️"
 
+BOT_USERNAME_CACHE: str | None = None
 SERVER_SESSIONS: dict[str, dict[str, Any]] = {}
 RESET_TOKENS: dict[str, dict[str, Any]] = {}
 CSRF_TOKENS: dict[str, float] = {}
