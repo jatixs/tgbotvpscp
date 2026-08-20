@@ -994,6 +994,271 @@ html.amoled .dark\:bg-black\/30 {
     display: none !important;
 }
 
+/* --- Size Picker Overlay --- */
+.size-picker {
+    position: absolute;
+    bottom: 12px;
+    left: 50%;
+    transform: translateX(-50%) translateY(12px);
+    opacity: 0;
+    z-index: 50;
+    background: rgba(255, 255, 255, 0.92);
+    backdrop-filter: blur(16px) saturate(180%);
+    border: 1px solid rgba(255, 255, 255, 0.5);
+    border-radius: 16px;
+    padding: 12px 16px 14px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.18), 0 2px 8px rgba(0, 0, 0, 0.08);
+    transition: opacity 0.2s ease, transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    pointer-events: auto;
+    min-width: 280px;
+    max-width: calc(100vw - 2rem);
+}
+
+.dark .size-picker {
+    background: rgba(17, 24, 39, 0.92);
+    border-color: rgba(255, 255, 255, 0.1);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5), 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+.size-picker--visible {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+}
+
+.size-picker-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+.dark .size-picker-header {
+    border-bottom-color: rgba(255, 255, 255, 0.08);
+}
+
+.size-picker-header span {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: #6b7280;
+}
+
+.dark .size-picker-header span {
+    color: #9ca3af;
+}
+
+.size-picker-close {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    border-radius: 8px;
+    color: #9ca3af;
+    transition: all 0.15s ease;
+    cursor: pointer;
+    background: none;
+    border: none;
+}
+
+.size-picker-close:hover {
+    background: rgba(0, 0, 0, 0.08);
+    color: #374151;
+}
+
+.dark .size-picker-close:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: #e5e7eb;
+}
+
+.size-picker-items {
+    display: flex;
+    gap: 6px;
+    align-items: stretch;
+}
+
+.size-picker-item {
+    position: relative;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    padding: 10px 4px 8px;
+    border-radius: 12px;
+    border: 2px solid transparent;
+    background: rgba(0, 0, 0, 0.03);
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.size-picker-item:hover {
+    background: rgba(59, 130, 246, 0.06);
+    border-color: rgba(59, 130, 246, 0.2);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(59, 130, 246, 0.12);
+}
+
+.dark .size-picker-item {
+    background: rgba(255, 255, 255, 0.04);
+}
+
+.dark .size-picker-item:hover {
+    background: rgba(59, 130, 246, 0.1);
+    border-color: rgba(59, 130, 246, 0.3);
+}
+
+.size-picker-item--active {
+    background: rgba(59, 130, 246, 0.1) !important;
+    border-color: #3b82f6 !important;
+    box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.2), 0 4px 12px rgba(59, 130, 246, 0.15);
+}
+
+.dark .size-picker-item--active {
+    background: rgba(59, 130, 246, 0.15) !important;
+    border-color: #60a5fa !important;
+}
+
+.size-picker-preview {
+    width: 100%;
+    height: 24px;
+    background: rgba(0, 0, 0, 0.06);
+    border-radius: 6px;
+    overflow: hidden;
+    display: flex;
+    align-items: stretch;
+}
+
+.dark .size-picker-preview {
+    background: rgba(255, 255, 255, 0.06);
+}
+
+.size-picker-bar {
+    height: 100%;
+    border-radius: 6px;
+    background: linear-gradient(135deg, #3b82f6, #6366f1);
+    transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    min-width: 4px;
+}
+
+.size-picker-item--active .size-picker-bar {
+    background: linear-gradient(135deg, #2563eb, #4f46e5);
+}
+
+.size-picker-label {
+    font-size: 11px;
+    font-weight: 800;
+    color: #374151;
+    letter-spacing: 0.02em;
+}
+
+.dark .size-picker-label {
+    color: #e5e7eb;
+}
+
+.size-picker-fraction {
+    font-size: 9px;
+    font-weight: 600;
+    color: #9ca3af;
+    font-variant-numeric: tabular-nums;
+}
+
+.size-picker-check {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    width: 14px;
+    height: 14px;
+    color: #3b82f6;
+}
+
+.dark .size-picker-check {
+    color: #60a5fa;
+}
+
+/* --- Resize Handle --- */
+.resize-handle {
+    display: none;
+    position: absolute;
+    top: 0;
+    right: -4px;
+    width: 8px;
+    height: 100%;
+    cursor: col-resize;
+    z-index: 45;
+    user-select: none;
+    touch-action: none;
+}
+
+.edit-mode .resize-handle {
+    display: block;
+}
+
+.resize-handle-bar {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 4px;
+    height: 32px;
+    border-radius: 4px;
+    background: rgba(59, 130, 246, 0);
+    transition: all 0.2s ease;
+}
+
+.resize-handle:hover .resize-handle-bar {
+    background: rgba(59, 130, 246, 0.5);
+    height: 48px;
+    box-shadow: 0 0 8px rgba(59, 130, 246, 0.3);
+}
+
+.dashboard-block.is-resizing {
+    transition: none !important;
+    z-index: 50;
+}
+
+.dashboard-block.is-resizing .resize-handle-bar {
+    background: rgba(59, 130, 246, 0.7) !important;
+    height: 64px;
+    box-shadow: 0 0 12px rgba(59, 130, 246, 0.4);
+}
+
+/* Hide resize handle and size button on mobile */
+@media (max-width: 639px) {
+    .resize-handle {
+        display: none !important;
+    }
+    .size-btn-desktop {
+        display: none !important;
+    }
+}
+
+/* Size Picker: 2-column grid for narrow blocks (STD / Medium / Small) */
+@media (min-width: 1024px) {
+    .dashboard-block[data-current-size="standard"] .size-picker,
+    .dashboard-block[data-current-size="medium"] .size-picker,
+    .dashboard-block[data-current-size="small"] .size-picker {
+        min-width: 200px;
+    }
+
+    .dashboard-block[data-current-size="standard"] .size-picker-items,
+    .dashboard-block[data-current-size="medium"] .size-picker-items,
+    .dashboard-block[data-current-size="small"] .size-picker-items {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 6px;
+    }
+
+    .dashboard-block[data-current-size="standard"] .size-picker-item:last-child,
+    .dashboard-block[data-current-size="medium"] .size-picker-item:last-child,
+    .dashboard-block[data-current-size="small"] .size-picker-item:last-child {
+        grid-column: 1 / -1;
+    }
+}
+
 /* --- Missing Tailwind Grid Classes for Dashboard Customization --- */
 .grid-cols-12 { grid-template-columns: repeat(12, minmax(0, 1fr)); }
 .col-span-12 { grid-column: span 12 / span 12; }

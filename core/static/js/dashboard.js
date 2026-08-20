@@ -3101,7 +3101,7 @@ function initDashboardEditOverlays() {
             overlay.className = 'edit-overlay';
             overlay.innerHTML = `
                 <div class="flex gap-2">
-                    <button onclick="changeDashboardBlockSize(event, this)" class="hidden sm:inline-flex bg-blue-500 hover:bg-blue-600 text-white text-xs px-3 py-1.5 rounded-lg font-bold transition items-center gap-1 shadow-lg">
+                    <button onclick="showSizePickerOverlay(event, this)" class="size-btn-desktop hidden sm:inline-flex bg-blue-500 hover:bg-blue-600 text-white text-xs px-3 py-1.5 rounded-lg font-bold transition items-center gap-1 shadow-lg">
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" /></svg>
                         ${(typeof I18N !== 'undefined' && I18N.web_widget_size) ? I18N.web_widget_size : 'Размер'}
                     </button>
@@ -3112,6 +3112,14 @@ function initDashboardEditOverlays() {
                 </div>
             `;
             block.appendChild(overlay);
+        }
+        // Add resize handle (tablet/desktop only)
+        if (!block.querySelector('.resize-handle')) {
+            const handle = document.createElement('div');
+            handle.className = 'resize-handle';
+            handle.innerHTML = '<div class="resize-handle-bar"></div>';
+            block.appendChild(handle);
+            initResizeHandle(handle, block);
         }
     });
 }
@@ -3133,16 +3141,41 @@ function autoSizeMovedBlock(item) {
     const blocks = Array.from(document.querySelectorAll('.dashboard-block:not(.hidden-block)'));
     const spanOf = (size) => size === 'small' ? 3 : size === 'medium' ? 4 : size === 'standard' ? 6 : size === 'wide' ? 8 : 12;
 
+    const currentSize = item.getAttribute('data-current-size');
+    const currentSpan = spanOf(currentSize);
+
     // Walk only the blocks preceding the dropped item (in its new position) to find
     // how much of its actual row is already occupied, mirroring CSS grid auto-flow.
     let rowSpace = 0;
+    let smallsInRow = 0;
     for (const b of blocks) {
         if (b === item) break;
         const span = spanOf(b.getAttribute('data-current-size'));
-        rowSpace = (rowSpace + span > 12) ? span : rowSpace + span;
+        if (rowSpace + span > 12) {
+            // This block wraps to a new row — reset counters
+            rowSpace = span;
+            smallsInRow = (b.getAttribute('data-current-size') === 'small') ? 1 : 0;
+        } else {
+            rowSpace += span;
+            if (b.getAttribute('data-current-size') === 'small') smallsInRow++;
+        }
+    }
+
+    // If preceding blocks fill the row exactly, the dropped item starts a new row
+    if (rowSpace >= 12) {
+        rowSpace = 0;
+        smallsInRow = 0;
     }
 
     const remaining = 12 - rowSpace;
+
+    // If the block already fits in the remaining space, keep its size
+    if (currentSpan <= remaining) return;
+
+    // Don't resize small blocks if the row already has 4 smalls (full row of smalls)
+    if (currentSize === 'small' && smallsInRow >= 4) return;
+
+    // Block doesn't fit — resize to the remaining space
     let newSize = 'standard';
     if (remaining <= 3) newSize = 'small';
     else if (remaining <= 4) newSize = 'medium';
@@ -3185,7 +3218,9 @@ function toggleDashboardEditMode() {
                 handle: '.edit-overlay',
                 ghostClass: 'opacity-50',
                 onEnd: function(evt) {
-                    autoSizeMovedBlock(evt.item);
+                    if (window.innerWidth >= 640) {
+                        autoSizeMovedBlock(evt.item);
+                    }
                     saveDashboardLayout();
                     applyDashboardLayout();
                 }
@@ -3195,6 +3230,8 @@ function toggleDashboardEditMode() {
         updateHiddenBlocksPanel();
     } else {
         container.classList.remove('edit-mode');
+        // Close any open size pickers
+        document.querySelectorAll('.size-picker').forEach(p => p.remove());
         panel.classList.remove('opacity-100', 'translate-y-0');
         panel.classList.add('opacity-0', 'translate-y-10');
         setTimeout(() => panel.classList.add('hidden'), 300);
@@ -3206,30 +3243,138 @@ function toggleDashboardEditMode() {
     }
 }
 
-function changeDashboardBlockSize(e, btn) {
+function showSizePickerOverlay(e, btn) {
     e.stopPropagation();
     const block = btn.closest('.dashboard-block');
-    const currentSize = block.getAttribute('data-current-size');
-    let currentIndex = SIZES_ORDER.indexOf(currentSize);
-    
-    if (currentIndex === -1) currentIndex = 2; // default standard
-    
-    const nextIndex = (currentIndex + 1) % SIZES_ORDER.length;
-    const nextSize = SIZES_ORDER[nextIndex];
-    
-    block.setAttribute('data-current-size', nextSize);
-    
+    const overlay = block.querySelector('.edit-overlay');
+    if (!overlay) return;
+
+    // Close any other open pickers first
+    document.querySelectorAll('.size-picker').forEach(p => p.remove());
+
+    const currentSize = block.getAttribute('data-current-size') || 'standard';
+    const lblSize = (typeof I18N !== 'undefined' && I18N.web_widget_size) ? I18N.web_widget_size : 'Размер';
+
+    const sizeLabels = { small: 'S', medium: 'M', standard: 'STD', wide: 'W', large: 'L' };
+    const sizeFractions = { small: '3/12', medium: '4/12', standard: '6/12', wide: '8/12', large: '12/12' };
+    const sizeWidths = { small: '25%', medium: '33.3%', standard: '50%', wide: '66.6%', large: '100%' };
+
+    let itemsHtml = SIZES_ORDER.map(size => {
+        const isActive = size === currentSize;
+        const activeClass = isActive ? 'size-picker-item--active' : '';
+        return `
+            <button class="size-picker-item ${activeClass}" onclick="applyPickedSize(event, '${size}')" title="${sizeFractions[size]}">
+                <div class="size-picker-preview">
+                    <div class="size-picker-bar" style="width: ${sizeWidths[size]}"></div>
+                </div>
+                <span class="size-picker-label">${sizeLabels[size]}</span>
+                <span class="size-picker-fraction">${sizeFractions[size]}</span>
+                ${isActive ? '<svg class="size-picker-check" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" /></svg>' : ''}
+            </button>
+        `;
+    }).join('');
+
+    const picker = document.createElement('div');
+    picker.className = 'size-picker';
+    picker.innerHTML = `
+        <div class="size-picker-header">
+            <span>${lblSize}</span>
+            <button class="size-picker-close" onclick="closeSizePicker(event)">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
+            </button>
+        </div>
+        <div class="size-picker-items">${itemsHtml}</div>
+    `;
+    picker.addEventListener('click', e => e.stopPropagation());
+    overlay.appendChild(picker);
+    requestAnimationFrame(() => picker.classList.add('size-picker--visible'));
+}
+
+function applyPickedSize(e, size) {
+    e.stopPropagation();
+    const picker = e.target.closest('.size-picker');
+    const block = e.target.closest('.dashboard-block');
+    if (!block) return;
+
+    block.setAttribute('data-current-size', size);
     Object.values(DASHBOARD_SIZES).forEach(classes => {
         classes.split(' ').forEach(cls => block.classList.remove(cls));
     });
-    
-    DASHBOARD_SIZES[nextSize].split(' ').forEach(cls => block.classList.add(cls));
-    
+    DASHBOARD_SIZES[size].split(' ').forEach(cls => block.classList.add(cls));
+
     block.style.transform = 'scale(0.98)';
     setTimeout(() => block.style.transform = '', 150);
     setTimeout(() => updateQuickStatCharts(), 160);
-    
+
     saveDashboardLayout();
+    if (picker) picker.remove();
+}
+
+function closeSizePicker(e) {
+    e.stopPropagation();
+    const picker = e.target.closest('.size-picker');
+    if (picker) {
+        picker.classList.remove('size-picker--visible');
+        setTimeout(() => picker.remove(), 200);
+    }
+}
+
+// --- Resize Handles (drag-to-resize) ---
+function initResizeHandle(handle, block) {
+    let startX = 0;
+    let startWidth = 0;
+    let containerWidth = 0;
+
+    function onPointerDown(e) {
+        if (window.innerWidth < 640) return;
+        e.preventDefault();
+        e.stopPropagation();
+        const container = document.getElementById('dashboardBlocksContainer');
+        if (!container) return;
+        containerWidth = container.getBoundingClientRect().width;
+        startX = e.clientX;
+        startWidth = block.getBoundingClientRect().width;
+        document.body.style.cursor = 'col-resize';
+        document.body.style.userSelect = 'none';
+        block.classList.add('is-resizing');
+        document.addEventListener('pointermove', onPointerMove);
+        document.addEventListener('pointerup', onPointerUp);
+    }
+
+    function onPointerMove(e) {
+        const delta = e.clientX - startX;
+        const newWidth = startWidth + delta;
+        const ratio = newWidth / containerWidth;
+        const cols = Math.round(ratio * 12);
+
+        let snappedSize = 'standard';
+        if (cols <= 3) snappedSize = 'small';
+        else if (cols <= 4) snappedSize = 'medium';
+        else if (cols <= 6) snappedSize = 'standard';
+        else if (cols <= 9) snappedSize = 'wide';
+        else snappedSize = 'large';
+
+        const current = block.getAttribute('data-current-size');
+        if (snappedSize !== current) {
+            block.setAttribute('data-current-size', snappedSize);
+            Object.values(DASHBOARD_SIZES).forEach(classes => {
+                classes.split(' ').forEach(cls => block.classList.remove(cls));
+            });
+            DASHBOARD_SIZES[snappedSize].split(' ').forEach(cls => block.classList.add(cls));
+        }
+    }
+
+    function onPointerUp() {
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
+        block.classList.remove('is-resizing');
+        document.removeEventListener('pointermove', onPointerMove);
+        document.removeEventListener('pointerup', onPointerUp);
+        setTimeout(() => updateQuickStatCharts(), 160);
+        saveDashboardLayout();
+    }
+
+    handle.addEventListener('pointerdown', onPointerDown);
 }
 
 function hideDashboardBlock(e, btn) {
