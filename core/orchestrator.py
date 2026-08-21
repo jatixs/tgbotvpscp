@@ -230,6 +230,7 @@ class ModuleOrchestrator:
                 if tasks:
                     for task in tasks:
                         self._background_tasks.add(task)
+                        task.add_done_callback(self._background_tasks.discard)
                         info.background_tasks.append(task)
 
             logging.info(f"  ✅ {module_name} (always-on) loaded.")
@@ -368,6 +369,7 @@ class ModuleOrchestrator:
                     if tasks:
                         for task in tasks:
                             self._background_tasks.add(task)
+                            task.add_done_callback(self._background_tasks.discard)
                             info.background_tasks.append(task)
 
                 logging.info(
