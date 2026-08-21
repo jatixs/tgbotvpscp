@@ -1248,6 +1248,7 @@ window.switchLogType = function (type) {
         }
         return;
     }
+    container.style.minHeight = container.offsetHeight + 'px';
     container.innerHTML = DOMPurify.sanitize('');
 
     const oldEmpty = document.getElementById('empty-logs-state');
@@ -1268,6 +1269,7 @@ window.switchLogType = function (type) {
             if (logs.length === 0) {
                 if (document.getElementById('log-loader')) {
                     container.classList.remove('overflow-hidden');
+                    container.style.minHeight = '';
                     removeLogLoading();
 
                     if (!document.getElementById('empty-logs-state')) {
@@ -1323,6 +1325,7 @@ window.switchLogType = function (type) {
             }
 
             container.classList.remove('overflow-hidden');
+            container.style.minHeight = '';
             if (isInitialLoad) {
                 container.scrollTo({
                     top: container.scrollHeight,
@@ -1342,6 +1345,7 @@ window.switchLogType = function (type) {
         } catch (err) {
             console.error("Logs parse error", err);
             container.classList.remove('overflow-hidden');
+            container.style.minHeight = '';
             removeLogLoading();
         }
     });
@@ -3035,11 +3039,11 @@ document.addEventListener('app:action:toggle-service-managed', e => {
     toggleServiceManaged(e.detail.target.getAttribute('data-name'), e.detail.target.getAttribute('data-type'), isManaged, e.detail.target);
 });
 const DASHBOARD_SIZES = {
-    'small': 'col-span-12 sm:col-span-6 lg:col-span-3',
-    'medium': 'col-span-12 sm:col-span-6 lg:col-span-4',
-    'standard': 'col-span-12 lg:col-span-6',
-    'wide': 'col-span-12 lg:col-span-8',
-    'large': 'col-span-12'
+    'small': 'col-span-12 sm:col-span-6 lg:col-span-3 lg:row-span-1',
+    'medium': 'col-span-12 sm:col-span-6 lg:col-span-4 lg:row-span-1',
+    'standard': 'col-span-12 lg:col-span-6 lg:row-span-2',
+    'wide': 'col-span-12 lg:col-span-8 lg:row-span-2',
+    'large': 'col-span-12 lg:row-span-2'
 };
 const SIZES_ORDER = ['small', 'medium', 'standard', 'wide', 'large'];
 
