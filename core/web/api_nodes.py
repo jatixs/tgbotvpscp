@@ -11,22 +11,20 @@ import json
 import logging
 import re
 import time
-from pathlib import Path
 from typing import Any, Final
 
 from aiohttp import web
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from aiogram.exceptions import TelegramRetryAfter
-from jinja2 import Environment, FileSystemLoader, select_autoescape
 
 from .. import config as current_config
 from .. import nodes_db, shared_state
-from ..config import ADMIN_USER_ID, BASE_DIR, NODE_OFFLINE_TIMEOUT, TG_BOT_NAME, WEB_SERVER_HOST, WEB_SERVER_PORT, DEFAULT_LANGUAGE
+from ..config import ADMIN_USER_ID, NODE_OFFLINE_TIMEOUT, WEB_SERVER_HOST, WEB_SERVER_PORT, DEFAULT_LANGUAGE
 from ..i18n import STRINGS, get_text as _, get_user_lang
 from ..messaging import send_alert
-from ..utils import decrypt_for_web, encrypt_for_web, format_traffic, format_uptime, get_app_version, get_country_flag, get_node_uptime_snapshot, get_server_timezone_label, get_web_key, decrypt_request_payload, encrypted_json_response
+from ..utils import decrypt_for_web, encrypt_for_web, format_traffic, format_uptime, get_country_flag, get_node_uptime_snapshot, get_server_timezone_label, get_web_key, decrypt_request_payload, encrypted_json_response
 from .auth import COOKIE_NAME, SERVER_SESSIONS, get_current_user
-from ..rbac import build_user_role_js, get_role_level as get_user_role_level, is_admin as _is_admin
+from ..rbac import get_role_level as get_user_role_level, is_admin as _is_admin
 from modules.services import (
     add_managed_service,
     get_all_available_services,
@@ -38,23 +36,6 @@ from modules.services import (
 
 routes = web.RouteTableDef()
 
-TEMPLATE_DIR: Final[Path] = Path(BASE_DIR) / "core" / "templates"
-JINJA_ENV = Environment(
-    loader=FileSystemLoader(str(TEMPLATE_DIR)),
-    autoescape=select_autoescape(["html", "xml"]),
-)
-APP_VERSION: Final[str] = get_app_version()
-CACHE_VER: Final[str] = str(int(time.time()))
-ALLOWED_NODE_COMMANDS: Final[set[str]] = {
-    "selftest",
-    "uptime",
-    "traffic",
-    "top",
-    "speedtest",
-    "update",
-    "reboot",
-    "services_list",
-}
 ALLOWED_SERVICE_ACTIONS: Final[set[str]] = {"start", "stop", "restart"}
 SSE_ACCEPT_HEADER: Final[str] = "text/event-stream"
 NODES_MONITOR_STREAM_INTERVAL: Final[float] = 10.0
@@ -248,13 +229,6 @@ async def process_node_result_background(
 
     except Exception as exc:
         logging.error("Background send error: %s", exc)
-
-
-def _get_avatar_html(user: dict[str, Any]) -> str:
-    raw = str(user.get("photo_url", ""))
-    if raw.startswith("http"):
-        return f'<img src="{raw}" alt="ava" class="w-6 h-6 rounded-full flex-shrink-0">'
-    return f'<span class="text-lg leading-none select-none">{raw}</span>'
 
 
 async def _require_user(request: web.Request) -> dict[str, Any] | None:
@@ -545,170 +519,6 @@ async def handle_node_rename(request: web.Request) -> web.StreamResponse:
     except Exception:
         logging.exception("Failed to rename node")
         return encrypted_json_response({"error": "Internal Server Error"}, status=500)
-
-
-async def handle_nodes_monitor_page(request: web.Request) -> web.StreamResponse:
-    """Render the nodes monitoring page."""
-    user = await _require_user(request)
-    if not user:
-        raise web.HTTPFound("/login")
-
-    user_id = int(user["id"])
-    lang = get_user_lang(user_id)
-    role = str(user.get("role", "users"))
-    is_admin = _is_admin(user)
-
-    if is_admin and user_id == ADMIN_USER_ID:
-        role_text = _("web_role_owner", lang)
-        role_badge_html = f'<span class="role-badge-owner hidden sm:inline-flex px-2 py-0.5 rounded text-[10px] border uppercase font-bold">{role_text}</span>'
-    elif is_admin:
-        role_text = _("web_role_admins", lang)
-        role_badge_html = f'<span class="role-badge-admin hidden sm:inline-flex px-2 py-0.5 rounded text-[10px] border uppercase font-bold">{role_text}</span>'
-    else:
-        role_text = _("web_role_users", lang)
-        role_badge_html = f'<span class="role-badge-user hidden sm:inline-flex px-2 py-0.5 rounded text-[10px] border uppercase font-bold">{role_text}</span>'
-
-    if not is_admin:
-        raise web.HTTPFound("/")
-
-    web_meta = getattr(current_config, "WEB_METADATA", {})
-    custom_title = web_meta.get("title", "")
-    page_title = f"{_('web_nodes_monitor_title', lang)} - {TG_BOT_NAME}"
-    if custom_title:
-        page_title = f"{_('web_nodes_monitor_title', lang)} - {custom_title}"
-
-    clean_version = APP_VERSION.lstrip("v")
-    display_version = f"v{clean_version}"
-
-    context = {
-        "lang": lang,
-        "web_title": page_title,
-        "web_version": display_version,
-        "pwa_version": current_config.INSTALLED_VERSION or display_version,
-        "cache_ver": CACHE_VER,
-        "user_avatar": _get_avatar_html(user),
-        "user_name": user.get("first_name", "User"),
-        "user_role_js": build_user_role_js(role, user_id),
-        "role_badge": role_badge_html,
-        "settings_btn": f'<a href="/settings" class="flex items-center justify-center w-8 h-8 rounded-lg hover:bg-black/5 dark:hover:bg-white/10 transition text-gray-600 dark:text-gray-400" title="{_("web_settings_button", lang)}"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg></a>',
-        "web_monitor_title": _("web_nodes_monitor_title", lang),
-        "web_mass_actions": _("web_nodes_monitor_mass_actions", lang),
-        "web_select_all": _("web_nodes_monitor_select_all", lang),
-        "web_mass_selftest": _("web_nodes_monitor_mass_selftest", lang),
-        "web_mass_reboot": _("web_nodes_monitor_mass_reboot", lang),
-        "web_refresh": _("web_refresh", lang),
-        "web_search_placeholder": _("web_nodes_monitor_search", lang),
-        "web_filter_all": _("web_nodes_monitor_filter_all", lang),
-        "web_filter_online": _("web_nodes_monitor_filter_online", lang),
-        "web_filter_offline": _("web_nodes_monitor_filter_offline", lang),
-        "web_filter_restarting": _("web_nodes_monitor_filter_restarting", lang),
-        "web_filter_btn": _("web_nodes_monitor_filter_btn", lang),
-        "web_filter_title": _("web_nodes_monitor_filter_title", lang),
-        "web_filter_status": _("web_nodes_monitor_filter_status", lang),
-        "web_filter_cpu_load": _("web_nodes_monitor_filter_cpu_load", lang),
-        "web_filter_high": _("web_nodes_monitor_filter_high", lang),
-        "web_filter_medium": _("web_nodes_monitor_filter_medium", lang),
-        "web_filter_low": _("web_nodes_monitor_filter_low", lang),
-        "web_filter_sort_by": _("web_nodes_monitor_filter_sort_by", lang),
-        "web_filter_sort_name": _("web_nodes_monitor_filter_sort_name", lang),
-        "web_filter_sort_cpu": _("web_nodes_monitor_filter_sort_cpu", lang),
-        "web_filter_sort_ram": _("web_nodes_monitor_filter_sort_ram", lang),
-        "web_filter_sort_ping": _("web_nodes_monitor_filter_sort_ping", lang),
-        "web_filter_reset": _("web_nodes_monitor_filter_reset", lang),
-        "web_filter_apply": _("web_nodes_monitor_filter_apply", lang),
-        "web_loading": _("web_loading", lang),
-        "web_stats_total": _("web_stats_total", lang),
-        "web_uptime": _("web_nodes_monitor_uptime", lang),
-        "web_notif_source_agent": _("web_notif_source_agent", lang),
-        "web_notif_source_node": _("web_notif_source_node", lang),
-        "web_notifications_title": _("web_notifications_title", lang),
-        "web_clear_notifications": _("web_clear_notifications", lang),
-        "web_resources_chart": _("web_nodes_monitor_resources_chart", lang),
-        "web_network_chart": _("web_nodes_monitor_network_chart", lang),
-        "web_services_title": _("web_nodes_monitor_tab_services", lang),
-        "web_live": _("web_live", lang),
-        "web_cpu": _("web_nodes_monitor_cpu", lang),
-        "web_ram": _("web_nodes_monitor_ram", lang),
-        "web_disk": _("web_nodes_monitor_disk", lang),
-        "web_show_more": _("web_show_more", lang),
-        "web_show_less": _("web_show_less", lang),
-        "web_node_details": _("web_nodes_monitor_details", lang),
-        "btn_selftest": _("web_nodes_monitor_btn_selftest", lang),
-        "btn_speedtest": _("web_nodes_monitor_btn_speedtest", lang),
-        "btn_reboot": _("web_nodes_monitor_btn_reboot", lang),
-        "modal_btn_cancel": _("modal_btn_cancel", lang),
-        "modal_btn_ok": _("modal_btn_ok", lang),
-        "i18n_json": json.dumps(
-            {
-                "web_no_nodes": _("web_nodes_monitor_no_nodes", lang),
-                "web_no_nodes_desc": _("web_nodes_monitor_no_nodes_desc", lang),
-                "web_loading": _("web_loading", lang),
-                "web_error": _("web_nodes_monitor_error", lang),
-                "web_services_empty": _("web_nodes_monitor_no_services", lang),
-                "web_services_loading": _("web_nodes_monitor_services_loading", lang),
-                "web_notif_source_agent": _("web_notif_source_agent", lang),
-                "web_notif_source_node": _("web_notif_source_node", lang),
-                "web_notifications_title": _("web_notifications_title", lang),
-                "web_clear_notifications": _("web_clear_notifications", lang),
-                "web_no_notifications": _("web_no_notifications", lang),
-                "web_notifications_cleared": _("web_notifications_cleared", lang),
-                "modal_title_alert": _("modal_title_alert", lang),
-                "modal_title_confirm": _("modal_title_confirm", lang),
-                "modal_title_error": _("modal_title_error", lang),
-                "modal_title_info": _("web_nodes_monitor_detail_title", lang),
-                "web_time_d": _("unit_day_short", lang),
-                "web_time_h": _("unit_hour_short", lang),
-                "web_time_m": _("unit_minute_short", lang),
-                "web_node_status_online": _("web_nodes_monitor_online", lang),
-                "web_node_status_offline": _("web_nodes_monitor_offline", lang),
-                "web_node_status_restarting": _("web_node_restarting", lang),
-                "web_nodes_monitor_select_nodes": _("web_nodes_monitor_select_nodes", lang),
-                "web_nodes_monitor_confirm_mass_reboot": _("web_nodes_monitor_confirm_mass_reboot", lang),
-                "web_nodes_monitor_confirm_mass_command": _("web_nodes_monitor_confirm_mass_command", lang),
-                "web_reboot_node_confirm": _("web_nodes_monitor_confirm_reboot", lang),
-                "web_command_sent": _("web_nodes_monitor_command_sent", lang),
-                "web_service_start": _("web_nodes_monitor_service_start", lang),
-                "web_service_stop": _("web_nodes_monitor_service_stop", lang),
-                "web_service_restart": _("web_nodes_monitor_service_restart", lang),
-                "web_service_confirm": _("web_nodes_monitor_confirm_service", lang),
-                "web_details": _("web_nodes_monitor_details", lang),
-                "web_node_details": _("web_nodes_monitor_details", lang),
-                "web_cpu": _("web_nodes_monitor_cpu", lang),
-                "web_ram": _("web_nodes_monitor_ram", lang),
-                "web_disk": _("web_nodes_monitor_disk", lang),
-                "web_traffic_in": _("web_nodes_monitor_traffic_in", lang),
-                "web_traffic_out": _("web_nodes_monitor_traffic_out", lang),
-                "web_show_more": _("web_show_more", lang),
-                "web_show_less": _("web_show_less", lang),
-                "web_nodes_monitor_btn_reboot": _("web_nodes_monitor_btn_reboot", lang),
-                "web_nodes_monitor_btn_selftest": _("web_nodes_monitor_btn_selftest", lang),
-                "web_nodes_monitor_btn_speedtest": _("web_nodes_monitor_btn_speedtest", lang),
-                "web_nodes_monitor_btn_traffic": _("web_nodes_monitor_btn_traffic", lang),
-                "web_commands_sent": _("web_commands_sent", lang),
-                "web_reboot_sent": _("web_reboot_sent", lang),
-                "web_node_modal_loading": _("web_node_modal_loading", lang),
-                "web_nodes_monitor_current_uptime": _("web_nodes_monitor_current_uptime", lang),
-                "web_nodes_monitor_last_outage": _("web_nodes_monitor_last_outage", lang),
-                "web_nodes_monitor_last_reboot": _("web_nodes_monitor_last_reboot", lang),
-                "web_nodes_monitor_total_uptime": _("web_nodes_monitor_total_uptime", lang),
-                "web_nodes_monitor_total_downtime": _("web_nodes_monitor_total_downtime", lang),
-                "web_nodes_monitor_internet_downtime": _("web_nodes_monitor_internet_downtime", lang),
-                "web_nodes_monitor_physical_downtime": _("web_nodes_monitor_physical_downtime", lang),
-                "web_nodes_monitor_outage_pending": _("web_nodes_monitor_outage_pending", lang),
-                "web_nodes_monitor_outage_rebooting": _("web_nodes_monitor_outage_rebooting", lang),
-                "unit_bytes": _("unit_bytes", lang),
-                "unit_kb": _("unit_kb", lang),
-                "unit_mb": _("unit_mb", lang),
-                "unit_gb": _("unit_gb", lang),
-                "unit_tb": _("unit_tb", lang),
-                "unit_pb": _("unit_pb", lang),
-            }
-        ),
-    }
-
-    template = JINJA_ENV.get_template("nodes_monitor.html")
-    html = template.render(**context)
-    return web.Response(text=html, content_type="text/html")
 
 
 @routes.get("/api/nodes/monitor/list")
@@ -1086,7 +896,6 @@ __all__ = [
     "handle_node_add",
     "handle_node_delete",
     "handle_node_rename",
-    "handle_nodes_monitor_page",
     "handle_nodes_monitor_list",
     "handle_nodes_monitor_detail",
     "handle_nodes_monitor_services",

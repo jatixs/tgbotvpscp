@@ -804,26 +804,6 @@ html.dark .monitor-link-btn:hover {
 		margin: 0 4px !important;
 		flex-shrink: 0 !important;
 	}
-
-	html.dark #networkBadgesDivider {
-		background-color: #4b5563 !important;
-		/* Темно-серый цвет для темной темы */
-	}
-
-	/* Уменьшаем размер шрифтов в бейджах для компактности */
-	#agentPingBadge span:first-child {
-		font-size: 0.55rem !important;
-	}
-
-	#agentPing,
-	#agentIp {
-		font-size: 0.625rem !important;
-	}
-
-	#agentIpBadge svg {
-		width: 0.875rem !important;
-		height: 0.875rem !important;
-	}
 }
 
 /* Lock Icon Styles */
@@ -965,4 +945,447 @@ html.amoled .dark\:bg-gray-800 {
 }
 html.amoled .dark\:bg-black\/30 {
     background-color: rgba(0, 0, 0, 0.5) !important;
+}
+
+/* --- Dashboard Edit Mode --- */
+.dashboard-block {
+    position: relative;
+    /* transition is already handled by tailwind classes */
+}
+
+/* Overlay for Edit Mode */
+.dashboard-block .edit-overlay {
+    display: none;
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(4px);
+    z-index: 40;
+    border-radius: inherit;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+
+.edit-mode .dashboard-block {
+    border: 2px dashed rgba(59, 130, 246, 0.5) !important; /* Blue dashed border */
+    cursor: grab;
+}
+
+.edit-mode .dashboard-block:active {
+    cursor: grabbing;
+}
+
+.edit-mode .dashboard-block .edit-overlay {
+    display: flex;
+    opacity: 1;
+}
+
+.edit-overlay button {
+    cursor: pointer;
+    pointer-events: auto; /* Buttons inside overlay should be clickable */
+}
+
+/* Hide animations */
+.dashboard-block.hidden-block {
+    display: none !important;
+}
+
+/* --- Size Picker Overlay --- */
+.size-picker {
+    position: absolute;
+    bottom: 12px;
+    left: 50%;
+    transform: translateX(-50%) translateY(12px);
+    opacity: 0;
+    z-index: 50;
+    background: rgba(255, 255, 255, 0.92);
+    backdrop-filter: blur(16px) saturate(180%);
+    border: 1px solid rgba(255, 255, 255, 0.5);
+    border-radius: 16px;
+    padding: 12px 16px 14px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.18), 0 2px 8px rgba(0, 0, 0, 0.08);
+    transition: opacity 0.2s ease, transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    pointer-events: auto;
+    min-width: 280px;
+    max-width: calc(100vw - 2rem);
+}
+
+.dark .size-picker {
+    background: rgba(17, 24, 39, 0.92);
+    border-color: rgba(255, 255, 255, 0.1);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5), 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+.size-picker--visible {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+}
+
+.size-picker-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+.dark .size-picker-header {
+    border-bottom-color: rgba(255, 255, 255, 0.08);
+}
+
+.size-picker-header span {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: #6b7280;
+}
+
+.dark .size-picker-header span {
+    color: #9ca3af;
+}
+
+.size-picker-close {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    border-radius: 8px;
+    color: #9ca3af;
+    transition: all 0.15s ease;
+    cursor: pointer;
+    background: none;
+    border: none;
+}
+
+.size-picker-close:hover {
+    background: rgba(0, 0, 0, 0.08);
+    color: #374151;
+}
+
+.dark .size-picker-close:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: #e5e7eb;
+}
+
+.size-picker-items {
+    display: flex;
+    gap: 6px;
+    align-items: stretch;
+}
+
+.size-picker-item {
+    position: relative;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    padding: 10px 4px 8px;
+    border-radius: 12px;
+    border: 2px solid transparent;
+    background: rgba(0, 0, 0, 0.03);
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.size-picker-item:hover {
+    background: rgba(59, 130, 246, 0.06);
+    border-color: rgba(59, 130, 246, 0.2);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(59, 130, 246, 0.12);
+}
+
+.dark .size-picker-item {
+    background: rgba(255, 255, 255, 0.04);
+}
+
+.dark .size-picker-item:hover {
+    background: rgba(59, 130, 246, 0.1);
+    border-color: rgba(59, 130, 246, 0.3);
+}
+
+.size-picker-item--active {
+    background: rgba(59, 130, 246, 0.1) !important;
+    border-color: #3b82f6 !important;
+    box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.2), 0 4px 12px rgba(59, 130, 246, 0.15);
+}
+
+.dark .size-picker-item--active {
+    background: rgba(59, 130, 246, 0.15) !important;
+    border-color: #60a5fa !important;
+}
+
+.size-picker-preview {
+    width: 100%;
+    height: 24px;
+    background: rgba(0, 0, 0, 0.06);
+    border-radius: 6px;
+    overflow: hidden;
+    display: flex;
+    align-items: stretch;
+}
+
+.dark .size-picker-preview {
+    background: rgba(255, 255, 255, 0.06);
+}
+
+.size-picker-bar {
+    height: 100%;
+    border-radius: 6px;
+    background: linear-gradient(135deg, #3b82f6, #6366f1);
+    transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    min-width: 4px;
+}
+
+.size-picker-item--active .size-picker-bar {
+    background: linear-gradient(135deg, #2563eb, #4f46e5);
+}
+
+.size-picker-label {
+    font-size: 11px;
+    font-weight: 800;
+    color: #374151;
+    letter-spacing: 0.02em;
+}
+
+.dark .size-picker-label {
+    color: #e5e7eb;
+}
+
+.size-picker-fraction {
+    font-size: 9px;
+    font-weight: 600;
+    color: #9ca3af;
+    font-variant-numeric: tabular-nums;
+}
+
+.size-picker-check {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    width: 14px;
+    height: 14px;
+    color: #3b82f6;
+}
+
+.dark .size-picker-check {
+    color: #60a5fa;
+}
+
+/* --- Resize Handle --- */
+.resize-handle {
+    display: none;
+    position: absolute;
+    top: 0;
+    right: -4px;
+    width: 8px;
+    height: 100%;
+    cursor: col-resize;
+    z-index: 45;
+    user-select: none;
+    touch-action: none;
+}
+
+.edit-mode .resize-handle {
+    display: block;
+}
+
+.resize-handle-bar {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 4px;
+    height: 32px;
+    border-radius: 4px;
+    background: rgba(59, 130, 246, 0);
+    transition: all 0.2s ease;
+}
+
+.resize-handle:hover .resize-handle-bar {
+    background: rgba(59, 130, 246, 0.5);
+    height: 48px;
+    box-shadow: 0 0 8px rgba(59, 130, 246, 0.3);
+}
+
+.dashboard-block.is-resizing {
+    transition: none !important;
+    z-index: 50;
+}
+
+.dashboard-block.is-resizing .resize-handle-bar {
+    background: rgba(59, 130, 246, 0.7) !important;
+    height: 64px;
+    box-shadow: 0 0 12px rgba(59, 130, 246, 0.4);
+}
+
+/* Hide resize handle and size button on mobile */
+@media (max-width: 639px) {
+    .resize-handle {
+        display: none !important;
+    }
+    .size-btn-desktop {
+        display: none !important;
+    }
+}
+
+/* Size Picker: 2-column grid for narrow blocks (STD / Medium / Small) */
+@media (min-width: 1024px) {
+    .dashboard-block[data-current-size="standard"] .size-picker,
+    .dashboard-block[data-current-size="medium"] .size-picker,
+    .dashboard-block[data-current-size="small"] .size-picker {
+        min-width: 200px;
+    }
+
+    .dashboard-block[data-current-size="standard"] .size-picker-items,
+    .dashboard-block[data-current-size="medium"] .size-picker-items,
+    .dashboard-block[data-current-size="small"] .size-picker-items {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 6px;
+    }
+
+    .dashboard-block[data-current-size="standard"] .size-picker-item:last-child,
+    .dashboard-block[data-current-size="medium"] .size-picker-item:last-child,
+    .dashboard-block[data-current-size="small"] .size-picker-item:last-child {
+        grid-column: 1 / -1;
+    }
+}
+
+/* --- Missing Tailwind Grid Classes for Dashboard Customization --- */
+.grid-cols-12 { grid-template-columns: repeat(12, minmax(0, 1fr)); }
+.col-span-12 { grid-column: span 12 / span 12; }
+
+@media (min-width: 640px) {
+    .sm\:col-span-6 { grid-column: span 6 / span 6; }
+}
+
+@media (min-width: 1024px) {
+    .lg\:col-span-3 { grid-column: span 3 / span 3; }
+    .lg\:col-span-4 { grid-column: span 4 / span 4; }
+    .lg\:col-span-6 { grid-column: span 6 / span 6; }
+    .lg\:col-span-8 { grid-column: span 8 / span 8; }
+}
+
+/* --- Dynamic Quick Stats Charts --- */
+.dashboard-block[data-current-size="small"] .quick-stat-bar { display: block; }
+.dashboard-block[data-current-size="small"] .quick-stat-chart { display: none; }
+
+.dashboard-block:not([data-current-size="small"]) .quick-stat-bar { display: none !important; }
+.dashboard-block:not([data-current-size="small"]) .quick-stat-chart { display: block !important; }
+
+/* --- Small Size Dashboard Block Adaptations (Desktop Only) --- */
+@media (min-width: 1024px) {
+    .dashboard-block[data-current-size="small"] {
+        padding: 1rem !important;
+    }
+
+    /* Agent Stats adaptation */
+    .dashboard-block[data-current-size="small"] .agent-stats-chart {
+        display: none !important;
+    }
+    .dashboard-block[data-current-size="small"] .agent-stats-bars {
+        display: flex !important;
+    }
+
+    /* Network Badges */
+    .dashboard-block[data-current-size="small"] #networkBadgesContainer {
+        width: 100%;
+        margin-top: 0.5rem;
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+    .dashboard-block[data-current-size="small"] #networkBadgesContainer > div {
+        width: 100%;
+        justify-content: space-between;
+        padding: 1rem;
+    }
+    .dashboard-block[data-current-size="small"] #networkBadgesDivider {
+        display: none;
+    }
+
+    /* Services Manager */
+    .dashboard-block[data-current-size="small"] #services-container {
+        grid-template-columns: 1fr !important;
+        gap: 0.5rem;
+    }
+
+    /* Node Manager */
+    .dashboard-block[data-current-size="small"] .hidden.lg\:block,
+    .dashboard-block[data-current-size="small"] .hidden.md\:block,
+    .dashboard-block[data-current-size="small"] .hidden.sm\:block {
+        display: none !important;
+    }
+    .dashboard-block[data-current-size="small"] .flex-row > .ml-4 {
+        margin-left: 0.5rem;
+    }
+
+    /* Traffic Stats */
+    .dashboard-block[data-current-size="small"] [data-block-id="traffic_stats"] .text-2xl {
+        font-size: 1.25rem;
+    }
+}
+
+/* Node Manager card columns (base widths, overridden below on narrow block sizes) */
+.node-stat-col {
+    width: 42px;
+    min-width: 42px;
+}
+.node-stat-col-wide {
+    width: 55px;
+    min-width: 55px;
+}
+
+/* Node cards use viewport-based sm: breakpoints, which don't know about the
+   dashboard block's own (container) width, so they must be forced to stack
+   whenever the block itself is resized narrower than "standard". Kept compact
+   (tighter padding/gaps, 3-column stat grid) so this block doesn't grow taller
+   than its row neighbors and stretch them into empty space. */
+@media (min-width: 1024px) {
+    .dashboard-block[data-current-size="small"] #nodesList .node-row,
+    .dashboard-block[data-current-size="medium"] #nodesList .node-row {
+        flex-direction: column !important;
+        align-items: stretch !important;
+        padding: 0.625rem 0.75rem !important;
+        gap: 0.5rem !important;
+    }
+    .dashboard-block[data-current-size="small"] #nodesList .node-stats,
+    .dashboard-block[data-current-size="medium"] #nodesList .node-stats {
+        display: grid !important;
+        grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+        justify-items: center !important;
+        align-items: center !important;
+        row-gap: 0.5rem !important;
+        column-gap: 0.25rem !important;
+        width: 100% !important;
+        margin-top: 0 !important;
+        padding: 0.5rem 0 0 !important;
+    }
+    .dashboard-block[data-current-size="small"] #nodesList .node-stat-col,
+    .dashboard-block[data-current-size="medium"] #nodesList .node-stat-col,
+    .dashboard-block[data-current-size="small"] #nodesList .node-stat-col-wide,
+    .dashboard-block[data-current-size="medium"] #nodesList .node-stat-col-wide {
+        width: 100% !important;
+        min-width: 0 !important;
+    }
+}
+
+
+/* Dashboard block stretch adaptation */
+.dashboard-block {
+    display: flex;
+    flex-direction: column;
+}
+.dashboard-block > * {
+    flex-shrink: 0;
+}
+.dashboard-block .lazy-block {
+    flex: 1 1 auto;
 }

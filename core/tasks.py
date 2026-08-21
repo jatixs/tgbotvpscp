@@ -71,15 +71,21 @@ async def measure_agent_ping() -> str | None:
         timeout_sec = getattr(current_config, "NODE_OFFLINE_TIMEOUT", 120)
         now = time.time()
         online_nodes = [n for n in all_nodes.values() if now - n.get("last_seen", 0) < timeout_sec and not n.get("is_restarting")]
-        if not online_nodes:
-            return None
-        target_node = online_nodes[0]
-        node_ip = target_node.get("ip", "")
-        if not node_ip or node_ip == "Unknown":
-            return None
-        target_ip = node_ip
-        target_http = f"http://{node_ip}"
-        target_port = 80
+        best_ping = None
+        for node in online_nodes:
+            node_stats = node.get("stats", {})
+            ping_val = node_stats.get("ping", "n/a")
+            if ping_val != "n/a":
+                try:
+                    ping_float = float(ping_val)
+                    if best_ping is None or ping_float < best_ping:
+                        best_ping = ping_float
+                except (ValueError, TypeError):
+                    pass
+        
+        if best_ping is not None:
+            return str(round(best_ping, 1)) if best_ping % 1 else str(int(best_ping))
+        return None
 
     if ping_mode == "icmp":
         icmp_res = await _do_icmp_ping(target_ip)
@@ -101,8 +107,8 @@ async def measure_agent_ping() -> str | None:
         except Exception:
             ping_mode = "http"
             
-    if ping_mode == "http":
-        targets = [target_http] if ping_target == "internal" else [
+    if ping_mode == "http" and target_http is not None:
+        targets = [
             target_http,
             "https://www.google.com" if ping_target != "google" else "https://www.cloudflare.com",
         ]
@@ -158,11 +164,14 @@ async def agent_monitor() -> None:
             mem = psutil.virtual_memory()
             ram_pct = round((mem.total - mem.available) / mem.total * 100, 1) if mem.total > 0 else 0
             net = psutil.net_io_counters()
+            disk = psutil.disk_usage('/')
+            disk_pct = disk.percent
             AGENT_HISTORY.append(
                 {
                     "t": int(time.time()),
                     "c": cpu,
                     "r": ram_pct,
+                    "d": disk_pct,
                     "rx": net.bytes_recv,
                     "tx": net.bytes_sent,
                 }

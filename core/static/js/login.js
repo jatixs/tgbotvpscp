@@ -45,7 +45,7 @@ async function onTelegramAuth(user) {
         }
     } catch (e) {
         console.error(e);
-        const errTitle = "Connection Error";
+        const errTitle = (typeof I18N !== 'undefined' && I18N.web_conn_error_short) ? I18N.web_conn_error_short : "Conn Error";
         if (window.showModalAlert) await window.showModalAlert(String(e), errTitle);
     }
 }
@@ -277,8 +277,9 @@ async function requestPasswordReset() {
             }
         }
     } catch (e) {
-        const netErrTitle = (typeof I18N !== 'undefined' && I18N.web_conn_error_short) ? I18N.web_conn_error_short : "Network Error";
-        if (window.showModalAlert) await window.showModalAlert("Connection Error: " + e, netErrTitle);
+        const netErrTitle = (typeof I18N !== 'undefined' && I18N.web_conn_error_short) ? I18N.web_conn_error_short : "Conn Error";
+        const netErrMsg = (typeof I18N !== 'undefined' && I18N.web_conn_error) ? I18N.web_conn_error.replace('{error}', e) : "Connection error: " + e;
+        if (window.showModalAlert) await window.showModalAlert(netErrMsg, netErrTitle);
     } finally {
         if (btn) {
             btn.disabled = false;
@@ -310,7 +311,7 @@ async function submitNewPassword() {
     }
 
     btn.disabled = true;
-    btn.innerText = "Saving...";
+    btn.innerText = (typeof I18N !== 'undefined' && I18N.web_saving_btn) ? I18N.web_saving_btn : "Saving...";
 
     try {
         const res = await fetch('/api/reset/confirm', {
@@ -342,14 +343,16 @@ async function submitNewPassword() {
             `);
             window.history.replaceState({}, document.title, "/login");
         } else {
-            if (window.showModalAlert) await window.showModalAlert("Error: " + data.error, errTitle);
+            const errMsg = (typeof I18N !== 'undefined' && I18N.web_error) ? I18N.web_error.replace('{error}', data.error) : "Error: " + data.error;
+            if (window.showModalAlert) await window.showModalAlert(errMsg, errTitle);
             btn.disabled = false;
-            btn.innerText = "Save Password";
+            btn.innerText = (typeof I18N !== 'undefined' && I18N.web_save_btn) ? I18N.web_save_btn : "Save Password";
         }
     } catch (e) {
-        if (window.showModalAlert) await window.showModalAlert("Network Error: " + e, errTitle);
+        const connErrMsg = (typeof I18N !== 'undefined' && I18N.web_conn_error) ? I18N.web_conn_error.replace('{error}', e) : "Network error: " + e;
+        if (window.showModalAlert) await window.showModalAlert(connErrMsg, errTitle);
         btn.disabled = false;
-        btn.innerText = "Save Password";
+        btn.innerText = (typeof I18N !== 'undefined' && I18N.web_save_btn) ? I18N.web_save_btn : "Save Password";
     }
 }
 
@@ -363,7 +366,7 @@ document.addEventListener("DOMContentLoaded", () => {
             mainCard.innerHTML = DOMPurify.sanitize(`
                 <div class="flex flex-col items-center justify-center py-12">
                     <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mb-4"></div>
-                    <p class="text-gray-500 dark:text-gray-400 font-medium">Authenticating via Telegram...</p>
+                    <p class="text-gray-500 dark:text-gray-400 font-medium">${(typeof I18N !== 'undefined' && I18N.web_logging_in) ? I18N.web_logging_in : "Authenticating via Telegram..."}</p>
                 </div>
             `);
         }
@@ -376,12 +379,14 @@ document.addEventListener("DOMContentLoaded", () => {
             if (res.ok) {
                 window.location.reload();
             } else {
-                throw new Error(res.body.error || "Web App auth failed");
+                const failMsg = (typeof I18N !== 'undefined' && I18N.login_webapp_auth_failed) ? I18N.login_webapp_auth_failed : "Web App auth failed";
+                throw new Error(res.body.error || failMsg);
             }
         }).catch(e => {
             console.error(e);
-            if (window.showModalAlert) window.showModalAlert(String(e), 'Web App Auth Error');
-            else alert("Error: " + e);
+            const errTitle = (typeof I18N !== 'undefined' && I18N.login_webapp_auth_error) ? I18N.login_webapp_auth_error : "Web App Auth Error";
+            if (window.showModalAlert) window.showModalAlert(String(e), errTitle);
+            else alert(errTitle + ": " + e);
             setTimeout(() => window.location.reload(), 3000); // Reload to show normal form
         });
         return; // Prevent other initialization if we are authenticating via Web App

@@ -489,6 +489,7 @@ def setup_logging(log_directory, log_filename_prefix):
     logging.info(
         f"Logging initialized. Mode: {mode_name}. Sensitive data redaction: {('OFF' if UNSAFE_LOGGING else 'ON')}"
     )
+    logging.getLogger("urllib3.connectionpool").setLevel(logging.ERROR)
 
 
 SENTRY_DSN = os.environ.get("SENTRY_DSN")

@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="ru">
+<html lang="{{ lang }}">
 
 <head>
     <meta charset="UTF-8">
@@ -64,23 +64,31 @@
             </div>
             <div class="flex items-center gap-1 sm:gap-4 shrink-0">
                 <div class="hide-on-mobile flex items-center gap-1 sm:gap-2 mr-1 sm:mr-0">
-                    <button data-action="toggle-perf-mode" title="Toggle Light Mode" aria-label="Toggle Light Mode" class="p-1.5 sm:p-2 rounded-full hover:bg-black/5 dark:hover:bg-white/10 transition active:scale-95 text-yellow-500 hover:text-yellow-600 dark:hover:text-yellow-400 hover:scale-110 focus:ring-2 focus:ring-yellow-500 focus:outline-none">
+                    <button data-action="toggle-perf-mode" title="{{ web_toggle_perf_mode }}" aria-label="{{ web_toggle_perf_mode }}" class="p-1.5 sm:p-2 rounded-full hover:bg-black/5 dark:hover:bg-white/10 transition active:scale-95 text-yellow-500 hover:text-yellow-600 dark:hover:text-yellow-400 hover:scale-110 focus:ring-2 focus:ring-yellow-500 focus:outline-none">
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 sm:h-5 sm:w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
                     </button>
-                    <button data-action="toggle-a11y-mode" title="Toggle Accessibility Mode" aria-label="Toggle Accessibility Mode" class="p-1.5 sm:p-2 rounded-full hover:bg-black/5 dark:hover:bg-white/10 transition active:scale-95 text-blue-500 hover:text-blue-600 dark:hover:text-blue-400 hover:scale-110 focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                    <button data-action="toggle-a11y-mode" title="{{ web_toggle_a11y_mode }}" aria-label="{{ web_toggle_a11y_mode }}" class="p-1.5 sm:p-2 rounded-full hover:bg-black/5 dark:hover:bg-white/10 transition active:scale-95 text-blue-500 hover:text-blue-600 dark:hover:text-blue-400 hover:scale-110 focus:ring-2 focus:ring-blue-500 focus:outline-none">
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 sm:h-5 sm:w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
                     </button>
                 </div>
                 {% if is_main_admin %}
                 <button onclick="openVncModal()"
                     class="flex items-center justify-center h-8 px-2 sm:px-3 rounded-lg hover:bg-black/5 dark:hover:bg-white/10 transition text-gray-600 dark:text-gray-400 font-medium text-xs sm:text-sm gap-1 whitespace-nowrap"
-                    title="VNC / Terminal">
+                    title="{{ web_vnc_terminal_title }}">
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24"
                         stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                             d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                     </svg>
                     <span class="hidden sm:inline" data-i18n="web_terminal_btn">VNC</span>
+                </button>
+                <button onclick="toggleDashboardEditMode()" id="btnEditDashboard"
+                    class="flex items-center justify-center h-8 px-2 sm:px-3 rounded-lg bg-blue-500/10 hover:bg-blue-500/20 text-blue-600 dark:text-blue-400 transition font-medium text-xs sm:text-sm gap-1 whitespace-nowrap"
+                    title="{{ web_edit_ui }}">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                    </svg>
+                    <span class="hidden lg:inline">{{ web_edit_ui }}</span>
                 </button>
                 {% endif %}
                 {{ settings_btn | safe }}
@@ -177,7 +185,7 @@
                         <div
                             class="bg-white/90 dark:bg-gray-800 border border-gray-200 dark:border-white/10 rounded-xl shadow-xl backdrop-blur-sm overflow-hidden py-1">
                             <div class="w-full px-4 py-2 text-sm flex items-center justify-between text-gray-800 dark:text-gray-200 border-b border-gray-100 dark:border-white/5">
-                                <span class="font-medium">Тема</span>
+                                <span class="font-medium">{{ web_theme_label|default("Тема") }}</span>
                                 <div class="flex items-center gap-1 bg-gray-200/50 dark:bg-black/30 p-1 rounded-xl text-sm shrink-0" id="mobileThemeSegment">
                                     <button onclick="setThemeDirect('system', event)" class="p-1.5 rounded-md transition-colors leading-none" id="mThemeSys">
                                         <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>
@@ -195,17 +203,17 @@
                             </div>
                             <div onclick="toggleHaptics()"
                                 class="w-full cursor-pointer px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-white/5 flex items-center justify-between text-gray-800 dark:text-gray-200 transition">
-                                <span class="font-medium">Вибрация</span>
+                                <span class="font-medium">{{ web_vibration_label|default("Вибрация") }}</span>
                                 <label class="relative inline-flex items-center cursor-pointer" onclick="event.stopPropagation(); event.preventDefault(); toggleHaptics()">
                                     <input type="checkbox" id="mHapticsCheckbox" class="sr-only peer">
                                     <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-green-500"></div>
                                 </label>
                             </div>
                             <div class="w-full px-4 py-2 flex items-center justify-center gap-3 border-t border-gray-100 dark:border-white/5">
-                                <button data-action="toggle-perf-mode" title="Toggle Light Mode" class="p-2 rounded-xl bg-gray-200/50 dark:bg-black/30 transition text-yellow-500 hover:bg-black/5 dark:hover:bg-white/10 w-full flex justify-center active:scale-95">
+                                <button data-action="toggle-perf-mode" title="{{ web_toggle_perf_mode }}" class="p-2 rounded-xl bg-gray-200/50 dark:bg-black/30 transition text-yellow-500 hover:bg-black/5 dark:hover:bg-white/10 w-full flex justify-center active:scale-95">
                                     <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
                                 </button>
-                                <button data-action="toggle-a11y-mode" title="Toggle Accessibility Mode" class="p-2 rounded-xl bg-gray-200/50 dark:bg-black/30 transition text-blue-500 hover:bg-black/5 dark:hover:bg-white/10 w-full flex justify-center active:scale-95">
+                                <button data-action="toggle-a11y-mode" title="{{ web_toggle_a11y_mode }}" class="p-2 rounded-xl bg-gray-200/50 dark:bg-black/30 transition text-blue-500 hover:bg-black/5 dark:hover:bg-white/10 w-full flex justify-center active:scale-95">
                                     <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
                                 </button>
                             </div>
@@ -232,9 +240,8 @@
         </div>
     </nav>
     <main class="max-w-7xl mx-auto px-4 mt-4 sm:mt-8 relative z-10">
-        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6 sm:mb-8">
-            <div
-                class="bg-white/60 dark:bg-white/5 backdrop-blur-md border border-white/40 dark:border-white/10 rounded-2xl p-5 shadow-lg dark:shadow-none flex flex-col justify-between h-32 relative overflow-hidden group hover:scale-[1.02] transition duration-300 cursor-help"
+        <div id="dashboardBlocksContainer" class="grid grid-cols-12 gap-6 pb-20 grid-flow-row-dense">
+            <div data-block-id="quick_stats_uptime" data-default-size="small" class="dashboard-block relative col-span-12 sm:col-span-6 lg:col-span-3 lg:row-span-1 bg-white/60 dark:bg-white/5 backdrop-blur-md border border-white/40 dark:border-white/10 rounded-2xl p-5 shadow-lg dark:shadow-none flex flex-col justify-between h-32 overflow-hidden group hover:scale-[1.02] transition-all duration-300 cursor-help"
                 onclick="toggleHint(event, 'hint-uptime')">
                 <div
                     class="absolute right-[-20px] top-[-20px] w-24 h-24 bg-blue-500/10 rounded-full blur-2xl group-hover:bg-blue-500/20 transition">
@@ -257,10 +264,20 @@
                         </svg>
                     </div>
                 </div>
-                <div class="text-xs text-gray-400 dark:text-gray-500 font-mono mt-auto">{{ web_footer_powered }} Python
+                <div class="text-xs text-gray-400 dark:text-gray-500 font-mono mt-auto quick-stat-bar">{{ web_footer_powered }} Python
+                </div>
+                <div class="w-full mt-auto hidden quick-stat-chart">
+                    <div class="flex items-center justify-between text-[10px] font-bold mb-1">
+                        <span class="text-green-500" id="uptime_online_label"></span>
+                        <span class="text-red-500" id="uptime_downtime_label"></span>
+                    </div>
+                    <div class="w-full h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden flex">
+                        <div id="uptimeBarOnline" class="h-full bg-green-500 transition-all duration-500" style="width: 100%"></div>
+                        <div id="uptimeBarDowntime" class="h-full bg-red-500 transition-all duration-500" style="width: 0%"></div>
+                    </div>
                 </div>
             </div>
-            <div class="bg-white/60 dark:bg-white/5 backdrop-blur-md border border-white/40 dark:border-white/10 rounded-2xl p-5 shadow-lg dark:shadow-none flex flex-col justify-between h-32 relative overflow-hidden group hover:scale-[1.02] transition duration-300 cursor-help"
+            <div data-block-id="quick_stats_cpu" data-default-size="small" class="dashboard-block relative col-span-12 sm:col-span-6 lg:col-span-3 lg:row-span-1 bg-white/60 dark:bg-white/5 backdrop-blur-md border border-white/40 dark:border-white/10 rounded-2xl p-5 shadow-lg dark:shadow-none flex flex-col justify-between h-32 overflow-hidden group hover:scale-[1.02] transition-all duration-300 cursor-help"
                 onclick="toggleHint(event, 'hint-cpu')">
                 <div
                     class="absolute right-[-20px] top-[-20px] w-24 h-24 bg-indigo-500/10 rounded-full blur-2xl group-hover:bg-indigo-500/20 transition">
@@ -287,12 +304,15 @@
                         </svg>
                     </div>
                 </div>
-                <div class="w-full bg-gray-200 dark:bg-gray-700 h-1.5 rounded-full mt-auto overflow-hidden">
+                <div class="w-full bg-gray-200 dark:bg-gray-700 h-1.5 rounded-full mt-auto overflow-hidden quick-stat-bar">
                     <div class="bg-indigo-500 h-1.5 rounded-full transition-all duration-1000 ease-out" id="prog_cpu"
                         style="width: 0%"></div>
                 </div>
+                <div class="w-full h-16 mt-auto hidden quick-stat-chart">
+                    <canvas id="quickCpuChart"></canvas>
+                </div>
             </div>
-            <div class="bg-white/60 dark:bg-white/5 backdrop-blur-md border border-white/40 dark:border-white/10 rounded-2xl p-5 shadow-lg dark:shadow-none flex flex-col justify-between h-32 relative overflow-hidden group hover:scale-[1.02] transition duration-300 cursor-help"
+            <div data-block-id="quick_stats_ram" data-default-size="small" class="dashboard-block relative col-span-12 sm:col-span-6 lg:col-span-3 lg:row-span-1 bg-white/60 dark:bg-white/5 backdrop-blur-md border border-white/40 dark:border-white/10 rounded-2xl p-5 shadow-lg dark:shadow-none flex flex-col justify-between h-32 overflow-hidden group hover:scale-[1.02] transition-all duration-300 cursor-help"
                 onclick="toggleHint(event, 'hint-ram')">
                 <div
                     class="absolute right-[-20px] top-[-20px] w-24 h-24 bg-purple-500/10 rounded-full blur-2xl group-hover:bg-purple-500/20 transition">
@@ -319,12 +339,15 @@
                         </svg>
                     </div>
                 </div>
-                <div class="w-full bg-gray-200 dark:bg-gray-700 h-1.5 rounded-full mt-auto overflow-hidden">
+                <div class="w-full bg-gray-200 dark:bg-gray-700 h-1.5 rounded-full mt-auto overflow-hidden quick-stat-bar">
                     <div class="bg-purple-500 h-1.5 rounded-full transition-all duration-1000 ease-out" id="prog_ram"
                         style="width: 0%"></div>
                 </div>
+                <div class="w-full h-16 mt-auto hidden quick-stat-chart">
+                    <canvas id="quickRamChart"></canvas>
+                </div>
             </div>
-            <div class="bg-white/60 dark:bg-white/5 backdrop-blur-md border border-white/40 dark:border-white/10 rounded-2xl p-5 shadow-lg dark:shadow-none flex flex-col justify-between h-32 relative overflow-hidden group hover:scale-[1.02] transition duration-300 cursor-help"
+            <div data-block-id="quick_stats_disk" data-default-size="small" class="dashboard-block relative col-span-12 sm:col-span-6 lg:col-span-3 lg:row-span-1 bg-white/60 dark:bg-white/5 backdrop-blur-md border border-white/40 dark:border-white/10 rounded-2xl p-5 shadow-lg dark:shadow-none flex flex-col justify-between h-32 overflow-hidden group hover:scale-[1.02] transition-all duration-300 cursor-help"
                 onclick="toggleHint(event, 'hint-disk')">
                 <div
                     class="absolute right-[-20px] top-[-20px] w-24 h-24 bg-green-500/10 rounded-full blur-2xl group-hover:bg-green-500/20 transition">
@@ -350,15 +373,15 @@
                         </svg>
                     </div>
                 </div>
-                <div class="w-full bg-gray-200 dark:bg-gray-700 h-1.5 rounded-full mt-auto overflow-hidden">
+                <div class="w-full bg-gray-200 dark:bg-gray-700 h-1.5 rounded-full mt-auto overflow-hidden quick-stat-bar">
                     <div class="bg-green-500 h-1.5 rounded-full transition-all duration-1000 ease-out" id="prog_disk"
                         style="width: 0%"></div>
                 </div>
+                <div class="w-full h-16 mt-auto hidden quick-stat-chart">
+                    <canvas id="quickDiskChart"></canvas>
+                </div>
             </div>
-        </div>
-        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
-            <div
-                class="lg:col-span-2 bg-white/60 dark:bg-white/5 backdrop-blur-md border border-white/40 dark:border-white/10 rounded-2xl p-6 shadow-lg dark:shadow-none lazy-block relative">
+            <div data-block-id="agent_stats" data-default-size="wide" class="dashboard-block col-span-12 lg:col-span-8 lg:row-span-2 bg-white/60 dark:bg-white/5 backdrop-blur-md border border-white/40 dark:border-white/10 rounded-2xl p-6 shadow-lg dark:shadow-none lazy-block relative transition-all duration-300">
                 <div class="flex justify-between items-center mb-4 gap-2 flex-wrap">
                     <h3 class="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2 min-w-0">
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-gray-500 flex-shrink-0" fill="none"
@@ -370,36 +393,59 @@
                     </h3>
                     <div id="networkBadgesContainer" class="flex items-center gap-2 flex-shrink-0">
                         <div id="agentPingBadge"
-                            class="network-badge flex items-center gap-1 bg-gray-100 dark:bg-black/30 px-3 py-1 rounded-lg border border-gray-200 dark:border-white/10 shadow-sm">
-                            <span class="text-[10px] text-gray-500 dark:text-gray-400 font-bold uppercase">{{
-                                web_agent_ping_label }}</span>
+                            class="network-badge flex items-center justify-between gap-1 bg-gray-100 dark:bg-black/30 px-3 py-1 rounded-lg border border-gray-200 dark:border-white/10 shadow-sm">
+                            <span class="text-[10px] text-gray-500 dark:text-gray-400 font-bold uppercase">{{ web_agent_ping_label|default("PING") }}</span>
                             <span id="agentPing"
-                                class="font-mono text-xs font-bold text-gray-600 dark:text-gray-300">n/a</span>
+                                class="font-mono text-xs font-bold text-gray-600 dark:text-gray-300 decrypt-on-load" data-scramble-len="6">n/a</span>
                         </div>
                         <div id="networkBadgesDivider"
                             class="hidden w-px h-6 bg-gray-300 dark:bg-gray-600 flex-shrink-0 mx-1"></div>
                         <div id="agentIpBadge" role="button" tabindex="2" onClick="openAgentIpsModal()"
                             onkeydown="if(event.key==='Enter'||event.key===' ') { event.preventDefault(); openAgentIpsModal(); }"
-                            class="network-badge flex items-center gap-2 bg-gray-100 dark:bg-black/30 px-3 py-1 rounded-lg border border-gray-200 dark:border-white/10 shadow-sm cursor-pointer hover:bg-gray-200/70 dark:hover:bg-white/10 transition">
-                            <span id="agentIp"
-                                class="font-mono text-xs font-bold text-gray-600 dark:text-gray-300 select-all">{{
-                                agent_ip }}</span>
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-gray-400" fill="none"
-                                viewBox="0 0 24 24" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                    d="M13 16h-1v-4h-1m1-4h.01M12 20a8 8 0 100-16 8 8 0 000 16z" />
-                            </svg>
+                            class="network-badge flex items-center justify-between gap-2 bg-gray-100 dark:bg-black/30 px-3 py-1 rounded-lg border border-gray-200 dark:border-white/10 shadow-sm cursor-pointer hover:bg-gray-200/70 dark:hover:bg-white/10 transition">
+                            <span class="text-[10px] text-gray-500 dark:text-gray-400 font-bold uppercase">IP</span>
+                            <div class="flex items-center gap-1">
+                                <span id="agentIp"
+                                    class="font-mono text-xs font-bold text-gray-600 dark:text-gray-300 select-all decrypt-on-load" data-scramble-len="15">n/a</span>
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-gray-400" fill="none"
+                                    viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M13 16h-1v-4h-1m1-4h.01M12 20a8 8 0 100-16 8 8 0 000 16z" />
+                                </svg>
+                            </div>
                         </div>
                     </div>
 
                 </div>
-                <div class="h-[250px] w-full">
+                <div class="flex-1 min-h-[250px] w-full agent-stats-chart">
                     <canvas id="agentChart"></canvas>
                 </div>
 
+                <div class="agent-stats-bars hidden flex-1 flex-col justify-center gap-4 mt-2 mb-2 w-full">
+                    <!-- TX Bar -->
+                    <div class="bg-gray-50 dark:bg-black/20 p-4 rounded-xl border border-gray-200 dark:border-white/5 flex flex-col gap-3">
+                        <div class="flex justify-between items-center text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider">
+                            <span class="flex items-center gap-2 text-blue-500"><span class="w-2 h-2 rounded-full bg-blue-500"></span> {{ web_upload|default("Отдача") }}</span>
+                            <span id="agentStatsBarTxText" class="font-mono text-sm">0.00 Кбит/с</span>
+                        </div>
+                        <div class="w-full bg-gray-200 dark:bg-gray-700 h-2 rounded-full overflow-hidden shadow-inner">
+                            <div class="bg-blue-500 h-2 rounded-full transition-all duration-500 ease-out" id="agentStatsBarTxProg" style="width: 0%"></div>
+                        </div>
+                    </div>
+                    <!-- RX Bar -->
+                    <div class="bg-gray-50 dark:bg-black/20 p-4 rounded-xl border border-gray-200 dark:border-white/5 flex flex-col gap-3">
+                        <div class="flex justify-between items-center text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider">
+                            <span class="flex items-center gap-2 text-green-500"><span class="w-2 h-2 rounded-full bg-green-500"></span> {{ web_download|default("Загрузка") }}</span>
+                            <span id="agentStatsBarRxText" class="font-mono text-sm">0.00 Кбит/с</span>
+                        </div>
+                        <div class="w-full bg-gray-200 dark:bg-gray-700 h-2 rounded-full overflow-hidden shadow-inner">
+                            <div class="bg-green-500 h-2 rounded-full transition-all duration-500 ease-out" id="agentStatsBarRxProg" style="width: 0%"></div>
+                        </div>
+                    </div>
+                </div>
+
             </div>
-            <div
-                class="bg-white/60 dark:bg-white/5 backdrop-blur-md border border-white/40 dark:border-white/10 rounded-2xl p-6 shadow-lg dark:shadow-none flex flex-col lazy-block">
+            <div data-block-id="traffic_stats" data-default-size="medium" class="dashboard-block relative col-span-12 lg:col-span-4 lg:row-span-1 bg-white/60 dark:bg-white/5 backdrop-blur-md border border-white/40 dark:border-white/10 rounded-2xl p-6 shadow-lg dark:shadow-none flex flex-col justify-between lazy-block transition-all duration-300">
                 <div class="flex justify-between items-start mb-4">
                     <h3 class="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-gray-500" fill="none"
@@ -466,11 +512,8 @@
                     </div>
                 </div>
             </div>
-        </div>
-        <div class="grid grid-cols-1 lg:grid-cols-1 gap-6 mb-6">
             <!-- SERVICES MANAGER -->
-            <div
-                class="bg-white/60 dark:bg-white/5 backdrop-blur-md border border-white/40 dark:border-white/10 rounded-2xl p-6 shadow-lg dark:shadow-none lazy-block">
+            <div data-block-id="services_manager" data-default-size="large" class="dashboard-block relative col-span-12 lg:row-span-2 bg-white/60 dark:bg-white/5 backdrop-blur-md border border-white/40 dark:border-white/10 rounded-2xl p-6 shadow-lg dark:shadow-none lazy-block transition-all duration-300">
                 <div class="flex justify-between items-center mb-4 flex-wrap gap-2">
                     <h3 class="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-gray-500" fill="none"
@@ -519,15 +562,11 @@
                     </div>
                 </div>
                 <!-- Services Grid -->
-                <div id="services-container" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                <div id="services-container" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 flex-1 max-h-[400px] overflow-y-auto custom-scrollbar pr-2 pb-2 content-start">
                     <div class="text-center w-full py-8 text-gray-400 text-sm">Loading services...</div>
                 </div>
             </div>
-        </div>
-
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <div
-                class="bg-white/60 dark:bg-white/5 backdrop-blur-md border border-white/40 dark:border-white/10 rounded-2xl p-6 shadow-lg dark:shadow-none lazy-block">
+            <div data-block-id="nodes_manager" data-default-size="standard" class="dashboard-block relative col-span-12 lg:col-span-6 lg:row-span-2 bg-white/60 dark:bg-white/5 backdrop-blur-md border border-white/40 dark:border-white/10 rounded-2xl p-6 shadow-lg dark:shadow-none lazy-block transition-all duration-300">
                 <div class="flex justify-between items-center mb-4 flex-wrap gap-2">
                     <h3 class="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-gray-500" fill="none"
@@ -592,7 +631,7 @@
                         </div>
                     </div>
                 </div>
-                <div class="space-y-3 pr-2 pb-3" id="nodesList">
+                <div class="space-y-3 pr-2 pb-3 max-h-[400px] overflow-y-auto custom-scrollbar" id="nodesList">
                     <div class="text-center py-8 text-gray-400 dark:text-gray-500 text-sm">
                         <svg class="animate-spin h-5 w-5 mx-auto mb-2 opacity-50" xmlns="http://www.w3.org/2000/svg"
                             fill="none" viewBox="0 0 24 24">
@@ -605,14 +644,14 @@
                         {{ web_nodes_loading }}
                     </div>
                 </div>
-                <div class="mt-4 pt-4 border-t border-gray-200 dark:border-white/5 flex justify-between items-center gap-3">
+                <div class="mt-auto pt-4 border-t border-gray-200 dark:border-white/5 flex justify-between items-center gap-3">
                     <a href="/nodes"
                         class="monitor-link-btn inline-flex items-center gap-2 py-1.5 px-3 rounded-lg text-xs font-bold transition shadow-lg shadow-purple-500/20"
                         title="{{ web_monitor_title }}">
                         <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="none" viewBox="0 0 24 24"
                             stroke="currentColor">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                                d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2-2v10a2 2 0 002 2z" />
                         </svg>
                         <span>{{ web_monitor_btn }}</span>
                     </a>
@@ -621,8 +660,7 @@
                     </div>
                 </div>
             </div>
-            <div
-                class="bg-white/60 dark:bg-white/5 backdrop-blur-md border border-white/40 dark:border-white/10 rounded-2xl p-6 shadow-lg dark:shadow-none flex flex-col relative overflow-hidden lazy-block">
+            <div data-block-id="system_logs" data-default-size="standard" class="dashboard-block relative col-span-12 lg:col-span-6 lg:row-span-2 bg-white/60 dark:bg-white/5 backdrop-blur-md border border-white/40 dark:border-white/10 rounded-2xl p-6 shadow-lg dark:shadow-none flex flex-col overflow-hidden lazy-block transition-all duration-300">
                 <div class="flex justify-between items-center mb-4 flex-wrap gap-2 relative z-10">
                     <h3 class="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-gray-500" fill="none"
@@ -644,7 +682,7 @@
                     </div>
                 </div>
                 <div
-                    class="flex-1 bg-gray-50 dark:bg-gray-900 rounded-xl p-4 overflow-hidden relative font-mono text-xs border border-gray-200 dark:border-gray-800 shadow-inner group">
+                    class="flex-1 flex flex-col min-h-[250px] max-h-[400px] bg-gray-50 dark:bg-gray-900 rounded-xl p-4 overflow-hidden relative font-mono text-xs border border-gray-200 dark:border-gray-800 shadow-inner group">
                     <div id="logsOverlay"
                         class="hidden absolute inset-0 z-20 flex items-center justify-center bg-white/10 dark:bg-black/10 backdrop-blur-sm transition-all duration-500">
                         <div
@@ -663,7 +701,7 @@
                         </div>
                     </div>
                     <div id="logsContainer"
-                        class="h-[300px] overflow-y-auto text-gray-700 dark:text-gray-300 space-y-1 custom-scrollbar scroll-smooth relative z-0">
+                        class="flex-1 min-h-0 overflow-y-auto text-gray-700 dark:text-gray-300 space-y-1 custom-scrollbar scroll-smooth relative z-0">
                         <div class="text-gray-600 italic text-center mt-20">{{ web_loading }}</div>
                     </div>
                     <div
@@ -672,6 +710,24 @@
                     </div>
                 </div>
             </div>
+        </div>
+
+        <!-- Hidden Blocks Panel (Visible only in Edit Mode) -->
+        <div id="hiddenBlocksPanel" class="hidden fixed bottom-4 right-4 z-50 bg-white dark:bg-gray-800 border border-gray-200 dark:border-white/10 rounded-2xl shadow-2xl p-4 w-72 max-w-[calc(100vw-2rem)] transition-all transform translate-y-10 opacity-0">
+            <div class="flex justify-between items-center mb-3">
+                <h4 class="font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
+                    </svg>
+                    {{ web_hidden_widgets|default("Скрытые виджеты") }}
+                </h4>
+            </div>
+            <div id="hiddenBlocksList" class="flex flex-col gap-2 max-h-60 overflow-y-auto custom-scrollbar">
+                <div class="text-xs text-gray-400 italic text-center py-2" id="hiddenBlocksEmpty">{{ web_hidden_widgets_empty|default("Нет скрытых виджетов") }}</div>
+            </div>
+            <button onclick="toggleDashboardEditMode()" class="mt-4 w-full py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-xl text-sm font-bold transition">
+                {{ web_save_layout|default("Сохранить макет") }}
+            </button>
         </div>
     </main>
     <div id="genericHintModal"
@@ -1148,6 +1204,15 @@
         </div>
     </div>
     <script src="/static/js/common.js?v={{ web_version }}"></script>
+    <script>
+        document.addEventListener("DOMContentLoaded", () => {
+            if (typeof window.startScrambleAnimation === 'function') {
+                document.querySelectorAll('.decrypt-on-load').forEach(el => {
+                    window.startScrambleAnimation(el);
+                });
+            }
+        });
+    </script>
     <script src="/static/js/dashboard.js?v={{ web_version }}"></script>
     <script>
         function openVncModal() {
