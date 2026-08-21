@@ -14,22 +14,29 @@
 ## [1.25.0] - 2026-08-20
 
 ### 🚀 New Features:
-* **WebUI (Dashboard Constructor):** Added a new custom interface building feature! You can now rearrange widgets on the main page using drag-and-drop. Blocks automatically adjust their size and width to elegantly fill empty space without leaving gaps. Your custom layout is automatically saved for your device.
-* **WebUI (Mini Charts):** Added CPU/RAM/Disk mini load charts to the quick stats block (similar to the traffic chart), plus a clear Uptime/Downtime split-bar visualization.
+* **WebUI:**
+  * **Dashboard Constructor:** Added a new custom interface building feature! You can now rearrange widgets on the main page using drag-and-drop. Blocks automatically adjust their size and width to elegantly fill empty space without leaving gaps. Your custom layout is automatically saved for your device.
+  * **Mini Charts:** Added CPU/RAM/Disk mini load charts to the quick stats block (similar to the traffic chart), plus a clear Uptime/Downtime split-bar visualization.
 
 ### 🔒 Security & API:
 * **Package Security:** Pinned `setuptools` version (>=83.0.0) across deployment scripts to fix CVE-2025-47273 (Path Traversal) and CVE-2026-59890 (MANIFEST.in bypass).
 * **Sudo Isolation:** Restricted bot user permissions. Removed `NOPASSWD: ALL` (and `apt` access) to prevent privilege escalation, added support for safe bash wrapper scripts.
 
 ### ✨ Improved:
-* **WebUI:** Reduced client upload size limit from 50 MB to 5 MB to protect against memory exhaustion (DoS vector).
+* **WebUI:**
+  * **Animations:** Added a smooth "decryption" animation for data (IP Address, Ping) when the dashboard loads before receiving SSE responses, eliminating visual jumps and text flashes.
+  * **Navigation:** Optimized the layout of buttons in the navigation bar into logical groups (settings, admin, personalization, profile). The "Edit UI" button now hides its text on mobile devices to save space.
+  * **Upload:** Reduced client upload size limit from 50 MB to 5 MB to protect against memory exhaustion (DoS vector).
 * **Architecture:** Fixed a potential memory leak in background task management within the module orchestrator.
 * **Network Logic:** Completely overhauled the internal ping measurement mechanism. The bot no longer initiates independent requests to nodes (which could be blocked by firewalls), but instead extracts accurate latency data directly from the heartbeat packets of the closest available node.
-* **WebUI (Adaptive Dashboard Grid):** Blocks within the same row are now always height-aligned, and their inner content (services list, node cards, system logs window) correctly adapts to the available space and to manual block resizing, instead of leaving empty stretched areas.
-* **WebUI (Node Cards):** Reworked node card stats layout (CPU/RAM/Disk/traffic) into a compact grid instead of inline styles, rendering correctly at any size of the "Node Management" block.
 
-### 🔧 Fixed:
-* **WebUI (Add Node):** Fixed a conflict between two request-encryption implementations (`encryptData`) in `common.js` and `dashboard.js` — a legacy XOR-based function in `dashboard.js` was shadowing the correct AES-based one, causing the server to fail decrypting the request and return a "Name required" error when adding a node.
+### 🐛 Bugfixes:
+* **System (Systemd):** Fixed the bot process crash by timeout (`stop-sigterm timed out. Killing.`) during `systemctl` restart. The issue was caused by a race condition in the background log monitoring (`tail`, `journalctl`), which immediately respawned upon shutdown.
+* **WebUI:**
+  * **Layout:** The system logs block no longer collapses and changes its size during the initial page load.
+  * **Adaptive Dashboard Grid:** Blocks within the same row are now always height-aligned, and their inner content (services list, node cards, system logs window) correctly adapts to the available space and to manual block resizing, instead of leaving empty stretched areas.
+  * **Node Cards:** Reworked node card stats layout (CPU/RAM/Disk/traffic) into a compact grid instead of inline styles, rendering correctly at any size of the "Node Management" block.
+  * **Add Node:** Resolved a conflict between two request encryption implementations (`encryptData`) in `common.js` and `dashboard.js` — an older XOR function in `dashboard.js` was overriding the correct AES function, causing the server to fail decryption and return a "Name required" error when trying to add a node.
 
 ---
 ## [1.24.4] - 2026-08-16
