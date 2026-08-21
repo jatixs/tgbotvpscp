@@ -716,6 +716,9 @@ async def reliable_command_monitor(bot, cmd, alert_type, parser):
                 except Exception:
                     pass
             await asyncio.sleep(10)
+            
+        # Give shutdown sequence time to cancel us before respawning
+        await asyncio.sleep(2)
 
 
 async def reliable_tail_log_monitor(bot, path, alert_type, parser):
@@ -771,3 +774,6 @@ async def reliable_tail_log_monitor(bot, path, alert_type, parser):
                 except Exception as e_kill:
                     logging.debug(f"Failed to kill tail process in except: {e_kill}")
             await asyncio.sleep(10)
+            
+        # Give shutdown sequence time to cancel us before respawning
+        await asyncio.sleep(2)

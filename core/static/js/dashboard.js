@@ -894,18 +894,27 @@ function updateAgentStatsUI(data) {
             }
 
             const ipEl = document.getElementById('agentIp');
-            if (ipEl && data.stats.ip) ipEl.innerText = decryptData(data.stats.ip);
+            if (ipEl && data.stats.ip) {
+                if (typeof window.animateDecryption === 'function') {
+                    window.animateDecryption(ipEl, decryptData(data.stats.ip), 800, 'agent_ip');
+                } else {
+                    ipEl.innerText = decryptData(data.stats.ip);
+                }
+            }
 
             const pingEl = document.getElementById('agentPing');
             if (pingEl) {
                 if (data.stats.ping) {
                     const pingValue = decryptData(data.stats.ping);
-                    // Add unit if it's a number
+                    let pingText = pingValue || 'n/a';
                     if (pingValue && !isNaN(pingValue)) {
                         const unit = (typeof I18N !== 'undefined' && I18N.web_agent_ping_unit) ? I18N.web_agent_ping_unit : 'ms';
-                        pingEl.innerText = pingValue + ' ' + unit;
+                        pingText = pingValue + ' ' + unit;
+                    }
+                    if (typeof window.animateDecryption === 'function') {
+                        window.animateDecryption(pingEl, pingText, 800, 'agent_ping');
                     } else {
-                        pingEl.innerText = pingValue || 'n/a';
+                        pingEl.innerText = pingText;
                     }
                 } else {
                     pingEl.innerText = 'n/a';
@@ -1576,6 +1585,7 @@ function updateNodeDetailsUI(data) {
     const newIp = decryptData(data.ip);
     const ipEl = document.getElementById('modalNodeIp');
     if (ipEl.innerText !== newIp) ipEl.innerText = newIp;
+    
     const tokenEl = document.getElementById('modalToken');
     if (tokenEl) {
         tokenEl.innerText = decryptData(data.token);
@@ -2166,6 +2176,10 @@ function renderServices(services, forceRender = false) {
         `);
         container.appendChild(card);
     });
+    
+    if (typeof parsePageEmojis === 'function') {
+        setTimeout(() => parsePageEmojis(container), 850);
+    }
 }
 
 // --- Services Search Filtering ---
