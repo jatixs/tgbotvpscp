@@ -5,11 +5,11 @@
 <h1 align="center">🤖 VPS Manager Telegram Bot</h1>
 
 <p align="center">
-  <b>v1.24.4</b> — профессиональная экосистема для мониторинга и управления серверной инфраструктурой<br>
+  <b>v1.25.0</b> — профессиональная экосистема для мониторинга и управления серверной инфраструктурой<br>
   (Systemd / Docker / API / WebUI / PWA / Multi-Node / Remote SSH / Backup Manager)<br><br>
 
-  <a href="https://github.com/jatixs/tgbotvpscp/releases/latest"><img src="https://img.shields.io/badge/version-v1.24.4-blue?style=flat-square" alt="Version 1.24.4"/></a>
-  <a href="https://github.com/jatixs/tgbotvpscp/releases/latest"><img src="https://img.shields.io/badge/build-87-purple?style=flat-square" alt="Build 87"/></a>
+  <a href="https://github.com/jatixs/tgbotvpscp/releases/latest"><img src="https://img.shields.io/badge/version-v1.25.0-blue?style=flat-square" alt="Version 1.25.0"/></a>
+  <a href="https://github.com/jatixs/tgbotvpscp/releases/latest"><img src="https://img.shields.io/badge/build-89-purple?style=flat-square" alt="Build 89"/></a>
   <a href="https://www.python.org/"><img src="https://img.shields.io/badge/python-3.10%2B-green?style=flat-square" alt="Python 3.10+"/></a>
   <a href="https://choosealicense.com/licenses/gpl-3.0/"><img src="https://img.shields.io/badge/license-GPL--3.0-lightgrey?style=flat-square" alt="License GPL-3.0"/></a>
   <a href="https://github.com/aiogram/aiogram"><img src="https://img.shields.io/badge/aiogram-3.x-orange?style=flat-square" alt="Aiogram 3.x"/></a>
@@ -83,7 +83,7 @@
 - ✅ **WAF** — защита от SQL Injection, XSS, Path Traversal
 - ✅ **Rate Limiting & Brute-force Protection** — защита от DDoS и подбора паролей
 - ✅ **Audit Logging** — детальные логи всех событий
-- ✅ **Шифрование данных** — Fernet (AES) + XOR + Argon2 для паролей
+- ✅ **Шифрование данных** — Fernet (AES) + AES-256-CBC + Argon2 для паролей
 - ✅ **DOMPurify** — строгая фильтрация контента на стороне клиента
 
 ### 🎨 Современный веб-интерфейс
@@ -148,7 +148,7 @@
 - **Database:** SQLite (aiosqlite)
 - **Frontend:** Tailwind CSS, Vanilla JavaScript, Chart.js
 - **Real-time:** Server-Sent Events (SSE)
-- **Security:** Argon2, Fernet, XOR encryption
+- **Security:** Argon2, Fernet, AES-256-CBC encryption
 - **Infrastructure:** Docker, Docker Compose, Systemd
 
 📖 Подробнее: [ARCHITECTURE.md](ARCHITECTURE.md)
@@ -372,7 +372,7 @@ http://YOUR_SERVER_IP:8080
 
 #### 🔹 Уровень 4: Data Encryption
 - **Fernet** — симметричное шифрование конфигов (`users.json`, `services.json`)
-- **XOR + Base64** — легковесное шифрование для веб-клиента (SSE events)
+- **AES-256-CBC + Base64** — шифрование для веб-клиента (SSE events)
 
 #### 🔹 Уровень 5: Audit Logging
 
@@ -614,7 +614,7 @@ python bot.py
 ---
 
 <p align="center">
-  <b>Версия:</b> 1.24.4 (Build 87)<br>
+  <b>Версия:</b> 1.25.0 (Build 89)<br>
   <b>Лицензия:</b> GPL-3.0 license<br>
   <b>Статус:</b> Релиз<br>
   <br>

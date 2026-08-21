@@ -49,6 +49,11 @@ let logSSESource = null;
 let servicesSSESource = null;
 
 let agentChart = null;
+let quickCpuChart = null;
+let quickRamChart = null;
+let quickDiskChart = null;
+const QUICK_STATS_HISTORY_MAX = 30;
+const quickStatsHistory = { cpu: [], ram: [], disk: [] };
 let allNodesData = [];
 let currentNodeToken = null;
 let currentRenderList = [];
@@ -57,23 +62,6 @@ const NODES_BATCH_SIZE = 15;
 let nodesFirstUpdateReceived = false;
 
 
-
-function encryptData(text) {
-    if (!text) return "";
-    if (typeof WEB_KEY === 'undefined' || !WEB_KEY) return text;
-    try {
-        const bytes = new TextEncoder().encode(text);
-        let result = "";
-        for (let i = 0; i < bytes.length; i++) {
-            const keyChar = WEB_KEY.charCodeAt(i % WEB_KEY.length);
-            result += String.fromCharCode(bytes[i] ^ keyChar);
-        }
-        return btoa(result);
-    } catch (e) {
-        console.error("Encryption error:", e);
-        return text;
-    }
-}
 
 window.addEventListener('themeChanged', () => {
     updateChartsColors();
@@ -422,7 +410,7 @@ function updateVisibleNodes(elements, dataList) {
                 if (pingVal >= 50 && pingVal < 150) pingColor = 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400';
                 else if (pingVal >= 150) pingColor = 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400';
                 pingBdg.className = `inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold ${pingColor}`;
-                pingBdg.innerText = pingVal + 'ms';
+                pingBdg.innerText = pingVal + ((typeof I18N !== 'undefined' && I18N.web_agent_ping_unit) ? I18N.web_agent_ping_unit : 'ms');
             } else {
                 pingBdg.className = 'hidden';
             }
@@ -625,7 +613,7 @@ function renderNextNodeBatch() {
             let pingColor = 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400';
             if (pingVal >= 50 && pingVal < 150) pingColor = 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400';
             else if (pingVal >= 150) pingColor = 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400';
-            pingHtml = `<span data-ref="ping-badge" class="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold ${pingColor}">${pingVal}ms</span>`;
+            pingHtml = `<span data-ref="ping-badge" class="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold ${pingColor}">${pingVal}${(typeof I18N !== 'undefined' && I18N.web_agent_ping_unit) ? I18N.web_agent_ping_unit : 'ms'}</span>`;
         } else {
             pingHtml = `<span data-ref="ping-badge" class="hidden"></span>`;
         }
@@ -633,7 +621,7 @@ function renderNextNodeBatch() {
         return `
         <div data-token="${escapeHtml(node.token)}" class="bg-white dark:bg-white/5 hover:bg-gray-50 dark:hover:bg-white/10 transition-all duration-200 rounded-xl border border-gray-100 dark:border-white/5 cursor-pointer shadow-sm hover:shadow-md group animate-fade-in-up" data-action="open-node-details" data-color="${ui.statusColor}">
             
-            <div class="p-3 sm:p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
+            <div class="node-row p-3 sm:p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
                 
                 <div class="flex flex-1 items-center gap-3 min-w-0">
                     <div class="${dragHandleClass}drag-handle p-2 -ml-2 text-gray-300 hover:text-gray-500 dark:text-white/20 dark:hover:text-white/50 cursor-grab active:cursor-grabbing transition" data-action="stop-propagation">
@@ -654,24 +642,24 @@ function renderNextNodeBatch() {
                     </div>
                 </div>
 
-                <div class="flex flex-wrap sm:flex-nowrap items-center justify-between sm:justify-end gap-x-1 gap-y-5 sm:gap-4 mt-1 sm:mt-0 pt-3 sm:pt-0 border-t border-gray-100 dark:border-white/5 sm:border-0 pb-5 sm:pb-0 w-full sm:w-auto">
+                <div class="node-stats flex flex-wrap sm:flex-nowrap items-center justify-between sm:justify-end gap-x-1 gap-y-5 sm:gap-4 mt-1 sm:mt-0 pt-3 sm:pt-0 border-t border-gray-100 dark:border-white/5 sm:border-0 pb-5 sm:pb-0 w-full sm:w-auto">
                     
-                    <div class="text-center flex-1 sm:flex-none" style="width:42px;min-width:42px">
+                    <div class="node-stat-col text-center flex-1 sm:flex-none">
                         <div class="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">${lblCpu}</div>
                         <div data-ref="cpu-val" class="text-xs font-mono font-bold ${ui.cpuColor}" style="font-variant-numeric:tabular-nums">${ui.cpu}%</div>
                     </div>
 
-                    <div class="text-center flex-1 sm:flex-none" style="width:42px;min-width:42px">
+                    <div class="node-stat-col text-center flex-1 sm:flex-none">
                         <div class="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">${lblRam}</div>
                         <div data-ref="ram-val" class="text-xs font-mono font-bold ${ui.ramColor}" style="font-variant-numeric:tabular-nums">${ui.ram}%</div>
                     </div>
 
-                    <div class="text-center flex-1 sm:flex-none" style="width:42px;min-width:42px">
+                    <div class="node-stat-col text-center flex-1 sm:flex-none">
                         <div class="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">${lblDisk}</div>
                         <div data-ref="disk-val" class="text-xs font-mono font-bold ${ui.diskColor}" style="font-variant-numeric:tabular-nums">${ui.disk}%</div>
                     </div>
 
-                    <div class="text-center flex-1 sm:flex-none" style="width:55px;min-width:55px">
+                    <div class="node-stat-col-wide text-center flex-1 sm:flex-none">
                         <div class="flex items-center justify-center gap-0.5 mb-0.5">
                             <svg class="w-3 h-3 text-green-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 14l-7 7m0 0l-7-7m7 7V3"/></svg>
                             <span data-ref="rx-unit" class="text-[9px] font-bold text-gray-400 uppercase tracking-wider">${rxUnit}</span>
@@ -679,7 +667,7 @@ function renderNextNodeBatch() {
                         <div data-ref="rx-val" class="text-xs font-mono font-bold text-green-500 dark:text-green-400" style="font-variant-numeric:tabular-nums">${rxVal}</div>
                     </div>
 
-                    <div class="text-center flex-1 sm:flex-none" style="width:55px;min-width:55px">
+                    <div class="node-stat-col-wide text-center flex-1 sm:flex-none">
                         <div class="flex items-center justify-center gap-0.5 mb-0.5">
                             <svg class="w-3 h-3 text-blue-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 10l7-7m0 0l7 7m-7-7v18"/></svg>
                             <span data-ref="tx-unit" class="text-[9px] font-bold text-gray-400 uppercase tracking-wider">${txUnit}</span>
@@ -728,6 +716,10 @@ function updateAgentStatsUI(data) {
         const freeIcon = `<svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 inline mb-0.5 opacity-60" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>`;
 
         if (data.stats) {
+            pushQuickStatHistory('cpu', data.stats.cpu);
+            pushQuickStatHistory('ram', data.stats.ram);
+            pushQuickStatHistory('disk', data.stats.disk);
+
             const cpuEl = document.getElementById('stat_cpu');
             const progCpu = document.getElementById('prog_cpu');
             if (cpuEl) {
@@ -850,9 +842,26 @@ function updateAgentStatsUI(data) {
             const uptimeEl = document.getElementById('stat_uptime');
             if (uptimeEl) uptimeEl.innerText = formatUptime(data.stats.boot_time);
 
+            const avail = data.stats.agent_availability || {};
+
+            const uptimeOnlineBar = document.getElementById('uptimeBarOnline');
+            const uptimeDowntimeBar = document.getElementById('uptimeBarDowntime');
+            if (uptimeOnlineBar && uptimeDowntimeBar) {
+                const onlineSecs = avail.total_online_secs || 0;
+                const downSecs = avail.total_downtime_secs || 0;
+                const totalSecs = onlineSecs + downSecs;
+                const onlinePct = totalSecs > 0 ? (onlineSecs / totalSecs) * 100 : 100;
+                uptimeOnlineBar.style.width = onlinePct + '%';
+                uptimeDowntimeBar.style.width = (100 - onlinePct) + '%';
+
+                const onlineLabel = document.getElementById('uptime_online_label');
+                const downtimeLabel = document.getElementById('uptime_downtime_label');
+                if (onlineLabel) onlineLabel.innerText = (I18N?.web_nodes_monitor_total_uptime || 'Total uptime') + ': ' + formatDuration(onlineSecs);
+                if (downtimeLabel) downtimeLabel.innerText = (I18N?.web_agent_downtime || 'Downtime') + ': ' + formatDuration(downSecs);
+            }
+
             const hintUptime = document.getElementById('hint-uptime');
             if (hintUptime) {
-                const avail = data.stats.agent_availability || {};
                 const fmtDt = (ts) => ts ? new Date(ts * 1000).toLocaleString() : '—';
 
                 const mkRow = (label, value, valueClass) => `
@@ -885,18 +894,27 @@ function updateAgentStatsUI(data) {
             }
 
             const ipEl = document.getElementById('agentIp');
-            if (ipEl && data.stats.ip) ipEl.innerText = decryptData(data.stats.ip);
+            if (ipEl && data.stats.ip) {
+                if (typeof window.animateDecryption === 'function') {
+                    window.animateDecryption(ipEl, decryptData(data.stats.ip), 800, 'agent_ip');
+                } else {
+                    ipEl.innerText = decryptData(data.stats.ip);
+                }
+            }
 
             const pingEl = document.getElementById('agentPing');
             if (pingEl) {
                 if (data.stats.ping) {
                     const pingValue = decryptData(data.stats.ping);
-                    // Add unit if it's a number
+                    let pingText = pingValue || 'n/a';
                     if (pingValue && !isNaN(pingValue)) {
                         const unit = (typeof I18N !== 'undefined' && I18N.web_agent_ping_unit) ? I18N.web_agent_ping_unit : 'ms';
-                        pingEl.innerText = pingValue + ' ' + unit;
+                        pingText = pingValue + ' ' + unit;
+                    }
+                    if (typeof window.animateDecryption === 'function') {
+                        window.animateDecryption(pingEl, pingText, 800, 'agent_ping');
                     } else {
-                        pingEl.innerText = pingValue || 'n/a';
+                        pingEl.innerText = pingText;
                     }
                 } else {
                     pingEl.innerText = 'n/a';
@@ -904,6 +922,7 @@ function updateAgentStatsUI(data) {
             }
         }
         renderAgentChart(data.history);
+        updateQuickStatCharts();
     } catch (e) {
         console.error("Agent stats UI error:", e);
     }
@@ -930,6 +949,60 @@ function getGradient(ctx, colorBase) {
     gradient.addColorStop(0, colorBase.replace(')', ', 0.5)').replace('rgb', 'rgba'));
     gradient.addColorStop(1, colorBase.replace(')', ', 0.0)').replace('rgb', 'rgba'));
     return gradient;
+}
+
+function pushQuickStatHistory(key, value) {
+    if (typeof value !== 'number' || Number.isNaN(value)) return;
+    const hist = quickStatsHistory[key];
+    hist.push(value);
+    if (hist.length > QUICK_STATS_HISTORY_MAX) hist.shift();
+}
+
+function renderQuickStatChart(canvasId, existingChart, colorRgb, historyKey) {
+    const canvas = document.getElementById(canvasId);
+    // Skip while the block is sized "small" (canvas hidden, width is 0) - it will be
+    // picked up on the next data tick once the block is resized and becomes visible.
+    if (!canvas || canvas.clientWidth === 0) return existingChart;
+
+    const data = quickStatsHistory[historyKey];
+    if (existingChart) {
+        existingChart.data.labels = data.map(() => '');
+        existingChart.data.datasets[0].data = data.slice();
+        existingChart.update('none');
+        return existingChart;
+    }
+
+    const ctx = canvas.getContext('2d');
+    return new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: data.map(() => ''),
+            datasets: [{
+                data: data.slice(),
+                borderColor: colorRgb,
+                borderWidth: 2,
+                backgroundColor: getGradient(ctx, colorRgb),
+                fill: true
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            animation: false,
+            scales: {
+                x: { display: false },
+                y: { display: false, min: 0, max: 100 }
+            },
+            plugins: { legend: { display: false }, tooltip: { enabled: false } },
+            elements: { line: { tension: 0.4 }, point: { radius: 0 } }
+        }
+    });
+}
+
+function updateQuickStatCharts() {
+    quickCpuChart = renderQuickStatChart('quickCpuChart', quickCpuChart, 'rgb(99, 102, 241)', 'cpu');
+    quickRamChart = renderQuickStatChart('quickRamChart', quickRamChart, 'rgb(168, 85, 247)', 'ram');
+    quickDiskChart = renderQuickStatChart('quickDiskChart', quickDiskChart, 'rgb(34, 197, 94)', 'disk');
 }
 
 function renderAgentChart(history) {
@@ -1184,6 +1257,7 @@ window.switchLogType = function (type) {
         }
         return;
     }
+    container.style.minHeight = container.offsetHeight + 'px';
     container.innerHTML = DOMPurify.sanitize('');
 
     const oldEmpty = document.getElementById('empty-logs-state');
@@ -1204,6 +1278,7 @@ window.switchLogType = function (type) {
             if (logs.length === 0) {
                 if (document.getElementById('log-loader')) {
                     container.classList.remove('overflow-hidden');
+                    container.style.minHeight = '';
                     removeLogLoading();
 
                     if (!document.getElementById('empty-logs-state')) {
@@ -1259,6 +1334,7 @@ window.switchLogType = function (type) {
             }
 
             container.classList.remove('overflow-hidden');
+            container.style.minHeight = '';
             if (isInitialLoad) {
                 container.scrollTo({
                     top: container.scrollHeight,
@@ -1278,6 +1354,7 @@ window.switchLogType = function (type) {
         } catch (err) {
             console.error("Logs parse error", err);
             container.classList.remove('overflow-hidden');
+            container.style.minHeight = '';
             removeLogLoading();
         }
     });
@@ -1508,6 +1585,7 @@ function updateNodeDetailsUI(data) {
     const newIp = decryptData(data.ip);
     const ipEl = document.getElementById('modalNodeIp');
     if (ipEl.innerText !== newIp) ipEl.innerText = newIp;
+    
     const tokenEl = document.getElementById('modalToken');
     if (tokenEl) {
         tokenEl.innerText = decryptData(data.token);
@@ -2078,7 +2156,11 @@ function renderServices(services, forceRender = false) {
         card.className = 'service-card w-fit bg-gray-50 dark:bg-black/20 rounded-xl px-4 py-3 flex items-center justify-between gap-3 transition hover:bg-gray-100 dark:hover:bg-white/5 cursor-pointer';
         card.dataset.name = item.name;
         card.dataset.type = item.type;
-        card.onclick = () => openServiceInfoModal(item.name, item.type);
+        card.onclick = (e) => {
+            if (!e.target.closest('button')) {
+                openServiceInfoModal(item.name, item.type);
+            }
+        };
 
         card.innerHTML = DOMPurify.sanitize(`
             <div class="flex items-center gap-3 min-w-0">
@@ -2094,6 +2176,10 @@ function renderServices(services, forceRender = false) {
         `);
         container.appendChild(card);
     });
+    
+    if (typeof parsePageEmojis === 'function') {
+        setTimeout(() => parsePageEmojis(container), 850);
+    }
 }
 
 // --- Services Search Filtering ---
@@ -2966,3 +3052,432 @@ document.addEventListener('app:action:toggle-service-managed', e => {
     const isManaged = e.detail.target.getAttribute('data-managed') === 'true';
     toggleServiceManaged(e.detail.target.getAttribute('data-name'), e.detail.target.getAttribute('data-type'), isManaged, e.detail.target);
 });
+const DASHBOARD_SIZES = {
+    'small': 'col-span-12 sm:col-span-6 lg:col-span-3 lg:row-span-1',
+    'medium': 'col-span-12 sm:col-span-6 lg:col-span-4 lg:row-span-1',
+    'standard': 'col-span-12 lg:col-span-6 lg:row-span-2',
+    'wide': 'col-span-12 lg:col-span-8 lg:row-span-2',
+    'large': 'col-span-12 lg:row-span-2'
+};
+const SIZES_ORDER = ['small', 'medium', 'standard', 'wide', 'large'];
+
+let isDashboardEditMode = false;
+let dashboardSortable = null;
+
+function applyDashboardLayout() {
+    const blocks = document.querySelectorAll('.dashboard-block');
+    const saved = localStorage.getItem('dashboardLayout');
+    
+    if (!saved) {
+        // Fallback: apply default sizes
+        blocks.forEach(block => {
+            if (!block.getAttribute('data-current-size')) {
+                const defSize = block.getAttribute('data-default-size');
+                if (defSize) block.setAttribute('data-current-size', defSize);
+            }
+        });
+        return;
+    }
+    
+    try {
+        const layout = JSON.parse(saved);
+        const container = document.getElementById('dashboardBlocksContainer');
+        if (!container) return;
+        
+        layout.forEach(item => {
+            const block = document.querySelector(`[data-block-id="${item.id}"]`);
+            if (block) {
+                container.appendChild(block);
+                
+                const targetSize = item.size || block.getAttribute('data-default-size');
+                if (targetSize) {
+                    block.setAttribute('data-current-size', targetSize);
+                    Object.values(DASHBOARD_SIZES).forEach(cls => {
+                        cls.split(' ').forEach(c => block.classList.remove(c));
+                    });
+                    if (DASHBOARD_SIZES[targetSize]) {
+                        DASHBOARD_SIZES[targetSize].split(' ').forEach(c => block.classList.add(c));
+                    }
+                }
+                if (item.hidden) {
+                    block.classList.add('hidden-block');
+                }
+            }
+        });
+    } catch(e) {}
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    applyDashboardLayout();
+});
+
+function initDashboardEditOverlays() {
+    const blocks = document.querySelectorAll('.dashboard-block');
+    blocks.forEach(block => {
+        if (!block.querySelector('.edit-overlay')) {
+            const overlay = document.createElement('div');
+            overlay.className = 'edit-overlay';
+            overlay.innerHTML = `
+                <div class="flex gap-2">
+                    <button onclick="showSizePickerOverlay(event, this)" class="size-btn-desktop hidden sm:inline-flex bg-blue-500 hover:bg-blue-600 text-white text-xs px-3 py-1.5 rounded-lg font-bold transition items-center gap-1 shadow-lg">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" /></svg>
+                        ${(typeof I18N !== 'undefined' && I18N.web_widget_size) ? I18N.web_widget_size : 'Размер'}
+                    </button>
+                    <button onclick="hideDashboardBlock(event, this)" class="bg-red-500 hover:bg-red-600 text-white text-xs px-3 py-1.5 rounded-lg font-bold transition flex items-center gap-1 shadow-lg">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" /></svg>
+                        ${(typeof I18N !== 'undefined' && I18N.web_widget_hide) ? I18N.web_widget_hide : 'Скрыть'}
+                    </button>
+                </div>
+            `;
+            block.appendChild(overlay);
+        }
+        // Add resize handle (tablet/desktop only)
+        if (!block.querySelector('.resize-handle')) {
+            const handle = document.createElement('div');
+            handle.className = 'resize-handle';
+            handle.innerHTML = '<div class="resize-handle-bar"></div>';
+            block.appendChild(handle);
+            initResizeHandle(handle, block);
+        }
+    });
+}
+
+function saveDashboardLayout() {
+    const blocks = document.querySelectorAll('.dashboard-block');
+    const layout = [];
+    blocks.forEach(block => {
+        layout.push({
+            id: block.getAttribute('data-block-id'),
+            size: block.getAttribute('data-current-size'),
+            hidden: block.classList.contains('hidden-block')
+        });
+    });
+    localStorage.setItem('dashboardLayout', JSON.stringify(layout));
+}
+
+function autoSizeMovedBlock(item) {
+    const blocks = Array.from(document.querySelectorAll('.dashboard-block:not(.hidden-block)'));
+    const spanOf = (size) => size === 'small' ? 3 : size === 'medium' ? 4 : size === 'standard' ? 6 : size === 'wide' ? 8 : 12;
+
+    const currentSize = item.getAttribute('data-current-size');
+    const currentSpan = spanOf(currentSize);
+
+    // Walk only the blocks preceding the dropped item (in its new position) to find
+    // how much of its actual row is already occupied, mirroring CSS grid auto-flow.
+    let rowSpace = 0;
+    let smallsInRow = 0;
+    for (const b of blocks) {
+        if (b === item) break;
+        const span = spanOf(b.getAttribute('data-current-size'));
+        if (rowSpace + span > 12) {
+            // This block wraps to a new row — reset counters
+            rowSpace = span;
+            smallsInRow = (b.getAttribute('data-current-size') === 'small') ? 1 : 0;
+        } else {
+            rowSpace += span;
+            if (b.getAttribute('data-current-size') === 'small') smallsInRow++;
+        }
+    }
+
+    // If preceding blocks fill the row exactly, the dropped item starts a new row
+    if (rowSpace >= 12) {
+        rowSpace = 0;
+        smallsInRow = 0;
+    }
+
+    const remaining = 12 - rowSpace;
+
+    // If the block already fits in the remaining space, keep its size
+    if (currentSpan <= remaining) return;
+
+    // Don't resize small blocks if the row already has 4 smalls (full row of smalls)
+    if (currentSize === 'small' && smallsInRow >= 4) return;
+
+    // Block doesn't fit — resize to the remaining space
+    let newSize = 'standard';
+    if (remaining <= 3) newSize = 'small';
+    else if (remaining <= 4) newSize = 'medium';
+    else if (remaining <= 6) newSize = 'standard';
+    else if (remaining <= 8) newSize = 'wide';
+    else newSize = 'large';
+    
+    item.setAttribute('data-current-size', newSize);
+    Object.values(DASHBOARD_SIZES).forEach(cls => {
+        cls.split(' ').forEach(c => item.classList.remove(c));
+    });
+    DASHBOARD_SIZES[newSize].split(' ').forEach(c => item.classList.add(c));
+    setTimeout(() => updateQuickStatCharts(), 160);
+}
+
+function toggleDashboardEditMode() {
+    const container = document.getElementById('dashboardBlocksContainer');
+    const panel = document.getElementById('hiddenBlocksPanel');
+    const btn = document.getElementById('btnEditDashboard');
+    if (!container) return;
+    
+    isDashboardEditMode = !isDashboardEditMode;
+    
+    if (isDashboardEditMode) {
+        initDashboardEditOverlays();
+        container.classList.add('edit-mode');
+        panel.classList.remove('hidden');
+        setTimeout(() => {
+            panel.classList.remove('opacity-0', 'translate-y-10');
+            panel.classList.add('opacity-100', 'translate-y-0');
+        }, 10);
+        
+        btn.classList.add('bg-blue-500', 'text-white');
+        btn.classList.remove('bg-blue-500/10', 'text-blue-600', 'dark:text-blue-400');
+        
+        if (!dashboardSortable) {
+            dashboardSortable = Sortable.create(container, {
+                animation: 300,
+                easing: "cubic-bezier(0.25, 1, 0.5, 1)",
+                handle: '.edit-overlay',
+                ghostClass: 'opacity-50',
+                onEnd: function(evt) {
+                    if (window.innerWidth >= 640) {
+                        autoSizeMovedBlock(evt.item);
+                    }
+                    saveDashboardLayout();
+                    applyDashboardLayout();
+                }
+            });
+        }
+        
+        updateHiddenBlocksPanel();
+    } else {
+        container.classList.remove('edit-mode');
+        // Close any open size pickers
+        document.querySelectorAll('.size-picker').forEach(p => p.remove());
+        panel.classList.remove('opacity-100', 'translate-y-0');
+        panel.classList.add('opacity-0', 'translate-y-10');
+        setTimeout(() => panel.classList.add('hidden'), 300);
+        
+        btn.classList.remove('bg-blue-500', 'text-white');
+        btn.classList.add('bg-blue-500/10', 'text-blue-600', 'dark:text-blue-400');
+        
+        saveDashboardLayout();
+    }
+}
+
+function showSizePickerOverlay(e, btn) {
+    e.stopPropagation();
+    const block = btn.closest('.dashboard-block');
+    const overlay = block.querySelector('.edit-overlay');
+    if (!overlay) return;
+
+    // Close any other open pickers first
+    document.querySelectorAll('.size-picker').forEach(p => p.remove());
+
+    const currentSize = block.getAttribute('data-current-size') || 'standard';
+    const lblSize = (typeof I18N !== 'undefined' && I18N.web_widget_size) ? I18N.web_widget_size : 'Размер';
+
+    const sizeLabels = { small: 'S', medium: 'M', standard: 'STD', wide: 'W', large: 'L' };
+    const sizeFractions = { small: '3/12', medium: '4/12', standard: '6/12', wide: '8/12', large: '12/12' };
+    const sizeWidths = { small: '25%', medium: '33.3%', standard: '50%', wide: '66.6%', large: '100%' };
+
+    let itemsHtml = SIZES_ORDER.map(size => {
+        const isActive = size === currentSize;
+        const activeClass = isActive ? 'size-picker-item--active' : '';
+        return `
+            <button class="size-picker-item ${activeClass}" onclick="applyPickedSize(event, '${size}')" title="${sizeFractions[size]}">
+                <div class="size-picker-preview">
+                    <div class="size-picker-bar" style="width: ${sizeWidths[size]}"></div>
+                </div>
+                <span class="size-picker-label">${sizeLabels[size]}</span>
+                <span class="size-picker-fraction">${sizeFractions[size]}</span>
+                ${isActive ? '<svg class="size-picker-check" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" /></svg>' : ''}
+            </button>
+        `;
+    }).join('');
+
+    const picker = document.createElement('div');
+    picker.className = 'size-picker';
+    picker.innerHTML = `
+        <div class="size-picker-header">
+            <span>${lblSize}</span>
+            <button class="size-picker-close" onclick="closeSizePicker(event)">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
+            </button>
+        </div>
+        <div class="size-picker-items">${itemsHtml}</div>
+    `;
+    picker.addEventListener('click', e => e.stopPropagation());
+    overlay.appendChild(picker);
+    requestAnimationFrame(() => picker.classList.add('size-picker--visible'));
+}
+
+function applyPickedSize(e, size) {
+    e.stopPropagation();
+    const picker = e.target.closest('.size-picker');
+    const block = e.target.closest('.dashboard-block');
+    if (!block) return;
+
+    block.setAttribute('data-current-size', size);
+    Object.values(DASHBOARD_SIZES).forEach(classes => {
+        classes.split(' ').forEach(cls => block.classList.remove(cls));
+    });
+    DASHBOARD_SIZES[size].split(' ').forEach(cls => block.classList.add(cls));
+
+    block.style.transform = 'scale(0.98)';
+    setTimeout(() => block.style.transform = '', 150);
+    setTimeout(() => updateQuickStatCharts(), 160);
+
+    saveDashboardLayout();
+    if (picker) picker.remove();
+}
+
+function closeSizePicker(e) {
+    e.stopPropagation();
+    const picker = e.target.closest('.size-picker');
+    if (picker) {
+        picker.classList.remove('size-picker--visible');
+        setTimeout(() => picker.remove(), 200);
+    }
+}
+
+// --- Resize Handles (drag-to-resize) ---
+function initResizeHandle(handle, block) {
+    let startX = 0;
+    let startWidth = 0;
+    let containerWidth = 0;
+
+    function onPointerDown(e) {
+        if (window.innerWidth < 640) return;
+        e.preventDefault();
+        e.stopPropagation();
+        const container = document.getElementById('dashboardBlocksContainer');
+        if (!container) return;
+        containerWidth = container.getBoundingClientRect().width;
+        startX = e.clientX;
+        startWidth = block.getBoundingClientRect().width;
+        document.body.style.cursor = 'col-resize';
+        document.body.style.userSelect = 'none';
+        block.classList.add('is-resizing');
+        document.addEventListener('pointermove', onPointerMove);
+        document.addEventListener('pointerup', onPointerUp);
+    }
+
+    function onPointerMove(e) {
+        const delta = e.clientX - startX;
+        const newWidth = startWidth + delta;
+        const ratio = newWidth / containerWidth;
+        const cols = Math.round(ratio * 12);
+
+        let snappedSize = 'standard';
+        if (cols <= 3) snappedSize = 'small';
+        else if (cols <= 4) snappedSize = 'medium';
+        else if (cols <= 6) snappedSize = 'standard';
+        else if (cols <= 9) snappedSize = 'wide';
+        else snappedSize = 'large';
+
+        const current = block.getAttribute('data-current-size');
+        if (snappedSize !== current) {
+            block.setAttribute('data-current-size', snappedSize);
+            Object.values(DASHBOARD_SIZES).forEach(classes => {
+                classes.split(' ').forEach(cls => block.classList.remove(cls));
+            });
+            DASHBOARD_SIZES[snappedSize].split(' ').forEach(cls => block.classList.add(cls));
+        }
+    }
+
+    function onPointerUp() {
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
+        block.classList.remove('is-resizing');
+        document.removeEventListener('pointermove', onPointerMove);
+        document.removeEventListener('pointerup', onPointerUp);
+        setTimeout(() => updateQuickStatCharts(), 160);
+        saveDashboardLayout();
+    }
+
+    handle.addEventListener('pointerdown', onPointerDown);
+}
+
+function hideDashboardBlock(e, btn) {
+    e.stopPropagation();
+    const block = btn.closest('.dashboard-block');
+    
+    block.style.opacity = '0';
+    block.style.transform = 'scale(0.9)';
+    
+    setTimeout(() => {
+        block.classList.add('hidden-block');
+        block.style.opacity = '';
+        block.style.transform = '';
+        saveDashboardLayout();
+        updateHiddenBlocksPanel();
+    }, 300);
+}
+
+function restoreDashboardBlock(blockId) {
+    const block = document.querySelector(`[data-block-id="${blockId}"]`);
+    if (block) {
+        block.classList.remove('hidden-block');
+        block.style.opacity = '0';
+        block.style.transform = 'scale(0.9)';
+        
+        void block.offsetWidth;
+        
+        block.style.opacity = '1';
+        block.style.transform = 'scale(1)';
+        setTimeout(() => {
+            block.style.opacity = '';
+            block.style.transform = '';
+        }, 300);
+        
+        saveDashboardLayout();
+        updateHiddenBlocksPanel();
+    }
+}
+
+function updateHiddenBlocksPanel() {
+    const hiddenBlocks = document.querySelectorAll('.dashboard-block.hidden-block');
+    const list = document.getElementById('hiddenBlocksList');
+    if (!list) return;
+    
+    const existingRows = list.querySelectorAll('.hidden-widget-row');
+    existingRows.forEach(row => row.remove());
+    
+    let emptyMsg = document.getElementById('hiddenBlocksEmpty');
+    if (!emptyMsg) {
+        emptyMsg = document.createElement('div');
+        emptyMsg.id = 'hiddenBlocksEmpty';
+        emptyMsg.className = 'text-xs text-gray-400 italic text-center py-2';
+        list.appendChild(emptyMsg);
+    }
+    emptyMsg.innerText = (typeof I18N !== 'undefined' && I18N.web_hidden_widgets_empty) ? I18N.web_hidden_widgets_empty : 'Нет скрытых виджетов';
+    
+    if (hiddenBlocks.length === 0) {
+        emptyMsg.style.display = 'block';
+    } else {
+        emptyMsg.style.display = 'none';
+        hiddenBlocks.forEach(block => {
+            const blockId = block.getAttribute('data-block-id');
+            const namesMap = {
+                'quick_stats_uptime': (typeof I18N !== 'undefined' && I18N.web_uptime) ? I18N.web_uptime : 'Аптайм',
+                'quick_stats_cpu': 'CPU',
+                'quick_stats_ram': 'RAM',
+                'quick_stats_disk': 'SSD',
+                'agent_stats': (typeof I18N !== 'undefined' && I18N.web_agent_stats_title) ? I18N.web_agent_stats_title : 'График Агента',
+                'traffic_stats': (typeof I18N !== 'undefined' && I18N.web_traffic_total) ? I18N.web_traffic_total : 'Трафик',
+                'services_manager': (typeof I18N !== 'undefined' && I18N.web_services_title) ? I18N.web_services_title : 'Менеджер Сервисов',
+                'nodes_manager': (typeof I18N !== 'undefined' && I18N.web_node_mgmt_title) ? I18N.web_node_mgmt_title : 'Менеджер Нод',
+                'system_logs': (typeof I18N !== 'undefined' && I18N.web_system_logs_title) ? I18N.web_system_logs_title : 'Системные Логи'
+            };
+            const blockName = namesMap[blockId] || blockId;
+            
+            const div = document.createElement('div');
+            div.className = 'hidden-widget-row flex justify-between items-center bg-gray-50 dark:bg-white/5 p-2 rounded-xl border border-gray-100 dark:border-white/5';
+            div.innerHTML = `
+                <span class="text-sm font-medium text-gray-700 dark:text-gray-300">${blockName}</span>
+                <button onclick="restoreDashboardBlock('${blockId}')" class="p-1.5 bg-green-500/20 text-green-600 dark:text-green-400 rounded-lg hover:bg-green-500 hover:text-white transition" title="${(typeof I18N !== 'undefined' && I18N.web_widget_restore) ? I18N.web_widget_restore : 'Восстановить'}">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" /></svg>
+                </button>
+            `;
+            list.appendChild(div);
+        });
+    }
+}
+
