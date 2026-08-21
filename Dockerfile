@@ -61,7 +61,7 @@ RUN pip install --no-cache-dir --upgrade pip 'setuptools>=83.0.0' wheel && \
 
 RUN groupadd -g 1001 tgbot && \
     useradd -u 1001 -g 1001 -m -s /bin/bash tgbot && \
-    echo "tgbot ALL=(ALL) NOPASSWD: /usr/bin/apt, /usr/bin/systemctl, /bin/journalctl" >> /etc/sudoers
+    echo "tgbot ALL=(ALL) NOPASSWD: /opt/tg-bot/scripts/update_os.sh, /usr/bin/systemctl, /bin/journalctl" >> /etc/sudoers
 
 WORKDIR /opt/tg-bot
 COPY . .

@@ -5,11 +5,11 @@
 <h1 align="center">🤖 VPS Manager Telegram Bot</h1>
 
 <p align="center">
-  <b>v1.24.4</b> — a professional ecosystem for monitoring and managing server infrastructure<br>
+  <b>v1.25.0</b> — a professional ecosystem for monitoring and managing server infrastructure<br>
   (Systemd / Docker / API / WebUI / PWA / Multi-Node / Remote SSH / Backup Manager)<br><br>
 
-  <a href="https://github.com/jatixs/tgbotvpscp/releases/latest"><img src="https://img.shields.io/badge/version-v1.24.4-blue?style=flat-square" alt="Version 1.24.4"/></a>
-  <a href="https://github.com/jatixs/tgbotvpscp/releases/latest"><img src="https://img.shields.io/badge/build-87-purple?style=flat-square" alt="Build 87"/></a>
+  <a href="https://github.com/jatixs/tgbotvpscp/releases/latest"><img src="https://img.shields.io/badge/version-v1.25.0-blue?style=flat-square" alt="Version 1.25.0"/></a>
+  <a href="https://github.com/jatixs/tgbotvpscp/releases/latest"><img src="https://img.shields.io/badge/build-89-purple?style=flat-square" alt="Build 89"/></a>
   <a href="https://www.python.org/"><img src="https://img.shields.io/badge/python-3.10%2B-green?style=flat-square" alt="Python 3.10+"/></a>
   <a href="https://choosealicense.com/licenses/gpl-3.0/"><img src="https://img.shields.io/badge/license-GPL--3.0-lightgrey?style=flat-square" alt="License GPL-3.0"/></a>
   <a href="https://github.com/aiogram/aiogram"><img src="https://img.shields.io/badge/aiogram-3.x-orange?style=flat-square" alt="Aiogram 3.x"/></a>
@@ -83,7 +83,7 @@
 - ✅ **WAF** — protection against SQL Injection, XSS, Path Traversal
 - ✅ **Rate Limiting & Brute-force Protection** — DDoS and password-guessing protection
 - ✅ **Audit Logging** — detailed logs of all security events
-- ✅ **Data Encryption** — Fernet (AES) + XOR + Argon2 for passwords
+- ✅ **Data Encryption** — Fernet (AES) + AES-256-CBC + Argon2 for passwords
 - ✅ **DOMPurify** — strict client-side content sanitization
 
 ### 🎨 Modern Web Interface
@@ -151,7 +151,7 @@
 - **Database:** SQLite (aiosqlite)
 - **Frontend:** Tailwind CSS, Vanilla JavaScript, Chart.js
 - **Real-time:** Server-Sent Events (SSE)
-- **Security:** Argon2, Fernet, XOR encryption
+- **Security:** Argon2, Fernet, AES-256-CBC encryption
 - **Infrastructure:** Docker, Docker Compose, Systemd
 
 📖 Learn more: [ARCHITECTURE.en.md](ARCHITECTURE.en.md)
@@ -375,7 +375,7 @@ Automatic detection:
 
 #### 🔹 Level 4: Data Encryption
 - **Fernet** — symmetric encryption for configs (`users.json`, `services.json`)
-- **XOR + Base64** — lightweight encryption for web client (SSE events)
+- **AES-256-CBC + Base64** — encryption for web client (SSE events)
 
 #### 🔹 Level 5: Audit Logging
 
@@ -617,7 +617,7 @@ If you find this project useful, support it:
 ---
 
 <p align="center">
-  <b>Version:</b> 1.24.4 (Build 87)<br>
+  <b>Version:</b> 1.25.0 (Build 89)<br>
   <b>Release Date:</b> July 2026<br>
   <b>License:</b> GPL-3.0 license<br>
   <b>Status:</b> Release<br>

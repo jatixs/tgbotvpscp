@@ -22,7 +22,7 @@ from .streaming import routes as streaming_routes
 from .views import routes as view_routes
 
 STATIC_DIR: Final[Path] = Path(BASE_DIR) / "core" / "static"
-MAX_CLIENT_UPLOAD_SIZE: Final[int] = 50 * 1024 * 1024
+MAX_CLIENT_UPLOAD_SIZE: Final[int] = 5 * 1024 * 1024
 
 try:
     from .routes import routes as extra_routes

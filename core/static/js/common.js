@@ -85,6 +85,86 @@ function decryptData(text) {
     }
 }
 
+window.startScrambleAnimation = function(element) {
+    if (!element) return;
+    if (element.dataset.isScrambling === 'true') return;
+    element.dataset.isScrambling = 'true';
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789@#$%&*+?';
+    
+    let len = parseInt(element.dataset.scrambleLen);
+    if (isNaN(len) || len <= 0) {
+        len = element.innerText.length > 20 ? 20 : Math.max(element.innerText.length, 5);
+    }
+    
+    element.scrambleInterval = setInterval(() => {
+        let currentText = '';
+        for (let i = 0; i < len; i++) {
+            currentText += chars[Math.floor(Math.random() * chars.length)];
+        }
+        element.innerText = currentText;
+    }, 50);
+};
+
+window.animateDecryption = function(element, finalHtml, duration = 800, uniqueId = null) {
+    if (!element) return;
+    
+    window._animatedDecryptions = window._animatedDecryptions || new Set();
+    
+    if ((uniqueId && window._animatedDecryptions.has(uniqueId)) || 
+        element.dataset.decryptedValue === finalHtml) {
+        element.innerHTML = typeof DOMPurify !== 'undefined' ? DOMPurify.sanitize(finalHtml) : finalHtml;
+        if (uniqueId) window._animatedDecryptions.add(uniqueId);
+        element.dataset.decryptedValue = finalHtml;
+        return;
+    }
+    
+    if (uniqueId) window._animatedDecryptions.add(uniqueId);
+    element.dataset.decryptedValue = finalHtml;
+    
+    if (element.scrambleInterval) {
+        clearInterval(element.scrambleInterval);
+        element.scrambleInterval = null;
+        element.dataset.isScrambling = 'false';
+    }
+
+    if (element.decryptionInterval) {
+        clearInterval(element.decryptionInterval);
+    }
+    
+    const tempDiv = document.createElement('div');
+    tempDiv.innerHTML = typeof DOMPurify !== 'undefined' ? DOMPurify.sanitize(finalHtml) : finalHtml;
+    const finalText = tempDiv.textContent || '';
+    
+    if (!finalText) {
+        element.innerHTML = typeof DOMPurify !== 'undefined' ? DOMPurify.sanitize(finalHtml) : finalHtml;
+        return;
+    }
+    
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789@#$%&*+?';
+    let iterations = 0;
+    const maxIterations = 20;
+    const frameTime = duration / maxIterations;
+    
+    element.decryptionInterval = setInterval(() => {
+        let currentText = '';
+        for (let i = 0; i < finalText.length; i++) {
+            if (i < (iterations / maxIterations) * finalText.length) {
+                currentText += finalText[i];
+            } else {
+                currentText += chars[Math.floor(Math.random() * chars.length)];
+            }
+        }
+        element.innerText = currentText;
+        
+        iterations++;
+        if (iterations > maxIterations) {
+            clearInterval(element.decryptionInterval);
+            element.decryptionInterval = null;
+            element.innerHTML = typeof DOMPurify !== 'undefined' ? DOMPurify.sanitize(finalHtml) : finalHtml;
+        }
+    }, frameTime);
+};
+
 function encryptData(text) {
     if (!text) return "";
     if (typeof WEB_KEY === 'undefined' || !WEB_KEY) return text;
@@ -619,7 +699,7 @@ function updateHapticsUI() {
 
     const statusText = document.getElementById('mobileHapticsStatus');
     if (statusText) {
-        statusText.innerText = isEnabled ? 'Вкл' : 'Выкл';
+        statusText.innerText = isEnabled ? (I18N?.web_on || 'Вкл') : (I18N?.web_off || 'Выкл');
         statusText.className = isEnabled ? 'text-xs font-bold uppercase text-green-500' : 'text-xs font-bold uppercase text-gray-500';
     }
 }
@@ -2253,7 +2333,7 @@ window.renderHeaderBilling = function() {
     
     const fragment = DOMPurify.sanitize(`
         <button class="flex items-center justify-center h-8 px-2 sm:px-3 rounded-lg hover:bg-black/5 dark:hover:bg-white/10 transition text-gray-600 dark:text-gray-400 font-medium text-xs sm:text-sm gap-1 whitespace-nowrap group"
-                title="${I18N?.web_billing_modal_title || 'Детали оплаты'}">
+                title="${I18N?.web_billing_modal_title || 'Детали аренды'}">
             <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-gray-500 group-hover:text-blue-500 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
             </svg>

@@ -5,6 +5,7 @@ REST API контроллеры для системных настроек.
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import os
 import time
@@ -88,7 +89,6 @@ async def handle_get_logs(request: web.Request) -> web.StreamResponse:
         else:
             logs = await asyncio.to_thread(_read_log_tail_sync, log_path, 300)
             
-        import json
         payload = json.dumps({"logs": [encrypt_for_web(line) for line in logs]})
         event_str = f"event: logs\ndata: {payload}\n\n"
         await response.write(event_str.encode("utf-8"))
@@ -123,7 +123,6 @@ async def handle_get_sys_logs(request: web.Request) -> web.StreamResponse:
             stderr=asyncio.subprocess.PIPE,
         )
         stdout, stderr = await proc.communicate()
-        import json
         if proc.returncode == 0:
             logs = stdout.decode("utf-8", errors="ignore").strip().split("\n")
             payload = json.dumps({"logs": [encrypt_for_web(line) for line in logs]})
@@ -345,7 +344,6 @@ async def api_check_update(request: web.Request) -> web.StreamResponse:
         else:
             return response
 
-        import json
         payload = json.dumps({
             "local_version": local_ver,
             "remote_version": remote_ver,
@@ -412,7 +410,6 @@ async def api_get_notifications(request: web.Request) -> web.StreamResponse:
     last_read = shared_state.WEB_USER_LAST_READ.get(uid, 0)
     unread_count = sum(1 for item in filtered if item["time"] > last_read)
     
-    import json
     payload = json.dumps({"notifications": filtered, "unread_count": unread_count})
     event_str = f"event: notifications\ndata: {payload}\n\n"
     await response.write(event_str.encode("utf-8"))

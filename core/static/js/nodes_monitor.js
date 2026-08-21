@@ -339,6 +339,10 @@ function renderNodes() {
         // Fallback if structural changes occurred
         container.innerHTML = DOMPurify.sanitize(newHtml);
     }
+    
+    if (typeof parsePageEmojis === 'function') {
+        parsePageEmojis(container);
+    }
 }
 
 // Get ping badge CSS classes based on latency value
