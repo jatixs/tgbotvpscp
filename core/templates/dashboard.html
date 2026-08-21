@@ -88,7 +88,7 @@
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                     </svg>
-                    <span class="hidden sm:inline">{{ web_edit_ui }}</span>
+                    <span class="hidden lg:inline">{{ web_edit_ui }}</span>
                 </button>
                 {% endif %}
                 {{ settings_btn | safe }}
@@ -396,7 +396,7 @@
                             class="network-badge flex items-center justify-between gap-1 bg-gray-100 dark:bg-black/30 px-3 py-1 rounded-lg border border-gray-200 dark:border-white/10 shadow-sm">
                             <span class="text-[10px] text-gray-500 dark:text-gray-400 font-bold uppercase">{{ web_agent_ping_label|default("PING") }}</span>
                             <span id="agentPing"
-                                class="font-mono text-xs font-bold text-gray-600 dark:text-gray-300">n/a</span>
+                                class="font-mono text-xs font-bold text-gray-600 dark:text-gray-300 decrypt-on-load" data-scramble-len="6">n/a</span>
                         </div>
                         <div id="networkBadgesDivider"
                             class="hidden w-px h-6 bg-gray-300 dark:bg-gray-600 flex-shrink-0 mx-1"></div>
@@ -406,8 +406,7 @@
                             <span class="text-[10px] text-gray-500 dark:text-gray-400 font-bold uppercase">IP</span>
                             <div class="flex items-center gap-1">
                                 <span id="agentIp"
-                                    class="font-mono text-xs font-bold text-gray-600 dark:text-gray-300 select-all">{{
-                                    agent_ip }}</span>
+                                    class="font-mono text-xs font-bold text-gray-600 dark:text-gray-300 select-all decrypt-on-load" data-scramble-len="15">n/a</span>
                                 <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-gray-400" fill="none"
                                     viewBox="0 0 24 24" stroke="currentColor">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -683,7 +682,7 @@
                     </div>
                 </div>
                 <div
-                    class="flex-1 flex flex-col max-h-[400px] bg-gray-50 dark:bg-gray-900 rounded-xl p-4 overflow-hidden relative font-mono text-xs border border-gray-200 dark:border-gray-800 shadow-inner group">
+                    class="flex-1 flex flex-col min-h-[250px] max-h-[400px] bg-gray-50 dark:bg-gray-900 rounded-xl p-4 overflow-hidden relative font-mono text-xs border border-gray-200 dark:border-gray-800 shadow-inner group">
                     <div id="logsOverlay"
                         class="hidden absolute inset-0 z-20 flex items-center justify-center bg-white/10 dark:bg-black/10 backdrop-blur-sm transition-all duration-500">
                         <div
@@ -1205,6 +1204,15 @@
         </div>
     </div>
     <script src="/static/js/common.js?v={{ web_version }}"></script>
+    <script>
+        document.addEventListener("DOMContentLoaded", () => {
+            if (typeof window.startScrambleAnimation === 'function') {
+                document.querySelectorAll('.decrypt-on-load').forEach(el => {
+                    window.startScrambleAnimation(el);
+                });
+            }
+        });
+    </script>
     <script src="/static/js/dashboard.js?v={{ web_version }}"></script>
     <script>
         function openVncModal() {
