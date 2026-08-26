@@ -814,6 +814,19 @@ function updateAgentStatsUI(data) {
             const txEl = document.getElementById('stat_net_sent');
             if (txEl) txEl.innerHTML = DOMPurify.sanitize(`${formatBytes(data.stats.net_sent)} <span class="${speedStyle}">${formatSpeed(txSpeed)}</span>`);
 
+            // Update S-size agent stats bars (TX/RX speed + progress)
+            const barTxText = document.getElementById('agentStatsBarTxText');
+            if (barTxText) barTxText.textContent = formatSpeed(txSpeed);
+            const barRxText = document.getElementById('agentStatsBarRxText');
+            if (barRxText) barRxText.textContent = formatSpeed(rxSpeed);
+
+            const peakSpeed = Math.max(rxSpeed, txSpeed, window._agentPeakSpeed || 0, 1);
+            window._agentPeakSpeed = peakSpeed;
+            const barTxProg = document.getElementById('agentStatsBarTxProg');
+            if (barTxProg) barTxProg.style.width = Math.min(100, (txSpeed / peakSpeed) * 100).toFixed(1) + '%';
+            const barRxProg = document.getElementById('agentStatsBarRxProg');
+            if (barRxProg) barRxProg.style.width = Math.min(100, (rxSpeed / peakSpeed) * 100).toFixed(1) + '%';
+
             if (data.stats.interfaces) {
                 const hintRx = document.getElementById('hint-rx');
                 if (hintRx) {
