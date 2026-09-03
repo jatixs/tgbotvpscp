@@ -4,11 +4,26 @@
 
 <h1 align="center">📝 Telegram VPS Management Bot — Changelog</h1>
 <p align="center">
-    <img src="https://img.shields.io/badge/version-v1.25.0-blue?style=flat-square" alt="Version 1.25.0"/>
-    <img src="https://img.shields.io/badge/build-89-purple?style=flat-square" alt="Build 89"/>
-    <img src="https://img.shields.io/badge/date-Aug%2020%202026-green?style=flat-square" alt="Date Aug 20 2026"/>
+    <img src="https://img.shields.io/badge/version-v1.25.1-blue?style=flat-square" alt="Version 1.25.1"/>
+    <img src="https://img.shields.io/badge/build-90-purple?style=flat-square" alt="Build 90"/>
+    <img src="https://img.shields.io/badge/date-Sep%2003%202026-green?style=flat-square" alt="Date Sep 03 2026"/>
 	<img src="https://img.shields.io/badge/status-stable-green?style=flat-square" alt="Status Stable"/>
 </p>
+
+---
+## [1.25.1] - 2026-09-03
+
+### ✨ Improved:
+* **WebUI:**
+  * **Easter Egg:** Click the site name in the header 7 times.
+  * **Billing Indicator:** The billing icon in the header is now additionally color-coded (green/yellow/red/gray) based on the upcoming payment status.
+  * **Dashboard Footer:** The "Powered by Python" badge on the uptime card now has a language icon and cleaner alignment.
+  * **AMOLED Theme:** Toast notifications and loading overlays (node details modal, system logs panel) now use a true black background instead of a blue-gray tint, matching the rest of the AMOLED design.
+
+### 🐛 Bugfixes:
+* **Traffic Charts:** Fixed incorrect traffic chart rendering when resizing the widget block.
+* **Modals:** Fixed a bug where closing the node details modal (or any other modal) would abruptly scroll the page back to the top instead of staying where it was opened from.
+* **Security (WebUI):** The "Hidden Blocks" panel now renders widget names via safe `textContent` instead of `innerHTML`, eliminating a potential XSS vector through block names.
 
 ---
 ## [1.25.0] - 2026-08-20
