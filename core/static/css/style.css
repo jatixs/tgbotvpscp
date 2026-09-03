@@ -68,6 +68,31 @@ nav {
 	padding-top: max(0px, env(safe-area-inset-top, 0px)) !important;
 }
 
+/* --- Фоновое свечение, следующее за курсором (еле заметное) --- */
+#bg-mouse-glow {
+	position: fixed;
+	inset: 0;
+	z-index: 0;
+	pointer-events: none;
+	opacity: 0;
+	transition: opacity 800ms ease;
+	background: radial-gradient(650px circle at var(--mgx, 50%) var(--mgy, 50%), rgba(59, 130, 246, 0.07), transparent 70%);
+}
+
+#bg-mouse-glow.is-active {
+	opacity: 1;
+}
+
+html.dark #bg-mouse-glow {
+	background: radial-gradient(650px circle at var(--mgx, 50%) var(--mgy, 50%), rgba(96, 165, 250, 0.09), transparent 70%);
+}
+
+@media (prefers-reduced-motion: reduce) {
+	#bg-mouse-glow {
+		display: none;
+	}
+}
+
 /* --- Анимации --- */
 @keyframes float {
 
@@ -144,6 +169,72 @@ nav {
 	.lazy-block {
 		transition: none !important;
 		opacity: 1 !important;
+	}
+}
+
+/* --- Пасхалка бренда: фейерверк из эмодзи --- */
+.brand-egg-overlay {
+	position: fixed;
+	inset: 0;
+	z-index: 9998;
+	pointer-events: none;
+	overflow: hidden;
+}
+
+.brand-egg-ring {
+	position: absolute;
+	width: 20px;
+	height: 20px;
+	border-radius: 9999px;
+	transform: translate(-50%, -50%) scale(0.2);
+	background: radial-gradient(circle, rgba(96, 165, 250, 0.45) 0%, rgba(96, 165, 250, 0) 70%);
+	animation: brandEggRing 700ms cubic-bezier(.16, .84, .44, 1) forwards;
+}
+
+@keyframes brandEggRing {
+	0% {
+		transform: translate(-50%, -50%) scale(0.2);
+		opacity: 0.9;
+	}
+
+	100% {
+		transform: translate(-50%, -50%) scale(9);
+		opacity: 0;
+	}
+}
+
+.brand-egg-particle {
+	position: absolute;
+	line-height: 1;
+	transform: translate(-50%, -50%);
+	will-change: transform, opacity;
+	filter: drop-shadow(0 6px 14px rgba(59, 130, 246, 0.35));
+	animation: brandEggBurst 1100ms cubic-bezier(.12, .78, .32, 1) forwards;
+	animation-delay: var(--delay, 0ms);
+}
+
+@keyframes brandEggBurst {
+	0% {
+		transform: translate(-50%, -50%) translate(0, 0) scale(0.3) rotate(0deg);
+		opacity: 0;
+	}
+
+	12% {
+		opacity: 1;
+	}
+
+	100% {
+		transform: translate(-50%, -50%) translate(var(--tx), var(--ty)) scale(var(--scale, 1)) rotate(var(--rot, 0deg));
+		opacity: 0;
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+
+	.brand-egg-ring,
+	.brand-egg-particle {
+		animation-duration: 1ms !important;
+		animation-delay: 0ms !important;
 	}
 }
 
@@ -992,6 +1083,14 @@ html.amoled .dark\:bg-gray-800 {
 }
 html.amoled .dark\:bg-black\/30 {
     background-color: rgba(0, 0, 0, 0.5) !important;
+}
+html.amoled .dark\:bg-gray-900\/90 {
+    background-color: rgba(0, 0, 0, 0.9) !important;
+}
+html.amoled .notif-dropdown,
+html.amoled .size-picker {
+    background: rgba(0, 0, 0, 0.97);
+    border-color: rgba(255, 255, 255, 0.08);
 }
 
 /* --- Dashboard Edit Mode --- */
