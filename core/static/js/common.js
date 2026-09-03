@@ -678,10 +678,9 @@ function toggleHaptics() {
 function updateHapticsUI() {
     const isEnabled = localStorage.getItem('haptics_enabled') !== 'false';
     
-    const checkbox = document.getElementById('mHapticsCheckbox');
-    if (checkbox) {
+    document.querySelectorAll('#mHapticsCheckbox, .mHapticsCheckbox').forEach(checkbox => {
         checkbox.checked = isEnabled;
-    }
+    });
     
     const track = document.getElementById('mHapticsTrack');
     const thumb = document.getElementById('mHapticsThumb');
@@ -2242,16 +2241,17 @@ window.calculateDaysLeft = function(isoDateString) {
     return days;
 };
 
+window.getBillingStatusColor = function(daysLeft) {
+    if (daysLeft === null) return 'gray';
+    if (daysLeft <= 3) return 'red';
+    if (daysLeft <= 7) return 'yellow';
+    return 'green';
+};
+
 window.getBillingBadgeHtml = function(daysLeft) {
     if (daysLeft === null) return '';
-    let badgeClass = "text-green-700 dark:text-green-400";
-    if (daysLeft < 0) {
-        badgeClass = "text-red-700 dark:text-red-400";
-    } else if (daysLeft <= 3) {
-        badgeClass = "text-red-700 dark:text-red-400";
-    } else if (daysLeft <= 7) {
-        badgeClass = "text-yellow-700 dark:text-yellow-400";
-    }
+    const color = getBillingStatusColor(daysLeft);
+    const badgeClass = `text-${color}-700 dark:text-${color}-400`;
     const isSmall = typeof window !== 'undefined' && window.innerWidth <= 380;
     const daysTemplate = isSmall
         ? (I18N?.web_billing_badge_days_short || "{days} д.")
@@ -2331,10 +2331,11 @@ window.renderHeaderBilling = function() {
     // Only show the header icon if billing is enabled or data exists.
     if (!isSet && !master_billing_json.next_payment_date) return;
     
+    const color = getBillingStatusColor(daysLeft);
     const fragment = DOMPurify.sanitize(`
-        <button class="flex items-center justify-center h-8 px-2 sm:px-3 rounded-lg hover:bg-black/5 dark:hover:bg-white/10 transition text-gray-600 dark:text-gray-400 font-medium text-xs sm:text-sm gap-1 whitespace-nowrap group"
+        <button class="header-billing-btn flex items-center justify-center h-8 px-2 sm:px-3 rounded-lg transition font-medium text-xs sm:text-sm gap-1 whitespace-nowrap group" data-status="${color}"
                 title="${I18N?.web_billing_modal_title || 'Детали аренды'}">
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-gray-500 group-hover:text-blue-500 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
             </svg>
             <span class="hidden sm:inline-flex">${getBillingBadgeHtml(daysLeft)}</span>
