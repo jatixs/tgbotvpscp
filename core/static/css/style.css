@@ -68,31 +68,6 @@ nav {
 	padding-top: max(0px, env(safe-area-inset-top, 0px)) !important;
 }
 
-/* --- Фоновое свечение, следующее за курсором (еле заметное) --- */
-#bg-mouse-glow {
-	position: fixed;
-	inset: 0;
-	z-index: 0;
-	pointer-events: none;
-	opacity: 0;
-	transition: opacity 800ms ease;
-	background: radial-gradient(650px circle at var(--mgx, 50%) var(--mgy, 50%), rgba(59, 130, 246, 0.07), transparent 70%);
-}
-
-#bg-mouse-glow.is-active {
-	opacity: 1;
-}
-
-html.dark #bg-mouse-glow {
-	background: radial-gradient(650px circle at var(--mgx, 50%) var(--mgy, 50%), rgba(96, 165, 250, 0.09), transparent 70%);
-}
-
-@media (prefers-reduced-motion: reduce) {
-	#bg-mouse-glow {
-		display: none;
-	}
-}
-
 /* --- Анимации --- */
 @keyframes float {
 
@@ -1091,6 +1066,15 @@ html.amoled .notif-dropdown,
 html.amoled .size-picker {
     background: rgba(0, 0, 0, 0.97);
     border-color: rgba(255, 255, 255, 0.08);
+}
+html.amoled .app-toast {
+    background-color: rgba(0, 0, 0, 0.92) !important;
+    border-color: rgba(255, 255, 255, 0.08) !important;
+    box-shadow: 0 20px 45px rgba(0, 0, 0, 0.65);
+}
+html.amoled #node-modal-loader,
+html.amoled #log-loader {
+    background-color: rgba(0, 0, 0, 0.75) !important;
 }
 
 /* --- Dashboard Edit Mode --- */

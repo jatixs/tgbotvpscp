@@ -578,6 +578,8 @@ let isSseConnected = false;
 let modalCloseTimer = null;
 let activeMobileModal = null;
 let bodyScrollTop = 0;
+let openModalStackCount = 0;
+const openModalSet = new Set();
 
 function initGlobalLazyLoad() {
     if (window.innerWidth >= 1024) return;
@@ -842,7 +844,7 @@ function getToastContainer() {
 function showToast(message) {
     const container = getToastContainer();
     const toast = document.createElement('div');
-    toast.className = 'pointer-events-auto flex items-center gap-3 px-4 py-3 rounded-2xl shadow-xl backdrop-blur-md border transition-all duration-500 ease-out transform translate-y-10 opacity-0 bg-white/90 dark:bg-gray-800/90 border-gray-200 dark:border-white/10 w-auto max-w-sm';
+    toast.className = 'app-toast pointer-events-auto flex items-center gap-3 px-4 py-3 rounded-2xl shadow-xl backdrop-blur-md border transition-all duration-500 ease-out transform translate-y-10 opacity-0 bg-white/90 dark:bg-gray-800/90 border-gray-200 dark:border-white/10 w-auto max-w-sm';
     const icon = `<div class="p-1.5 rounded-full bg-blue-100 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400 flex-shrink-0"><svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg></div>`;
     const closeBtn = `<button data-action="close-toast" class="text-gray-400 hover:text-gray-600 dark:hover:text-white transition p-1 rounded-lg hover:bg-black/5 dark:hover:bg-white/10 ml-1 flex-shrink-0"><svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg></button>`;
     toast.innerHTML = DOMPurify.sanitize(`${icon}<div class="flex-1 min-w-0"><p class="text-sm font-medium text-gray-900 dark:text-white leading-snug break-words">${message}</p></div>${closeBtn}`);
@@ -940,11 +942,11 @@ function showNextRouteEasterEgg(isRu) {
                 <div class="text-4xl">🛰️</div>
                 <p class="leading-relaxed">
                     Похоже, вы обожаете кликать. А наш друг-тестировщик обожает искать баги —
-                    и построил для этого целый маршрут в обход блокировок:
-                    <span class="font-bold text-blue-600 dark:text-blue-400">NextRouteVPN</span>.
+                    и построил для этого свой сетевой проект:
+                    <span class="font-bold text-blue-600 dark:text-blue-400">NextRoute</span>.
                 </p>
                 <p class="text-xs text-gray-500 dark:text-gray-400">
-                    Быстрый VPN на XRay-Core, подключение прямо из Telegram.
+                    Быстрое и стабильное соединение на базе XRay-Core.
                 </p>
             </div>
         `
@@ -953,11 +955,11 @@ function showNextRouteEasterEgg(isRu) {
                 <div class="text-4xl">🛰️</div>
                 <p class="leading-relaxed">
                     You clearly love clicking. Our tester friend loves hunting bugs even more —
-                    so he built a whole route around the blockades:
-                    <span class="font-bold text-blue-600 dark:text-blue-400">NextRouteVPN</span>.
+                    so he built his own networking project:
+                    <span class="font-bold text-blue-600 dark:text-blue-400">NextRoute</span>.
                 </p>
                 <p class="text-xs text-gray-500 dark:text-gray-400">
-                    A fast VPN on XRay-Core, connected right from Telegram.
+                    A fast and stable connection built on XRay-Core.
                 </p>
             </div>
         `;
@@ -972,7 +974,7 @@ function showNextRouteEasterEgg(isRu) {
                 close: true,
             },
             {
-                text: isRu ? '🚀 Открыть NextRouteVPN' : '🚀 Open NextRouteVPN',
+                text: isRu ? '🚀 Открыть NextRoute' : '🚀 Open NextRoute',
                 class: 'bg-blue-600 text-white hover:bg-blue-700',
                 close: true,
                 onClick: () => {
@@ -1778,15 +1780,26 @@ function animateModalOpen(modal, isInput = false) {
     const isMobile = window.innerWidth < 640;
     const card = modal.firstElementChild;
 
-    bodyScrollTop = window.scrollY;
+    // Guard against the same modal being "opened" twice in a row (e.g. duplicate click
+    // events) without a matching close, which would desync the shared lock counter below.
+    if (!openModalSet.has(modal)) {
+        openModalSet.add(modal);
 
-    if (isMobile) {
-        document.body.style.position = 'fixed';
-        document.body.style.top = `-${bodyScrollTop}px`;
-        document.body.style.width = '100%';
-        document.body.style.overflow = 'hidden';
-    } else {
-        document.body.style.overflow = 'hidden';
+        // Only the first modal in a stack should capture/lock scroll; nested modals (e.g. billing
+        // modal opened on top of the node modal) must not overwrite the original scroll position.
+        if (openModalStackCount === 0) {
+            bodyScrollTop = window.scrollY;
+
+            if (isMobile) {
+                document.body.style.position = 'fixed';
+                document.body.style.top = `-${bodyScrollTop}px`;
+                document.body.style.width = '100%';
+                document.body.style.overflow = 'hidden';
+            } else {
+                document.body.style.overflow = 'hidden';
+            }
+        }
+        openModalStackCount += 1;
     }
 
     modal.classList.remove('hidden');
@@ -1872,33 +1885,43 @@ function animateModalClose(modal) {
 
     modal.removeEventListener('click', handleModalInputClick);
 
+    // Only decrement once per modal — guards against double-close calls (overlay click +
+    // explicit close button both firing) desyncing the shared lock counter.
+    if (openModalSet.has(modal)) {
+        openModalSet.delete(modal);
+        openModalStackCount = Math.max(0, openModalStackCount - 1);
+    }
+
     modalCloseTimer = setTimeout(() => {
         modal.classList.add('hidden');
         modal.classList.remove('flex');
 
-        const scrollYToRestore = (document.body.style.position === 'fixed') 
-            ? Math.abs(parseInt(document.body.style.top || '0')) 
-            : bodyScrollTop;
+        // Only unlock/restore scroll once the last modal in the stack has closed.
+        if (openModalStackCount === 0) {
+            const scrollYToRestore = (document.body.style.position === 'fixed')
+                ? Math.abs(parseInt(document.body.style.top || '0'))
+                : bodyScrollTop;
 
-        if (document.body.style.position === 'fixed') {
-            document.body.style.position = '';
-            document.body.style.top = '';
-            document.body.style.width = '';
+            if (document.body.style.position === 'fixed') {
+                document.body.style.position = '';
+                document.body.style.top = '';
+                document.body.style.width = '';
+            }
+            document.body.style.overflow = '';
+
+            // Restore original scroll behavior temporarily
+            const html = document.documentElement;
+            const originalBehavior = html.style.scrollBehavior;
+            html.style.scrollBehavior = 'auto';
+
+            // Instantly jump to the original scroll position
+            window.scrollTo(0, scrollYToRestore);
+
+            // Restore smooth scrolling if it was previously enabled
+            setTimeout(() => {
+                html.style.scrollBehavior = originalBehavior;
+            }, 50);
         }
-        document.body.style.overflow = '';
-
-        // Restore original scroll behavior temporarily
-        const html = document.documentElement;
-        const originalBehavior = html.style.scrollBehavior;
-        html.style.scrollBehavior = 'auto';
-
-        // Instantly jump to the original scroll position
-        window.scrollTo(0, scrollYToRestore);
-
-        // Restore smooth scrolling if it was previously enabled
-        setTimeout(() => {
-            html.style.scrollBehavior = originalBehavior;
-        }, 50);
 
         modal.style.height = '';
         modal.style.top = '';
