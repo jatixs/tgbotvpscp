@@ -3483,12 +3483,19 @@ function updateHiddenBlocksPanel() {
             
             const div = document.createElement('div');
             div.className = 'hidden-widget-row flex justify-between items-center bg-gray-50 dark:bg-white/5 p-2 rounded-xl border border-gray-100 dark:border-white/5';
-            div.innerHTML = `
-                <span class="text-sm font-medium text-gray-700 dark:text-gray-300">${blockName}</span>
-                <button onclick="restoreDashboardBlock('${blockId}')" class="p-1.5 bg-green-500/20 text-green-600 dark:text-green-400 rounded-lg hover:bg-green-500 hover:text-white transition" title="${(typeof I18N !== 'undefined' && I18N.web_widget_restore) ? I18N.web_widget_restore : 'Восстановить'}">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" /></svg>
-                </button>
-            `;
+
+            const nameSpan = document.createElement('span');
+            nameSpan.className = 'text-sm font-medium text-gray-700 dark:text-gray-300';
+            nameSpan.textContent = blockName;
+
+            const restoreBtn = document.createElement('button');
+            restoreBtn.className = 'p-1.5 bg-green-500/20 text-green-600 dark:text-green-400 rounded-lg hover:bg-green-500 hover:text-white transition';
+            restoreBtn.title = (typeof I18N !== 'undefined' && I18N.web_widget_restore) ? I18N.web_widget_restore : 'Восстановить';
+            restoreBtn.addEventListener('click', () => restoreDashboardBlock(blockId));
+            restoreBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" /></svg>';
+
+            div.appendChild(nameSpan);
+            div.appendChild(restoreBtn);
             list.appendChild(div);
         });
     }

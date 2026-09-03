@@ -875,29 +875,47 @@ document.addEventListener('app:action:close-toast', e => {
     closeToast(e.detail.target.closest('div'));
 });
 
-function launchBrandEasterEgg() {
+function launchBrandEasterEgg(originEl) {
     const overlay = document.createElement('div');
-    overlay.className = 'pointer-events-none fixed inset-0 z-[9998] overflow-hidden';
+    overlay.className = 'brand-egg-overlay';
     document.body.appendChild(overlay);
 
-    const glyphs = ['✨', '🚀', '🖥️', '⚡', '🌟'];
-    for (let index = 0; index < 18; index += 1) {
-        const sparkle = document.createElement('div');
-        sparkle.textContent = glyphs[index % glyphs.length];
-        sparkle.style.position = 'absolute';
-        sparkle.style.left = `${8 + getSecureRandom() * 84}%`;
-        sparkle.style.top = `${10 + getSecureRandom() * 22}%`;
-        sparkle.style.fontSize = `${16 + getSecureRandom() * 16}px`;
-        sparkle.style.opacity = '0';
-        sparkle.style.transform = 'translateY(8px) scale(0.8) rotate(0deg)';
-        sparkle.style.transition = 'transform 900ms ease, opacity 900ms ease';
-        sparkle.style.filter = 'drop-shadow(0 8px 24px rgba(59,130,246,0.35))';
-        overlay.appendChild(sparkle);
+    // Anchor the burst to the clicked element so it looks right on any screen size.
+    const rect = originEl && originEl.getBoundingClientRect ? originEl.getBoundingClientRect() : null;
+    const originX = rect ? rect.left + rect.width / 2 : window.innerWidth / 2;
+    const originY = rect ? rect.top + rect.height / 2 : window.innerHeight / 3;
 
-        setTimeout(() => {
-            sparkle.style.opacity = '1';
-            sparkle.style.transform = `translateY(${-24 - getSecureRandom() * 36}px) scale(${1 + getSecureRandom() * 0.45}) rotate(${(-25 + getSecureRandom() * 50).toFixed(0)}deg)`;
-        }, index * 35);
+    const ring = document.createElement('div');
+    ring.className = 'brand-egg-ring';
+    ring.style.left = `${originX}px`;
+    ring.style.top = `${originY}px`;
+    overlay.appendChild(ring);
+
+    // Emoji without variation selectors render consistently across OS/browsers.
+    const glyphs = ['✨', '🚀', '⚡', '🌟', '💫', '🎉'];
+    const particleCount = 20;
+    const burstRadius = Math.min(window.innerWidth, window.innerHeight) * 0.22;
+
+    for (let index = 0; index < particleCount; index += 1) {
+        const particle = document.createElement('div');
+        particle.className = 'brand-egg-particle';
+        particle.textContent = glyphs[index % glyphs.length];
+        particle.style.left = `${originX}px`;
+        particle.style.top = `${originY}px`;
+        particle.style.fontSize = `${14 + getSecureRandom() * 14}px`;
+
+        const angle = (Math.PI * 2 * index) / particleCount + getSecureRandom() * 0.5;
+        const distance = burstRadius * (0.5 + getSecureRandom() * 0.7);
+        const tx = Math.cos(angle) * distance;
+        const ty = Math.sin(angle) * distance + 40; // slight downward drift like gravity
+
+        particle.style.setProperty('--tx', `${tx.toFixed(0)}px`);
+        particle.style.setProperty('--ty', `${ty.toFixed(0)}px`);
+        particle.style.setProperty('--scale', (0.8 + getSecureRandom() * 0.6).toFixed(2));
+        particle.style.setProperty('--rot', `${(-180 + getSecureRandom() * 360).toFixed(0)}deg`);
+        particle.style.setProperty('--delay', `${index * 18}ms`);
+
+        overlay.appendChild(particle);
     }
 
     setTimeout(() => overlay.remove(), 1500);
@@ -908,6 +926,61 @@ function launchBrandEasterEgg() {
     if (window.playHaptic) {
         window.playHaptic([25, 40, 25]);
     }
+
+    setTimeout(() => showNextRouteEasterEgg(isRu), 900);
+}
+
+function showNextRouteEasterEgg(isRu) {
+    if (typeof window.showModal !== 'function') return;
+
+    const title = isRu ? '📡 Найден секретный маршрут' : '📡 Secret route found';
+    const content = isRu
+        ? `
+            <div class="flex flex-col items-center text-center gap-3">
+                <div class="text-4xl">🛰️</div>
+                <p class="leading-relaxed">
+                    Похоже, вы обожаете кликать. А наш друг-тестировщик обожает искать баги —
+                    и построил для этого целый маршрут в обход блокировок:
+                    <span class="font-bold text-blue-600 dark:text-blue-400">NextRouteVPN</span>.
+                </p>
+                <p class="text-xs text-gray-500 dark:text-gray-400">
+                    Быстрый VPN на XRay-Core, подключение прямо из Telegram.
+                </p>
+            </div>
+        `
+        : `
+            <div class="flex flex-col items-center text-center gap-3">
+                <div class="text-4xl">🛰️</div>
+                <p class="leading-relaxed">
+                    You clearly love clicking. Our tester friend loves hunting bugs even more —
+                    so he built a whole route around the blockades:
+                    <span class="font-bold text-blue-600 dark:text-blue-400">NextRouteVPN</span>.
+                </p>
+                <p class="text-xs text-gray-500 dark:text-gray-400">
+                    A fast VPN on XRay-Core, connected right from Telegram.
+                </p>
+            </div>
+        `;
+
+    window.showModal({
+        title,
+        content,
+        buttons: [
+            {
+                text: isRu ? 'Закрыть' : 'Close',
+                class: 'bg-gray-200 text-gray-800 hover:bg-gray-300 dark:bg-gray-700 dark:text-white dark:hover:bg-gray-600',
+                close: true,
+            },
+            {
+                text: isRu ? '🚀 Открыть NextRouteVPN' : '🚀 Open NextRouteVPN',
+                class: 'bg-blue-600 text-white hover:bg-blue-700',
+                close: true,
+                onClick: () => {
+                    window.open('https://nextroute.network/', '_blank', 'noopener,noreferrer');
+                },
+            },
+        ],
+    });
 }
 
 function initBrandEasterEgg() {
@@ -934,7 +1007,7 @@ function initBrandEasterEgg() {
 
         clickCount = 0;
         cooldown = true;
-        launchBrandEasterEgg();
+        launchBrandEasterEgg(brandEl);
         setTimeout(() => {
             cooldown = false;
         }, 2500);
