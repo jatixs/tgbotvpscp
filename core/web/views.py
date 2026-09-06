@@ -704,6 +704,8 @@ async def handle_nodes_monitor_page(request: web.Request) -> web.StreamResponse:
             "web_disk": _("web_nodes_monitor_disk", lang),
             "web_traffic_in": _("web_nodes_monitor_traffic_in", lang),
             "web_traffic_out": _("web_nodes_monitor_traffic_out", lang),
+            "web_label_rx": _("web_label_rx", lang),
+            "web_label_tx": _("web_label_tx", lang),
             "web_show_more": _("web_show_more", lang),
             "web_show_less": _("web_show_less", lang),
             "web_nodes_monitor_btn_reboot": _("web_nodes_monitor_btn_reboot", lang),

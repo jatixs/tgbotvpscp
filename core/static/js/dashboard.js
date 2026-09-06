@@ -1131,14 +1131,14 @@ function renderAgentChart(history) {
             data: {
                 labels,
                 datasets: [{
-                    label: 'RX',
+                    label: (typeof I18N !== 'undefined' && I18N.web_label_rx) ? I18N.web_label_rx : 'ВХ',
                     data: netRx,
                     borderColor: '#22c55e',
                     borderWidth: 2,
                     backgroundColor: rxGrad,
                     fill: true
                 }, {
-                    label: 'TX',
+                    label: (typeof I18N !== 'undefined' && I18N.web_label_tx) ? I18N.web_label_tx : 'ИСХ',
                     data: netTx,
                     borderColor: '#3b82f6',
                     borderWidth: 2,
@@ -1940,14 +1940,14 @@ function renderCharts(history) {
             data: {
                 labels,
                 datasets: [{
-                    label: 'RX',
+                    label: (typeof I18N !== 'undefined' && I18N.web_label_rx) ? I18N.web_label_rx : 'ВХ',
                     data: netRx,
                     borderColor: '#22c55e',
                     borderWidth: 2,
                     backgroundColor: rxGrad,
                     fill: true
                 }, {
-                    label: 'TX',
+                    label: (typeof I18N !== 'undefined' && I18N.web_label_tx) ? I18N.web_label_tx : 'ИСХ',
                     data: netTx,
                     borderColor: '#ef4444',
                     borderWidth: 2,

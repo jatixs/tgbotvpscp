@@ -19,11 +19,17 @@
   * **Billing Indicator:** The billing icon in the header is now additionally color-coded (green/yellow/red/gray) based on the upcoming payment status.
   * **Dashboard Footer:** The "Powered by Python" badge on the uptime card now has a language icon and cleaner alignment.
   * **AMOLED Theme:** Toast notifications and loading overlays (node details modal, system logs panel) now use a true black background instead of a blue-gray tint, matching the rest of the AMOLED design.
+  * **Network Activity:** Traffic chart legend labels renamed from RX/TX to ВХ/ИСХ (incoming/outgoing) for the Russian-language interface.
 
 ### 🐛 Bugfixes:
 * **Traffic Charts:** Fixed incorrect traffic chart rendering when resizing the widget block.
 * **Modals:** Fixed a bug where closing the node details modal (or any other modal) would abruptly scroll the page back to the top instead of staying where it was opened from.
 * **Security (WebUI):** The "Hidden Blocks" panel now renders widget names via safe `textContent` instead of `innerHTML`, eliminating a potential XSS vector through block names.
+* **Graceful Shutdown:** Fixed graceful shutdown handling for the main bot and alert bot.
+
+### 🔧 Refactoring:
+* **Logging:** Translated all logging messages to English for consistency and easier log analysis.
+* **Localized Logging:** Implemented localized logging messages for better clarity and consistency.
 
 ---
 ## [1.25.0] - 2026-08-20
