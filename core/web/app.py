@@ -13,6 +13,7 @@ from aiohttp import web
 from aiogram import Bot
 
 from ..config import BASE_DIR, ENABLE_WEB_UI, WEB_SERVER_HOST, WEB_SERVER_PORT
+from ..i18n import log_text
 from ..tasks import cleanup_server, start_background_tasks
 from .api_nodes import routes as node_routes
 from .api_system import routes as system_routes
@@ -65,7 +66,7 @@ def _register_routes(app: web.Application) -> None:
         app.add_routes(system_routes)
         app.add_routes(streaming_routes)
         app.add_routes(extra_routes)
-        logging.info("Web route tables registered successfully")
+        logging.info(log_text("web_routes_registered"))
     except Exception:
         logging.exception("Failed to register web route tables")
         raise
@@ -89,7 +90,7 @@ async def start_web_server(bot_instance: Bot) -> web.AppRunner | None:
         await runner.cleanup()
         return None
 
-    logging.info("Web server started on %s:%s", WEB_SERVER_HOST, WEB_SERVER_PORT)
+    logging.info(log_text("web_server_started", host=WEB_SERVER_HOST, port=WEB_SERVER_PORT))
     return runner
 
 

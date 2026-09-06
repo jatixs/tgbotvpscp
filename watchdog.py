@@ -77,20 +77,20 @@ if DEPLOY_MODE == "docker":
         try:
             docker_client = docker.from_env()
             docker_client.ping()
-            logging.info("Успешное подключение к Docker API.")
+            logging.info("Successfully connected to Docker API.")
         except docker.errors.DockerException:
             logging.critical(
-                "Не удалось подключиться к Docker socket. Убедитесь, что /var/run/docker.sock смонтирован."
+                "Failed to connect to Docker socket. Make sure /var/run/docker.sock is mounted."
             )
             docker_client = None
         except Exception as e:
             logging.critical(
-                f"Неожиданная ошибка при инициализации Docker клиента: {e}"
+                f"Unexpected error initializing Docker client: {e}"
             )
             docker_client = None
     else:
         logging.critical(
-            "Режим Docker, но библиотека 'docker' не установлена! Watchdog не сможет работать."
+            "Docker mode is set, but the 'docker' library is not installed! Watchdog will not work."
         )
 
 
@@ -231,7 +231,7 @@ def send_or_edit_telegram_alert(
         apply_cooldown
         and current_time - last_alert_times.get(alert_type, 0) < ALERT_COOLDOWN_SECONDS
     ):
-        logging.warning(f"Активен кулдаун для '{alert_type}', пропуск уведомления.")
+        logging.warning(f"Cooldown active for '{alert_type}', skipping notification.")
         return message_id_to_edit
     
     if alert_type in ["bot_service_up_ok", "watchdog_start"]:
@@ -241,7 +241,7 @@ def send_or_edit_telegram_alert(
 
     if not message_key:
         logging.error(
-            f"send_or_edit_telegram_alert вызван с пустым message_key для alert_type '{alert_type}'"
+            f"send_or_edit_telegram_alert called with empty message_key for alert_type '{alert_type}'"
         )
         message_body = get_text("error_internal", ALERT_ADMIN_ID)
     else:
@@ -274,19 +274,19 @@ def send_or_edit_telegram_alert(
         try:
             response = requests.post(url, data=payload, timeout=10)
             if response.status_code == 200:
-                logging.info(f"Telegram-сообщение ID {message_id_to_edit} отредактировано ('{alert_type}').")
+                logging.info(f"Telegram message ID {message_id_to_edit} edited ('{alert_type}').")
                 message_sent_or_edited = True
                 if apply_cooldown:
                     last_alert_times[alert_type] = current_time
             elif response.status_code == 400:
-                logging.debug(f"Сообщение ID {message_id_to_edit} не изменено.")
+                logging.debug(f"Message ID {message_id_to_edit} not changed.")
                 message_sent_or_edited = True
             else:
-                logging.warning(f"Ошибка редактирования {message_id_to_edit}: {response.text}")
+                logging.warning(f"Error editing {message_id_to_edit}: {response.text}")
                 status_alert_message_id = None
                 new_message_id = None
         except Exception as e:
-            logging.error(f"Ошибка при редактировании: {e}")
+            logging.error(f"Error while editing: {e}")
             status_alert_message_id = None
             new_message_id = None
             
@@ -303,14 +303,14 @@ def send_or_edit_telegram_alert(
             if response.status_code == 200:
                 sent_data = response.json()
                 new_message_id = sent_data.get("result", {}).get("message_id")
-                logging.info(f"Telegram-оповещение '{alert_type}' отправлено (ID {new_message_id}).")
+                logging.info(f"Telegram alert '{alert_type}' sent (ID {new_message_id}).")
                 if apply_cooldown:
                     last_alert_times[alert_type] = current_time
             else:
-                logging.error(f"Ошибка отправки '{alert_type}': {response.text}")
+                logging.error(f"Error sending '{alert_type}': {response.text}")
                 new_message_id = None
         except Exception as e:
-            logging.error(f"Ошибка при отправке '{alert_type}': {e}")
+            logging.error(f"Error while sending '{alert_type}': {e}")
             new_message_id = None
             
     return new_message_id
@@ -474,13 +474,13 @@ def process_service_state(
             now = datetime.utcnow() if is_utc else datetime.now()
             try:
                 if (now - current_start_dt).total_seconds() < 120:
-                    logging.info("Обнаружен свежий запуск бота.")
+                    logging.info("Fresh bot startup detected.")
                     is_restart_detected = True
             except Exception as e:
-                logging.warning(f"Ошибка сравнения времени: {e}")
+                logging.warning(f"Error comparing time: {e}")
                 
         elif current_start_dt != last_service_start_dt:
-            logging.info(f"Обнаружено изменение времени запуска.")
+            logging.info(f"Startup time change detected.")
             last_service_start_dt = current_start_dt
             is_restart_detected = True
 
