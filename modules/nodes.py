@@ -112,10 +112,10 @@ async def _broadcast_node_status_to_clients(event_type: str, changed_node_token:
                 await alert_bot.send_message(uid, text, parse_mode="HTML")
                 await asyncio.sleep(0.05)
             except Exception as e:
-                logging.warning(f"[nodes] Ошибка при отправке статуса серверов клиенту {uid}: {e}")
+                logging.warning(f"[nodes] Error sending server status to client {uid}: {e}")
                 
     except Exception as e:
-        logging.warning(f"[nodes] Ошибка генерации системного алерта: {e}")
+        logging.warning(f"[nodes] Error generating system alert: {e}")
 
 
 def get_button() -> KeyboardButton:

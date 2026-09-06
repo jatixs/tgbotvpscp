@@ -38,22 +38,22 @@ def cleanup_backups():
     Удаляет файлы .bak в папке config, если они существуют.
     Вызывается только после успешной миграции.
     """
-    logger.info("🧹 Очистка файлов бэкапов...")
+    logger.info("🧹 Cleaning up backup files...")
     count = 0
     for filename in FILES_TO_MIGRATE:
         backup_path = os.path.join(CONFIG_DIR, f"{filename}.bak")
         if os.path.exists(backup_path):
             try:
                 os.remove(backup_path)
-                logger.info(f"✅ Удален бэкап: {filename}.bak")
+                logger.info(f"✅ Removed backup: {filename}.bak")
                 count += 1
             except OSError as e:
-                logger.error(f"❌ Ошибка удаления {filename}.bak: {e}")
+                logger.error(f"❌ Error removing {filename}.bak: {e}")
     
     if count == 0:
-        logger.info("Бэкапы не найдены или уже удалены.")
+        logger.info("No backups found or already removed.")
     else:
-        logger.info(f"Очистка завершена. Удалено файлов: {count}")
+        logger.info(f"Cleanup complete. Files removed: {count}")
 
 def migrate_file(filename: str):
     file_path = os.path.join(CONFIG_DIR, filename)
@@ -73,23 +73,23 @@ def migrate_file(filename: str):
     except (json.JSONDecodeError, UnicodeDecodeError):
         return
 
-    logger.info(f"🔄 Миграция (шифрование) {filename}...")
+    logger.info(f"🔄 Migrating (encrypting) {filename}...")
 
     try:
         shutil.copy2(file_path, backup_path)
-        logger.info(f"   Бэкап создан: {filename}.bak")
+        logger.info(f"   Backup created: {filename}.bak")
     except Exception as e:
-        logger.error(f"❌ Ошибка создания бэкапа для {filename}: {e}")
+        logger.error(f"❌ Error creating backup for {filename}: {e}")
         return
 
     try:
         save_encrypted(file_path, data)
-        logger.info(f"   Файл {filename} успешно зашифрован.")
+        logger.info(f"   File {filename} encrypted successfully.")
     except Exception as e:
-        logger.error(f"❌ Ошибка шифрования {filename}: {e}")
+        logger.error(f"❌ Error encrypting {filename}: {e}")
         if os.path.exists(backup_path):
             shutil.move(backup_path, file_path)
-            logger.warning("   Файл восстановлен из бэкапа.")
+            logger.warning("   File restored from backup.")
         return
 
 
@@ -101,10 +101,10 @@ def ensure_env_variables():
     env_file = os.path.join(config.BASE_DIR, ".env")
     
     if not os.path.exists(env_file):
-        logger.warning(".env файл не найден, пропуск проверки переменных.")
+        logger.warning(".env file not found, skipping variable check.")
         return
     
-    logger.info("🔍 Проверка переменных окружения в .env...")
+    logger.info("🔍 Checking environment variables in .env...")
     
     required_vars = {
         "WEB_SERVER_HOST": "127.0.0.1",
@@ -141,7 +141,7 @@ def ensure_env_variables():
         for var_name, default_val in required_vars.items():
             if var_name not in existing_vars:
                 lines_to_add.append(f'{var_name}="{default_val}"')
-                logger.info(f"  + Добавлена переменная: {var_name}={default_val}")
+                logger.info(f"  + Added variable: {var_name}={default_val}")
                 changes_made = True
         
         for var_name in optional_vars:
@@ -152,12 +152,12 @@ def ensure_env_variables():
         if lines_to_add:
             with open(env_file, 'a', encoding='utf-8') as f:
                 f.write('\n' + '\n'.join(lines_to_add) + '\n')
-            logger.info(f"✅ Добавлено {len(lines_to_add)} переменных в .env")
+            logger.info(f"✅ Added {len(lines_to_add)} variables to .env")
         else:
-            logger.info("✅ Все переменные окружения актуальны.")
+            logger.info("✅ All environment variables are up to date.")
             
     except Exception as e:
-        logger.error(f"❌ Ошибка при проверке .env: {e}")
+        logger.error(f"❌ Error checking .env: {e}")
 
 
 def migrate_metadata():
@@ -222,7 +222,7 @@ def migrate_metadata():
         logger.info("WebUI Metadata is valid. No changes needed.")
 
 def main():
-    logger.info("🚀 Запуск миграции конфигурации...")
+    logger.info("🚀 Starting configuration migration...")
     
     try:
         ensure_env_variables()
@@ -230,11 +230,11 @@ def main():
         for filename in FILES_TO_MIGRATE:
             migrate_file(filename)
         migrate_metadata()
-        logger.info("✅ Все миграции выполнены успешно.")
+        logger.info("✅ All migrations completed successfully.")
         cleanup_backups()
         
     except Exception as e:
-        logger.critical(f"⛔ Критическая ошибка во время миграции: {e}")
+        logger.critical(f"⛔ Critical error during migration: {e}")
         exit(1)
 
 if __name__ == "__main__":
