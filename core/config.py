@@ -486,9 +486,15 @@ def setup_logging(log_directory, log_filename_prefix):
     logger.addHandler(rotating_handler)
     logger.addHandler(console_handler)
     mode_name = "DEBUG" if DEBUG_MODE else "RELEASE"
-    logging.info(
-        f"Logging initialized. Mode: {mode_name}. Sensitive data redaction: {('OFF' if UNSAFE_LOGGING else 'ON')}"
-    )
+    try:
+        from .i18n import log_text  # local import: i18n depends on this module
+
+        redaction = "OFF" if UNSAFE_LOGGING else "ON"
+        logging.info(log_text("logging_initialized", mode=mode_name, redaction=redaction))
+    except Exception:
+        logging.info(
+            f"Logging initialized. Mode: {mode_name}. Sensitive data redaction: {('OFF' if UNSAFE_LOGGING else 'ON')}"
+        )
     logging.getLogger("urllib3.connectionpool").setLevel(logging.ERROR)
 
 

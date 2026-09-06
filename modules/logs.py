@@ -57,16 +57,16 @@ async def logs_handler(message: types.Message, state: FSMContext):
             response_text = _("logs_header", user_id, log_output=escaped_output)
         else:
             error_message = escape_html(stderr.decode().strip())
-            logging.error(f"Ошибка при чтении журналов: {error_message}")
+            logging.error(f"Error reading logs: {error_message}")
             response_text = _("logs_read_error", user_id, error=error_message)
         await message.answer(
             response_text, reply_markup=main_keyboard, parse_mode="HTML"
         )
     except FileNotFoundError:
-        logging.error(f"Команда '{cmd[0]}' не найдена.")
+        logging.error(f"Command '{cmd[0]}' not found.")
         await message.answer(
             _("logs_journalctl_not_found", user_id), reply_markup=main_keyboard
         )
     except Exception as e:
-        logging.error(f"Ошибка при выполнении logs_handler: {e}")
+        logging.error(f"Error running logs_handler: {e}")
         await message.answer(_("error_unexpected", user_id), reply_markup=main_keyboard)

@@ -133,10 +133,10 @@ async def cq_get_id_inline(callback: types.CallbackQuery):
         if "message is not modified" in str(e):
             await callback.answer(_("users_already_here", lang))
         else:
-            logging.error(f"Ошибка в cq_get_id_inline (edit): {e}")
+            logging.error(f"Error in cq_get_id_inline (edit): {e}")
             await callback.answer(_("error_unexpected", lang), show_alert=True)
     except Exception as e:
-        logging.error(f"Ошибка в cq_get_id_inline: {e}")
+        logging.error(f"Error in cq_get_id_inline: {e}")
         await callback.answer(_("error_unexpected", lang), show_alert=True)
 
 
@@ -177,10 +177,10 @@ async def cq_back_to_manage_users(callback: types.CallbackQuery, state: FSMConte
         if "message is not modified" in str(e):
             await callback.answer(_("users_already_here", lang))
         else:
-            logging.error(f"Ошибка в cq_back_to_manage_users (edit): {e}")
+            logging.error(f"Error in cq_back_to_manage_users (edit): {e}")
             await callback.answer(_("error_unexpected", lang), show_alert=True)
     except Exception as e:
-        logging.error(f"Ошибка в cq_back_to_manage_users: {e}")
+        logging.error(f"Error in cq_back_to_manage_users: {e}")
         await callback.answer(_("error_unexpected", lang), show_alert=True)
 
 
@@ -226,7 +226,7 @@ async def process_add_user_id(message: types.Message, state: FSMContext):
                 await message.delete()
             except TelegramBadRequest as edit_err:
                 logging.warning(
-                    f"Не удалось отредактировать сообщение {original_question_msg_id} для выбора группы: {edit_err}. Отправляю новое."
+                    f"Failed to edit message {original_question_msg_id} for group selection: {edit_err}. Sending a new one."
                 )
                 await message.reply(prompt_text, reply_markup=keyboard)
         else:
@@ -235,7 +235,7 @@ async def process_add_user_id(message: types.Message, state: FSMContext):
     except ValueError:
         await message.reply(_("users_add_invalid_id", lang))
     except Exception as e:
-        logging.error(f"Ошибка в process_add_user_id: {e}")
+        logging.error(f"Error in process_add_user_id: {e}")
         await message.reply(_("error_unexpected", lang))
 
 
@@ -252,7 +252,7 @@ async def process_add_user_group(callback: types.CallbackQuery, state: FSMContex
         ALLOWED_USERS[new_user_id] = group_key
         new_user_name = await get_user_name(callback.bot, new_user_id)
         logging.info(
-            f"Админ {callback.from_user.id} добавил пользователя {new_user_name} ({new_user_id}) в группу '{group_key}'"
+            f"Admin {callback.from_user.id} added user {new_user_name} ({new_user_id}) to group '{group_key}'"
         )
         # Audit logging
         log_audit_event(
@@ -277,7 +277,7 @@ async def process_add_user_group(callback: types.CallbackQuery, state: FSMContex
         )
         await state.clear()
     except Exception as e:
-        logging.error(f"Ошибка в process_add_user_group: {e}")
+        logging.error(f"Error in process_add_user_group: {e}")
         await callback.message.edit_text(
             f"{_('error_unexpected', lang)}: {e}",
             reply_markup=get_back_keyboard(lang, "back_to_manage_users"),
@@ -330,7 +330,7 @@ async def cq_delete_user_confirm(callback: types.CallbackQuery):
 
         await save_user_settings_async()
         logging.info(
-            f"Админ {admin_id} удалил пользователя {deleted_user_name} ({user_id_to_delete}) из группы '{deleted_group_key}'"
+            f"Admin {admin_id} deleted user {deleted_user_name} ({user_id_to_delete}) from group '{deleted_group_key}'"
         )
         # Audit logging
         log_audit_event(
@@ -350,7 +350,7 @@ async def cq_delete_user_confirm(callback: types.CallbackQuery):
             show_alert=False,
         )
     except Exception as e:
-        logging.error(f"Ошибка в cq_delete_user_confirm: {e}")
+        logging.error(f"Error in cq_delete_user_confirm: {e}")
         await callback.answer(_("error_unexpected", lang), show_alert=True)
 
 
@@ -378,7 +378,7 @@ async def cq_request_self_delete(callback: types.CallbackQuery):
         )
         await callback.answer()
     except Exception as e:
-        logging.error(f"Ошибка в cq_request_self_delete: {e}")
+        logging.error(f"Error in cq_request_self_delete: {e}")
         await callback.answer(_("error_unexpected", lang), show_alert=True)
 
 
@@ -413,12 +413,12 @@ async def cq_confirm_self_delete(callback: types.CallbackQuery):
 
         await save_user_settings_async()
         logging.info(
-            f"Пользователь {deleted_user_name} ({user_id_to_delete}) удалил себя из группы '{deleted_group_key}'"
+            f"User {deleted_user_name} ({user_id_to_delete}) removed themselves from group '{deleted_group_key}'"
         )
         await callback.message.delete()
         await callback.answer(_("users_delete_self_success", lang), show_alert=True)
     except Exception as e:
-        logging.error(f"Ошибка в cq_confirm_self_delete: {e}")
+        logging.error(f"Error in cq_confirm_self_delete: {e}")
         await callback.answer(_("error_unexpected", lang), show_alert=True)
 
 
@@ -472,7 +472,7 @@ async def cq_select_user_for_group_change(callback: types.CallbackQuery):
         )
         await callback.answer()
     except Exception as e:
-        logging.error(f"Ошибка в cq_select_user_for_group_change: {e}")
+        logging.error(f"Error in cq_select_user_for_group_change: {e}")
         await callback.answer(_("error_unexpected", lang), show_alert=True)
 
 
@@ -486,7 +486,7 @@ async def cq_set_group_existing(callback: types.CallbackQuery, state: FSMContext
         parts = callback.data.split("_")
         if parts[2] == "new":
             logging.warning(
-                f"cq_set_group_existing получил callback для нового пользователя: {callback.data}"
+                f"cq_set_group_existing received callback for a new user: {callback.data}"
             )
             await callback.answer(
                 _("error_internal", lang) + " (wrong handler)", show_alert=True
@@ -495,7 +495,7 @@ async def cq_set_group_existing(callback: types.CallbackQuery, state: FSMContext
         user_id_to_change = int(parts[2])
         new_group_key = parts[3]
         if new_group_key not in ["admins", "users"]:
-            raise ValueError(f"Неверный ключ группы в callback_data: {new_group_key}")
+            raise ValueError(f"Invalid group key in callback_data: {new_group_key}")
         if user_id_to_change not in ALLOWED_USERS or user_id_to_change == ADMIN_USER_ID:
             await callback.answer(
                 _("users_change_group_invalid", lang), show_alert=True
@@ -506,7 +506,7 @@ async def cq_set_group_existing(callback: types.CallbackQuery, state: FSMContext
         await save_users_async()
         user_name = USER_NAMES.get(str(user_id_to_change), f"ID: {user_id_to_change}")
         logging.info(
-            f"Админ {admin_id} изменил группу для {user_name} ({user_id_to_change}) с '{old_group_key}' на '{new_group_key}'"
+            f"Admin {admin_id} changed group for {user_name} ({user_id_to_change}) from '{old_group_key}' to '{new_group_key}'"
         )
         keyboard = get_change_group_keyboard(admin_id)
         new_group_display = (
@@ -529,9 +529,9 @@ async def cq_set_group_existing(callback: types.CallbackQuery, state: FSMContext
         )
     except (IndexError, ValueError) as e:
         logging.error(
-            f"Ошибка разбора callback_data в cq_set_group_existing: {e} (data: {callback.data})"
+            f"Error parsing callback_data in cq_set_group_existing: {e} (data: {callback.data})"
         )
         await callback.answer(_("error_internal", lang), show_alert=True)
     except Exception as e:
-        logging.error(f"Ошибка в cq_set_group_existing: {e}")
+        logging.error(f"Error in cq_set_group_existing: {e}")
         await callback.answer(_("error_unexpected", lang), show_alert=True)

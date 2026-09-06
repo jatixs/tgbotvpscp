@@ -578,6 +578,8 @@ let isSseConnected = false;
 let modalCloseTimer = null;
 let activeMobileModal = null;
 let bodyScrollTop = 0;
+let openModalStackCount = 0;
+const openModalSet = new Set();
 
 function initGlobalLazyLoad() {
     if (window.innerWidth >= 1024) return;
@@ -678,10 +680,9 @@ function toggleHaptics() {
 function updateHapticsUI() {
     const isEnabled = localStorage.getItem('haptics_enabled') !== 'false';
     
-    const checkbox = document.getElementById('mHapticsCheckbox');
-    if (checkbox) {
+    document.querySelectorAll('#mHapticsCheckbox, .mHapticsCheckbox').forEach(checkbox => {
         checkbox.checked = isEnabled;
-    }
+    });
     
     const track = document.getElementById('mHapticsTrack');
     const thumb = document.getElementById('mHapticsThumb');
@@ -843,7 +844,7 @@ function getToastContainer() {
 function showToast(message) {
     const container = getToastContainer();
     const toast = document.createElement('div');
-    toast.className = 'pointer-events-auto flex items-center gap-3 px-4 py-3 rounded-2xl shadow-xl backdrop-blur-md border transition-all duration-500 ease-out transform translate-y-10 opacity-0 bg-white/90 dark:bg-gray-800/90 border-gray-200 dark:border-white/10 w-auto max-w-sm';
+    toast.className = 'app-toast pointer-events-auto flex items-center gap-3 px-4 py-3 rounded-2xl shadow-xl backdrop-blur-md border transition-all duration-500 ease-out transform translate-y-10 opacity-0 bg-white/90 dark:bg-gray-800/90 border-gray-200 dark:border-white/10 w-auto max-w-sm';
     const icon = `<div class="p-1.5 rounded-full bg-blue-100 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400 flex-shrink-0"><svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg></div>`;
     const closeBtn = `<button data-action="close-toast" class="text-gray-400 hover:text-gray-600 dark:hover:text-white transition p-1 rounded-lg hover:bg-black/5 dark:hover:bg-white/10 ml-1 flex-shrink-0"><svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg></button>`;
     toast.innerHTML = DOMPurify.sanitize(`${icon}<div class="flex-1 min-w-0"><p class="text-sm font-medium text-gray-900 dark:text-white leading-snug break-words">${message}</p></div>${closeBtn}`);
@@ -876,29 +877,47 @@ document.addEventListener('app:action:close-toast', e => {
     closeToast(e.detail.target.closest('div'));
 });
 
-function launchBrandEasterEgg() {
+function launchBrandEasterEgg(originEl) {
     const overlay = document.createElement('div');
-    overlay.className = 'pointer-events-none fixed inset-0 z-[9998] overflow-hidden';
+    overlay.className = 'brand-egg-overlay';
     document.body.appendChild(overlay);
 
-    const glyphs = ['✨', '🚀', '🖥️', '⚡', '🌟'];
-    for (let index = 0; index < 18; index += 1) {
-        const sparkle = document.createElement('div');
-        sparkle.textContent = glyphs[index % glyphs.length];
-        sparkle.style.position = 'absolute';
-        sparkle.style.left = `${8 + getSecureRandom() * 84}%`;
-        sparkle.style.top = `${10 + getSecureRandom() * 22}%`;
-        sparkle.style.fontSize = `${16 + getSecureRandom() * 16}px`;
-        sparkle.style.opacity = '0';
-        sparkle.style.transform = 'translateY(8px) scale(0.8) rotate(0deg)';
-        sparkle.style.transition = 'transform 900ms ease, opacity 900ms ease';
-        sparkle.style.filter = 'drop-shadow(0 8px 24px rgba(59,130,246,0.35))';
-        overlay.appendChild(sparkle);
+    // Anchor the burst to the clicked element so it looks right on any screen size.
+    const rect = originEl && originEl.getBoundingClientRect ? originEl.getBoundingClientRect() : null;
+    const originX = rect ? rect.left + rect.width / 2 : window.innerWidth / 2;
+    const originY = rect ? rect.top + rect.height / 2 : window.innerHeight / 3;
 
-        setTimeout(() => {
-            sparkle.style.opacity = '1';
-            sparkle.style.transform = `translateY(${-24 - getSecureRandom() * 36}px) scale(${1 + getSecureRandom() * 0.45}) rotate(${(-25 + getSecureRandom() * 50).toFixed(0)}deg)`;
-        }, index * 35);
+    const ring = document.createElement('div');
+    ring.className = 'brand-egg-ring';
+    ring.style.left = `${originX}px`;
+    ring.style.top = `${originY}px`;
+    overlay.appendChild(ring);
+
+    // Emoji without variation selectors render consistently across OS/browsers.
+    const glyphs = ['✨', '🚀', '⚡', '🌟', '💫', '🎉'];
+    const particleCount = 20;
+    const burstRadius = Math.min(window.innerWidth, window.innerHeight) * 0.22;
+
+    for (let index = 0; index < particleCount; index += 1) {
+        const particle = document.createElement('div');
+        particle.className = 'brand-egg-particle';
+        particle.textContent = glyphs[index % glyphs.length];
+        particle.style.left = `${originX}px`;
+        particle.style.top = `${originY}px`;
+        particle.style.fontSize = `${14 + getSecureRandom() * 14}px`;
+
+        const angle = (Math.PI * 2 * index) / particleCount + getSecureRandom() * 0.5;
+        const distance = burstRadius * (0.5 + getSecureRandom() * 0.7);
+        const tx = Math.cos(angle) * distance;
+        const ty = Math.sin(angle) * distance + 40; // slight downward drift like gravity
+
+        particle.style.setProperty('--tx', `${tx.toFixed(0)}px`);
+        particle.style.setProperty('--ty', `${ty.toFixed(0)}px`);
+        particle.style.setProperty('--scale', (0.8 + getSecureRandom() * 0.6).toFixed(2));
+        particle.style.setProperty('--rot', `${(-180 + getSecureRandom() * 360).toFixed(0)}deg`);
+        particle.style.setProperty('--delay', `${index * 18}ms`);
+
+        overlay.appendChild(particle);
     }
 
     setTimeout(() => overlay.remove(), 1500);
@@ -909,6 +928,61 @@ function launchBrandEasterEgg() {
     if (window.playHaptic) {
         window.playHaptic([25, 40, 25]);
     }
+
+    setTimeout(() => showNextRouteEasterEgg(isRu), 900);
+}
+
+function showNextRouteEasterEgg(isRu) {
+    if (typeof window.showModal !== 'function') return;
+
+    const title = isRu ? '📡 Найден секретный маршрут' : '📡 Secret route found';
+    const content = isRu
+        ? `
+            <div class="flex flex-col items-center text-center gap-3">
+                <div class="text-4xl">🛰️</div>
+                <p class="leading-relaxed">
+                    Похоже, вы обожаете кликать. А наш друг-тестировщик обожает искать баги —
+                    и построил для этого свой сетевой проект:
+                    <span class="font-bold text-blue-600 dark:text-blue-400">NextRoute</span>.
+                </p>
+                <p class="text-xs text-gray-500 dark:text-gray-400">
+                    Быстрое и стабильное соединение на базе XRay-Core.
+                </p>
+            </div>
+        `
+        : `
+            <div class="flex flex-col items-center text-center gap-3">
+                <div class="text-4xl">🛰️</div>
+                <p class="leading-relaxed">
+                    You clearly love clicking. Our tester friend loves hunting bugs even more —
+                    so he built his own networking project:
+                    <span class="font-bold text-blue-600 dark:text-blue-400">NextRoute</span>.
+                </p>
+                <p class="text-xs text-gray-500 dark:text-gray-400">
+                    A fast and stable connection built on XRay-Core.
+                </p>
+            </div>
+        `;
+
+    window.showModal({
+        title,
+        content,
+        buttons: [
+            {
+                text: isRu ? 'Закрыть' : 'Close',
+                class: 'bg-gray-200 text-gray-800 hover:bg-gray-300 dark:bg-gray-700 dark:text-white dark:hover:bg-gray-600',
+                close: true,
+            },
+            {
+                text: isRu ? '🚀 Открыть NextRoute' : '🚀 Open NextRoute',
+                class: 'bg-blue-600 text-white hover:bg-blue-700',
+                close: true,
+                onClick: () => {
+                    window.open('https://nextroute.network/', '_blank', 'noopener,noreferrer');
+                },
+            },
+        ],
+    });
 }
 
 function initBrandEasterEgg() {
@@ -935,7 +1009,7 @@ function initBrandEasterEgg() {
 
         clickCount = 0;
         cooldown = true;
-        launchBrandEasterEgg();
+        launchBrandEasterEgg(brandEl);
         setTimeout(() => {
             cooldown = false;
         }, 2500);
@@ -1706,15 +1780,26 @@ function animateModalOpen(modal, isInput = false) {
     const isMobile = window.innerWidth < 640;
     const card = modal.firstElementChild;
 
-    bodyScrollTop = window.scrollY;
+    // Guard against the same modal being "opened" twice in a row (e.g. duplicate click
+    // events) without a matching close, which would desync the shared lock counter below.
+    if (!openModalSet.has(modal)) {
+        openModalSet.add(modal);
 
-    if (isMobile) {
-        document.body.style.position = 'fixed';
-        document.body.style.top = `-${bodyScrollTop}px`;
-        document.body.style.width = '100%';
-        document.body.style.overflow = 'hidden';
-    } else {
-        document.body.style.overflow = 'hidden';
+        // Only the first modal in a stack should capture/lock scroll; nested modals (e.g. billing
+        // modal opened on top of the node modal) must not overwrite the original scroll position.
+        if (openModalStackCount === 0) {
+            bodyScrollTop = window.scrollY;
+
+            if (isMobile) {
+                document.body.style.position = 'fixed';
+                document.body.style.top = `-${bodyScrollTop}px`;
+                document.body.style.width = '100%';
+                document.body.style.overflow = 'hidden';
+            } else {
+                document.body.style.overflow = 'hidden';
+            }
+        }
+        openModalStackCount += 1;
     }
 
     modal.classList.remove('hidden');
@@ -1800,33 +1885,43 @@ function animateModalClose(modal) {
 
     modal.removeEventListener('click', handleModalInputClick);
 
+    // Only decrement once per modal — guards against double-close calls (overlay click +
+    // explicit close button both firing) desyncing the shared lock counter.
+    if (openModalSet.has(modal)) {
+        openModalSet.delete(modal);
+        openModalStackCount = Math.max(0, openModalStackCount - 1);
+    }
+
     modalCloseTimer = setTimeout(() => {
         modal.classList.add('hidden');
         modal.classList.remove('flex');
 
-        const scrollYToRestore = (document.body.style.position === 'fixed') 
-            ? Math.abs(parseInt(document.body.style.top || '0')) 
-            : bodyScrollTop;
+        // Only unlock/restore scroll once the last modal in the stack has closed.
+        if (openModalStackCount === 0) {
+            const scrollYToRestore = (document.body.style.position === 'fixed')
+                ? Math.abs(parseInt(document.body.style.top || '0'))
+                : bodyScrollTop;
 
-        if (document.body.style.position === 'fixed') {
-            document.body.style.position = '';
-            document.body.style.top = '';
-            document.body.style.width = '';
+            if (document.body.style.position === 'fixed') {
+                document.body.style.position = '';
+                document.body.style.top = '';
+                document.body.style.width = '';
+            }
+            document.body.style.overflow = '';
+
+            // Restore original scroll behavior temporarily
+            const html = document.documentElement;
+            const originalBehavior = html.style.scrollBehavior;
+            html.style.scrollBehavior = 'auto';
+
+            // Instantly jump to the original scroll position
+            window.scrollTo(0, scrollYToRestore);
+
+            // Restore smooth scrolling if it was previously enabled
+            setTimeout(() => {
+                html.style.scrollBehavior = originalBehavior;
+            }, 50);
         }
-        document.body.style.overflow = '';
-
-        // Restore original scroll behavior temporarily
-        const html = document.documentElement;
-        const originalBehavior = html.style.scrollBehavior;
-        html.style.scrollBehavior = 'auto';
-
-        // Instantly jump to the original scroll position
-        window.scrollTo(0, scrollYToRestore);
-
-        // Restore smooth scrolling if it was previously enabled
-        setTimeout(() => {
-            html.style.scrollBehavior = originalBehavior;
-        }, 50);
 
         modal.style.height = '';
         modal.style.top = '';
@@ -2242,16 +2337,17 @@ window.calculateDaysLeft = function(isoDateString) {
     return days;
 };
 
+window.getBillingStatusColor = function(daysLeft) {
+    if (daysLeft === null) return 'gray';
+    if (daysLeft <= 3) return 'red';
+    if (daysLeft <= 7) return 'yellow';
+    return 'green';
+};
+
 window.getBillingBadgeHtml = function(daysLeft) {
     if (daysLeft === null) return '';
-    let badgeClass = "text-green-700 dark:text-green-400";
-    if (daysLeft < 0) {
-        badgeClass = "text-red-700 dark:text-red-400";
-    } else if (daysLeft <= 3) {
-        badgeClass = "text-red-700 dark:text-red-400";
-    } else if (daysLeft <= 7) {
-        badgeClass = "text-yellow-700 dark:text-yellow-400";
-    }
+    const color = getBillingStatusColor(daysLeft);
+    const badgeClass = `text-${color}-700 dark:text-${color}-400`;
     const isSmall = typeof window !== 'undefined' && window.innerWidth <= 380;
     const daysTemplate = isSmall
         ? (I18N?.web_billing_badge_days_short || "{days} д.")
@@ -2331,10 +2427,11 @@ window.renderHeaderBilling = function() {
     // Only show the header icon if billing is enabled or data exists.
     if (!isSet && !master_billing_json.next_payment_date) return;
     
+    const color = getBillingStatusColor(daysLeft);
     const fragment = DOMPurify.sanitize(`
-        <button class="flex items-center justify-center h-8 px-2 sm:px-3 rounded-lg hover:bg-black/5 dark:hover:bg-white/10 transition text-gray-600 dark:text-gray-400 font-medium text-xs sm:text-sm gap-1 whitespace-nowrap group"
+        <button class="header-billing-btn flex items-center justify-center h-8 px-2 sm:px-3 rounded-lg transition font-medium text-xs sm:text-sm gap-1 whitespace-nowrap group" data-status="${color}"
                 title="${I18N?.web_billing_modal_title || 'Детали аренды'}">
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-gray-500 group-hover:text-blue-500 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
             </svg>
             <span class="hidden sm:inline-flex">${getBillingBadgeHtml(daysLeft)}</span>

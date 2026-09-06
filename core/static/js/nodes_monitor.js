@@ -1030,8 +1030,8 @@ function updateModalCharts(history) {
             data: {
                 labels,
                 datasets: [
-                    { label: 'RX', data: rxData, borderColor: '#22c55e', borderWidth: 2, backgroundColor: getGradient(netCtx, 'rgb(34, 197, 94)'), fill: true },
-                    { label: 'TX', data: txData, borderColor: '#ef4444', borderWidth: 2, backgroundColor: getGradient(netCtx, 'rgb(239, 68, 68)'), fill: true }
+                    { label: (typeof I18N !== 'undefined' && I18N.web_label_rx) ? I18N.web_label_rx : 'ВХ', data: rxData, borderColor: '#22c55e', borderWidth: 2, backgroundColor: getGradient(netCtx, 'rgb(34, 197, 94)'), fill: true },
+                    { label: (typeof I18N !== 'undefined' && I18N.web_label_tx) ? I18N.web_label_tx : 'ИСХ', data: txData, borderColor: '#ef4444', borderWidth: 2, backgroundColor: getGradient(netCtx, 'rgb(239, 68, 68)'), fill: true }
                 ]
             },
             options: {
