@@ -29,17 +29,17 @@ def load_users():
                 ALLOWED_USERS[uid] = {"group": group, "password_hash": password_hash}
             USER_NAMES.update(data.get("user_names", {}))
         else:
-            logging.info("Users config empty. Инициализация.")
+            logging.info("Users config empty. Initializing.")
         if ADMIN_USER_ID not in ALLOWED_USERS:
-            logging.info(f"Главный админ ID {ADMIN_USER_ID} не найден, добавляю.")
+            logging.info(f"Main admin ID {ADMIN_USER_ID} not found, adding.")
             initial_pass = os.environ.get("TG_WEB_INITIAL_PASSWORD")
             if initial_pass:
-                logging.info("Использую сгенерированный пароль.")
+                logging.info("Using generated password.")
                 ph = PasswordHasher()
                 p_hash = ph.hash(initial_pass)
             else:
                 logging.warning(
-                    "Случайный пароль не найден. Использую дефолтный ('admin')."
+                    "Generated password not found. Using default ('admin')."
                 )
                 ph = PasswordHasher()
                 p_hash = ph.hash("admin")
@@ -50,9 +50,9 @@ def load_users():
             save_users()
         elif isinstance(ALLOWED_USERS[ADMIN_USER_ID], str):
             ALLOWED_USERS[ADMIN_USER_ID] = {"group": "admins", "password_hash": None}
-        logging.info(f"Пользователи загружены: {len(ALLOWED_USERS)}")
+        logging.info(f"Users loaded: {len(ALLOWED_USERS)}")
     except Exception as e:
-        logging.error(f"Критическая ошибка загрузки пользователей: {e}", exc_info=True)
+        logging.error(f"Critical error loading users: {e}", exc_info=True)
         ALLOWED_USERS[ADMIN_USER_ID] = {"group": "admins", "password_hash": None}
         save_users()
 
@@ -77,7 +77,7 @@ def save_users():
         }
         set_bot_config_sync("users", data)
     except Exception as e:
-        logging.error(f"Ошибка сохранения пользователей: {e}", exc_info=True)
+        logging.error(f"Error saving users: {e}", exc_info=True)
 
 
 async def load_users_async():
@@ -93,17 +93,17 @@ async def load_users_async():
                 ALLOWED_USERS[uid] = {"group": group, "password_hash": password_hash}
             USER_NAMES.update(data.get("user_names", {}))
         else:
-            logging.info("Users config empty. Инициализация.")
+            logging.info("Users config empty. Initializing.")
         if ADMIN_USER_ID not in ALLOWED_USERS:
-            logging.info(f"Главный админ ID {ADMIN_USER_ID} не найден, добавляю.")
+            logging.info(f"Main admin ID {ADMIN_USER_ID} not found, adding.")
             initial_pass = os.environ.get("TG_WEB_INITIAL_PASSWORD")
             if initial_pass:
-                logging.info("Использую сгенерированный пароль.")
+                logging.info("Using generated password.")
                 ph = PasswordHasher()
                 p_hash = ph.hash(initial_pass)
             else:
                 logging.warning(
-                    "Случайный пароль не найден. Использую дефолтный ('admin')."
+                    "Generated password not found. Using default ('admin')."
                 )
                 ph = PasswordHasher()
                 p_hash = ph.hash("admin")
@@ -114,9 +114,9 @@ async def load_users_async():
             await save_users_async()
         elif isinstance(ALLOWED_USERS[ADMIN_USER_ID], str):
             ALLOWED_USERS[ADMIN_USER_ID] = {"group": "admins", "password_hash": None}
-        logging.info(f"Пользователи загружены: {len(ALLOWED_USERS)}")
+        logging.info(f"Users loaded: {len(ALLOWED_USERS)}")
     except Exception as e:
-        logging.error(f"Критическая ошибка загрузки пользователей: {e}", exc_info=True)
+        logging.error(f"Critical error loading users: {e}", exc_info=True)
         ALLOWED_USERS[ADMIN_USER_ID] = {"group": "admins", "password_hash": None}
         await save_users_async()
 
@@ -141,7 +141,7 @@ async def save_users_async():
         }
         await config.set_bot_config("users", data)
     except Exception as e:
-        logging.error(f"Ошибка сохранения пользователей: {e}", exc_info=True)
+        logging.error(f"Error saving users: {e}", exc_info=True)
 
 
 def is_allowed(user_id, command=None):
@@ -278,9 +278,9 @@ async def refresh_user_names(bot: Bot):
                         USER_NAMES[uid_str] = new_name
                         needs_save = True
                 else:
-                    logging.error(f"Ошибка API при обновлении имени {uid}: {e}")
+                    logging.error(f"API error while updating name {uid}: {e}")
             except Exception as e:
-                logging.error(f"Ошибка при обновлении имени {uid}: {e}")
+                logging.error(f"Error updating name {uid}: {e}")
     if needs_save:
         await save_users_async()
 
@@ -320,7 +320,7 @@ async def get_user_name(bot: Bot, user_id: int) -> str:
                 await save_users_async()
             return new_name
     except Exception as e:
-        logging.error(f"Ошибка получения имени для ID {user_id}: {e}")
+        logging.error(f"Error getting name for ID {user_id}: {e}")
         if cached_name != new_name:
             USER_NAMES[uid_str] = new_name
             await save_users_async()
@@ -357,4 +357,4 @@ async def send_access_denied_message(
         )
         LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = sent_message.message_id
     except Exception as e:
-        logging.error(f"Не удалось отправить отказ пользователю {user_id}: {e}")
+        logging.error(f"Failed to send access denial to user {user_id}: {e}")

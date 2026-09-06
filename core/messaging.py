@@ -47,7 +47,7 @@ async def send_support_message(bot: Bot, user_id: int, lang: str):
         )
     except Exception as e:
         logging.error(
-            f"Не удалось отправить сообщение о поддержке пользователю {user_id}: {e}"
+            f"Failed to send support message to user {user_id}: {e}"
         )
 
 
@@ -59,7 +59,7 @@ async def send_alert(
     **kwargs,
 ):
     if not alert_type:
-        logging.warning("send_alert вызван без указания alert_type")
+        logging.warning("send_alert called without alert_type")
         return
 
     users_to_alert = []
@@ -111,7 +111,7 @@ async def send_alert(
                 }
             )
     except Exception as e:
-        logging.error(f"Ошибка сохранения Web-уведомления: {e}")
+        logging.error(f"Error saving web notification: {e}")
     for user_id in users_to_alert:
         try:
             lang = get_user_lang(user_id)
@@ -123,4 +123,4 @@ async def send_alert(
             await bot.send_message(user_id, text_to_send, parse_mode="HTML")
             await asyncio.sleep(0.1)
         except Exception as e:
-            logging.error(f"Ошибка при отправке алерта пользователю {user_id}: {e}")
+            logging.error(f"Error sending alert to user {user_id}: {e}")

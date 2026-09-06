@@ -206,6 +206,6 @@ async def _execute_optimization(callback: types.CallbackQuery, selected_ids: lis
         sent_message_final = await callback.message.answer(response_text, parse_mode="HTML")
         LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = sent_message_final.message_id
     except (TelegramNetworkError, OSError):
-        logging.warning("Оптимизация: бот перезагружен системой, ответ не отправлен.")
+        logging.warning("Optimize: bot was rebooted by the system, response not sent.")
     except Exception as e:
-        logging.error(f"Ошибка отправки отчета оптимизации: {e}")
+        logging.error(f"Error sending optimization report: {e}")
