@@ -97,7 +97,9 @@ def _get_token_hash(token: str) -> str:
 async def init_db():
     await Tortoise.init(config=TORTOISE_ORM)
     await Tortoise.generate_schemas()
-    logging.info(f"ORM initialized. DB: {TORTOISE_ORM['connections']['default']}")
+    from .i18n import log_text
+
+    logging.info(log_text("orm_initialized", db=TORTOISE_ORM['connections']['default']))
     await _ensure_billing_columns()
     await _migrate_from_json_if_needed()
 

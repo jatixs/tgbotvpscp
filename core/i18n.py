@@ -1966,7 +1966,7 @@ def load_user_settings():
             loaded_data_int_keys = {int(k): v for k, v in settings.items()}
             shared_state.USER_SETTINGS.clear()
             shared_state.USER_SETTINGS.update(loaded_data_int_keys)
-            logging.info("User settings (languages) loaded from bot.db.")
+            logging.info(log_text("user_settings_loaded"))
         else:
             shared_state.USER_SETTINGS.clear()
             logging.info("User settings (languages) not found or empty.")
@@ -1993,7 +1993,7 @@ async def load_user_settings_async():
             loaded_data_int_keys = {int(k): v for k, v in settings.items()}
             shared_state.USER_SETTINGS.clear()
             shared_state.USER_SETTINGS.update(loaded_data_int_keys)
-            logging.info("User settings (languages) loaded from bot.db.")
+            logging.info(log_text("user_settings_loaded"))
         else:
             shared_state.USER_SETTINGS.clear()
             logging.info("User settings (languages) not found or empty.")
@@ -2124,3 +2124,74 @@ def get_language_keyboard() -> InlineKeyboardMarkup:
         ]
     )
     return keyboard
+
+
+# ─── Localized server logs ──────────────────────────────────────────────────
+# Frequent/key journalctl log lines, shown in the language chosen by the main admin.
+
+LOG_STRINGS = {
+    "en": {
+        "logging_initialized": "Logging initialized. Mode: {mode}. Sensitive data redaction: {redaction}",
+        "bot_starting_mode": "Bot starting in mode: {mode}",
+        "orm_initialized": "ORM initialized. DB: {db}",
+        "users_loaded": "Users loaded: {count}",
+        "alerts_config_loaded": "Alerts config loaded from bot.db.",
+        "services_config_loaded": "Services config loaded from bot.db: {count} services.",
+        "critical_service_readded": "Re-added critical service: {name}",
+        "user_settings_loaded": "User settings (languages) loaded from bot.db.",
+        "agent_availability_loaded": "Agent availability loaded from bot.db.",
+        "orchestrator_setup_start": "🧠 Memory Orchestrator: Setting up...",
+        "orchestrator_module_always_on": "  ✅ {module} (always-on) loaded.",
+        "orchestrator_module_on_demand": "  ⏸️  {module} (on-demand) — {msg} msg + {cb} cb handlers registered as proxies.",
+        "orchestrator_setup_complete": "🧠 Memory Orchestrator: Setup complete. {loaded}/{total} modules loaded.",
+        "orchestrator_gc_started": "🧠 Memory Orchestrator GC loop started.",
+        "web_server_starting": "Starting Agent Web Server...",
+        "web_routes_registered": "Web route tables registered successfully",
+        "background_tasks_started": "Background tasks started: {tasks}",
+        "nodes_monitor_started": "Nodes Monitor started.",
+        "web_server_started": "Web server started on {host}:{port}",
+        "polling_starting": "Starting polling...",
+        "client_alerts_polling_start": "[client_alerts] Starting Alert Bot polling...",
+    },
+    "ru": {
+        "logging_initialized": "Логирование инициализировано. Режим: {mode}. Скрытие чувствительных данных: {redaction}",
+        "bot_starting_mode": "Бот запускается в режиме: {mode}",
+        "orm_initialized": "ORM инициализирован. БД: {db}",
+        "users_loaded": "Пользователи загружены: {count}",
+        "alerts_config_loaded": "Конфигурация оповещений загружена из bot.db.",
+        "services_config_loaded": "Конфигурация служб загружена из bot.db: {count} шт.",
+        "critical_service_readded": "Критическая служба возвращена: {name}",
+        "user_settings_loaded": "Настройки пользователей (языки) загружены из bot.db.",
+        "agent_availability_loaded": "Доступность агента загружена из bot.db.",
+        "orchestrator_setup_start": "🧠 Memory Orchestrator: настройка...",
+        "orchestrator_module_always_on": "  ✅ {module} (постоянный) загружен.",
+        "orchestrator_module_on_demand": "  ⏸️  {module} (по требованию) — {msg} msg + {cb} cb обработчиков зарегистрировано как прокси.",
+        "orchestrator_setup_complete": "🧠 Memory Orchestrator: настройка завершена. {loaded}/{total} модулей загружено.",
+        "orchestrator_gc_started": "🧠 Memory Orchestrator: цикл сборки мусора запущен.",
+        "web_server_starting": "Запуск веб-сервера агента...",
+        "web_routes_registered": "Таблицы веб-маршрутов успешно зарегистрированы",
+        "background_tasks_started": "Фоновые задачи запущены: {tasks}",
+        "nodes_monitor_started": "Монитор нод запущен.",
+        "web_server_started": "Веб-сервер запущен на {host}:{port}",
+        "polling_starting": "Запуск поллинга...",
+        "client_alerts_polling_start": "[client_alerts] Запуск поллинга Alert Bot...",
+    },
+}
+
+
+def get_log_language() -> str:
+    """Language used for server/journalctl logs: the main admin's chosen language."""
+    try:
+        return get_user_lang(core_config.ADMIN_USER_ID)
+    except Exception:
+        return core_config.DEFAULT_LANGUAGE
+
+
+def log_text(key: str, **kwargs) -> str:
+    """Resolves a key from LOG_STRINGS into the main admin's language, for use in logging calls."""
+    lang = get_log_language()
+    template = LOG_STRINGS.get(lang, {}).get(key) or LOG_STRINGS.get("en", {}).get(key, f"[{key}]")
+    try:
+        return template.format(**kwargs) if kwargs else template
+    except Exception:
+        return template

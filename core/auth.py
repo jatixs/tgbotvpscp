@@ -8,7 +8,7 @@ from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.exceptions import TelegramBadRequest
 from argon2 import PasswordHasher
 from . import config
-from .i18n import _
+from .i18n import _, log_text
 from .config import ADMIN_USER_ID, ADMIN_USERNAME, INSTALL_MODE
 from .config import get_bot_config_sync, set_bot_config_sync
 from .shared_state import ALLOWED_USERS, USER_NAMES, LAST_MESSAGE_IDS
@@ -50,7 +50,7 @@ def load_users():
             save_users()
         elif isinstance(ALLOWED_USERS[ADMIN_USER_ID], str):
             ALLOWED_USERS[ADMIN_USER_ID] = {"group": "admins", "password_hash": None}
-        logging.info(f"Users loaded: {len(ALLOWED_USERS)}")
+        logging.info(log_text("users_loaded", count=len(ALLOWED_USERS)))
     except Exception as e:
         logging.error(f"Critical error loading users: {e}", exc_info=True)
         ALLOWED_USERS[ADMIN_USER_ID] = {"group": "admins", "password_hash": None}
@@ -114,7 +114,7 @@ async def load_users_async():
             await save_users_async()
         elif isinstance(ALLOWED_USERS[ADMIN_USER_ID], str):
             ALLOWED_USERS[ADMIN_USER_ID] = {"group": "admins", "password_hash": None}
-        logging.info(f"Users loaded: {len(ALLOWED_USERS)}")
+        logging.info(log_text("users_loaded", count=len(ALLOWED_USERS)))
     except Exception as e:
         logging.error(f"Critical error loading users: {e}", exc_info=True)
         ALLOWED_USERS[ADMIN_USER_ID] = {"group": "admins", "password_hash": None}

@@ -285,7 +285,9 @@ async def start_background_tasks(app: web.Application) -> None:
         asyncio.create_task(cleanup_monitor(app), name="cleanup-monitor"),
     ]
     app[BACKGROUND_TASKS_KEY] = tasks
-    logging.info("Background tasks started: %s", ", ".join(task.get_name() for task in tasks))
+    from .i18n import log_text
+
+    logging.info(log_text("background_tasks_started", tasks=", ".join(task.get_name() for task in tasks)))
 
 
 async def cleanup_server(app: web.Application) -> None:

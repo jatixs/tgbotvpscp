@@ -4,7 +4,7 @@
 """
 from core.middlewares import SpamThrottleMiddleware, AutoDeleteMessageMiddleware, CallbackTTLMiddleware
 from core.orchestrator import ModuleOrchestrator, ModuleTier
-from core.i18n import _, I18nFilter, get_language_keyboard
+from core.i18n import _, I18nFilter, get_language_keyboard, log_text
 from core import i18n
 from core import config, shared_state, auth, utils, keyboards, messaging
 from core import nodes_db
@@ -451,7 +451,7 @@ async def main():
     loop = asyncio.get_event_loop()
     web_runner = None
     try:
-        logging.info(f"Bot starting in mode: {config.INSTALL_MODE.upper()}")
+        logging.info(log_text("bot_starting_mode", mode=config.INSTALL_MODE.upper()))
         await nodes_db.init_db()
         await auth.load_users_async()
         await utils.load_alerts_config_async()
@@ -467,11 +467,11 @@ async def main():
         # Register the catch-all handler LAST so it doesn't intercept module commands
         dp.message.register(unrecognized_message_handler)
 
-        logging.info("Starting Agent Web Server...")
+        logging.info(log_text("web_server_starting"))
         web_runner = await start_web_server(bot)
         if not web_runner:
             logging.warning("Web Server NOT started.")
-        logging.info("Starting polling...")
+        logging.info(log_text("polling_starting"))
         await bot.delete_webhook(drop_pending_updates=True)
         await dp.start_polling(bot, allowed_updates=dp.resolve_used_update_types())
     except (KeyboardInterrupt, SystemExit):
