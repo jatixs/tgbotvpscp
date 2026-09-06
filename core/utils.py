@@ -27,7 +27,7 @@ except ImportError:
 
 from . import config
 from . import shared_state
-from .i18n import get_text, get_user_lang
+from .i18n import get_text, get_user_lang, log_text
 from .config import INSTALL_MODE, DEPLOY_MODE, DEBUG_MODE
 from .config import (
     REBOOT_FLAG_FILE,
@@ -175,7 +175,7 @@ def load_alerts_config():
             loaded_data_int_keys = {int(k): v for k, v in loaded_data.items()}
             shared_state.ALERTS_CONFIG.clear()
             shared_state.ALERTS_CONFIG.update(loaded_data_int_keys)
-            logging.info("Alerts config loaded from bot.db.")
+            logging.info(log_text("alerts_config_loaded"))
         else:
             shared_state.ALERTS_CONFIG.clear()
             logging.info("Alerts config empty or not found.")
@@ -199,7 +199,7 @@ async def load_alerts_config_async():
             loaded_data_int_keys = {int(k): v for k, v in loaded_data.items()}
             shared_state.ALERTS_CONFIG.clear()
             shared_state.ALERTS_CONFIG.update(loaded_data_int_keys)
-            logging.info("Alerts config loaded from bot.db.")
+            logging.info(log_text("alerts_config_loaded"))
         else:
             shared_state.ALERTS_CONFIG.clear()
             logging.info("Alerts config empty or not found.")
@@ -241,7 +241,7 @@ async def load_agent_availability_async() -> None:
         shared_state.AGENT_AVAILABILITY["session_end_time"] = 0.0
 
         await config.set_bot_config("agent_availability", dict(shared_state.AGENT_AVAILABILITY))
-        logging.info("Agent availability loaded from bot.db.")
+        logging.info(log_text("agent_availability_loaded"))
     except Exception as e:
         logging.error(f"Error loading agent availability: {e}")
 
@@ -307,7 +307,7 @@ def load_services_config():
             # Replace MANAGED_SERVICES with loaded data
             config_module.MANAGED_SERVICES.clear()
             config_module.MANAGED_SERVICES.extend(loaded_data)
-            logging.info(f"Services config loaded from bot.db: {len(loaded_data)} services.")
+            logging.info(log_text("services_config_loaded", count=len(loaded_data)))
         else:
             logging.info("Services config empty or not found, using defaults.")
     except Exception as e:
@@ -318,7 +318,7 @@ def load_services_config():
     for critical_service in CRITICAL_SERVICES:
         if critical_service["name"] not in existing_names:
             config_module.MANAGED_SERVICES.insert(0, critical_service)
-            logging.info(f"Re-added critical service: {critical_service['name']}")
+            logging.info(log_text("critical_service_readded", name=critical_service['name']))
 
 
 def save_services_config():
@@ -348,7 +348,7 @@ async def load_services_config_async():
         if loaded_data and isinstance(loaded_data, list):
             config_module.MANAGED_SERVICES.clear()
             config_module.MANAGED_SERVICES.extend(loaded_data)
-            logging.info(f"Services config loaded from bot.db: {len(loaded_data)} services.")
+            logging.info(log_text("services_config_loaded", count=len(loaded_data)))
         else:
             logging.info("Services config empty or not found, using defaults.")
     except Exception as e:
@@ -358,7 +358,7 @@ async def load_services_config_async():
     for critical_service in critical_services:
         if critical_service["name"] not in existing_names:
             config_module.MANAGED_SERVICES.insert(0, critical_service)
-            logging.info(f"Re-added critical service: {critical_service['name']}")
+            logging.info(log_text("critical_service_readded", name=critical_service['name']))
 
 
 async def save_services_config_async():

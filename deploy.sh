@@ -812,6 +812,7 @@ EnvironmentFile=${BOT_INSTALL_PATH}/.env
 ExecStart=${VENV_PATH}/bin/python ${script}
 Restart=always
 RestartSec=10
+TimeoutStopSec=20
 [Install]
 WantedBy=multi-user.target
 EOF

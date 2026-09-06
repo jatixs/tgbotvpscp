@@ -14,7 +14,7 @@ from aiogram.types import KeyboardButton, InlineKeyboardMarkup, InlineKeyboardBu
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.filters import StateFilter
-from core.i18n import _, I18nFilter, get_user_lang
+from core.i18n import _, I18nFilter, get_user_lang, log_text
 from core import config
 from core.auth import is_allowed, send_access_denied_message
 from core.messaging import delete_previous_message, send_alert
@@ -112,10 +112,10 @@ async def _broadcast_node_status_to_clients(event_type: str, changed_node_token:
                 await alert_bot.send_message(uid, text, parse_mode="HTML")
                 await asyncio.sleep(0.05)
             except Exception as e:
-                logging.warning(f"[nodes] Ошибка при отправке статуса серверов клиенту {uid}: {e}")
+                logging.warning(f"[nodes] Error sending server status to client {uid}: {e}")
                 
     except Exception as e:
-        logging.warning(f"[nodes] Ошибка генерации системного алерта: {e}")
+        logging.warning(f"[nodes] Error generating system alert: {e}")
 
 
 def get_button() -> KeyboardButton:
@@ -861,7 +861,7 @@ async def node_traffic_scheduler(bot: Bot):
 
 
 async def nodes_monitor(bot: Bot):
-    logging.info("Nodes Monitor started.")
+    logging.info(log_text("nodes_monitor_started"))
     grace_period = config.NODE_OFFLINE_TIMEOUT + 15
     await asyncio.sleep(10)
     while True:

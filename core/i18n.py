@@ -1966,13 +1966,13 @@ def load_user_settings():
             loaded_data_int_keys = {int(k): v for k, v in settings.items()}
             shared_state.USER_SETTINGS.clear()
             shared_state.USER_SETTINGS.update(loaded_data_int_keys)
-            logging.info("Настройки пользователей (языки) загружены из bot.db.")
+            logging.info(log_text("user_settings_loaded"))
         else:
             shared_state.USER_SETTINGS.clear()
-            logging.info("Настройки пользователей (языки) не найдены или пусты.")
+            logging.info("User settings (languages) not found or empty.")
     except Exception as e:
         safe_e = str(e).replace("\n", " ").replace("\r", "")
-        logging.error(f"Ошибка загрузки user_settings: {safe_e}")
+        logging.error(f"Error loading user_settings: {safe_e}")
         shared_state.USER_SETTINGS.clear()
 
 
@@ -1980,10 +1980,10 @@ def save_user_settings():
     try:
         settings_to_save = {str(k): v for k, v in shared_state.USER_SETTINGS.items()}
         set_bot_config_sync("user_settings", settings_to_save)
-        logging.debug("Настройки пользователей (языки) сохранены.")
+        logging.debug("User settings (languages) saved.")
     except Exception as e:
         safe_e = str(e).replace("\n", " ").replace("\r", "")
-        logging.error(f"Ошибка сохранения user_settings: {safe_e}")
+        logging.error(f"Error saving user_settings: {safe_e}")
 
 
 async def load_user_settings_async():
@@ -1993,13 +1993,13 @@ async def load_user_settings_async():
             loaded_data_int_keys = {int(k): v for k, v in settings.items()}
             shared_state.USER_SETTINGS.clear()
             shared_state.USER_SETTINGS.update(loaded_data_int_keys)
-            logging.info("Настройки пользователей (языки) загружены из bot.db.")
+            logging.info(log_text("user_settings_loaded"))
         else:
             shared_state.USER_SETTINGS.clear()
-            logging.info("Настройки пользователей (языки) не найдены или пусты.")
+            logging.info("User settings (languages) not found or empty.")
     except Exception as e:
         safe_e = str(e).replace("\n", " ").replace("\r", "")
-        logging.error(f"Ошибка загрузки user_settings: {safe_e}")
+        logging.error(f"Error loading user_settings: {safe_e}")
         shared_state.USER_SETTINGS.clear()
 
 
@@ -2007,10 +2007,10 @@ async def save_user_settings_async():
     try:
         settings_to_save = {str(k): v for k, v in shared_state.USER_SETTINGS.items()}
         await core_config.set_bot_config("user_settings", settings_to_save)
-        logging.debug("Настройки пользователей (языки) сохранены.")
+        logging.debug("User settings (languages) saved.")
     except Exception as e:
         safe_e = str(e).replace("\n", " ").replace("\r", "")
-        logging.error(f"Ошибка сохранения user_settings: {safe_e}")
+        logging.error(f"Error saving user_settings: {safe_e}")
 
 
 def get_user_lang(user_id: int | str | None) -> str:
@@ -2026,47 +2026,47 @@ def get_user_lang(user_id: int | str | None) -> str:
     else:
         if user_id is not None:
             logging.warning(
-                f"get_user_lang вызван с неожиданным типом user_id: {type(user_id)}. Возвращаю язык по умолчанию."
+                f"get_user_lang called with unexpected user_id type: {type(user_id)}. Returning default language."
             )
         return core_config.DEFAULT_LANGUAGE
 
 
 def set_user_lang(user_id: int | str | None, lang: str):
     if user_id is None:
-        logging.warning("set_user_lang вызван с user_id=None. Сохранение отменено.")
+        logging.warning("set_user_lang called with user_id=None. Save cancelled.")
         return
     if not isinstance(user_id, int):
         try:
             user_id = int(user_id)
         except (ValueError, TypeError):
             logging.error(
-                f"set_user_lang вызван с нечисловым user_id: {user_id}. Сохранение отменено."
+                f"set_user_lang called with non-numeric user_id: {user_id}. Save cancelled."
             )
             return
     if user_id not in shared_state.USER_SETTINGS:
         shared_state.USER_SETTINGS[user_id] = {}
     shared_state.USER_SETTINGS[user_id]["lang"] = lang
     save_user_settings()
-    logging.info(f"Язык для пользователя {user_id} изменен на '{lang}' и сохранен.")
+    logging.info(f"Language for user {user_id} changed to '{lang}' and saved.")
 
 
 async def set_user_lang_async(user_id: int | str | None, lang: str):
     if user_id is None:
-        logging.warning("set_user_lang_async вызван с user_id=None. Сохранение отменено.")
+        logging.warning("set_user_lang_async called with user_id=None. Save cancelled.")
         return
     if not isinstance(user_id, int):
         try:
             user_id = int(user_id)
         except (ValueError, TypeError):
             logging.error(
-                f"set_user_lang_async вызван с нечисловым user_id: {user_id}. Сохранение отменено."
+                f"set_user_lang_async called with non-numeric user_id: {user_id}. Save cancelled."
             )
             return
     if user_id not in shared_state.USER_SETTINGS:
         shared_state.USER_SETTINGS[user_id] = {}
     shared_state.USER_SETTINGS[user_id]["lang"] = lang
     await save_user_settings_async()
-    logging.info(f"Язык для пользователя {user_id} изменен на '{lang}' и сохранен.")
+    logging.info(f"Language for user {user_id} changed to '{lang}' and saved.")
 
 
 def get_text(key: str, user_id_or_lang: int | str | None, **kwargs) -> str:
@@ -2088,7 +2088,7 @@ def get_text(key: str, user_id_or_lang: int | str | None, **kwargs) -> str:
         safe_lang = lang.replace("\n", "").replace("\r", "")
         safe_e = str(e).replace("\n", " ").replace("\r", "")
         logging.warning(
-            f"Ошибка форматирования для ключа '{safe_key}' языка '{safe_lang}'. Ошибка: {safe_e}"
+            f"Formatting error for key '{safe_key}' language '{safe_lang}'. Error: {safe_e}"
         )
         return string_template
 
@@ -2105,7 +2105,7 @@ def get_all_translations(key: str) -> list[str]:
     unique_translations = list(set(translations))
     if not unique_translations:
         safe_key = key.replace("\n", "").replace("\r", "")
-        logging.error(f"Ключ перевода '{safe_key}' не найден ни в одном языке!")
+        logging.error(f"Translation key '{safe_key}' not found in any language!")
         return [f"[{key}]"]
     return unique_translations
 
@@ -2124,3 +2124,74 @@ def get_language_keyboard() -> InlineKeyboardMarkup:
         ]
     )
     return keyboard
+
+
+# ─── Localized server logs ──────────────────────────────────────────────────
+# Frequent/key journalctl log lines, shown in the language chosen by the main admin.
+
+LOG_STRINGS = {
+    "en": {
+        "logging_initialized": "Logging initialized. Mode: {mode}. Sensitive data redaction: {redaction}",
+        "bot_starting_mode": "Bot starting in mode: {mode}",
+        "orm_initialized": "ORM initialized. DB: {db}",
+        "users_loaded": "Users loaded: {count}",
+        "alerts_config_loaded": "Alerts config loaded from bot.db.",
+        "services_config_loaded": "Services config loaded from bot.db: {count} services.",
+        "critical_service_readded": "Re-added critical service: {name}",
+        "user_settings_loaded": "User settings (languages) loaded from bot.db.",
+        "agent_availability_loaded": "Agent availability loaded from bot.db.",
+        "orchestrator_setup_start": "🧠 Memory Orchestrator: Setting up...",
+        "orchestrator_module_always_on": "  ✅ {module} (always-on) loaded.",
+        "orchestrator_module_on_demand": "  ⏸️  {module} (on-demand) — {msg} msg + {cb} cb handlers registered as proxies.",
+        "orchestrator_setup_complete": "🧠 Memory Orchestrator: Setup complete. {loaded}/{total} modules loaded.",
+        "orchestrator_gc_started": "🧠 Memory Orchestrator GC loop started.",
+        "web_server_starting": "Starting Agent Web Server...",
+        "web_routes_registered": "Web route tables registered successfully",
+        "background_tasks_started": "Background tasks started: {tasks}",
+        "nodes_monitor_started": "Nodes Monitor started.",
+        "web_server_started": "Web server started on {host}:{port}",
+        "polling_starting": "Starting polling...",
+        "client_alerts_polling_start": "[client_alerts] Starting Alert Bot polling...",
+    },
+    "ru": {
+        "logging_initialized": "Логирование инициализировано. Режим: {mode}. Скрытие чувствительных данных: {redaction}",
+        "bot_starting_mode": "Бот запускается в режиме: {mode}",
+        "orm_initialized": "ORM инициализирован. БД: {db}",
+        "users_loaded": "Пользователи загружены: {count}",
+        "alerts_config_loaded": "Конфигурация оповещений загружена из bot.db.",
+        "services_config_loaded": "Конфигурация служб загружена из bot.db: {count} шт.",
+        "critical_service_readded": "Критическая служба возвращена: {name}",
+        "user_settings_loaded": "Настройки пользователей (языки) загружены из bot.db.",
+        "agent_availability_loaded": "Доступность агента загружена из bot.db.",
+        "orchestrator_setup_start": "🧠 Memory Orchestrator: настройка...",
+        "orchestrator_module_always_on": "  ✅ {module} (постоянный) загружен.",
+        "orchestrator_module_on_demand": "  ⏸️  {module} (по требованию) — {msg} msg + {cb} cb обработчиков зарегистрировано как прокси.",
+        "orchestrator_setup_complete": "🧠 Memory Orchestrator: настройка завершена. {loaded}/{total} модулей загружено.",
+        "orchestrator_gc_started": "🧠 Memory Orchestrator: цикл сборки мусора запущен.",
+        "web_server_starting": "Запуск веб-сервера агента...",
+        "web_routes_registered": "Таблицы веб-маршрутов успешно зарегистрированы",
+        "background_tasks_started": "Фоновые задачи запущены: {tasks}",
+        "nodes_monitor_started": "Монитор нод запущен.",
+        "web_server_started": "Веб-сервер запущен на {host}:{port}",
+        "polling_starting": "Запуск поллинга...",
+        "client_alerts_polling_start": "[client_alerts] Запуск поллинга Alert Bot...",
+    },
+}
+
+
+def get_log_language() -> str:
+    """Language used for server/journalctl logs: the main admin's chosen language."""
+    try:
+        return get_user_lang(core_config.ADMIN_USER_ID)
+    except Exception:
+        return core_config.DEFAULT_LANGUAGE
+
+
+def log_text(key: str, **kwargs) -> str:
+    """Resolves a key from LOG_STRINGS into the main admin's language, for use in logging calls."""
+    lang = get_log_language()
+    template = LOG_STRINGS.get(lang, {}).get(key) or LOG_STRINGS.get("en", {}).get(key, f"[{key}]")
+    try:
+        return template.format(**kwargs) if kwargs else template
+    except Exception:
+        return template

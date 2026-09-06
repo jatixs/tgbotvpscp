@@ -173,7 +173,7 @@ async def process_vless_file(message: types.Message, state: FSMContext):
         LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = sent_message.message_id
         await state.set_state(GenerateVlessStates.waiting_for_name)
     except Exception as e:
-        logging.error(f"Ошибка при загрузке или чтении VLESS JSON: {e}")
+        logging.error(f"Error loading or reading VLESS JSON: {e}")
         await message.answer(_("vless_error_file_processing", lang, error=e))
         await state.clear()
 
@@ -341,7 +341,7 @@ async def process_vless_name(message: types.Message, state: FSMContext):
         )
         LAST_MESSAGE_IDS.setdefault(user_id, {})["menu"] = sent_message.message_id
     except Exception as e:
-        logging.error(f"Ошибка при генерации VLESS или QR: {e}")
+        logging.error(f"Error generating VLESS or QR: {e}")
         await message.answer(
             f"{_('error_unexpected', lang)}: {escape_html(str(e))}",
             reply_markup=get_back_keyboard(lang, "back_to_menu"),

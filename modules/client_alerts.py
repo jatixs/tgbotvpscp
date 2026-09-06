@@ -31,7 +31,7 @@ from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 from core import config
-from core.i18n import I18nFilter, get_user_lang, _
+from core.i18n import I18nFilter, get_user_lang, _, log_text
 
 # ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -81,7 +81,7 @@ def _load_subscribers() -> dict[int, dict]:
                         _save_subscribers(migrated)
                     return migrated
     except Exception as e:
-        logging.warning(f"[client_alerts] Не удалось загрузить подписчиков: {e}")
+        logging.warning(f"[client_alerts] Failed to load subscribers: {e}")
     return {}
 
 
@@ -92,7 +92,7 @@ def _save_subscribers(subscribers: dict[int, dict]) -> None:
         with open(SUBSCRIBERS_FILE, "w", encoding="utf-8") as f:
             json.dump(subscribers, f, ensure_ascii=False, indent=2)
     except Exception as e:
-        logging.error(f"[client_alerts] Не удалось сохранить подписчиков: {e}")
+        logging.error(f"[client_alerts] Failed to save subscribers: {e}")
 
 
 async def _add_subscriber(user_id: int, user_name: str) -> bool:
@@ -201,7 +201,7 @@ async def broadcast_system_alert(text: str) -> None:
             await alert_bot.send_message(uid, text, parse_mode="HTML")
             await asyncio.sleep(0.05)
         except Exception as e:
-            logging.warning(f"[client_alerts] Ошибка отправки системного алерта -> {uid}: {e}")
+            logging.warning(f"[client_alerts] Error sending system alert -> {uid}: {e}")
 
 
 # ─── Alert Bot: Initialization ─────────────────────────────────────────────────
@@ -213,13 +213,13 @@ if ALERT_BOT_TOKEN:
     try:
         alert_bot = Bot(token=ALERT_BOT_TOKEN)
         alert_dp = Dispatcher(storage=MemoryStorage())
-        logging.info("[client_alerts] Alert Bot инициализирован успешно.")
+        logging.info("[client_alerts] Alert Bot initialized successfully.")
     except Exception as _init_err:
-        logging.error(f"[client_alerts] Ошибка инициализации Alert Bot: {_init_err}")
+        logging.error(f"[client_alerts] Alert Bot initialization error: {_init_err}")
         alert_bot = None
         alert_dp = None
 else:
-    logging.info("[client_alerts] ALERT_BOT_TOKEN не задан — Alert Bot отключён.")
+    logging.info("[client_alerts] ALERT_BOT_TOKEN not set — Alert Bot disabled.")
 
 
 # ─── Inline Keyboards ────────────────────────────────────────────────────────
@@ -353,7 +353,7 @@ if alert_dp is not None:
                 parse_mode="HTML",
                 reply_markup=_get_client_main_keyboard(lang)
             )
-            logging.info(f"[client_alerts] Новый подписчик: {user_id} ({user_name})")
+            logging.info(f"[client_alerts] New subscriber: {user_id} ({user_name})")
         else:
             await message.answer(
                 _("alert_welcome_existing", lang),
@@ -461,7 +461,7 @@ if alert_dp is not None:
             import bot as main_bot_module
             main_bot_instance: Bot = main_bot_module.bot
         except ImportError:
-            logging.error("[client_alerts] Не удалось импортировать главный бот.")
+            logging.error("[client_alerts] Failed to import the main bot.")
             return
 
         try:
@@ -484,7 +484,7 @@ if alert_dp is not None:
             await message.answer(_("alert_msg_sent", lang))
 
         except Exception as e:
-            logging.error(f"[client_alerts] Ошибка пересылки тикета: {e}")
+            logging.error(f"[client_alerts] Error forwarding ticket: {e}")
             await message.answer("⚠️ Error / Ошибка при отправке. Попробуйте позже.")
 
 
@@ -706,7 +706,7 @@ async def _broadcast_confirm(
             sent_ok += 1
             await asyncio.sleep(0.05)  # rate limit guard
         except Exception as e:
-            logging.warning(f"[client_alerts] Рассылка → {uid}: {e}")
+            logging.warning(f"[client_alerts] Broadcast → {uid}: {e}")
             sent_fail += 1
 
     result_text = (
@@ -784,10 +784,10 @@ async def _reply_text_received(message: types.Message, state: FSMContext) -> Non
 
     try:
         await _send_payload_via_alert_bot(client_user_id, payload, reply_to_message_id=client_message_id)
-        logging.info(f"[client_alerts] Ответ отправлен клиенту {client_user_id}.")
+        logging.info(f"[client_alerts] Reply sent to client {client_user_id}.")
         text = f"✅ <b>Ответ отправлен</b> клиенту <code>{client_user_id}</code>."
     except Exception as e:
-        logging.error(f"[client_alerts] Ошибка ответа клиенту {client_user_id}: {e}")
+        logging.error(f"[client_alerts] Error replying to client {client_user_id}: {e}")
         text = f"❌ Ошибка отправки <code>{client_user_id}</code>: {e}"
 
     try:
@@ -835,8 +835,8 @@ def register_handlers(dp: Dispatcher) -> None:
     """
     if not ALERT_BOT_TOKEN:
         logging.info(
-            "[client_alerts] ALERT_BOT_TOKEN не задан. "
-            "Хендлеры Alert Module не зарегистрированы."
+            "[client_alerts] ALERT_BOT_TOKEN not set. "
+            "Alert Module handlers not registered."
         )
         return
 
@@ -866,7 +866,7 @@ def register_handlers(dp: Dispatcher) -> None:
     dp.callback_query(F.data == "alert_fsm_cancel")(_cq_fsm_cancel)
 
     logging.info(
-        "[client_alerts] Хендлеры Alert Module зарегистрированы в главном боте."
+        "[client_alerts] Alert Module handlers registered on the main bot."
     )
 
 
@@ -882,22 +882,26 @@ def start_background_tasks(bot: Bot) -> list[asyncio.Task]:
         Список asyncio.Task. Пустой если ALERT_BOT_TOKEN не задан.
     """
     if alert_bot is None or alert_dp is None:
-        logging.info("[client_alerts] Alert Bot не запущен (токен не задан).")
+        logging.info("[client_alerts] Alert Bot not started (token not set).")
         return []
 
     async def _run_alert_polling() -> None:
         """Starts Alert Bot polling with graceful shutdown."""
-        logging.info("[client_alerts] Запуск поллинга Alert Bot...")
+        logging.info(log_text("client_alerts_polling_start"))
         try:
             await alert_bot.delete_webhook(drop_pending_updates=True)
+            # handle_signals=False: the main bot owns the single process-wide SIGINT/SIGTERM
+            # handler (see bot.py); a second dispatcher registering its own would silently
+            # steal the signal and prevent the main bot from shutting down gracefully.
             await alert_dp.start_polling(
                 alert_bot,
                 allowed_updates=alert_dp.resolve_used_update_types(),
+                handle_signals=False,
             )
         except asyncio.CancelledError:
-            logging.info("[client_alerts] Поллинг Alert Bot остановлен.")
+            logging.info("[client_alerts] Alert Bot polling stopped.")
         except Exception as e:
-            logging.error(f"[client_alerts] Критическая ошибка Alert Bot: {e}", exc_info=True)
+            logging.error(f"[client_alerts] Critical Alert Bot error: {e}", exc_info=True)
         finally:
             try:
                 session = getattr(alert_bot, "session", None)
@@ -905,8 +909,8 @@ def start_background_tasks(bot: Bot) -> list[asyncio.Task]:
                     await session.close()
             except Exception:
                 pass
-            logging.info("[client_alerts] Alert Bot завершён.")
+            logging.info("[client_alerts] Alert Bot finished.")
 
     task = asyncio.create_task(_run_alert_polling(), name="AlertBotPolling")
-    logging.info("[client_alerts] Фоновая задача Alert Bot создана.")
+    logging.info("[client_alerts] Alert Bot background task created.")
     return [task]
