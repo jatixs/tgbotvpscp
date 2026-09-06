@@ -400,6 +400,30 @@ async def unrecognized_message_handler(message: types.Message):
         logging.error(f"Failed to fetch useless fact: {e}")
         await message.answer(i18n._("unrecognized_command", lang), parse_mode="HTML")
 
+
+def _install_shutdown_signal_handlers(loop: asyncio.AbstractEventLoop, dispatcher: Dispatcher) -> None:
+    # Own the single process-wide SIGINT/SIGTERM handler instead of letting aiogram's
+    # start_polling(handle_signals=True) register one per dispatcher: with two dispatchers
+    # (main bot + Alert Bot) polling concurrently, the second registration silently
+    # overwrites the first, so the main bot never learns about the stop signal and hangs
+    # until systemd's stop-sigterm timeout kills the process and its subprocesses.
+    async def _stop_polling_safe() -> None:
+        try:
+            await dispatcher.stop_polling()
+        except RuntimeError:
+            pass  # Signal arrived before polling actually started; nothing to stop yet.
+
+    def _on_signal(sig: signal.Signals) -> None:
+        logging.warning(f"Received {sig.name} signal. Initiating graceful shutdown...")
+        asyncio.create_task(_stop_polling_safe())
+
+    for sig in (signal.SIGINT, signal.SIGTERM):
+        try:
+            loop.add_signal_handler(sig, _on_signal, sig)
+        except NotImplementedError:
+            pass  # Not supported on Windows event loops; rely on KeyboardInterrupt instead.
+
+
 async def shutdown(dispatcher: Dispatcher, bot_instance: Bot, web_runner=None):
     logging.info("Shutdown signal received. Stopping services...")
     try:
@@ -467,13 +491,15 @@ async def main():
         # Register the catch-all handler LAST so it doesn't intercept module commands
         dp.message.register(unrecognized_message_handler)
 
+        _install_shutdown_signal_handlers(loop, dp)
+
         logging.info(log_text("web_server_starting"))
         web_runner = await start_web_server(bot)
         if not web_runner:
             logging.warning("Web Server NOT started.")
         logging.info(log_text("polling_starting"))
         await bot.delete_webhook(drop_pending_updates=True)
-        await dp.start_polling(bot, allowed_updates=dp.resolve_used_update_types())
+        await dp.start_polling(bot, allowed_updates=dp.resolve_used_update_types(), handle_signals=False)
     except (KeyboardInterrupt, SystemExit):
         logging.info("Exit main.")
     except Exception as e:

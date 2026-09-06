@@ -890,9 +890,13 @@ def start_background_tasks(bot: Bot) -> list[asyncio.Task]:
         logging.info(log_text("client_alerts_polling_start"))
         try:
             await alert_bot.delete_webhook(drop_pending_updates=True)
+            # handle_signals=False: the main bot owns the single process-wide SIGINT/SIGTERM
+            # handler (see bot.py); a second dispatcher registering its own would silently
+            # steal the signal and prevent the main bot from shutting down gracefully.
             await alert_dp.start_polling(
                 alert_bot,
                 allowed_updates=alert_dp.resolve_used_update_types(),
+                handle_signals=False,
             )
         except asyncio.CancelledError:
             logging.info("[client_alerts] Alert Bot polling stopped.")
