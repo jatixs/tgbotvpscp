@@ -26,6 +26,8 @@ from typing import Any, Optional
 
 import psutil
 
+from .i18n import log_text
+
 
 def _filter_kwargs(func, kwargs: dict) -> dict:
     """Filters kwargs to only pass arguments that the target function actually accepts."""
@@ -195,7 +197,7 @@ class ModuleOrchestrator:
           1. For ALWAYS_ON modules: import, register handlers, start tasks.
           2. For ON_DEMAND modules: collect handlers via proxy, register proxies.
         """
-        logging.info("🧠 Memory Orchestrator: Setting up...")
+        logging.info(log_text("orchestrator_setup_start"))
 
         for module_name, mod_config in self._config.items():
             tier = mod_config["tier"]
@@ -211,7 +213,7 @@ class ModuleOrchestrator:
         self._setup_done = True
         loaded = sum(1 for m in self._modules.values() if m.state == ModuleState.LOADED)
         total = len(self._modules)
-        logging.info(f"🧠 Memory Orchestrator: Setup complete. {loaded}/{total} modules loaded.")
+        logging.info(log_text("orchestrator_setup_complete", loaded=loaded, total=total))
 
     async def _load_always_on(self, module_name: str, info: ModuleInfo):
         """Load an ALWAYS_ON module immediately."""
@@ -233,7 +235,7 @@ class ModuleOrchestrator:
                         task.add_done_callback(self._background_tasks.discard)
                         info.background_tasks.append(task)
 
-            logging.info(f"  ✅ {module_name} (always-on) loaded.")
+            logging.info(log_text("orchestrator_module_always_on", module=module_name))
         except Exception as e:
             logging.error(f"  ❌ Failed to load {module_name}: {e}", exc_info=True)
 
@@ -271,9 +273,12 @@ class ModuleOrchestrator:
             self._register_proxies_from_collector(module_name, collector)
 
             logging.info(
-                f"  ⏸️  {module_name} (on-demand) — "
-                f"{len(collector.message_handlers)} msg + "
-                f"{len(collector.callback_handlers)} cb handlers registered as proxies."
+                log_text(
+                    "orchestrator_module_on_demand",
+                    module=module_name,
+                    msg=len(collector.message_handlers),
+                    cb=len(collector.callback_handlers),
+                )
             )
         except Exception as e:
             logging.error(f"  ❌ Failed to setup lazy handlers for {module_name}: {e}", exc_info=True)
@@ -438,7 +443,7 @@ class ModuleOrchestrator:
         """Start the background garbage collection loop."""
         self._gc_task = asyncio.create_task(self._gc_loop(), name="OrchestratorGC")
         self._background_tasks.add(self._gc_task)
-        logging.info("🧠 Memory Orchestrator GC loop started.")
+        logging.info(log_text("orchestrator_gc_started"))
 
     async def _gc_loop(self):
         """Periodically check and unload inactive ON_DEMAND modules."""

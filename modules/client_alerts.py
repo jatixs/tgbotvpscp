@@ -31,7 +31,7 @@ from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 from core import config
-from core.i18n import I18nFilter, get_user_lang, _
+from core.i18n import I18nFilter, get_user_lang, _, log_text
 
 # ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -887,7 +887,7 @@ def start_background_tasks(bot: Bot) -> list[asyncio.Task]:
 
     async def _run_alert_polling() -> None:
         """Starts Alert Bot polling with graceful shutdown."""
-        logging.info("[client_alerts] Starting Alert Bot polling...")
+        logging.info(log_text("client_alerts_polling_start"))
         try:
             await alert_bot.delete_webhook(drop_pending_updates=True)
             await alert_dp.start_polling(
