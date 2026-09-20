@@ -1931,6 +1931,16 @@ function renderCharts(history) {
                         callback: (v) => formatSpeed(v)
                     }
                 }
+            },
+            plugins: {
+                ...commonOptions.plugins,
+                tooltip: {
+                    mode: 'index',
+                    intersect: false,
+                    callbacks: {
+                        label: (c) => c.dataset.label + ': ' + formatSpeed(c.raw)
+                    }
+                }
             }
         };
         const rxGrad = getGradient(ctxNet, 'rgb(34, 197, 94)');

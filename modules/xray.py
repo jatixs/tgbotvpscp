@@ -3,7 +3,7 @@ import re
 import logging
 import shlex
 from aiogram import F, Dispatcher, types
-from aiogram.types import KeyboardButton
+from aiogram.types import KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.fsm.context import FSMContext
 from aiogram.exceptions import TelegramBadRequest
 from core.i18n import _, I18nFilter, get_user_lang
@@ -22,6 +22,7 @@ def get_button() -> KeyboardButton:
 
 def register_handlers(dp: Dispatcher):
     dp.message(I18nFilter(BUTTON_KEY))(updatexray_handler)
+    dp.callback_query(F.data == "confirm_xray_update")(run_xray_update)
 
 
 async def updatexray_handler(message: types.Message, state: FSMContext):
@@ -48,35 +49,96 @@ async def updatexray_handler(message: types.Message, state: FSMContext):
             except TelegramBadRequest:
                 pass
             return
-        version = _("xray_version_unknown", lang)
         client_name_display = client.capitalize()
         if client == "3x-ui":
             client_name_display = "3X-UI"
         if setup_variant == "akiyamov":
             client_name_display = f"{client.capitalize()} (Akiyamov)"
         container_display = escape_html(container_name) if container_name else None
+
+        # Store detection results for the confirmation callback
+        await state.update_data(
+            xray_client=client,
+            xray_container=container_name,
+            xray_setup_variant=setup_variant,
+            xray_client_display=client_name_display,
+        )
+
+        if container_display:
+            detect_text = _(
+                "xray_detected_start_update",
+                lang,
+                client=client_name_display,
+                container=container_display,
+            )
+        else:
+            detect_text = _(
+                "xray_detected_start_update_native",
+                lang,
+                client=client_name_display,
+            )
+
+        keyboard = InlineKeyboardMarkup(
+            inline_keyboard=[
+                [
+                    InlineKeyboardButton(
+                        text=_("btn_confirm_xray_update", lang),
+                        callback_data="confirm_xray_update",
+                        style="success"
+                    )
+                ],
+                [
+                    InlineKeyboardButton(
+                        text=_("btn_cancel", lang), callback_data="back_to_menu", style="danger"
+                    )
+                ],
+            ]
+        )
         try:
-            if container_display:
-                detect_text = _(
-                    "xray_detected_start_update",
-                    lang,
-                    client=client_name_display,
-                    container=container_display,
-                )
-            else:
-                detect_text = _(
-                    "xray_detected_start_update_native",
-                    lang,
-                    client=client_name_display,
-                )
             await message.bot.edit_message_text(
                 detect_text,
                 chat_id=chat_id,
                 message_id=sent_msg.message_id,
                 parse_mode="HTML",
+                reply_markup=keyboard,
             )
         except TelegramBadRequest:
             pass
+    except Exception as e:
+        logging.error(f"Error in updatexray_handler: {e}")
+        error_msg = _("xray_error_generic", lang, error=str(e))
+        try:
+            await message.bot.edit_message_text(
+                error_msg,
+                chat_id=chat_id,
+                message_id=sent_msg.message_id,
+                parse_mode="HTML",
+            )
+        except TelegramBadRequest:
+            await message.answer(error_msg, parse_mode="HTML")
+
+
+async def run_xray_update(callback: types.CallbackQuery, state: FSMContext):
+    user_id = callback.from_user.id
+    chat_id = callback.message.chat.id
+    lang = get_user_lang(user_id)
+    data = await state.get_data()
+    client = data.get("xray_client")
+    container_name = data.get("xray_container")
+    setup_variant = data.get("xray_setup_variant")
+    client_name_display = data.get("xray_client_display", "Unknown")
+
+    if not client:
+        await callback.message.edit_text(_("xray_detect_fail", lang))
+        await state.clear()
+        return
+
+    await callback.message.edit_text(
+        _("xray_updating", lang, client=client_name_display), parse_mode="HTML"
+    )
+
+    try:
+        version = _("xray_version_unknown", lang)
         update_cmd = ""
         version_cmd = ""
         safe_container = shlex.quote(container_name) if container_name else None
@@ -156,25 +218,19 @@ async def updatexray_handler(message: types.Message, state: FSMContext):
             "xray_update_success", lang, client=client_name_display, version=version
         )
         try:
-            await message.bot.edit_message_text(
-                final_message,
-                chat_id=chat_id,
-                message_id=sent_msg.message_id,
-                parse_mode="HTML",
+            await callback.message.edit_text(
+                final_message, parse_mode="HTML"
             )
         except TelegramBadRequest:
-            await message.answer(final_message, parse_mode="HTML")
+            await callback.message.answer(final_message, parse_mode="HTML")
     except Exception as e:
-        logging.error(f"Error in updatexray_handler: {e}")
+        logging.error(f"Error in run_xray_update: {e}")
         error_msg = _("xray_error_generic", lang, error=str(e))
         try:
-            await message.bot.edit_message_text(
-                error_msg,
-                chat_id=chat_id,
-                message_id=sent_msg.message_id,
-                parse_mode="HTML",
+            await callback.message.edit_text(
+                error_msg, parse_mode="HTML"
             )
         except TelegramBadRequest:
-            await message.answer(error_msg, parse_mode="HTML")
+            await callback.message.answer(error_msg, parse_mode="HTML")
     finally:
         await state.clear()

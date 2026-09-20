@@ -1046,7 +1046,14 @@ function updateModalCharts(history) {
                         display: true, 
                         position: 'top', 
                         labels: { color: tickColor, boxWidth: 10, usePointStyle: true, font: { size: 10 } } 
-                    } 
+                    },
+                    tooltip: {
+                        mode: 'index',
+                        intersect: false,
+                        callbacks: {
+                            label: function(c) { return c.dataset.label + ': ' + formatSpeed(c.raw); }
+                        }
+                    }
                 },
                 scales: {
                     x: { 
