@@ -4,11 +4,24 @@
 
 <h1 align="center">📝 Telegram VPS Management Bot — Список изменений</h1>
 <p align="center">
-    <img src="https://img.shields.io/badge/version-v1.25.1-blue?style=flat-square" alt="Version 1.25.1"/>
-    <img src="https://img.shields.io/badge/build-90-purple?style=flat-square" alt="Build 90"/>
-    <img src="https://img.shields.io/badge/date-Сентябрь%2003%202026-green?style=flat-square" alt="Date Sep 03 2026"/>
+    <img src="https://img.shields.io/badge/version-v1.25.2-blue?style=flat-square" alt="Version 1.25.2"/>
+    <img src="https://img.shields.io/badge/build-91-purple?style=flat-square" alt="Build 91"/>
+    <img src="https://img.shields.io/badge/date-Сентябрь%2020%202026-green?style=flat-square" alt="Date Sep 20 2026"/>
 	<img src="https://img.shields.io/badge/status-stable-green?style=flat-square" alt="Status Stable"/>
 </p>
+
+---
+## [1.25.2] - 2026-09-20
+
+### ✨ Улучшено:
+* **Обновление:** Добавлены диалоговые окна с подтверждением перед началом обновления системы (apt) и панели Xray/3X-UI, чтобы избежать случайного запуска долгих процессов.
+* **Перевод:** Добавлен резервный API для перевода интересных фактов (MyMemory API) на случай ошибки `429 Too Many Requests` от Google Translate (частая проблема для IP дата-центров).
+* **Логирование:** Улучшено логирование ошибок перевода. Ошибки локализованы, а объемные HTML-тела ответов убраны из логов для чистоты.
+
+### 🐛 Исправлено:
+* **WebUI / Telegram API:** Убраны несовместимые параметры и эмодзи из кнопок подтверждения обновлений, возвращена поддержка нативного `style` для корректного отображения кнопок как в WebUI, так и в самом Telegram.
+* **Обновление системы:** Добавлена проверка наличия скрипта `update_os.sh` перед его выполнением. Если скрипт отсутствует, выполняется безопасная обертка `apt` команд без вывода ложной ошибки `command not found`.
+* **Графики трафика:** Всплывающие подсказки (tooltips) в модальном окне «Управление Нодами» и на графиках сетевой активности агента теперь корректно форматируются в Мбит/с и Кбит/с вместо сырых числовых значений.
 
 ---
 ## [1.25.1] - 2026-09-03

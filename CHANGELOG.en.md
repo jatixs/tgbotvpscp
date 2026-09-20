@@ -4,11 +4,24 @@
 
 <h1 align="center">📝 Telegram VPS Management Bot — Changelog</h1>
 <p align="center">
-    <img src="https://img.shields.io/badge/version-v1.25.1-blue?style=flat-square" alt="Version 1.25.1"/>
-    <img src="https://img.shields.io/badge/build-90-purple?style=flat-square" alt="Build 90"/>
-    <img src="https://img.shields.io/badge/date-Sep%2003%202026-green?style=flat-square" alt="Date Sep 03 2026"/>
+    <img src="https://img.shields.io/badge/version-v1.25.2-blue?style=flat-square" alt="Version 1.25.2"/>
+    <img src="https://img.shields.io/badge/build-91-purple?style=flat-square" alt="Build 91"/>
+    <img src="https://img.shields.io/badge/date-Sep%2020%202026-green?style=flat-square" alt="Date Sep 20 2026"/>
 	<img src="https://img.shields.io/badge/status-stable-green?style=flat-square" alt="Status Stable"/>
 </p>
+
+---
+## [1.25.2] - 2026-09-20
+
+### ✨ Improved:
+* **Updates:** Added confirmation dialogs before initiating system (apt) and Xray/3X-UI updates to prevent accidental execution of long-running processes.
+* **Translations:** Added a fallback translation API (MyMemory) for fun facts in case of a `429 Too Many Requests` error from Google Translate (common for datacenter IPs).
+* **Logging:** Improved and localized translation error logs. Removed bulky HTML response bodies from logs to keep the console clean.
+
+### 🐛 Bugfixes:
+* **WebUI / Telegram API:** Removed incompatible parameters and emojis from update confirmation buttons, restoring native `style` support for proper rendering in both the WebUI and Telegram.
+* **System Update:** Added a check for the `update_os.sh` script before execution. If missing, a safe `apt` wrapper command is executed to prevent false `command not found` errors.
+* **Traffic Charts:** Tooltips in the "Node Management" modal and agent network activity charts are now correctly formatted in Mbps and Kbps instead of raw numerical byte values.
 
 ---
 ## [1.25.1] - 2026-09-03
