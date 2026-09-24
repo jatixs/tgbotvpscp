@@ -1404,7 +1404,7 @@ function renderKeyboardModalContent() {
             'enable_sshlog': 'icon-document text-gray-400',
             'enable_fail2ban': 'icon-lock text-red-400',
             'enable_logs': 'icon-document text-gray-400',
-            'enable_xray': 'icon-shield text-cyan-500',
+            'enable_xray': 'icon-xray text-cyan-500',
             'enable_vless': 'icon-link text-blue-400',
             'enable_notifications': 'icon-bell text-yellow-400',
             'enable_client_alerts': 'icon-megaphone text-orange-400'
