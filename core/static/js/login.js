@@ -255,9 +255,9 @@ async function requestPasswordReset() {
                             <path d="M20.665 3.717l-17.73 6.837c-1.21.486-1.203 1.161-.222 1.462l4.552 1.42 10.532-6.645c.498-.303.953-.14.579.192l-8.533 7.701h-.002l.002.001-.314 4.692c.46 0 .663-.211.921-.46l2.211-2.15 4.599 3.397c.848.467 1.457.227 1.668-.785l3.019-14.228c.309-1.239-.473-1.8-1.282-1.434z"></path>
                         </svg>
                     </div>
-                    <h3 class="text-lg font-bold text-gray-900 dark:text-white mb-2" data-i18n="login_link_sent_title">${title}</h3>
-                    <p class="text-sm text-gray-500 dark:text-gray-400" data-i18n="login_link_sent_desc">${desc}</p>
-                    <a href="${botLink}" target="_blank" class="inline-block mt-6 px-6 py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-xl font-bold transition shadow-lg shadow-blue-500/20" data-i18n="login_go_to_bot">${btnText}</a>
+                    <h3 class="text-lg font-bold text-gray-900 dark:text-white mb-2">${title}</h3>
+                    <p class="text-sm text-gray-500 dark:text-gray-400">${desc}</p>
+                    <a href="${botLink}" target="_blank" class="inline-block mt-6 px-6 py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-xl font-bold transition shadow-lg shadow-blue-500/20">${btnText}</a>
                 </div>
             `);
         } else {
