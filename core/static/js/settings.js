@@ -1387,13 +1387,40 @@ function renderKeyboardModalContent() {
                  </button>`;
         html += `</div>`;
         html += `<div class="grid grid-cols-1 sm:grid-cols-2 gap-3">`;
+        const iconMap = {
+            'enable_selftest': 'icon-wrench text-blue-500',
+            'enable_traffic': 'icon-radar text-indigo-500',
+            'enable_uptime': 'icon-clock text-green-500',
+            'enable_speedtest': 'icon-rocket text-purple-500',
+            'enable_top': 'icon-fire text-orange-500',
+            'enable_nodes': 'icon-monitor text-blue-400',
+            'enable_users': 'icon-user text-indigo-400',
+            'enable_services': 'icon-gear text-gray-500',
+            'enable_update': 'icon-refresh text-green-400',
+            'enable_optimize': 'icon-lightning text-yellow-500',
+            'enable_restart': 'icon-refresh text-teal-500',
+            'enable_reboot': 'icon-refresh text-red-500',
+            'enable_billing': 'icon-credit-card text-emerald-500',
+            'enable_sshlog': 'icon-document text-gray-400',
+            'enable_fail2ban': 'icon-lock text-red-400',
+            'enable_logs': 'icon-document text-gray-400',
+            'enable_xray': 'icon-shield text-cyan-500',
+            'enable_vless': 'icon-link text-blue-400',
+            'enable_notifications': 'icon-bell text-yellow-400',
+            'enable_client_alerts': 'icon-megaphone text-orange-400'
+        };
+
         categoryKeys.forEach(key => {
             const enabled = KEYBOARD_CONFIG[key];
             let label = (typeof I18N !== 'undefined' && I18N[`lbl_${key}`]) ? I18N[`lbl_${key}`] : key;
             label = label.replace(/[\u2600-\u27bf\u2b50\u2b55\u23e9-\u23f3\u23f8-\u23fa\u25b6\u25c0\u2328\ud83c-\ud83e][\udc00-\udfff]?/g, '').replace(/[\u2600-\u27BF]/g, '').trim();
+            const iconClass = iconMap[key] || 'icon-gear text-gray-400';
             html += `
                 <div class="flex items-center justify-between bg-gray-50 dark:bg-black/20 p-3 rounded-xl hover:bg-gray-100 dark:hover:bg-black/30 transition border border-gray-200 dark:border-white/5 cursor-pointer select-none" data-action="click-alert-toggle" data-target="${key}">
-                    <span class="text-sm font-medium text-gray-900 dark:text-white truncate pr-2" title="${label}">${label}</span>
+                    <div class="flex items-center gap-2 min-w-0 pr-2">
+                        <i class="icon ${iconClass} icon-sm flex-shrink-0"></i>
+                        <span class="text-sm font-medium text-gray-900 dark:text-white truncate" title="${label}">${label}</span>
+                    </div>
                     <label class="relative inline-flex items-center cursor-pointer flex-shrink-0" data-action="stop-propagation">
                         <input type="checkbox" id="${key}" class="sr-only peer" data-action="trigger-keyboard-save" ${enabled ? 'checked' : ''}>
                         <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-blue-600"></div>
