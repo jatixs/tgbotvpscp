@@ -14,6 +14,9 @@
 ## [1.25.2] - 2026-09-20
 
 ### ✨ Improved:
+* **WebUI / UI Refactoring:** Conducted a global UI refactoring: all emojis have been replaced with modern SVG equivalents and CSS indicators to ensure uniform and stable rendering across all devices.
+* **WebUI / Logging:** Implemented automatic server-side log filtering before sending them to the web interface (stripping bot-generated emojis), while preserving the original characters in the log files for historical records.
+* **WebUI / Security:** Added built-in `filter_zalgo` filtering at the core level to prevent injection of non-standard unicode characters and text distortion.
 * **Updates:** Added confirmation dialogs before initiating system (apt) and Xray/3X-UI updates to prevent accidental execution of long-running processes.
 * **Translations:** Added a fallback translation API (MyMemory) for fun facts in case of a `429 Too Many Requests` error from Google Translate (common for datacenter IPs).
 * **Logging:** Improved and localized translation error logs. Removed bulky HTML response bodies from logs to keep the console clean.

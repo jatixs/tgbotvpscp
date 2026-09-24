@@ -429,6 +429,13 @@ def escape_html(text):
     return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
 
+def filter_zalgo(text: str) -> str:
+    """
+    if not text:
+        return ""
+    zalgo_pattern = re.compile(r'([\u0300-\u036f\u0483-\u0489\u1dc0-\u1dff\u20d0-\u20ff\ufe20-\ufe2f]{2,})')
+    return zalgo_pattern.sub('', str(text))
+
 def convert_json_to_vless(json_data, custom_name):
     try:
         config_data = json.loads(json_data)
