@@ -935,11 +935,12 @@ function launchBrandEasterEgg(originEl) {
 function showNextRouteEasterEgg(isRu) {
     if (typeof window.showModal !== 'function') return;
 
-    const title = isRu ? '📡 Найден секретный маршрут' : '📡 Secret route found';
+    const radarSvg = '<svg class="w-5 h-5 inline-block mr-1 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.111 16.404a5.5 5.5 0 017.778 0M12 20h.01m-7.08-7.071c3.904-3.905 10.236-3.906 14.142 0M1.394 9.393c5.857-5.857 15.355-5.857 21.213 0"></path></svg>';
+    const title = isRu ? `${radarSvg} Найден секретный маршрут` : `${radarSvg} Secret route found`;
     const content = isRu
         ? `
             <div class="flex flex-col items-center text-center gap-3">
-                <div class="text-4xl">🛰️</div>
+                <div class="text-4xl flex justify-center"><svg class="w-10 h-10 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"></path></svg></div>
                 <p class="leading-relaxed">
                     Похоже, вы обожаете кликать. А наш друг-тестировщик обожает искать баги —
                     и построил для этого свой сетевой проект:
@@ -952,7 +953,7 @@ function showNextRouteEasterEgg(isRu) {
         `
         : `
             <div class="flex flex-col items-center text-center gap-3">
-                <div class="text-4xl">🛰️</div>
+                <div class="text-4xl flex justify-center"><svg class="w-10 h-10 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"></path></svg></div>
                 <p class="leading-relaxed">
                     You clearly love clicking. Our tester friend loves hunting bugs even more —
                     so he built his own networking project:
