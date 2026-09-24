@@ -1410,10 +1410,10 @@ function handleSessionExpired() {
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
                 </svg>
             </div>
-            <h3 class="text-xl font-bold text-gray-900 dark:text-white mb-2">${title}</h3>
-            <p class="text-gray-500 dark:text-gray-400 mb-6 text-sm leading-relaxed">${msg}</p>
+            <h3 class="text-xl font-bold text-gray-900 dark:text-white mb-2" data-i18n="web_session_expired">${title}</h3>
+            <p class="text-gray-500 dark:text-gray-400 mb-6 text-sm leading-relaxed" data-i18n="web_please_relogin">${msg}</p>
             <a href="/login" class="block w-full py-3 px-4 bg-blue-600 hover:bg-blue-500 text-white rounded-xl font-bold transition shadow-lg shadow-blue-500/20 active:scale-95">
-                ${btnText}
+                <span data-i18n="web_login_btn">${btnText}</span>
             </a>
         </div>
     `);
@@ -1449,13 +1449,13 @@ function handleConnectionError() {
             <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-red-600 dark:text-red-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
             </svg>
-            <span class="text-sm font-bold text-red-900 dark:text-red-100">${msg}</span>
+            <span class="text-sm font-bold text-red-900 dark:text-red-100" data-i18n="web_conn_problem">${msg}</span>
         </div>
         <button data-action="retry-sse" class="w-full py-1.5 px-3 bg-red-200 hover:bg-red-300 dark:bg-red-800 dark:hover:bg-red-700 text-red-900 dark:text-red-100 rounded-lg text-xs font-bold transition flex items-center justify-center gap-2">
             <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
             </svg>
-            ${btnText}
+            <span data-i18n="web_refresh_stream">${btnText}</span>
         </button>
     `);
 
