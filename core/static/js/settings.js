@@ -1,6 +1,6 @@
 /**
- * Логика страницы настроек WebUI.
- * Взаимодействие с API для изменения параметров панели, обработка форм и анимаций интерфейса.
+ * WebUI settings page logic.
+ * API interaction for panel settings, form handling and UI animations.
  */
 /* /core/static/js/settings.js */
 
@@ -1066,7 +1066,7 @@ function renderNotifNodesList() {
         return `
         <button data-action="switch-notif-view" data-token="${n.token}" class="flex items-center justify-between w-full bg-gray-50 dark:bg-black/20 p-4 rounded-xl hover:bg-gray-100 dark:hover:bg-black/30 transition border border-gray-200 dark:border-white/5 cursor-pointer group">
             <div class="flex items-center gap-3 min-w-0">
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 inline-block text-blue-500 group-hover:scale-110 transition-transform flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>
+                <i class="icon icon-monitor icon-lg text-blue-500 group-hover:scale-110 transition-transform flex-shrink-0"></i>
                 <span class="text-sm font-bold text-gray-900 dark:text-white text-left truncate">${escapeHtml(n.name)}</span>
             </div>
             <svg class="w-5 h-5 text-gray-400 group-hover:text-blue-500 transition-colors flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>

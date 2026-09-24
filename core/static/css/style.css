@@ -68,7 +68,7 @@ nav {
 	padding-top: max(0px, env(safe-area-inset-top, 0px)) !important;
 }
 
-/* --- Анимации --- */
+/* --- Animations --- */
 @keyframes float {
 
 	0%,
@@ -147,7 +147,7 @@ nav {
 	}
 }
 
-/* --- Пасхалка бренда: фейерверк из эмодзи --- */
+/* --- Brand Easter Egg: emoji fireworks --- */
 .brand-egg-overlay {
 	position: fixed;
 	inset: 0;
@@ -213,7 +213,7 @@ nav {
 	}
 }
 
-/* --- Вспомогательные классы --- */
+/* --- Utility classes --- */
 .modal-open {
 	display: flex !important;
 }
@@ -237,7 +237,7 @@ button {
 	transition-duration: 300ms;
 }
 
-/* --- Уведомления --- */
+/* --- Notifications --- */
 .notif-btn {
 	position: relative;
 	cursor: pointer;
@@ -339,7 +339,7 @@ button {
 	animation: bell-shake 0.5s cubic-bezier(.36, .07, .19, .97) both;
 }
 
-/* --- Гирлянда --- */
+/* --- Garland --- */
 .lights-garland {
 	position: absolute;
 	z-index: 40;
@@ -463,7 +463,7 @@ button {
 	}
 }
 
-/* --- Снег --- */
+/* --- Snow --- */
 #snow-container {
 	position: fixed;
 	top: 0;
@@ -499,7 +499,7 @@ button {
 	filter: drop-shadow(0 0 5px rgba(96, 165, 250, 0.5));
 }
 
-/* --- Модальные окна --- */
+/* --- Modals --- */
 #systemModal>div,
 #addNodeModal>div,
 #keyboardModal>div,
@@ -567,21 +567,21 @@ button.force-expanded .btn-text {
 	}
 }
 
-/* Инерция (импульсная прокрутка) для всех прокручиваемых блоков */
+/* Momentum (impulse scrolling) for all scrollable blocks */
 .custom-scrollbar,
 .overflow-y-auto,
 .overflow-x-auto {
 	-webkit-overflow-scrolling: touch;
 }
 
-/* 2. Стилизация Webkit (Chrome, Safari, Edge) */
-/* Применяем ТОЛЬКО к элементам с классом .custom-scrollbar */
+/* 2. Webkit scrollbar styling (Chrome, Safari, Edge) */
+/* Applied ONLY to elements with the .custom-scrollbar class */
 
 .custom-scrollbar::-webkit-scrollbar {
 	width: 6px;
-	/* Тонкий вертикальный скролл */
+	/* Thin vertical scrollbar */
 	height: 6px;
-	/* Тонкий горизонтальный скролл */
+	/* Thin horizontal scrollbar */
 }
 
 .custom-scrollbar::-webkit-scrollbar-track {
@@ -590,24 +590,24 @@ button.force-expanded .btn-text {
 
 .custom-scrollbar::-webkit-scrollbar-thumb {
 	background-color: rgba(156, 163, 175, 0.5);
-	/* gray-400 полупрозрачный */
+	/* gray-400 semi-transparent */
 	border-radius: 9999px;
 	border: 2px solid transparent;
-	/* Отступ внутри */
+	/* Inner padding */
 	background-clip: content-box;
 	transition: background-color 0.2s;
 }
 
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
 	background-color: rgba(107, 114, 128, 0.8);
-	/* gray-500 при наведении */
+	/* gray-500 on hover */
 }
 
 .custom-scrollbar::-webkit-scrollbar-corner {
 	background: transparent;
 }
 
-/* Адаптация под темную тему */
+/* Dark theme adaptation */
 .dark .custom-scrollbar::-webkit-scrollbar-thumb {
 	background-color: rgba(75, 85, 99, 0.5);
 	/* gray-600 */
@@ -634,14 +634,14 @@ button.force-expanded .btn-text {
 		padding-right: 0.5rem !important;
 		/* 8px */
 		gap: 0.25rem !important;
-		/* Уменьшаем разрыв между левой и правой частью */
+		/* Reduce gap between left and right parts */
 	}
 
 	nav span.text-lg {
 		font-size: 0.95rem !important;
-		/* Чуть меньше стандарта */
+		/* Slightly smaller than default */
 		max-width: 120px;
-		/* Ограничиваем ширину, чтобы не толкал кнопки */
+		/* Limit width to prevent pushing buttons */
 		overflow: hidden;
 		text-overflow: ellipsis;
 	}
@@ -653,7 +653,7 @@ button.force-expanded .btn-text {
 		height: 1.75rem !important;
 		/* 28px */
 		border-radius: 0.375rem !important;
-		/* Чуть меньше скругление */
+		/* Slightly less rounding */
 	}
 
 	nav button svg,
@@ -793,7 +793,7 @@ html.dark .monitor-link-btn:hover {
 	background-color: rgba(147, 51, 234, 0.25);
 }
 
-/* Иконка биллинга в шапке: подсветка цветом по статусу оплаты */
+/* Header billing icon: color highlight based on payment status */
 .header-billing-btn[data-status="green"] {
 	background-color: rgba(34, 197, 94, .1);
 	color: rgb(21, 128, 61);
@@ -875,7 +875,7 @@ html.dark .header-billing-btn[data-status="gray"] {
 /* Responsive adjustments for Network Activity section on narrow screens */
 @media (max-width: 484px) {
 
-	/* Делаем контейнер на всю ширину и применяем стиль единой панели */
+	/* Make container full-width and apply unified panel style */
 	#networkBadgesContainer {
 		width: 100% !important;
 		justify-content: space-between !important;
@@ -892,7 +892,7 @@ html.dark .header-billing-btn[data-status="gray"] {
 		border-color: rgba(255, 255, 255, 0.05) !important;
 	}
 
-	/* Убираем рамки и фон у самих кнопок, чтобы они слились в одну панель */
+	/* Remove borders and background from buttons so they merge into one panel */
 	#networkBadgesContainer .network-badge {
 		flex: 1 1 0% !important;
 		justify-content: center !important;
@@ -903,15 +903,15 @@ html.dark .header-billing-btn[data-status="gray"] {
 		padding-bottom: 0.375rem !important;
 	}
 
-	/* Показываем разделитель и жестко задаем ему размеры и цвет */
+	/* Show separator and set its dimensions and color */
 	#networkBadgesDivider {
 		display: block !important;
 		width: 1px !important;
 		min-width: 1px !important;
 		height: 1.25rem !important;
-		/* Аккуратная высота линии */
+		/* Neat line height */
 		background-color: #d1d5db !important;
-		/* Серый цвет для светлой темы */
+		/* Gray color for light theme */
 		margin: 0 4px !important;
 		flex-shrink: 0 !important;
 	}
@@ -980,7 +980,7 @@ html.dark .telegram-only-overlay-badge {
 	box-shadow: 0 10px 24px rgba(16, 185, 129, 0.24);
 }
 
-/* Анимация переключателя виброотклика */
+/* Haptic feedback toggle animation */
 #mHapticsCheckbox+div,
 .mHapticsCheckbox+div {
 	transition: background-color 0.3s ease;
@@ -991,9 +991,9 @@ html.dark .telegram-only-overlay-badge {
 	transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.3s ease;
 }
 
-/* --- Режимы производительности и доступности --- */
+/* --- Performance and accessibility modes --- */
 
-/* Light-версия (Perf-mode) */
+/* Light version (Perf-mode) */
 html.perf-mode *,
 html.perf-mode *:before,
 html.perf-mode *:after {
@@ -1011,13 +1011,13 @@ html.perf-mode .lights-garland {
     display: none !important;
 }
 
-/* Версия для слабовидящих (A11y-mode) */
+/* Version for visually impaired (A11y-mode) */
 html.a11y-mode {
     font-size: 115% !important;
     filter: contrast(125%) saturate(110%);
 }
 
-/* Активные состояния кнопок режимов */
+/* Active states for mode buttons */
 html.perf-mode [data-action="toggle-perf-mode"] {
     background-color: rgba(234, 179, 8, 0.15) !important;
 }
@@ -1032,7 +1032,7 @@ html.dark.a11y-mode [data-action="toggle-a11y-mode"] {
     background-color: rgba(59, 130, 246, 0.25) !important;
 }
 
-/* --- Скрытие элементов на десктопе и мобилках --- */
+/* --- Hide elements on desktop and mobile --- */
 @media (min-width: 1024px) {
     .hide-on-desktop {
         display: none !important;
