@@ -826,7 +826,10 @@ function copyTextToClipboard(text) {
 window.copyTextToClipboard = copyTextToClipboard;
 
 function showCopyFeedback() {
-    if (window.showToast) window.showToast((typeof I18N !== 'undefined' && I18N.web_copied) ? I18N.web_copied : "Copied!");
+    if (window.showToast) {
+        const text = (typeof I18N !== 'undefined' && I18N.web_copied) ? I18N.web_copied : "Copied!";
+        window.showToast(`<span data-i18n="web_copied">${text}</span>`);
+    }
 }
 window.copyToken = copyToken;
 
@@ -1567,7 +1570,7 @@ async function clearNotifications(e) {
 
         if (res.ok) {
             updateNotifUI([], 0);
-            if (window.showToast) window.showToast(I18N.web_notifications_cleared);
+            if (window.showToast) window.showToast(`<span data-i18n="web_notifications_cleared">${I18N.web_notifications_cleared}</span>`);
         }
     } catch (e) {
         console.error("Clear notifications error:", e);
@@ -2306,7 +2309,9 @@ function togglePerfMode() {
     const isPerfMode = document.documentElement.classList.toggle('perf-mode');
     localStorage.setItem('perf_mode', isPerfMode ? '1' : '0');
     if (typeof showToast === 'function') {
-        showToast(isPerfMode ? (I18N?.web_perf_mode_on || 'Light mode enabled') : (I18N?.web_perf_mode_off || 'Light mode disabled'));
+        const text = isPerfMode ? (I18N?.web_perf_mode_on || 'Light mode enabled') : (I18N?.web_perf_mode_off || 'Light mode disabled');
+        const key = isPerfMode ? 'web_perf_mode_on' : 'web_perf_mode_off';
+        showToast(`<span data-i18n="${key}">${text}</span>`);
     }
     if (window.playHaptic) playHaptic([8, 40, 10]);
 }
@@ -2315,7 +2320,9 @@ function toggleA11yMode() {
     const isA11yMode = document.documentElement.classList.toggle('a11y-mode');
     localStorage.setItem('a11y_mode', isA11yMode ? '1' : '0');
     if (typeof showToast === 'function') {
-        showToast(isA11yMode ? (I18N?.web_a11y_mode_on || 'Accessibility mode enabled') : (I18N?.web_a11y_mode_off || 'Accessibility mode disabled'));
+        const text = isA11yMode ? (I18N?.web_a11y_mode_on || 'Accessibility mode enabled') : (I18N?.web_a11y_mode_off || 'Accessibility mode disabled');
+        const key = isA11yMode ? 'web_a11y_mode_on' : 'web_a11y_mode_off';
+        showToast(`<span data-i18n="${key}">${text}</span>`);
     }
     if (window.playHaptic) playHaptic([8, 40, 10]);
 }
