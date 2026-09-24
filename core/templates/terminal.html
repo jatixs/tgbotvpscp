@@ -103,17 +103,17 @@
 
     <!-- Mobile Termius Keyboard -->
     <div id="mobileKeyboard" class="flex bg-gray-800 border-t border-gray-700 w-full overflow-x-auto custom-scrollbar items-center shrink-0 z-20" style="height: 44px; min-height: 44px;">
-        <button onmousedown="event.preventDefault(); term.focus();" class="px-4 h-full text-sm font-bold text-gray-400 hover:bg-gray-700 border-r border-gray-700 shrink-0">⌨️</button>
+        <button onmousedown="event.preventDefault(); term.focus();" class="px-4 h-full text-sm font-bold text-gray-400 hover:bg-gray-700 border-r border-gray-700 shrink-0"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 inline-block" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg></button>
         <button onmousedown="event.preventDefault(); ws&&ws.send('\x1b');" class="px-5 h-full text-[13px] font-bold text-gray-300 hover:text-white hover:bg-gray-700 border-r border-gray-700 shrink-0">ESC</button>
         <button id="btnCtrl" onmousedown="event.preventDefault(); toggleCtrlMode();" class="px-5 h-full text-[13px] font-bold text-gray-300 hover:text-white hover:bg-gray-700 border-r border-gray-700 shrink-0">CTRL</button>
         <button onmousedown="event.preventDefault(); ws&&ws.send('\x09');" class="px-5 h-full text-[13px] font-bold text-gray-300 hover:text-white hover:bg-gray-700 border-r border-gray-700 shrink-0">TAB</button>
         <button onmousedown="event.preventDefault(); ws&&ws.send('-');" class="px-5 h-full text-base font-bold text-gray-300 hover:text-white hover:bg-gray-700 border-r border-gray-700 shrink-0">-</button>
         <button onmousedown="event.preventDefault(); ws&&ws.send('/');" class="px-5 h-full text-base font-bold text-gray-300 hover:text-white hover:bg-gray-700 border-r border-gray-700 shrink-0">/</button>
         <button onmousedown="event.preventDefault(); ws&&ws.send('|');" class="px-5 h-full text-base font-bold text-gray-300 hover:text-white hover:bg-gray-700 border-r border-gray-700 shrink-0">|</button>
-        <button onmousedown="event.preventDefault(); ws&&ws.send('\x1b[A');" class="px-5 h-full text-base font-bold text-gray-300 hover:text-white hover:bg-gray-700 border-r border-gray-700 shrink-0">↑</button>
-        <button onmousedown="event.preventDefault(); ws&&ws.send('\x1b[B');" class="px-5 h-full text-base font-bold text-gray-300 hover:text-white hover:bg-gray-700 border-r border-gray-700 shrink-0">↓</button>
-        <button onmousedown="event.preventDefault(); ws&&ws.send('\x1b[D');" class="px-5 h-full text-base font-bold text-gray-300 hover:text-white hover:bg-gray-700 border-r border-gray-700 shrink-0">←</button>
-        <button onmousedown="event.preventDefault(); ws&&ws.send('\x1b[C');" class="px-5 h-full text-base font-bold text-gray-300 hover:text-white hover:bg-gray-700 shrink-0">→</button>
+        <button onmousedown="event.preventDefault(); ws&&ws.send('\x1b[A');" class="px-5 h-full text-base font-bold text-gray-300 hover:text-white hover:bg-gray-700 border-r border-gray-700 shrink-0"><svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 inline-block" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 10l7-7m0 0l7 7m-7-7v18" /></svg></button>
+        <button onmousedown="event.preventDefault(); ws&&ws.send('\x1b[B');" class="px-5 h-full text-base font-bold text-gray-300 hover:text-white hover:bg-gray-700 border-r border-gray-700 shrink-0"><svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 inline-block" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 14l-7 7m0 0l-7-7m7 7V3" /></svg></button>
+        <button onmousedown="event.preventDefault(); ws&&ws.send('\x1b[D');" class="px-5 h-full text-base font-bold text-gray-300 hover:text-white hover:bg-gray-700 border-r border-gray-700 shrink-0"><svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 inline-block" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" /></svg></button>
+        <button onmousedown="event.preventDefault(); ws&&ws.send('\x1b[C');" class="px-5 h-full text-base font-bold text-gray-300 hover:text-white hover:bg-gray-700 shrink-0"><svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 inline-block" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3" /></svg></button>
     </div>
     
     <div id="connectModal" class="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-2 sm:p-4">
@@ -166,7 +166,7 @@
                         <div id="fieldKey" class="hidden">
                             <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-wide mb-1 flex justify-between">
                                 <span>{{ web_terminal_key }}</span>
-                                <label for="inpKeyFile" class="text-blue-400 hover:text-blue-300 cursor-pointer text-[10px]">📁 {{ web_terminal_key_select }}</label>
+                                <label for="inpKeyFile" class="text-blue-400 hover:text-blue-300 cursor-pointer text-[10px]"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 inline-block text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" /></svg> {{ web_terminal_key_select }}</label>
                                 <input type="file" id="inpKeyFile" class="hidden" accept=".pem,.key,.*" onchange="loadKeyFile(event)">
                             </label>
                             <textarea id="inpKey" rows="3" placeholder="-----BEGIN OPENSSH PRIVATE KEY-----" class="w-full bg-gray-900 rounded-lg px-3 py-2 text-white outline-none focus:ring-2 focus:ring-blue-500/50 focus:bg-gray-800 font-mono text-[10px] leading-tight resize-none transition custom-scrollbar"></textarea>

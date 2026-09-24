@@ -1066,7 +1066,7 @@ function renderNotifNodesList() {
         return `
         <button data-action="switch-notif-view" data-token="${n.token}" class="flex items-center justify-between w-full bg-gray-50 dark:bg-black/20 p-4 rounded-xl hover:bg-gray-100 dark:hover:bg-black/30 transition border border-gray-200 dark:border-white/5 cursor-pointer group">
             <div class="flex items-center gap-3 min-w-0">
-                <span class="text-2xl group-hover:scale-110 transition-transform flex-shrink-0">🖥</span>
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 inline-block text-blue-500 group-hover:scale-110 transition-transform flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>
                 <span class="text-sm font-bold text-gray-900 dark:text-white text-left truncate">${escapeHtml(n.name)}</span>
             </div>
             <svg class="w-5 h-5 text-gray-400 group-hover:text-blue-500 transition-colors flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
@@ -1366,7 +1366,9 @@ function renderKeyboardModalContent() {
         const categoryKeys = catData.keys.filter(k => KEYBOARD_CONFIG.hasOwnProperty(k));
         if (categoryKeys.length === 0) continue;
 
-        const title = (typeof I18N !== 'undefined' && I18N[catData.titleKey]) ? I18N[catData.titleKey] : catKey;
+        let title = (typeof I18N !== 'undefined' && I18N[catData.titleKey]) ? I18N[catData.titleKey] : catKey;
+        title = title.replace(/[\u2600-\u27bf\u2b50\u2b55\u23e9-\u23f3\u23f8-\u23fa\u25b6\u25c0\u2328\ud83c-\ud83e][\udc00-\udfff]?/g, '').replace(/[\u2600-\u27BF]/g, '').trim();
+
         const enabledCount = categoryKeys.filter(k => KEYBOARD_CONFIG[k]).length;
         const totalCount = categoryKeys.length;
         const allOn = enabledCount === totalCount;
@@ -1387,7 +1389,8 @@ function renderKeyboardModalContent() {
         html += `<div class="grid grid-cols-1 sm:grid-cols-2 gap-3">`;
         categoryKeys.forEach(key => {
             const enabled = KEYBOARD_CONFIG[key];
-            const label = (typeof I18N !== 'undefined' && I18N[`lbl_${key}`]) ? I18N[`lbl_${key}`] : key;
+            let label = (typeof I18N !== 'undefined' && I18N[`lbl_${key}`]) ? I18N[`lbl_${key}`] : key;
+            label = label.replace(/[\u2600-\u27bf\u2b50\u2b55\u23e9-\u23f3\u23f8-\u23fa\u25b6\u25c0\u2328\ud83c-\ud83e][\udc00-\udfff]?/g, '').replace(/[\u2600-\u27BF]/g, '').trim();
             html += `
                 <div class="flex items-center justify-between bg-gray-50 dark:bg-black/20 p-3 rounded-xl hover:bg-gray-100 dark:hover:bg-black/30 transition border border-gray-200 dark:border-white/5 cursor-pointer select-none" data-action="click-alert-toggle" data-target="${key}">
                     <span class="text-sm font-medium text-gray-900 dark:text-white truncate pr-2" title="${label}">${label}</span>

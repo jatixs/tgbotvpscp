@@ -56,10 +56,10 @@
                             {{ web_stats_total }}: <span id="nodesTotal">0</span>
                         </span>
                         <span class="px-2 py-1 bg-green-100 dark:bg-green-900/30 rounded text-green-600 dark:text-green-400 font-bold">
-                            🟢 <span id="nodesOnline">0</span>
+                            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 inline-block text-green-500" fill="currentColor" viewBox="0 0 16 16"><circle cx="8" cy="8" r="8"/></svg> <span id="nodesOnline">0</span>
                         </span>
                         <span class="px-2 py-1 bg-red-100 dark:bg-red-900/30 rounded text-red-600 dark:text-red-400 font-bold">
-                            🔴 <span id="nodesOffline">0</span>
+                            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 inline-block text-red-500" fill="currentColor" viewBox="0 0 16 16"><circle cx="8" cy="8" r="8"/></svg> <span id="nodesOffline">0</span>
                         </span>
                     </div>
                     
@@ -100,8 +100,8 @@
                         </button>
                         <div class="absolute right-0 top-full pt-2 w-32 hidden group-hover:block z-50">
                             <div class="bg-white/90 dark:bg-gray-800 border border-gray-200 dark:border-white/10 rounded-xl shadow-xl backdrop-blur-sm overflow-hidden">
-                                <button onclick="setLanguage('ru')" class="w-full text-left px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-white/5 flex items-center gap-2 text-gray-800 dark:text-gray-200"><span>🇷🇺</span> Русский</button>
-                                <button onclick="setLanguage('en')" class="w-full text-left px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-white/5 flex items-center gap-2 text-gray-800 dark:text-gray-200"><span>🇬🇧</span> English</button>
+                                <button onclick="setLanguage('ru')" class="w-full text-left px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-white/5 flex items-center gap-2 text-gray-800 dark:text-gray-200"><span><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 9 6" class="w-5 h-4 inline-block shadow-sm"><rect fill="#fff" width="9" height="3"/><rect fill="#d52b1e" y="3" width="9" height="3"/><rect fill="#0039a6" y="2" width="9" height="2"/></svg></span> Русский</button>
+                                <button onclick="setLanguage('en')" class="w-full text-left px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-white/5 flex items-center gap-2 text-gray-800 dark:text-gray-200"><span><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 60 30" class="w-5 h-4 inline-block shadow-sm"><clipPath id="s"><path d="M0,0 v30 h60 v-30 z"/></clipPath><clipPath id="t"><path d="M30,15 h30 v15 z v-15 h-30 z h-30 v-15 z v15 h30 z"/></clipPath><g clip-path="url(#s)"><path d="M0,0 v30 h60 v-30 z" fill="#012169"/><path d="M0,0 L60,30 M60,0 L0,30" stroke="#fff" stroke-width="6"/><path d="M0,0 L60,30 M60,0 L0,30" clip-path="url(#t)" stroke="#C8102E" stroke-width="4"/><path d="M30,0 v30 M0,15 h60" stroke="#fff" stroke-width="10"/><path d="M30,0 v30 M0,15 h60" stroke="#C8102E" stroke-width="6"/></g></svg></span> English</button>
                             </div>
                         </div>
                     </div>
@@ -441,13 +441,13 @@
                                 {{ web_filter_all }}
                             </button>
                             <button onclick="setFilterStatus('online')" id="fStatusOnline" class="filter-status-btn px-2 sm:px-3 py-2 text-xs sm:text-sm font-medium rounded-lg transition focus:outline-none bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 border-2 border-transparent hover:border-green-500 whitespace-nowrap">
-                                🟢 {{ web_filter_online }}
+                                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 inline-block text-green-500" fill="currentColor" viewBox="0 0 16 16"><circle cx="8" cy="8" r="8"/></svg> {{ web_filter_online }}
                             </button>
                             <button onclick="setFilterStatus('offline')" id="fStatusOffline" class="filter-status-btn px-2 sm:px-3 py-2 text-xs sm:text-sm font-medium rounded-lg transition focus:outline-none bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 border-2 border-transparent hover:border-red-500 whitespace-nowrap">
-                                🔴 {{ web_filter_offline }}
+                                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 inline-block text-red-500" fill="currentColor" viewBox="0 0 16 16"><circle cx="8" cy="8" r="8"/></svg> {{ web_filter_offline }}
                             </button>
                             <button onclick="setFilterStatus('restarting')" id="fStatusRestarting" class="filter-status-btn px-2 sm:px-3 py-2 text-xs sm:text-sm font-medium rounded-lg transition focus:outline-none bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 border-2 border-transparent hover:border-blue-500 whitespace-nowrap">
-                                🔵 {{ web_filter_restarting }}
+                                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 inline-block text-blue-500" fill="currentColor" viewBox="0 0 16 16"><circle cx="8" cy="8" r="8"/></svg> {{ web_filter_restarting }}
                             </button>
                         </div>
                     </div>
@@ -460,13 +460,13 @@
                                 {{ web_filter_all }}
                             </button>
                             <button onclick="setFilterCpu('high')" id="fCpuHigh" class="filter-cpu-btn px-2 sm:px-3 py-2 text-xs sm:text-sm font-medium rounded-lg transition focus:outline-none bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 border-2 border-transparent hover:border-red-500 whitespace-nowrap">
-                                🔴 {{ web_filter_high }} (>80%)
+                                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 inline-block text-red-500" fill="currentColor" viewBox="0 0 16 16"><circle cx="8" cy="8" r="8"/></svg> {{ web_filter_high }} (>80%)
                             </button>
                             <button onclick="setFilterCpu('medium')" id="fCpuMedium" class="filter-cpu-btn px-2 sm:px-3 py-2 text-xs sm:text-sm font-medium rounded-lg transition focus:outline-none bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 border-2 border-transparent hover:border-yellow-500 whitespace-nowrap">
-                                🟡 {{ web_filter_medium }} (50-80%)
+                                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 inline-block text-yellow-500" fill="currentColor" viewBox="0 0 16 16"><circle cx="8" cy="8" r="8"/></svg> {{ web_filter_medium }} (50-80%)
                             </button>
                             <button onclick="setFilterCpu('low')" id="fCpuLow" class="filter-cpu-btn px-2 sm:px-3 py-2 text-xs sm:text-sm font-medium rounded-lg transition focus:outline-none bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 border-2 border-transparent hover:border-green-500 whitespace-nowrap">
-                                🟢 {{ web_filter_low }} (<50%)
+                                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 inline-block text-green-500" fill="currentColor" viewBox="0 0 16 16"><circle cx="8" cy="8" r="8"/></svg> {{ web_filter_low }} (<50%)
                             </button>
                         </div>
                     </div>
