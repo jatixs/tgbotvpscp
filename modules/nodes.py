@@ -908,7 +908,7 @@ async def nodes_monitor(bot: Bot):
                     await nodes_db.update_node_extra(
                         token, "is_offline_alert_sent", True
                     )
-                    # Рассылка клиентам
+                    # Broadcast to clients
                     asyncio.create_task(_broadcast_node_status_to_clients("down", token, name, now))
                 elif not is_dead and is_offline_alert_sent:
                     await send_alert(
@@ -920,7 +920,7 @@ async def nodes_monitor(bot: Bot):
                     await nodes_db.update_node_extra(
                         token, "is_offline_alert_sent", False
                     )
-                    # Рассылка клиентам
+                    # Broadcast to clients
                     asyncio.create_task(_broadcast_node_status_to_clients("up", token, name, now))
                 if not is_dead and is_restarting:
                     await nodes_db.update_node_extra(token, "is_restarting", False)

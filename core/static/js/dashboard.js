@@ -1,6 +1,6 @@
 /**
- * Логика главной страницы дашборда.
- * Обработка карточек нод, сортировки (Drag-and-Drop) и модальных окон детализации.
+ * Dashboard main page logic.
+ * Node card handling, drag-and-drop sorting, and detail modal windows.
  */
 /* /core/static/js/dashboard.js */
 
@@ -2400,7 +2400,7 @@ async function searchGlobalServices(query, managedMatchCount) {
         matches.forEach(item => {
             const isRunning = item.status === 'running' || item.status === 'active';
             const colorClass = isRunning ? 'green' : 'red';
-            const typeIcon = item.type === 'docker' ? '<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 inline-block text-blue-500 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" /></svg>' : '<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 inline-block text-gray-500 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>';
+            const typeIcon = item.type === 'docker' ? '<i class="icon icon-docker icon-sm text-blue-500 mr-1"></i>' : '<i class="icon icon-gear icon-sm text-gray-500 mr-1"></i>';
             const roleLevel = window.USER_ROLE_LEVEL || 0;
 
             // Card in same style as managed services but with Add button
@@ -2537,7 +2537,7 @@ function renderServiceInfo(info) {
             ? (I18N.web_services_status_stopped || 'Stopped')
             : (I18N.web_services_status_unknown || 'Unknown');
 
-    const typeIcon = info.type === 'docker' ? '<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 inline-block text-blue-500 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" /></svg>' : '<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 inline-block text-gray-500 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>';
+    const typeIcon = info.type === 'docker' ? '<i class="icon icon-docker icon-sm text-blue-500 mr-1"></i>' : '<i class="icon icon-gear icon-sm text-gray-500 mr-1"></i>';
     const typeLabel = info.type === 'docker' ? 'Docker' : 'Systemd';
     const description = info.description || (I18N.web_services_info_no_desc || 'No description');
 
@@ -2700,8 +2700,8 @@ function renderServicesEditList(services) {
 
     for (const s of services) {
         const isManaged = s.managed;
-        const statusIcon = s.status === 'running' ? '<span class="w-3 h-3 rounded-full bg-green-500 inline-block mr-1"></span>' : '<span class="w-3 h-3 rounded-full bg-red-500 inline-block mr-1"></span>';
-        const typeLabel = s.type === 'docker' ? '<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 inline-block text-blue-500 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" /></svg>' : '<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 inline-block text-gray-500 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>';
+        const statusIcon = s.status === 'running' ? '<i class="icon icon-dot icon-dot-green icon-xs mr-1"></i>' : '<i class="icon icon-dot icon-dot-red icon-xs mr-1"></i>';
+        const typeLabel = s.type === 'docker' ? '<i class="icon icon-docker icon-sm text-blue-500 mr-1"></i>' : '<i class="icon icon-gear icon-sm text-gray-500 mr-1"></i>';
         const safeId = s.name.replace(/[^a-zA-Z0-9]/g, '_');
 
         const buttonClasses = isManaged

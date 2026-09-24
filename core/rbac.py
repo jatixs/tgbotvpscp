@@ -25,7 +25,7 @@ ROLE_ADMIN: str = "admins"
 # ---------------------------------------------------------------------------
 
 def is_admin(user: dict[str, Any]) -> bool:
-    """Root и Admin → True; User → False."""
+    """Root and Admin → True; User → False."""
     return bool(
         user.get("role") == ROLE_ADMIN
         or int(user.get("id", 0)) == ADMIN_USER_ID
@@ -33,7 +33,7 @@ def is_admin(user: dict[str, Any]) -> bool:
 
 
 def is_root(user: dict[str, Any]) -> bool:
-    """True только для главного администратора (Owner/Root)."""
+    """True only for the main administrator (Owner/Root)."""
     return int(user.get("id", 0)) == ADMIN_USER_ID
 
 
@@ -62,7 +62,7 @@ def get_role_level(user_id: int) -> int:
 # ---------------------------------------------------------------------------
 
 def build_user_role_js(role: str, user_id: int) -> str:
-    """Генерирует инлайн-JS со строками USER_ROLE, IS_MAIN_ADMIN, WEB_KEY."""
+    """Generates inline JS with USER_ROLE, IS_MAIN_ADMIN, WEB_KEY strings."""
     is_main = str(user_id == ADMIN_USER_ID).lower()
     return (
         f"const USER_ROLE = '{role}'; "

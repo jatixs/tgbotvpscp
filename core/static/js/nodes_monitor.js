@@ -361,15 +361,15 @@ function createNodeCard(node) {
     let statusClass, statusIcon, statusText;
     if (isRestarting) {
         statusClass = 'bg-blue-100 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400';
-        statusIcon = '<span class="w-3 h-3 rounded-full bg-blue-500 inline-block mr-1"></span>';
+        statusIcon = '<i class="icon icon-dot icon-dot-blue icon-xs mr-1"></i>';
         statusText = I18N?.web_node_status_restarting || 'Restarting';
     } else if (isOnline) {
         statusClass = 'bg-green-100 dark:bg-green-500/20 text-green-600 dark:text-green-400';
-        statusIcon = '<span class="w-3 h-3 rounded-full bg-green-500 inline-block mr-1"></span>';
+        statusIcon = '<i class="icon icon-dot icon-dot-green icon-xs mr-1"></i>';
         statusText = I18N?.web_node_status_online || 'Online';
     } else {
         statusClass = 'bg-red-100 dark:bg-red-500/20 text-red-600 dark:text-red-400';
-        statusIcon = '<span class="w-3 h-3 rounded-full bg-red-500 inline-block mr-1"></span>';
+        statusIcon = '<i class="icon icon-dot icon-dot-red icon-xs mr-1"></i>';
         statusText = I18N?.web_node_status_offline || 'Offline';
     }
     

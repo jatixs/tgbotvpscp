@@ -99,7 +99,7 @@ def _category_has_visible_buttons(category_key: str, user_id: int) -> bool:
             continue
         if btn_key in ROOT_ONLY_BTNS and not (is_root_mode and is_admin):
             continue
-        # btn_client_alerts показывается только если ALERT_BOT_TOKEN задан в окружении
+        # btn_client_alerts is only shown if ALERT_BOT_TOKEN is set in the environment
         if btn_key == "btn_client_alerts" and not os.getenv("ALERT_BOT_TOKEN"):
             continue
         return True
@@ -145,7 +145,7 @@ def get_subcategory_keyboard(category_key: str, user_id: int) -> ReplyKeyboardMa
             continue
         if btn_key in ROOT_ONLY_BTNS and (not (is_root_mode and is_admin)):
             continue
-        # btn_client_alerts показывается только если ALERT_BOT_TOKEN задан в окружении
+        # btn_client_alerts is only shown if ALERT_BOT_TOKEN is set in the environment
         if btn_key == "btn_client_alerts" and not os.getenv("ALERT_BOT_TOKEN"):
             continue
         current_row.append(KeyboardButton(text=_(btn_key, lang)))
