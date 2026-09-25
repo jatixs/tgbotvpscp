@@ -27,6 +27,7 @@
         {{ web_key_js | safe }}
         </script>
         <link rel="stylesheet" href="/static/css/style.css?v={{ web_version }}">
+    <link rel="stylesheet" href="/static/css/icons.css?v={{ web_version }}">
         <link rel="stylesheet" href="/static/css/login.css?v={{ web_version }}">
         <script src="/static/vendor/telegram-web-app.js"></script>
         <script src="/static/vendor/dompurify.min.js"></script>
@@ -343,7 +344,7 @@
             <div class="bg-white dark:bg-gray-900 border border-white/20 dark:border-white/10 rounded-2xl shadow-2xl w-full max-w-sm relative flex flex-col backdrop-blur-xl p-6">
                 <div class="flex justify-between items-center mb-6">
                     <h3 class="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
-                        <span class="text-red-500">❤️</span> <span data-i18n="login_support_title">Support</span>
+                        <span class="text-red-500"><i class="icon icon-heart icon-sm text-red-500"></i></span> <span data-i18n="login_support_title">Support</span>
                     </h3>
                     <button onclick="closeSupportModal()"
                             class="text-gray-400 hover:text-gray-600 dark:hover:text-white transition p-1">

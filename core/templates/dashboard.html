@@ -39,6 +39,7 @@
     <script src="/static/vendor/chartjs-plugin-zoom.min.js"></script>
     <script src="/static/vendor/sortable.min.js"></script>
     <link rel="stylesheet" href="/static/css/style.css?v={{ web_version }}">
+    <link rel="stylesheet" href="/static/css/icons.css?v={{ web_version }}">
     <script src="/static/vendor/dompurify.min.js"></script>
 </head>
 
@@ -130,11 +131,11 @@
                             class="bg-white/90 dark:bg-gray-800 border border-gray-200 dark:border-white/10 rounded-xl shadow-xl backdrop-blur-sm overflow-hidden">
                             <button onclick="setLanguage('ru')"
                                 class="w-full text-left px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-white/5 flex items-center gap-2 text-gray-800 dark:text-gray-200">
-                                <span>🇷🇺</span> Русский
+                                <span><i class="icon icon-flag-ru icon-md" style="width:1.25rem;height:1rem"></i></span> Русский
                             </button>
                             <button onclick="setLanguage('en')"
                                 class="w-full text-left px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-white/5 flex items-center gap-2 text-gray-800 dark:text-gray-200">
-                                <span>🇬🇧</span> English
+                                <span><i class="icon icon-flag-gb icon-md" style="width:1.25rem;height:1rem"></i></span> English
                             </button>
                         </div>
                     </div>
