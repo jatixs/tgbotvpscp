@@ -32,6 +32,7 @@
         </script>
         <script src="/static/vendor/twemoji.min.js" crossorigin="anonymous"></script>
         <link rel="stylesheet" href="/static/css/style.css?v={{ web_version }}">
+    <link rel="stylesheet" href="/static/css/icons.css?v={{ web_version }}">
         <script src="/static/vendor/dompurify.min.js"></script>
     </head>
     <body class="bg-gray-100 text-gray-900 dark:bg-gray-900 dark:text-gray-100 font-sans selection:bg-blue-500/30 pb-10 overflow-x-hidden">
@@ -102,11 +103,11 @@
                             <div class="bg-white/90 dark:bg-gray-800 border border-gray-200 dark:border-white/10 rounded-xl shadow-xl backdrop-blur-sm overflow-hidden">
                                 <button onclick="setLanguage('ru')"
                                         class="w-full text-left px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-white/5 flex items-center gap-2 text-gray-800 dark:text-gray-200">
-                                    <span>🇷🇺</span> Русский
+                                    <span><i class="icon icon-flag-ru icon-md" style="width:1.25rem;height:1rem"></i></span> Русский
                                 </button>
                                 <button onclick="setLanguage('en')"
                                         class="w-full text-left px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-white/5 flex items-center gap-2 text-gray-800 dark:text-gray-200">
-                                    <span>🇬🇧</span> English
+                                    <span><i class="icon icon-flag-gb icon-md" style="width:1.25rem;height:1rem"></i></span> English
                                 </button>
                             </div>
                         </div>
@@ -620,12 +621,12 @@
                         <div id="notifViewMenu" class="animate-fade-in-up flex flex-col flex-1">
                             <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                 <button onclick="switchNotifView('global')" class="flex flex-col items-center justify-center bg-gray-50 dark:bg-black/20 p-6 rounded-xl hover:bg-gray-100 dark:hover:bg-black/30 transition border border-gray-200 dark:border-white/5 cursor-pointer group">
-                                    <span class="text-4xl mb-3 group-hover:scale-110 transition-transform">🌐</span>
+                                    <span class="text-4xl mb-3 group-hover:scale-110 transition-transform"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 inline-block" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" /></svg></span>
                                     <span class="text-sm font-bold text-gray-900 dark:text-white">{{ web_notif_btn_global }}</span>
                                     <span class="text-[10px] text-gray-500 mt-1.5 text-center uppercase tracking-wider font-bold" data-i18n="web_notif_btn_global_subtitle">{{ web_notif_btn_global_subtitle }}</span>
                                 </button>
                                 <button onclick="switchNotifView('nodes')" class="flex flex-col items-center justify-center bg-gray-50 dark:bg-black/20 p-6 rounded-xl hover:bg-gray-100 dark:hover:bg-black/30 transition border border-gray-200 dark:border-white/5 cursor-pointer group">
-                                    <span class="text-4xl mb-3 group-hover:scale-110 transition-transform">🖥</span>
+                                    <span class="text-4xl mb-3 group-hover:scale-110 transition-transform"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 inline-block" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg></span>
                                     <span class="text-sm font-bold text-gray-900 dark:text-white">{{ web_notif_btn_nodes }}</span>
                                     <span class="text-[10px] text-gray-500 mt-1.5 text-center uppercase tracking-wider font-bold" data-i18n="web_notif_btn_nodes_subtitle">{{ web_notif_btn_nodes_subtitle }}</span>
                                 </button>
@@ -713,7 +714,7 @@
                         <div id="notifViewNodeDetail" class="hidden animate-fade-in-up">
                             <div class="flex items-center justify-between mb-4 min-h-[32px]">
                                 <span class="inline-flex items-center gap-2 text-sm font-bold bg-purple-100 text-purple-700 dark:bg-purple-500/20 dark:text-purple-200 px-3 py-1.5 rounded-xl truncate max-w-[180px] sm:max-w-none" id="notifDetailNodeName">
-                                    <span class="text-base">🖥</span>
+                                    <span class="text-base"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 inline-block" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg></span>
                                     <span class="truncate">{{ web_notif_node_label }}</span>
                                 </span>
                                 <div id="notifStatusNodeDetail" class="flex items-center justify-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider opacity-0 transition-opacity duration-300 pointer-events-none"></div>

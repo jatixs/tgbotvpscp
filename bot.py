@@ -343,16 +343,39 @@ async def unrecognized_message_handler(message: types.Message):
                     if fact and lang != "en":
                         # Translate the fact if the user's language is not English
                         try:
+                            import json as _json
                             translate_url = f"https://translate.googleapis.com/translate_a/single?client=gtx&sl=en&tl={lang}&dt=t&q={urllib.parse.quote(fact)}"
-                            async with session.get(translate_url) as tr_resp:
+                            headers = {"User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"}
+                            
+                            translated_text = ""
+                            # 1. Try Google Translate
+                            async with session.get(translate_url, headers=headers) as tr_resp:
+                                raw_body = await tr_resp.text()
                                 if tr_resp.status == 200:
-                                    tr_data = await tr_resp.json()
-                                    if tr_data and isinstance(tr_data, list) and len(tr_data) > 0:
-                                        translated_text = "".join([part[0] for part in tr_data[0] if part[0]])
-                                        if translated_text:
-                                            fact = translated_text
+                                    try:
+                                        tr_data = _json.loads(raw_body)
+                                        if tr_data and isinstance(tr_data, list) and len(tr_data) > 0:
+                                            translated_text = "".join([part[0] for part in tr_data[0] if part and part[0]])
+                                    except _json.JSONDecodeError:
+                                        logging.warning(log_text("translate_google_error", status=tr_resp.status))
+                                else:
+                                    logging.warning(log_text("translate_google_error", status=tr_resp.status))
+                                    
+                            # 2. Fallback to MyMemory if Google fails (e.g., 429 Too Many Requests)
+                            if not translated_text:
+                                mymemory_url = f"https://api.mymemory.translated.net/get?q={urllib.parse.quote(fact)}&langpair=en|{lang}"
+                                async with session.get(mymemory_url, headers=headers) as mm_resp:
+                                    if mm_resp.status == 200:
+                                        mm_data = await mm_resp.json()
+                                        if mm_data and mm_data.get("responseData"):
+                                            translated_text = mm_data["responseData"].get("translatedText", "")
+                                    else:
+                                        logging.warning(log_text("translate_mymemory_error", status=mm_resp.status))
+                                            
+                            if translated_text:
+                                fact = translated_text
                         except Exception as tr_e:
-                            logging.error(f"Translation API error: {tr_e}")
+                            logging.error(log_text("translate_error", error=str(tr_e)))
 
                     if fact:
                         import html
