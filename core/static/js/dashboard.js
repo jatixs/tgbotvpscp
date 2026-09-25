@@ -1,6 +1,6 @@
 /**
- * Логика главной страницы дашборда.
- * Обработка карточек нод, сортировки (Drag-and-Drop) и модальных окон детализации.
+ * Dashboard main page logic.
+ * Node card handling, drag-and-drop sorting, and detail modal windows.
  */
 /* /core/static/js/dashboard.js */
 
@@ -1624,7 +1624,7 @@ function updateNodeDetailsUI(data) {
     }
 
     if (stats.net_rx !== undefined) {
-        document.getElementById('modalNodeTraffic').innerText = `⬇${formatBytes(stats.net_rx)} ⬆${formatBytes(stats.net_tx)}`;
+        document.getElementById('modalNodeTraffic').innerText = `${formatBytes(stats.net_rx)} ${formatBytes(stats.net_tx)}`;
     } else {
         document.getElementById('modalNodeTraffic').innerText = "-";
     }
@@ -1929,6 +1929,16 @@ function renderCharts(history) {
                     ticks: {
                         ...commonOptions.scales.y.ticks,
                         callback: (v) => formatSpeed(v)
+                    }
+                }
+            },
+            plugins: {
+                ...commonOptions.plugins,
+                tooltip: {
+                    mode: 'index',
+                    intersect: false,
+                    callbacks: {
+                        label: (c) => c.dataset.label + ': ' + formatSpeed(c.raw)
                     }
                 }
             }
@@ -2390,7 +2400,7 @@ async function searchGlobalServices(query, managedMatchCount) {
         matches.forEach(item => {
             const isRunning = item.status === 'running' || item.status === 'active';
             const colorClass = isRunning ? 'green' : 'red';
-            const typeIcon = item.type === 'docker' ? '🐳' : '⚙️';
+            const typeIcon = item.type === 'docker' ? '<i class="icon icon-docker icon-sm text-blue-500 mr-1"></i>' : '<i class="icon icon-gear icon-sm text-gray-500 mr-1"></i>';
             const roleLevel = window.USER_ROLE_LEVEL || 0;
 
             // Card in same style as managed services but with Add button
@@ -2527,7 +2537,7 @@ function renderServiceInfo(info) {
             ? (I18N.web_services_status_stopped || 'Stopped')
             : (I18N.web_services_status_unknown || 'Unknown');
 
-    const typeIcon = info.type === 'docker' ? '🐳' : '⚙️';
+    const typeIcon = info.type === 'docker' ? '<i class="icon icon-docker icon-sm text-blue-500 mr-1"></i>' : '<i class="icon icon-gear icon-sm text-gray-500 mr-1"></i>';
     const typeLabel = info.type === 'docker' ? 'Docker' : 'Systemd';
     const description = info.description || (I18N.web_services_info_no_desc || 'No description');
 
@@ -2690,8 +2700,8 @@ function renderServicesEditList(services) {
 
     for (const s of services) {
         const isManaged = s.managed;
-        const statusIcon = s.status === 'running' ? '🟢' : '🔴';
-        const typeLabel = s.type === 'docker' ? '🐳' : '⚙️';
+        const statusIcon = s.status === 'running' ? '<i class="icon icon-dot icon-dot-green icon-xs mr-1"></i>' : '<i class="icon icon-dot icon-dot-red icon-xs mr-1"></i>';
+        const typeLabel = s.type === 'docker' ? '<i class="icon icon-docker icon-sm text-blue-500 mr-1"></i>' : '<i class="icon icon-gear icon-sm text-gray-500 mr-1"></i>';
         const safeId = s.name.replace(/[^a-zA-Z0-9]/g, '_');
 
         const buttonClasses = isManaged

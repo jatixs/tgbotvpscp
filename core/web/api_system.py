@@ -40,7 +40,10 @@ routes = web.RouteTableDef()
 
 def _read_log_tail_sync(log_path: str, limit: int = 300) -> list[str]:
     with open(log_path, "r", encoding="utf-8", errors="ignore") as file_obj:
-        return list(deque(file_obj, limit))
+        lines = list(deque(file_obj, limit))
+    import re
+    emoji_pattern = re.compile(r'[\u2600-\u27bf\u2b50\u2b55\u23e9-\u23f3\u23f8-\u23fa\u25b6\u25c0\u2328\U00010000-\U0010ffff]')
+    return [emoji_pattern.sub('', line).replace('\ufe0f', '') for line in lines]
 
 
 def _clear_logs_sync(target: str) -> None:

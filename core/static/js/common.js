@@ -1,6 +1,6 @@
 /**
- * Общие JavaScript утилиты и компоненты веб-панели.
- * Включает логику уведомлений (тостов), базовые анимации, сайдбар и перехват сетевых ошибок.
+ * Common JavaScript utilities and components for the web panel.
+ * Includes notification (toast) logic, basic animations, sidebar and network error interception.
  */
 /* /core/static/js/common.js */
 
@@ -935,11 +935,12 @@ function launchBrandEasterEgg(originEl) {
 function showNextRouteEasterEgg(isRu) {
     if (typeof window.showModal !== 'function') return;
 
-    const title = isRu ? '📡 Найден секретный маршрут' : '📡 Secret route found';
+    const radarSvg = '<i class="icon icon-radar icon-md text-blue-500 mr-1"></i>';
+    const title = isRu ? `${radarSvg} Найден секретный маршрут` : `${radarSvg} Secret route found`;
     const content = isRu
         ? `
             <div class="flex flex-col items-center text-center gap-3">
-                <div class="text-4xl">🛰️</div>
+                <div class="text-4xl flex justify-center"><i class="icon icon-satellite icon-xl text-blue-500"></i></div>
                 <p class="leading-relaxed">
                     Похоже, вы обожаете кликать. А наш друг-тестировщик обожает искать баги —
                     и построил для этого свой сетевой проект:
@@ -952,7 +953,7 @@ function showNextRouteEasterEgg(isRu) {
         `
         : `
             <div class="flex flex-col items-center text-center gap-3">
-                <div class="text-4xl">🛰️</div>
+                <div class="text-4xl flex justify-center"><i class="icon icon-satellite icon-xl text-blue-500"></i></div>
                 <p class="leading-relaxed">
                     You clearly love clicking. Our tester friend loves hunting bugs even more —
                     so he built his own networking project:

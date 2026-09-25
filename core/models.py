@@ -6,7 +6,7 @@ import time
 
 
 class EncryptionOperationError(ValueError):
-    """Ошибки, возникающие при шифровании/дешифровании данных в БД."""
+    """Errors that occur during encryption/decryption of database data."""
     pass
 
 class EncryptedTextField(fields.TextField):

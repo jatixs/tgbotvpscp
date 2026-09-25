@@ -215,7 +215,7 @@ def get_all_available_services():
     return result
 
 def add_managed_service(name, sType):
-    """Add only реально существующую service/container в MANAGED_SERVICES."""
+    """Add only actually existing service/container to MANAGED_SERVICES."""
     try:
         name = _validate_name(name)
     except ValueError:

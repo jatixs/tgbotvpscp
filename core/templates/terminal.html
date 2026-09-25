@@ -10,6 +10,7 @@
     <link rel="icon" type="image/x-icon" href="/static/favicons/favicon.ico">
     
     <link rel="stylesheet" href="/static/css/main.css?v={{ web_version }}">
+    <link rel="stylesheet" href="/static/css/icons.css?v={{ web_version }}">
     <script src="/static/vendor/crypto-js.min.js"></script>
     <script src="/static/js/theme_init.js?v={{ web_version }}"></script>
     <script src="/static/vendor/twemoji.min.js" crossorigin="anonymous"></script>
@@ -103,17 +104,17 @@
 
     <!-- Mobile Termius Keyboard -->
     <div id="mobileKeyboard" class="flex bg-gray-800 border-t border-gray-700 w-full overflow-x-auto custom-scrollbar items-center shrink-0 z-20" style="height: 44px; min-height: 44px;">
-        <button onmousedown="event.preventDefault(); term.focus();" class="px-4 h-full text-sm font-bold text-gray-400 hover:bg-gray-700 border-r border-gray-700 shrink-0">⌨️</button>
+        <button onmousedown="event.preventDefault(); term.focus();" class="px-4 h-full text-sm font-bold text-gray-400 hover:bg-gray-700 border-r border-gray-700 shrink-0"><i class="icon icon-terminal icon-md"></i></button>
         <button onmousedown="event.preventDefault(); ws&&ws.send('\x1b');" class="px-5 h-full text-[13px] font-bold text-gray-300 hover:text-white hover:bg-gray-700 border-r border-gray-700 shrink-0">ESC</button>
         <button id="btnCtrl" onmousedown="event.preventDefault(); toggleCtrlMode();" class="px-5 h-full text-[13px] font-bold text-gray-300 hover:text-white hover:bg-gray-700 border-r border-gray-700 shrink-0">CTRL</button>
         <button onmousedown="event.preventDefault(); ws&&ws.send('\x09');" class="px-5 h-full text-[13px] font-bold text-gray-300 hover:text-white hover:bg-gray-700 border-r border-gray-700 shrink-0">TAB</button>
         <button onmousedown="event.preventDefault(); ws&&ws.send('-');" class="px-5 h-full text-base font-bold text-gray-300 hover:text-white hover:bg-gray-700 border-r border-gray-700 shrink-0">-</button>
         <button onmousedown="event.preventDefault(); ws&&ws.send('/');" class="px-5 h-full text-base font-bold text-gray-300 hover:text-white hover:bg-gray-700 border-r border-gray-700 shrink-0">/</button>
         <button onmousedown="event.preventDefault(); ws&&ws.send('|');" class="px-5 h-full text-base font-bold text-gray-300 hover:text-white hover:bg-gray-700 border-r border-gray-700 shrink-0">|</button>
-        <button onmousedown="event.preventDefault(); ws&&ws.send('\x1b[A');" class="px-5 h-full text-base font-bold text-gray-300 hover:text-white hover:bg-gray-700 border-r border-gray-700 shrink-0">↑</button>
-        <button onmousedown="event.preventDefault(); ws&&ws.send('\x1b[B');" class="px-5 h-full text-base font-bold text-gray-300 hover:text-white hover:bg-gray-700 border-r border-gray-700 shrink-0">↓</button>
-        <button onmousedown="event.preventDefault(); ws&&ws.send('\x1b[D');" class="px-5 h-full text-base font-bold text-gray-300 hover:text-white hover:bg-gray-700 border-r border-gray-700 shrink-0">←</button>
-        <button onmousedown="event.preventDefault(); ws&&ws.send('\x1b[C');" class="px-5 h-full text-base font-bold text-gray-300 hover:text-white hover:bg-gray-700 shrink-0">→</button>
+        <button onmousedown="event.preventDefault(); ws&&ws.send('\x1b[A');" class="px-5 h-full text-base font-bold text-gray-300 hover:text-white hover:bg-gray-700 border-r border-gray-700 shrink-0"><i class="icon icon-arrow-up icon-sm"></i></button>
+        <button onmousedown="event.preventDefault(); ws&&ws.send('\x1b[B');" class="px-5 h-full text-base font-bold text-gray-300 hover:text-white hover:bg-gray-700 border-r border-gray-700 shrink-0"><i class="icon icon-arrow-down icon-sm"></i></button>
+        <button onmousedown="event.preventDefault(); ws&&ws.send('\x1b[D');" class="px-5 h-full text-base font-bold text-gray-300 hover:text-white hover:bg-gray-700 border-r border-gray-700 shrink-0"><i class="icon icon-arrow-left icon-sm"></i></button>
+        <button onmousedown="event.preventDefault(); ws&&ws.send('\x1b[C');" class="px-5 h-full text-base font-bold text-gray-300 hover:text-white hover:bg-gray-700 shrink-0"><i class="icon icon-arrow-right icon-sm"></i></button>
     </div>
     
     <div id="connectModal" class="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-2 sm:p-4">
@@ -166,7 +167,7 @@
                         <div id="fieldKey" class="hidden">
                             <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-wide mb-1 flex justify-between">
                                 <span>{{ web_terminal_key }}</span>
-                                <label for="inpKeyFile" class="text-blue-400 hover:text-blue-300 cursor-pointer text-[10px]">📁 {{ web_terminal_key_select }}</label>
+                                <label for="inpKeyFile" class="text-blue-400 hover:text-blue-300 cursor-pointer text-[10px]"><i class="icon icon-folder icon-md text-gray-400"></i> {{ web_terminal_key_select }}</label>
                                 <input type="file" id="inpKeyFile" class="hidden" accept=".pem,.key,.*" onchange="loadKeyFile(event)">
                             </label>
                             <textarea id="inpKey" rows="3" placeholder="-----BEGIN OPENSSH PRIVATE KEY-----" class="w-full bg-gray-900 rounded-lg px-3 py-2 text-white outline-none focus:ring-2 focus:ring-blue-500/50 focus:bg-gray-800 font-mono text-[10px] leading-tight resize-none transition custom-scrollbar"></textarea>

@@ -127,30 +127,55 @@ def _extract_message_payload(message: types.Message) -> dict:
     """
     Извлекает из сообщения сериализуемый payload для хранения в FSM state.
     Использует file_id — они глобальны в Telegram и работают между ботами.
+    Сохраняет raw entities для поддержки расширенного форматирования.
     """
-    caption = message.html_text if message.caption else ""
-    text = message.html_text if message.text else ""
+    def dump_entity(e):
+        return e.model_dump(exclude_none=True) if hasattr(e, "model_dump") else e.dict(exclude_none=True)
+
+    payload = {}
     
     if message.text:
-        return {"type": "text", "text": text}
-    elif message.photo:
-        return {"type": "photo", "file_id": message.photo[-1].file_id, "caption": caption}
-    elif message.video:
-        return {"type": "video", "file_id": message.video.file_id, "caption": caption}
-    elif message.audio:
-        return {"type": "audio", "file_id": message.audio.file_id, "caption": caption}
-    elif message.document:
-        return {"type": "document", "file_id": message.document.file_id, "caption": caption}
-    elif message.voice:
-        return {"type": "voice", "file_id": message.voice.file_id, "caption": caption}
-    elif message.video_note:
-        return {"type": "video_note", "file_id": message.video_note.file_id}
-    elif message.sticker:
-        return {"type": "sticker", "file_id": message.sticker.file_id}
-    elif message.animation:
-        return {"type": "animation", "file_id": message.animation.file_id, "caption": caption}
+        payload["type"] = "text"
+        payload["text"] = message.text
+        if message.entities:
+            payload["entities"] = [dump_entity(e) for e in message.entities]
     else:
-        return {"type": "unsupported"}
+        payload["caption"] = message.caption or ""
+        if message.caption_entities:
+            payload["entities"] = [dump_entity(e) for e in message.caption_entities]
+            
+        if message.photo:
+            payload["type"] = "photo"
+            payload["file_id"] = message.photo[-1].file_id
+        elif message.video:
+            payload["type"] = "video"
+            payload["file_id"] = message.video.file_id
+        elif message.audio:
+            payload["type"] = "audio"
+            payload["file_id"] = message.audio.file_id
+        elif message.document:
+            payload["type"] = "document"
+            payload["file_id"] = message.document.file_id
+        elif message.voice:
+            payload["type"] = "voice"
+            payload["file_id"] = message.voice.file_id
+        elif message.video_note:
+            payload["type"] = "video_note"
+            payload["file_id"] = message.video_note.file_id
+        elif message.sticker:
+            payload["type"] = "sticker"
+            payload["file_id"] = message.sticker.file_id
+        elif message.animation:
+            payload["type"] = "animation"
+            payload["file_id"] = message.animation.file_id
+        else:
+            payload["type"] = "unsupported"
+            try:
+                payload["debug"] = str(message.model_dump(exclude_none=True))
+            except:
+                payload["debug"] = str(message)
+            
+    return payload
 
 
 async def _send_payload_via_alert_bot(chat_id: int, payload: dict, reply_to_message_id: int = None) -> None:
@@ -165,19 +190,27 @@ async def _send_payload_via_alert_bot(chat_id: int, payload: dict, reply_to_mess
     file_id = payload.get("file_id", "")
     text = payload.get("text", "")
     caption = payload.get("caption") or None
+    
+    raw_entities = payload.get("entities")
+    entities = None
+    if raw_entities:
+        from aiogram.types import MessageEntity
+        entities = [MessageEntity(**e) for e in raw_entities]
+
+    kwargs = {"reply_to_message_id": reply_to_message_id}
 
     if msg_type == "text":
-        await alert_bot.send_message(chat_id, text, parse_mode="HTML", reply_to_message_id=reply_to_message_id)
+        await alert_bot.send_message(chat_id, text, entities=entities, **kwargs)
     elif msg_type == "photo":
-        await alert_bot.send_photo(chat_id, file_id, caption=caption, parse_mode="HTML", reply_to_message_id=reply_to_message_id)
+        await alert_bot.send_photo(chat_id, file_id, caption=caption, caption_entities=entities, **kwargs)
     elif msg_type == "video":
-        await alert_bot.send_video(chat_id, file_id, caption=caption, parse_mode="HTML", reply_to_message_id=reply_to_message_id)
+        await alert_bot.send_video(chat_id, file_id, caption=caption, caption_entities=entities, **kwargs)
     elif msg_type == "audio":
-        await alert_bot.send_audio(chat_id, file_id, caption=caption, parse_mode="HTML", reply_to_message_id=reply_to_message_id)
+        await alert_bot.send_audio(chat_id, file_id, caption=caption, caption_entities=entities, **kwargs)
     elif msg_type == "document":
-        await alert_bot.send_document(chat_id, file_id, caption=caption, parse_mode="HTML", reply_to_message_id=reply_to_message_id)
+        await alert_bot.send_document(chat_id, file_id, caption=caption, caption_entities=entities, **kwargs)
     elif msg_type == "voice":
-        await alert_bot.send_voice(chat_id, file_id, caption=caption, parse_mode="HTML", reply_to_message_id=reply_to_message_id)
+        await alert_bot.send_voice(chat_id, file_id, caption=caption, caption_entities=entities, **kwargs)
     elif msg_type == "video_note":
         await alert_bot.send_video_note(chat_id, file_id, reply_to_message_id=reply_to_message_id)
     elif msg_type == "sticker":
@@ -185,8 +218,7 @@ async def _send_payload_via_alert_bot(chat_id: int, payload: dict, reply_to_mess
     elif msg_type == "animation":
         await alert_bot.send_animation(chat_id, file_id, caption=caption, parse_mode="HTML", reply_to_message_id=reply_to_message_id)
     else:
-        await alert_bot.send_message(chat_id, "⚠️ Неподдерживаемый тип сообщения.", reply_to_message_id=reply_to_message_id)
-
+        raise ValueError("Данный тип сообщения (например, таблицы или спецформатирование) не поддерживается для пересылки между ботами. Пожалуйста, используйте обычный текст или медиа.")
 
 async def broadcast_system_alert(text: str) -> None:
     """

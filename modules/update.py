@@ -29,7 +29,8 @@ def get_button() -> KeyboardButton:
 
 def register_handlers(dp: Dispatcher):
     dp.message(I18nFilter(BUTTON_KEY))(update_menu_handler)
-    dp.callback_query(F.data == "update_system_apt")(run_system_update)
+    dp.callback_query(F.data == "update_system_apt")(confirm_system_update)
+    dp.callback_query(F.data == "confirm_system_update")(run_system_update)
     dp.callback_query(F.data == "check_bot_update")(check_bot_update)
     dp.callback_query(F.data.startswith("do_bot_update"))(run_bot_update)
 
@@ -261,6 +262,30 @@ async def update_menu_handler(message: types.Message):
     LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = sent_message.message_id
 
 
+async def confirm_system_update(callback: types.CallbackQuery):
+    user_id = callback.from_user.id
+    lang = get_user_lang(user_id)
+    keyboard = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text=_("btn_confirm_update", lang),
+                    callback_data="confirm_system_update",
+                    style="success"
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text=_("btn_cancel", lang), callback_data="back_to_menu", style="danger"
+                )
+            ],
+        ]
+    )
+    await callback.message.edit_text(
+        _("update_confirm", lang), reply_markup=keyboard, parse_mode="HTML"
+    )
+
+
 async def run_system_update(callback: types.CallbackQuery):
     user_id = callback.from_user.id
     lang = get_user_lang(user_id)
@@ -270,8 +295,13 @@ async def run_system_update(callback: types.CallbackQuery):
         base_cmd = "DEBIAN_FRONTEND=noninteractive apt update && DEBIAN_FRONTEND=noninteractive apt upgrade -y && apt autoremove -y"
         cmd_args = ["nsenter", "-t", "1", "-m", "-u", "-i", "-n", "-p", "--", "bash", "-c", base_cmd]
     else:
-        base_cmd = "sudo /opt/tg-bot/scripts/update_os.sh"
-        cmd_args = ["bash", "-c", base_cmd]
+        script_path = "/opt/tg-bot/scripts/update_os.sh"
+        if os.path.isfile(script_path):
+            base_cmd = f"sudo {script_path}"
+            cmd_args = ["bash", "-c", base_cmd]
+        else:
+            base_cmd = "sudo DEBIAN_FRONTEND=noninteractive apt update && sudo DEBIAN_FRONTEND=noninteractive apt upgrade -y && sudo apt autoremove -y && sudo apt clean"
+            cmd_args = ["bash", "-c", base_cmd]
 
     code, out, err = await run_command(*cmd_args)
     if code == 0:
@@ -301,13 +331,12 @@ async def check_bot_update(callback: types.CallbackQuery):
                     [
                         InlineKeyboardButton(
                             text=_("btn_update_bot_now", lang),
-                            callback_data=f"do_bot_update:{branch}",
-                            style="success"
+                            callback_data=f"do_bot_update:{branch}"
                         )
                     ],
                     [
                         InlineKeyboardButton(
-                            text=_("btn_cancel", lang), callback_data="back_to_menu", style="danger"
+                            text=_("btn_cancel", lang), callback_data="back_to_menu"
                         )
                     ],
                 ]
