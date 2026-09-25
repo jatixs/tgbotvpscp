@@ -236,7 +236,7 @@ def is_ip_address(host: str) -> bool:
         return False
 
 def _write_cache_file(path: str, content: str):
-    """Синхронная запись файла для запуска через to_thread"""
+    """Synchronous file write for execution via to_thread"""
     with open(path, "w", encoding="utf-8") as f:
         f.write(content)
 
