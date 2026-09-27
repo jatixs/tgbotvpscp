@@ -13,18 +13,10 @@ import re
 import time
 from typing import Any, Final
 
-from aiohttp import web
-from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from aiogram.exceptions import TelegramRetryAfter
+from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+from aiohttp import web
 
-from .. import config as current_config
-from .. import nodes_db, shared_state
-from ..config import ADMIN_USER_ID, NODE_OFFLINE_TIMEOUT, WEB_SERVER_HOST, WEB_SERVER_PORT, DEFAULT_LANGUAGE
-from ..i18n import STRINGS, get_text as _, get_user_lang
-from ..messaging import send_alert
-from ..utils import decrypt_for_web, encrypt_for_web, format_traffic, format_uptime, get_country_flag, get_node_uptime_snapshot, get_server_timezone_label, get_web_key, decrypt_request_payload, encrypted_json_response
-from .auth import COOKIE_NAME, SERVER_SESSIONS, get_current_user
-from ..rbac import get_role_level as get_user_role_level, is_admin as _is_admin
 from modules.services import (
     add_managed_service,
     get_all_available_services,
@@ -33,6 +25,33 @@ from modules.services import (
     perform_service_action,
     remove_managed_service,
 )
+
+from .. import config as current_config
+from .. import nodes_db, shared_state
+from ..config import (
+    ADMIN_USER_ID,
+    DEFAULT_LANGUAGE,
+    NODE_OFFLINE_TIMEOUT,
+    WEB_SERVER_HOST,
+    WEB_SERVER_PORT,
+)
+from ..i18n import STRINGS, get_user_lang
+from ..i18n import get_text as _
+from ..messaging import send_alert
+from ..rbac import get_role_level as get_user_role_level
+from ..rbac import is_admin as _is_admin
+from ..utils import (
+    decrypt_for_web,
+    decrypt_request_payload,
+    encrypt_for_web,
+    encrypted_json_response,
+    format_traffic,
+    format_uptime,
+    get_country_flag,
+    get_node_uptime_snapshot,
+    get_server_timezone_label,
+)
+from .auth import COOKIE_NAME, SERVER_SESSIONS, get_current_user
 
 routes = web.RouteTableDef()
 
@@ -63,7 +82,7 @@ def _build_plain_api_notice(path: str) -> web.Response:
 
 async def _write_sse(response: web.StreamResponse, event: str, data: Any) -> None:
     payload = json.dumps(data)
-    await response.write(f"event: {event}\ndata: {payload}\n\n".encode("utf-8"))
+    await response.write(f"event: {event}\ndata: {payload}\n\n".encode())
 
 
 def _session_expired(current_token: str | None) -> bool:
@@ -209,7 +228,7 @@ async def process_node_result_background(
                     return
                 except Exception:
                     getattr(shared_state, "ACTIVE_NODE_SPEEDTESTS", {}).pop(key, None)
-                    pass  # Fallback to sending new message
+                    # Fallback to sending new message
 
         max_retries = 3
         for attempt in range(max_retries):
@@ -891,20 +910,20 @@ async def api_reset_node_uptime(request: web.Request) -> web.StreamResponse:
 
 
 __all__ = [
-    "routes",
-    "handle_nodes_list_json",
+    "api_control_service",
+    "api_reset_node_uptime",
+    "api_services_manage",
+    "handle_available_services",
     "handle_node_add",
     "handle_node_delete",
     "handle_node_rename",
-    "handle_nodes_monitor_list",
-    "handle_nodes_monitor_detail",
-    "handle_nodes_monitor_services",
+    "handle_nodes_list_json",
     "handle_nodes_monitor_command",
+    "handle_nodes_monitor_detail",
+    "handle_nodes_monitor_list",
     "handle_nodes_monitor_service_action",
-    "handle_services_list",
-    "handle_available_services",
+    "handle_nodes_monitor_services",
     "handle_service_info",
-    "api_control_service",
-    "api_services_manage",
-    "api_reset_node_uptime",
+    "handle_services_list",
+    "routes",
 ]

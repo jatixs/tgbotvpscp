@@ -1,21 +1,22 @@
 import asyncio
-import logging
-import psutil
-import time
-import json
-import os
 import glob
+import json
+import logging
+import os
+import time
 from datetime import datetime
-from aiogram import F, Dispatcher, types, Bot
-from aiogram.types import KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
-from aiogram.exceptions import TelegramRetryAfter, TelegramBadRequest
-from core.i18n import I18nFilter, get_user_lang, get_text
-from core import config
-from core import shared_state
+
+import psutil
+from aiogram import Bot, Dispatcher, F, types
+from aiogram.exceptions import TelegramBadRequest, TelegramRetryAfter
+from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, KeyboardButton
+
+from core import config, shared_state
 from core.auth import is_allowed, send_access_denied_message
+from core.i18n import I18nFilter, get_text, get_user_lang
+from core.keyboards import get_main_reply_keyboard
 from core.messaging import delete_previous_message
 from core.utils import format_traffic
-from core.keyboards import get_main_reply_keyboard
 
 BUTTON_KEY = "btn_traffic"
 MESSAGE_EDIT_THROTTLE = {}
@@ -90,14 +91,14 @@ def load_traffic_state():
             TRAFFIC_OFFSET["tx"] = backup_tx - counters.bytes_sent
             
             IS_SERVER_REBOOT = False # Just a bot restart
-            logging.info(f"Traffic state restored (Bot restart). Offset updated. Reset button hidden.")
+            logging.info("Traffic state restored (Bot restart). Offset updated. Reset button hidden.")
         else:
             # Server was rebooted (system counters reset)
             TRAFFIC_OFFSET["rx"] = backup_rx
             TRAFFIC_OFFSET["tx"] = backup_tx
             
             IS_SERVER_REBOOT = True # Server reboot
-            logging.info(f"Traffic state restored (Server reboot). Offset set to last backup values.")
+            logging.info("Traffic state restored (Server reboot). Offset set to last backup values.")
 
     except Exception as e:
         logging.error(f"Failed to load traffic state: {e}")

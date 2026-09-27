@@ -494,6 +494,16 @@ async function saveSystemConfig(groupName) {
     btn.disabled = true;
     document.querySelectorAll('[id^="error_"]').forEach(el => el.classList.add('hidden'));
 
+    for (const id of config.ids) {
+        const val = document.getElementById(id).value.trim();
+        if (!val) {
+            showError(id, (typeof I18N !== 'undefined' && I18N.web_error_empty_field) ? I18N.web_error_empty_field : "Fill in all fields");
+            btn.innerText = originalText;
+            toggleSaveButton(config.btnId, true);
+            return;
+        }
+    }
+
     if (groupName === 'intervals') {
         const trafficVal = parseInt(document.getElementById('conf_traffic').value);
         const servicesVal = parseInt(document.getElementById('conf_services').value);

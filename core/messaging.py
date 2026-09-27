@@ -1,14 +1,15 @@
-import logging
 import asyncio
+import logging
 import time
 import uuid
-from typing import Union, Callable
+from collections.abc import Callable
+
 from aiogram import Bot
-from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-from .i18n import _, get_user_lang, STRINGS
-from . import config
-from .shared_state import LAST_MESSAGE_IDS, ALERTS_CONFIG
-from . import shared_state
+from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+
+from . import config, shared_state
+from .i18n import STRINGS, _, get_user_lang
+from .shared_state import ALERTS_CONFIG, LAST_MESSAGE_IDS
 
 
 async def delete_previous_message(user_id: int, command, chat_id: int, bot: Bot):
@@ -53,7 +54,7 @@ async def send_support_message(bot: Bot, user_id: int, lang: str):
 
 async def send_alert(
     bot: Bot,
-    message_or_func: Union[str, Callable[[str], str]],
+    message_or_func: str | Callable[[str], str],
     alert_type: str,
     node_token: str = None,
     **kwargs,

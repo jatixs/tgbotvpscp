@@ -2,12 +2,13 @@
 Утилита миграции базы данных и конфигурации.
 Обеспечивает безопасное обновление схемы БД и шифрование данных при апгрейде.
 """
-import os
 import json
 import logging
-import sys
+import os
 import shutil
-from core import config  
+import sys
+
+from core import config
 from core.config import CIPHER_SUITE, CONFIG_DIR  # For encryption
 
 logging.basicConfig(
