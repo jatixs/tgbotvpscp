@@ -28,7 +28,24 @@ document.addEventListener('change', e => {
 document.addEventListener('keydown', e => {
     const actionEl = e.target.closest('[data-action]');
     if (!actionEl) return;
+    
     const action = actionEl.getAttribute('data-action');
+    
+    // Pass explicit keydown actions
+    if (!action.endsWith('-keydown')) {
+        // Let native buttons/links handle their own Enter/Space to 'click'
+        if (actionEl.tagName === 'BUTTON' || actionEl.tagName === 'A') {
+            return;
+        }
+        // For generic elements acting as buttons, only activate on Enter/Space
+        if (actionEl.tagName !== 'INPUT' && actionEl.tagName !== 'TEXTAREA') {
+            if (e.key !== 'Enter' && e.key !== ' ') {
+                return;
+            }
+            if (e.key === ' ') e.preventDefault();
+        }
+    }
+
     const event = new CustomEvent(`app:action:${action}`, { bubbles: true, detail: { target: actionEl, originalEvent: e } });
     actionEl.dispatchEvent(event);
 });
@@ -904,17 +921,17 @@ function launchBrandEasterEgg(originEl) {
         particle.textContent = glyphs[index % glyphs.length];
         particle.style.left = `${originX}px`;
         particle.style.top = `${originY}px`;
-        particle.style.fontSize = `${14 + getSecureRandom() * 14}px`;
+        particle.style.fontSize = `${14 + Math.random() * 14}px`;
 
-        const angle = (Math.PI * 2 * index) / particleCount + getSecureRandom() * 0.5;
-        const distance = burstRadius * (0.5 + getSecureRandom() * 0.7);
+        const angle = (Math.PI * 2 * index) / particleCount + Math.random() * 0.5;
+        const distance = burstRadius * (0.5 + Math.random() * 0.7);
         const tx = Math.cos(angle) * distance;
         const ty = Math.sin(angle) * distance + 40; // slight downward drift like gravity
 
         particle.style.setProperty('--tx', `${tx.toFixed(0)}px`);
         particle.style.setProperty('--ty', `${ty.toFixed(0)}px`);
-        particle.style.setProperty('--scale', (0.8 + getSecureRandom() * 0.6).toFixed(2));
-        particle.style.setProperty('--rot', `${(-180 + getSecureRandom() * 360).toFixed(0)}deg`);
+        particle.style.setProperty('--scale', (0.8 + Math.random() * 0.6).toFixed(2));
+        particle.style.setProperty('--rot', `${(-180 + Math.random() * 360).toFixed(0)}deg`);
         particle.style.setProperty('--delay', `${index * 18}ms`);
 
         overlay.appendChild(particle);
@@ -975,7 +992,7 @@ function showNextRouteEasterEgg(isRu) {
                 close: true,
             },
             {
-                text: isRu ? '🚀 Открыть NextRoute' : '🚀 Open NextRoute',
+                text: isRu ? '<span class="flex items-center justify-center gap-2"><i class="icon icon-rocket icon-sm bg-current"></i> Открыть NextRoute</span>' : '<span class="flex items-center justify-center gap-2"><i class="icon icon-rocket icon-sm bg-current"></i> Open NextRoute</span>',
                 class: 'bg-blue-600 text-white hover:bg-blue-700',
                 close: true,
                 onClick: () => {
@@ -1234,11 +1251,11 @@ function startSnow() {
     snowInterval = setInterval(() => {
         const s = document.createElement('div');
         s.className = 'snowflake';
-        s.innerText = icons[Math.floor(getSecureRandom() * icons.length)];
-        s.style.left = getSecureRandom() * 100 + 'vw';
-        s.style.animationDuration = (getSecureRandom() * 3 + 4) + 's';
-        s.style.opacity = getSecureRandom() * 0.7;
-        s.style.fontSize = (getSecureRandom() * 8 + 8) + 'px';
+        s.innerText = icons[Math.floor(Math.random() * icons.length)];
+        s.style.left = Math.random() * 100 + 'vw';
+        s.style.animationDuration = (Math.random() * 3 + 4) + 's';
+        s.style.opacity = Math.random() * 0.7;
+        s.style.fontSize = (Math.random() * 8 + 8) + 'px';
         container.appendChild(s);
         setTimeout(() => s.remove(), 6000);
     }, 300);

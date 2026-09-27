@@ -3,13 +3,13 @@
 Загружает переменные окружения, настраивает пути и параметры безопасности (в т.ч. ключи шифрования).
 """
 import asyncio
-import os
-import sys
 import json
 import logging
 import logging.handlers
+import os
 import re
-from datetime import datetime
+import sys
+
 import aiosqlite
 from cryptography.fernet import Fernet, InvalidToken
 
@@ -119,12 +119,11 @@ def init_bot_db_sync():
 
 async def get_bot_config(key: str, default=None):
     try:
-        async with aiosqlite.connect(BOT_DB_PATH) as conn:
-            async with conn.execute(
-                "SELECT value FROM bot_config WHERE key = ?",
-                (key,),
-            ) as cursor:
-                row = await cursor.fetchone()
+        async with aiosqlite.connect(BOT_DB_PATH) as conn, conn.execute(
+            "SELECT value FROM bot_config WHERE key = ?",
+            (key,),
+        ) as cursor:
+            row = await cursor.fetchone()
         if row:
             return _decode_config_blob(key, row[0])
     except Exception as e:

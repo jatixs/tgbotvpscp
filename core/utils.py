@@ -2,40 +2,43 @@
 Вспомогательные утилиты проекта.
 Содержит функции для работы с сетью, логированием, шифрованием и форматированием данных.
 """
-import os
-import json
-import logging
-import re
 import asyncio
-import urllib.parse
-import time
-import aiohttp
 import base64
 import binascii
 import hashlib
-import requests
-from io import BytesIO
+import json
+import logging
+import os
+import re
+import time
+import urllib.parse
 from datetime import datetime
+from io import BytesIO
 from pathlib import Path
-from typing import Optional, Dict, Any
+from typing import Any
+
+import aiohttp
+import requests
 from aiogram import Bot
-from aiogram.exceptions import TelegramBadRequest
+
 try:
     from PIL import Image
 except ImportError:
     Image = None
 
-from . import config
-from . import shared_state
-from .i18n import get_text, get_user_lang, log_text
-from .config import INSTALL_MODE, DEPLOY_MODE, DEBUG_MODE
+from . import config, shared_state
 from .config import (
-    REBOOT_FLAG_FILE,
-    RESTART_FLAG_FILE,
     CIPHER_SUITE,
     DATA_ENCRYPTION_KEY,
+    DEBUG_MODE,
+    DEPLOY_MODE,
+    INSTALL_MODE,
+    REBOOT_FLAG_FILE,
+    RESTART_FLAG_FILE,
+    get_bot_config_sync,
+    set_bot_config_sync,
 )
-from .config import get_bot_config_sync, set_bot_config_sync
+from .i18n import get_text, get_user_lang, log_text
 
 
 def anonymize_user(user_id: int, username: str = None) -> str:
@@ -67,9 +70,10 @@ def decrypt_data(data: str) -> str:
         return data
 
 
-from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
-from cryptography.hazmat.primitives import padding
 from cryptography.hazmat.backends import default_backend
+from cryptography.hazmat.primitives import padding
+from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+
 
 def get_web_key() -> str:
     """Return a 64-character hex string (32 bytes) for AES-256."""
@@ -379,24 +383,23 @@ async def get_country_flag(ip_or_code: str) -> str:
         return "🏠"
     input_str = ip_or_code.strip().upper()
     if len(input_str) == 2 and input_str.isalpha():
-        return "".join((chr(ord(char) - 65 + 127462) for char in input_str))
+        return "".join(chr(ord(char) - 65 + 127462) for char in input_str)
     try:
-        async with aiohttp.ClientSession() as session:
-            async with session.get(
-                f"http://ip-api.com/json/{ip_or_code}?fields=countryCode,status",
-                timeout=2,
-            ) as response:
-                if response.status == 200:
-                    data = await response.json()
-                    if data.get("status") == "success":
-                        country_code = data.get("countryCode")
-                        if country_code and len(country_code) == 2:
-                            return "".join(
-                                (
-                                    chr(ord(char.upper()) - 65 + 127462)
-                                    for char in country_code
-                                )
-                            )
+        async with aiohttp.ClientSession() as session, session.get(
+            f"http://ip-api.com/json/{ip_or_code}?fields=countryCode,status",
+            timeout=2,
+        ) as response:
+            if response.status == 200:
+                data = await response.json()
+                if data.get("status") == "success":
+                    country_code = data.get("countryCode")
+                    if country_code and len(country_code) == 2:
+                        return "".join(
+                            
+                                chr(ord(char.upper()) - 65 + 127462)
+                                for char in country_code
+                            
+                        )
     except Exception as e:
         logging.warning(f"Error getting flag for {ip_or_code}: {e}")
     return "❓"
@@ -409,14 +412,13 @@ async def get_country_details(ip_or_code: str):
     if not identifier or identifier in ["localhost", "127.0.0.1", "::1"]:
         return ("🏠", None)
     try:
-        async with aiohttp.ClientSession() as session:
-            async with session.get(
-                f"http://ip-api.com/json/{identifier}?fields=country,status", timeout=2
-            ) as response:
-                if response.status == 200:
-                    data = await response.json()
-                    if data.get("status") == "success":
-                        country_name = data.get("country")
+        async with aiohttp.ClientSession() as session, session.get(
+            f"http://ip-api.com/json/{identifier}?fields=country,status", timeout=2
+        ) as response:
+            if response.status == 200:
+                data = await response.json()
+                if data.get("status") == "success":
+                    country_name = data.get("country")
     except Exception as e:
         logging.warning(f"Error getting country details for {identifier}: {e}")
     return (flag, country_name)
@@ -548,7 +550,7 @@ def convert_vless_to_json(vless_link):
             if "extra" in params:
                 try:
                     xhttp_settings["extra"] = json.loads(params["extra"])
-                except:
+                except Exception:
                     pass
             json_template["outbounds"][0]["streamSettings"]["xhttpSettings"] = xhttp_settings
         elif net_type == "ws":
@@ -1075,9 +1077,9 @@ def init_audit_log():
 def log_audit_event(
     event_type: str,
     user_id: int,
-    details: Optional[Dict[str, Any]] = None,
+    details: dict[str, Any] | None = None,
     severity: str = "INFO",
-    ip_address: Optional[str] = None
+    ip_address: str | None = None
 ):
     """
     Records an audit event to the log
@@ -1125,7 +1127,7 @@ def log_audit_event(
         logging.error(f"Failed to write audit log: {e}")
 
 
-def get_audit_logs(limit: int = 100, event_filter: Optional[str] = None) -> list:
+def get_audit_logs(limit: int = 100, event_filter: str | None = None) -> list:
     """
     Retrieves the latest entries from the audit log
     

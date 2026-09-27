@@ -1,12 +1,14 @@
+import hashlib
 import json
 import logging
+import os
 import secrets
 import time
-import os
-import hashlib
+
 from tortoise import Tortoise
-from .models import Node
+
 from .config import CONFIG_DIR, NODE_OFFLINE_TIMEOUT, TORTOISE_ORM
+from .models import Node
 
 LEGACY_JSON_PATH = os.path.join(CONFIG_DIR, "nodes.json")
 
@@ -241,7 +243,7 @@ async def update_node_name(token: str, new_name: str):
 async def delete_node(token: str):
     t_hash = _get_token_hash(token)
     await Node.filter(token_hash=t_hash).delete()
-    logging.info(f"Node deleted.")
+    logging.info("Node deleted.")
 
 
 async def update_node_heartbeat(token: str, ip: str, stats: dict):

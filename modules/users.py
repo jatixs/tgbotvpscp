@@ -1,33 +1,32 @@
-import asyncio
 import logging
-from aiogram import F, Dispatcher, types
-from aiogram.types import KeyboardButton
+
+from aiogram import Dispatcher, F, types
+from aiogram.exceptions import TelegramBadRequest
+from aiogram.filters import StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
-from aiogram.filters import StateFilter
-from aiogram.exceptions import TelegramBadRequest
-from core.i18n import _, I18nFilter, get_user_lang
-from core import config
-from core import shared_state
-from core.utils import log_audit_event, AuditEvent
+from aiogram.types import KeyboardButton
+
+from core import config, shared_state
 from core.auth import (
-    is_allowed,
-    send_access_denied_message,
-    refresh_user_names,
-    save_users_async,
     get_user_name,
+    is_allowed,
+    save_users_async,
+    send_access_denied_message,
+)
+from core.config import ADMIN_USER_ID
+from core.i18n import I18nFilter, _, get_user_lang
+from core.keyboards import (
+    get_back_keyboard,
+    get_change_group_keyboard,
+    get_delete_users_keyboard,
+    get_group_selection_keyboard,
+    get_manage_users_keyboard,
+    get_self_delete_confirmation_keyboard,
 )
 from core.messaging import delete_previous_message
-from core.shared_state import LAST_MESSAGE_IDS, ALLOWED_USERS, USER_NAMES, ALERTS_CONFIG
-from core.config import ADMIN_USER_ID
-from core.keyboards import (
-    get_manage_users_keyboard,
-    get_delete_users_keyboard,
-    get_change_group_keyboard,
-    get_group_selection_keyboard,
-    get_self_delete_confirmation_keyboard,
-    get_back_keyboard,
-)
+from core.shared_state import ALERTS_CONFIG, ALLOWED_USERS, LAST_MESSAGE_IDS, USER_NAMES
+from core.utils import AuditEvent, log_audit_event
 
 BUTTON_KEY = "btn_users"
 

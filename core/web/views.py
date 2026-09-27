@@ -6,7 +6,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-import os
 import secrets
 import socket
 import time
@@ -19,10 +18,14 @@ from jinja2 import Environment, FileSystemLoader, select_autoescape
 from .. import config as current_config
 from .. import nodes_db, shared_state
 from ..config import ADMIN_USER_ID, BASE_DIR, DEFAULT_LANGUAGE, TG_BOT_NAME
-from ..i18n import get_text as _, get_user_lang
+from ..i18n import get_text as _
+from ..i18n import get_user_lang
 from ..keyboards import BTN_CONFIG_MAP
-from ..rbac import ROLE_USER, build_user_role_js, get_role_level, is_admin as _is_admin, is_root as _is_root
-from ..utils import encrypt_for_web, generate_favicons, get_app_version, get_web_key
+from ..rbac import ROLE_USER, build_user_role_js, get_role_level
+from ..rbac import is_admin as _is_admin
+from ..rbac import is_root as _is_root
+from ..utils import encrypt_for_web, generate_favicons, get_app_version
+
 # Lazy import traffic_module when needed
 from . import auth as web_auth
 
@@ -829,6 +832,7 @@ async def handle_settings_page(request: web.Request) -> web.StreamResponse:
     i18n_data = {
         "web_access_denied": _("web_access_denied", lang),
         "access_denied_no_rights": _("access_denied_no_rights", lang),
+        "web_error_empty_field": _("pass_is_empty", lang),
         "web_access_denied_desc": _("web_access_denied_desc", lang),
         "web_back": _("web_back", lang),
         "web_saving_btn": _("web_saving_btn", lang),
@@ -1189,6 +1193,10 @@ async def handle_login_page(request: web.Request) -> web.StreamResponse:
         "pass_match_error",
         "login_webapp_auth_failed",
         "login_webapp_auth_error",
+        "web_perf_mode_on",
+        "web_perf_mode_off",
+        "web_a11y_mode_on",
+        "web_a11y_mode_off",
     ]
     i18n_all: dict[str, dict[str, str]] = {}
     for locale in ["ru", "en"]:
@@ -1265,6 +1273,10 @@ async def handle_reset_page_render(request: web.Request) -> web.StreamResponse:
         "web_redirecting": _("web_redirecting", lang),
         "web_logging_in": _("web_logging_in", lang),
         "web_saving_btn": _("web_saving_btn", lang),
+        "web_perf_mode_on": _("web_perf_mode_on", lang),
+        "web_perf_mode_off": _("web_perf_mode_off", lang),
+        "web_a11y_mode_on": _("web_a11y_mode_on", lang),
+        "web_a11y_mode_off": _("web_a11y_mode_off", lang),
     }
     context = {
         "lang": lang,
@@ -1286,13 +1298,13 @@ async def handle_reset_page_render(request: web.Request) -> web.StreamResponse:
 
 
 __all__ = [
-    "routes",
     "JINJA_ENV",
     "TEMPLATE_DIR",
     "handle_dashboard",
-    "handle_settings_page",
     "handle_login_page",
     "handle_nodes_monitor_page",
-    "handle_terminal_page",
     "handle_reset_page_render",
+    "handle_settings_page",
+    "handle_terminal_page",
+    "routes",
 ]

@@ -16,9 +16,15 @@ from .. import config as current_config
 from .. import nodes_db, shared_state
 from ..config import BASE_DIR, DEFAULT_LANGUAGE, DEPLOY_MODE
 from ..i18n import get_user_lang
-from ..utils import decrypt_for_web, encrypt_for_web, get_host_path, get_node_uptime_snapshot
-from .auth import COOKIE_NAME, SERVER_SESSIONS, get_current_user
 from ..rbac import is_admin as _is_admin
+from ..utils import (
+    decrypt_for_web,
+    encrypt_for_web,
+    get_host_path,
+    get_node_uptime_snapshot,
+)
+from .auth import COOKIE_NAME, SERVER_SESSIONS, get_current_user
+
 # Lazy imports: traffic_module and services are loaded on-demand
 # from modules import traffic as traffic_module
 # from modules.services import get_all_services_status
@@ -167,7 +173,7 @@ def _get_top_processes(metric: str) -> list[str]:
 
 async def _write_sse(response: web.StreamResponse, event: str, data: Any) -> None:
     payload = json.dumps(data)
-    await response.write(f"event: {event}\ndata: {payload}\n\n".encode("utf-8"))
+    await response.write(f"event: {event}\ndata: {payload}\n\n".encode())
 
 
 @routes.get("/api/events")
@@ -1056,11 +1062,11 @@ async def handle_terminal_ws(request: web.Request) -> web.StreamResponse:
 
 
 __all__ = [
-    "routes",
-    "handle_sse_stream",
     "handle_sse_logs",
     "handle_sse_node_details",
     "handle_sse_node_services",
     "handle_sse_services",
+    "handle_sse_stream",
     "handle_terminal_ws",
+    "routes",
 ]

@@ -1,12 +1,15 @@
 import asyncio
 import logging
 import os
-from aiogram import F, types, Dispatcher
+
+from aiogram import Dispatcher, types
 from aiogram.fsm.context import FSMContext
 from aiogram.types import KeyboardButton
-from core.config import INSTALL_MODE, DEPLOY_MODE, DEFAULT_LANGUAGE
+
+from core.config import DEFAULT_LANGUAGE, DEPLOY_MODE, INSTALL_MODE
+from core.i18n import I18nFilter
+from core.i18n import get_text as _
 from core.keyboards import get_main_reply_keyboard
-from core.i18n import I18nFilter, get_text as _
 from core.utils import escape_html
 
 BUTTON_KEY = "btn_logs"
