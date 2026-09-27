@@ -215,7 +215,7 @@
 
 ### 📦 Dependencies & Documentation:
 * **Libraries:** Bumped all Python packages to their latest stable and compatible versions (aiogram 3.28.2, tortoise-orm 0.25.4, aiohttp 3.13.5, etc.).
-* **Documentation:** Updated `ARCHITECTURE.en.md` and `../custom_module_en.md` to reflect the new Memory Orchestrator, Middlewares, and the updated plugin registration system.
+* **Documentation:** Updated `ARCHITECTURE.en.md` and `custom_module_en.md` to reflect the new Memory Orchestrator, Middlewares, and the updated plugin registration system.
 
 ---
 ## [1.22.5] - 2026-06-08

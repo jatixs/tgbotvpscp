@@ -449,7 +449,7 @@ http://YOUR_SERVER_IP:8080
 ### Руководства
 
 - 📘 [**ARCHITECTURE.md**](docs/ARCHITECTURE.md) — Полная архитектура проекта
-- 🧩 [**custom_module.md**](custom_module.md) — Создание модуля для бота
+- 🧩 [**custom_module.md**](docs/custom_module.md) — Создание модуля для бота
 - 🌐 [**web_module.md**](docs/web_module.md) — Создание веб-модуля (WebUI + Бот)
 - 📝 [**CHANGELOG.md**](docs/CHANGELOG.md) — История изменений
 
