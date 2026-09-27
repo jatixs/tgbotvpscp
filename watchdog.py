@@ -354,7 +354,7 @@ def parse_docker_timestamp(ts_str):
             main, frac = ts.split(".", 1)
             ts = f"{main}.{frac[:6]}"
         return datetime.fromisoformat(ts)
-    except:
+    except Exception:
         return None
 
 def parse_systemd_timestamp(ts_str):
@@ -364,7 +364,7 @@ def parse_systemd_timestamp(ts_str):
         time_part = next((p for p in parts if p.count(":") == 2), None)
         if date_part and time_part:
             return datetime.strptime(f"{date_part} {time_part}", "%Y-%m-%d %H:%M:%S")
-    except:
+    except Exception:
         return None
 
 

@@ -418,7 +418,7 @@ def get_systemd_service_info(service_name):
                         info["memory"] = f"{mem_bytes / (1024*1024):.1f} MB"
                     else:
                         info["memory"] = f"{mem_bytes / 1024:.1f} KB"
-                except:
+                except Exception:
                     pass
             
             # Uptime from ActiveEnterTimestamp
@@ -809,7 +809,7 @@ async def cq_services_add_list(callback: types.CallbackQuery):
     # Get page
     try:
         page = int(callback.data.split("_")[3])
-    except:
+    except Exception:
         page = 0
     
     # Get all available services that are not yet managed
@@ -903,7 +903,7 @@ async def cq_services_remove_list(callback: types.CallbackQuery):
     # Get page
     try:
         page = int(callback.data.split("_")[3])
-    except:
+    except Exception:
         page = 0
     
     # Get all managed services

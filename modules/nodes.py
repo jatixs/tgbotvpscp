@@ -1180,12 +1180,12 @@ async def process_billing_amount(message: types.Message, state: FSMContext):
         return
         
     try: await message.delete()
-    except: pass
+    except Exception: pass
     
     prompt_msg_id = data.get("prompt_msg_id")
     if prompt_msg_id:
         try: await message.bot.delete_message(chat_id=message.chat.id, message_id=prompt_msg_id)
-        except: pass
+        except Exception: pass
 
     import asyncio
     try:
@@ -1195,7 +1195,7 @@ async def process_billing_amount(message: types.Message, state: FSMContext):
         async def del_temp(m):
             await asyncio.sleep(3)
             try: await m.delete()
-            except: pass
+            except Exception: pass
         asyncio.create_task(del_temp(temp))
         return
     
@@ -1226,7 +1226,7 @@ async def process_billing_amount(message: types.Message, state: FSMContext):
                 async def remove_toast(cid, mid, txt, kb):
                     await asyncio.sleep(3)
                     try: await message.bot.edit_message_text(txt, chat_id=cid, message_id=mid, reply_markup=kb, parse_mode="HTML")
-                    except: pass
+                    except Exception: pass
                 asyncio.create_task(remove_toast(message.chat.id, menu_msg_id, clean_text, keyboard))
         except OperationalError:
             pass
@@ -1251,12 +1251,12 @@ async def process_billing_date_shift(message: types.Message, state: FSMContext):
         return
         
     try: await message.delete()
-    except: pass
+    except Exception: pass
     
     prompt_msg_id = data.get("prompt_msg_id")
     if prompt_msg_id:
         try: await message.bot.delete_message(chat_id=message.chat.id, message_id=prompt_msg_id)
-        except: pass
+        except Exception: pass
 
     import datetime
     import asyncio
@@ -1289,7 +1289,7 @@ async def process_billing_date_shift(message: types.Message, state: FSMContext):
             async def del_temp(m):
                 await asyncio.sleep(3)
                 try: await m.delete()
-                except: pass
+                except Exception: pass
             asyncio.create_task(del_temp(temp))
             return
 
@@ -1299,7 +1299,7 @@ async def process_billing_date_shift(message: types.Message, state: FSMContext):
         async def del_temp_date(m):
             await asyncio.sleep(3)
             try: await m.delete()
-            except: pass
+            except Exception: pass
         asyncio.create_task(del_temp_date(temp))
         return
             
@@ -1318,7 +1318,7 @@ async def process_billing_date_shift(message: types.Message, state: FSMContext):
                     async def del_temp_r(m):
                         await asyncio.sleep(3)
                         try: await m.delete()
-                        except: pass
+                        except Exception: pass
                     asyncio.create_task(del_temp_r(temp))
                     await state.clear()
                     return
@@ -1344,7 +1344,7 @@ async def process_billing_date_shift(message: types.Message, state: FSMContext):
                 async def remove_toast(cid, mid, txt, kb):
                     await asyncio.sleep(3)
                     try: await message.bot.edit_message_text(txt, chat_id=cid, message_id=mid, reply_markup=kb, parse_mode="HTML")
-                    except: pass
+                    except Exception: pass
                 asyncio.create_task(remove_toast(message.chat.id, menu_msg_id, clean_text, keyboard))
         except OperationalError:
             pass
@@ -1420,12 +1420,12 @@ async def process_master_billing_amount(message: types.Message, state: FSMContex
     data = await state.get_data()
     
     try: await message.delete()
-    except: pass
+    except Exception: pass
     
     prompt_msg_id = data.get("prompt_msg_id")
     if prompt_msg_id:
         try: await message.bot.delete_message(chat_id=message.chat.id, message_id=prompt_msg_id)
-        except: pass
+        except Exception: pass
 
     import asyncio
     try:
@@ -1435,7 +1435,7 @@ async def process_master_billing_amount(message: types.Message, state: FSMContex
         async def del_temp(m):
             await asyncio.sleep(3)
             try: await m.delete()
-            except: pass
+            except Exception: pass
         asyncio.create_task(del_temp(temp))
         return
     
@@ -1470,7 +1470,7 @@ async def process_master_billing_amount(message: types.Message, state: FSMContex
             async def remove_toast(cid, mid, txt, kb):
                 await asyncio.sleep(3)
                 try: await message.bot.edit_message_text(txt, chat_id=cid, message_id=mid, reply_markup=kb, parse_mode="HTML")
-                except: pass
+                except Exception: pass
             asyncio.create_task(remove_toast(message.chat.id, menu_msg_id, clean_text, keyboard))
         except Exception:
             pass
@@ -1491,12 +1491,12 @@ async def process_master_billing_date_shift(message: types.Message, state: FSMCo
     data = await state.get_data()
     
     try: await message.delete()
-    except: pass
+    except Exception: pass
     
     prompt_msg_id = data.get("prompt_msg_id")
     if prompt_msg_id:
         try: await message.bot.delete_message(chat_id=message.chat.id, message_id=prompt_msg_id)
-        except: pass
+        except Exception: pass
 
     import datetime
     import asyncio
@@ -1529,7 +1529,7 @@ async def process_master_billing_date_shift(message: types.Message, state: FSMCo
             async def del_temp(m):
                 await asyncio.sleep(3)
                 try: await m.delete()
-                except: pass
+                except Exception: pass
             asyncio.create_task(del_temp(temp))
             return
 
@@ -1539,7 +1539,7 @@ async def process_master_billing_date_shift(message: types.Message, state: FSMCo
         async def del_temp_date(m):
             await asyncio.sleep(3)
             try: await m.delete()
-            except: pass
+            except Exception: pass
         asyncio.create_task(del_temp_date(temp))
         return
     
@@ -1562,7 +1562,7 @@ async def process_master_billing_date_shift(message: types.Message, state: FSMCo
             async def del_temp_r(m):
                 await asyncio.sleep(3)
                 try: await m.delete()
-                except: pass
+                except Exception: pass
             asyncio.create_task(del_temp_r(temp))
             await state.clear()
             return
@@ -1590,7 +1590,7 @@ async def process_master_billing_date_shift(message: types.Message, state: FSMCo
             async def remove_toast(cid, mid, txt, kb):
                 await asyncio.sleep(3)
                 try: await message.bot.edit_message_text(txt, chat_id=cid, message_id=mid, reply_markup=kb, parse_mode="HTML")
-                except: pass
+                except Exception: pass
             asyncio.create_task(remove_toast(message.chat.id, menu_msg_id, clean_text, keyboard))
         except Exception:
             pass
@@ -1762,7 +1762,7 @@ async def cq_master_billing_set_currency(callback: types.CallbackQuery, state: F
             import datetime
             date_obj = datetime.datetime.fromisoformat(date)
             date_str = date_obj.strftime("%d.%m.%Y")
-        except:
+        except Exception:
             date_str = date
     else:
         date_str = _("billing_date_not_set", lang)

@@ -172,7 +172,7 @@ def _extract_message_payload(message: types.Message) -> dict:
             payload["type"] = "unsupported"
             try:
                 payload["debug"] = str(message.model_dump(exclude_none=True))
-            except:
+            except Exception:
                 payload["debug"] = str(message)
             
     return payload
