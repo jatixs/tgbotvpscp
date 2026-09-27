@@ -14,17 +14,19 @@
 ## [1.25.3] - 2026-09-27
 
 ### 🔒 Security:
-* **Dependencies:** Bumped `asyncssh` to 2.24.0 to patch CVE-2026-62949 (Denial of Service).
-* **CodeQL:** Resolved `biased-cryptographic-random` warning in frontend visual effects by switching to `Math.random()`.
+* **Dependencies:** Patched CVE-2026-62949 (Denial of Service) by updating the `asyncssh` library.
+* **Core:** Conducted a comprehensive code security audit. Addressed potential random number generation vulnerabilities (CodeQL) and prevented crashes during system interrupts.
 
 ### ✨ Improved:
-* **Selftest:** Bot resource consumption info (`(X used by bot)`) is now automatically hidden when the bot is not consuming that resource (CPU = 0, RAM < 0.1 MB, Disk < 100 KB). The status message is now cleaner and more compact.
-* **WebUI:** Replaced emoji (⏱, 📊) in the node monitoring section with consistent SVG icons to improve display reliability across OSs.
-* **Refactor:** Globally replaced potentially unsafe `except:` statements with `except Exception:` to prevent intercepting system-level exceptions like `KeyboardInterrupt`.
+* **WebUI & UX:** Major interface upgrade: added strict localized form validation for settings, improved keyboard accessibility (fixed `Tab`/`Ctrl` conflicts), and enhanced modal stability. Unreliable emojis were replaced with cross-platform SVG icons.
+* **Monitoring (Selftest):** System reports are now more concise — the bot no longer clutters the summary with zero-values when it isn't consuming resources (CPU, RAM).
+* **Code Optimization:** Executed a deep refactoring of the core and modules (over 40 files). Enforced strict typing standards (Ruff), removed dead code, and optimized imports, making the bot faster and more reliable.
 
 ### 🐛 Bugfixes:
-* **WebUI / Modals:** Added null-safe checks for system modal elements (`input`, `cancel`, `ok` buttons), preventing errors when DOM elements are missing.
-* **WebUI / Localization:** Fixed missing translations for toast notifications regarding mode toggles (performance, accessibility) on the login and password reset pages.
+* **Localization:** Restored missing translations for toast notifications on the login and password reset screens.
+
+### 📝 Documentation:
+* **Administration:** Published comprehensive guides: a security policy (`SECURITY.md` with deployment Best Practices) and `CONTRIBUTING.md`. All technical documentation is now fully bilingual (EN/RU) with easy navigation.
 
 ---
 ## [1.25.2] - 2026-09-20
