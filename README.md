@@ -1,5 +1,5 @@
 <p align="center">
-  <a href="docs/README.en.md">English Version</a> | Русская Версия
+  <a href="docs/README.en.md">🇬🇧 English</a> | 🇷🇺 Русский
 </p>
 
 <h1 align="center">🤖 VPS Manager Telegram Bot</h1>
