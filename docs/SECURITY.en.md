@@ -1,5 +1,5 @@
 <p align="center">
-  English Version | <a href="../SECURITY.md">Русская Версия</a>
+  🇬🇧 English | <a href="../SECURITY.md">🇷🇺 Русский</a>
 </p>
 
 # Security Policy

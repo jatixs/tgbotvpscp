@@ -1,5 +1,5 @@
 <p align="center">
-  English Version | <a href="CHANGELOG.md">Русская Версия</a>
+  🇬🇧 English | <a href="CHANGELOG.md">🇷🇺 Русский</a>
 </p>
 
 <h1 align="center">📝 Telegram VPS Management Bot — Changelog</h1>

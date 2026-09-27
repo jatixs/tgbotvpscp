@@ -1,5 +1,5 @@
 <p align="center">
-  <a href="docs/CONTRIBUTING.en.md">English Version</a> | Русская Версия
+  <a href="docs/CONTRIBUTING.en.md">🇬🇧 English</a> | 🇷🇺 Русский
 </p>
 
 # Как помочь проекту (Telegram VPS Management Bot)
