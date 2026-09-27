@@ -1975,12 +1975,12 @@ function _showSystemModalBase(title, message, type = 'alert', placeholder = '', 
 
         const input = document.getElementById('sysModalInput');
         const cancel = document.getElementById('sysModalCancel');
-        input.classList.toggle('hidden', type !== 'prompt');
-        cancel.classList.toggle('hidden', type === 'alert');
+        if (input) input.classList.toggle('hidden', type !== 'prompt');
+        if (cancel) cancel.classList.toggle('hidden', type === 'alert');
 
         animateModalOpen(modal, type === 'prompt');
 
-        if (type === 'prompt') {
+        if (type === 'prompt' && input) {
             input.value = '';
             input.placeholder = placeholder;
 
@@ -1996,12 +1996,16 @@ function _showSystemModalBase(title, message, type = 'alert', placeholder = '', 
 
             setTimeout(() => input.focus(), 100);
             input.onkeydown = (e) => {
-                if (e.key === 'Enter') document.getElementById('sysModalOk').click();
+                if (e.key === 'Enter') {
+                    const okBtn = document.getElementById('sysModalOk');
+                    if (okBtn) okBtn.click();
+                }
             };
         }
 
-        document.getElementById('sysModalOk').onclick = () => closeSystemModal(type === 'prompt' ? input.value : true);
-        cancel.onclick = () => closeSystemModal(type === 'prompt' ? null : false);
+        const okBtn = document.getElementById('sysModalOk');
+        if (okBtn) okBtn.onclick = () => closeSystemModal(type === 'prompt' ? (input ? input.value : true) : true);
+        if (cancel) cancel.onclick = () => closeSystemModal(type === 'prompt' ? null : false);
     });
 }
 window.showModalAlert = (m, t) => _showSystemModalBase(t || 'Alert', m, 'alert');
