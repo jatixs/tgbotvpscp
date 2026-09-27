@@ -4,11 +4,20 @@
 
 <h1 align="center">📝 Telegram VPS Management Bot — Changelog</h1>
 <p align="center">
-    <img src="https://img.shields.io/badge/version-v1.25.2-blue?style=flat-square" alt="Version 1.25.2"/>
-    <img src="https://img.shields.io/badge/build-91-purple?style=flat-square" alt="Build 91"/>
-    <img src="https://img.shields.io/badge/date-Sep%2020%202026-green?style=flat-square" alt="Date Sep 20 2026"/>
+    <img src="https://img.shields.io/badge/version-v1.25.3-blue?style=flat-square" alt="Version 1.25.3"/>
+    <img src="https://img.shields.io/badge/build-92-purple?style=flat-square" alt="Build 92"/>
+    <img src="https://img.shields.io/badge/date-Sep%2027%202026-green?style=flat-square" alt="Date Sep 27 2026"/>
 	<img src="https://img.shields.io/badge/status-stable-green?style=flat-square" alt="Status Stable"/>
 </p>
+
+---
+## [1.25.3] - 2026-09-27
+
+### ✨ Improved:
+* **Selftest:** Bot resource consumption info (`(X used by bot)`) is now automatically hidden when the bot is not consuming that resource (CPU = 0, RAM < 0.1 MB, Disk < 100 KB). The status message is now cleaner and more compact.
+
+### 🐛 Bugfixes:
+* **WebUI / Modals:** Added null-safe checks for system modal elements (`input`, `cancel`, `ok` buttons), preventing errors when DOM elements are missing.
 
 ---
 ## [1.25.2] - 2026-09-20
