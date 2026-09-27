@@ -28,7 +28,24 @@ document.addEventListener('change', e => {
 document.addEventListener('keydown', e => {
     const actionEl = e.target.closest('[data-action]');
     if (!actionEl) return;
+    
     const action = actionEl.getAttribute('data-action');
+    
+    // Pass explicit keydown actions
+    if (!action.endsWith('-keydown')) {
+        // Let native buttons/links handle their own Enter/Space to 'click'
+        if (actionEl.tagName === 'BUTTON' || actionEl.tagName === 'A') {
+            return;
+        }
+        // For generic elements acting as buttons, only activate on Enter/Space
+        if (actionEl.tagName !== 'INPUT' && actionEl.tagName !== 'TEXTAREA') {
+            if (e.key !== 'Enter' && e.key !== ' ') {
+                return;
+            }
+            if (e.key === ' ') e.preventDefault();
+        }
+    }
+
     const event = new CustomEvent(`app:action:${action}`, { bubbles: true, detail: { target: actionEl, originalEvent: e } });
     actionEl.dispatchEvent(event);
 });
