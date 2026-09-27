@@ -2,36 +2,41 @@
 Telegram-модуль управления нодами.
 Обеспечивает интерфейс (Inline-кнопки) для добавления, редактирования и мониторинга нод прямо в чате.
 """
-import time
 import asyncio
-import logging
 import html
-import socket
+import logging
 import os
+import socket
+import time
 from datetime import datetime
-from aiogram import F, Dispatcher, types, Bot
-from aiogram.types import KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
+
+import aiohttp
+from aiogram import Bot, Dispatcher, F, types
+from aiogram.filters import StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
-from aiogram.filters import StateFilter
-from core.i18n import _, I18nFilter, get_user_lang, log_text
-from core import config
+from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, KeyboardButton
+
+from core import config, nodes_db
 from core.auth import is_allowed, send_access_denied_message
-from core.messaging import delete_previous_message, send_alert
-from core.shared_state import LAST_MESSAGE_IDS, NODE_TRAFFIC_MONITORS, ACTIVE_NODE_SPEEDTESTS
-from core import nodes_db
+from core.i18n import I18nFilter, _, get_user_lang, log_text
 from core.keyboards import (
-    get_nodes_list_keyboard,
-    get_node_management_keyboard,
-    get_nodes_delete_keyboard,
     get_back_keyboard,
-    get_node_services_keyboard,
-    get_node_service_actions_keyboard,
-    get_node_billing_keyboard,
     get_master_billing_keyboard,
+    get_node_billing_keyboard,
+    get_node_management_keyboard,
+    get_node_service_actions_keyboard,
+    get_node_services_keyboard,
+    get_nodes_delete_keyboard,
+    get_nodes_list_keyboard,
+)
+from core.messaging import delete_previous_message, send_alert
+from core.shared_state import (
+    ACTIVE_NODE_SPEEDTESTS,
+    LAST_MESSAGE_IDS,
+    NODE_TRAFFIC_MONITORS,
 )
 from core.utils import build_node_uptime_report, format_uptime
-import aiohttp
 
 BUTTON_KEY = "btn_nodes"
 AGENT_START_TIME = time.time()
@@ -72,7 +77,11 @@ async def _broadcast_node_status_to_clients(event_type: str, changed_node_token:
     с общим списком статусов серверов.
     """
     try:
-        from modules.client_alerts import broadcast_system_alert, alert_bot, _load_subscribers, is_node_muted_for_user
+        from modules.client_alerts import (
+            _load_subscribers,
+            alert_bot,
+            is_node_muted_for_user,
+        )
         if alert_bot is None:
             return
             
@@ -421,7 +430,7 @@ async def cq_node_rename(callback: types.CallbackQuery, state: FSMContext):
 
 async def cq_node_global_mute(callback: types.CallbackQuery):
     if callback.from_user.id != config.ADMIN_USER_ID:
-        from core.i18n import get_user_lang, _
+        from core.i18n import _, get_user_lang
         await callback.answer(_("access_denied", get_user_lang(callback.from_user.id)), show_alert=True)
         return
     token = callback.data.replace("node_global_mute_", "")
@@ -1180,12 +1189,12 @@ async def process_billing_amount(message: types.Message, state: FSMContext):
         return
         
     try: await message.delete()
-    except: pass
+    except Exception: pass
     
     prompt_msg_id = data.get("prompt_msg_id")
     if prompt_msg_id:
         try: await message.bot.delete_message(chat_id=message.chat.id, message_id=prompt_msg_id)
-        except: pass
+        except Exception: pass
 
     import asyncio
     try:
@@ -1195,7 +1204,7 @@ async def process_billing_amount(message: types.Message, state: FSMContext):
         async def del_temp(m):
             await asyncio.sleep(3)
             try: await m.delete()
-            except: pass
+            except Exception: pass
         asyncio.create_task(del_temp(temp))
         return
     
@@ -1214,7 +1223,7 @@ async def process_billing_amount(message: types.Message, state: FSMContext):
                 date_val = getattr(node_obj, "next_payment_date", None)
                 date_str = date_val.strftime("%d.%m.%Y") if date_val else _("billing_date_not_set", lang)
                 
-                provider = getattr(node_obj, "provider_name") or "Unknown"
+                provider = node_obj.provider_name or "Unknown"
                 clean_text = _("billing_menu_text_node", lang, name=node_obj.name, provider=provider, amount=amount_str, date=date_str)
                 toast_text = clean_text + "\n\n✅ <b>Данные обновлены!</b>"
                 
@@ -1226,7 +1235,7 @@ async def process_billing_amount(message: types.Message, state: FSMContext):
                 async def remove_toast(cid, mid, txt, kb):
                     await asyncio.sleep(3)
                     try: await message.bot.edit_message_text(txt, chat_id=cid, message_id=mid, reply_markup=kb, parse_mode="HTML")
-                    except: pass
+                    except Exception: pass
                 asyncio.create_task(remove_toast(message.chat.id, menu_msg_id, clean_text, keyboard))
         except OperationalError:
             pass
@@ -1251,15 +1260,15 @@ async def process_billing_date_shift(message: types.Message, state: FSMContext):
         return
         
     try: await message.delete()
-    except: pass
+    except Exception: pass
     
     prompt_msg_id = data.get("prompt_msg_id")
     if prompt_msg_id:
         try: await message.bot.delete_message(chat_id=message.chat.id, message_id=prompt_msg_id)
-        except: pass
+        except Exception: pass
 
-    import datetime
     import asyncio
+    import datetime
     text = message.text.strip()
     target_date = None
     days = None
@@ -1289,7 +1298,7 @@ async def process_billing_date_shift(message: types.Message, state: FSMContext):
             async def del_temp(m):
                 await asyncio.sleep(3)
                 try: await m.delete()
-                except: pass
+                except Exception: pass
             asyncio.create_task(del_temp(temp))
             return
 
@@ -1299,7 +1308,7 @@ async def process_billing_date_shift(message: types.Message, state: FSMContext):
         async def del_temp_date(m):
             await asyncio.sleep(3)
             try: await m.delete()
-            except: pass
+            except Exception: pass
         asyncio.create_task(del_temp_date(temp))
         return
             
@@ -1318,7 +1327,7 @@ async def process_billing_date_shift(message: types.Message, state: FSMContext):
                     async def del_temp_r(m):
                         await asyncio.sleep(3)
                         try: await m.delete()
-                        except: pass
+                        except Exception: pass
                     asyncio.create_task(del_temp_r(temp))
                     await state.clear()
                     return
@@ -1332,7 +1341,7 @@ async def process_billing_date_shift(message: types.Message, state: FSMContext):
                 amount_str = _fmt_billing_amount(amount_val, currency, lang)
                 date_str = node_obj.next_payment_date.strftime("%d.%m.%Y")
                 
-                provider = getattr(node_obj, "provider_name") or "Unknown"
+                provider = node_obj.provider_name or "Unknown"
                 clean_text = _("billing_menu_text_node", lang, name=node_obj.name, provider=provider, amount=amount_str, date=date_str)
                 toast_text = clean_text + "\n\n✅ <b>Данные сохранены!</b>"
                 
@@ -1344,7 +1353,7 @@ async def process_billing_date_shift(message: types.Message, state: FSMContext):
                 async def remove_toast(cid, mid, txt, kb):
                     await asyncio.sleep(3)
                     try: await message.bot.edit_message_text(txt, chat_id=cid, message_id=mid, reply_markup=kb, parse_mode="HTML")
-                    except: pass
+                    except Exception: pass
                 asyncio.create_task(remove_toast(message.chat.id, menu_msg_id, clean_text, keyboard))
         except OperationalError:
             pass
@@ -1401,7 +1410,7 @@ async def cq_master_billing_menu(callback: types.CallbackQuery):
     keyboard = get_master_billing_keyboard(master_billing, lang)
     try:
         await callback.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
-    except Exception as e:
+    except Exception:
         pass
     await callback.answer()
 
@@ -1420,12 +1429,12 @@ async def process_master_billing_amount(message: types.Message, state: FSMContex
     data = await state.get_data()
     
     try: await message.delete()
-    except: pass
+    except Exception: pass
     
     prompt_msg_id = data.get("prompt_msg_id")
     if prompt_msg_id:
         try: await message.bot.delete_message(chat_id=message.chat.id, message_id=prompt_msg_id)
-        except: pass
+        except Exception: pass
 
     import asyncio
     try:
@@ -1435,7 +1444,7 @@ async def process_master_billing_amount(message: types.Message, state: FSMContex
         async def del_temp(m):
             await asyncio.sleep(3)
             try: await m.delete()
-            except: pass
+            except Exception: pass
         asyncio.create_task(del_temp(temp))
         return
     
@@ -1470,7 +1479,7 @@ async def process_master_billing_amount(message: types.Message, state: FSMContex
             async def remove_toast(cid, mid, txt, kb):
                 await asyncio.sleep(3)
                 try: await message.bot.edit_message_text(txt, chat_id=cid, message_id=mid, reply_markup=kb, parse_mode="HTML")
-                except: pass
+                except Exception: pass
             asyncio.create_task(remove_toast(message.chat.id, menu_msg_id, clean_text, keyboard))
         except Exception:
             pass
@@ -1491,15 +1500,15 @@ async def process_master_billing_date_shift(message: types.Message, state: FSMCo
     data = await state.get_data()
     
     try: await message.delete()
-    except: pass
+    except Exception: pass
     
     prompt_msg_id = data.get("prompt_msg_id")
     if prompt_msg_id:
         try: await message.bot.delete_message(chat_id=message.chat.id, message_id=prompt_msg_id)
-        except: pass
+        except Exception: pass
 
-    import datetime
     import asyncio
+    import datetime
     text = message.text.strip()
     target_date = None
     days = None
@@ -1529,7 +1538,7 @@ async def process_master_billing_date_shift(message: types.Message, state: FSMCo
             async def del_temp(m):
                 await asyncio.sleep(3)
                 try: await m.delete()
-                except: pass
+                except Exception: pass
             asyncio.create_task(del_temp(temp))
             return
 
@@ -1539,7 +1548,7 @@ async def process_master_billing_date_shift(message: types.Message, state: FSMCo
         async def del_temp_date(m):
             await asyncio.sleep(3)
             try: await m.delete()
-            except: pass
+            except Exception: pass
         asyncio.create_task(del_temp_date(temp))
         return
     
@@ -1562,7 +1571,7 @@ async def process_master_billing_date_shift(message: types.Message, state: FSMCo
             async def del_temp_r(m):
                 await asyncio.sleep(3)
                 try: await m.delete()
-                except: pass
+                except Exception: pass
             asyncio.create_task(del_temp_r(temp))
             await state.clear()
             return
@@ -1590,7 +1599,7 @@ async def process_master_billing_date_shift(message: types.Message, state: FSMCo
             async def remove_toast(cid, mid, txt, kb):
                 await asyncio.sleep(3)
                 try: await message.bot.edit_message_text(txt, chat_id=cid, message_id=mid, reply_markup=kb, parse_mode="HTML")
-                except: pass
+                except Exception: pass
             asyncio.create_task(remove_toast(message.chat.id, menu_msg_id, clean_text, keyboard))
         except Exception:
             pass
@@ -1614,6 +1623,7 @@ async def cq_master_billing_toggle_reminder(callback: types.CallbackQuery):
 async def billing_reminders_task(bot: Bot):
     await asyncio.sleep(10)
     import datetime
+
     from core.config import get_bot_config, set_bot_config
     while True:
         try:
@@ -1762,7 +1772,7 @@ async def cq_master_billing_set_currency(callback: types.CallbackQuery, state: F
             import datetime
             date_obj = datetime.datetime.fromisoformat(date)
             date_str = date_obj.strftime("%d.%m.%Y")
-        except:
+        except Exception:
             date_str = date
     else:
         date_str = _("billing_date_not_set", lang)

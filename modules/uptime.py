@@ -1,15 +1,19 @@
-import asyncio
 import logging
-import time
-from aiogram import Dispatcher, types, F
-from aiogram.types import KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
-from core.i18n import _, I18nFilter, get_user_lang
-from core import config
-from core import shared_state
+
+from aiogram import Dispatcher, F, types
+from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, KeyboardButton
+
+from core import config, shared_state
 from core.auth import is_allowed, send_access_denied_message
+from core.i18n import I18nFilter, _, get_user_lang
 from core.messaging import delete_previous_message
 from core.shared_state import LAST_MESSAGE_IDS
-from core.utils import format_uptime, format_node_event_time, get_host_path, reset_agent_availability_async
+from core.utils import (
+    format_node_event_time,
+    format_uptime,
+    get_host_path,
+    reset_agent_availability_async,
+)
 
 BUTTON_KEY = "btn_uptime"
 

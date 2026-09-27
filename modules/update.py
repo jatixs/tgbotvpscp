@@ -1,22 +1,22 @@
 import asyncio
 import logging
 import os
-import sys
 import re
 import signal
+import sys
+
 import aiohttp
-from aiogram import F, Dispatcher, types, Bot
-from aiogram.types import KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram import Bot, Dispatcher, F, types
 from aiogram.exceptions import TelegramBadRequest
-from core.i18n import _, I18nFilter, get_user_lang
-from core import config, utils
-from core.utils import log_audit_event, AuditEvent
+from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, KeyboardButton
+
+from core import config, shared_state, utils
 from core.auth import is_allowed, send_access_denied_message
+from core.config import DEPLOY_MODE, RESTART_FLAG_FILE
+from core.i18n import I18nFilter, _, get_user_lang
 from core.messaging import delete_previous_message, send_alert
 from core.shared_state import LAST_MESSAGE_IDS
-from core.utils import escape_html
-from core.config import RESTART_FLAG_FILE, DEPLOY_MODE
-from core import shared_state
+from core.utils import AuditEvent, escape_html, log_audit_event
 
 BUTTON_KEY = "btn_update"
 CHECK_INTERVAL = 21600
@@ -114,7 +114,7 @@ async def get_changelog_entry(branch: str, lang: str) -> str:
                         out = await response.text()
                     else:
                         return "Changelog not found."
-        except:
+        except Exception:
             return "Changelog not available."
     lines = out.splitlines()
     result = []

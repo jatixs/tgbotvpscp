@@ -1,9 +1,11 @@
 import asyncio
+
 from aiogram import Dispatcher, types
 from aiogram.types import KeyboardButton
-from core.i18n import _, I18nFilter, get_user_lang
+
 from core import config
 from core.auth import is_allowed, send_access_denied_message
+from core.i18n import I18nFilter, _, get_user_lang
 from core.messaging import delete_previous_message
 from core.shared_state import LAST_MESSAGE_IDS
 from core.utils import escape_html

@@ -1,24 +1,26 @@
 import asyncio
 import logging
-import psutil
-import aiohttp
 import os
 import re
 import time
-from datetime import datetime, timezone, timedelta
-from aiogram import Dispatcher, types, F
-from aiogram.types import KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
-from core.i18n import _, I18nFilter, get_user_lang
+from datetime import datetime, timedelta, timezone
+
+import aiohttp
+import psutil
+from aiogram import Dispatcher, F, types
+from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, KeyboardButton
+
 from core import config
 from core.auth import is_allowed, send_access_denied_message
+from core.i18n import I18nFilter, _, get_user_lang
 from core.messaging import delete_previous_message
 from core.shared_state import LAST_MESSAGE_IDS
 from core.utils import (
+    escape_html,
     format_traffic,
     format_uptime,
-    get_server_timezone_label,
     get_host_path,
-    escape_html,
+    get_server_timezone_label,
 )
 
 BUTTON_KEY = "btn_selftest"
@@ -81,24 +83,23 @@ async def get_ip_data_full(ip: str):
     if not ip or ip in ["localhost", "127.0.0.1", "::1"]:
         return "🏠", None
     try:
-        async with aiohttp.ClientSession() as session:
-            async with session.get(
-                f"http://ip-api.com/json/{ip}?fields=status,countryCode,offset",
-                timeout=2,
-            ) as response:
-                if response.status == 200:
-                    data = await response.json()
-                    if data.get("status") == "success":
-                        country_code = data.get("countryCode")
-                        flag = "❓"
-                        if country_code and len(country_code) == 2:
-                            flag = "".join(
-                                (
-                                    chr(ord(char.upper()) - 65 + 127462)
-                                    for char in country_code
-                                )
-                            )
-                        return flag, data.get("offset")
+        async with aiohttp.ClientSession() as session, session.get(
+            f"http://ip-api.com/json/{ip}?fields=status,countryCode,offset",
+            timeout=2,
+        ) as response:
+            if response.status == 200:
+                data = await response.json()
+                if data.get("status") == "success":
+                    country_code = data.get("countryCode")
+                    flag = "❓"
+                    if country_code and len(country_code) == 2:
+                        flag = "".join(
+                            
+                                chr(ord(char.upper()) - 65 + 127462)
+                                for char in country_code
+                            
+                        )
+                    return flag, data.get("offset")
     except Exception as e:
         logging.debug(f"Error getting IP data: {e}")
     return "❓", None
@@ -208,7 +209,7 @@ async def get_last_ssh_login(lang: str):
                                 off_h = int(offset / 3600)
                                 sign = "+" if off_h >= 0 else ""
                                 time_str += f" / 📍 {ip_dt.strftime('%H:%M')} (GMT{sign}{off_h})"
-                            except: pass
+                            except Exception: pass
 
                         return _(
                             "selftest_ssh_entry",

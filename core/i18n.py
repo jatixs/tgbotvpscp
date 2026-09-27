@@ -1,11 +1,11 @@
-import json
 import logging
-import os
+from functools import cache
+
 from aiogram import F
-from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+
 from . import config as core_config
 from . import shared_state
-from functools import lru_cache
 from .config import get_bot_config_sync, set_bot_config_sync
 
 STRINGS = {
@@ -2110,7 +2110,7 @@ def get_text(key: str, user_id_or_lang: int | str | None, **kwargs) -> str:
 _ = get_text
 
 
-@lru_cache(maxsize=None)
+@cache
 def get_all_translations(key: str) -> list[str]:
     translations = []
     for lang_code, lang_strings in STRINGS.items():

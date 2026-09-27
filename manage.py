@@ -3,12 +3,12 @@
 Утилита командной строки (CLI) для управления проектом.
 Позволяет добавлять администраторов, сбрасывать пароли, очищать логи и управлять системными службами.
 """
-import asyncio
 import argparse
-import sys
+import asyncio
+import logging
 import os
 import subprocess
-import logging
+import sys
 import time
 
 base_dir = os.path.dirname(os.path.abspath(__file__))
@@ -28,7 +28,8 @@ if os.path.exists(env_file):
 logging.basicConfig(format="%(message)s", level=logging.INFO)
 
 from tortoise import Tortoise
-from core import config, auth, models, utils
+
+from core import auth, config, models, utils
 from core.nodes_db import init_db
 
 
@@ -43,7 +44,7 @@ async def close_services():
 
 
 async def cmd_adduser(args):
-    print(f"🔧 Добавление администратора...")
+    print("🔧 Добавление администратора...")
     auth.load_users()
     if auth.add_user(args.id, "admins", args.name):
         if hasattr(auth, "save_users"):
@@ -59,8 +60,8 @@ async def cmd_webpass(args):
         new_pass = utils.generate_random_string(12)
 
     utils.update_env_variable("TG_WEB_INITIAL_PASSWORD", new_pass)
-    print(f"✅ Пароль Web-панели изменен.")
-    print(f"🔑 Новый пароль сохранен в файле .env")
+    print("✅ Пароль Web-панели изменен.")
+    print("🔑 Новый пароль сохранен в файле .env")
     print("ℹ️  Перезапустите бота для применения: tgcp-bot restart")
     
 
@@ -72,7 +73,7 @@ async def cmd_stats(args):
         now = time.time()
         threshold = now - config.NODE_OFFLINE_TIMEOUT
         active = await models.Node.filter(last_seen__gte=threshold).count()
-        print(f"📊 Статистика:")
+        print("📊 Статистика:")
         print(f"   Всего нод: {node_count}")
         print(f"   Активных: {active}")
     finally:
@@ -162,7 +163,7 @@ async def cmd_status(args):
                                 print(f"  • {name}: {state} ({status})")
                         else:
                             print("  Контейнеры не найдены")
-                    except:
+                    except Exception:
                         # Fallback to raw output if JSON parsing fails
                         print(result.stdout)
                 else:
