@@ -1,18 +1,22 @@
 import asyncio
+import json
 import logging
 import re
 import subprocess
-import json
-import os
+
 import aiohttp
-from aiogram import types, F, Dispatcher
-from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-from core.i18n import _, get_user_lang, I18nFilter
+from aiogram import Dispatcher, F, types
+from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+
 from core import config
+from core.auth import (
+    is_allowed,
+    send_access_denied_message,
+)
 from core.config import MANAGED_SERVICES
-from core.auth import is_allowed, send_access_denied_message, ALLOWED_USERS, ADMIN_USER_ID
-from core.rbac import get_role_level as get_user_role_level
+from core.i18n import I18nFilter, _, get_user_lang
 from core.messaging import delete_previous_message
+from core.rbac import get_role_level as get_user_role_level
 from core.shared_state import LAST_MESSAGE_IDS
 
 # Cache for Docker Hub descriptions
@@ -114,7 +118,7 @@ def get_docker_status(container_name):
             return "not_found"
         except Exception:
             return "not_found"
-    except Exception as e:
+    except Exception:
         # Docker not available or connection error - treat as not found
         return "not_found"
 
@@ -574,8 +578,7 @@ def get_services_keyboard(user_id, page=0):
     total_pages = (total_services + SERVICES_PER_PAGE - 1) // SERVICES_PER_PAGE
     
     # Clamp page
-    if page < 0:
-        page = 0
+    page = max(page, 0)
     if page >= total_pages:
         page = total_pages - 1
     

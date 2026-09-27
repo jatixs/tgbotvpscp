@@ -1,18 +1,23 @@
-import os
-import json
 import logging
+import os
 import urllib.parse
-import hashlib
+
 from aiogram import Bot
-from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.exceptions import TelegramBadRequest
+from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from argon2 import PasswordHasher
+
 from . import config
+from .config import (
+    ADMIN_USER_ID,
+    ADMIN_USERNAME,
+    INSTALL_MODE,
+    get_bot_config_sync,
+    set_bot_config_sync,
+)
 from .i18n import _, log_text
-from .config import ADMIN_USER_ID, ADMIN_USERNAME, INSTALL_MODE
-from .config import get_bot_config_sync, set_bot_config_sync
-from .shared_state import ALLOWED_USERS, USER_NAMES, LAST_MESSAGE_IDS
 from .messaging import delete_previous_message
+from .shared_state import ALLOWED_USERS, LAST_MESSAGE_IDS, USER_NAMES
 from .utils import escape_html
 
 

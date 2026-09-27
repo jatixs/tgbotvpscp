@@ -9,8 +9,8 @@ import logging
 from pathlib import Path
 from typing import Final
 
-from aiohttp import web
 from aiogram import Bot
+from aiohttp import web
 
 from ..config import BASE_DIR, ENABLE_WEB_UI, WEB_SERVER_HOST, WEB_SERVER_PORT
 from ..i18n import log_text
@@ -18,7 +18,12 @@ from ..tasks import cleanup_server, start_background_tasks
 from .api_nodes import routes as node_routes
 from .api_system import routes as system_routes
 from .auth import routes as auth_routes
-from .middlewares import csrf_middleware, rate_limit_middleware, security_headers_middleware, waf_middleware
+from .middlewares import (
+    csrf_middleware,
+    rate_limit_middleware,
+    security_headers_middleware,
+    waf_middleware,
+)
 from .streaming import routes as streaming_routes
 from .views import routes as view_routes
 
@@ -94,4 +99,4 @@ async def start_web_server(bot_instance: Bot) -> web.AppRunner | None:
     return runner
 
 
-__all__ = ["create_web_app", "start_web_server", "on_shutdown"]
+__all__ = ["create_web_app", "on_shutdown", "start_web_server"]

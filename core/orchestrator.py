@@ -22,7 +22,6 @@ import sys
 import time
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Optional
 
 import psutil
 
@@ -182,7 +181,7 @@ class ModuleOrchestrator:
         self._unload_ttl = unload_ttl
         self._modules: dict[str, ModuleInfo] = {}
         self._locks: dict[str, asyncio.Lock] = {}
-        self._gc_task: Optional[asyncio.Task] = None
+        self._gc_task: asyncio.Task | None = None
         self._background_tasks: set[asyncio.Task] = set()
         self._setup_done = False
 

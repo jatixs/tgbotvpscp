@@ -1,17 +1,19 @@
 import asyncio
-import re
 import logging
+import re
 import shlex
-from aiogram import F, Dispatcher, types
-from aiogram.types import KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
-from aiogram.fsm.context import FSMContext
+
+from aiogram import Dispatcher, F, types
 from aiogram.exceptions import TelegramBadRequest
-from core.i18n import _, I18nFilter, get_user_lang
+from aiogram.fsm.context import FSMContext
+from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, KeyboardButton
+
 from core import config
 from core.auth import is_allowed, send_access_denied_message
+from core.i18n import I18nFilter, _, get_user_lang
 from core.messaging import delete_previous_message
 from core.shared_state import LAST_MESSAGE_IDS
-from core.utils import escape_html, detect_xray_client
+from core.utils import detect_xray_client, escape_html
 
 BUTTON_KEY = "btn_xray"
 

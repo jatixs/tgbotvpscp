@@ -11,13 +11,13 @@ import re
 import subprocess
 import time
 from collections import deque
-from typing import Any
 
 import aiohttp
 from aiohttp import web
 
 from . import config as current_config
 from . import shared_state
+from .shared_state import AGENT_HISTORY, AUTH_TOKENS
 from .utils import get_country_flag
 from .web.auth import (
     CSRF_TOKENS,
@@ -28,7 +28,6 @@ from .web.auth import (
     RESET_TOKENS,
     SERVER_SESSIONS,
 )
-from .shared_state import AGENT_HISTORY, AUTH_TOKENS
 
 AGENT_PING_TIMEOUT = 5
 BACKGROUND_TASKS_KEY = "background_tasks"
@@ -308,8 +307,8 @@ async def cleanup_server(app: web.Application) -> None:
 
 __all__ = [
     "agent_monitor",
-    "measure_agent_ping",
     "cleanup_monitor",
     "cleanup_server",
+    "measure_agent_ping",
     "start_background_tasks",
 ]

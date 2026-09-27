@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 modules/client_alerts.py — Gateway Bot / Alert System (optional module).
 
@@ -31,7 +30,7 @@ from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 from core import config
-from core.i18n import I18nFilter, get_user_lang, _, log_text
+from core.i18n import I18nFilter, _, get_user_lang, log_text
 
 # ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -595,19 +594,17 @@ async def _cq_panel_subscribers(callback: types.CallbackQuery) -> None:
 
     if not subscribers:
         text = (
-            f"📣 <b>Alert Module — Панель управления</b>\n\n"
-            f"📭 Подписчиков пока нет.\n\n"
-            f"Выберите действие:"
+            "📣 <b>Alert Module — Панель управления</b>\n\n"
+            "📭 Подписчиков пока нет.\n\n"
+            "Выберите действие:"
         )
         markup = _get_alert_panel_keyboard()
     else:
         PER_PAGE = 5
         items = list(subscribers.items())
         total_pages = max(1, (len(items) + PER_PAGE - 1) // PER_PAGE)
-        if page > total_pages:
-            page = total_pages
-        if page < 1:
-            page = 1
+        page = min(page, total_pages)
+        page = max(page, 1)
             
         start_idx = (page - 1) * PER_PAGE
         end_idx = start_idx + PER_PAGE

@@ -1,13 +1,13 @@
-from tortoise import fields, models
-from cryptography.fernet import InvalidToken
-from core.config import CIPHER_SUITE
-import json
 import time
+
+from cryptography.fernet import InvalidToken
+from tortoise import fields, models
+
+from core.config import CIPHER_SUITE
 
 
 class EncryptionOperationError(ValueError):
     """Errors that occur during encryption/decryption of database data."""
-    pass
 
 class EncryptedTextField(fields.TextField):
     """

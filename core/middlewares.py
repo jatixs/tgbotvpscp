@@ -1,23 +1,26 @@
-import time
 import logging
-from typing import Callable, Dict, Any, Awaitable, Tuple
+import time
+from collections.abc import Awaitable, Callable
+from typing import Any
+
 from aiogram import BaseMiddleware, Bot
-from aiogram.types import Message, CallbackQuery
+from aiogram.types import CallbackQuery, Message
+
 from .i18n import _, get_user_lang
 from .utils import anonymize_user
 
 THROTTLE_TIME = 5
-user_last_action_info: Dict[int, Tuple[float, str | None]] = {}
-user_throttle_warning_time: Dict[int, float] = {}
+user_last_action_info: dict[int, tuple[float, str | None]] = {}
+user_throttle_warning_time: dict[int, float] = {}
 
 
 class SpamThrottleMiddleware(BaseMiddleware):
 
     async def __call__(
         self,
-        handler: Callable[[Message | CallbackQuery, Dict[str, Any]], Awaitable[Any]],
+        handler: Callable[[Message | CallbackQuery, dict[str, Any]], Awaitable[Any]],
         event: Message | CallbackQuery,
-        data: Dict[str, Any],
+        data: dict[str, Any],
     ) -> Any:
         user_id = event.from_user.id
         username = event.from_user.username
@@ -71,12 +74,13 @@ class SpamThrottleMiddleware(BaseMiddleware):
 
 from datetime import datetime, timezone
 
+
 class AutoDeleteMessageMiddleware(BaseMiddleware):
     async def __call__(
         self,
-        handler: Callable[[Message, Dict[str, Any]], Awaitable[Any]],
+        handler: Callable[[Message, dict[str, Any]], Awaitable[Any]],
         event: Message,
-        data: Dict[str, Any],
+        data: dict[str, Any],
     ) -> Any:
         response = await handler(event, data)
         try:
@@ -88,9 +92,9 @@ class AutoDeleteMessageMiddleware(BaseMiddleware):
 class CallbackTTLMiddleware(BaseMiddleware):
     async def __call__(
         self,
-        handler: Callable[[CallbackQuery, Dict[str, Any]], Awaitable[Any]],
+        handler: Callable[[CallbackQuery, dict[str, Any]], Awaitable[Any]],
         event: CallbackQuery,
-        data: Dict[str, Any],
+        data: dict[str, Any],
     ) -> Any:
         if event.data in ["selftest_refresh", "cmd_memstats"] or str(event.data).startswith("alert_reply_"):
             return await handler(event, data)
