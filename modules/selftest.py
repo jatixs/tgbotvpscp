@@ -256,10 +256,12 @@ async def _generate_selftest_data(lang: str) -> tuple[str, InlineKeyboardMarkup]
             
         used_freq_total = (freq.current * cpu_total_pct) / 100
         cpu_val = format_freq(used_freq_total)
-        cpu_bot = format_freq((freq.current * bot_cpu_pct) / 100)
+        bot_cpu_mhz = (freq.current * bot_cpu_pct) / 100
+        cpu_bot = format_freq(bot_cpu_mhz)
     else:
         cpu_val = f"{cpu_total_pct:.1f}%"
         cpu_bot = f"{bot_cpu_pct:.1f}%"
+        bot_cpu_mhz = bot_cpu_pct  # use percentage as proxy for zero check
 
     _mem = psutil.virtual_memory()
     mem_val_mb = (_mem.total - _mem.available) / (1024 * 1024)
@@ -288,6 +290,13 @@ async def _generate_selftest_data(lang: str) -> tuple[str, InlineKeyboardMarkup]
     
     bot_disk_bytes = await asyncio.to_thread(get_dir_size, config.BASE_DIR)
     disk_bot = f"{bot_disk_bytes / (1024 * 1024):.1f} MB"
+
+    if freq and freq.current > 0:
+        cpu_bot_info = f" (<b>{cpu_bot}</b> {_('selftest_bot_cpu_suffix', lang)})" if bot_cpu_mhz > 0 else ""
+    else:
+        cpu_bot_info = f" (<b>{cpu_bot}</b> {_('selftest_bot_cpu_suffix', lang)})" if bot_cpu_pct > 0 else ""
+    mem_bot_info = f" (<b>{mem_bot}</b> {_('selftest_bot_mem_suffix', lang)})" if mem_bot_mb >= 0.1 else ""
+    disk_bot_info = f" (<b>{disk_bot}</b> {_('selftest_bot_disk_suffix', lang)})" if bot_disk_bytes >= 102400 else ""
 
     uptime_seconds = time.time() - psutil.boot_time()
     uptime_str = format_uptime(uptime_seconds, lang)
@@ -350,11 +359,11 @@ async def _generate_selftest_data(lang: str) -> tuple[str, InlineKeyboardMarkup]
         "selftest_results_body",
         lang,
         cpu_val=cpu_val,
-        cpu_bot=cpu_bot,
+        cpu_bot_info=cpu_bot_info,
         mem_val=mem_val,
-        mem_bot=mem_bot,
+        mem_bot_info=mem_bot_info,
         disk_val=disk_val,
-        disk_bot=disk_bot,
+        disk_bot_info=disk_bot_info,
         uptime=uptime_str,
         inet_status=inet_status,
         ping_target=ping_target_label,
