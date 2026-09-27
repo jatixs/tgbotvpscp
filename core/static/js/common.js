@@ -975,7 +975,7 @@ function showNextRouteEasterEgg(isRu) {
                 close: true,
             },
             {
-                text: isRu ? '🚀 Открыть NextRoute' : '🚀 Open NextRoute',
+                text: isRu ? '<span class="flex items-center justify-center gap-2"><i class="icon icon-rocket icon-sm bg-current"></i> Открыть NextRoute</span>' : '<span class="flex items-center justify-center gap-2"><i class="icon icon-rocket icon-sm bg-current"></i> Open NextRoute</span>',
                 class: 'bg-blue-600 text-white hover:bg-blue-700',
                 close: true,
                 onClick: () => {
