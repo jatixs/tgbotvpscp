@@ -1,14 +1,15 @@
-import logging
 import os
+
 from aiogram.types import (
-    ReplyKeyboardMarkup,
-    KeyboardButton,
-    InlineKeyboardMarkup,
     InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    KeyboardButton,
+    ReplyKeyboardMarkup,
 )
-from .i18n import _, get_user_lang, STRINGS as I18N_STRINGS
-from .shared_state import ALLOWED_USERS, USER_NAMES, ALERTS_CONFIG
-from .config import ADMIN_USER_ID, INSTALL_MODE, DEFAULT_LANGUAGE, KEYBOARD_CONFIG
+
+from .config import ADMIN_USER_ID, INSTALL_MODE, KEYBOARD_CONFIG
+from .i18n import _, get_user_lang
+from .shared_state import ALERTS_CONFIG, ALLOWED_USERS, USER_NAMES
 
 BTN_CONFIG_MAP = {
     "btn_selftest": "enable_selftest",

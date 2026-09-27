@@ -1,14 +1,32 @@
 <p align="center">
-  English Version | <a href="CHANGELOG.md">Русская Версия</a>
+  <img src="https://flagcdn.com/20x15/gb.png" width="16" alt="EN"> English | <a href="CHANGELOG.md"><img src="https://flagcdn.com/20x15/ru.png" width="16" alt="RU"> Русский</a>
 </p>
 
 <h1 align="center">📝 Telegram VPS Management Bot — Changelog</h1>
 <p align="center">
-    <img src="https://img.shields.io/badge/version-v1.25.2-blue?style=flat-square" alt="Version 1.25.2"/>
-    <img src="https://img.shields.io/badge/build-91-purple?style=flat-square" alt="Build 91"/>
-    <img src="https://img.shields.io/badge/date-Sep%2020%202026-green?style=flat-square" alt="Date Sep 20 2026"/>
+    <img src="https://img.shields.io/badge/version-v1.25.3-blue?style=flat-square" alt="Version 1.25.3"/>
+    <img src="https://img.shields.io/badge/build-92-purple?style=flat-square" alt="Build 92"/>
+    <img src="https://img.shields.io/badge/date-Sep%2027%202026-green?style=flat-square" alt="Date Sep 27 2026"/>
 	<img src="https://img.shields.io/badge/status-stable-green?style=flat-square" alt="Status Stable"/>
 </p>
+
+---
+## [1.25.3] - 2026-09-27
+
+### 🔒 Security:
+* **Dependencies:** Patched CVE-2026-62949 (Denial of Service) by updating the `asyncssh` library.
+* **Core:** Conducted a comprehensive code security audit. Addressed potential random number generation vulnerabilities (CodeQL) and prevented crashes during system interrupts.
+
+### ✨ Improved:
+* **WebUI & UX:** Major interface upgrade: added strict localized form validation for settings, improved keyboard accessibility (fixed `Tab`/`Ctrl` conflicts), and enhanced modal stability. Unreliable emojis were replaced with cross-platform SVG icons.
+* **Monitoring (Selftest):** System reports are now more concise — the bot no longer clutters the summary with zero-values when it isn't consuming resources (CPU, RAM).
+* **Code Optimization:** Executed a deep refactoring of the core and modules (over 40 files). Enforced strict typing standards (Ruff), removed dead code, and optimized imports, making the bot faster and more reliable.
+
+### 🐛 Bugfixes:
+* **Localization:** Restored missing translations for toast notifications on the login and password reset screens.
+
+### 📝 Documentation:
+* **Administration:** Published comprehensive guides: a security policy (`SECURITY.md` with deployment Best Practices) and `CONTRIBUTING.md`. All technical documentation is now fully bilingual (EN/RU) with easy navigation.
 
 ---
 ## [1.25.2] - 2026-09-20
@@ -890,7 +908,7 @@ Into the core of the web server (`core/server.py `) added a number of new APIs a
 
 ### 📝 Documentation:
 
-* **Adding a Module:** Added a section with instructions on how to create and integrate custom modules in `README.md` and `README.en.md`.
+* **Adding a Module:** Added a section with instructions on how to create and integrate custom modules in `../README.md` and `README.en.md`.
 * Updated version and build numbers.
 
 ---

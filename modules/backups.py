@@ -1,22 +1,30 @@
-import os
+import asyncio
 import glob
 import json
-import asyncio
 import logging
+import os
 import time
 import zipfile
-import psutil
 from datetime import datetime
-from aiogram import Dispatcher, types, F
-from aiogram.types import KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton, BufferedInputFile
-from core.i18n import I18nFilter, get_user_lang, get_text
-from core import i18n as i18n_module
+
+import psutil
+from aiogram import Dispatcher, F, types
+from aiogram.types import (
+    BufferedInputFile,
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    KeyboardButton,
+)
+
 from core import config
+from core import i18n as i18n_module
 from core import utils as core_utils
 from core.auth import is_allowed, send_access_denied_message
+from core.i18n import I18nFilter, get_text, get_user_lang
+from core.keyboards import get_backup_timer_settings_keyboard, get_backups_menu_keyboard
 from core.shared_state import LAST_MESSAGE_IDS
-from core.keyboards import get_backups_menu_keyboard, get_backup_timer_settings_keyboard
 from core.utils import format_traffic
+
 # Lazy import traffic_module when needed
 
 BUTTON_KEY = "btn_backups"
@@ -220,8 +228,7 @@ async def _toggle_autobackup() -> tuple[bool, int]:
     if last_value < BACKUP_INTERVAL_STEP:
         last_value = int(config.DEFAULT_CONFIG.get("BACKUP_INTERVAL", 300))
     last_value = _normalize_interval(last_value)
-    if last_value < BACKUP_INTERVAL_STEP:
-        last_value = BACKUP_INTERVAL_STEP
+    last_value = max(last_value, BACKUP_INTERVAL_STEP)
 
     await config.save_system_config_async({
         "BACKUP_INTERVAL": last_value,

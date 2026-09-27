@@ -1,25 +1,27 @@
-import logging
 import io
 import json
+import logging
+
 import qrcode
-from aiogram import F, Dispatcher, types
-from aiogram.types import (
-    KeyboardButton,
-    InlineKeyboardMarkup,
-    InlineKeyboardButton,
-    BufferedInputFile,
-)
+from aiogram import Dispatcher, F, types
+from aiogram.exceptions import TelegramBadRequest
+from aiogram.filters import StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
-from aiogram.filters import StateFilter
-from aiogram.exceptions import TelegramBadRequest
-from core.i18n import _, I18nFilter, get_user_lang
+from aiogram.types import (
+    BufferedInputFile,
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    KeyboardButton,
+)
+
 from core import config
 from core.auth import is_allowed
+from core.i18n import I18nFilter, _, get_user_lang
+from core.keyboards import get_back_keyboard, get_main_reply_keyboard
 from core.messaging import delete_previous_message
 from core.shared_state import LAST_MESSAGE_IDS
 from core.utils import convert_json_to_vless, convert_vless_to_json, escape_html
-from core.keyboards import get_back_keyboard, get_main_reply_keyboard
 
 BUTTON_KEY = "btn_vless"
 

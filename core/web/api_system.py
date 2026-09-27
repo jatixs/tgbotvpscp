@@ -15,6 +15,9 @@ from typing import Any
 from aiohttp import web
 
 from .. import config as current_config
+
+# Lazy imports for modules
+from .. import shared_state
 from ..auth import get_user_name, save_users_async
 from ..config import (
     ADMIN_USER_ID,
@@ -22,18 +25,22 @@ from ..config import (
     DEPLOY_MODE,
     NODE_LOG_DIR,
     WATCHDOG_LOG_DIR,
-    save_keyboard_config,
     save_keyboard_config_async,
-    save_system_config,
     save_system_config_async,
 )
-from ..i18n import get_text as _, get_user_lang, set_user_lang_async
+from ..i18n import get_text as _
+from ..i18n import get_user_lang, set_user_lang_async
+from ..rbac import is_admin as _is_admin
 from ..shared_state import ALERTS_CONFIG, ALLOWED_USERS, USER_NAMES
-from ..utils import generate_favicons, save_alerts_config_async, reset_agent_availability_async, decrypt_request_payload, encrypted_json_response, encrypt_for_web
+from ..utils import (
+    decrypt_request_payload,
+    encrypt_for_web,
+    encrypted_json_response,
+    generate_favicons,
+    reset_agent_availability_async,
+    save_alerts_config_async,
+)
 from .auth import get_current_user
-from ..rbac import is_admin as _is_admin, is_root as _is_main_admin
-# Lazy imports for modules
-from .. import shared_state
 
 routes = web.RouteTableDef()
 
@@ -483,19 +490,19 @@ async def api_reset_agent_uptime(request: web.Request) -> web.StreamResponse:
 
 
 __all__ = [
-    "routes",
-    "handle_get_logs",
-    "handle_get_sys_logs",
-    "handle_clear_logs",
-    "handle_save_system_config",
-    "handle_save_keyboard_config",
-    "handle_save_notifications",
-    "handle_save_metadata",
-    "handle_set_language",
-    "handle_user_action",
     "api_check_update",
-    "api_run_update",
+    "api_clear_notifications",
     "api_get_notifications",
     "api_read_notifications",
-    "api_clear_notifications",
+    "api_run_update",
+    "handle_clear_logs",
+    "handle_get_logs",
+    "handle_get_sys_logs",
+    "handle_save_keyboard_config",
+    "handle_save_metadata",
+    "handle_save_notifications",
+    "handle_save_system_config",
+    "handle_set_language",
+    "handle_user_action",
+    "routes",
 ]

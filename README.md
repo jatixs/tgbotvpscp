@@ -1,15 +1,15 @@
 <p align="center">
-  <a href="README.en.md">English Version</a> | Русская Версия
+  <a href="docs/README.en.md"><img src="https://flagcdn.com/20x15/gb.png" width="16" alt="EN"> English</a> | <img src="https://flagcdn.com/20x15/ru.png" width="16" alt="RU"> Русский
 </p>
 
 <h1 align="center">🤖 VPS Manager Telegram Bot</h1>
 
 <p align="center">
-  <b>v1.25.2</b> — профессиональная экосистема для мониторинга и управления серверной инфраструктурой<br>
+  <b>v1.25.3</b> — профессиональная экосистема для мониторинга и управления серверной инфраструктурой<br>
   (Systemd / Docker / API / WebUI / PWA / Multi-Node / Remote SSH / Backup Manager)<br><br>
 
-  <a href="https://github.com/jatixs/tgbotvpscp/releases/latest"><img src="https://img.shields.io/badge/version-v1.25.2-blue?style=flat-square" alt="Version 1.25.2"/></a>
-  <a href="https://github.com/jatixs/tgbotvpscp/releases/latest"><img src="https://img.shields.io/badge/build-91-purple?style=flat-square" alt="Build 91"/></a>
+  <a href="https://github.com/jatixs/tgbotvpscp/releases/latest"><img src="https://img.shields.io/badge/version-v1.25.3-blue?style=flat-square" alt="Version 1.25.3"/></a>
+  <a href="https://github.com/jatixs/tgbotvpscp/releases/latest"><img src="https://img.shields.io/badge/build-92-purple?style=flat-square" alt="Build 92"/></a>
   <a href="https://www.python.org/"><img src="https://img.shields.io/badge/python-3.10%2B-green?style=flat-square" alt="Python 3.10+"/></a>
   <a href="https://choosealicense.com/licenses/gpl-3.0/"><img src="https://img.shields.io/badge/license-GPL--3.0-lightgrey?style=flat-square" alt="License GPL-3.0"/></a>
   <a href="https://github.com/aiogram/aiogram"><img src="https://img.shields.io/badge/aiogram-3.x-orange?style=flat-square" alt="Aiogram 3.x"/></a>
@@ -151,7 +151,7 @@
 - **Security:** Argon2, Fernet, AES-256-CBC encryption
 - **Infrastructure:** Docker, Docker Compose, Systemd
 
-📖 Подробнее: [ARCHITECTURE.md](ARCHITECTURE.md)
+📖 Подробнее: [ARCHITECTURE.md](docs/ARCHITECTURE.md)
 
 ---
 
@@ -440,7 +440,7 @@ http://YOUR_SERVER_IP:8080
     └── node.py              # Агент ноды
 ```
 
-📖 Подробная документация: [ARCHITECTURE.md](ARCHITECTURE.md)
+📖 Подробная документация: [ARCHITECTURE.md](docs/ARCHITECTURE.md)
 
 ---
 
@@ -448,10 +448,10 @@ http://YOUR_SERVER_IP:8080
 
 ### Руководства
 
-- 📘 [**ARCHITECTURE.md**](ARCHITECTURE.md) — Полная архитектура проекта
-- 🧩 [**custom_module.md**](custom_module.md) — Создание модуля для бота
-- 🌐 [**web_module.md**](web_module.md) — Создание веб-модуля (WebUI + Бот)
-- 📝 [**CHANGELOG.md**](CHANGELOG.md) — История изменений
+- 📘 [**ARCHITECTURE.md**](docs/ARCHITECTURE.md) — Полная архитектура проекта
+- 🧩 [**custom_module.md**](docs/custom_module.md) — Создание модуля для бота
+- 🌐 [**web_module.md**](docs/web_module.md) — Создание веб-модуля (WebUI + Бот)
+- 📝 [**CHANGELOG.md**](docs/CHANGELOG.md) — История изменений
 
 ### Полезные команды
 
@@ -547,7 +547,7 @@ sudo systemctl restart tg-bot
 - `POST /api/system_config` — Сохранение конфигурации
 - `POST /api/alerts_config` — Настройки алертов
 
-📖 Полная документация API: [ARCHITECTURE.md#api](ARCHITECTURE.md)
+📖 Полная документация API: [ARCHITECTURE.md#api](docs/ARCHITECTURE.md)
 
 ---
 
