@@ -213,7 +213,7 @@
 
 ### 📦 Dependencies & Documentation:
 * **Libraries:** Bumped all Python packages to their latest stable and compatible versions (aiogram 3.28.2, tortoise-orm 0.25.4, aiohttp 3.13.5, etc.).
-* **Documentation:** Updated `ARCHITECTURE.en.md` and `custom_module_en.md` to reflect the new Memory Orchestrator, Middlewares, and the updated plugin registration system.
+* **Documentation:** Updated `ARCHITECTURE.en.md` and `../custom_module_en.md` to reflect the new Memory Orchestrator, Middlewares, and the updated plugin registration system.
 
 ---
 ## [1.22.5] - 2026-06-08
@@ -906,7 +906,7 @@ Into the core of the web server (`core/server.py `) added a number of new APIs a
 
 ### 📝 Documentation:
 
-* **Adding a Module:** Added a section with instructions on how to create and integrate custom modules in `README.md` and `README.en.md`.
+* **Adding a Module:** Added a section with instructions on how to create and integrate custom modules in `../README.md` and `README.en.md`.
 * Updated version and build numbers.
 
 ---

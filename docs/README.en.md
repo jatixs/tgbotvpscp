@@ -1,5 +1,5 @@
 <p align="center">
-  <a href="README.md">Русская Версия</a> | English Version
+  <a href="../README.md">Русская Версия</a> | English Version
 </p>
 
 <h1 align="center">🤖 VPS Manager Telegram Bot</h1>
@@ -452,7 +452,7 @@ Automatic detection:
 ### Guides
 
 - 📘 [**ARCHITECTURE.en.md**](ARCHITECTURE.en.md) — Complete project architecture
-- 🧩 [**custom_module_en.md**](custom_module_en.md) — Creating your own module
+- 🧩 [**../custom_module_en.md**](../custom_module_en.md) — Creating your own module
 - 🌐 [**web_module_en.md**](web_module_en.md) — Creating a web module (WebUI + Bot)
 - 📝 [**CHANGELOG.en.md**](CHANGELOG.en.md) — Change history
 
