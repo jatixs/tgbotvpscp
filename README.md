@@ -1,5 +1,5 @@
 <p align="center">
-  <a href="README.en.md">English Version</a> | Русская Версия
+  <a href="docs/README.en.md">English Version</a> | Русская Версия
 </p>
 
 <h1 align="center">🤖 VPS Manager Telegram Bot</h1>
@@ -151,7 +151,7 @@
 - **Security:** Argon2, Fernet, AES-256-CBC encryption
 - **Infrastructure:** Docker, Docker Compose, Systemd
 
-📖 Подробнее: [ARCHITECTURE.md](ARCHITECTURE.md)
+📖 Подробнее: [ARCHITECTURE.md](docs/ARCHITECTURE.md)
 
 ---
 
@@ -440,7 +440,7 @@ http://YOUR_SERVER_IP:8080
     └── node.py              # Агент ноды
 ```
 
-📖 Подробная документация: [ARCHITECTURE.md](ARCHITECTURE.md)
+📖 Подробная документация: [ARCHITECTURE.md](docs/ARCHITECTURE.md)
 
 ---
 
@@ -448,10 +448,10 @@ http://YOUR_SERVER_IP:8080
 
 ### Руководства
 
-- 📘 [**ARCHITECTURE.md**](ARCHITECTURE.md) — Полная архитектура проекта
+- 📘 [**ARCHITECTURE.md**](docs/ARCHITECTURE.md) — Полная архитектура проекта
 - 🧩 [**custom_module.md**](custom_module.md) — Создание модуля для бота
-- 🌐 [**web_module.md**](web_module.md) — Создание веб-модуля (WebUI + Бот)
-- 📝 [**CHANGELOG.md**](CHANGELOG.md) — История изменений
+- 🌐 [**web_module.md**](docs/web_module.md) — Создание веб-модуля (WebUI + Бот)
+- 📝 [**CHANGELOG.md**](docs/CHANGELOG.md) — История изменений
 
 ### Полезные команды
 
@@ -547,7 +547,7 @@ sudo systemctl restart tg-bot
 - `POST /api/system_config` — Сохранение конфигурации
 - `POST /api/alerts_config` — Настройки алертов
 
-📖 Полная документация API: [ARCHITECTURE.md#api](ARCHITECTURE.md)
+📖 Полная документация API: [ARCHITECTURE.md#api](docs/ARCHITECTURE.md)
 
 ---
 
