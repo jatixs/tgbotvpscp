@@ -904,17 +904,17 @@ function launchBrandEasterEgg(originEl) {
         particle.textContent = glyphs[index % glyphs.length];
         particle.style.left = `${originX}px`;
         particle.style.top = `${originY}px`;
-        particle.style.fontSize = `${14 + getSecureRandom() * 14}px`;
+        particle.style.fontSize = `${14 + Math.random() * 14}px`;
 
-        const angle = (Math.PI * 2 * index) / particleCount + getSecureRandom() * 0.5;
-        const distance = burstRadius * (0.5 + getSecureRandom() * 0.7);
+        const angle = (Math.PI * 2 * index) / particleCount + Math.random() * 0.5;
+        const distance = burstRadius * (0.5 + Math.random() * 0.7);
         const tx = Math.cos(angle) * distance;
         const ty = Math.sin(angle) * distance + 40; // slight downward drift like gravity
 
         particle.style.setProperty('--tx', `${tx.toFixed(0)}px`);
         particle.style.setProperty('--ty', `${ty.toFixed(0)}px`);
-        particle.style.setProperty('--scale', (0.8 + getSecureRandom() * 0.6).toFixed(2));
-        particle.style.setProperty('--rot', `${(-180 + getSecureRandom() * 360).toFixed(0)}deg`);
+        particle.style.setProperty('--scale', (0.8 + Math.random() * 0.6).toFixed(2));
+        particle.style.setProperty('--rot', `${(-180 + Math.random() * 360).toFixed(0)}deg`);
         particle.style.setProperty('--delay', `${index * 18}ms`);
 
         overlay.appendChild(particle);
@@ -1234,11 +1234,11 @@ function startSnow() {
     snowInterval = setInterval(() => {
         const s = document.createElement('div');
         s.className = 'snowflake';
-        s.innerText = icons[Math.floor(getSecureRandom() * icons.length)];
-        s.style.left = getSecureRandom() * 100 + 'vw';
-        s.style.animationDuration = (getSecureRandom() * 3 + 4) + 's';
-        s.style.opacity = getSecureRandom() * 0.7;
-        s.style.fontSize = (getSecureRandom() * 8 + 8) + 'px';
+        s.innerText = icons[Math.floor(Math.random() * icons.length)];
+        s.style.left = Math.random() * 100 + 'vw';
+        s.style.animationDuration = (Math.random() * 3 + 4) + 's';
+        s.style.opacity = Math.random() * 0.7;
+        s.style.fontSize = (Math.random() * 8 + 8) + 'px';
         container.appendChild(s);
         setTimeout(() => s.remove(), 6000);
     }, 300);

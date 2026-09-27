@@ -450,7 +450,7 @@ class SSHMonitor:
                         try:
                             tz_offset = time.strftime('%z')
                             tz_label = f"GMT{tz_offset[:3]}:{tz_offset[3:]}" if tz_offset else "GMT"
-                        except:
+                        except Exception:
                             tz_label = "GMT"
 
                         events.append({

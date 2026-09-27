@@ -208,7 +208,7 @@ async def get_last_ssh_login(lang: str):
                                 off_h = int(offset / 3600)
                                 sign = "+" if off_h >= 0 else ""
                                 time_str += f" / 📍 {ip_dt.strftime('%H:%M')} (GMT{sign}{off_h})"
-                            except: pass
+                            except Exception: pass
 
                         return _(
                             "selftest_ssh_entry",

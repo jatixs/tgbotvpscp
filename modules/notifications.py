@@ -772,7 +772,7 @@ async def reliable_tail_log_monitor(bot, path, alert_type, parser):
                 try:
                     os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
                 except Exception as e_kill:
-                    logging.debug(f"Failed to kill tail process in except: {e_kill}")
+                    logging.debug(f"Failed to kill tail process in except Exception: {e_kill}")
             await asyncio.sleep(10)
             
         # Give shutdown sequence time to cancel us before respawning

@@ -162,7 +162,7 @@ async def cmd_status(args):
                                 print(f"  • {name}: {state} ({status})")
                         else:
                             print("  Контейнеры не найдены")
-                    except:
+                    except Exception:
                         # Fallback to raw output if JSON parsing fails
                         print(result.stdout)
                 else:

@@ -114,7 +114,7 @@ async def get_changelog_entry(branch: str, lang: str) -> str:
                         out = await response.text()
                     else:
                         return "Changelog not found."
-        except:
+        except Exception:
             return "Changelog not available."
     lines = out.splitlines()
     result = []
