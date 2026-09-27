@@ -4,11 +4,20 @@
 
 <h1 align="center">📝 Telegram VPS Management Bot — Список изменений</h1>
 <p align="center">
-    <img src="https://img.shields.io/badge/version-v1.25.2-blue?style=flat-square" alt="Version 1.25.2"/>
-    <img src="https://img.shields.io/badge/build-91-purple?style=flat-square" alt="Build 91"/>
-    <img src="https://img.shields.io/badge/date-Сентябрь%2020%202026-green?style=flat-square" alt="Date Sep 20 2026"/>
+    <img src="https://img.shields.io/badge/version-v1.25.3-blue?style=flat-square" alt="Version 1.25.3"/>
+    <img src="https://img.shields.io/badge/build-92-purple?style=flat-square" alt="Build 92"/>
+    <img src="https://img.shields.io/badge/date-Сентябрь%2027%202026-green?style=flat-square" alt="Date Sep 27 2026"/>
 	<img src="https://img.shields.io/badge/status-stable-green?style=flat-square" alt="Status Stable"/>
 </p>
+
+---
+## [1.25.3] - 2026-09-27
+
+### ✨ Улучшено:
+* **Selftest:** Информация о потреблении ресурсов ботом (`(X из них - бот)`) теперь автоматически скрывается, если бот не потребляет данный ресурс (CPU = 0, RAM < 0.1 MB, Диск < 100 KB). Сообщение стало чище и компактнее.
+
+### 🐛 Исправлено:
+* **WebUI / Модальные окна:** Добавлены null-safe проверки для элементов системного модального окна (`input`, `cancel`, `ok` кнопки), предотвращающие ошибки при отсутствии DOM-элементов.
 
 ---
 ## [1.25.2] - 2026-09-20
