@@ -1,5 +1,5 @@
 <p align="center">
-  <a href="docs/README.en.md">🇬🇧 English</a> | 🇷🇺 Русский
+  <a href="docs/README.en.md"><img src="https://flagcdn.com/20x15/gb.png" width="16" alt="EN"> English</a> | <img src="https://flagcdn.com/20x15/ru.png" width="16" alt="RU"> Русский
 </p>
 
 <h1 align="center">🤖 VPS Manager Telegram Bot</h1>
