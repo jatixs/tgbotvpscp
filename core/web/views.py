@@ -1189,6 +1189,10 @@ async def handle_login_page(request: web.Request) -> web.StreamResponse:
         "pass_match_error",
         "login_webapp_auth_failed",
         "login_webapp_auth_error",
+        "web_perf_mode_on",
+        "web_perf_mode_off",
+        "web_a11y_mode_on",
+        "web_a11y_mode_off",
     ]
     i18n_all: dict[str, dict[str, str]] = {}
     for locale in ["ru", "en"]:
@@ -1265,6 +1269,10 @@ async def handle_reset_page_render(request: web.Request) -> web.StreamResponse:
         "web_redirecting": _("web_redirecting", lang),
         "web_logging_in": _("web_logging_in", lang),
         "web_saving_btn": _("web_saving_btn", lang),
+        "web_perf_mode_on": _("web_perf_mode_on", lang),
+        "web_perf_mode_off": _("web_perf_mode_off", lang),
+        "web_a11y_mode_on": _("web_a11y_mode_on", lang),
+        "web_a11y_mode_off": _("web_a11y_mode_off", lang),
     }
     context = {
         "lang": lang,

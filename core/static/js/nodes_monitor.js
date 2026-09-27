@@ -461,8 +461,8 @@ function createNodeCard(node) {
                 
                 <!-- Info Row -->
                 <div class="flex justify-between text-xs text-gray-500 dark:text-gray-400 pt-2 mt-2 border-t border-gray-100 dark:border-white/5">
-                    <span>⏱ ${uptime}</span>
-                    <span>📊 ${traffic}</span>
+                    <span class="flex items-center gap-1"><i class="icon icon-clock icon-sm bg-current"></i> ${uptime}</span>
+                    <span class="flex items-center gap-1"><i class="icon icon-chart-bar icon-sm bg-current"></i> ${traffic}</span>
                 </div>
                 <div class="mt-2 pt-2 border-t border-gray-100 dark:border-white/5 text-[11px] text-gray-500 dark:text-gray-400 space-y-1">
                     <div class="flex justify-between gap-2">
