@@ -2,16 +2,17 @@ import asyncio
 import logging
 import os
 import signal
-from aiogram import F, Dispatcher, types, Bot
-from aiogram.types import KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
-from core.i18n import _, I18nFilter, get_user_lang
-from core import config
-from core.utils import log_audit_event, AuditEvent
+
+from aiogram import Dispatcher, F, types
+from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, KeyboardButton
+
+from core import config, shared_state
 from core.auth import is_allowed, send_access_denied_message
+from core.config import RESTART_FLAG_FILE
+from core.i18n import I18nFilter, _, get_user_lang
 from core.messaging import delete_previous_message
 from core.shared_state import LAST_MESSAGE_IDS
-from core.config import RESTART_FLAG_FILE
-from core import shared_state
+from core.utils import AuditEvent, log_audit_event
 
 BUTTON_KEY = "btn_restart"
 

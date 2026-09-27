@@ -6,7 +6,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-import os
 import secrets
 import socket
 import time
@@ -19,10 +18,14 @@ from jinja2 import Environment, FileSystemLoader, select_autoescape
 from .. import config as current_config
 from .. import nodes_db, shared_state
 from ..config import ADMIN_USER_ID, BASE_DIR, DEFAULT_LANGUAGE, TG_BOT_NAME
-from ..i18n import get_text as _, get_user_lang
+from ..i18n import get_text as _
+from ..i18n import get_user_lang
 from ..keyboards import BTN_CONFIG_MAP
-from ..rbac import ROLE_USER, build_user_role_js, get_role_level, is_admin as _is_admin, is_root as _is_root
-from ..utils import encrypt_for_web, generate_favicons, get_app_version, get_web_key
+from ..rbac import ROLE_USER, build_user_role_js, get_role_level
+from ..rbac import is_admin as _is_admin
+from ..rbac import is_root as _is_root
+from ..utils import encrypt_for_web, generate_favicons, get_app_version
+
 # Lazy import traffic_module when needed
 from . import auth as web_auth
 
@@ -1295,13 +1298,13 @@ async def handle_reset_page_render(request: web.Request) -> web.StreamResponse:
 
 
 __all__ = [
-    "routes",
     "JINJA_ENV",
     "TEMPLATE_DIR",
     "handle_dashboard",
-    "handle_settings_page",
     "handle_login_page",
     "handle_nodes_monitor_page",
-    "handle_terminal_page",
     "handle_reset_page_render",
+    "handle_settings_page",
+    "handle_terminal_page",
+    "routes",
 ]

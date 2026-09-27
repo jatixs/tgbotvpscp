@@ -1,14 +1,14 @@
-import os
-import time
-import subprocess
-import requests
-import logging
-import re
-import json
-import sys
 import glob
+import json
+import logging
+import os
+import subprocess
+import sys
+import time
+from collections.abc import Callable
 from datetime import datetime, timedelta
-from typing import Optional, Callable
+
+import requests
 
 try:
     import docker
@@ -43,9 +43,7 @@ try:
             line = line.strip()
             if line and (not line.startswith("#")) and ("=" in line):
                 key, value = line.split("=", 1)
-                if value.startswith('"') and value.endswith('"'):
-                    value = value[1:-1]
-                elif value.startswith("'") and value.endswith("'"):
+                if value.startswith('"') and value.endswith('"') or value.startswith("'") and value.endswith("'"):
                     value = value[1:-1]
                 env_vars[key.strip()] = value.strip()
 except Exception as e:
@@ -71,7 +69,7 @@ current_reported_state = None
 down_time_start = None
 last_service_start_dt = None
 
-docker_client: Optional[DockerClient] = None
+docker_client: DockerClient | None = None
 if DEPLOY_MODE == "docker":
     if DOCKER_AVAILABLE:
         try:
@@ -457,7 +455,7 @@ def process_service_state(
     actual_state: str, 
     status_output_full: str, 
     restart_function: Callable[[], None],
-    current_start_dt: Optional[datetime] = None,
+    current_start_dt: datetime | None = None,
     is_utc: bool = False
 ):
     global bot_service_was_down_or_activating, status_alert_message_id, current_reported_state, down_time_start, last_service_start_dt
@@ -480,7 +478,7 @@ def process_service_state(
                 logging.warning(f"Error comparing time: {e}")
                 
         elif current_start_dt != last_service_start_dt:
-            logging.info(f"Startup time change detected.")
+            logging.info("Startup time change detected.")
             last_service_start_dt = current_start_dt
             is_restart_detected = True
 

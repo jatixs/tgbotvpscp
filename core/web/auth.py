@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 import hashlib
 import hmac
 import html
@@ -11,23 +10,29 @@ import time
 from typing import Any, Final
 from urllib.parse import parse_qsl
 
-from aiohttp import web
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
-from argon2 import PasswordHasher, exceptions as argon2_exceptions
+from aiohttp import web
+from argon2 import PasswordHasher
+from argon2 import exceptions as argon2_exceptions
 
 from .. import config as current_config
 from ..auth import save_users_async
 from ..config import (
     ADMIN_USER_ID,
     ADMIN_USERNAME,
-    DEFAULT_LANGUAGE,
     TOKEN,
     WEB_SERVER_HOST,
     WEB_SERVER_PORT,
 )
-from ..i18n import get_text as _, get_user_lang
-from ..shared_state import ALLOWED_USERS, USER_NAMES, AUTH_TOKENS
-from ..utils import encrypt_for_web, decrypt_for_web, decrypt_request_payload, encrypted_json_response, get_web_key
+from ..i18n import get_text as _
+from ..i18n import get_user_lang
+from ..shared_state import ALLOWED_USERS, AUTH_TOKENS, USER_NAMES
+from ..utils import (
+    decrypt_for_web,
+    decrypt_request_payload,
+    encrypt_for_web,
+    encrypted_json_response,
+)
 
 routes = web.RouteTableDef()
 
@@ -798,19 +803,19 @@ async def handle_change_password(request: web.Request) -> web.StreamResponse:
 
 
 __all__ = [
-    "routes",
-    "SERVER_SESSIONS",
-    "RESET_TOKENS",
     "CSRF_TOKENS",
+    "RESET_TOKENS",
+    "SERVER_SESSIONS",
     "generate_csrf_token",
-    "verify_csrf_token",
     "get_current_user",
-    "handle_login_request",
     "handle_login_password",
-    "handle_magic_login",
-    "handle_telegram_auth",
+    "handle_login_request",
     "handle_logout",
-    "handle_reset_request",
+    "handle_magic_login",
     "handle_reset_confirm",
+    "handle_reset_request",
+    "handle_telegram_auth",
     "is_default_password_active",
+    "routes",
+    "verify_csrf_token",
 ]

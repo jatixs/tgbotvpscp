@@ -2,23 +2,24 @@
 Агент сбора метрик (Node Agent).
 Скрипт, работающий на удаленном сервере (ноде). Собирает системные метрики и передает их мастер-боту по HTTP.
 """
-import time
-import psutil
-import requests
+import collections
+import hashlib
+import hmac
+import html
+import json
 import logging
 import os
-import sys
-import subprocess
 import random
 import re
-import hmac
-import hashlib
-import json
-import html
-import collections
-import threading
 import socket
+import subprocess
+import sys
+import threading
+import time
 from datetime import datetime
+
+import psutil
+import requests
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 ENV_FILE = os.path.join(BASE_DIR, '.env')
@@ -161,7 +162,7 @@ def ensure_env_variables():
             with open(ENV_FILE, 'a', encoding='utf-8') as f:
                 f.write('\n' + '\n'.join(lines_to_add) + '\n')
             
-    except Exception as e:
+    except Exception:
         pass  # Silent fail for env check
 
 
@@ -640,7 +641,7 @@ def parse_iperf_json(output: str, direction: str) -> float:
             return 0.0
             
         if "end" not in data:
-            logging.error(f"No 'end' section in iperf3 output")
+            logging.error("No 'end' section in iperf3 output")
             return 0.0
             
         end = data["end"]

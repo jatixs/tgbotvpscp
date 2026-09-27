@@ -1,37 +1,38 @@
 import asyncio
-import logging
-import psutil
-import time
-import re
-import os
-import signal
-import aiohttp
 import html
+import logging
+import os
+import re
+import signal
+import time
 from datetime import datetime, timedelta, timezone
-from aiogram import F, Dispatcher, types, Bot
+
+import aiohttp
+import psutil
+from aiogram import Bot, Dispatcher, F, types
 from aiogram.types import KeyboardButton
-from core.i18n import _, I18nFilter, get_user_lang
-from core import config
-from core import nodes_db
+
+from core import config, nodes_db
 from core.auth import is_allowed, send_access_denied_message
+from core.i18n import I18nFilter, _, get_user_lang
+from core.keyboards import (
+    get_notifications_global_keyboard,
+    get_notifications_node_settings_keyboard,
+    get_notifications_nodes_list_keyboard,
+    get_notifications_start_keyboard,
+)
 from core.messaging import delete_previous_message, send_alert
 from core.shared_state import (
-    LAST_MESSAGE_IDS,
     ALERTS_CONFIG,
-    RESOURCE_ALERT_STATE,
+    LAST_MESSAGE_IDS,
     LAST_RESOURCE_ALERT_TIME,
+    RESOURCE_ALERT_STATE,
 )
 from core.utils import (
-    save_alerts_config_async,
-    get_server_timezone_label,
     escape_html,
     get_host_path,
-)
-from core.keyboards import (
-    get_notifications_start_keyboard,
-    get_notifications_global_keyboard,
-    get_notifications_nodes_list_keyboard,
-    get_notifications_node_settings_keyboard,
+    get_server_timezone_label,
+    save_alerts_config_async,
 )
 
 BUTTON_KEY = "btn_notifications"
@@ -424,25 +425,24 @@ async def get_ip_data(ip: str):
     if not ip or ip in ["localhost", "127.0.0.1", "::1"]:
         return "🏠", None
     try:
-        async with aiohttp.ClientSession() as session:
-            async with session.get(
-                f"http://ip-api.com/json/{ip}?fields=status,countryCode,offset",
-                timeout=2,
-            ) as response:
-                if response.status == 200:
-                    data = await response.json()
-                    if data.get("status") == "success":
-                        country_code = data.get("countryCode")
-                        flag = "❓"
-                        if country_code and len(country_code) == 2:
-                            flag = "".join(
-                                (
-                                    chr(ord(char.upper()) - 65 + 127462)
-                                    for char in country_code
-                                )
-                            )
-                        offset = data.get("offset")
-                        return flag, offset
+        async with aiohttp.ClientSession() as session, session.get(
+            f"http://ip-api.com/json/{ip}?fields=status,countryCode,offset",
+            timeout=2,
+        ) as response:
+            if response.status == 200:
+                data = await response.json()
+                if data.get("status") == "success":
+                    country_code = data.get("countryCode")
+                    flag = "❓"
+                    if country_code and len(country_code) == 2:
+                        flag = "".join(
+                            
+                                chr(ord(char.upper()) - 65 + 127462)
+                                for char in country_code
+                            
+                        )
+                    offset = data.get("offset")
+                    return flag, offset
     except Exception as e:
         logging.warning(f"Error getting IP data for {ip}: {e}")
     

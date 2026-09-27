@@ -1,20 +1,22 @@
 import asyncio
-import re
-import logging
-import json
-import platform
-import os
-import time
-import aiohttp
-from typing import Optional, Dict, Any, Tuple, List
 import ipaddress
+import json
+import logging
+import os
+import platform
+import re
+import time
+from typing import Any
+
+import aiohttp
 import yaml
-from aiogram import F, Dispatcher, types, Bot
-from aiogram.types import KeyboardButton
+from aiogram import Bot, Dispatcher, types
 from aiogram.exceptions import TelegramBadRequest
-from core.i18n import _, I18nFilter, get_user_lang
+from aiogram.types import KeyboardButton
+
 from core import config
 from core.auth import is_allowed, send_access_denied_message
+from core.i18n import I18nFilter, _, get_user_lang
 from core.messaging import delete_previous_message
 from core.shared_state import LAST_MESSAGE_IDS
 from core.utils import escape_html
@@ -95,7 +97,7 @@ def register_handlers(dp: Dispatcher):
 async def edit_status_safe(
     bot: Bot,
     chat_id: int,
-    message_id: Optional[int],
+    message_id: int | None,
     text: str,
     lang: str,
     force: bool = False,
@@ -151,7 +153,7 @@ async def speedtest_progress_updater(
             pass
 
 
-async def get_ping_async(host: str) -> Optional[float]:
+async def get_ping_async(host: str) -> float | None:
     os_type = platform.system().lower()
     
     if os_type == "windows":
@@ -189,7 +191,7 @@ async def get_ping_async(host: str) -> Optional[float]:
     return None
 
 
-async def get_vps_location() -> Tuple[Optional[str], Optional[str], Optional[str]]:
+async def get_vps_location() -> tuple[str | None, str | None, str | None]:
     ip, country_code, continent = (None, None, None)
     try:
         async with aiohttp.ClientSession() as session:
@@ -240,12 +242,12 @@ def _write_cache_file(path: str, content: str):
     with open(path, "w", encoding="utf-8") as f:
         f.write(content)
 
-async def fetch_servers_async(vps_country_code: Optional[str]) -> List[Dict[str, Any]]:
+async def fetch_servers_async(vps_country_code: str | None) -> list[dict[str, Any]]:
     servers_list = []
     use_ru = vps_country_code == "RU"
     async with aiohttp.ClientSession() as session:
         if use_ru:
-            logging.info(f"VPS in RU, trying to fetch RU server list...")
+            logging.info("VPS in RU, trying to fetch RU server list...")
             content = None
             try:
                 async with session.get(RU_SERVER_LIST_URL, timeout=10) as resp:
@@ -314,8 +316,8 @@ async def fetch_servers_async(vps_country_code: Optional[str]) -> List[Dict[str,
 
 
 async def find_best_servers_async(
-    servers: list, vps_country_code: Optional[str], vps_continent: Optional[str]
-) -> List[Tuple[float, Dict[str, Any]]]:
+    servers: list, vps_country_code: str | None, vps_continent: str | None
+) -> list[tuple[float, dict[str, Any]]]:
     to_check = servers[:MAX_SERVERS_TO_PING]
     
     sem = asyncio.Semaphore(15)
@@ -346,7 +348,7 @@ async def find_best_servers_async(
 
 def _handle_iperf_error_output(
     out_bytes: bytes, err_bytes: bytes, returncode: int, direction: str
-) -> Optional[str]:
+) -> str | None:
     output = (err_bytes or out_bytes).decode("utf-8", "ignore")
     if returncode == 0:
         return None
@@ -400,11 +402,11 @@ async def run_iperf_test_async(
         try:
             data = json.loads(out)
             if "sum_received" not in data["end"]:
-                return f"DOWNLOAD_FAIL: No sum_received in final report"
+                return "DOWNLOAD_FAIL: No sum_received in final report"
             results["download"] = data["end"]["sum_received"]["bits_per_second"] / 1000000
             logging.info(f"Download speed: {results['download']:.2f} Mbps")
         except json.JSONDecodeError:
-            return f"DOWNLOAD_FAIL: JSON Decode Error"
+            return "DOWNLOAD_FAIL: JSON Decode Error"
     except Exception as e:
         logging.error(f"DL Error: {e}")
         return str(e)
@@ -429,11 +431,11 @@ async def run_iperf_test_async(
         try:
             data = json.loads(out)
             if "sum_sent" not in data["end"]:
-                return f"UPLOAD_FAIL: No sum_sent in final report"
+                return "UPLOAD_FAIL: No sum_sent in final report"
             results["upload"] = data["end"]["sum_sent"]["bits_per_second"] / 1000000
             logging.info(f"Upload speed: {results['upload']:.2f} Mbps")
         except json.JSONDecodeError:
-            return f"UPLOAD_FAIL: JSON Decode Error"
+            return "UPLOAD_FAIL: JSON Decode Error"
     except Exception as e:
         logging.error(f"UL Error: {e}")
         return str(e)

@@ -2,28 +2,32 @@
 Главный файл запуска Telegram-бота.
 Инициализирует диспетчер, подключает middlewares, оркестратор и запускает поллинг.
 """
-from core.middlewares import SpamThrottleMiddleware, AutoDeleteMessageMiddleware, CallbackTTLMiddleware
-from core.orchestrator import ModuleOrchestrator, ModuleTier
-from core.i18n import _, I18nFilter, get_language_keyboard, log_text
-from core import i18n
-from core import config, shared_state, auth, utils, keyboards, messaging
-from core import nodes_db
-from core.web.app import start_web_server
 import asyncio
 import logging
-import signal
 import os
+import signal
+
 import psutil
 import sentry_sdk
 from tortoise import Tortoise
 
+from core import auth, config, i18n, keyboards, messaging, nodes_db, shared_state, utils
+from core.i18n import I18nFilter, _, get_language_keyboard, log_text
+from core.middlewares import (
+    AutoDeleteMessageMiddleware,
+    CallbackTTLMiddleware,
+    SpamThrottleMiddleware,
+)
+from core.orchestrator import ModuleOrchestrator, ModuleTier
+from core.web.app import start_web_server
+
 if os.path.isdir("/proc_host"):
     psutil.PROCFS_PATH = "/proc_host"
-from aiogram import Bot, Dispatcher, types, F
-from aiogram.fsm.storage.memory import MemoryStorage
+from aiogram import Bot, Dispatcher, F, types
+from aiogram.exceptions import TelegramBadRequest
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
-from aiogram.exceptions import TelegramBadRequest
+from aiogram.fsm.storage.memory import MemoryStorage
 
 if config.SENTRY_DSN and config.SENTRY_DSN.strip().startswith("http"):
     try:
@@ -332,8 +336,9 @@ async def unrecognized_message_handler(message: types.Message):
     user_id = message.from_user.id
     lang = i18n.get_user_lang(user_id)
     try:
-        import aiohttp
         import urllib.parse
+
+        import aiohttp
         async with aiohttp.ClientSession() as session:
             async with session.get("https://uselessfacts.jsph.pl/api/v2/facts/random") as resp:
                 if resp.status == 200:
@@ -384,8 +389,8 @@ async def unrecognized_message_handler(message: types.Message):
                         prefix_part = base_str.replace("</i>", "")
                         suffix_part = "</i>"
 
-                        import time
                         import asyncio
+                        import time
                         draft_id = int(time.time() * 1000) % 2147483647
                         chat_id = message.chat.id
                         bot_token = message.bot.token

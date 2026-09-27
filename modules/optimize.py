@@ -1,11 +1,13 @@
 import asyncio
 import logging
-from aiogram import F, Dispatcher, types
-from aiogram.types import KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
+
+from aiogram import Dispatcher, F, types
 from aiogram.exceptions import TelegramNetworkError
-from core.i18n import _, I18nFilter, get_user_lang
+from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, KeyboardButton
+
 from core import config
 from core.auth import is_allowed, send_access_denied_message
+from core.i18n import I18nFilter, _, get_user_lang
 from core.messaging import delete_previous_message
 from core.shared_state import LAST_MESSAGE_IDS, OPTIMIZE_STATE
 from core.utils import escape_html
