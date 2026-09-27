@@ -829,6 +829,7 @@ async def handle_settings_page(request: web.Request) -> web.StreamResponse:
     i18n_data = {
         "web_access_denied": _("web_access_denied", lang),
         "access_denied_no_rights": _("access_denied_no_rights", lang),
+        "web_error_empty_field": _("pass_is_empty", lang),
         "web_access_denied_desc": _("web_access_denied_desc", lang),
         "web_back": _("web_back", lang),
         "web_saving_btn": _("web_saving_btn", lang),
