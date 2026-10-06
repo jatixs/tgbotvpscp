@@ -188,22 +188,53 @@ check_integrity() {
     fi
 }
 
+nginx_check() {
+    local output
+    output=$(sudo nginx -t 2>&1) || { printf '%s\n' "${output}" >&2; return 1; }
+}
+
+# Checks host match, remaining lifetime, and that the key belongs to the certificate.
+tls_pair_valid() {
+    local cert="$1" key="$2" seconds="$3" check_flag="-checkhost" cert_hash key_hash
+    command -v openssl >/dev/null 2>&1 || return 1
+    sudo test -s "${cert}" && sudo test -s "${key}" || return 1
+    sudo openssl x509 -noout -checkend "${seconds}" -in "${cert}" >/dev/null 2>&1 || return 1
+    if [ "${TLS_KIND}" == "ip" ]; then check_flag="-checkip"; fi
+    sudo openssl x509 -noout "${check_flag}" "${TLS_HOST}" -in "${cert}" 2>/dev/null | grep -q "does match" || return 1
+    cert_hash=$(sudo openssl x509 -noout -pubkey -in "${cert}" 2>/dev/null | openssl sha256) || return 1
+    key_hash=$(sudo openssl pkey -pubout -in "${key}" 2>/dev/null | openssl sha256) || return 1
+    [ -n "${cert_hash}" ] && [ "${cert_hash}" == "${key_hash}" ]
+}
+
+# Looks for a ready pair in the Nginx config (including custom and Cloudflare certificates) and in Certbot.
+tls_find_certificate() {
+    local min_seconds="$1" pair cert key
+    local candidates=()
+    mapfile -t candidates < <(
+        sudo nginx -T 2>/dev/null | "${PYTHON_BIN}" "${BOT_INSTALL_PATH}/core/tls_config.py" find-nginx-cert "${TLS_HOST}" 2>/dev/null
+        printf '/etc/letsencrypt/live/%s/fullchain.pem\t/etc/letsencrypt/live/%s/privkey.pem\n' "${TLS_CERT_NAME}" "${TLS_CERT_NAME}"
+    )
+    for pair in "${candidates[@]}"; do
+        cert="${pair%%$'\t'*}"
+        key="${pair#*$'\t'}"
+        if tls_pair_valid "${cert}" "${key}" "${min_seconds}"; then
+            TLS_CERT_FILE="${cert}"
+            TLS_KEY_FILE="${key}"
+            return 0
+        fi
+    done
+    return 1
+}
+
 setup_nginx_proxy() {
     local helper="${BOT_INSTALL_PATH}/core/tls_config.py"
-    local webroot="/var/www/tgbot-acme"
     local parsed=()
     local tls_info=""
-    local certbot_cmd="$(command -v certbot 2>/dev/null || true)"
-    local acme_conf="/etc/nginx/sites-available/tgbot-acme.conf"
-    local acme_link="/etc/nginx/sites-enabled/tgbot-acme.conf"
-    local final_conf=""
-    local final_link=""
-    local old_conf=""
-    local old_backup=""
+    local min_valid=86400
 
-    echo -e "\n${C_CYAN}🔒 Setting up HTTPS (Nginx + Certbot)${C_RESET}"
+    echo -e "\n${C_CYAN}🔒 Setting up HTTPS${C_RESET}"
     tls_info=$("${PYTHON_BIN}" "${helper}" parse-url "${WEB_PUBLIC_URL}") || {
-        msg_error "Invalid HTTPS URL: ${WEB_PUBLIC_URL}"
+        msg_error "Invalid HTTPS address: ${WEB_PUBLIC_URL}"
         return 1
     }
     mapfile -t parsed <<< "${tls_info}"
@@ -211,16 +242,35 @@ setup_nginx_proxy() {
     TLS_HOST="${parsed[1]}"
     HTTPS_PORT="${parsed[2]}"
     TLS_CERT_NAME="${parsed[3]}"
+    TLS_SITE_NAME="${parsed[3]}"
     HTTPS_DOMAIN="${TLS_HOST}"
+    TLS_CERT_FILE=""
+    TLS_KEY_FILE=""
+    if [ "${TLS_KIND}" == "ip" ]; then min_valid=21600; fi
 
     run_with_spinner "Installing Nginx" sudo apt-get install -y -q nginx || return 1
+    if tls_find_certificate "${min_valid}"; then
+        msg_info "Using the existing certificate: ${TLS_CERT_FILE}"
+    else
+        issue_certbot_certificate || return 1
+    fi
+    write_nginx_site
+}
+
+issue_certbot_certificate() {
+    local helper="${BOT_INSTALL_PATH}/core/tls_config.py"
+    local webroot="/var/www/tgbot-acme"
+    local certbot_cmd="$(command -v certbot 2>/dev/null || true)"
+    local acme_conf="/etc/nginx/sites-available/tgbot-acme.conf"
+    local acme_link="/etc/nginx/sites-enabled/tgbot-acme.conf"
+
     if [ -z "${certbot_cmd}" ]; then
         run_with_spinner "Installing Certbot" sudo apt-get install -y -q certbot || return 1
         certbot_cmd="$(command -v certbot 2>/dev/null || true)"
     fi
 
     if [ "${TLS_KIND}" == "ip" ] && ! "${certbot_cmd}" --help all 2>/dev/null | grep -q -- "--ip-address"; then
-        run_with_spinner "Installing snapd for IP certificate support" sudo apt-get install -y -q snapd || return 1
+        run_with_spinner "Installing Certbot for an IP certificate" sudo apt-get install -y -q snapd || return 1
         sudo systemctl enable --now snapd.socket || return 1
         if sudo snap list certbot >/dev/null 2>&1; then
             run_with_spinner "Updating Certbot" sudo snap refresh certbot --channel=latest/stable || return 1
@@ -260,70 +310,59 @@ server {
 }
 EOF
     sudo ln -sfn "${acme_conf}" "${acme_link}"
-    if ! sudo nginx -t; then
+    if ! nginx_check; then
         sudo rm -f "${acme_link}" "${acme_conf}"
         return 1
     fi
     if systemctl is-active --quiet nginx; then sudo systemctl reload nginx; else sudo systemctl start nginx; fi
     if command -v ufw >/dev/null 2>&1; then sudo ufw allow 80/tcp >/dev/null; fi
 
-    local probe_required="true"
-    local renewal_window=2592000
-    if [ "${TLS_KIND}" == "ip" ]; then renewal_window=288000; fi
-    if [ -s "/etc/letsencrypt/live/${TLS_CERT_NAME}/fullchain.pem" ] && \
-        command -v openssl >/dev/null 2>&1 && \
-        openssl x509 -checkend "${renewal_window}" -noout -in "/etc/letsencrypt/live/${TLS_CERT_NAME}/fullchain.pem" >/dev/null 2>&1; then
-        probe_required="false"
-    fi
-
-    if [ "${probe_required}" == "true" ]; then
-        local probe_name="tgbot-acme-probe-$$-${RANDOM}"
-        local probe_value="acme-probe-${TLS_HOST}-$$-${RANDOM}"
-        local probe_file="${webroot}/.well-known/acme-challenge/${probe_name}"
-        sudo install -d -m 755 "${webroot}/.well-known/acme-challenge"
-        printf '%s' "${probe_value}" | sudo tee "${probe_file}" >/dev/null
-
-        local local_probe=""
-        local_probe=$(curl -fsS --connect-timeout 3 --max-time 8 \
-            --resolve "${TLS_HOST}:80:127.0.0.1" \
-            "http://${TLS_HOST}/.well-known/acme-challenge/${probe_name}" 2>/dev/null) || true
-        if [ "${local_probe}" != "${probe_value}" ]; then
-            sudo rm -f "${probe_file}" "${acme_link}" "${acme_conf}"
-            sudo nginx -t && sudo systemctl reload nginx
-            msg_error "Local Nginx did not serve the ACME webroot probe; certificate issuance was stopped. The previous HTTPS config is preserved."
-            return 1
-        fi
-
-        local family=""
-        local public_probe=""
-        for family in 4 6; do
-            if [ "${family}" == "6" ]; then
-                if [ "${TLS_KIND}" != "domain" ] || ! getent ahostsv6 "${TLS_HOST}" | \
-                    awk '$1 ~ /:/ && $1 !~ /^::ffff:/ { found=1 } END { exit !found }'; then
-                    continue
-                fi
-            elif ! getent ahostsv4 "${TLS_HOST}" >/dev/null 2>&1; then
-                continue
-            fi
-            public_probe=$(curl "-${family}" -fsS --connect-timeout 4 --max-time 12 --max-filesize 65536 \
-                "http://${TLS_HOST}/.well-known/acme-challenge/${probe_name}" 2>/dev/null) || true
-            if [ "${public_probe}" != "${probe_value}" ]; then
-                msg_warning "Could not verify the ACME challenge through public IPv${family} from this VPS. This may be a hairpin NAT limitation; Certbot will continue with Let's Encrypt validation. If validation fails, check DNS A/AAAA, Cloudflare proxy/WAF/cache, and redirects for /.well-known/acme-challenge/*."
-            fi
-        done
-        sudo rm -f "${probe_file}"
+    local probe_name="tgbot-acme-probe-$$-${RANDOM}"
+    local probe_file="${webroot}/.well-known/acme-challenge/${probe_name}"
+    local local_probe=""
+    printf '%s' "${probe_name}" | sudo tee "${probe_file}" >/dev/null
+    local_probe=$(curl -fsS --connect-timeout 3 --max-time 8 \
+        --resolve "${TLS_HOST}:80:127.0.0.1" \
+        "http://${TLS_HOST}/.well-known/acme-challenge/${probe_name}" 2>/dev/null) || true
+    sudo rm -f "${probe_file}"
+    if [ "${local_probe}" != "${probe_name}" ]; then
+        sudo rm -f "${acme_link}" "${acme_conf}"
+        nginx_check && sudo systemctl reload nginx
+        msg_error "Nginx does not serve the Let's Encrypt test file for ${TLS_HOST}: port 80 may be handled by another site."
+        return 1
     fi
 
     local certbot_args=()
+    local certbot_log="/tmp/${SERVICE_NAME}_certbot.log"
+    local certbot_pid=0
+    local certbot_rc=0
     mapfile -d '' -t certbot_args < <(
         "${PYTHON_BIN}" "${helper}" certbot-args "${TLS_HOST}" "${HTTPS_EMAIL}" "${certbot_cmd}" "${webroot}"
     )
-    if ! run_with_spinner "Obtaining HTTPS certificate" sudo "${certbot_args[@]}"; then
+    ( sudo "${certbot_args[@]}" > "${certbot_log}" 2>&1 ) &
+    certbot_pid=$!
+    spinner "${certbot_pid}" "Requesting a Let's Encrypt certificate"
+    wait "${certbot_pid}" || certbot_rc=$?
+    echo -ne "\033[2K\r"
+    cat "${certbot_log}" >> "/tmp/${SERVICE_NAME}_install.log"
+    if [ "${certbot_rc}" -ne 0 ]; then
         sudo rm -f "${acme_link}" "${acme_conf}"
-        sudo nginx -t && sudo systemctl reload nginx
-        msg_error "Certificate issuance failed; the old HTTPS config was preserved."
+        nginx_check && sudo systemctl reload nginx
+        if grep -q "too many certificates" "${certbot_log}"; then
+            msg_warning "Let's Encrypt has temporarily limited certificates for ${TLS_HOST}; try again after $(grep -o 'retry after [0-9-]* [0-9:]* UTC' "${certbot_log}" | head -n 1 | cut -d' ' -f3-)."
+        elif grep -qiE "unauthorized|timeout|connection|rejected|NXDOMAIN" "${certbot_log}"; then
+            msg_warning "Let's Encrypt could not verify ${TLS_HOST}: check DNS, that port 80 is reachable, and that a CDN (for example Cloudflare) does not block /.well-known/acme-challenge/."
+        else
+            msg_warning "Could not obtain a certificate. Details: /var/log/letsencrypt/letsencrypt.log"
+        fi
+        if tls_find_certificate 3600; then
+            msg_info "Using the existing certificate: ${TLS_CERT_FILE}"
+            return 0
+        fi
+        msg_error "No certificate was obtained. The current HTTPS setup is unchanged."
         return 1
     fi
+    CERTBOT_CMD="${certbot_cmd}"
 
     local cert_dir="/etc/letsencrypt/live/${TLS_CERT_NAME}"
     if [ ! -s "${cert_dir}/fullchain.pem" ] || [ ! -s "${cert_dir}/privkey.pem" ]; then
@@ -365,16 +404,27 @@ EOF
         if [ -n "${fallback_cert_dir}" ]; then
             cert_dir="${fallback_cert_dir}"
             TLS_CERT_NAME="${fallback_lineage}"
-            msg_warning "Certbot stored the certificate in lineage '${TLS_CERT_NAME}'; using the actual path ${cert_dir}."
         else
-            msg_error "Certbot completed successfully, but no matching certificate/key pair was found for ${TLS_HOST}."
-            printf '%s\n' "${certbot_report}" | tail -n 15
+            msg_error "A certificate was issued, but its files for ${TLS_HOST} were not found (see ${certbot_cmd} certificates)."
             return 1
         fi
     fi
+    TLS_CERT_FILE="${cert_dir}/fullchain.pem"
+    TLS_KEY_FILE="${cert_dir}/privkey.pem"
+}
 
-    final_conf="/etc/nginx/sites-available/tgbot-panel-${TLS_CERT_NAME}.conf"
-    final_link="/etc/nginx/sites-enabled/tgbot-panel-${TLS_CERT_NAME}.conf"
+write_nginx_site() {
+    local webroot="/var/www/tgbot-acme"
+    local acme_conf="/etc/nginx/sites-available/tgbot-acme.conf"
+    local acme_link="/etc/nginx/sites-enabled/tgbot-acme.conf"
+    local final_conf=""
+    local final_link=""
+    local old_conf=""
+    local old_backup=""
+    local stale=""
+
+    final_conf="/etc/nginx/sites-available/tgbot-panel-${TLS_SITE_NAME}.conf"
+    final_link="/etc/nginx/sites-enabled/tgbot-panel-${TLS_SITE_NAME}.conf"
     old_conf="/etc/nginx/sites-available/${TLS_HOST}"
     old_backup="${old_conf}.tgbot-migration-backup"
     if [ "${old_conf}" != "${final_conf}" ] && [ -f "${old_conf}" ] && \
@@ -406,8 +456,8 @@ server {
     listen ${HTTPS_PORT} ssl http2;
     server_name ${TLS_HOST};
     client_max_body_size 50m;
-    ssl_certificate ${cert_dir}/fullchain.pem;
-    ssl_certificate_key ${cert_dir}/privkey.pem;
+    ssl_certificate ${TLS_CERT_FILE};
+    ssl_certificate_key ${TLS_KEY_FILE};
     ssl_protocols TLSv1.2 TLSv1.3;
     ssl_ciphers HIGH:!aNULL:!MD5:!RC4;
     ssl_prefer_server_ciphers on;
@@ -434,16 +484,21 @@ server {
 }
 EOF
     sudo ln -sfn "${final_conf}" "${final_link}"
-    if ! sudo nginx -t; then
+    if ! nginx_check; then
         sudo rm -f "${final_link}" "${final_conf}"
         if [ -f "${old_backup}" ]; then sudo mv "${old_backup}" "${old_conf}"; sudo ln -sfn "${old_conf}" "/etc/nginx/sites-enabled/${TLS_HOST}"; fi
         sudo rm -f "${acme_link}" "${acme_conf}"
-        sudo nginx -t && sudo systemctl reload nginx
-        msg_error "New Nginx configuration failed validation; the previous configuration was restored."
+        nginx_check && sudo systemctl reload nginx
+        msg_error "The new Nginx configuration failed validation; the previous one was restored."
         return 1
     fi
 
     sudo rm -f "${acme_link}" "${acme_conf}"
+    for stale in /etc/nginx/sites-available/tgbot-panel-*.conf; do
+        if [ -f "${stale}" ] && [ "${stale}" != "${final_conf}" ] && grep -q "server_name ${TLS_HOST};" "${stale}"; then
+            sudo rm -f "${stale}" "/etc/nginx/sites-enabled/$(basename "${stale}")"
+        fi
+    done
     if [ -n "${WEB_DOMAIN}" ] && [ "${WEB_DOMAIN}" != "${TLS_HOST}" ]; then
         local previous_domain_conf="/etc/nginx/sites-available/${WEB_DOMAIN}"
         if [ -f "${previous_domain_conf}" ] && \
@@ -456,21 +511,25 @@ EOF
     if [ -f "${old_backup}" ]; then sudo rm -f "${old_backup}"; fi
     if command -v ufw >/dev/null 2>&1; then sudo ufw allow "${HTTPS_PORT}/tcp" >/dev/null; fi
 
-    sudo mkdir -p /etc/letsencrypt/renewal-hooks/deploy
-    sudo tee /etc/letsencrypt/renewal-hooks/deploy/50-tgbot-nginx-reload >/dev/null <<'EOF'
+    local certbot_cmd="${CERTBOT_CMD:-$(command -v certbot 2>/dev/null || true)}"
+    if [ "${TLS_KIND}" == "ip" ] && [ -x /snap/bin/certbot ]; then certbot_cmd="/snap/bin/certbot"; fi
+    # Certificates outside /etc/letsencrypt are renewed by their owner.
+    if [[ "${TLS_CERT_FILE}" == /etc/letsencrypt/live/* ]] && [ -n "${certbot_cmd}" ]; then
+        sudo mkdir -p /etc/letsencrypt/renewal-hooks/deploy
+        sudo tee /etc/letsencrypt/renewal-hooks/deploy/50-tgbot-nginx-reload >/dev/null <<'EOF'
 #!/bin/sh
 systemctl reload nginx
 EOF
-    sudo chmod 755 /etc/letsencrypt/renewal-hooks/deploy/50-tgbot-nginx-reload
-    sudo tee /etc/systemd/system/tgbot-certbot-renew.service >/dev/null <<EOF
+        sudo chmod 755 /etc/letsencrypt/renewal-hooks/deploy/50-tgbot-nginx-reload
+        sudo tee /etc/systemd/system/tgbot-certbot-renew.service >/dev/null <<EOF
 [Unit]
 Description=Renew tgbot HTTPS certificates
 
 [Service]
 Type=oneshot
-ExecStart=${certbot_cmd} renew --cert-name ${TLS_CERT_NAME} --quiet
+ExecStart=${certbot_cmd} renew --cert-name $(basename "$(dirname "${TLS_CERT_FILE}")") --quiet
 EOF
-    sudo tee /etc/systemd/system/tgbot-certbot-renew.timer >/dev/null <<'EOF'
+        sudo tee /etc/systemd/system/tgbot-certbot-renew.timer >/dev/null <<'EOF'
 [Unit]
 Description=Check tgbot certificates for renewal hourly
 
@@ -482,8 +541,9 @@ RandomizedDelaySec=300
 [Install]
 WantedBy=timers.target
 EOF
-    sudo systemctl daemon-reload
-    sudo systemctl enable --now tgbot-certbot-renew.timer
+        sudo systemctl daemon-reload
+        sudo systemctl enable --now tgbot-certbot-renew.timer
+    fi
     echo -e "Web panel available at: ${WEB_PUBLIC_URL}/"
 }
 
