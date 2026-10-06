@@ -13,27 +13,35 @@
 ## [1.26.0] - 2026-10-07
 
 ### 🔒 Security
-* Privileged Telegram and WebUI actions now enforce role checks in the handler itself. Authorization was tightened for backups, service management, traffic resets, and administrator settings.
-* Removed the known `admin` password fallback; the installer generates a random initial password. Node tokens are no longer sent to browser pages or placed in node-monitoring URLs; the UI addresses nodes by numeric ID.
-* SSH host-key verification is enabled for Web Terminal connections. Proxy headers are trusted only from configured proxies, and temporary caches are bounded by age and size.
-* Docker API access in the secure profile is read-only; mutating operations remain available only in the root profile.
+* Roles are checked right before every privileged action in Telegram and the WebUI: backups, service management, traffic resets, and administrator settings.
+* Removed the default `admin` password: the installer generates a random initial password.
+* Secret node tokens no longer appear in browser pages or URLs; the panel addresses nodes by numeric ID.
+* The SSH terminal verifies the remote server's host key. Reverse-proxy headers are trusted only from configured proxies.
+* In the Secure Docker profile the bot can only read Docker data; changing operations are available only in the Root profile.
 
 ### 🌐 HTTPS and Agent Migration
-* The installer can configure HTTPS with Nginx and Certbot for a domain or globally routable public IPv4. IP certificates use Let's Encrypt's short-lived profile and last 160 hours; renewal is checked hourly.
-* HTTP-01 validation requires inbound TCP port 80 to be reachable. Private and local IP addresses are unsupported. Owners of external reverse proxies remain responsible for certificate issuance and renewal.
-* If a valid certificate for the address already exists (in the Nginx configuration, including Cloudflare Origin, or in Certbot), the installer reuses it instead of issuing a new one. This avoids Let's Encrypt rate limits on repeated runs.
-* Existing agents migrate in stages: update the master first, then each agent discovers the HTTPS origin, validates TLS and hostname consistency, and saves the new URL. During rollout, a restricted HTTP bridge accepts only discovery, bootstrap, and HMAC-signed heartbeats.
-* `tgcp-bot tls status` reports node migration state; `tgcp-bot tls check` verifies readiness; `tgcp-bot tls finalize` disables the bridge after every node has migrated.
+* The installer can set up HTTPS with Nginx and Certbot not only for a domain, but also for a public IPv4 address without a domain. An IP certificate lasts 160 hours and is checked for renewal every hour.
+* If a valid certificate for the address already exists (in the Nginx configuration, including Cloudflare Origin, or in Certbot), the installer simply uses it. A new one is requested only when none exists, so repeated runs don't hit Let's Encrypt rate limits.
+* A new Let's Encrypt certificate requires inbound access to TCP port 80. Private and local IP addresses are not supported. With an external reverse proxy, its owner manages issuance and renewal. The installer does not renew certificates that were not issued through Certbot (for example, Cloudflare ones).
+* Existing agents move to HTTPS in stages: update the master first, then the nodes. An agent discovers the HTTPS address, validates the certificate and server name, and saves the new address. During the transition, a restricted HTTP bridge accepts only address discovery, initial setup, and HMAC-signed heartbeats.
+* `tgcp-bot tls status` shows the migration state; `tgcp-bot tls check` verifies readiness; `tgcp-bot tls finalize` closes the temporary bridge once all nodes have migrated.
 
 ### 📦 Installation and Updates
-* Updates now use a staging copy. `.env`, configuration, logs, and installer helpers are preserved while application code is replaced. Systemd/Docker modes can be switched without first uninstalling the deployment.
-* An ordinary Docker mode switch no longer removes volumes. The WebUI is published on host loopback while the service listens on the container interface.
-* The `tgcp-bot` CLI adds status, restart, initial-password, and HTTPS-migration commands. Docker operations that require host files use a host-side helper.
+* Updates first prepare a separate copy of the program and swap it in once ready. `.env`, configuration, logs, and installer files are preserved. You can switch between Systemd and Docker without uninstalling first.
+* A normal Docker profile switch no longer deletes data. The WebUI is reachable on the host only via the local address.
+* Installer messages are shorter and clearer: technical Nginx and Certbot output is hidden unless needed, and on failure the installer states the cause and what to do next. The existing HTTPS setup is left untouched if the new one fails validation.
+* The `tgcp-bot` CLI gained commands for checking status and restarting, changing the initial password, and controlling the HTTPS migration.
+
+### ✨ Improved
+* The node window shows the node's ID next to its name, in gray at the end of the row after the buttons and badges. In Settings, the node table now starts with an "ID" column (it used to end with a "Token" column).
+
+### 🐛 Fixed
+* Telegram billing: after changing the amount or payment date, the menu showed dollars instead of the selected currency. The currency now stays as set.
 
 ### 🧰 Maintenance and Tests
-* Bounded in-memory caches now cover throttling, Docker Hub descriptions, SSH login deduplication, and Alert Bot flood state; Redis is not required.
-* Removed unused direct dependencies. Added unit tests for TLS URL validation, Certbot arguments, endpoint migration, and bridge finalization.
-* Synchronized the Russian and English documentation for HTTPS setup, agent migration, CLI usage, and development workflow.
+* Caches for anti-flood, Docker Hub descriptions, repeated SSH login notifications, and Alert Bot state are limited by age and size; Redis is not required.
+* Removed unused direct dependencies. Added tests for HTTPS addresses, finding a ready certificate in the Nginx configuration, Certbot arguments, and agent migration.
+* Russian and English documentation updated together: HTTPS setup, agent migration, and management commands.
 
 ---
 ## [1.25.3] - 2026-09-27
