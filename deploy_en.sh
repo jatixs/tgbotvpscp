@@ -308,10 +308,7 @@ EOF
             public_probe=$(curl "-${family}" -fsS --connect-timeout 4 --max-time 12 --max-filesize 65536 \
                 "http://${TLS_HOST}/.well-known/acme-challenge/${probe_name}" 2>/dev/null) || true
             if [ "${public_probe}" != "${probe_value}" ]; then
-                sudo rm -f "${probe_file}" "${acme_link}" "${acme_conf}"
-                sudo nginx -t && sudo systemctl reload nginx
-                msg_error "Public IPv${family} does not return the ACME challenge. Check DNS A/AAAA, Cloudflare proxy/WAF/cache, and HTTP redirects for /.well-known/acme-challenge/*. The previous HTTPS config is preserved."
-                return 1
+                msg_warning "Could not verify the ACME challenge through public IPv${family} from this VPS. This may be a hairpin NAT limitation; Certbot will continue with Let's Encrypt validation. If validation fails, check DNS A/AAAA, Cloudflare proxy/WAF/cache, and redirects for /.well-known/acme-challenge/*."
             fi
         done
         sudo rm -f "${probe_file}"

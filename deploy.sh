@@ -306,10 +306,7 @@ EOF
             public_probe=$(curl "-${family}" -fsS --connect-timeout 4 --max-time 12 --max-filesize 65536 \
                 "http://${TLS_HOST}/.well-known/acme-challenge/${probe_name}" 2>/dev/null) || true
             if [ "${public_probe}" != "${probe_value}" ]; then
-                sudo rm -f "${probe_file}" "${acme_link}" "${acme_conf}"
-                sudo nginx -t && sudo systemctl reload nginx
-                msg_error "Публичный IPv${family} URL не возвращает ACME challenge. Проверьте DNS A/AAAA, Cloudflare proxy/WAF/cache и HTTP redirects для /.well-known/acme-challenge/*. Старый HTTPS конфиг сохранен."
-                return 1
+                msg_warning "Не удалось проверить ACME challenge через публичный IPv${family} с самого VPS. Это может быть ограничение hairpin NAT; Certbot продолжит проверку с серверов Let's Encrypt. Если она завершится ошибкой, проверьте DNS A/AAAA, Cloudflare proxy/WAF/cache и redirects для /.well-known/acme-challenge/*."
             fi
         done
         sudo rm -f "${probe_file}"
