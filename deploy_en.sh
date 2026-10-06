@@ -330,8 +330,50 @@ EOF
 
     local cert_dir="/etc/letsencrypt/live/${TLS_CERT_NAME}"
     if [ ! -s "${cert_dir}/fullchain.pem" ] || [ ! -s "${cert_dir}/privkey.pem" ]; then
-        msg_error "Certbot did not create the expected certificate/key pair."
-        return 1
+        local certbot_report=""
+        local lineage_name=""
+        local lineage_domains=""
+        local lineage_cert=""
+        local lineage_key=""
+        local fallback_cert_dir=""
+        local fallback_lineage=""
+        certbot_report=$("${certbot_cmd}" certificates 2>&1 || true)
+        while IFS= read -r line; do
+            case "$line" in
+                *"Certificate Name:"*)
+                    lineage_name="${line#*: }"
+                    lineage_domains=""
+                    lineage_cert=""
+                    lineage_key=""
+                    ;;
+                *"Domains:"*) lineage_domains="${line#*: }" ;;
+                *"Certificate Path:"*) lineage_cert="${line#*: }" ;;
+                *"Private Key Path:"*)
+                    lineage_key="${line#*: }"
+                    if [[ " ${lineage_domains} " == *" ${TLS_HOST} "* ]] && \
+                        [ -s "${lineage_cert}" ] && [ -s "${lineage_key}" ]; then
+                        if [ "${lineage_name}" == "${TLS_CERT_NAME}" ]; then
+                            fallback_cert_dir="$(dirname "${lineage_cert}")"
+                            fallback_lineage="${lineage_name}"
+                            break
+                        elif [ -z "${fallback_cert_dir}" ]; then
+                            fallback_cert_dir="$(dirname "${lineage_cert}")"
+                            fallback_lineage="${lineage_name}"
+                        fi
+                    fi
+                    ;;
+            esac
+        done <<< "${certbot_report}"
+
+        if [ -n "${fallback_cert_dir}" ]; then
+            cert_dir="${fallback_cert_dir}"
+            TLS_CERT_NAME="${fallback_lineage}"
+            msg_warning "Certbot stored the certificate in lineage '${TLS_CERT_NAME}'; using the actual path ${cert_dir}."
+        else
+            msg_error "Certbot completed successfully, but no matching certificate/key pair was found for ${TLS_HOST}."
+            printf '%s\n' "${certbot_report}" | tail -n 15
+            return 1
+        fi
     fi
 
     final_conf="/etc/nginx/sites-available/tgbot-panel-${TLS_CERT_NAME}.conf"
