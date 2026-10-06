@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import fnmatch
 import ipaddress
 import re
 import sys
@@ -141,6 +142,51 @@ def build_certbot_args(
     return arguments
 
 
+def find_nginx_certificates(config_dump: str, host: str) -> list[tuple[str, str]]:
+    """Return (certificate, key) pairs from server blocks whose server_name matches host."""
+    text = re.sub(r"(?m)#.*$", "", config_dump)
+    tokens = re.findall(r"\"[^\"]*\"|'[^']*'|[{};]|[^\s{};\"']+", text)
+
+    servers: list[list[list[str]]] = []
+    stack: list[tuple[str, list[list[str]]]] = []
+    words: list[str] = []
+    for token in tokens:
+        if token == "{":
+            stack.append((words[0] if words else "", []))
+            words = []
+        elif token == "}":
+            if stack:
+                name, directives = stack.pop()
+                if name == "server":
+                    servers.append(directives)
+            words = []
+        elif token == ";":
+            if stack and words:
+                stack[-1][1].append(words)
+            words = []
+        else:
+            words.append(token.strip("\"'"))
+
+    host = host.lower()
+    pairs: list[tuple[str, str]] = []
+    for directives in servers:
+        names = [arg.lower() for d in directives if d[0] == "server_name" for arg in d[1:]]
+        matched = any(
+            name == host or ("*" in name and fnmatch.fnmatchcase(host, name)) for name in names
+        )
+        if not matched:
+            continue
+        certs = [d[1] for d in directives if d[0] == "ssl_certificate" and len(d) > 1]
+        keys = [d[1] for d in directives if d[0] == "ssl_certificate_key" and len(d) > 1]
+        for cert, key in zip(certs, keys):
+            if "$" in cert or "$" in key:
+                continue
+            pair = tuple(path if path.startswith("/") else f"/etc/nginx/{path}" for path in (cert, key))
+            if pair not in pairs:
+                pairs.append(pair)
+    return pairs
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser()
     commands = parser.add_subparsers(dest="command", required=True)
@@ -157,6 +203,8 @@ def main(argv: list[str] | None = None) -> int:
     certbot_command.add_argument("email")
     certbot_command.add_argument("certbot_binary")
     certbot_command.add_argument("webroot")
+    nginx_command = commands.add_parser("find-nginx-cert")
+    nginx_command.add_argument("host")
     args = parser.parse_args(argv)
 
     try:
@@ -168,6 +216,9 @@ def main(argv: list[str] | None = None) -> int:
             sys.stdout.write(public_https_url(args.identifier, args.port) + "\n")
         elif args.command == "upgrade-url":
             sys.stdout.write(upgrade_legacy_http_url(args.url, args.port) + "\n")
+        elif args.command == "find-nginx-cert":
+            for cert, key in find_nginx_certificates(sys.stdin.read(), args.host):
+                sys.stdout.write(f"{cert}\t{key}\n")
         else:
             output = build_certbot_args(
                 args.identifier,

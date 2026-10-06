@@ -2,6 +2,7 @@ import unittest
 
 from core.tls_config import (
     build_certbot_args,
+    find_nginx_certificates,
     normalize_identifier,
     parse_public_https_url,
     public_https_url,
@@ -68,6 +69,35 @@ class TLSConfigTests(unittest.TestCase):
         ):
             with self.subTest(value=value), self.assertRaises(ValueError):
                 normalize_identifier(value)
+
+    def test_nginx_certificates_are_taken_from_matching_server_block(self):
+        dump = """
+        # configuration file /etc/nginx/sites-enabled/panel:
+        server {
+            listen 443 ssl;
+            server_name Panel.Example.com www.example.com;
+            ssl_certificate /etc/ssl/cf/origin.pem;
+            ssl_certificate_key "/etc/ssl/cf/origin.key";
+            location / { proxy_pass http://127.0.0.1:8080; }
+        }
+        server {
+            listen 443 ssl;
+            server_name other.example.com;
+            ssl_certificate /etc/ssl/other.pem;
+            ssl_certificate_key /etc/ssl/other.key;
+        }
+        server {
+            listen 443 ssl;
+            server_name *.example.com;
+            ssl_certificate certs/wildcard.pem;
+            ssl_certificate_key $ssl_key;
+        }
+        """
+
+        self.assertEqual(
+            find_nginx_certificates(dump, "panel.example.com"),
+            [("/etc/ssl/cf/origin.pem", "/etc/ssl/cf/origin.key")],
+        )
 
 
 if __name__ == "__main__":
