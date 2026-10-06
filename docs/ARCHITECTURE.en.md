@@ -13,6 +13,16 @@
 5. **Fault Tolerance** — Watchdog system and automatic restart
 6. **Separation of Concerns** — web layer in `core/web/`, bot logic in `modules/`
 
+## 🔒 HTTPS and Node Enrollment
+
+`WEB_PUBLIC_URL` is the canonical public HTTPS origin for the panel. Managed TLS configures Nginx and Certbot; an external reverse proxy must issue and renew its own certificate. Systemd WebUI listens on loopback by default, and Docker publishes its port only on host loopback.
+
+HTTPS supports DNS names and globally routable public IPv4 addresses. Let's Encrypt IP certificates use the short-lived profile and are valid for 160 hours. HTTP-01 requires inbound TCP port 80; managed renewal is checked hourly. Private/local IP addresses are not supported.
+
+New agents use the HTTPS origin. `GET /api/agent/https` advertises the URL without a token; bootstrap sends the secret in `X-Node-Token`, and heartbeats are HMAC-signed. An updated agent validates TLS and the same hostname, then persists the HTTPS URL. During migration from an older systemd install, a restricted HTTP bridge temporarily handles only discovery/bootstrap and signed heartbeats. After updating every agent, run `tgcp-bot tls status`, then `tgcp-bot tls finalize`.
+
+Browser pages use numeric node IDs. Agent tokens are never placed in URLs or browser-facing JSON responses.
+
 ---
 
 ## 📂 Project Structure
@@ -115,7 +125,8 @@ core/
     ├── nodes_monitor.html  # Node monitoring
     ├── reset_password.html # Password reset
     ├── settings.html       # Settings
-    └── terminal.html       # Web terminal (VNC)
+    └── terminal.html       # Web SSH terminal
+    └── terminal.html       # Web SSH terminal
 ```
 
 ---
@@ -264,7 +275,7 @@ STRINGS = {
 **Security:**
 - `encrypt_for_web(data)` — AES-256-CBC + Base64 encryption for SSE
 - `decrypt_for_web(data)` — Client-side decryption
-- `log_audit_event()` — Audit logging (GDPR compliant)
+- `log_audit_event()` — audit-event recording; operators must define retention and compliance requirements separately
 - `mask_sensitive_data()` — Mask IPs, tokens, passwords in logs
 
 **System:**
@@ -424,6 +435,10 @@ streaming_routes → SSE streams
 
 **1. Rate Limit Middleware:**
 - 100 requests/min per IP per endpoint
+- Request throttling; client IP resolution trusts only the configured proxy chain
+- **Logging and privacy:**
+- An audit log alone does not guarantee regulatory compliance
+- xterm.js — browser-based SSH terminal (not VNC)
 - Automatic window reset
 
 **2. CSRF Middleware:**
@@ -459,14 +474,16 @@ Detected attacks:
 **Endpoints:**
 ```
 GET  /api/heartbeat                     — Health probe
+GET  /api/agent/https                   — Public HTTPS origin advertised to agents
+GET  /api/node/bootstrap                — Bootstrap using X-Node-Token
 POST /api/heartbeat                     — Node heartbeat with HMAC signature
 GET  /api/nodes/list                    — Node list (encrypted)
 POST /api/nodes/add                     — Add node
 POST /api/nodes/delete                  — Delete node
 POST /api/nodes/rename                  — Rename (admin only)
 GET  /api/nodes/monitor/list            — Data for monitoring page
-GET  /api/nodes/monitor/detail?token=   — Specific node details
-GET  /api/nodes/monitor/services        — Specific node services
+GET  /api/nodes/monitor/detail?node_id= — Node details by numeric ID (WebUI session)
+GET  /api/nodes/monitor/services?node_id= — Services by numeric ID (WebUI session)
 POST /api/nodes/monitor/command         — Send command to node
 POST /api/nodes/monitor/service_action  — Manage service on node
 GET  /api/services                      — Managed services list
@@ -527,6 +544,7 @@ GET  /api/agent/ipv4           — Agent IPv4 addresses
 **3. `GET /api/events/node` — Specific node details:**
 - Statistics and chart data
 - Updates via `?token=...` parameter
+- Updates by numeric `node_id`; the agent token is not sent to the browser
 
 **4. `GET /api/events/services` — Service Manager stream:**
 - Real-time systemd service states
@@ -706,7 +724,7 @@ node/
 **Requirements:**
 - Python 3.10+
 - Libraries: requests, psutil
-- Open port on main server (8080)
+- Reachable public HTTPS origin on the master; managed TLS also needs inbound TCP/80
 
 ---
 
@@ -745,17 +763,7 @@ Attack Patterns:
 #### 5️⃣ Audit Logging
 **Location:** `logs/audit/audit.log`
 
-**Recorded Events:**
-- Login attempts (success/fail)
-- Password resets
-- User additions/deletions
-- Configuration changes
-- WAF triggers / Suspicious activity
-
-**Privacy (GDPR Compliant):**
-- IP addresses masked (`203.0.113.XXX`)
-- Tokens hidden (`abc123...`)
-- Sensitive data not logged
+The audit helper records security and administrative events. Mask client IPs and secrets in warning logs, restrict access to log files, and define an explicit retention period. An audit log alone does not establish regulatory compliance.
 
 ---
 
@@ -768,15 +776,11 @@ Attack Patterns:
 2. Initialize logging system
 3. Connect to SQLite database (Tortoise ORM)
 4. Load encrypted configs (users, alerts, services)
-5. Initialize Telegram Bot + Dispatcher
-6. Register 18 modules and middleware
-7. Start Aiohttp web server (core/web/app.py, port 8080)
-8. Launch background tasks (tasks.py):
-   - agent_monitor() — agent metrics collection
-   - cleanup_monitor() — session and token cleanup
-9. Launch module background tasks:
-   - check_alerts_loop() — threshold monitoring
-10. Send startup notification to admin
+5. Initialize Telegram Bot and Dispatcher
+6. Configure `ModuleOrchestrator` from `MODULE_CONFIG`
+7. Start aiohttp WebUI using `WEB_SERVER_HOST/PORT`
+8. Start application and module background tasks
+9. Start Telegram polling and notify the administrator
 ```
 
 ### Shutdown Sequence
@@ -812,7 +816,7 @@ while True:
 
 ```
 Remote Node (node.py)
-    ↓ (heartbeat every 60 sec)
+    ↓ (heartbeat at the configured interval)
 POST /api/heartbeat (HMAC signature)
     {
         "cpu": 45.2, "ram": 72.1,
@@ -876,12 +880,7 @@ Update DOM in real-time
 ## 🎨 Frontend Architecture
 
 ### Technologies
-- **Tailwind CSS** — Utility-first CSS framework
-- **Vanilla JavaScript** — ES6+, no frameworks
-- **Server-Sent Events** — Real-time updates
-- **Chart.js** — Resource consumption charts
-- **PWA** — Progressive Web App with manifest
-- **xterm.js** — Web terminal (VNC)
+- **xterm.js** — browser-based SSH terminal
 
 ### Key Files
 

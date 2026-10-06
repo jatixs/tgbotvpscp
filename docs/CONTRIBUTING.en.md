@@ -15,7 +15,7 @@ Welcome! We love your input! We want to make contributing to this project as eas
 This project is divided into several logical components:
 * **Bot Core (`bot.py`, `core/`)**: Built on `aiogram 3.x` for Telegram bot interactions.
 * **WebUI (`core/web/`, `core/static/`)**: Built with `aiohttp` and `Jinja2` templates. Frontend styling uses TailwindCSS and vanilla JS.
-* **Database**: `tortoise-orm` with SQLite/PostgreSQL support (via `aiosqlite`).
+* **Database**: `tortoise-orm` with SQLite through `aiosqlite`.
 * **VPS Node Agent (`node/`)**: Lightweight monitoring agent installed on remote VPS nodes, communicating with the main bot.
 
 ### Project Structure
@@ -30,7 +30,7 @@ This project is divided into several logical components:
 1. **Prerequisites**: Python 3.10 or higher.
 2. **Clone the repository**:
    ```bash
-   git clone https://github.com/your-username/tgbotvpscp.git
+   git clone https://github.com/jatixs/tgbotvpscp.git
    cd tgbotvpscp
    ```
 3. **Set up a virtual environment**:
@@ -43,7 +43,7 @@ This project is divided into several logical components:
    pip install -r requirements.txt
    ```
 5. **Configuration**:
-   Copy `.env.example` to `.env` and fill in your Bot Token and Telegram User ID.
+   Never put production secrets in a development checkout. Create a local `.env` using the variables read by `core/config.py`; the repository does not include `.env.example`. Use a dedicated test bot and isolated test data.
 6. **Run the bot**:
    ```bash
    python bot.py
@@ -55,7 +55,7 @@ This project is divided into several logical components:
 - We follow **PEP 8** standards.
 - We use **Ruff** for linting. Please ensure your code passes checks before submitting:
   ```bash
-  ruff check . --fix
+   ruff check .
   ```
 - Use Python type hinting wherever possible (e.g., `def handler(message: types.Message) -> None:`).
 
@@ -69,8 +69,8 @@ We follow [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/)
 ### Pull Requests
 1. Fork the repo and create your branch from `main`.
 2. Name your branch logically: `feature/your-feature-name` or `bugfix/issue-number`.
-3. If you've added code that should be tested, test it thoroughly (WebUI, Telegram bot commands, node scripts).
-4. Update `CHANGELOG.md` with your changes (optional but highly appreciated).
+3. Run the relevant checks: `python -m unittest discover -s tests`; for installers, run `bash -n deploy.sh` and `bash -n deploy_en.sh` in Linux/macOS or Git Bash.
+4. Update `CHANGELOG.md`; for auth, node-protocol, or deployment changes, synchronize the Russian and English docs and security guidance.
 5. Open a Pull Request!
 
 ## Translations (i18n)

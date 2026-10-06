@@ -55,7 +55,7 @@ let quickDiskChart = null;
 const QUICK_STATS_HISTORY_MAX = 30;
 const quickStatsHistory = { cpu: [], ram: [], disk: [] };
 let allNodesData = [];
-let currentNodeToken = null;
+let currentNodeId = null;
 let currentRenderList = [];
 let renderedCount = 0;
 const NODES_BATCH_SIZE = 15;
@@ -306,8 +306,8 @@ function updateNodesListUI(data) {
                 try {
                     const order = JSON.parse(orderStr);
                     newList.sort((a, b) => {
-                        const aDec = typeof decryptData === 'function' ? decryptData(a.token) : a.token;
-                        const bDec = typeof decryptData === 'function' ? decryptData(b.token) : b.token;
+                        const aDec = String(a.id);
+                        const bDec = String(b.id);
                         let idxA = order.indexOf(aDec);
                         let idxB = order.indexOf(bDec);
                         if (idxA === -1) idxA = Infinity;
@@ -353,17 +353,17 @@ function updateNodesListUI(data) {
 function updateVisibleNodes(elements, dataList) {
     for (let i = 0; i < elements.length; i++) {
         const el = elements[i];
-        const token = el.getAttribute('data-token');
+        const nodeId = el.getAttribute('data-token');
         const nodeData = dataList[i];
         
         if (!nodeData) return false;
         
-        const valA = typeof decryptData === 'function' ? decryptData(token) : token;
-        const valB = typeof decryptData === 'function' ? decryptData(nodeData.token) : nodeData.token;
+        const valA = nodeId;
+        const valB = String(nodeData.id);
         if (valA !== valB) return false;
         
-        if (token !== nodeData.token) {
-            el.setAttribute('data-token', escapeHtml(nodeData.token));
+        if (nodeId !== valB) {
+            el.setAttribute('data-token', valB);
         }
         const ui = getNodeUiParams(nodeData);
         const cpuEl = el.querySelector('[data-ref="cpu-val"]');
@@ -425,7 +425,7 @@ function updateVisibleNodes(elements, dataList) {
                 stPing.style.display = 'none';
             }
         }
-        el.setAttribute('onclick', `openNodeDetails('${escapeHtml(nodeData.token)}', '${ui.statusColor}')`);
+        el.setAttribute('onclick', `openNodeDetails('${valB}', '${ui.statusColor}')`);
     }
     return true;
 }
@@ -461,8 +461,8 @@ function filterAndRenderNodes() {
             try {
                 const order = JSON.parse(orderStr);
                 newList.sort((a, b) => {
-                    const aDec = typeof decryptData === 'function' ? decryptData(a.token) : a.token;
-                    const bDec = typeof decryptData === 'function' ? decryptData(b.token) : b.token;
+                    const aDec = String(a.id);
+                    const bDec = String(b.id);
                     let idxA = order.indexOf(aDec);
                     let idxB = order.indexOf(bDec);
                     if (idxA === -1) idxA = Infinity;
@@ -558,16 +558,14 @@ function renderNodesList() {
             animation: 150,
             disabled: sortMode !== 'custom',
             onEnd: function () {
-                const newOrder = Array.from(container.querySelectorAll('[data-token]')).map(el => {
-                    const t = el.getAttribute('data-token');
-                    return typeof decryptData === 'function' ? decryptData(t) : t;
-                });
+                const newOrder = Array.from(container.querySelectorAll('[data-token]'))
+                    .map(el => el.getAttribute('data-token'));
                 localStorage.setItem('dashboardNodeOrder', JSON.stringify(newOrder));
                 const orderMap = {};
                 newOrder.forEach((t, i) => orderMap[t] = i);
                 currentRenderList.sort((a, b) => {
-                    const aDec = typeof decryptData === 'function' ? decryptData(a.token) : a.token;
-                    const bDec = typeof decryptData === 'function' ? decryptData(b.token) : b.token;
+                    const aDec = String(a.id);
+                    const bDec = String(b.id);
                     let idxA = orderMap[aDec];
                     let idxB = orderMap[bDec];
                     if (idxA === undefined) idxA = Infinity;
@@ -619,7 +617,7 @@ function renderNextNodeBatch() {
         }
 
         return `
-        <div data-token="${escapeHtml(node.token)}" class="bg-white dark:bg-white/5 hover:bg-gray-50 dark:hover:bg-white/10 transition-all duration-200 rounded-xl border border-gray-100 dark:border-white/5 cursor-pointer shadow-sm hover:shadow-md group animate-fade-in-up" data-action="open-node-details" data-color="${ui.statusColor}">
+        <div data-token="${node.id}" class="bg-white dark:bg-white/5 hover:bg-gray-50 dark:hover:bg-white/10 transition-all duration-200 rounded-xl border border-gray-100 dark:border-white/5 cursor-pointer shadow-sm hover:shadow-md group animate-fade-in-up" data-action="open-node-details" data-color="${ui.statusColor}">
             
             <div class="node-row p-3 sm:p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
                 
@@ -1502,12 +1500,12 @@ function removeModalLoading() {
     }, 300);
 }
 
-async function openNodeDetails(token, color) {
+async function openNodeDetails(nodeId, color) {
     const modal = document.getElementById('nodeModal');
     if (modal) {
         setModalLoading();
         animateModalOpen(modal);
-        currentNodeToken = token;
+        currentNodeId = nodeId;
         cancelNodeRename();
     }
 
@@ -1519,7 +1517,7 @@ async function openNodeDetails(token, color) {
         nodeSSESource.close();
         nodeSSESource = null;
     }
-    nodeSSESource = new EventSource(`/api/events/node?token=${encodeURIComponent(token)}`);
+    nodeSSESource = new EventSource(`/api/events/node?node_id=${encodeURIComponent(nodeId)}`);
 
     nodeSSESource.addEventListener('node_details', (e) => {
         try {
@@ -1601,7 +1599,7 @@ function updateNodeDetailsUI(data) {
     
     const tokenEl = document.getElementById('modalToken');
     if (tokenEl) {
-        tokenEl.innerText = decryptData(data.token);
+        tokenEl.innerText = data.id;
     }
 
     const stats = data.stats || {};
@@ -1709,7 +1707,7 @@ window.cancelNodeRename = function () {
 window.saveNodeRename = async function () {
     const nameInput = document.getElementById('modalNodeNameInput');
     const newName = nameInput.value.trim();
-    if (!newName || !currentNodeToken) return;
+    if (!newName || !currentNodeId) return;
     document.getElementById('modalNodeName').innerHTML = replaceEmojisWithFlagsHTML(escapeHtml(newName));
     cancelNodeRename();
 
@@ -1720,7 +1718,7 @@ window.saveNodeRename = async function () {
                 'Content-Type': 'application/json'
             },
             body: JSON.stringify({
-                token: currentNodeToken,
+                node_id: currentNodeId,
                 name: newName
             })
         });
@@ -3023,14 +3021,14 @@ window.resetAgentUptime = async function() {
 };
 
 window.resetNodeUptime = async function() {
-    if (!currentNodeToken) return;
+    if (!currentNodeId) return;
     if (!await window.showModalConfirm(I18N.web_reset_uptime_confirm, I18N.modal_title_confirm)) return;
 
     try {
         const res = await fetch('/api/nodes/reset-uptime', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ token: currentNodeToken })
+            body: JSON.stringify({ node_id: currentNodeId })
         });
         if (res.ok) {
             if (window.showToast) window.showToast(I18N.uptime_reset_success);

@@ -106,9 +106,19 @@ def ensure_env_variables():
         return
     
     logger.info("🔍 Checking environment variables in .env...")
+
+    default_web_host = "127.0.0.1"
+    try:
+        with open(env_file, "r", encoding="utf-8") as f:
+            for line in f:
+                if line.startswith("DEPLOY_MODE=") and line.split("=", 1)[1].strip().strip('"') == "docker":
+                    default_web_host = "0.0.0.0"
+                    break
+    except OSError:
+        pass
     
     required_vars = {
-        "WEB_SERVER_HOST": "127.0.0.1",
+        "WEB_SERVER_HOST": default_web_host,
         "WEB_SERVER_PORT": "8080",
         "INSTALL_MODE": "secure",
         "DEPLOY_MODE": "systemd",
@@ -123,6 +133,11 @@ def ensure_env_variables():
         "TG_BOT_CONTAINER_NAME",
         "COMPOSE_PROFILES",
         "WEB_DOMAIN",
+        "WEB_PUBLIC_URL",
+        "HTTPS_PORT",
+        "HTTPS_EMAIL",
+        "WEB_TLS_MODE",
+        "LEGACY_NODE_BRIDGE",
     ]
     
     try:

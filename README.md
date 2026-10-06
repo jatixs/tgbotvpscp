@@ -5,11 +5,11 @@
 <h1 align="center">🤖 VPS Manager Telegram Bot</h1>
 
 <p align="center">
-  <b>v1.25.3</b> — профессиональная экосистема для мониторинга и управления серверной инфраструктурой<br>
+  <b>v1.26.0</b> — профессиональная экосистема для мониторинга и управления серверной инфраструктурой<br>
   (Systemd / Docker / API / WebUI / PWA / Multi-Node / Remote SSH / Backup Manager)<br><br>
 
-  <a href="https://github.com/jatixs/tgbotvpscp/releases/latest"><img src="https://img.shields.io/badge/version-v1.25.3-blue?style=flat-square" alt="Version 1.25.3"/></a>
-  <a href="https://github.com/jatixs/tgbotvpscp/releases/latest"><img src="https://img.shields.io/badge/build-92-purple?style=flat-square" alt="Build 92"/></a>
+  <a href="https://github.com/jatixs/tgbotvpscp/releases/latest"><img src="https://img.shields.io/badge/version-v1.26.0-blue?style=flat-square" alt="Version 1.26.0"/></a>
+  <a href="https://github.com/jatixs/tgbotvpscp/releases/latest"><img src="https://img.shields.io/badge/build-93-purple?style=flat-square" alt="Build 93"/></a>
   <a href="https://www.python.org/"><img src="https://img.shields.io/badge/python-3.10%2B-green?style=flat-square" alt="Python 3.10+"/></a>
   <a href="https://choosealicense.com/licenses/gpl-3.0/"><img src="https://img.shields.io/badge/license-GPL--3.0-lightgrey?style=flat-square" alt="License GPL-3.0"/></a>
   <a href="https://github.com/aiogram/aiogram"><img src="https://img.shields.io/badge/aiogram-3.x-orange?style=flat-square" alt="Aiogram 3.x"/></a>
@@ -49,7 +49,7 @@
 ✅ **Централизованное управление** — один интерфейс для всех серверов  
 ✅ **Real-time мониторинг** — мгновенные обновления без перезагрузки  
 ✅ **Безопасность** — enterprise-класса защита с WAF и аудитом  
-✅ **Масштабируемость** — от 1 до 1000+ серверов  
+✅ **Масштабируемость** — управление несколькими удаленными серверами
 ✅ **Мобильность** — управление с телефона через Telegram  
 
 ---
@@ -58,14 +58,14 @@
 
 ### 🚀 Производительность
 - ✅ **Полная асинхронность** — AsyncIO, aiohttp, aiosqlite
-- ✅ **Низкое потребление** — ~100MB RAM на агенте
+- ✅ **Ограниченный runtime footprint** — кэширование и фоновая очистка
 - ✅ **Кольцевые буферы** — оптимизация памяти через deque
 - ✅ **Memory Orchestrator** — динамическая выгрузка неиспользуемых модулей
 
 ### 🖥 Мульти-серверное управление
 - ✅ **Неограниченное количество нод** — масштабируемая архитектура
 - ✅ **Real-time метрики** — CPU, RAM, Disk, Network (HTTP / ICMP ping)
-- ✅ **Web Terminal (VNC)** — безопасный SSH-доступ прямо из браузера
+- ✅ **Web Terminal (SSH)** — доступ к терминалу через WebUI с проверкой host key
 - ✅ **Оптимизация системы** — интерактивный модуль настройки VPS (BBR, Swap, очистка кэша)
 
 ### 💳 Система биллинга и аренды
@@ -80,7 +80,7 @@
 - ✅ **Интерактивные виджеты** — меню с сохранением состояния (чекбоксы) и живыми таймерами
 
 ### 🛡️ Безопасность Enterprise-класса
-- ✅ **WAF** — защита от SQL Injection, XSS, Path Traversal
+- ✅ **Web-защита** — security headers, CSRF, rate limiting и фильтрация подозрительных запросов
 - ✅ **Rate Limiting & Brute-force Protection** — защита от DDoS и подбора паролей
 - ✅ **Audit Logging** — детальные логи всех событий
 - ✅ **Шифрование данных** — Fernet (AES) + AES-256-CBC + Argon2 для паролей
@@ -180,54 +180,37 @@
    ```
 
 ### 2️⃣ Установка главного бота
-
 ```bash
 bash <(wget -qO- https://raw.githubusercontent.com/jatixs/tgbotvpscp/main/deploy.sh)
 ```
 
-**Выберите режим установки:**
-- `1) Docker - Secure Mode` — **Рекомендуется** (изоляция, безопасность)
-- `3) Docker - Root Mode` — Полный доступ (для перезагрузки сервера)
+**Режимы установки:**
+- `1) Systemd - Secure` — рекомендуемый вариант с отдельным ограниченным пользователем
+- `2) Systemd - Root` — полный доступ к хосту
+- `3) Docker - Secure` — контейнерный secure-профиль
+- `4) Docker - Root` — полный доступ к хосту через root-профиль
 
-**Введите данные:**
-- Bot Token (от BotFather)
-- Admin User ID (ваш Telegram ID)
+Установщик запросит токен Telegram, ID администратора и настройки WebUI. Панель публикуется по HTTPS origin из `WEB_PUBLIC_URL`; внутренний порт не следует открывать напрямую в Интернет.
 
-🎉 Бот запущен! API доступен на `http://YOUR_IP:8080`
+Managed TLS принимает домен или глобальный публичный IPv4. IP-сертификат Let's Encrypt использует short-lived profile и действует 160 часов; HTTP-01 требует входящий TCP/80, renewal проверяется ежечасно. Частные и локальные IPv4 не поддерживаются. При внешнем reverse proxy укажите его HTTPS origin и настройте сертификат/renewal на proxy.
 
-### 3️⃣ Подключение удаленных серверов (Нод)
+### 3️⃣ Подключение удаленных серверов (нод)
 
-#### На главном боте:
-1. Откройте Telegram → **🖥 Ноды**
-2. Нажмите **➕ Добавить ноду**
-3. Введите имя → Скопируйте **токен**
+1. В Telegram откройте **🖥 Ноды** → **➕ Добавить ноду**, задайте имя и сохраните выданный секретный token.
+2. На удаленном сервере запустите установщик и выберите **7) НОДА (Клиент)**.
+3. Укажите HTTPS origin master, например `https://panel.example.com` или `https://203.0.113.10`, и node token.
 
-#### На удаленном сервере:
-```bash
-bash <(wget -qO- https://raw.githubusercontent.com/jatixs/tgbotvpscp/main/deploy.sh)
-```
+Для существующих агентов сначала обновите master, затем обновите ноды. Агент проверяет same-host HTTPS endpoint и сохраняет новый URL; временный HTTP bridge принимает только discovery/bootstrap и HMAC-защищенный heartbeat. Проверьте прогресс командой `sudo tgcp-bot tls status`; после подтверждения всех нод закройте bridge: `sudo tgcp-bot tls finalize`.
 
-Выберите **8) Установить НОДУ (Клиент)**
+### Доступ к WebUI
 
-Введите:
-- **URL агента:** `http://MAIN_SERVER_IP:8080`
-- **Токен:** полученный от бота
+Открывайте HTTPS origin, указанный при установке, например `https://panel.example.com/`. Установщик создает случайный initial password и показывает его в конце установки; общего пароля `admin` нет. Сменить пароль можно командой `sudo tgcp-bot webpass`.
 
-✅ Нода появится в списке через несколько секунд!
+Agent routes: `GET /api/agent/https` публикует HTTPS origin без токена; `GET /api/node/bootstrap` принимает token через `X-Node-Token`; `POST /api/heartbeat` принимает HMAC-подписанный heartbeat.
 
 ---
 
 ## 💻 Веб-интерфейс
-
-### Доступ к Dashboard
-
-```
-http://YOUR_SERVER_IP:8080
-```
-
-**Первый вход:**
-- Username: `admin`
-- Password: `admin` (измените после входа!)
 
 ### Основные функции
 
@@ -282,7 +265,8 @@ http://YOUR_SERVER_IP:8080
 
 **Node API:**
 - `GET /api/heartbeat` — health probe для агента/нод
-- GET /api/node/bootstrap — скрипт инициализации для установки агента
+- `GET /api/agent/https` — публичный HTTPS origin для migration discovery
+- `GET /api/node/bootstrap` — bootstrap с секретом в `X-Node-Token`
 - `POST /api/heartbeat` — heartbeat от ноды с HMAC-подписью
 - `GET /api/nodes/list` — список нод
 - `POST /api/nodes/add` — добавить ноду
@@ -290,8 +274,8 @@ http://YOUR_SERVER_IP:8080
 - `POST /api/nodes/rename` — переименовать ноду
 - POST /api/nodes/reset-uptime — сброс статистики аптайма ноды
 - `GET /api/nodes/monitor/list` — данные страницы мониторинга
-- `GET /api/nodes/monitor/detail?token=...` — детали конкретной ноды
-- `GET /api/nodes/monitor/services?token=...` — сервисы конкретной ноды
+- `GET /api/nodes/monitor/detail?node_id=...` — детали ноды, доступны через WebUI-сессию
+- `GET /api/nodes/monitor/services?node_id=...` — сервисы ноды, доступны через WebUI-сессию
 - `POST /api/nodes/monitor/command` — отправить команду на ноду
 - `POST /api/nodes/monitor/service_action` — действие над сервисом ноды
 
@@ -359,11 +343,11 @@ http://YOUR_SERVER_IP:8080
 - **Server-side sessions** — безопасные куки
 - **CSRF Protection** — токены для всех POST запросов
 - **Brute-force Protection** — блокировка после 5 попыток на 5 минут
-- **Rate Limiting** — 100 API запросов/мин на IP
+- **Rate Limiting** — ограничение частоты запросов с учетом доверенной proxy-конфигурации
 
 #### 🔹 Уровень 3: WAF (Web Application Firewall)
 
-Автоматическое обнаружение:
+Фильтрация подозрительных запросов — дополнительный уровень защиты, а не замена авторизации, проверок прав и валидации входных данных:
 - ❌ SQL Injection (`UNION SELECT`, `OR 1=1`)
 - ❌ XSS (`<script>`, `javascript:`)
 - ❌ Path Traversal (`../`, `%2e%2e`)
@@ -386,9 +370,11 @@ http://YOUR_SERVER_IP:8080
 **Privacy:**
 - IP маскируются (203.0.113.XXX)
 - Токены скрываются (abc123...)
-- GDPR compliant
+- Не публикуйте `.env`, резервные копии и журналы доступа
 
 **Файл:** `logs/audit/audit.log`
+
+Для WebUI задавайте `WEB_PUBLIC_URL` со схемой `https://`. При внешнем reverse proxy сертификатом управляет proxy; при managed TLS установщик настраивает Nginx/Certbot. TCP/80 необходим для ACME HTTP-01. Старые агенты мигрируют после обновления master и node; закройте временный bridge командой `tgcp-bot tls finalize`, когда `tgcp-bot tls status` не показывает ожидающих нод.
 
 ---
 
@@ -406,6 +392,7 @@ http://YOUR_SERVER_IP:8080
 ├── Dockerfile               # Образ контейнера
 ├── deploy.sh                # Установщик
 ├── core/                    # Ядро системы
+│   ├── tls_config.py        # Проверка TLS endpoint и Certbot arguments
 │   ├── config.py            # Загрузка конфигурации
 │   ├── auth.py              # Авторизация
 │   ├── i18n.py              # Мультиязычность
@@ -436,8 +423,12 @@ http://YOUR_SERVER_IP:8080
 │   ├── backups.py           # Менеджер бэкапов
 │   ├── notifications.py     # Фоновые алерты
 │   └── ...                  # +11 модулей
-└── node/                    # Клиент для удаленных серверов
-    └── node.py              # Агент ноды
+├── node/                    # Агент удаленного сервера
+│   ├── node.py              # Агент и HTTPS migration flow
+│   └── endpoint_migration.py # Проверка same-host перехода на HTTPS
+├── scripts/                 # Host-side helpers установщика и CLI
+│   └── tls_finalize.py      # Закрытие legacy bridge, в том числе в Docker
+└── tests/                   # Unit tests для TLS и миграции агентов
 ```
 
 📖 Подробная документация: [ARCHITECTURE.md](docs/ARCHITECTURE.md)
@@ -449,6 +440,8 @@ http://YOUR_SERVER_IP:8080
 ### Руководства
 
 - 📘 [**ARCHITECTURE.md**](docs/ARCHITECTURE.md) — Полная архитектура проекта
+- 🔒 [**SECURITY.md**](SECURITY.md) — Безопасный деплой, HTTPS и миграция агентов
+- 🤝 [**CONTRIBUTING.md**](CONTRIBUTING.md) — Разработка и тестирование
 - 🧩 [**custom_module.md**](docs/custom_module.md) — Создание модуля для бота
 - 🌐 [**web_module.md**](docs/web_module.md) — Создание веб-модуля (WebUI + Бот)
 - 📝 [**CHANGELOG.md**](docs/CHANGELOG.md) — История изменений
@@ -510,11 +503,13 @@ tar -czf /backup/tg-bot-logs-$(date +%F).tar.gz /opt/tg-bot/logs/
 # Telegram → 🔧 Утилиты → 🔄 Обновить VPS → Обновить бота
 
 # Ручное
-cd /opt/tg-bot
-git pull
-source venv/bin/activate
-pip install -r requirements.txt --upgrade
-sudo systemctl restart tg-bot
+# Для обновления используйте update flow установщика: он сохраняет .env и runtime state.
+# Полезные команды:
+sudo tgcp-bot status
+sudo tgcp-bot restart
+sudo tgcp-bot tls status
+sudo tgcp-bot tls check
+sudo tgcp-bot tls finalize
 ```
 
 ---
@@ -614,7 +609,7 @@ python bot.py
 ---
 
 <p align="center">
-  <b>Версия:</b> 1.25.1 (Build 90)<br>
+  <b>Версия:</b> 1.26.0 (Build 93)<br>
   <b>Лицензия:</b> GPL-3.0 license<br>
   <b>Статус:</b> Релиз<br>
   <br>

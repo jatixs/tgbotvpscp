@@ -869,12 +869,7 @@ def get_app_version() -> str:
 
 def update_env_variable(key: str, value: str, env_path: str = None):
     if env_path is None:
-        try:
-            from core import config
-
-            env_path = config.ENV_FILE_PATH
-        except ImportError:
-            env_path = "/opt/tg-bot/.env"
+        env_path = os.path.join(config.BASE_DIR, ".env")
     if not os.path.exists(env_path):
         return
     try:

@@ -239,7 +239,12 @@ async def process_add_user_id(message: types.Message, state: FSMContext):
 
 
 async def process_add_user_group(callback: types.CallbackQuery, state: FSMContext):
-    lang = get_user_lang(callback.from_user.id)
+    user_id = callback.from_user.id
+    lang = get_user_lang(user_id)
+    if not is_allowed(user_id, "add_user"):
+        await state.clear()
+        await callback.answer(_("access_denied_generic", lang), show_alert=True)
+        return
     try:
         group_key = callback.data.split("_")[-1]
         if group_key not in ["admins", "users"]:
@@ -251,12 +256,12 @@ async def process_add_user_group(callback: types.CallbackQuery, state: FSMContex
         ALLOWED_USERS[new_user_id] = group_key
         new_user_name = await get_user_name(callback.bot, new_user_id)
         logging.info(
-            f"Admin {callback.from_user.id} added user {new_user_name} ({new_user_id}) to group '{group_key}'"
+            f"Admin {user_id} added user {new_user_name} ({new_user_id}) to group '{group_key}'"
         )
         # Audit logging
         log_audit_event(
             AuditEvent.USER_ADDED,
-            callback.from_user.id,
+            user_id,
             details={"target_user_id": new_user_id, "username": new_user_name, "role": group_key},
             severity="WARNING"
         )

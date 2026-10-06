@@ -4,11 +4,35 @@
 
 <h1 align="center">📝 Telegram VPS Management Bot — Changelog</h1>
 <p align="center">
-    <img src="https://img.shields.io/badge/version-v1.25.3-blue?style=flat-square" alt="Version 1.25.3"/>
-    <img src="https://img.shields.io/badge/build-92-purple?style=flat-square" alt="Build 92"/>
-    <img src="https://img.shields.io/badge/date-Sep%2027%202026-green?style=flat-square" alt="Date Sep 27 2026"/>
+    <img src="https://img.shields.io/badge/version-v1.26.0-blue?style=flat-square" alt="Version 1.26.0"/>
+    <img src="https://img.shields.io/badge/build-93-purple?style=flat-square" alt="Build 93"/>
+    <img src="https://img.shields.io/badge/date-Oct%207%202026-green?style=flat-square" alt="Date Oct 7 2026"/>
 	<img src="https://img.shields.io/badge/status-stable-green?style=flat-square" alt="Status Stable"/>
 </p>
+
+## [1.26.0] - 2026-10-07
+
+### 🔒 Security
+* Privileged Telegram and WebUI actions now enforce role checks in the handler itself. Authorization was tightened for backups, service management, traffic resets, and administrator settings.
+* Removed the known `admin` password fallback; the installer generates a random initial password. Node tokens are no longer sent to browser pages or placed in node-monitoring URLs; the UI addresses nodes by numeric ID.
+* SSH host-key verification is enabled for Web Terminal connections. Proxy headers are trusted only from configured proxies, and temporary caches are bounded by age and size.
+* Docker API access in the secure profile is read-only; mutating operations remain available only in the root profile.
+
+### 🌐 HTTPS and Agent Migration
+* The installer can configure HTTPS with Nginx and Certbot for a domain or globally routable public IPv4. IP certificates use Let's Encrypt's short-lived profile and last 160 hours; renewal is checked hourly.
+* HTTP-01 validation requires inbound TCP port 80 to be reachable. Private and local IP addresses are unsupported. Owners of external reverse proxies remain responsible for certificate issuance and renewal.
+* Existing agents migrate in stages: update the master first, then each agent discovers the HTTPS origin, validates TLS and hostname consistency, and saves the new URL. During rollout, a restricted HTTP bridge accepts only discovery, bootstrap, and HMAC-signed heartbeats.
+* `tgcp-bot tls status` reports node migration state; `tgcp-bot tls check` verifies readiness; `tgcp-bot tls finalize` disables the bridge after every node has migrated.
+
+### 📦 Installation and Updates
+* Updates now use a staging copy. `.env`, configuration, logs, and installer helpers are preserved while application code is replaced. Systemd/Docker modes can be switched without first uninstalling the deployment.
+* An ordinary Docker mode switch no longer removes volumes. The WebUI is published on host loopback while the service listens on the container interface.
+* The `tgcp-bot` CLI adds status, restart, initial-password, and HTTPS-migration commands. Docker operations that require host files use a host-side helper.
+
+### 🧰 Maintenance and Tests
+* Bounded in-memory caches now cover throttling, Docker Hub descriptions, SSH login deduplication, and Alert Bot flood state; Redis is not required.
+* Removed unused direct dependencies. Added unit tests for TLS URL validation, Certbot arguments, endpoint migration, and bridge finalization.
+* Synchronized the Russian and English documentation for HTTPS setup, agent migration, CLI usage, and development workflow.
 
 ---
 ## [1.25.3] - 2026-09-27

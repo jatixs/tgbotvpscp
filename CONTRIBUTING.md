@@ -15,7 +15,7 @@
 Проект разделен на несколько логических компонентов:
 * **Ядро бота (`bot.py`, `core/`)**: Построено на `aiogram 3.x` для взаимодействия с Telegram.
 * **WebUI (`core/web/`, `core/static/`)**: Реализовано с помощью `aiohttp` и шаблонов `Jinja2`. Фронтенд использует TailwindCSS и ванильный JS.
-* **База данных**: `tortoise-orm` с поддержкой SQLite/PostgreSQL (через `aiosqlite`).
+* **База данных**: `tortoise-orm` с SQLite через `aiosqlite`.
 * **Агент мониторинга (`node/`)**: Легковесный скрипт, устанавливаемый на удаленные VPS для мониторинга и общения с главным ботом.
 
 ### Структура проекта
@@ -30,7 +30,7 @@
 1. **Требования**: Python 3.10 или новее.
 2. **Клонирование репозитория**:
    ```bash
-   git clone https://github.com/your-username/tgbotvpscp.git
+   git clone https://github.com/jatixs/tgbotvpscp.git
    cd tgbotvpscp
    ```
 3. **Настройка виртуального окружения**:
@@ -43,7 +43,7 @@
    pip install -r requirements.txt
    ```
 5. **Конфигурация**:
-   Скопируйте файл `.env.example` в `.env` и заполните токен бота и ваш Telegram User ID.
+   Не храните production secrets в dev checkout. Для локального запуска создайте собственный `.env` по переменным, которые читает `core/config.py`; файл `.env.example` в репозитории не поставляется. Используйте тестового Telegram-бота и отдельные тестовые данные.
 6. **Запуск бота**:
    ```bash
    python bot.py
@@ -55,7 +55,7 @@
 - Мы следуем стандартам **PEP 8**.
 - Для линтинга используется **Ruff**. Перед отправкой кода убедитесь, что он проходит проверки:
   ```bash
-  ruff check . --fix
+   ruff check .
   ```
 - Используйте аннотации типов везде, где это возможно (например: `def handler(message: types.Message) -> None:`).
 
@@ -69,8 +69,8 @@
 ### Pull Requests
 1. Сделайте Fork репозитория и создайте свою ветку от `main`.
 2. Называйте ветку логично: `feature/ваша-функция` или `bugfix/номер-issue`.
-3. Обязательно тщательно протестируйте свои изменения (особенно WebUI и скрипты агента ноды).
-4. По возможности обновите `docs/CHANGELOG.md`, описав, что вы изменили.
+3. Проверьте изменения: `python -m unittest discover -s tests`; для установщиков выполните `bash -n deploy.sh` и `bash -n deploy_en.sh` в Linux/macOS или Git Bash.
+4. Обновите `docs/CHANGELOG.md`; для изменений auth, node protocol или деплоя синхронизируйте RU/EN документацию и security guidance.
 5. Откройте Pull Request!
 
 ## Переводы и локализация (i18n)

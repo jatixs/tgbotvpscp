@@ -28,6 +28,13 @@ README_FILE="${BOT_INSTALL_PATH}/README.md"
 DOCKER_COMPOSE_FILE="${BOT_INSTALL_PATH}/docker-compose.yml"
 ENV_FILE="${BOT_INSTALL_PATH}/.env"
 LEGACY_SECURITY_KEY_FILE="${BOT_INSTALL_PATH}/config/security.key"
+ENV_BACKUP_FILE="/root/.tgbot_env.bak"
+LEGACY_ENV_BACKUP_FILE="/tmp/tgbot_env.bak"
+
+if [ -f "${LEGACY_ENV_BACKUP_FILE}" ] && [ ! -f "${ENV_BACKUP_FILE}" ]; then
+    sudo install -m 600 "${LEGACY_ENV_BACKUP_FILE}" "${ENV_BACKUP_FILE}"
+    sudo rm -f "${LEGACY_ENV_BACKUP_FILE}"
+fi
 
 GITHUB_REPO="jatixs/tgbotvpscp"
 GITHUB_REPO_URL="https://github.com/${GITHUB_REPO}.git"
@@ -62,7 +69,7 @@ is_node_context() {
     if [ -f "${ENV_FILE}" ] && grep -q '^MODE=node' "${ENV_FILE}"; then
         return 0
     fi
-    if [ -f "/tmp/tgbot_env.bak" ] && grep -q '^MODE=node' "/tmp/tgbot_env.bak"; then
+    if [ -f "${ENV_BACKUP_FILE}" ] && grep -q '^MODE=node' "${ENV_BACKUP_FILE}"; then
         return 0
     fi
     return 1
@@ -182,59 +189,148 @@ check_integrity() {
 }
 
 setup_nginx_proxy() {
-    echo -e "\n${C_CYAN}🔒 Настройка HTTPS (Nginx + Certbot)${C_RESET}"
-    run_with_spinner "Установка Nginx и Certbot" sudo apt-get install -y -q nginx certbot python3-certbot-nginx psmisc
+    local helper="${BOT_INSTALL_PATH}/core/tls_config.py"
+    local webroot="/var/www/tgbot-acme"
+    local parsed=()
+    local tls_info=""
+    local certbot_cmd="$(command -v certbot 2>/dev/null || true)"
+    local acme_conf="/etc/nginx/sites-available/tgbot-acme.conf"
+    local acme_link="/etc/nginx/sites-enabled/tgbot-acme.conf"
+    local final_conf=""
+    local final_link=""
+    local old_conf=""
+    local old_backup=""
 
-    if command -v lsof &> /dev/null && lsof -Pi :80 -sTCP:LISTEN -t >/dev/null ; then
-        sudo fuser -k 80/tcp 2>/dev/null
-        sudo systemctl stop nginx 2>/dev/null
-    elif command -v fuser &> /dev/null && sudo fuser 80/tcp >/dev/null; then
-         sudo fuser -k 80/tcp
-         sudo systemctl stop nginx 2>/dev/null
+    echo -e "\n${C_CYAN}🔒 Настройка HTTPS (Nginx + Certbot)${C_RESET}"
+    tls_info=$("${PYTHON_BIN}" "${helper}" parse-url "${WEB_PUBLIC_URL}") || {
+        msg_error "Некорректный HTTPS URL: ${WEB_PUBLIC_URL}"
+        return 1
+    }
+    mapfile -t parsed <<< "${tls_info}"
+    TLS_KIND="${parsed[0]}"
+    TLS_HOST="${parsed[1]}"
+    HTTPS_PORT="${parsed[2]}"
+    TLS_CERT_NAME="${parsed[3]}"
+    HTTPS_DOMAIN="${TLS_HOST}"
+
+    run_with_spinner "Установка Nginx" sudo apt-get install -y -q nginx || return 1
+    if [ -z "${certbot_cmd}" ]; then
+        run_with_spinner "Установка Certbot" sudo apt-get install -y -q certbot || return 1
+        certbot_cmd="$(command -v certbot 2>/dev/null || true)"
     fi
 
-    if sudo certbot certonly --standalone --non-interactive --agree-tos --email "${HTTPS_EMAIL}" -d "${HTTPS_DOMAIN}"; then
-        msg_success "Сертификат получен!"
-    else
-        msg_error "Ошибка получения сертификата."
-        sudo systemctl start nginx
+    if [ "${TLS_KIND}" == "ip" ] && ! "${certbot_cmd}" --help all 2>/dev/null | grep -q -- "--ip-address"; then
+        run_with_spinner "Установка Certbot для IP certificates" sudo apt-get install -y -q snapd || return 1
+        sudo systemctl enable --now snapd.socket || return 1
+        if ! sudo snap list certbot >/dev/null 2>&1; then
+            run_with_spinner "Установка актуального Certbot" sudo snap install certbot --classic
+        fi
+        certbot_cmd="/snap/bin/certbot"
+        if ! "${certbot_cmd}" --help all 2>/dev/null | grep -q -- "--ip-address"; then
+            msg_error "Нужен Certbot с поддержкой --ip-address (версия 5.8 или новее)."
+            return 1
+        fi
+    fi
+
+    if [ -z "${certbot_cmd}" ]; then
+        msg_error "Certbot не найден."
         return 1
     fi
 
-    NGINX_CONF="/etc/nginx/sites-available/${HTTPS_DOMAIN}"
-    NGINX_LINK="/etc/nginx/sites-enabled/${HTTPS_DOMAIN}"
-    if [ -f "/etc/nginx/sites-enabled/default" ]; then sudo rm -f "/etc/nginx/sites-enabled/default"; fi
+    sudo mkdir -p "${webroot}/.well-known/acme-challenge" /etc/nginx/sites-available /etc/nginx/sites-enabled
+    sudo tee "${acme_conf}" >/dev/null <<EOF
+server {
+    listen 80;
+    server_name ${TLS_HOST};
+    location ^~ /.well-known/acme-challenge/ {
+        root ${webroot};
+        default_type text/plain;
+    }
+    location ~ ^/api/(agent/https|node/bootstrap|heartbeat)$ {
+        proxy_pass http://127.0.0.1:${WEB_PORT};
+        proxy_set_header Host ${TLS_HOST};
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+    }
+    location / { return 404; }
+}
+EOF
+    sudo ln -sfn "${acme_conf}" "${acme_link}"
+    if ! sudo nginx -t; then
+        sudo rm -f "${acme_link}" "${acme_conf}"
+        return 1
+    fi
+    if systemctl is-active --quiet nginx; then sudo systemctl reload nginx; else sudo systemctl start nginx; fi
+    if command -v ufw >/dev/null 2>&1; then sudo ufw allow 80/tcp >/dev/null; fi
 
-    sudo bash -c "cat > ${NGINX_CONF}" <<EOF
+    local certbot_args=()
+    mapfile -d '' -t certbot_args < <(
+        "${PYTHON_BIN}" "${helper}" certbot-args "${TLS_HOST}" "${HTTPS_EMAIL}" "${certbot_cmd}" "${webroot}"
+    )
+    if ! run_with_spinner "Получение HTTPS сертификата" sudo "${certbot_args[@]}"; then
+        sudo rm -f "${acme_link}" "${acme_conf}"
+        sudo nginx -t && sudo systemctl reload nginx
+        msg_error "Сертификат не получен. Старый HTTPS конфиг оставлен без изменений."
+        return 1
+    fi
+
+    local cert_dir="/etc/letsencrypt/live/${TLS_CERT_NAME}"
+    if [ ! -s "${cert_dir}/fullchain.pem" ] || [ ! -s "${cert_dir}/privkey.pem" ]; then
+        msg_error "Certbot завершился без ожидаемой пары certificate/key."
+        return 1
+    fi
+
+    final_conf="/etc/nginx/sites-available/tgbot-panel-${TLS_CERT_NAME}.conf"
+    final_link="/etc/nginx/sites-enabled/tgbot-panel-${TLS_CERT_NAME}.conf"
+    old_conf="/etc/nginx/sites-available/${TLS_HOST}"
+    old_backup="${old_conf}.tgbot-migration-backup"
+    if [ "${old_conf}" != "${final_conf}" ] && [ -f "${old_conf}" ] && grep -q "proxy_pass http://127.0.0.1:" "${old_conf}"; then
+        if [ -L "/etc/nginx/sites-enabled/${TLS_HOST}" ]; then sudo rm -f "/etc/nginx/sites-enabled/${TLS_HOST}"; fi
+        sudo mv "${old_conf}" "${old_backup}"
+    fi
+
+    sudo tee "${final_conf}" >/dev/null <<EOF
+server {
+    listen 80;
+    server_name ${TLS_HOST};
+    location ^~ /.well-known/acme-challenge/ {
+        root ${webroot};
+        default_type text/plain;
+    }
+    location ~ ^/api/(agent/https|node/bootstrap|heartbeat)$ {
+        proxy_pass http://127.0.0.1:${WEB_PORT};
+        proxy_set_header Host ${TLS_HOST};
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+    }
+    location / { return 301 ${WEB_PUBLIC_URL}\$request_uri; }
+}
+
 server {
     listen ${HTTPS_PORT} ssl http2;
-    server_name ${HTTPS_DOMAIN};
+    server_name ${TLS_HOST};
     client_max_body_size 50m;
-
-    # SSL
-    ssl_certificate /etc/letsencrypt/live/${HTTPS_DOMAIN}/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/${HTTPS_DOMAIN}/privkey.pem;
+    ssl_certificate ${cert_dir}/fullchain.pem;
+    ssl_certificate_key ${cert_dir}/privkey.pem;
     ssl_protocols TLSv1.2 TLSv1.3;
     ssl_ciphers HIGH:!aNULL:!MD5:!RC4;
     ssl_prefer_server_ciphers on;
     ssl_session_cache shared:SSL:10m;
     ssl_session_timeout 10m;
-
-    # Security headers
-    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+    add_header Strict-Transport-Security "max-age=31536000" always;
     add_header X-Content-Type-Options nosniff always;
-    add_header X-Frame-Options SAMEORIGIN always;
+    add_header X-Frame-Options DENY always;
     add_header Referrer-Policy strict-origin-when-cross-origin always;
-
-    access_log /var/log/nginx/${HTTPS_DOMAIN}_access.log;
-    error_log /var/log/nginx/${HTTPS_DOMAIN}_error.log;
-
+    access_log /var/log/nginx/tgbot-panel_access.log;
+    error_log /var/log/nginx/tgbot-panel_error.log;
     location / {
         proxy_pass http://127.0.0.1:${WEB_PORT};
         proxy_http_version 1.1;
         proxy_set_header Upgrade \$http_upgrade;
         proxy_set_header Connection "upgrade";
-        proxy_set_header Host \$host;
+        proxy_set_header Host ${TLS_HOST};
         proxy_set_header X-Real-IP \$remote_addr;
         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto \$scheme;
@@ -243,45 +339,127 @@ server {
     }
 }
 EOF
-    sudo ln -sf "${NGINX_CONF}" "${NGINX_LINK}"
-    if sudo nginx -t; then
-        sudo systemctl restart nginx
-        if command -v ufw &> /dev/null; then sudo ufw allow ${HTTPS_PORT}/tcp >/dev/null; fi
-        echo -e "Веб-панель доступна: https://${HTTPS_DOMAIN}:${HTTPS_PORT}/"
-    else
-        msg_error "Ошибка в конфиге Nginx."
+    sudo ln -sfn "${final_conf}" "${final_link}"
+    if ! sudo nginx -t; then
+        sudo rm -f "${final_link}" "${final_conf}"
+        if [ -f "${old_backup}" ]; then sudo mv "${old_backup}" "${old_conf}"; sudo ln -sfn "${old_conf}" "/etc/nginx/sites-enabled/${TLS_HOST}"; fi
+        sudo rm -f "${acme_link}" "${acme_conf}"
+        sudo nginx -t && sudo systemctl reload nginx
+        msg_error "Новый Nginx конфиг не прошел проверку; восстановлен предыдущий."
+        return 1
     fi
+
+    sudo rm -f "${acme_link}" "${acme_conf}"
+    if [ -n "${WEB_DOMAIN}" ] && [ "${WEB_DOMAIN}" != "${TLS_HOST}" ]; then
+        local previous_domain_conf="/etc/nginx/sites-available/${WEB_DOMAIN}"
+        if [ -f "${previous_domain_conf}" ] && grep -q "proxy_pass http://127.0.0.1:" "${previous_domain_conf}"; then
+            sudo rm -f "/etc/nginx/sites-enabled/${WEB_DOMAIN}" "${previous_domain_conf}"
+        fi
+    fi
+    sudo systemctl reload nginx
+    if [ -f "${old_backup}" ]; then sudo rm -f "${old_backup}"; fi
+    if command -v ufw >/dev/null 2>&1; then sudo ufw allow "${HTTPS_PORT}/tcp" >/dev/null; fi
+
+    sudo mkdir -p /etc/letsencrypt/renewal-hooks/deploy
+    sudo tee /etc/letsencrypt/renewal-hooks/deploy/50-tgbot-nginx-reload >/dev/null <<'EOF'
+#!/bin/sh
+systemctl reload nginx
+EOF
+    sudo chmod 755 /etc/letsencrypt/renewal-hooks/deploy/50-tgbot-nginx-reload
+    sudo tee /etc/systemd/system/tgbot-certbot-renew.service >/dev/null <<EOF
+[Unit]
+Description=Renew tgbot HTTPS certificates
+
+[Service]
+Type=oneshot
+ExecStart=${certbot_cmd} renew --cert-name ${TLS_CERT_NAME} --quiet
+EOF
+    sudo tee /etc/systemd/system/tgbot-certbot-renew.timer >/dev/null <<'EOF'
+[Unit]
+Description=Check tgbot certificates for renewal hourly
+
+[Timer]
+OnCalendar=hourly
+Persistent=true
+RandomizedDelaySec=300
+
+[Install]
+WantedBy=timers.target
+EOF
+    sudo systemctl daemon-reload
+    sudo systemctl enable --now tgbot-certbot-renew.timer
+    echo -e "Веб-панель доступна: ${WEB_PUBLIC_URL}/"
 }
 
 common_install_steps() {
     echo "" > /tmp/${SERVICE_NAME}_install.log
     msg_info "1. Обновление системы..."
     
-    if [ -d "/etc/nginx/sites-enabled" ]; then
-        sudo find /etc/nginx/sites-enabled -xtype l -delete 2>/dev/null
-    fi
-    
     run_with_spinner "Apt update" sudo apt-get update -y -q
-    run_with_spinner "Установка пакетов" sudo apt-get install -y -q -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" python3 python3-pip python3-venv git curl wget sudo python3-yaml
+    run_with_spinner "Установка пакетов" sudo apt-get install -y -q -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" python3 python3-pip python3-venv git curl wget sudo
 }
 
 setup_repo_and_dirs() {
     local owner_user=$1; if [ -z "$owner_user" ]; then owner_user="root"; fi
-    cd /
+    local staging_path="${BOT_INSTALL_PATH}.staging.$$"
+    local previous_path="${BOT_INSTALL_PATH}.previous.$$"
     msg_info "Подготовка файлов (Ветка: ${GIT_BRANCH})..."
-    if [ -f "${ENV_FILE}" ]; then cp "${ENV_FILE}" /tmp/tgbot_env.bak; fi
+    if [ -f "${ENV_FILE}" ]; then
+        sudo install -m 600 "${ENV_FILE}" "${ENV_BACKUP_FILE}" || return 1
+    fi
     if [ -z "$DATA_ENCRYPTION_KEY" ] && [ -f "${LEGACY_SECURITY_KEY_FILE}" ]; then
         DATA_ENCRYPTION_KEY=$(tr -d '\r\n' < "${LEGACY_SECURITY_KEY_FILE}")
         export DATA_ENCRYPTION_KEY
         msg_info "Найден legacy security.key. Ключ будет перенесен в .env."
     fi
-    if [ -d "${BOT_INSTALL_PATH}" ]; then run_with_spinner "Удаление старых файлов" sudo rm -rf "${BOT_INSTALL_PATH}"; fi
-    sudo mkdir -p ${BOT_INSTALL_PATH}
-    run_with_spinner "Клонирование репозитория" sudo git clone --branch "${GIT_BRANCH}" "${GITHUB_REPO_URL}" "${BOT_INSTALL_PATH}" || exit 1
-    if [ -f "/tmp/tgbot_env.bak" ]; then sudo cp /tmp/tgbot_env.bak "${ENV_FILE}"; fi
-    sudo mkdir -p "${BOT_INSTALL_PATH}/logs/bot" "${BOT_INSTALL_PATH}/logs/watchdog" "${BOT_INSTALL_PATH}/logs/node" "${BOT_INSTALL_PATH}/config"
-    download_vendor_assets
-    sudo chown -R ${owner_user}:${owner_user} ${BOT_INSTALL_PATH}
+    sudo rm -rf "${staging_path}" "${previous_path}"
+    if ! run_with_spinner "Клонирование репозитория" sudo git clone --branch "${GIT_BRANCH}" "${GITHUB_REPO_URL}" "${staging_path}"; then
+        sudo rm -rf "${staging_path}"
+        return 1
+    fi
+
+    sudo mkdir -p "${staging_path}/logs/bot" "${staging_path}/logs/watchdog" "${staging_path}/logs/node" "${staging_path}/config"
+    if [ -d "${BOT_INSTALL_PATH}" ]; then
+        local state_dir
+        for state_dir in config logs scripts certbot-venv; do
+            if [ -d "${BOT_INSTALL_PATH}/${state_dir}" ]; then
+                sudo mkdir -p "${staging_path}/${state_dir}"
+                if ! sudo cp -a "${BOT_INSTALL_PATH}/${state_dir}/." "${staging_path}/${state_dir}/"; then
+                    sudo rm -rf "${staging_path}"
+                    return 1
+                fi
+            fi
+        done
+        if [ -f "${BOT_INSTALL_PATH}/installstate" ]; then
+            sudo cp -a "${BOT_INSTALL_PATH}/installstate" "${staging_path}/installstate"
+        fi
+    fi
+    if [ -f "${ENV_BACKUP_FILE}" ]; then
+        sudo install -m 600 "${ENV_BACKUP_FILE}" "${staging_path}/.env"
+    fi
+
+    local live_path="${BOT_INSTALL_PATH}"
+    BOT_INSTALL_PATH="${staging_path}"
+    if ! download_vendor_assets; then
+        BOT_INSTALL_PATH="${live_path}"
+        sudo rm -rf "${staging_path}"
+        return 1
+    fi
+    BOT_INSTALL_PATH="${live_path}"
+    sudo chown -R "${owner_user}:${owner_user}" "${staging_path}"
+
+    if [ -d "${BOT_INSTALL_PATH}" ]; then
+        if ! sudo mv "${BOT_INSTALL_PATH}" "${previous_path}"; then
+            sudo rm -rf "${staging_path}"
+            return 1
+        fi
+    fi
+    if ! sudo mv "${staging_path}" "${BOT_INSTALL_PATH}"; then
+        if [ -d "${previous_path}" ]; then sudo mv "${previous_path}" "${BOT_INSTALL_PATH}"; fi
+        sudo rm -rf "${staging_path}"
+        return 1
+    fi
+    sudo rm -rf "${previous_path}"
 }
 
 download_vendor_assets() {
@@ -301,21 +479,39 @@ download_vendor_assets() {
 
 load_cached_env() {
     local env_file="${ENV_FILE}"
-    if [ ! -f "$env_file" ] && [ -f "/tmp/tgbot_env.bak" ]; then env_file="/tmp/tgbot_env.bak"; fi
+    if [ ! -f "$env_file" ] && [ -f "${ENV_BACKUP_FILE}" ]; then env_file="${ENV_BACKUP_FILE}"; fi
 
     if [ -f "$env_file" ]; then
+        get_env_val() { grep -m 1 "^$1=" "$env_file" | cut -d'=' -f2- | sed 's/^"//;s/"$//' | sed "s/^'//;s/'$//"; }
+        if [ -z "$DATA_ENCRYPTION_KEY" ] && ! is_node_context; then
+            DATA_ENCRYPTION_KEY=$(get_env_val "DATA_ENCRYPTION_KEY")
+        fi
         echo -e "${C_YELLOW}⚠️  Обнаружена сохраненная конфигурация.${C_RESET}"
         read -p "$(echo -e "${C_CYAN}❓ Восстановить настройки? (y/n) [y]: ${C_RESET}")" RESTORE_CHOICE
         RESTORE_CHOICE=${RESTORE_CHOICE:-y}
 
         if [[ "$RESTORE_CHOICE" =~ ^[Yy]$ ]]; then
             msg_info "Загружаю сохраненные данные..."
-            get_env_val() { grep "^$1=" "$env_file" | cut -d'=' -f2- | sed 's/^"//;s/"$//' | sed "s/^'//;s/'$//"; }
             [ -z "$T" ] && T=$(get_env_val "TG_BOT_TOKEN")
             [ -z "$A" ] && A=$(get_env_val "TG_ADMIN_ID")
             [ -z "$U" ] && U=$(get_env_val "TG_ADMIN_USERNAME")
             [ -z "$N" ] && N=$(get_env_val "TG_BOT_NAME")
             [ -z "$P" ] && P=$(get_env_val "WEB_SERVER_PORT")
+            [ -z "$WEB_PUBLIC_URL" ] && WEB_PUBLIC_URL=$(get_env_val "WEB_PUBLIC_URL")
+            [ -z "$WEB_DOMAIN" ] && WEB_DOMAIN=$(get_env_val "WEB_DOMAIN")
+            [ -z "$HTTPS_PORT" ] && HTTPS_PORT=$(get_env_val "HTTPS_PORT")
+            [ -z "$HTTPS_EMAIL" ] && HTTPS_EMAIL=$(get_env_val "HTTPS_EMAIL")
+            [ -z "$WEB_TLS_MODE" ] && WEB_TLS_MODE=$(get_env_val "WEB_TLS_MODE")
+            [ -z "$LEGACY_NODE_BRIDGE" ] && LEGACY_NODE_BRIDGE=$(get_env_val "LEGACY_NODE_BRIDGE")
+            if [ -z "$LEGACY_NODE_BRIDGE" ]; then
+                local old_host="$(get_env_val WEB_SERVER_HOST)"
+                local old_deploy="$(get_env_val DEPLOY_MODE)"
+                if [ "$old_deploy" != "docker" ] && [ "$old_host" == "0.0.0.0" ]; then
+                    LEGACY_NODE_BRIDGE="true"
+                else
+                    LEGACY_NODE_BRIDGE="false"
+                fi
+            fi
             [ -z "$SENTRY_DSN" ] && SENTRY_DSN=$(get_env_val "SENTRY_DSN")
             [ -z "$DATA_ENCRYPTION_KEY" ] && DATA_ENCRYPTION_KEY=$(get_env_val "DATA_ENCRYPTION_KEY")
             if [ -z "$W" ]; then
@@ -324,12 +520,156 @@ load_cached_env() {
             fi
             [ -z "$AGENT_URL" ] && AGENT_URL=$(get_env_val "AGENT_BASE_URL")
             [ -z "$NODE_TOKEN" ] && NODE_TOKEN=$(get_env_val "AGENT_TOKEN")
+
+            if [ -z "$WEB_PUBLIC_URL" ] && [ -n "$WEB_DOMAIN" ]; then
+                local legacy_port="${HTTPS_PORT:-}"
+                local legacy_nginx="/etc/nginx/sites-available/${WEB_DOMAIN}"
+                if [ -z "$legacy_port" ] && [ -f "$legacy_nginx" ]; then
+                    legacy_port=$(grep -Eo 'listen[[:space:]]+[0-9]+[[:space:]]+ssl' "$legacy_nginx" | head -n 1 | grep -Eo '[0-9]+')
+                fi
+                HTTPS_PORT="${legacy_port:-8443}"
+                WEB_PUBLIC_URL=$("${PYTHON_BIN}" "${BOT_INSTALL_PATH}/core/tls_config.py" build-url "$WEB_DOMAIN" "$HTTPS_PORT" 2>/dev/null || true)
+            fi
         else
             msg_info "Восстановление пропущено."
         fi
     fi
 
     ensure_data_encryption_key
+}
+
+parse_tls_url() {
+    local url="$1"
+    local parsed=""
+    parsed=$("${PYTHON_BIN}" "${BOT_INSTALL_PATH}/core/tls_config.py" parse-url "$url") || return 1
+    mapfile -t TLS_URL_PARTS <<< "$parsed"
+    [ "${#TLS_URL_PARTS[@]}" -eq 4 ] || return 1
+    TLS_KIND="${TLS_URL_PARTS[0]}"
+    HTTPS_DOMAIN="${TLS_URL_PARTS[1]}"
+    HTTPS_PORT="${TLS_URL_PARTS[2]}"
+    TLS_CERT_NAME="${TLS_URL_PARTS[3]}"
+}
+
+detect_public_ipv4() {
+    curl -4fsS --connect-timeout 3 --max-time 8 https://api.ipify.org 2>/dev/null \
+        || curl -4fsS --connect-timeout 3 --max-time 8 https://ipinfo.io/ip 2>/dev/null \
+        || true
+}
+
+read_env_value() {
+    local key="$1"
+    local file="${2:-${ENV_FILE}}"
+    if [ ! -f "$file" ]; then return 0; fi
+    grep -m 1 "^${key}=" "$file" | cut -d'=' -f2- | sed 's/^"//;s/"$//;s/^'"'"'//;s/'"'"'$//'
+}
+
+write_env_value() {
+    "${PYTHON_BIN}" - "${ENV_FILE}" "$1" "$2" <<'PY'
+import os
+import sys
+import tempfile
+
+path, key, value = sys.argv[1:]
+value = value.replace("\r", "").replace("\n", "")
+with open(path, "r", encoding="utf-8") as source:
+    lines = source.readlines()
+replacement = f'{key}="{value}"\n'
+updated = False
+result = []
+for line in lines:
+    if line.startswith(f"{key}="):
+        if not updated:
+            result.append(replacement)
+            updated = True
+    else:
+        result.append(line)
+if not updated:
+    if result and not result[-1].endswith("\n"):
+        result[-1] += "\n"
+    result.append(replacement)
+fd, temporary = tempfile.mkstemp(prefix=".env.", dir=os.path.dirname(path))
+try:
+    with os.fdopen(fd, "w", encoding="utf-8") as destination:
+        destination.writelines(result)
+    os.chmod(temporary, 0o600)
+    os.replace(temporary, path)
+finally:
+    if os.path.exists(temporary):
+        os.unlink(temporary)
+PY
+}
+
+migrate_web_https() {
+    local web_enabled="$(read_env_value ENABLE_WEB_UI)"
+    [ "$web_enabled" == "false" ] && return 0
+
+    WEB_PUBLIC_URL="$(read_env_value WEB_PUBLIC_URL)"
+    WEB_TLS_MODE="$(read_env_value WEB_TLS_MODE)"
+    HTTPS_EMAIL="$(read_env_value HTTPS_EMAIL)"
+    HTTPS_PORT="$(read_env_value HTTPS_PORT)"
+    WEB_DOMAIN="$(read_env_value WEB_DOMAIN)"
+    WEB_PORT="$(read_env_value WEB_SERVER_PORT)"
+    WEB_PORT="${WEB_PORT:-8080}"
+    local deploy_mode="$(read_env_value DEPLOY_MODE)"
+    local legacy_host="$(read_env_value WEB_SERVER_HOST)"
+    SETUP_HTTPS="false"
+
+    if [ -z "$WEB_PUBLIC_URL" ] && [ -n "$WEB_DOMAIN" ]; then
+        local previous_site="/etc/nginx/sites-available/${WEB_DOMAIN}"
+        if [ -z "$HTTPS_PORT" ] && [ -f "$previous_site" ]; then
+            HTTPS_PORT=$(grep -Eo 'listen[[:space:]]+[0-9]+[[:space:]]+ssl' "$previous_site" | head -n 1 | grep -Eo '[0-9]+')
+        fi
+        HTTPS_PORT="${HTTPS_PORT:-8443}"
+        WEB_PUBLIC_URL=$("${PYTHON_BIN}" "${BOT_INSTALL_PATH}/core/tls_config.py" build-url "$WEB_DOMAIN" "$HTTPS_PORT") || return 1
+        WEB_TLS_MODE="managed"
+    fi
+
+    if [ -n "$WEB_PUBLIC_URL" ] && parse_tls_url "$WEB_PUBLIC_URL"; then
+        if [ "$WEB_TLS_MODE" == "managed" ] || \
+            [ -f "/etc/nginx/sites-available/tgbot-panel-${TLS_CERT_NAME}.conf" ] || \
+            { [ -n "$WEB_DOMAIN" ] && [ -f "/etc/nginx/sites-available/${WEB_DOMAIN}" ]; }; then
+            SETUP_HTTPS="true"
+            WEB_TLS_MODE="managed"
+        else
+            WEB_TLS_MODE="external"
+        fi
+    else
+        local detected_ip="$(detect_public_ipv4)"
+        read -p "Публичный домен или IPv4 для HTTPS [${detected_ip:-обязателен}]: " TLS_IDENTIFIER
+        TLS_IDENTIFIER="${TLS_IDENTIFIER:-$detected_ip}"
+        if [ -z "$TLS_IDENTIFIER" ]; then
+            msg_error "Не удалось определить публичный IPv4; задайте домен или IPv4 вручную."
+            return 1
+        fi
+        HTTPS_PORT="${HTTPS_PORT:-443}"
+        read -p "Внешний HTTPS порт [${HTTPS_PORT}]: " HP
+        HTTPS_PORT="${HP:-$HTTPS_PORT}"
+        WEB_PUBLIC_URL=$("${PYTHON_BIN}" "${BOT_INSTALL_PATH}/core/tls_config.py" build-url "$TLS_IDENTIFIER" "$HTTPS_PORT") || return 1
+        parse_tls_url "$WEB_PUBLIC_URL" || return 1
+        read -p "Управлять локальным Nginx/Certbot? (y/n) [y]: " H
+        H="${H:-y}"
+        if [[ "$H" =~ ^[Yy]$ ]]; then
+            SETUP_HTTPS="true"
+            WEB_TLS_MODE="managed"
+        else
+            WEB_TLS_MODE="external"
+        fi
+    fi
+
+    write_env_value WEB_PUBLIC_URL "$WEB_PUBLIC_URL" || return 1
+    write_env_value WEB_DOMAIN "$HTTPS_DOMAIN" || return 1
+    write_env_value HTTPS_PORT "$HTTPS_PORT" || return 1
+    write_env_value HTTPS_EMAIL "$HTTPS_EMAIL" || return 1
+    write_env_value WEB_TLS_MODE "$WEB_TLS_MODE" || return 1
+
+    if [ "$deploy_mode" != "docker" ] && [ "$legacy_host" == "0.0.0.0" ]; then
+        write_env_value LEGACY_NODE_BRIDGE true || return 1
+        msg_warning "Старые ноды временно остаются на HMAC-защищенном heartbeat bridge; обновите агенты и завершите миграцию через tgcp-bot tls finalize."
+    else
+        write_env_value LEGACY_NODE_BRIDGE false || return 1
+    fi
+
+    if [ "$SETUP_HTTPS" == "true" ]; then setup_nginx_proxy || return 1; fi
 }
 
 fetch_node_name_from_agent() {
@@ -364,8 +704,13 @@ resolve_node_name_defaults() {
 }
 cleanup_common_trash() {
     if [ -d "$BOT_INSTALL_PATH/.github" ]; then sudo rm -rf "$BOT_INSTALL_PATH/.github"; fi
-    if [ -d "$BOT_INSTALL_PATH/assets" ]; then sudo rm -rf "$BOT_INSTALL_PATH/assets"; fi
-    sudo find "$BOT_INSTALL_PATH" -maxdepth 1 -type f \( -name "*.txt" -o -name "*.md" -o -name "*.sh" -o -name ".gitignore" -o -name "LICENSE" \) -delete
+    if [ -d "$BOT_INSTALL_PATH/docs" ]; then sudo rm -rf "$BOT_INSTALL_PATH/docs"; fi
+    if [ -d "$BOT_INSTALL_PATH/tests" ]; then sudo rm -rf "$BOT_INSTALL_PATH/tests"; fi
+    if [ -d "$BOT_INSTALL_PATH/assets" ]; then
+        sudo find "$BOT_INSTALL_PATH/assets" -type f ! -name "web_1.png" ! -name "bot_1.png" -delete
+        sudo find "$BOT_INSTALL_PATH/assets" -mindepth 1 -type d -empty -delete
+    fi
+    sudo find "$BOT_INSTALL_PATH" -maxdepth 1 -type f \( -name "*.txt" ! -name "requirements.txt" -o -name "*.md" -o -name "*.sh" -o -name ".gitignore" -o -name "LICENSE" \) -delete
     sudo find "$BOT_INSTALL_PATH" -maxdepth 1 -type f -name "*.ini" ! -name "aerich.ini" -delete
     sudo find "$BOT_INSTALL_PATH" -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null
 }
@@ -383,14 +728,36 @@ cleanup_for_docker() {
     cd "${BOT_INSTALL_PATH}"
     sudo rm -rf node
     sudo rm -rf core modules bot.py watchdog.py manage.py migrate.py aerich.ini
-    sudo rm -f Dockerfile
+    sudo rm -rf assets
 }
 cleanup_for_node() {
     local action_name=$1
     msg_info "Завершение ${action_name}..."
     cleanup_common_trash
-    cd ${BOT_INSTALL_PATH}
-    sudo rm -rf core modules bot.py watchdog.py Dockerfile docker-compose.yml .git config/users.json config/alerts_config.json
+    sudo rm -rf "${BOT_INSTALL_PATH}/core" "${BOT_INSTALL_PATH}/modules" "${BOT_INSTALL_PATH}/bot.py" \
+        "${BOT_INSTALL_PATH}/watchdog.py" "${BOT_INSTALL_PATH}/Dockerfile" \
+        "${BOT_INSTALL_PATH}/docker-compose.yml" "${BOT_INSTALL_PATH}/.git" "${BOT_INSTALL_PATH}/assets" \
+        "${BOT_INSTALL_PATH}/scripts" "${BOT_INSTALL_PATH}/requirements.txt"
+    sudo rm -rf "${BOT_INSTALL_PATH}/logs/bot" "${BOT_INSTALL_PATH}/logs/watchdog" \
+        "${BOT_INSTALL_PATH}/logs/traffic_backups" "${BOT_INSTALL_PATH}/logs/config_backups" \
+        "${BOT_INSTALL_PATH}/logs/logs_backups" "${BOT_INSTALL_PATH}/logs/nodes_backups"
+    if [ -d "${BOT_INSTALL_PATH}/config" ]; then
+        sudo find "${BOT_INSTALL_PATH}/config" -mindepth 1 -maxdepth 1 \
+            ! -name ".speedtest_mode" ! -name ".agent_alert_state.json" ! -name ".agent_alert_meta.json" \
+            -exec rm -rf {} +
+    fi
+}
+
+stop_existing_runtime() {
+    sudo systemctl stop "${SERVICE_NAME}" "${WATCHDOG_SERVICE_NAME}" "${NODE_SERVICE_NAME}" >/dev/null 2>&1 || true
+    sudo systemctl disable "${SERVICE_NAME}" "${WATCHDOG_SERVICE_NAME}" "${NODE_SERVICE_NAME}" >/dev/null 2>&1 || true
+    if [ -f "${DOCKER_COMPOSE_FILE}" ] && command -v docker >/dev/null 2>&1; then
+        if sudo docker compose version >/dev/null 2>&1; then
+            (cd "${BOT_INSTALL_PATH}" && sudo docker compose down --remove-orphans) || return 1
+        elif command -v docker-compose >/dev/null 2>&1; then
+            (cd "${BOT_INSTALL_PATH}" && sudo docker-compose down --remove-orphans) || return 1
+        fi
+    fi
 }
 
 get_country_code_by_ip() {
@@ -450,11 +817,6 @@ install_extras() {
         echo "RU" | sudo tee "${BOT_INSTALL_PATH}/config/.speedtest_mode" > /dev/null
     else
         msg_info "Сервер не в России - устанавливаем Ookla Speedtest CLI"
-        
-        # Remove iperf3 if present (not needed outside Russia)
-        if command -v iperf3 &> /dev/null; then
-            run_with_spinner "Удаление iperf3" sudo apt-get remove -y -q iperf3
-        fi
         
         if command -v speedtest &> /dev/null && speedtest --version 2>&1 | grep -q "Speedtest by Ookla"; then
             msg_success "Ookla Speedtest CLI уже установлен"
@@ -527,22 +889,64 @@ ask_env_details() {
     if [[ "$W" =~ ^[Nn]$ ]]; then
         ENABLE_WEB="false"
         SETUP_HTTPS="false"
+        WEB_PUBLIC_URL=""
+        WEB_TLS_MODE="disabled"
     else
         ENABLE_WEB="true"
         GEN_PASS=$(tr -dc A-Za-z0-9 </dev/urandom | head -c 12)
-        msg_question "Настроить HTTPS? (y/n): " H
-        if [[ "$H" =~ ^[Yy]$ ]]; then
-            SETUP_HTTPS="true"
-            msg_question "Домен: " HTTPS_DOMAIN
-            msg_question "Email: " HTTPS_EMAIL
-            msg_question "Внешний HTTPS порт [8443]: " HP
-            if [ -z "$HP" ]; then HTTPS_PORT="8443"; else HTTPS_PORT="$HP"; fi
+        local managed_site="false"
+        if [ -n "$WEB_PUBLIC_URL" ] && parse_tls_url "$WEB_PUBLIC_URL"; then
+            local previous_site="/etc/nginx/sites-available/${WEB_DOMAIN}"
+            if [ -f "/etc/nginx/sites-available/tgbot-panel-${TLS_CERT_NAME}.conf" ] || \
+                { [ -n "$WEB_DOMAIN" ] && [ -f "$previous_site" ] && \
+                  grep -q "proxy_pass http://127.0.0.1:" "$previous_site" && \
+                  grep -q "access_log /var/log/nginx/${WEB_DOMAIN}_access.log" "$previous_site"; }; then
+                managed_site="true"
+            fi
         else
-            SETUP_HTTPS="false"
+            WEB_PUBLIC_URL=""
         fi
+
+        if [ "$managed_site" == "true" ]; then
+            SETUP_HTTPS="true"
+            WEB_TLS_MODE="managed"
+        elif [ -n "$WEB_PUBLIC_URL" ]; then
+            SETUP_HTTPS="false"
+            WEB_TLS_MODE="external"
+        else
+            local detected_ip="$(detect_public_ipv4)"
+            read -p "Публичный домен или IPv4 [${detected_ip:-обязателен}]: " TLS_IDENTIFIER
+            TLS_IDENTIFIER="${TLS_IDENTIFIER:-$detected_ip}"
+            if [ -z "$TLS_IDENTIFIER" ]; then
+                msg_error "Не удалось определить публичный IPv4; задайте домен или IPv4 вручную."
+                return 1
+            fi
+            read -p "Управлять локальным Nginx/Certbot? (y/n) [y]: " H
+            H="${H:-y}"
+            if [[ "$H" =~ ^[Yy]$ ]]; then
+                SETUP_HTTPS="true"
+                WEB_TLS_MODE="managed"
+                HTTPS_PORT="${HTTPS_PORT:-443}"
+                read -p "Внешний HTTPS порт [${HTTPS_PORT}]: " HP
+                HTTPS_PORT="${HP:-$HTTPS_PORT}"
+                read -p "Email для уведомлений Certbot (необязательно): " HTTPS_EMAIL_INPUT
+                HTTPS_EMAIL="${HTTPS_EMAIL_INPUT:-$HTTPS_EMAIL}"
+                WEB_PUBLIC_URL=$("${PYTHON_BIN}" "${BOT_INSTALL_PATH}/core/tls_config.py" build-url "$TLS_IDENTIFIER" "$HTTPS_PORT") || return 1
+            else
+                SETUP_HTTPS="false"
+                WEB_TLS_MODE="external"
+                local detected_url="$("${PYTHON_BIN}" "${BOT_INSTALL_PATH}/core/tls_config.py" build-url "$TLS_IDENTIFIER" 443)" || return 1
+                read -p "Публичный HTTPS URL reverse proxy [${detected_url}]: " WEB_PUBLIC_URL_INPUT
+                WEB_PUBLIC_URL="${WEB_PUBLIC_URL_INPUT:-$detected_url}"
+            fi
+        fi
+        parse_tls_url "$WEB_PUBLIC_URL" || {
+            msg_error "WEB_PUBLIC_URL должен быть корректным HTTPS origin."
+            return 1
+        }
     fi
     ensure_data_encryption_key
-    export T A U N WEB_PORT ENABLE_WEB SETUP_HTTPS HTTPS_DOMAIN HTTPS_EMAIL HTTPS_PORT GEN_PASS SENTRY_DSN
+    export T A U N WEB_PORT ENABLE_WEB SETUP_HTTPS HTTPS_DOMAIN HTTPS_EMAIL HTTPS_PORT WEB_PUBLIC_URL WEB_TLS_MODE GEN_PASS SENTRY_DSN
 }
 
 write_env_file() {
@@ -555,8 +959,16 @@ write_env_file() {
 
     local compose_profile=""
     if [ "$dm" == "docker" ]; then compose_profile="${im}"; fi
+    local web_server_host="127.0.0.1"
+    if [ "$dm" == "docker" ]; then web_server_host="0.0.0.0"; fi
+    local legacy_node_bridge="false"
+    if [ "$dm" != "docker" ] && [ "${LEGACY_NODE_BRIDGE:-false}" == "true" ]; then
+        web_server_host="0.0.0.0"
+        legacy_node_bridge="true"
+    fi
     local web_domain=""
     if [ -n "$HTTPS_DOMAIN" ]; then web_domain="${HTTPS_DOMAIN}"; fi
+    local web_tls_mode="${WEB_TLS_MODE:-external}"
 
     ensure_data_encryption_key
 
@@ -566,8 +978,14 @@ TG_ADMIN_ID="${A}"
 TG_ADMIN_USERNAME="${U}"
 TG_BOT_NAME="${N}"
 DATA_ENCRYPTION_KEY="${DATA_ENCRYPTION_KEY}"
-WEB_SERVER_HOST="0.0.0.0"
+WEB_SERVER_HOST="${web_server_host}"
 WEB_SERVER_PORT="${WEB_PORT}"
+WEB_PUBLIC_URL="${WEB_PUBLIC_URL}"
+WEB_DOMAIN="${web_domain}"
+HTTPS_PORT="${HTTPS_PORT}"
+HTTPS_EMAIL="${HTTPS_EMAIL}"
+WEB_TLS_MODE="${web_tls_mode}"
+LEGACY_NODE_BRIDGE="${legacy_node_bridge}"
 INSTALL_MODE="${im}"
 DEPLOY_MODE="${dm}"
 TG_BOT_CONTAINER_NAME="${cn}"
@@ -577,7 +995,6 @@ DEBUG="${debug_setting}"
 SENTRY_DSN="${SENTRY_DSN}"
 INSTALLED_VERSION="${ver}"
 COMPOSE_PROFILES="${compose_profile}"
-WEB_DOMAIN="${web_domain}"
 EOF
     sudo chmod 600 "${ENV_FILE}"
 
@@ -607,8 +1024,11 @@ ensure_env_variables() {
     
     # List of variables with their default values
     # Format: "VAR_NAME|default_value|description"
+    local deploy_mode_from_env=$(grep '^DEPLOY_MODE=' "${ENV_FILE}" | cut -d'=' -f2 | tr -d '"')
+    local default_web_host="127.0.0.1"
+    if [ "$deploy_mode_from_env" == "docker" ]; then default_web_host="0.0.0.0"; fi
     local ENV_VARS=(
-        "WEB_SERVER_HOST|0.0.0.0|Хост веб-сервера"
+        "WEB_SERVER_HOST|${default_web_host}|Хост веб-сервера"
         "WEB_SERVER_PORT|8080|Порт веб-сервера"
         "INSTALL_MODE|secure|Режим установки"
         "DEPLOY_MODE|systemd|Режим деплоя"
@@ -620,7 +1040,7 @@ ensure_env_variables() {
     if ! is_node_context; then
         ENV_VARS=("DATA_ENCRYPTION_KEY||Ключ шифрования данных" "${ENV_VARS[@]}")
     fi
-    
+
     for var_entry in "${ENV_VARS[@]}"; do
         local var_name=$(echo "$var_entry" | cut -d'|' -f1)
         local default_val=$(echo "$var_entry" | cut -d'|' -f2)
@@ -649,6 +1069,11 @@ ensure_env_variables() {
         "TG_BOT_CONTAINER_NAME"
         "COMPOSE_PROFILES"
         "WEB_DOMAIN"
+        "WEB_PUBLIC_URL"
+        "HTTPS_PORT"
+        "HTTPS_EMAIL"
+        "WEB_TLS_MODE"
+        "LEGACY_NODE_BRIDGE"
     )
     
     for var_name in "${OPTIONAL_VARS[@]}"; do
@@ -671,130 +1096,17 @@ check_docker_deps() {
 }
 
 create_dockerfile() {
-    sudo tee "${BOT_INSTALL_PATH}/Dockerfile" > /dev/null <<'EOF'
-FROM python:3.10-slim-bookworm
-RUN apt-get update && apt-get install -y python3-yaml iperf3 git curl wget sudo procps iputils-ping net-tools gnupg docker.io coreutils && rm -rf /var/lib/apt/lists/*
-RUN pip install --no-cache-dir --upgrade pip 'setuptools>=83.0.0' wheel && pip install --no-cache-dir docker aiohttp==3.14.3 aiosqlite argon2-cffi sentry-sdk tortoise-orm aerich cryptography tomlkit
-RUN groupadd -g 1001 tgbot && useradd -u 1001 -g 1001 -m -s /bin/bash tgbot && echo "tgbot ALL=(ALL) NOPASSWD: /opt/tg-bot/scripts/update_os.sh, /usr/bin/systemctl, /bin/journalctl" >> /etc/sudoers
-WORKDIR /opt/tg-bot
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-COPY . .
-RUN mkdir -p /opt/tg-bot/config /opt/tg-bot/logs/bot /opt/tg-bot/logs/watchdog && chown -R tgbot:tgbot /opt/tg-bot
-USER tgbot
-CMD ["python", "bot.py"]
-EOF
+    if [ ! -f "${BOT_INSTALL_PATH}/Dockerfile" ]; then
+        msg_error "Dockerfile is missing from the cloned repository."
+        return 1
+    fi
 }
 
 create_docker_compose_yml() {
-    sudo tee "${BOT_INSTALL_PATH}/docker-compose.yml" > /dev/null <<EOF
-version: '3.8'
-x-bot-base: &bot-base
-  build: .
-  image: tg-vps-bot:latest
-  restart: always
-  env_file: .env
-  depends_on:
-    docker-proxy:
-      condition: service_started
-  environment:
-    DOCKER_HOST: tcp://docker-proxy:2375
-    DEPLOY_MODE: docker
-  security_opt:
-    - no-new-privileges:true
-  cap_drop:
-    - ALL
-  tmpfs:
-    - /tmp
-  networks:
-    - app
-    - docker-api
-services:
-  docker-proxy:
-    image: tecnativa/docker-socket-proxy:0.3.0
-    container_name: tg-docker-proxy
-    restart: always
-    read_only: true
-    security_opt:
-      - no-new-privileges:true
-    cap_drop:
-      - ALL
-    tmpfs:
-      - /run
-      - /tmp
-    environment:
-      CONTAINERS: 1
-      EVENTS: 1
-      INFO: 1
-      PING: 1
-      POST: 1
-      VERSION: 1
-      IMAGES: 0
-      NETWORKS: 0
-      SERVICES: 0
-      TASKS: 0
-      VOLUMES: 0
-      SYSTEM: 0
-      NODES: 0
-      SECRETS: 0
-      SWARM: 0
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro
-    networks:
-      - docker-api
-  bot-secure:
-    <<: *bot-base
-    container_name: tg-bot-secure
-    profiles: ["secure"]
-    user: "tgbot"
-    ports:
-      - "127.0.0.1:\${WEB_PORT}:\${WEB_PORT}"
-    environment:
-      - INSTALL_MODE=secure
-      - TG_BOT_CONTAINER_NAME=tg-bot-secure
-    volumes:
-      - ./config:/opt/tg-bot/config
-      - ./logs/bot:/opt/tg-bot/logs/bot
-      - /proc/uptime:/proc_host/uptime:ro
-      - /proc/stat:/proc_host/stat:ro
-      - /proc/meminfo:/proc_host/meminfo:ro
-      - /proc/net/dev:/proc_host/net/dev:ro
-    cap_add:
-      - NET_RAW
-  bot-root:
-    <<: *bot-base
-    container_name: tg-bot-root
-    profiles: ["root"]
-    user: "root"
-    ports:
-      - "127.0.0.1:\${WEB_PORT}:\${WEB_PORT}"
-    environment:
-      - INSTALL_MODE=root
-      - TG_BOT_CONTAINER_NAME=tg-bot-root
-    volumes:
-      - ./config:/opt/tg-bot/config
-      - ./logs/bot:/opt/tg-bot/logs/bot
-      - /proc/uptime:/proc_host/uptime:ro
-      - /proc/stat:/proc_host/stat:ro
-      - /proc/meminfo:/proc_host/meminfo:ro
-      - /proc/net/dev:/proc_host/net/dev:ro
-      - /etc/hostname:/host/etc/hostname:ro
-      - /etc/os-release:/host/etc/os-release:ro
-  watchdog:
-    <<: *bot-base
-    container_name: tg-watchdog
-    command: python watchdog.py
-    user: "root"
-    volumes:
-      - ./config:/opt/tg-bot/config
-      - ./logs/watchdog:/opt/tg-bot/logs/watchdog
-networks:
-  app:
-    driver: bridge
-  docker-api:
-    driver: bridge
-    internal: true
-EOF
+        if [ ! -f "${DOCKER_COMPOSE_FILE}" ]; then
+                msg_error "docker-compose.yml is missing from the cloned repository."
+                return 1
+        fi
 }
 
 create_and_start_service() {
@@ -875,6 +1187,7 @@ EOF
 
 install_systemd_logic() {
     local mode=$1
+    stop_existing_runtime || return 1
     common_install_steps
     install_extras
     local exec_cmd=""
@@ -884,19 +1197,17 @@ install_systemd_logic() {
         sudo -u ${SERVICE_USER} ${PYTHON_BIN} -m venv "${VENV_PATH}"
         run_with_spinner "Обновление pip" sudo -u ${SERVICE_USER} "${VENV_PATH}/bin/pip" install --upgrade pip 'setuptools>=83.0.0' wheel
         run_with_spinner "Установка зависимостей" sudo -u ${SERVICE_USER} "${VENV_PATH}/bin/pip" install -r "${BOT_INSTALL_PATH}/requirements.txt"
-        run_with_spinner "Установка tomlkit" sudo -u ${SERVICE_USER} "${VENV_PATH}/bin/pip" install tomlkit
         exec_cmd="sudo -u ${SERVICE_USER}"
     else
         setup_repo_and_dirs "root"
         ${PYTHON_BIN} -m venv "${VENV_PATH}"
         run_with_spinner "Обновление pip" "${VENV_PATH}/bin/pip" install --upgrade pip 'setuptools>=83.0.0' wheel
         run_with_spinner "Установка зависимостей" "${VENV_PATH}/bin/pip" install -r "${BOT_INSTALL_PATH}/requirements.txt"
-        run_with_spinner "Установка tomlkit" "${VENV_PATH}/bin/pip" install tomlkit
         exec_cmd=""
     fi
 
     load_cached_env
-    ask_env_details
+    ask_env_details || return 1
     write_env_file "systemd" "$mode" ""
     run_db_migrations "$exec_cmd"
     cleanup_for_systemd "установки"
@@ -915,17 +1226,18 @@ EOF
     local ip=$(curl -s ipinfo.io/ip)
     echo ""; msg_success "Установка завершена! Панель: http://${ip}:${WEB_PORT}"
     if [ "${ENABLE_WEB}" == "true" ]; then echo -e "${C_CYAN}🔑 ПАРОЛЬ: ${C_BOLD}${GEN_PASS}${C_RESET}"; fi
-    if [ "$SETUP_HTTPS" == "true" ]; then setup_nginx_proxy; fi
+    if [ "$SETUP_HTTPS" == "true" ] && ! setup_nginx_proxy; then return 1; fi
 }
 
 install_docker_logic() {
     local mode=$1
+    stop_existing_runtime || return 1
     common_install_steps
     install_extras
     setup_repo_and_dirs "root"
     check_docker_deps
     load_cached_env
-    ask_env_details
+    ask_env_details || return 1
     create_dockerfile
     create_docker_compose_yml
     local container_name="tg-bot-${mode}"
@@ -947,17 +1259,37 @@ install_docker_logic() {
 cd ${BOT_INSTALL_PATH}
 MODE=\$(grep '^INSTALL_MODE=' .env | cut -d'=' -f2 | tr -d '"')
 CONTAINER="tg-bot-\$MODE"
+if [ "\$1" = "tls" ] && [ "\$2" = "finalize" ]; then
+    sudo /usr/bin/python3 "${BOT_INSTALL_PATH}/scripts/tls_finalize.py"
+    exit \$?
+fi
+if [ "\$1" = "restart" ]; then
+    sudo $dc_cmd --profile "\$MODE" restart "\$CONTAINER"
+    exit \$?
+fi
+if [ "\$1" = "status" ]; then
+    sudo $dc_cmd --profile "\$MODE" ps
+    exit \$?
+fi
+if [ "\$1" = "webpass" ]; then
+    sudo $dc_cmd --profile "\$MODE" exec "\$CONTAINER" python manage.py "\$@"
+    result=\$?
+    if [ \$result -ne 0 ]; then exit \$result; fi
+    sudo /usr/bin/python3 "${BOT_INSTALL_PATH}/scripts/tls_finalize.py" clear-initial-password
+    exit \$?
+fi
 sudo $dc_cmd --profile "\$MODE" exec -T \$CONTAINER python manage.py "\$@"
 EOF
     sudo chmod +x /usr/local/bin/tgcp-bot
 
     msg_success "Установка Docker завершена!"
     if [ "${ENABLE_WEB}" == "true" ]; then echo -e "${C_CYAN}🔑 ПАРОЛЬ: ${C_BOLD}${GEN_PASS}${C_RESET}"; fi
-    if [ "$SETUP_HTTPS" == "true" ]; then setup_nginx_proxy; fi
+    if [ "$SETUP_HTTPS" == "true" ] && ! setup_nginx_proxy; then return 1; fi
 }
 
 install_node_logic() {
     echo -e "\n${C_BOLD}=== Установка НОДЫ ===${C_RESET}"
+    stop_existing_runtime || return 1
     FORCE_NODE_MODE="yes"
     if [ -n "$AUTO_AGENT_URL" ]; then AGENT_URL="$AUTO_AGENT_URL"; fi
     if [ -n "$AUTO_NODE_TOKEN" ]; then NODE_TOKEN="$AUTO_NODE_TOKEN"; fi
@@ -986,9 +1318,9 @@ install_node_logic() {
     msg_question "Token: " NODE_TOKEN
     local saved_node_name=""
     local saved_node_name_sync_mode=""
-    if [ -f "/tmp/tgbot_env.bak" ]; then
-        saved_node_name=$(grep "^NODE_NAME=" "/tmp/tgbot_env.bak" | cut -d'=' -f2- | tr -d '"')
-        saved_node_name_sync_mode=$(grep "^NODE_NAME_SYNC_MODE=" "/tmp/tgbot_env.bak" | cut -d'=' -f2- | tr -d '"' | xargs)
+    if [ -f "${ENV_BACKUP_FILE}" ]; then
+        saved_node_name=$(grep "^NODE_NAME=" "${ENV_BACKUP_FILE}" | cut -d'=' -f2- | tr -d '"')
+        saved_node_name_sync_mode=$(grep "^NODE_NAME_SYNC_MODE=" "${ENV_BACKUP_FILE}" | cut -d'=' -f2- | tr -d '"' | xargs)
     fi
     mapfile -t node_name_defaults < <(resolve_node_name_defaults "$saved_node_name" "$saved_node_name_sync_mode" "$AGENT_URL" "$NODE_TOKEN")
     local initial_node_name="${node_name_defaults[0]}"
@@ -1005,10 +1337,10 @@ INSTALLED_VERSION="${ver}"
 EOF
     
     # Check and restore/configure agent monitoring variables if settings were restored
-    if [[ "$RESTORE_CHOICE" =~ ^[Yy]$ ]] && [ -f "/tmp/tgbot_env.bak" ]; then
-        local saved_bot_token=$(grep "^BOT_TOKEN=" "/tmp/tgbot_env.bak" | cut -d'=' -f2- | tr -d '"' | xargs)
-        local saved_chat_ids=$(grep "^CRITICAL_ALERT_CHAT_IDS=" "/tmp/tgbot_env.bak" | cut -d'=' -f2- | tr -d '"' | xargs)
-        local saved_delay=$(grep "^AGENT_ALERT_DELAY_SECONDS=" "/tmp/tgbot_env.bak" | cut -d'=' -f2- | tr -d '"')
+    if [[ "$RESTORE_CHOICE" =~ ^[Yy]$ ]] && [ -f "${ENV_BACKUP_FILE}" ]; then
+        local saved_bot_token=$(grep "^BOT_TOKEN=" "${ENV_BACKUP_FILE}" | cut -d'=' -f2- | tr -d '"' | xargs)
+        local saved_chat_ids=$(grep "^CRITICAL_ALERT_CHAT_IDS=" "${ENV_BACKUP_FILE}" | cut -d'=' -f2- | tr -d '"' | xargs)
+        local saved_delay=$(grep "^AGENT_ALERT_DELAY_SECONDS=" "${ENV_BACKUP_FILE}" | cut -d'=' -f2- | tr -d '"')
         
         # Ask user if monitoring variables are missing or empty
         local need_bot_token=""
@@ -1088,11 +1420,9 @@ EOF
 uninstall_bot() {
     echo -e "\n${C_BOLD}=== Удаление ===${C_RESET}"
     cd /
-    sudo systemctl stop ${SERVICE_NAME} ${WATCHDOG_SERVICE_NAME} ${NODE_SERVICE_NAME} &> /dev/null
-    sudo systemctl disable ${SERVICE_NAME} ${WATCHDOG_SERVICE_NAME} ${NODE_SERVICE_NAME} &> /dev/null
+    stop_existing_runtime
     sudo rm -f /etc/systemd/system/${SERVICE_NAME}.service /etc/systemd/system/${WATCHDOG_SERVICE_NAME}.service /etc/systemd/system/${NODE_SERVICE_NAME}.service
     sudo systemctl daemon-reload
-    if [ -f "${DOCKER_COMPOSE_FILE}" ]; then cd ${BOT_INSTALL_PATH} && sudo docker-compose down -v --remove-orphans &> /dev/null; fi
     sudo rm -rf "${BOT_INSTALL_PATH}"
     sudo rm -f /usr/local/bin/tgcp-bot
     if id "${SERVICE_USER}" &>/dev/null; then sudo userdel -r "${SERVICE_USER}" &> /dev/null; fi
@@ -1135,6 +1465,10 @@ update_bot() {
 
     # Check and add missing environment variables
     ensure_env_variables
+    if ! migrate_web_https; then
+        msg_error "HTTPS migration failed; the current service has not been switched."
+        return 1
+    fi
 
     download_vendor_assets
     if [ -f "${ENV_FILE}" ] && grep -q "INSTALL_MODE=secure" "${ENV_FILE}"; then
@@ -1152,13 +1486,31 @@ update_bot() {
 cd ${BOT_INSTALL_PATH}
 MODE=\$(grep '^INSTALL_MODE=' .env | cut -d'=' -f2 | tr -d '"')
 CONTAINER="tg-bot-\$MODE"
+if [ "\$1" = "tls" ] && [ "\$2" = "finalize" ]; then
+    sudo /usr/bin/python3 "${BOT_INSTALL_PATH}/scripts/tls_finalize.py"
+    exit \$?
+fi
+if [ "\$1" = "restart" ]; then
+    sudo $dc_cmd --profile "\$MODE" restart "\$CONTAINER"
+    exit \$?
+fi
+if [ "\$1" = "status" ]; then
+    sudo $dc_cmd --profile "\$MODE" ps
+    exit \$?
+fi
+if [ "\$1" = "webpass" ]; then
+    sudo $dc_cmd --profile "\$MODE" exec "\$CONTAINER" python manage.py "\$@"
+    result=\$?
+    if [ \$result -ne 0 ]; then exit \$result; fi
+    sudo /usr/bin/python3 "${BOT_INSTALL_PATH}/scripts/tls_finalize.py" clear-initial-password
+    exit \$?
+fi
 sudo $dc_cmd --profile "\$MODE" exec -T \$CONTAINER python manage.py "\$@"
 EOF
             sudo chmod +x /usr/local/bin/tgcp-bot
         else msg_error "Нет docker-compose.yml"; return 1; fi
     else
         run_with_spinner "Обновление pip" $exec_cmd "${VENV_PATH}/bin/pip" install -r "${BOT_INSTALL_PATH}/requirements.txt" --upgrade
-        run_with_spinner "Обновление tomlkit" $exec_cmd "${VENV_PATH}/bin/pip" install tomlkit
         sudo bash -c "cat > /usr/local/bin/tgcp-bot" <<EOF
 #!/bin/bash
 cd ${BOT_INSTALL_PATH}
@@ -1461,11 +1813,11 @@ main_menu() {
         case $choice in
             1) update_bot; read -p "Нажмите Enter..." ;;
             2) msg_question "Удалить ${item_type}? (y/n): " c; if [[ "$c" =~ ^[Yy]$ ]]; then uninstall_bot; return; fi ;;
-            3) uninstall_bot; install_systemd_logic "secure"; read -p "Нажмите Enter..." ;;
-            4) uninstall_bot; install_systemd_logic "root"; read -p "Нажмите Enter..." ;;
-            5) uninstall_bot; install_docker_logic "secure"; read -p "Нажмите Enter..." ;;
-            6) uninstall_bot; install_docker_logic "root"; read -p "Нажмите Enter..." ;;
-            7) if [ "$IS_NODE" == "yes" ]; then uninstall_bot; install_node_logic; read -p "Нажмите Enter..."; else msg_error "Пункт доступен только в режиме НОДЫ."; sleep 2; fi ;;
+            3) install_systemd_logic "secure"; read -p "Нажмите Enter..." ;;
+            4) install_systemd_logic "root"; read -p "Нажмите Enter..." ;;
+            5) install_docker_logic "secure"; read -p "Нажмите Enter..." ;;
+            6) install_docker_logic "root"; read -p "Нажмите Enter..." ;;
+            7) if [ "$IS_NODE" == "yes" ]; then install_node_logic; read -p "Нажмите Enter..."; else msg_error "Пункт доступен только в режиме НОДЫ."; sleep 2; fi ;;
             8) if [ "$IS_NODE" == "yes" ]; then toggle_agent_monitoring; read -p "Нажмите Enter..."; fi ;;
             9) if [ "$IS_NODE" != "yes" ]; then manage_alert_module; read -p "Нажмите Enter..."; fi ;;
             0) break ;;
@@ -1493,11 +1845,11 @@ if [ "$INSTALL_TYPE" == "НЕТ" ]; then
     echo "--------------------------------------------------------"
     read -p "$(echo -e "${C_BOLD}Ваш выбор: ${C_RESET}")" ch
     case $ch in
-        1) uninstall_bot; install_systemd_logic "secure"; read -p "Нажмите Enter..." ;;
-        2) uninstall_bot; install_systemd_logic "root"; read -p "Нажмите Enter..." ;;
-        3) uninstall_bot; install_docker_logic "secure"; read -p "Нажмите Enter..." ;;
-        4) uninstall_bot; install_docker_logic "root"; read -p "Нажмите Enter..." ;;
-        7) uninstall_bot; install_node_logic; read -p "Нажмите Enter..." ;;
+        1) install_systemd_logic "secure"; read -p "Нажмите Enter..." ;;
+        2) install_systemd_logic "root"; read -p "Нажмите Enter..." ;;
+        3) install_docker_logic "secure"; read -p "Нажмите Enter..." ;;
+        4) install_docker_logic "root"; read -p "Нажмите Enter..." ;;
+        7) install_node_logic; read -p "Нажмите Enter..." ;;
         0) exit 0 ;;
         *) msg_error "Неверный выбор."; sleep 2 ;;
     esac
