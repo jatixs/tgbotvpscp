@@ -415,7 +415,7 @@ async def handle_dashboard(request: web.Request) -> web.StreamResponse:
         "web_copied": _("web_copied", lang),
         "web_resources_chart": _("web_resources_chart", lang),
         "web_network_chart": _("web_network_chart", lang),
-        "web_token_label": _("web_token_label", lang),
+        "web_node_id_label": _("web_node_id_label", lang),
         "web_stats_total": _("web_stats_total", lang),
         "web_stats_active": _("web_stats_active", lang),
         "web_notifications_title": _("web_notifications_title", lang),

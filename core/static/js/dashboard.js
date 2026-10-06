@@ -1379,7 +1379,7 @@ function setModalLoading() {
     const modal = document.getElementById('nodeModal');
     if (!modal) return;
 
-    const fields = ['modalNodeName', 'modalNodeIp', 'modalToken', 'modalNodeUptime', 'modalNodeRam', 'modalNodeDisk', 'modalNodeTraffic', 'dashboardAvailabilityCurrentUptime', 'dashboardAvailabilityLastOutage', 'dashboardAvailabilityLastReboot', 'dashboardAvailabilityTotalUptime', 'dashboardAvailabilityTotalDowntime', 'dashboardAvailabilityInternetDowntime', 'dashboardAvailabilityPhysicalDowntime', 'dashboardAvailabilityNote'];
+    const fields = ['modalNodeName', 'modalNodeIp', 'modalNodeId', 'modalNodeUptime', 'modalNodeRam', 'modalNodeDisk', 'modalNodeTraffic', 'dashboardAvailabilityCurrentUptime', 'dashboardAvailabilityLastOutage', 'dashboardAvailabilityLastReboot', 'dashboardAvailabilityTotalUptime', 'dashboardAvailabilityTotalDowntime', 'dashboardAvailabilityInternetDowntime', 'dashboardAvailabilityPhysicalDowntime', 'dashboardAvailabilityNote'];
     fields.forEach(id => {
         const el = document.getElementById(id);
         if (el) el.innerText = '...';
@@ -1597,9 +1597,9 @@ function updateNodeDetailsUI(data) {
     const ipEl = document.getElementById('modalNodeIp');
     if (ipEl.innerText !== newIp) ipEl.innerText = newIp;
     
-    const tokenEl = document.getElementById('modalToken');
-    if (tokenEl) {
-        tokenEl.innerText = data.id;
+    const nodeIdEl = document.getElementById('modalNodeId');
+    if (nodeIdEl) {
+        nodeIdEl.textContent = String(data.id ?? '-');
     }
 
     const stats = data.stats || {};
