@@ -247,6 +247,7 @@ server {
     location ^~ /.well-known/acme-challenge/ {
         root ${webroot};
         default_type text/plain;
+        add_header Cache-Control "no-store" always;
     }
     location ~ ^/api/(agent/https|node/bootstrap|heartbeat)$ {
         proxy_pass http://127.0.0.1:${WEB_PORT};
@@ -265,6 +266,56 @@ EOF
     fi
     if systemctl is-active --quiet nginx; then sudo systemctl reload nginx; else sudo systemctl start nginx; fi
     if command -v ufw >/dev/null 2>&1; then sudo ufw allow 80/tcp >/dev/null; fi
+
+    local probe_required="true"
+    local renewal_window=2592000
+    if [ "${TLS_KIND}" == "ip" ]; then renewal_window=288000; fi
+    if [ -s "/etc/letsencrypt/live/${TLS_CERT_NAME}/fullchain.pem" ] && \
+        command -v openssl >/dev/null 2>&1 && \
+        openssl x509 -checkend "${renewal_window}" -noout -in "/etc/letsencrypt/live/${TLS_CERT_NAME}/fullchain.pem" >/dev/null 2>&1; then
+        probe_required="false"
+    fi
+
+    if [ "${probe_required}" == "true" ]; then
+        local probe_name="tgbot-acme-probe-$$-${RANDOM}"
+        local probe_value="acme-probe-${TLS_HOST}-$$-${RANDOM}"
+        local probe_file="${webroot}/.well-known/acme-challenge/${probe_name}"
+        sudo install -d -m 755 "${webroot}/.well-known/acme-challenge"
+        printf '%s' "${probe_value}" | sudo tee "${probe_file}" >/dev/null
+
+        local local_probe=""
+        local_probe=$(curl -fsS --connect-timeout 3 --max-time 8 \
+            --resolve "${TLS_HOST}:80:127.0.0.1" \
+            "http://${TLS_HOST}/.well-known/acme-challenge/${probe_name}" 2>/dev/null) || true
+        if [ "${local_probe}" != "${probe_value}" ]; then
+            sudo rm -f "${probe_file}" "${acme_link}" "${acme_conf}"
+            sudo nginx -t && sudo systemctl reload nginx
+            msg_error "Local Nginx did not serve the ACME webroot probe; certificate issuance was stopped. The previous HTTPS config is preserved."
+            return 1
+        fi
+
+        local family=""
+        local public_probe=""
+        for family in 4 6; do
+            if [ "${family}" == "6" ]; then
+                if [ "${TLS_KIND}" != "domain" ] || ! getent ahostsv6 "${TLS_HOST}" | \
+                    awk '$1 ~ /:/ && $1 !~ /^::ffff:/ { found=1 } END { exit !found }'; then
+                    continue
+                fi
+            elif ! getent ahostsv4 "${TLS_HOST}" >/dev/null 2>&1; then
+                continue
+            fi
+            public_probe=$(curl "-${family}" -fsS --connect-timeout 4 --max-time 12 --max-filesize 65536 \
+                "http://${TLS_HOST}/.well-known/acme-challenge/${probe_name}" 2>/dev/null) || true
+            if [ "${public_probe}" != "${probe_value}" ]; then
+                sudo rm -f "${probe_file}" "${acme_link}" "${acme_conf}"
+                sudo nginx -t && sudo systemctl reload nginx
+                msg_error "Public IPv${family} does not return the ACME challenge. Check DNS A/AAAA, Cloudflare proxy/WAF/cache, and HTTP redirects for /.well-known/acme-challenge/*. The previous HTTPS config is preserved."
+                return 1
+            fi
+        done
+        sudo rm -f "${probe_file}"
+    fi
 
     local certbot_args=()
     mapfile -d '' -t certbot_args < <(
