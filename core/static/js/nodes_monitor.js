@@ -803,6 +803,9 @@ function updateNodeModal(data) {
     const newIp = decryptData(data.ip) || '-';
     const ipEl = document.getElementById('modalNodeIp');
     if (ipEl.textContent !== newIp) ipEl.textContent = newIp;
+
+    const nodeIdEl = document.getElementById('modalNodeId');
+    if (nodeIdEl) nodeIdEl.textContent = String(data.id ?? '-');
     
     // Update ping badge in modal
     const pingBadge = document.getElementById('modalNodePingBadge');
@@ -827,23 +830,19 @@ function updateNodeModal(data) {
     
     const isRestarting = data.status === 'restarting';
     const isOnline = data.status === 'online';
-    const statusIcon = document.getElementById('modalNodeStatusIcon');
     const statusBadge = document.getElementById('modalNodeStatusBadge');
     const statusDot = document.getElementById('modalNodeStatusDot');
     const statusText = document.getElementById('modalNodeStatus');
     
     if (isRestarting) {
-        statusIcon.className = 'p-2 bg-blue-100 dark:bg-blue-500/20 rounded-lg text-blue-600 dark:text-blue-400';
         statusBadge.className = 'flex items-center gap-1 text-blue-600 dark:text-blue-400';
         statusDot.className = 'w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse';
         statusText.textContent = I18N?.web_node_status_restarting || 'Restarting';
     } else if (isOnline) {
-        statusIcon.className = 'p-2 bg-green-100 dark:bg-green-500/20 rounded-lg text-green-600 dark:text-green-400';
         statusBadge.className = 'flex items-center gap-1 text-green-600 dark:text-green-400';
         statusDot.className = 'w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse';
         statusText.textContent = I18N?.web_node_status_online || 'Online';
     } else {
-        statusIcon.className = 'p-2 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg text-red-600 dark:text-red-400';
         statusBadge.className = 'flex items-center gap-1 text-red-600 dark:text-red-400';
         statusDot.className = 'w-1.5 h-1.5 rounded-full bg-red-500';
         statusText.textContent = I18N?.web_node_status_offline || 'Offline';
