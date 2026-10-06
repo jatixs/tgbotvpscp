@@ -36,6 +36,10 @@ To keep your bot and VPS infrastructure secure, please adhere to the following r
 3. **Strong Credentials:** Set a complex WebUI password. The system uses Argon2 for secure hashing, but a weak password can still be brute-forced.
 4. **Environment Variables:** Keep your `.env` and `config.py` files highly secure. They contain sensitive keys (Telegram Tokens, Admin IDs) that provide full access to your VPS nodes.
 5. **Principle of Least Privilege:** If the bot doesn't strictly need `root` access for the specific modules you use, run it under a dedicated limited user account.
+6. **Canonical URL:** Set `WEB_PUBLIC_URL` to the panel's full HTTPS origin, for example `https://panel.example.com` or `https://panel.example.com:8443`. Magic login, password reset, and node provisioning are disabled unless this URL is valid.
+7. **HTTPS without a domain:** managed TLS supports globally routable public IPv4 addresses using a short-lived Let's Encrypt IP certificate (160 hours). Inbound TCP port 80 must remain reachable for HTTP-01; renewal is checked hourly. Private IPv4 addresses are not supported. For an external reverse proxy, set its HTTPS origin as `WEB_PUBLIC_URL` and configure certificate issuance and renewal there.
+8. **Upgrade existing installations:** update the master with the installer first, then update node agents. The legacy HTTP bridge is limited to discovery, bootstrap, and HMAC-protected heartbeat; an updated agent validates the HTTPS endpoint and persists its new URL. Run `tgcp-bot tls status`, then `tgcp-bot tls finalize` once every node is confirmed to disable the bridge. Rotate old node tokens afterward: previous versions could expose them to signed-in WebUI users. The old `admin` password is no longer accepted; sign in through Telegram and set a new password.
+9. **Docker secure profile:** container mutations are intentionally available only in the root profile; the secure profile can read container status but has no write access to the Docker API.
 
 ## Disclosure Policy
 When a vulnerability is reported, we will coordinate with you to:

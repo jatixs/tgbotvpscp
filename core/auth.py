@@ -43,11 +43,8 @@ def load_users():
                 ph = PasswordHasher()
                 p_hash = ph.hash(initial_pass)
             else:
-                logging.warning(
-                    "Generated password not found. Using default ('admin')."
-                )
-                ph = PasswordHasher()
-                p_hash = ph.hash("admin")
+                logging.warning("No initial web password configured; password login remains disabled until reset.")
+                p_hash = None
             ALLOWED_USERS[ADMIN_USER_ID] = {"group": "admins", "password_hash": p_hash}
             USER_NAMES[str(ADMIN_USER_ID)] = _(
                 "default_admin_name", config.DEFAULT_LANGUAGE
@@ -107,11 +104,8 @@ async def load_users_async():
                 ph = PasswordHasher()
                 p_hash = ph.hash(initial_pass)
             else:
-                logging.warning(
-                    "Generated password not found. Using default ('admin')."
-                )
-                ph = PasswordHasher()
-                p_hash = ph.hash("admin")
+                logging.warning("No initial web password configured; password login remains disabled until reset.")
+                p_hash = None
             ALLOWED_USERS[ADMIN_USER_ID] = {"group": "admins", "password_hash": p_hash}
             USER_NAMES[str(ADMIN_USER_ID)] = _(
                 "default_admin_name", config.DEFAULT_LANGUAGE

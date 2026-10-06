@@ -5,8 +5,7 @@ Telegram-модуль управления нодами.
 import asyncio
 import html
 import logging
-import os
-import socket
+import shlex
 import time
 from datetime import datetime
 
@@ -249,6 +248,9 @@ async def billing_handler(message: types.Message):
 async def cq_nodes_list_refresh(callback: types.CallbackQuery):
     user_id = callback.from_user.id
     lang = get_user_lang(user_id)
+    if not is_allowed(user_id, "nodes"):
+        await callback.answer(_("access_denied_generic", lang), show_alert=True)
+        return
     prepared_nodes = await _prepare_nodes_data()
     keyboard = get_nodes_list_keyboard(prepared_nodes, lang)
     try:
@@ -263,6 +265,9 @@ async def cq_nodes_list_refresh(callback: types.CallbackQuery):
 async def cq_node_select(callback: types.CallbackQuery):
     user_id = callback.from_user.id
     lang = get_user_lang(user_id)
+    if not is_allowed(user_id, "nodes"):
+        await callback.answer(_("access_denied_generic", lang), show_alert=True)
+        return
     token = callback.data.split("_", 2)[2]
     node = await nodes_db.get_node_by_token(token)
     if not node:
@@ -316,7 +321,11 @@ async def cq_node_select(callback: types.CallbackQuery):
 
 
 async def cq_add_node_start(callback: types.CallbackQuery, state: FSMContext):
-    lang = get_user_lang(callback.from_user.id)
+    user_id = callback.from_user.id
+    lang = get_user_lang(user_id)
+    if not is_allowed(user_id, "nodes"):
+        await callback.answer(_("access_denied_generic", lang), show_alert=True)
+        return
     await callback.message.edit_text(
         "Введите имя новой ноды:",
         reply_markup=get_back_keyboard(lang, "nodes_list_refresh"),
@@ -326,53 +335,28 @@ async def cq_add_node_start(callback: types.CallbackQuery, state: FSMContext):
 
 
 async def process_node_name(message: types.Message, state: FSMContext):
+    if not is_allowed(message.from_user.id, "nodes"):
+        await state.clear()
+        await send_access_denied_message(message.bot, message.from_user.id, message.chat.id, "nodes")
+        return
     lang = get_user_lang(message.from_user.id)
     name = message.text.strip()
+    agent_url = config.WEB_PUBLIC_URL.rstrip("/")
+    if not agent_url.startswith("https://"):
+        await message.answer(
+            "Set WEB_PUBLIC_URL to the panel's HTTPS address before adding a node."
+            if lang == "en"
+            else "Перед добавлением ноды задайте WEB_PUBLIC_URL с HTTPS-адресом панели."
+        )
+        await state.clear()
+        return
+
     token = await nodes_db.create_node(name)
 
-    configured_domain = os.environ.get("WEB_DOMAIN")
-    host_address = None
-    if configured_domain:
-        host_address = configured_domain
-    else:
-        ext_ip = None
-        try:
-            proc = await asyncio.create_subprocess_shell(
-                "curl -4 -s --max-time 2 ifconfig.me",
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE
-            )
-            stdout, stderr_data = await proc.communicate()
-            if stdout:
-                ext_ip = stdout.decode().strip()
-        except Exception as e:
-            logging.error(f"Error detecting external IP: {e}")
-
-        host_address = ext_ip
-        if ext_ip:
-            try:
-                loop = asyncio.get_running_loop()
-                hostname, aliases, ips = await loop.run_in_executor(None, socket.gethostbyaddr, ext_ip)
-                if hostname:
-                    host_address = hostname
-            except Exception:
-                pass
-
-    if not host_address:
-        host_address = "YOUR_SERVER_IP"
-
-    protocol = "https" if (configured_domain and "https" in config.AGENT_BASE_URL if hasattr(config, 'AGENT_BASE_URL') else False) else "http"
-    port_str = f":{config.WEB_SERVER_PORT}"
-    if configured_domain and config.WEB_SERVER_PORT in [80, 443]:
-         port_str = ""
-         if config.WEB_SERVER_PORT == 443: protocol = "https"
-
-    if configured_domain:  
-         agent_url = f"https://{configured_domain}" 
-    else:
-         agent_url = f"http://{host_address}:{config.WEB_SERVER_PORT}"
-
-    deploy_cmd = f"bash <(wget -qO- https://raw.githubusercontent.com/jatixs/tgbotvpscp/main/deploy.sh) --agent={agent_url} --token={token}"
+    deploy_cmd = (
+        "bash <(wget -qO- https://raw.githubusercontent.com/jatixs/tgbotvpscp/main/deploy.sh) "
+        f"--agent={shlex.quote(agent_url)} --token={shlex.quote(token)}"
+    )
     safe_command = html.escape(deploy_cmd)
 
     await message.answer(
@@ -385,6 +369,9 @@ async def process_node_name(message: types.Message, state: FSMContext):
 async def cq_node_page(callback: types.CallbackQuery):
     user_id = callback.from_user.id
     lang = get_user_lang(user_id)
+    if not is_allowed(user_id, "nodes"):
+        await callback.answer(_("access_denied_generic", lang), show_alert=True)
+        return
     # data format: node_page_{page}_{token}
     parts = callback.data.split("_", 3)
     if len(parts) < 4:
@@ -498,7 +485,11 @@ async def process_node_rename(message: types.Message, state: FSMContext):
 
 
 async def cq_node_delete_menu(callback: types.CallbackQuery):
-    lang = get_user_lang(callback.from_user.id)
+    user_id = callback.from_user.id
+    lang = get_user_lang(user_id)
+    if not is_allowed(user_id, "nodes"):
+        await callback.answer(_("access_denied_generic", lang), show_alert=True)
+        return
     nodes_data = await _prepare_nodes_data()
     keyboard = get_nodes_delete_keyboard(nodes_data, lang)
     await callback.message.edit_text(
@@ -508,8 +499,15 @@ async def cq_node_delete_menu(callback: types.CallbackQuery):
 
 
 async def cq_node_delete_confirm(callback: types.CallbackQuery):
-    lang = get_user_lang(callback.from_user.id)
+    user_id = callback.from_user.id
+    lang = get_user_lang(user_id)
+    if not is_allowed(user_id, "nodes"):
+        await callback.answer(_("access_denied_generic", lang), show_alert=True)
+        return
     token = callback.data.split("_", 3)[3]
+    if not await nodes_db.get_node_by_token(token):
+        await callback.answer("Node not found", show_alert=True)
+        return
     await nodes_db.delete_node(token)
     await callback.answer(_("node_deleted", lang, name="Node"), show_alert=False)
     await cq_node_delete_menu(callback)
@@ -518,9 +516,21 @@ async def cq_node_delete_confirm(callback: types.CallbackQuery):
 async def cq_node_command(callback: types.CallbackQuery):
     user_id = callback.from_user.id
     lang = get_user_lang(user_id)
+    if not is_allowed(user_id, "nodes"):
+        await callback.answer(_("access_denied_generic", lang), show_alert=True)
+        return
     data = callback.data[9:]
     token = data[:32]
     cmd = data[33:]
+    if cmd not in {"uptime", "traffic", "selftest", "top", "speedtest", "update", "reboot", "resetuptime"}:
+        await callback.answer("Invalid command", show_alert=True)
+        return
+    if cmd == "reboot" and user_id != config.ADMIN_USER_ID:
+        await callback.answer(_("access_denied_generic", lang), show_alert=True)
+        return
+    if cmd == "update" and user_id != config.ADMIN_USER_ID:
+        await callback.answer(_("access_denied_generic", lang), show_alert=True)
+        return
     node = await nodes_db.get_node_by_token(token)
     if not node:
         await callback.answer("Error: Node not found", show_alert=True)
@@ -619,6 +629,9 @@ async def cq_node_command(callback: types.CallbackQuery):
 async def cq_node_stop_traffic(callback: types.CallbackQuery):
     user_id = callback.from_user.id
     lang = get_user_lang(user_id)
+    if not is_allowed(user_id, "nodes"):
+        await callback.answer(_("access_denied_generic", lang), show_alert=True)
+        return
     token = callback.data.replace("node_stop_traffic_", "")
     node = await nodes_db.get_node_by_token(token)
     node_name = html.escape(node.get("name", "Unknown")) if node else "Unknown"
@@ -652,6 +665,9 @@ async def cq_node_services(callback: types.CallbackQuery):
     """Show services list for a node"""
     user_id = callback.from_user.id
     lang = get_user_lang(user_id)
+    if not is_allowed(user_id, "nodes"):
+        await callback.answer(_("access_denied_generic", lang), show_alert=True)
+        return
     token = callback.data.replace("node_services_", "")
     
     node = await nodes_db.get_node_by_token(token)
@@ -694,6 +710,9 @@ async def cq_node_service_detail(callback: types.CallbackQuery):
     """Show service details with action buttons"""
     user_id = callback.from_user.id
     lang = get_user_lang(user_id)
+    if not is_allowed(user_id, "nodes"):
+        await callback.answer(_("access_denied_generic", lang), show_alert=True)
+        return
     
     # Parse: nsd_{token}_{service_name}
     parts = callback.data.split("_", 2)
@@ -1010,6 +1029,9 @@ async def cq_node_services(callback: types.CallbackQuery):
     """Show node services menu"""
     user_id = callback.from_user.id
     lang = get_user_lang(user_id)
+    if not is_allowed(user_id, "nodes"):
+        await callback.answer(_("access_denied_generic", lang), show_alert=True)
+        return
     token = callback.data.replace("node_services_", "")
     
     node = await nodes_db.get_node_by_token(token)
@@ -1051,6 +1073,9 @@ async def cq_node_service_detail(callback: types.CallbackQuery):
     """Show service details with actions"""
     user_id = callback.from_user.id
     lang = get_user_lang(user_id)
+    if not is_allowed(user_id, "nodes"):
+        await callback.answer(_("access_denied_generic", lang), show_alert=True)
+        return
     
     # Parse: nsd_{token}_{service}
     parts = callback.data.split("_", 2)
@@ -1097,6 +1122,9 @@ async def cq_node_service_action(callback: types.CallbackQuery):
     """Execute service action (start/stop/restart)"""
     user_id = callback.from_user.id
     lang = get_user_lang(user_id)
+    if user_id != config.ADMIN_USER_ID:
+        await callback.answer(_("access_denied_no_rights", lang), show_alert=True)
+        return
     
     # Parse: nsa_{token}_{service}_{t}_{action} (t: d=docker, s=systemd)
     parts = callback.data.split("_")
@@ -1117,6 +1145,10 @@ async def cq_node_service_action(callback: types.CallbackQuery):
     node = await nodes_db.get_node_by_token(token)
     if not node:
         await callback.answer("Node not found", show_alert=True)
+        return
+
+    if not any(service.get("name") == service_name for service in node.get("services", [])):
+        await callback.answer("Service not found", show_alert=True)
         return
     
     # Send service action task to node with type

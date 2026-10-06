@@ -197,6 +197,11 @@ TG_BOT_NAME = os.environ.get("TG_BOT_NAME", "VPS Bot")
 INSTALLED_VERSION = os.environ.get("INSTALLED_VERSION")
 WEB_SERVER_HOST = os.environ.get("WEB_SERVER_HOST", "127.0.0.1")
 WEB_SERVER_PORT = int(os.environ.get("WEB_SERVER_PORT", 8080))
+WEB_PUBLIC_URL = os.environ.get("WEB_PUBLIC_URL", "").strip().rstrip("/")
+LEGACY_NODE_BRIDGE = (
+    os.environ.get("LEGACY_NODE_BRIDGE", "false").lower() == "true"
+    and not os.path.exists(os.path.join(CONFIG_DIR, ".legacy_node_bridge_disabled"))
+)
 ENABLE_WEB_UI = os.environ.get("ENABLE_WEB_UI", "true").lower() == "true"
 try:
     ADMIN_USER_ID = int(os.environ.get("TG_ADMIN_ID"))

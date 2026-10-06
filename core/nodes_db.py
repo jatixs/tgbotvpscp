@@ -174,6 +174,7 @@ async def get_all_nodes():
     for node in nodes:
         real_token = node.token_safe or "ErrorDecryption"
         result[real_token] = {
+            "id": node.id,
             "token": real_token,
             "name": node.name,
             "created_at": node.created_at,
@@ -198,6 +199,7 @@ async def get_node_by_token(token: str):
     node = await Node.get_or_none(token_hash=t_hash)
     if node:
         base = {
+            "id": node.id,
             "token": node.token_safe,
             "name": node.name,
             "created_at": node.created_at,
@@ -215,6 +217,14 @@ async def get_node_by_token(token: str):
         }
         return {**base, **node.extra_state}
     return None
+
+
+async def get_node_by_id(node_id: int):
+    node = await Node.get_or_none(id=node_id)
+    if not node:
+        return None
+
+    return await get_node_by_token(node.token_safe)
 
 
 async def create_node(name: str) -> str:

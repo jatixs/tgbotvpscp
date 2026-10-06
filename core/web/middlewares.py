@@ -11,6 +11,7 @@ from typing import Final
 from aiohttp import web
 from aiohttp.typedefs import Handler
 
+from ..config import LEGACY_NODE_BRIDGE, WEB_PUBLIC_URL
 from .auth import verify_csrf_token
 
 MAX_API_REQUESTS: Final[int] = 100
@@ -81,14 +82,51 @@ def get_client_ip(request: web.Request) -> str:
     peer = _peer_ip(request)
 
     if _is_trusted_proxy(peer):
-        forwarded_for = request.headers.get("X-Forwarded-For", "").split(",")[0].strip()
         real_ip = request.headers.get("X-Real-IP", "").strip()
-        if forwarded_for:
-            return forwarded_for
         if real_ip:
-            return real_ip
+            try:
+                return str(ipaddress.ip_address(real_ip.strip("[]")))
+            except ValueError:
+                pass
+
+        forwarded_chain = request.headers.get("X-Forwarded-For", "").split(",")
+        for candidate in reversed(forwarded_chain):
+            try:
+                normalized = str(ipaddress.ip_address(candidate.strip().strip("[]")))
+            except ValueError:
+                continue
+            if not _is_trusted_proxy(normalized):
+                return normalized
 
     return peer
+
+
+def _request_is_https(request: web.Request) -> bool:
+    if request.scheme == "https":
+        return True
+    peer = _peer_ip(request)
+    return _is_trusted_proxy(peer) and request.headers.get("X-Forwarded-Proto", "").lower() == "https"
+
+
+@web.middleware
+async def https_enforcement_middleware(request: web.Request, handler: Handler) -> web.StreamResponse:
+    if _request_is_https(request):
+        return await handler(request)
+
+    if LEGACY_NODE_BRIDGE and request.path in {
+        "/api/agent/https",
+        "/api/heartbeat",
+        "/api/node/bootstrap",
+    }:
+        return await handler(request)
+
+    if not WEB_PUBLIC_URL.lower().startswith("https://"):
+        return web.Response(text="WEB_PUBLIC_URL must be configured with HTTPS", status=503)
+
+    if request.method in {"GET", "HEAD"}:
+        raise web.HTTPPermanentRedirect(f"{WEB_PUBLIC_URL}{request.rel_url}")
+
+    return web.json_response({"error": "HTTPS is required"}, status=426)
 
 
 def mask_sensitive_data(data: str, mask_length: int = 6) -> str:
@@ -288,7 +326,7 @@ async def security_headers_middleware(request: web.Request, handler: Handler) ->
     response.headers.setdefault("X-XSS-Protection", "0")
     if request.path.startswith("/api/"):
         response.headers.setdefault("Cache-Control", "no-store")
-    is_https = request.scheme == "https" or request.headers.get("X-Forwarded-Proto") == "https"
+    is_https = request.scheme == "https" or WEB_PUBLIC_URL.lower().startswith("https://")
     if is_https:
         response.headers.setdefault(
             "Strict-Transport-Security", "max-age=31536000; includeSubDomains"
@@ -300,6 +338,7 @@ __all__ = [
     "check_waf_patterns",
     "csrf_middleware",
     "get_client_ip",
+    "https_enforcement_middleware",
     "mask_sensitive_data",
     "rate_limit_middleware",
     "security_headers_middleware",

@@ -13,6 +13,16 @@
 5. **Отказоустойчивость** — система Watchdog и автоматический перезапуск
 6. **Разделение ответственности** — веб-слой вынесен в `core/web/`, бот-логика в `modules/`
 
+## 🔒 HTTPS и подключение нод
+
+`WEB_PUBLIC_URL` — канонический публичный HTTPS origin панели. При managed TLS установщик настраивает Nginx и Certbot; внешний reverse proxy должен сам выпускать и продлевать сертификат. Systemd WebUI по умолчанию слушает loopback, Docker публикует порт только на host loopback.
+
+Для домена и глобального публичного IPv4 поддерживается HTTPS. IP-сертификат Let's Encrypt использует short-lived профиль и действует 160 часов. HTTP-01 требует доступный извне TCP-порт 80; managed renewal проверяется ежечасно. Private/local IP не подходят.
+
+Новые агенты подключаются к HTTPS origin. `GET /api/agent/https` объявляет URL без токена; bootstrap передает секрет в `X-Node-Token`, heartbeat подписывается HMAC. Обновленный агент проверяет TLS и тот же hostname, затем сохраняет HTTPS URL. При переходе со старой systemd-установки ограниченный HTTP bridge временно обслуживает только discovery/bootstrap и подписанный heartbeat. После обновления всех агентов выполните `tgcp-bot tls status`, затем `tgcp-bot tls finalize`.
+
+Браузерные страницы используют числовой ID ноды. Агентские токены не помещаются в URL или клиентские JSON-ответы.
+
 ---
 
 ## 📂 Структура проекта
@@ -115,7 +125,8 @@ core/
     ├── nodes_monitor.html  # Мониторинг нод
     ├── reset_password.html # Сброс пароля
     ├── settings.html       # Настройки
-    └── terminal.html       # Веб-терминал (VNC)
+    └── terminal.html       # Веб-терминал SSH
+    └── terminal.html       # Web SSH terminal
 ```
 
 ---
@@ -266,7 +277,7 @@ STRINGS = {
 **Безопасность:**
 - `encrypt_for_web(data)` — AES-256-CBC + Base64 шифрование для SSE
 - `decrypt_for_web(data)` — Расшифровка на стороне клиента
-- `log_audit_event()` — Аудит логирование (GDPR compliant)
+- `log_audit_event()` — запись событий аудита; эксплуатация должна отдельно определить срок хранения и требования compliance
 - `mask_sensitive_data()` — Маскировка IP, токенов, паролей в логах
 
 **Система:**
@@ -426,6 +437,10 @@ streaming_routes → SSE потоки
 
 **1. Rate Limit Middleware:**
 - 100 запросов/мин на IP на endpoint
+- Ограничение частоты запросов; клиентский IP учитывает только доверенную proxy-конфигурацию
+- **Logging and privacy:**
+- Наличие audit log само по себе не гарантирует соответствие законодательству
+- xterm.js — браузерный SSH-терминал (не VNC)
 - Автоматический сброс окна
 
 **2. CSRF Middleware:**
@@ -461,14 +476,16 @@ streaming_routes → SSE потоки
 **Эндпоинты:**
 ```
 GET  /api/heartbeat                     — Health probe
+GET  /api/agent/https                   — Публичный HTTPS origin агента
+GET  /api/node/bootstrap                — Bootstrap по X-Node-Token
 POST /api/heartbeat                     — Heartbeat от ноды с HMAC-подписью
 GET  /api/nodes/list                    — Список нод (зашифровано)
 POST /api/nodes/add                     — Добавить ноду
 POST /api/nodes/delete                  — Удалить ноду
 POST /api/nodes/rename                  — Переименовать (admin only)
 GET  /api/nodes/monitor/list            — Данные для страницы мониторинга
-GET  /api/nodes/monitor/detail?token=   — Детали конкретной ноды
-GET  /api/nodes/monitor/services        — Сервисы конкретной ноды
+GET  /api/nodes/monitor/detail?node_id= — Детали ноды по числовому ID (WebUI session)
+GET  /api/nodes/monitor/services?node_id= — Сервисы по числовому ID (WebUI session)
 POST /api/nodes/monitor/command         — Отправить команду на ноду
 POST /api/nodes/monitor/service_action  — Управление сервисом на ноде
 GET  /api/services                      — Список управляемых сервисов
@@ -529,6 +546,7 @@ GET  /api/agent/ipv4           — IPv4 адреса агента
 **3. `GET /api/events/node` — Детали конкретной ноды:**
 - Статистика и данные для графиков
 - Обновления через параметр `?token=...`
+- Обновления по числовому параметру `node_id`; agent token не передается браузеру
 
 **4. `GET /api/events/services` — Поток менеджера сервисов:**
 - Статусы systemd-сервисов в реальном времени
@@ -707,8 +725,8 @@ node/
 
 **Требования:**
 - Python 3.10+
-- Библиотеки: requests, psutil
-- Открытый порт на главном сервере (8080)
+- Библиотеки: requests, psutil; PyYAML для дополнительных YAML-based checks
+- Доступный публичный HTTPS origin master; managed TLS дополнительно требует inbound TCP/80
 
 ---
 
@@ -739,25 +757,14 @@ node/
 - LDAP Injection
 
 #### 4️⃣ Data Encryption
-- **Fernet (AES)** — Симметричное шифрование конфигов
-  - `users.json`, `services.json`, `alerts_config.json`, `bot.db`
-- **AES-256-CBC + Base64** — шифрование для SSE-потоков
-- **HMAC** — Подпись heartbeat-сообщений от нод
+- **Fernet (AES)** — шифрование конфигурационных JSON-файлов
+- **AES-256-CBC + Base64** — шифрование payload для SSE-клиента
+- **HMAC-SHA256** — проверка подлинности heartbeat от нод
 
 #### 5️⃣ Audit Logging
 **Местоположение:** `logs/audit/audit.log`
 
-**Записываемые события:**
-- Login attempts (success/fail)
-- Password resets
-- User additions/deletions
-- Configuration changes
-- WAF triggers / Suspicious activity
-
-**Privacy (GDPR Compliant):**
-- IP адреса маскируются (`203.0.113.XXX`)
-- Токены скрываются (`abc123...`)
-- Чувствительные данные не логируются
+Журнал содержит события аудита; IP и секреты в предупреждениях маскируются. Настройте собственные сроки хранения и доступа к логам, не рассматривайте сам факт наличия audit log как гарантию соответствия требованиям.
 
 ---
 
@@ -766,19 +773,13 @@ node/
 ### Startup Sequence
 
 ```
-1. Загрузка .env конфигурации
-2. Инициализация системы логирования
-3. Подключение к SQLite базе (Tortoise ORM)
-4. Загрузка зашифрованных конфигов (users, alerts, services)
-5. Инициализация Telegram Bot + Dispatcher
-6. Регистрация 18 модулей и middleware
-7. Запуск Aiohttp веб-сервера (core/web/app.py, порт 8080)
-8. Запуск фоновых задач (tasks.py):
-   - agent_monitor() — сбор метрик агента
-   - cleanup_monitor() — очистка сессий и токенов
-9. Запуск фоновых задач модулей:
-   - check_alerts_loop() — мониторинг порогов
-10. Отправка уведомления о старте администратору
+1. Загрузка .env и настройка логирования
+2. Инициализация SQLite/Tortoise ORM и конфигурации
+3. Создание Telegram Bot и Dispatcher
+4. Настройка `ModuleOrchestrator` и регистрация модулей из `MODULE_CONFIG`
+5. Запуск aiohttp WebUI согласно `WEB_SERVER_HOST/PORT`
+6. Запуск фоновых задач приложения и модулей
+7. Запуск Telegram polling
 ```
 
 ### Shutdown Sequence
@@ -814,7 +815,7 @@ while True:
 
 ```
 Remote Node (node.py)
-    ↓ (heartbeat каждые 60 сек)
+    ↓ (heartbeat с настраиваемым интервалом)
 POST /api/heartbeat (HMAC signature)
     {
         "cpu": 45.2, "ram": 72.1,
@@ -878,13 +879,7 @@ decrypt() → AES-256-CBC + Base64
 ## 🎨 Фронтенд архитектура
 
 ### Технологии
-- **Tailwind CSS** — Utility-first CSS framework
-- **Vanilla JavaScript** — ES6+, без фреймворков
-- **Server-Sent Events** — Real-time обновления
-- **Chart.js** — Графики потребления ресурсов
-- **PWA** — Progressive Web App с манифестом
-- **xterm.js** — Веб-терминал (VNC)
-
+- **xterm.js** — браузерный SSH-терминал
 ### Ключевые файлы
 
 #### **dashboard.js**

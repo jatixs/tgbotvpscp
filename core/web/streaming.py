@@ -8,6 +8,7 @@ import os
 import time
 from collections import deque
 from typing import Any, Final
+from urllib.parse import urlsplit
 
 import aiohttp
 from aiohttp import web
@@ -23,7 +24,7 @@ from ..utils import (
     get_host_path,
     get_node_uptime_snapshot,
 )
-from .auth import COOKIE_NAME, SERVER_SESSIONS, get_current_user
+from .auth import COOKIE_NAME, SERVER_SESSIONS, _get_public_base_url, get_current_user
 
 # Lazy imports: traffic_module and services are loaded on-demand
 # from modules import traffic as traffic_module
@@ -293,7 +294,7 @@ async def handle_sse_stream(request: web.Request) -> web.StreamResponse:
                 stats = node.get("stats", {})
                 nodes_data.append(
                     {
-                        "token": encrypt_for_web(token),
+                        "id": node["id"],
                         "name": node.get("name", "Unknown"),
                         "ip": encrypt_for_web(node.get("ip", "Unknown")),
                         "status": status,
@@ -551,9 +552,16 @@ async def handle_sse_node_details(request: web.Request) -> web.StreamResponse:
     if not user:
         return web.Response(status=401)
 
-    token = decrypt_for_web(request.query.get("token"))
-    if not token:
+    try:
+        node_id = int(request.query.get("node_id", "0"))
+    except ValueError:
+        node_id = 0
+    if node_id <= 0:
         return web.Response(status=400)
+    node = await nodes_db.get_node_by_id(node_id)
+    if not node:
+        return web.Response(status=404)
+    token = node["token"]
 
     current_token = request.cookies.get(COOKIE_NAME)
     lang = get_user_lang(int(user["id"]))
@@ -598,7 +606,7 @@ async def handle_sse_node_details(request: web.Request) -> web.StreamResponse:
                     "ip": encrypt_for_web(node.get("ip")),
                     "stats": _encrypt_node_stats_for_web(node.get("stats")),
                     "history": node.get("history", []),
-                    "token": encrypt_for_web(token),
+                    "id": node["id"],
                     "last_seen": last_seen,
                     "is_restarting": is_restarting,
                     "status": status,
@@ -645,9 +653,16 @@ async def handle_sse_node_services(request: web.Request) -> web.StreamResponse:
     if not user:
         return web.Response(status=401)
 
-    token = decrypt_for_web(request.query.get("token"))
-    if not token:
+    try:
+        node_id = int(request.query.get("node_id", "0"))
+    except ValueError:
+        node_id = 0
+    if node_id <= 0:
         return web.Response(status=400)
+    node = await nodes_db.get_node_by_id(node_id)
+    if not node:
+        return web.Response(status=404)
+    token = node["token"]
 
     current_token = request.cookies.get(COOKIE_NAME)
     response = web.StreamResponse(status=200, reason="OK")
@@ -938,6 +953,21 @@ async def handle_terminal_ws(request: web.Request) -> web.StreamResponse:
     if not ws_ready.ok:
         return _build_websocket_notice(request.path)
 
+    public_base_url = _get_public_base_url()
+    origin = request.headers.get("Origin", "")
+    try:
+        expected_origin = urlsplit(public_base_url) if public_base_url else None
+        request_origin = urlsplit(origin) if origin else None
+    except ValueError:
+        return web.Response(status=403, text="Invalid Origin")
+    if (
+        not expected_origin
+        or not request_origin
+        or request_origin.scheme != expected_origin.scheme
+        or request_origin.netloc.lower() != expected_origin.netloc.lower()
+    ):
+        return web.Response(status=403, text="Invalid Origin")
+
     user = get_current_user(request)
     if not user or not _is_admin(user):
         return web.Response(status=403)
@@ -999,7 +1029,6 @@ async def handle_terminal_ws(request: web.Request) -> web.StreamResponse:
             "host": host,
             "port": port,
             "username": username,
-            "known_hosts": None,
         }
 
         if auth_type == "key" and private_key:

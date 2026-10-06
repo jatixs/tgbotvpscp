@@ -64,6 +64,9 @@ async def reboot_cancel_handler(callback: types.CallbackQuery):
 async def reboot_execute_handler(callback: types.CallbackQuery):
     user_id = callback.from_user.id
     lang = get_user_lang(user_id)
+    if not is_allowed(user_id, "reboot"):
+        await callback.answer(_("access_denied_generic", lang), show_alert=True)
+        return
     bot: Bot = callback.bot
     await callback.message.edit_text(_("reboot_confirmed", lang), parse_mode="HTML")
     try:

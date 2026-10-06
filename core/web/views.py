@@ -123,6 +123,16 @@ def _render_html_response(template_name: str, context: dict[str, Any], request: 
     return response
 
 
+def _alerts_for_web(alerts: dict[str, Any], nodes: dict[str, dict[str, Any]]) -> dict[str, Any]:
+    public_alerts = {key: value for key, value in alerts.items() if not key.startswith("node_")}
+    for token, node in nodes.items():
+        for alert_type in ("downtime", "node_resources", "node_logins"):
+            key = f"node_{token}_{alert_type}"
+            if key in alerts:
+                public_alerts[f"node_{node['id']}_{alert_type}"] = alerts[key]
+    return public_alerts
+
+
 def _build_api_root_notice() -> web.Response:
     return web.json_response(
         {
@@ -302,7 +312,7 @@ async def handle_dashboard(request: web.Request) -> web.StreamResponse:
         users_json = json.dumps(ulist)
         nlist = [
             {
-                "token": encrypt_for_web(token),
+                "id": node["id"],
                 "name": node.get("name", "Unknown"),
                 "ip": encrypt_for_web(node.get("ip", "Unknown")),
                 "billing_amount": node.get("billing_amount"),
@@ -785,7 +795,8 @@ async def handle_settings_page(request: web.Request) -> web.StreamResponse:
     is_main_admin = _is_root(user)
     is_admin = _is_admin(user)
     lang = get_user_lang(user_id)
-    user_alerts = shared_state.ALERTS_CONFIG.get(user_id, {})
+    all_nodes = await nodes_db.get_all_nodes()
+    user_alerts = _alerts_for_web(shared_state.ALERTS_CONFIG.get(user_id, {}), all_nodes)
     web_meta = getattr(current_config, "WEB_METADATA", {})
     meta_locked = web_meta.get("locked", False)
     users_json = "null"
@@ -810,10 +821,9 @@ async def handle_settings_page(request: web.Request) -> web.StreamResponse:
             if uid != ADMIN_USER_ID
         ]
         users_json = json.dumps(ulist)
-        all_nodes = await nodes_db.get_all_nodes()
         nlist = [
             {
-                "token": encrypt_for_web(token),
+            "id": node["id"],
                 "name": node.get("name", "Unknown"),
                 "ip": encrypt_for_web(node.get("ip", "Unknown")),
                 "reminder_enabled": node.get("reminder_enabled", False),

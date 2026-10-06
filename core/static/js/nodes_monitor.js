@@ -9,7 +9,7 @@ let currentCpuFilter = 'all';
 let currentSort = 'name';
 let searchQuery = '';
 let selectedNodes = new Set();
-let currentNodeToken = null;
+let currentNodeId = null;
 let modalResChart = null;
 let modalNetChart = null;
 let nodesMonitorSSESource = null;
@@ -152,7 +152,7 @@ function connectNodesMonitorStream() {
         try {
             const data = JSON.parse(event.data);
             allNodesData = Array.isArray(data.nodes) ? data.nodes.map(normalizeNode) : [];
-            selectedNodes = new Set([...selectedNodes].filter(token => allNodesData.some(node => node.token === token)));
+            selectedNodes = new Set([...selectedNodes].filter(nodeId => allNodesData.some(node => String(node.id) === nodeId)));
             updateStats();
             renderNodes();
         } catch (error) {
@@ -189,7 +189,7 @@ function initNodesMonitor() {
     currentSort = 'name';
     searchQuery = '';
     selectedNodes.clear();
-    currentNodeToken = null;
+    currentNodeId = null;
     
     // Destroy charts if they exist
     if (modalResChart) {
@@ -222,11 +222,11 @@ window.toggleServicesDisplay = toggleServicesDisplay;
 document.addEventListener('app:action:node-service-action', (e) => {
     const el = e.detail?.target;
     if (!el) return;
-    const token = el.dataset.token;
+    const nodeId = el.dataset.token;
     const name = el.dataset.name;
     const cmd = el.dataset.cmd;
     const type = el.dataset.type || 'systemd';
-    if (!token || !name || !cmd) return;
+    if (!nodeId || !name || !cmd) return;
 
     const cmdLabels = {
         restart: I18N?.web_service_restart || 'restart',
@@ -240,7 +240,7 @@ document.addEventListener('app:action:node-service-action', (e) => {
         (I18N?.web_service_confirm || 'Execute {action} for {name}?')
             .replace('{action}', actionLabel.toLowerCase())
             .replace('{name}', name),
-        () => nodeServiceAction(token, name, cmd, type)
+        () => nodeServiceAction(nodeId, name, cmd, type)
     );
 });
 
@@ -382,11 +382,12 @@ function createNodeCard(node) {
     const lastOutage = availability.last_downtime || '-';
     const totalDowntime = availability.total_downtime || '-';
     
-    const isSelected = selectedNodes.has(node.token);
+    const nodeId = String(node.id);
+    const isSelected = selectedNodes.has(nodeId);
     
     return `
         <div class="node-card bg-white/60 dark:bg-white/5 backdrop-blur-md border border-white/40 dark:border-white/10 rounded-2xl overflow-hidden shadow-lg dark:shadow-none hover:scale-[1.02] transition duration-300 ${isSelected ? 'ring-2 ring-blue-500' : ''}" 
-             data-token="${node.token}" data-status="${node.status}" data-name="${node.name.toLowerCase()}">
+             data-token="${nodeId}" data-status="${node.status}" data-name="${node.name.toLowerCase()}">
             
             <!-- Header -->
             <div class="p-4 border-b border-gray-100 dark:border-white/5 flex items-center justify-between">
@@ -394,7 +395,7 @@ function createNodeCard(node) {
                     ${(typeof USER_ROLE !== 'undefined' && USER_ROLE !== 'users') ? `
                     <input type="checkbox" class="node-checkbox rounded border-gray-300 dark:border-gray-600 text-blue-600 focus:ring-blue-500" 
                            ${isSelected ? 'checked' : ''} 
-                           data-action="toggle-node-selection" data-token="${node.token}">
+                           data-action="toggle-node-selection" data-token="${nodeId}">
                     ` : ''}
                     <div>
                         <h3 class="font-bold text-gray-900 dark:text-white text-sm">${typeof replaceEmojisWithFlagsHTML === 'function' ? replaceEmojisWithFlagsHTML(escapeHtml(node.name)) : escapeHtml(node.name)}</h3>
@@ -478,11 +479,11 @@ function createNodeCard(node) {
             
             <!-- Actions -->
             <div class="px-4 pb-4 mb-3 pt-1 flex gap-2">
-                <button data-action="open-node-detail" data-token="${node.token}" class="flex-1 px-3 py-2 bg-blue-100 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400 rounded-xl text-xs font-bold hover:bg-blue-200 dark:hover:bg-blue-500/30 transition">
+                <button data-action="open-node-detail" data-token="${nodeId}" class="flex-1 px-3 py-2 bg-blue-100 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400 rounded-xl text-xs font-bold hover:bg-blue-200 dark:hover:bg-blue-500/30 transition">
                     ${I18N?.web_node_details || 'Node Details'}
                 </button>
                 ${(typeof USER_ROLE !== 'undefined' && USER_ROLE !== 'users') ? `
-                <button data-action="quick-reboot" data-token="${node.token}" class="node-reboot-btn px-3 py-2 text-red-600 dark:text-red-400 rounded-xl text-xs font-bold hover:bg-red-200 transition" title="Reboot">
+                <button data-action="quick-reboot" data-token="${nodeId}" class="node-reboot-btn px-3 py-2 text-red-600 dark:text-red-400 rounded-xl text-xs font-bold hover:bg-red-200 transition" title="Reboot">
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                     </svg>
@@ -607,7 +608,7 @@ function updateFilterBadge() {
 // Selection functions
 function toggleSelectAll(checkbox) {
     if (checkbox.checked) {
-        allNodesData.forEach(node => selectedNodes.add(node.token));
+        allNodesData.forEach(node => selectedNodes.add(String(node.id)));
     } else {
         selectedNodes.clear();
     }
@@ -664,7 +665,7 @@ async function massCommand(cmd) {
 
 // Quick actions
 async function quickReboot(token) {
-    const node = allNodesData.find(n => n.token === token);
+    const node = allNodesData.find(n => String(n.id) === token);
     const name = node ? node.name : 'Node';
     
     showConfirm(
@@ -680,7 +681,7 @@ async function quickReboot(token) {
 
 // Node detail modal
 async function openNodeDetail(token) {
-    currentNodeToken = token;
+    currentNodeId = token;
     const modal = document.getElementById('nodeDetailModal');
     
     if (typeof animateModalOpen === 'function') {
@@ -702,7 +703,7 @@ function closeNodeDetailModal() {
         modal.classList.add('hidden');
         modal.classList.remove('flex');
     }
-    currentNodeToken = null;
+    currentNodeId = null;
     _lastServicesCache = null; // reset so next node gets a fresh render
 
     if (typeof window.hideAvailabilityPopover === 'function') window.hideAvailabilityPopover();
@@ -723,7 +724,7 @@ function closeNodeDetailModal() {
 function connectNodeDetailStream(token) {
     stopNodeDetailStream();
 
-    nodeDetailSSESource = new EventSource(`/api/events/node?token=${encodeURIComponent(token)}`);
+    nodeDetailSSESource = new EventSource(`/api/events/node?node_id=${encodeURIComponent(token)}`);
 
     nodeDetailSSESource.addEventListener('node_details', (event) => {
         try {
@@ -1086,7 +1087,7 @@ function connectNodeServicesStream(token) {
         _lastServicesCache = null; // force full re-render on next data event
     }
 
-    nodeServicesSSESource = new EventSource(`/api/events/node/services?token=${encodeURIComponent(token)}`);
+    nodeServicesSSESource = new EventSource(`/api/events/node/services?node_id=${encodeURIComponent(token)}`);
 
     nodeServicesSSESource.addEventListener('node_services', (event) => {
         try {
@@ -1239,22 +1240,22 @@ function toggleServicesDisplay() {
     const container = document.getElementById('modalServicesContainer');
     const isShowingAll = container.dataset.showAll === 'true';
     container.dataset.showAll = !isShowingAll;
-    if (currentNodeToken) {
-        connectNodeServicesStream(currentNodeToken);
+    if (currentNodeId) {
+        connectNodeServicesStream(currentNodeId);
     }
 }
 
 function refreshNodeServices() {
-    if (currentNodeToken) {
-        connectNodeServicesStream(currentNodeToken);
+    if (currentNodeId) {
+        connectNodeServicesStream(currentNodeId);
     }
 }
 
 // Node commands from modal
 function nodeCommand(cmd) {
-    if (!currentNodeToken) return;
+    if (!currentNodeId) return;
     
-    const node = allNodesData.find(n => n.token === currentNodeToken);
+    const node = allNodesData.find(n => String(n.id) === currentNodeId);
     const name = node ? node.name : 'Node';
     
     if (cmd === 'reboot') {
@@ -1262,42 +1263,42 @@ function nodeCommand(cmd) {
             I18N?.modal_title_confirm || 'Confirm',
             (I18N?.web_reboot_node_confirm || 'Reboot {name}?').replace('{name}', name),
             async () => {
-                await sendNodeCommand(currentNodeToken, cmd);
+                await sendNodeCommand(currentNodeId, cmd);
                 showAlert(I18N?.modal_title_alert || 'Alert', I18N?.web_command_sent || 'Command sent');
                 closeNodeDetailModal();
                 connectNodesMonitorStream();
             }
         );
     } else {
-        sendNodeCommand(currentNodeToken, cmd).then(() => {
+        sendNodeCommand(currentNodeId, cmd).then(() => {
             showAlert(I18N?.modal_title_alert || 'Alert', I18N?.web_command_sent || 'Command sent');
         });
     }
 }
 
-async function nodeServiceAction(token, service, action, type = 'systemd') {
+async function nodeServiceAction(nodeId, service, action, type = 'systemd') {
     try {
         const response = await fetch('/api/nodes/monitor/service_action', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ token, service, action, type })
+            body: JSON.stringify({ node_id: Number(nodeId), service, action, type })
         });
         
         if (!response.ok) throw new Error('Service action failed');
         
         showAlert(I18N?.modal_title_alert || 'Alert', I18N?.web_command_sent || 'Command sent');
-        setTimeout(() => connectNodeServicesStream(token), 2000);
+        setTimeout(() => connectNodeServicesStream(nodeId), 2000);
     } catch (error) {
         showAlert(I18N?.modal_title_error || 'Error', error.message);
     }
 }
 
 // Send command to node
-async function sendNodeCommand(token, command) {
+async function sendNodeCommand(nodeId, command) {
     const response = await fetch('/api/nodes/monitor/command', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token, command })
+        body: JSON.stringify({ node_id: Number(nodeId), command })
     });
     
     if (!response.ok) {

@@ -810,31 +810,31 @@ function renderNodes() {
     if (NODES_DATA.length > 0) {
         const rawHtml = NODES_DATA.map(n => {
             const decryptedIp = decryptData(n.ip);
-            const decryptedToken = decryptData(n.token);
+            const nodeId = String(n.id);
 
             return `
         <tr class="border-b border-gray-100 dark:border-white/5 hover:bg-gray-50 dark:hover:bg-white/5 transition group">
             <td class="px-2 sm:px-4 py-3 font-medium text-sm text-gray-900 dark:text-white w-full sm:w-auto">
-                <div id="disp_name_${n.token}" class="flex items-center gap-2 max-w-[120px] sm:max-w-none">
+                <div id="disp_name_${nodeId}" class="flex items-center gap-2 max-w-[120px] sm:max-w-none">
                     <span class="truncate block" title="${escapeHtml(n.name)}">${escapeHtml(n.name)}</span>
                     ${isMainAdmin ? `
-                    <button data-action="start-node-rename" data-token="${n.token}" class="text-gray-400 hover:text-blue-500 p-1 flex-shrink-0 transition-colors">
+                    <button data-action="start-node-rename" data-token="${nodeId}" class="text-gray-400 hover:text-blue-500 p-1 flex-shrink-0 transition-colors">
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
                     </button>
                     ` : ''}
                 </div>
-                <div id="edit_name_${n.token}" class="hidden flex items-center gap-1">
-                    <input type="text" id="input_name_${n.token}" value="${escapeHtml(n.name)}" class="bg-white dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded px-2 py-1 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-blue-500 w-24 sm:w-48 transition-all" data-action="node-rename-keydown" data-token="${n.token}">
+                <div id="edit_name_${nodeId}" class="hidden flex items-center gap-1">
+                    <input type="text" id="input_name_${nodeId}" value="${escapeHtml(n.name)}" class="bg-white dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded px-2 py-1 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-blue-500 w-24 sm:w-48 transition-all" data-action="node-rename-keydown" data-token="${nodeId}">
                     <div class="flex items-center flex-shrink-0">
-                        <button data-action="save-node-rename" data-token="${n.token}" class="text-green-500 hover:text-green-600 p-1"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg></button>
-                        <button data-action="cancel-node-rename" data-token="${n.token}" class="text-red-500 hover:text-red-600 p-1"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg></button>
+                        <button data-action="save-node-rename" data-token="${nodeId}" class="text-green-500 hover:text-green-600 p-1"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg></button>
+                        <button data-action="cancel-node-rename" data-token="${nodeId}" class="text-red-500 hover:text-red-600 p-1"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg></button>
                     </div>
                 </div>
             </td>
             <td class="px-2 sm:px-4 py-3 text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">${escapeHtml(decryptedIp) || 'Unknown'}</td>
-            <td class="px-2 sm:px-4 py-3 font-mono text-[10px] text-gray-400 dark:text-gray-500 truncate max-w-[80px]" title="${escapeHtml(decryptedToken)}">${escapeHtml(decryptedToken).substring(0, 8)}...</td>
+            <td class="px-2 sm:px-4 py-3 font-mono text-[10px] text-gray-400 dark:text-gray-500 truncate max-w-[80px]">${nodeId}</td>
             <td class="px-2 sm:px-4 py-3 text-right">
-                <button data-action="delete-node" data-token="${n.token}" class="text-red-500 hover:text-red-700 dark:hover:text-red-300 transition p-1" title="Delete">
+                <button data-action="delete-node" data-token="${nodeId}" class="text-red-500 hover:text-red-700 dark:hover:text-red-300 transition p-1" title="Delete">
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
                 </button>
             </td>
@@ -855,7 +855,7 @@ window.startNodeRename = function (token) {
 
     input.focus({ preventScroll: true });
 
-    const node = NODES_DATA.find(n => n.token === token);
+    const node = NODES_DATA.find(n => String(n.id) === token);
     if (node) input.value = node.name;
 
 };
@@ -871,7 +871,7 @@ window.saveNodeRename = async function (token) {
     if (!newName) return;
 
     // Optimistic update
-    const nodeIndex = NODES_DATA.findIndex(n => n.token === token);
+    const nodeIndex = NODES_DATA.findIndex(n => String(n.id) === token);
     const oldName = NODES_DATA[nodeIndex].name;
     if (nodeIndex > -1) {
         NODES_DATA[nodeIndex].name = newName;
@@ -885,7 +885,7 @@ window.saveNodeRename = async function (token) {
                 'Content-Type': 'application/json'
             },
             body: JSON.stringify({
-                token: token,
+                node_id: Number(token),
                 name: newName
             })
         });
@@ -938,11 +938,11 @@ async function deleteNode(token) {
                 'Content-Type': 'application/json'
             },
             body: JSON.stringify({
-                token: token
+                node_id: Number(token)
             })
         });
         if (res.ok) {
-            const idx = NODES_DATA.findIndex(n => n.token === token);
+            const idx = NODES_DATA.findIndex(n => String(n.id) === token);
             if (idx > -1) NODES_DATA.splice(idx, 1);
             renderNodes();
         } else {
@@ -1074,7 +1074,7 @@ function renderNotifNodesList() {
 
     container.innerHTML = DOMPurify.sanitize(NODES_DATA.map(n => {
         return `
-        <button data-action="switch-notif-view" data-token="${n.token}" class="flex items-center justify-between w-full bg-gray-50 dark:bg-black/20 p-4 rounded-xl hover:bg-gray-100 dark:hover:bg-black/30 transition border border-gray-200 dark:border-white/5 cursor-pointer group">
+        <button data-action="switch-notif-view" data-token="${n.id}" class="flex items-center justify-between w-full bg-gray-50 dark:bg-black/20 p-4 rounded-xl hover:bg-gray-100 dark:hover:bg-black/30 transition border border-gray-200 dark:border-white/5 cursor-pointer group">
             <div class="flex items-center gap-3 min-w-0">
                 <i class="icon icon-monitor icon-lg text-blue-500 group-hover:scale-110 transition-transform flex-shrink-0"></i>
                 <span class="text-sm font-bold text-gray-900 dark:text-white text-left truncate">${escapeHtml(n.name)}</span>
@@ -1090,7 +1090,7 @@ function renderNotifNodeDetail() {
     const titleEl = document.getElementById('notifNodeSettingsTitle');
     if (!container || !currentNodeForNotif) return;
 
-    const node = NODES_DATA.find(n => n.token === currentNodeForNotif);
+    const node = NODES_DATA.find(n => String(n.id) === currentNodeForNotif);
     if (node) {
         const textSpan = nameEl.querySelector('span.truncate');
         if (textSpan) {
