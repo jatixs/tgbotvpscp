@@ -814,6 +814,7 @@ function renderNodes() {
 
             return `
         <tr class="border-b border-gray-100 dark:border-white/5 hover:bg-gray-50 dark:hover:bg-white/5 transition group">
+            <td class="px-2 sm:px-4 py-3 font-mono text-[10px] text-gray-400 dark:text-gray-500 whitespace-nowrap">${nodeId}</td>
             <td class="px-2 sm:px-4 py-3 font-medium text-sm text-gray-900 dark:text-white w-full sm:w-auto">
                 <div id="disp_name_${nodeId}" class="flex items-center gap-2 max-w-[120px] sm:max-w-none">
                     <span class="truncate block" title="${escapeHtml(n.name)}">${escapeHtml(n.name)}</span>
@@ -832,7 +833,6 @@ function renderNodes() {
                 </div>
             </td>
             <td class="px-2 sm:px-4 py-3 text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">${escapeHtml(decryptedIp) || 'Unknown'}</td>
-            <td class="px-2 sm:px-4 py-3 font-mono text-[10px] text-gray-400 dark:text-gray-500 truncate max-w-[80px]">${nodeId}</td>
             <td class="px-2 sm:px-4 py-3 text-right">
                 <button data-action="delete-node" data-token="${nodeId}" class="text-red-500 hover:text-red-700 dark:hover:text-red-300 transition p-1" title="Delete">
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>

@@ -1250,7 +1250,7 @@ async def process_billing_amount(message: types.Message, state: FSMContext):
             
             menu_msg_id = data.get("menu_msg_id")
             if menu_msg_id:
-                currency = getattr(node_obj, "billing_currency", "$")
+                currency = getattr(node_obj, "currency", None) or "$"
                 amount_str = _fmt_billing_amount(amount, currency, lang)
                 date_val = getattr(node_obj, "next_payment_date", None)
                 date_str = date_val.strftime("%d.%m.%Y") if date_val else _("billing_date_not_set", lang)
@@ -1369,7 +1369,7 @@ async def process_billing_date_shift(message: types.Message, state: FSMContext):
             menu_msg_id = data.get("menu_msg_id")
             if menu_msg_id:
                 amount_val = getattr(node_obj, "billing_amount", None)
-                currency = getattr(node_obj, "billing_currency", "$")
+                currency = getattr(node_obj, "currency", None) or "$"
                 amount_str = _fmt_billing_amount(amount_val, currency, lang)
                 date_str = node_obj.next_payment_date.strftime("%d.%m.%Y")
                 
