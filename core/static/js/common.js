@@ -2398,10 +2398,11 @@ window.showBillingModal = function(name, amount, currency, dateStr, daysLeft) {
     
     const amountVal = amount !== null && amount !== undefined ? `${amount} ${currency}` : (I18N?.web_billing_not_set || "Не установлена");
     const dateVal = dateStr ? new Date(dateStr).toLocaleDateString() : (I18N?.web_billing_not_set || "Не установлена");
+    const nameHtml = replaceEmojisWithFlagsHTML(escapeHtml(String(name ?? '')));
 
     const contentHtml = `
         <div class="mb-4 text-center">
-            <h3 class="text-xl font-black text-gray-900 dark:text-white">${name}</h3>
+            <h3 class="text-xl font-black text-gray-900 dark:text-white">${nameHtml}</h3>
         </div>
         <div class="bg-gray-50 dark:bg-black/20 rounded-xl p-4 space-y-3 border border-gray-100 dark:border-white/5 shadow-inner">
             <div class="flex justify-between items-center border-b border-gray-200 dark:border-white/10 pb-2">
