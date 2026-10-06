@@ -21,6 +21,7 @@
 ### 🌐 HTTPS and Agent Migration
 * The installer can configure HTTPS with Nginx and Certbot for a domain or globally routable public IPv4. IP certificates use Let's Encrypt's short-lived profile and last 160 hours; renewal is checked hourly.
 * HTTP-01 validation requires inbound TCP port 80 to be reachable. Private and local IP addresses are unsupported. Owners of external reverse proxies remain responsible for certificate issuance and renewal.
+* Before invoking Certbot, the installer checks the challenge file locally and through published IPv4/IPv6 addresses. This helps detect incorrect DNS, redirects, or CDN filtering early; with Cloudflare, temporarily use DNS-only or bypass WAF and cache for the ACME path.
 * Existing agents migrate in stages: update the master first, then each agent discovers the HTTPS origin, validates TLS and hostname consistency, and saves the new URL. During rollout, a restricted HTTP bridge accepts only discovery, bootstrap, and HMAC-signed heartbeats.
 * `tgcp-bot tls status` reports node migration state; `tgcp-bot tls check` verifies readiness; `tgcp-bot tls finalize` disables the bridge after every node has migrated.
 
