@@ -15,6 +15,7 @@ from typing import Any
 from aiohttp import web
 
 from .. import config as current_config
+from .. import nodes_db
 
 # Lazy imports for modules
 from .. import shared_state

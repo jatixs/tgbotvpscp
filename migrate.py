@@ -108,14 +108,7 @@ def ensure_env_variables():
     logger.info("🔍 Checking environment variables in .env...")
 
     default_web_host = "127.0.0.1"
-    try:
-        with open(env_file, "r", encoding="utf-8") as f:
-            for line in f:
-                if line.startswith("DEPLOY_MODE=") and line.split("=", 1)[1].strip().strip('"') == "docker":
-                    default_web_host = "0.0.0.0"
-                    break
-    except OSError:
-        pass
+    # Docker Compose overrides this inside the container; keep the persisted host default private.
     
     required_vars = {
         "WEB_SERVER_HOST": default_web_host,
