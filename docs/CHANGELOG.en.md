@@ -12,7 +12,7 @@
 
 ## [1.26.0] - 2026-10-07
 
-### � New Features
+### 🚀 New Features
 * **HTTPS for an IP address.** The installer sets up Nginx + Certbot not only for a domain but also for a public IPv4 without one (160-hour certificate with automatic renewal). An existing certificate (Nginx, Cloudflare Origin, Certbot) is reused so repeated runs don't hit Let's Encrypt limits. Requires inbound port 80; private IPs are not supported.
 * **Agent migration to HTTPS.** Nodes move in stages (master first, then nodes): the agent discovers the HTTPS address and validates the certificate, while a restricted HMAC-signed HTTP bridge covers the transition. Managed with `tgcp-bot tls status | check | finalize`.
 * **Chart period.** Resource and network charts (agent and node windows) got a period selector from 3 minutes to 7 days, like Zabbix/Grafana. History is stored in the database (raw samples for an hour, per-minute for a day, five-minute for a week), delivered over an encrypted SSE stream; short periods update live.
