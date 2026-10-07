@@ -15,6 +15,7 @@ from aiohttp import web
 from ..config import BASE_DIR, ENABLE_WEB_UI, WEB_SERVER_HOST, WEB_SERVER_PORT
 from ..i18n import log_text
 from ..tasks import cleanup_server, start_background_tasks
+from .api_metrics import routes as metrics_routes
 from .api_nodes import routes as node_routes
 from .api_system import routes as system_routes
 from .auth import routes as auth_routes
@@ -70,6 +71,7 @@ def _register_routes(app: web.Application) -> None:
         app.add_routes(auth_routes)
         app.add_routes(node_routes)
         app.add_routes(system_routes)
+        app.add_routes(metrics_routes)
         app.add_routes(streaming_routes)
         app.add_routes(extra_routes)
         logging.info(log_text("web_routes_registered"))

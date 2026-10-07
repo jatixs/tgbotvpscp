@@ -305,13 +305,23 @@
 
                     <!-- Charts Row -->
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-                        <div class="h-[200px] bg-white/50 dark:bg-black/20 rounded-xl p-4 border border-gray-100 dark:border-white/5">
-                            <h4 class="text-xs font-bold text-gray-500 uppercase mb-2 text-center">{{ web_resources_chart }}</h4>
-                            <canvas id="modalResChart"></canvas>
+                        <div class="h-[200px] bg-white/50 dark:bg-black/20 rounded-xl p-4 border border-gray-100 dark:border-white/5 chart-card">
+                            <div class="chart-card-head">
+                                <h4 class="text-xs font-bold text-gray-500 uppercase truncate">{{ web_resources_chart }}</h4>
+                                <div data-chart-range="modalResChart" class="chart-range"></div>
+                            </div>
+                            <div class="chart-card-body">
+                                <canvas id="modalResChart"></canvas>
+                            </div>
                         </div>
-                        <div class="h-[200px] bg-white/50 dark:bg-black/20 rounded-xl p-4 border border-gray-100 dark:border-white/5">
-                            <h4 class="text-xs font-bold text-gray-500 uppercase mb-2 text-center">{{ web_network_chart }}</h4>
-                            <canvas id="modalNetChart"></canvas>
+                        <div class="h-[200px] bg-white/50 dark:bg-black/20 rounded-xl p-4 border border-gray-100 dark:border-white/5 chart-card">
+                            <div class="chart-card-head">
+                                <h4 class="text-xs font-bold text-gray-500 uppercase truncate">{{ web_network_chart }}</h4>
+                                <div data-chart-range="modalNetChart" class="chart-range"></div>
+                            </div>
+                            <div class="chart-card-body">
+                                <canvas id="modalNetChart"></canvas>
+                            </div>
                         </div>
                     </div>
 
@@ -523,6 +533,7 @@
         </div>
 
         <script src="/static/js/common.js?v={{ web_version }}"></script>
+        <script src="/static/js/chart_range.js?v={{ web_version }}"></script>
         <script src="/static/js/nodes_monitor.js?v={{ web_version }}"></script>
     </body>
 </html>

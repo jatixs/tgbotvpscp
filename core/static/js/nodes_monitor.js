@@ -12,6 +12,8 @@ let selectedNodes = new Set();
 let currentNodeId = null;
 let modalResChart = null;
 let modalNetChart = null;
+let modalResRangeCtl = null;
+let modalNetRangeCtl = null;
 let nodesMonitorSSESource = null;
 let nodeDetailSSESource = null;
 let nodeServicesSSESource = null;
@@ -693,6 +695,33 @@ async function openNodeDetail(token) {
 
     connectNodeDetailStream(token);
     connectNodeServicesStream(token);
+    startModalChartRanges();
+}
+
+function startModalChartRanges() {
+    if (typeof window.createChartRangeController !== 'function') return;
+    if (modalResRangeCtl) modalResRangeCtl.destroy();
+    if (modalNetRangeCtl) modalNetRangeCtl.destroy();
+    const getSource = () => (currentNodeId ? { source: 'node', node_id: currentNodeId } : null);
+    modalResRangeCtl = window.createChartRangeController({
+        key: 'modalResChart',
+        mount: '[data-chart-range="modalResChart"]',
+        canvasId: 'modalResChart',
+        getSource,
+        render: (series) => updateModalCharts(series, 'res')
+    }).start();
+    modalNetRangeCtl = window.createChartRangeController({
+        key: 'modalNetChart',
+        mount: '[data-chart-range="modalNetChart"]',
+        canvasId: 'modalNetChart',
+        getSource,
+        render: (series) => updateModalCharts(series, 'net')
+    }).start();
+}
+
+function stopModalChartRanges() {
+    if (modalResRangeCtl) modalResRangeCtl.stop();
+    if (modalNetRangeCtl) modalNetRangeCtl.stop();
 }
 
 function closeNodeDetailModal() {
@@ -709,6 +738,7 @@ function closeNodeDetailModal() {
     if (typeof window.hideAvailabilityPopover === 'function') window.hideAvailabilityPopover();
 
     stopNodeModalStreams();
+    stopModalChartRanges();
     
     // Destroy charts
     if (modalResChart) {
@@ -873,48 +903,26 @@ function updateNodeModal(data) {
         if (!isDefault && typeof USER_ROLE !== 'undefined' && USER_ROLE !== 'users') resetBtn.classList.remove('hidden');
         else resetBtn.classList.add('hidden');
     }
-
-    // Update charts
-    updateModalCharts(data.history || []);
 }
 
-function updateModalCharts(history) {
-    if (!history || history.length < 2) return;
-
-    const gapThreshold = 25;
-    const labels = [];
-    const cpuData = [];
-    const ramData = [];
-    const rxData = [];
-    const txData = [];
-
-    labels.push(new Date(history[0].t * 1000).toLocaleTimeString([], {
-        hour: '2-digit', minute: '2-digit', second: '2-digit'
-    }));
-    cpuData.push(history[0].c || 0);
-    ramData.push(history[0].r || 0);
-    rxData.push(0);
-    txData.push(0);
-
-    for (let i = 1; i < history.length; i++) {
-        const dt = history[i].t - history[i - 1].t;
-        if (dt > gapThreshold) {
-            labels.push("");
-            cpuData.push(null);
-            ramData.push(null);
-            rxData.push(null);
-            txData.push(null);
+function updateModalCharts(series, which) {
+    const canvas = document.getElementById(which === 'res' ? 'modalResChart' : 'modalNetChart');
+    if (!canvas) return;
+    if (!series || series.points.length < 2) {
+        const chart = which === 'res' ? modalResChart : modalNetChart;
+        if (chart) {
+            chart.data.labels = [];
+            chart.data.datasets.forEach(ds => { ds.data = []; });
+            chart.update('none');
         }
-        labels.push(new Date(history[i].t * 1000).toLocaleTimeString([], {
-            hour: '2-digit', minute: '2-digit', second: '2-digit'
-        }));
-        cpuData.push(history[i].c || 0);
-        ramData.push(history[i].r || 0);
-        
-        const dtFixed = Math.max(dt, 1);
-        rxData.push((Math.max(0, history[i].rx - history[i - 1].rx) * 8 / dtFixed / 1024));
-        txData.push((Math.max(0, history[i].tx - history[i - 1].tx) * 8 / dtFixed / 1024));
+        return;
     }
+
+    const labels = series.labels;
+    const cpuData = series.cpu;
+    const ramData = series.ram;
+    const rxData = series.rx;
+    const txData = series.tx;
     
     const isDark = document.documentElement.classList.contains('dark');
     const gridColor = isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.05)';
@@ -928,12 +936,14 @@ function updateModalCharts(history) {
         return gradient;
     }
 
-    const resCtx = document.getElementById('modalResChart').getContext('2d');
-    const netCtx = document.getElementById('modalNetChart').getContext('2d');
+    const resCtx = canvas.getContext('2d');
+    const netCtx = resCtx;
 
     const interactiveOptions = window.buildInteractiveChartOptions ? window.buildInteractiveChartOptions({}) : {};
 
-    if (modalResChart) {
+    if (which !== 'res') {
+        // handled by the network branch below
+    } else if (modalResChart) {
         const applyModalResChartData = () => {
             modalResChart.data.labels = labels;
             modalResChart.data.datasets[0].data = cpuData;
@@ -996,6 +1006,8 @@ function updateModalCharts(history) {
         if (window.attachChartInteractions) window.attachChartInteractions(modalResChart, 'modalResChart');
     }
     
+    if (which !== 'net') return;
+
     if (modalNetChart) {
         const applyModalNetChartData = () => {
             modalNetChart.data.labels = labels;

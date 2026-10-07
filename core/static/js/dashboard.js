@@ -49,6 +49,9 @@ let logSSESource = null;
 let servicesSSESource = null;
 
 let agentChart = null;
+let agentRangeCtl = null;
+let nodeResRangeCtl = null;
+let nodeNetRangeCtl = null;
 let quickCpuChart = null;
 let quickRamChart = null;
 let quickDiskChart = null;
@@ -104,6 +107,8 @@ window.initDashboard = function () {
         window.sseSource.addEventListener('nodes_list', handleSSENodesList);
     }
 
+    initAgentChartRange();
+
     if (document.getElementById('nodesList')) {
         const searchInput = document.getElementById('nodeSearch');
         if (searchInput) {
@@ -141,6 +146,52 @@ function cleanupDashboardSources() {
     }
     if (window.nodesPollInterval) clearInterval(window.nodesPollInterval);
     if (window.agentPollInterval) clearInterval(window.agentPollInterval);
+}
+
+function initAgentChartRange() {
+    const canvas = document.getElementById('agentChart');
+    if (!canvas || typeof window.createChartRangeController !== 'function') return;
+
+    // After SPA navigation the canvas is a fresh element: the old Chart instance is dead.
+    if (agentChart && agentChart.canvas !== canvas) {
+        agentChart.destroy();
+        agentChart = null;
+    }
+    if (agentRangeCtl) agentRangeCtl.destroy();
+    agentRangeCtl = window.createChartRangeController({
+        key: 'agentChart',
+        mount: '[data-chart-range="agentChart"]',
+        canvasId: 'agentChart',
+        getSource: () => ({ source: 'agent' }),
+        render: renderAgentChart
+    });
+    agentRangeCtl.start();
+}
+
+function startNodeChartRanges() {
+    if (typeof window.createChartRangeController !== 'function') return;
+    if (nodeResRangeCtl) nodeResRangeCtl.destroy();
+    if (nodeNetRangeCtl) nodeNetRangeCtl.destroy();
+    const getSource = () => (currentNodeId ? { source: 'node', node_id: currentNodeId } : null);
+    nodeResRangeCtl = window.createChartRangeController({
+        key: 'nodeResChart',
+        mount: '[data-chart-range="nodeResChart"]',
+        canvasId: 'nodeResChart',
+        getSource,
+        render: renderNodeResChart
+    }).start();
+    nodeNetRangeCtl = window.createChartRangeController({
+        key: 'nodeNetChart',
+        mount: '[data-chart-range="nodeNetChart"]',
+        canvasId: 'nodeNetChart',
+        getSource,
+        render: renderNodeNetChart
+    }).start();
+}
+
+function stopNodeChartRanges() {
+    if (nodeResRangeCtl) nodeResRangeCtl.stop();
+    if (nodeNetRangeCtl) nodeNetRangeCtl.stop();
 }
 const handleSSEAgentStats = (e) => {
     if (!document.getElementById('agentChart')) return;
@@ -950,7 +1001,6 @@ function updateAgentStatsUI(data) {
                 }
             }
         }
-        renderAgentChart(data.history);
         updateQuickStatCharts();
     } catch (e) {
         console.error("Agent stats UI error:", e);
@@ -1034,29 +1084,21 @@ function updateQuickStatCharts() {
     quickDiskChart = renderQuickStatChart('quickDiskChart', quickDiskChart, 'rgb(34, 197, 94)', 'disk');
 }
 
-function renderAgentChart(history) {
-    if (!history || history.length < 2) return;
-    const ctx = document.getElementById('agentChart').getContext('2d');
-    const labels = [];
-    const netRx = [];
-    const netTx = [];
-    const gapThreshold = 10;
-
-    for (let i = 1; i < history.length; i++) {
-        const dt = history[i].t - history[i - 1].t;
-        if (dt > gapThreshold) {
-            labels.push("");
-            netRx.push(null);
-            netTx.push(null);
+function renderAgentChart(series) {
+    const canvas = document.getElementById('agentChart');
+    if (!canvas) return;
+    const labels = series.labels;
+    const netRx = series.rx;
+    const netTx = series.tx;
+    if (series.points.length < 2) {
+        if (agentChart) {
+            agentChart.data.labels = [];
+            agentChart.data.datasets.forEach(ds => { ds.data = []; });
+            agentChart.update('none');
         }
-        labels.push(new Date(history[i].t * 1000).toLocaleTimeString([], {
-            hour: '2-digit',
-            minute: '2-digit',
-            second: '2-digit'
-        }));
-        netRx.push((Math.max(0, history[i].rx - history[i - 1].rx) * 8 / dt / 1024));
-        netTx.push((Math.max(0, history[i].tx - history[i - 1].tx) * 8 / dt / 1024));
+        return;
     }
+    const ctx = canvas.getContext('2d');
 
     const isDark = document.documentElement.classList.contains('dark');
     const gridColor = isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.05)';
@@ -1536,6 +1578,7 @@ async function openNodeDetails(nodeId, color) {
         nodeSSESource.close();
         nodeSSESource = null;
     }
+    startNodeChartRanges();
     nodeSSESource = new EventSource(`/api/events/node?node_id=${encodeURIComponent(nodeId)}`);
 
     nodeSSESource.addEventListener('node_details', (e) => {
@@ -1676,7 +1719,6 @@ function updateNodeDetailsUI(data) {
         lsEl.innerText = diff < 60 ? statusOnline : `${statusLastSeen}${new Date(lastSeen * 1000).toLocaleString()}`;
         lsEl.className = diff < 60 ? "text-green-500 font-bold text-xs" : "text-red-500 font-bold text-xs";
     }
-    renderCharts(data.history);
 }
 
 function closeNodeModal() {
@@ -1685,6 +1727,7 @@ function closeNodeModal() {
         animateModalClose(modal);
     }
     removeModalLoading();
+    stopNodeChartRanges();
     if (typeof window.hideDashboardAvailabilityPopover === 'function') window.hideDashboardAvailabilityPopover();
     if (nodeSSESource) {
         nodeSSESource.close();
@@ -1762,56 +1805,18 @@ window.handleRenameKeydown = function (event) {
     }
 };
 
-function renderCharts(history) {
-    if (!history || history.length < 2) return;
+function clearChartData(chart) {
+    if (!chart) return;
+    chart.data.labels = [];
+    chart.data.datasets.forEach(ds => { ds.data = []; });
+    chart.update('none');
+}
 
-    const ctxRes = document.getElementById('nodeResChart').getContext('2d');
-    const ctxNet = document.getElementById('nodeNetChart').getContext('2d');
-    const gapThreshold = 25;
-
-    const labels = [];
-    const cpuData = [];
-    const ramData = [];
-    const netRx = [];
-    const netTx = [];
-
-    labels.push(new Date(history[0].t * 1000).toLocaleTimeString([], {
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit'
-    }));
-    cpuData.push(history[0].c);
-    ramData.push(history[0].r);
-    netRx.push(0);
-    netTx.push(0);
-
-    for (let i = 1; i < history.length; i++) {
-        const dt = history[i].t - history[i - 1].t;
-        if (dt > gapThreshold) {
-            labels.push("");
-            cpuData.push(null);
-            ramData.push(null);
-            netRx.push(null);
-            netTx.push(null);
-        }
-        labels.push(new Date(history[i].t * 1000).toLocaleTimeString([], {
-            hour: '2-digit',
-            minute: '2-digit',
-            second: '2-digit'
-        }));
-        cpuData.push(history[i].c);
-        ramData.push(history[i].r);
-        netRx.push((Math.max(0, history[i].rx - history[i - 1].rx) * 8 / dt / 1024));
-        netTx.push((Math.max(0, history[i].tx - history[i - 1].tx) * 8 / dt / 1024));
-    }
-
+function buildNodeChartOptions() {
     const isDark = document.documentElement.classList.contains('dark');
     const gridColor = isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.05)';
     const tickColor = isDark ? '#9ca3af' : '#6b7280';
     const isMobile = window.innerWidth < 640;
-
-    const lblCpu = (typeof I18N !== 'undefined' && I18N.web_label_cpu) ? I18N.web_label_cpu : "CPU";
-    const lblRam = (typeof I18N !== 'undefined' && I18N.web_label_ram) ? I18N.web_label_ram : "RAM";
 
     const commonOptionsBase = {
         responsive: true,
@@ -1863,7 +1868,23 @@ function renderCharts(history) {
             }
         }
     };
-    const commonOptions = window.buildInteractiveChartOptions ? window.buildInteractiveChartOptions(commonOptionsBase) : commonOptionsBase;
+    return window.buildInteractiveChartOptions ? window.buildInteractiveChartOptions(commonOptionsBase) : commonOptionsBase;
+}
+
+function renderNodeResChart(series) {
+    const canvas = document.getElementById('nodeResChart');
+    if (!canvas) return;
+    if (series.points.length < 2) {
+        clearChartData(chartRes);
+        return;
+    }
+    const ctxRes = canvas.getContext('2d');
+    const labels = series.labels;
+    const cpuData = series.cpu;
+    const ramData = series.ram;
+    const commonOptions = buildNodeChartOptions();
+    const lblCpu = (typeof I18N !== 'undefined' && I18N.web_label_cpu) ? I18N.web_label_cpu : "CPU";
+    const lblRam = (typeof I18N !== 'undefined' && I18N.web_label_ram) ? I18N.web_label_ram : "RAM";
 
     if (chartRes) {
         const applyResChartData = () => {
@@ -1915,6 +1936,20 @@ function renderCharts(history) {
         });
         if (window.attachChartInteractions) window.attachChartInteractions(chartRes, 'nodeResChart');
     }
+}
+
+function renderNodeNetChart(series) {
+    const canvas = document.getElementById('nodeNetChart');
+    if (!canvas) return;
+    if (series.points.length < 2) {
+        clearChartData(chartNet);
+        return;
+    }
+    const ctxNet = canvas.getContext('2d');
+    const labels = series.labels;
+    const netRx = series.rx;
+    const netTx = series.tx;
+    const commonOptions = buildNodeChartOptions();
 
     if (chartNet) {
         const applyNetChartData = () => {
