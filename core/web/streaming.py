@@ -137,7 +137,7 @@ def _get_top_processes(metric: str) -> list[str]:
         return f"{num:.1f} PB"
 
     try:
-        attrs = ["pid", "name", "cpu_percent", "memory_percent"]
+        attrs = ["pid", "name", "cpu_percent", "memory_percent", "memory_info"]
         if metric == "disk":
             attrs.append("io_counters")
 
@@ -150,13 +150,27 @@ def _get_top_processes(metric: str) -> list[str]:
             except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
                 continue
 
+        def get_rss(proc: dict[str, Any]) -> str:
+            mem = proc.get("memory_info")
+            return sizeof_fmt(mem.rss) if mem else "n/a"
+
+        def get_cpu_freq(proc: dict[str, Any], mhz: float) -> str:
+            used = float(proc.get("cpu_percent", 0)) / 100 * mhz
+            return f"{used / 1000:.2f} GHz" if used >= 1000 else f"{used:.0f} MHz"
+
+        # "name (primary|alt)": the dashboard toggles between the two values on click.
         if metric == "cpu":
+            freq = psutil.cpu_freq()
+            mhz = freq.current if freq else 0
             sorted_processes = sorted(processes, key=lambda p: p.get("cpu_percent", 0), reverse=True)[:5]
-            return [f"{p['name']} ({p.get('cpu_percent', 0)}%)" for p in sorted_processes]
+            return [
+                f"{p['name']} ({p.get('cpu_percent', 0)}%" + (f"|{get_cpu_freq(p, mhz)}" if mhz else "") + ")"
+                for p in sorted_processes
+            ]
 
         if metric == "ram":
             sorted_processes = sorted(processes, key=lambda p: p.get("memory_percent", 0), reverse=True)[:5]
-            return [f"{p['name']} ({p.get('memory_percent', 0):.1f}%)" for p in sorted_processes]
+            return [f"{p['name']} ({p.get('memory_percent', 0):.1f}%|{get_rss(p)})" for p in sorted_processes]
 
         if metric == "disk":
             def get_io(proc: dict[str, Any]) -> int:
@@ -164,7 +178,11 @@ def _get_top_processes(metric: str) -> list[str]:
                 return int(io.read_bytes + io.write_bytes) if io else 0
 
             sorted_processes = sorted(processes, key=get_io, reverse=True)[:5]
-            return [f"{p['name']} ({sizeof_fmt(get_io(p))})" for p in sorted_processes]
+            disk_total = psutil.disk_usage(get_host_path("/")).total
+            return [
+                f"{p['name']} ({sizeof_fmt(get_io(p))}" + (f"|{get_io(p) / disk_total * 100:.2f}%" if disk_total else "") + ")"
+                for p in sorted_processes
+            ]
 
         return []
     except Exception:

@@ -186,11 +186,17 @@ function formatProcessList(procList, title, colorClass = "text-gray-500") {
         const match = procStr.match(/^(.*)\s\((.*)\)$/);
         let name = procStr;
         let value = "";
+        let alt = "";
 
         if (match) {
             name = match[1];
-            value = match[2];
+            [value, alt = ""] = match[2].split('|');
         }
+
+        const badgeBase = "text-[10px] font-mono font-bold bg-gray-100 dark:bg-white/10 px-1.5 py-0.5 rounded ml-2 text-gray-600 dark:text-gray-300 whitespace-nowrap";
+        const valueAttrs = alt
+            ? `class="proc-value-toggle cursor-pointer select-none ${badgeBase}" data-primary="${escapeHtml(value)}" data-alt="${escapeHtml(alt)}" data-showing="primary"`
+            : `class="${badgeBase}"`;
 
         return `
         <div class="flex justify-between items-center py-1.5 border-b border-gray-500/10 last:border-0 group">
@@ -198,7 +204,7 @@ function formatProcessList(procList, title, colorClass = "text-gray-500") {
                 <div class="w-1 h-1 rounded-full bg-gray-300 dark:bg-gray-600 group-hover:bg-blue-400 transition-colors"></div>
                 <span class="text-xs font-medium text-gray-700 dark:text-gray-200 truncate" title="${escapeHtml(name)}">${escapeHtml(name)}</span>
             </div>
-            <span class="text-[10px] font-mono font-bold bg-gray-100 dark:bg-white/10 px-1.5 py-0.5 rounded ml-2 text-gray-600 dark:text-gray-300 whitespace-nowrap">${escapeHtml(value)}</span>
+            <span ${valueAttrs}>${escapeHtml(value)}</span>
         </div>`;
     }).join('');
 
@@ -213,6 +219,18 @@ function formatProcessList(procList, title, colorClass = "text-gray-500") {
         </div>
     `;
 }
+
+// Clicking a process value flips every value in the same modal between % and real size.
+document.addEventListener('click', (e) => {
+    const badge = e.target.closest?.('.proc-value-toggle');
+    if (!badge) return;
+    const root = badge.closest('#hintModalContent') || document;
+    const showAlt = badge.dataset.showing !== 'alt';
+    root.querySelectorAll('.proc-value-toggle').forEach((el) => {
+        el.textContent = showAlt ? el.dataset.alt : el.dataset.primary;
+        el.dataset.showing = showAlt ? 'alt' : 'primary';
+    });
+});
 
 function formatInterfaceList(interfaces, type, title, colorClass = "text-gray-500") {
     if (!interfaces) return '';
@@ -1384,6 +1402,7 @@ function setModalLoading() {
         const el = document.getElementById(id);
         if (el) el.innerText = '...';
     });
+    renderNodeModalTitle(document.getElementById('modalNodeName'), '...');
     const lastSeen = document.getElementById('modalNodeLastSeen');
     if (lastSeen) {
         lastSeen.innerText = '...';
@@ -1545,15 +1564,8 @@ function updateNodeDetailsUI(data) {
     removeModalLoading();
     const inputContainer = document.getElementById('nodeNameInputContainer');
     if (inputContainer && inputContainer.classList.contains('hidden')) {
-        const newTitleHtml = replaceEmojisWithFlagsHTML(escapeHtml(decryptData(data.name)));
-        const titleEl = document.getElementById('modalNodeName');
-        const tempTitle = titleEl.cloneNode(false);
-        tempTitle.innerHTML = DOMPurify.sanitize(newTitleHtml);
-        if (!updateDOM(titleEl, tempTitle)) {
-            titleEl.innerHTML = DOMPurify.sanitize(newTitleHtml);
-        }
-        if (typeof parsePageEmojis === 'function') parsePageEmojis(titleEl);
-        
+        renderNodeModalTitle(document.getElementById('modalNodeName'), decryptData(data.name));
+
         const nameContainer = document.getElementById('nodeNameContainer');
         if (nameContainer) {
             let badgeEl = document.getElementById('nodeBillingBadge');
@@ -1684,7 +1696,8 @@ window.startNodeRename = function () {
     const nameDisplay = document.getElementById('nodeNameContainer');
     const nameInputContainer = document.getElementById('nodeNameInputContainer');
     const nameInput = document.getElementById('modalNodeNameInput');
-    const currentName = document.getElementById('modalNodeName').innerText;
+    const titleEl = document.getElementById('modalNodeName');
+    const currentName = titleEl.dataset.rawName || titleEl.innerText;
 
     if (nameDisplay && nameInputContainer && nameInput) {
         nameDisplay.classList.add('hidden');
@@ -1708,7 +1721,7 @@ window.saveNodeRename = async function () {
     const nameInput = document.getElementById('modalNodeNameInput');
     const newName = nameInput.value.trim();
     if (!newName || !currentNodeId) return;
-    document.getElementById('modalNodeName').innerHTML = replaceEmojisWithFlagsHTML(escapeHtml(newName));
+    renderNodeModalTitle(document.getElementById('modalNodeName'), newName);
     cancelNodeRename();
 
     try {
