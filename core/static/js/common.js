@@ -9,7 +9,7 @@ if (window.Chart) {
     window.Chart.defaults.animation.easing = 'easeOutQuart';
     window.Chart.defaults.animations.colors.properties = ['color', 'borderColor'];
 
-    window.Chart.register({
+    const legendDatasetFadePlugin = {
         id: 'legend-dataset-fade',
         beforeDatasetDraw(chart, args) {
             const fade = chart.$legendDatasetFades?.[args.index];
@@ -20,7 +20,13 @@ if (window.Chart) {
         afterDatasetDraw(chart, args) {
             if (chart.$legendDatasetFades?.[args.index]) chart.ctx.restore();
         }
-    });
+    };
+    // The built-in filler draws area fills in its own beforeDatasetDraw hook; it must run
+    // after ours so the gradient fill fades together with the line instead of snapping off.
+    const fillerPlugin = window.Chart.registry.plugins.get('filler');
+    if (fillerPlugin) window.Chart.unregister(fillerPlugin);
+    window.Chart.register(legendDatasetFadePlugin);
+    if (fillerPlugin) window.Chart.register(fillerPlugin);
 
     window.Chart.defaults.plugins.legend.onClick = (event, item, legend) => {
         const chart = legend.chart;
@@ -28,7 +34,6 @@ if (window.Chart) {
         if (!Number.isInteger(datasetIndex) || chart.$legendDatasetFades?.[datasetIndex]) return;
 
         const wasVisible = chart.isDatasetVisible(datasetIndex);
-        const targetOpacity = wasVisible ? 0 : 1;
         if (document.documentElement.classList.contains('perf-mode')) {
             chart.setDatasetVisibility(datasetIndex, !wasVisible);
             chart.update('none');
@@ -41,14 +46,16 @@ if (window.Chart) {
         if (!wasVisible) chart.update('none');
 
         const startedAt = performance.now();
-        const duration = 320;
+        const duration = 700;
         const animateFade = now => {
             if (!chart.canvas) {
                 delete chart.$legendDatasetFades[datasetIndex];
                 return;
             }
             const progress = Math.min(1, (now - startedAt) / duration);
-            const eased = 1 - Math.pow(1 - progress, 3);
+            const eased = progress < 0.5
+                ? 4 * progress * progress * progress
+                : 1 - Math.pow(-2 * progress + 2, 3) / 2;
             fade.opacity = wasVisible ? 1 - eased : eased;
             chart.draw();
 
@@ -873,7 +880,8 @@ function parsePageEmojis(element) {
                 if (icon.length === 11 && /^1f1[e-f][0-9a-f]-1f1[e-f][0-9a-f]$/.test(icon)) {
                     return {
                         class: 'emoji flagcdn',
-                        style: 'width: 1.4em; height: 1em; object-fit: cover; border-radius: 2px; display: inline-block; vertical-align: middle; box-shadow: 0 1px 2px rgba(0,0,0,0.1)'
+                        // -0.15em centers a 1em-high flag on the cap height of bold text
+                        style: 'width: 1.4em; height: 1em; object-fit: cover; border-radius: 2px; display: inline-block; vertical-align: -0.15em; box-shadow: 0 1px 2px rgba(0,0,0,0.1)'
                     };
                 }
             },
@@ -892,7 +900,7 @@ function replaceEmojisWithFlagsHTML(text) {
         const code2 = match.codePointAt(2);
         const char1 = String.fromCharCode(code1 - 0x1F1E6 + 97);
         const char2 = String.fromCharCode(code2 - 0x1F1E6 + 97);
-        return `<img src="https://flagcdn.com/${char1}${char2}.svg" class="emoji flagcdn" style="width: 1.4em; height: 1em; object-fit: cover; border-radius: 2px; display: inline-block; vertical-align: middle; box-shadow: 0 1px 2px rgba(0,0,0,0.1)" alt="${match}" />`;
+        return `<img src="https://flagcdn.com/${char1}${char2}.svg" class="emoji flagcdn" style="width: 1.4em; height: 1em; object-fit: cover; border-radius: 2px; display: inline-block; vertical-align: -0.15em; box-shadow: 0 1px 2px rgba(0,0,0,0.1)" alt="${match}" />`;
     });
 }
 

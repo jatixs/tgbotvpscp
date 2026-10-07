@@ -915,6 +915,82 @@ html.dark .header-billing-btn[data-status="gray"] {
 		margin: 0 4px !important;
 		flex-shrink: 0 !important;
 	}
+
+	/* Period selector, ping and IP share one row: never wrap values, let the IP cell take the slack */
+	#networkBadgesContainer .network-badge,
+	#networkBadgesContainer .chart-range-btn {
+		white-space: nowrap;
+	}
+
+	#networkBadgesContainer .network-badge {
+		padding-left: 0.5rem !important;
+		padding-right: 0.5rem !important;
+		gap: 0.35rem !important;
+		min-width: 0;
+	}
+
+	#agentPingBadge {
+		flex: 0 0 auto !important;
+	}
+
+	#agentIpBadge {
+		flex: 1 1 auto !important;
+		justify-content: center !important;
+	}
+
+	#agentIpBadge #agentIp {
+		font-size: 11px;
+		letter-spacing: -0.01em;
+	}
+
+	/* The selector merges into the panel and is separated from the badges by the same divider line */
+	#networkBadgesContainer .chart-range {
+		flex: 0 0 auto;
+		padding-right: 4px;
+		margin-right: 4px;
+		border-right: 1px solid #d1d5db;
+	}
+
+	html.dark #networkBadgesContainer .chart-range {
+		border-right-color: #4b5563;
+	}
+
+	#networkBadgesContainer .chart-range-btn {
+		background: transparent;
+		border-color: transparent;
+		box-shadow: none;
+		height: 1.75rem;
+		padding: 0 0.4rem 0 0.45rem;
+	}
+}
+
+/* Below ~400px the three cells no longer fit in one row: period selector gets its own row above ping/IP */
+@media (max-width: 400px) {
+	#networkBadgesContainer {
+		flex-wrap: wrap;
+		row-gap: 0.25rem !important;
+	}
+
+	#networkBadgesContainer .chart-range {
+		flex: 1 1 100%;
+		justify-content: center;
+		padding-right: 0;
+		margin-right: 0;
+		border-right: none;
+		border-bottom: 1px solid #e5e7eb;
+		padding-bottom: 0.25rem;
+	}
+
+	html.dark #networkBadgesContainer .chart-range {
+		border-bottom-color: rgba(255, 255, 255, 0.08);
+	}
+
+	/* Second row: ping and IP split the width evenly, both centered */
+	#agentPingBadge,
+	#agentIpBadge {
+		flex: 1 1 0% !important;
+		justify-content: center !important;
+	}
 }
 
 /* Lock Icon Styles */

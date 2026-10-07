@@ -1113,7 +1113,7 @@ function renderAgentChart(series, animate = true) {
     const gridColor = isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.05)';
     const tickColor = isDark ? '#9ca3af' : '#6b7280';
     const isMobile = window.innerWidth < 640;
-    const maxTicks = isMobile ? 4 : 8;
+    const maxTicks = isMobile ? 3 : 8;
 
     const optsBase = {
         responsive: true,
@@ -1132,6 +1132,7 @@ function renderAgentChart(series, animate = true) {
                 ticks: {
                     color: tickColor,
                     maxTicksLimit: maxTicks,
+                    autoSkipPadding: 16,
                     maxRotation: 0
                 }
             },
