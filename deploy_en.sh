@@ -103,15 +103,63 @@ spinner() {
     printf "\r"
 }
 
+APT_LOCK_FILES="/var/lib/dpkg/lock-frontend /var/lib/dpkg/lock /var/lib/apt/lists/lock /var/cache/apt/archives/lock"
+APT_LOCK_WAIT_MAX=600
+
+apt_lock_busy() {
+    if command -v fuser >/dev/null 2>&1; then
+        sudo fuser $APT_LOCK_FILES >/dev/null 2>&1
+    else
+        pgrep -x apt-get >/dev/null 2>&1 || pgrep -x apt >/dev/null 2>&1 || pgrep -x dpkg >/dev/null 2>&1 || pgrep -f unattended-upgrade >/dev/null 2>&1
+    fi
+}
+
+# Unattended-upgrades or a parallel apt run holds the dpkg lock; wait instead of failing with code 100.
+wait_for_apt_lock() {
+    local waited=0
+    while apt_lock_busy; do
+        if [ $waited -eq 0 ]; then
+            msg_warning "Package manager is busy (apt/dpkg held by another process), waiting for the lock..."
+        fi
+        if [ $waited -ge $APT_LOCK_WAIT_MAX ]; then
+            msg_error "apt/dpkg lock was not released within $((APT_LOCK_WAIT_MAX / 60)) min. Continuing, but package installation may fail."
+            return 1
+        fi
+        sleep 5
+        waited=$((waited + 5))
+    done
+    if [ $waited -gt 0 ]; then
+        msg_success "apt/dpkg lock released (waited ${waited}s)."
+    fi
+    return 0
+}
+
 run_with_spinner() {
     local msg=$1
     shift
-    ( "$@" >> /tmp/${SERVICE_NAME}_install.log 2>&1 ) &
-    local pid=$!
-    spinner "$pid" "$msg"
-    wait $pid
-    local exit_code=$?
-    echo -ne "\033[2K\r"
+    local is_apt=0
+    case " $* " in *" apt-get "*) is_apt=1 ;; esac
+    if [ $is_apt -eq 1 ]; then wait_for_apt_lock; fi
+
+    local attempt=1
+    local exit_code=0
+    while true; do
+        ( "$@" >> /tmp/${SERVICE_NAME}_install.log 2>&1 ) &
+        local pid=$!
+        spinner "$pid" "$msg"
+        wait $pid
+        exit_code=$?
+        echo -ne "\033[2K\r"
+        if [ $exit_code -ne 0 ] && [ $is_apt -eq 1 ] && [ $attempt -lt 3 ] \
+            && tail -n 20 /tmp/${SERVICE_NAME}_install.log | grep -q "Could not get lock\|Unable to acquire the dpkg"; then
+            attempt=$((attempt + 1))
+            msg_warning "apt could not acquire the lock, retry ${attempt}/3: '$msg'"
+            sleep 5
+            wait_for_apt_lock
+            continue
+        fi
+        break
+    done
     if [ $exit_code -ne 0 ]; then
         msg_error "Error during '$msg'. Code: $exit_code"
         msg_error "Details in log: /tmp/${SERVICE_NAME}_install.log"

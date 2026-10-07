@@ -450,6 +450,11 @@ function attachChartInteractions(chart, canvasOrId) {
 
         const state = activeChart.__liveZoomState = activeChart.__liveZoomState || {};
         state.freezeUpdates = false;
+        state.liveRangeSize = 0;
+        if (activeChart.options?.scales?.x) {
+            delete activeChart.options.scales.x.min;
+            delete activeChart.options.scales.x.max;
+        }
 
         if (typeof state.pendingUpdate === 'function') {
             state.pendingUpdate();

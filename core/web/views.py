@@ -40,6 +40,27 @@ APP_VERSION: Final[str] = get_app_version()
 CACHE_VER: Final[str] = str(int(time.time()))
 
 
+def _compute_asset_version() -> str:
+    """Version tag for static URLs: changes whenever any bundled JS/CSS file changes.
+
+    The app version alone is not enough — hotfixes within the same release left
+    browsers serving stale scripts from heuristic cache.
+    """
+    static_dir = Path(BASE_DIR) / "core" / "static"
+    latest = 0
+    for pattern in ("js/*.js", "css/*.css"):
+        for file in static_dir.glob(pattern):
+            try:
+                latest = max(latest, int(file.stat().st_mtime))
+            except OSError:
+                continue
+    return f"{APP_VERSION.lstrip('v')}.{latest or CACHE_VER}"
+
+
+ASSET_VER: Final[str] = _compute_asset_version()
+JINJA_ENV.globals["asset_ver"] = ASSET_VER
+
+
 def _get_avatar_html(user: dict[str, Any]) -> str:
     raw = str(user.get("photo_url", ""))
     if raw.startswith("http"):
