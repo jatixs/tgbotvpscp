@@ -34,6 +34,8 @@
 
 ### ✨ Improved
 * The node window shows the node's ID next to its name, in gray at the end of the row after the buttons and badges. In Settings, the node table now starts with an "ID" column (it used to end with a "Token" column).
+* The node window scales text, emoji, icons, and chart fonts to the screen size without changing the layout. A long node name shrinks to fit, and the country flag from the name is shown as an SVG icon instead of the node icon.
+* In the top-processes hint, clicking a value switches all values in the window between percent and the real figure: CPU shows frequency, RAM shows memory in use, and Disk shows the share of total disk size.
 
 ### 🐛 Fixed
 * Telegram billing: after changing the amount or payment date, the menu showed dollars instead of the selected currency. The currency now stays as set.
