@@ -256,7 +256,7 @@
                 delete chart.options.scales.x.min;
                 delete chart.options.scales.x.max;
             }
-            try { chart.resetZoom?.('none'); } catch (e) { /* plugin missing */ }
+            try { chart.resetZoom?.('default'); } catch (e) { /* plugin missing */ }
         }
 
         function toggleEmptyState(isEmpty) {

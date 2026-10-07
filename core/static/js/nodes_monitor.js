@@ -913,7 +913,7 @@ function updateModalCharts(series, which) {
         if (chart) {
             chart.data.labels = [];
             chart.data.datasets.forEach(ds => { ds.data = []; });
-            chart.update('none');
+            chart.update();
         }
         return;
     }
@@ -962,7 +962,7 @@ function updateModalCharts(series, which) {
             window.updateChartWithLiveData(modalResChart, applyModalResChartData, 'modalResChart');
         } else {
             applyModalResChartData();
-            modalResChart.update('none');
+            modalResChart.update();
             if (window.attachChartInteractions) window.attachChartInteractions(modalResChart, 'modalResChart');
         }
     } else {
@@ -979,7 +979,6 @@ function updateModalCharts(series, which) {
                 ...interactiveOptions,
                 responsive: true,
                 maintainAspectRatio: false,
-                animation: false,
                 interaction: { mode: 'index', intersect: false },
                 plugins: {
                     ...(interactiveOptions.plugins || {}),
@@ -1027,7 +1026,7 @@ function updateModalCharts(series, which) {
             window.updateChartWithLiveData(modalNetChart, applyModalNetChartData, 'modalNetChart');
         } else {
             applyModalNetChartData();
-            modalNetChart.update('none');
+            modalNetChart.update();
             if (window.attachChartInteractions) window.attachChartInteractions(modalNetChart, 'modalNetChart');
         }
     } else {
@@ -1044,7 +1043,6 @@ function updateModalCharts(series, which) {
                 ...interactiveOptions,
                 responsive: true,
                 maintainAspectRatio: false,
-                animation: false,
                 interaction: { mode: 'index', intersect: false },
                 plugins: {
                     ...(interactiveOptions.plugins || {}),

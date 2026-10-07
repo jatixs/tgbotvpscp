@@ -1047,7 +1047,7 @@ function renderQuickStatChart(canvasId, existingChart, colorRgb, historyKey) {
     if (existingChart) {
         existingChart.data.labels = data.map(() => '');
         existingChart.data.datasets[0].data = data.slice();
-        existingChart.update('none');
+        existingChart.update();
         return existingChart;
     }
 
@@ -1067,7 +1067,6 @@ function renderQuickStatChart(canvasId, existingChart, colorRgb, historyKey) {
         options: {
             responsive: true,
             maintainAspectRatio: false,
-            animation: false,
             scales: {
                 x: { display: false },
                 y: { display: false, min: 0, max: 100 }
@@ -1094,7 +1093,7 @@ function renderAgentChart(series) {
         if (agentChart) {
             agentChart.data.labels = [];
             agentChart.data.datasets.forEach(ds => { ds.data = []; });
-            agentChart.update('none');
+            agentChart.update();
         }
         return;
     }
@@ -1109,7 +1108,6 @@ function renderAgentChart(series) {
     const optsBase = {
         responsive: true,
         maintainAspectRatio: false,
-        animation: false,
         interaction: {
             mode: 'index',
             intersect: false
@@ -1177,7 +1175,7 @@ function renderAgentChart(series) {
             window.updateChartWithLiveData(agentChart, applyAgentChartData, 'agentChart');
         } else {
             applyAgentChartData();
-            agentChart.update('none');
+            agentChart.update();
             if (window.attachChartInteractions) window.attachChartInteractions(agentChart, 'agentChart');
         }
     } else {
@@ -1809,7 +1807,7 @@ function clearChartData(chart) {
     if (!chart) return;
     chart.data.labels = [];
     chart.data.datasets.forEach(ds => { ds.data = []; });
-    chart.update('none');
+    chart.update();
 }
 
 function buildNodeChartOptions() {
@@ -1821,7 +1819,6 @@ function buildNodeChartOptions() {
     const commonOptionsBase = {
         responsive: true,
         maintainAspectRatio: false,
-        animation: false,
         interaction: {
             mode: 'index',
             intersect: false
@@ -1897,7 +1894,7 @@ function renderNodeResChart(series) {
             window.updateChartWithLiveData(chartRes, applyResChartData, 'nodeResChart');
         } else {
             applyResChartData();
-            chartRes.update('none');
+            chartRes.update();
             if (window.attachChartInteractions) window.attachChartInteractions(chartRes, 'nodeResChart');
         }
     } else {
@@ -1962,7 +1959,7 @@ function renderNodeNetChart(series) {
             window.updateChartWithLiveData(chartNet, applyNetChartData, 'nodeNetChart');
         } else {
             applyNetChartData();
-            chartNet.update('none');
+            chartNet.update();
             if (window.attachChartInteractions) window.attachChartInteractions(chartNet, 'nodeNetChart');
         }
     } else {
