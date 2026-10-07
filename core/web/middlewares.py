@@ -326,6 +326,9 @@ async def security_headers_middleware(request: web.Request, handler: Handler) ->
     response.headers.setdefault("X-XSS-Protection", "0")
     if request.path.startswith("/api/"):
         response.headers.setdefault("Cache-Control", "no-store")
+    elif response.content_type == "text/html":
+        # Pages must always be revalidated, otherwise browsers keep stale markup after an update.
+        response.headers.setdefault("Cache-Control", "no-cache")
     is_https = request.scheme == "https" or WEB_PUBLIC_URL.lower().startswith("https://")
     if is_https:
         response.headers.setdefault(

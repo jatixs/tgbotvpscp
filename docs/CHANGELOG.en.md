@@ -39,6 +39,8 @@
 * In the top-processes hint, clicking a value switches all values in the window between percent and the real figure: CPU shows frequency, RAM shows memory in use, and Disk shows the share of total disk size.
 
 ### 🐛 Fixed
+* After an update the browser could keep using old WebUI scripts and styles (for example, new controls in the node window on the monitoring page did not appear). JS/CSS URLs now change whenever the files change, and HTML pages are always revalidated — no hard refresh is needed after updating.
+* The installer no longer fails with "Code: 100" when apt/dpkg is held by another process during an update (for example, Ubuntu unattended upgrades): it waits for the lock to be released (up to 10 minutes) and retries the package installation.
 * Telegram billing: after changing the amount or payment date, the menu showed dollars instead of the selected currency. The currency now stays as set.
 
 ### 🧰 Maintenance and Tests

@@ -17,9 +17,9 @@
         <link rel="icon" type="image/x-icon" href="/static/favicons/favicon.ico?v={{ cache_ver }}">
         <meta name="description" content="{{ web_meta_desc }}">
         <meta name="keywords" content="{{ web_meta_keywords }}">
-        <link rel="stylesheet" href="/static/css/main.css?v={{ web_version }}">
+        <link rel="stylesheet" href="/static/css/main.css?v={{ asset_ver }}">
         <script src="/static/vendor/crypto-js.min.js"></script>
-        <script src="/static/js/theme_init.js?v={{ web_version }}"></script>
+        <script src="/static/js/theme_init.js?v={{ asset_ver }}"></script>
         <script>
         const I18N = {{ i18n_json | safe }};
         const master_billing_json = {{ master_billing_json | safe | default('null') }};
@@ -31,8 +31,8 @@
         {{ user_role_js | safe }}
         </script>
         <script src="/static/vendor/twemoji.min.js" crossorigin="anonymous"></script>
-        <link rel="stylesheet" href="/static/css/style.css?v={{ web_version }}">
-    <link rel="stylesheet" href="/static/css/icons.css?v={{ web_version }}">
+        <link rel="stylesheet" href="/static/css/style.css?v={{ asset_ver }}">
+    <link rel="stylesheet" href="/static/css/icons.css?v={{ asset_ver }}">
         <script src="/static/vendor/dompurify.min.js"></script>
     </head>
     <body class="bg-gray-100 text-gray-900 dark:bg-gray-900 dark:text-gray-100 font-sans selection:bg-blue-500/30 pb-10 overflow-x-hidden">
@@ -1292,8 +1292,8 @@
 </div>
         </div>
 
-        <script src="/static/js/common.js?v={{ web_version }}"></script>
-        <script src="/static/js/settings.js?v={{ web_version }}"></script>
+        <script src="/static/js/common.js?v={{ asset_ver }}"></script>
+        <script src="/static/js/settings.js?v={{ asset_ver }}"></script>
         <script>
             document.addEventListener('DOMContentLoaded', () => {
                 if (typeof USER_ROLE !== 'undefined' && USER_ROLE !== 'admins') {
