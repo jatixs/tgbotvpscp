@@ -163,6 +163,7 @@ function initAgentChartRange() {
         mount: '[data-chart-range="agentChart"]',
         canvasId: 'agentChart',
         getSource: () => ({ source: 'agent' }),
+        getValues: point => [point.rx, point.tx],
         render: renderAgentChart
     });
     agentRangeCtl.start();
@@ -178,6 +179,7 @@ function startNodeChartRanges() {
         mount: '[data-chart-range="nodeResChart"]',
         canvasId: 'nodeResChart',
         getSource,
+        getValues: point => [point.c, point.r],
         render: renderNodeResChart
     }).start();
     nodeNetRangeCtl = window.createChartRangeController({
@@ -185,6 +187,7 @@ function startNodeChartRanges() {
         mount: '[data-chart-range="nodeNetChart"]',
         canvasId: 'nodeNetChart',
         getSource,
+        getValues: point => [point.rx, point.tx],
         render: renderNodeNetChart
     }).start();
 }
@@ -1018,7 +1021,7 @@ function updateChartsColors() {
             chart.options.scales.y.grid.color = gridColor;
             chart.options.scales.y.ticks.color = tickColor;
             if (chart.options.plugins.legend) chart.options.plugins.legend.labels.color = tickColor;
-            chart.update();
+            chart.update(document.documentElement.classList.contains('perf-mode') ? 'none' : undefined);
         }
     });
 }
@@ -1033,6 +1036,7 @@ function getGradient(ctx, colorBase) {
 function pushQuickStatHistory(key, value) {
     if (typeof value !== 'number' || Number.isNaN(value)) return;
     const hist = quickStatsHistory[key];
+    if (hist.length && Object.is(hist[hist.length - 1], value)) return;
     hist.push(value);
     if (hist.length > QUICK_STATS_HISTORY_MAX) hist.shift();
 }
@@ -1045,9 +1049,14 @@ function renderQuickStatChart(canvasId, existingChart, colorRgb, historyKey) {
 
     const data = quickStatsHistory[historyKey];
     if (existingChart) {
-        existingChart.data.labels = data.map(() => '');
-        existingChart.data.datasets[0].data = data.slice();
-        existingChart.update();
+        const nextData = data.slice();
+        const previousData = existingChart.data.datasets[0].data || [];
+        if (previousData.length === nextData.length && previousData.every((value, index) => Object.is(value, nextData[index]))) {
+            return existingChart;
+        }
+        existingChart.data.labels = nextData.map(() => '');
+        existingChart.data.datasets[0].data = nextData;
+        existingChart.update(document.documentElement.classList.contains('perf-mode') ? 'none' : undefined);
         return existingChart;
     }
 
@@ -1067,6 +1076,7 @@ function renderQuickStatChart(canvasId, existingChart, colorRgb, historyKey) {
         options: {
             responsive: true,
             maintainAspectRatio: false,
+            animation: document.documentElement.classList.contains('perf-mode') ? false : undefined,
             scales: {
                 x: { display: false },
                 y: { display: false, min: 0, max: 100 }
@@ -1083,7 +1093,7 @@ function updateQuickStatCharts() {
     quickDiskChart = renderQuickStatChart('quickDiskChart', quickDiskChart, 'rgb(34, 197, 94)', 'disk');
 }
 
-function renderAgentChart(series) {
+function renderAgentChart(series, animate = true) {
     const canvas = document.getElementById('agentChart');
     if (!canvas) return;
     const labels = series.labels;
@@ -1093,7 +1103,7 @@ function renderAgentChart(series) {
         if (agentChart) {
             agentChart.data.labels = [];
             agentChart.data.datasets.forEach(ds => { ds.data = []; });
-            agentChart.update();
+            agentChart.update(animate && !document.documentElement.classList.contains('perf-mode') ? undefined : 'none');
         }
         return;
     }
@@ -1172,10 +1182,10 @@ function renderAgentChart(series) {
         };
 
         if (window.updateChartWithLiveData) {
-            window.updateChartWithLiveData(agentChart, applyAgentChartData, 'agentChart');
+            window.updateChartWithLiveData(agentChart, applyAgentChartData, 'agentChart', animate);
         } else {
             applyAgentChartData();
-            agentChart.update();
+            agentChart.update(document.documentElement.classList.contains('perf-mode') ? 'none' : undefined);
             if (window.attachChartInteractions) window.attachChartInteractions(agentChart, 'agentChart');
         }
     } else {
@@ -1803,11 +1813,11 @@ window.handleRenameKeydown = function (event) {
     }
 };
 
-function clearChartData(chart) {
+function clearChartData(chart, animate = true) {
     if (!chart) return;
     chart.data.labels = [];
     chart.data.datasets.forEach(ds => { ds.data = []; });
-    chart.update();
+    chart.update(animate && !document.documentElement.classList.contains('perf-mode') ? undefined : 'none');
 }
 
 function buildNodeChartOptions() {
@@ -1868,11 +1878,11 @@ function buildNodeChartOptions() {
     return window.buildInteractiveChartOptions ? window.buildInteractiveChartOptions(commonOptionsBase) : commonOptionsBase;
 }
 
-function renderNodeResChart(series) {
+function renderNodeResChart(series, animate = true) {
     const canvas = document.getElementById('nodeResChart');
     if (!canvas) return;
     if (series.points.length < 2) {
-        clearChartData(chartRes);
+        clearChartData(chartRes, animate);
         return;
     }
     const ctxRes = canvas.getContext('2d');
@@ -1891,10 +1901,10 @@ function renderNodeResChart(series) {
         };
 
         if (window.updateChartWithLiveData) {
-            window.updateChartWithLiveData(chartRes, applyResChartData, 'nodeResChart');
+            window.updateChartWithLiveData(chartRes, applyResChartData, 'nodeResChart', animate);
         } else {
             applyResChartData();
-            chartRes.update();
+            chartRes.update(document.documentElement.classList.contains('perf-mode') ? 'none' : undefined);
             if (window.attachChartInteractions) window.attachChartInteractions(chartRes, 'nodeResChart');
         }
     } else {
@@ -1935,11 +1945,11 @@ function renderNodeResChart(series) {
     }
 }
 
-function renderNodeNetChart(series) {
+function renderNodeNetChart(series, animate = true) {
     const canvas = document.getElementById('nodeNetChart');
     if (!canvas) return;
     if (series.points.length < 2) {
-        clearChartData(chartNet);
+        clearChartData(chartNet, animate);
         return;
     }
     const ctxNet = canvas.getContext('2d');
@@ -1956,10 +1966,10 @@ function renderNodeNetChart(series) {
         };
 
         if (window.updateChartWithLiveData) {
-            window.updateChartWithLiveData(chartNet, applyNetChartData, 'nodeNetChart');
+            window.updateChartWithLiveData(chartNet, applyNetChartData, 'nodeNetChart', animate);
         } else {
             applyNetChartData();
-            chartNet.update();
+            chartNet.update(document.documentElement.classList.contains('perf-mode') ? 'none' : undefined);
             if (window.attachChartInteractions) window.attachChartInteractions(chartNet, 'nodeNetChart');
         }
     } else {

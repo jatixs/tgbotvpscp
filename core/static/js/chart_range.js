@@ -256,7 +256,8 @@
                 delete chart.options.scales.x.min;
                 delete chart.options.scales.x.max;
             }
-            try { chart.resetZoom?.('default'); } catch (e) { /* plugin missing */ }
+            const mode = document.documentElement.classList.contains('perf-mode') ? 'none' : 'default';
+            try { chart.resetZoom?.(mode); } catch (e) { /* plugin missing */ }
         }
 
         function toggleEmptyState(isEmpty) {
@@ -310,12 +311,12 @@
             return series;
         }
 
-        function emit() {
+        function emit(animate = true) {
             if (ctl.destroyed) return;
             toggleEmptyState(!ctl.loading && ctl.points.length < 2);
             if (typeof opts.render === 'function') {
                 try {
-                    opts.render(buildSeries());
+                    opts.render(buildSeries(), animate);
                 } catch (e) {
                     console.error('Chart range render error:', e);
                 }
@@ -336,6 +337,41 @@
             if (ctl.points.length && ctl.points[0].t < cutoff) {
                 ctl.points = ctl.points.filter(p => p.t >= cutoff);
             }
+        }
+
+        function pointsEqual(left, right) {
+            if (left.length !== right.length) return false;
+            for (let i = 0; i < left.length; i++) {
+                const a = left[i];
+                const b = right[i];
+                if (a.t !== b.t || a.c !== b.c || a.r !== b.r || a.d !== b.d || a.rx !== b.rx || a.tx !== b.tx) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        function metricValuesChanged(previous, next) {
+            if (!previous.length) return next.length > 0;
+            const getValues = typeof opts.getValues === 'function'
+                ? opts.getValues
+                : point => [point.c, point.r, point.d, point.rx, point.tx];
+            const previousByTime = new Map(previous.map(point => [point.t, point]));
+            let preceding = previous[previous.length - 1];
+
+            for (const point of next) {
+                const sameTime = previousByTime.get(point.t);
+                const comparison = sameTime || (point.t > preceding.t ? preceding : null);
+                if (comparison) {
+                    const oldValues = getValues(comparison);
+                    const newValues = getValues(point);
+                    if (oldValues.length !== newValues.length || oldValues.some((value, index) => !Object.is(value, newValues[index]))) {
+                        return true;
+                    }
+                }
+                if (point.t > preceding.t) preceding = point;
+            }
+            return false;
         }
 
         function decodePoints(payload) {
@@ -383,9 +419,13 @@
                 try {
                     const payload = JSON.parse(event.data);
                     if (payload.range !== rangeKey) return;
+                    const wasLoading = ctl.loading;
+                    const previousPoints = ctl.points;
                     ctl.loading = false;
                     mergePoints(payload, decodePoints(payload), !payload.full);
-                    emit();
+                    if (wasLoading || !pointsEqual(previousPoints, ctl.points)) {
+                        emit(wasLoading || metricValuesChanged(previousPoints, ctl.points));
+                    }
                 } catch (e) {
                     console.error('Chart range stream parse error:', e);
                 }

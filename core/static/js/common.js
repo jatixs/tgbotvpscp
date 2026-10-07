@@ -5,10 +5,9 @@
 /* /core/static/js/common.js */
 
 if (window.Chart) {
-    window.Chart.defaults.animation = {
-        duration: 420,
-        easing: 'easeOutQuart'
-    };
+    window.Chart.defaults.animation.duration = 420;
+    window.Chart.defaults.animation.easing = 'easeOutQuart';
+    window.Chart.defaults.animations.colors.properties = ['color', 'borderColor'];
 }
 
 // Export globally to resolve linter unused warnings
@@ -384,7 +383,24 @@ function alignChartToLiveWindow(chart) {
 }
 window.alignChartToLiveWindow = alignChartToLiveWindow;
 
-function updateChartWithLiveData(chart, applyData, canvasOrId) {
+function chartDataMatchesSnapshot(chart, labels, datasets) {
+    const currentLabels = chart.data.labels || [];
+    if (currentLabels.length !== labels.length || chart.data.datasets.length !== datasets.length) return false;
+    for (let i = 0; i < labels.length; i++) {
+        if (!Object.is(currentLabels[i], labels[i])) return false;
+    }
+    for (let i = 0; i < datasets.length; i++) {
+        const currentData = chart.data.datasets[i].data || [];
+        const previousData = datasets[i];
+        if (currentData.length !== previousData.length) return false;
+        for (let j = 0; j < previousData.length; j++) {
+            if (!Object.is(currentData[j], previousData[j])) return false;
+        }
+    }
+    return true;
+}
+
+function updateChartWithLiveData(chart, applyData, canvasOrId, animate = true) {
     if (!chart || typeof applyData !== 'function') return false;
 
     const state = chart.__liveZoomState = chart.__liveZoomState || {};
@@ -395,20 +411,25 @@ function updateChartWithLiveData(chart, applyData, canvasOrId) {
         return false;
     }
 
+    const previousLabels = (chart.data.labels || []).slice();
+    const previousDatasets = chart.data.datasets.map(dataset => (dataset.data || []).slice());
     applyData();
     alignChartToLiveWindow(chart);
-    chart.update();
+    const changed = !chartDataMatchesSnapshot(chart, previousLabels, previousDatasets);
+    const shouldAnimate = animate && !document.documentElement.classList.contains('perf-mode');
+    if (changed) chart.update(shouldAnimate ? undefined : 'none');
     refreshChartZoomState(chart, canvasOrId);
-    return true;
+    return changed;
 }
 window.updateChartWithLiveData = updateChartWithLiveData;
 
 function buildInteractiveChartOptions(baseOptions = {}) {
     ensureChartZoomRegistered();
+    const perfMode = document.documentElement.classList.contains('perf-mode');
 
     return {
         ...baseOptions,
-        animation: baseOptions.animation === false ? {
+        animation: perfMode ? false : baseOptions.animation === false ? {
             duration: 420,
             easing: 'easeOutQuart'
         } : baseOptions.animation,
@@ -417,7 +438,7 @@ function buildInteractiveChartOptions(baseOptions = {}) {
             zoom: {
                 ...(baseOptions.transitions?.zoom || {}),
                 animation: {
-                    duration: 360,
+                    duration: perfMode ? 0 : 360,
                     easing: 'easeOutCubic',
                     ...(baseOptions.transitions?.zoom?.animation || {})
                 }
@@ -477,7 +498,7 @@ function attachChartInteractions(chart, canvasOrId) {
         if (!activeChart) return;
 
         if (typeof activeChart.resetZoom === 'function') {
-            activeChart.resetZoom('default');
+            activeChart.resetZoom(document.documentElement.classList.contains('perf-mode') ? 'none' : 'default');
         }
 
         const state = activeChart.__liveZoomState = activeChart.__liveZoomState || {};
@@ -493,7 +514,7 @@ function attachChartInteractions(chart, canvasOrId) {
         }
 
         window.alignChartToLiveWindow?.(activeChart);
-        activeChart.update();
+        activeChart.update(document.documentElement.classList.contains('perf-mode') ? 'none' : undefined);
         window.refreshChartZoomState?.(activeChart, canvas);
     };
 
