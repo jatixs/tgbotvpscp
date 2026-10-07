@@ -8,6 +8,61 @@ if (window.Chart) {
     window.Chart.defaults.animation.duration = 420;
     window.Chart.defaults.animation.easing = 'easeOutQuart';
     window.Chart.defaults.animations.colors.properties = ['color', 'borderColor'];
+
+    window.Chart.register({
+        id: 'legend-dataset-fade',
+        beforeDatasetDraw(chart, args) {
+            const fade = chart.$legendDatasetFades?.[args.index];
+            if (!fade) return;
+            chart.ctx.save();
+            chart.ctx.globalAlpha *= fade.opacity;
+        },
+        afterDatasetDraw(chart, args) {
+            if (chart.$legendDatasetFades?.[args.index]) chart.ctx.restore();
+        }
+    });
+
+    window.Chart.defaults.plugins.legend.onClick = (event, item, legend) => {
+        const chart = legend.chart;
+        const datasetIndex = item.datasetIndex;
+        if (!Number.isInteger(datasetIndex) || chart.$legendDatasetFades?.[datasetIndex]) return;
+
+        const wasVisible = chart.isDatasetVisible(datasetIndex);
+        const targetOpacity = wasVisible ? 0 : 1;
+        if (document.documentElement.classList.contains('perf-mode')) {
+            chart.setDatasetVisibility(datasetIndex, !wasVisible);
+            chart.update('none');
+            return;
+        }
+
+        if (!wasVisible) chart.setDatasetVisibility(datasetIndex, true);
+        chart.$legendDatasetFades = chart.$legendDatasetFades || {};
+        const fade = chart.$legendDatasetFades[datasetIndex] = { opacity: wasVisible ? 1 : 0 };
+        if (!wasVisible) chart.update('none');
+
+        const startedAt = performance.now();
+        const duration = 320;
+        const animateFade = now => {
+            if (!chart.canvas) {
+                delete chart.$legendDatasetFades[datasetIndex];
+                return;
+            }
+            const progress = Math.min(1, (now - startedAt) / duration);
+            const eased = 1 - Math.pow(1 - progress, 3);
+            fade.opacity = wasVisible ? 1 - eased : eased;
+            chart.draw();
+
+            if (progress < 1) {
+                requestAnimationFrame(animateFade);
+                return;
+            }
+
+            delete chart.$legendDatasetFades[datasetIndex];
+            if (wasVisible) chart.setDatasetVisibility(datasetIndex, false);
+            chart.update('none');
+        };
+        requestAnimationFrame(animateFade);
+    };
 }
 
 // Export globally to resolve linter unused warnings
