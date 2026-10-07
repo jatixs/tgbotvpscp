@@ -186,6 +186,28 @@ get_local_version() {
 
 INSTALL_TYPE="НЕТ"; STATUS_MESSAGE="Проверка не проводилась."
 INTEGRITY_STATUS=""
+# Set by update_bot so install_node_logic prints "update" wording instead of "install".
+NODE_OP_UPDATE=""
+
+op_header() { echo -e "\n${C_BOLD}=== $1 ===${C_RESET}"; }
+
+# "НОДЫ" / "АГЕНТА" — genitive label of what is currently installed.
+target_label() {
+    if [ -f "${ENV_FILE}" ] && grep -q "MODE=node" "${ENV_FILE}"; then echo "НОДЫ"; else echo "АГЕНТА"; fi
+}
+
+mode_label() {
+    local runtime=$1 mode=$2
+    local m="Secure"; if [ "$mode" == "root" ]; then m="Root"; fi
+    echo "${runtime} - ${m}"
+}
+
+# "Установка АГЕНТА (Systemd - Secure)" on a clean host, "Переустановка …" over an existing install.
+agent_install_header() {
+    local verb="Установка"
+    if [ -d "${BOT_INSTALL_PATH}" ] && [ -f "${ENV_FILE}" ]; then verb="Переустановка"; fi
+    op_header "${verb} АГЕНТА ($(mode_label "$1" "$2"))"
+}
 
 check_integrity() {
     INTEGRITY_STATUS=""
@@ -1385,6 +1407,7 @@ EOF
 
 install_systemd_logic() {
     local mode=$1
+    agent_install_header "Systemd" "$mode"
     stop_existing_runtime || return 1
     common_install_steps
     install_extras
@@ -1429,6 +1452,7 @@ EOF
 
 install_docker_logic() {
     local mode=$1
+    agent_install_header "Docker" "$mode"
     stop_existing_runtime || return 1
     common_install_steps
     install_extras
@@ -1486,7 +1510,9 @@ EOF
 }
 
 install_node_logic() {
-    echo -e "\n${C_BOLD}=== Установка НОДЫ ===${C_RESET}"
+    if [ -z "$NODE_OP_UPDATE" ]; then
+        if [ -f "${ENV_FILE}" ] && grep -q "MODE=node" "${ENV_FILE}"; then op_header "Переустановка НОДЫ"; else op_header "Установка НОДЫ"; fi
+    fi
     stop_existing_runtime || return 1
     FORCE_NODE_MODE="yes"
     if [ -n "$AUTO_AGENT_URL" ]; then AGENT_URL="$AUTO_AGENT_URL"; fi
@@ -1609,14 +1635,14 @@ RestartSec=10
 WantedBy=multi-user.target
 EOF
     sudo systemctl daemon-reload; sudo systemctl enable ${NODE_SERVICE_NAME}
-    cleanup_for_node "установки"  
+    if [ -n "$NODE_OP_UPDATE" ]; then cleanup_for_node "обновления"; else cleanup_for_node "установки"; fi
     run_with_spinner "Запуск Ноды" sudo systemctl restart ${NODE_SERVICE_NAME}
     FORCE_NODE_MODE="no"
-    msg_success "Нода установлена!"
+    if [ -n "$NODE_OP_UPDATE" ]; then msg_success "Нода обновлена!"; else msg_success "Нода установлена!"; fi
 }
 
 uninstall_bot() {
-    echo -e "\n${C_BOLD}=== Удаление ===${C_RESET}"
+    op_header "Удаление $(target_label)"
     cd /
     stop_existing_runtime
     sudo rm -f /etc/systemd/system/${SERVICE_NAME}.service /etc/systemd/system/${WATCHDOG_SERVICE_NAME}.service /etc/systemd/system/${NODE_SERVICE_NAME}.service
@@ -1628,8 +1654,10 @@ uninstall_bot() {
 }
 
 update_bot() {
-    echo -e "\n${C_BOLD}=== Обновление ===${C_RESET}"
-    if [ -f "${ENV_FILE}" ] && grep -q "MODE=node" "${ENV_FILE}"; then install_node_logic; return; fi
+    op_header "Обновление $(target_label)"
+    if [ -f "${ENV_FILE}" ] && grep -q "MODE=node" "${ENV_FILE}"; then
+        NODE_OP_UPDATE="yes"; install_node_logic; local rc=$?; NODE_OP_UPDATE=""; return $rc
+    fi
     if [ ! -d "${BOT_INSTALL_PATH}/.git" ]; then msg_error "Git не найден."; return 1; fi
     echo "" > /tmp/${SERVICE_NAME}_install.log
     local exec_cmd=""
@@ -1745,7 +1773,7 @@ EOF
          cleanup_for_systemd "обновления"
     fi
 
-    msg_success "Обновлено."
+    msg_success "Агент обновлён."
 }
 
 check_agent_monitoring_status() {

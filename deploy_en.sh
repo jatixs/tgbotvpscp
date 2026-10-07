@@ -186,6 +186,27 @@ get_local_version() {
 
 INSTALL_TYPE="NONE"; STATUS_MESSAGE="Check not performed."
 INTEGRITY_STATUS=""
+# Set by update_bot so install_node_logic prints "update" wording instead of "install".
+NODE_OP_UPDATE=""
+
+op_header() { echo -e "\n${C_BOLD}=== $1 ===${C_RESET}"; }
+
+target_label() {
+    if [ -f "${ENV_FILE}" ] && grep -q "MODE=node" "${ENV_FILE}"; then echo "NODE"; else echo "AGENT"; fi
+}
+
+mode_label() {
+    local runtime=$1 mode=$2
+    local m="Secure"; if [ "$mode" == "root" ]; then m="Root"; fi
+    echo "${runtime} - ${m}"
+}
+
+# "AGENT Installation (Systemd - Secure)" on a clean host, "AGENT Reinstallation …" over an existing install.
+agent_install_header() {
+    local verb="Installation"
+    if [ -d "${BOT_INSTALL_PATH}" ] && [ -f "${ENV_FILE}" ]; then verb="Reinstallation"; fi
+    op_header "AGENT ${verb} ($(mode_label "$1" "$2"))"
+}
 
 check_integrity() {
     INTEGRITY_STATUS=""
@@ -1395,6 +1416,7 @@ EOF
 
 install_systemd_logic() {
     local mode=$1
+    agent_install_header "Systemd" "$mode"
     stop_existing_runtime || return 1
     common_install_steps
     install_extras
@@ -1439,6 +1461,7 @@ EOF
 
 install_docker_logic() {
     local mode=$1
+    agent_install_header "Docker" "$mode"
     stop_existing_runtime || return 1
     common_install_steps
     install_extras
@@ -1496,7 +1519,9 @@ EOF
 }
 
 install_node_logic() {
-    echo -e "\n${C_BOLD}=== NODE Installation ===${C_RESET}"
+    if [ -z "$NODE_OP_UPDATE" ]; then
+        if [ -f "${ENV_FILE}" ] && grep -q "MODE=node" "${ENV_FILE}"; then op_header "NODE Reinstallation"; else op_header "NODE Installation"; fi
+    fi
     stop_existing_runtime || return 1
     FORCE_NODE_MODE="yes"
     if [ -n "$AUTO_AGENT_URL" ]; then AGENT_URL="$AUTO_AGENT_URL"; fi
@@ -1605,14 +1630,14 @@ RestartSec=10
 WantedBy=multi-user.target
 EOF
     sudo systemctl daemon-reload; sudo systemctl enable ${NODE_SERVICE_NAME}
-    cleanup_for_node "installation"  
+    if [ -n "$NODE_OP_UPDATE" ]; then cleanup_for_node "update"; else cleanup_for_node "installation"; fi
     run_with_spinner "Starting Node" sudo systemctl restart ${NODE_SERVICE_NAME}
     FORCE_NODE_MODE="no"
-    msg_success "Node installed!"
+    if [ -n "$NODE_OP_UPDATE" ]; then msg_success "Node updated!"; else msg_success "Node installed!"; fi
 }
 
 uninstall_bot() {
-    echo -e "\n${C_BOLD}=== Uninstall ===${C_RESET}"
+    op_header "$(target_label) Uninstall"
     cd /
     stop_existing_runtime
     sudo rm -f /etc/systemd/system/${SERVICE_NAME}.service /etc/systemd/system/${WATCHDOG_SERVICE_NAME}.service /etc/systemd/system/${NODE_SERVICE_NAME}.service
@@ -1624,8 +1649,10 @@ uninstall_bot() {
 }
 
 update_bot() {
-    echo -e "\n${C_BOLD}=== Update ===${C_RESET}"
-    if [ -f "${ENV_FILE}" ] && grep -q "MODE=node" "${ENV_FILE}"; then install_node_logic; return; fi
+    op_header "$(target_label) Update"
+    if [ -f "${ENV_FILE}" ] && grep -q "MODE=node" "${ENV_FILE}"; then
+        NODE_OP_UPDATE="yes"; install_node_logic; local rc=$?; NODE_OP_UPDATE=""; return $rc
+    fi
     if [ ! -d "${BOT_INSTALL_PATH}/.git" ]; then msg_error "Git not found."; return 1; fi
     echo "" > /tmp/${SERVICE_NAME}_install.log
     local exec_cmd=""
@@ -1730,7 +1757,7 @@ EOF
          cleanup_for_systemd "update"
     fi
 
-    msg_success "Updated."
+    msg_success "Agent updated."
 }
 
 check_agent_monitoring_status() {

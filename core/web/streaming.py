@@ -14,7 +14,7 @@ import aiohttp
 from aiohttp import web
 
 from .. import config as current_config
-from .. import nodes_db, shared_state
+from .. import metrics_history, nodes_db, shared_state
 from ..config import BASE_DIR, DEFAULT_LANGUAGE, DEPLOY_MODE
 from ..i18n import get_user_lang
 from ..rbac import is_admin as _is_admin
@@ -1108,8 +1108,113 @@ async def handle_terminal_ws(request: web.Request) -> web.StreamResponse:
     return ws_client
 
 
+@routes.get("/api/events/metrics")
+async def handle_sse_metrics(request: web.Request) -> web.StreamResponse:
+    """Chart history for one source/range: a full snapshot first, then incremental points."""
+    if not _is_sse_request(request):
+        return _build_plain_api_notice(request.path)
+
+    user = get_current_user(request)
+    if not user:
+        return web.Response(status=401)
+
+    range_key = request.query.get("range", metrics_history.DEFAULT_RANGE)
+    if range_key not in metrics_history.RANGES:
+        return web.Response(status=400)
+
+    source_kind = request.query.get("source", "agent")
+    if source_kind == "agent":
+        source = metrics_history.AGENT_SOURCE
+    elif source_kind == "node":
+        try:
+            node_id = int(request.query.get("node_id", "0"))
+        except ValueError:
+            node_id = 0
+        if node_id <= 0:
+            return web.Response(status=400)
+        if not await nodes_db.get_node_by_id(node_id):
+            return web.Response(status=404)
+        source = metrics_history.node_source(node_id)
+    else:
+        return web.Response(status=400)
+
+    current_token = request.cookies.get(COOKIE_NAME)
+    response = web.StreamResponse(status=200, reason="OK")
+    response.headers["Content-Type"] = "text/event-stream"
+    response.headers["Cache-Control"] = "no-cache"
+    response.headers["Connection"] = "keep-alive"
+    response.headers["X-Accel-Buffering"] = "no"
+    await response.prepare(request)
+
+    shutdown_event = request.app.get("shutdown_event")
+    interval = metrics_history.STREAM_INTERVALS.get(range_key, 10)
+    last_t: int | None = None
+    try:
+        while True:
+            if shared_state.IS_RESTARTING:
+                try:
+                    await response.write(b"event: shutdown\ndata: restarting\n\n")
+                except Exception:
+                    pass
+                break
+
+            try:
+                if request.transport is None or request.transport.is_closing():
+                    break
+            except Exception:
+                break
+
+            if _session_expired(current_token):
+                try:
+                    await response.write(b"event: session_status\ndata: expired\n\n")
+                except Exception:
+                    pass
+                break
+
+            await metrics_history.flush_pending()
+            series = await metrics_history.query_series(source, range_key, last_t)
+            points = series["points"]
+            payload = {
+                "source": source_kind,
+                "range": series["range"],
+                "step": series["step"],
+                "span": series["span"],
+                "now": series["now"],
+                "full": last_t is None,
+                # The last bucket is re-sent on the next tick because it may still be filling up.
+                "data": encrypt_for_web(json.dumps(points, separators=(",", ":"))),
+            }
+            if points:
+                last_t = int(points[-1]["t"])
+            elif last_t is None:
+                last_t = series["now"] - series["span"]
+
+            try:
+                await _write_sse(response, "metrics_history", payload)
+            except (ConnectionResetError, BrokenPipeError, ConnectionError):
+                break
+
+            if shutdown_event:
+                try:
+                    if not shared_state.IS_RESTARTING:
+                        await asyncio.wait_for(shutdown_event.wait(), timeout=interval)
+                        break
+                except asyncio.TimeoutError:
+                    pass
+            else:
+                await asyncio.sleep(interval)
+    except asyncio.CancelledError:
+        pass
+    except Exception as exc:
+        if "closing transport" not in str(exc) and "'NoneType' object" not in str(exc):
+            logging.error("SSE metrics error: %s", exc)
+
+    return response
+
+
 __all__ = [
     "handle_sse_logs",
+    "handle_sse_metrics",
     "handle_sse_node_details",
     "handle_sse_node_services",
     "handle_sse_services",

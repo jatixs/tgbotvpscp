@@ -1,5 +1,9 @@
 /*
- * Chart time-range selector (3m … 7d) + history polling.
+ * Chart time-range selector (3m … 7d) + history stream.
+ *
+ * Data comes from the SSE endpoint /api/events/metrics (event `metrics_history`): the first
+ * message is a full snapshot, later ones are incremental; `data` is AES-encrypted like the
+ * other SSE payloads and decrypted with decryptData() from common.js.
  *
  * Usage:
  *   const ctl = createChartRangeController({
@@ -18,21 +22,23 @@
     'use strict';
 
     const RANGES = [
-        { key: '3m', group: 'minutes', amount: 3, seconds: 180, poll: 3000 },
-        { key: '10m', group: 'minutes', amount: 10, seconds: 600, poll: 3000 },
-        { key: '30m', group: 'minutes', amount: 30, seconds: 1800, poll: 5000 },
-        { key: '1h', group: 'hours', amount: 1, seconds: 3600, poll: 10000 },
-        { key: '3h', group: 'hours', amount: 3, seconds: 3 * 3600, poll: 30000 },
-        { key: '6h', group: 'hours', amount: 6, seconds: 6 * 3600, poll: 30000 },
-        { key: '12h', group: 'hours', amount: 12, seconds: 12 * 3600, poll: 60000 },
-        { key: '1d', group: 'days', amount: 1, seconds: 86400, poll: 60000 },
-        { key: '3d', group: 'days', amount: 3, seconds: 3 * 86400, poll: 120000 },
-        { key: '7d', group: 'days', amount: 7, seconds: 7 * 86400, poll: 300000 }
+        { key: '3m', group: 'minutes', amount: 3, seconds: 180 },
+        { key: '10m', group: 'minutes', amount: 10, seconds: 600 },
+        { key: '30m', group: 'minutes', amount: 30, seconds: 1800 },
+        { key: '1h', group: 'hours', amount: 1, seconds: 3600 },
+        { key: '3h', group: 'hours', amount: 3, seconds: 3 * 3600 },
+        { key: '6h', group: 'hours', amount: 6, seconds: 6 * 3600 },
+        { key: '12h', group: 'hours', amount: 12, seconds: 12 * 3600 },
+        { key: '1d', group: 'days', amount: 1, seconds: 86400 },
+        { key: '3d', group: 'days', amount: 3, seconds: 3 * 86400 },
+        { key: '7d', group: 'days', amount: 7, seconds: 7 * 86400 }
     ];
     const GROUPS = ['minutes', 'hours', 'days'];
     const DEFAULT_RANGE = '3m';
     const LIVE_MAX_SECONDS = 3600;
     const RAW_GAP_SECONDS = 25;
+    const STREAM_URL = '/api/events/metrics';
+    const RECONNECT_DELAY = 5000;
 
     const CLOCK_ICON = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="chart-range-icon"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>';
     const CHEVRON_ICON = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="chart-range-chevron"><path d="M6 9l6 6 6-6"/></svg>';
@@ -118,8 +124,8 @@
             serverNow: 0,
             running: false,
             destroyed: false,
-            timer: null,
-            inflight: null,
+            stream: null,
+            reconnectTimer: null,
             loading: true,
             pop: null,
             button: null,
@@ -316,8 +322,7 @@
             }
         }
 
-        function mergePoints(payload, incremental) {
-            const incoming = Array.isArray(payload.points) ? payload.points : [];
+        function mergePoints(payload, incoming, incremental) {
             ctl.step = payload.step || 0;
             ctl.span = payload.span || ctl.range.seconds;
             ctl.serverNow = payload.now || Math.floor(Date.now() / 1000);
@@ -333,49 +338,86 @@
             }
         }
 
-        async function load(full) {
-            if (ctl.destroyed || !ctl.running) return;
+        function decodePoints(payload) {
+            const raw = payload.data;
+            if (!raw) return [];
+            const text = typeof window.decryptData === 'function' ? window.decryptData(raw)
+                : (typeof decryptData === 'function' ? decryptData(raw) : raw);
+            try {
+                const parsed = JSON.parse(text);
+                return Array.isArray(parsed) ? parsed : [];
+            } catch (e) {
+                console.debug('Chart range payload decode failed:', e);
+                return [];
+            }
+        }
+
+        function closeStream() {
+            clearTimeout(ctl.reconnectTimer);
+            ctl.reconnectTimer = null;
+            if (ctl.stream) {
+                ctl.stream.close();
+                ctl.stream = null;
+            }
+        }
+
+        function openStream() {
+            closeStream();
+            if (ctl.destroyed || !ctl.running || typeof EventSource === 'undefined') return;
             if (mount && !mount.isConnected) {
-                // The page was swapped by the SPA navigation; stop polling for a dead widget.
+                // The page was swapped by the SPA navigation; stop streaming for a dead widget.
                 ctl.stop();
                 return;
             }
             const src = sourceParams();
             if (!src) return;
-            if (ctl.inflight) ctl.inflight.abort();
-            const aborter = new AbortController();
-            ctl.inflight = aborter;
 
             const params = new URLSearchParams({ source: src.source, range: ctl.range.key });
             if (src.node_id) params.set('node_id', String(src.node_id));
-            const incremental = !full && ctl.points.length > 0;
-            if (incremental) params.set('since', String(ctl.points[ctl.points.length - 1].t));
+            const rangeKey = ctl.range.key;
+            const es = new EventSource(`${STREAM_URL}?${params.toString()}`);
+            ctl.stream = es;
 
-            try {
-                const res = await fetch(`/api/metrics/history?${params.toString()}`, { signal: aborter.signal, cache: 'no-store' });
-                if (!res.ok) throw new Error(`HTTP ${res.status}`);
-                const payload = await res.json();
-                if (ctl.destroyed || aborter !== ctl.inflight) return;
-                if (payload.range !== ctl.range.key) return;
-                ctl.loading = false;
-                mergePoints(payload, incremental);
-                emit();
-            } catch (e) {
-                if (e.name !== 'AbortError') console.debug('Chart range fetch failed:', e);
-            } finally {
-                // A newer request may have replaced this one; only the latest schedules the next poll.
-                if (ctl.inflight === aborter) {
-                    ctl.inflight = null;
-                    schedule();
+            es.addEventListener('metrics_history', (event) => {
+                if (ctl.stream !== es) return;
+                try {
+                    const payload = JSON.parse(event.data);
+                    if (payload.range !== rangeKey) return;
+                    ctl.loading = false;
+                    mergePoints(payload, decodePoints(payload), !payload.full);
+                    emit();
+                } catch (e) {
+                    console.error('Chart range stream parse error:', e);
                 }
-            }
+            });
+
+            es.addEventListener('session_status', (event) => {
+                if (event.data === 'expired') {
+                    ctl.stop();
+                    window.location.assign('/login');
+                }
+            });
+
+            es.addEventListener('shutdown', () => {
+                closeStream();
+                scheduleReconnect(15000);
+            });
+
+            es.onerror = () => {
+                // EventSource retries transient errors itself; a CLOSED state means the server refused the stream.
+                if (ctl.stream === es && es.readyState === EventSource.CLOSED) {
+                    closeStream();
+                    scheduleReconnect(RECONNECT_DELAY);
+                }
+            };
         }
 
-        function schedule() {
-            clearTimeout(ctl.timer);
+        function scheduleReconnect(delay) {
+            clearTimeout(ctl.reconnectTimer);
             if (!ctl.running || ctl.destroyed) return;
-            const delay = document.hidden ? Math.max(ctl.range.poll, 30000) : ctl.range.poll;
-            ctl.timer = setTimeout(() => load(false), delay);
+            ctl.reconnectTimer = setTimeout(() => {
+                if (ctl.running && !ctl.destroyed && !document.hidden) openStream();
+            }, delay);
         }
 
         function setRange(key) {
@@ -392,11 +434,14 @@
             resetChartZoom();
             if (typeof opts.onRangeChange === 'function') opts.onRangeChange(next.key);
             emit();
-            if (ctl.running) load(true);
+            if (ctl.running) openStream();
         }
 
         function onVisibility() {
-            if (!document.hidden && ctl.running) load(false);
+            if (!ctl.running) return;
+            // Hidden tabs drop the stream to save server work; it is re-opened with a fresh snapshot.
+            if (document.hidden) closeStream();
+            else if (!ctl.stream) openStream();
         }
 
         /* ---------- public API ---------- */
@@ -404,18 +449,13 @@
             if (ctl.destroyed) return ctl;
             ctl.running = true;
             document.addEventListener('visibilitychange', onVisibility);
-            load(true);
+            openStream();
             return ctl;
         };
 
         ctl.stop = function () {
             ctl.running = false;
-            clearTimeout(ctl.timer);
-            ctl.timer = null;
-            if (ctl.inflight) {
-                ctl.inflight.abort();
-                ctl.inflight = null;
-            }
+            closeStream();
             document.removeEventListener('visibilitychange', onVisibility);
             ctl.closePopover();
             return ctl;
@@ -425,12 +465,12 @@
             ctl.points = [];
             ctl.step = 0;
             ctl.loading = true;
-            if (ctl.running) load(true);
+            if (ctl.running) openStream();
             return ctl;
         };
 
         ctl.refresh = function () {
-            if (ctl.running) load(false);
+            if (ctl.running) openStream();
             return ctl;
         };
 

@@ -105,7 +105,6 @@ core/
 │   ├── middlewares.py      # WAF, Rate Limiting, CSRF
 │   ├── api_nodes.py        # Node management API
 │   ├── api_system.py       # System settings API
-│   ├── api_metrics.py      # Chart metrics history API
 │   ├── streaming.py        # Server-Sent Events (SSE)
 │   └── views.py            # HTML views (Jinja2)
 ├── static/                 # CSS, JS, images
@@ -323,7 +322,7 @@ Every heartbeat also feeds a sample into `metrics_history` (network speed is der
 **How it works:**
 - `record_sample()` — queues a sample in an in-memory buffer; network speed is stored in bytes/s (from counters or a ready rate)
 - `maintenance_loop()` (background task `metrics-history`): flushes the buffer to the DB every 10 s with a single `bulk_create`, rebuilds the 60/300 s buckets for the last 3/15 minutes idempotently once a minute (after startup — for the whole retention of the lower tier), and deletes rows past retention every 10 minutes
-- `query_series(source, range, since)` — picks the tier for the period and, when needed, averages down to the output step (6h → 120 s, 12h → 180 s, 3d → 15 min, 7d → 30 min); `since` enables incremental fetches
+- `query_series(source, range, since)` — picks the tier for the period and, when needed, averages down to the output step (6h → 120 s, 12h → 180 s, 3d → 15 min, 7d → 30 min); `since` yields increments for the `/api/events/metrics` SSE stream
 - Sources: `agent` and `node:<id>`; deleting a node drops its history
 
 **Footprint:** at steady state ≈ 5–6k rows per source (~0.5 MB); the database does not grow unbounded, SQLite reuses freed pages.
@@ -409,8 +408,7 @@ core/web/
 ├── middlewares.py      # WAF, Rate Limiting, CSRF Protection
 ├── api_nodes.py        # aiohttp-based API for nodes (heartbeat, CRUD, commands)
 ├── api_system.py       # aiohttp-based API for settings, logs, users
-├── api_metrics.py      # Chart metrics history with selectable period
-├── streaming.py        # Server-Sent Events (3 streams)
+├── streaming.py        # Server-Sent Events (5 streams, incl. chart history)
 └── views.py            # HTML pages (Jinja2 rendering)
 ```
 
@@ -419,7 +417,7 @@ core/web/
 
 **Functions:**
 - Creates `aiohttp.web.Application` with middleware stack
-- Registers routes from 6 modules (views, auth, nodes, system, metrics, streaming)
+- Registers routes from 5 modules (views, auth, nodes, system, streaming)
 - Serves static files (`/static/`)
 - Launches background tasks from `tasks.py` on startup
 - Handles graceful shutdown via `shutdown_event`
@@ -560,28 +558,13 @@ GET  /api/agent/ipv4           — Agent IPv4 addresses
 
 ---
 
-#### **api_metrics.py** — Chart Metrics History
-**Purpose:** data for charts with the selected period (reads `metrics_history`)
-
-```
-GET /api/metrics/history?source=agent&range=3m
-GET /api/metrics/history?source=node&node_id=8&range=1d[&since=<unix ts>]
-```
-
-- `range` — one of `3m 10m 30m 1h 3h 6h 12h 1d 3d 7d`
-- Response: `{range, step, span, now, points: [{t, c, r, d, rx, tx}]}` — `step` in seconds (`0` = raw points), `rx`/`tx` in bytes/s
-- `since` — return only points with `t >= since` (incremental polling from the browser)
-- Requires a web session; nodes are addressed by numeric `node_id`
-
----
-
 #### **streaming.py** — Server-Sent Events
 **Purpose:** Real-time updates without WebSocket
 
 **SSE Streams:**
 
 **1. `GET /api/events` — Main stream:**
-- `agent_stats` — CPU, RAM, Disk, Network, last 60 samples (for current speed); the charts themselves read `/api/metrics/history`
+- `agent_stats` — CPU, RAM, Disk, Network, last 60 samples (for current speed); the charts themselves subscribe to the `/api/events/metrics` stream
 - `nodes_list` — All nodes with statuses
 - `notifications` — Notifications (filtered by last read)
 
@@ -590,13 +573,18 @@ GET /api/metrics/history?source=node&node_id=8&range=1d[&since=<unix ts>]
 - System logs — `journalctl --follow`
 
 **3. `GET /api/events/node` — Specific node details:**
-- Statistics, availability, billing (the modal charts poll `/api/metrics/history`)
+- Statistics, availability, billing (the modal charts subscribe to `/api/events/metrics`)
 - Updates via `?token=...` parameter
 - Updates by numeric `node_id`; the agent token is not sent to the browser
 
 **4. `GET /api/events/services` — Service Manager stream:**
 - Real-time systemd service states
 - Updates for the Service Manager page
+
+**5. `GET /api/events/metrics?source=agent|node&node_id=…&range=3m…7d` — Chart history:**
+- Event `metrics_history`: `{range, step, span, now, full, data}` — `data` is an encrypted (`encrypt_for_web`) JSON array of points `[{t, c, r, d, rx, tx}]`, `rx`/`tx` in bytes/s, `step` in seconds (`0` = raw points)
+- The first message is a full snapshot (`full: true`), then increments at a period-dependent interval (3 s for 3m … 5 min for 7d); the last bucket is re-sent until it is complete
+- Changing the period in the browser reopens the stream with a new `range`; nodes are addressed by numeric `node_id`
 
 **Restriction:** a regular browser navigation to `GET /api/events*` returns informational text instead of metrics. Proper usage requires `EventSource` with `Accept: text/event-stream`. Likewise, `GET /api/terminal/ws` requires `Upgrade: websocket` and returns `426 Upgrade Required` for a plain HTTP request.
 
@@ -891,8 +879,8 @@ In-memory buffer → (10 s) → metric_samples res=0
 res=60 (minute average) → res=300 (five-minute average)
     ↓ (10 min) delete older than 1 h / 25 h / 7 d
 
-Browser: chart_range.js → GET /api/metrics/history?range=…&since=…
-    ↓ polling 3 s … 5 min (depends on period), paused in background tabs
+Browser: chart_range.js → EventSource /api/events/metrics?range=…
+    ↓ full snapshot, then increments every 3 s … 5 min (depends on period); `data` is decrypted with decryptData(); the stream is closed in background tabs
 Chart.js: gaps for missing data, axis labels by period length, zoom reset on period change
 ```
 
@@ -956,7 +944,7 @@ Update DOM in real-time
 
 #### **chart_range.js**
 - `createChartRangeController({ key, mount, canvasId, getSource, render })` — period dropdown button (Minutes / Hours / Days) next to a chart
-- Polls `/api/metrics/history` at an interval that depends on the period (3 s for 3m … 5 min for 7d), fetching incrementally via `since`
+- Subscribes to the SSE stream `/api/events/metrics` (`EventSource`), receives a full snapshot and increments, decrypts `data` via `decryptData()`; reopens the stream on period change and reconnects after a drop
 - Passes a normalized `series` to `render` (`labels`, `cpu`, `ram`, `disk`, `rx`/`tx` in Kbps, `null` on gaps)
 - Remembers the choice in `localStorage` (`chartRange:<key>`), shows a “Live” indicator for periods ≤ 1 h, resets zoom on period change, stops when the modal closes or on SPA navigation
 
