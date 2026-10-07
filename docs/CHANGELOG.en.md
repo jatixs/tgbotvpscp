@@ -12,41 +12,30 @@
 
 ## [1.26.0] - 2026-10-07
 
-### 🔒 Security
-* Roles are checked right before every privileged action in Telegram and the WebUI: backups, service management, traffic resets, and administrator settings.
-* Removed the default `admin` password: the installer generates a random initial password.
-* Secret node tokens no longer appear in browser pages or URLs; the panel addresses nodes by numeric ID.
-* The SSH terminal verifies the remote server's host key. Reverse-proxy headers are trusted only from configured proxies.
-* In the Secure Docker profile the bot can only read Docker data; changing operations are available only in the Root profile.
-
-### 🌐 HTTPS and Agent Migration
-* The installer can set up HTTPS with Nginx and Certbot not only for a domain, but also for a public IPv4 address without a domain. An IP certificate lasts 160 hours and is checked for renewal every hour.
-* If a valid certificate for the address already exists (in the Nginx configuration, including Cloudflare Origin, or in Certbot), the installer simply uses it. A new one is requested only when none exists, so repeated runs don't hit Let's Encrypt rate limits.
-* A new Let's Encrypt certificate requires inbound access to TCP port 80. Private and local IP addresses are not supported. With an external reverse proxy, its owner manages issuance and renewal. The installer does not renew certificates that were not issued through Certbot (for example, Cloudflare ones).
-* Existing agents move to HTTPS in stages: update the master first, then the nodes. An agent discovers the HTTPS address, validates the certificate and server name, and saves the new address. During the transition, a restricted HTTP bridge accepts only address discovery, initial setup, and HMAC-signed heartbeats.
-* `tgcp-bot tls status` shows the migration state; `tgcp-bot tls check` verifies readiness; `tgcp-bot tls finalize` closes the temporary bridge once all nodes have migrated.
-
-### 📦 Installation and Updates
-* Updates first prepare a separate copy of the program and swap it in once ready. `.env`, configuration, logs, and installer files are preserved. You can switch between Systemd and Docker without uninstalling first.
-* A normal Docker profile switch no longer deletes data. The WebUI is reachable on the host only via the local address.
-* Installer messages are shorter and clearer: technical Nginx and Certbot output is hidden unless needed, and on failure the installer states the cause and what to do next. The existing HTTPS setup is left untouched if the new one fails validation.
-* The `tgcp-bot` CLI gained commands for checking status and restarting, changing the initial password, and controlling the HTTPS migration.
+### � New Features
+* **HTTPS for an IP address.** The installer sets up Nginx + Certbot not only for a domain but also for a public IPv4 without one (160-hour certificate with automatic renewal). An existing certificate (Nginx, Cloudflare Origin, Certbot) is reused so repeated runs don't hit Let's Encrypt limits. Requires inbound port 80; private IPs are not supported.
+* **Agent migration to HTTPS.** Nodes move in stages (master first, then nodes): the agent discovers the HTTPS address and validates the certificate, while a restricted HMAC-signed HTTP bridge covers the transition. Managed with `tgcp-bot tls status | check | finalize`.
+* **Chart period.** Resource and network charts (agent and node windows) got a period selector from 3 minutes to 7 days, like Zabbix/Grafana. History is stored in the database (raw samples for an hour, per-minute for a day, five-minute for a week); short periods update live.
+* **`tgcp-bot` CLI.** Commands for status, restart, changing the initial password, and controlling the HTTPS migration.
 
 ### ✨ Improved
-* Resource and network charts now have a period selector like Zabbix or Grafana: 3, 10, 30 minutes; 1, 3, 6, 12 hours; 1, 3, 7 days. The selector sits next to every chart — on the agent panel and in the node window (dashboard and node monitor). History is stored in the database: raw samples for an hour, per-minute for a day, five-minute for a week. The chosen period is remembered in the browser; short periods update live.
-* The node window shows the node's ID next to its name, in gray at the end of the row after the buttons and badges. In Settings, the node table now starts with an "ID" column (it used to end with a "Token" column).
-* The node window scales text, emoji, icons, and chart fonts to the screen size without changing the layout. A long node name shrinks to fit, and the country flag from the name is shown as an SVG icon instead of the node icon.
-* In the top-processes hint, clicking a value switches all values in the window between percent and the real figure: CPU shows frequency, RAM shows memory in use, and Disk shows the share of total disk size.
+* **Seamless updates.** The new version is prepared in a separate copy and swapped in only when ready; `.env`, configuration, and logs are preserved. Systemd ↔ Docker and Docker profile switches no longer delete data.
+* **Installer.** Shorter, clearer messages, technical Nginx/Certbot output is hidden, and failures state the cause and next step. A failed HTTPS setup leaves the previous one intact.
+* **Node window.** Text, emoji, icons, and chart fonts scale to the screen; long names shrink to fit and the country flag is shown as an SVG icon. The node ID is shown next to the name, and the Settings table now has an "ID" column instead of "Token".
+* **Top processes.** Clicking a value toggles between percent and the real figure (CPU frequency, memory in use, disk share).
+* **Maintenance.** Internal caches are bounded by size and age (no Redis needed), unused dependencies removed, tests added for HTTPS/Certbot/migration, documentation updated (RU/EN).
 
 ### 🐛 Fixed
-* After an update the browser could keep using old WebUI scripts and styles (for example, new controls in the node window on the monitoring page did not appear). JS/CSS URLs now change whenever the files change, and HTML pages are always revalidated — no hard refresh is needed after updating.
-* The installer no longer fails with "Code: 100" when apt/dpkg is held by another process during an update (for example, Ubuntu unattended upgrades): it waits for the lock to be released (up to 10 minutes) and retries the package installation.
-* Telegram billing: after changing the amount or payment date, the menu showed dollars instead of the selected currency. The currency now stays as set.
+* The browser no longer keeps stale JS/CSS after an update — no hard refresh required.
+* The installer waits for apt/dpkg to be released (up to 10 minutes) instead of failing with "Code: 100".
+* Telegram billing: the currency no longer resets to dollars after changing the amount or date.
 
-### 🧰 Maintenance and Tests
-* Caches for anti-flood, Docker Hub descriptions, repeated SSH login notifications, and Alert Bot state are limited by age and size; Redis is not required.
-* Removed unused direct dependencies. Added tests for HTTPS addresses, finding a ready certificate in the Nginx configuration, Certbot arguments, and agent migration.
-* Russian and English documentation updated together: HTTPS setup, agent migration, and management commands.
+### 🔒 Security
+* Roles are checked right before every privileged action in Telegram and the WebUI.
+* Removed the default `admin` password — the installer generates a random one.
+* Node tokens never appear in pages or URLs; the panel works by numeric ID.
+* The SSH terminal verifies the server host key; reverse-proxy headers are trusted only from configured proxies.
+* In the Secure Docker profile the bot only reads Docker data; the WebUI on the host is reachable only via the local address.
 
 ---
 ## [1.25.3] - 2026-09-27
