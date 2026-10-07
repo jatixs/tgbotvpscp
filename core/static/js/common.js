@@ -4,6 +4,13 @@
  */
 /* /core/static/js/common.js */
 
+if (window.Chart) {
+    window.Chart.defaults.animation = {
+        duration: 420,
+        easing: 'easeOutQuart'
+    };
+}
+
 // Export globally to resolve linter unused warnings
 window.secureFetch = secureFetch;
 window.sseRequest = sseRequest;
@@ -390,7 +397,7 @@ function updateChartWithLiveData(chart, applyData, canvasOrId) {
 
     applyData();
     alignChartToLiveWindow(chart);
-    chart.update('none');
+    chart.update();
     refreshChartZoomState(chart, canvasOrId);
     return true;
 }
@@ -401,6 +408,21 @@ function buildInteractiveChartOptions(baseOptions = {}) {
 
     return {
         ...baseOptions,
+        animation: baseOptions.animation === false ? {
+            duration: 420,
+            easing: 'easeOutQuart'
+        } : baseOptions.animation,
+        transitions: {
+            ...(baseOptions.transitions || {}),
+            zoom: {
+                ...(baseOptions.transitions?.zoom || {}),
+                animation: {
+                    duration: 360,
+                    easing: 'easeOutCubic',
+                    ...(baseOptions.transitions?.zoom?.animation || {})
+                }
+            }
+        },
         plugins: {
             ...(baseOptions.plugins || {}),
             zoom: {
@@ -455,7 +477,7 @@ function attachChartInteractions(chart, canvasOrId) {
         if (!activeChart) return;
 
         if (typeof activeChart.resetZoom === 'function') {
-            activeChart.resetZoom();
+            activeChart.resetZoom('default');
         }
 
         const state = activeChart.__liveZoomState = activeChart.__liveZoomState || {};
@@ -471,7 +493,7 @@ function attachChartInteractions(chart, canvasOrId) {
         }
 
         window.alignChartToLiveWindow?.(activeChart);
-        activeChart.update('none');
+        activeChart.update();
         window.refreshChartZoomState?.(activeChart, canvas);
     };
 
