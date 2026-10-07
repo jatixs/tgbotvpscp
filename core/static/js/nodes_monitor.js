@@ -754,15 +754,9 @@ function connectNodeDetailStream(token) {
 }
 
 function updateNodeModal(data) {
-    const newTitleHtml = typeof replaceEmojisWithFlagsHTML === 'function' ? replaceEmojisWithFlagsHTML(escapeHtml(decryptData(data.name) || 'Unknown')) : escapeHtml(decryptData(data.name) || 'Unknown');
     const modalTitleEl = document.getElementById('modalNodeTitle');
-    const tempTitle = modalTitleEl.cloneNode(false);
-    tempTitle.innerHTML = DOMPurify.sanitize(newTitleHtml);
-    if (!updateDOM(modalTitleEl, tempTitle)) {
-        modalTitleEl.innerHTML = DOMPurify.sanitize(newTitleHtml);
-    }
-    if (typeof parsePageEmojis === 'function') parsePageEmojis(modalTitleEl);
-    
+    renderNodeModalTitle(modalTitleEl, decryptData(data.name) || 'Unknown');
+
     const nameContainer = modalTitleEl.parentElement;
     if (nameContainer) {
         const badgeEl = document.getElementById('monitorNodeBillingBadge');

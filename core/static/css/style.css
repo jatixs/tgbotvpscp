@@ -1519,3 +1519,94 @@ html.amoled #log-loader {
 .dashboard-block .lazy-block {
     flex: 1 1 auto;
 }
+
+/* --- Node detail modals: fluid scale (--nm-s is set by common.js from the card width) --- */
+:is(#nodeModal, #nodeDetailModal) .text-xs {
+    font-size: calc(0.75rem * var(--nm-s, 1));
+}
+
+:is(#nodeModal, #nodeDetailModal) .text-sm {
+    font-size: calc(0.875rem * var(--nm-s, 1));
+}
+
+:is(#nodeModal, #nodeDetailModal) .text-\[10px\] {
+    font-size: max(9px, calc(10px * var(--nm-s, 1)));
+}
+
+:is(#nodeModal, #nodeDetailModal) svg.h-3 {
+    width: calc(0.75rem * var(--nm-s, 1));
+    height: calc(0.75rem * var(--nm-s, 1));
+}
+
+:is(#nodeModal, #nodeDetailModal) svg.h-3\.5 {
+    width: calc(0.875rem * var(--nm-s, 1));
+    height: calc(0.875rem * var(--nm-s, 1));
+}
+
+:is(#nodeModal, #nodeDetailModal) svg.h-4 {
+    width: calc(1rem * var(--nm-s, 1));
+    height: calc(1rem * var(--nm-s, 1));
+}
+
+:is(#nodeModal, #nodeDetailModal) svg.h-5 {
+    width: calc(1.25rem * var(--nm-s, 1));
+    height: calc(1.25rem * var(--nm-s, 1));
+}
+
+:is(#nodeModal, #nodeDetailModal) svg.h-6 {
+    width: calc(1.5rem * var(--nm-s, 1));
+    height: calc(1.5rem * var(--nm-s, 1));
+}
+
+@media (min-width: 640px) {
+    :is(#nodeModal, #nodeDetailModal) svg.sm\:h-6 {
+        width: calc(1.5rem * var(--nm-s, 1));
+        height: calc(1.5rem * var(--nm-s, 1));
+    }
+}
+
+/* Country flag shown in place of the node icon */
+:is(#nodeModal, #nodeDetailModal) .nm-flag-icon {
+    display: block;
+    width: calc(1.5rem * var(--nm-s, 1));
+    height: calc(1.5rem * var(--nm-s, 1));
+    object-fit: contain;
+}
+
+@media (max-width: 639px) {
+    #nodeDetailModal .nm-flag-icon {
+        width: calc(1.25rem * var(--nm-s, 1));
+        height: calc(1.25rem * var(--nm-s, 1));
+    }
+}
+
+/* Single-line text fitted to its box by common.js (data-nm-fit) */
+:is(#nodeModal, #nodeDetailModal) [data-nm-fit="title"] {
+    font-size: calc(1.25rem * var(--nm-s, 1));
+    line-height: 1.3;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    min-width: 0;
+    flex: 0 1 auto;
+}
+
+:is(#nodeModal, #nodeDetailModal) [data-nm-fit="value"] {
+    font-size: calc(0.875rem * var(--nm-s, 1));
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+:is(#nodeModal, #nodeDetailModal) [data-nm-fit="row"] {
+    font-size: calc(0.75rem * var(--nm-s, 1));
+    white-space: nowrap;
+}
+
+:is(#nodeModal, #nodeDetailModal) [data-nm-fit="row"] * {
+    font-size: inherit;
+}
+
+:is(#nodeModal, #nodeDetailModal) [data-nm-fit="row"] #modalNodePingBadge {
+    font-size: 0.85em;
+}

@@ -762,6 +762,134 @@ function replaceEmojisWithFlagsHTML(text) {
     });
 }
 
+// --- Node detail modals: flag-as-icon, fluid font scale, fit-to-width text, chart fonts ---
+
+function splitNodeFlag(rawName) {
+    const text = String(rawName || '');
+    const m = /\uD83C[\uDDE6-\uDDFF]\uD83C[\uDDE6-\uDDFF]/.exec(text);
+    if (!m) return { code: null, name: text };
+    const code = String.fromCharCode(
+        m[0].codePointAt(0) - 0x1F1E6 + 97,
+        m[0].codePointAt(2) - 0x1F1E6 + 97
+    );
+    const rest = (text.slice(0, m.index) + ' ' + text.slice(m.index + m[0].length)).replace(/\s{2,}/g, ' ').trim();
+    return { code, name: rest || code.toUpperCase() };
+}
+
+function setNodeIconFlag(iconBox, code) {
+    if (!iconBox) return;
+    const svg = iconBox.querySelector('svg');
+    let img = iconBox.querySelector('img.nm-flag-icon');
+    if (!code) {
+        if (img) img.remove();
+        if (svg) svg.style.display = '';
+        return;
+    }
+    const src = `https://flagcdn.com/${code}.svg`;
+    if (!img) {
+        img = document.createElement('img');
+        img.className = 'nm-flag-icon';
+        img.alt = '';
+        iconBox.appendChild(img);
+    }
+    if (img.getAttribute('src') !== src) img.setAttribute('src', src);
+    if (svg) svg.style.display = 'none';
+}
+
+function renderNodeModalTitle(titleEl, rawName) {
+    if (!titleEl) return;
+    const { code, name } = splitNodeFlag(rawName);
+    const html = DOMPurify.sanitize(replaceEmojisWithFlagsHTML(escapeHtml(name)));
+    const temp = titleEl.cloneNode(false);
+    temp.innerHTML = html;
+    if (!updateDOM(titleEl, temp)) titleEl.innerHTML = html;
+    if (typeof parsePageEmojis === 'function') parsePageEmojis(titleEl);
+    titleEl.dataset.rawName = String(rawName || '');
+    titleEl.title = name;
+    const header = titleEl.closest('#nodeModal > div > div, #nodeDetailModal > div > div');
+    setNodeIconFlag(header?.firstElementChild?.firstElementChild, code);
+}
+window.renderNodeModalTitle = renderNodeModalTitle;
+
+const NM_FIT_MIN = { title: 11, value: 9, row: 9 };
+
+function nmFitEl(el) {
+    el.style.fontSize = '';
+    if (!el.clientWidth) return;
+    let size = parseFloat(getComputedStyle(el).fontSize);
+    const min = NM_FIT_MIN[el.dataset.nmFit] || 9;
+    for (let i = 0; i < 4 && size > min && el.scrollWidth > el.clientWidth + 0.5; i++) {
+        size = Math.max(min, size * el.clientWidth / el.scrollWidth - 0.1);
+        el.style.fontSize = size + 'px';
+    }
+}
+
+function initNodeModalScaling() {
+    ['nodeModal', 'nodeDetailModal'].forEach((id) => {
+        const card = document.getElementById(id)?.firstElementChild;
+        if (!card || card.dataset.nmInit) return;
+        card.dataset.nmInit = '1';
+
+        const mark = (selector, kind) => card.querySelectorAll(selector).forEach((el) => { el.dataset.nmFit = kind; });
+        mark('#modalNodeName, #modalNodeTitle', 'title');
+        mark('#modalNodeUptime, #modalNodeRam, #modalNodeDisk, #modalNodeTraffic, #modalUptime, #modalCpu, #modalRam, #modalDisk', 'value');
+        const ip = card.querySelector('#modalNodeIp');
+        if (ip?.parentElement) ip.parentElement.dataset.nmFit = 'row';
+
+        // Let the title shrink instead of pushing/wrapping inside the header.
+        const title = card.querySelector('[data-nm-fit="title"]');
+        for (let el = title?.parentElement; el && el.parentElement !== card; el = el.parentElement) {
+            el.style.minWidth = '0';
+        }
+
+        const fitAll = () => card.querySelectorAll('[data-nm-fit]').forEach(nmFitEl);
+        let raf = 0;
+        const schedule = () => {
+            cancelAnimationFrame(raf);
+            raf = requestAnimationFrame(fitAll);
+        };
+
+        let lastWidth = 0;
+        new ResizeObserver(() => {
+            const w = card.clientWidth;
+            if (!w || w === lastWidth) return;
+            lastWidth = w;
+            card.style.setProperty('--nm-s', Math.min(1, Math.max(0.8, w / 560)).toFixed(3));
+            schedule();
+        }).observe(card);
+
+        new MutationObserver(schedule).observe(card, { childList: true, characterData: true, subtree: true });
+    });
+}
+document.addEventListener('DOMContentLoaded', initNodeModalScaling);
+
+if (typeof Chart !== 'undefined') {
+    Chart.register({
+        id: 'nodeModalChartFonts',
+        beforeUpdate(chart) {
+            if (!chart.canvas || !chart.canvas.closest('#nodeModal, #nodeDetailModal')) return;
+            const w = chart.width || chart.canvas.clientWidth;
+            if (!w) return;
+            const size = Math.max(8, Math.min(12, Math.round(w / 32)));
+            try {
+                const opts = chart.options;
+                Object.entries(opts.scales || {}).forEach(([axis, scale]) => {
+                    if (!scale.ticks) return;
+                    scale.ticks.font = { size };
+                    if (axis === 'x') {
+                        scale.ticks.display = w >= 340;
+                        scale.ticks.maxTicksLimit = Math.max(2, Math.min(6, Math.floor(w / 90)));
+                    }
+                });
+                const legendLabels = opts.plugins?.legend?.labels;
+                if (legendLabels) legendLabels.font = { size };
+            } catch (e) {
+                console.debug('nodeModalChartFonts skipped:', e);
+            }
+        }
+    });
+}
+
 function updateDOM(oldNode, newNode) {
     if (!oldNode || !newNode) return false;
     if (oldNode.nodeType !== newNode.nodeType) return false;
@@ -2148,6 +2276,7 @@ document.addEventListener('click', async (e) => {
                 } catch (e) { }
                 initHolidayMood();
                 initGlobalLazyLoad();
+                initNodeModalScaling();
 
                 try {
                     if (url.includes('/settings')) {
