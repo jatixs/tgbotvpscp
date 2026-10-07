@@ -1,0 +1,463 @@
+/*
+ * Chart time-range selector (3m … 7d) + history polling.
+ *
+ * Usage:
+ *   const ctl = createChartRangeController({
+ *       key: 'agentChart',                       // localStorage key suffix
+ *       mount: '[data-chart-range="agentChart"]',// element that receives the dropdown button
+ *       canvasId: 'agentChart',                  // used for zoom reset + empty-state overlay
+ *       getSource: () => ({ source: 'agent' }),  // or { source: 'node', node_id }
+ *       render: (series) => { ... }              // called with normalized series
+ *   });
+ *   ctl.start(); ctl.stop(); ctl.refresh(); ctl.destroy();
+ *
+ * series = { range, step, span, points, labels, cpu, ram, disk, rx, tx, isLive }
+ * rx/tx are in Kbps (same unit the charts already use), gaps are null-filled.
+ */
+(function () {
+    'use strict';
+
+    const RANGES = [
+        { key: '3m', group: 'minutes', amount: 3, seconds: 180, poll: 3000 },
+        { key: '10m', group: 'minutes', amount: 10, seconds: 600, poll: 3000 },
+        { key: '30m', group: 'minutes', amount: 30, seconds: 1800, poll: 5000 },
+        { key: '1h', group: 'hours', amount: 1, seconds: 3600, poll: 10000 },
+        { key: '3h', group: 'hours', amount: 3, seconds: 3 * 3600, poll: 30000 },
+        { key: '6h', group: 'hours', amount: 6, seconds: 6 * 3600, poll: 30000 },
+        { key: '12h', group: 'hours', amount: 12, seconds: 12 * 3600, poll: 60000 },
+        { key: '1d', group: 'days', amount: 1, seconds: 86400, poll: 60000 },
+        { key: '3d', group: 'days', amount: 3, seconds: 3 * 86400, poll: 120000 },
+        { key: '7d', group: 'days', amount: 7, seconds: 7 * 86400, poll: 300000 }
+    ];
+    const GROUPS = ['minutes', 'hours', 'days'];
+    const DEFAULT_RANGE = '3m';
+    const LIVE_MAX_SECONDS = 3600;
+    const RAW_GAP_SECONDS = 25;
+
+    const CLOCK_ICON = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="chart-range-icon"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>';
+    const CHEVRON_ICON = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="chart-range-chevron"><path d="M6 9l6 6 6-6"/></svg>';
+
+    function t(key, fallback) {
+        return (typeof I18N !== 'undefined' && I18N && I18N[key]) ? I18N[key] : fallback;
+    }
+
+    function unitLabel(group) {
+        if (group === 'minutes') return t('unit_minute_short', 'm');
+        if (group === 'hours') return t('unit_hour_short', 'h');
+        return t('unit_day_short', 'd');
+    }
+
+    function groupLabel(group) {
+        if (group === 'minutes') return t('web_chart_range_minutes', 'Minutes');
+        if (group === 'hours') return t('web_chart_range_hours', 'Hours');
+        return t('web_chart_range_days', 'Days');
+    }
+
+    function rangeLabel(range) {
+        return `${range.amount}${unitLabel(range.group)}`;
+    }
+
+    function stepLabel(step) {
+        if (!step) return '';
+        if (step < 60) return `${step}s`;
+        if (step < 3600) return `${Math.round(step / 60)}${unitLabel('minutes')}`;
+        return `${Math.round(step / 3600)}${unitLabel('hours')}`;
+    }
+
+    function findRange(key) {
+        return RANGES.find(r => r.key === key) || RANGES.find(r => r.key === DEFAULT_RANGE);
+    }
+
+    function formatLabel(ts, span) {
+        const date = new Date(ts * 1000);
+        if (span <= 3600) {
+            return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        }
+        if (span <= 86400) {
+            return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        }
+        return date.toLocaleString([], { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+    }
+
+    function readStored(key) {
+        try {
+            const value = localStorage.getItem(`chartRange:${key}`);
+            return RANGES.some(r => r.key === value) ? value : null;
+        } catch (e) {
+            return null;
+        }
+    }
+
+    function writeStored(key, value) {
+        try {
+            localStorage.setItem(`chartRange:${key}`, value);
+        } catch (e) { /* storage disabled */ }
+    }
+
+    let openController = null;
+
+    document.addEventListener('click', (e) => {
+        if (!openController) return;
+        if (openController.pop?.contains(e.target) || openController.button?.contains(e.target)) return;
+        openController.closePopover();
+    });
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && openController) openController.closePopover();
+    });
+    window.addEventListener('resize', () => openController?.closePopover());
+    window.addEventListener('scroll', () => openController?.closePopover(), true);
+
+    function createChartRangeController(opts) {
+        const mount = typeof opts.mount === 'string' ? document.querySelector(opts.mount) : opts.mount;
+        const storageKey = opts.key || opts.canvasId || 'chart';
+        const ctl = {
+            range: findRange(opts.initialRange || readStored(storageKey) || DEFAULT_RANGE),
+            points: [],
+            step: 0,
+            span: 0,
+            serverNow: 0,
+            running: false,
+            destroyed: false,
+            timer: null,
+            inflight: null,
+            loading: true,
+            pop: null,
+            button: null,
+            mount
+        };
+
+        /* ---------- UI ---------- */
+        function buildButton() {
+            if (!mount) return;
+            mount.classList.add('chart-range');
+            mount.innerHTML = `
+                <button type="button" class="chart-range-btn" aria-haspopup="listbox" aria-expanded="false" title="${t('web_chart_range_title', 'Chart period')}">
+                    <span class="chart-range-live" aria-hidden="true"></span>
+                    ${CLOCK_ICON}
+                    <span class="chart-range-label"></span>
+                    ${CHEVRON_ICON}
+                </button>`;
+            ctl.button = mount.querySelector('.chart-range-btn');
+            ctl.button.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                if (ctl.pop?.classList.contains('is-open')) ctl.closePopover();
+                else openPopover();
+            });
+            syncButton();
+        }
+
+        function syncButton() {
+            if (!ctl.button) return;
+            const label = ctl.button.querySelector('.chart-range-label');
+            if (label) label.textContent = rangeLabel(ctl.range);
+            ctl.button.classList.toggle('is-live', ctl.range.seconds <= LIVE_MAX_SECONDS);
+            if (ctl.pop) {
+                ctl.pop.querySelectorAll('.chart-range-chip').forEach(chip => {
+                    chip.classList.toggle('is-active', chip.dataset.range === ctl.range.key);
+                    chip.setAttribute('aria-selected', chip.dataset.range === ctl.range.key ? 'true' : 'false');
+                });
+                const foot = ctl.pop.querySelector('.chart-range-foot');
+                if (foot) foot.innerHTML = footHtml();
+            }
+        }
+
+        function footHtml() {
+            const isLive = ctl.range.seconds <= LIVE_MAX_SECONDS;
+            const stepText = ctl.step ? `${t('web_chart_range_step', 'Step')}: ${stepLabel(ctl.step)}` : '';
+            if (isLive) {
+                return `<span class="chart-range-foot-live"><span class="chart-range-live"></span>${t('web_chart_range_live', 'Live')}</span>${stepText ? `<span>${stepText}</span>` : ''}`;
+            }
+            return `<span>${stepText || rangeLabel(ctl.range)}</span>`;
+        }
+
+        function buildPopover() {
+            const pop = document.createElement('div');
+            pop.className = 'chart-range-pop';
+            pop.setAttribute('role', 'listbox');
+            const groups = GROUPS.map(group => {
+                const chips = RANGES.filter(r => r.group === group).map(r =>
+                    `<button type="button" class="chart-range-chip" role="option" data-range="${r.key}">${rangeLabel(r)}</button>`
+                ).join('');
+                return `<div class="chart-range-group"><span class="chart-range-group-label">${groupLabel(group)}</span><div class="chart-range-chips">${chips}</div></div>`;
+            }).join('');
+            pop.innerHTML = `<div class="chart-range-pop-title">${t('web_chart_range_title', 'Chart period')}</div>${groups}<div class="chart-range-foot"></div>`;
+            pop.addEventListener('click', (e) => {
+                const chip = e.target.closest('.chart-range-chip');
+                if (!chip) return;
+                e.stopPropagation();
+                chip.classList.add('is-pressed');
+                setTimeout(() => chip.classList.remove('is-pressed'), 180);
+                setRange(chip.dataset.range);
+                setTimeout(() => ctl.closePopover(), 120);
+            });
+            document.body.appendChild(pop);
+            ctl.pop = pop;
+            syncButton();
+        }
+
+        function positionPopover() {
+            if (!ctl.pop || !ctl.button) return;
+            const rect = ctl.button.getBoundingClientRect();
+            const pop = ctl.pop;
+            const margin = 8;
+            const popRect = pop.getBoundingClientRect();
+            let left = rect.right - popRect.width;
+            left = Math.max(margin, Math.min(left, window.innerWidth - popRect.width - margin));
+            let top = rect.bottom + 6;
+            let openUp = false;
+            if (top + popRect.height > window.innerHeight - margin && rect.top - popRect.height - 6 > margin) {
+                top = rect.top - popRect.height - 6;
+                openUp = true;
+            }
+            pop.style.left = `${Math.round(left)}px`;
+            pop.style.top = `${Math.round(top)}px`;
+            pop.classList.toggle('is-up', openUp);
+        }
+
+        function openPopover() {
+            if (ctl.destroyed) return;
+            if (openController && openController !== ctl) openController.closePopover();
+            if (!ctl.pop) buildPopover();
+            syncButton();
+            positionPopover();
+            requestAnimationFrame(() => ctl.pop?.classList.add('is-open'));
+            ctl.button?.setAttribute('aria-expanded', 'true');
+            ctl.button?.classList.add('is-open');
+            openController = ctl;
+        }
+
+        ctl.closePopover = function () {
+            if (ctl.pop) ctl.pop.classList.remove('is-open');
+            ctl.button?.setAttribute('aria-expanded', 'false');
+            ctl.button?.classList.remove('is-open');
+            if (openController === ctl) openController = null;
+        };
+
+        /* ---------- data ---------- */
+        function sourceParams() {
+            const src = typeof opts.getSource === 'function' ? opts.getSource() : { source: 'agent' };
+            if (!src || !src.source) return null;
+            if (src.source === 'node' && !src.node_id) return null;
+            return src;
+        }
+
+        function resetChartZoom() {
+            const chart = opts.canvasId && window.__chartRegistry ? window.__chartRegistry[opts.canvasId] : null;
+            if (!chart) return;
+            chart.__liveZoomState = {};
+            if (chart.options?.scales?.x) {
+                delete chart.options.scales.x.min;
+                delete chart.options.scales.x.max;
+            }
+            try { chart.resetZoom?.('none'); } catch (e) { /* plugin missing */ }
+        }
+
+        function toggleEmptyState(isEmpty) {
+            const canvas = opts.canvasId ? document.getElementById(opts.canvasId) : null;
+            const wrapper = canvas?.parentElement;
+            if (!wrapper) return;
+            let el = wrapper.querySelector('.chart-range-empty');
+            if (isEmpty) {
+                if (!el) {
+                    el = document.createElement('div');
+                    el.className = 'chart-range-empty';
+                    wrapper.appendChild(el);
+                }
+                el.textContent = t('web_chart_range_no_data', 'No data for this period yet');
+                el.classList.add('is-visible');
+            } else if (el) {
+                el.classList.remove('is-visible');
+            }
+        }
+
+        function buildSeries() {
+            const pts = ctl.points;
+            const span = ctl.range.seconds;
+            const step = ctl.step;
+            const gap = step ? step * 1.5 : RAW_GAP_SECONDS;
+            const series = {
+                range: ctl.range.key,
+                step,
+                span,
+                points: pts,
+                isLive: span <= LIVE_MAX_SECONDS,
+                labels: [], cpu: [], ram: [], disk: [], rx: [], tx: []
+            };
+            for (let i = 0; i < pts.length; i++) {
+                const p = pts[i];
+                if (i > 0 && p.t - pts[i - 1].t > gap) {
+                    series.labels.push('');
+                    series.cpu.push(null);
+                    series.ram.push(null);
+                    series.disk.push(null);
+                    series.rx.push(null);
+                    series.tx.push(null);
+                }
+                series.labels.push(formatLabel(p.t, span));
+                series.cpu.push(p.c);
+                series.ram.push(p.r);
+                series.disk.push(p.d);
+                series.rx.push(p.rx * 8 / 1024);
+                series.tx.push(p.tx * 8 / 1024);
+            }
+            return series;
+        }
+
+        function emit() {
+            if (ctl.destroyed) return;
+            toggleEmptyState(!ctl.loading && ctl.points.length < 2);
+            if (typeof opts.render === 'function') {
+                try {
+                    opts.render(buildSeries());
+                } catch (e) {
+                    console.error('Chart range render error:', e);
+                }
+            }
+        }
+
+        function mergePoints(payload, incremental) {
+            const incoming = Array.isArray(payload.points) ? payload.points : [];
+            ctl.step = payload.step || 0;
+            ctl.span = payload.span || ctl.range.seconds;
+            ctl.serverNow = payload.now || Math.floor(Date.now() / 1000);
+            if (incremental && incoming.length) {
+                const since = incoming[0].t;
+                ctl.points = ctl.points.filter(p => p.t < since).concat(incoming);
+            } else if (!incremental) {
+                ctl.points = incoming;
+            }
+            const cutoff = ctl.serverNow - ctl.span;
+            if (ctl.points.length && ctl.points[0].t < cutoff) {
+                ctl.points = ctl.points.filter(p => p.t >= cutoff);
+            }
+        }
+
+        async function load(full) {
+            if (ctl.destroyed || !ctl.running) return;
+            if (mount && !mount.isConnected) {
+                // The page was swapped by the SPA navigation; stop polling for a dead widget.
+                ctl.stop();
+                return;
+            }
+            const src = sourceParams();
+            if (!src) return;
+            if (ctl.inflight) ctl.inflight.abort();
+            const aborter = new AbortController();
+            ctl.inflight = aborter;
+
+            const params = new URLSearchParams({ source: src.source, range: ctl.range.key });
+            if (src.node_id) params.set('node_id', String(src.node_id));
+            const incremental = !full && ctl.points.length > 0;
+            if (incremental) params.set('since', String(ctl.points[ctl.points.length - 1].t));
+
+            try {
+                const res = await fetch(`/api/metrics/history?${params.toString()}`, { signal: aborter.signal, cache: 'no-store' });
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                const payload = await res.json();
+                if (ctl.destroyed || aborter !== ctl.inflight) return;
+                if (payload.range !== ctl.range.key) return;
+                ctl.loading = false;
+                mergePoints(payload, incremental);
+                emit();
+            } catch (e) {
+                if (e.name !== 'AbortError') console.debug('Chart range fetch failed:', e);
+            } finally {
+                // A newer request may have replaced this one; only the latest schedules the next poll.
+                if (ctl.inflight === aborter) {
+                    ctl.inflight = null;
+                    schedule();
+                }
+            }
+        }
+
+        function schedule() {
+            clearTimeout(ctl.timer);
+            if (!ctl.running || ctl.destroyed) return;
+            const delay = document.hidden ? Math.max(ctl.range.poll, 30000) : ctl.range.poll;
+            ctl.timer = setTimeout(() => load(false), delay);
+        }
+
+        function setRange(key) {
+            const next = findRange(key);
+            if (!next) return;
+            const changed = next.key !== ctl.range.key;
+            ctl.range = next;
+            writeStored(storageKey, next.key);
+            syncButton();
+            if (!changed) return;
+            ctl.points = [];
+            ctl.step = 0;
+            ctl.loading = true;
+            resetChartZoom();
+            if (typeof opts.onRangeChange === 'function') opts.onRangeChange(next.key);
+            emit();
+            if (ctl.running) load(true);
+        }
+
+        function onVisibility() {
+            if (!document.hidden && ctl.running) load(false);
+        }
+
+        /* ---------- public API ---------- */
+        ctl.start = function () {
+            if (ctl.destroyed) return ctl;
+            ctl.running = true;
+            document.addEventListener('visibilitychange', onVisibility);
+            load(true);
+            return ctl;
+        };
+
+        ctl.stop = function () {
+            ctl.running = false;
+            clearTimeout(ctl.timer);
+            ctl.timer = null;
+            if (ctl.inflight) {
+                ctl.inflight.abort();
+                ctl.inflight = null;
+            }
+            document.removeEventListener('visibilitychange', onVisibility);
+            ctl.closePopover();
+            return ctl;
+        };
+
+        ctl.reset = function () {
+            ctl.points = [];
+            ctl.step = 0;
+            ctl.loading = true;
+            if (ctl.running) load(true);
+            return ctl;
+        };
+
+        ctl.refresh = function () {
+            if (ctl.running) load(false);
+            return ctl;
+        };
+
+        ctl.setRange = function (key) {
+            setRange(key);
+            return ctl;
+        };
+
+        ctl.getRange = function () {
+            return ctl.range.key;
+        };
+
+        ctl.destroy = function () {
+            ctl.stop();
+            ctl.destroyed = true;
+            ctl.pop?.remove();
+            ctl.pop = null;
+            if (mount) {
+                mount.innerHTML = '';
+                mount.classList.remove('chart-range');
+            }
+        };
+
+        buildButton();
+        return ctl;
+    }
+
+    window.createChartRangeController = createChartRangeController;
+    window.CHART_RANGES = RANGES.map(r => r.key);
+})();

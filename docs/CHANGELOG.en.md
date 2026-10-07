@@ -33,6 +33,7 @@
 * The `tgcp-bot` CLI gained commands for checking status and restarting, changing the initial password, and controlling the HTTPS migration.
 
 ### ✨ Improved
+* Resource and network charts now have a period selector like Zabbix or Grafana: 3, 10, 30 minutes; 1, 3, 6, 12 hours; 1, 3, 7 days. The selector sits next to every chart — on the agent panel and in the node window (dashboard and node monitor). History is stored in the database: raw samples for an hour, per-minute for a day, five-minute for a week. The chosen period is remembered in the browser; short periods update live.
 * The node window shows the node's ID next to its name, in gray at the end of the row after the buttons and badges. In Settings, the node table now starts with an "ID" column (it used to end with a "Token" column).
 * The node window scales text, emoji, icons, and chart fonts to the screen size without changing the layout. A long node name shrinks to fit, and the country flag from the name is shown as an SVG icon instead of the node icon.
 * In the top-processes hint, clicking a value switches all values in the window between percent and the real figure: CPU shows frequency, RAM shows memory in use, and Disk shows the share of total disk size.

@@ -16,7 +16,7 @@ import aiohttp
 from aiohttp import web
 
 from . import config as current_config
-from . import shared_state
+from . import metrics_history, shared_state
 from .shared_state import AGENT_HISTORY, AUTH_TOKENS
 from .utils import get_country_flag
 from .web.auth import (
@@ -175,6 +175,14 @@ async def agent_monitor() -> None:
                     "tx": net.bytes_sent,
                 }
             )
+            metrics_history.record_sample(
+                metrics_history.AGENT_SOURCE,
+                cpu=cpu,
+                ram=ram_pct,
+                disk=disk_pct,
+                rx_bytes=net.bytes_recv,
+                tx_bytes=net.bytes_sent,
+            )
 
             # Accumulate online time
             shared_state.AGENT_AVAILABILITY["total_online_seconds"] = (
@@ -282,6 +290,7 @@ async def start_background_tasks(app: web.Application) -> None:
     tasks = [
         asyncio.create_task(agent_monitor(), name="agent-monitor"),
         asyncio.create_task(cleanup_monitor(app), name="cleanup-monitor"),
+        asyncio.create_task(metrics_history.maintenance_loop(), name="metrics-history"),
     ]
     app[BACKGROUND_TASKS_KEY] = tasks
     from .i18n import log_text

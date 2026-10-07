@@ -308,6 +308,7 @@ Agent routes: `GET /api/agent/https` публикует HTTPS origin без то
 - `GET /api/events/node` — SSE поток детальной карточки ноды
 - GET /api/events/node/services — SSE поток статусов сервисов конкретной ноды
 - `GET /api/events/services` — SSE поток менеджера сервисов
+- `GET /api/metrics/history` — история для графиков за период (`range=3m…7d`, `source=agent|node&node_id=…`)
 - `GET /api/agent/ipv4` — список IPv4 адресов агента
 - `GET /api/terminal/creds` — загрузка сохраненных SSH credentials
 - `POST /api/terminal/creds` — сохранение SSH credentials

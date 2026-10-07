@@ -59,3 +59,24 @@ class Node(models.Model):
 
     class Meta:
         table = "nodes"
+
+
+class MetricSample(models.Model):
+    """
+    Точка истории ресурсов агента или ноды.
+    res = 0 — сырой замер, 60/300 — усреднённые минутные/пятиминутные корзины.
+    rx/tx хранятся как скорость в байтах в секунду.
+    """
+    id = fields.BigIntField(pk=True)
+    source = fields.CharField(max_length=32)
+    res = fields.SmallIntField(default=0)
+    t = fields.IntField()
+    cpu = fields.FloatField(default=0)
+    ram = fields.FloatField(default=0)
+    disk = fields.FloatField(default=0)
+    rx = fields.FloatField(default=0)
+    tx = fields.FloatField(default=0)
+
+    class Meta:
+        table = "metric_samples"
+        indexes = (("source", "res", "t"),)
