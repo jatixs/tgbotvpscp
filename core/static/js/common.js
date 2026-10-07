@@ -330,7 +330,10 @@ function refreshChartZoomState(chart, canvasOrId) {
     const atLiveEdge = total <= 1 || max >= (maxIndex - 1);
     const visibleRange = Math.max(1, max - min);
 
-    if (!state.liveRangeSize || !state.freezeUpdates) {
+    // Remember the visible width only while zoomed; an unzoomed chart must follow the full data range.
+    if (!hasZoom) {
+        state.liveRangeSize = 0;
+    } else if (!state.liveRangeSize || !state.freezeUpdates) {
         state.liveRangeSize = visibleRange;
     }
 
@@ -353,12 +356,19 @@ window.refreshChartZoomState = refreshChartZoomState;
 function alignChartToLiveWindow(chart) {
     if (!chart?.options?.scales?.x) return;
 
-    const total = Array.isArray(chart.data?.labels) ? chart.data.labels.length : 0;
-    if (total <= 1) return;
-
     const state = chart.__liveZoomState = chart.__liveZoomState || {};
+    const total = Array.isArray(chart.data?.labels) ? chart.data.labels.length : 0;
+
+    if (!state.liveRangeSize || total <= 1) {
+        delete chart.options.scales.x.min;
+        delete chart.options.scales.x.max;
+        state.freezeUpdates = false;
+        state.atLiveEdge = true;
+        return;
+    }
+
     const maxIndex = total - 1;
-    const liveRangeSize = Math.max(1, Math.min(maxIndex, state.liveRangeSize || maxIndex));
+    const liveRangeSize = Math.max(1, Math.min(maxIndex, state.liveRangeSize));
 
     chart.options.scales.x.min = Math.max(0, maxIndex - liveRangeSize);
     chart.options.scales.x.max = maxIndex;
