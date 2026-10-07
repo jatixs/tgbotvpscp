@@ -950,6 +950,7 @@ function updateModalCharts(series, which, animate = true) {
             modalResChart.data.labels = labels;
             modalResChart.data.datasets[0].data = cpuData;
             modalResChart.data.datasets[1].data = ramData;
+            modalResChart.__chartTimeWindow = { min: series.minIndex, max: series.maxIndex };
 
             modalResChart.data.datasets[0].backgroundColor = getGradient(resCtx, 'rgb(59, 130, 246)');
             modalResChart.data.datasets[1].backgroundColor = getGradient(resCtx, 'rgb(168, 85, 247)');
@@ -992,6 +993,8 @@ function updateModalCharts(series, which, animate = true) {
                 },
                 scales: {
                     x: { 
+                        min: series.minIndex,
+                        max: series.maxIndex,
                         grid: { display: false },
                         ticks: { display: !isMobile, maxTicksLimit: isMobile ? 3 : 6, color: tickColor }
                     },
@@ -1004,6 +1007,7 @@ function updateModalCharts(series, which, animate = true) {
                 elements: { line: { tension: 0.4 }, point: { radius: 0, hitRadius: 10 } }
             }
         });
+        modalResChart.__chartTimeWindow = { min: series.minIndex, max: series.maxIndex };
         if (window.attachChartInteractions) window.attachChartInteractions(modalResChart, 'modalResChart');
     }
     
@@ -1014,6 +1018,7 @@ function updateModalCharts(series, which, animate = true) {
             modalNetChart.data.labels = labels;
             modalNetChart.data.datasets[0].data = rxData;
             modalNetChart.data.datasets[1].data = txData;
+            modalNetChart.__chartTimeWindow = { min: series.minIndex, max: series.maxIndex };
 
             modalNetChart.data.datasets[0].backgroundColor = getGradient(netCtx, 'rgb(34, 197, 94)');
             modalNetChart.data.datasets[1].backgroundColor = getGradient(netCtx, 'rgb(239, 68, 68)');
@@ -1063,6 +1068,8 @@ function updateModalCharts(series, which, animate = true) {
                 },
                 scales: {
                     x: { 
+                        min: series.minIndex,
+                        max: series.maxIndex,
                         grid: { display: false },
                         ticks: { display: !isMobile, maxTicksLimit: isMobile ? 3 : 6, color: tickColor }
                     },
@@ -1079,6 +1086,7 @@ function updateModalCharts(series, which, animate = true) {
                 elements: { line: { tension: 0.4 }, point: { radius: 0, hitRadius: 10 } }
             }
         });
+        modalNetChart.__chartTimeWindow = { min: series.minIndex, max: series.maxIndex };
         if (window.attachChartInteractions) window.attachChartInteractions(modalNetChart, 'modalNetChart');
     }
 }
