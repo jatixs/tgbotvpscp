@@ -11,6 +11,7 @@ The web layer is located in `core/web/` and built on **aiohttp** + **Jinja2**. E
 | `core/web/auth.py` | Authentication |
 | `core/web/api_system.py` | System API |
 | `core/web/api_nodes.py` | Node API |
+| `core/web/api_metrics.py` | Chart metrics history |
 | `core/web/streaming.py` | SSE streams |
 | `core/web/middlewares.py` | WAF, CSRF, Rate Limiting |
 
@@ -27,11 +28,13 @@ core/web/app.py (routing)
     ├── views.py       → Jinja2 HTML
     ├── api_system.py  → JSON API
     ├── api_nodes.py   → JSON API
+    ├── api_metrics.py → JSON API (chart history)
     ├── streaming.py   → SSE streams
     └── auth.py        → Authentication
     ↓
 core/shared_state.py (in-memory data)
 core/nodes_db.py (SQLite)
+core/metrics_history.py (SQLite, metrics history)
 core/messaging.py (Telegram notifications)
 ```
 

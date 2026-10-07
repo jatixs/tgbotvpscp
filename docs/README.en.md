@@ -221,6 +221,7 @@ Agent routes: `GET /api/agent/https` advertises the HTTPS origin without a token
 - Real-time CPU/RAM/Disk charts
 - List of all nodes with statuses
 - Network traffic (current and historical)
+- Chart period from 3 minutes to 7 days (agent and node windows); history is kept in the database as a sliding window
 - Quick actions (reboot, update)
 - Drag & Drop node sorting 
 - Visual alerts (⚠️) during peak loads 
@@ -405,6 +406,7 @@ Set `WEB_PUBLIC_URL` to an `https://` origin. With an external reverse proxy, th
 │   ├── middlewares.py       # Bot middlewares
 │   ├── models.py            # ORM models (Tortoise)
 │   ├── nodes_db.py          # Node database
+│   ├── metrics_history.py   # Chart metrics history (3 min … 7 days)
 │   ├── shared_state.py      # Bot ↔ Web state bridge
 │   ├── tasks.py             # Background tasks
 │   ├── utils.py             # Utilities
@@ -414,6 +416,7 @@ Set `WEB_PUBLIC_URL` to an `https://` origin. With an external reverse proxy, th
 │   │   ├── middlewares.py   # WAF, CSRF, Rate Limiting
 │   │   ├── api_nodes.py     # aiohttp-based node API
 │   │   ├── api_system.py    # aiohttp-based system API
+│   │   ├── api_metrics.py   # Chart metrics history API
 │   │   ├── streaming.py     # SSE streams
 │   │   └── views.py         # Jinja2 HTML pages
 │   ├── static/              # CSS, JS

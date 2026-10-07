@@ -218,6 +218,7 @@ Agent routes: `GET /api/agent/https` публикует HTTPS origin без то
 - Real-time графики CPU/RAM/Disk
 - Список всех нод с текущими статусами
 - Сетевой трафик (текущий и исторический)
+- Выбор периода графиков от 3 минут до 7 дней (агент и окна нод), история хранится в базе скользящим окном
 - Быстрые действия (перезагрузка, обновление)
 - Drag & Drop сортировка нод
 - Визуальные алерты (⚠️) при пиковых нагрузках 
@@ -402,6 +403,7 @@ Agent routes: `GET /api/agent/https` публикует HTTPS origin без то
 │   ├── middlewares.py       # Middleware бота
 │   ├── models.py            # ORM модели (Tortoise)
 │   ├── nodes_db.py          # База данных нод
+│   ├── metrics_history.py   # История метрик для графиков (3 мин … 7 дней)
 │   ├── shared_state.py      # Мост Bot ↔ Web
 │   ├── tasks.py             # Фоновые задачи
 │   ├── utils.py             # Утилиты
@@ -411,6 +413,7 @@ Agent routes: `GET /api/agent/https` публикует HTTPS origin без то
 │   │   ├── middlewares.py   # WAF, CSRF, Rate Limiting
 │   │   ├── api_nodes.py     # API нод на базе aiohttp
 │   │   ├── api_system.py    # Системный API на базе aiohttp
+│   │   ├── api_metrics.py   # API истории метрик для графиков
 │   │   ├── streaming.py     # SSE потоки
 │   │   └── views.py         # Jinja2 HTML страницы
 │   ├── static/              # CSS, JS
