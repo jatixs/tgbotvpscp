@@ -94,6 +94,7 @@ core/
 ├── middlewares.py          # Anti-spam, filters (Telegram)
 ├── utils.py                # Helper utilities
 ├── nodes_db.py             # Node database (Tortoise ORM)
+├── metrics_history.py      # Chart metrics history (3 min … 7 days)
 ├── models.py               # ORM models
 ├── orchestrator.py         # Memory Orchestrator (Lazy Loading / GC)
 ├── shared_state.py         # Global state (in-memory)
@@ -104,6 +105,7 @@ core/
 │   ├── middlewares.py      # WAF, Rate Limiting, CSRF
 │   ├── api_nodes.py        # Node management API
 │   ├── api_system.py       # System settings API
+│   ├── api_metrics.py      # Chart metrics history API
 │   ├── streaming.py        # Server-Sent Events (SSE)
 │   └── views.py            # HTML views (Jinja2)
 ├── static/                 # CSS, JS, images
@@ -113,6 +115,7 @@ core/
 │   │   └── style.css       # Components and animations
 │   └── js/
 │       ├── common.js       # Encryption, modals, toast
+│       ├── chart_range.js  # Chart period selector and history polling
 │       ├── dashboard.js    # Dashboard logic and SSE
 │       ├── login.js        # Authentication
 │       ├── nodes_monitor.js # Node monitoring
@@ -300,7 +303,30 @@ STRINGS = {
 - `get_node_by_token()` — Search by authorization token
 - `update_node_metrics()` — Update metrics (CPU, RAM, Disk)
 - `get_all_nodes()` — List all servers
-- `delete_node()` — Delete node
+- `delete_node()` — Delete node (together with its metrics history)
+
+Every heartbeat also feeds a sample into `metrics_history` (network speed is derived from the `net_rx`/`net_tx` counter delta between heartbeats).
+
+---
+
+#### **metrics_history.py** — Chart Metrics History
+**Purpose:** store agent and node CPU/RAM/disk/network for charts with a selectable period (Zabbix/Grafana style)
+
+**Storage (table `metric_samples`, sliding window like RRD):**
+
+| Tier (`res`) | Step | Retained | Serves periods |
+|--------------|------|----------|----------------|
+| `0` — raw samples | 2 s (agent) / heartbeat (node) | 1 h 10 min | 3m, 10m, 30m, 1h |
+| `60` — minute buckets | 60 s | 25 h | 3h, 6h, 12h |
+| `300` — five-minute buckets | 300 s | 7 d 2 h | 1d, 3d, 7d |
+
+**How it works:**
+- `record_sample()` — queues a sample in an in-memory buffer; network speed is stored in bytes/s (from counters or a ready rate)
+- `maintenance_loop()` (background task `metrics-history`): flushes the buffer to the DB every 10 s with a single `bulk_create`, rebuilds the 60/300 s buckets for the last 3/15 minutes idempotently once a minute (after startup — for the whole retention of the lower tier), and deletes rows past retention every 10 minutes
+- `query_series(source, range, since)` — picks the tier for the period and, when needed, averages down to the output step (6h → 120 s, 12h → 180 s, 3d → 15 min, 7d → 30 min); `since` enables incremental fetches
+- Sources: `agent` and `node:<id>`; deleting a node drops its history
+
+**Footprint:** at steady state ≈ 5–6k rows per source (~0.5 MB); the database does not grow unbounded, SQLite reuses freed pages.
 
 ---
 
@@ -310,6 +336,7 @@ STRINGS = {
 **Models:**
 - `User` — Bot users (Telegram ID, role, language)
 - `Node` — Remote servers (token, name, IP, metrics)
+- `MetricSample` — Metrics history point (`source`, `res`, `t`, `cpu`, `ram`, `disk`, `rx`, `tx`)
 - `Alert` — Notification history
 - `TrafficLog` — Network traffic logs
 
@@ -338,7 +365,7 @@ STRINGS = {
 - `AUTH_TOKENS: dict` — Node tokens for heartbeat
 - `NODE_TRAFFIC_MONITORS: dict` — Active traffic monitors
 - `ALERTS_CONFIG: dict` — Notification threshold configuration
-- `AGENT_HISTORY: deque` — Agent metrics history (ring buffer ~1000 points)
+- `AGENT_HISTORY: deque` — Last 60 agent samples for SSE (current network speed); long-term history lives in `metrics_history`
 - `WEB_NOTIFICATIONS: deque` — Web panel notifications
 - `WEB_USER_LAST_READ: dict` — Last read notification per user
 
@@ -355,7 +382,12 @@ STRINGS = {
 - Updates agent public IP cache (`AGENT_IP_CACHE`)
 - Updates country flag (`AGENT_FLAG`)
 - Measures agent ping (`AGENT_PING_CACHE`)
-- Records metrics history to `AGENT_HISTORY` (CPU%, RAM%, RX, TX)
+- Records metrics history to `AGENT_HISTORY` (CPU%, RAM%, RX, TX) and passes the sample to `metrics_history.record_sample()`
+
+**metrics_history.maintenance_loop() — every 10 seconds:**
+- Flushes the sample buffer into the `metric_samples` table
+- Builds minute and five-minute buckets once a minute
+- Deletes data past retention (1 h / 25 h / 7 d) every 10 minutes
 
 **cleanup_monitor() — every 600 seconds:**
 - Removes expired web sessions
@@ -377,6 +409,7 @@ core/web/
 ├── middlewares.py      # WAF, Rate Limiting, CSRF Protection
 ├── api_nodes.py        # aiohttp-based API for nodes (heartbeat, CRUD, commands)
 ├── api_system.py       # aiohttp-based API for settings, logs, users
+├── api_metrics.py      # Chart metrics history with selectable period
 ├── streaming.py        # Server-Sent Events (3 streams)
 └── views.py            # HTML pages (Jinja2 rendering)
 ```
@@ -386,7 +419,7 @@ core/web/
 
 **Functions:**
 - Creates `aiohttp.web.Application` with middleware stack
-- Registers routes from 5 modules (views, auth, nodes, system, streaming)
+- Registers routes from 6 modules (views, auth, nodes, system, metrics, streaming)
 - Serves static files (`/static/`)
 - Launches background tasks from `tasks.py` on startup
 - Handles graceful shutdown via `shutdown_event`
@@ -527,13 +560,28 @@ GET  /api/agent/ipv4           — Agent IPv4 addresses
 
 ---
 
+#### **api_metrics.py** — Chart Metrics History
+**Purpose:** data for charts with the selected period (reads `metrics_history`)
+
+```
+GET /api/metrics/history?source=agent&range=3m
+GET /api/metrics/history?source=node&node_id=8&range=1d[&since=<unix ts>]
+```
+
+- `range` — one of `3m 10m 30m 1h 3h 6h 12h 1d 3d 7d`
+- Response: `{range, step, span, now, points: [{t, c, r, d, rx, tx}]}` — `step` in seconds (`0` = raw points), `rx`/`tx` in bytes/s
+- `since` — return only points with `t >= since` (incremental polling from the browser)
+- Requires a web session; nodes are addressed by numeric `node_id`
+
+---
+
 #### **streaming.py** — Server-Sent Events
 **Purpose:** Real-time updates without WebSocket
 
 **SSE Streams:**
 
 **1. `GET /api/events` — Main stream:**
-- `agent_stats` — CPU, RAM, Disk, Network, chart history
+- `agent_stats` — CPU, RAM, Disk, Network, last 60 samples (for current speed); the charts themselves read `/api/metrics/history`
 - `nodes_list` — All nodes with statuses
 - `notifications` — Notifications (filtered by last read)
 
@@ -542,7 +590,7 @@ GET  /api/agent/ipv4           — Agent IPv4 addresses
 - System logs — `journalctl --follow`
 
 **3. `GET /api/events/node` — Specific node details:**
-- Statistics and chart data
+- Statistics, availability, billing (the modal charts poll `/api/metrics/history`)
 - Updates via `?token=...` parameter
 - Updates by numeric `node_id`; the agent token is not sent to the browser
 
@@ -826,11 +874,26 @@ POST /api/heartbeat (HMAC signature)
     ↓
 api_nodes.py → HMAC validation
     ↓
-Update nodes_db (SQLite)
+Update nodes_db (SQLite) + sample into metrics_history
     ↓
 Check thresholds → Send alert (if needed)
     ↓
 Broadcast via SSE → WebUI updates in real-time
+```
+
+### Chart History Flow
+
+```
+agent_monitor (every 2 s) / node heartbeat
+    ↓ record_sample()
+In-memory buffer → (10 s) → metric_samples res=0
+    ↓ (1 min, idempotent)
+res=60 (minute average) → res=300 (five-minute average)
+    ↓ (10 min) delete older than 1 h / 25 h / 7 d
+
+Browser: chart_range.js → GET /api/metrics/history?range=…&since=…
+    ↓ polling 3 s … 5 min (depends on period), paused in background tabs
+Chart.js: gaps for missing data, axis labels by period length, zoom reset on period change
 ```
 
 ### User Interaction Flow (Telegram)
@@ -887,9 +950,15 @@ Update DOM in real-time
 #### **dashboard.js**
 - `initSSE()` — Connect to main SSE stream
 - `initServicesSSE()` — SSE for service manager
-- `updateDashboard()` — Update CPU/RAM/Disk charts
-- `renderTrafficChart()` — Network traffic chart
+- `updateAgentStatsUI()` — Update CPU/RAM/Disk cards and mini charts
+- `renderAgentChart(series)` / `renderNodeResChart(series)` / `renderNodeNetChart(series)` — Charts fed by the period controller
 - `fetchNodesList()` — Render node list
+
+#### **chart_range.js**
+- `createChartRangeController({ key, mount, canvasId, getSource, render })` — period dropdown button (Minutes / Hours / Days) next to a chart
+- Polls `/api/metrics/history` at an interval that depends on the period (3 s for 3m … 5 min for 7d), fetching incrementally via `since`
+- Passes a normalized `series` to `render` (`labels`, `cpu`, `ram`, `disk`, `rx`/`tx` in Kbps, `null` on gaps)
+- Remembers the choice in `localStorage` (`chartRange:<key>`), shows a “Live” indicator for periods ≤ 1 h, resets zoom on period change, stops when the modal closes or on SPA navigation
 
 #### **nodes_monitor.js**
 - `loadNodes()` — Load nodes via API
@@ -897,7 +966,7 @@ Update DOM in real-time
 - Search by name and IP
 - Sorting (name, CPU, RAM, ping)
 - Multi-select + bulk commands
-- Modal: Resources/Network charts, services, actions
+- Modal: Resources/Network charts with period selector (`chart_range.js`), services, actions
 
 #### **settings.js**
 - Notification center (alert toggles with hint tooltips)
@@ -952,6 +1021,23 @@ CREATE TABLE users (
     last_seen DATETIME
 );
 ```
+
+#### Table: `metric_samples`
+```sql
+CREATE TABLE metric_samples (
+    id     INTEGER PRIMARY KEY AUTOINCREMENT,
+    source VARCHAR(32) NOT NULL,   -- 'agent' or 'node:<id>'
+    res    SMALLINT NOT NULL DEFAULT 0, -- 0 = raw sample, 60 / 300 = averaged bucket (sec)
+    t      INT NOT NULL,           -- unix time of the sample / bucket start
+    cpu    REAL NOT NULL DEFAULT 0, -- %
+    ram    REAL NOT NULL DEFAULT 0, -- %
+    disk   REAL NOT NULL DEFAULT 0, -- %
+    rx     REAL NOT NULL DEFAULT 0, -- bytes/s
+    tx     REAL NOT NULL DEFAULT 0  -- bytes/s
+);
+CREATE INDEX idx_metric_samples_source_res_t ON metric_samples (source, res, t);
+```
+Sliding window: raw samples are kept ~1 h, minute buckets 25 h, five-minute buckets 7 days; the table is created automatically (`generate_schemas` / Aerich).
 
 ### Encrypted JSON Configs
 
