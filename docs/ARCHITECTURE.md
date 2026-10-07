@@ -105,7 +105,6 @@ core/
 │   ├── middlewares.py      # WAF, Rate Limiting, CSRF
 │   ├── api_nodes.py        # API управления нодами
 │   ├── api_system.py       # API системных настроек
-│   ├── api_metrics.py      # API истории метрик для графиков
 │   ├── streaming.py        # Server-Sent Events (SSE)
 │   └── views.py            # HTML-представления (Jinja2)
 ├── static/                 # CSS, JS, изображения
@@ -325,7 +324,7 @@ STRINGS = {
 **Принцип работы:**
 - `record_sample()` — кладёт замер в буфер в памяти; скорость сети хранится в байтах/с (из счётчиков или готовой скорости)
 - `maintenance_loop()` (фоновая задача `metrics-history`): каждые 10 с сбрасывает буфер в БД одним `bulk_create`, раз в минуту идемпотентно пересчитывает корзины 60/300 с за последние 3/15 минут (после старта — за весь срок хранения нижнего уровня), раз в 10 минут удаляет строки старше срока хранения
-- `query_series(source, range, since)` — выбирает уровень по периоду и при необходимости доусредняет до шага вывода (6h → 120 с, 12h → 180 с, 3d → 15 мин, 7d → 30 мин); `since` даёт инкрементальную догрузку
+- `query_series(source, range, since)` — выбирает уровень по периоду и при необходимости доусредняет до шага вывода (6h → 120 с, 12h → 180 с, 3d → 15 мин, 7d → 30 мин); `since` даёт инкременты для SSE-потока `/api/events/metrics`
 - Источники: `agent` и `node:<id>`; при удалении ноды её история удаляется
 
 **Объём:** в установившемся режиме ≈ 5–6 тыс. строк на источник (~0,5 МБ); база не растёт бесконечно, SQLite переиспользует освобождённые страницы.
@@ -411,8 +410,7 @@ core/web/
 ├── middlewares.py      # WAF, Rate Limiting, CSRF Protection
 ├── api_nodes.py        # API на базе aiohttp для нод (heartbeat, CRUD, команды)
 ├── api_system.py       # API на базе aiohttp для настроек, логов, пользователей
-├── api_metrics.py      # История метрик для графиков с выбором периода
-├── streaming.py        # Server-Sent Events (3 потока)
+├── streaming.py        # Server-Sent Events (5 потоков, включая историю графиков)
 └── views.py            # HTML-страницы (Jinja2 рендеринг)
 ```
 
@@ -421,7 +419,7 @@ core/web/
 
 **Функции:**
 - Создает `aiohttp.web.Application` с middleware стеком
-- Регистрирует маршруты из 6 модулей (views, auth, nodes, system, metrics, streaming)
+- Регистрирует маршруты из 5 модулей (views, auth, nodes, system, streaming)
 - Подключает статические файлы (`/static/`)
 - Запускает фоновые задачи из `tasks.py` при startup
 - Обрабатывает graceful shutdown через `shutdown_event`
@@ -562,28 +560,13 @@ GET  /api/agent/ipv4           — IPv4 адреса агента
 
 ---
 
-#### **api_metrics.py** — История метрик для графиков
-**Назначение:** данные для графиков с выбранным периодом (читает `metrics_history`)
-
-```
-GET /api/metrics/history?source=agent&range=3m
-GET /api/metrics/history?source=node&node_id=8&range=1d[&since=<unix ts>]
-```
-
-- `range` — один из `3m 10m 30m 1h 3h 6h 12h 1d 3d 7d`
-- Ответ: `{range, step, span, now, points: [{t, c, r, d, rx, tx}]}` — `step` в секундах (`0` = сырые точки), `rx`/`tx` — байты/с
-- `since` — вернуть только точки с `t >= since` (инкрементальный опрос из браузера)
-- Требуется веб-сессия; нода адресуется числовым `node_id`
-
----
-
 #### **streaming.py** — Server-Sent Events
 **Назначение:** Real-time обновления без WebSocket
 
 **SSE-потоки:**
 
 **1. `GET /api/events` — Главный поток:**
-- `agent_stats` — CPU, RAM, Disk, Network, последние 60 замеров (для текущей скорости); сами графики берут данные из `/api/metrics/history`
+- `agent_stats` — CPU, RAM, Disk, Network, последние 60 замеров (для текущей скорости); сами графики получают данные из потока `/api/events/metrics`
 - `nodes_list` — Список всех нод со статусами
 - `notifications` — Уведомления (фильтрация по последнему прочтению)
 
@@ -592,13 +575,18 @@ GET /api/metrics/history?source=node&node_id=8&range=1d[&since=<unix ts>]
 - System logs — `journalctl --follow`
 
 **3. `GET /api/events/node` — Детали конкретной ноды:**
-- Статистика, доступность, биллинг (графики модального окна опрашивают `/api/metrics/history`)
+- Статистика, доступность, биллинг (графики модального окна подписаны на `/api/events/metrics`)
 - Обновления через параметр `?token=...`
 - Обновления по числовому параметру `node_id`; agent token не передается браузеру
 
 **4. `GET /api/events/services` — Поток менеджера сервисов:**
 - Статусы systemd-сервисов в реальном времени
 - Обновления для страницы Service Manager
+
+**5. `GET /api/events/metrics?source=agent|node&node_id=…&range=3m…7d` — История для графиков:**
+- Событие `metrics_history`: `{range, step, span, now, full, data}` — `data` это зашифрованный (`encrypt_for_web`) JSON-массив точек `[{t, c, r, d, rx, tx}]`, `rx`/`tx` в байтах/с, `step` в секундах (`0` = сырые точки)
+- Первое сообщение — полный снимок (`full: true`), далее инкременты с интервалом по периоду (3 с для 3m … 5 мин для 7d); последняя корзина пересылается, пока не заполнится
+- Смена периода в браузере переоткрывает поток с новым `range`; нода адресуется числовым `node_id`
 
 **Ограничение:** при обычном переходе из браузера `GET /api/events*` возвращает информационный текст, а не метрики. Для работы требуется `EventSource` с `Accept: text/event-stream`. Аналогично `GET /api/terminal/ws` требует `Upgrade: websocket` и для обычного HTTP-запроса отвечает `426 Upgrade Required`.
 
@@ -890,8 +878,8 @@ agent_monitor (каждые 2 с) / heartbeat ноды
 res=60 (среднее за минуту) → res=300 (среднее за 5 минут)
     ↓ (10 мин) удаление старше 1 ч / 25 ч / 7 д
 
-Браузер: chart_range.js → GET /api/metrics/history?range=…&since=…
-    ↓ опрос 3 с … 5 мин (зависит от периода), пауза в фоновой вкладке
+Браузер: chart_range.js → EventSource /api/events/metrics?range=…
+    ↓ полный снимок, затем инкременты каждые 3 с … 5 мин (зависит от периода); `data` расшифровывается decryptData(); в фоновой вкладке поток закрывается
 Chart.js: разрывы при пропусках, подписи оси по длине периода, сброс зума при смене периода
 ```
 
@@ -954,7 +942,7 @@ decrypt() → AES-256-CBC + Base64
 
 #### **chart_range.js**
 - `createChartRangeController({ key, mount, canvasId, getSource, render })` — кнопка-дропдаун периода (Минуты / Часы / Дни) рядом с графиком
-- Опрашивает `/api/metrics/history` с интервалом, зависящим от периода (3 с для 3m … 5 мин для 7d), догружает инкрементально через `since`
+- Подписывается на SSE `/api/events/metrics` (`EventSource`), получает полный снимок и инкременты, расшифровывает `data` через `decryptData()`; при смене периода переоткрывает поток, при обрыве переподключается
 - Передаёт в `render` нормализованный `series` (`labels`, `cpu`, `ram`, `disk`, `rx`/`tx` в Kbps, `null` на разрывах)
 - Запоминает выбор в `localStorage` (`chartRange:<key>`), показывает индикатор «Live» для периодов ≤ 1 ч, сбрасывает зум при смене периода, останавливается при закрытии модалки или SPA-переходе
 

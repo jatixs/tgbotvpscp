@@ -11,8 +11,7 @@
 | `core/web/auth.py` | Аутентификация |
 | `core/web/api_system.py` | Системные API |
 | `core/web/api_nodes.py` | API нод |
-| `core/web/api_metrics.py` | История метрик для графиков |
-| `core/web/streaming.py` | SSE-потоки |
+| `core/web/streaming.py` | SSE-потоки (в том числе история графиков) |
 | `core/web/middlewares.py` | WAF, CSRF, Rate Limiting |
 
 ---
@@ -28,8 +27,7 @@ core/web/app.py (маршрутизация)
     ├── views.py       → Jinja2 HTML
     ├── api_system.py  → JSON API
     ├── api_nodes.py   → JSON API
-    ├── api_metrics.py → JSON API (история графиков)
-    ├── streaming.py   → SSE потоки
+    ├── streaming.py   → SSE потоки (включая историю графиков)
     └── auth.py        → Аутентификация
     ↓
 core/shared_state.py (in-memory данные)

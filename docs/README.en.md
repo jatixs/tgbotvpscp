@@ -312,7 +312,7 @@ Agent routes: `GET /api/agent/https` advertises the HTTPS origin without a token
 - `GET /api/events/node` — node details SSE stream
 - GET /api/events/node/services — SSE stream for node services
 - `GET /api/events/services` — service manager SSE stream
-- `GET /api/metrics/history` — chart history for a period (`range=3m…7d`, `source=agent|node&node_id=…`)
+- `GET /api/events/metrics` — encrypted SSE stream with chart history for a period (`range=3m…7d`, `source=agent|node&node_id=…`)
 - `GET /api/agent/ipv4` — agent IPv4 list
 - `GET /api/terminal/creds` — load saved SSH credentials
 - `POST /api/terminal/creds` — save SSH credentials
@@ -416,7 +416,6 @@ Set `WEB_PUBLIC_URL` to an `https://` origin. With an external reverse proxy, th
 │   │   ├── middlewares.py   # WAF, CSRF, Rate Limiting
 │   │   ├── api_nodes.py     # aiohttp-based node API
 │   │   ├── api_system.py    # aiohttp-based system API
-│   │   ├── api_metrics.py   # Chart metrics history API
 │   │   ├── streaming.py     # SSE streams
 │   │   └── views.py         # Jinja2 HTML pages
 │   ├── static/              # CSS, JS

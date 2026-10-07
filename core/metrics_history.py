@@ -36,6 +36,20 @@ RANGES: Final[dict[str, tuple[int, int, int]]] = {
 }
 DEFAULT_RANGE: Final[str] = "3m"
 
+# How often the SSE stream pushes new points for each range (seconds).
+STREAM_INTERVALS: Final[dict[str, int]] = {
+    "3m": 3,
+    "10m": 3,
+    "30m": 5,
+    "1h": 10,
+    "3h": 30,
+    "6h": 30,
+    "12h": 60,
+    "1d": 60,
+    "3d": 120,
+    "7d": 300,
+}
+
 RETENTION: Final[dict[int, int]] = {
     RES_RAW: 3600 + 10 * 60,
     RES_MINUTE: 24 * 3600 + 3600,
