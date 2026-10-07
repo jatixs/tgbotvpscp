@@ -708,14 +708,16 @@ function startModalChartRanges() {
         mount: '[data-chart-range="modalResChart"]',
         canvasId: 'modalResChart',
         getSource,
-        render: (series) => updateModalCharts(series, 'res')
+        getValues: point => [point.c, point.r],
+        render: (series, animate) => updateModalCharts(series, 'res', animate)
     }).start();
     modalNetRangeCtl = window.createChartRangeController({
         key: 'modalNetChart',
         mount: '[data-chart-range="modalNetChart"]',
         canvasId: 'modalNetChart',
         getSource,
-        render: (series) => updateModalCharts(series, 'net')
+        getValues: point => [point.rx, point.tx],
+        render: (series, animate) => updateModalCharts(series, 'net', animate)
     }).start();
 }
 
@@ -905,7 +907,7 @@ function updateNodeModal(data) {
     }
 }
 
-function updateModalCharts(series, which) {
+function updateModalCharts(series, which, animate = true) {
     const canvas = document.getElementById(which === 'res' ? 'modalResChart' : 'modalNetChart');
     if (!canvas) return;
     if (!series || series.points.length < 2) {
@@ -913,7 +915,7 @@ function updateModalCharts(series, which) {
         if (chart) {
             chart.data.labels = [];
             chart.data.datasets.forEach(ds => { ds.data = []; });
-            chart.update();
+            chart.update(animate && !document.documentElement.classList.contains('perf-mode') ? undefined : 'none');
         }
         return;
     }
@@ -959,10 +961,10 @@ function updateModalCharts(series, which) {
         };
 
         if (window.updateChartWithLiveData) {
-            window.updateChartWithLiveData(modalResChart, applyModalResChartData, 'modalResChart');
+            window.updateChartWithLiveData(modalResChart, applyModalResChartData, 'modalResChart', animate);
         } else {
             applyModalResChartData();
-            modalResChart.update();
+            modalResChart.update(document.documentElement.classList.contains('perf-mode') ? 'none' : undefined);
             if (window.attachChartInteractions) window.attachChartInteractions(modalResChart, 'modalResChart');
         }
     } else {
@@ -1023,10 +1025,10 @@ function updateModalCharts(series, which) {
         };
 
         if (window.updateChartWithLiveData) {
-            window.updateChartWithLiveData(modalNetChart, applyModalNetChartData, 'modalNetChart');
+            window.updateChartWithLiveData(modalNetChart, applyModalNetChartData, 'modalNetChart', animate);
         } else {
             applyModalNetChartData();
-            modalNetChart.update();
+            modalNetChart.update(document.documentElement.classList.contains('perf-mode') ? 'none' : undefined);
             if (window.attachChartInteractions) window.attachChartInteractions(modalNetChart, 'modalNetChart');
         }
     } else {
