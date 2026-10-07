@@ -252,6 +252,7 @@
             const chart = opts.canvasId && window.__chartRegistry ? window.__chartRegistry[opts.canvasId] : null;
             if (!chart) return;
             chart.__liveZoomState = {};
+            chart.__chartTimeWindow = null;
             if (chart.options?.scales?.x) {
                 delete chart.options.scales.x.min;
                 delete chart.options.scales.x.max;
@@ -289,8 +290,12 @@
                 span,
                 points: pts,
                 isLive: span <= LIVE_MAX_SECONDS,
+                minIndex: 0,
+                maxIndex: -1,
                 labels: [], cpu: [], ram: [], disk: [], rx: [], tx: []
             };
+            const cutoff = ctl.serverNow - span;
+            let viewportStarted = false;
             for (let i = 0; i < pts.length; i++) {
                 const p = pts[i];
                 if (i > 0 && p.t - pts[i - 1].t > gap) {
@@ -301,6 +306,10 @@
                     series.rx.push(null);
                     series.tx.push(null);
                 }
+                if (!viewportStarted && p.t >= cutoff) {
+                    series.minIndex = series.labels.length;
+                    viewportStarted = true;
+                }
                 series.labels.push(formatLabel(p.t, span));
                 series.cpu.push(p.c);
                 series.ram.push(p.r);
@@ -308,6 +317,7 @@
                 series.rx.push(p.rx * 8 / 1024);
                 series.tx.push(p.tx * 8 / 1024);
             }
+            series.maxIndex = series.labels.length - 1;
             return series;
         }
 
@@ -333,7 +343,7 @@
             } else if (!incremental) {
                 ctl.points = incoming;
             }
-            const cutoff = ctl.serverNow - ctl.span;
+            const cutoff = ctl.serverNow - ctl.span * 3;
             if (ctl.points.length && ctl.points[0].t < cutoff) {
                 ctl.points = ctl.points.filter(p => p.t >= cutoff);
             }

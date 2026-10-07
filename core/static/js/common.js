@@ -333,26 +333,31 @@ function refreshChartZoomState(chart, canvasOrId) {
     }
 
     const hasZoom = total > 1 && (min > 0 || max < maxIndex);
+    const timeWindow = chart.__chartTimeWindow;
+    const isTimeWindow = timeWindow
+        && Math.abs(min - timeWindow.min) < 0.01
+        && Math.abs(max - timeWindow.max) < 0.01;
+    const userZoomed = hasZoom && !isTimeWindow;
     const atLiveEdge = total <= 1 || max >= (maxIndex - 1);
     const visibleRange = Math.max(1, max - min);
 
     // Remember the visible width only while zoomed; an unzoomed chart must follow the full data range.
-    if (!hasZoom) {
+    if (!userZoomed) {
         state.liveRangeSize = 0;
     } else if (!state.liveRangeSize || !state.freezeUpdates) {
         state.liveRangeSize = visibleRange;
     }
 
-    state.isZoomed = hasZoom;
+    state.isZoomed = userZoomed;
     state.atLiveEdge = atLiveEdge;
-    state.freezeUpdates = hasZoom && !atLiveEdge;
+    state.freezeUpdates = userZoomed && !atLiveEdge;
 
     const wrapper = canvas?.parentElement;
     const resetBtn = wrapper?.querySelector('.chart-reset-zoom-btn');
     if (resetBtn) {
         resetBtn.textContent = getChartResetLabel();
         resetBtn.title = getChartResetLabel();
-        resetBtn.classList.toggle('hidden', !hasZoom);
+        resetBtn.classList.toggle('hidden', !userZoomed);
     }
 
     return state;
@@ -364,6 +369,21 @@ function alignChartToLiveWindow(chart) {
 
     const state = chart.__liveZoomState = chart.__liveZoomState || {};
     const total = Array.isArray(chart.data?.labels) ? chart.data.labels.length : 0;
+    const timeWindow = chart.__chartTimeWindow;
+    const zoomLimits = chart.options.plugins?.zoom?.limits?.x;
+
+    if (zoomLimits && total > 1) {
+        zoomLimits.min = 0;
+        zoomLimits.max = total - 1;
+    }
+
+    if (timeWindow && total > 1 && !state.isZoomed) {
+        chart.options.scales.x.min = Math.max(0, Math.min(total - 1, timeWindow.min));
+        chart.options.scales.x.max = Math.max(chart.options.scales.x.min + 1, Math.min(total - 1, timeWindow.max));
+        state.freezeUpdates = false;
+        state.atLiveEdge = true;
+        return;
+    }
 
     if (!state.liveRangeSize || total <= 1) {
         delete chart.options.scales.x.min;
@@ -504,6 +524,7 @@ function attachChartInteractions(chart, canvasOrId) {
         const state = activeChart.__liveZoomState = activeChart.__liveZoomState || {};
         state.freezeUpdates = false;
         state.liveRangeSize = 0;
+        state.isZoomed = false;
         if (activeChart.options?.scales?.x) {
             delete activeChart.options.scales.x.min;
             delete activeChart.options.scales.x.max;

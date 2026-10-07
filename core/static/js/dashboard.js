@@ -1124,6 +1124,8 @@ function renderAgentChart(series, animate = true) {
         },
         scales: {
             x: {
+                min: series.minIndex,
+                max: series.maxIndex,
                 grid: {
                     display: false
                 },
@@ -1178,6 +1180,7 @@ function renderAgentChart(series, animate = true) {
             agentChart.data.labels = labels;
             agentChart.data.datasets[0].data = netRx;
             agentChart.data.datasets[1].data = netTx;
+            agentChart.__chartTimeWindow = { min: series.minIndex, max: series.maxIndex };
             agentChart.options = opts;
         };
 
@@ -1214,6 +1217,7 @@ function renderAgentChart(series, animate = true) {
             },
             options: opts
         });
+        agentChart.__chartTimeWindow = { min: series.minIndex, max: series.maxIndex };
         if (window.attachChartInteractions) window.attachChartInteractions(agentChart, 'agentChart');
     }
 }
@@ -1820,7 +1824,7 @@ function clearChartData(chart, animate = true) {
     chart.update(animate && !document.documentElement.classList.contains('perf-mode') ? undefined : 'none');
 }
 
-function buildNodeChartOptions() {
+function buildNodeChartOptions(series) {
     const isDark = document.documentElement.classList.contains('dark');
     const gridColor = isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.05)';
     const tickColor = isDark ? '#9ca3af' : '#6b7280';
@@ -1847,6 +1851,8 @@ function buildNodeChartOptions() {
                 }
             },
             x: {
+                min: series.minIndex,
+                max: series.maxIndex,
                 grid: {
                     display: false
                 },
@@ -1889,7 +1895,7 @@ function renderNodeResChart(series, animate = true) {
     const labels = series.labels;
     const cpuData = series.cpu;
     const ramData = series.ram;
-    const commonOptions = buildNodeChartOptions();
+    const commonOptions = buildNodeChartOptions(series);
     const lblCpu = (typeof I18N !== 'undefined' && I18N.web_label_cpu) ? I18N.web_label_cpu : "CPU";
     const lblRam = (typeof I18N !== 'undefined' && I18N.web_label_ram) ? I18N.web_label_ram : "RAM";
 
@@ -1898,6 +1904,7 @@ function renderNodeResChart(series, animate = true) {
             chartRes.data.labels = labels;
             chartRes.data.datasets[0].data = cpuData;
             chartRes.data.datasets[1].data = ramData;
+            chartRes.__chartTimeWindow = { min: series.minIndex, max: series.maxIndex };
         };
 
         if (window.updateChartWithLiveData) {
@@ -1941,6 +1948,7 @@ function renderNodeResChart(series, animate = true) {
                 }
             }
         });
+        chartRes.__chartTimeWindow = { min: series.minIndex, max: series.maxIndex };
         if (window.attachChartInteractions) window.attachChartInteractions(chartRes, 'nodeResChart');
     }
 }
@@ -1956,13 +1964,14 @@ function renderNodeNetChart(series, animate = true) {
     const labels = series.labels;
     const netRx = series.rx;
     const netTx = series.tx;
-    const commonOptions = buildNodeChartOptions();
+    const commonOptions = buildNodeChartOptions(series);
 
     if (chartNet) {
         const applyNetChartData = () => {
             chartNet.data.labels = labels;
             chartNet.data.datasets[0].data = netRx;
             chartNet.data.datasets[1].data = netTx;
+            chartNet.__chartTimeWindow = { min: series.minIndex, max: series.maxIndex };
         };
 
         if (window.updateChartWithLiveData) {
@@ -2020,6 +2029,7 @@ function renderNodeNetChart(series, animate = true) {
             },
             options: netOpts
         });
+        chartNet.__chartTimeWindow = { min: series.minIndex, max: series.maxIndex };
         if (window.attachChartInteractions) window.attachChartInteractions(chartNet, 'nodeNetChart');
     }
 }
