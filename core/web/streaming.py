@@ -1047,6 +1047,7 @@ async def handle_terminal_ws(request: web.Request) -> web.StreamResponse:
             "host": host,
             "port": port,
             "username": username,
+            "known_hosts": None,
         }
 
         if auth_type == "key" and private_key:
