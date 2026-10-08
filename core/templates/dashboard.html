@@ -19,9 +19,9 @@
     <link rel="icon" type="image/x-icon" href="/static/favicons/favicon.ico?v={{ cache_ver }}">
     <meta name="description" content="{{ web_meta_desc }}">
     <meta name="keywords" content="{{ web_meta_keywords }}">
-    <link rel="stylesheet" href="/static/css/main.css?v={{ web_version }}">
+    <link rel="stylesheet" href="/static/css/main.css?v={{ asset_ver }}">
     <script src="/static/vendor/crypto-js.min.js"></script>
-    <script src="/static/js/theme_init.js?v={{ web_version }}"></script>
+    <script src="/static/js/theme_init.js?v={{ asset_ver }}"></script>
     <script>
         window.i18n = window.i18n || {};
         window.i18n.services_empty = "{{ web_services_empty }}";
@@ -38,8 +38,8 @@
     <script src="/static/vendor/chart.js"></script>
     <script src="/static/vendor/chartjs-plugin-zoom.min.js"></script>
     <script src="/static/vendor/sortable.min.js"></script>
-    <link rel="stylesheet" href="/static/css/style.css?v={{ web_version }}">
-    <link rel="stylesheet" href="/static/css/icons.css?v={{ web_version }}">
+    <link rel="stylesheet" href="/static/css/style.css?v={{ asset_ver }}">
+    <link rel="stylesheet" href="/static/css/icons.css?v={{ asset_ver }}">
     <script src="/static/vendor/dompurify.min.js"></script>
 </head>
 
@@ -400,6 +400,7 @@
                         <span class="truncate">{{ web_agent_stats_title }}</span>
                     </h3>
                     <div id="networkBadgesContainer" class="flex items-center gap-2 flex-shrink-0">
+                        <div data-chart-range="agentChart" class="chart-range"></div>
                         <div id="agentPingBadge"
                             class="network-badge flex items-center justify-between gap-1 bg-gray-100 dark:bg-black/30 px-3 py-1 rounded-lg border border-gray-200 dark:border-white/10 shadow-sm">
                             <span class="text-[10px] text-gray-500 dark:text-gray-400 font-bold uppercase">{{ web_agent_ping_label|default("PING") }}</span>
@@ -678,15 +679,52 @@
                         </svg>
                         {{ web_logs_title }}
                     </h3>
-                    <div class="flex bg-gray-100 dark:bg-black/30 rounded-lg p-1 text-[10px] font-bold">
-                        <button onclick="switchLogType('bot')" id="btnLogBot"
-                            class="px-3 py-1.5 rounded-md transition-all text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white">
-                            {{ web_logs_btn_bot }}
-                        </button>
-                        <button onclick="switchLogType('sys')" id="btnLogSys"
-                            class="px-3 py-1.5 rounded-md transition-all text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white">
-                            {{ web_logs_btn_sys }}
-                        </button>
+                    <div class="flex items-center gap-2">
+                        <style>
+                            #logsContainer.filter-INFO .log-line:not([data-level="INFO"]),
+                            #logsContainer.filter-WARN .log-line:not([data-level="WARN"]),
+                            #logsContainer.filter-ERROR .log-line:not([data-level="ERROR"]) {
+                                visibility: hidden;
+                                position: absolute;
+                                pointer-events: none;
+                            }
+                        </style>
+                        <div class="relative" id="logFilterDropdownWrapper">
+                            <button id="logFilterBtn" onclick="document.getElementById('logFilterMenu').classList.toggle('hidden')"
+                                class="px-3 py-1.5 bg-gray-100 dark:bg-black/30 border border-gray-200 dark:border-white/10 rounded-lg text-[10px] font-bold text-gray-700 dark:text-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all duration-300 flex items-center gap-2 whitespace-nowrap">
+                                <svg class="h-3.5 w-3.5 text-gray-400 shrink-0" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+                                </svg>
+                                <span id="logFilterSelectedText">ALL</span>
+                                <svg class="h-3 w-3 text-gray-400 shrink-0" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                                </svg>
+                            </button>
+                            <div id="logFilterMenu" class="hidden absolute right-0 mt-2 w-36 bg-white dark:bg-gray-800 border border-gray-100 dark:border-white/10 rounded-xl shadow-xl z-50 overflow-hidden">
+                                <button onclick="selectLogFilter('ALL')" class="w-full text-left px-4 py-2 text-xs font-bold text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-white/5 flex items-center gap-2.5 transition-colors">
+                                    <span class="w-2 h-2 rounded-full bg-gray-400 shrink-0"></span>ALL
+                                </button>
+                                <button onclick="selectLogFilter('INFO')" class="w-full text-left px-4 py-2 text-xs font-bold text-blue-500 dark:text-blue-400 hover:bg-gray-50 dark:hover:bg-white/5 flex items-center gap-2.5 transition-colors border-t border-gray-50 dark:border-white/5">
+                                    <span class="w-2 h-2 rounded-full bg-blue-400 shrink-0"></span>INFO
+                                </button>
+                                <button onclick="selectLogFilter('WARN')" class="w-full text-left px-4 py-2 text-xs font-bold text-yellow-500 dark:text-yellow-400 hover:bg-gray-50 dark:hover:bg-white/5 flex items-center gap-2.5 transition-colors border-t border-gray-50 dark:border-white/5">
+                                    <span class="w-2 h-2 rounded-full bg-yellow-400 shrink-0"></span>WARN
+                                </button>
+                                <button onclick="selectLogFilter('ERROR')" class="w-full text-left px-4 py-2 text-xs font-bold text-red-500 dark:text-red-400 hover:bg-gray-50 dark:hover:bg-white/5 flex items-center gap-2.5 transition-colors border-t border-gray-50 dark:border-white/5">
+                                    <span class="w-2 h-2 rounded-full bg-red-500 shrink-0"></span>ERROR
+                                </button>
+                            </div>
+                        </div>
+                        <div class="flex bg-gray-100 dark:bg-black/30 rounded-lg p-1 text-[10px] font-bold">
+                            <button onclick="switchLogType('bot')" id="btnLogBot"
+                                class="px-3 py-1.5 rounded-md transition-all text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white">
+                                {{ web_logs_btn_bot }}
+                            </button>
+                            <button onclick="switchLogType('sys')" id="btnLogSys"
+                                class="px-3 py-1.5 rounded-md transition-all text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white">
+                                {{ web_logs_btn_sys }}
+                            </button>
+                        </div>
                     </div>
                 </div>
                 <div
@@ -808,6 +846,10 @@
                                     </svg>
                                 </button>
                             </div>
+                            <span class="inline-flex items-baseline gap-1 text-[10px] leading-none font-medium text-gray-400 dark:text-gray-500 shrink-0">
+                                <span>{{ web_node_id_label }}</span>
+                                <span id="modalNodeId" class="tabular-nums">-</span>
+                            </span>
                         </div>
                         <div class="flex items-center gap-2 text-xs text-gray-500">
                             <span id="modalNodeIp">{{ web_ip }}</span> &bull; <span id="modalNodeLastSeen">{{
@@ -863,49 +905,26 @@
 
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6 mb-6">
                     <div
-                        class="h-[200px] bg-white/50 dark:bg-black/20 rounded-xl p-4 border border-gray-100 dark:border-white/5">
-                        <h4 class="text-xs font-bold text-gray-500 uppercase mb-2 text-center">{{ web_resources_chart }}
-                        </h4>
-                        <canvas id="nodeResChart"></canvas>
+                        class="h-[200px] bg-white/50 dark:bg-black/20 rounded-xl p-4 border border-gray-100 dark:border-white/5 chart-card">
+                        <div class="chart-card-head">
+                            <h4 class="text-xs font-bold text-gray-500 uppercase truncate">{{ web_resources_chart }}</h4>
+                            <div data-chart-range="nodeResChart" class="chart-range"></div>
+                        </div>
+                        <div class="chart-card-body">
+                            <canvas id="nodeResChart"></canvas>
+                        </div>
                     </div>
                     <div
-                        class="h-[200px] bg-white/50 dark:bg-black/20 rounded-xl p-4 border border-gray-100 dark:border-white/5">
-                        <h4 class="text-xs font-bold text-gray-500 uppercase mb-2 text-center">{{ web_network_chart }}
-                        </h4>
-                        <canvas id="nodeNetChart"></canvas>
-                    </div>
-                </div>
-                {% if is_main_admin %}
-                <div onclick="copyToken(this)"
-                    class="group bg-gray-100/50 dark:bg-white/5 hover:bg-gray-200 dark:hover:bg-white/10 transition-colors border border-gray-200 dark:border-white/10 rounded-xl p-3 flex items-center justify-between cursor-pointer relative overflow-hidden">
-                    <div class="flex items-center gap-3 overflow-hidden">
-                        <div class="bg-green-500/20 p-2 rounded-lg text-green-600 dark:text-green-400">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24"
-                                stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                    d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11.542 16.49a1 1 0 01-.17.21l-.414.415a2 2 0 00-.586 1.414V22h-3v-2.764a1 1 0 00-.293-.707l-5.964-5.964A6 6 0 1121 9z" />
-                            </svg>
+                        class="h-[200px] bg-white/50 dark:bg-black/20 rounded-xl p-4 border border-gray-100 dark:border-white/5 chart-card">
+                        <div class="chart-card-head">
+                            <h4 class="text-xs font-bold text-gray-500 uppercase truncate">{{ web_network_chart }}</h4>
+                            <div data-chart-range="nodeNetChart" class="chart-range"></div>
                         </div>
-                        <div class="flex flex-col overflow-hidden">
-                            <span class="text-[10px] text-gray-500 uppercase font-bold tracking-wider">{{
-                                web_token_label }}</span>
-                            <span id="modalToken"
-                                class="text-xs font-mono text-green-600/80 dark:text-green-400/80 blur-sm group-hover:text-green-600 dark:group-hover:text-green-400 transition duration-300 select-all truncate">...</span>
+                        <div class="chart-card-body">
+                            <canvas id="nodeNetChart"></canvas>
                         </div>
                     </div>
-                    <div class="text-gray-400 group-hover:text-gray-600 dark:group-hover:text-white transition">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
-                            stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                        </svg>
-                    </div>
-                    <div class="absolute inset-0 bg-green-600 flex items-center justify-center text-white font-bold text-sm transition-transform translate-y-full group-active:translate-y-0 pointer-events-none"
-                        id="copyToast">
-                        <span data-i18n="web_copied">{{ web_copied }}</span>
-                    </div>
                 </div>
-                {% endif %}
             </div>
         </div>
     </div>
@@ -1211,7 +1230,8 @@
             </div>
         </div>
     </div>
-    <script src="/static/js/common.js?v={{ web_version }}"></script>
+    <script src="/static/js/common.js?v={{ asset_ver }}"></script>
+    <script src="/static/js/chart_range.js?v={{ asset_ver }}"></script>
     <script>
         document.addEventListener("DOMContentLoaded", () => {
             if (typeof window.startScrambleAnimation === 'function') {
@@ -1221,7 +1241,7 @@
             }
         });
     </script>
-    <script src="/static/js/dashboard.js?v={{ web_version }}"></script>
+    <script src="/static/js/dashboard.js?v={{ asset_ver }}"></script>
     <script>
         function openVncModal() {
             const m = document.getElementById('vncNodeSelectModal');

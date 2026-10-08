@@ -4,6 +4,74 @@
  */
 /* /core/static/js/common.js */
 
+if (window.Chart) {
+    window.Chart.defaults.animation.duration = 420;
+    window.Chart.defaults.animation.easing = 'easeOutQuart';
+    window.Chart.defaults.animations.colors.properties = ['color', 'borderColor'];
+
+    const legendDatasetFadePlugin = {
+        id: 'legend-dataset-fade',
+        beforeDatasetDraw(chart, args) {
+            const fade = chart.$legendDatasetFades?.[args.index];
+            if (!fade) return;
+            chart.ctx.save();
+            chart.ctx.globalAlpha *= fade.opacity;
+        },
+        afterDatasetDraw(chart, args) {
+            if (chart.$legendDatasetFades?.[args.index]) chart.ctx.restore();
+        }
+    };
+    // The built-in filler draws area fills in its own beforeDatasetDraw hook; it must run
+    // after ours so the gradient fill fades together with the line instead of snapping off.
+    const fillerPlugin = window.Chart.registry.plugins.get('filler');
+    if (fillerPlugin) window.Chart.unregister(fillerPlugin);
+    window.Chart.register(legendDatasetFadePlugin);
+    if (fillerPlugin) window.Chart.register(fillerPlugin);
+
+    window.Chart.defaults.plugins.legend.onClick = (event, item, legend) => {
+        const chart = legend.chart;
+        const datasetIndex = item.datasetIndex;
+        if (!Number.isInteger(datasetIndex) || chart.$legendDatasetFades?.[datasetIndex]) return;
+
+        const wasVisible = chart.isDatasetVisible(datasetIndex);
+        if (document.documentElement.classList.contains('perf-mode')) {
+            chart.setDatasetVisibility(datasetIndex, !wasVisible);
+            chart.update('none');
+            return;
+        }
+
+        if (!wasVisible) chart.setDatasetVisibility(datasetIndex, true);
+        chart.$legendDatasetFades = chart.$legendDatasetFades || {};
+        const fade = chart.$legendDatasetFades[datasetIndex] = { opacity: wasVisible ? 1 : 0 };
+        if (!wasVisible) chart.update('none');
+
+        const startedAt = performance.now();
+        const duration = 700;
+        const animateFade = now => {
+            if (!chart.canvas) {
+                delete chart.$legendDatasetFades[datasetIndex];
+                return;
+            }
+            const progress = Math.min(1, (now - startedAt) / duration);
+            const eased = progress < 0.5
+                ? 4 * progress * progress * progress
+                : 1 - Math.pow(-2 * progress + 2, 3) / 2;
+            fade.opacity = wasVisible ? 1 - eased : eased;
+            chart.draw();
+
+            if (progress < 1) {
+                requestAnimationFrame(animateFade);
+                return;
+            }
+
+            delete chart.$legendDatasetFades[datasetIndex];
+            if (wasVisible) chart.setDatasetVisibility(datasetIndex, false);
+            chart.update('none');
+        };
+        requestAnimationFrame(animateFade);
+    };
+}
+
 // Export globally to resolve linter unused warnings
 window.secureFetch = secureFetch;
 window.sseRequest = sseRequest;
@@ -327,23 +395,31 @@ function refreshChartZoomState(chart, canvasOrId) {
     }
 
     const hasZoom = total > 1 && (min > 0 || max < maxIndex);
+    const timeWindow = chart.__chartTimeWindow;
+    const isTimeWindow = timeWindow
+        && Math.abs(min - timeWindow.min) < 0.01
+        && Math.abs(max - timeWindow.max) < 0.01;
+    const userZoomed = hasZoom && !isTimeWindow;
     const atLiveEdge = total <= 1 || max >= (maxIndex - 1);
     const visibleRange = Math.max(1, max - min);
 
-    if (!state.liveRangeSize || !state.freezeUpdates) {
+    // Remember the visible width only while zoomed; an unzoomed chart must follow the full data range.
+    if (!userZoomed) {
+        state.liveRangeSize = 0;
+    } else if (!state.liveRangeSize || !state.freezeUpdates) {
         state.liveRangeSize = visibleRange;
     }
 
-    state.isZoomed = hasZoom;
+    state.isZoomed = userZoomed;
     state.atLiveEdge = atLiveEdge;
-    state.freezeUpdates = hasZoom && !atLiveEdge;
+    state.freezeUpdates = userZoomed && !atLiveEdge;
 
     const wrapper = canvas?.parentElement;
     const resetBtn = wrapper?.querySelector('.chart-reset-zoom-btn');
     if (resetBtn) {
         resetBtn.textContent = getChartResetLabel();
         resetBtn.title = getChartResetLabel();
-        resetBtn.classList.toggle('hidden', !hasZoom);
+        resetBtn.classList.toggle('hidden', !userZoomed);
     }
 
     return state;
@@ -353,12 +429,34 @@ window.refreshChartZoomState = refreshChartZoomState;
 function alignChartToLiveWindow(chart) {
     if (!chart?.options?.scales?.x) return;
 
-    const total = Array.isArray(chart.data?.labels) ? chart.data.labels.length : 0;
-    if (total <= 1) return;
-
     const state = chart.__liveZoomState = chart.__liveZoomState || {};
+    const total = Array.isArray(chart.data?.labels) ? chart.data.labels.length : 0;
+    const timeWindow = chart.__chartTimeWindow;
+    const zoomLimits = chart.options.plugins?.zoom?.limits?.x;
+
+    if (zoomLimits && total > 1) {
+        zoomLimits.min = 0;
+        zoomLimits.max = total - 1;
+    }
+
+    if (timeWindow && total > 1 && !state.isZoomed) {
+        chart.options.scales.x.min = Math.max(0, Math.min(total - 1, timeWindow.min));
+        chart.options.scales.x.max = Math.max(chart.options.scales.x.min + 1, Math.min(total - 1, timeWindow.max));
+        state.freezeUpdates = false;
+        state.atLiveEdge = true;
+        return;
+    }
+
+    if (!state.liveRangeSize || total <= 1) {
+        delete chart.options.scales.x.min;
+        delete chart.options.scales.x.max;
+        state.freezeUpdates = false;
+        state.atLiveEdge = true;
+        return;
+    }
+
     const maxIndex = total - 1;
-    const liveRangeSize = Math.max(1, Math.min(maxIndex, state.liveRangeSize || maxIndex));
+    const liveRangeSize = Math.max(1, Math.min(maxIndex, state.liveRangeSize));
 
     chart.options.scales.x.min = Math.max(0, maxIndex - liveRangeSize);
     chart.options.scales.x.max = maxIndex;
@@ -367,7 +465,24 @@ function alignChartToLiveWindow(chart) {
 }
 window.alignChartToLiveWindow = alignChartToLiveWindow;
 
-function updateChartWithLiveData(chart, applyData, canvasOrId) {
+function chartDataMatchesSnapshot(chart, labels, datasets) {
+    const currentLabels = chart.data.labels || [];
+    if (currentLabels.length !== labels.length || chart.data.datasets.length !== datasets.length) return false;
+    for (let i = 0; i < labels.length; i++) {
+        if (!Object.is(currentLabels[i], labels[i])) return false;
+    }
+    for (let i = 0; i < datasets.length; i++) {
+        const currentData = chart.data.datasets[i].data || [];
+        const previousData = datasets[i];
+        if (currentData.length !== previousData.length) return false;
+        for (let j = 0; j < previousData.length; j++) {
+            if (!Object.is(currentData[j], previousData[j])) return false;
+        }
+    }
+    return true;
+}
+
+function updateChartWithLiveData(chart, applyData, canvasOrId, animate = true) {
     if (!chart || typeof applyData !== 'function') return false;
 
     const state = chart.__liveZoomState = chart.__liveZoomState || {};
@@ -378,19 +493,39 @@ function updateChartWithLiveData(chart, applyData, canvasOrId) {
         return false;
     }
 
+    const previousLabels = (chart.data.labels || []).slice();
+    const previousDatasets = chart.data.datasets.map(dataset => (dataset.data || []).slice());
     applyData();
     alignChartToLiveWindow(chart);
-    chart.update('none');
+    const changed = !chartDataMatchesSnapshot(chart, previousLabels, previousDatasets);
+    const shouldAnimate = animate && !document.documentElement.classList.contains('perf-mode');
+    if (changed) chart.update(shouldAnimate ? undefined : 'none');
     refreshChartZoomState(chart, canvasOrId);
-    return true;
+    return changed;
 }
 window.updateChartWithLiveData = updateChartWithLiveData;
 
 function buildInteractiveChartOptions(baseOptions = {}) {
     ensureChartZoomRegistered();
+    const perfMode = document.documentElement.classList.contains('perf-mode');
 
     return {
         ...baseOptions,
+        animation: perfMode ? false : baseOptions.animation === false ? {
+            duration: 420,
+            easing: 'easeOutQuart'
+        } : baseOptions.animation,
+        transitions: {
+            ...(baseOptions.transitions || {}),
+            zoom: {
+                ...(baseOptions.transitions?.zoom || {}),
+                animation: {
+                    duration: perfMode ? 0 : 360,
+                    easing: 'easeOutCubic',
+                    ...(baseOptions.transitions?.zoom?.animation || {})
+                }
+            }
+        },
         plugins: {
             ...(baseOptions.plugins || {}),
             zoom: {
@@ -445,18 +580,24 @@ function attachChartInteractions(chart, canvasOrId) {
         if (!activeChart) return;
 
         if (typeof activeChart.resetZoom === 'function') {
-            activeChart.resetZoom();
+            activeChart.resetZoom(document.documentElement.classList.contains('perf-mode') ? 'none' : 'default');
         }
 
         const state = activeChart.__liveZoomState = activeChart.__liveZoomState || {};
         state.freezeUpdates = false;
+        state.liveRangeSize = 0;
+        state.isZoomed = false;
+        if (activeChart.options?.scales?.x) {
+            delete activeChart.options.scales.x.min;
+            delete activeChart.options.scales.x.max;
+        }
 
         if (typeof state.pendingUpdate === 'function') {
             state.pendingUpdate();
         }
 
         window.alignChartToLiveWindow?.(activeChart);
-        activeChart.update('none');
+        activeChart.update(document.documentElement.classList.contains('perf-mode') ? 'none' : undefined);
         window.refreshChartZoomState?.(activeChart, canvas);
     };
 
@@ -739,7 +880,8 @@ function parsePageEmojis(element) {
                 if (icon.length === 11 && /^1f1[e-f][0-9a-f]-1f1[e-f][0-9a-f]$/.test(icon)) {
                     return {
                         class: 'emoji flagcdn',
-                        style: 'width: 1.4em; height: 1em; object-fit: cover; border-radius: 2px; display: inline-block; vertical-align: middle; box-shadow: 0 1px 2px rgba(0,0,0,0.1)'
+                        // -0.15em centers a 1em-high flag on the cap height of bold text
+                        style: 'width: 1.4em; height: 1em; object-fit: cover; border-radius: 2px; display: inline-block; vertical-align: -0.15em; box-shadow: 0 1px 2px rgba(0,0,0,0.1)'
                     };
                 }
             },
@@ -758,7 +900,135 @@ function replaceEmojisWithFlagsHTML(text) {
         const code2 = match.codePointAt(2);
         const char1 = String.fromCharCode(code1 - 0x1F1E6 + 97);
         const char2 = String.fromCharCode(code2 - 0x1F1E6 + 97);
-        return `<img src="https://flagcdn.com/${char1}${char2}.svg" class="emoji flagcdn" style="width: 1.4em; height: 1em; object-fit: cover; border-radius: 2px; display: inline-block; vertical-align: middle; box-shadow: 0 1px 2px rgba(0,0,0,0.1)" alt="${match}" />`;
+        return `<img src="https://flagcdn.com/${char1}${char2}.svg" class="emoji flagcdn" style="width: 1.4em; height: 1em; object-fit: cover; border-radius: 2px; display: inline-block; vertical-align: -0.15em; box-shadow: 0 1px 2px rgba(0,0,0,0.1)" alt="${match}" />`;
+    });
+}
+
+// --- Node detail modals: flag-as-icon, fluid font scale, fit-to-width text, chart fonts ---
+
+function splitNodeFlag(rawName) {
+    const text = String(rawName || '');
+    const m = /\uD83C[\uDDE6-\uDDFF]\uD83C[\uDDE6-\uDDFF]/.exec(text);
+    if (!m) return { code: null, name: text };
+    const code = String.fromCharCode(
+        m[0].codePointAt(0) - 0x1F1E6 + 97,
+        m[0].codePointAt(2) - 0x1F1E6 + 97
+    );
+    const rest = (text.slice(0, m.index) + ' ' + text.slice(m.index + m[0].length)).replace(/\s{2,}/g, ' ').trim();
+    return { code, name: rest || code.toUpperCase() };
+}
+
+function setNodeIconFlag(iconBox, code) {
+    if (!iconBox) return;
+    const svg = iconBox.querySelector('svg');
+    let img = iconBox.querySelector('img.nm-flag-icon');
+    if (!code) {
+        if (img) img.remove();
+        if (svg) svg.style.display = '';
+        return;
+    }
+    const src = `https://flagcdn.com/${code}.svg`;
+    if (!img) {
+        img = document.createElement('img');
+        img.className = 'nm-flag-icon';
+        img.alt = '';
+        iconBox.appendChild(img);
+    }
+    if (img.getAttribute('src') !== src) img.setAttribute('src', src);
+    if (svg) svg.style.display = 'none';
+}
+
+function renderNodeModalTitle(titleEl, rawName) {
+    if (!titleEl) return;
+    const { code, name } = splitNodeFlag(rawName);
+    const html = DOMPurify.sanitize(replaceEmojisWithFlagsHTML(escapeHtml(name)));
+    const temp = titleEl.cloneNode(false);
+    temp.innerHTML = html;
+    if (!updateDOM(titleEl, temp)) titleEl.innerHTML = html;
+    if (typeof parsePageEmojis === 'function') parsePageEmojis(titleEl);
+    titleEl.dataset.rawName = String(rawName || '');
+    titleEl.title = name;
+    const header = titleEl.closest('#nodeModal > div > div, #nodeDetailModal > div > div');
+    setNodeIconFlag(header?.firstElementChild?.firstElementChild, code);
+}
+window.renderNodeModalTitle = renderNodeModalTitle;
+
+const NM_FIT_MIN = { title: 11, value: 9, row: 9 };
+
+function nmFitEl(el) {
+    el.style.fontSize = '';
+    if (!el.clientWidth) return;
+    let size = parseFloat(getComputedStyle(el).fontSize);
+    const min = NM_FIT_MIN[el.dataset.nmFit] || 9;
+    for (let i = 0; i < 4 && size > min && el.scrollWidth > el.clientWidth + 0.5; i++) {
+        size = Math.max(min, size * el.clientWidth / el.scrollWidth - 0.1);
+        el.style.fontSize = size + 'px';
+    }
+}
+
+function initNodeModalScaling() {
+    ['nodeModal', 'nodeDetailModal'].forEach((id) => {
+        const card = document.getElementById(id)?.firstElementChild;
+        if (!card || card.dataset.nmInit) return;
+        card.dataset.nmInit = '1';
+
+        const mark = (selector, kind) => card.querySelectorAll(selector).forEach((el) => { el.dataset.nmFit = kind; });
+        mark('#modalNodeName, #modalNodeTitle', 'title');
+        mark('#modalNodeUptime, #modalNodeRam, #modalNodeDisk, #modalNodeTraffic, #modalUptime, #modalCpu, #modalRam, #modalDisk', 'value');
+        const ip = card.querySelector('#modalNodeIp');
+        if (ip?.parentElement) ip.parentElement.dataset.nmFit = 'row';
+
+        // Let the title shrink instead of pushing/wrapping inside the header.
+        const title = card.querySelector('[data-nm-fit="title"]');
+        for (let el = title?.parentElement; el && el.parentElement !== card; el = el.parentElement) {
+            el.style.minWidth = '0';
+        }
+
+        const fitAll = () => card.querySelectorAll('[data-nm-fit]').forEach(nmFitEl);
+        let raf = 0;
+        const schedule = () => {
+            cancelAnimationFrame(raf);
+            raf = requestAnimationFrame(fitAll);
+        };
+
+        let lastWidth = 0;
+        new ResizeObserver(() => {
+            const w = card.clientWidth;
+            if (!w || w === lastWidth) return;
+            lastWidth = w;
+            card.style.setProperty('--nm-s', Math.min(1, Math.max(0.8, w / 560)).toFixed(3));
+            schedule();
+        }).observe(card);
+
+        new MutationObserver(schedule).observe(card, { childList: true, characterData: true, subtree: true });
+    });
+}
+document.addEventListener('DOMContentLoaded', initNodeModalScaling);
+
+if (typeof Chart !== 'undefined') {
+    Chart.register({
+        id: 'nodeModalChartFonts',
+        beforeUpdate(chart) {
+            if (!chart.canvas || !chart.canvas.closest('#nodeModal, #nodeDetailModal')) return;
+            const w = chart.width || chart.canvas.clientWidth;
+            if (!w) return;
+            const size = Math.max(8, Math.min(12, Math.round(w / 32)));
+            try {
+                const opts = chart.options;
+                Object.entries(opts.scales || {}).forEach(([axis, scale]) => {
+                    if (!scale.ticks) return;
+                    scale.ticks.font = { size };
+                    if (axis === 'x') {
+                        scale.ticks.display = w >= 340;
+                        scale.ticks.maxTicksLimit = Math.max(2, Math.min(6, Math.floor(w / 90)));
+                    }
+                });
+                const legendLabels = opts.plugins?.legend?.labels;
+                if (legendLabels) legendLabels.font = { size };
+            } catch (e) {
+                console.debug('nodeModalChartFonts skipped:', e);
+            }
+        }
     });
 }
 
@@ -2148,6 +2418,7 @@ document.addEventListener('click', async (e) => {
                 } catch (e) { }
                 initHolidayMood();
                 initGlobalLazyLoad();
+                initNodeModalScaling();
 
                 try {
                     if (url.includes('/settings')) {
@@ -2398,10 +2669,11 @@ window.showBillingModal = function(name, amount, currency, dateStr, daysLeft) {
     
     const amountVal = amount !== null && amount !== undefined ? `${amount} ${currency}` : (I18N?.web_billing_not_set || "Не установлена");
     const dateVal = dateStr ? new Date(dateStr).toLocaleDateString() : (I18N?.web_billing_not_set || "Не установлена");
+    const nameHtml = replaceEmojisWithFlagsHTML(escapeHtml(String(name ?? '')));
 
     const contentHtml = `
         <div class="mb-4 text-center">
-            <h3 class="text-xl font-black text-gray-900 dark:text-white">${name}</h3>
+            <h3 class="text-xl font-black text-gray-900 dark:text-white">${nameHtml}</h3>
         </div>
         <div class="bg-gray-50 dark:bg-black/20 rounded-xl p-4 space-y-3 border border-gray-100 dark:border-white/5 shadow-inner">
             <div class="flex justify-between items-center border-b border-gray-200 dark:border-white/10 pb-2">

@@ -15,6 +15,7 @@ from typing import Any
 from aiohttp import web
 
 from .. import config as current_config
+from .. import nodes_db
 
 # Lazy imports for modules
 from .. import shared_state
@@ -179,18 +180,30 @@ async def handle_save_notifications(request: web.Request) -> web.StreamResponse:
 
         for key, value in data.items():
             if key == "master_billing":
+                if not _is_admin(user):
+                    continue
                 from core.config import get_bot_config, set_bot_config
                 mb = await get_bot_config("master_billing") or {}
                 mb["reminder_enabled"] = bool(value)
                 await set_bot_config("master_billing", mb)
-            elif key.startswith("node_") and key.endswith("_billing"):
-                token = key.replace("node_", "").replace("_billing", "")
-                from core.nodes_db import Node, _get_token_hash
-                t_hash = _get_token_hash(token)
-                node_obj = await Node.get_or_none(token_hash=t_hash)
-                if node_obj:
-                    node_obj.reminder_enabled = bool(value)
-                    await node_obj.save(update_fields=["reminder_enabled"])
+            elif key.startswith("node_"):
+                parts = key.split("_", 2)
+                if len(parts) != 3 or not parts[1].isdigit():
+                    continue
+                node_id = int(parts[1])
+                setting = parts[2]
+                node = await nodes_db.get_node_by_id(node_id)
+                if not node:
+                    continue
+                if setting == "billing":
+                    if not _is_admin(user):
+                        continue
+                    node_obj = await nodes_db.Node.get_or_none(id=node_id)
+                    if node_obj:
+                        node_obj.reminder_enabled = bool(value)
+                        await node_obj.save(update_fields=["reminder_enabled"])
+                elif setting in {"downtime", "node_resources", "node_logins"}:
+                    ALERTS_CONFIG[uid][f"node_{node['token']}_{setting}"] = bool(value)
             else:
                 ALERTS_CONFIG[uid][key] = bool(value)
 

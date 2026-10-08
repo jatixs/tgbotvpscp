@@ -17,18 +17,18 @@
         <link rel="icon" type="image/x-icon" href="/static/favicons/favicon.ico?v={{ cache_ver }}">
         <meta name="description" content="{{ web_meta_desc }}">
         <meta name="keywords" content="{{ web_meta_keywords }}">
-		<link rel="stylesheet" href="/static/css/main.css?v={{ web_version }}">
+		<link rel="stylesheet" href="/static/css/main.css?v={{ asset_ver }}">
         <script src="/static/vendor/crypto-js.min.js"></script>
-        <script src="/static/js/theme_init.js?v={{ web_version }}"></script>
+        <script src="/static/js/theme_init.js?v={{ asset_ver }}"></script>
         <script>
         const I18N = {{ i18n_json | safe }};
         const BOT_USERNAME = "{{ bot_username }}";
         const CURRENT_LANG = "{{ current_lang }}";
         {{ web_key_js | safe }}
         </script>
-        <link rel="stylesheet" href="/static/css/style.css?v={{ web_version }}">
-    <link rel="stylesheet" href="/static/css/icons.css?v={{ web_version }}">
-        <link rel="stylesheet" href="/static/css/login.css?v={{ web_version }}">
+        <link rel="stylesheet" href="/static/css/style.css?v={{ asset_ver }}">
+    <link rel="stylesheet" href="/static/css/icons.css?v={{ asset_ver }}">
+        <link rel="stylesheet" href="/static/css/login.css?v={{ asset_ver }}">
         <script src="/static/vendor/telegram-web-app.js"></script>
         <script src="/static/vendor/dompurify.min.js"></script>
     </head>
@@ -403,8 +403,8 @@
         
         <script src="/static/vendor/twemoji.min.js"
                 crossorigin="anonymous"></script>
-        <script src="/static/js/common.js?v={{ web_version }}"></script>
-        <script src="/static/js/login.js?v={{ web_version }}"></script>
+        <script src="/static/js/common.js?v={{ asset_ver }}"></script>
+        <script src="/static/js/login.js?v={{ asset_ver }}"></script>
         <script>
             document.addEventListener("DOMContentLoaded", () => {
                 const isSecure = window.location.protocol === 'https:';

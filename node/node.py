@@ -17,9 +17,15 @@ import sys
 import threading
 import time
 from datetime import datetime
+from urllib.parse import urlsplit
 
 import psutil
 import requests
+
+try:
+    from .endpoint_migration import validate_https_migration_url
+except ImportError:
+    from endpoint_migration import validate_https_migration_url
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 ENV_FILE = os.path.join(BASE_DIR, '.env')
@@ -336,7 +342,66 @@ if not AGENT_BASE_URL or not AGENT_TOKEN:
     logging.error("CRITICAL: AGENT_BASE_URL or AGENT_TOKEN not found in .env")
     sys.exit(1)
 
+agent_url = urlsplit(AGENT_BASE_URL)
+if (
+    agent_url.scheme not in {"http", "https"}
+    or not agent_url.hostname
+    or agent_url.username
+    or agent_url.password
+    or agent_url.query
+    or agent_url.fragment
+    or agent_url.path not in {"", "/"}
+):
+    logging.critical("CRITICAL: AGENT_BASE_URL must be a valid HTTP(S) origin")
+    sys.exit(1)
+AGENT_BASE_URL = AGENT_BASE_URL.rstrip("/")
+LEGACY_HTTP_AGENT = agent_url.scheme == "http"
+if LEGACY_HTTP_AGENT:
+    logging.warning("Legacy HTTP endpoint detected; agent will only use it for unauthenticated HTTPS discovery.")
+
 OWN_NODE_TOKEN_HASH = hashlib.sha256(AGENT_TOKEN.encode()).hexdigest()
+
+
+def migrate_agent_to_https() -> bool:
+    global AGENT_BASE_URL, LEGACY_HTTP_AGENT
+    if not LEGACY_HTTP_AGENT:
+        return True
+
+    try:
+        discovery = requests.get(
+            f"{AGENT_BASE_URL}/api/agent/https",
+            timeout=5,
+            allow_redirects=False,
+        )
+        if discovery.status_code != 200:
+            logging.warning("HTTPS discovery is not available yet (HTTP %s)", discovery.status_code)
+            return False
+        advertised_url = discovery.json().get("agent_base_url", "")
+        try:
+            https_base_url = validate_https_migration_url(AGENT_BASE_URL, advertised_url)
+        except ValueError as exc:
+            logging.error("Master advertised an invalid HTTPS migration endpoint: %s", exc)
+            return False
+
+        verification = requests.get(
+            f"{https_base_url}/api/node/bootstrap",
+            headers={"X-Node-Token": AGENT_TOKEN},
+            timeout=8,
+            allow_redirects=False,
+        )
+        if verification.status_code != 200 or verification.json().get("status") != "ok":
+            logging.warning("HTTPS token verification failed (HTTP %s)", verification.status_code)
+            return False
+
+        upsert_env_value("AGENT_BASE_URL", https_base_url)
+        CONF["AGENT_BASE_URL"] = https_base_url
+        AGENT_BASE_URL = https_base_url
+        LEGACY_HTTP_AGENT = False
+        logging.info("Agent endpoint migrated to verified HTTPS: %s", https_base_url)
+        return True
+    except Exception as exc:
+        logging.warning("HTTPS endpoint migration will retry: %s", exc)
+        return False
 
 # Parse critical alert targets if provided.
 # Supports numeric chat IDs (e.g. -100123...) and string targets (e.g. @channel_username).
@@ -1879,6 +1944,7 @@ def send_heartbeat():
         "ssh_logins": current_ssh_events,
         "services": services,
         "agent_status": agent_status,
+        "agent_https": AGENT_BASE_URL.startswith("https://"),
         "timestamp": int(time.time())
     }
     
@@ -1895,8 +1961,15 @@ def send_heartbeat():
     try:
         response = requests.post(url, data=payload_bytes, headers=headers, timeout=5)
         if response.status_code == 200:
+            response_signature = response.headers.get("X-Signature", "")
+            expected_response_signature = hmac.new(
+                AGENT_TOKEN.encode(), response.content, hashlib.sha256
+            ).hexdigest()
+            if not hmac.compare_digest(expected_response_signature, response_signature):
+                raise ValueError("Invalid heartbeat response signature")
+
             flush_suppressed_http_error_logs()
-            data = response.json()
+            data = json.loads(response.content)
 
             sync_node_name_from_agent(data.get("node_name", ""))
 
@@ -2006,6 +2079,10 @@ def send_heartbeat():
 def main():
     # Check and update environment variables
     ensure_env_variables()
+
+    while not migrate_agent_to_https():
+        logging.warning("Node agent is paused until its HTTPS endpoint is verified.")
+        time.sleep(60)
     
     logging.info(f"Node Agent started. Target: {AGENT_BASE_URL}. Mode: {'DEBUG' if DEBUG_MODE else 'RELEASE'}")
     psutil.cpu_percent(interval=None)

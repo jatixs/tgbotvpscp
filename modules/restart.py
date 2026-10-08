@@ -68,6 +68,9 @@ async def restart_execute_handler(callback: types.CallbackQuery):
     user_id = callback.from_user.id
     chat_id = callback.message.chat.id
     lang = get_user_lang(user_id)
+    if not is_allowed(user_id, "restart"):
+        await callback.answer(_("access_denied_generic", lang), show_alert=True)
+        return
     await callback.message.edit_text(_("restart_start", lang), parse_mode="HTML")
     try:
         # Audit logging

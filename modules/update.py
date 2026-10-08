@@ -265,6 +265,9 @@ async def update_menu_handler(message: types.Message):
 async def confirm_system_update(callback: types.CallbackQuery):
     user_id = callback.from_user.id
     lang = get_user_lang(user_id)
+    if not is_allowed(user_id, "update"):
+        await callback.answer(_("access_denied_generic", lang), show_alert=True)
+        return
     keyboard = InlineKeyboardMarkup(
         inline_keyboard=[
             [
@@ -289,6 +292,9 @@ async def confirm_system_update(callback: types.CallbackQuery):
 async def run_system_update(callback: types.CallbackQuery):
     user_id = callback.from_user.id
     lang = get_user_lang(user_id)
+    if not is_allowed(user_id, "update"):
+        await callback.answer(_("access_denied_generic", lang), show_alert=True)
+        return
     await callback.message.edit_text(_("update_start", lang), parse_mode="HTML")
 
     if DEPLOY_MODE == "docker":
@@ -317,6 +323,9 @@ async def run_system_update(callback: types.CallbackQuery):
 async def check_bot_update(callback: types.CallbackQuery):
     user_id = callback.from_user.id
     lang = get_user_lang(user_id)
+    if not is_allowed(user_id, "update"):
+        await callback.answer(_("access_denied_generic", lang), show_alert=True)
+        return
     await callback.message.edit_text(_("bot_update_checking", lang), parse_mode="HTML")
     try:
         local_v, remote_v, branch, available = await get_update_info()
@@ -375,6 +384,9 @@ async def check_bot_update(callback: types.CallbackQuery):
 async def run_bot_update(callback: types.CallbackQuery):
     user_id = callback.from_user.id
     lang = get_user_lang(user_id)
+    if not is_allowed(user_id, "update"):
+        await callback.answer(_("access_denied_generic", lang), show_alert=True)
+        return
     chat_id = callback.message.chat.id
     data_parts = callback.data.split(":")
     branch = data_parts[1] if len(data_parts) > 1 else "main"
