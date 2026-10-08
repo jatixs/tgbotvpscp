@@ -11,7 +11,7 @@
 | `core/web/auth.py` | Аутентификация |
 | `core/web/api_system.py` | Системные API |
 | `core/web/api_nodes.py` | API нод |
-| `core/web/streaming.py` | SSE-потоки |
+| `core/web/streaming.py` | SSE-потоки (в том числе история графиков) |
 | `core/web/middlewares.py` | WAF, CSRF, Rate Limiting |
 
 ---
@@ -27,11 +27,12 @@ core/web/app.py (маршрутизация)
     ├── views.py       → Jinja2 HTML
     ├── api_system.py  → JSON API
     ├── api_nodes.py   → JSON API
-    ├── streaming.py   → SSE потоки
+    ├── streaming.py   → SSE потоки (включая историю графиков)
     └── auth.py        → Аутентификация
     ↓
 core/shared_state.py (in-memory данные)
 core/nodes_db.py (SQLite)
+core/metrics_history.py (SQLite, история метрик)
 core/messaging.py (Telegram уведомления)
 ```
 
@@ -47,65 +48,48 @@ core/messaging.py (Telegram уведомления)
 
 ```python
 # Добавьте в конец файла перед определением маршрутов
+@routes.post("/api/my-feature")
 async def api_my_feature(request):
-    """Ваш кастомный API-эндпоинт."""
-    # 1. Проверка авторизации (сессия)
-    session = request.get("session")
-    if not session:
+    """Пример авторизованного JSON endpoint."""
+    user = get_current_user(request)
+    if not user:
         return web.json_response({"error": "Unauthorized"}, status=401)
 
-    # 2. Получение данных из запроса
-    if request.method == "POST":
-        data = await request.json()
-        param = data.get("param", "")
-    else:
-        param = request.query.get("param", "")
-
-    # 3. Ваша логика
-    result = {"status": "ok", "data": f"Processed: {param}"}
-
-    # 4. Возвращаем JSON
-    return web.json_response(result)
+    data = await request.json()
+    param = str(data.get("param", ""))[:100]
+    return web.json_response({"status": "ok", "user_id": user["id"], "data": param})
 ```
 
 ### Шаг 2: Регистрация маршрута
 
 **Файл:** `/opt/tg-bot/core/web/api_system.py`
 
-Найдите список маршрутов `system_routes` (обычно в конце файла) и добавьте:
-
-```python
-system_routes = [
-    # ... существующие маршруты ...
-    web.get("/api/my-feature", api_my_feature),
-    web.post("/api/my-feature", api_my_feature),
-]
-```
+В `api_system.py` уже объявлен `routes = web.RouteTableDef()`. Декоратор `@routes.post(...)` из примера выше регистрирует маршрут; отдельный список `system_routes` создавать не нужно.
 
 ### Шаг 3: Вызов из JavaScript
 
 **Файл:** `/opt/tg-bot/core/static/js/dashboard.js` (или создайте свой `.js`)
 
 ```javascript
+function getCsrfToken() {
+    const item = document.cookie.split("; ").find(value => value.startsWith("csrf_token="));
+    return item ? decodeURIComponent(item.slice("csrf_token=".length)) : "";
+}
+
 async function callMyFeature() {
-    try {
-        const resp = await fetch('/api/my-feature', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRF-Token': CSRF_TOKEN  // обязательно для POST
-            },
-            body: JSON.stringify({ param: 'hello' })
-        });
-        const data = await resp.json();
-        console.log(data);
-    } catch (err) {
-        console.error('API error:', err);
-    }
+    const response = await fetch("/api/my-feature", {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json",
+            "X-CSRF-Token": getCsrfToken()
+        },
+        body: JSON.stringify({ param: "hello" })
+    });
+    if (!response.ok) throw new Error(`Request failed: ${response.status}`);
+    return response.json();
 }
 ```
-
-> ⚠️ **Важно:** Все POST запросы должны включать CSRF-токен в заголовке `X-CSRF-Token`. Он доступен из переменной `CSRF_TOKEN`, которая передается в шаблон.
+> ⚠️ **Важно:** изменяющие `/api/` запросы проходят CSRF middleware. Передавайте значение cookie `csrf_token` в заголовке `X-CSRF-Token`; не отключайте middleware для нового endpoint.
 
 ---
 
@@ -146,11 +130,10 @@ async function callMyFeature() {
             </div>
         </div>
     </main>
+    <script type="application/json" id="page-data">{{ i18n_data | tojson }}</script>
 
     <script>
-        const CSRF_TOKEN = '{{ csrf_token }}';
-        const WEB_KEY = '{{ web_key }}';
-        const I18N = {{ i18n_json | safe }};
+        const I18N = JSON.parse(document.getElementById("page-data").textContent);
     </script>
     <script src="/static/js/common.js"></script>
     <script src="/static/js/my_feature.js"></script>
@@ -165,12 +148,11 @@ async function callMyFeature() {
 ```python
 async def my_feature_page(request):
     """Страница вашей фичи."""
-    session = request.get("session")
-    if not session:
+    user = get_current_user(request)
+    if not user:
         raise web.HTTPFound("/login")
 
-    user_role = session.get("role", "users")
-    lang = session.get("lang", "ru")
+    lang = get_user_lang(user["id"])
 
     # Собираем строки для i18n на фронтенде
     i18n_keys = ["my_feature_title", "my_feature_desc"]
@@ -180,9 +162,7 @@ async def my_feature_page(request):
         "lang": lang,
         "page_title": get_text("my_feature_title", lang),
         "app_name": "VPS Manager",
-        "csrf_token": session.get("csrf_token", ""),
-        "web_key": WEB_KEY,
-        "i18n_json": json.dumps(i18n_data, ensure_ascii=False),
+        "i18n_data": i18n_data,
         "I18N": i18n_data,
     }
 
@@ -192,14 +172,12 @@ async def my_feature_page(request):
 ### Шаг 3: Регистрация маршрута
 
 **Файл:** `/opt/tg-bot/core/web/views.py`
-
-Добавьте в список `view_routes`:
+В `views.py` используйте существующую таблицу `routes`:
 
 ```python
-view_routes = [
-    # ... существующие маршруты ...
-    web.get("/my-feature", my_feature_page),
-]
+@routes.get("/my-feature")
+async def my_feature_page(request):
+    ...
 ```
 
 ### Шаг 4: Создание JavaScript
@@ -223,7 +201,10 @@ async function loadData() {
 
 function renderContent(data) {
     const container = document.getElementById('content');
-    container.innerHTML = `<p class="text-gray-700 dark:text-gray-300">${data.data}</p>`;
+    const paragraph = document.createElement("p");
+    paragraph.className = "text-gray-700 dark:text-gray-300";
+    paragraph.textContent = String(data.data ?? "");
+    container.replaceChildren(paragraph);
 }
 ```
 
@@ -238,27 +219,23 @@ function renderContent(data) {
 ```python
 # В вашем API-хендлере (core/web/api_system.py)
 from core.messaging import send_alert
+from core.rbac import is_admin
+from core.web.auth import get_current_user
 
+@routes.post("/api/my-action")
 async def api_my_action(request):
-    session = request.get("session")
-    if not session:
+    user = get_current_user(request)
+    if not user:
         return web.json_response({"error": "Unauthorized"}, status=401)
+    if not is_admin(user):
+        return web.json_response({"error": "Forbidden"}, status=403)
 
     data = await request.json()
-
-    # Выполняем действие
     result = do_something(data)
-
-    # Отправляем уведомление в Telegram всем админам
     bot = request.app.get("bot")
     if bot:
-        await send_alert(
-            bot,
-            "🔔 Действие выполнено из WebUI",
-            alert_type="system"
-        )
-
-    return web.json_response({"status": "ok"})
+        await send_alert(bot, "Action performed from WebUI", alert_type="system")
+    return web.json_response({"status": "ok", "result": result})
 ```
 
 ### Отправка данных из бота в WebUI (через SSE)
@@ -287,6 +264,10 @@ async def my_feature_handler(message):
 from core.shared_state import ALERTS_CONFIG, ALLOWED_USERS
 
 async def api_get_status(request):
+    user = get_current_user(request)
+    if not user:
+        return web.json_response({"error": "Unauthorized"}, status=401)
+
     return web.json_response({
         "alerts_enabled": ALERTS_CONFIG.get("global_enabled", True),
         "users_count": len(ALLOWED_USERS),
@@ -305,27 +286,11 @@ from core.shared_state import WEB_NOTIFICATIONS
 ## 🔒 Безопасность
 
 ### Обязательные правила
-
-1. **CSRF-токен** — все POST/PUT/DELETE запросы должны включать `X-CSRF-Token`
-2. **Проверка сессии** — всегда проверяйте `request.get("session")`
-3. **Проверка роли** — для опасных операций проверяйте `session.get("role")`
-4. **Валидация входных данных** — никогда не доверяйте пользовательскому вводу
-5. **Шифрование** — используйте `encrypt_for_web()` для передачи чувствительных данных
-
-### Пример проверки прав
-
-```python
-async def api_admin_action(request):
-    session = request.get("session")
-    if not session:
-        return web.json_response({"error": "Unauthorized"}, status=401)
-
-    # Только для админов
-    if session.get("role") not in ("owner", "admins"):
-        return web.json_response({"error": "Forbidden"}, status=403)
-
-    # ... логика ...
-```
+1. Проверяйте пользователя через `get_current_user(request)`; не читайте несуществующий `request["session"]`.
+2. Для операций администратора используйте `core.rbac.is_admin(user)`; проверку делайте в каждом API/callback handler.
+3. Изменяющие `/api/` requests должны пройти CSRF middleware с заголовком `X-CSRF-Token`.
+4. Валидируйте тип, диапазон и размер входных данных; авторизация не заменяет валидацию.
+5. Не отправляйте node tokens, passwords или иные секреты в browser payloads. Клиентское шифрование не является проверкой прав доступа.
 
 ---
 

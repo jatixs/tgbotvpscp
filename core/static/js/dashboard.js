@@ -49,13 +49,16 @@ let logSSESource = null;
 let servicesSSESource = null;
 
 let agentChart = null;
+let agentRangeCtl = null;
+let nodeResRangeCtl = null;
+let nodeNetRangeCtl = null;
 let quickCpuChart = null;
 let quickRamChart = null;
 let quickDiskChart = null;
 const QUICK_STATS_HISTORY_MAX = 30;
 const quickStatsHistory = { cpu: [], ram: [], disk: [] };
 let allNodesData = [];
-let currentNodeToken = null;
+let currentNodeId = null;
 let currentRenderList = [];
 let renderedCount = 0;
 const NODES_BATCH_SIZE = 15;
@@ -104,6 +107,8 @@ window.initDashboard = function () {
         window.sseSource.addEventListener('nodes_list', handleSSENodesList);
     }
 
+    initAgentChartRange();
+
     if (document.getElementById('nodesList')) {
         const searchInput = document.getElementById('nodeSearch');
         if (searchInput) {
@@ -141,6 +146,55 @@ function cleanupDashboardSources() {
     }
     if (window.nodesPollInterval) clearInterval(window.nodesPollInterval);
     if (window.agentPollInterval) clearInterval(window.agentPollInterval);
+}
+
+function initAgentChartRange() {
+    const canvas = document.getElementById('agentChart');
+    if (!canvas || typeof window.createChartRangeController !== 'function') return;
+
+    // After SPA navigation the canvas is a fresh element: the old Chart instance is dead.
+    if (agentChart && agentChart.canvas !== canvas) {
+        agentChart.destroy();
+        agentChart = null;
+    }
+    if (agentRangeCtl) agentRangeCtl.destroy();
+    agentRangeCtl = window.createChartRangeController({
+        key: 'agentChart',
+        mount: '[data-chart-range="agentChart"]',
+        canvasId: 'agentChart',
+        getSource: () => ({ source: 'agent' }),
+        getValues: point => [point.rx, point.tx],
+        render: renderAgentChart
+    });
+    agentRangeCtl.start();
+}
+
+function startNodeChartRanges() {
+    if (typeof window.createChartRangeController !== 'function') return;
+    if (nodeResRangeCtl) nodeResRangeCtl.destroy();
+    if (nodeNetRangeCtl) nodeNetRangeCtl.destroy();
+    const getSource = () => (currentNodeId ? { source: 'node', node_id: currentNodeId } : null);
+    nodeResRangeCtl = window.createChartRangeController({
+        key: 'nodeResChart',
+        mount: '[data-chart-range="nodeResChart"]',
+        canvasId: 'nodeResChart',
+        getSource,
+        getValues: point => [point.c, point.r],
+        render: renderNodeResChart
+    }).start();
+    nodeNetRangeCtl = window.createChartRangeController({
+        key: 'nodeNetChart',
+        mount: '[data-chart-range="nodeNetChart"]',
+        canvasId: 'nodeNetChart',
+        getSource,
+        getValues: point => [point.rx, point.tx],
+        render: renderNodeNetChart
+    }).start();
+}
+
+function stopNodeChartRanges() {
+    if (nodeResRangeCtl) nodeResRangeCtl.stop();
+    if (nodeNetRangeCtl) nodeNetRangeCtl.stop();
 }
 const handleSSEAgentStats = (e) => {
     if (!document.getElementById('agentChart')) return;
@@ -186,11 +240,17 @@ function formatProcessList(procList, title, colorClass = "text-gray-500") {
         const match = procStr.match(/^(.*)\s\((.*)\)$/);
         let name = procStr;
         let value = "";
+        let alt = "";
 
         if (match) {
             name = match[1];
-            value = match[2];
+            [value, alt = ""] = match[2].split('|');
         }
+
+        const badgeBase = "text-[10px] font-mono font-bold bg-gray-100 dark:bg-white/10 px-1.5 py-0.5 rounded ml-2 text-gray-600 dark:text-gray-300 whitespace-nowrap";
+        const valueAttrs = alt
+            ? `class="proc-value-toggle cursor-pointer select-none ${badgeBase}" data-primary="${escapeHtml(value)}" data-alt="${escapeHtml(alt)}" data-showing="primary"`
+            : `class="${badgeBase}"`;
 
         return `
         <div class="flex justify-between items-center py-1.5 border-b border-gray-500/10 last:border-0 group">
@@ -198,7 +258,7 @@ function formatProcessList(procList, title, colorClass = "text-gray-500") {
                 <div class="w-1 h-1 rounded-full bg-gray-300 dark:bg-gray-600 group-hover:bg-blue-400 transition-colors"></div>
                 <span class="text-xs font-medium text-gray-700 dark:text-gray-200 truncate" title="${escapeHtml(name)}">${escapeHtml(name)}</span>
             </div>
-            <span class="text-[10px] font-mono font-bold bg-gray-100 dark:bg-white/10 px-1.5 py-0.5 rounded ml-2 text-gray-600 dark:text-gray-300 whitespace-nowrap">${escapeHtml(value)}</span>
+            <span ${valueAttrs}>${escapeHtml(value)}</span>
         </div>`;
     }).join('');
 
@@ -213,6 +273,18 @@ function formatProcessList(procList, title, colorClass = "text-gray-500") {
         </div>
     `;
 }
+
+// Clicking a process value flips every value in the same modal between % and real size.
+document.addEventListener('click', (e) => {
+    const badge = e.target.closest?.('.proc-value-toggle');
+    if (!badge) return;
+    const root = badge.closest('#hintModalContent') || document;
+    const showAlt = badge.dataset.showing !== 'alt';
+    root.querySelectorAll('.proc-value-toggle').forEach((el) => {
+        el.textContent = showAlt ? el.dataset.alt : el.dataset.primary;
+        el.dataset.showing = showAlt ? 'alt' : 'primary';
+    });
+});
 
 function formatInterfaceList(interfaces, type, title, colorClass = "text-gray-500") {
     if (!interfaces) return '';
@@ -306,8 +378,8 @@ function updateNodesListUI(data) {
                 try {
                     const order = JSON.parse(orderStr);
                     newList.sort((a, b) => {
-                        const aDec = typeof decryptData === 'function' ? decryptData(a.token) : a.token;
-                        const bDec = typeof decryptData === 'function' ? decryptData(b.token) : b.token;
+                        const aDec = String(a.id);
+                        const bDec = String(b.id);
                         let idxA = order.indexOf(aDec);
                         let idxB = order.indexOf(bDec);
                         if (idxA === -1) idxA = Infinity;
@@ -353,17 +425,17 @@ function updateNodesListUI(data) {
 function updateVisibleNodes(elements, dataList) {
     for (let i = 0; i < elements.length; i++) {
         const el = elements[i];
-        const token = el.getAttribute('data-token');
+        const nodeId = el.getAttribute('data-token');
         const nodeData = dataList[i];
         
         if (!nodeData) return false;
         
-        const valA = typeof decryptData === 'function' ? decryptData(token) : token;
-        const valB = typeof decryptData === 'function' ? decryptData(nodeData.token) : nodeData.token;
+        const valA = nodeId;
+        const valB = String(nodeData.id);
         if (valA !== valB) return false;
         
-        if (token !== nodeData.token) {
-            el.setAttribute('data-token', escapeHtml(nodeData.token));
+        if (nodeId !== valB) {
+            el.setAttribute('data-token', valB);
         }
         const ui = getNodeUiParams(nodeData);
         const cpuEl = el.querySelector('[data-ref="cpu-val"]');
@@ -425,7 +497,7 @@ function updateVisibleNodes(elements, dataList) {
                 stPing.style.display = 'none';
             }
         }
-        el.setAttribute('onclick', `openNodeDetails('${escapeHtml(nodeData.token)}', '${ui.statusColor}')`);
+        el.setAttribute('onclick', `openNodeDetails('${valB}', '${ui.statusColor}')`);
     }
     return true;
 }
@@ -461,8 +533,8 @@ function filterAndRenderNodes() {
             try {
                 const order = JSON.parse(orderStr);
                 newList.sort((a, b) => {
-                    const aDec = typeof decryptData === 'function' ? decryptData(a.token) : a.token;
-                    const bDec = typeof decryptData === 'function' ? decryptData(b.token) : b.token;
+                    const aDec = String(a.id);
+                    const bDec = String(b.id);
                     let idxA = order.indexOf(aDec);
                     let idxB = order.indexOf(bDec);
                     if (idxA === -1) idxA = Infinity;
@@ -558,16 +630,14 @@ function renderNodesList() {
             animation: 150,
             disabled: sortMode !== 'custom',
             onEnd: function () {
-                const newOrder = Array.from(container.querySelectorAll('[data-token]')).map(el => {
-                    const t = el.getAttribute('data-token');
-                    return typeof decryptData === 'function' ? decryptData(t) : t;
-                });
+                const newOrder = Array.from(container.querySelectorAll('[data-token]'))
+                    .map(el => el.getAttribute('data-token'));
                 localStorage.setItem('dashboardNodeOrder', JSON.stringify(newOrder));
                 const orderMap = {};
                 newOrder.forEach((t, i) => orderMap[t] = i);
                 currentRenderList.sort((a, b) => {
-                    const aDec = typeof decryptData === 'function' ? decryptData(a.token) : a.token;
-                    const bDec = typeof decryptData === 'function' ? decryptData(b.token) : b.token;
+                    const aDec = String(a.id);
+                    const bDec = String(b.id);
                     let idxA = orderMap[aDec];
                     let idxB = orderMap[bDec];
                     if (idxA === undefined) idxA = Infinity;
@@ -619,7 +689,7 @@ function renderNextNodeBatch() {
         }
 
         return `
-        <div data-token="${escapeHtml(node.token)}" class="bg-white dark:bg-white/5 hover:bg-gray-50 dark:hover:bg-white/10 transition-all duration-200 rounded-xl border border-gray-100 dark:border-white/5 cursor-pointer shadow-sm hover:shadow-md group animate-fade-in-up" data-action="open-node-details" data-color="${ui.statusColor}">
+        <div data-token="${node.id}" class="bg-white dark:bg-white/5 hover:bg-gray-50 dark:hover:bg-white/10 transition-all duration-200 rounded-xl border border-gray-100 dark:border-white/5 cursor-pointer shadow-sm hover:shadow-md group animate-fade-in-up" data-action="open-node-details" data-color="${ui.statusColor}">
             
             <div class="node-row p-3 sm:p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
                 
@@ -934,7 +1004,6 @@ function updateAgentStatsUI(data) {
                 }
             }
         }
-        renderAgentChart(data.history);
         updateQuickStatCharts();
     } catch (e) {
         console.error("Agent stats UI error:", e);
@@ -952,7 +1021,7 @@ function updateChartsColors() {
             chart.options.scales.y.grid.color = gridColor;
             chart.options.scales.y.ticks.color = tickColor;
             if (chart.options.plugins.legend) chart.options.plugins.legend.labels.color = tickColor;
-            chart.update();
+            chart.update(document.documentElement.classList.contains('perf-mode') ? 'none' : undefined);
         }
     });
 }
@@ -967,6 +1036,7 @@ function getGradient(ctx, colorBase) {
 function pushQuickStatHistory(key, value) {
     if (typeof value !== 'number' || Number.isNaN(value)) return;
     const hist = quickStatsHistory[key];
+    if (hist.length && Object.is(hist[hist.length - 1], value)) return;
     hist.push(value);
     if (hist.length > QUICK_STATS_HISTORY_MAX) hist.shift();
 }
@@ -979,9 +1049,14 @@ function renderQuickStatChart(canvasId, existingChart, colorRgb, historyKey) {
 
     const data = quickStatsHistory[historyKey];
     if (existingChart) {
-        existingChart.data.labels = data.map(() => '');
-        existingChart.data.datasets[0].data = data.slice();
-        existingChart.update('none');
+        const nextData = data.slice();
+        const previousData = existingChart.data.datasets[0].data || [];
+        if (previousData.length === nextData.length && previousData.every((value, index) => Object.is(value, nextData[index]))) {
+            return existingChart;
+        }
+        existingChart.data.labels = nextData.map(() => '');
+        existingChart.data.datasets[0].data = nextData;
+        existingChart.update(document.documentElement.classList.contains('perf-mode') ? 'none' : undefined);
         return existingChart;
     }
 
@@ -1001,7 +1076,7 @@ function renderQuickStatChart(canvasId, existingChart, colorRgb, historyKey) {
         options: {
             responsive: true,
             maintainAspectRatio: false,
-            animation: false,
+            animation: document.documentElement.classList.contains('perf-mode') ? false : undefined,
             scales: {
                 x: { display: false },
                 y: { display: false, min: 0, max: 100 }
@@ -1018,52 +1093,46 @@ function updateQuickStatCharts() {
     quickDiskChart = renderQuickStatChart('quickDiskChart', quickDiskChart, 'rgb(34, 197, 94)', 'disk');
 }
 
-function renderAgentChart(history) {
-    if (!history || history.length < 2) return;
-    const ctx = document.getElementById('agentChart').getContext('2d');
-    const labels = [];
-    const netRx = [];
-    const netTx = [];
-    const gapThreshold = 10;
-
-    for (let i = 1; i < history.length; i++) {
-        const dt = history[i].t - history[i - 1].t;
-        if (dt > gapThreshold) {
-            labels.push("");
-            netRx.push(null);
-            netTx.push(null);
+function renderAgentChart(series, animate = true) {
+    const canvas = document.getElementById('agentChart');
+    if (!canvas) return;
+    const labels = series.labels;
+    const netRx = series.rx;
+    const netTx = series.tx;
+    if (series.points.length < 2) {
+        if (agentChart) {
+            agentChart.data.labels = [];
+            agentChart.data.datasets.forEach(ds => { ds.data = []; });
+            agentChart.update(animate && !document.documentElement.classList.contains('perf-mode') ? undefined : 'none');
         }
-        labels.push(new Date(history[i].t * 1000).toLocaleTimeString([], {
-            hour: '2-digit',
-            minute: '2-digit',
-            second: '2-digit'
-        }));
-        netRx.push((Math.max(0, history[i].rx - history[i - 1].rx) * 8 / dt / 1024));
-        netTx.push((Math.max(0, history[i].tx - history[i - 1].tx) * 8 / dt / 1024));
+        return;
     }
+    const ctx = canvas.getContext('2d');
 
     const isDark = document.documentElement.classList.contains('dark');
     const gridColor = isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.05)';
     const tickColor = isDark ? '#9ca3af' : '#6b7280';
     const isMobile = window.innerWidth < 640;
-    const maxTicks = isMobile ? 4 : 8;
+    const maxTicks = isMobile ? 3 : 8;
 
     const optsBase = {
         responsive: true,
         maintainAspectRatio: false,
-        animation: false,
         interaction: {
             mode: 'index',
             intersect: false
         },
         scales: {
             x: {
+                min: series.minIndex,
+                max: series.maxIndex,
                 grid: {
                     display: false
                 },
                 ticks: {
                     color: tickColor,
                     maxTicksLimit: maxTicks,
+                    autoSkipPadding: 16,
                     maxRotation: 0
                 }
             },
@@ -1112,14 +1181,15 @@ function renderAgentChart(history) {
             agentChart.data.labels = labels;
             agentChart.data.datasets[0].data = netRx;
             agentChart.data.datasets[1].data = netTx;
+            agentChart.__chartTimeWindow = { min: series.minIndex, max: series.maxIndex };
             agentChart.options = opts;
         };
 
         if (window.updateChartWithLiveData) {
-            window.updateChartWithLiveData(agentChart, applyAgentChartData, 'agentChart');
+            window.updateChartWithLiveData(agentChart, applyAgentChartData, 'agentChart', animate);
         } else {
             applyAgentChartData();
-            agentChart.update('none');
+            agentChart.update(document.documentElement.classList.contains('perf-mode') ? 'none' : undefined);
             if (window.attachChartInteractions) window.attachChartInteractions(agentChart, 'agentChart');
         }
     } else {
@@ -1148,6 +1218,7 @@ function renderAgentChart(history) {
             },
             options: opts
         });
+        agentChart.__chartTimeWindow = { min: series.minIndex, max: series.maxIndex };
         if (window.attachChartInteractions) window.attachChartInteractions(agentChart, 'agentChart');
     }
 }
@@ -1246,7 +1317,31 @@ function removeLogLoading() {
     }, 300);
 }
 
+window.selectLogFilter = function (level) {
+    const container = document.getElementById('logsContainer');
+    const label = document.getElementById('logFilterSelectedText');
+    const menu = document.getElementById('logFilterMenu');
+    // Remove all existing filter classes
+    container.classList.remove('filter-ALL', 'filter-INFO', 'filter-WARN', 'filter-ERROR');
+    if (level !== 'ALL') {
+        container.classList.add('filter-' + level);
+    }
+    if (label) label.textContent = level;
+    if (menu) menu.classList.add('hidden');
+};
+
+// Close log filter dropdown when clicking outside
+document.addEventListener('click', function (e) {
+    const wrapper = document.getElementById('logFilterDropdownWrapper');
+    const menu = document.getElementById('logFilterMenu');
+    if (wrapper && menu && !wrapper.contains(e.target)) {
+        menu.classList.add('hidden');
+    }
+});
+
 window.switchLogType = function (type) {
+    // Reset log level filter to ALL
+    selectLogFilter('ALL');
     ['btnLogBot', 'btnLogSys'].forEach(id => {
         const el = document.getElementById(id);
         const isActive = (id === 'btnLogBot' && type === 'bot') || (id === 'btnLogSys' && type === 'sys');
@@ -1322,10 +1417,11 @@ window.switchLogType = function (type) {
 
             const html = logs.map(line => {
                 let cls = "text-gray-500";
-                if (line.includes("INFO")) cls = "text-blue-400";
-                else if (line.includes("WARNING")) cls = "text-yellow-400";
-                else if (line.includes("ERROR") || line.includes("CRITICAL")) cls = "text-red-500 font-bold";
-                return `<div class="${cls} font-mono text-xs break-all py-[1px]">${escapeHtml(line)}</div>`;
+                let level = "ALL";
+                if (line.includes("INFO")) { cls = "text-blue-400"; level = "INFO"; }
+                else if (line.includes("WARNING")) { cls = "text-yellow-400"; level = "WARN"; }
+                else if (line.includes("ERROR") || line.includes("CRITICAL")) { cls = "text-red-500 font-bold"; level = "ERROR"; }
+                return `<div data-level="${level}" class="log-line ${cls} font-mono text-xs break-all py-[1px]">${escapeHtml(line)}</div>`;
             }).join('');
 
             const loader = document.getElementById('log-loader');
@@ -1381,11 +1477,12 @@ function setModalLoading() {
     const modal = document.getElementById('nodeModal');
     if (!modal) return;
 
-    const fields = ['modalNodeName', 'modalNodeIp', 'modalToken', 'modalNodeUptime', 'modalNodeRam', 'modalNodeDisk', 'modalNodeTraffic', 'dashboardAvailabilityCurrentUptime', 'dashboardAvailabilityLastOutage', 'dashboardAvailabilityLastReboot', 'dashboardAvailabilityTotalUptime', 'dashboardAvailabilityTotalDowntime', 'dashboardAvailabilityInternetDowntime', 'dashboardAvailabilityPhysicalDowntime', 'dashboardAvailabilityNote'];
+    const fields = ['modalNodeName', 'modalNodeIp', 'modalNodeId', 'modalNodeUptime', 'modalNodeRam', 'modalNodeDisk', 'modalNodeTraffic', 'dashboardAvailabilityCurrentUptime', 'dashboardAvailabilityLastOutage', 'dashboardAvailabilityLastReboot', 'dashboardAvailabilityTotalUptime', 'dashboardAvailabilityTotalDowntime', 'dashboardAvailabilityInternetDowntime', 'dashboardAvailabilityPhysicalDowntime', 'dashboardAvailabilityNote'];
     fields.forEach(id => {
         const el = document.getElementById(id);
         if (el) el.innerText = '...';
     });
+    renderNodeModalTitle(document.getElementById('modalNodeName'), '...');
     const lastSeen = document.getElementById('modalNodeLastSeen');
     if (lastSeen) {
         lastSeen.innerText = '...';
@@ -1502,12 +1599,12 @@ function removeModalLoading() {
     }, 300);
 }
 
-async function openNodeDetails(token, color) {
+async function openNodeDetails(nodeId, color) {
     const modal = document.getElementById('nodeModal');
     if (modal) {
         setModalLoading();
         animateModalOpen(modal);
-        currentNodeToken = token;
+        currentNodeId = nodeId;
         cancelNodeRename();
     }
 
@@ -1519,7 +1616,8 @@ async function openNodeDetails(token, color) {
         nodeSSESource.close();
         nodeSSESource = null;
     }
-    nodeSSESource = new EventSource(`/api/events/node?token=${encodeURIComponent(token)}`);
+    startNodeChartRanges();
+    nodeSSESource = new EventSource(`/api/events/node?node_id=${encodeURIComponent(nodeId)}`);
 
     nodeSSESource.addEventListener('node_details', (e) => {
         try {
@@ -1547,15 +1645,8 @@ function updateNodeDetailsUI(data) {
     removeModalLoading();
     const inputContainer = document.getElementById('nodeNameInputContainer');
     if (inputContainer && inputContainer.classList.contains('hidden')) {
-        const newTitleHtml = replaceEmojisWithFlagsHTML(escapeHtml(decryptData(data.name)));
-        const titleEl = document.getElementById('modalNodeName');
-        const tempTitle = titleEl.cloneNode(false);
-        tempTitle.innerHTML = DOMPurify.sanitize(newTitleHtml);
-        if (!updateDOM(titleEl, tempTitle)) {
-            titleEl.innerHTML = DOMPurify.sanitize(newTitleHtml);
-        }
-        if (typeof parsePageEmojis === 'function') parsePageEmojis(titleEl);
-        
+        renderNodeModalTitle(document.getElementById('modalNodeName'), decryptData(data.name));
+
         const nameContainer = document.getElementById('nodeNameContainer');
         if (nameContainer) {
             let badgeEl = document.getElementById('nodeBillingBadge');
@@ -1599,9 +1690,9 @@ function updateNodeDetailsUI(data) {
     const ipEl = document.getElementById('modalNodeIp');
     if (ipEl.innerText !== newIp) ipEl.innerText = newIp;
     
-    const tokenEl = document.getElementById('modalToken');
-    if (tokenEl) {
-        tokenEl.innerText = decryptData(data.token);
+    const nodeIdEl = document.getElementById('modalNodeId');
+    if (nodeIdEl) {
+        nodeIdEl.textContent = String(data.id ?? '-');
     }
 
     const stats = data.stats || {};
@@ -1666,7 +1757,6 @@ function updateNodeDetailsUI(data) {
         lsEl.innerText = diff < 60 ? statusOnline : `${statusLastSeen}${new Date(lastSeen * 1000).toLocaleString()}`;
         lsEl.className = diff < 60 ? "text-green-500 font-bold text-xs" : "text-red-500 font-bold text-xs";
     }
-    renderCharts(data.history);
 }
 
 function closeNodeModal() {
@@ -1675,6 +1765,7 @@ function closeNodeModal() {
         animateModalClose(modal);
     }
     removeModalLoading();
+    stopNodeChartRanges();
     if (typeof window.hideDashboardAvailabilityPopover === 'function') window.hideDashboardAvailabilityPopover();
     if (nodeSSESource) {
         nodeSSESource.close();
@@ -1686,7 +1777,8 @@ window.startNodeRename = function () {
     const nameDisplay = document.getElementById('nodeNameContainer');
     const nameInputContainer = document.getElementById('nodeNameInputContainer');
     const nameInput = document.getElementById('modalNodeNameInput');
-    const currentName = document.getElementById('modalNodeName').innerText;
+    const titleEl = document.getElementById('modalNodeName');
+    const currentName = titleEl.dataset.rawName || titleEl.innerText;
 
     if (nameDisplay && nameInputContainer && nameInput) {
         nameDisplay.classList.add('hidden');
@@ -1709,8 +1801,8 @@ window.cancelNodeRename = function () {
 window.saveNodeRename = async function () {
     const nameInput = document.getElementById('modalNodeNameInput');
     const newName = nameInput.value.trim();
-    if (!newName || !currentNodeToken) return;
-    document.getElementById('modalNodeName').innerHTML = replaceEmojisWithFlagsHTML(escapeHtml(newName));
+    if (!newName || !currentNodeId) return;
+    renderNodeModalTitle(document.getElementById('modalNodeName'), newName);
     cancelNodeRename();
 
     try {
@@ -1720,7 +1812,7 @@ window.saveNodeRename = async function () {
                 'Content-Type': 'application/json'
             },
             body: JSON.stringify({
-                token: currentNodeToken,
+                node_id: currentNodeId,
                 name: newName
             })
         });
@@ -1751,61 +1843,22 @@ window.handleRenameKeydown = function (event) {
     }
 };
 
-function renderCharts(history) {
-    if (!history || history.length < 2) return;
+function clearChartData(chart, animate = true) {
+    if (!chart) return;
+    chart.data.labels = [];
+    chart.data.datasets.forEach(ds => { ds.data = []; });
+    chart.update(animate && !document.documentElement.classList.contains('perf-mode') ? undefined : 'none');
+}
 
-    const ctxRes = document.getElementById('nodeResChart').getContext('2d');
-    const ctxNet = document.getElementById('nodeNetChart').getContext('2d');
-    const gapThreshold = 25;
-
-    const labels = [];
-    const cpuData = [];
-    const ramData = [];
-    const netRx = [];
-    const netTx = [];
-
-    labels.push(new Date(history[0].t * 1000).toLocaleTimeString([], {
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit'
-    }));
-    cpuData.push(history[0].c);
-    ramData.push(history[0].r);
-    netRx.push(0);
-    netTx.push(0);
-
-    for (let i = 1; i < history.length; i++) {
-        const dt = history[i].t - history[i - 1].t;
-        if (dt > gapThreshold) {
-            labels.push("");
-            cpuData.push(null);
-            ramData.push(null);
-            netRx.push(null);
-            netTx.push(null);
-        }
-        labels.push(new Date(history[i].t * 1000).toLocaleTimeString([], {
-            hour: '2-digit',
-            minute: '2-digit',
-            second: '2-digit'
-        }));
-        cpuData.push(history[i].c);
-        ramData.push(history[i].r);
-        netRx.push((Math.max(0, history[i].rx - history[i - 1].rx) * 8 / dt / 1024));
-        netTx.push((Math.max(0, history[i].tx - history[i - 1].tx) * 8 / dt / 1024));
-    }
-
+function buildNodeChartOptions(series) {
     const isDark = document.documentElement.classList.contains('dark');
     const gridColor = isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.05)';
     const tickColor = isDark ? '#9ca3af' : '#6b7280';
     const isMobile = window.innerWidth < 640;
 
-    const lblCpu = (typeof I18N !== 'undefined' && I18N.web_label_cpu) ? I18N.web_label_cpu : "CPU";
-    const lblRam = (typeof I18N !== 'undefined' && I18N.web_label_ram) ? I18N.web_label_ram : "RAM";
-
     const commonOptionsBase = {
         responsive: true,
         maintainAspectRatio: false,
-        animation: false,
         interaction: {
             mode: 'index',
             intersect: false
@@ -1824,6 +1877,8 @@ function renderCharts(history) {
                 }
             },
             x: {
+                min: series.minIndex,
+                max: series.maxIndex,
                 grid: {
                     display: false
                 },
@@ -1852,20 +1907,37 @@ function renderCharts(history) {
             }
         }
     };
-    const commonOptions = window.buildInteractiveChartOptions ? window.buildInteractiveChartOptions(commonOptionsBase) : commonOptionsBase;
+    return window.buildInteractiveChartOptions ? window.buildInteractiveChartOptions(commonOptionsBase) : commonOptionsBase;
+}
+
+function renderNodeResChart(series, animate = true) {
+    const canvas = document.getElementById('nodeResChart');
+    if (!canvas) return;
+    if (series.points.length < 2) {
+        clearChartData(chartRes, animate);
+        return;
+    }
+    const ctxRes = canvas.getContext('2d');
+    const labels = series.labels;
+    const cpuData = series.cpu;
+    const ramData = series.ram;
+    const commonOptions = buildNodeChartOptions(series);
+    const lblCpu = (typeof I18N !== 'undefined' && I18N.web_label_cpu) ? I18N.web_label_cpu : "CPU";
+    const lblRam = (typeof I18N !== 'undefined' && I18N.web_label_ram) ? I18N.web_label_ram : "RAM";
 
     if (chartRes) {
         const applyResChartData = () => {
             chartRes.data.labels = labels;
             chartRes.data.datasets[0].data = cpuData;
             chartRes.data.datasets[1].data = ramData;
+            chartRes.__chartTimeWindow = { min: series.minIndex, max: series.maxIndex };
         };
 
         if (window.updateChartWithLiveData) {
-            window.updateChartWithLiveData(chartRes, applyResChartData, 'nodeResChart');
+            window.updateChartWithLiveData(chartRes, applyResChartData, 'nodeResChart', animate);
         } else {
             applyResChartData();
-            chartRes.update('none');
+            chartRes.update(document.documentElement.classList.contains('perf-mode') ? 'none' : undefined);
             if (window.attachChartInteractions) window.attachChartInteractions(chartRes, 'nodeResChart');
         }
     } else {
@@ -1902,21 +1974,37 @@ function renderCharts(history) {
                 }
             }
         });
+        chartRes.__chartTimeWindow = { min: series.minIndex, max: series.maxIndex };
         if (window.attachChartInteractions) window.attachChartInteractions(chartRes, 'nodeResChart');
     }
+}
+
+function renderNodeNetChart(series, animate = true) {
+    const canvas = document.getElementById('nodeNetChart');
+    if (!canvas) return;
+    if (series.points.length < 2) {
+        clearChartData(chartNet, animate);
+        return;
+    }
+    const ctxNet = canvas.getContext('2d');
+    const labels = series.labels;
+    const netRx = series.rx;
+    const netTx = series.tx;
+    const commonOptions = buildNodeChartOptions(series);
 
     if (chartNet) {
         const applyNetChartData = () => {
             chartNet.data.labels = labels;
             chartNet.data.datasets[0].data = netRx;
             chartNet.data.datasets[1].data = netTx;
+            chartNet.__chartTimeWindow = { min: series.minIndex, max: series.maxIndex };
         };
 
         if (window.updateChartWithLiveData) {
-            window.updateChartWithLiveData(chartNet, applyNetChartData, 'nodeNetChart');
+            window.updateChartWithLiveData(chartNet, applyNetChartData, 'nodeNetChart', animate);
         } else {
             applyNetChartData();
-            chartNet.update('none');
+            chartNet.update(document.documentElement.classList.contains('perf-mode') ? 'none' : undefined);
             if (window.attachChartInteractions) window.attachChartInteractions(chartNet, 'nodeNetChart');
         }
     } else {
@@ -1967,6 +2055,7 @@ function renderCharts(history) {
             },
             options: netOpts
         });
+        chartNet.__chartTimeWindow = { min: series.minIndex, max: series.maxIndex };
         if (window.attachChartInteractions) window.attachChartInteractions(chartNet, 'nodeNetChart');
     }
 }
@@ -3023,14 +3112,14 @@ window.resetAgentUptime = async function() {
 };
 
 window.resetNodeUptime = async function() {
-    if (!currentNodeToken) return;
+    if (!currentNodeId) return;
     if (!await window.showModalConfirm(I18N.web_reset_uptime_confirm, I18N.modal_title_confirm)) return;
 
     try {
         const res = await fetch('/api/nodes/reset-uptime', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ token: currentNodeToken })
+            body: JSON.stringify({ node_id: currentNodeId })
         });
         if (res.ok) {
             if (window.showToast) window.showToast(I18N.uptime_reset_success);

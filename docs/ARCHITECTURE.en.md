@@ -13,6 +13,16 @@
 5. **Fault Tolerance** — Watchdog system and automatic restart
 6. **Separation of Concerns** — web layer in `core/web/`, bot logic in `modules/`
 
+## 🔒 HTTPS and Node Enrollment
+
+`WEB_PUBLIC_URL` is the canonical public HTTPS origin for the panel. Managed TLS configures Nginx and Certbot; an external reverse proxy must issue and renew its own certificate. Systemd WebUI listens on loopback by default, and Docker publishes its port only on host loopback.
+
+HTTPS supports DNS names and globally routable public IPv4 addresses. Let's Encrypt IP certificates use the short-lived profile and are valid for 160 hours. HTTP-01 requires inbound TCP port 80; managed renewal is checked hourly. Private/local IP addresses are not supported.
+
+New agents use the HTTPS origin. `GET /api/agent/https` advertises the URL without a token; bootstrap sends the secret in `X-Node-Token`, and heartbeats are HMAC-signed. An updated agent validates TLS and the same hostname, then persists the HTTPS URL. During migration from an older systemd install, a restricted HTTP bridge temporarily handles only discovery/bootstrap and signed heartbeats. After updating every agent, run `tgcp-bot tls status`, then `tgcp-bot tls finalize`.
+
+Browser pages use numeric node IDs. Agent tokens are never placed in URLs or browser-facing JSON responses.
+
 ---
 
 ## 📂 Project Structure
@@ -84,6 +94,7 @@ core/
 ├── middlewares.py          # Anti-spam, filters (Telegram)
 ├── utils.py                # Helper utilities
 ├── nodes_db.py             # Node database (Tortoise ORM)
+├── metrics_history.py      # Chart metrics history (3 min … 7 days)
 ├── models.py               # ORM models
 ├── orchestrator.py         # Memory Orchestrator (Lazy Loading / GC)
 ├── shared_state.py         # Global state (in-memory)
@@ -103,6 +114,7 @@ core/
 │   │   └── style.css       # Components and animations
 │   └── js/
 │       ├── common.js       # Encryption, modals, toast
+│       ├── chart_range.js  # Chart period selector and history polling
 │       ├── dashboard.js    # Dashboard logic and SSE
 │       ├── login.js        # Authentication
 │       ├── nodes_monitor.js # Node monitoring
@@ -115,7 +127,8 @@ core/
     ├── nodes_monitor.html  # Node monitoring
     ├── reset_password.html # Password reset
     ├── settings.html       # Settings
-    └── terminal.html       # Web terminal (VNC)
+    └── terminal.html       # Web SSH terminal
+    └── terminal.html       # Web SSH terminal
 ```
 
 ---
@@ -264,7 +277,7 @@ STRINGS = {
 **Security:**
 - `encrypt_for_web(data)` — AES-256-CBC + Base64 encryption for SSE
 - `decrypt_for_web(data)` — Client-side decryption
-- `log_audit_event()` — Audit logging (GDPR compliant)
+- `log_audit_event()` — audit-event recording; operators must define retention and compliance requirements separately
 - `mask_sensitive_data()` — Mask IPs, tokens, passwords in logs
 
 **System:**
@@ -289,7 +302,30 @@ STRINGS = {
 - `get_node_by_token()` — Search by authorization token
 - `update_node_metrics()` — Update metrics (CPU, RAM, Disk)
 - `get_all_nodes()` — List all servers
-- `delete_node()` — Delete node
+- `delete_node()` — Delete node (together with its metrics history)
+
+Every heartbeat also feeds a sample into `metrics_history` (network speed is derived from the `net_rx`/`net_tx` counter delta between heartbeats).
+
+---
+
+#### **metrics_history.py** — Chart Metrics History
+**Purpose:** store agent and node CPU/RAM/disk/network for charts with a selectable period (Zabbix/Grafana style)
+
+**Storage (table `metric_samples`, sliding window like RRD):**
+
+| Tier (`res`) | Step | Retained | Serves periods |
+|--------------|------|----------|----------------|
+| `0` — raw samples | 2 s (agent) / heartbeat (node) | 1 h 10 min | 3m, 10m, 30m, 1h |
+| `60` — minute buckets | 60 s | 25 h | 3h, 6h, 12h |
+| `300` — five-minute buckets | 300 s | 7 d 2 h | 1d, 3d, 7d |
+
+**How it works:**
+- `record_sample()` — queues a sample in an in-memory buffer; network speed is stored in bytes/s (from counters or a ready rate)
+- `maintenance_loop()` (background task `metrics-history`): flushes the buffer to the DB every 10 s with a single `bulk_create`, rebuilds the 60/300 s buckets for the last 3/15 minutes idempotently once a minute (after startup — for the whole retention of the lower tier), and deletes rows past retention every 10 minutes
+- `query_series(source, range, since)` — picks the tier for the period and, when needed, averages down to the output step (6h → 120 s, 12h → 180 s, 3d → 15 min, 7d → 30 min); `since` yields increments for the `/api/events/metrics` SSE stream
+- Sources: `agent` and `node:<id>`; deleting a node drops its history
+
+**Footprint:** at steady state ≈ 5–6k rows per source (~0.5 MB); the database does not grow unbounded, SQLite reuses freed pages.
 
 ---
 
@@ -299,6 +335,7 @@ STRINGS = {
 **Models:**
 - `User` — Bot users (Telegram ID, role, language)
 - `Node` — Remote servers (token, name, IP, metrics)
+- `MetricSample` — Metrics history point (`source`, `res`, `t`, `cpu`, `ram`, `disk`, `rx`, `tx`)
 - `Alert` — Notification history
 - `TrafficLog` — Network traffic logs
 
@@ -327,7 +364,7 @@ STRINGS = {
 - `AUTH_TOKENS: dict` — Node tokens for heartbeat
 - `NODE_TRAFFIC_MONITORS: dict` — Active traffic monitors
 - `ALERTS_CONFIG: dict` — Notification threshold configuration
-- `AGENT_HISTORY: deque` — Agent metrics history (ring buffer ~1000 points)
+- `AGENT_HISTORY: deque` — Last 60 agent samples for SSE (current network speed); long-term history lives in `metrics_history`
 - `WEB_NOTIFICATIONS: deque` — Web panel notifications
 - `WEB_USER_LAST_READ: dict` — Last read notification per user
 
@@ -344,7 +381,12 @@ STRINGS = {
 - Updates agent public IP cache (`AGENT_IP_CACHE`)
 - Updates country flag (`AGENT_FLAG`)
 - Measures agent ping (`AGENT_PING_CACHE`)
-- Records metrics history to `AGENT_HISTORY` (CPU%, RAM%, RX, TX)
+- Records metrics history to `AGENT_HISTORY` (CPU%, RAM%, RX, TX) and passes the sample to `metrics_history.record_sample()`
+
+**metrics_history.maintenance_loop() — every 10 seconds:**
+- Flushes the sample buffer into the `metric_samples` table
+- Builds minute and five-minute buckets once a minute
+- Deletes data past retention (1 h / 25 h / 7 d) every 10 minutes
 
 **cleanup_monitor() — every 600 seconds:**
 - Removes expired web sessions
@@ -366,7 +408,7 @@ core/web/
 ├── middlewares.py      # WAF, Rate Limiting, CSRF Protection
 ├── api_nodes.py        # aiohttp-based API for nodes (heartbeat, CRUD, commands)
 ├── api_system.py       # aiohttp-based API for settings, logs, users
-├── streaming.py        # Server-Sent Events (3 streams)
+├── streaming.py        # Server-Sent Events (5 streams, incl. chart history)
 └── views.py            # HTML pages (Jinja2 rendering)
 ```
 
@@ -424,6 +466,10 @@ streaming_routes → SSE streams
 
 **1. Rate Limit Middleware:**
 - 100 requests/min per IP per endpoint
+- Request throttling; client IP resolution trusts only the configured proxy chain
+- **Logging and privacy:**
+- An audit log alone does not guarantee regulatory compliance
+- xterm.js — browser-based SSH terminal (not VNC)
 - Automatic window reset
 
 **2. CSRF Middleware:**
@@ -459,14 +505,16 @@ Detected attacks:
 **Endpoints:**
 ```
 GET  /api/heartbeat                     — Health probe
+GET  /api/agent/https                   — Public HTTPS origin advertised to agents
+GET  /api/node/bootstrap                — Bootstrap using X-Node-Token
 POST /api/heartbeat                     — Node heartbeat with HMAC signature
 GET  /api/nodes/list                    — Node list (encrypted)
 POST /api/nodes/add                     — Add node
 POST /api/nodes/delete                  — Delete node
 POST /api/nodes/rename                  — Rename (admin only)
 GET  /api/nodes/monitor/list            — Data for monitoring page
-GET  /api/nodes/monitor/detail?token=   — Specific node details
-GET  /api/nodes/monitor/services        — Specific node services
+GET  /api/nodes/monitor/detail?node_id= — Node details by numeric ID (WebUI session)
+GET  /api/nodes/monitor/services?node_id= — Services by numeric ID (WebUI session)
 POST /api/nodes/monitor/command         — Send command to node
 POST /api/nodes/monitor/service_action  — Manage service on node
 GET  /api/services                      — Managed services list
@@ -516,7 +564,7 @@ GET  /api/agent/ipv4           — Agent IPv4 addresses
 **SSE Streams:**
 
 **1. `GET /api/events` — Main stream:**
-- `agent_stats` — CPU, RAM, Disk, Network, chart history
+- `agent_stats` — CPU, RAM, Disk, Network, last 60 samples (for current speed); the charts themselves subscribe to the `/api/events/metrics` stream
 - `nodes_list` — All nodes with statuses
 - `notifications` — Notifications (filtered by last read)
 
@@ -525,12 +573,18 @@ GET  /api/agent/ipv4           — Agent IPv4 addresses
 - System logs — `journalctl --follow`
 
 **3. `GET /api/events/node` — Specific node details:**
-- Statistics and chart data
+- Statistics, availability, billing (the modal charts subscribe to `/api/events/metrics`)
 - Updates via `?token=...` parameter
+- Updates by numeric `node_id`; the agent token is not sent to the browser
 
 **4. `GET /api/events/services` — Service Manager stream:**
 - Real-time systemd service states
 - Updates for the Service Manager page
+
+**5. `GET /api/events/metrics?source=agent|node&node_id=…&range=3m…7d` — Chart history:**
+- Event `metrics_history`: `{range, step, span, now, full, data}` — `data` is an encrypted (`encrypt_for_web`) JSON array of points `[{t, c, r, d, rx, tx}]`, `rx`/`tx` in bytes/s, `step` in seconds (`0` = raw points)
+- The first message is a full snapshot (`full: true`), then increments at a period-dependent interval (3 s for 3m … 5 min for 7d); the last bucket is re-sent until it is complete
+- Changing the period in the browser reopens the stream with a new `range`; nodes are addressed by numeric `node_id`
 
 **Restriction:** a regular browser navigation to `GET /api/events*` returns informational text instead of metrics. Proper usage requires `EventSource` with `Accept: text/event-stream`. Likewise, `GET /api/terminal/ws` requires `Upgrade: websocket` and returns `426 Upgrade Required` for a plain HTTP request.
 
@@ -706,7 +760,7 @@ node/
 **Requirements:**
 - Python 3.10+
 - Libraries: requests, psutil
-- Open port on main server (8080)
+- Reachable public HTTPS origin on the master; managed TLS also needs inbound TCP/80
 
 ---
 
@@ -745,17 +799,7 @@ Attack Patterns:
 #### 5️⃣ Audit Logging
 **Location:** `logs/audit/audit.log`
 
-**Recorded Events:**
-- Login attempts (success/fail)
-- Password resets
-- User additions/deletions
-- Configuration changes
-- WAF triggers / Suspicious activity
-
-**Privacy (GDPR Compliant):**
-- IP addresses masked (`203.0.113.XXX`)
-- Tokens hidden (`abc123...`)
-- Sensitive data not logged
+The audit helper records security and administrative events. Mask client IPs and secrets in warning logs, restrict access to log files, and define an explicit retention period. An audit log alone does not establish regulatory compliance.
 
 ---
 
@@ -768,15 +812,11 @@ Attack Patterns:
 2. Initialize logging system
 3. Connect to SQLite database (Tortoise ORM)
 4. Load encrypted configs (users, alerts, services)
-5. Initialize Telegram Bot + Dispatcher
-6. Register 18 modules and middleware
-7. Start Aiohttp web server (core/web/app.py, port 8080)
-8. Launch background tasks (tasks.py):
-   - agent_monitor() — agent metrics collection
-   - cleanup_monitor() — session and token cleanup
-9. Launch module background tasks:
-   - check_alerts_loop() — threshold monitoring
-10. Send startup notification to admin
+5. Initialize Telegram Bot and Dispatcher
+6. Configure `ModuleOrchestrator` from `MODULE_CONFIG`
+7. Start aiohttp WebUI using `WEB_SERVER_HOST/PORT`
+8. Start application and module background tasks
+9. Start Telegram polling and notify the administrator
 ```
 
 ### Shutdown Sequence
@@ -812,7 +852,7 @@ while True:
 
 ```
 Remote Node (node.py)
-    ↓ (heartbeat every 60 sec)
+    ↓ (heartbeat at the configured interval)
 POST /api/heartbeat (HMAC signature)
     {
         "cpu": 45.2, "ram": 72.1,
@@ -822,11 +862,26 @@ POST /api/heartbeat (HMAC signature)
     ↓
 api_nodes.py → HMAC validation
     ↓
-Update nodes_db (SQLite)
+Update nodes_db (SQLite) + sample into metrics_history
     ↓
 Check thresholds → Send alert (if needed)
     ↓
 Broadcast via SSE → WebUI updates in real-time
+```
+
+### Chart History Flow
+
+```
+agent_monitor (every 2 s) / node heartbeat
+    ↓ record_sample()
+In-memory buffer → (10 s) → metric_samples res=0
+    ↓ (1 min, idempotent)
+res=60 (minute average) → res=300 (five-minute average)
+    ↓ (10 min) delete older than 1 h / 25 h / 7 d
+
+Browser: chart_range.js → EventSource /api/events/metrics?range=…
+    ↓ full snapshot, then increments every 3 s … 5 min (depends on period); `data` is decrypted with decryptData(); the stream is closed in background tabs
+Chart.js: gaps for missing data, axis labels by period length, zoom reset on period change
 ```
 
 ### User Interaction Flow (Telegram)
@@ -876,21 +931,22 @@ Update DOM in real-time
 ## 🎨 Frontend Architecture
 
 ### Technologies
-- **Tailwind CSS** — Utility-first CSS framework
-- **Vanilla JavaScript** — ES6+, no frameworks
-- **Server-Sent Events** — Real-time updates
-- **Chart.js** — Resource consumption charts
-- **PWA** — Progressive Web App with manifest
-- **xterm.js** — Web terminal (VNC)
+- **xterm.js** — browser-based SSH terminal
 
 ### Key Files
 
 #### **dashboard.js**
 - `initSSE()` — Connect to main SSE stream
 - `initServicesSSE()` — SSE for service manager
-- `updateDashboard()` — Update CPU/RAM/Disk charts
-- `renderTrafficChart()` — Network traffic chart
+- `updateAgentStatsUI()` — Update CPU/RAM/Disk cards and mini charts
+- `renderAgentChart(series)` / `renderNodeResChart(series)` / `renderNodeNetChart(series)` — Charts fed by the period controller
 - `fetchNodesList()` — Render node list
+
+#### **chart_range.js**
+- `createChartRangeController({ key, mount, canvasId, getSource, render })` — period dropdown button (Minutes / Hours / Days) next to a chart
+- Subscribes to the SSE stream `/api/events/metrics` (`EventSource`), receives a full snapshot and increments, decrypts `data` via `decryptData()`; reopens the stream on period change and reconnects after a drop
+- Passes a normalized `series` to `render` (`labels`, `cpu`, `ram`, `disk`, `rx`/`tx` in Kbps, `null` on gaps)
+- Remembers the choice in `localStorage` (`chartRange:<key>`), shows a “Live” indicator for periods ≤ 1 h, resets zoom on period change, stops when the modal closes or on SPA navigation
 
 #### **nodes_monitor.js**
 - `loadNodes()` — Load nodes via API
@@ -898,7 +954,7 @@ Update DOM in real-time
 - Search by name and IP
 - Sorting (name, CPU, RAM, ping)
 - Multi-select + bulk commands
-- Modal: Resources/Network charts, services, actions
+- Modal: Resources/Network charts with period selector (`chart_range.js`), services, actions
 
 #### **settings.js**
 - Notification center (alert toggles with hint tooltips)
@@ -953,6 +1009,23 @@ CREATE TABLE users (
     last_seen DATETIME
 );
 ```
+
+#### Table: `metric_samples`
+```sql
+CREATE TABLE metric_samples (
+    id     INTEGER PRIMARY KEY AUTOINCREMENT,
+    source VARCHAR(32) NOT NULL,   -- 'agent' or 'node:<id>'
+    res    SMALLINT NOT NULL DEFAULT 0, -- 0 = raw sample, 60 / 300 = averaged bucket (sec)
+    t      INT NOT NULL,           -- unix time of the sample / bucket start
+    cpu    REAL NOT NULL DEFAULT 0, -- %
+    ram    REAL NOT NULL DEFAULT 0, -- %
+    disk   REAL NOT NULL DEFAULT 0, -- %
+    rx     REAL NOT NULL DEFAULT 0, -- bytes/s
+    tx     REAL NOT NULL DEFAULT 0  -- bytes/s
+);
+CREATE INDEX idx_metric_samples_source_res_t ON metric_samples (source, res, t);
+```
+Sliding window: raw samples are kept ~1 h, minute buckets 25 h, five-minute buckets 7 days; the table is created automatically (`generate_schemas` / Aerich).
 
 ### Encrypted JSON Configs
 

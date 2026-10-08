@@ -31,6 +31,13 @@ async def updatexray_handler(message: types.Message, state: FSMContext):
     user_id = message.from_user.id
     chat_id = message.chat.id
     lang = get_user_lang(user_id)
+    if config.DEPLOY_MODE == "docker" and config.INSTALL_MODE == "secure":
+        await message.answer(
+            "Xray updates are unavailable in secure Docker mode."
+            if lang == "en"
+            else "Обновление Xray недоступно в безопасном режиме Docker."
+        )
+        return
     command = "updatexray"
     if not is_allowed(user_id, command):
         await send_access_denied_message(message.bot, user_id, chat_id, command)
@@ -124,6 +131,17 @@ async def run_xray_update(callback: types.CallbackQuery, state: FSMContext):
     user_id = callback.from_user.id
     chat_id = callback.message.chat.id
     lang = get_user_lang(user_id)
+    if config.DEPLOY_MODE == "docker" and config.INSTALL_MODE == "secure":
+        await callback.answer(
+            "Xray updates are unavailable in secure Docker mode."
+            if lang == "en"
+            else "Обновление Xray недоступно в безопасном режиме Docker.",
+            show_alert=True,
+        )
+        return
+    if not is_allowed(user_id, "updatexray"):
+        await callback.answer(_("access_denied_generic", lang), show_alert=True)
+        return
     data = await state.get_data()
     client = data.get("xray_client")
     container_name = data.get("xray_container")

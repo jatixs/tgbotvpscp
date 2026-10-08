@@ -8,7 +8,7 @@ import logging
 import secrets
 import time
 from typing import Any, Final
-from urllib.parse import parse_qsl
+from urllib.parse import parse_qsl, urlsplit
 
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from aiohttp import web
@@ -21,8 +21,7 @@ from ..config import (
     ADMIN_USER_ID,
     ADMIN_USERNAME,
     TOKEN,
-    WEB_SERVER_HOST,
-    WEB_SERVER_PORT,
+    WEB_PUBLIC_URL,
 )
 from ..i18n import get_text as _
 from ..i18n import get_user_lang
@@ -57,7 +56,60 @@ RESET_TOKENS: dict[str, dict[str, Any]] = {}
 CSRF_TOKENS: dict[str, float] = {}
 LOGIN_ATTEMPTS: dict[str, list[float]] = {}
 PASSWORD_HASHER = PasswordHasher()
-DEFAULT_ADMIN_PASSWORD_HASH = PASSWORD_HASHER.hash("admin")
+
+
+def _get_public_base_url() -> str | None:
+    candidate = WEB_PUBLIC_URL
+    try:
+        parsed = urlsplit(candidate)
+        parsed.port
+    except ValueError:
+        return None
+    if (
+        parsed.scheme != "https"
+        or not parsed.hostname
+        or any(character.isspace() for character in candidate)
+        or parsed.username
+        or parsed.password
+        or parsed.path not in {"", "/"}
+        or parsed.query
+        or parsed.fragment
+    ):
+        return None
+    return candidate.rstrip("/")
+
+
+def _is_secure_request(request: web.Request) -> bool:
+    return request.scheme == "https" or bool(
+        _get_public_base_url() and urlsplit(WEB_PUBLIC_URL).scheme == "https"
+    )
+
+
+def _trim_expiring_store(
+    store: dict[str, dict[str, Any]],
+    *,
+    max_items: int,
+    timestamp_key: str,
+    ttl: int,
+    expiry_key: str | None = None,
+) -> None:
+    now = time.time()
+    for key, value in list(store.items()):
+        if expiry_key is not None:
+            expired = now >= float(value.get(expiry_key, 0))
+        else:
+            expired = now - float(value.get(timestamp_key, 0)) > ttl
+        if expired:
+            store.pop(key, None)
+
+    overflow = len(store) - max_items + 1
+    if overflow > 0:
+        oldest = sorted(
+            store,
+            key=lambda key: float(store[key].get(timestamp_key, 0)),
+        )[:overflow]
+        for key in oldest:
+            store.pop(key, None)
 
 
 def generate_csrf_token() -> str:
@@ -99,23 +151,10 @@ def verify_csrf_token(token: str | None) -> bool:
 
 
 def get_client_ip(request: web.Request) -> str:
-    """Resolve the original client IP, honoring common proxy headers."""
-    forwarded = request.headers.get("X-Forwarded-For", "").split(",")[0].strip()
-    real_ip = request.headers.get("X-Real-IP", "").strip()
+    """Resolve the client IP using proxy headers only from trusted peers."""
+    from .middlewares import get_client_ip as trusted_get_client_ip
 
-    if forwarded:
-        return forwarded
-    if real_ip:
-        return real_ip
-
-    if request.transport is None:
-        return "127.0.0.1"
-
-    peer = request.transport.get_extra_info("peername")
-    if isinstance(peer, tuple) and peer:
-        return str(peer[0])
-
-    return "127.0.0.1"
+    return trusted_get_client_ip(request)
 
 
 def check_rate_limit(ip: str) -> bool:
@@ -146,12 +185,9 @@ def check_user_password(user_id: int, raw_password: str | None) -> bool:
 
     stored_hash = user_data.get("password_hash")
     if not stored_hash:
-        if user_id != ADMIN_USER_ID:
-            return False
-        try:
-            return bool(PASSWORD_HASHER.verify(DEFAULT_ADMIN_PASSWORD_HASH, raw_password))
-        except argon2_exceptions.VerifyMismatchError:
-            return False
+        return False
+    if user_id == ADMIN_USER_ID and raw_password == "admin":
+        return False
 
     try:
         return bool(PASSWORD_HASHER.verify(stored_hash, raw_password))
@@ -279,7 +315,7 @@ def _set_csrf_cookie(
     token: str | None = None,
 ) -> str:
     token = token or generate_csrf_token()
-    is_secure = request.scheme == "https" or request.headers.get("X-Forwarded-Proto") == "https"
+    is_secure = _is_secure_request(request)
     response.set_cookie(
         CSRF_TOKEN_COOKIE,
         token,
@@ -299,6 +335,13 @@ def _create_session(
     max_age: int,
     photo_url: str | None = None,
 ) -> str:
+    _trim_expiring_store(
+        SERVER_SESSIONS,
+        max_items=MAX_SERVER_SESSIONS,
+        timestamp_key="created",
+        ttl=max_age,
+        expiry_key="expires",
+    )
     session_token = secrets.token_hex(32)
     SERVER_SESSIONS[session_token] = {
         "id": user_id,
@@ -318,7 +361,7 @@ def _set_session_cookie(
     session_token: str,
     max_age: int,
 ) -> None:
-    is_secure = request.scheme == "https" or request.headers.get("X-Forwarded-Proto") == "https"
+    is_secure = _is_secure_request(request)
     response.set_cookie(
         COOKIE_NAME,
         session_token,
@@ -345,12 +388,19 @@ async def handle_login_request(request: web.Request) -> web.StreamResponse:
     if user_id not in ALLOWED_USERS:
         return web.Response(text="User not found", status=403)
 
-    login_token = secrets.token_urlsafe(32)
-    AUTH_TOKENS[login_token] = {"user_id": user_id, "created_at": time.time()}
+    public_base_url = _get_public_base_url()
+    if not public_base_url:
+        return web.Response(text="WEB_PUBLIC_URL must be configured", status=503)
 
-    host = request.headers.get("Host", f"{WEB_SERVER_HOST}:{WEB_SERVER_PORT}")
-    proto = "https" if request.headers.get("X-Forwarded-Proto") == "https" else "http"
-    link = f"{proto}://{host}/api/login/magic?token={login_token}"
+    login_token = secrets.token_urlsafe(32)
+    _trim_expiring_store(
+        AUTH_TOKENS,
+        max_items=1_000,
+        timestamp_key="created_at",
+        ttl=LOGIN_TOKEN_TTL,
+    )
+    AUTH_TOKENS[login_token] = {"user_id": user_id, "created_at": time.time()}
+    link = f"{public_base_url}/api/login/magic?token={login_token}"
 
     bot = request.app.get("bot")
     if bot is None:
@@ -527,7 +577,7 @@ async def handle_logout(request: web.Request) -> web.StreamResponse:
     if session_token:
         SERVER_SESSIONS.pop(session_token, None)
 
-    is_secure = request.scheme == "https" or request.headers.get("X-Forwarded-Proto") == "https"
+    is_secure = _is_secure_request(request)
     response = web.HTTPFound("/login")
     response.del_cookie(COOKIE_NAME, secure=is_secure, httponly=True, samesite="Strict" if is_secure else "Lax")
     response.del_cookie(CSRF_TOKEN_COOKIE, secure=is_secure, samesite="Strict" if is_secure else "Lax")
@@ -552,12 +602,19 @@ async def handle_reset_request(request: web.Request) -> web.StreamResponse:
             )
             return encrypted_json_response({"error": "not_found", "admin_url": admin_url}, status=404)
 
-        reset_token = secrets.token_urlsafe(32)
-        RESET_TOKENS[reset_token] = {"ts": time.time(), "user_id": user_id}
+        public_base_url = _get_public_base_url()
+        if not public_base_url:
+            return encrypted_json_response({"error": "WEB_PUBLIC_URL must be configured"}, status=503)
 
-        host = request.headers.get("Host", f"{WEB_SERVER_HOST}:{WEB_SERVER_PORT}")
-        proto = "https" if request.headers.get("X-Forwarded-Proto") == "https" else "http"
-        link = f"{proto}://{host}/reset_password?token={reset_token}"
+        reset_token = secrets.token_urlsafe(32)
+        _trim_expiring_store(
+            RESET_TOKENS,
+            max_items=MAX_RESET_TOKENS,
+            timestamp_key="ts",
+            ttl=RESET_TOKEN_TTL,
+        )
+        RESET_TOKENS[reset_token] = {"ts": time.time(), "user_id": user_id}
+        link = f"{public_base_url}/reset_password?token={reset_token}"
 
         bot = request.app.get("bot")
         if bot is None:
@@ -590,7 +647,12 @@ async def handle_reset_confirm(request: web.Request) -> web.StreamResponse:
         if not token or token not in RESET_TOKENS:
             return encrypted_json_response({"error": "Expired"}, status=403)
 
-        user_id = int(RESET_TOKENS[token].get("user_id", 0))
+        token_data = RESET_TOKENS[token]
+        if time.time() - float(token_data.get("ts", 0)) > RESET_TOKEN_TTL:
+            RESET_TOKENS.pop(token, None)
+            return encrypted_json_response({"error": "Expired"}, status=403)
+
+        user_id = int(token_data.get("user_id", 0))
         if user_id != ADMIN_USER_ID:
             RESET_TOKENS.pop(token, None)
             return encrypted_json_response({"error": "Denied"}, status=403)
