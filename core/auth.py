@@ -357,3 +357,22 @@ async def send_access_denied_message(
         LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = sent_message.message_id
     except Exception as e:
         logging.error(f"Failed to send access denial to user {user_id}: {e}")
+
+
+def check_user_password(user_id: int, password: str) -> bool:
+    from argon2.exceptions import VerifyMismatchError
+    user_data = ALLOWED_USERS.get(user_id)
+    if not isinstance(user_data, dict):
+        return False
+    p_hash = user_data.get("password_hash")
+    if not p_hash:
+        return False
+    try:
+        ph = PasswordHasher()
+        return ph.verify(p_hash, password)
+    except VerifyMismatchError:
+        return False
+    except Exception as e:
+        logging.error(f"Error verifying password for {user_id}: {e}")
+        return False
+
