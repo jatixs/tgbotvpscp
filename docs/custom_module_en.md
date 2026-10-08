@@ -175,3 +175,12 @@ async def _my_background_loop(bot):
 ```
 
 ✅ **Done!** Your module is now part of the bot.
+
+## Security and Lifecycle
+
+- Check permissions inside every sensitive handler, including `callback_query`; a visible button or previously opened menu does not establish authorization.
+- Never put node tokens, bot tokens, or other secrets in callback data, URLs, user-visible messages, or WebUI payloads.
+- Escape user-controlled text with `html.escape` before inserting it into Telegram HTML; do not interpolate untrusted values into HTML.
+- Set timeouts and response-size limits for network calls. Every cache must have an upper bound and a time-to-live.
+- Create background tasks in `start_background_tasks()` and return them to the orchestrator; handle `asyncio.CancelledError` so shutdown can complete.
+- After changing a module, run `python -m unittest discover -s tests` and verify permissions for both message and callback handlers.

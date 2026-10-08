@@ -181,7 +181,7 @@ async def traffic_handler(message: types.Message):
         row_actions = [InlineKeyboardButton(text=get_text("btn_stop_traffic", lang), callback_data="stop_traffic")]
         
         # Check condition for reset button
-        if can_reset_traffic():
+        if can_reset_traffic() and user_id == config.ADMIN_USER_ID:
             row_actions.append(InlineKeyboardButton(text=get_text("btn_reset_traffic", lang), callback_data="reset_traffic_stats"))
             
         keyboard = InlineKeyboardMarkup(inline_keyboard=[row_actions])
@@ -265,7 +265,7 @@ async def traffic_monitor(bot: Bot):
                 row_actions = [InlineKeyboardButton(text=get_text("btn_stop_traffic", lang), callback_data="stop_traffic")]
                 
                 # Check condition for reset button in live-mode
-                if can_reset_traffic():
+                if can_reset_traffic() and user_id == config.ADMIN_USER_ID:
                     row_actions.append(InlineKeyboardButton(text=get_text("btn_reset_traffic", lang), callback_data="reset_traffic_stats"))
                 
                 keyboard = InlineKeyboardMarkup(inline_keyboard=[row_actions])
@@ -298,7 +298,7 @@ async def traffic_monitor(bot: Bot):
 async def reset_stats_handler(callback: types.CallbackQuery):
     """Statistics reset: deletes backup files and resets offset."""
     # Additional server-side check before execution
-    if not can_reset_traffic():
+    if callback.from_user.id != config.ADMIN_USER_ID or not can_reset_traffic():
         await callback.answer("Reset not allowed or time expired", show_alert=True)
         return
         

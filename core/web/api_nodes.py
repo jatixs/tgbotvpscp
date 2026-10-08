@@ -9,7 +9,7 @@ import hashlib
 import hmac
 import json
 import logging
-import re
+import shlex
 import time
 from typing import Any, Final
 
@@ -32,8 +32,6 @@ from ..config import (
     ADMIN_USER_ID,
     DEFAULT_LANGUAGE,
     NODE_OFFLINE_TIMEOUT,
-    WEB_SERVER_HOST,
-    WEB_SERVER_PORT,
 )
 from ..i18n import STRINGS, get_user_lang
 from ..i18n import get_text as _
@@ -51,7 +49,7 @@ from ..utils import (
     get_node_uptime_snapshot,
     get_server_timezone_label,
 )
-from .auth import COOKIE_NAME, SERVER_SESSIONS, get_current_user
+from .auth import COOKIE_NAME, SERVER_SESSIONS, _get_public_base_url, get_current_user
 
 routes = web.RouteTableDef()
 
@@ -119,7 +117,7 @@ def _build_nodes_monitor_payload(all_nodes: dict[str, dict[str, Any]], *, now: f
 
         nodes_data.append(
             {
-                "token": encrypt_for_web(token),
+                "id": node["id"],
                 "name": encrypt_for_web(node.get("name", "Unknown")),
                 "ip": encrypt_for_web(node.get("ip", "Unknown")),
                 "status": status,
@@ -262,6 +260,14 @@ async def handle_heartbeat_probe(request: web.Request) -> web.StreamResponse:
     return web.json_response({"status": "ok"})
 
 
+@routes.get("/api/agent/https")
+async def handle_agent_https_discovery(request: web.Request) -> web.StreamResponse:
+    public_url = str(getattr(current_config, "WEB_PUBLIC_URL", "") or "")
+    if not public_url.startswith("https://"):
+        return web.json_response({"error": "HTTPS endpoint is not configured"}, status=503)
+    return web.json_response({"agent_base_url": public_url})
+
+
 @routes.get("/api/node/bootstrap")
 async def handle_node_bootstrap(request: web.Request) -> web.StreamResponse:
     token = (request.headers.get("X-Node-Token") or "").strip()
@@ -276,6 +282,7 @@ async def handle_node_bootstrap(request: web.Request) -> web.StreamResponse:
         {
             "status": "ok",
             "node_name": node.get("name", ""),
+            "agent_base_url": current_config.WEB_PUBLIC_URL,
         }
     )
 
@@ -313,6 +320,13 @@ async def handle_heartbeat(request: web.Request) -> web.StreamResponse:
         server_time = time.strftime("%H:%M")
         now = time.time()
         recent_ssh_logins = getattr(shared_state, "RECENT_SSH_LOGINS", {})
+        for cache_key, cached_at in list(recent_ssh_logins.items()):
+            if now - float(cached_at) > 600:
+                recent_ssh_logins.pop(cache_key, None)
+        if len(recent_ssh_logins) >= 1_000:
+            oldest = sorted(recent_ssh_logins, key=recent_ssh_logins.get)[:250]
+            for cache_key in oldest:
+                recent_ssh_logins.pop(cache_key, None)
 
         for login in ssh_logins:
             user_ssh = login.get("user", "unknown")
@@ -326,9 +340,6 @@ async def handle_heartbeat(request: web.Request) -> web.StreamResponse:
                 continue
 
             recent_ssh_logins[cache_key] = now
-            if len(recent_ssh_logins) > 1000:
-                recent_ssh_logins.clear()
-
             method_key = "auth_method_unknown"
             if "publickey" in str(method_raw).lower():
                 method_key = "auth_method_key"
@@ -357,6 +368,8 @@ async def handle_heartbeat(request: web.Request) -> web.StreamResponse:
 
     stats = data.get("stats", {})
     results = data.get("results", [])
+    if isinstance(data.get("agent_https"), bool):
+        await nodes_db.update_node_extra(token, "agent_https", data["agent_https"])
     if bot and results:
         for result in results:
             asyncio.create_task(
@@ -398,7 +411,7 @@ async def handle_heartbeat(request: web.Request) -> web.StreamResponse:
     if alert_lang not in STRINGS:
         alert_lang = DEFAULT_LANGUAGE
 
-    return web.json_response(
+    response_body = json.dumps(
         {
             "status": "ok",
             "tasks": tasks_to_send,
@@ -408,7 +421,15 @@ async def handle_heartbeat(request: web.Request) -> web.StreamResponse:
             "ping_interval": getattr(current_config, "PING_INTERVAL", 30),
             "ping_mode": getattr(current_config, "PING_MODE", "http"),
             "ping_target": getattr(current_config, "PING_TARGET", "google"),
-        }
+            "agent_base_url": current_config.WEB_PUBLIC_URL,
+        },
+        sort_keys=True,
+    ).encode("utf-8")
+    response_signature = hmac.new(token.encode(), response_body, hashlib.sha256).hexdigest()
+    return web.Response(
+        body=response_body,
+        content_type="application/json",
+        headers={"X-Signature": response_signature, "Cache-Control": "no-store"},
     )
 
 
@@ -439,7 +460,7 @@ async def handle_nodes_list_json(request: web.Request) -> web.StreamResponse:
 
         nodes_data.append(
             {
-                "token": encrypt_for_web(token),
+                "id": node["id"],
                 "name": encrypt_for_web(node.get("name", "Unknown")),
                 "ip": encrypt_for_web(node.get("ip", "Unknown")),
                 "status": status,
@@ -468,22 +489,24 @@ async def handle_node_add(request: web.Request) -> web.StreamResponse:
         return web.json_response({"error": "Admin required"}, status=403)
 
     try:
+        public_base_url = _get_public_base_url()
+        if not public_base_url or not public_base_url.startswith("https://"):
+            return encrypted_json_response(
+                {"error": "A valid HTTPS WEB_PUBLIC_URL must be configured before adding nodes"},
+                status=503,
+            )
+
         data = await decrypt_request_payload(request)
         name = str(data.get("name", "")).strip()
         if not name:
             return encrypted_json_response({"error": "Name required"}, status=400)
 
         token = await nodes_db.create_node(name)
-        host = request.headers.get("Host", f"{WEB_SERVER_HOST}:{WEB_SERVER_PORT}")
-        if not re.match(r"^[a-zA-Z0-9\-\.:]+$", host):
-            host = f"{WEB_SERVER_HOST}:{WEB_SERVER_PORT}"
-
-        proto = "https" if request.headers.get("X-Forwarded-Proto") == "https" else "http"
         lang = get_user_lang(int(user["id"]))
         script = "deploy_en.sh" if lang == "en" else "deploy.sh"
         command = (
             f"bash <(wget -qO- https://raw.githubusercontent.com/jatixs/tgbotvpscp/main/{script}) "
-            f"--agent={proto}://{host} --token={token}"
+            f"--agent={shlex.quote(public_base_url)} --token={shlex.quote(token)}"
         )
 
         return encrypted_json_response(
@@ -506,11 +529,15 @@ async def handle_node_delete(request: web.Request) -> web.StreamResponse:
 
     try:
         data = await decrypt_request_payload(request)
-        token = decrypt_for_web(data.get("token"))
-        if not token:
-            return encrypted_json_response({"error": "Token required"}, status=400)
+        try:
+            node_id = int(data.get("node_id", 0))
+        except (TypeError, ValueError):
+            node_id = 0
+        node = await nodes_db.get_node_by_id(node_id)
+        if not node:
+            return encrypted_json_response({"error": "Node not found"}, status=404)
 
-        await nodes_db.delete_node(token)
+        await nodes_db.delete_node(node["token"])
         return web.json_response({"status": "ok"})
     except Exception:
         logging.exception("Failed to delete node")
@@ -525,14 +552,18 @@ async def handle_node_rename(request: web.Request) -> web.StreamResponse:
 
     try:
         data = await decrypt_request_payload(request)
-        token = decrypt_for_web(data.get("token"))
+        try:
+            node_id = int(data.get("node_id", 0))
+        except (TypeError, ValueError):
+            node_id = 0
         new_name = str(data.get("name", "")).strip()
-        if not token or not new_name:
-            return encrypted_json_response({"error": "Token and name required"}, status=400)
+        if node_id <= 0 or not new_name:
+            return encrypted_json_response({"error": "Node ID and name required"}, status=400)
 
-        success = await nodes_db.update_node_name(token, new_name)
-        if not success:
+        node = await nodes_db.get_node_by_id(node_id)
+        if not node:
             return encrypted_json_response({"error": "Node not found"}, status=404)
+        await nodes_db.update_node_name(node["token"], new_name)
 
         return encrypted_json_response({"status": "ok"})
     except Exception:
@@ -622,11 +653,14 @@ async def handle_nodes_monitor_detail(request: web.Request) -> web.StreamRespons
     if not user:
         return web.json_response({"error": "Unauthorized"}, status=401)
 
-    token = decrypt_for_web(request.query.get("token"))
-    if not token:
-        return web.json_response({"error": "Token required"}, status=400)
+    try:
+        node_id = int(request.query.get("node_id", "0"))
+    except ValueError:
+        node_id = 0
+    if node_id <= 0:
+        return web.json_response({"error": "Node ID required"}, status=400)
 
-    node = await nodes_db.get_node_by_token(token)
+    node = await nodes_db.get_node_by_id(node_id)
     if not node:
         return web.json_response({"error": "Node not found"}, status=404)
 
@@ -643,7 +677,7 @@ async def handle_nodes_monitor_detail(request: web.Request) -> web.StreamRespons
             "status": status,
             "stats": node.get("stats", {}),
             "history": node.get("history", []),
-            "token": encrypt_for_web(token),
+            "id": node["id"],
             "last_seen": last_seen,
             "services": node.get("services", []),
             "availability": get_node_uptime_snapshot(node, lang, NODE_OFFLINE_TIMEOUT, now),
@@ -658,11 +692,14 @@ async def handle_nodes_monitor_services(request: web.Request) -> web.StreamRespo
     if not user:
         return web.json_response({"error": "Unauthorized"}, status=401)
 
-    token = decrypt_for_web(request.query.get("token"))
-    if not token:
-        return web.json_response({"error": "Token required"}, status=400)
+    try:
+        node_id = int(request.query.get("node_id", "0"))
+    except ValueError:
+        node_id = 0
+    if node_id <= 0:
+        return web.json_response({"error": "Node ID required"}, status=400)
 
-    node = await nodes_db.get_node_by_token(token)
+    node = await nodes_db.get_node_by_id(node_id)
     if not node:
         return web.json_response({"error": "Node not found"}, status=404)
 
@@ -680,17 +717,21 @@ async def handle_nodes_monitor_command(request: web.Request) -> web.StreamRespon
 
     try:
         data = await decrypt_request_payload(request)
-        token = decrypt_for_web(data.get("token"))
+        try:
+            node_id = int(data.get("node_id", 0))
+        except (TypeError, ValueError):
+            node_id = 0
         command = decrypt_for_web(data.get("command"))
 
-        if not token or not command:
-            return encrypted_json_response({"error": "Token and command required"}, status=400)
+        if node_id <= 0 or not command:
+            return encrypted_json_response({"error": "Node ID and command required"}, status=400)
         if command not in ["restart", "reboot"]:
             return encrypted_json_response({"error": "Invalid command"}, status=400)
 
-        node = await nodes_db.get_node_by_token(token)
+        node = await nodes_db.get_node_by_id(node_id)
         if not node:
             return encrypted_json_response({"error": "Node not found"}, status=404)
+        token = node["token"]
 
         if command == "reboot":
             await nodes_db.update_node_extra(token, "is_restarting", True)
@@ -713,19 +754,23 @@ async def handle_nodes_monitor_service_action(request: web.Request) -> web.Strea
 
     try:
         data = await decrypt_request_payload(request)
-        token = decrypt_for_web(data.get("token"))
+        try:
+            node_id = int(data.get("node_id", 0))
+        except (TypeError, ValueError):
+            node_id = 0
         service = decrypt_for_web(data.get("service"))
         action = decrypt_for_web(data.get("action"))
         service_type = str(data.get("type", "systemd")).strip()
 
-        if not all([token, service, action]):
-            return encrypted_json_response({"error": "Token, service and action required"}, status=400)
+        if node_id <= 0 or not all([service, action]):
+            return encrypted_json_response({"error": "Node ID, service and action required"}, status=400)
         if action not in ALLOWED_SERVICE_ACTIONS:
             return encrypted_json_response({"error": "Invalid action"}, status=400)
 
-        node = await nodes_db.get_node_by_token(token)
+        node = await nodes_db.get_node_by_id(node_id)
         if not node:
             return encrypted_json_response({"error": "Node not found"}, status=404)
+        token = node["token"]
 
         await nodes_db.update_node_task(
             token,
@@ -760,8 +805,11 @@ async def handle_services_list(request: web.Request) -> web.StreamResponse:
         payload = json.dumps(services)
         event_str = f"event: services_list\ndata: {payload}\n\n"
         await response.write(event_str.encode("utf-8"))
-    except Exception:
-        logging.exception("Failed to fetch services list")
+    except (ConnectionResetError, BrokenPipeError, ConnectionError):
+        pass
+    except Exception as exc:
+        if "closing transport" not in str(exc).lower():
+            logging.exception("Failed to fetch services list")
     
     return response
 
@@ -783,8 +831,11 @@ async def handle_available_services(request: web.Request) -> web.StreamResponse:
         payload = json.dumps(services)
         event_str = f"event: available_services\ndata: {payload}\n\n"
         await response.write(event_str.encode("utf-8"))
-    except Exception:
-        logging.exception("Failed to fetch available services")
+    except (ConnectionResetError, BrokenPipeError, ConnectionError):
+        pass
+    except Exception as exc:
+        if "closing transport" not in str(exc).lower():
+            logging.exception("Failed to fetch available services")
         
     return response
 
@@ -808,8 +859,11 @@ async def handle_service_info(request: web.Request) -> web.StreamResponse:
         payload = json.dumps(info)
         event_str = f"event: service_info\ndata: {payload}\n\n"
         await response.write(event_str.encode("utf-8"))
-    except Exception:
-        logging.exception("Failed to fetch service info")
+    except (ConnectionResetError, BrokenPipeError, ConnectionError):
+        pass
+    except Exception as exc:
+        if "closing transport" not in str(exc).lower():
+            logging.exception("Failed to fetch service info")
         
     return response
 
@@ -895,13 +949,17 @@ async def api_reset_node_uptime(request: web.Request) -> web.StreamResponse:
 
     try:
         data = await decrypt_request_payload(request)
-        token = decrypt_for_web(data.get("token"))
-        if not token:
-            return encrypted_json_response({"error": "Token required"}, status=400)
+        try:
+            node_id = int(data.get("node_id", 0))
+        except (TypeError, ValueError):
+            node_id = 0
+        if node_id <= 0:
+            return encrypted_json_response({"error": "Node ID required"}, status=400)
 
-        success = await nodes_db.reset_node_availability(token)
-        if not success:
+        node = await nodes_db.get_node_by_id(node_id)
+        if not node:
             return encrypted_json_response({"error": "Node not found"}, status=404)
+        await nodes_db.reset_node_availability(node["token"])
 
         return encrypted_json_response({"status": "ok"})
     except Exception:

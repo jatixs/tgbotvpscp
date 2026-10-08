@@ -7,6 +7,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import KeyboardButton
 
 from core.config import DEFAULT_LANGUAGE, DEPLOY_MODE, INSTALL_MODE
+from core.auth import is_allowed, send_access_denied_message
 from core.i18n import I18nFilter
 from core.i18n import get_text as _
 from core.keyboards import get_main_reply_keyboard
@@ -25,6 +26,9 @@ def register_handlers(dp: Dispatcher):
 
 async def logs_handler(message: types.Message, state: FSMContext):
     user_id = message.from_user.id
+    if not is_allowed(user_id, "logs"):
+        await send_access_denied_message(message.bot, user_id, message.chat.id, "logs")
+        return
     await state.clear()
     main_keyboard = get_main_reply_keyboard(user_id)
     if DEPLOY_MODE == "docker" and INSTALL_MODE == "secure":

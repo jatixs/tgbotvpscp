@@ -4,11 +4,39 @@
 
 <h1 align="center">📝 Telegram VPS Management Bot — Changelog</h1>
 <p align="center">
-    <img src="https://img.shields.io/badge/version-v1.25.3-blue?style=flat-square" alt="Version 1.25.3"/>
-    <img src="https://img.shields.io/badge/build-92-purple?style=flat-square" alt="Build 92"/>
-    <img src="https://img.shields.io/badge/date-Sep%2027%202026-green?style=flat-square" alt="Date Sep 27 2026"/>
+    <img src="https://img.shields.io/badge/version-v1.26.0-blue?style=flat-square" alt="Version 1.26.0"/>
+    <img src="https://img.shields.io/badge/build-93-purple?style=flat-square" alt="Build 93"/>
+    <img src="https://img.shields.io/badge/date-Oct%207%202026-green?style=flat-square" alt="Date Oct 7 2026"/>
 	<img src="https://img.shields.io/badge/status-stable-green?style=flat-square" alt="Status Stable"/>
 </p>
+
+## [1.26.0] - 2026-10-07
+
+### 🚀 New Features
+* **HTTPS for an IP address.** The installer sets up Nginx + Certbot not only for a domain but also for a public IPv4 without one (160-hour certificate with automatic renewal). An existing certificate (Nginx, Cloudflare Origin, Certbot) is reused so repeated runs don't hit Let's Encrypt limits. Requires inbound port 80; private IPs are not supported.
+* **Agent migration to HTTPS.** Nodes move in stages (master first, then nodes): the agent discovers the HTTPS address and validates the certificate, while a restricted HMAC-signed HTTP bridge covers the transition. Managed with `tgcp-bot tls status | check | finalize`.
+* **Chart period.** Resource and network charts (agent and node windows) got a period selector from 3 minutes to 7 days. History is stored in the database (raw samples for an hour, per-minute for a day, five-minute for a week), delivered over an encrypted SSE stream; short periods update live.
+* **`tgcp-bot` CLI.** Commands for status, restart, changing the initial password, and controlling the HTTPS migration.
+* **WebUI Logs.** Added dropdowns for instant real-time log filtering by level (INFO, WARN, ERROR) for the bot.
+
+### ✨ Improved
+* **Seamless updates.** The new version is prepared in a separate copy and swapped in only when ready; `.env`, configuration, and logs are preserved. Systemd ↔ Docker and Docker profile switches no longer delete data.
+* **Installer.** Shorter, clearer messages, technical Nginx/Certbot output is hidden, and failures state the cause and next step. Operation headers now say exactly what is happening: install, reinstall, update, or uninstall of the agent or the node. A failed HTTPS setup leaves the previous one intact.
+* **Node window.** Text, emoji, icons, and chart fonts scale to the screen; long names shrink to fit and the country flag is shown as an SVG icon. The node ID is shown next to the name, and the Settings table now has an "ID" column instead of "Token".
+* **Top processes.** Clicking a value toggles between percent and the real figure (CPU frequency, memory in use, disk share).
+* **Maintenance.** Internal caches are bounded by size and age (no Redis needed), unused dependencies removed, tests added for HTTPS/Certbot/migration, documentation updated (RU/EN).
+
+### 🐛 Fixed
+* The browser no longer keeps stale JS/CSS after an update — no hard refresh required.
+* The installer waits for apt/dpkg to be released (up to 10 minutes) instead of failing with "Code: 100".
+* Telegram billing: the currency no longer resets to dollars after changing the amount or date.
+
+### 🔒 Security
+* Roles are checked right before every privileged action in Telegram and the WebUI.
+* Removed the default `admin` password — the installer generates a random one.
+* Node tokens never appear in pages or URLs; the panel works by numeric ID.
+* The SSH terminal verifies the server host key; reverse-proxy headers are trusted only from configured proxies.
+* In the Secure Docker profile the bot only reads Docker data; the WebUI on the host is reachable only via the local address.
 
 ---
 ## [1.25.3] - 2026-09-27

@@ -13,6 +13,16 @@
 5. **Отказоустойчивость** — система Watchdog и автоматический перезапуск
 6. **Разделение ответственности** — веб-слой вынесен в `core/web/`, бот-логика в `modules/`
 
+## 🔒 HTTPS и подключение нод
+
+`WEB_PUBLIC_URL` — канонический публичный HTTPS origin панели. При managed TLS установщик настраивает Nginx и Certbot; внешний reverse proxy должен сам выпускать и продлевать сертификат. Systemd WebUI по умолчанию слушает loopback, Docker публикует порт только на host loopback.
+
+Для домена и глобального публичного IPv4 поддерживается HTTPS. IP-сертификат Let's Encrypt использует short-lived профиль и действует 160 часов. HTTP-01 требует доступный извне TCP-порт 80; managed renewal проверяется ежечасно. Private/local IP не подходят.
+
+Новые агенты подключаются к HTTPS origin. `GET /api/agent/https` объявляет URL без токена; bootstrap передает секрет в `X-Node-Token`, heartbeat подписывается HMAC. Обновленный агент проверяет TLS и тот же hostname, затем сохраняет HTTPS URL. При переходе со старой systemd-установки ограниченный HTTP bridge временно обслуживает только discovery/bootstrap и подписанный heartbeat. После обновления всех агентов выполните `tgcp-bot tls status`, затем `tgcp-bot tls finalize`.
+
+Браузерные страницы используют числовой ID ноды. Агентские токены не помещаются в URL или клиентские JSON-ответы.
+
 ---
 
 ## 📂 Структура проекта
@@ -84,6 +94,7 @@ core/
 ├── middlewares.py          # Anti-spam, фильтры (Telegram)
 ├── utils.py                # Вспомогательные утилиты
 ├── nodes_db.py             # База данных нод (Tortoise ORM)
+├── metrics_history.py      # История метрик для графиков (3 мин … 7 дней)
 ├── models.py               # ORM модели
 ├── orchestrator.py         # Memory Orchestrator (Lazy Loading / GC)
 ├── shared_state.py         # Глобальное состояние (in-memory)
@@ -103,6 +114,7 @@ core/
 │   │   └── style.css       # Компоненты и анимации
 │   └── js/
 │       ├── common.js       # Шифрование, модалки, toast
+│       ├── chart_range.js  # Выбор периода графиков и опрос истории
 │       ├── dashboard.js    # Логика дашборда и SSE
 │       ├── login.js        # Авторизация
 │       ├── nodes_monitor.js # Мониторинг нод
@@ -115,7 +127,8 @@ core/
     ├── nodes_monitor.html  # Мониторинг нод
     ├── reset_password.html # Сброс пароля
     ├── settings.html       # Настройки
-    └── terminal.html       # Веб-терминал (VNC)
+    └── terminal.html       # Веб-терминал SSH
+    └── terminal.html       # Web SSH terminal
 ```
 
 ---
@@ -266,7 +279,7 @@ STRINGS = {
 **Безопасность:**
 - `encrypt_for_web(data)` — AES-256-CBC + Base64 шифрование для SSE
 - `decrypt_for_web(data)` — Расшифровка на стороне клиента
-- `log_audit_event()` — Аудит логирование (GDPR compliant)
+- `log_audit_event()` — запись событий аудита; эксплуатация должна отдельно определить срок хранения и требования compliance
 - `mask_sensitive_data()` — Маскировка IP, токенов, паролей в логах
 
 **Система:**
@@ -291,7 +304,30 @@ STRINGS = {
 - `get_node_by_token()` — Поиск по токену авторизации
 - `update_node_metrics()` — Обновление метрик (CPU, RAM, Disk)
 - `get_all_nodes()` — Список всех серверов
-- `delete_node()` — Удаление ноды
+- `delete_node()` — Удаление ноды (вместе с её историей метрик)
+
+Каждый heartbeat также передаёт замер в `metrics_history` (скорость сети считается по разнице счётчиков `net_rx`/`net_tx` между heartbeat).
+
+---
+
+#### **metrics_history.py** — История метрик для графиков
+**Назначение:** хранение CPU/RAM/диск/сеть агента и нод для графиков с выбором периода (как в Zabbix/Grafana)
+
+**Хранение (таблица `metric_samples`, скользящее окно как в RRD):**
+
+| Уровень (`res`) | Шаг | Хранится | Обслуживает периоды |
+|-----------------|-----|----------|---------------------|
+| `0` — сырые замеры | 2 с (агент) / heartbeat (нода) | 1 ч 10 мин | 3m, 10m, 30m, 1h |
+| `60` — минутные корзины | 60 с | 25 ч | 3h, 6h, 12h |
+| `300` — пятиминутные корзины | 300 с | 7 д 2 ч | 1d, 3d, 7d |
+
+**Принцип работы:**
+- `record_sample()` — кладёт замер в буфер в памяти; скорость сети хранится в байтах/с (из счётчиков или готовой скорости)
+- `maintenance_loop()` (фоновая задача `metrics-history`): каждые 10 с сбрасывает буфер в БД одним `bulk_create`, раз в минуту идемпотентно пересчитывает корзины 60/300 с за последние 3/15 минут (после старта — за весь срок хранения нижнего уровня), раз в 10 минут удаляет строки старше срока хранения
+- `query_series(source, range, since)` — выбирает уровень по периоду и при необходимости доусредняет до шага вывода (6h → 120 с, 12h → 180 с, 3d → 15 мин, 7d → 30 мин); `since` даёт инкременты для SSE-потока `/api/events/metrics`
+- Источники: `agent` и `node:<id>`; при удалении ноды её история удаляется
+
+**Объём:** в установившемся режиме ≈ 5–6 тыс. строк на источник (~0,5 МБ); база не растёт бесконечно, SQLite переиспользует освобождённые страницы.
 
 ---
 
@@ -301,6 +337,7 @@ STRINGS = {
 **Модели:**
 - `User` — Пользователи бота (Telegram ID, роль, язык)
 - `Node` — Удаленные серверы (токен, имя, IP, метрики)
+- `MetricSample` — Точка истории метрик (`source`, `res`, `t`, `cpu`, `ram`, `disk`, `rx`, `tx`)
 - `Alert` — История уведомлений
 - `TrafficLog` — Логи сетевого трафика
 
@@ -329,7 +366,7 @@ STRINGS = {
 - `AUTH_TOKENS: dict` — Токены нод для heartbeat
 - `NODE_TRAFFIC_MONITORS: dict` — Активные мониторы трафика
 - `ALERTS_CONFIG: dict` — Конфигурация порогов уведомлений
-- `AGENT_HISTORY: deque` — История метрик агента (кольцевой буфер ~1000 точек)
+- `AGENT_HISTORY: deque` — Последние 60 замеров агента для SSE (текущая скорость сети); долгая история — в `metrics_history`
 - `WEB_NOTIFICATIONS: deque` — Уведомления для веб-панели
 - `WEB_USER_LAST_READ: dict` — Последнее прочитанное уведомление
 
@@ -346,7 +383,12 @@ STRINGS = {
 - Обновляет кэш публичного IP агента (`AGENT_IP_CACHE`)
 - Обновляет флаг страны (`AGENT_FLAG`)
 - Измеряет пинг агента (`AGENT_PING_CACHE`)
-- Записывает историю метрик в `AGENT_HISTORY` (CPU%, RAM%, RX, TX)
+- Записывает историю метрик в `AGENT_HISTORY` (CPU%, RAM%, RX, TX) и передаёт замер в `metrics_history.record_sample()`
+
+**metrics_history.maintenance_loop() — каждые 10 секунд:**
+- Сбрасывает буфер замеров в таблицу `metric_samples`
+- Раз в минуту строит минутные и пятиминутные корзины
+- Раз в 10 минут удаляет данные старше срока хранения (1 ч / 25 ч / 7 д)
 
 **cleanup_monitor() — каждые 600 секунд:**
 - Удаляет истекшие веб-сессии
@@ -368,7 +410,7 @@ core/web/
 ├── middlewares.py      # WAF, Rate Limiting, CSRF Protection
 ├── api_nodes.py        # API на базе aiohttp для нод (heartbeat, CRUD, команды)
 ├── api_system.py       # API на базе aiohttp для настроек, логов, пользователей
-├── streaming.py        # Server-Sent Events (3 потока)
+├── streaming.py        # Server-Sent Events (5 потоков, включая историю графиков)
 └── views.py            # HTML-страницы (Jinja2 рендеринг)
 ```
 
@@ -426,6 +468,10 @@ streaming_routes → SSE потоки
 
 **1. Rate Limit Middleware:**
 - 100 запросов/мин на IP на endpoint
+- Ограничение частоты запросов; клиентский IP учитывает только доверенную proxy-конфигурацию
+- **Logging and privacy:**
+- Наличие audit log само по себе не гарантирует соответствие законодательству
+- xterm.js — браузерный SSH-терминал (не VNC)
 - Автоматический сброс окна
 
 **2. CSRF Middleware:**
@@ -461,14 +507,16 @@ streaming_routes → SSE потоки
 **Эндпоинты:**
 ```
 GET  /api/heartbeat                     — Health probe
+GET  /api/agent/https                   — Публичный HTTPS origin агента
+GET  /api/node/bootstrap                — Bootstrap по X-Node-Token
 POST /api/heartbeat                     — Heartbeat от ноды с HMAC-подписью
 GET  /api/nodes/list                    — Список нод (зашифровано)
 POST /api/nodes/add                     — Добавить ноду
 POST /api/nodes/delete                  — Удалить ноду
 POST /api/nodes/rename                  — Переименовать (admin only)
 GET  /api/nodes/monitor/list            — Данные для страницы мониторинга
-GET  /api/nodes/monitor/detail?token=   — Детали конкретной ноды
-GET  /api/nodes/monitor/services        — Сервисы конкретной ноды
+GET  /api/nodes/monitor/detail?node_id= — Детали ноды по числовому ID (WebUI session)
+GET  /api/nodes/monitor/services?node_id= — Сервисы по числовому ID (WebUI session)
 POST /api/nodes/monitor/command         — Отправить команду на ноду
 POST /api/nodes/monitor/service_action  — Управление сервисом на ноде
 GET  /api/services                      — Список управляемых сервисов
@@ -518,7 +566,7 @@ GET  /api/agent/ipv4           — IPv4 адреса агента
 **SSE-потоки:**
 
 **1. `GET /api/events` — Главный поток:**
-- `agent_stats` — CPU, RAM, Disk, Network, история для графиков
+- `agent_stats` — CPU, RAM, Disk, Network, последние 60 замеров (для текущей скорости); сами графики получают данные из потока `/api/events/metrics`
 - `nodes_list` — Список всех нод со статусами
 - `notifications` — Уведомления (фильтрация по последнему прочтению)
 
@@ -527,12 +575,18 @@ GET  /api/agent/ipv4           — IPv4 адреса агента
 - System logs — `journalctl --follow`
 
 **3. `GET /api/events/node` — Детали конкретной ноды:**
-- Статистика и данные для графиков
+- Статистика, доступность, биллинг (графики модального окна подписаны на `/api/events/metrics`)
 - Обновления через параметр `?token=...`
+- Обновления по числовому параметру `node_id`; agent token не передается браузеру
 
 **4. `GET /api/events/services` — Поток менеджера сервисов:**
 - Статусы systemd-сервисов в реальном времени
 - Обновления для страницы Service Manager
+
+**5. `GET /api/events/metrics?source=agent|node&node_id=…&range=3m…7d` — История для графиков:**
+- Событие `metrics_history`: `{range, step, span, now, full, data}` — `data` это зашифрованный (`encrypt_for_web`) JSON-массив точек `[{t, c, r, d, rx, tx}]`, `rx`/`tx` в байтах/с, `step` в секундах (`0` = сырые точки)
+- Первое сообщение — полный снимок (`full: true`), далее инкременты с интервалом по периоду (3 с для 3m … 5 мин для 7d); последняя корзина пересылается, пока не заполнится
+- Смена периода в браузере переоткрывает поток с новым `range`; нода адресуется числовым `node_id`
 
 **Ограничение:** при обычном переходе из браузера `GET /api/events*` возвращает информационный текст, а не метрики. Для работы требуется `EventSource` с `Accept: text/event-stream`. Аналогично `GET /api/terminal/ws` требует `Upgrade: websocket` и для обычного HTTP-запроса отвечает `426 Upgrade Required`.
 
@@ -707,8 +761,8 @@ node/
 
 **Требования:**
 - Python 3.10+
-- Библиотеки: requests, psutil
-- Открытый порт на главном сервере (8080)
+- Библиотеки: requests, psutil; PyYAML для дополнительных YAML-based checks
+- Доступный публичный HTTPS origin master; managed TLS дополнительно требует inbound TCP/80
 
 ---
 
@@ -739,25 +793,14 @@ node/
 - LDAP Injection
 
 #### 4️⃣ Data Encryption
-- **Fernet (AES)** — Симметричное шифрование конфигов
-  - `users.json`, `services.json`, `alerts_config.json`, `bot.db`
-- **AES-256-CBC + Base64** — шифрование для SSE-потоков
-- **HMAC** — Подпись heartbeat-сообщений от нод
+- **Fernet (AES)** — шифрование конфигурационных JSON-файлов
+- **AES-256-CBC + Base64** — шифрование payload для SSE-клиента
+- **HMAC-SHA256** — проверка подлинности heartbeat от нод
 
 #### 5️⃣ Audit Logging
 **Местоположение:** `logs/audit/audit.log`
 
-**Записываемые события:**
-- Login attempts (success/fail)
-- Password resets
-- User additions/deletions
-- Configuration changes
-- WAF triggers / Suspicious activity
-
-**Privacy (GDPR Compliant):**
-- IP адреса маскируются (`203.0.113.XXX`)
-- Токены скрываются (`abc123...`)
-- Чувствительные данные не логируются
+Журнал содержит события аудита; IP и секреты в предупреждениях маскируются. Настройте собственные сроки хранения и доступа к логам, не рассматривайте сам факт наличия audit log как гарантию соответствия требованиям.
 
 ---
 
@@ -766,19 +809,13 @@ node/
 ### Startup Sequence
 
 ```
-1. Загрузка .env конфигурации
-2. Инициализация системы логирования
-3. Подключение к SQLite базе (Tortoise ORM)
-4. Загрузка зашифрованных конфигов (users, alerts, services)
-5. Инициализация Telegram Bot + Dispatcher
-6. Регистрация 18 модулей и middleware
-7. Запуск Aiohttp веб-сервера (core/web/app.py, порт 8080)
-8. Запуск фоновых задач (tasks.py):
-   - agent_monitor() — сбор метрик агента
-   - cleanup_monitor() — очистка сессий и токенов
-9. Запуск фоновых задач модулей:
-   - check_alerts_loop() — мониторинг порогов
-10. Отправка уведомления о старте администратору
+1. Загрузка .env и настройка логирования
+2. Инициализация SQLite/Tortoise ORM и конфигурации
+3. Создание Telegram Bot и Dispatcher
+4. Настройка `ModuleOrchestrator` и регистрация модулей из `MODULE_CONFIG`
+5. Запуск aiohttp WebUI согласно `WEB_SERVER_HOST/PORT`
+6. Запуск фоновых задач приложения и модулей
+7. Запуск Telegram polling
 ```
 
 ### Shutdown Sequence
@@ -814,7 +851,7 @@ while True:
 
 ```
 Remote Node (node.py)
-    ↓ (heartbeat каждые 60 сек)
+    ↓ (heartbeat с настраиваемым интервалом)
 POST /api/heartbeat (HMAC signature)
     {
         "cpu": 45.2, "ram": 72.1,
@@ -824,11 +861,26 @@ POST /api/heartbeat (HMAC signature)
     ↓
 api_nodes.py → Валидация HMAC
     ↓
-Обновление nodes_db (SQLite)
+Обновление nodes_db (SQLite) + замер в metrics_history
     ↓
 Проверка порогов → Отправка алерта (если нужно)
     ↓
 Трансляция через SSE → WebUI обновляется в реальном времени
+```
+
+### Chart History Flow (История графиков)
+
+```
+agent_monitor (каждые 2 с) / heartbeat ноды
+    ↓ record_sample()
+Буфер в памяти → (10 с) → metric_samples res=0
+    ↓ (1 мин, идемпотентно)
+res=60 (среднее за минуту) → res=300 (среднее за 5 минут)
+    ↓ (10 мин) удаление старше 1 ч / 25 ч / 7 д
+
+Браузер: chart_range.js → EventSource /api/events/metrics?range=…
+    ↓ полный снимок, затем инкременты каждые 3 с … 5 мин (зависит от периода); `data` расшифровывается decryptData(); в фоновой вкладке поток закрывается
+Chart.js: разрывы при пропусках, подписи оси по длине периода, сброс зума при смене периода
 ```
 
 ### User Interaction Flow (Telegram)
@@ -878,21 +930,21 @@ decrypt() → AES-256-CBC + Base64
 ## 🎨 Фронтенд архитектура
 
 ### Технологии
-- **Tailwind CSS** — Utility-first CSS framework
-- **Vanilla JavaScript** — ES6+, без фреймворков
-- **Server-Sent Events** — Real-time обновления
-- **Chart.js** — Графики потребления ресурсов
-- **PWA** — Progressive Web App с манифестом
-- **xterm.js** — Веб-терминал (VNC)
-
+- **xterm.js** — браузерный SSH-терминал
 ### Ключевые файлы
 
 #### **dashboard.js**
 - `initSSE()` — Подключение к главному SSE потоку
 - `initServicesSSE()` — SSE для менеджера сервисов
-- `updateDashboard()` — Обновление графиков CPU/RAM/Disk
-- `renderTrafficChart()` — График сетевого трафика
+- `updateAgentStatsUI()` — Обновление карточек CPU/RAM/Disk и мини-графиков
+- `renderAgentChart(series)` / `renderNodeResChart(series)` / `renderNodeNetChart(series)` — Графики по данным контроллера периода
 - `fetchNodesList()` — Рендеринг списка нод
+
+#### **chart_range.js**
+- `createChartRangeController({ key, mount, canvasId, getSource, render })` — кнопка-дропдаун периода (Минуты / Часы / Дни) рядом с графиком
+- Подписывается на SSE `/api/events/metrics` (`EventSource`), получает полный снимок и инкременты, расшифровывает `data` через `decryptData()`; при смене периода переоткрывает поток, при обрыве переподключается
+- Передаёт в `render` нормализованный `series` (`labels`, `cpu`, `ram`, `disk`, `rx`/`tx` в Kbps, `null` на разрывах)
+- Запоминает выбор в `localStorage` (`chartRange:<key>`), показывает индикатор «Live» для периодов ≤ 1 ч, сбрасывает зум при смене периода, останавливается при закрытии модалки или SPA-переходе
 
 #### **nodes_monitor.js**
 - `loadNodes()` — Загрузка нод через API
@@ -900,7 +952,7 @@ decrypt() → AES-256-CBC + Base64
 - Поиск по имени и IP
 - Сортировка (имя, CPU, RAM, ping)
 - Множественный выбор + массовые команды
-- Модальное окно: графики Resources/Network, сервисы, действия
+- Модальное окно: графики Resources/Network с выбором периода (`chart_range.js`), сервисы, действия
 
 #### **settings.js**
 - Центр уведомлений (переключатели алертов с hint-подсказками)
@@ -955,6 +1007,23 @@ CREATE TABLE users (
     last_seen DATETIME
 );
 ```
+
+#### Table: `metric_samples`
+```sql
+CREATE TABLE metric_samples (
+    id     INTEGER PRIMARY KEY AUTOINCREMENT,
+    source VARCHAR(32) NOT NULL,   -- 'agent' или 'node:<id>'
+    res    SMALLINT NOT NULL DEFAULT 0, -- 0 = сырой замер, 60 / 300 = усреднённая корзина (сек)
+    t      INT NOT NULL,           -- unix time замера / начала корзины
+    cpu    REAL NOT NULL DEFAULT 0, -- %
+    ram    REAL NOT NULL DEFAULT 0, -- %
+    disk   REAL NOT NULL DEFAULT 0, -- %
+    rx     REAL NOT NULL DEFAULT 0, -- байт/с
+    tx     REAL NOT NULL DEFAULT 0  -- байт/с
+);
+CREATE INDEX idx_metric_samples_source_res_t ON metric_samples (source, res, t);
+```
+Скользящее окно: сырые замеры хранятся ~1 ч, минутные — 25 ч, пятиминутные — 7 дней; таблица создаётся автоматически (`generate_schemas` / Aerich).
 
 ### Encrypted JSON Configs
 

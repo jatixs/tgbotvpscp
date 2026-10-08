@@ -10,8 +10,36 @@ from .i18n import _, get_user_lang
 from .utils import anonymize_user
 
 THROTTLE_TIME = 5
+THROTTLE_STATE_TTL = 3600
+MAX_TRACKED_THROTTLE_USERS = 20_000
+THROTTLE_CLEANUP_INTERVAL = 60
 user_last_action_info: dict[int, tuple[float, str | None]] = {}
 user_throttle_warning_time: dict[int, float] = {}
+_last_throttle_cleanup = 0.0
+
+
+def _cleanup_throttle_state(now: float) -> None:
+    global _last_throttle_cleanup
+    if now - _last_throttle_cleanup < THROTTLE_CLEANUP_INTERVAL and len(user_last_action_info) < MAX_TRACKED_THROTTLE_USERS:
+        return
+    _last_throttle_cleanup = now
+    stale_users = [
+        user_id
+        for user_id, (timestamp, _action) in user_last_action_info.items()
+        if now - timestamp > THROTTLE_STATE_TTL
+    ]
+    for user_id in stale_users:
+        user_last_action_info.pop(user_id, None)
+        user_throttle_warning_time.pop(user_id, None)
+    overflow = len(user_last_action_info) - MAX_TRACKED_THROTTLE_USERS
+    if overflow > 0:
+        oldest_users = sorted(
+            user_last_action_info,
+            key=lambda user_id: user_last_action_info[user_id][0],
+        )[:overflow]
+        for user_id in oldest_users:
+            user_last_action_info.pop(user_id, None)
+            user_throttle_warning_time.pop(user_id, None)
 
 
 class SpamThrottleMiddleware(BaseMiddleware):
@@ -25,6 +53,7 @@ class SpamThrottleMiddleware(BaseMiddleware):
         user_id = event.from_user.id
         username = event.from_user.username
         current_time = time.time()
+        _cleanup_throttle_state(current_time)
         bot: Bot = data["bot"]
         user_log_str = anonymize_user(user_id, username)
         current_action_key: str | None = None

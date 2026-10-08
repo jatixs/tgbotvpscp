@@ -65,7 +65,7 @@ BACKUP_TYPES = {
 
 
 def _is_settings_allowed(user_id: int) -> bool:
-    return is_allowed(user_id, "settings")
+    return is_allowed(user_id, "manage_users")
 
 
 def _list_backup_files(backup_type: str) -> list[str]:
@@ -433,8 +433,8 @@ async def backups_main_menu_handler(message: types.Message):
     chat_id = message.chat.id
     lang = get_user_lang(user_id)
     
-    if not is_allowed(user_id, "settings"):
-        await send_access_denied_message(message.bot, user_id, chat_id, "settings")
+    if not _is_settings_allowed(user_id):
+        await send_access_denied_message(message.bot, user_id, chat_id, "manage_users")
         return
 
     text = _get_backups_menu_text(lang)

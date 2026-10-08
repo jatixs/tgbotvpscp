@@ -7,6 +7,7 @@ import time
 
 from tortoise import Tortoise
 
+from . import metrics_history
 from .config import CONFIG_DIR, NODE_OFFLINE_TIMEOUT, TORTOISE_ORM
 from .models import Node
 
@@ -174,6 +175,7 @@ async def get_all_nodes():
     for node in nodes:
         real_token = node.token_safe or "ErrorDecryption"
         result[real_token] = {
+            "id": node.id,
             "token": real_token,
             "name": node.name,
             "created_at": node.created_at,
@@ -198,6 +200,7 @@ async def get_node_by_token(token: str):
     node = await Node.get_or_none(token_hash=t_hash)
     if node:
         base = {
+            "id": node.id,
             "token": node.token_safe,
             "name": node.name,
             "created_at": node.created_at,
@@ -215,6 +218,14 @@ async def get_node_by_token(token: str):
         }
         return {**base, **node.extra_state}
     return None
+
+
+async def get_node_by_id(node_id: int):
+    node = await Node.get_or_none(id=node_id)
+    if not node:
+        return None
+
+    return await get_node_by_token(node.token_safe)
 
 
 async def create_node(name: str) -> str:
@@ -242,8 +253,34 @@ async def update_node_name(token: str, new_name: str):
 
 async def delete_node(token: str):
     t_hash = _get_token_hash(token)
+    node = await Node.get_or_none(token_hash=t_hash)
+    if node:
+        await metrics_history.delete_source(metrics_history.node_source(node.id))
     await Node.filter(token_hash=t_hash).delete()
     logging.info("Node deleted.")
+
+
+def _record_node_metrics(node_id: int, prev_stats: dict, prev_last_seen: float, stats: dict, now: float) -> None:
+    rx_rate = tx_rate = None
+    dt = now - prev_last_seen
+    if prev_stats and 0 < dt <= NODE_OFFLINE_TIMEOUT:
+        rx_delta = _coerce_float(stats.get("net_rx")) - _coerce_float(prev_stats.get("net_rx"))
+        tx_delta = _coerce_float(stats.get("net_tx")) - _coerce_float(prev_stats.get("net_tx"))
+        if rx_delta >= 0 and tx_delta >= 0:
+            rx_rate, tx_rate = rx_delta / dt, tx_delta / dt
+    if rx_rate is None:
+        # Agent reports speeds in Kbps (bits / 1024 / s).
+        rx_rate = _coerce_float(stats.get("net_rx_speed")) * 1024 / 8
+        tx_rate = _coerce_float(stats.get("net_tx_speed")) * 1024 / 8
+    metrics_history.record_sample(
+        metrics_history.node_source(node_id),
+        cpu=_coerce_float(stats.get("cpu")),
+        ram=_coerce_float(stats.get("ram")),
+        disk=_coerce_float(stats.get("disk")),
+        rx_rate=rx_rate,
+        tx_rate=tx_rate,
+        t=now,
+    )
 
 
 async def update_node_heartbeat(token: str, ip: str, stats: dict):
@@ -314,6 +351,7 @@ async def update_node_heartbeat(token: str, ip: str, stats: dict):
     history.append(point)
     if len(history) > 60:
         history = history[-60:]
+    _record_node_metrics(node.id, prev_stats, prev_last_seen, stats, now)
     extra["availability"] = availability
     node.last_seen = now
     node.ip = ip
