@@ -89,7 +89,7 @@
 ### 🎨 Modern Web Interface
 - **PWA** — works like a native app (iOS / Android support)
 - **SSE (Server-Sent Events)** — real-time charts and logs without reloading
-- **AMOLED & Dark Theme** — automatic switching
+- **4 Theme Options** — System, Light, Dark, and AMOLED
 - **Responsive Design** — mobile-first approach
 - **Drag & Drop** — manual and automatic server sorting
 
@@ -199,7 +199,7 @@ Managed TLS accepts a domain or globally routable public IPv4. Let's Encrypt IP 
 
 ### 3️⃣ Connect Remote Servers (Nodes)
 
-1. In Telegram, open **Ноды** → **Добавить ноду**, name the node, and keep the generated secret token.
+1. In Telegram, open **Nodes** → **Add Node**, name the node, and keep the generated secret token.
 2. Run the installer on the remote server and select **7) NODE (Client)**.
 3. Enter the master's HTTPS origin, such as `https://panel.example.com` or `https://203.0.113.10`, and the node token.
 
