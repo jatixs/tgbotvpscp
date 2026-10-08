@@ -679,15 +679,52 @@
                         </svg>
                         {{ web_logs_title }}
                     </h3>
-                    <div class="flex bg-gray-100 dark:bg-black/30 rounded-lg p-1 text-[10px] font-bold">
-                        <button onclick="switchLogType('bot')" id="btnLogBot"
-                            class="px-3 py-1.5 rounded-md transition-all text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white">
-                            {{ web_logs_btn_bot }}
-                        </button>
-                        <button onclick="switchLogType('sys')" id="btnLogSys"
-                            class="px-3 py-1.5 rounded-md transition-all text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white">
-                            {{ web_logs_btn_sys }}
-                        </button>
+                    <div class="flex items-center gap-2">
+                        <style>
+                            #logsContainer.filter-INFO .log-line:not([data-level="INFO"]),
+                            #logsContainer.filter-WARN .log-line:not([data-level="WARN"]),
+                            #logsContainer.filter-ERROR .log-line:not([data-level="ERROR"]) {
+                                visibility: hidden;
+                                position: absolute;
+                                pointer-events: none;
+                            }
+                        </style>
+                        <div class="relative" id="logFilterDropdownWrapper">
+                            <button id="logFilterBtn" onclick="document.getElementById('logFilterMenu').classList.toggle('hidden')"
+                                class="px-3 py-1.5 bg-gray-100 dark:bg-black/30 border border-gray-200 dark:border-white/10 rounded-lg text-[10px] font-bold text-gray-700 dark:text-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all duration-300 flex items-center gap-2 whitespace-nowrap">
+                                <svg class="h-3.5 w-3.5 text-gray-400 shrink-0" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+                                </svg>
+                                <span id="logFilterSelectedText">ALL</span>
+                                <svg class="h-3 w-3 text-gray-400 shrink-0" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                                </svg>
+                            </button>
+                            <div id="logFilterMenu" class="hidden absolute right-0 mt-2 w-36 bg-white dark:bg-gray-800 border border-gray-100 dark:border-white/10 rounded-xl shadow-xl z-50 overflow-hidden">
+                                <button onclick="selectLogFilter('ALL')" class="w-full text-left px-4 py-2 text-xs font-bold text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-white/5 flex items-center gap-2.5 transition-colors">
+                                    <span class="w-2 h-2 rounded-full bg-gray-400 shrink-0"></span>ALL
+                                </button>
+                                <button onclick="selectLogFilter('INFO')" class="w-full text-left px-4 py-2 text-xs font-bold text-blue-500 dark:text-blue-400 hover:bg-gray-50 dark:hover:bg-white/5 flex items-center gap-2.5 transition-colors border-t border-gray-50 dark:border-white/5">
+                                    <span class="w-2 h-2 rounded-full bg-blue-400 shrink-0"></span>INFO
+                                </button>
+                                <button onclick="selectLogFilter('WARN')" class="w-full text-left px-4 py-2 text-xs font-bold text-yellow-500 dark:text-yellow-400 hover:bg-gray-50 dark:hover:bg-white/5 flex items-center gap-2.5 transition-colors border-t border-gray-50 dark:border-white/5">
+                                    <span class="w-2 h-2 rounded-full bg-yellow-400 shrink-0"></span>WARN
+                                </button>
+                                <button onclick="selectLogFilter('ERROR')" class="w-full text-left px-4 py-2 text-xs font-bold text-red-500 dark:text-red-400 hover:bg-gray-50 dark:hover:bg-white/5 flex items-center gap-2.5 transition-colors border-t border-gray-50 dark:border-white/5">
+                                    <span class="w-2 h-2 rounded-full bg-red-500 shrink-0"></span>ERROR
+                                </button>
+                            </div>
+                        </div>
+                        <div class="flex bg-gray-100 dark:bg-black/30 rounded-lg p-1 text-[10px] font-bold">
+                            <button onclick="switchLogType('bot')" id="btnLogBot"
+                                class="px-3 py-1.5 rounded-md transition-all text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white">
+                                {{ web_logs_btn_bot }}
+                            </button>
+                            <button onclick="switchLogType('sys')" id="btnLogSys"
+                                class="px-3 py-1.5 rounded-md transition-all text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white">
+                                {{ web_logs_btn_sys }}
+                            </button>
+                        </div>
                     </div>
                 </div>
                 <div
