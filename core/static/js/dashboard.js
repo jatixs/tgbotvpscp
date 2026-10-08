@@ -1317,7 +1317,31 @@ function removeLogLoading() {
     }, 300);
 }
 
+window.selectLogFilter = function (level) {
+    const container = document.getElementById('logsContainer');
+    const label = document.getElementById('logFilterSelectedText');
+    const menu = document.getElementById('logFilterMenu');
+    // Remove all existing filter classes
+    container.classList.remove('filter-ALL', 'filter-INFO', 'filter-WARN', 'filter-ERROR');
+    if (level !== 'ALL') {
+        container.classList.add('filter-' + level);
+    }
+    if (label) label.textContent = level;
+    if (menu) menu.classList.add('hidden');
+};
+
+// Close log filter dropdown when clicking outside
+document.addEventListener('click', function (e) {
+    const wrapper = document.getElementById('logFilterDropdownWrapper');
+    const menu = document.getElementById('logFilterMenu');
+    if (wrapper && menu && !wrapper.contains(e.target)) {
+        menu.classList.add('hidden');
+    }
+});
+
 window.switchLogType = function (type) {
+    // Reset log level filter to ALL
+    selectLogFilter('ALL');
     ['btnLogBot', 'btnLogSys'].forEach(id => {
         const el = document.getElementById(id);
         const isActive = (id === 'btnLogBot' && type === 'bot') || (id === 'btnLogSys' && type === 'sys');
@@ -1393,10 +1417,11 @@ window.switchLogType = function (type) {
 
             const html = logs.map(line => {
                 let cls = "text-gray-500";
-                if (line.includes("INFO")) cls = "text-blue-400";
-                else if (line.includes("WARNING")) cls = "text-yellow-400";
-                else if (line.includes("ERROR") || line.includes("CRITICAL")) cls = "text-red-500 font-bold";
-                return `<div class="${cls} font-mono text-xs break-all py-[1px]">${escapeHtml(line)}</div>`;
+                let level = "ALL";
+                if (line.includes("INFO")) { cls = "text-blue-400"; level = "INFO"; }
+                else if (line.includes("WARNING")) { cls = "text-yellow-400"; level = "WARN"; }
+                else if (line.includes("ERROR") || line.includes("CRITICAL")) { cls = "text-red-500 font-bold"; level = "ERROR"; }
+                return `<div data-level="${level}" class="log-line ${cls} font-mono text-xs break-all py-[1px]">${escapeHtml(line)}</div>`;
             }).join('');
 
             const loader = document.getElementById('log-loader');
