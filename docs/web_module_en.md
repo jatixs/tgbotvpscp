@@ -11,7 +11,7 @@ The web layer is located in `core/web/` and built on **aiohttp** + **Jinja2**. E
 | `core/web/auth.py` | Authentication |
 | `core/web/api_system.py` | System API |
 | `core/web/api_nodes.py` | Node API |
-| `core/web/streaming.py` | SSE streams |
+| `core/web/streaming.py` | SSE streams (incl. chart history) |
 | `core/web/middlewares.py` | WAF, CSRF, Rate Limiting |
 
 ---
@@ -27,11 +27,12 @@ core/web/app.py (routing)
     ├── views.py       → Jinja2 HTML
     ├── api_system.py  → JSON API
     ├── api_nodes.py   → JSON API
-    ├── streaming.py   → SSE streams
+    ├── streaming.py   → SSE streams (incl. chart history)
     └── auth.py        → Authentication
     ↓
 core/shared_state.py (in-memory data)
 core/nodes_db.py (SQLite)
+core/metrics_history.py (SQLite, metrics history)
 core/messaging.py (Telegram notifications)
 ```
 
@@ -47,65 +48,48 @@ If you need a JSON API built on `aiohttp`, add a handler to `core/web/api_system
 
 ```python
 # Add at the end of the file before route definitions
+@routes.post("/api/my-feature")
 async def api_my_feature(request):
-    """Your custom API endpoint."""
-    # 1. Check authorization (session)
-    session = request.get("session")
-    if not session:
+    """Example authenticated JSON endpoint."""
+    user = get_current_user(request)
+    if not user:
         return web.json_response({"error": "Unauthorized"}, status=401)
 
-    # 2. Get request data
-    if request.method == "POST":
-        data = await request.json()
-        param = data.get("param", "")
-    else:
-        param = request.query.get("param", "")
-
-    # 3. Your logic
-    result = {"status": "ok", "data": f"Processed: {param}"}
-
-    # 4. Return JSON
-    return web.json_response(result)
+    data = await request.json()
+    param = str(data.get("param", ""))[:100]
+    return web.json_response({"status": "ok", "user_id": user["id"], "data": param})
 ```
 
 ### Step 2: Register Route
 
 **File:** `/opt/tg-bot/core/web/api_system.py`
 
-Find the `system_routes` list (usually at the end of the file) and add:
-
-```python
-system_routes = [
-    # ... existing routes ...
-    web.get("/api/my-feature", api_my_feature),
-    web.post("/api/my-feature", api_my_feature),
-]
-```
+`api_system.py` already declares `routes = web.RouteTableDef()`. The `@routes.post(...)` decorator in the example registers the endpoint; do not create a separate `system_routes` list.
 
 ### Step 3: Call from JavaScript
 
 **File:** `/opt/tg-bot/core/static/js/dashboard.js` (or create your own `.js`)
 
 ```javascript
+function getCsrfToken() {
+    const item = document.cookie.split("; ").find(value => value.startsWith("csrf_token="));
+    return item ? decodeURIComponent(item.slice("csrf_token=".length)) : "";
+}
+
 async function callMyFeature() {
-    try {
-        const resp = await fetch('/api/my-feature', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRF-Token': CSRF_TOKEN  // required for POST
-            },
-            body: JSON.stringify({ param: 'hello' })
-        });
-        const data = await resp.json();
-        console.log(data);
-    } catch (err) {
-        console.error('API error:', err);
-    }
+    const response = await fetch("/api/my-feature", {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json",
+            "X-CSRF-Token": getCsrfToken()
+        },
+        body: JSON.stringify({ param: "hello" })
+    });
+    if (!response.ok) throw new Error(`Request failed: ${response.status}`);
+    return response.json();
 }
 ```
-
-> ⚠️ **Important:** All POST requests must include a CSRF token in the `X-CSRF-Token` header. It is available from the `CSRF_TOKEN` variable passed to the template.
+> ⚠️ **Important:** Mutating `/api/` requests pass through the CSRF middleware. Send the `csrf_token` cookie value in the `X-CSRF-Token` header; do not disable middleware for a new endpoint.
 
 ---
 
@@ -146,11 +130,10 @@ If you need a full page with UI.
             </div>
         </div>
     </main>
+    <script type="application/json" id="page-data">{{ i18n_data | tojson }}</script>
 
     <script>
-        const CSRF_TOKEN = '{{ csrf_token }}';
-        const WEB_KEY = '{{ web_key }}';
-        const I18N = {{ i18n_json | safe }};
+        const I18N = JSON.parse(document.getElementById("page-data").textContent);
     </script>
     <script src="/static/js/common.js"></script>
     <script src="/static/js/my_feature.js"></script>
@@ -165,12 +148,11 @@ If you need a full page with UI.
 ```python
 async def my_feature_page(request):
     """Your feature page."""
-    session = request.get("session")
-    if not session:
+    user = get_current_user(request)
+    if not user:
         raise web.HTTPFound("/login")
 
-    user_role = session.get("role", "users")
-    lang = session.get("lang", "ru")
+    lang = get_user_lang(user["id"])
 
     # Collect i18n strings for frontend
     i18n_keys = ["my_feature_title", "my_feature_desc"]
@@ -180,9 +162,7 @@ async def my_feature_page(request):
         "lang": lang,
         "page_title": get_text("my_feature_title", lang),
         "app_name": "VPS Manager",
-        "csrf_token": session.get("csrf_token", ""),
-        "web_key": WEB_KEY,
-        "i18n_json": json.dumps(i18n_data, ensure_ascii=False),
+        "i18n_data": i18n_data,
         "I18N": i18n_data,
     }
 
@@ -192,14 +172,12 @@ async def my_feature_page(request):
 ### Step 3: Register Route
 
 **File:** `/opt/tg-bot/core/web/views.py`
-
-Add to `view_routes`:
+In `views.py`, use the existing route table:
 
 ```python
-view_routes = [
-    # ... existing routes ...
-    web.get("/my-feature", my_feature_page),
-]
+@routes.get("/my-feature")
+async def my_feature_page(request):
+    ...
 ```
 
 ### Step 4: Create JavaScript
@@ -223,7 +201,10 @@ async function loadData() {
 
 function renderContent(data) {
     const container = document.getElementById('content');
-    container.innerHTML = `<p class="text-gray-700 dark:text-gray-300">${data.data}</p>`;
+    const paragraph = document.createElement("p");
+    paragraph.className = "text-gray-700 dark:text-gray-300";
+    paragraph.textContent = String(data.data ?? "");
+    container.replaceChildren(paragraph);
 }
 ```
 
@@ -238,27 +219,23 @@ For two-way communication between WebUI and the bot, use `shared_state` and `mes
 ```python
 # In your API handler (core/web/api_system.py)
 from core.messaging import send_alert
+from core.rbac import is_admin
+from core.web.auth import get_current_user
 
+@routes.post("/api/my-action")
 async def api_my_action(request):
-    session = request.get("session")
-    if not session:
+    user = get_current_user(request)
+    if not user:
         return web.json_response({"error": "Unauthorized"}, status=401)
+    if not is_admin(user):
+        return web.json_response({"error": "Forbidden"}, status=403)
 
     data = await request.json()
-
-    # Perform action
     result = do_something(data)
-
-    # Send notification to Telegram (all admins)
     bot = request.app.get("bot")
     if bot:
-        await send_alert(
-            bot,
-            "🔔 Action performed from WebUI",
-            alert_type="system"
-        )
-
-    return web.json_response({"status": "ok"})
+        await send_alert(bot, "Action performed from WebUI", alert_type="system")
+    return web.json_response({"status": "ok", "result": result})
 ```
 
 ### Sending Data from Bot to WebUI (via SSE)
@@ -287,6 +264,10 @@ async def my_feature_handler(message):
 from core.shared_state import ALERTS_CONFIG, ALLOWED_USERS
 
 async def api_get_status(request):
+    user = get_current_user(request)
+    if not user:
+        return web.json_response({"error": "Unauthorized"}, status=401)
+
     return web.json_response({
         "alerts_enabled": ALERTS_CONFIG.get("global_enabled", True),
         "users_count": len(ALLOWED_USERS),
@@ -305,27 +286,11 @@ from core.shared_state import WEB_NOTIFICATIONS
 ## 🔒 Security
 
 ### Mandatory Rules
-
-1. **CSRF Token** — all POST/PUT/DELETE requests must include `X-CSRF-Token`
-2. **Session Check** — always check `request.get("session")`
-3. **Role Check** — for dangerous operations check `session.get("role")`
-4. **Input Validation** — never trust user input
-5. **Encryption** — use `encrypt_for_web()` for sensitive data transmission
-
-### Permission Check Example
-
-```python
-async def api_admin_action(request):
-    session = request.get("session")
-    if not session:
-        return web.json_response({"error": "Unauthorized"}, status=401)
-
-    # Admin only
-    if session.get("role") not in ("owner", "admins"):
-        return web.json_response({"error": "Forbidden"}, status=403)
-
-    # ... logic ...
-```
+1. Resolve the authenticated user with `get_current_user(request)`; do not read a nonexistent `request["session"]`.
+2. Use `core.rbac.is_admin(user)` for administrator operations and enforce permissions in every API/callback handler.
+3. Mutating `/api/` requests must pass the CSRF middleware with the `X-CSRF-Token` header.
+4. Validate input types, ranges, and sizes; authentication does not replace validation.
+5. Never send node tokens, passwords, or other secrets in browser payloads. Client-side encryption is not an authorization check.
 
 ---
 

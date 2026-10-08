@@ -40,6 +40,27 @@ APP_VERSION: Final[str] = get_app_version()
 CACHE_VER: Final[str] = str(int(time.time()))
 
 
+def _compute_asset_version() -> str:
+    """Version tag for static URLs: changes whenever any bundled JS/CSS file changes.
+
+    The app version alone is not enough — hotfixes within the same release left
+    browsers serving stale scripts from heuristic cache.
+    """
+    static_dir = Path(BASE_DIR) / "core" / "static"
+    latest = 0
+    for pattern in ("js/*.js", "css/*.css"):
+        for file in static_dir.glob(pattern):
+            try:
+                latest = max(latest, int(file.stat().st_mtime))
+            except OSError:
+                continue
+    return f"{APP_VERSION.lstrip('v')}.{latest or CACHE_VER}"
+
+
+ASSET_VER: Final[str] = _compute_asset_version()
+JINJA_ENV.globals["asset_ver"] = ASSET_VER
+
+
 def _get_avatar_html(user: dict[str, Any]) -> str:
     raw = str(user.get("photo_url", ""))
     if raw.startswith("http"):
@@ -121,6 +142,16 @@ def _render_html_response(template_name: str, context: dict[str, Any], request: 
     if hasattr(web_auth, "_set_csrf_cookie"):
         web_auth._set_csrf_cookie(response, request)
     return response
+
+
+def _alerts_for_web(alerts: dict[str, Any], nodes: dict[str, dict[str, Any]]) -> dict[str, Any]:
+    public_alerts = {key: value for key, value in alerts.items() if not key.startswith("node_")}
+    for token, node in nodes.items():
+        for alert_type in ("downtime", "node_resources", "node_logins"):
+            key = f"node_{token}_{alert_type}"
+            if key in alerts:
+                public_alerts[f"node_{node['id']}_{alert_type}"] = alerts[key]
+    return public_alerts
 
 
 def _build_api_root_notice() -> web.Response:
@@ -302,7 +333,7 @@ async def handle_dashboard(request: web.Request) -> web.StreamResponse:
         users_json = json.dumps(ulist)
         nlist = [
             {
-                "token": encrypt_for_web(token),
+                "id": node["id"],
                 "name": node.get("name", "Unknown"),
                 "ip": encrypt_for_web(node.get("ip", "Unknown")),
                 "billing_amount": node.get("billing_amount"),
@@ -405,7 +436,7 @@ async def handle_dashboard(request: web.Request) -> web.StreamResponse:
         "web_copied": _("web_copied", lang),
         "web_resources_chart": _("web_resources_chart", lang),
         "web_network_chart": _("web_network_chart", lang),
-        "web_token_label": _("web_token_label", lang),
+        "web_node_id_label": _("web_node_id_label", lang),
         "web_stats_total": _("web_stats_total", lang),
         "web_stats_active": _("web_stats_active", lang),
         "web_notifications_title": _("web_notifications_title", lang),
@@ -432,6 +463,16 @@ async def handle_dashboard(request: web.Request) -> web.StreamResponse:
             "web_cpu": _("web_cpu", lang),
             "web_ram": _("web_ram", lang),
             "web_no_nodes": _("web_no_nodes", lang),
+            "web_chart_range_title": _("web_chart_range_title", lang),
+            "web_chart_range_minutes": _("web_chart_range_minutes", lang),
+            "web_chart_range_hours": _("web_chart_range_hours", lang),
+            "web_chart_range_days": _("web_chart_range_days", lang),
+            "web_chart_range_live": _("web_chart_range_live", lang),
+            "web_chart_range_no_data": _("web_chart_range_no_data", lang),
+            "web_chart_range_step": _("web_chart_range_step", lang),
+            "unit_minute_short": _("unit_minute_short", lang),
+            "unit_hour_short": _("unit_hour_short", lang),
+            "unit_day_short": _("unit_day_short", lang),
             "web_loading": _("web_loading", lang),
             "web_error": _("web_error", lang, error=""),
             "web_conn_error": _("web_conn_error", lang, error=""),
@@ -666,6 +707,16 @@ async def handle_nodes_monitor_page(request: web.Request) -> web.StreamResponse:
         "i18n_json": json.dumps({
             "web_no_nodes": _("web_nodes_monitor_no_nodes", lang),
             "web_no_nodes_desc": _("web_nodes_monitor_no_nodes_desc", lang),
+            "web_chart_range_title": _("web_chart_range_title", lang),
+            "web_chart_range_minutes": _("web_chart_range_minutes", lang),
+            "web_chart_range_hours": _("web_chart_range_hours", lang),
+            "web_chart_range_days": _("web_chart_range_days", lang),
+            "web_chart_range_live": _("web_chart_range_live", lang),
+            "web_chart_range_no_data": _("web_chart_range_no_data", lang),
+            "web_chart_range_step": _("web_chart_range_step", lang),
+            "unit_minute_short": _("unit_minute_short", lang),
+            "unit_hour_short": _("unit_hour_short", lang),
+            "unit_day_short": _("unit_day_short", lang),
             "web_loading": _("web_loading", lang),
             "web_error": _("web_nodes_monitor_error", lang),
             "web_services_empty": _("web_nodes_monitor_no_services", lang),
@@ -785,7 +836,8 @@ async def handle_settings_page(request: web.Request) -> web.StreamResponse:
     is_main_admin = _is_root(user)
     is_admin = _is_admin(user)
     lang = get_user_lang(user_id)
-    user_alerts = shared_state.ALERTS_CONFIG.get(user_id, {})
+    all_nodes = await nodes_db.get_all_nodes()
+    user_alerts = _alerts_for_web(shared_state.ALERTS_CONFIG.get(user_id, {}), all_nodes)
     web_meta = getattr(current_config, "WEB_METADATA", {})
     meta_locked = web_meta.get("locked", False)
     users_json = "null"
@@ -810,10 +862,9 @@ async def handle_settings_page(request: web.Request) -> web.StreamResponse:
             if uid != ADMIN_USER_ID
         ]
         users_json = json.dumps(ulist)
-        all_nodes = await nodes_db.get_all_nodes()
         nlist = [
             {
-                "token": encrypt_for_web(token),
+            "id": node["id"],
                 "name": node.get("name", "Unknown"),
                 "ip": encrypt_for_web(node.get("ip", "Unknown")),
                 "reminder_enabled": node.get("reminder_enabled", False),

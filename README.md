@@ -5,11 +5,11 @@
 <h1 align="center">🤖 VPS Manager Telegram Bot</h1>
 
 <p align="center">
-  <b>v1.25.3</b> — профессиональная экосистема для мониторинга и управления серверной инфраструктурой<br>
+  <b>v1.26.0</b> — профессиональная экосистема для мониторинга и управления серверной инфраструктурой<br>
   (Systemd / Docker / API / WebUI / PWA / Multi-Node / Remote SSH / Backup Manager)<br><br>
 
-  <a href="https://github.com/jatixs/tgbotvpscp/releases/latest"><img src="https://img.shields.io/badge/version-v1.25.3-blue?style=flat-square" alt="Version 1.25.3"/></a>
-  <a href="https://github.com/jatixs/tgbotvpscp/releases/latest"><img src="https://img.shields.io/badge/build-92-purple?style=flat-square" alt="Build 92"/></a>
+  <a href="https://github.com/jatixs/tgbotvpscp/releases/latest"><img src="https://img.shields.io/badge/version-v1.26.0-blue?style=flat-square" alt="Version 1.26.0"/></a>
+  <a href="https://github.com/jatixs/tgbotvpscp/releases/latest"><img src="https://img.shields.io/badge/build-93-purple?style=flat-square" alt="Build 93"/></a>
   <a href="https://www.python.org/"><img src="https://img.shields.io/badge/python-3.10%2B-green?style=flat-square" alt="Python 3.10+"/></a>
   <a href="https://choosealicense.com/licenses/gpl-3.0/"><img src="https://img.shields.io/badge/license-GPL--3.0-lightgrey?style=flat-square" alt="License GPL-3.0"/></a>
   <a href="https://github.com/aiogram/aiogram"><img src="https://img.shields.io/badge/aiogram-3.x-orange?style=flat-square" alt="Aiogram 3.x"/></a>
@@ -19,120 +19,120 @@
 
 ---
 
-## 📘 Оглавление
+## 📋 Оглавление
 
-1. [О проекте](#-о-проекте)
-2. [Ключевые возможности](#-ключевые-возможности)
-3. [Архитектура](#-архитектура)
-4. [Быстрый старт](#-быстрый-старт)
-5. [Веб-интерфейс](#-веб-интерфейс)
-6. [Безопасность](#-безопасность)
-7. [Структура проекта](#️-структура-проекта)
-8. [Документация](#-документация)
-9. [Лицензия](#-лицензия)
+1. [О проекте](#ℹ️-о-проекте)
+2. [Ключевые возможности](#✨-ключевые-возможности)
+3. [Архитектура](#🏗️-архитектура)
+4. [Быстрый старт](#🚀-быстрый-старт)
+5. [Веб-интерфейс](#🖥️-веб-интерфейс)
+6. [Безопасность](#🔒-безопасность)
+7. [Структура проекта](#📁-структура-проекта)
+8. [Документация](#📚-документация)
+9. [Лицензия](#📄-лицензия)
 
 ---
 
-## 🧩 О проекте
+## ℹ️ О проекте
 
 **VPS Manager Telegram Bot** — это комплексное решение enterprise-класса для управления серверной инфраструктурой через Telegram и веб-интерфейс.
 
 ### 🎯 Для кого этот проект?
 
-- **Системные администраторы** — автоматизация рутинных задач
-- **DevOps инженеры** — мониторинг множества серверов из одной точки
-- **VPN провайдеры** — управление X-ray/VLESS панелями
-- **Хостинг-провайдеры** — клиентский мониторинг
+- 👨‍💻 **Системные администраторы** — автоматизация рутинных задач
+- 🔧 **DevOps инженеры** — мониторинг множества серверов из одной точки
+- 🛡️ **VPN провайдеры** — управление X-ray/VLESS панелями
+- ☁️ **Хостинг-провайдеры** — клиентский мониторинг
 
 ### 💡 Проблемы, которые решает проект
 
-✅ **Централизованное управление** — один интерфейс для всех серверов  
-✅ **Real-time мониторинг** — мгновенные обновления без перезагрузки  
-✅ **Безопасность** — enterprise-класса защита с WAF и аудитом  
-✅ **Масштабируемость** — от 1 до 1000+ серверов  
-✅ **Мобильность** — управление с телефона через Telegram  
+- 🎯 **Централизованное управление** — один интерфейс для всех серверов  
+- 📈 **Мониторинг в реальном времени** — мгновенные обновления без перезагрузки  
+- 🔐 **Безопасность** — защита корпоративного уровня с WAF и аудитом  
+- 🌐 **Масштабируемость** — управление несколькими удаленными серверами
+- 📱 **Мобильность** — управление с телефона через Telegram  
 
 ---
 
-## ⚡ Ключевые возможности
+## ✨ Ключевые возможности
 
-### 🚀 Производительность
-- ✅ **Полная асинхронность** — AsyncIO, aiohttp, aiosqlite
-- ✅ **Низкое потребление** — ~100MB RAM на агенте
-- ✅ **Кольцевые буферы** — оптимизация памяти через deque
-- ✅ **Memory Orchestrator** — динамическая выгрузка неиспользуемых модулей
+### ⚡ Производительность
+- **Полная асинхронность** — AsyncIO, aiohttp, aiosqlite
+- **Ограниченное потребление ресурсов** — кэширование и фоновая очистка
+- **Кольцевые буферы** — оптимизация памяти через deque
+- **Memory Orchestrator** — динамическая выгрузка неиспользуемых модулей
 
-### 🖥 Мульти-серверное управление
-- ✅ **Неограниченное количество нод** — масштабируемая архитектура
-- ✅ **Real-time метрики** — CPU, RAM, Disk, Network (HTTP / ICMP ping)
-- ✅ **Web Terminal (VNC)** — безопасный SSH-доступ прямо из браузера
-- ✅ **Оптимизация системы** — интерактивный модуль настройки VPS (BBR, Swap, очистка кэша)
+### 🌍 Мульти-серверное управление
+- **Неограниченное количество нод** — масштабируемая архитектура
+- **Метрики в реальном времени** — CPU, RAM, Disk, Network (HTTP / ICMP ping)
+- **Веб-терминал (SSH)** — доступ к терминалу через WebUI с проверкой ключа хоста
+- **Оптимизация системы** — интерактивный модуль настройки VPS (BBR, Swap, очистка кэша)
 
 ### 💳 Система биллинга и аренды
-- ✅ **Учет платежей** — отслеживание стоимости аренды нод и мастер-сервера (€/$/₽)
-- ✅ **Умные напоминания** — автоматические алерты за 3 дня до конца оплаты
-- ✅ **Информативные бейджи** — отображение оставшихся дней до оплаты в WebUI
+- **Учет платежей** — отслеживание стоимости аренды нод и мастер-сервера (€/$/₽)
+- **Умные напоминания** — автоматические алерты за 3 дня до конца оплаты
+- **Информативные бейджи** — отображение оставшихся дней до оплаты в WebUI
 
-### 🤖 Умный Telegram-интерфейс
-- ✅ **Шлюз Поддержки (Gateway Bot)** — выделенный клиентский бот с рассылками и ответами на тикеты прямо из админ-панели, со встроенным Anti-Flood
-- ✅ **Smart Cleanup** — автоматическая очистка чата от команд и старых меню
-- ✅ **Защита от флуда** — встроенный SpamThrottle для защиты Telegram API
-- ✅ **Интерактивные виджеты** — меню с сохранением состояния (чекбоксы) и живыми таймерами
+### 💬 Умный Telegram-интерфейс
+- **Шлюз Поддержки (Gateway Bot)** — выделенный клиентский бот с рассылками и ответами на тикеты прямо из админ-панели, со встроенной защитой от флуда
+- **Умная очистка (Smart Cleanup)** — автоматическая очистка чата от команд и старых меню
+- **Защита от спама** — встроенный SpamThrottle для защиты Telegram API
+- **Интерактивные виджеты** — меню с сохранением состояния (чекбоксы) и живыми таймерами
 
 ### 🛡️ Безопасность Enterprise-класса
-- ✅ **WAF** — защита от SQL Injection, XSS, Path Traversal
-- ✅ **Rate Limiting & Brute-force Protection** — защита от DDoS и подбора паролей
-- ✅ **Audit Logging** — детальные логи всех событий
-- ✅ **Шифрование данных** — Fernet (AES) + AES-256-CBC + Argon2 для паролей
-- ✅ **DOMPurify** — строгая фильтрация контента на стороне клиента
+- **Web-защита** — заголовки безопасности, CSRF, ограничение частоты запросов и фильтрация подозрительных запросов
+- **Защита от DDoS и перебора паролей (Rate Limiting & Brute-force)** 
+- **Журналирование аудита (Audit Logging)** — детальные логи всех событий
+- **Шифрование данных** — Fernet (AES) + AES-256-CBC + Argon2 для паролей
+- **DOMPurify** — строгая фильтрация контента на стороне клиента
 
 ### 🎨 Современный веб-интерфейс
-- ✅ **PWA** — работает как нативное приложение (поддержка iOS / Android)
-- ✅ **SSE (Server-Sent Events)** — обновления графиков и логов без перезагрузки
-- ✅ **AMOLED & Темная тема** — автоматическое переключение
-- ✅ **Адаптивный дизайн** — Mobile-first подход
-- ✅ **Drag & Drop** — ручная и автоматическая сортировка серверов
+- **PWA** — работает как нативное приложение (поддержка iOS / Android)
+- **SSE (Server-Sent Events)** — обновления графиков и логов без перезагрузки
+- **4 вида тем оформления** — Системная, Светлая, Темная и AMOLED
+- **Адаптивный дизайн** — подход Mobile-first
+- **Перетаскивание (Drag & Drop)** — ручная и автоматическая сортировка серверов
 
 ### ⚙️ Менеджер сервисов 
-- ✅ **Real-time статус** — все systemd сервисы
-- ✅ **Управление в 1 клик** — Start / Stop / Restart
-- ✅ **Детальная информация** — логи, uptime, PID
+- **Статус в реальном времени** — все systemd сервисы
+- **Управление в 1 клик** — Запуск / Остановка / Перезапуск
+- **Детальная информация** — логи, uptime, PID
 
 ### 📦 Менеджер бэкапов и обновлений
-- ✅ **Автоматические бэкапы** — резервное копирование трафика и конфигов по таймеру
-- ✅ **Smart Update** — автоматическое обновление бота и системы напрямую из Telegram
-- ✅ **Автоматические миграции БД** — через \erich\, без потери данных
+- **Автоматические бэкапы** — резервное копирование трафика и конфигов по таймеру
+- **Умное обновление (Smart Update)** — автоматическое обновление бота и системы напрямую из Telegram
+- **Автоматические миграции БД** — через \ erich\, без потери данных
 
 ### 🔔 Умные уведомления
-- ✅ **Настраиваемые пороги** — CPU/RAM/Disk по выбору
-- ✅ **Даунтайм алерты** — интеллектуальное определение недоступности серверов
-- ✅ **SSH мониторинг** — уведомления о входах (в том числе по SSH-ключам)
-- ✅ **Fail2Ban интеграция** — автоматическая блокировка подозрительных IP
-- ✅ **Alert-bot** — Вспомогательный бот-ретранслятор для уведомлений\новостей. 
+- **Настраиваемые пороги** — CPU/RAM/Disk по выбору
+- **Уведомления о простоях** — интеллектуальное определение недоступности серверов
+- **SSH мониторинг** — уведомления о входах (в том числе по SSH-ключам)
+- **Интеграция с Fail2Ban** — автоматическая блокировка подозрительных IP
+- **Alert-bot** — вспомогательный бот-ретранслятор для уведомлений/новостей. 
 
 ### 🌐 Интернационализация
-- ✅ **Русский язык** — полная локализация
-- ✅ **English** — complete translation
-- ✅ **Переключение на лету** — без перезапуска бота
+- **Русский язык** — полная локализация
+- **English** — complete translation
+- **Переключение на лету** — без перезапуска бота
 
 ### 🐳 Docker & DevOps
-- ✅ **Docker Compose** — простой деплой (Secure и Root режимы)
-- ✅ **Watchdog** — автоперезапуск при сбое
-- ✅ **Health checks** — мониторинг состояния
+- **Docker Compose** — простой деплой (Secure и Root режимы)
+- **Watchdog** — автоперезапуск при сбое
+- **Health checks** — мониторинг состояния
 
 ---
 
-## 🏗 Архитектура
+## 🏗️ Архитектура
 
 **Паттерн Agent-Client** с централизованным управлением:
 
 ```
 ┌─────────────────────────────────────────────────┐
-│  🤖 Telegram Bot (Main Agent)                   │
-│  ├── 📊 SQLite DB (nodes, users, metrics)       │
-│  ├── 🌐 Web Dashboard (Aiohttp + SSE)            │
-│  ├── 🔌 API на базе aiohttp (HTTP + Real-time)  │
-│  └── ⏰ Background Tasks (monitoring, alerts)    │
+│  Telegram Bot (Main Agent)                      │
+│  ├── SQLite DB (nodes, users, metrics)          │
+│  ├── Web Dashboard (Aiohttp + SSE)               │
+│  ├── API на базе aiohttp (HTTP + Real-time)     │
+│  └── Background Tasks (monitoring, alerts)       │
 └─────────────────────────────────────────────────┘
               ↓         ↓         ↓
     ┌─────────┴─────────┴─────────┴───────┐
@@ -157,7 +157,7 @@
 
 ## 🚀 Быстрый старт
 
-### Системные требования
+### 📌 Системные требования
 
 **Минимальные:**
 - Ubuntu 20.04+ / Debian 11+
@@ -180,82 +180,66 @@
    ```
 
 ### 2️⃣ Установка главного бота
-
 ```bash
 bash <(wget -qO- https://raw.githubusercontent.com/jatixs/tgbotvpscp/main/deploy.sh)
 ```
 
-**Выберите режим установки:**
-- `1) Docker - Secure Mode` — **Рекомендуется** (изоляция, безопасность)
-- `3) Docker - Root Mode` — Полный доступ (для перезагрузки сервера)
+**Режимы установки:**
+- `1) Systemd - Secure` — рекомендуемый вариант с отдельным ограниченным пользователем
+- `2) Systemd - Root` — полный доступ к хосту
+- `3) Docker - Secure` — контейнерный secure-профиль
+- `4) Docker - Root` — полный доступ к хосту через root-профиль
 
-**Введите данные:**
-- Bot Token (от BotFather)
-- Admin User ID (ваш Telegram ID)
+Установщик запросит токен Telegram, ID администратора и настройки WebUI. Панель публикуется по HTTPS origin из `WEB_PUBLIC_URL`; внутренний порт не следует открывать напрямую в Интернет.
 
-🎉 Бот запущен! API доступен на `http://YOUR_IP:8080`
+Managed TLS принимает домен или глобальный публичный IPv4. IP-сертификат Let's Encrypt использует short-lived profile и действует 160 часов; HTTP-01 требует входящий TCP/80, renewal проверяется ежечасно. Частные и локальные IPv4 не поддерживаются. При внешнем reverse proxy укажите его HTTPS origin и настройте сертификат/renewal на proxy.
 
-### 3️⃣ Подключение удаленных серверов (Нод)
+### 3️⃣ Подключение удаленных серверов (нод)
 
-#### На главном боте:
-1. Откройте Telegram → **🖥 Ноды**
-2. Нажмите **➕ Добавить ноду**
-3. Введите имя → Скопируйте **токен**
+1. В Telegram откройте **Ноды** → **Добавить ноду**, задайте имя и сохраните выданный секретный token.
+2. На удаленном сервере запустите установщик и выберите **7) НОДА (Клиент)**.
+3. Укажите HTTPS origin master, например `https://panel.example.com` или `https://203.0.113.10`, и node token.
 
-#### На удаленном сервере:
-```bash
-bash <(wget -qO- https://raw.githubusercontent.com/jatixs/tgbotvpscp/main/deploy.sh)
-```
+Для существующих агентов сначала обновите master, затем обновите ноды. Агент проверяет same-host HTTPS endpoint и сохраняет новый URL; временный HTTP bridge принимает только discovery/bootstrap и HMAC-защищенный heartbeat. Проверьте прогресс командой `sudo tgcp-bot tls status`; после подтверждения всех нод закройте bridge: `sudo tgcp-bot tls finalize`.
 
-Выберите **8) Установить НОДУ (Клиент)**
+### 🔑 Доступ к WebUI
 
-Введите:
-- **URL агента:** `http://MAIN_SERVER_IP:8080`
-- **Токен:** полученный от бота
+Открывайте HTTPS origin, указанный при установке, например `https://panel.example.com/`. Установщик создает случайный initial password и показывает его в конце установки; общего пароля `admin` нет. Сменить пароль можно командой `sudo tgcp-bot webpass`.
 
-✅ Нода появится в списке через несколько секунд!
+Agent routes: `GET /api/agent/https` публикует HTTPS origin без токена; `GET /api/node/bootstrap` принимает token через `X-Node-Token`; `POST /api/heartbeat` принимает HMAC-подписанный heartbeat.
 
 ---
 
-## 💻 Веб-интерфейс
-
-### Доступ к Dashboard
-
-```
-http://YOUR_SERVER_IP:8080
-```
-
-**Первый вход:**
-- Username: `admin`
-- Password: `admin` (измените после входа!)
+## 🖥️ Веб-интерфейс
 
 ### Основные функции
 
-#### 📊 Dashboard
-- Real-time графики CPU/RAM/Disk
+#### 📊 Панель управления (Dashboard)
+- Графики CPU/RAM/Disk в реальном времени
 - Список всех нод с текущими статусами
 - Сетевой трафик (текущий и исторический)
+- Выбор периода графиков от 3 минут до 7 дней (агент и окна нод), история хранится в базе скользящим окном
 - Быстрые действия (перезагрузка, обновление)
-- Drag & Drop сортировка нод
-- Визуальные алерты (⚠️) при пиковых нагрузках 
+- Перетаскивание (Drag & Drop) для сортировки нод
+- Визуальные предупреждения при пиковых нагрузках 
 
-#### ⚙️ Settings
-- **Alerts Config** — пороги уведомлений (CPU 80%, RAM 90%, Disk 85%)
-- **Keyboard Config** — видимость кнопок в Telegram
-- **User Management** — добавление/удаление пользователей
-- **Language** — смена языка интерфейса
+#### ⚙️ Настройки (Settings)
+- **Настройка уведомлений** — пороги уведомлений (CPU 80%, RAM 90%, Disk 85%)
+- **Настройка клавиатуры** — видимость кнопок в Telegram
+- **Управление пользователями** — добавление/удаление пользователей
+- **Язык** — смена языка интерфейса
 
-#### ⚙️ Service Manager
+#### 🛠️ Диспетчер служб (Service Manager)
 - Статус всех systemd сервисов
-- Управление (Start/Stop/Restart)
+- Управление (Запуск / Остановка / Перезапуск)
 - Добавление в мониторинг
-- Детальная информация (PID, uptime, logs)
+- Детальная информация (PID, uptime, логи)
 
-#### 📜 Logs
-- Bot logs (real-time)
-- Watchdog logs
-- Node logs (для каждой ноды отдельно)
-- Audit logs (события безопасности)
+#### 📝 Журналы (Logs)
+- Журналы бота (в реальном времени)
+- Журналы Watchdog
+- Журналы нод (для каждой ноды отдельно)
+- Журналы аудита (события безопасности)
 
 ### API Endpoints
 
@@ -270,7 +254,7 @@ http://YOUR_SERVER_IP:8080
 - `POST /api/login/password` — вход по логину и паролю
 - `GET /api/login/magic` — вход по magic link
 - `POST /api/auth/telegram` — вход через Telegram widget
-- POST /api/auth/webapp — Авторизация через Telegram WebApp
+- `POST /api/auth/webapp` — Авторизация через Telegram WebApp
 - `POST /api/login/reset` — запрос сброса пароля
 - `POST /api/reset/confirm` — подтверждение сброса пароля
 - `GET /api/security/telegram_only_mode` — текущее состояние режима Telegram-only
@@ -282,16 +266,17 @@ http://YOUR_SERVER_IP:8080
 
 **Node API:**
 - `GET /api/heartbeat` — health probe для агента/нод
-- GET /api/node/bootstrap — скрипт инициализации для установки агента
+- `GET /api/agent/https` — публичный HTTPS origin для migration discovery
+- `GET /api/node/bootstrap` — bootstrap с секретом в `X-Node-Token`
 - `POST /api/heartbeat` — heartbeat от ноды с HMAC-подписью
 - `GET /api/nodes/list` — список нод
 - `POST /api/nodes/add` — добавить ноду
 - `POST /api/nodes/delete` — удалить ноду
 - `POST /api/nodes/rename` — переименовать ноду
-- POST /api/nodes/reset-uptime — сброс статистики аптайма ноды
+- `POST /api/nodes/reset-uptime` — сброс статистики аптайма ноды
 - `GET /api/nodes/monitor/list` — данные страницы мониторинга
-- `GET /api/nodes/monitor/detail?token=...` — детали конкретной ноды
-- `GET /api/nodes/monitor/services?token=...` — сервисы конкретной ноды
+- `GET /api/nodes/monitor/detail?node_id=...` — детали ноды, доступны через WebUI-сессию
+- `GET /api/nodes/monitor/services?node_id=...` — сервисы ноды, доступны через WebUI-сессию
 - `POST /api/nodes/monitor/command` — отправить команду на ноду
 - `POST /api/nodes/monitor/service_action` — действие над сервисом ноды
 
@@ -305,7 +290,7 @@ http://YOUR_SERVER_IP:8080
 - `POST /api/settings/metadata` — сохранение web metadata
 - `POST /api/settings/language` — смена языка WebUI
 - `POST /api/users/action` — управление пользователями
-- POST /api/system/reset-uptime — сброс статистики аптайма мастер-сервера
+- `POST /api/system/reset-uptime` — сброс статистики аптайма мастер-сервера
 - `GET /api/update/check` — проверка обновлений
 - `POST /api/update/run` — запуск обновления
 - `GET /api/notifications/list` — список уведомлений
@@ -322,15 +307,16 @@ http://YOUR_SERVER_IP:8080
 - `GET /api/events` — основной SSE поток dashboard
 - `GET /api/events/logs` — SSE поток логов
 - `GET /api/events/node` — SSE поток детальной карточки ноды
-- GET /api/events/node/services — SSE поток статусов сервисов конкретной ноды
+- `GET /api/events/node/services` — SSE поток статусов сервисов конкретной ноды
 - `GET /api/events/services` — SSE поток менеджера сервисов
+- `GET /api/events/metrics` — зашифрованный SSE поток истории для графиков за период (`range=3m…7d`, `source=agent|node&node_id=…`)
 - `GET /api/agent/ipv4` — список IPv4 адресов агента
 - `GET /api/terminal/creds` — загрузка сохраненных SSH credentials
 - `POST /api/terminal/creds` — сохранение SSH credentials
 - `GET /api/terminal/stats` — статистика сервера для web terminal
 - `GET /api/terminal/ws` — WebSocket endpoint терминала
 
-### PWA Features
+### 📱 PWA Features
 
 **Установка как приложение:**
 1. Откройте Dashboard в браузере
@@ -349,32 +335,32 @@ http://YOUR_SERVER_IP:8080
 
 ### Уровни защиты
 
-#### 🔹 Уровень 1: Telegram Bot
+#### Уровень 1: Telegram Bot
 - Whitelist — только авторизованные Telegram ID
 - Role-Based Access Control (RBAC)
 - Anti-spam middleware (1 запрос/сек на пользователя)
 
-#### 🔹 Уровень 2: Web Panel
+#### Уровень 2: Web Panel
 - **Argon2** — рекомендованное OWASP хеширование паролей
 - **Server-side sessions** — безопасные куки
 - **CSRF Protection** — токены для всех POST запросов
 - **Brute-force Protection** — блокировка после 5 попыток на 5 минут
-- **Rate Limiting** — 100 API запросов/мин на IP
+- **Rate Limiting** — ограничение частоты запросов с учетом доверенной proxy-конфигурации
 
-#### 🔹 Уровень 3: WAF (Web Application Firewall)
+#### Уровень 3: WAF (Web Application Firewall)
 
-Автоматическое обнаружение:
-- ❌ SQL Injection (`UNION SELECT`, `OR 1=1`)
-- ❌ XSS (`<script>`, `javascript:`)
-- ❌ Path Traversal (`../`, `%2e%2e`)
-- ❌ Command Injection (`;`, `|`, `` ` ``)
-- ❌ LDAP Injection
+Фильтрация подозрительных запросов — дополнительный уровень защиты, а не замена авторизации, проверок прав и валидации входных данных:
+- ⛔ SQL Injection (`UNION SELECT`, `OR 1=1`)
+- ⛔ XSS (`<script>`, `javascript:`)
+- ⛔ Path Traversal (`../`, `%2e%2e`)
+- ⛔ Command Injection (`;`, `|`, `` ` ``)
+- ⛔ LDAP Injection
 
-#### 🔹 Уровень 4: Data Encryption
+#### Уровень 4: Data Encryption
 - **Fernet** — симметричное шифрование конфигов (`users.json`, `services.json`)
 - **AES-256-CBC + Base64** — шифрование для веб-клиента (SSE events)
 
-#### 🔹 Уровень 5: Audit Logging
+#### Уровень 5: Audit Logging
 
 **Записываются:**
 - Login attempts (success/fail)
@@ -386,13 +372,15 @@ http://YOUR_SERVER_IP:8080
 **Privacy:**
 - IP маскируются (203.0.113.XXX)
 - Токены скрываются (abc123...)
-- GDPR compliant
+- Не публикуйте `.env`, резервные копии и журналы доступа
 
 **Файл:** `logs/audit/audit.log`
 
+Для WebUI задавайте `WEB_PUBLIC_URL` со схемой `https://`. При внешнем reverse proxy сертификатом управляет proxy; при managed TLS установщик настраивает Nginx/Certbot. TCP/80 необходим для ACME HTTP-01. Старые агенты мигрируют после обновления master и node; закройте временный bridge командой `tgcp-bot tls finalize`, когда `tgcp-bot tls status` не показывает ожидающих нод.
+
 ---
 
-## 🗂️ Структура проекта
+## 📁 Структура проекта
 
 ```
 /opt/tg-bot/
@@ -406,6 +394,7 @@ http://YOUR_SERVER_IP:8080
 ├── Dockerfile               # Образ контейнера
 ├── deploy.sh                # Установщик
 ├── core/                    # Ядро системы
+│   ├── tls_config.py        # Проверка TLS endpoint и Certbot arguments
 │   ├── config.py            # Загрузка конфигурации
 │   ├── auth.py              # Авторизация
 │   ├── i18n.py              # Мультиязычность
@@ -414,6 +403,7 @@ http://YOUR_SERVER_IP:8080
 │   ├── middlewares.py       # Middleware бота
 │   ├── models.py            # ORM модели (Tortoise)
 │   ├── nodes_db.py          # База данных нод
+│   ├── metrics_history.py   # История метрик для графиков (3 мин … 7 дней)
 │   ├── shared_state.py      # Мост Bot ↔ Web
 │   ├── tasks.py             # Фоновые задачи
 │   ├── utils.py             # Утилиты
@@ -436,8 +426,12 @@ http://YOUR_SERVER_IP:8080
 │   ├── backups.py           # Менеджер бэкапов
 │   ├── notifications.py     # Фоновые алерты
 │   └── ...                  # +11 модулей
-└── node/                    # Клиент для удаленных серверов
-    └── node.py              # Агент ноды
+├── node/                    # Агент удаленного сервера
+│   ├── node.py              # Агент и HTTPS migration flow
+│   └── endpoint_migration.py # Проверка same-host перехода на HTTPS
+├── scripts/                 # Host-side helpers установщика и CLI
+│   └── tls_finalize.py      # Закрытие legacy bridge, в том числе в Docker
+└── tests/                   # Unit tests для TLS и миграции агентов
 ```
 
 📖 Подробная документация: [ARCHITECTURE.md](docs/ARCHITECTURE.md)
@@ -448,9 +442,11 @@ http://YOUR_SERVER_IP:8080
 
 ### Руководства
 
-- 📘 [**ARCHITECTURE.md**](docs/ARCHITECTURE.md) — Полная архитектура проекта
+- 📖 [**ARCHITECTURE.md**](docs/ARCHITECTURE.md) — Полная архитектура проекта
+- 🛡️ [**SECURITY.md**](SECURITY.md) — Безопасный деплой, HTTPS и миграция агентов
+- 🛠️ [**CONTRIBUTING.md**](CONTRIBUTING.md) — Разработка и тестирование
 - 🧩 [**custom_module.md**](docs/custom_module.md) — Создание модуля для бота
-- 🌐 [**web_module.md**](docs/web_module.md) — Создание веб-модуля (WebUI + Бот)
+- 💻 [**web_module.md**](docs/web_module.md) — Создание веб-модуля (WebUI + Бот)
 - 📝 [**CHANGELOG.md**](docs/CHANGELOG.md) — История изменений
 
 ### Полезные команды
@@ -507,19 +503,21 @@ tar -czf /backup/tg-bot-logs-$(date +%F).tar.gz /opt/tg-bot/logs/
 
 ```bash
 # Автоматическое (через бота)
-# Telegram → 🔧 Утилиты → 🔄 Обновить VPS → Обновить бота
+# Telegram → Утилиты → Обновить VPS → Обновить бота
 
 # Ручное
-cd /opt/tg-bot
-git pull
-source venv/bin/activate
-pip install -r requirements.txt --upgrade
-sudo systemctl restart tg-bot
+# Для обновления используйте update flow установщика: он сохраняет .env и runtime state.
+# Полезные команды:
+sudo tgcp-bot status
+sudo tgcp-bot restart
+sudo tgcp-bot tls status
+sudo tgcp-bot tls check
+sudo tgcp-bot tls finalize
 ```
 
 ---
 
-## 📊 API Endpoints
+## 🔌 API Endpoints
 
 ### Public Endpoints
 
@@ -559,8 +557,8 @@ sudo systemctl restart tg-bot
 
 1. 🐛 **Сообщить о баге** — [Issues](https://github.com/jatixs/tgbotvpscp/issues)
 2. 💡 **Предложить функцию** — [Discussions](https://github.com/jatixs/tgbotvpscp/discussions)
-3. 🔧 **Отправить Pull Request**
-4. 📖 **Улучшить документацию**
+3. 🔄 **Отправить Pull Request**
+4. 📝 **Улучшить документацию**
 5. ⭐ **Поставить звезду** — это мотивирует!
 
 ### Разработка
@@ -603,18 +601,18 @@ python bot.py
 
 ---
 
-## 🌟 Поддержать проект
+## 💎 Поддержать проект
 
 Если проект оказался полезным, поддержите его:
 
 - ⭐ **Поставь звезду** на GitHub
-- 🔄 **Поделись** с друзьями
-- 💰 **[Донат](https://yoomoney.ru/to/410011639584793)**
+- 📢 **Поделись** с друзьями
+- ☕ **[Донат](https://yoomoney.ru/to/410011639584793)**
 
 ---
 
 <p align="center">
-  <b>Версия:</b> 1.25.1 (Build 90)<br>
+  <b>Версия:</b> 1.26.0 (Build 93)<br>
   <b>Лицензия:</b> GPL-3.0 license<br>
   <b>Статус:</b> Релиз<br>
   <br>

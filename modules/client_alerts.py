@@ -41,6 +41,9 @@ SUBSCRIBERS_FILE = os.path.join(config.CONFIG_DIR, "alert_subscribers.json")
 
 # Dictionary for anti-flood: user_id -> timestamp
 _user_last_message_time: dict[int, float] = {}
+_USER_FLOOD_STATE_TTL = 600
+_MAX_USER_FLOOD_STATES = 20_000
+_last_flood_state_cleanup = 0.0
 
 # ─── FSM States for main bot ──────────────────────────────────────────────────
 
@@ -467,6 +470,17 @@ if alert_dp is not None:
 
         # Anti-flood: max 1 message per 3 seconds
         now = time.time()
+        global _last_flood_state_cleanup
+        if now - _last_flood_state_cleanup >= 60 or len(_user_last_message_time) >= _MAX_USER_FLOOD_STATES:
+            stale = [uid for uid, timestamp in _user_last_message_time.items() if now - timestamp > _USER_FLOOD_STATE_TTL]
+            for uid in stale:
+                _user_last_message_time.pop(uid, None)
+            overflow = len(_user_last_message_time) - _MAX_USER_FLOOD_STATES
+            if overflow > 0:
+                oldest = sorted(_user_last_message_time, key=_user_last_message_time.get)[:overflow]
+                for uid in oldest:
+                    _user_last_message_time.pop(uid, None)
+            _last_flood_state_cleanup = now
         last_time = _user_last_message_time.get(user_id, 0)
         if now - last_time < 3.0:
             await message.answer(_("alert_flood_wait", lang))

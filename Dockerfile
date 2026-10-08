@@ -14,18 +14,7 @@ WORKDIR /build
 COPY requirements.txt .
 
 RUN pip install --no-cache-dir --upgrade pip 'setuptools>=83.0.0' wheel && \
-    pip wheel --no-cache-dir --wheel-dir /build/wheels \
-    docker \
-    aiohttp==3.14.3 \
-    aiosqlite \
-    argon2-cffi \
-    'msgpack>=1.2.1' \
-    sentry-sdk \
-    tortoise-orm \
-    aerich \
-    cryptography \
-    tomlkit \
-    -r requirements.txt
+    pip wheel --no-cache-dir --wheel-dir /build/wheels -r requirements.txt
 
 # -- Stage 2: Final --
 FROM python:3.10-slim-bookworm
@@ -38,7 +27,6 @@ RUN apt-get update \
     ca-certificates \
     openssl \
     libssl3 \
-    python3-yaml \
     iperf3 \
     git \
     curl \

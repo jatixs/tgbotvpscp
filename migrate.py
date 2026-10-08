@@ -106,9 +106,12 @@ def ensure_env_variables():
         return
     
     logger.info("🔍 Checking environment variables in .env...")
+
+    default_web_host = "127.0.0.1"
+    # Docker Compose overrides this inside the container; keep the persisted host default private.
     
     required_vars = {
-        "WEB_SERVER_HOST": "127.0.0.1",
+        "WEB_SERVER_HOST": default_web_host,
         "WEB_SERVER_PORT": "8080",
         "INSTALL_MODE": "secure",
         "DEPLOY_MODE": "systemd",
@@ -123,6 +126,11 @@ def ensure_env_variables():
         "TG_BOT_CONTAINER_NAME",
         "COMPOSE_PROFILES",
         "WEB_DOMAIN",
+        "WEB_PUBLIC_URL",
+        "HTTPS_PORT",
+        "HTTPS_EMAIL",
+        "WEB_TLS_MODE",
+        "LEGACY_NODE_BRIDGE",
     ]
     
     try:

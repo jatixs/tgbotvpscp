@@ -21,6 +21,14 @@ from core.shared_state import LAST_MESSAGE_IDS
 
 # Cache for Docker Hub descriptions
 _docker_descriptions_cache = {}
+_DOCKER_DESCRIPTION_CACHE_LIMIT = 256
+
+
+def _cache_docker_description(image_name: str, description: str | None) -> None:
+    _docker_descriptions_cache[image_name] = description
+    if len(_docker_descriptions_cache) > _DOCKER_DESCRIPTION_CACHE_LIMIT:
+        oldest_key = next(iter(_docker_descriptions_cache))
+        _docker_descriptions_cache.pop(oldest_key, None)
 
 # Regex for valid service/container names: alphanumeric, hyphens, underscores, dots, @, /
 _VALID_NAME_RE = re.compile(r'^[a-zA-Z0-9._@/:-]+$')
@@ -319,6 +327,12 @@ async def perform_service_action(name, sType, action):
     # action: start, stop, restart
     if action not in ["start", "stop", "restart"]:
         return False, "Invalid action"
+    if (
+        sType == "docker"
+        and config.DEPLOY_MODE == "docker"
+        and config.INSTALL_MODE == "secure"
+    ):
+        return False, "Docker container control is disabled in secure deployment mode"
     
     try:
         name = _validate_name(name)
@@ -481,12 +495,12 @@ async def get_docker_hub_description(image_name):
                     # Truncate long descriptions
                     if description and len(description) > 500:
                         description = description[:500] + "..."
-                    _docker_descriptions_cache[image_name] = description
+                    _cache_docker_description(image_name, description)
                     return description
     except Exception as e:
         logging.debug(f"Error fetching Docker Hub description for {image_name}: {e}")
     
-    _docker_descriptions_cache[image_name] = None
+    _cache_docker_description(image_name, None)
     return None
 
 async def get_docker_container_info(container_name):

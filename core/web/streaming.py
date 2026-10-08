@@ -8,12 +8,13 @@ import os
 import time
 from collections import deque
 from typing import Any, Final
+from urllib.parse import urlsplit
 
 import aiohttp
 from aiohttp import web
 
 from .. import config as current_config
-from .. import nodes_db, shared_state
+from .. import metrics_history, nodes_db, shared_state
 from ..config import BASE_DIR, DEFAULT_LANGUAGE, DEPLOY_MODE
 from ..i18n import get_user_lang
 from ..rbac import is_admin as _is_admin
@@ -23,7 +24,7 @@ from ..utils import (
     get_host_path,
     get_node_uptime_snapshot,
 )
-from .auth import COOKIE_NAME, SERVER_SESSIONS, get_current_user
+from .auth import COOKIE_NAME, SERVER_SESSIONS, _get_public_base_url, get_current_user
 
 # Lazy imports: traffic_module and services are loaded on-demand
 # from modules import traffic as traffic_module
@@ -136,7 +137,7 @@ def _get_top_processes(metric: str) -> list[str]:
         return f"{num:.1f} PB"
 
     try:
-        attrs = ["pid", "name", "cpu_percent", "memory_percent"]
+        attrs = ["pid", "name", "cpu_percent", "memory_percent", "memory_info"]
         if metric == "disk":
             attrs.append("io_counters")
 
@@ -149,13 +150,27 @@ def _get_top_processes(metric: str) -> list[str]:
             except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
                 continue
 
+        def get_rss(proc: dict[str, Any]) -> str:
+            mem = proc.get("memory_info")
+            return sizeof_fmt(mem.rss) if mem else "n/a"
+
+        def get_cpu_freq(proc: dict[str, Any], mhz: float) -> str:
+            used = float(proc.get("cpu_percent", 0)) / 100 * mhz
+            return f"{used / 1000:.2f} GHz" if used >= 1000 else f"{used:.0f} MHz"
+
+        # "name (primary|alt)": the dashboard toggles between the two values on click.
         if metric == "cpu":
+            freq = psutil.cpu_freq()
+            mhz = freq.current if freq else 0
             sorted_processes = sorted(processes, key=lambda p: p.get("cpu_percent", 0), reverse=True)[:5]
-            return [f"{p['name']} ({p.get('cpu_percent', 0)}%)" for p in sorted_processes]
+            return [
+                f"{p['name']} ({p.get('cpu_percent', 0)}%" + (f"|{get_cpu_freq(p, mhz)}" if mhz else "") + ")"
+                for p in sorted_processes
+            ]
 
         if metric == "ram":
             sorted_processes = sorted(processes, key=lambda p: p.get("memory_percent", 0), reverse=True)[:5]
-            return [f"{p['name']} ({p.get('memory_percent', 0):.1f}%)" for p in sorted_processes]
+            return [f"{p['name']} ({p.get('memory_percent', 0):.1f}%|{get_rss(p)})" for p in sorted_processes]
 
         if metric == "disk":
             def get_io(proc: dict[str, Any]) -> int:
@@ -163,7 +178,11 @@ def _get_top_processes(metric: str) -> list[str]:
                 return int(io.read_bytes + io.write_bytes) if io else 0
 
             sorted_processes = sorted(processes, key=get_io, reverse=True)[:5]
-            return [f"{p['name']} ({sizeof_fmt(get_io(p))})" for p in sorted_processes]
+            disk_total = psutil.disk_usage(get_host_path("/")).total
+            return [
+                f"{p['name']} ({sizeof_fmt(get_io(p))}" + (f"|{get_io(p) / disk_total * 100:.2f}%" if disk_total else "") + ")"
+                for p in sorted_processes
+            ]
 
         return []
     except Exception:
@@ -293,7 +312,7 @@ async def handle_sse_stream(request: web.Request) -> web.StreamResponse:
                 stats = node.get("stats", {})
                 nodes_data.append(
                     {
-                        "token": encrypt_for_web(token),
+                        "id": node["id"],
                         "name": node.get("name", "Unknown"),
                         "ip": encrypt_for_web(node.get("ip", "Unknown")),
                         "status": status,
@@ -551,9 +570,16 @@ async def handle_sse_node_details(request: web.Request) -> web.StreamResponse:
     if not user:
         return web.Response(status=401)
 
-    token = decrypt_for_web(request.query.get("token"))
-    if not token:
+    try:
+        node_id = int(request.query.get("node_id", "0"))
+    except ValueError:
+        node_id = 0
+    if node_id <= 0:
         return web.Response(status=400)
+    node = await nodes_db.get_node_by_id(node_id)
+    if not node:
+        return web.Response(status=404)
+    token = node["token"]
 
     current_token = request.cookies.get(COOKIE_NAME)
     lang = get_user_lang(int(user["id"]))
@@ -598,7 +624,7 @@ async def handle_sse_node_details(request: web.Request) -> web.StreamResponse:
                     "ip": encrypt_for_web(node.get("ip")),
                     "stats": _encrypt_node_stats_for_web(node.get("stats")),
                     "history": node.get("history", []),
-                    "token": encrypt_for_web(token),
+                    "id": node["id"],
                     "last_seen": last_seen,
                     "is_restarting": is_restarting,
                     "status": status,
@@ -645,9 +671,16 @@ async def handle_sse_node_services(request: web.Request) -> web.StreamResponse:
     if not user:
         return web.Response(status=401)
 
-    token = decrypt_for_web(request.query.get("token"))
-    if not token:
+    try:
+        node_id = int(request.query.get("node_id", "0"))
+    except ValueError:
+        node_id = 0
+    if node_id <= 0:
         return web.Response(status=400)
+    node = await nodes_db.get_node_by_id(node_id)
+    if not node:
+        return web.Response(status=404)
+    token = node["token"]
 
     current_token = request.cookies.get(COOKIE_NAME)
     response = web.StreamResponse(status=200, reason="OK")
@@ -938,6 +971,21 @@ async def handle_terminal_ws(request: web.Request) -> web.StreamResponse:
     if not ws_ready.ok:
         return _build_websocket_notice(request.path)
 
+    public_base_url = _get_public_base_url()
+    origin = request.headers.get("Origin", "")
+    try:
+        expected_origin = urlsplit(public_base_url) if public_base_url else None
+        request_origin = urlsplit(origin) if origin else None
+    except ValueError:
+        return web.Response(status=403, text="Invalid Origin")
+    if (
+        not expected_origin
+        or not request_origin
+        or request_origin.scheme != expected_origin.scheme
+        or request_origin.netloc.lower() != expected_origin.netloc.lower()
+    ):
+        return web.Response(status=403, text="Invalid Origin")
+
     user = get_current_user(request)
     if not user or not _is_admin(user):
         return web.Response(status=403)
@@ -1061,8 +1109,113 @@ async def handle_terminal_ws(request: web.Request) -> web.StreamResponse:
     return ws_client
 
 
+@routes.get("/api/events/metrics")
+async def handle_sse_metrics(request: web.Request) -> web.StreamResponse:
+    """Chart history for one source/range: a full snapshot first, then incremental points."""
+    if not _is_sse_request(request):
+        return _build_plain_api_notice(request.path)
+
+    user = get_current_user(request)
+    if not user:
+        return web.Response(status=401)
+
+    range_key = request.query.get("range", metrics_history.DEFAULT_RANGE)
+    if range_key not in metrics_history.RANGES:
+        return web.Response(status=400)
+
+    source_kind = request.query.get("source", "agent")
+    if source_kind == "agent":
+        source = metrics_history.AGENT_SOURCE
+    elif source_kind == "node":
+        try:
+            node_id = int(request.query.get("node_id", "0"))
+        except ValueError:
+            node_id = 0
+        if node_id <= 0:
+            return web.Response(status=400)
+        if not await nodes_db.get_node_by_id(node_id):
+            return web.Response(status=404)
+        source = metrics_history.node_source(node_id)
+    else:
+        return web.Response(status=400)
+
+    current_token = request.cookies.get(COOKIE_NAME)
+    response = web.StreamResponse(status=200, reason="OK")
+    response.headers["Content-Type"] = "text/event-stream"
+    response.headers["Cache-Control"] = "no-cache"
+    response.headers["Connection"] = "keep-alive"
+    response.headers["X-Accel-Buffering"] = "no"
+    await response.prepare(request)
+
+    shutdown_event = request.app.get("shutdown_event")
+    interval = metrics_history.STREAM_INTERVALS.get(range_key, 10)
+    last_t: int | None = None
+    try:
+        while True:
+            if shared_state.IS_RESTARTING:
+                try:
+                    await response.write(b"event: shutdown\ndata: restarting\n\n")
+                except Exception:
+                    pass
+                break
+
+            try:
+                if request.transport is None or request.transport.is_closing():
+                    break
+            except Exception:
+                break
+
+            if _session_expired(current_token):
+                try:
+                    await response.write(b"event: session_status\ndata: expired\n\n")
+                except Exception:
+                    pass
+                break
+
+            await metrics_history.flush_pending()
+            series = await metrics_history.query_series(source, range_key, last_t)
+            points = series["points"]
+            payload = {
+                "source": source_kind,
+                "range": series["range"],
+                "step": series["step"],
+                "span": series["span"],
+                "now": series["now"],
+                "full": last_t is None,
+                # The last bucket is re-sent on the next tick because it may still be filling up.
+                "data": encrypt_for_web(json.dumps(points, separators=(",", ":"))),
+            }
+            if points:
+                last_t = int(points[-1]["t"])
+            elif last_t is None:
+                last_t = series["now"] - series["span"]
+
+            try:
+                await _write_sse(response, "metrics_history", payload)
+            except (ConnectionResetError, BrokenPipeError, ConnectionError):
+                break
+
+            if shutdown_event:
+                try:
+                    if not shared_state.IS_RESTARTING:
+                        await asyncio.wait_for(shutdown_event.wait(), timeout=interval)
+                        break
+                except asyncio.TimeoutError:
+                    pass
+            else:
+                await asyncio.sleep(interval)
+    except asyncio.CancelledError:
+        pass
+    except Exception as exc:
+        if "closing transport" not in str(exc) and "'NoneType' object" not in str(exc):
+            logging.error("SSE metrics error: %s", exc)
+
+    return response
+
+
 __all__ = [
     "handle_sse_logs",
+    "handle_sse_metrics",
     "handle_sse_node_details",
     "handle_sse_node_services",
     "handle_sse_services",

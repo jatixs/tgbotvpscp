@@ -5,11 +5,12 @@ x-bot-base: &bot-base
   restart: always
   env_file: .env
   depends_on:
-    docker-proxy:
+    docker-proxy-ro:
       condition: service_started
   environment:
-    DOCKER_HOST: tcp://docker-proxy:2375
+    DOCKER_HOST: tcp://docker-proxy-ro:2375
     DEPLOY_MODE: docker
+    WEB_SERVER_HOST: 0.0.0.0
   security_opt:
     - no-new-privileges:true
   cap_drop:
@@ -18,12 +19,44 @@ x-bot-base: &bot-base
     - /tmp
   networks:
     - app
-    - docker-api
 
 services:
-  docker-proxy:
+  docker-proxy-ro:
     image: tecnativa/docker-socket-proxy:0.3.0
-    container_name: tg-docker-proxy
+    container_name: tg-docker-proxy-ro
+    restart: always
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    tmpfs:
+      - /run
+      - /tmp
+    environment:
+      CONTAINERS: 1
+      EVENTS: 1
+      INFO: 1
+      PING: 1
+      POST: 0
+      VERSION: 1
+      IMAGES: 0
+      NETWORKS: 0
+      SERVICES: 0
+      TASKS: 0
+      VOLUMES: 0
+      SYSTEM: 0
+      NODES: 0
+      SECRETS: 0
+      SWARM: 0
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - docker-api-ro
+
+  docker-proxy-root:
+    image: tecnativa/docker-socket-proxy:0.3.0
+    container_name: tg-docker-proxy-root
     restart: always
     read_only: true
     security_opt:
@@ -52,7 +85,7 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
     networks:
-      - docker-api
+      - docker-api-root
 
   bot-secure:
     <<: *bot-base
@@ -73,15 +106,22 @@ services:
       - /proc/net/dev:/proc_host/net/dev:ro
     cap_add:
       - NET_RAW
+    networks:
+      - app
+      - docker-api-ro
 
   bot-root:
     <<: *bot-base
     container_name: tg-bot-root
     profiles: ["root"]
     user: "root"
+    depends_on:
+      docker-proxy-root:
+        condition: service_started
     ports:
       - "127.0.0.1:${WEB_SERVER_PORT}:${WEB_SERVER_PORT}"
     environment:
+      DOCKER_HOST: tcp://docker-proxy-root:2375
       INSTALL_MODE: root
       TG_BOT_CONTAINER_NAME: tg-bot-root
     volumes:
@@ -93,19 +133,35 @@ services:
       - /proc/net/dev:/proc_host/net/dev:ro
       - /etc/hostname:/host/etc/hostname:ro
       - /etc/os-release:/host/etc/os-release:ro
+    networks:
+      - app
+      - docker-api-root
 
   watchdog:
     <<: *bot-base
     container_name: tg-watchdog
     command: python watchdog.py
     user: "root"
+    depends_on:
+      docker-proxy-root:
+        condition: service_started
+    environment:
+      DOCKER_HOST: tcp://docker-proxy-root:2375
+      DEPLOY_MODE: docker
+      WEB_SERVER_HOST: 0.0.0.0
     volumes:
       - ./config:/opt/tg-bot/config
       - ./logs/watchdog:/opt/tg-bot/logs/watchdog
+    networks:
+      - app
+      - docker-api-root
 
 networks:
   app:
     driver: bridge
-  docker-api:
+  docker-api-ro:
+    driver: bridge
+    internal: true
+  docker-api-root:
     driver: bridge
     internal: true
