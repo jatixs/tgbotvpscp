@@ -181,7 +181,7 @@ async def handle_save_notifications(request: web.Request) -> web.StreamResponse:
         for key, value in data.items():
             if key == "master_billing":
                 if not _is_admin(user):
-                    return encrypted_json_response({"error": "Admin required"}, status=403)
+                    continue
                 from core.config import get_bot_config, set_bot_config
                 mb = await get_bot_config("master_billing") or {}
                 mb["reminder_enabled"] = bool(value)
@@ -197,7 +197,7 @@ async def handle_save_notifications(request: web.Request) -> web.StreamResponse:
                     continue
                 if setting == "billing":
                     if not _is_admin(user):
-                        return encrypted_json_response({"error": "Admin required"}, status=403)
+                        continue
                     node_obj = await nodes_db.Node.get_or_none(id=node_id)
                     if node_obj:
                         node_obj.reminder_enabled = bool(value)
