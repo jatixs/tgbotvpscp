@@ -19,110 +19,110 @@
 
 ---
 
-## 📘 Table of Contents
+## 📋 Table of Contents
 
-1. [About](#-about-the-project)
-2. [Key Features](#-key-features)
-3. [Architecture](#-architecture)
-4. [Quick Start](#-quick-start)
-5. [Web Interface](#-web-interface)
-6. [Security](#-security)
-7. [Project Structure](#️-project-structure)
-8. [Documentation](#-documentation)
-9. [License](#-license)
+1. [About](#ℹ️-about-the-project)
+2. [Key Features](#✨-key-features)
+3. [Architecture](#🏗️-architecture)
+4. [Quick Start](#🚀-quick-start)
+5. [Web Interface](#🖥️-web-interface)
+6. [Security](#🔒-security)
+7. [Project Structure](#📁-project-structure)
+8. [Documentation](#📚-documentation)
+9. [License](#📄-license)
 
 ---
 
-## 🧩 About the Project
+## ℹ️ About the Project
 
 **VPS Manager Telegram Bot** is a comprehensive enterprise-class solution for managing server infrastructure via Telegram and web interface.
 
 ### 🎯 Who is this for?
 
-- **System Administrators** — automate routine tasks
-- **DevOps Engineers** — monitor multiple servers from one place
-- **VPN Providers** — manage X-ray/VLESS panels
-- **Hosting Providers** — client monitoring
+- 👨‍💻 **System Administrators** — automate routine tasks
+- 🔧 **DevOps Engineers** — monitor multiple servers from one place
+- 🛡️ **VPN Providers** — manage X-ray/VLESS panels
+- ☁️ **Hosting Providers** — client monitoring
 
 ### 💡 Problems this project solves
 
-✅ **Centralized Management** — one interface for all servers  
-✅ **Real-time Monitoring** — instant updates without reloading  
-✅ **Security** — enterprise-grade protection with WAF and audit logging  
-✅ **Scalability** — manage multiple remote servers
-✅ **Mobility** — manage from your phone via Telegram  
+- 🎯 **Centralized Management** — one interface for all servers  
+- 📈 **Real-time Monitoring** — instant updates without reloading  
+- 🔐 **Security** — enterprise-grade protection with WAF and audit logging  
+- 🌐 **Scalability** — manage multiple remote servers
+- 📱 **Mobility** — manage from your phone via Telegram  
 
 ---
 
-## ⚡ Key Features
+## ✨ Key Features
 
-### 🚀 Performance
-- ✅ **Fully Asynchronous** — AsyncIO, aiohttp, aiosqlite
-- ✅ **Bounded runtime footprint** — cache limits and background cleanup
-- ✅ **Ring Buffers** — memory optimization via deque
-- ✅ **Memory Orchestrator** — dynamic unloading of unused modules
+### ⚡ Performance
+- **Fully Asynchronous** — AsyncIO, aiohttp, aiosqlite
+- **Bounded runtime footprint** — cache limits and background cleanup
+- **Ring Buffers** — memory optimization via deque
+- **Memory Orchestrator** — dynamic unloading of unused modules
 
-### 🖥 Multi-Server Management
-- ✅ **Unlimited Nodes** — scalable architecture
-- ✅ **Real-time Metrics** — CPU, RAM, Disk, Network (HTTP / ICMP ping)
-- ✅ **Web Terminal (SSH)** — browser terminal access with host-key verification
-- ✅ **System Optimization** — interactive VPS tuning module (BBR, Swap, cache cleanup)
+### 🌍 Multi-Server Management
+- **Unlimited Nodes** — scalable architecture
+- **Real-time Metrics** — CPU, RAM, Disk, Network (HTTP / ICMP ping)
+- **Web Terminal (SSH)** — browser terminal access with host-key verification
+- **System Optimization** — interactive VPS tuning module (BBR, Swap, cache cleanup)
 
 ### 💳 Billing & Rental System
-- ✅ **Payment Tracking** — monitor rental costs for nodes and master server (€/$/₽)
-- ✅ **Smart Reminders** — automatic alerts 3 days before the payment deadline
-- ✅ **Informative Badges** — display remaining days until payment in the WebUI
+- **Payment Tracking** — monitor rental costs for nodes and master server (€/$/₽)
+- **Smart Reminders** — automatic alerts 3 days before the payment deadline
+- **Informative Badges** — display remaining days until payment in the WebUI
 
-### 🤖 Smart Telegram UX
-- ✅ **Support Gateway (Alert Bot)** — dedicated client-facing bot with broadcasting and ticket replies directly from the admin panel, featuring built-in Anti-Flood
-- ✅ **Smart Cleanup** — auto-deletes user commands and stale bot menus
-- ✅ **Anti-Spam Protection** — built-in SpamThrottle to protect Telegram API limits
-- ✅ **Interactive Widgets** — inline menus with state-preserving checkboxes and live timers
+### 💬 Smart Telegram UX
+- **Support Gateway (Alert Bot)** — dedicated client-facing bot with broadcasting and ticket replies directly from the admin panel, featuring built-in Anti-Flood
+- **Smart Cleanup** — auto-deletes user commands and stale bot menus
+- **Anti-Spam Protection** — built-in SpamThrottle to protect Telegram API limits
+- **Interactive Widgets** — inline menus with state-preserving checkboxes and live timers
 
 ### 🛡️ Enterprise-Grade Security
-- ✅ **Web protections** — security headers, CSRF, rate limiting, and suspicious-request filtering
-- ✅ **Rate Limiting & Brute-force Protection** — DDoS and password-guessing protection
-- ✅ **Audit Logging** — detailed logs of all security events
-- ✅ **Data Encryption** — Fernet (AES) + AES-256-CBC + Argon2 for passwords
-- ✅ **DOMPurify** — strict client-side content sanitization
+- **Web protections** — security headers, CSRF, rate limiting, and suspicious-request filtering
+- **Rate Limiting & Brute-force Protection** — DDoS and password-guessing protection
+- **Audit Logging** — detailed logs of all security events
+- **Data Encryption** — Fernet (AES) + AES-256-CBC + Argon2 for passwords
+- **DOMPurify** — strict client-side content sanitization
 
 ### 🎨 Modern Web Interface
-- ✅ **PWA** — works like a native app (iOS / Android support)
-- ✅ **SSE (Server-Sent Events)** — real-time charts and logs without reloading
-- ✅ **AMOLED & Dark Theme** — automatic switching
-- ✅ **Responsive Design** — mobile-first approach
-- ✅ **Drag & Drop** — manual and automatic server sorting
+- **PWA** — works like a native app (iOS / Android support)
+- **SSE (Server-Sent Events)** — real-time charts and logs without reloading
+- **AMOLED & Dark Theme** — automatic switching
+- **Responsive Design** — mobile-first approach
+- **Drag & Drop** — manual and automatic server sorting
 
 ### ⚙️ Service Manager
-- ✅ **Real-time Status** — all systemd services
-- ✅ **1-Click Control** — Start / Stop / Restart
-- ✅ **Detailed Info** — logs, uptime, PID
+- **Real-time Status** — all systemd services
+- **1-Click Control** — Start / Stop / Restart
+- **Detailed Info** — logs, uptime, PID
 
 ### 📦 Backups & Updates Manager
-- ✅ **Automated Backups** — scheduled backups for traffic and configurations
-- ✅ **Smart Update** — automated bot and system updates directly from Telegram
-- ✅ **Auto DB Migrations** — via \erich\, ensuring zero data loss
+- **Automated Backups** — scheduled backups for traffic and configurations
+- **Smart Update** — automated bot and system updates directly from Telegram
+- **Auto DB Migrations** — via \ erich\, ensuring zero data loss
 
 ### 🔔 Smart Notifications
-- ✅ **Customizable Thresholds** — CPU/RAM/Disk limits
-- ✅ **Downtime Alerts** — intelligent server unavailability detection
-- ✅ **SSH Monitoring** — login notifications (including SSH keys)
-- ✅ **Fail2Ban Integration** — blocking suspicious IPs
-- ✅ **Alert-bot** — is an auxiliary relay bot for notifications and news.
+- **Customizable Thresholds** — CPU/RAM/Disk limits
+- **Downtime Alerts** — intelligent server unavailability detection
+- **SSH Monitoring** — login notifications (including SSH keys)
+- **Fail2Ban Integration** — blocking suspicious IPs
+- **Alert-bot** — is an auxiliary relay bot for notifications and news.
 
 ### 🌐 Internationalization
-- ✅ **Russian** — full localization
-- ✅ **English** — complete translation
-- ✅ **Switch On-the-fly** — no restart needed
+- **Russian** — full localization
+- **English** — complete translation
+- **Switch On-the-fly** — no restart needed
 
 ### 🐳 Docker & DevOps
-- ✅ **Docker Compose** — easy deployment (Secure and Root modes)
-- ✅ **Watchdog** — auto-restart on crash
-- ✅ **Health Checks** — state monitoring
+- **Docker Compose** — easy deployment (Secure and Root modes)
+- **Watchdog** — auto-restart on crash
+- **Health Checks** — state monitoring
 
 ---
 
-## 🏗 Architecture
+## 🏗️ Architecture
 
 **Agent-Client Pattern** with centralized management:
 
@@ -160,7 +160,7 @@
 
 ## 🚀 Quick Start
 
-### System Requirements
+### 📌 System Requirements
 
 **Minimum:**
 - Ubuntu 20.04+ / Debian 11+
@@ -199,13 +199,13 @@ Managed TLS accepts a domain or globally routable public IPv4. Let's Encrypt IP 
 
 ### 3️⃣ Connect Remote Servers (Nodes)
 
-1. In Telegram, open **🖥 Nodes** → **➕ Add Node**, name the node, and keep the generated secret token.
+1. In Telegram, open **Ноды** → **Добавить ноду**, name the node, and keep the generated secret token.
 2. Run the installer on the remote server and select **7) NODE (Client)**.
 3. Enter the master's HTTPS origin, such as `https://panel.example.com` or `https://203.0.113.10`, and the node token.
 
 For existing agents, update the master first, then update each node. The agent validates a same-host HTTPS endpoint and persists its new URL; the temporary HTTP bridge only accepts discovery/bootstrap and HMAC-protected heartbeats. Check progress with `sudo tgcp-bot tls status`; after all nodes confirm, close the bridge with `sudo tgcp-bot tls finalize`.
 
-### WebUI Access
+### 🔑 WebUI Access
 
 Open the HTTPS origin selected during installation, for example `https://panel.example.com/`. The installer generates and displays a random initial password at completion; there is no shared `admin` password. Change it with `sudo tgcp-bot webpass`.
 
@@ -213,7 +213,7 @@ Agent routes: `GET /api/agent/https` advertises the HTTPS origin without a token
 
 ---
 
-## 💻 Web Interface
+## 🖥️ Web Interface
 
 ### Main Features
 
@@ -224,7 +224,7 @@ Agent routes: `GET /api/agent/https` advertises the HTTPS origin without a token
 - Chart period from 3 minutes to 7 days (agent and node windows); history is kept in the database as a sliding window
 - Quick actions (reboot, update)
 - Drag & Drop node sorting 
-- Visual alerts (⚠️) during peak loads 
+- Visual alerts during peak loads 
 
 #### ⚙️ Settings
 - **Alerts Config** — notification thresholds (CPU 80%, RAM 90%, Disk 85%)
@@ -232,13 +232,13 @@ Agent routes: `GET /api/agent/https` advertises the HTTPS origin without a token
 - **User Management** — add/remove users
 - **Language** — change interface language
 
-#### ⚙️ Service Manager
+#### 🛠️ Service Manager
 - Status of all systemd services
 - Control (Start/Stop/Restart)
 - Add to monitoring
 - Detailed info (PID, uptime, logs)
 
-#### 📜 Logs
+#### 📝 Logs
 - Bot logs (real-time)
 - Watchdog logs
 - Node logs (separate for each node)
@@ -257,7 +257,7 @@ Agent routes: `GET /api/agent/https` advertises the HTTPS origin without a token
 - `POST /api/login/password` — login with username and password
 - `GET /api/login/magic` — login via magic link
 - `POST /api/auth/telegram` — login via Telegram widget
-- POST /api/auth/webapp — WebApp authorization
+- `POST /api/auth/webapp` — WebApp authorization
 - `POST /api/login/reset` — request password reset
 - `POST /api/reset/confirm` — confirm password reset
 - `GET /api/security/telegram_only_mode` — get Telegram-only mode state
@@ -276,7 +276,7 @@ Agent routes: `GET /api/agent/https` advertises the HTTPS origin without a token
 - `POST /api/nodes/add` — add node
 - `POST /api/nodes/delete` — delete node
 - `POST /api/nodes/rename` — rename node
-- POST /api/nodes/reset-uptime — reset node uptime stats
+- `POST /api/nodes/reset-uptime` — reset node uptime stats
 - `GET /api/nodes/monitor/list` — monitoring page data
 - `GET /api/nodes/monitor/detail?node_id=...` — node details, protected by a WebUI session
 - `GET /api/nodes/monitor/services?node_id=...` — node services, protected by a WebUI session
@@ -293,7 +293,7 @@ Agent routes: `GET /api/agent/https` advertises the HTTPS origin without a token
 - `POST /api/settings/metadata` — save web metadata
 - `POST /api/settings/language` — switch WebUI language
 - `POST /api/users/action` — manage users
-- POST /api/system/reset-uptime — reset master server uptime stats
+- `POST /api/system/reset-uptime` — reset master server uptime stats
 - `GET /api/update/check` — check updates
 - `POST /api/update/run` — run update
 - `GET /api/notifications/list` — list notifications
@@ -310,7 +310,7 @@ Agent routes: `GET /api/agent/https` advertises the HTTPS origin without a token
 - `GET /api/events` — main dashboard SSE stream
 - `GET /api/events/logs` — logs SSE stream
 - `GET /api/events/node` — node details SSE stream
-- GET /api/events/node/services — SSE stream for node services
+- `GET /api/events/node/services` — SSE stream for node services
 - `GET /api/events/services` — service manager SSE stream
 - `GET /api/events/metrics` — encrypted SSE stream with chart history for a period (`range=3m…7d`, `source=agent|node&node_id=…`)
 - `GET /api/agent/ipv4` — agent IPv4 list
@@ -319,7 +319,7 @@ Agent routes: `GET /api/agent/https` advertises the HTTPS origin without a token
 - `GET /api/terminal/stats` — server stats for web terminal
 - `GET /api/terminal/ws` — terminal WebSocket endpoint
 
-### PWA Features
+### 📱 PWA Features
 
 **Install as app:**
 1. Open Dashboard in browser
@@ -338,32 +338,32 @@ Agent routes: `GET /api/agent/https` advertises the HTTPS origin without a token
 
 ### Security Levels
 
-#### 🔹 Level 1: Telegram Bot
+#### Level 1: Telegram Bot
 - Whitelist — only authorized Telegram IDs
 - Role-Based Access Control (RBAC)
 - Anti-spam middleware (1 request/sec per user)
 
-#### 🔹 Level 2: Web Panel
+#### Level 2: Web Panel
 - **Argon2** — OWASP recommended password hashing
 - **Server-side sessions** — secure cookies
 - **CSRF Protection** — tokens for all POST requests
 - **Brute-force Protection** — block after 5 attempts for 5 minutes
 - **Rate Limiting** — request throttling that respects the trusted-proxy configuration
 
-#### 🔹 Level 3: WAF (Web Application Firewall)
+#### Level 3: WAF (Web Application Firewall)
 
 Suspicious-request filtering is defense in depth, not a substitute for authentication, authorization, or input validation:
-- ❌ SQL Injection (`UNION SELECT`, `OR 1=1`)
-- ❌ XSS (`<script>`, `javascript:`)
-- ❌ Path Traversal (`../`, `%2e%2e`)
-- ❌ Command Injection (`;`, `|`, `` ` ``)
-- ❌ LDAP Injection
+- ⛔ SQL Injection (`UNION SELECT`, `OR 1=1`)
+- ⛔ XSS (`<script>`, `javascript:`)
+- ⛔ Path Traversal (`../`, `%2e%2e`)
+- ⛔ Command Injection (`;`, `|`, `` ` ``)
+- ⛔ LDAP Injection
 
-#### 🔹 Level 4: Data Encryption
+#### Level 4: Data Encryption
 - **Fernet** — symmetric encryption for configs (`users.json`, `services.json`)
 - **AES-256-CBC + Base64** — encryption for web client (SSE events)
 
-#### 🔹 Level 5: Audit Logging
+#### Level 5: Audit Logging
 
 **Recorded:**
 - Login attempts (success/fail)
@@ -383,7 +383,7 @@ Set `WEB_PUBLIC_URL` to an `https://` origin. With an external reverse proxy, th
 
 ---
 
-## 🗂️ Project Structure
+## 📁 Project Structure
 
 ```
 /opt/tg-bot/
@@ -445,11 +445,11 @@ Set `WEB_PUBLIC_URL` to an `https://` origin. With an external reverse proxy, th
 
 ### Guides
 
-- 📘 [**ARCHITECTURE.en.md**](ARCHITECTURE.en.md) — Complete project architecture
-- 🔒 [**SECURITY.en.md**](SECURITY.en.md) — Secure deployment, HTTPS, and agent migration
-- 🤝 [**CONTRIBUTING.en.md**](CONTRIBUTING.en.md) — Development and testing
+- 📖 [**ARCHITECTURE.en.md**](ARCHITECTURE.en.md) — Complete project architecture
+- 🛡️ [**SECURITY.en.md**](SECURITY.en.md) — Secure deployment, HTTPS, and agent migration
+- 🛠️ [**CONTRIBUTING.en.md**](CONTRIBUTING.en.md) — Development and testing
 - 🧩 [**custom_module_en.md**](custom_module_en.md) — Creating your own module
-- 🌐 [**web_module_en.md**](web_module_en.md) — Creating a web module (WebUI + Bot)
+- 💻 [**web_module_en.md**](web_module_en.md) — Creating a web module (WebUI + Bot)
 - 📝 [**CHANGELOG.en.md**](CHANGELOG.en.md) — Change history
 
 ### Useful Commands
@@ -520,7 +520,7 @@ sudo tgcp-bot tls finalize
 
 ---
 
-## 📊 API Endpoints
+## 🔌 API Endpoints
 
 ### Public Endpoints
 
@@ -560,8 +560,8 @@ We welcome contributions to the project!
 
 1. 🐛 **Report a bug** — [Issues](https://github.com/jatixs/tgbotvpscp/issues)
 2. 💡 **Suggest a feature** — [Discussions](https://github.com/jatixs/tgbotvpscp/discussions)
-3. 🔧 **Submit a Pull Request**
-4. 📖 **Improve documentation**
+3. 🔄 **Submit a Pull Request**
+4. 📝 **Improve documentation**
 5. ⭐ **Star the project** — it motivates!
 
 ### Development
@@ -604,13 +604,13 @@ This project is licensed under **GPL-3.0**. See [LICENSE](LICENSE) file for deta
 
 ---
 
-## 🌟 Support the Project
+## 💎 Support the Project
 
 If you find this project useful, support it:
 
 - ⭐ **Star** on GitHub
-- 🔄 **Share** with friends
-- 💰 **[Donate](https://yoomoney.ru/to/410011639584793)**
+- 📢 **Share** with friends
+- ☕ **[Donate](https://yoomoney.ru/to/410011639584793)**
 
 ---
 
