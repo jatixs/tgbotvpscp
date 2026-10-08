@@ -64,12 +64,12 @@ async def close_services():
 async def cmd_adduser(args):
     if args.id <= 0:
         raise ValueError("Telegram ID must be a positive integer")
-    auth.load_users()
+    await auth.load_users_async()
     if args.id in shared_state.ALLOWED_USERS:
         raise ValueError(f"User {args.id} already exists")
     shared_state.ALLOWED_USERS[args.id] = {"group": "admins", "password_hash": None}
     shared_state.USER_NAMES[str(args.id)] = args.name
-    auth.save_users()
+    await auth.save_users_async()
     print(f"Admin {args.name} (ID: {args.id}) added.")
 
 
@@ -85,7 +85,7 @@ async def cmd_webpass(args):
     if new_pass == "admin":
         raise ValueError("The default admin password is not allowed")
 
-    auth.load_users()
+    await auth.load_users_async()
     user = shared_state.ALLOWED_USERS.get(config.ADMIN_USER_ID)
     if isinstance(user, dict):
         user_data = user
@@ -94,9 +94,9 @@ async def cmd_webpass(args):
     user_data["group"] = "admins"
     user_data["password_hash"] = PasswordHasher().hash(new_pass)
     shared_state.ALLOWED_USERS[config.ADMIN_USER_ID] = user_data
-    auth.save_users()
+    await auth.save_users_async()
     _set_env_value("TG_WEB_INITIAL_PASSWORD", "")
-    auth.load_users()
+    await auth.load_users_async()
     if not auth.check_user_password(config.ADMIN_USER_ID, new_pass):
         raise RuntimeError("Password hash could not be verified after saving")
     print("WebUI password hash saved to the encrypted database.")
