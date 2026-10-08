@@ -124,7 +124,16 @@ async def https_enforcement_middleware(request: web.Request, handler: Handler) -
         return web.Response(text="WEB_PUBLIC_URL must be configured with HTTPS", status=503)
 
     if request.method in {"GET", "HEAD"}:
-        raise web.HTTPPermanentRedirect(f"{WEB_PUBLIC_URL}{request.rel_url}")
+        parsed_base = urllib.parse.urlparse(WEB_PUBLIC_URL)
+        target_url = urllib.parse.urlunparse((
+            parsed_base.scheme,
+            parsed_base.netloc,
+            request.path,
+            "",
+            request.query_string,
+            ""
+        ))
+        raise web.HTTPPermanentRedirect(target_url)
 
     return web.json_response({"error": "HTTPS is required"}, status=426)
 
