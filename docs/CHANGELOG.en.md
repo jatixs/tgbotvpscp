@@ -4,11 +4,22 @@
 
 <h1 align="center">📝 Telegram VPS Management Bot — Changelog</h1>
 <p align="center">
-    <img src="https://img.shields.io/badge/version-v1.26.0-blue?style=flat-square" alt="Version 1.26.0"/>
-    <img src="https://img.shields.io/badge/build-93-purple?style=flat-square" alt="Build 93"/>
-    <img src="https://img.shields.io/badge/date-Oct%207%202026-green?style=flat-square" alt="Date Oct 7 2026"/>
+    <img src="https://img.shields.io/badge/version-v1.26.1-blue?style=flat-square" alt="Version 1.26.1"/>
+    <img src="https://img.shields.io/badge/build-94-purple?style=flat-square" alt="Build 94"/>
+    <img src="https://img.shields.io/badge/date-Oct%2011%202026-green?style=flat-square" alt="Date Oct 11 2026"/>
 	<img src="https://img.shields.io/badge/status-stable-green?style=flat-square" alt="Status Stable"/>
 </p>
+
+## [1.26.1] - 2026-10-11
+
+### ✨ Improved
+* **Top Disk Usage:** The widget now displays the top 5 largest folders in the root partition (e.g., `/usr`, `/var`) instead of just the physical disk `/`. Added caching and background calculation (once every 5 minutes) to avoid slowing down the bot. Clicking the badge toggles between megabytes and percentage of the total disk space.
+* **Process Identification:** RAM and CPU widgets now correctly distinguish and display `tg-bot` (main process) and `tg-watchdog` (alert module) processes instead of a generic `python`.
+
+### 🐛 Fixed
+* **Global Code Refactoring (74 fixes):** Resolved all static analyzer warnings (Codacy): removed unused variables, fixed duplicate functions, resolved scope leakage in WebUI JavaScript files.
+* **Migration:** Fixed a critical installer error when updating the `.env` file (`name 'lines_to_add' is not defined`).
+* **Table of Contents (TOC):** Fixed broken anchor links in the documentation (MD051).
 
 ## [1.26.0] - 2026-10-07
 
