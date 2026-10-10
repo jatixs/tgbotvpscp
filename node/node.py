@@ -1170,9 +1170,6 @@ def execute_command(task):
 
             ping_val = str(LAST_PING_MS)
             inet_ok = ping_val != "n/a"
-
-            except Exception:
-                pass
             
             rx_raw = stats.get('net_rx', 0)
             tx_raw = stats.get('net_tx', 0)
