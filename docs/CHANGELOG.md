@@ -4,11 +4,22 @@
 
 <h1 align="center">📝 Telegram VPS Management Bot — Список изменений</h1>
 <p align="center">
-    <img src="https://img.shields.io/badge/version-v1.26.0-blue?style=flat-square" alt="Version 1.26.0"/>
-    <img src="https://img.shields.io/badge/build-93-purple?style=flat-square" alt="Build 93"/>
-    <img src="https://img.shields.io/badge/date-Октябрь%207%202026-green?style=flat-square" alt="Date Oct 7 2026"/>
+    <img src="https://img.shields.io/badge/version-v1.26.1-blue?style=flat-square" alt="Version 1.26.1"/>
+    <img src="https://img.shields.io/badge/build-94-purple?style=flat-square" alt="Build 94"/>
+    <img src="https://img.shields.io/badge/date-Октябрь%2011%202026-green?style=flat-square" alt="Date Oct 11 2026"/>
 	<img src="https://img.shields.io/badge/status-stable-green?style=flat-square" alt="Status Stable"/>
 </p>
+
+## [1.26.1] - 2026-10-11
+
+### ✨ Улучшено
+* **Топ использования диска:** Виджет теперь отображает 5 самых тяжелых папок в корневом разделе (например, `/usr`, `/var`), а не только сам физический диск `/`. Добавлено кэширование и фоновое вычисление (раз в 5 минут), чтобы не замедлять работу бота. Нажатие на бейдж переключает мегабайты в процент от всего диска.
+* **Идентификация процессов:** В виджетах ОЗУ и CPU теперь корректно отображаются процессы `tg-bot` (основной процесс) и `tg-watchdog` (модуль оповещений), вместо обобщенного `python`.
+
+### 🐛 Исправлено
+* **Глобальный рефакторинг кода (74 исправления):** Устранены все ошибки статического анализатора (Codacy): удалены неиспользуемые переменные, исправлены дубликаты функций, устранена утечка областей видимости в JavaScript-файлах веб-панели.
+* **Миграция:** Исправлена критическая ошибка установщика при обновлении файла `.env` (`name 'lines_to_add' is not defined`).
+* **Оглавление (TOC):** Исправлены неработающие якорные ссылки в документации (MD051).
 
 ## [1.26.0] - 2026-10-07
 
