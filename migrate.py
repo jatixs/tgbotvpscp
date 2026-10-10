@@ -138,6 +138,7 @@ def ensure_env_variables():
             content = f.read()
         
         existing_vars = set()
+        lines_to_add = []
         for line in content.split('\n'):
             line = line.strip()
             if line and not line.startswith('#') and '=' in line:
