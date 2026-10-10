@@ -527,7 +527,6 @@ def get_notifications_nodes_list_keyboard(nodes_dict: dict, lang: str):
 def get_notifications_node_settings_keyboard(token: str, node: dict, user_id: int):
     lang = get_user_lang(user_id)
     user_config = ALERTS_CONFIG.get(user_id, {})
-    node_name = node.get("name", "Unknown")
     
     # Downtime
     key_down = f"node_{token}_downtime"
@@ -696,8 +695,6 @@ def get_node_management_keyboard(
 
 
 def get_node_billing_keyboard(token: str, node: dict, lang: str) -> InlineKeyboardMarkup:
-    reminder_enabled = node.get("reminder_enabled", False)
-    status_icon = "✅" if reminder_enabled else "❌"
     
     return InlineKeyboardMarkup(
         inline_keyboard=[

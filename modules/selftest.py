@@ -228,7 +228,7 @@ async def get_last_ssh_login(lang: str):
     return _("selftest_ssh_not_found", lang)
 
 
-async def selftest_handler(message: types.Message):
+async def _old_selftest_handler(message: types.Message):
     user_id = message.from_user.id
     chat_id = message.chat.id
     lang = get_user_lang(user_id)
@@ -240,7 +240,7 @@ async def selftest_handler(message: types.Message):
 
     await delete_previous_message(user_id, command, chat_id, message.bot)
 
-    loading_msg = await message.answer(_("selftest_gathering_info", lang))
+    await message.answer(_("selftest_gathering_info", lang))
 
 async def _generate_selftest_data(lang: str) -> tuple[str, InlineKeyboardMarkup]:
     p = psutil.Process()
@@ -277,7 +277,7 @@ async def _generate_selftest_data(lang: str) -> tuple[str, InlineKeyboardMarkup]
     def get_dir_size(path):
         total = 0
         try:
-            for dirpath, _, filenames in os.walk(path):
+            for dirpath, __, filenames in os.walk(path):
                 for f in filenames:
                     fp = os.path.join(dirpath, f)
                     if not os.path.islink(fp):

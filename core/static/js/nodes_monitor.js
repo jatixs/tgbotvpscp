@@ -309,10 +309,11 @@ function renderNodes() {
                 return (b.cpu || 0) - (a.cpu || 0);
             case 'ram':
                 return (b.ram || 0) - (a.ram || 0);
-            case 'ping':
+            case 'ping': {
                 const pingA = a.ping != null ? parseFloat(a.ping) : Infinity;
                 const pingB = b.ping != null ? parseFloat(b.ping) : Infinity;
                 return pingA - pingB;
+            }
             case 'name':
             default:
                 return a.name.localeCompare(b.name);
@@ -496,7 +497,7 @@ function createNodeCard(node) {
 }
 
 // Filtering functions
-function filterNodes(query) {
+window.filterNodes = function(query) {
     searchQuery = query;
     renderNodes();
 }
@@ -506,7 +507,7 @@ let tempFilterStatus = 'all';
 let tempFilterCpu = 'all';
 let tempFilterSort = 'name';
 
-function openFilterModal() {
+window.openFilterModal = function() {
     tempFilterStatus = currentFilter;
     tempFilterCpu = currentCpuFilter;
     tempFilterSort = currentSort;
@@ -520,7 +521,7 @@ function openFilterModal() {
     }
 }
 
-function closeFilterModal() {
+window.closeFilterModal = function() {
     const modal = document.getElementById('filterModal');
     if (typeof animateModalClose === 'function') {
         animateModalClose(modal);
@@ -559,29 +560,29 @@ function updateFilterModalUI() {
     }
 }
 
-function setFilterStatus(status) {
+window.setFilterStatus = function(status) {
     tempFilterStatus = status;
     updateFilterModalUI();
 }
 
-function setFilterCpu(cpu) {
+window.setFilterCpu = function(cpu) {
     tempFilterCpu = cpu;
     updateFilterModalUI();
 }
 
-function setFilterSort(sort) {
+window.setFilterSort = function(sort) {
     tempFilterSort = sort;
     updateFilterModalUI();
 }
 
-function resetFilters() {
+window.resetFilters = function() {
     tempFilterStatus = 'all';
     tempFilterCpu = 'all';
     tempFilterSort = 'name';
     updateFilterModalUI();
 }
 
-function applyFilters() {
+window.applyFilters = function() {
     currentFilter = tempFilterStatus;
     currentCpuFilter = tempFilterCpu;
     currentSort = tempFilterSort;
@@ -608,16 +609,16 @@ function updateFilterBadge() {
 }
 
 // Selection functions
-function toggleSelectAll(checkbox) {
+window.toggleSelectAll = function(checkbox) {
     if (checkbox.checked) {
-        allNodesData.forEach(node => selectedNodes.add(String(node.id)));
+        allNodesData.forEach(node => { selectedNodes.add(String(node.id)); });
     } else {
         selectedNodes.clear();
     }
     renderNodes();
 }
 
-function toggleNodeSelection(token, checkbox) {
+window.toggleNodeSelection = function(token, checkbox) {
     if (checkbox.checked) {
         selectedNodes.add(token);
     } else {
@@ -631,7 +632,7 @@ function toggleNodeSelection(token, checkbox) {
 }
 
 // Mass commands
-async function massCommand(cmd) {
+window.massCommand = async function(cmd) {
     if (selectedNodes.size === 0) {
         showAlert(I18N?.modal_title_alert || 'Alert', I18N?.web_nodes_monitor_select_nodes || 'Please select at least one node');
         return;
@@ -666,7 +667,7 @@ async function massCommand(cmd) {
 }
 
 // Quick actions
-async function quickReboot(token) {
+window.quickReboot = async function(token) {
     const node = allNodesData.find(n => String(n.id) === token);
     const name = node ? node.name : 'Node';
     
@@ -682,7 +683,7 @@ async function quickReboot(token) {
 }
 
 // Node detail modal
-async function openNodeDetail(token) {
+window.openNodeDetail = async function(token) {
     currentNodeId = token;
     const modal = document.getElementById('nodeDetailModal');
     
@@ -702,7 +703,7 @@ function startModalChartRanges() {
     if (typeof window.createChartRangeController !== 'function') return;
     if (modalResRangeCtl) modalResRangeCtl.destroy();
     if (modalNetRangeCtl) modalNetRangeCtl.destroy();
-    const getSource = () => (currentNodeId ? { source: 'node', node_id: currentNodeId } : null);
+    function getSource() { return currentNodeId ? { source: 'node', node_id: currentNodeId } : null; }
     modalResRangeCtl = window.createChartRangeController({
         key: 'modalResChart',
         mount: '[data-chart-range="modalResChart"]',
@@ -726,7 +727,7 @@ function stopModalChartRanges() {
     if (modalNetRangeCtl) modalNetRangeCtl.stop();
 }
 
-function closeNodeDetailModal() {
+window.closeNodeDetailModal = function() {
     const modal = document.getElementById('nodeDetailModal');
     if (typeof animateModalClose === 'function') {
         animateModalClose(modal);
@@ -946,7 +947,7 @@ function updateModalCharts(series, which, animate = true) {
     if (which !== 'res') {
         // handled by the network branch below
     } else if (modalResChart) {
-        const applyModalResChartData = () => {
+        function applyModalResChartData() {
             modalResChart.data.labels = labels;
             modalResChart.data.datasets[0].data = cpuData;
             modalResChart.data.datasets[1].data = ramData;
@@ -1014,7 +1015,7 @@ function updateModalCharts(series, which, animate = true) {
     if (which !== 'net') return;
 
     if (modalNetChart) {
-        const applyModalNetChartData = () => {
+        function applyModalNetChartData() {
             modalNetChart.data.labels = labels;
             modalNetChart.data.datasets[0].data = rxData;
             modalNetChart.data.datasets[1].data = txData;
@@ -1258,14 +1259,14 @@ function toggleServicesDisplay() {
     }
 }
 
-function refreshNodeServices() {
+window.refreshNodeServices = function() {
     if (currentNodeId) {
         connectNodeServicesStream(currentNodeId);
     }
 }
 
 // Node commands from modal
-function nodeCommand(cmd) {
+window.nodeCommand = function(cmd) {
     if (!currentNodeId) return;
     
     const node = allNodesData.find(n => String(n.id) === currentNodeId);
@@ -1322,7 +1323,7 @@ async function sendNodeCommand(nodeId, command) {
 }
 
 // Refresh
-function refreshAllNodes() {
+window.refreshAllNodes = function() {
     connectNodesMonitorStream();
 }
 
@@ -1424,7 +1425,7 @@ function closeSystemModal() {
 
 // Theme toggle (if not defined in common.js)
 if (typeof toggleTheme === 'undefined') {
-    function toggleTheme() {
+    window.toggleTheme = function() {
         const html = document.documentElement;
         const current = html.classList.contains('dark') ? 'dark' : 'light';
         const next = current === 'dark' ? 'light' : 'dark';

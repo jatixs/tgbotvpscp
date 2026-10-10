@@ -143,7 +143,7 @@ window.initSettings = function () {
     }
 };
 
-function initInputScrollLogic() {
+window.initInputScrollLogic = function() {
     const isTouchDevice = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
     if (!isTouchDevice) return;
 
@@ -151,7 +151,7 @@ function initInputScrollLogic() {
     ids.forEach(id => {
         const el = document.getElementById(id);
         if (el) {
-            const scrollFn = (e) => {
+            function scrollFn(e) {
                 e.target.scrollIntoView({
                     behavior: 'smooth',
                     block: 'center'
@@ -177,7 +177,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const fileInput = document.getElementById('favFileInput');
 
     if (favInput && favImg) {
-        const updatePreview = () => {
+        function updatePreview() {
             const val = favInput.value.trim();
             if (val) {
                 // Validate URL scheme via URL API to prevent javascript: injection
@@ -192,7 +192,7 @@ document.addEventListener("DOMContentLoaded", () => {
                             safeUrl = parsed.href;
                         }
                     }
-                } catch (e) {
+                } catch {
                     safeUrl = null;
                 }
                 if (safeUrl) {
@@ -311,7 +311,7 @@ function animateCounter(el, start, end, duration) {
     const range = end - start;
     let startTime = null;
 
-    const step = (timestamp) => {
+    function step(timestamp) {
         if (!startTime) startTime = timestamp;
         const progress = Math.min((timestamp - startTime) / duration, 1);
         const ease = 1 - Math.pow(1 - progress, 3);
@@ -391,7 +391,7 @@ function initChangePasswordUI() {
     const btn = document.getElementById('btnChangePass');
     if (!btn) return;
 
-    const updateBtnState = () => {
+    function updateBtnState() {
         const allFilled = ids.every(id => {
             const el = document.getElementById(id);
             return el && el.value.trim().length > 0;
@@ -462,7 +462,7 @@ function checkForChanges(groupName) {
                     displayEl.innerText = el.value + '%';
                 }
             }
-            if (el.value != initialConfig[groupName][id]) {
+            if (el.value !== initialConfig[groupName][id]) {
                 hasChanges = true;
             }
         }
@@ -484,7 +484,7 @@ function toggleSaveButton(btnId, enable) {
     }
 }
 
-async function saveSystemConfig(groupName) {
+window.saveSystemConfig = async function(groupName) {
     const config = groups[groupName];
     const btn = document.getElementById(config.btnId);
     if (!btn) return;
@@ -492,7 +492,7 @@ async function saveSystemConfig(groupName) {
     const originalText = I18N.web_save_btn;
     btn.innerText = I18N.web_saving_btn;
     btn.disabled = true;
-    document.querySelectorAll('[id^="error_"]').forEach(el => el.classList.add('hidden'));
+    document.querySelectorAll('[id^="error_"]').forEach(el => { el.classList.add('hidden'); });
 
     for (const id of config.ids) {
         const val = document.getElementById(id).value.trim();
@@ -585,7 +585,7 @@ async function saveSystemConfig(groupName) {
     }
 }
 
-async function clearLogs() {
+window.clearLogs = async function() {
     if (!await window.showModalConfirm(I18N.web_clear_logs_confirm, I18N.modal_title_confirm)) return;
 
     const btn = document.getElementById('clearLogsBtn');
@@ -643,7 +643,7 @@ async function clearLogs() {
     }
 }
 
-async function resetTrafficSettings() {
+window.resetTrafficSettings = async function() {
     if (!await window.showModalConfirm(I18N.web_traffic_reset_confirm || "Are you sure? This will zero out the counters.", I18N.modal_title_confirm)) return;
 
     const btn = document.getElementById('resetTrafficBtn');
@@ -751,7 +751,7 @@ async function deleteUser(id, name) {
             })
         });
         if (res.ok) {
-            const idx = USERS_DATA.findIndex(u => u.id == id);
+            const idx = USERS_DATA.findIndex(u => String(u.id) === String(id));
             if (idx > -1) USERS_DATA.splice(idx, 1);
             renderUsers();
         } else {
@@ -764,7 +764,7 @@ async function deleteUser(id, name) {
     }
 }
 
-async function openAddUserModal() {
+window.openAddUserModal = async function() {
     const promptText = (typeof I18N !== 'undefined' && I18N.web_add_user_prompt) ? I18N.web_add_user_prompt : "Enter user's Telegram ID:";
     const titleText = (typeof I18N !== 'undefined' && I18N.modal_title_prompt) ? I18N.modal_title_prompt : "Input";
     const id = await window.showModalPrompt(promptText, titleText, "123456789");
@@ -1113,7 +1113,7 @@ function renderNotifNodeDetail() {
     const t = currentNodeForNotif;
     
     // Check if override exists, else use global state
-    const isChecked = (type) => {
+    function isChecked(type) {
         const key = `node_${t}_${type}`;
         if (USER_ALERTS && typeof USER_ALERTS[key] !== 'undefined') return USER_ALERTS[key];
         return USER_ALERTS ? USER_ALERTS[type] || false : false;
@@ -1324,7 +1324,7 @@ function getVisibleKeys() {
     if (typeof KEYBOARD_CONFIG === 'undefined') return keys;
     for (const catData of Object.values(btnCategories)) {
         catData.keys.forEach(k => {
-            if (KEYBOARD_CONFIG.hasOwnProperty(k)) {
+            if (Object.hasOwn(KEYBOARD_CONFIG, k)) {
                 keys.push(k);
             }
         });
@@ -1357,7 +1357,7 @@ function renderKeyboardPreview() {
 window.toggleCategoryKeyboard = async function (catKey) {
     const catData = btnCategories[catKey];
     if (!catData) return;
-    const keys = catData.keys.filter(k => KEYBOARD_CONFIG.hasOwnProperty(k));
+    const keys = catData.keys.filter(k => Object.hasOwn(KEYBOARD_CONFIG, k));
     const allEnabled = keys.length > 0 && keys.every(k => KEYBOARD_CONFIG[k]);
     const newVal = !allEnabled;
     keys.forEach(key => { KEYBOARD_CONFIG[key] = newVal; });
@@ -1373,7 +1373,7 @@ function renderKeyboardModalContent() {
 
     let html = '';
     for (const [catKey, catData] of Object.entries(btnCategories)) {
-        const categoryKeys = catData.keys.filter(k => KEYBOARD_CONFIG.hasOwnProperty(k));
+        const categoryKeys = catData.keys.filter(k => Object.hasOwn(KEYBOARD_CONFIG, k));
         if (categoryKeys.length === 0) continue;
 
         let title = (typeof I18N !== 'undefined' && I18N[catData.titleKey]) ? I18N[catData.titleKey] : catKey;
@@ -1551,7 +1551,7 @@ function updateBulkButtonsUI() {
     const btnEnable = document.getElementById('btnEnableAllKb');
     const btnDisable = document.getElementById('btnDisableAllKb');
 
-    const setDeactivated = (btn, isDeactivated) => {
+    function setDeactivated(btn, isDeactivated) {
         if (!btn) return;
         if (isDeactivated) {
             btn.classList.add('opacity-50', 'cursor-not-allowed');
@@ -1571,7 +1571,7 @@ function updateCategoryBadges() {
         const badgeBtn = document.getElementById(`kb-badge-${catKey}`);
         if (!badgeBtn) continue;
 
-        const categoryKeys = catData.keys.filter(k => KEYBOARD_CONFIG.hasOwnProperty(k));
+        const categoryKeys = catData.keys.filter(k => Object.hasOwn(KEYBOARD_CONFIG, k));
         if (categoryKeys.length === 0) continue;
 
         const enabledCount = categoryKeys.filter(k => KEYBOARD_CONFIG[k]).length;
@@ -1937,7 +1937,7 @@ async function handleSettingsBtnClick(btn, actionCallback) {
     const container = btn.closest('div');
     if (container) {
         const allBtns = container.querySelectorAll('button');
-        allBtns.forEach(b => b.classList.remove('force-expanded'));
+        allBtns.forEach(b => { b.classList.remove('force-expanded'); });
     }
     if (settingsBtnTimer) clearTimeout(settingsBtnTimer);
     btn.classList.add('force-expanded');

@@ -42,12 +42,13 @@ if (window.Chart) {
 
         if (!wasVisible) chart.setDatasetVisibility(datasetIndex, true);
         chart.$legendDatasetFades = chart.$legendDatasetFades || {};
-        const fade = chart.$legendDatasetFades[datasetIndex] = { opacity: wasVisible ? 1 : 0 };
+        chart.$legendDatasetFades[datasetIndex] = { opacity: wasVisible ? 1 : 0 };
+        const fade = chart.$legendDatasetFades[datasetIndex];
         if (!wasVisible) chart.update('none');
 
         const startedAt = performance.now();
         const duration = 700;
-        const animateFade = now => {
+        function animateFade(now) {
             if (!chart.canvas) {
                 delete chart.$legendDatasetFades[datasetIndex];
                 return;
@@ -119,7 +120,7 @@ document.addEventListener('keydown', e => {
 });
 
 // Security: Safe HTML helpers
-function getSecureRandom() {
+window.getSecureRandom = function() {
     return window.crypto.getRandomValues(new Uint32Array(1))[0] / 4294967295;
 }
 
@@ -301,7 +302,7 @@ async function secureFetch(url, options = {}) {
         try {
             const parsedBody = JSON.parse(reqOptions.body);
             reqOptions.body = JSON.stringify(encryptRequestPayload(parsedBody));
-        } catch (e) {
+        } catch {
             // body is not JSON or couldn't be parsed, leave as is
         }
     }
@@ -358,7 +359,7 @@ function ensureChartZoomRegistered() {
             Chart.register(plugin);
             window.__chartZoomRegistered = true;
             break;
-        } catch (e) {
+        } catch {
             console.debug('Chart zoom plugin registration skipped:', e);
         }
     }
@@ -379,7 +380,8 @@ function refreshChartZoomState(chart, canvasOrId) {
     if (!chart) return { isZoomed: false, freezeUpdates: false, atLiveEdge: true };
 
     const canvas = typeof canvasOrId === 'string' ? document.getElementById(canvasOrId) : (canvasOrId || chart.canvas);
-    const state = chart.__liveZoomState = chart.__liveZoomState || {};
+    chart.__liveZoomState = chart.__liveZoomState || {};
+    const state = chart.__liveZoomState;
     const total = Array.isArray(chart.data?.labels) ? chart.data.labels.length : 0;
     const maxIndex = Math.max(0, total - 1);
     const xScale = chart.scales?.x;
@@ -429,7 +431,8 @@ window.refreshChartZoomState = refreshChartZoomState;
 function alignChartToLiveWindow(chart) {
     if (!chart?.options?.scales?.x) return;
 
-    const state = chart.__liveZoomState = chart.__liveZoomState || {};
+    chart.__liveZoomState = chart.__liveZoomState || {};
+    const state = chart.__liveZoomState;
     const total = Array.isArray(chart.data?.labels) ? chart.data.labels.length : 0;
     const timeWindow = chart.__chartTimeWindow;
     const zoomLimits = chart.options.plugins?.zoom?.limits?.x;
@@ -485,7 +488,8 @@ function chartDataMatchesSnapshot(chart, labels, datasets) {
 function updateChartWithLiveData(chart, applyData, canvasOrId, animate = true) {
     if (!chart || typeof applyData !== 'function') return false;
 
-    const state = chart.__liveZoomState = chart.__liveZoomState || {};
+    chart.__liveZoomState = chart.__liveZoomState || {};
+    const state = chart.__liveZoomState;
     state.pendingUpdate = applyData;
 
     refreshChartZoomState(chart, canvasOrId);
@@ -575,7 +579,7 @@ function attachChartInteractions(chart, canvasOrId) {
 
     canvas.title = getChartHintText();
 
-    const applyPendingAndReset = () => {
+    function applyPendingAndReset() {
         const activeChart = canvas.id ? window.__chartRegistry[canvas.id] : chart;
         if (!activeChart) return;
 
@@ -583,7 +587,8 @@ function attachChartInteractions(chart, canvasOrId) {
             activeChart.resetZoom(document.documentElement.classList.contains('perf-mode') ? 'none' : 'default');
         }
 
-        const state = activeChart.__liveZoomState = activeChart.__liveZoomState || {};
+        activeChart.__liveZoomState = activeChart.__liveZoomState || {};
+        const state = activeChart.__liveZoomState;
         state.freezeUpdates = false;
         state.liveRangeSize = 0;
         state.isZoomed = false;
@@ -670,7 +675,7 @@ function getCsrfToken() {
             let url = null;
             try {
                 url = new URL(requestUrl, window.location.origin);
-            } catch (e) {
+            } catch {
                 url = null;
             }
 
@@ -686,7 +691,7 @@ function getCsrfToken() {
                         const parsedBody = JSON.parse(options.body);
                         options.body = JSON.stringify(encryptRequestPayload(parsedBody));
                         headers.set('Content-Type', 'application/json');
-                    } catch (e) {
+                    } catch {
                         // ignore non-JSON
                     }
                 }
@@ -711,7 +716,7 @@ function getCsrfToken() {
         try {
             const data = await originalJson.call(this);
             return decryptApiResponse(data);
-        } catch (e) {
+        } catch {
             if (e instanceof SyntaxError && e.message.includes("Unexpected token")) {
                 const friendlyMessage = (typeof I18N !== 'undefined' && I18N.web_json_parse_error) ? I18N.web_json_parse_error : "Ошибка сервера: неверный формат ответа (возможно, сессия истекла или сервер недоступен).";
                 const err = new Error(friendlyMessage);
@@ -724,7 +729,6 @@ function getCsrfToken() {
     window.__jsonParsePatched = true;
 })();
 
-const themes = ['dark', 'light', 'system', 'amoled'];
 let currentTheme = localStorage.getItem('theme') || 'system';
 let latestNotificationTime = Math.floor(Date.now() / 1000);
 const pageCache = new Map();
@@ -785,7 +789,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // Unlock Vibration API on first interaction
     const unlockHaptics = () => {
-        try { if (navigator.vibrate) navigator.vibrate(0); } catch (e) {}
+        try { if (navigator.vibrate) navigator.vibrate(0); } catch {}
         document.body.removeEventListener('touchstart', unlockHaptics);
         document.body.removeEventListener('click', unlockHaptics);
     };
@@ -972,7 +976,7 @@ function initNodeModalScaling() {
         if (!card || card.dataset.nmInit) return;
         card.dataset.nmInit = '1';
 
-        const mark = (selector, kind) => card.querySelectorAll(selector).forEach((el) => { el.dataset.nmFit = kind; });
+        function mark(selector, kind) { card.querySelectorAll(selector).forEach(function(el) { el.dataset.nmFit = kind; }); }
         mark('#modalNodeName, #modalNodeTitle', 'title');
         mark('#modalNodeUptime, #modalNodeRam, #modalNodeDisk, #modalNodeTraffic, #modalUptime, #modalCpu, #modalRam, #modalDisk', 'value');
         const ip = card.querySelector('#modalNodeIp');
@@ -984,12 +988,12 @@ function initNodeModalScaling() {
             el.style.minWidth = '0';
         }
 
-        const fitAll = () => card.querySelectorAll('[data-nm-fit]').forEach(nmFitEl);
+        function fitAll() { card.querySelectorAll('[data-nm-fit]').forEach(nmFitEl); }
         let raf = 0;
-        const schedule = () => {
+        function schedule() {
             cancelAnimationFrame(raf);
             raf = requestAnimationFrame(fitAll);
-        };
+        }
 
         let lastWidth = 0;
         new ResizeObserver(() => {
@@ -1025,7 +1029,7 @@ if (typeof Chart !== 'undefined') {
                 });
                 const legendLabels = opts.plugins?.legend?.labels;
                 if (legendLabels) legendLabels.font = { size };
-            } catch (e) {
+            } catch {
                 console.debug('nodeModalChartFonts skipped:', e);
             }
         }
@@ -1083,7 +1087,7 @@ async function setLanguage(lang) {
             })
         });
         window.location.reload();
-    } catch (e) {
+    } catch {
         console.error(e);
     }
 }
@@ -1106,7 +1110,7 @@ function copyTextToClipboard(text) {
         try {
             document.execCommand('copy');
             showCopyFeedback();
-        } catch (e) { }
+        } catch { }
         document.body.removeChild(t);
     }
 }
@@ -1547,7 +1551,7 @@ function initSSE() {
     isSseConnected = false;
     if (connectionTimer) clearTimeout(connectionTimer);
 
-    const resetConnectionWatchdog = () => {
+    function resetConnectionWatchdog() {
         if (connectionTimer) clearTimeout(connectionTimer);
         connectionTimer = setTimeout(() => {
             if (navigator.onLine) {
@@ -1632,7 +1636,7 @@ function initSessionSync() {
     });
 }
 
-function checkSessionStatus() {
+window.checkSessionStatus = function() {
     if (document.getElementById('session-expired-overlay')) return;
 
     fetch('/api/settings/language', {
@@ -1708,7 +1712,7 @@ function handleSessionExpired() {
     document.body.appendChild(overlay);
     document.body.style.overflow = 'hidden';
     const modals = document.querySelectorAll('[id$="Modal"]');
-    modals.forEach(m => m.classList.add('hidden'));
+    modals.forEach(m => { m.classList.add('hidden'); });
 
     requestAnimationFrame(() => {
         overlay.classList.remove('opacity-0');
@@ -1808,7 +1812,7 @@ function handleServerRestart() {
         <h2 class="text-xl font-bold text-gray-900 dark:text-white">${msg}</h2>
     `);
 
-    const checkServer = () => {
+    function checkServer() {
         fetch('/api/settings/language', {
             method: 'HEAD',
             cache: 'no-store'
@@ -1980,7 +1984,7 @@ function closeMobileSettings() {
 window.closeMobileSettings = closeMobileSettings;
 window.toggleMobileSettings = toggleMobileSettings;
 
-function toggleTheme() {
+window.toggleTheme = function() {
     const themes = ["system", "dark", "light", "amoled"];
     let currentTheme = localStorage.getItem("theme");
     if (!currentTheme) currentTheme = "system";
@@ -2002,7 +2006,7 @@ function setThemeDirect(theme, event) {
 
 function applyThemeUI(t) {
     if (!t) return;
-    ['iconMoon', 'iconSun', 'iconSystem', 'iconAmoled'].forEach(id => document.getElementById(id)?.classList.add('hidden'));
+    ['iconMoon', 'iconSun', 'iconSystem', 'iconAmoled'].forEach(id => { document.getElementById(id)?.classList.add('hidden'); });
     
     if (t === 'dark') {
         document.getElementById('iconMoon')?.classList.remove('hidden');
@@ -2396,8 +2400,8 @@ document.addEventListener('click', async (e) => {
                                 .replace(/const\s+NODES_DATA\s*=/g, 'window.NODES_DATA =')
                                 .replace(/const\s+KEYBOARD_CONFIG\s*=/g, 'window.KEYBOARD_CONFIG =')
                                 .replace(/const\s+USER_ROLE\s*=/g, 'window.USER_ROLE =');
-                            (1, eval)(patched);
-                        } catch (err) {
+                            Function(patched)();
+                        } catch {
                             console.error("Error evaluating injected script:", err);
                         }
                     }
@@ -2464,7 +2468,7 @@ window.addEventListener('popstate', async () => {
 window.animateModalOpen = animateModalOpen;
 window.animateModalClose = animateModalClose;
 
-async function clearLogs() {
+window.clearLogs = async function() {
     if (!await window.showModalConfirm(I18N.web_clear_logs_confirm, I18N.modal_title_confirm)) return;
 
     const btn = document.getElementById('clearLogsBtn');
@@ -2517,7 +2521,7 @@ async function clearLogs() {
     }
 }
 
-async function resetTrafficSettings() {
+window.resetTrafficSettings = async function() {
     if (!await window.showModalConfirm(I18N.web_traffic_reset_confirm || "Are you sure? This will zero out the counters.", I18N.modal_title_confirm)) return;
 
     const btn = document.getElementById('resetTrafficBtn');
