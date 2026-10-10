@@ -131,7 +131,7 @@ _last_folder_check: float = 0.0
 
 def _get_top_folders() -> list[str]:
     global _cached_top_folders, _last_folder_check
-    import time, subprocess, sys
+    import time, subprocess, sys, psutil
     
     if sys.platform == 'win32': return []
     
@@ -140,9 +140,12 @@ def _get_top_folders() -> list[str]:
         return _cached_top_folders
         
     try:
+        total_disk_mb = float(psutil.disk_usage(get_host_path("/")).total) / (1024 * 1024)
+        if total_disk_mb <= 0: total_disk_mb = 1.0
+        
         cmd = "du -sm --exclude=/proc --exclude=/sys --exclude=/dev --exclude=/run /* 2>/dev/null | sort -nr | head -n 5"
-        result = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=2.0)
-        if result.returncode == 0:
+        result = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=15.0)
+        if result.stdout:
             lines = result.stdout.strip().split('\n')
             folders = []
             for line in lines:
@@ -151,13 +154,15 @@ def _get_top_folders() -> list[str]:
                     size_mb = int(parts[0])
                     path = parts[1]
                     size_fmt = f"{size_mb / 1024:.1f} GB" if size_mb >= 1024 else f"{size_mb} MB"
-                    folders.append({"name": path[:15], "fmt": size_fmt, "mb": size_mb})
+                    percent = (size_mb / total_disk_mb) * 100
+                    folders.append({"name": path[:15], "fmt": size_fmt, "percent": percent})
             
             if folders:
-                _cached_top_folders = [f"{f['name']} ({f['fmt']}|{f['mb']} MB)" for f in folders]
+                _cached_top_folders = [f"{f['name']} ({f['fmt']}|{f['percent']:.2f}%)" for f in folders]
             _last_folder_check = now
-    except Exception:
-        pass
+    except Exception as e:
+        import logging
+        logging.error(f"Error getting top folders: {e}")
         
     return _cached_top_folders
 
@@ -172,14 +177,25 @@ def _get_top_processes(metric: str) -> list[str]:
         return f"{num:.1f} PB"
 
     try:
-        attrs = ["pid", "name", "cpu_percent", "memory_percent", "memory_info"]
+        attrs = ["pid", "name", "cmdline", "cpu_percent", "memory_percent", "memory_info"]
 
 
         processes: list[dict[str, Any]] = []
         for proc in psutil.process_iter(attrs):
             try:
                 info = proc.info
-                info["name"] = str(info.get("name", ""))[:15]
+                name = str(info.get("name", ""))
+                
+                if "python" in name.lower():
+                    cmdline = info.get("cmdline", [])
+                    if cmdline:
+                        cmd_str = " ".join(cmdline).lower()
+                        if "watchdog.py" in cmd_str:
+                            name = "tg-watchdog"
+                        elif "bot.py" in cmd_str or "main.py" in cmd_str:
+                            name = "tg-bot"
+                
+                info["name"] = name[:15]
                 processes.append(info)
             except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
                 continue
