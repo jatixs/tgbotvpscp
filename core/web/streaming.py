@@ -126,6 +126,41 @@ async def _is_allowed_terminal_host(host: str) -> bool:
     return normalized_host in allowed_node_ips
 
 
+_cached_top_folders: list[str] = []
+_last_folder_check: float = 0.0
+
+def _get_top_folders() -> list[str]:
+    global _cached_top_folders, _last_folder_check
+    import time, subprocess, sys
+    
+    if sys.platform == 'win32': return []
+    
+    now = time.time()
+    if now - _last_folder_check < 300: # cache for 5 mins
+        return _cached_top_folders
+        
+    try:
+        cmd = "du -sm --exclude=/proc --exclude=/sys --exclude=/dev --exclude=/run /* 2>/dev/null | sort -nr | head -n 5"
+        result = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=2.0)
+        if result.returncode == 0:
+            lines = result.stdout.strip().split('\n')
+            folders = []
+            for line in lines:
+                parts = line.strip().split('\t')
+                if len(parts) == 2:
+                    size_mb = int(parts[0])
+                    path = parts[1]
+                    size_fmt = f"{size_mb / 1024:.1f} GB" if size_mb >= 1024 else f"{size_mb} MB"
+                    folders.append({"name": path[:15], "fmt": size_fmt, "mb": size_mb})
+            
+            if folders:
+                _cached_top_folders = [f"{f['name']} ({f['fmt']}|{f['mb']} MB)" for f in folders]
+            _last_folder_check = now
+    except Exception:
+        pass
+        
+    return _cached_top_folders
+
 def _get_top_processes(metric: str) -> list[str]:
     import psutil
 
@@ -172,6 +207,10 @@ def _get_top_processes(metric: str) -> list[str]:
             return [f"{p['name']} ({p.get('memory_percent', 0):.1f}%|{get_rss(p)})" for p in sorted_processes]
 
         if metric == "disk":
+            folders = _get_top_folders()
+            if folders:
+                return folders
+                
             partitions = psutil.disk_partitions(all=False)
             disk_info = []
             for part in partitions:
