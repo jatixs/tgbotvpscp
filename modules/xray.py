@@ -129,7 +129,6 @@ async def updatexray_handler(message: types.Message, state: FSMContext):
 
 async def run_xray_update(callback: types.CallbackQuery, state: FSMContext):
     user_id = callback.from_user.id
-    chat_id = callback.message.chat.id
     lang = get_user_lang(user_id)
     if config.DEPLOY_MODE == "docker" and config.INSTALL_MODE == "secure":
         await callback.answer(

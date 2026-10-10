@@ -138,8 +138,7 @@ def _get_top_processes(metric: str) -> list[str]:
 
     try:
         attrs = ["pid", "name", "cpu_percent", "memory_percent", "memory_info"]
-        if metric == "disk":
-            attrs.append("io_counters")
+
 
         processes: list[dict[str, Any]] = []
         for proc in psutil.process_iter(attrs):
@@ -173,15 +172,31 @@ def _get_top_processes(metric: str) -> list[str]:
             return [f"{p['name']} ({p.get('memory_percent', 0):.1f}%|{get_rss(p)})" for p in sorted_processes]
 
         if metric == "disk":
-            def get_io(proc: dict[str, Any]) -> int:
-                io = proc.get("io_counters")
-                return int(io.read_bytes + io.write_bytes) if io else 0
+            partitions = psutil.disk_partitions(all=False)
+            disk_info = []
+            for part in partitions:
+                if part.fstype and part.fstype not in ('squashfs', 'tmpfs', 'devtmpfs', 'overlay', 'shm', 'sysfs', 'proc', 'devpts', 'cgroup', 'cgroup2'):
+                    try:
+                        usage = psutil.disk_usage(get_host_path(part.mountpoint))
+                        disk_info.append({
+                            "name": part.mountpoint[:15] if len(part.mountpoint) > 1 else "/",
+                            "used": usage.used,
+                            "percent": usage.percent
+                        })
+                    except Exception:
+                        pass
+            
+            if not disk_info:
+                try:
+                    usage = psutil.disk_usage(get_host_path("/"))
+                    disk_info.append({"name": "/", "used": usage.used, "percent": usage.percent})
+                except Exception:
+                    pass
 
-            sorted_processes = sorted(processes, key=get_io, reverse=True)[:5]
-            disk_total = psutil.disk_usage(get_host_path("/")).total
+            sorted_disks = sorted(disk_info, key=lambda d: d["used"], reverse=True)[:5]
             return [
-                f"{p['name']} ({sizeof_fmt(get_io(p))}" + (f"|{get_io(p) / disk_total * 100:.2f}%" if disk_total else "") + ")"
-                for p in sorted_processes
+                f"{d['name']} ({sizeof_fmt(d['used'])}|{d['percent']:.2f}%)"
+                for d in sorted_disks
             ]
 
         return []
@@ -917,7 +932,7 @@ async def handle_terminal_stats(request: web.Request) -> web.StreamResponse:
         if _is_local_terminal_stats_target(ip, safe_agent_ip):
             import psutil
 
-            cpu = psutil.cpu_percent(interval=None)
+            cpu = psutil.cpu_percent(interval=0.1)
             mem = psutil.virtual_memory()
             disk = psutil.disk_usage(get_host_path("/"))
             uptime = int(time.time() - psutil.boot_time())

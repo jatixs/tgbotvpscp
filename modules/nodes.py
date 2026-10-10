@@ -661,7 +661,7 @@ async def cq_node_stop_traffic(callback: types.CallbackQuery):
     )
 
 
-async def cq_node_services(callback: types.CallbackQuery):
+async def _old_cq_node_services(callback: types.CallbackQuery):
     """Show services list for a node"""
     user_id = callback.from_user.id
     lang = get_user_lang(user_id)
@@ -706,7 +706,7 @@ async def cq_node_services(callback: types.CallbackQuery):
     await callback.answer()
 
 
-async def cq_node_service_detail(callback: types.CallbackQuery):
+async def _old_cq_node_service_detail(callback: types.CallbackQuery):
     """Show service details with action buttons"""
     user_id = callback.from_user.id
     lang = get_user_lang(user_id)
@@ -760,7 +760,7 @@ async def cq_node_service_detail(callback: types.CallbackQuery):
     await callback.answer()
 
 
-async def cq_node_service_action(callback: types.CallbackQuery):
+async def _old_cq_node_service_action(callback: types.CallbackQuery):
     """Execute service action (start/stop/restart)"""
     user_id = callback.from_user.id
     lang = get_user_lang(user_id)
@@ -790,8 +790,6 @@ async def cq_node_service_action(callback: types.CallbackQuery):
     if not node:
         await callback.answer("Node not found", show_alert=True)
         return
-    
-    node_name = html.escape(node.get("name", "Unknown"))
     
     # Send task to node with service type
     await nodes_db.update_node_task(token, {

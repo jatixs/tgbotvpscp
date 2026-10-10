@@ -144,19 +144,14 @@ def ensure_env_variables():
                 var_name = line.split('=')[0].strip()
                 existing_vars.add(var_name)
         
-        changes_made = False
-        lines_to_add = []
-        
         for var_name, default_val in required_vars.items():
             if var_name not in existing_vars:
                 lines_to_add.append(f'{var_name}="{default_val}"')
                 logger.info(f"  + Added variable: {var_name}={default_val}")
-                changes_made = True
         
         for var_name in optional_vars:
             if var_name not in existing_vars:
                 lines_to_add.append(f'{var_name}=""')
-                changes_made = True
         
         if lines_to_add:
             with open(env_file, 'a', encoding='utf-8') as f:

@@ -21,15 +21,15 @@
 
 ## 📋 Table of Contents
 
-1. [About](#ℹ️-about-the-project)
-2. [Key Features](#✨-key-features)
-3. [Architecture](#🏗️-architecture)
-4. [Quick Start](#🚀-quick-start)
-5. [Web Interface](#🖥️-web-interface)
-6. [Security](#🔒-security)
-7. [Project Structure](#📁-project-structure)
-8. [Documentation](#📚-documentation)
-9. [License](#📄-license)
+1. [About](#about-the-project)
+2. [Key Features](#key-features)
+3. [Architecture](#architecture)
+4. [Quick Start](#quick-start)
+5. [Web Interface](#web-interface)
+6. [Security](#security)
+7. [Project Structure](#project-structure)
+8. [Documentation](#documentation)
+9. [License](#license)
 
 ---
 
