@@ -144,7 +144,7 @@ def _get_top_folders() -> list[str]:
         if total_disk_mb <= 0: total_disk_mb = 1.0
         
         cmd = "du -sm --exclude=/proc --exclude=/sys --exclude=/dev --exclude=/run /* 2>/dev/null | sort -nr | head -n 5"
-        result = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=15.0)
+        result = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=15.0)  # nosec B602
         if result.stdout:
             lines = result.stdout.strip().split('\n')
             folders = []
