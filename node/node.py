@@ -1951,6 +1951,19 @@ def send_heartbeat():
                 AGENT_TOKEN.encode(), response.content, hashlib.sha256
             ).hexdigest()
             if not hmac.compare_digest(expected_response_signature, response_signature):
+                ct = response.headers.get("Content-Type", "unknown")
+                sig_present = bool(response_signature)
+                body_preview = response.content[:200].decode("utf-8", errors="replace")
+                logging.debug(
+                    "Signature mismatch details: Content-Type=%s, X-Signature present=%s, "
+                    "Content-Length=%d, Body preview: %s",
+                    ct, sig_present, len(response.content), body_preview,
+                )
+                if not sig_present:
+                    raise ValueError(
+                        "Invalid heartbeat response signature (X-Signature header missing "
+                        "- response may be from a proxy/CDN, not the agent)"
+                    )
                 raise ValueError("Invalid heartbeat response signature")
 
             flush_suppressed_http_error_logs()

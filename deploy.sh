@@ -16,6 +16,15 @@ for arg in "$@"; do
 done
 
 export DEBIAN_FRONTEND=noninteractive
+export NEEDRESTART_MODE=a
+
+if [ -d /etc/needrestart/conf.d ]; then
+    echo "\$nrconf{restart} = 'a';" | sudo tee /etc/needrestart/conf.d/tgbot-noninteractive.conf >/dev/null 2>&1 || true
+    echo "\$nrconf{kernelhints} = 0;" | sudo tee -a /etc/needrestart/conf.d/tgbot-noninteractive.conf >/dev/null 2>&1 || true
+fi
+sudo mkdir -p /etc/apt/apt.conf.d 2>/dev/null || true
+echo 'DPkg::Lock::Timeout "60";' | sudo tee /etc/apt/apt.conf.d/99tgbot-noninteractive >/dev/null 2>&1 || true
+echo 'Dpkg::Options { "--force-confdef"; "--force-confold"; };' | sudo tee -a /etc/apt/apt.conf.d/99tgbot-noninteractive >/dev/null 2>&1 || true
 
 BOT_INSTALL_PATH="/opt/tg-bot"
 SERVICE_NAME="tg-bot"
@@ -144,7 +153,7 @@ run_with_spinner() {
     local attempt=1
     local exit_code=0
     while true; do
-        ( "$@" >> /tmp/${SERVICE_NAME}_install.log 2>&1 ) &
+        ( export DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=a; "$@" >> /tmp/${SERVICE_NAME}_install.log 2>&1 ) &
         local pid=$!
         spinner "$pid" "$msg"
         wait $pid
@@ -1071,17 +1080,21 @@ install_ookla_speedtest() {
     # Add Ookla repository
     run_with_spinner "Добавление репозитория Ookla" bash -c 'curl -s https://packagecloud.io/install/repositories/ookla/speedtest-cli/script.deb.sh | sudo bash'
     
-    # Fix for Ubuntu 24+ (noble -> jammy)
+    # Fix for Ubuntu versions not supported by Ookla (remap to jammy)
     OOKLA_LIST="/etc/apt/sources.list.d/ookla_speedtest-cli.list"
     if [ -f "$OOKLA_LIST" ]; then
-        if grep -q "noble" "$OOKLA_LIST" 2>/dev/null; then
-            msg_info "Применяю исправление для Ubuntu 24+..."
-            sudo sed -i 's/noble/jammy/g' "$OOKLA_LIST"
+        local current_codename=""
+        if [ -f /etc/os-release ]; then
+            current_codename=$(. /etc/os-release && echo "$VERSION_CODENAME")
         fi
-        # Also fix for other unsupported versions
-        if grep -q "oracular\|mantic\|lunar" "$OOKLA_LIST" 2>/dev/null; then
-            msg_info "Применяю исправление для неподдерживаемой версии Ubuntu..."
-            sudo sed -i 's/oracular\|mantic\|lunar/jammy/g' "$OOKLA_LIST"
+        # If the list file contains the current codename and it's NOT a known-supported one
+        # (focal, jammy are the only ones Ookla reliably supports)
+        local supported_codenames="focal|jammy"
+        if [ -n "$current_codename" ] && ! echo "$current_codename" | grep -qE "^($supported_codenames)$"; then
+            if grep -q "$current_codename" "$OOKLA_LIST" 2>/dev/null; then
+                msg_info "Применяю исправление для неподдерживаемой версии Ubuntu ($current_codename → jammy)..."
+                sudo sed -i "s/$current_codename/jammy/g" "$OOKLA_LIST"
+            fi
         fi
     fi
     
@@ -1519,7 +1532,13 @@ install_node_logic() {
     if [ -n "$AUTO_NODE_TOKEN" ]; then NODE_TOKEN="$AUTO_NODE_TOKEN"; fi
     common_install_steps
     
+    setup_repo_and_dirs "root"
+    if [ ! -d "${VENV_PATH}" ]; then run_with_spinner "Создание venv" ${PYTHON_BIN} -m venv "${VENV_PATH}"; fi
+    run_with_spinner "Обновление pip" "${VENV_PATH}/bin/pip" install --upgrade pip 'setuptools>=83.0.0' wheel
+    run_with_spinner "Установка зависимостей" "${VENV_PATH}/bin/pip" install psutil requests pyyaml
+
     # Detect node location and install appropriate speedtest tool
+    # (must run after setup_repo_and_dirs so config/ directory exists for .speedtest_mode)
     msg_info "Определение геолокации ноды..."
     NODE_COUNTRY=$(get_country_code_by_ip)
     
@@ -1532,11 +1551,6 @@ install_node_logic() {
         # Also install iperf3 as fallback
         run_with_spinner "Установка iperf3" sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -q iperf3
     fi
-    
-    setup_repo_and_dirs "root"
-    if [ ! -d "${VENV_PATH}" ]; then run_with_spinner "Создание venv" ${PYTHON_BIN} -m venv "${VENV_PATH}"; fi
-    run_with_spinner "Обновление pip" "${VENV_PATH}/bin/pip" install --upgrade pip 'setuptools>=83.0.0' wheel
-    run_with_spinner "Установка зависимостей" "${VENV_PATH}/bin/pip" install psutil requests pyyaml
     load_cached_env
     msg_question "Agent URL (http://IP:8080): " AGENT_URL
     msg_question "Token: " NODE_TOKEN
