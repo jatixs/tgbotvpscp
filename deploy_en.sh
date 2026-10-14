@@ -697,17 +697,91 @@ setup_repo_and_dirs() {
 }
 
 download_vendor_assets() {
+    if is_node_context; then
+        return 0
+    fi
     msg_info "Downloading local JS/CSS dependencies..."
     local vendor_dir="${BOT_INSTALL_PATH}/core/static/vendor"
     sudo mkdir -p "${vendor_dir}"
-    
-    run_with_spinner "Downloading Twemoji" sudo curl -sSLo "${vendor_dir}/twemoji.min.js" "https://unpkg.com/@twemoji/api@15.1.0/dist/twemoji.min.js"
-    run_with_spinner "Downloading Chart.js" sudo curl -sSLo "${vendor_dir}/chart.umd.min.js" "https://cdn.jsdelivr.net/npm/chart.js"
-    run_with_spinner "Downloading xterm.js" sudo curl -sSLo "${vendor_dir}/xterm.js" "https://cdn.jsdelivr.net/npm/xterm/lib/xterm.js"
-    run_with_spinner "Downloading xterm.css" sudo curl -sSLo "${vendor_dir}/xterm.css" "https://cdn.jsdelivr.net/npm/xterm/css/xterm.css"
-    run_with_spinner "Downloading xterm-addon-fit" sudo curl -sSLo "${vendor_dir}/xterm-addon-fit.js" "https://cdn.jsdelivr.net/npm/xterm-addon-fit/lib/xterm-addon-fit.js"
-    run_with_spinner "Downloading DOMPurify" sudo curl -sSLo "${vendor_dir}/dompurify.min.js" "https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.6/purify.min.js"
-    run_with_spinner "Downloading CryptoJS" sudo curl -sSLo "${vendor_dir}/crypto-js.min.js" "https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"
+    curl_cdn() {
+        local dest="$1"; shift
+        local label="$1"; shift
+        local filename="$(basename "${dest}")"
+        local urls=("$@")
+        local backup_tmp=""
+        if [ -s "${dest}" ]; then
+            backup_tmp=$(mktemp "/tmp/${label// /_}.XXXXXX" 2>/dev/null || echo "/tmp/${filename}.bak.$$")
+            sudo cp -f "${dest}" "${backup_tmp}" 2>/dev/null || true
+        fi
+
+        urls+=("https://raw.githubusercontent.com/${GITHUB_REPO}/${GIT_BRANCH}/core/static/vendor/${filename}")
+
+        for url in "${urls[@]}"; do
+            if sudo curl -fsSL --connect-timeout 10 --max-time 25 --retry 2 --retry-delay 2 \
+                -o "${dest}" "${url}" >> /tmp/${SERVICE_NAME}_install.log 2>&1; then
+                if [ -s "${dest}" ]; then
+                    [ -n "${backup_tmp}" ] && sudo rm -f "${backup_tmp}" 2>/dev/null || true
+                    return 0
+                fi
+            fi
+            echo "  ⚠ Mirror unavailable: ${url}" >> /tmp/${SERVICE_NAME}_install.log
+        done
+
+        if [ -n "${backup_tmp}" ] && [ -s "${backup_tmp}" ]; then
+            sudo cp -f "${backup_tmp}" "${dest}" 2>/dev/null || true
+            sudo rm -f "${backup_tmp}" 2>/dev/null || true
+            echo "  ℹ ${label}: all CDN mirrors unavailable, using copy from repository." >> /tmp/${SERVICE_NAME}_install.log
+            return 0
+        fi
+
+        if [ -s "${dest}" ]; then
+            echo "  ℹ ${label}: using copy from repository (${dest})." >> /tmp/${SERVICE_NAME}_install.log
+            return 0
+        fi
+        msg_error "Failed to download ${label} from any mirror and file is missing from repository"
+        return 1
+    }
+
+    run_with_spinner "Downloading Twemoji" curl_cdn "${vendor_dir}/twemoji.min.js" "Twemoji" \
+        "https://unpkg.com/@twemoji/api@15.1.0/dist/twemoji.min.js" \
+        "https://cdn.jsdelivr.net/npm/@twemoji/api@15.1.0/dist/twemoji.min.js" \
+        "https://fastly.jsdelivr.net/npm/@twemoji/api@15.1.0/dist/twemoji.min.js"
+
+    run_with_spinner "Downloading Chart.js" curl_cdn "${vendor_dir}/chart.js" "Chart.js" \
+        "https://cdn.jsdelivr.net/npm/chart.js" \
+        "https://fastly.jsdelivr.net/npm/chart.js" \
+        "https://unpkg.com/chart.js/dist/chart.umd.min.js"
+    sudo cp -f "${vendor_dir}/chart.js" "${vendor_dir}/chart.umd.min.js" 2>/dev/null || true
+
+    run_with_spinner "Downloading xterm.js" curl_cdn "${vendor_dir}/xterm.js" "xterm.js" \
+        "https://cdn.jsdelivr.net/npm/xterm/lib/xterm.js" \
+        "https://fastly.jsdelivr.net/npm/xterm/lib/xterm.js" \
+        "https://unpkg.com/xterm/lib/xterm.js"
+
+    run_with_spinner "Downloading xterm.css" curl_cdn "${vendor_dir}/xterm.css" "xterm.css" \
+        "https://cdn.jsdelivr.net/npm/xterm/css/xterm.css" \
+        "https://fastly.jsdelivr.net/npm/xterm/css/xterm.css" \
+        "https://unpkg.com/xterm/css/xterm.css"
+
+    run_with_spinner "Downloading xterm-addon-fit" curl_cdn "${vendor_dir}/xterm-addon-fit.js" "xterm-addon-fit" \
+        "https://cdn.jsdelivr.net/npm/xterm-addon-fit/lib/xterm-addon-fit.js" \
+        "https://fastly.jsdelivr.net/npm/xterm-addon-fit/lib/xterm-addon-fit.js" \
+        "https://unpkg.com/xterm-addon-fit/lib/xterm-addon-fit.js"
+
+    run_with_spinner "Downloading SortableJS" curl_cdn "${vendor_dir}/sortable.min.js" "SortableJS" \
+        "https://cdn.jsdelivr.net/npm/sortablejs@latest/Sortable.min.js" \
+        "https://fastly.jsdelivr.net/npm/sortablejs@latest/Sortable.min.js" \
+        "https://unpkg.com/sortablejs@latest/Sortable.min.js"
+
+    run_with_spinner "Downloading DOMPurify" curl_cdn "${vendor_dir}/dompurify.min.js" "DOMPurify" \
+        "https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.6/purify.min.js" \
+        "https://cdn.jsdelivr.net/npm/dompurify@3.0.6/dist/purify.min.js" \
+        "https://unpkg.com/dompurify@3.0.6/dist/purify.min.js"
+
+    run_with_spinner "Downloading CryptoJS" curl_cdn "${vendor_dir}/crypto-js.min.js" "CryptoJS" \
+        "https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js" \
+        "https://cdn.jsdelivr.net/npm/crypto-js@4.1.1/crypto-js.min.js" \
+        "https://unpkg.com/crypto-js@4.1.1/crypto-js.min.js"
 }
 
 load_cached_env() {
