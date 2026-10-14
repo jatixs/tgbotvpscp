@@ -330,7 +330,6 @@ async def handle_dashboard(request: web.Request) -> web.StreamResponse:
             for uid in shared_state.ALLOWED_USERS
             if uid != ADMIN_USER_ID
         ]
-        users_json = json.dumps(ulist)
         nlist = [
             {
                 "id": node["id"],
@@ -343,7 +342,6 @@ async def handle_dashboard(request: web.Request) -> web.StreamResponse:
             }
             for token, node in all_nodes.items()
         ]
-        nodes_json = json.dumps(nlist)
 
     vnc_nodes = [{"name": _("web_notif_global_group_agent", lang), "ip": _agent_ip()}]
     for node_token, node in all_nodes.items():
@@ -910,7 +908,6 @@ async def handle_settings_page(request: web.Request) -> web.StreamResponse:
         "error_services_interval_low": _("error_services_interval_low", lang),
         "error_ping_interval_low": _("error_ping_interval_low", lang),
         "web_logs_clearing": _("web_logs_clearing", lang),
-        "web_logs_cleared_alert": _("web_logs_cleared_alert", lang),
         "web_pass_changed": _("web_pass_changed", lang),
         "web_pass_mismatch": _("web_pass_mismatch", lang),
         "web_telegram_only_enabled": _("web_telegram_only_enabled", lang),

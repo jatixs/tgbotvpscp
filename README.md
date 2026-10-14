@@ -5,11 +5,11 @@
 <h1 align="center">🤖 VPS Manager Telegram Bot</h1>
 
 <p align="center">
-  <b>v1.26.0</b> — профессиональная экосистема для мониторинга и управления серверной инфраструктурой<br>
+  <b>v1.26.1</b> — профессиональная экосистема для мониторинга и управления серверной инфраструктурой<br>
   (Systemd / Docker / API / WebUI / PWA / Multi-Node / Remote SSH / Backup Manager)<br><br>
 
-  <a href="https://github.com/jatixs/tgbotvpscp/releases/latest"><img src="https://img.shields.io/badge/version-v1.26.0-blue?style=flat-square" alt="Version 1.26.0"/></a>
-  <a href="https://github.com/jatixs/tgbotvpscp/releases/latest"><img src="https://img.shields.io/badge/build-93-purple?style=flat-square" alt="Build 93"/></a>
+  <a href="https://github.com/jatixs/tgbotvpscp/releases/latest"><img src="https://img.shields.io/badge/version-v1.26.1-blue?style=flat-square" alt="Version 1.26.1"/></a>
+  <a href="https://github.com/jatixs/tgbotvpscp/releases/latest"><img src="https://img.shields.io/badge/build-94-purple?style=flat-square" alt="Build 94"/></a>
   <a href="https://www.python.org/"><img src="https://img.shields.io/badge/python-3.10%2B-green?style=flat-square" alt="Python 3.10+"/></a>
   <a href="https://choosealicense.com/licenses/gpl-3.0/"><img src="https://img.shields.io/badge/license-GPL--3.0-lightgrey?style=flat-square" alt="License GPL-3.0"/></a>
   <a href="https://github.com/aiogram/aiogram"><img src="https://img.shields.io/badge/aiogram-3.x-orange?style=flat-square" alt="Aiogram 3.x"/></a>
@@ -21,15 +21,15 @@
 
 ## 📋 Оглавление
 
-1. [О проекте](#ℹ️-о-проекте)
-2. [Ключевые возможности](#✨-ключевые-возможности)
-3. [Архитектура](#🏗️-архитектура)
-4. [Быстрый старт](#🚀-быстрый-старт)
-5. [Веб-интерфейс](#🖥️-веб-интерфейс)
-6. [Безопасность](#🔒-безопасность)
-7. [Структура проекта](#📁-структура-проекта)
-8. [Документация](#📚-документация)
-9. [Лицензия](#📄-лицензия)
+1. [О проекте](#ℹ%EF%B8%8F-о-проекте)
+2. [Ключевые возможности](#-ключевые-возможности)
+3. [Архитектура](#%EF%B8%8F-архитектура)
+4. [Быстрый старт](#-быстрый-старт)
+5. [Веб-интерфейс](#%EF%B8%8F-веб-интерфейс)
+6. [Безопасность](#-безопасность)
+7. [Структура проекта](#-структура-проекта)
+8. [Документация](#-документация)
+9. [Лицензия](#-лицензия)
 
 ---
 
@@ -595,7 +595,7 @@ python bot.py
 
 **Jatix**
 
-- 📧 Почта: [jatix.com@mail.ru](jatix.com@mail.ru)
+- 📧 Почта: [jatix.com@mail.ru](mailto:jatix.com@mail.ru)
 - 💬 Telegram: [@jatix](https://t.me/faridshykhaliev)
 - 🌐 GitHub: [@jatixs](https://github.com/jatixs)
 

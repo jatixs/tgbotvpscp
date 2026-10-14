@@ -5,11 +5,11 @@
 <h1 align="center">🤖 VPS Manager Telegram Bot</h1>
 
 <p align="center">
-  <b>v1.26.0</b> — a professional ecosystem for monitoring and managing server infrastructure<br>
+  <b>v1.26.1</b> — a professional ecosystem for monitoring and managing server infrastructure<br>
   (Systemd / Docker / API / WebUI / PWA / Multi-Node / Remote SSH / Backup Manager)<br><br>
 
-  <a href="https://github.com/jatixs/tgbotvpscp/releases/latest"><img src="https://img.shields.io/badge/version-v1.26.0-blue?style=flat-square" alt="Version 1.26.0"/></a>
-  <a href="https://github.com/jatixs/tgbotvpscp/releases/latest"><img src="https://img.shields.io/badge/build-93-purple?style=flat-square" alt="Build 93"/></a>
+  <a href="https://github.com/jatixs/tgbotvpscp/releases/latest"><img src="https://img.shields.io/badge/version-v1.26.1-blue?style=flat-square" alt="Version 1.26.1"/></a>
+  <a href="https://github.com/jatixs/tgbotvpscp/releases/latest"><img src="https://img.shields.io/badge/build-94-purple?style=flat-square" alt="Build 94"/></a>
   <a href="https://www.python.org/"><img src="https://img.shields.io/badge/python-3.10%2B-green?style=flat-square" alt="Python 3.10+"/></a>
   <a href="https://choosealicense.com/licenses/gpl-3.0/"><img src="https://img.shields.io/badge/license-GPL--3.0-lightgrey?style=flat-square" alt="License GPL-3.0"/></a>
   <a href="https://github.com/aiogram/aiogram"><img src="https://img.shields.io/badge/aiogram-3.x-orange?style=flat-square" alt="Aiogram 3.x"/></a>
@@ -21,15 +21,15 @@
 
 ## 📋 Table of Contents
 
-1. [About](#ℹ️-about-the-project)
-2. [Key Features](#✨-key-features)
-3. [Architecture](#🏗️-architecture)
-4. [Quick Start](#🚀-quick-start)
-5. [Web Interface](#🖥️-web-interface)
-6. [Security](#🔒-security)
-7. [Project Structure](#📁-project-structure)
-8. [Documentation](#📚-documentation)
-9. [License](#📄-license)
+1. [About](#ℹ%EF%B8%8F-about-the-project)
+2. [Key Features](#-key-features)
+3. [Architecture](#%EF%B8%8F-architecture)
+4. [Quick Start](#-quick-start)
+5. [Web Interface](#%EF%B8%8F-web-interface)
+6. [Security](#-security)
+7. [Project Structure](#-project-structure)
+8. [Documentation](#-documentation)
+9. [License](#-license)
 
 ---
 
@@ -590,7 +590,7 @@ python bot.py
 
 ## 📄 License
 
-This project is licensed under **GPL-3.0**. See [LICENSE](LICENSE) file for details.
+This project is licensed under **GPL-3.0**. See [LICENSE](../LICENSE) file for details.
 
 ---
 
@@ -598,7 +598,7 @@ This project is licensed under **GPL-3.0**. See [LICENSE](LICENSE) file for deta
 
 **Jatix**
 
-- 📧 Email: [jatix.com@mail.ru](jatix.com@mail.ru)
+- 📧 Email: [jatix.com@mail.ru](mailto:jatix.com@mail.ru)
 - 💬 Telegram: [@jatix](https://t.me/faridshykhaliev)
 - 🌐 GitHub: [@jatixs](https://github.com/jatixs)
 

@@ -89,7 +89,7 @@
         try {
             const value = localStorage.getItem(`chartRange:${key}`);
             return RANGES.some(r => r.key === value) ? value : null;
-        } catch (e) {
+        } catch {
             return null;
         }
     }
@@ -97,7 +97,7 @@
     function writeStored(key, value) {
         try {
             localStorage.setItem(`chartRange:${key}`, value);
-        } catch (e) { /* storage disabled */ }
+        } catch { /* storage disabled */ }
     }
 
     let openController = null;
@@ -258,7 +258,7 @@
                 delete chart.options.scales.x.max;
             }
             const mode = document.documentElement.classList.contains('perf-mode') ? 'none' : 'default';
-            try { chart.resetZoom?.(mode); } catch (e) { /* plugin missing */ }
+            try { chart.resetZoom?.(mode); } catch { /* plugin missing */ }
         }
 
         function toggleEmptyState(isEmpty) {
@@ -392,7 +392,7 @@
             try {
                 const parsed = JSON.parse(text);
                 return Array.isArray(parsed) ? parsed : [];
-            } catch (e) {
+            } catch {
                 console.debug('Chart range payload decode failed:', e);
                 return [];
             }

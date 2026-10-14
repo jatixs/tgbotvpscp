@@ -825,7 +825,6 @@ def get_system_stats():
         
         global LAST_PING_TIME, LAST_PING_MS
         if now - LAST_PING_TIME >= GLOBAL_PING_INTERVAL or LAST_PING_MS == "n/a":
-            t1 = time.time()
             success = False
             
             target_ip = "8.8.8.8"
@@ -1171,20 +1170,7 @@ def execute_command(task):
 
             ping_val = str(LAST_PING_MS)
             inet_ok = ping_val != "n/a"
-
-            try:
-                # Security: Use exec instead of shell
-                proc = subprocess.Popen(
-                    ["uname", "-r"],
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE
-                )
-                stdout, _ = proc.communicate()
-                kernel = stdout.decode().strip()
-            except Exception:
-                kernel = "N/A"
             
-            uptime_str = format_uptime_simple(stats.get('uptime', 0))
             rx_raw = stats.get('net_rx', 0)
             tx_raw = stats.get('net_tx', 0)
 
@@ -1203,7 +1189,6 @@ def execute_command(task):
                 cpu_val = f"{cpu_pct:.1f}%"
 
             # Format RAM value
-            ram_total = stats.get('ram_total', 0)
             ram_used = stats.get('ram_used', 0)
             if ram_used > 0:
                 mem_val = f"{ram_used / (1024 * 1024):.1f} MB"
@@ -1966,6 +1951,19 @@ def send_heartbeat():
                 AGENT_TOKEN.encode(), response.content, hashlib.sha256
             ).hexdigest()
             if not hmac.compare_digest(expected_response_signature, response_signature):
+                ct = response.headers.get("Content-Type", "unknown")
+                sig_present = bool(response_signature)
+                body_preview = response.content[:200].decode("utf-8", errors="replace")
+                logging.debug(
+                    "Signature mismatch details: Content-Type=%s, X-Signature present=%s, "
+                    "Content-Length=%d, Body preview: %s",
+                    ct, sig_present, len(response.content), body_preview,
+                )
+                if not sig_present:
+                    raise ValueError(
+                        "Invalid heartbeat response signature (X-Signature header missing "
+                        "- response may be from a proxy/CDN, not the agent)"
+                    )
                 raise ValueError("Invalid heartbeat response signature")
 
             flush_suppressed_http_error_logs()
