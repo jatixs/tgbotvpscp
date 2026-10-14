@@ -16,6 +16,15 @@ for arg in "$@"; do
 done
 
 export DEBIAN_FRONTEND=noninteractive
+export NEEDRESTART_MODE=a
+
+if [ -d /etc/needrestart/conf.d ]; then
+    echo "\$nrconf{restart} = 'a';" | sudo tee /etc/needrestart/conf.d/tgbot-noninteractive.conf >/dev/null 2>&1 || true
+    echo "\$nrconf{kernelhints} = 0;" | sudo tee -a /etc/needrestart/conf.d/tgbot-noninteractive.conf >/dev/null 2>&1 || true
+fi
+sudo mkdir -p /etc/apt/apt.conf.d 2>/dev/null || true
+echo 'DPkg::Lock::Timeout "60";' | sudo tee /etc/apt/apt.conf.d/99tgbot-noninteractive >/dev/null 2>&1 || true
+echo 'Dpkg::Options { "--force-confdef"; "--force-confold"; };' | sudo tee -a /etc/apt/apt.conf.d/99tgbot-noninteractive >/dev/null 2>&1 || true
 
 BOT_INSTALL_PATH="/opt/tg-bot"
 SERVICE_NAME="tg-bot"
@@ -144,7 +153,7 @@ run_with_spinner() {
     local attempt=1
     local exit_code=0
     while true; do
-        ( "$@" >> /tmp/${SERVICE_NAME}_install.log 2>&1 ) &
+        ( export DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=a; "$@" >> /tmp/${SERVICE_NAME}_install.log 2>&1 ) &
         local pid=$!
         spinner "$pid" "$msg"
         wait $pid
@@ -164,7 +173,7 @@ run_with_spinner() {
         msg_error "Ошибка во время '$msg'. Код: $exit_code"
         msg_error "Подробности в логе: /tmp/${SERVICE_NAME}_install.log"
         echo -e "${C_YELLOW}Последние строки лога (/tmp/${SERVICE_NAME}_install.log):${C_RESET}"
-        tail -n 10 /tmp/${SERVICE_NAME}_install.log
+        tail -n 15 /tmp/${SERVICE_NAME}_install.log | grep -v "is already the newest version" | tail -n 10
     fi
     return $exit_code
 }
@@ -341,7 +350,7 @@ issue_certbot_certificate() {
 
     if [ "${TLS_KIND}" == "ip" ] && ! "${certbot_cmd}" --help all 2>/dev/null | grep -q -- "--ip-address"; then
         run_with_spinner "Установка Certbot для сертификата по IP" sudo apt-get install -y -q snapd || return 1
-        sudo systemctl enable --now snapd.socket || return 1
+        run_with_spinner "Активация snapd" sudo systemctl enable --now snapd.socket || return 1
         if ! sudo snap list certbot >/dev/null 2>&1; then
             run_with_spinner "Установка актуального Certbot" sudo snap install certbot --classic
         fi
@@ -606,7 +615,9 @@ RandomizedDelaySec=300
 WantedBy=timers.target
 EOF
         sudo systemctl daemon-reload
-        sudo systemctl enable --now tgbot-certbot-renew.timer
+        if run_with_spinner "Настройка автопродления сертификатов" sudo systemctl enable --now tgbot-certbot-renew.timer; then
+            msg_info "✓ Таймер автопродления сертификатов активирован"
+        fi
     fi
     echo -e "Веб-панель доступна: ${WEB_PUBLIC_URL}/"
 }
@@ -633,7 +644,27 @@ setup_repo_and_dirs() {
         msg_info "Найден legacy security.key. Ключ будет перенесен в .env."
     fi
     sudo rm -rf "${staging_path}" "${previous_path}"
-    if ! run_with_spinner "Клонирование репозитория" sudo git clone --branch "${GIT_BRANCH}" "${GITHUB_REPO_URL}" "${staging_path}"; then
+    
+    clone_or_reuse_repo() {
+        local target="$1"
+        for attempt in 1 2 3; do
+            if sudo git clone --depth 1 --branch "${GIT_BRANCH}" "${GITHUB_REPO_URL}" "${target}" >> /tmp/${SERVICE_NAME}_install.log 2>&1; then
+                return 0
+            fi
+            sudo rm -rf "${target}"
+            sleep 2
+        done
+
+        if [ -d "${BOT_INSTALL_PATH}" ] && { [ -f "${BOT_INSTALL_PATH}/node/node.py" ] || [ -f "${BOT_INSTALL_PATH}/bot.py" ]; }; then
+            echo "  ℹ Связь с GitHub прервалась, но на сервере уже установлена рабочая версия. Продолжаем..." >> /tmp/${SERVICE_NAME}_install.log
+            sudo mkdir -p "${target}"
+            sudo cp -a "${BOT_INSTALL_PATH}/." "${target}/"
+            return 0
+        fi
+        return 1
+    }
+
+    if ! run_with_spinner "Клонирование репозитория" clone_or_reuse_repo "${staging_path}"; then
         sudo rm -rf "${staging_path}"
         return 1
     fi
@@ -686,15 +717,96 @@ download_vendor_assets() {
     msg_info "Загрузка локальных JS/CSS зависимостей..."
     local vendor_dir="${BOT_INSTALL_PATH}/core/static/vendor"
     sudo mkdir -p "${vendor_dir}"
-    
-    run_with_spinner "Загрузка Twemoji" sudo curl -sSLo "${vendor_dir}/twemoji.min.js" "https://unpkg.com/@twemoji/api@15.1.0/dist/twemoji.min.js"
-    run_with_spinner "Загрузка Chart.js" sudo curl -sSLo "${vendor_dir}/chart.umd.min.js" "https://cdn.jsdelivr.net/npm/chart.js"
-    run_with_spinner "Загрузка xterm.js" sudo curl -sSLo "${vendor_dir}/xterm.js" "https://cdn.jsdelivr.net/npm/xterm/lib/xterm.js"
-    run_with_spinner "Загрузка xterm.css" sudo curl -sSLo "${vendor_dir}/xterm.css" "https://cdn.jsdelivr.net/npm/xterm/css/xterm.css"
-    run_with_spinner "Загрузка xterm-addon-fit" sudo curl -sSLo "${vendor_dir}/xterm-addon-fit.js" "https://cdn.jsdelivr.net/npm/xterm-addon-fit/lib/xterm-addon-fit.js"
-    run_with_spinner "Загрузка SortableJS" sudo curl -sSLo "${vendor_dir}/sortable.min.js" "https://cdn.jsdelivr.net/npm/sortablejs@latest/Sortable.min.js"
-    run_with_spinner "Загрузка DOMPurify" sudo curl -sSLo "${vendor_dir}/dompurify.min.js" "https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.6/purify.min.js"
-    run_with_spinner "Загрузка CryptoJS" sudo curl -sSLo "${vendor_dir}/crypto-js.min.js" "https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"
+
+    curl_cdn() {
+        local dest="$1"; shift
+        local label="$1"; shift
+        local filename="$(basename "${dest}")"
+        local urls=("$@")
+        if [ ! -s "${dest}" ]; then
+            local raw_repo_url="https://raw.githubusercontent.com/${GITHUB_REPO}/${GIT_BRANCH}/core/static/vendor/${filename}"
+            sudo curl -fsSL --connect-timeout 8 --max-time 20 --retry 1 \
+                -o "${dest}" "${raw_repo_url}" >> /tmp/${SERVICE_NAME}_install.log 2>&1 || true
+        fi
+
+        local backup_tmp=""
+        if [ -s "${dest}" ]; then
+            backup_tmp=$(mktemp "/tmp/${label// /_}.XXXXXX" 2>/dev/null || echo "/tmp/${filename}.bak.$$")
+            sudo cp -f "${dest}" "${backup_tmp}" 2>/dev/null || true
+        fi
+
+        local updated=false
+        for url in "${urls[@]}"; do
+            local tmp_download="${dest}.tmp.$$"
+            if sudo curl -fsSL --connect-timeout 5 --max-time 15 \
+                -o "${tmp_download}" "${url}" >> /tmp/${SERVICE_NAME}_install.log 2>&1; then
+                if [ -s "${tmp_download}" ]; then
+                    sudo mv -f "${tmp_download}" "${dest}"
+                    updated=true
+                    break
+                fi
+            fi
+            sudo rm -f "${tmp_download}" 2>/dev/null || true
+            echo "  ⚠ CDN недоступен: ${url}" >> /tmp/${SERVICE_NAME}_install.log
+        done
+
+        # 3. Если обновление с CDN не удалось, но у нас есть копия из репозитория — восстанавливаем её
+        if [ "$updated" = false ]; then
+            if [ -n "${backup_tmp}" ] && [ -s "${backup_tmp}" ]; then
+                sudo cp -f "${backup_tmp}" "${dest}" 2>/dev/null || true
+                echo "  ℹ ${label}: обновление с CDN недоступно, используется копия из репозитория." >> /tmp/${SERVICE_NAME}_install.log
+            fi
+        fi
+        [ -n "${backup_tmp}" ] && sudo rm -f "${backup_tmp}" 2>/dev/null || true
+
+        if [ -s "${dest}" ]; then
+            return 0
+        fi
+
+        msg_error "Не удалось получить ${label} ни из репозитория, ни из CDN"
+        return 1
+    }
+
+    run_with_spinner "Загрузка Twemoji" curl_cdn "${vendor_dir}/twemoji.min.js" "Twemoji" \
+        "https://unpkg.com/@twemoji/api@15.1.0/dist/twemoji.min.js" \
+        "https://cdn.jsdelivr.net/npm/@twemoji/api@15.1.0/dist/twemoji.min.js" \
+        "https://fastly.jsdelivr.net/npm/@twemoji/api@15.1.0/dist/twemoji.min.js"
+
+    run_with_spinner "Загрузка Chart.js" curl_cdn "${vendor_dir}/chart.js" "Chart.js" \
+        "https://cdn.jsdelivr.net/npm/chart.js" \
+        "https://fastly.jsdelivr.net/npm/chart.js" \
+        "https://unpkg.com/chart.js/dist/chart.umd.min.js"
+    sudo cp -f "${vendor_dir}/chart.js" "${vendor_dir}/chart.umd.min.js" 2>/dev/null || true
+
+    run_with_spinner "Загрузка xterm.js" curl_cdn "${vendor_dir}/xterm.js" "xterm.js" \
+        "https://cdn.jsdelivr.net/npm/xterm/lib/xterm.js" \
+        "https://fastly.jsdelivr.net/npm/xterm/lib/xterm.js" \
+        "https://unpkg.com/xterm/lib/xterm.js"
+
+    run_with_spinner "Загрузка xterm.css" curl_cdn "${vendor_dir}/xterm.css" "xterm.css" \
+        "https://cdn.jsdelivr.net/npm/xterm/css/xterm.css" \
+        "https://fastly.jsdelivr.net/npm/xterm/css/xterm.css" \
+        "https://unpkg.com/xterm/css/xterm.css"
+
+    run_with_spinner "Загрузка xterm-addon-fit" curl_cdn "${vendor_dir}/xterm-addon-fit.js" "xterm-addon-fit" \
+        "https://cdn.jsdelivr.net/npm/xterm-addon-fit/lib/xterm-addon-fit.js" \
+        "https://fastly.jsdelivr.net/npm/xterm-addon-fit/lib/xterm-addon-fit.js" \
+        "https://unpkg.com/xterm-addon-fit/lib/xterm-addon-fit.js"
+
+    run_with_spinner "Загрузка SortableJS" curl_cdn "${vendor_dir}/sortable.min.js" "SortableJS" \
+        "https://cdn.jsdelivr.net/npm/sortablejs@latest/Sortable.min.js" \
+        "https://fastly.jsdelivr.net/npm/sortablejs@latest/Sortable.min.js" \
+        "https://unpkg.com/sortablejs@latest/Sortable.min.js"
+
+    run_with_spinner "Загрузка DOMPurify" curl_cdn "${vendor_dir}/dompurify.min.js" "DOMPurify" \
+        "https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.6/purify.min.js" \
+        "https://cdn.jsdelivr.net/npm/dompurify@3.0.6/dist/purify.min.js" \
+        "https://unpkg.com/dompurify@3.0.6/dist/purify.min.js"
+
+    run_with_spinner "Загрузка CryptoJS" curl_cdn "${vendor_dir}/crypto-js.min.js" "CryptoJS" \
+        "https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js" \
+        "https://cdn.jsdelivr.net/npm/crypto-js@4.1.1/crypto-js.min.js" \
+        "https://unpkg.com/crypto-js@4.1.1/crypto-js.min.js"
 }
 
 load_cached_env() {
@@ -1071,17 +1183,21 @@ install_ookla_speedtest() {
     # Add Ookla repository
     run_with_spinner "Добавление репозитория Ookla" bash -c 'curl -s https://packagecloud.io/install/repositories/ookla/speedtest-cli/script.deb.sh | sudo bash'
     
-    # Fix for Ubuntu 24+ (noble -> jammy)
+    # Fix for Ubuntu versions not supported by Ookla (remap to jammy)
     OOKLA_LIST="/etc/apt/sources.list.d/ookla_speedtest-cli.list"
     if [ -f "$OOKLA_LIST" ]; then
-        if grep -q "noble" "$OOKLA_LIST" 2>/dev/null; then
-            msg_info "Применяю исправление для Ubuntu 24+..."
-            sudo sed -i 's/noble/jammy/g' "$OOKLA_LIST"
+        local current_codename=""
+        if [ -f /etc/os-release ]; then
+            current_codename=$(. /etc/os-release && echo "$VERSION_CODENAME")
         fi
-        # Also fix for other unsupported versions
-        if grep -q "oracular\|mantic\|lunar" "$OOKLA_LIST" 2>/dev/null; then
-            msg_info "Применяю исправление для неподдерживаемой версии Ubuntu..."
-            sudo sed -i 's/oracular\|mantic\|lunar/jammy/g' "$OOKLA_LIST"
+        # If the list file contains the current codename and it's NOT a known-supported one
+        # (focal, jammy are the only ones Ookla reliably supports)
+        local supported_codenames="focal|jammy"
+        if [ -n "$current_codename" ] && ! echo "$current_codename" | grep -qE "^($supported_codenames)$"; then
+            if grep -q "$current_codename" "$OOKLA_LIST" 2>/dev/null; then
+                msg_info "Применяю исправление для неподдерживаемой версии Ubuntu ($current_codename → jammy)..."
+                sudo sed -i "s/$current_codename/jammy/g" "$OOKLA_LIST"
+            fi
         fi
     fi
     
@@ -1348,7 +1464,10 @@ TimeoutStopSec=20
 [Install]
 WantedBy=multi-user.target
 EOF
-    sudo systemctl daemon-reload; sudo systemctl enable ${svc} &> /dev/null; sudo systemctl restart ${svc}
+    sudo systemctl daemon-reload
+    run_with_spinner "Настройка автозапуска (${desc})" sudo systemctl enable ${svc}
+    msg_info "✓ Автозапуск службы ${svc} (${desc}) настроен"
+    run_with_spinner "Запуск службы (${desc})" sudo systemctl restart ${svc}
 }
 
 run_db_migrations() {
@@ -1519,7 +1638,13 @@ install_node_logic() {
     if [ -n "$AUTO_NODE_TOKEN" ]; then NODE_TOKEN="$AUTO_NODE_TOKEN"; fi
     common_install_steps
     
+    setup_repo_and_dirs "root"
+    if [ ! -d "${VENV_PATH}" ]; then run_with_spinner "Создание venv" ${PYTHON_BIN} -m venv "${VENV_PATH}"; fi
+    run_with_spinner "Обновление pip" "${VENV_PATH}/bin/pip" install --upgrade pip 'setuptools>=83.0.0' wheel
+    run_with_spinner "Установка зависимостей" "${VENV_PATH}/bin/pip" install psutil requests pyyaml
+
     # Detect node location and install appropriate speedtest tool
+    # (must run after setup_repo_and_dirs so config/ directory exists for .speedtest_mode)
     msg_info "Определение геолокации ноды..."
     NODE_COUNTRY=$(get_country_code_by_ip)
     
@@ -1532,11 +1657,6 @@ install_node_logic() {
         # Also install iperf3 as fallback
         run_with_spinner "Установка iperf3" sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -q iperf3
     fi
-    
-    setup_repo_and_dirs "root"
-    if [ ! -d "${VENV_PATH}" ]; then run_with_spinner "Создание venv" ${PYTHON_BIN} -m venv "${VENV_PATH}"; fi
-    run_with_spinner "Обновление pip" "${VENV_PATH}/bin/pip" install --upgrade pip 'setuptools>=83.0.0' wheel
-    run_with_spinner "Установка зависимостей" "${VENV_PATH}/bin/pip" install psutil requests pyyaml
     load_cached_env
     msg_question "Agent URL (http://IP:8080): " AGENT_URL
     msg_question "Token: " NODE_TOKEN
@@ -1634,7 +1754,9 @@ RestartSec=10
 [Install]
 WantedBy=multi-user.target
 EOF
-    sudo systemctl daemon-reload; sudo systemctl enable ${NODE_SERVICE_NAME}
+    sudo systemctl daemon-reload
+    run_with_spinner "Настройка автозапуска службы" sudo systemctl enable ${NODE_SERVICE_NAME}
+    msg_info "✓ Автозапуск службы ${NODE_SERVICE_NAME} настроен"
     if [ -n "$NODE_OP_UPDATE" ]; then cleanup_for_node "обновления"; else cleanup_for_node "установки"; fi
     run_with_spinner "Запуск Ноды" sudo systemctl restart ${NODE_SERVICE_NAME}
     FORCE_NODE_MODE="no"
