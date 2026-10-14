@@ -6,20 +6,26 @@
 <p align="center">
     <img src="https://img.shields.io/badge/version-v1.26.1-blue?style=flat-square" alt="Version 1.26.1"/>
     <img src="https://img.shields.io/badge/build-94-purple?style=flat-square" alt="Build 94"/>
-    <img src="https://img.shields.io/badge/date-Oct%2011%202026-green?style=flat-square" alt="Date Oct 11 2026"/>
+    <img src="https://img.shields.io/badge/date-Oct%2014%202026-green?style=flat-square" alt="Date Oct 14 2026"/>
 	<img src="https://img.shields.io/badge/status-stable-green?style=flat-square" alt="Status Stable"/>
 </p>
 
-## [1.26.1] - 2026-10-11
+## [1.26.1] - 2026-10-14
 
 ### ✨ Improved
-* **Top Disk Usage:** The widget now displays the top 5 largest folders in the root partition (e.g., `/usr`, `/var`) instead of just the physical disk `/`. Added caching and background calculation (once every 5 minutes) to avoid slowing down the bot. Clicking the badge toggles between megabytes and percentage of the total disk space.
-* **Process Identification:** RAM and CPU widgets now correctly distinguish and display `tg-bot` (main process) and `tg-watchdog` (alert module) processes instead of a generic `python`.
+* **Unattended, Non-Interactive Installation:** The installer (`deploy.sh` and `deploy_en.sh`) now runs completely unattended: suppresses `needrestart` prompts during daemon/kernel updates, automatically resolves package config conflicts, and waits up to 60 seconds for `apt/dpkg` locks. Fresh installs and upgrades on Debian 12+ and Ubuntu 22.04+ no longer hang in the terminal.
+* **Ookla Speedtest on Any Ubuntu Release:** Speedtest repository setup now automatically falls back to a compatible release for all Ubuntu versions that lack official Ookla repo entries (including Ubuntu 24.04 `noble`).
+* **Disk Usage Breakdown:** The storage widget now surfaces the top 5 heaviest directories in the root partition (such as `/usr` or `/var`), skipping pseudo-filesystems. Sizes are recalculated in the background every 5 minutes without causing disk I/O spikes. Clicking toggles between data size and percentage.
+* **Clear Process Naming:** CPU and RAM monitoring now cleanly distinguishes bot services as `tg-bot` (main engine) and `tg-watchdog` (monitoring/alerting) instead of listing generic `python` processes.
+* **Snappier Web Terminal:** Terminal CPU load sampling has been streamlined to a fast 0.1-second interval, eliminating stream lag when opening the console.
 
 ### 🐛 Fixed
-* **Global Code Refactoring (74 fixes):** Resolved all static analyzer warnings (Codacy): removed unused variables, fixed duplicate functions, resolved scope leakage in WebUI JavaScript files.
-* **Migration:** Fixed a critical installer error when updating the `.env` file (`name 'lines_to_add' is not defined`).
-* **Table of Contents (TOC):** Fixed broken anchor links in the documentation (MD051).
+* **WebUI Script Stability:** Fixed scope issues for web panel functions (settings save buttons, filters, and bulk node commands now remain interactive across SPA page transitions). Replaced unsafe direct `eval()` calls with sandboxed execution.
+* **Node Setup Order:** Working directories and Python virtual environments are now created before running speed tests, preventing missing path errors during first-time node setup.
+* **Environment Migration Bug:** Fixed an unhandled error in `migrate.py` (`lines_to_add` undefined) when automatically inserting missing `.env` variables.
+* **Node Connection Diagnostics:** When node requests are intercepted by a reverse proxy or CDN (Cloudflare, Nginx error screens, etc.), the node clearly identifies the missing signature header rather than failing silently.
+* **Documentation Links:** Fixed broken Table of Contents anchor links in the project README.
+
 
 ## [1.26.0] - 2026-10-07
 

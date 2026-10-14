@@ -595,7 +595,7 @@ python bot.py
 
 **Jatix**
 
-- 📧 Почта: [jatix.com@mail.ru](jatix.com@mail.ru)
+- 📧 Почта: [jatix.com@mail.ru](mailto:jatix.com@mail.ru)
 - 💬 Telegram: [@jatix](https://t.me/faridshykhaliev)
 - 🌐 GitHub: [@jatixs](https://github.com/jatixs)
 

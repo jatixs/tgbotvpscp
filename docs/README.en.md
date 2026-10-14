@@ -590,7 +590,7 @@ python bot.py
 
 ## 📄 License
 
-This project is licensed under **GPL-3.0**. See [LICENSE](LICENSE) file for details.
+This project is licensed under **GPL-3.0**. See [LICENSE](../LICENSE) file for details.
 
 ---
 
@@ -598,7 +598,7 @@ This project is licensed under **GPL-3.0**. See [LICENSE](LICENSE) file for deta
 
 **Jatix**
 
-- 📧 Email: [jatix.com@mail.ru](jatix.com@mail.ru)
+- 📧 Email: [jatix.com@mail.ru](mailto:jatix.com@mail.ru)
 - 💬 Telegram: [@jatix](https://t.me/faridshykhaliev)
 - 🌐 GitHub: [@jatixs](https://github.com/jatixs)
 
