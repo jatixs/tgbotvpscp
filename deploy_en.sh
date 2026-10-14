@@ -349,7 +349,7 @@ issue_certbot_certificate() {
 
     if [ "${TLS_KIND}" == "ip" ] && ! "${certbot_cmd}" --help all 2>/dev/null | grep -q -- "--ip-address"; then
         run_with_spinner "Installing Certbot for an IP certificate" sudo apt-get install -y -q snapd || return 1
-        sudo systemctl enable --now snapd.socket || return 1
+        run_with_spinner "Enabling snapd" sudo systemctl enable --now snapd.socket || return 1
         if sudo snap list certbot >/dev/null 2>&1; then
             run_with_spinner "Updating Certbot" sudo snap refresh certbot --channel=latest/stable || return 1
         else
@@ -620,7 +620,9 @@ RandomizedDelaySec=300
 WantedBy=timers.target
 EOF
         sudo systemctl daemon-reload
-        sudo systemctl enable --now tgbot-certbot-renew.timer
+        if run_with_spinner "Configuring certificate auto-renewal" sudo systemctl enable --now tgbot-certbot-renew.timer; then
+            msg_info "✓ Certificate auto-renewal timer activated"
+        fi
     fi
     echo -e "Web panel available at: ${WEB_PUBLIC_URL}/"
 }
@@ -1470,7 +1472,10 @@ TimeoutStopSec=20
 [Install]
 WantedBy=multi-user.target
 EOF
-    sudo systemctl daemon-reload; sudo systemctl enable ${svc} &> /dev/null; sudo systemctl restart ${svc}
+    sudo systemctl daemon-reload
+    run_with_spinner "Configuring service autostart (${desc})" sudo systemctl enable ${svc}
+    msg_info "✓ Service ${svc} (${desc}) autostart configured"
+    run_with_spinner "Starting service (${desc})" sudo systemctl restart ${svc}
 }
 
 run_db_migrations() {
@@ -1742,7 +1747,9 @@ RestartSec=10
 [Install]
 WantedBy=multi-user.target
 EOF
-    sudo systemctl daemon-reload; sudo systemctl enable ${NODE_SERVICE_NAME}
+    sudo systemctl daemon-reload
+    run_with_spinner "Configuring service autostart" sudo systemctl enable ${NODE_SERVICE_NAME}
+    msg_info "✓ Service ${NODE_SERVICE_NAME} autostart configured"
     if [ -n "$NODE_OP_UPDATE" ]; then cleanup_for_node "update"; else cleanup_for_node "installation"; fi
     run_with_spinner "Starting Node" sudo systemctl restart ${NODE_SERVICE_NAME}
     FORCE_NODE_MODE="no"

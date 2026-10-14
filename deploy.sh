@@ -350,7 +350,7 @@ issue_certbot_certificate() {
 
     if [ "${TLS_KIND}" == "ip" ] && ! "${certbot_cmd}" --help all 2>/dev/null | grep -q -- "--ip-address"; then
         run_with_spinner "Установка Certbot для сертификата по IP" sudo apt-get install -y -q snapd || return 1
-        sudo systemctl enable --now snapd.socket || return 1
+        run_with_spinner "Активация snapd" sudo systemctl enable --now snapd.socket || return 1
         if ! sudo snap list certbot >/dev/null 2>&1; then
             run_with_spinner "Установка актуального Certbot" sudo snap install certbot --classic
         fi
@@ -615,7 +615,9 @@ RandomizedDelaySec=300
 WantedBy=timers.target
 EOF
         sudo systemctl daemon-reload
-        sudo systemctl enable --now tgbot-certbot-renew.timer
+        if run_with_spinner "Настройка автопродления сертификатов" sudo systemctl enable --now tgbot-certbot-renew.timer; then
+            msg_info "✓ Таймер автопродления сертификатов активирован"
+        fi
     fi
     echo -e "Веб-панель доступна: ${WEB_PUBLIC_URL}/"
 }
@@ -1462,7 +1464,10 @@ TimeoutStopSec=20
 [Install]
 WantedBy=multi-user.target
 EOF
-    sudo systemctl daemon-reload; sudo systemctl enable ${svc} &> /dev/null; sudo systemctl restart ${svc}
+    sudo systemctl daemon-reload
+    run_with_spinner "Настройка автозапуска (${desc})" sudo systemctl enable ${svc}
+    msg_info "✓ Автозапуск службы ${svc} (${desc}) настроен"
+    run_with_spinner "Запуск службы (${desc})" sudo systemctl restart ${svc}
 }
 
 run_db_migrations() {
@@ -1749,7 +1754,9 @@ RestartSec=10
 [Install]
 WantedBy=multi-user.target
 EOF
-    sudo systemctl daemon-reload; sudo systemctl enable ${NODE_SERVICE_NAME}
+    sudo systemctl daemon-reload
+    run_with_spinner "Настройка автозапуска службы" sudo systemctl enable ${NODE_SERVICE_NAME}
+    msg_info "✓ Автозапуск службы ${NODE_SERVICE_NAME} настроен"
     if [ -n "$NODE_OP_UPDATE" ]; then cleanup_for_node "обновления"; else cleanup_for_node "установки"; fi
     run_with_spinner "Запуск Ноды" sudo systemctl restart ${NODE_SERVICE_NAME}
     FORCE_NODE_MODE="no"
