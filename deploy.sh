@@ -692,48 +692,56 @@ setup_repo_and_dirs() {
 }
 
 download_vendor_assets() {
-    if is_node_context; then
-        return 0
-    fi
     msg_info "Загрузка локальных JS/CSS зависимостей..."
     local vendor_dir="${BOT_INSTALL_PATH}/core/static/vendor"
     sudo mkdir -p "${vendor_dir}"
+
     curl_cdn() {
         local dest="$1"; shift
         local label="$1"; shift
         local filename="$(basename "${dest}")"
         local urls=("$@")
+        if [ ! -s "${dest}" ]; then
+            local raw_repo_url="https://raw.githubusercontent.com/${GITHUB_REPO}/${GIT_BRANCH}/core/static/vendor/${filename}"
+            sudo curl -fsSL --connect-timeout 8 --max-time 20 --retry 1 \
+                -o "${dest}" "${raw_repo_url}" >> /tmp/${SERVICE_NAME}_install.log 2>&1 || true
+        fi
+
         local backup_tmp=""
         if [ -s "${dest}" ]; then
             backup_tmp=$(mktemp "/tmp/${label// /_}.XXXXXX" 2>/dev/null || echo "/tmp/${filename}.bak.$$")
             sudo cp -f "${dest}" "${backup_tmp}" 2>/dev/null || true
         fi
-        urls+=("https://raw.githubusercontent.com/${GITHUB_REPO}/${GIT_BRANCH}/core/static/vendor/${filename}")
 
+        local updated=false
         for url in "${urls[@]}"; do
-            if sudo curl -fsSL --connect-timeout 10 --max-time 25 --retry 2 --retry-delay 2 \
-                -o "${dest}" "${url}" >> /tmp/${SERVICE_NAME}_install.log 2>&1; then
-                if [ -s "${dest}" ]; then
-                    [ -n "${backup_tmp}" ] && sudo rm -f "${backup_tmp}" 2>/dev/null || true
-                    return 0
+            local tmp_download="${dest}.tmp.$$"
+            if sudo curl -fsSL --connect-timeout 5 --max-time 15 \
+                -o "${tmp_download}" "${url}" >> /tmp/${SERVICE_NAME}_install.log 2>&1; then
+                if [ -s "${tmp_download}" ]; then
+                    sudo mv -f "${tmp_download}" "${dest}"
+                    updated=true
+                    break
                 fi
             fi
-            echo "  ⚠ Зеркало недоступно: ${url}" >> /tmp/${SERVICE_NAME}_install.log
+            sudo rm -f "${tmp_download}" 2>/dev/null || true
+            echo "  ⚠ CDN недоступен: ${url}" >> /tmp/${SERVICE_NAME}_install.log
         done
 
-        if [ -n "${backup_tmp}" ] && [ -s "${backup_tmp}" ]; then
-            sudo cp -f "${backup_tmp}" "${dest}" 2>/dev/null || true
-            sudo rm -f "${backup_tmp}" 2>/dev/null || true
-            echo "  ℹ ${label}: все CDN-зеркала недоступны, использована копия из репозитория." >> /tmp/${SERVICE_NAME}_install.log
-            return 0
+        # 3. Если обновление с CDN не удалось, но у нас есть копия из репозитория — восстанавливаем её
+        if [ "$updated" = false ]; then
+            if [ -n "${backup_tmp}" ] && [ -s "${backup_tmp}" ]; then
+                sudo cp -f "${backup_tmp}" "${dest}" 2>/dev/null || true
+                echo "  ℹ ${label}: обновление с CDN недоступно, используется копия из репозитория." >> /tmp/${SERVICE_NAME}_install.log
+            fi
         fi
+        [ -n "${backup_tmp}" ] && sudo rm -f "${backup_tmp}" 2>/dev/null || true
 
         if [ -s "${dest}" ]; then
-            echo "  ℹ ${label}: использована копия из репозитория (${dest})." >> /tmp/${SERVICE_NAME}_install.log
             return 0
         fi
 
-        msg_error "Не удалось загрузить ${label} ни с одного зеркала и файл отсутствует в репозитории"
+        msg_error "Не удалось получить ${label} ни из репозитория, ни из CDN"
         return 1
     }
 

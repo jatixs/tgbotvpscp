@@ -697,9 +697,6 @@ setup_repo_and_dirs() {
 }
 
 download_vendor_assets() {
-    if is_node_context; then
-        return 0
-    fi
     msg_info "Downloading local JS/CSS dependencies..."
     local vendor_dir="${BOT_INSTALL_PATH}/core/static/vendor"
     sudo mkdir -p "${vendor_dir}"
@@ -708,37 +705,46 @@ download_vendor_assets() {
         local label="$1"; shift
         local filename="$(basename "${dest}")"
         local urls=("$@")
+        if [ ! -s "${dest}" ]; then
+            local raw_repo_url="https://raw.githubusercontent.com/${GITHUB_REPO}/${GIT_BRANCH}/core/static/vendor/${filename}"
+            sudo curl -fsSL --connect-timeout 8 --max-time 20 --retry 1 \
+                -o "${dest}" "${raw_repo_url}" >> /tmp/${SERVICE_NAME}_install.log 2>&1 || true
+        fi
         local backup_tmp=""
         if [ -s "${dest}" ]; then
             backup_tmp=$(mktemp "/tmp/${label// /_}.XXXXXX" 2>/dev/null || echo "/tmp/${filename}.bak.$$")
             sudo cp -f "${dest}" "${backup_tmp}" 2>/dev/null || true
         fi
 
-        urls+=("https://raw.githubusercontent.com/${GITHUB_REPO}/${GIT_BRANCH}/core/static/vendor/${filename}")
-
+        local updated=false
         for url in "${urls[@]}"; do
-            if sudo curl -fsSL --connect-timeout 10 --max-time 25 --retry 2 --retry-delay 2 \
-                -o "${dest}" "${url}" >> /tmp/${SERVICE_NAME}_install.log 2>&1; then
-                if [ -s "${dest}" ]; then
-                    [ -n "${backup_tmp}" ] && sudo rm -f "${backup_tmp}" 2>/dev/null || true
-                    return 0
+            local tmp_download="${dest}.tmp.$$"
+            if sudo curl -fsSL --connect-timeout 5 --max-time 15 \
+                -o "${tmp_download}" "${url}" >> /tmp/${SERVICE_NAME}_install.log 2>&1; then
+                if [ -s "${tmp_download}" ]; then
+                    sudo mv -f "${tmp_download}" "${dest}"
+                    updated=true
+                    break
                 fi
             fi
-            echo "  ⚠ Mirror unavailable: ${url}" >> /tmp/${SERVICE_NAME}_install.log
+            sudo rm -f "${tmp_download}" 2>/dev/null || true
+            echo "  ⚠ CDN unavailable: ${url}" >> /tmp/${SERVICE_NAME}_install.log
         done
 
-        if [ -n "${backup_tmp}" ] && [ -s "${backup_tmp}" ]; then
-            sudo cp -f "${backup_tmp}" "${dest}" 2>/dev/null || true
-            sudo rm -f "${backup_tmp}" 2>/dev/null || true
-            echo "  ℹ ${label}: all CDN mirrors unavailable, using copy from repository." >> /tmp/${SERVICE_NAME}_install.log
+        # 3. If CDN update failed, restore/keep the verified copy from repository
+        if [ "$updated" = false ]; then
+            if [ -n "${backup_tmp}" ] && [ -s "${backup_tmp}" ]; then
+                sudo cp -f "${backup_tmp}" "${dest}" 2>/dev/null || true
+                echo "  ℹ ${label}: CDN update unavailable, using verified copy from repository." >> /tmp/${SERVICE_NAME}_install.log
+            fi
+        fi
+        [ -n "${backup_tmp}" ] && sudo rm -f "${backup_tmp}" 2>/dev/null || true
+
+        if [ -s "${dest}" ]; then
             return 0
         fi
 
-        if [ -s "${dest}" ]; then
-            echo "  ℹ ${label}: using copy from repository (${dest})." >> /tmp/${SERVICE_NAME}_install.log
-            return 0
-        fi
-        msg_error "Failed to download ${label} from any mirror and file is missing from repository"
+        msg_error "Failed to retrieve ${label} from repository or CDNs"
         return 1
     }
 
