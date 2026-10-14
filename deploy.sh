@@ -173,7 +173,7 @@ run_with_spinner() {
         msg_error "Ошибка во время '$msg'. Код: $exit_code"
         msg_error "Подробности в логе: /tmp/${SERVICE_NAME}_install.log"
         echo -e "${C_YELLOW}Последние строки лога (/tmp/${SERVICE_NAME}_install.log):${C_RESET}"
-        tail -n 10 /tmp/${SERVICE_NAME}_install.log
+        tail -n 15 /tmp/${SERVICE_NAME}_install.log | grep -v "is already the newest version" | tail -n 10
     fi
     return $exit_code
 }
@@ -642,7 +642,27 @@ setup_repo_and_dirs() {
         msg_info "Найден legacy security.key. Ключ будет перенесен в .env."
     fi
     sudo rm -rf "${staging_path}" "${previous_path}"
-    if ! run_with_spinner "Клонирование репозитория" sudo git clone --branch "${GIT_BRANCH}" "${GITHUB_REPO_URL}" "${staging_path}"; then
+    
+    clone_or_reuse_repo() {
+        local target="$1"
+        for attempt in 1 2 3; do
+            if sudo git clone --depth 1 --branch "${GIT_BRANCH}" "${GITHUB_REPO_URL}" "${target}" >> /tmp/${SERVICE_NAME}_install.log 2>&1; then
+                return 0
+            fi
+            sudo rm -rf "${target}"
+            sleep 2
+        done
+
+        if [ -d "${BOT_INSTALL_PATH}" ] && { [ -f "${BOT_INSTALL_PATH}/node/node.py" ] || [ -f "${BOT_INSTALL_PATH}/bot.py" ]; }; then
+            echo "  ℹ Связь с GitHub прервалась, но на сервере уже установлена рабочая версия. Продолжаем..." >> /tmp/${SERVICE_NAME}_install.log
+            sudo mkdir -p "${target}"
+            sudo cp -a "${BOT_INSTALL_PATH}/." "${target}/"
+            return 0
+        fi
+        return 1
+    }
+
+    if ! run_with_spinner "Клонирование репозитория" clone_or_reuse_repo "${staging_path}"; then
         sudo rm -rf "${staging_path}"
         return 1
     fi
