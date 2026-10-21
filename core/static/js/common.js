@@ -2073,7 +2073,7 @@ window.closeMobileSettings = closeMobileSettings;
 window.toggleMobileSettings = toggleMobileSettings;
 
 window.toggleTheme = function() {
-    const themes = ["system", "dark", "light", "amoled"];
+    const themes = ["system", "light", "dark", "amoled"];
     let currentTheme = localStorage.getItem("theme");
     if (!currentTheme) currentTheme = "system";
 
@@ -2094,12 +2094,12 @@ function setThemeDirect(theme, event) {
 
 function applyThemeUI(t) {
     if (!t) return;
-    ['iconMoon', 'iconSun', 'iconSystem', 'iconAmoled'].forEach(id => { document.getElementById(id)?.classList.add('hidden'); });
+    ['iconSystem', 'iconSun', 'iconMoon', 'iconAmoled'].forEach(id => { document.getElementById(id)?.classList.add('hidden'); });
     
-    if (t === 'dark') {
-        document.getElementById('iconMoon')?.classList.remove('hidden');
-    } else if (t === 'light') {
+    if (t === 'light') {
         document.getElementById('iconSun')?.classList.remove('hidden');
+    } else if (t === 'dark') {
+        document.getElementById('iconMoon')?.classList.remove('hidden');
     } else if (t === 'amoled') {
         document.getElementById('iconAmoled')?.classList.remove('hidden');
     } else {
@@ -2110,7 +2110,7 @@ function applyThemeUI(t) {
     const baseClasses = ["text-gray-500", "hover:text-gray-700", "dark:text-gray-400", "dark:hover:text-gray-200", "hover:bg-gray-200", "dark:hover:bg-gray-800"];
     const activeClasses = ["bg-white", "dark:bg-gray-600", "shadow-sm", "text-gray-900", "dark:text-white"];
     
-    ['mThemeSys', 'mThemeDark', 'mThemeLight', 'mThemeAmoled'].forEach(id => {
+    ['mThemeSys', 'mThemeLight', 'mThemeDark', 'mThemeAmoled'].forEach(id => {
         const el = document.getElementById(id);
         if (el) {
             el.classList.remove(...activeClasses);
