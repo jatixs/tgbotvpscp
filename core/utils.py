@@ -856,6 +856,8 @@ def get_app_version() -> str:
         return ver if ver.startswith("v") else f"v{ver}"
     try:
         changelog_path = os.path.join(config.BASE_DIR, "CHANGELOG.md")
+        if not os.path.exists(changelog_path):
+            changelog_path = os.path.join(config.BASE_DIR, "docs", "CHANGELOG.md")
         if os.path.exists(changelog_path):
             with open(changelog_path, "r", encoding="utf-8") as f:
                 content = f.read()
