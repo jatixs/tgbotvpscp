@@ -207,13 +207,14 @@
             const rect = ctl.button.getBoundingClientRect();
             const pop = ctl.pop;
             const margin = 8;
-            const popRect = pop.getBoundingClientRect();
-            let left = rect.right - popRect.width;
-            left = Math.max(margin, Math.min(left, window.innerWidth - popRect.width - margin));
+            const popWidth = pop.offsetWidth;
+            const popHeight = pop.offsetHeight;
+            let left = rect.left + (rect.width - popWidth) / 2;
+            left = Math.max(margin, Math.min(left, window.innerWidth - popWidth - margin));
             let top = rect.bottom + 6;
             let openUp = false;
-            if (top + popRect.height > window.innerHeight - margin && rect.top - popRect.height - 6 > margin) {
-                top = rect.top - popRect.height - 6;
+            if (top + popHeight > window.innerHeight - margin && rect.top - popHeight - 6 > margin) {
+                top = rect.top - popHeight - 6;
                 openUp = true;
             }
             pop.style.left = `${Math.round(left)}px`;

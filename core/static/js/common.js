@@ -1121,6 +1121,94 @@ function showCopyFeedback() {
 }
 window.copyToken = copyToken;
 
+function copyIpWithFeedback(ip, triggerEl, event) {
+    if (event) {
+        event.stopPropagation();
+        if (event.stopImmediatePropagation) event.stopImmediatePropagation();
+        if (event.preventDefault) event.preventDefault();
+    }
+    const cleanIp = (ip || '').trim();
+    if (!cleanIp || cleanIp === '-' || cleanIp === 'n/a' || cleanIp === 'Unknown' || cleanIp === '...') return;
+
+    copyTextToClipboard(cleanIp);
+
+    const btn = triggerEl ? (triggerEl.closest('.ip-copy-btn') || triggerEl.querySelector?.('.ip-copy-btn') || triggerEl) : null;
+    const iconSvg = btn ? (btn.querySelector('.ip-copy-icon') || (btn.classList && btn.classList.contains('ip-copy-icon') ? btn : null)) : null;
+
+    if (iconSvg && !btn._isCopying) {
+        btn._isCopying = true;
+        const originalHtml = iconSvg.innerHTML;
+        const originalClass = iconSvg.getAttribute('class') || '';
+
+        // Checkmark icon
+        iconSvg.innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7" />';
+        iconSvg.setAttribute('class', originalClass + ' text-emerald-500 dark:text-emerald-400 scale-110');
+
+        setTimeout(() => {
+            iconSvg.innerHTML = originalHtml;
+            iconSvg.setAttribute('class', originalClass);
+            btn._isCopying = false;
+        }, 1500);
+    }
+}
+window.copyIpWithFeedback = copyIpWithFeedback;
+
+function isTouchDeviceOrEvent(e) {
+    if (e && (e.pointerType === 'touch' || e.pointerType === 'pen')) return true;
+    if (window.matchMedia && (window.matchMedia('(pointer: coarse)').matches || window.matchMedia('(hover: none)').matches)) return true;
+    if ('ontouchstart' in window || navigator.maxTouchPoints > 0) return true;
+    return false;
+}
+
+// Global Capture delegation for Copying IP (works across desktop click and touchscreen tap)
+document.addEventListener('click', e => {
+    // 1. Explicit Copy Button Click
+    const btn = e.target.closest('.ip-copy-btn, [data-action="copy-ip"]');
+    if (btn) {
+        e.stopPropagation();
+        if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+        if (e.preventDefault) e.preventDefault();
+        const container = btn.closest('.ip-copy-container');
+        const ip = btn.getAttribute('data-ip') || 
+                   (container && container.getAttribute('data-copy-ip')) || 
+                   (container && container.querySelector('.ip-copy-text')?.textContent.trim()) || 
+                   '';
+        if (ip) {
+            copyIpWithFeedback(ip, btn, e);
+        }
+        return;
+    }
+
+    // 2. Touch screen tap on IP text or container (tablets, phones)
+    const textOrContainer = e.target.closest('.ip-copy-text, .ip-copy-container');
+    if (textOrContainer && isTouchDeviceOrEvent(e)) {
+        e.stopPropagation();
+        if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+        if (e.preventDefault) e.preventDefault();
+        const container = textOrContainer.closest('.ip-copy-container') || textOrContainer;
+        const textEl = container.querySelector('.ip-copy-text') || textOrContainer;
+        const ip = container.getAttribute('data-copy-ip') || textEl.textContent.trim();
+        const btnEl = container.querySelector('.ip-copy-btn');
+        if (ip) {
+            copyIpWithFeedback(ip, btnEl, e);
+        }
+        return;
+    }
+}, true);
+
+document.addEventListener('app:action:copy-ip', e => {
+    e.detail.originalEvent?.stopPropagation();
+    const btn = e.detail.target;
+    const container = btn.closest('.ip-copy-container');
+    const ip = btn.getAttribute('data-ip') || 
+               (container && container.getAttribute('data-copy-ip')) || 
+               (container && container.querySelector('.ip-copy-text')?.textContent.trim()) || 
+               '';
+    if (ip) {
+        copyIpWithFeedback(ip, btn, e.detail.originalEvent);
+    }
+});
+
 let toastContainer = null;
 
 function getToastContainer() {

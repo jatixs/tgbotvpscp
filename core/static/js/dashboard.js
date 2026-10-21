@@ -705,8 +705,15 @@ function renderNextNodeBatch() {
                         <div class="flex items-center gap-2">
                             <div data-ref="name" class="font-bold text-sm text-gray-900 dark:text-white truncate group-hover:text-blue-600 dark:group-hover:text-blue-400 transition">${replaceEmojisWithFlagsHTML(escapeHtml(node.name))}</div>
                         </div>
-                        <div class="flex items-center gap-2 mt-1">
-                            <div data-ref="ip" class="text-[10px] sm:text-xs font-mono text-gray-400 truncate">${escapeHtml(displayIp)}</div>
+                        <div class="flex items-center gap-2 mt-1 min-w-0">
+                            <div class="ip-copy-container inline-flex items-center gap-1 group/ip max-w-full" data-copy-ip="${escapeHtml(displayIp)}">
+                                <span data-ref="ip" class="ip-copy-text text-[10px] sm:text-xs font-mono text-gray-400 truncate select-all" title="${(typeof I18N !== 'undefined' && I18N.web_copy_ip) ? I18N.web_copy_ip : 'Copy IP'}">${escapeHtml(displayIp)}</span>
+                                <button type="button" class="ip-copy-btn p-0.5 text-gray-400 hover:text-blue-500 dark:hover:text-blue-400 rounded transition opacity-70 group-hover/ip:opacity-100 flex-shrink-0" data-action="copy-ip" data-ip="${escapeHtml(displayIp)}" title="${(typeof I18N !== 'undefined' && I18N.web_copy_ip) ? I18N.web_copy_ip : 'Copy IP'}">
+                                    <svg class="w-3.5 h-3.5 ip-copy-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                                    </svg>
+                                </button>
+                            </div>
                             ${pingHtml}
                         </div>
                     </div>
@@ -978,10 +985,13 @@ function updateAgentStatsUI(data) {
 
             const ipEl = document.getElementById('agentIp');
             if (ipEl && data.stats.ip) {
+                const ip = decryptData(data.stats.ip);
+                const copyBtn = document.getElementById('agentIpCopyBtn');
+                if (copyBtn) copyBtn.setAttribute('data-ip', ip);
                 if (typeof window.animateDecryption === 'function') {
-                    window.animateDecryption(ipEl, decryptData(data.stats.ip), 800, 'agent_ip');
+                    window.animateDecryption(ipEl, ip, 800, 'agent_ip');
                 } else {
-                    ipEl.innerText = decryptData(data.stats.ip);
+                    ipEl.innerText = ip;
                 }
             }
 
@@ -1688,7 +1698,13 @@ function updateNodeDetailsUI(data) {
 
     const newIp = decryptData(data.ip);
     const ipEl = document.getElementById('modalNodeIp');
-    if (ipEl.innerText !== newIp) ipEl.innerText = newIp;
+    if (ipEl && ipEl.innerText !== newIp) {
+        ipEl.innerText = newIp;
+        const container = document.getElementById('modalNodeIpContainer');
+        if (container) container.setAttribute('data-copy-ip', newIp);
+        const copyBtn = document.getElementById('modalNodeIpCopyBtn');
+        if (copyBtn) copyBtn.setAttribute('data-ip', newIp);
+    }
     
     const nodeIdEl = document.getElementById('modalNodeId');
     if (nodeIdEl) {
@@ -2941,7 +2957,13 @@ async function loadAgentIpv4() {
         const primary = data.primary || data.source_ip || data.agent_ip || '-';
         const ips = Array.isArray(data.ips) ? data.ips : Array.isArray(data.ipv4) ? data.ipv4 : [];
 
-        if (elPrimary) elPrimary.textContent = primary;
+        if (elPrimary) {
+            elPrimary.textContent = primary;
+            const container = document.getElementById('agentIpsPrimaryContainer');
+            if (container) container.setAttribute('data-copy-ip', primary);
+            const copyBtn = document.getElementById('agentIpsPrimaryCopyBtn');
+            if (copyBtn) copyBtn.setAttribute('data-ip', primary);
+        }
 
         const secondary = ips.filter(ip => ip && ip !== primary);
 
@@ -2949,8 +2971,13 @@ async function loadAgentIpv4() {
             elEmpty?.classList.remove('hidden');
         } else if (elList) {
             const rawHtml = secondary.map(ip => `
-        <li class="bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-xl px-3 py-2 font-mono text-xs select-all">
-          ${escapeHtml(ip)}
+        <li class="bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-xl px-3 py-2 font-mono text-xs select-all flex items-center justify-between group/ip ip-copy-container" data-copy-ip="${escapeHtml(ip)}">
+          <span class="ip-copy-text">${escapeHtml(ip)}</span>
+          <button type="button" class="ip-copy-btn p-1 text-gray-400 hover:text-blue-500 dark:hover:text-blue-400 rounded transition opacity-70 group-hover/ip:opacity-100 flex-shrink-0" data-action="copy-ip" data-ip="${escapeHtml(ip)}" title="${(typeof I18N !== 'undefined' && I18N.web_copy_ip) ? I18N.web_copy_ip : 'Copy IP'}">
+            <svg class="w-3.5 h-3.5 ip-copy-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+            </svg>
+          </button>
         </li>
       `).join('');
             const safeHtml = DOMPurify.sanitize('<ul>' + rawHtml + '</ul>');
@@ -2985,7 +3012,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 badge.removeAttribute('onkeydown');
                 badge.classList.remove('cursor-pointer', 'hover:bg-gray-200/70', 'dark:hover:bg-white/10');
                 // Remove the info icon
-                const icon = badge.querySelector('svg');
+                const icon = document.getElementById('agentIpInfoIcon');
                 if (icon) icon.remove();
                 return; // Don't add click handlers
             }
@@ -3003,7 +3030,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     badge.addEventListener('click', handler);
     badge.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter' || e.key === ' ') {
+        if (e.target === badge && (e.key === 'Enter' || e.key === ' ')) {
             e.preventDefault();
             handler(e);
         }
@@ -3599,4 +3626,3 @@ function updateHiddenBlocksPanel() {
         });
     }
 }
-
