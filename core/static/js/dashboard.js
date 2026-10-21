@@ -1139,11 +1139,27 @@ function renderAgentChart(series, animate = true) {
                 grid: {
                     display: false
                 },
+                // Evenly spaced ticks that always include the last point, so the rotated
+                // labels reach the right edge instead of leaving an empty corner.
+                afterBuildTicks: (scale) => {
+                    const ticks = scale.ticks;
+                    if (!ticks || ticks.length <= maxTicks) return;
+                    const last = ticks.length - 1;
+                    const picked = [];
+                    for (let i = 0; i < maxTicks; i++) {
+                        picked.push(ticks[Math.round(i * last / (maxTicks - 1))]);
+                    }
+                    scale.ticks = picked;
+                },
                 ticks: {
                     color: tickColor,
-                    maxTicksLimit: maxTicks,
-                    autoSkipPadding: 16,
-                    maxRotation: 0
+                    autoSkip: false,
+                    minRotation: 45,
+                    maxRotation: 45,
+                    padding: 4,
+                    font: {
+                        size: isMobile ? 10 : 11
+                    }
                 }
             },
             y: {
