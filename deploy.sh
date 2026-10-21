@@ -231,20 +231,42 @@ check_integrity() {
         INTEGRITY_STATUS="${C_GREEN}🛡️ Режим НОДЫ (Git не требуется)${C_RESET}"
     elif [ -d "${BOT_INSTALL_PATH}/.git" ]; then
         cd "${BOT_INSTALL_PATH}" || return
-        git fetch origin "$GIT_BRANCH" >/dev/null 2>&1
-        local FILES_TO_CHECK="core modules bot.py watchdog.py migrate.py manage.py"
-        local EXISTING_FILES=""
-        for f in $FILES_TO_CHECK; do
-            if [ -e "${BOT_INSTALL_PATH}/$f" ]; then EXISTING_FILES="$EXISTING_FILES $f"; fi
-        done
-        if [ -z "$EXISTING_FILES" ]; then
-            INTEGRITY_STATUS="${C_YELLOW}⚠️ Файлы не найдены${C_RESET}"
-        else
-            local DIFF=$(git diff --name-only HEAD -- $EXISTING_FILES 2>/dev/null | grep -v '^core/static/vendor/')
-            if [ -n "$DIFF" ]; then
-                INTEGRITY_STATUS="${C_RED}⚠️ ЦЕЛОСТНОСТЬ НАРУШЕНА (Файлы изменены локально)${C_RESET}"
+        local py_bin="python3"
+        if [ -x "${VENV_PATH}/bin/python3" ]; then py_bin="${VENV_PATH}/bin/python3"; fi
+
+        local json_report=""
+        if [ -f "${BOT_INSTALL_PATH}/manage.py" ] && command -v "$py_bin" &>/dev/null; then
+            json_report=$($py_bin "${BOT_INSTALL_PATH}/manage.py" integrity check --branch "$GIT_BRANCH" --json 2>/dev/null || true)
+        fi
+
+        if [ -n "$json_report" ]; then
+            local status=$(echo "$json_report" | grep -oP '"status":\s*"\K[^"]+' | head -n 1)
+            local mod_count=$(echo "$json_report" | grep -oP '"rel_path"' | wc -l)
+            if [ "$status" == "OK" ]; then
+                INTEGRITY_STATUS="${C_GREEN}🛡️ SHA-256 подтвержден (${GIT_BRANCH})${C_RESET}"
+            elif [ "$status" == "CUSTOM_ACTIVE" ]; then
+                INTEGRITY_STATUS="${C_GREEN}🛡️ SHA-256 подтвержден + 🧩 Кастом активен${C_RESET}"
+            elif [ "$status" == "MODIFIED" ]; then
+                INTEGRITY_STATUS="${C_YELLOW}⚠️ Локальные изменения (${mod_count} файлов)${C_RESET}"
             else
                 INTEGRITY_STATUS="${C_GREEN}🛡️ Код подтвержден${C_RESET}"
+            fi
+        else
+            git fetch origin "$GIT_BRANCH" >/dev/null 2>&1
+            local FILES_TO_CHECK="core modules bot.py watchdog.py migrate.py manage.py"
+            local EXISTING_FILES=""
+            for f in $FILES_TO_CHECK; do
+                if [ -e "${BOT_INSTALL_PATH}/$f" ]; then EXISTING_FILES="$EXISTING_FILES $f"; fi
+            done
+            if [ -z "$EXISTING_FILES" ]; then
+                INTEGRITY_STATUS="${C_YELLOW}⚠️ Файлы не найдены${C_RESET}"
+            else
+                local DIFF=$(git diff --name-only HEAD -- $EXISTING_FILES 2>/dev/null | grep -v '^core/static/vendor/')
+                if [ -n "$DIFF" ]; then
+                    INTEGRITY_STATUS="${C_YELLOW}⚠️ Файлы изменены локально${C_RESET}"
+                else
+                    INTEGRITY_STATUS="${C_GREEN}🛡️ Код подтвержден${C_RESET}"
+                fi
             fi
         fi
         cd - >/dev/null
@@ -1787,6 +1809,43 @@ update_bot() {
 
     cd "${BOT_INSTALL_PATH}"
     if ! run_with_spinner "Git fetch" $exec_cmd git fetch origin; then return 1; fi
+
+    local py_bin="python3"
+    if [ -x "${VENV_PATH}/bin/python3" ]; then py_bin="${VENV_PATH}/bin/python3"; fi
+
+    if [ -f "${BOT_INSTALL_PATH}/manage.py" ] && command -v "$py_bin" &>/dev/null; then
+        local json_report=$($py_bin "${BOT_INSTALL_PATH}/manage.py" integrity check --branch "$GIT_BRANCH" --json 2>/dev/null || true)
+        local status=$(echo "$json_report" | grep -oP '"status":\s*"\K[^"]+' | head -n 1)
+        if [ "$status" == "MODIFIED" ]; then
+            echo ""
+            msg_warning "Внимание! Обнаружены локальные изменения системных файлов."
+            $py_bin "${BOT_INSTALL_PATH}/manage.py" integrity check --branch "$GIT_BRANCH"
+            echo ""
+            echo "  1) Создать автоматический бэкап в .backups/ и продолжить (Рекомендуется)"
+            echo "  2) Показать Git diff"
+            echo "  3) Отменить обновление"
+            read -p "$(echo -e "${C_BOLD}Ваш выбор [1/2/3]: ${C_RESET}")" mod_choice
+            case $mod_choice in
+                2)
+                    git diff "origin/${GIT_BRANCH}" | less -R
+                    read -p "Продолжить обновление с созданием бэкапа? (y/n): " c_after_diff
+                    if [[ ! "$c_after_diff" =~ ^[Yy]$ ]]; then
+                        msg_info "Обновление отменено."
+                        return 0
+                    fi
+                    $py_bin "${BOT_INSTALL_PATH}/manage.py" integrity backup --branch "$GIT_BRANCH"
+                    ;;
+                3)
+                    msg_info "Обновление отменено пользователем."
+                    return 0
+                    ;;
+                *)
+                    $py_bin "${BOT_INSTALL_PATH}/manage.py" integrity backup --branch "$GIT_BRANCH"
+                    ;;
+            esac
+        fi
+    fi
+
     if ! run_with_spinner "Git reset" $exec_cmd git reset --hard "origin/${GIT_BRANCH}"; then return 1; fi
     
     local new_ver=""
@@ -2115,6 +2174,86 @@ manage_alert_module() {
     fi
 }
 
+manage_custom_modules() {
+    local py_bin="python3"
+    if [ -x "${VENV_PATH}/bin/python3" ]; then py_bin="${VENV_PATH}/bin/python3"; fi
+
+    while true; do
+        clear
+        echo -e "${C_BLUE}${C_BOLD}╔═══════════════════════════════════════════════════════╗${C_RESET}"
+        echo -e "${C_BLUE}${C_BOLD}║     Кастомные модули и аудит целостности SHA-256      ║${C_RESET}"
+        echo -e "${C_BLUE}${C_BOLD}╚═══════════════════════════════════════════════════════╝${C_RESET}"
+        echo "  Директория custom/ изолирована от Git и защищена от перезаписи при обновлениях."
+        echo "--------------------------------------------------------"
+        echo "  1) Полный аудит целостности SHA-256 (сверка с origin/${GIT_BRANCH})"
+        echo "  2) Список активных кастомных модулей и WebUI страниц"
+        echo "  3) Создать шаблон кастомного модуля бота (custom/modules/)"
+        echo "  4) Создать шаблон кастомной WebUI страницы (маршрут + шаблон)"
+        echo "  5) Создать бэкап изменённых системных файлов (.backups/)"
+        echo "  6) Показать Git diff с веткой origin/${GIT_BRANCH}"
+        echo "  0) Назад в главное меню"
+        echo "--------------------------------------------------------"
+        read -p "$(echo -e "${C_BOLD}Ваш выбор: ${C_RESET}")" c_choice
+        case $c_choice in
+            1)
+                cd "${BOT_INSTALL_PATH}" || return
+                $py_bin "${BOT_INSTALL_PATH}/manage.py" integrity check --branch "$GIT_BRANCH" -v
+                read -p "Нажмите Enter для продолжения..."
+                ;;
+            2)
+                cd "${BOT_INSTALL_PATH}" || return
+                $py_bin "${BOT_INSTALL_PATH}/manage.py" integrity list-custom
+                read -p "Нажмите Enter для продолжения..."
+                ;;
+            3)
+                cd "${BOT_INSTALL_PATH}" || return
+                read -p "$(echo -e "${C_BOLD}Введите имя модуля (латиницей, например my_vpn): ${C_RESET}")" mod_name
+                if [ -n "$mod_name" ]; then
+                    $py_bin "${BOT_INSTALL_PATH}/manage.py" integrity new-module "$mod_name"
+                    if [ -f "${ENV_FILE}" ] && grep -q "INSTALL_MODE=secure" "${ENV_FILE}"; then
+                        sudo chown -R ${SERVICE_USER}:${SERVICE_USER} "${BOT_INSTALL_PATH}/custom" 2>/dev/null || true
+                    fi
+                    read -p "Перезапустить бота для применения? (y/n): " r_choice
+                    if [[ "$r_choice" =~ ^[Yy]$ ]]; then
+                        sudo systemctl restart "${SERVICE_NAME}" 2>/dev/null || true
+                        msg_success "Сервис перезапущен!"
+                    fi
+                fi
+                read -p "Нажмите Enter..."
+                ;;
+            4)
+                cd "${BOT_INSTALL_PATH}" || return
+                read -p "$(echo -e "${C_BOLD}Введите имя страницы (например custom_stats): ${C_RESET}")" page_name
+                if [ -n "$page_name" ]; then
+                    $py_bin "${BOT_INSTALL_PATH}/manage.py" integrity new-page "$page_name"
+                    if [ -f "${ENV_FILE}" ] && grep -q "INSTALL_MODE=secure" "${ENV_FILE}"; then
+                        sudo chown -R ${SERVICE_USER}:${SERVICE_USER} "${BOT_INSTALL_PATH}/custom" 2>/dev/null || true
+                    fi
+                    read -p "Перезапустить бота для применения? (y/n): " r_choice
+                    if [[ "$r_choice" =~ ^[Yy]$ ]]; then
+                        sudo systemctl restart "${SERVICE_NAME}" 2>/dev/null || true
+                        msg_success "Сервис перезапущен!"
+                    fi
+                fi
+                read -p "Нажмите Enter..."
+                ;;
+            5)
+                cd "${BOT_INSTALL_PATH}" || return
+                $py_bin "${BOT_INSTALL_PATH}/manage.py" integrity backup --branch "$GIT_BRANCH"
+                read -p "Нажмите Enter для продолжения..."
+                ;;
+            6)
+                cd "${BOT_INSTALL_PATH}" || return
+                git fetch origin "$GIT_BRANCH" >/dev/null 2>&1
+                git diff "origin/${GIT_BRANCH}" | less -R
+                ;;
+            0)
+                break
+                ;;
+        esac
+    done
+}
+
 main_menu() {
     local local_version=$(get_local_version)
     while true; do
@@ -2153,6 +2292,7 @@ main_menu() {
                 alert_status="${C_GREEN}активен${C_RESET}"
             fi
             echo -e "  9) Управление Alert-модулем (${alert_status})"
+            echo -e " 10) Кастомные модули и аудит SHA-256"
         fi
 
         echo "  0) Выход"
@@ -2168,6 +2308,7 @@ main_menu() {
             7) if [ "$IS_NODE" == "yes" ]; then install_node_logic; read -p "Нажмите Enter..."; else msg_error "Пункт доступен только в режиме НОДЫ."; sleep 2; fi ;;
             8) if [ "$IS_NODE" == "yes" ]; then toggle_agent_monitoring; read -p "Нажмите Enter..."; fi ;;
             9) if [ "$IS_NODE" != "yes" ]; then manage_alert_module; read -p "Нажмите Enter..."; fi ;;
+            10) if [ "$IS_NODE" != "yes" ]; then manage_custom_modules; fi ;;
             0) break ;;
         esac
     done

@@ -59,8 +59,34 @@ def create_web_app(bot_instance: Bot) -> web.Application:
     if ENABLE_WEB_UI and STATIC_DIR.exists():
         app.router.add_static("/static", str(STATIC_DIR))
 
+    custom_static_dir = Path(BASE_DIR) / "custom" / "web" / "static"
+    if ENABLE_WEB_UI and custom_static_dir.is_dir():
+        app.router.add_static("/static/custom", str(custom_static_dir))
+
     _register_routes(app)
     return app
+
+
+def _register_custom_routes(app: web.Application) -> None:
+    """Discover and register custom WebUI routes from custom/web/routes/*.py."""
+    custom_routes_dir = Path(BASE_DIR) / "custom" / "web" / "routes"
+    if not custom_routes_dir.is_dir():
+        return
+    import importlib.util
+    for route_file in custom_routes_dir.glob("*.py"):
+        if route_file.name.startswith("__"):
+            continue
+        try:
+            mod_name = f"custom_web_route_{route_file.stem}"
+            spec = importlib.util.spec_from_file_location(mod_name, str(route_file))
+            if spec and spec.loader:
+                mod = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(mod)
+                if hasattr(mod, "routes"):
+                    app.add_routes(mod.routes)
+                    logging.info(f"🧩 Registered custom WebUI route: {route_file.stem}")
+        except Exception as e:
+            logging.error(f"Failed to load custom web route {route_file}: {e}")
 
 
 def _register_routes(app: web.Application) -> None:
@@ -72,10 +98,12 @@ def _register_routes(app: web.Application) -> None:
         app.add_routes(system_routes)
         app.add_routes(streaming_routes)
         app.add_routes(extra_routes)
+        _register_custom_routes(app)
         logging.info(log_text("web_routes_registered"))
     except Exception:
         logging.exception("Failed to register web route tables")
         raise
+
 
 
 async def start_web_server(bot_instance: Bot) -> web.AppRunner | None:

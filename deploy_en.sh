@@ -230,20 +230,42 @@ check_integrity() {
         INTEGRITY_STATUS="${C_GREEN}🛡️ NODE Mode (Git not required)${C_RESET}"
     elif [ -d "${BOT_INSTALL_PATH}/.git" ]; then
         cd "${BOT_INSTALL_PATH}" || return
-        git fetch origin "$GIT_BRANCH" >/dev/null 2>&1
-        local FILES_TO_CHECK="core modules bot.py watchdog.py migrate.py manage.py"
-        local EXISTING_FILES=""
-        for f in $FILES_TO_CHECK; do
-            if [ -e "${BOT_INSTALL_PATH}/$f" ]; then EXISTING_FILES="$EXISTING_FILES $f"; fi
-        done
-        if [ -z "$EXISTING_FILES" ]; then
-            INTEGRITY_STATUS="${C_YELLOW}⚠️ Files not found${C_RESET}"
-        else
-            local DIFF=$(git diff --name-only HEAD -- $EXISTING_FILES 2>/dev/null | grep -v '^core/static/vendor/')
-            if [ -n "$DIFF" ]; then
-                INTEGRITY_STATUS="${C_RED}⚠️ INTEGRITY VIOLATED (Files modified locally)${C_RESET}"
+        local py_bin="python3"
+        if [ -x "${VENV_PATH}/bin/python3" ]; then py_bin="${VENV_PATH}/bin/python3"; fi
+
+        local json_report=""
+        if [ -f "${BOT_INSTALL_PATH}/manage.py" ] && command -v "$py_bin" &>/dev/null; then
+            json_report=$($py_bin "${BOT_INSTALL_PATH}/manage.py" integrity check --branch "$GIT_BRANCH" --json 2>/dev/null || true)
+        fi
+
+        if [ -n "$json_report" ]; then
+            local status=$(echo "$json_report" | grep -oP '"status":\s*"\K[^"]+' | head -n 1)
+            local mod_count=$(echo "$json_report" | grep -oP '"rel_path"' | wc -l)
+            if [ "$status" == "OK" ]; then
+                INTEGRITY_STATUS="${C_GREEN}🛡️ SHA-256 verified (${GIT_BRANCH})${C_RESET}"
+            elif [ "$status" == "CUSTOM_ACTIVE" ]; then
+                INTEGRITY_STATUS="${C_GREEN}🛡️ SHA-256 verified + 🧩 Custom active${C_RESET}"
+            elif [ "$status" == "MODIFIED" ]; then
+                INTEGRITY_STATUS="${C_YELLOW}⚠️ Local modifications (${mod_count} files)${C_RESET}"
             else
                 INTEGRITY_STATUS="${C_GREEN}🛡️ Code verified${C_RESET}"
+            fi
+        else
+            git fetch origin "$GIT_BRANCH" >/dev/null 2>&1
+            local FILES_TO_CHECK="core modules bot.py watchdog.py migrate.py manage.py"
+            local EXISTING_FILES=""
+            for f in $FILES_TO_CHECK; do
+                if [ -e "${BOT_INSTALL_PATH}/$f" ]; then EXISTING_FILES="$EXISTING_FILES $f"; fi
+            done
+            if [ -z "$EXISTING_FILES" ]; then
+                INTEGRITY_STATUS="${C_YELLOW}⚠️ Files not found${C_RESET}"
+            else
+                local DIFF=$(git diff --name-only HEAD -- $EXISTING_FILES 2>/dev/null | grep -v '^core/static/vendor/')
+                if [ -n "$DIFF" ]; then
+                    INTEGRITY_STATUS="${C_YELLOW}⚠️ Files modified locally${C_RESET}"
+                else
+                    INTEGRITY_STATUS="${C_GREEN}🛡️ Code verified${C_RESET}"
+                fi
             fi
         fi
         cd - >/dev/null
@@ -1780,6 +1802,43 @@ update_bot() {
 
     cd "${BOT_INSTALL_PATH}"
     if ! run_with_spinner "Git fetch" $exec_cmd git fetch origin; then return 1; fi
+
+    local py_bin="python3"
+    if [ -x "${VENV_PATH}/bin/python3" ]; then py_bin="${VENV_PATH}/bin/python3"; fi
+
+    if [ -f "${BOT_INSTALL_PATH}/manage.py" ] && command -v "$py_bin" &>/dev/null; then
+        local json_report=$($py_bin "${BOT_INSTALL_PATH}/manage.py" integrity check --branch "$GIT_BRANCH" --json 2>/dev/null || true)
+        local status=$(echo "$json_report" | grep -oP '"status":\s*"\K[^"]+' | head -n 1)
+        if [ "$status" == "MODIFIED" ]; then
+            echo ""
+            msg_warning "Warning! Local modifications to system files detected."
+            $py_bin "${BOT_INSTALL_PATH}/manage.py" integrity check --branch "$GIT_BRANCH"
+            echo ""
+            echo "  1) Create automatic backup in .backups/ and proceed (Recommended)"
+            echo "  2) Show Git diff"
+            echo "  3) Cancel update"
+            read -p "$(echo -e "${C_BOLD}Your choice [1/2/3]: ${C_RESET}")" mod_choice
+            case $mod_choice in
+                2)
+                    git diff "origin/${GIT_BRANCH}" | less -R
+                    read -p "Proceed with update and backup? (y/n): " c_after_diff
+                    if [[ ! "$c_after_diff" =~ ^[Yy]$ ]]; then
+                        msg_info "Update cancelled."
+                        return 0
+                    fi
+                    $py_bin "${BOT_INSTALL_PATH}/manage.py" integrity backup --branch "$GIT_BRANCH"
+                    ;;
+                3)
+                    msg_info "Update cancelled by user."
+                    return 0
+                    ;;
+                *)
+                    $py_bin "${BOT_INSTALL_PATH}/manage.py" integrity backup --branch "$GIT_BRANCH"
+                    ;;
+            esac
+        fi
+    fi
+
     if ! run_with_spinner "Git reset" $exec_cmd git reset --hard "origin/${GIT_BRANCH}"; then return 1; fi
     
     if [ -f "$README_FILE" ]; then
@@ -2100,6 +2159,86 @@ manage_alert_module() {
     fi
 }
 
+manage_custom_modules() {
+    local py_bin="python3"
+    if [ -x "${VENV_PATH}/bin/python3" ]; then py_bin="${VENV_PATH}/bin/python3"; fi
+
+    while true; do
+        clear
+        echo -e "${C_BLUE}${C_BOLD}╔═══════════════════════════════════════════════════════╗${C_RESET}"
+        echo -e "${C_BLUE}${C_BOLD}║      Custom Modules & SHA-256 Integrity Audit         ║${C_RESET}"
+        echo -e "${C_BLUE}${C_BOLD}╚═══════════════════════════════════════════════════════╝${C_RESET}"
+        echo "  Directory custom/ is isolated from Git and protected from overwrite during updates."
+        echo "--------------------------------------------------------"
+        echo "  1) Full SHA-256 integrity audit (against origin/${GIT_BRANCH})"
+        echo "  2) List active custom modules & WebUI pages"
+        echo "  3) Create custom bot module template (custom/modules/)"
+        echo "  4) Create custom WebUI page template (route + template)"
+        echo "  5) Backup modified system files (.backups/)"
+        echo "  6) Show Git diff with origin/${GIT_BRANCH}"
+        echo "  0) Back to main menu"
+        echo "--------------------------------------------------------"
+        read -p "$(echo -e "${C_BOLD}Your choice: ${C_RESET}")" c_choice
+        case $c_choice in
+            1)
+                cd "${BOT_INSTALL_PATH}" || return
+                $py_bin "${BOT_INSTALL_PATH}/manage.py" integrity check --branch "$GIT_BRANCH" -v
+                read -p "Press Enter to continue..."
+                ;;
+            2)
+                cd "${BOT_INSTALL_PATH}" || return
+                $py_bin "${BOT_INSTALL_PATH}/manage.py" integrity list-custom
+                read -p "Press Enter to continue..."
+                ;;
+            3)
+                cd "${BOT_INSTALL_PATH}" || return
+                read -p "$(echo -e "${C_BOLD}Enter module name (e.g. my_vpn): ${C_RESET}")" mod_name
+                if [ -n "$mod_name" ]; then
+                    $py_bin "${BOT_INSTALL_PATH}/manage.py" integrity new-module "$mod_name"
+                    if [ -f "${ENV_FILE}" ] && grep -q "INSTALL_MODE=secure" "${ENV_FILE}"; then
+                        sudo chown -R ${SERVICE_USER}:${SERVICE_USER} "${BOT_INSTALL_PATH}/custom" 2>/dev/null || true
+                    fi
+                    read -p "Restart bot to apply? (y/n): " r_choice
+                    if [[ "$r_choice" =~ ^[Yy]$ ]]; then
+                        sudo systemctl restart "${SERVICE_NAME}" 2>/dev/null || true
+                        msg_success "Service restarted!"
+                    fi
+                fi
+                read -p "Press Enter..."
+                ;;
+            4)
+                cd "${BOT_INSTALL_PATH}" || return
+                read -p "$(echo -e "${C_BOLD}Enter page name (e.g. custom_stats): ${C_RESET}")" page_name
+                if [ -n "$page_name" ]; then
+                    $py_bin "${BOT_INSTALL_PATH}/manage.py" integrity new-page "$page_name"
+                    if [ -f "${ENV_FILE}" ] && grep -q "INSTALL_MODE=secure" "${ENV_FILE}"; then
+                        sudo chown -R ${SERVICE_USER}:${SERVICE_USER} "${BOT_INSTALL_PATH}/custom" 2>/dev/null || true
+                    fi
+                    read -p "Restart bot to apply? (y/n): " r_choice
+                    if [[ "$r_choice" =~ ^[Yy]$ ]]; then
+                        sudo systemctl restart "${SERVICE_NAME}" 2>/dev/null || true
+                        msg_success "Service restarted!"
+                    fi
+                fi
+                read -p "Press Enter..."
+                ;;
+            5)
+                cd "${BOT_INSTALL_PATH}" || return
+                $py_bin "${BOT_INSTALL_PATH}/manage.py" integrity backup --branch "$GIT_BRANCH"
+                read -p "Press Enter to continue..."
+                ;;
+            6)
+                cd "${BOT_INSTALL_PATH}" || return
+                git fetch origin "$GIT_BRANCH" >/dev/null 2>&1
+                git diff "origin/${GIT_BRANCH}" | less -R
+                ;;
+            0)
+                break
+                ;;
+        esac
+    done
+}
+
 main_menu() {
     local local_version=$(get_local_version)
     while true; do
@@ -2139,6 +2278,7 @@ main_menu() {
                 alert_status="${C_GREEN}active${C_RESET}"
             fi
             echo -e "  9) Manage Alert Module (${alert_status})"
+            echo -e " 10) Custom Modules & SHA-256 Audit"
         fi
 
         echo "  0) Exit"
@@ -2154,6 +2294,7 @@ main_menu() {
             7) if [ "$IS_NODE" == "yes" ]; then install_node_logic; read -p "Press Enter..."; else msg_error "Option available in NODE mode only."; sleep 2; fi ;;
             8) if [ "$IS_NODE" == "yes" ]; then toggle_agent_monitoring; read -p "Press Enter..."; fi ;;
             9) if [ "$IS_NODE" != "yes" ]; then manage_alert_module; read -p "Press Enter..."; fi ;;
+            10) if [ "$IS_NODE" != "yes" ]; then manage_custom_modules; fi ;;
             0) break ;;
         esac
     done

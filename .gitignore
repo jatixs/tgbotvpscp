@@ -215,3 +215,10 @@ config/*.bak
 *.bak
 .env.*
 !.env.example
+
+# User custom extensions (isolated from upstream git updates)
+custom/
+modules/custom/
+core/web/custom/
+core/templates/custom/
+.backups/

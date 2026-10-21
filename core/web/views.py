@@ -32,8 +32,12 @@ from . import auth as web_auth
 routes = web.RouteTableDef()
 
 TEMPLATE_DIR: Final[Path] = Path(BASE_DIR) / "core" / "templates"
+CUSTOM_TEMPLATE_DIR: Final[Path] = Path(BASE_DIR) / "custom" / "web" / "templates"
+
+_template_paths: list[str] = [str(CUSTOM_TEMPLATE_DIR), str(TEMPLATE_DIR)] if CUSTOM_TEMPLATE_DIR.is_dir() else [str(TEMPLATE_DIR)]
+
 JINJA_ENV = Environment(
-    loader=FileSystemLoader(str(TEMPLATE_DIR)),
+    loader=FileSystemLoader(_template_paths),
     autoescape=select_autoescape(["html", "xml"]),
 )
 APP_VERSION: Final[str] = get_app_version()
