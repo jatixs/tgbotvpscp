@@ -32,13 +32,23 @@ CORE_SYSTEM_PATTERNS = [
     "watchdog.py",
     "manage.py",
     "migrate.py",
-    "deploy.sh",
-    "deploy_en.sh",
     "requirements.txt",
     "aerich.ini",
     "Dockerfile",
     "docker-compose.yml",
+    "deploy.sh",
+    "deploy_en.sh",
 ]
+
+# Deployment artifacts that are intentionally cleaned up on VPS hosts (e.g. systemd mode)
+# If these files are absent locally, they do NOT trigger a MISSING_LOCAL alert.
+OPTIONAL_DEPLOY_PATTERNS = {
+    "Dockerfile",
+    "docker-compose.yml",
+    "deploy.sh",
+    "deploy_en.sh",
+    "node",
+}
 
 # Paths explicitly excluded from integrity verification
 IGNORED_PATTERNS = {
@@ -324,6 +334,13 @@ def check_project_integrity(
         local_path = root / rel_path
 
         if not local_path.is_file():
+            # If the file is an optional deploy artifact (deleted by cleanup_common_trash/systemd), ignore missing
+            if rel_path in OPTIONAL_DEPLOY_PATTERNS or any(
+                rel_path == p or rel_path.startswith(f"{p}/") for p in OPTIONAL_DEPLOY_PATTERNS
+            ):
+                total_checked -= 1
+                continue
+
             modified_list.append(
                 ModifiedFileEntry(
                     rel_path=rel_path,
