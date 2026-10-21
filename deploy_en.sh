@@ -217,6 +217,62 @@ agent_install_header() {
     op_header "AGENT ${verb} ($(mode_label "$1" "$2"))"
 }
 
+ensure_integrity_tools_available() {
+    # 1. If BOT_INSTALL_PATH already has updated manage.py with integrity, we're good
+    if [ -f "${BOT_INSTALL_PATH}/manage.py" ] && grep -q "integrity" "${BOT_INSTALL_PATH}/manage.py" 2>/dev/null; then
+        return 0
+    fi
+    # 2. If BOT_INSTALL_PATH has core/integrity.py that can be run directly, we're good
+    if [ -f "${BOT_INSTALL_PATH}/core/integrity.py" ]; then
+        return 0
+    fi
+
+    # 3. If running deploy.sh from a directory that has core/integrity.py and manage.py
+    local script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
+    if [ -f "${script_dir}/core/integrity.py" ] && [ -f "${script_dir}/manage.py" ] && grep -q "integrity" "${script_dir}/manage.py" 2>/dev/null; then
+        sudo mkdir -p "${BOT_INSTALL_PATH}/core" 2>/dev/null || true
+        sudo cp -f "${script_dir}/core/integrity.py" "${BOT_INSTALL_PATH}/core/integrity.py" 2>/dev/null || true
+        sudo cp -f "${script_dir}/manage.py" "${BOT_INSTALL_PATH}/manage.py" 2>/dev/null || true
+        if [ -f "${ENV_FILE}" ] && grep -q "INSTALL_MODE=secure" "${ENV_FILE}"; then
+            sudo chown ${SERVICE_USER}:${SERVICE_USER} "${BOT_INSTALL_PATH}/core/integrity.py" "${BOT_INSTALL_PATH}/manage.py" 2>/dev/null || true
+        fi
+        return 0
+    fi
+
+    # 4. If BOT_INSTALL_PATH has git, fetch and checkout manage.py and core/integrity.py from origin/$GIT_BRANCH
+    if [ -d "${BOT_INSTALL_PATH}/.git" ]; then
+        cd "${BOT_INSTALL_PATH}" || return 1
+        local exec_cmd=""
+        if [ -f "${ENV_FILE}" ] && grep -q "INSTALL_MODE=secure" "${ENV_FILE}"; then exec_cmd="sudo -u ${SERVICE_USER}"; fi
+        $exec_cmd git fetch origin "$GIT_BRANCH" >/dev/null 2>&1 || true
+        $exec_cmd git checkout "origin/${GIT_BRANCH}" -- manage.py core/integrity.py >/dev/null 2>&1 || true
+        cd - >/dev/null 2>&1 || true
+    fi
+
+    # 5. Check again
+    if [ -f "${BOT_INSTALL_PATH}/manage.py" ] && grep -q "integrity" "${BOT_INSTALL_PATH}/manage.py" 2>/dev/null; then
+        return 0
+    fi
+    if [ -f "${BOT_INSTALL_PATH}/core/integrity.py" ]; then
+        return 0
+    fi
+
+    return 1
+}
+
+run_integrity_cmd() {
+    local py_bin="python3"
+    if [ -x "${VENV_PATH}/bin/python3" ]; then py_bin="${VENV_PATH}/bin/python3"; fi
+
+    if [ -f "${BOT_INSTALL_PATH}/manage.py" ] && grep -q "integrity" "${BOT_INSTALL_PATH}/manage.py" 2>/dev/null; then
+        $py_bin "${BOT_INSTALL_PATH}/manage.py" integrity "$@"
+    elif [ -f "${BOT_INSTALL_PATH}/core/integrity.py" ]; then
+        $py_bin "${BOT_INSTALL_PATH}/core/integrity.py" "$@" --repo-root "${BOT_INSTALL_PATH}"
+    else
+        return 1
+    fi
+}
+
 check_integrity() {
     INTEGRITY_STATUS=""
     if [ ! -d "${BOT_INSTALL_PATH}" ] || [ ! -f "${ENV_FILE}" ]; then
@@ -230,12 +286,9 @@ check_integrity() {
         INTEGRITY_STATUS="${C_GREEN}🛡️ NODE Mode (Git not required)${C_RESET}"
     elif [ -d "${BOT_INSTALL_PATH}/.git" ]; then
         cd "${BOT_INSTALL_PATH}" || return
-        local py_bin="python3"
-        if [ -x "${VENV_PATH}/bin/python3" ]; then py_bin="${VENV_PATH}/bin/python3"; fi
-
         local json_report=""
-        if [ -f "${BOT_INSTALL_PATH}/manage.py" ] && command -v "$py_bin" &>/dev/null; then
-            json_report=$($py_bin "${BOT_INSTALL_PATH}/manage.py" integrity check --branch "$GIT_BRANCH" --json 2>/dev/null || true)
+        if ensure_integrity_tools_available; then
+            json_report=$(run_integrity_cmd check --branch "$GIT_BRANCH" --json 2>/dev/null || true)
         fi
 
         if [ -n "$json_report" ]; then
@@ -1803,16 +1856,13 @@ update_bot() {
     cd "${BOT_INSTALL_PATH}"
     if ! run_with_spinner "Git fetch" $exec_cmd git fetch origin; then return 1; fi
 
-    local py_bin="python3"
-    if [ -x "${VENV_PATH}/bin/python3" ]; then py_bin="${VENV_PATH}/bin/python3"; fi
-
-    if [ -f "${BOT_INSTALL_PATH}/manage.py" ] && command -v "$py_bin" &>/dev/null; then
-        local json_report=$($py_bin "${BOT_INSTALL_PATH}/manage.py" integrity check --branch "$GIT_BRANCH" --json 2>/dev/null || true)
+    if ensure_integrity_tools_available; then
+        local json_report=$(run_integrity_cmd check --branch "$GIT_BRANCH" --json 2>/dev/null || true)
         local status=$(echo "$json_report" | grep -oP '"status":\s*"\K[^"]+' | head -n 1)
         if [ "$status" == "MODIFIED" ]; then
             echo ""
             msg_warning "Warning! Local modifications to system files detected."
-            $py_bin "${BOT_INSTALL_PATH}/manage.py" integrity check --branch "$GIT_BRANCH"
+            run_integrity_cmd check --branch "$GIT_BRANCH"
             echo ""
             echo "  1) Create automatic backup in .backups/ and proceed (Recommended)"
             echo "  2) Show Git diff"
@@ -1826,14 +1876,14 @@ update_bot() {
                         msg_info "Update cancelled."
                         return 0
                     fi
-                    $py_bin "${BOT_INSTALL_PATH}/manage.py" integrity backup --branch "$GIT_BRANCH"
+                    run_integrity_cmd backup --branch "$GIT_BRANCH"
                     ;;
                 3)
                     msg_info "Update cancelled by user."
                     return 0
                     ;;
                 *)
-                    $py_bin "${BOT_INSTALL_PATH}/manage.py" integrity backup --branch "$GIT_BRANCH"
+                    run_integrity_cmd backup --branch "$GIT_BRANCH"
                     ;;
             esac
         fi
@@ -2160,8 +2210,15 @@ manage_alert_module() {
 }
 
 manage_custom_modules() {
-    local py_bin="python3"
-    if [ -x "${VENV_PATH}/bin/python3" ]; then py_bin="${VENV_PATH}/bin/python3"; fi
+    if ! ensure_integrity_tools_available; then
+        echo ""
+        msg_warning "Integrity module is not yet installed in ${BOT_INSTALL_PATH}."
+        echo "  To use SHA-256 audit and custom modules, please update the bot first."
+        echo "  Select option 1 (Update $(target_label)) in the main menu."
+        echo ""
+        read -p "Press Enter to return..."
+        return
+    fi
 
     while true; do
         clear
@@ -2182,19 +2239,19 @@ manage_custom_modules() {
         case $c_choice in
             1)
                 cd "${BOT_INSTALL_PATH}" || return
-                $py_bin "${BOT_INSTALL_PATH}/manage.py" integrity check --branch "$GIT_BRANCH" -v
+                run_integrity_cmd check --branch "$GIT_BRANCH" -v
                 read -p "Press Enter to continue..."
                 ;;
             2)
                 cd "${BOT_INSTALL_PATH}" || return
-                $py_bin "${BOT_INSTALL_PATH}/manage.py" integrity list-custom
+                run_integrity_cmd list-custom
                 read -p "Press Enter to continue..."
                 ;;
             3)
                 cd "${BOT_INSTALL_PATH}" || return
                 read -p "$(echo -e "${C_BOLD}Enter module name (e.g. my_vpn): ${C_RESET}")" mod_name
                 if [ -n "$mod_name" ]; then
-                    $py_bin "${BOT_INSTALL_PATH}/manage.py" integrity new-module "$mod_name"
+                    run_integrity_cmd new-module "$mod_name"
                     if [ -f "${ENV_FILE}" ] && grep -q "INSTALL_MODE=secure" "${ENV_FILE}"; then
                         sudo chown -R ${SERVICE_USER}:${SERVICE_USER} "${BOT_INSTALL_PATH}/custom" 2>/dev/null || true
                     fi
@@ -2210,7 +2267,7 @@ manage_custom_modules() {
                 cd "${BOT_INSTALL_PATH}" || return
                 read -p "$(echo -e "${C_BOLD}Enter page name (e.g. custom_stats): ${C_RESET}")" page_name
                 if [ -n "$page_name" ]; then
-                    $py_bin "${BOT_INSTALL_PATH}/manage.py" integrity new-page "$page_name"
+                    run_integrity_cmd new-page "$page_name"
                     if [ -f "${ENV_FILE}" ] && grep -q "INSTALL_MODE=secure" "${ENV_FILE}"; then
                         sudo chown -R ${SERVICE_USER}:${SERVICE_USER} "${BOT_INSTALL_PATH}/custom" 2>/dev/null || true
                     fi
@@ -2224,7 +2281,7 @@ manage_custom_modules() {
                 ;;
             5)
                 cd "${BOT_INSTALL_PATH}" || return
-                $py_bin "${BOT_INSTALL_PATH}/manage.py" integrity backup --branch "$GIT_BRANCH"
+                run_integrity_cmd backup --branch "$GIT_BRANCH"
                 read -p "Press Enter to continue..."
                 ;;
             6)

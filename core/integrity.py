@@ -545,3 +545,117 @@ async def custom_page_view(request: web.Request) -> web.Response:
     route_file.write_text(route_code, encoding="utf-8")
     template_file.write_text(template_html, encoding="utf-8")
     return str(route_file), str(template_file)
+
+
+def main(argv=None):
+    import argparse
+
+    parser = argparse.ArgumentParser(
+        prog="integrity",
+        description="VPS Bot Integrity & Custom Extensions CLI",
+    )
+    parser.add_argument(
+        "action",
+        nargs="?",
+        default="check",
+        choices=["check", "backup", "new-module", "new-page", "list-custom"],
+        help="Действие: check, backup, new-module, new-page, list-custom",
+    )
+    parser.add_argument("name", nargs="?", default="", help="Имя модуля или страницы")
+    parser.add_argument("--branch", default="main", help="Ветка git")
+    parser.add_argument("--fetch", action="store_true", help="Сделать git fetch origin перед проверкой")
+    parser.add_argument("--json", action="store_true", help="Вывод в формате JSON")
+    parser.add_argument("--verbose", "-v", action="store_true", help="Подробный вывод")
+    parser.add_argument("--repo-root", default=os.path.dirname(os.path.dirname(os.path.abspath(__file__))), help="Корень репозитория")
+
+    args = parser.parse_args(argv)
+    repo_root = Path(args.repo_root).resolve()
+
+    if args.action == "check":
+        report = check_project_integrity(branch=args.branch, repo_root=repo_root, fetch=args.fetch)
+        if args.json:
+            print(json.dumps(report.to_dict(), indent=2, ensure_ascii=False))
+            return 0 if report.status in ("OK", "CUSTOM_ACTIVE") else 1
+
+        print(f"\n🔍 Проверка целостности проекта (SHA-256 vs origin/{args.branch})")
+        print(f"   Проверено системных файлов: {report.total_checked}")
+        print(f"   Совпадений SHA-256: {report.matches_count}")
+
+        if report.status == "OK":
+            print("   ✅ Целостность подтверждена: системный код полностью совпадает с веткой.")
+        elif report.status == "CUSTOM_ACTIVE":
+            print("   ✅ Системные файлы чисты. Активны кастомные дополнения (изолированы от Git):")
+            for cf in report.custom_files:
+                print(f"      🧩 [{cf.category}] {cf.rel_path}")
+        elif report.status == "MODIFIED":
+            print(f"   ⚠️ Обнаружены локальные изменения системных файлов ({len(report.modified_files)}):")
+            for mf in report.modified_files:
+                if args.verbose:
+                    print(f"      • {mf.rel_path} (Локальный: {mf.local_sha256[:10]}..., Upstream: {mf.remote_sha256[:10]}...)")
+                else:
+                    print(f"      • {mf.rel_path} [{mf.status}]")
+            print("   💡 Используйте 'integrity backup' для сохранения копии перед обновлением.")
+        elif report.status == "ERROR":
+            print(f"   ❌ Ошибка: {report.error_message}")
+            return 1
+
+        if report.custom_files and report.status == "MODIFIED":
+            print(f"\n   🧩 Также обнаружены кастомные дополнения ({len(report.custom_files)}):")
+            for cf in report.custom_files:
+                print(f"      • [{cf.category}] {cf.rel_path}")
+
+        return 0 if report.status in ("OK", "CUSTOM_ACTIVE") else 1
+
+    elif args.action == "backup":
+        success, backup_dir, backed_up = backup_modified_files(repo_root=repo_root, branch=args.branch)
+        if backed_up:
+            print(f"📦 Бэкап успешно создан ({len(backed_up)} файлов):")
+            print(f"   Папка: {backup_dir}")
+            for f in backed_up:
+                print(f"   • {f}")
+        else:
+            print("ℹ️ Нет модифицированных системных файлов для бэкапа.")
+        return 0
+
+    elif args.action == "new-module":
+        name = args.name
+        if not name:
+            print("❌ Укажите имя модуля: integrity new-module <имя>")
+            return 1
+        try:
+            path = create_custom_module_template(name, repo_root=repo_root)
+            print(f"✨ Создан шаблон кастомного модуля: {path}")
+            return 0
+        except Exception as e:
+            print(f"❌ Ошибка создания модуля: {e}")
+            return 1
+
+    elif args.action == "new-page":
+        name = args.name
+        if not name:
+            print("❌ Укажите имя страницы: integrity new-page <имя>")
+            return 1
+        try:
+            r_path, t_path = create_custom_web_page_template(name, repo_root=repo_root)
+            print(f"✨ Создан шаблон WebUI страницы:")
+            print(f"   Маршрут: {r_path}")
+            print(f"   Шаблон:  {t_path}")
+            print(f"   URL:     /custom/{name}")
+            return 0
+        except Exception as e:
+            print(f"❌ Ошибка создания страницы: {e}")
+            return 1
+
+    elif args.action == "list-custom":
+        custom_files = find_custom_extensions(repo_root=repo_root)
+        if not custom_files:
+            print("ℹ️ Кастомных дополнений пока нет.")
+        else:
+            print(f"🧩 Найдено кастомных файлов: {len(custom_files)}")
+            for cf in custom_files:
+                print(f"   • [{cf.category}] {cf.rel_path} (изменен: {cf.modified_time})")
+        return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
