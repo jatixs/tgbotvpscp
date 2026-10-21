@@ -4,11 +4,23 @@
 
 <h1 align="center">📝 Telegram VPS Management Bot — Changelog</h1>
 <p align="center">
-    <img src="https://img.shields.io/badge/version-v1.26.1-blue?style=flat-square" alt="Version 1.26.1"/>
-    <img src="https://img.shields.io/badge/build-94-purple?style=flat-square" alt="Build 94"/>
-    <img src="https://img.shields.io/badge/date-Oct%2014%202026-green?style=flat-square" alt="Date Oct 14 2026"/>
+    <img src="https://img.shields.io/badge/version-v1.26.2-blue?style=flat-square" alt="Version 1.26.2"/>
+    <img src="https://img.shields.io/badge/build-95-purple?style=flat-square" alt="Build 95"/>
+    <img src="https://img.shields.io/badge/date-Oct%2021%202026-green?style=flat-square" alt="Date Oct 21 2026"/>
 	<img src="https://img.shields.io/badge/status-stable-green?style=flat-square" alt="Status Stable"/>
 </p>
+
+## [1.26.2] - 2026-10-21
+
+### 🚀 New Features
+* **One-Click IP Copy in WebUI:** Quick IP copying has been integrated across all key web panel components: agent network block on the dashboard, node cards & node detail modals, nodes monitor (`nodes_monitor`), settings table, and the quick VNC connect dialog. Features smooth visual feedback with the icon transitioning into a green checkmark for 1.5 seconds.
+* **Touchscreen Optimization:** On mobile devices and tablets, tapping directly on the IP text immediately copies it to the clipboard. The text features subtle dotted underlining and an active touch highlight so users don't need to tap small icon targets.
+
+### ✨ Improved
+* **Agent Chart Tick Readability:** Enhanced time-axis tick formatting on agent resource charts: an even-distribution algorithm (`afterBuildTicks`) guarantees that the latest timestamp is always anchored to the right edge (preventing awkward trailing whitespace), while labels are tilted at 45° with font sizes responsive to mobile and desktop screens.
+* **Responsive Network Badges:** Network badge styling and typography have been refined for compact and narrow mobile viewports (down to 320–360px): dynamic font scaling via `clamp()`, condensed padding, and omission of decorative hint icons prevent IP truncation or multi-line breakage.
+* **Chart Range Dropdown Alignment:** The chart timeframe popover menu is now centered horizontally relative to its trigger button with improved boundary detection and an origin-centered scaling animation.
+
 
 ## [1.26.1] - 2026-10-14
 
