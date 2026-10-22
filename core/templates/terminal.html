@@ -183,7 +183,7 @@
 
                         <div id="fieldPassword">
                             <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-wide mb-1">{{ web_terminal_pass }}</label>
-                            <input type="password" id="inpPass" placeholder="***" class="w-full bg-gray-900 rounded-lg px-3 py-2 text-white outline-none focus:ring-2 focus:ring-blue-500/50 focus:bg-gray-800 font-mono text-sm leading-tight transition">
+                            <input type="password" id="inpPass" placeholder="***" onfocus="if(this.value === '*** SAVED PASSWORD ***') this.value = '';" class="w-full bg-gray-900 rounded-lg px-3 py-2 text-white outline-none focus:ring-2 focus:ring-blue-500/50 focus:bg-gray-800 font-mono text-sm leading-tight transition">
                         </div>
                         
                         <div id="fieldKey" class="hidden">
@@ -192,7 +192,7 @@
                                 <label for="inpKeyFile" class="text-blue-400 hover:text-blue-300 cursor-pointer text-[10px]"><i class="icon icon-folder icon-md text-gray-400"></i> {{ web_terminal_key_select }}</label>
                                 <input type="file" id="inpKeyFile" class="hidden" accept=".pem,.key,.*" onchange="loadKeyFile(event)">
                             </label>
-                            <textarea id="inpKey" rows="3" placeholder="-----BEGIN OPENSSH PRIVATE KEY-----" class="w-full bg-gray-900 rounded-lg px-3 py-2 text-white outline-none focus:ring-2 focus:ring-blue-500/50 focus:bg-gray-800 font-mono text-[10px] leading-tight resize-none transition custom-scrollbar"></textarea>
+                            <textarea id="inpKey" rows="3" placeholder="-----BEGIN OPENSSH PRIVATE KEY-----" onfocus="if(this.value === '*** SAVED SECURE KEY ***') { this.value = ''; clearPassphrase(); }" class="w-full bg-gray-900 rounded-lg px-3 py-2 text-white outline-none focus:ring-2 focus:ring-blue-500/50 focus:bg-gray-800 font-mono text-[10px] leading-tight resize-none transition custom-scrollbar"></textarea>
                             
                             <!-- Hidden passphrase storage (populated by modal) -->
                             <input type="hidden" id="inpKeyPassphrase" value="">
@@ -699,8 +699,8 @@
                 return;
             }
             
-            // If remember is checked, save credentials
-            if (remember && (!isSavedPass && !isSavedKey)) {
+            // Synchronize credentials with encrypted backend storage
+            if (remember) {
                 fetch('/api/terminal/creds', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
@@ -709,9 +709,20 @@
                         port: port,
                         user: user,
                         type: method,
-                        password: method === 'password' ? password : '',
-                        private_key: method === 'key' ? privateKey : '',
-                        passphrase: (method === 'key' && !isSavedPassphrase) ? passphrase : ''
+                        password: isSavedPass ? '*** SAVED PASSWORD ***' : (method === 'password' ? password : ''),
+                        private_key: isSavedKey ? '*** SAVED SECURE KEY ***' : (method === 'key' ? privateKey : ''),
+                        passphrase: isSavedPassphrase ? '*** SAVED PASSPHRASE ***' : ((method === 'key') ? passphrase : ''),
+                        remember: true
+                    })
+                }).catch(e => console.error(e));
+            } else {
+                // If remember is unchecked, securely wipe saved credentials for this IP from server
+                fetch('/api/terminal/creds', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        ip: ip,
+                        remember: false
                     })
                 }).catch(e => console.error(e));
             }
@@ -735,7 +746,7 @@
                     auth_type: method,
                     password: password,
                     private_key: privateKey,
-                    passphrase: isSavedPassphrase ? '' : passphrase,
+                    passphrase: isSavedPassphrase ? '*** SAVED PASSPHRASE ***' : passphrase,
                     cols: term.cols,
                     rows: term.rows
                 }));

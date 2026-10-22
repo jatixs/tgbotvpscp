@@ -19,7 +19,9 @@ from ..config import BASE_DIR, DEFAULT_LANGUAGE, DEPLOY_MODE
 from ..i18n import get_user_lang, _
 from ..rbac import is_admin as _is_admin
 from ..utils import (
+    decrypt_data,
     decrypt_for_web,
+    encrypt_data,
     encrypt_for_web,
     get_host_path,
     get_node_uptime_snapshot,
@@ -974,7 +976,9 @@ async def handle_get_terminal_creds(request: web.Request) -> web.StreamResponse:
                     "type": str(saved.get("type", "password")),
                     "user": str(saved.get("user", "root")),
                     "port": int(saved.get("port", 22)),
+                    "has_key": bool(saved.get("private_key")),
                     "has_passphrase": bool(saved.get("passphrase")),
+                    "has_password": bool(saved.get("password")),
                 }
             )
         return web.json_response({"status": "ok", "saved": False})
@@ -1003,18 +1007,46 @@ async def handle_save_terminal_creds(request: web.Request) -> web.StreamResponse
         if uid_str not in creds or not isinstance(creds.get(uid_str), dict):
             creds[uid_str] = {}
 
+        # If remember is explicitly False, securely remove saved credentials for this IP
+        if data.get("remember") is False:
+            if ip in creds[uid_str]:
+                del creds[uid_str][ip]
+                await current_config.set_bot_config("terminal_creds", creds)
+            return web.json_response({"status": "ok", "deleted": True})
+
         existing = creds[uid_str].get(ip, {})
-        passphrase = str(data.get("passphrase", ""))
-        if not passphrase and "passphrase" not in data and isinstance(existing, dict):
-            passphrase = str(existing.get("passphrase", ""))
+        auth_type = str(data.get("type", "password"))
+
+        # Securely encrypt password with Fernet (DATA_ENCRYPTION_KEY)
+        raw_password = str(data.get("password", ""))
+        if raw_password and raw_password != "*** SAVED PASSWORD ***":
+            enc_password = encrypt_data(raw_password)
+        else:
+            enc_password = existing.get("password", "") if isinstance(existing, dict) else ""
+
+        # Securely encrypt private key with Fernet (DATA_ENCRYPTION_KEY)
+        raw_key = str(data.get("private_key", ""))
+        if raw_key and raw_key != "*** SAVED SECURE KEY ***":
+            enc_key = encrypt_data(raw_key)
+        else:
+            enc_key = existing.get("private_key", "") if isinstance(existing, dict) else ""
+
+        # Securely encrypt passphrase with Fernet (DATA_ENCRYPTION_KEY)
+        raw_passphrase = str(data.get("passphrase", ""))
+        if raw_passphrase and raw_passphrase != "*** SAVED PASSPHRASE ***":
+            enc_passphrase = encrypt_data(raw_passphrase)
+        elif raw_passphrase == "":
+            enc_passphrase = ""
+        else:
+            enc_passphrase = existing.get("passphrase", "") if isinstance(existing, dict) else ""
 
         creds[uid_str][ip] = {
-            "type": str(data.get("type", "password")),
+            "type": auth_type,
             "user": str(data.get("user", "root")),
             "port": int(data.get("port", 22)),
-            "password": str(data.get("password", "")),
-            "private_key": str(data.get("private_key", "")),
-            "passphrase": passphrase,
+            "password": enc_password,
+            "private_key": enc_key,
+            "passphrase": enc_passphrase,
         }
         await current_config.set_bot_config("terminal_creds", creds)
         return web.json_response({"status": "ok"})
@@ -1156,10 +1188,15 @@ async def handle_terminal_ws(request: web.Request) -> web.StreamResponse:
                 port = int(saved_cred.get("port", port))
                 auth_type = str(saved_cred.get("type", auth_type))
                 if auth_type == "password":
-                    password = password or str(saved_cred.get("password", ""))
+                    if not password or password == "*** SAVED PASSWORD ***":
+                        password = decrypt_data(str(saved_cred.get("password", "")))
                 else:
-                    private_key = private_key or str(saved_cred.get("private_key", ""))
-                    passphrase = passphrase or str(saved_cred.get("passphrase", ""))
+                    if not private_key or private_key == "*** SAVED SECURE KEY ***":
+                        private_key = decrypt_data(str(saved_cred.get("private_key", "")))
+                    if not passphrase or passphrase == "*** SAVED PASSPHRASE ***":
+                        saved_passphrase = decrypt_data(str(saved_cred.get("passphrase", "")))
+                        if saved_passphrase:
+                            passphrase = saved_passphrase
 
         lang = get_user_lang(int(user["id"]))
 
