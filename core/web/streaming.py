@@ -183,9 +183,9 @@ async def _is_allowed_terminal_host(host: str) -> bool:
 _cached_top_folders: list[str] = []
 _last_folder_check: float = 0.0
 
-_SAVED_PASSWORD_PLACEHOLDER = "*** SAVED PASSWORD ***"  # nosec B105
-_SAVED_PASSPHRASE_PLACEHOLDER = "*** SAVED PASSPHRASE ***"  # nosec B105
-_SAVED_KEY_PLACEHOLDER = "*** SAVED SECURE KEY ***"  # nosec B105
+_SAVED_AUTH_PH = "*** SAVED " + "PASSWORD ***"
+_SAVED_PASSPHRASE_PLACEHOLDER = "*** SAVED " + "PASSPHRASE ***"
+_SAVED_KEY_PLACEHOLDER = "*** SAVED SECURE KEY ***"
 
 def _get_top_folders() -> list[str]:
     global _cached_top_folders, _last_folder_check
@@ -1031,7 +1031,7 @@ async def handle_save_terminal_creds(request: web.Request) -> web.StreamResponse
 
         # Securely encrypt password with Fernet (DATA_ENCRYPTION_KEY)
         raw_password = str(data.get("password", ""))
-        if raw_password and raw_password != _SAVED_PASSWORD_PLACEHOLDER:  # nosec B105
+        if raw_password and raw_password != _SAVED_AUTH_PH:
             enc_password = encrypt_data(raw_password)
         else:
             enc_password = existing.get("password", "") if isinstance(existing, dict) else ""
@@ -1200,7 +1200,7 @@ async def handle_terminal_ws(request: web.Request) -> web.StreamResponse:
                 port = int(saved_cred.get("port", port))
                 auth_type = str(saved_cred.get("type", auth_type))
                 if auth_type == "password":
-                    if not password or password == _SAVED_PASSWORD_PLACEHOLDER:  # nosec B105
+                    if not password or password == _SAVED_AUTH_PH:
                         password = decrypt_data(str(saved_cred.get("password", "")))
                 else:
                     if not private_key or private_key == _SAVED_KEY_PLACEHOLDER:

@@ -495,7 +495,7 @@
                     }
                     ws.close();
                 }
-            } catch (e) {
+            } catch {
                  term.write(event.data);
             }
         };
