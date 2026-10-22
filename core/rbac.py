@@ -1,13 +1,13 @@
 """
-core/rbac.py — централизованный модуль контроля доступа (RBAC).
+core/rbac.py — Centralized Role-Based Access Control (RBAC) module.
 
-Иерархия ролей:
-  root  — ADMIN_USER_ID из .env, полный доступ
-  admin — group == "admins", управление нодами/пользователями/сервисами
-  user  — group == "users",  только просмотр статистики
+Role hierarchy:
+  root  — ADMIN_USER_ID from .env, full superuser access
+  admin — group == "admins", node/user/service management
+  user  — group == "users", read-only stats viewing
 
-Все остальные модули должны импортировать хелперы отсюда
-вместо того чтобы дублировать логику на месте.
+All other modules should import access helpers from here
+rather than duplicating role check logic locally.
 """
 from __future__ import annotations
 
@@ -42,10 +42,10 @@ def is_root(user: dict[str, Any]) -> bool:
 
 def get_role_level(user_id: int) -> int:
     """
-    Числовой уровень прав пользователя:
-      0 — только просмотр (User)
-      1 — запуск / рестарт сервисов (Admin)
-      2 — полный контроль, включая остановку (Root)
+    Numeric permission level for the user:
+      0 — View only (User)
+      1 — Start / restart services (Admin)
+      2 — Full control, including service stop (Root)
     """
     if user_id == ADMIN_USER_ID:
         return 2

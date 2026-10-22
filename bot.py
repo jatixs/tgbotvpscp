@@ -1,6 +1,6 @@
 """
-Главный файл запуска Telegram-бота.
-Инициализирует диспетчер, подключает middlewares, оркестратор и запускает поллинг.
+Main launch file for the Telegram bot.
+Initializes the dispatcher, attaches middlewares, orchestrator, and starts polling.
 """
 import asyncio
 import logging
@@ -79,10 +79,20 @@ MODULE_CONFIG = {
     "modules.backups":   {"tier": ModuleTier.ON_DEMAND},
 }
 
+# Auto-discover custom extensions (isolated in custom/modules/ and modules/custom/)
+try:
+    from core.integrity import discover_custom_modules
+    custom_mods = discover_custom_modules(config.BASE_DIR)
+    if custom_mods:
+        MODULE_CONFIG.update(custom_mods)
+except Exception as _e:
+    logging.warning(f"Failed to discover custom modules: {_e}")
+
 UNLOAD_TTL = int(os.environ.get("MODULE_UNLOAD_TTL", 300))  # 5 min default
 
 orchestrator = ModuleOrchestrator(dp, bot, MODULE_CONFIG, unload_ttl=UNLOAD_TTL)
 shared_state.ORCHESTRATOR = orchestrator
+
 
 
 async def show_main_menu(

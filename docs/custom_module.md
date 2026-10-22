@@ -18,58 +18,58 @@ import logging
 from aiogram import Dispatcher, types
 from aiogram.types import KeyboardButton
 
-# Импорты ядра
+# Core imports
 from core.i18n import _, I18nFilter, get_user_lang
 from core import config
 from core.auth import is_allowed, send_access_denied_message
 from core.messaging import delete_previous_message
 from core.shared_state import LAST_MESSAGE_IDS
 
-# 1. Уникальный ключ кнопки (должен быть добавлен в i18n)
+# 1. Unique button key (must be added to i18n)
 BUTTON_KEY = "btn_my_feature"
 
-# 2. Категория в меню (monitoring / management / security / tools)
+# 2. Menu category (monitoring / management / security / tools)
 CATEGORY = "tools"
 
-# 3. Функция для кнопки
+# 3. Button factory
 def get_button() -> KeyboardButton:
     return KeyboardButton(text=_(BUTTON_KEY, config.DEFAULT_LANGUAGE))
 
-# 4. Категория подменю
+# 4. Submenu category
 def get_subcategory() -> str:
     return CATEGORY
 
 def has_subcategory() -> bool:
     return True
 
-# 5. Регистрация обработчиков
+# 5. Handler registration
 def register_handlers(dp: Dispatcher):
     dp.message(I18nFilter(BUTTON_KEY))(my_feature_handler)
 
-# 6. Основная логика
+# 6. Main logic
 async def my_feature_handler(message: types.Message):
     user_id = message.from_user.id
     chat_id = message.chat.id
     lang = get_user_lang(user_id)
     command = "my_feature"
 
-    # --- Проверка прав ---
+    # --- Permission check ---
     if not is_allowed(user_id, command):
         await send_access_denied_message(message.bot, user_id, chat_id, command)
         return
 
-    # --- Очистка чата ---
+    # --- Chat cleanup ---
     await delete_previous_message(user_id, command, chat_id, message.bot)
 
-    # --- Ваша логика ---
+    # --- Custom logic ---
     try:
-        result_data = "Работа выполнена успешно!"
+        result_data = "Task completed successfully!"
         response_text = _("my_feature_response", lang, data=result_data)
     except Exception as e:
         logging.error(f"Error in my_feature: {e}")
         response_text = _("error_with_details", lang, error=str(e))
 
-    # --- Отправка ответа ---
+    # --- Send response ---
     sent_message = await message.answer(response_text, parse_mode="HTML")
     LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = sent_message.message_id
 ```
@@ -108,8 +108,8 @@ STRINGS = {
 
 ```python
 MODULE_CONFIG = {
-    # ... другие модули ...
-    "modules.my_feature": {"tier": ModuleTier.ON_DEMAND},  # <--- ваш модуль
+    # ... other modules ...
+    "modules.my_feature": {"tier": ModuleTier.ON_DEMAND},  # <--- your module
 }
 ```
 
@@ -127,7 +127,7 @@ MODULE_CONFIG = {
 elif category == "cat_tools":
     kb = [
         [speedtest.get_button(), top.get_button()],
-        [my_feature.get_button()],  # <--- ваша кнопка
+        [my_feature.get_button()],  # <--- your button
         [i18n.get_text_button("btn_back_to_menu", user_id)]
     ]
 ```
@@ -165,7 +165,7 @@ def start_background_tasks(bot) -> list:
 async def _my_background_loop(bot):
     while True:
         try:
-            # Ваша логика
+            # Your logic
             pass
         except asyncio.CancelledError:
             break

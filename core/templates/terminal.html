@@ -20,34 +20,7 @@
     <script src="/static/vendor/xterm-addon-fit.js"></script>
     <script src="/static/vendor/xterm-addon-web-links.js"></script>
     
-    <style>
-        body, html {
-            height: 100%;
-            margin: 0;
-            background-color: #111827; 
-            color: #f3f4f6;
-            font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-            overflow: hidden;
-        }
-        
-        #terminal-container {
-            width: 100%;
-            height: calc(100vh - 50px);
-            padding: 10px;
-            box-sizing: border-box;
-            background: #000;
-        }
-        
-        .xterm .xterm-viewport {
-            border-radius: 8px;
-        }
-        
-        @media (min-width: 768px) {
-            #mobileKeyboard {
-                display: none !important;
-            }
-        }
-    </style>
+    <link rel="stylesheet" href="/static/css/terminal.css?v={{ asset_ver }}">
     <script src="/static/vendor/dompurify.min.js"></script>
 </head>
 <body class="bg-gray-900 flex flex-col font-sans" style="height: 100vh; height: 100dvh; position: fixed; inset: 0; overflow: hidden; margin: 0; padding: 0;">
@@ -161,7 +134,7 @@
 
                         <div id="fieldPassword">
                             <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-wide mb-1">{{ web_terminal_pass }}</label>
-                            <input type="password" id="inpPass" placeholder="***" class="w-full bg-gray-900 rounded-lg px-3 py-2 text-white outline-none focus:ring-2 focus:ring-blue-500/50 focus:bg-gray-800 font-mono text-sm leading-tight transition">
+                            <input type="password" id="inpPass" placeholder="***" onfocus="if(this.value === '*** SAVED PASSWORD ***') this.value = '';" class="w-full bg-gray-900 rounded-lg px-3 py-2 text-white outline-none focus:ring-2 focus:ring-blue-500/50 focus:bg-gray-800 font-mono text-sm leading-tight transition">
                         </div>
                         
                         <div id="fieldKey" class="hidden">
@@ -170,7 +143,19 @@
                                 <label for="inpKeyFile" class="text-blue-400 hover:text-blue-300 cursor-pointer text-[10px]"><i class="icon icon-folder icon-md text-gray-400"></i> {{ web_terminal_key_select }}</label>
                                 <input type="file" id="inpKeyFile" class="hidden" accept=".pem,.key,.*" onchange="loadKeyFile(event)">
                             </label>
-                            <textarea id="inpKey" rows="3" placeholder="-----BEGIN OPENSSH PRIVATE KEY-----" class="w-full bg-gray-900 rounded-lg px-3 py-2 text-white outline-none focus:ring-2 focus:ring-blue-500/50 focus:bg-gray-800 font-mono text-[10px] leading-tight resize-none transition custom-scrollbar"></textarea>
+                            <textarea id="inpKey" rows="3" placeholder="-----BEGIN OPENSSH PRIVATE KEY-----" onfocus="if(this.value === '*** SAVED SECURE KEY ***') { this.value = ''; clearPassphrase(); }" class="w-full bg-gray-900 rounded-lg px-3 py-2 text-white outline-none focus:ring-2 focus:ring-blue-500/50 focus:bg-gray-800 font-mono text-[10px] leading-tight resize-none transition custom-scrollbar"></textarea>
+                            
+                            <!-- Hidden passphrase storage (populated by modal) -->
+                            <input type="hidden" id="inpKeyPassphrase" value="">
+
+                            <!-- Passphrase badge — shown after user enters passphrase via modal -->
+                            <div id="passphraseBadge" class="hidden mt-2 flex items-center gap-2 bg-green-900/30 border border-green-700/40 rounded-lg px-3 py-1.5 transition-all duration-300">
+                                <svg class="w-3.5 h-3.5 text-green-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+                                <span class="text-[10px] text-green-300 font-medium">{{ web_terminal_passphrase_set }}</span>
+                                <button type="button" onclick="clearPassphrase()" class="ml-auto text-gray-400 hover:text-red-400 transition p-0.5 rounded" title="{{ web_terminal_passphrase_clear }}">
+                                    <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                                </button>
+                            </div>
                         </div>
 
                         <div class="flex items-center gap-2 mt-2">
@@ -192,10 +177,70 @@
         </div>
     </div>
     
+    <!-- Animated Passphrase Modal -->
+    <div id="passphraseModal" onclick="if(event.target === this) closePassphraseModal()" class="fixed inset-0 hidden items-center justify-center bg-black/80 backdrop-blur-md p-3 sm:p-4 modal-closed">
+        <div id="passphraseCard" class="bg-gray-800 rounded-2xl shadow-2xl w-full max-w-sm flex flex-col relative overflow-hidden">
+            <div class="absolute top-0 right-0 p-3 sm:p-4">
+                <button type="button" onclick="closePassphraseModal()" class="text-gray-400 hover:text-white transition cursor-pointer p-1 rounded-lg hover:bg-gray-700/50">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                </button>
+            </div>
+            
+            <div class="p-5 sm:p-6">
+                <div class="flex items-center gap-3 mb-4">
+                    <div class="w-10 h-10 rounded-xl bg-blue-500/20 flex items-center justify-center text-blue-400 shrink-0 shadow-inner">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                        </svg>
+                    </div>
+                    <div>
+                        <h3 class="text-base sm:text-lg font-bold text-white leading-snug">
+                            {{ web_terminal_passphrase_title }}
+                        </h3>
+                        <p class="text-xs text-gray-400 leading-tight mt-0.5">
+                            {{ web_terminal_passphrase_desc }}
+                        </p>
+                    </div>
+                </div>
+
+                <form id="passphraseForm" onsubmit="event.preventDefault(); submitPassphrase();">
+                    <div class="space-y-3.5">
+                        <div>
+                            <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-wide mb-1.5">
+                                {{ web_terminal_passphrase }}
+                            </label>
+                            <div class="relative flex items-center" style="position: relative;">
+                                <input type="password" id="inpPassphrase" autocomplete="current-password" placeholder="{{ web_terminal_passphrase_placeholder }}"
+                                    style="padding-right: 44px;"
+                                    class="w-full bg-gray-900 rounded-lg px-3 py-2.5 text-white placeholder-gray-500 outline-none focus:ring-2 focus:ring-blue-500/50 focus:bg-gray-800 font-mono text-sm leading-tight transition">
+                                <button type="button" onclick="togglePassphraseVisibility()" style="position: absolute; right: 10px; top: 50%; transform: translateY(-50%); display: flex; align-items: center; justify-content: center;" class="text-gray-400 hover:text-gray-200 transition p-1" title="{{ web_toggle_visibility }}">
+                                    <svg id="eyeIconOpen" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
+                                    <svg id="eyeIconClosed" class="w-4 h-4 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 8a10.645 10.645 0 0 0 20 0"/><path d="m4 15 1.726-2.05"/><path d="m9 18 .722-3.25"/><path d="m15 18-.722-3.25"/><path d="m20 15-1.726-2.05"/></svg>
+                                </button>
+                            </div>
+                        </div>
+
+                        <div id="passphraseError" class="hidden bg-red-900/40 text-red-400 text-xs p-2.5 rounded-lg leading-relaxed font-sans">
+                        </div>
+
+                        <div class="flex items-center gap-2 pt-2">
+                            <button type="button" onclick="closePassphraseModal()" class="flex-1 py-2.5 px-3 bg-gray-700/80 hover:bg-gray-700 text-gray-300 hover:text-white font-medium text-sm rounded-xl transition cursor-pointer">
+                                {{ modal_btn_cancel }}
+                            </button>
+                            <button type="submit" id="btnSubmitPassphrase" class="flex-[1.6] py-2.5 px-4 bg-blue-600 hover:bg-blue-500 text-white font-bold text-sm rounded-xl shadow-lg shadow-blue-500/20 transition flex items-center justify-center gap-2 cursor-pointer">
+                                <span>{{ web_terminal_passphrase_submit }}</span>
+                            </button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    
     <div id="termCtxMenu" class="fixed hidden z-[200] bg-gray-800 border border-gray-700 rounded-lg shadow-xl overflow-hidden min-w-[120px] text-sm py-1">
-        <button onclick="termCopy()" class="w-full text-left px-4 py-2 text-gray-200 hover:bg-gray-700 transition">Копировать</button>
-        <button onclick="termCut()" class="w-full text-left px-4 py-2 text-gray-200 hover:bg-gray-700 transition">Вырезать</button>
-        <button onclick="termPaste()" class="w-full text-left px-4 py-2 text-gray-200 hover:bg-gray-700 transition">Вставить</button>
+        <button onclick="termCopy()" class="w-full text-left px-4 py-2 text-gray-200 hover:bg-gray-700 transition">{{ web_terminal_copy }}</button>
+        <button onclick="termCut()" class="w-full text-left px-4 py-2 text-gray-200 hover:bg-gray-700 transition">{{ web_terminal_cut }}</button>
+        <button onclick="termPaste()" class="w-full text-left px-4 py-2 text-gray-200 hover:bg-gray-700 transition">{{ web_terminal_paste }}</button>
     </div>
 
     <div id="helpModal" class="fixed inset-0 z-[150] hidden flex items-center justify-center bg-black/80 backdrop-blur-sm p-2 sm:p-4 text-white" onclick="if(event.target === this) document.getElementById('helpModal').classList.add('hidden')">
@@ -204,359 +249,37 @@
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
-                Горячие клавиши
+                {{ web_help_hotkeys }}
             </h3>
             <ul class="space-y-3 text-sm text-gray-300">
-                <li class="flex justify-between items-center"><span class="bg-gray-700 px-2 py-1 flex items-center justify-center rounded border-b-2 border-gray-900 font-mono shadow-sm">ПКМ (Клик правой)</span><span>Контекстное меню</span></li>
-                <li class="flex justify-between items-center"><span class="bg-gray-700 px-2 py-1 flex items-center justify-center rounded border-b-2 border-gray-900 font-mono shadow-sm">Shift + Insert</span><span>Вставить</span></li>
-                <li class="flex justify-between items-center"><span class="bg-gray-700 px-2 py-1 flex items-center justify-center rounded border-b-2 border-gray-900 font-mono shadow-sm">Ctrl + Shift + C</span><span>Копировать</span></li>
-                <li class="flex justify-between items-center"><span class="bg-gray-700 px-2 py-1 flex items-center justify-center rounded border-b-2 border-gray-900 font-mono shadow-sm">Ctrl + Shift + V</span><span>Вставить</span></li>
+                <li class="flex justify-between items-center"><span class="bg-gray-700 px-2 py-1 flex items-center justify-center rounded border-b-2 border-gray-900 font-mono shadow-sm">{{ web_hotkey_rmb }}</span><span>{{ web_hotkey_context_menu }}</span></li>
+                <li class="flex justify-between items-center"><span class="bg-gray-700 px-2 py-1 flex items-center justify-center rounded border-b-2 border-gray-900 font-mono shadow-sm">Shift + Insert</span><span>{{ web_terminal_paste }}</span></li>
+                <li class="flex justify-between items-center"><span class="bg-gray-700 px-2 py-1 flex items-center justify-center rounded border-b-2 border-gray-900 font-mono shadow-sm">Ctrl + Shift + C</span><span>{{ web_terminal_copy }}</span></li>
+                <li class="flex justify-between items-center"><span class="bg-gray-700 px-2 py-1 flex items-center justify-center rounded border-b-2 border-gray-900 font-mono shadow-sm">Ctrl + Shift + V</span><span>{{ web_terminal_paste }}</span></li>
             </ul>
-            <button onclick="document.getElementById('helpModal').classList.add('hidden')" class="mt-6 w-full py-2 bg-gray-700 hover:bg-gray-600 font-bold rounded-lg transition">Понятно</button>
+            <button onclick="document.getElementById('helpModal').classList.add('hidden')" class="mt-6 w-full py-2 bg-gray-700 hover:bg-gray-600 font-bold rounded-lg transition">{{ web_btn_got_it }}</button>
         </div>
     </div>
     
     <script>
-        if (window.visualViewport) {
-            const updateViewport = () => {
-                document.body.style.height = window.visualViewport.height + 'px';
-                window.scrollTo(0, 0);
-            };
-            window.visualViewport.addEventListener('resize', updateViewport);
-            window.visualViewport.addEventListener('scroll', updateViewport);
-            updateViewport();
-        }
-
-        const term = new Terminal({
-            cursorBlink: true,
-            theme: {
-                background: '#09090b',
-                foreground: '#f8fafc',
-                cursor: '#3b82f6',
-                selectionBackground: 'rgba(59, 130, 246, 0.3)',
-                black: '#000000',
-                red: '#ef4444',
-                green: '#22c55e',
-                yellow: '#eab308',
-                blue: '#3b82f6',
-                magenta: '#d946ef',
-                cyan: '#06b6d4',
-                white: '#ffffff',
-                brightBlack: '#64748b',
-                brightRed: '#f87171',
-                brightGreen: '#4ade80',
-                brightYellow: '#fde047',
-                brightBlue: '#60a5fa',
-                brightMagenta: '#e879f9',
-                brightCyan: '#22d3ee',
-                brightWhite: '#ffffff'
-            },
-            fontFamily: 'Consolas, "Courier New", monospace',
-            fontSize: 14,
-            rendererType: 'canvas'
-        });
-        
-        const fitAddon = new FitAddon.FitAddon();
-        term.loadAddon(fitAddon);
-        term.loadAddon(new WebLinksAddon.WebLinksAddon());
-        
-        term.open(document.getElementById('termDiv'));
-        fitAddon.fit();
-        
-        let ws = null;
-        let pinger = null;
-        
-        window.addEventListener('resize', () => {
-            fitAddon.fit();
-            if (ws && ws.readyState === WebSocket.OPEN) {
-                ws.send(JSON.stringify({
-                    type: "resize",
-                    cols: term.cols,
-                    rows: term.rows
-                }));
-            }
-        });
-
-        term.onData(data => {
-            if (ws && ws.readyState === WebSocket.OPEN) {
-                if (ctrlMode && data.length === 1) {
-                    let charCode = data.charCodeAt(0);
-                    if (charCode >= 97 && charCode <= 122) { // a-z
-                        data = String.fromCharCode(charCode - 96);
-                    } else if (charCode >= 65 && charCode <= 90) { // A-Z
-                        data = String.fromCharCode(charCode - 64);
-                    }
-                    toggleCtrlMode(); // Disable after one char
-                }
-                ws.send(JSON.stringify({
-                    type: "data",
-                    data: data
-                }));
-            }
-        });
-        
-        let ctrlMode = false;
-        function toggleCtrlMode() {
-            ctrlMode = !ctrlMode;
-            const btn = document.getElementById('btnCtrl');
-            if (ctrlMode) {
-                btn.classList.add('bg-blue-600', 'text-white');
-                btn.classList.remove('text-gray-300');
-            } else {
-                btn.classList.remove('bg-blue-600', 'text-white');
-                btn.classList.add('text-gray-300');
-            }
-        }
-        
-        const statusBadge = document.getElementById('statusBadge');
-        const modal = document.getElementById('connectModal');
-        const btnDisconnect = document.getElementById('btnDisconnect');
-        const connError = document.getElementById('connError');
-        
-        const I18N = {
-            disconnected: "{{ web_terminal_status_disconnected }}",
-            connecting: "{{ web_terminal_status_connecting }}",
-            connected: "{{ web_terminal_status_connected }}",
-            error: "{{ web_terminal_error }}"
+        window.I18N = {
+            disconnected: {{ web_terminal_status_disconnected | tojson }},
+            connecting: {{ web_terminal_status_connecting | tojson }},
+            connected: {{ web_terminal_status_connected | tojson }},
+            error: {{ web_terminal_error | tojson }},
+            banner: {{ web_terminal_banner | tojson }},
+            welcomeHint: {{ web_terminal_welcome_hint | tojson }},
+            connectingTo: {{ web_terminal_connecting_to | tojson }},
+            connectionClosed: {{ web_terminal_connection_closed | tojson }},
+            errWs: {{ web_terminal_err_ws | tojson }},
+            errWsShort: {{ web_terminal_err_ws_short | tojson }},
+            errInvalidIp: {{ web_terminal_err_invalid_ip | tojson }},
+            errInvalidUser: {{ web_terminal_err_invalid_user | tojson }},
+            passphraseRequired: {{ web_terminal_err_passphrase_required | tojson }},
+            unitH: {{ web_terminal_unit_hour | tojson }},
+            unitM: {{ web_terminal_unit_min | tojson }}
         };
-        
-        function toggleAuthFields() {
-            const method = document.getElementById('inpAuthMethod').value;
-            if (method === 'key') {
-                document.getElementById('fieldKey').classList.remove('hidden');
-                document.getElementById('fieldPassword').classList.add('hidden');
-            } else {
-                document.getElementById('fieldKey').classList.add('hidden');
-                document.getElementById('fieldPassword').classList.remove('hidden');
-            }
-        }
-
-        function loadKeyFile(event) {
-            const file = event.target.files[0];
-            if (!file) return;
-            const reader = new FileReader();
-            reader.onload = function(e) {
-                document.getElementById('inpKey').value = e.target.result;
-            };
-            reader.readAsText(file);
-        }
-
-        // Fetch credentials continuously if IP changes
-        document.getElementById('inpIp').addEventListener('blur', function() {
-            const ip = this.value.trim();
-            if (!ip) return;
-            fetch(`/api/terminal/creds?ip=${encodeURIComponent(ip)}`)
-                .then(r => r.json())
-                .then(data => {
-                    if (data.status === 'ok' && data.saved) {
-                        document.getElementById('inpUser').value = data.user || 'root';
-                        document.getElementById('inpAuthMethod').value = data.type;
-                        document.getElementById('inpPort').value = data.port || '';
-                        toggleAuthFields();
-                        // For security, backend will remember the key. Frontend doesn't receive it.
-                        // We indicate saved status.
-                        document.getElementById('inpRemember').checked = true;
-                        if (data.type === 'key') {
-                            document.getElementById('inpKey').value = '*** SAVED SECURE KEY ***';
-                        } else {
-                            document.getElementById('inpPass').value = '*** SAVED PASSWORD ***';
-                        }
-                    }
-                })
-                .catch(() => {});
-        });
-
-        const urlParams = new URLSearchParams(window.location.search);
-        if (urlParams.has('ip')) {
-            const ip = urlParams.get('ip');
-            document.getElementById('inpIp').value = ip;
-            document.getElementById('inpIp').dispatchEvent(new Event('blur'));
-        }
-
-        term.writeln('\x1b[1;36mTelegram VPS Control Panel - Web Terminal\x1b[0m');
-        term.writeln('Enter connection details in the settings menu to continue.\r\n');
-
-        function setStatus(state, msg="") {
-            if (state === 'disconnected') {
-                statusBadge.className = "px-2 py-0.5 rounded text-[10px] uppercase font-bold bg-gray-700 text-gray-300";
-                statusBadge.innerText = I18N.disconnected;
-                btnDisconnect.classList.add('hidden');
-                
-                if (pinger) {
-                    clearInterval(pinger);
-                    pinger = null;
-                }
-            } else if (state === 'connecting') {
-                statusBadge.className = "px-2 py-0.5 rounded text-[10px] uppercase font-bold bg-yellow-500/20 text-yellow-500 border border-yellow-500/30";
-                statusBadge.innerText = I18N.connecting;
-                connError.classList.add('hidden');
-            } else if (state === 'connected') {
-                statusBadge.className = "px-2 py-0.5 rounded text-[10px] uppercase font-bold bg-green-500/20 text-green-500 border border-green-500/30";
-                statusBadge.innerText = I18N.connected;
-                btnDisconnect.classList.remove('hidden');
-                modal.classList.add('hidden');
-            } else if (state === 'error') {
-                statusBadge.className = "px-2 py-0.5 rounded text-[10px] uppercase font-bold bg-red-500/20 text-red-500 border border-red-500/30";
-                statusBadge.innerText = I18N.error;
-                
-                if (msg) {
-                    connError.innerText = msg;
-                    connError.classList.remove('hidden');
-                    modal.classList.remove('hidden');
-                }
-            }
-        }
-
-        function connect() {
-            if (ws) ws.close();
-            
-            const ip = document.getElementById('inpIp').value;
-            const port = document.getElementById('inpPort').value || 22;
-            const user = document.getElementById('inpUser').value;
-            const method = document.getElementById('inpAuthMethod').value;
-            const remember = document.getElementById('inpRemember').checked;
-            
-            let password = document.getElementById('inpPass').value;
-            let privateKey = document.getElementById('inpKey').value;
-            
-            const isSavedPass = password === '*** SAVED PASSWORD ***';
-            const isSavedKey = privateKey === '*** SAVED SECURE KEY ***';
-
-            if (!ip || !user) return;
-            
-            // If remember is checked, and we provide real password/key, save them via POST /api/terminal/creds
-            if (remember && (!isSavedPass && !isSavedKey)) {
-                fetch('/api/terminal/creds', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({
-                        ip: ip,
-                        port: port,
-                        user: user,
-                        type: method,
-                        password: method === 'password' ? password : '',
-                        private_key: method === 'key' ? privateKey : ''
-                    })
-                }).catch(e => console.error(e));
-            }
-
-            setStatus('connecting');
-            term.reset();
-            term.writeln('\x1b[1;34m[*] Connecting to ' + ip + ':' + port + '...\x1b[0m');
-            
-            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-            const wsUrl = `${protocol}//${window.location.host}/api/terminal/ws`;
-            
-            ws = new WebSocket(wsUrl);
-            
-            ws.onopen = () => {
-                ws.send(JSON.stringify({
-                    type: "auth",
-                    host: ip,
-                    port: parseInt(port),
-                    user: user,
-                    use_saved: (isSavedPass || isSavedKey),
-                    auth_type: method,
-                    password: password,
-                    private_key: privateKey,
-                    cols: term.cols,
-                    rows: term.rows
-                }));
-            };
-            
-            ws.onmessage = (event) => {
-                try {
-                    const data = JSON.parse(event.data);
-                    if (data.type === "connected") {
-                        setStatus('connected');
-                        pinger = setInterval(() => {
-                            if (ws && ws.readyState === WebSocket.OPEN) {
-                                ws.send(JSON.stringify({type: "ping"}));
-                            }
-                        }, 20000);
-                    } else if (data.type === "error") {
-                        setStatus('error', data.message);
-                        term.writeln('\r\n\x1b[1;31m[!] Error: ' + data.message + '\x1b[0m');
-                        ws.close();
-                    }
-                } catch (e) {
-                     term.write(event.data);
-                }
-            };
-            
-            ws.onclose = (event) => {
-                setStatus('disconnected');
-                term.writeln('\r\n\x1b[1;33m[*] Connection closed.\x1b[0m');
-            };
-            
-            ws.onerror = (error) => {
-                setStatus('error', "WebSocket connection error");
-                term.writeln('\r\n\x1b[1;31m[!] WebSocket error.\x1b[0m');
-            };
-        }
-        
-        function disconnect() {
-            if (ws) ws.close();
-        }
-
-        // --- Context Menu Logic ---
-        const termCtxMenu = document.getElementById('termCtxMenu');
-        
-        document.getElementById('termDiv').addEventListener('contextmenu', (e) => {
-            e.preventDefault();
-            termCtxMenu.style.left = e.clientX + 'px';
-            termCtxMenu.style.top = e.clientY + 'px';
-            termCtxMenu.classList.remove('hidden');
-        });
-        
-        document.addEventListener('click', () => {
-            termCtxMenu.classList.add('hidden');
-        });
-        
-        function termCopy() {
-            const sel = term.getSelection();
-            if (sel) navigator.clipboard.writeText(sel);
-            term.focus();
-        }
-        function termCut() {
-            termCopy();
-            term.clearSelection();
-            term.focus();
-        }
-        function termPaste() {
-            navigator.clipboard.readText().then(text => {
-                if (ws && ws.readyState === WebSocket.OPEN) {
-                    ws.send(JSON.stringify({ type: "data", data: text }));
-                }
-            });
-            term.focus();
-        }
-
-        // --- Stats Polling Logic ---
-        function updateStats() {
-            if (ws && ws.readyState === WebSocket.OPEN) {
-                const ip = document.getElementById('inpIp').value;
-                if (!ip) return;
-                fetch(`/api/terminal/stats?ip=${encodeURIComponent(ip)}`)
-                    .then(r => r.json())
-                    .then(d => {
-                        if (!d.error) {
-                            let uptimeStr = "--";
-                            if (d.uptime > 0) {
-                                const h = Math.floor(d.uptime / 3600);
-                                const m = Math.floor((d.uptime % 3600)/60);
-                                uptimeStr = `${h}h ${m}m`;
-                            }
-                            document.getElementById('statCpu').innerText = d.cpu.toFixed(1) + '%';
-                            document.getElementById('statRam').innerText = Math.round(d.ram) + '%';
-                            document.getElementById('statRom').innerText = Math.round(d.rom) + '%';
-                            document.getElementById('statUptime').innerText = uptimeStr;
-                            document.getElementById('statPing').innerText = Math.round(d.ping) + 'ms';
-                        }
-                    }).catch(()=>{});
-            }
-        }
-        setInterval(updateStats, 2000);
     </script>
+    <script src="/static/js/terminal.js?v={{ asset_ver }}"></script>
 </body>
 </html>

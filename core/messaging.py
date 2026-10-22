@@ -125,3 +125,18 @@ async def send_alert(
             await asyncio.sleep(0.1)
         except Exception as e:
             logging.error(f"Error sending alert to user {user_id}: {e}")
+
+    try:
+        from .web.webpush import send_web_push_for_alert
+        asyncio.create_task(
+            send_web_push_for_alert(
+                user_ids=users_to_alert,
+                alert_type=alert_type,
+                message_or_func=message_or_func,
+                node_token=node_token,
+                kwargs=kwargs,
+            )
+        )
+    except Exception as exc:
+        logging.error(f"Error initiating web push alert: {exc}")
+

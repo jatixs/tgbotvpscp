@@ -1,6 +1,6 @@
 """
-Вспомогательные утилиты проекта.
-Содержит функции для работы с сетью, логированием, шифрованием и форматированием данных.
+Project helper utilities.
+Contains functions for networking, logging, encryption, and data formatting.
 """
 import asyncio
 import base64
@@ -856,6 +856,8 @@ def get_app_version() -> str:
         return ver if ver.startswith("v") else f"v{ver}"
     try:
         changelog_path = os.path.join(config.BASE_DIR, "CHANGELOG.md")
+        if not os.path.exists(changelog_path):
+            changelog_path = os.path.join(config.BASE_DIR, "docs", "CHANGELOG.md")
         if os.path.exists(changelog_path):
             with open(changelog_path, "r", encoding="utf-8") as f:
                 content = f.read()

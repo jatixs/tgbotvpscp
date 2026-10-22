@@ -5,11 +5,11 @@
 <h1 align="center">🤖 VPS Manager Telegram Bot</h1>
 
 <p align="center">
-  <b>v1.26.1</b> — профессиональная экосистема для мониторинга и управления серверной инфраструктурой<br>
+  <b>v1.27.0</b> — профессиональная экосистема для мониторинга и управления серверной инфраструктурой<br>
   (Systemd / Docker / API / WebUI / PWA / Multi-Node / Remote SSH / Backup Manager)<br><br>
 
-  <a href="https://github.com/jatixs/tgbotvpscp/releases/latest"><img src="https://img.shields.io/badge/version-v1.26.1-blue?style=flat-square" alt="Version 1.26.1"/></a>
-  <a href="https://github.com/jatixs/tgbotvpscp/releases/latest"><img src="https://img.shields.io/badge/build-94-purple?style=flat-square" alt="Build 94"/></a>
+  <a href="https://github.com/jatixs/tgbotvpscp/releases/latest"><img src="https://img.shields.io/badge/version-v1.27.0-blue?style=flat-square" alt="Version 1.27.0"/></a>
+  <a href="https://github.com/jatixs/tgbotvpscp/releases/latest"><img src="https://img.shields.io/badge/build-95-purple?style=flat-square" alt="Build 95"/></a>
   <a href="https://www.python.org/"><img src="https://img.shields.io/badge/python-3.10%2B-green?style=flat-square" alt="Python 3.10+"/></a>
   <a href="https://choosealicense.com/licenses/gpl-3.0/"><img src="https://img.shields.io/badge/license-GPL--3.0-lightgrey?style=flat-square" alt="License GPL-3.0"/></a>
   <a href="https://github.com/aiogram/aiogram"><img src="https://img.shields.io/badge/aiogram-3.x-orange?style=flat-square" alt="Aiogram 3.x"/></a>
@@ -65,7 +65,7 @@
 ### 🌍 Мульти-серверное управление
 - **Неограниченное количество нод** — масштабируемая архитектура
 - **Метрики в реальном времени** — CPU, RAM, Disk, Network (HTTP / ICMP ping)
-- **Веб-терминал (SSH)** — доступ к терминалу через WebUI с проверкой ключа хоста
+- **Веб-терминал (SSH)** — доступ к консоли через WebUI с поддержкой проверки ключа хоста, зашифрованных SSH-ключей (с кодовой фразой/passphrase) и виртуальной клавиатурой для мобильных устройств (Ctrl, Alt, Tab, Esc, стрелки)
 - **Оптимизация системы** — интерактивный модуль настройки VPS (BBR, Swap, очистка кэша)
 
 ### 💳 Система биллинга и аренды
@@ -83,7 +83,8 @@
 - **Web-защита** — заголовки безопасности, CSRF, ограничение частоты запросов и фильтрация подозрительных запросов
 - **Защита от DDoS и перебора паролей (Rate Limiting & Brute-force)** 
 - **Журналирование аудита (Audit Logging)** — детальные логи всех событий
-- **Шифрование данных** — Fernet (AES) + AES-256-CBC + Argon2 для паролей
+- **Шифрование данных** — Fernet (AES-128) для паролей и SSH-ключей терминала + AES-256-CBC + Argon2 для паролей
+- **Контроль целостности ядра** — встроенный аудит SHA-256 для проверки системных файлов
 - **DOMPurify** — строгая фильтрация контента на стороне клиента
 
 ### 🎨 Современный веб-интерфейс
@@ -104,11 +105,13 @@
 - **Автоматические миграции БД** — через \ erich\, без потери данных
 
 ### 🔔 Умные уведомления
+- **Web Push уведомления (PWA и браузер)** — фоновые Push-уведомления (VAPID / RFC 8291) на смартфонах (Android, iOS 16.4+ PWA) и ПК даже при закрытом приложении
+- **Управление Push-подписками** — переключатель в настройках, мгновенные тестовые алерты и кнопка отзыва подписок на всех устройствах
 - **Настраиваемые пороги** — CPU/RAM/Disk по выбору
 - **Уведомления о простоях** — интеллектуальное определение недоступности серверов
 - **SSH мониторинг** — уведомления о входах (в том числе по SSH-ключам)
 - **Интеграция с Fail2Ban** — автоматическая блокировка подозрительных IP
-- **Alert-bot** — вспомогательный бот-ретранслятор для уведомлений/новостей. 
+- **Alert-bot** — вспомогательный бот-ретранслятор для уведомлений/новостей 
 
 ### 🌐 Интернационализация
 - **Русский язык** — полная локализация
@@ -197,7 +200,7 @@ Managed TLS принимает домен или глобальный публи
 ### 3️⃣ Подключение удаленных серверов (нод)
 
 1. В Telegram откройте **Ноды** → **Добавить ноду**, задайте имя и сохраните выданный секретный token.
-2. На удаленном сервере запустите установщик и выберите **7) НОДА (Клиент)**.
+2. На удаленном сервере запустите установщик и выберите **5) НОДА (Клиент)**.
 3. Укажите HTTPS origin master, например `https://panel.example.com` или `https://203.0.113.10`, и node token.
 
 Для существующих агентов сначала обновите master, затем обновите ноды. Агент проверяет same-host HTTPS endpoint и сохраняет новый URL; временный HTTP bridge принимает только discovery/bootstrap и HMAC-защищенный heartbeat. Проверьте прогресс командой `sudo tgcp-bot tls status`; после подтверждения всех нод закройте bridge: `sudo tgcp-bot tls finalize`.
@@ -397,6 +400,7 @@ Agent routes: `GET /api/agent/https` публикует HTTPS origin без то
 │   ├── tls_config.py        # Проверка TLS endpoint и Certbot arguments
 │   ├── config.py            # Загрузка конфигурации
 │   ├── auth.py              # Авторизация
+│   ├── integrity.py         # Аудит целостности системы (SHA-256)
 │   ├── i18n.py              # Мультиязычность
 │   ├── keyboards.py         # UI генератор
 │   ├── messaging.py         # Уведомления
@@ -413,8 +417,9 @@ Agent routes: `GET /api/agent/https` публикует HTTPS origin без то
 │   │   ├── middlewares.py   # WAF, CSRF, Rate Limiting
 │   │   ├── api_nodes.py     # API нод на базе aiohttp
 │   │   ├── api_system.py    # Системный API на базе aiohttp
-│   │   ├── streaming.py     # SSE потоки
-│   │   └── views.py         # Jinja2 HTML страницы
+│   │   ├── streaming.py     # SSE потоки и WebSocket терминал
+│   │   ├── views.py         # Jinja2 HTML страницы
+│   │   └── webpush.py       # Web Push API (подписки и VAPID доставка)
 │   ├── static/              # CSS, JS
 │   └── templates/           # HTML шаблоны
 ├── modules/                 # Функциональные модули (20 модулей)
@@ -612,7 +617,7 @@ python bot.py
 ---
 
 <p align="center">
-  <b>Версия:</b> 1.26.0 (Build 93)<br>
+  <b>Версия:</b> 1.27.0 (Build 95)<br>
   <b>Лицензия:</b> GPL-3.0 license<br>
   <b>Статус:</b> Релиз<br>
   <br>

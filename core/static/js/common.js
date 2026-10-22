@@ -1121,6 +1121,94 @@ function showCopyFeedback() {
 }
 window.copyToken = copyToken;
 
+function copyIpWithFeedback(ip, triggerEl, event) {
+    if (event) {
+        event.stopPropagation();
+        if (event.stopImmediatePropagation) event.stopImmediatePropagation();
+        if (event.preventDefault) event.preventDefault();
+    }
+    const cleanIp = (ip || '').trim();
+    if (!cleanIp || cleanIp === '-' || cleanIp === 'n/a' || cleanIp === 'Unknown' || cleanIp === '...') return;
+
+    copyTextToClipboard(cleanIp);
+
+    const btn = triggerEl ? (triggerEl.closest('.ip-copy-btn') || triggerEl.querySelector?.('.ip-copy-btn') || triggerEl) : null;
+    const iconSvg = btn ? (btn.querySelector('.ip-copy-icon') || (btn.classList && btn.classList.contains('ip-copy-icon') ? btn : null)) : null;
+
+    if (iconSvg && !btn._isCopying) {
+        btn._isCopying = true;
+        const originalHtml = iconSvg.innerHTML;
+        const originalClass = iconSvg.getAttribute('class') || '';
+
+        // Checkmark icon
+        iconSvg.innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7" />';
+        iconSvg.setAttribute('class', originalClass + ' text-emerald-500 dark:text-emerald-400 scale-110');
+
+        setTimeout(() => {
+            iconSvg.innerHTML = originalHtml;
+            iconSvg.setAttribute('class', originalClass);
+            btn._isCopying = false;
+        }, 1500);
+    }
+}
+window.copyIpWithFeedback = copyIpWithFeedback;
+
+function isTouchDeviceOrEvent(e) {
+    if (e && (e.pointerType === 'touch' || e.pointerType === 'pen')) return true;
+    if (window.matchMedia && (window.matchMedia('(pointer: coarse)').matches || window.matchMedia('(hover: none)').matches)) return true;
+    if ('ontouchstart' in window || navigator.maxTouchPoints > 0) return true;
+    return false;
+}
+
+// Global Capture delegation for Copying IP (works across desktop click and touchscreen tap)
+document.addEventListener('click', e => {
+    // 1. Explicit Copy Button Click
+    const btn = e.target.closest('.ip-copy-btn, [data-action="copy-ip"]');
+    if (btn) {
+        e.stopPropagation();
+        if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+        if (e.preventDefault) e.preventDefault();
+        const container = btn.closest('.ip-copy-container');
+        const ip = btn.getAttribute('data-ip') || 
+                   (container && container.getAttribute('data-copy-ip')) || 
+                   (container && container.querySelector('.ip-copy-text')?.textContent.trim()) || 
+                   '';
+        if (ip) {
+            copyIpWithFeedback(ip, btn, e);
+        }
+        return;
+    }
+
+    // 2. Touch screen tap on IP text or container (tablets, phones)
+    const textOrContainer = e.target.closest('.ip-copy-text, .ip-copy-container');
+    if (textOrContainer && isTouchDeviceOrEvent(e)) {
+        e.stopPropagation();
+        if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+        if (e.preventDefault) e.preventDefault();
+        const container = textOrContainer.closest('.ip-copy-container') || textOrContainer;
+        const textEl = container.querySelector('.ip-copy-text') || textOrContainer;
+        const ip = container.getAttribute('data-copy-ip') || textEl.textContent.trim();
+        const btnEl = container.querySelector('.ip-copy-btn');
+        if (ip) {
+            copyIpWithFeedback(ip, btnEl, e);
+        }
+        return;
+    }
+}, true);
+
+document.addEventListener('app:action:copy-ip', e => {
+    e.detail.originalEvent?.stopPropagation();
+    const btn = e.detail.target;
+    const container = btn.closest('.ip-copy-container');
+    const ip = btn.getAttribute('data-ip') || 
+               (container && container.getAttribute('data-copy-ip')) || 
+               (container && container.querySelector('.ip-copy-text')?.textContent.trim()) || 
+               '';
+    if (ip) {
+        copyIpWithFeedback(ip, btn, e.detail.originalEvent);
+    }
+});
+
 let toastContainer = null;
 
 function getToastContainer() {
@@ -1878,9 +1966,28 @@ function updateNotifUI(list, count) {
     if (count > 0) {
         setSafeText(badge, count > 99 ? '99+' : String(count));
         badge.classList.remove('hidden');
-        if (lastUnreadCount !== -1 && count > lastUnreadCount && bellIcon) {
-            bellIcon.classList.add('notif-bell-shake');
-            setTimeout(() => bellIcon.classList.remove('notif-bell-shake'), 500);
+        if (lastUnreadCount !== -1 && count > lastUnreadCount) {
+            if (bellIcon) {
+                bellIcon.classList.add('notif-bell-shake');
+                setTimeout(() => bellIcon.classList.remove('notif-bell-shake'), 500);
+            }
+            if (document.visibilityState === 'hidden' && 'Notification' in window && Notification.permission === 'granted' && list && list.length > 0) {
+                try {
+                    const tempSpan = document.createElement('span');
+                    tempSpan.innerHTML = list[0].text || '';
+                    const cleanBody = tempSpan.textContent || tempSpan.innerText || '';
+                    if (window.swRegistration && window.swRegistration.showNotification) {
+                        window.swRegistration.showNotification(document.title || 'VPS Control Panel', {
+                            body: cleanBody,
+                            icon: '/static/favicons/android-chrome-192x192.png',
+                            badge: '/static/favicons/favicon-32x32.png',
+                            tag: 'vps-foreground-alert'
+                        });
+                    }
+                } catch (e) {
+                    console.debug('Foreground notif error:', e);
+                }
+            }
         }
     } else badge.classList.add('hidden');
 
@@ -1985,7 +2092,7 @@ window.closeMobileSettings = closeMobileSettings;
 window.toggleMobileSettings = toggleMobileSettings;
 
 window.toggleTheme = function() {
-    const themes = ["system", "dark", "light", "amoled"];
+    const themes = ["system", "light", "dark", "amoled"];
     let currentTheme = localStorage.getItem("theme");
     if (!currentTheme) currentTheme = "system";
 
@@ -2006,12 +2113,12 @@ function setThemeDirect(theme, event) {
 
 function applyThemeUI(t) {
     if (!t) return;
-    ['iconMoon', 'iconSun', 'iconSystem', 'iconAmoled'].forEach(id => { document.getElementById(id)?.classList.add('hidden'); });
+    ['iconSystem', 'iconSun', 'iconMoon', 'iconAmoled'].forEach(id => { document.getElementById(id)?.classList.add('hidden'); });
     
-    if (t === 'dark') {
-        document.getElementById('iconMoon')?.classList.remove('hidden');
-    } else if (t === 'light') {
+    if (t === 'light') {
         document.getElementById('iconSun')?.classList.remove('hidden');
+    } else if (t === 'dark') {
+        document.getElementById('iconMoon')?.classList.remove('hidden');
     } else if (t === 'amoled') {
         document.getElementById('iconAmoled')?.classList.remove('hidden');
     } else {
@@ -2022,7 +2129,7 @@ function applyThemeUI(t) {
     const baseClasses = ["text-gray-500", "hover:text-gray-700", "dark:text-gray-400", "dark:hover:text-gray-200", "hover:bg-gray-200", "dark:hover:bg-gray-800"];
     const activeClasses = ["bg-white", "dark:bg-gray-600", "shadow-sm", "text-gray-900", "dark:text-white"];
     
-    ['mThemeSys', 'mThemeDark', 'mThemeLight', 'mThemeAmoled'].forEach(id => {
+    ['mThemeSys', 'mThemeLight', 'mThemeDark', 'mThemeAmoled'].forEach(id => {
         const el = document.getElementById(id);
         if (el) {
             el.classList.remove(...activeClasses);
@@ -2836,3 +2943,20 @@ window.closeDynamicModal = function(id) {
         }
     }
 };
+
+// --- SERVICE WORKER REGISTRATION (PWA & Web Push) ---
+(function initPwaServiceWorker() {
+    if ('serviceWorker' in navigator && (window.location.protocol === 'https:' || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
+        window.addEventListener('load', () => {
+            navigator.serviceWorker.register('/sw.js', { scope: '/' })
+                .then((registration) => {
+                    window.swRegistration = registration;
+                    window.dispatchEvent(new CustomEvent('swReady', { detail: registration }));
+                })
+                .catch((err) => {
+                    console.debug('ServiceWorker registration error:', err);
+                });
+        });
+    }
+})();
+
