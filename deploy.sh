@@ -2335,21 +2335,14 @@ main_menu() {
         echo "  6) Переустановить (Docker - Root)"
         if [ "$IS_NODE" == "yes" ]; then
             echo -e "${C_GREEN}  7) Установить НОДУ (Клиент)${C_RESET}"
-        fi
-        
-        if [ "$IS_NODE" == "yes" ]; then
             local monitoring_status=$(check_agent_monitoring_status)
             echo -e "${C_YELLOW}  8) Мониторинг агента (${monitoring_status})${C_RESET}"
-        fi
-
-        # Alert module menu item — non-node mode only
-        if [ "$IS_NODE" != "yes" ]; then
+        else
             local alert_status="не активен"
             if [ -f "${ENV_FILE}" ] && grep -q '^ALERT_BOT_TOKEN=' "${ENV_FILE}"; then
                 alert_status="${C_GREEN}активен${C_RESET}"
             fi
-            echo -e "  9) Управление Alert-модулем (${alert_status})"
-            echo -e " 10) Кастомные модули и аудит SHA-256"
+            echo -e "  7) Управление Alert-модулем (${alert_status})"
         fi
 
         echo "  0) Выход"
@@ -2362,10 +2355,23 @@ main_menu() {
             4) install_systemd_logic "root"; read -p "Нажмите Enter..." ;;
             5) install_docker_logic "secure"; read -p "Нажмите Enter..." ;;
             6) install_docker_logic "root"; read -p "Нажмите Enter..." ;;
-            7) if [ "$IS_NODE" == "yes" ]; then install_node_logic; read -p "Нажмите Enter..."; else msg_error "Пункт доступен только в режиме НОДЫ."; sleep 2; fi ;;
-            8) if [ "$IS_NODE" == "yes" ]; then toggle_agent_monitoring; read -p "Нажмите Enter..."; fi ;;
-            9) if [ "$IS_NODE" != "yes" ]; then manage_alert_module; read -p "Нажмите Enter..."; fi ;;
-            10) if [ "$IS_NODE" != "yes" ]; then manage_custom_modules; fi ;;
+            7)
+                if [ "$IS_NODE" == "yes" ]; then
+                    install_node_logic; read -p "Нажмите Enter..."
+                else
+                    manage_alert_module; read -p "Нажмите Enter..."
+                fi
+                ;;
+            8)
+                if [ "$IS_NODE" == "yes" ]; then
+                    toggle_agent_monitoring; read -p "Нажмите Enter..."
+                fi
+                ;;
+            9)
+                if [ "$IS_NODE" != "yes" ]; then
+                    manage_alert_module; read -p "Нажмите Enter..."
+                fi
+                ;;
             0) break ;;
         esac
     done
@@ -2386,7 +2392,7 @@ if [ "$INSTALL_TYPE" == "НЕТ" ]; then
     echo "  2) АГЕНТ (Systemd - Root)    [Полный доступ]"
     echo "  3) АГЕНТ (Docker - Secure)   [Изоляция]"
     echo "  4) АГЕНТ (Docker - Root)     [Docker + Host]"
-    echo -e "${C_GREEN}  7) НОДА (Клиент)${C_RESET}"
+    echo -e "${C_GREEN}  5) НОДА (Клиент)${C_RESET}"
     echo "  0) Выход"
     echo "--------------------------------------------------------"
     read -p "$(echo -e "${C_BOLD}Ваш выбор: ${C_RESET}")" ch
@@ -2395,7 +2401,7 @@ if [ "$INSTALL_TYPE" == "НЕТ" ]; then
         2) install_systemd_logic "root"; read -p "Нажмите Enter..." ;;
         3) install_docker_logic "secure"; read -p "Нажмите Enter..." ;;
         4) install_docker_logic "root"; read -p "Нажмите Enter..." ;;
-        7) install_node_logic; read -p "Нажмите Enter..." ;;
+        5|7) install_node_logic; read -p "Нажмите Enter..." ;;
         0) exit 0 ;;
         *) msg_error "Неверный выбор."; sleep 2 ;;
     esac

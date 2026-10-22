@@ -65,7 +65,7 @@
 ### 🌍 Multi-Server Management
 - **Unlimited Nodes** — scalable architecture
 - **Real-time Metrics** — CPU, RAM, Disk, Network (HTTP / ICMP ping)
-- **Web Terminal (SSH)** — browser terminal access with host-key verification
+- **Web Terminal (SSH)** — browser console access with host-key verification, encrypted SSH key support (passphrase modal), and mobile virtual keyboard (Ctrl, Alt, Tab, Esc, arrows)
 - **System Optimization** — interactive VPS tuning module (BBR, Swap, cache cleanup)
 
 ### 💳 Billing & Rental System
@@ -83,7 +83,8 @@
 - **Web protections** — security headers, CSRF, rate limiting, and suspicious-request filtering
 - **Rate Limiting & Brute-force Protection** — DDoS and password-guessing protection
 - **Audit Logging** — detailed logs of all security events
-- **Data Encryption** — Fernet (AES) + AES-256-CBC + Argon2 for passwords
+- **Data Encryption** — Fernet (AES-128) for stored passwords and terminal SSH keys + AES-256-CBC + Argon2 for passwords
+- **Core Integrity Check** — built-in SHA-256 verification of system files
 - **DOMPurify** — strict client-side content sanitization
 
 ### 🎨 Modern Web Interface
@@ -104,11 +105,13 @@
 - **Auto DB Migrations** — via \ erich\, ensuring zero data loss
 
 ### 🔔 Smart Notifications
+- **Web Push Notifications (PWA & Desktop)** — background Push notifications (VAPID / RFC 8291) on mobile (Android, iOS 16.4+ PWA) and PC even when app is closed
+- **Push Subscription Management** — settings toggle, instant test alerts, and one-click revocation across all devices
 - **Customizable Thresholds** — CPU/RAM/Disk limits
 - **Downtime Alerts** — intelligent server unavailability detection
 - **SSH Monitoring** — login notifications (including SSH keys)
 - **Fail2Ban Integration** — blocking suspicious IPs
-- **Alert-bot** — is an auxiliary relay bot for notifications and news.
+- **Alert-bot** — auxiliary relay bot for notifications and news
 
 ### 🌐 Internationalization
 - **Russian** — full localization
@@ -200,7 +203,7 @@ Managed TLS accepts a domain or globally routable public IPv4. Let's Encrypt IP 
 ### 3️⃣ Connect Remote Servers (Nodes)
 
 1. In Telegram, open **Nodes** → **Add Node**, name the node, and keep the generated secret token.
-2. Run the installer on the remote server and select **7) NODE (Client)**.
+2. Run the installer on the remote server and select **5) NODE (Client)**.
 3. Enter the master's HTTPS origin, such as `https://panel.example.com` or `https://203.0.113.10`, and the node token.
 
 For existing agents, update the master first, then update each node. The agent validates a same-host HTTPS endpoint and persists its new URL; the temporary HTTP bridge only accepts discovery/bootstrap and HMAC-protected heartbeats. Check progress with `sudo tgcp-bot tls status`; after all nodes confirm, close the bridge with `sudo tgcp-bot tls finalize`.
@@ -400,6 +403,7 @@ Set `WEB_PUBLIC_URL` to an `https://` origin. With an external reverse proxy, th
 │   ├── tls_config.py        # TLS endpoint validation and Certbot arguments
 │   ├── config.py            # Configuration loader
 │   ├── auth.py              # Authorization
+│   ├── integrity.py         # System integrity verification (SHA-256)
 │   ├── i18n.py              # Multilingual
 │   ├── keyboards.py         # UI generator
 │   ├── messaging.py         # Notifications
@@ -416,8 +420,9 @@ Set `WEB_PUBLIC_URL` to an `https://` origin. With an external reverse proxy, th
 │   │   ├── middlewares.py   # WAF, CSRF, Rate Limiting
 │   │   ├── api_nodes.py     # aiohttp-based node API
 │   │   ├── api_system.py    # aiohttp-based system API
-│   │   ├── streaming.py     # SSE streams
-│   │   └── views.py         # Jinja2 HTML pages
+│   │   ├── streaming.py     # SSE streams & WebSocket terminal
+│   │   ├── views.py         # Jinja2 HTML pages
+│   │   └── webpush.py       # Web Push API (subscriptions & VAPID delivery)
 │   ├── static/              # CSS, JS
 │   └── templates/           # HTML templates
 ├── modules/                 # Functional modules (20 modules)

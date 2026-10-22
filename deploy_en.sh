@@ -2320,22 +2320,14 @@ main_menu() {
         echo "  6) Reinstall (Docker - Root)"
         if [ "$IS_NODE" == "yes" ]; then
             echo -e "${C_GREEN}  7) Install NODE (Client)${C_RESET}"
-        fi
-        
-        # Show agent monitoring option only for nodes
-        if [ "$IS_NODE" == "yes" ]; then
             local monitoring_status=$(check_agent_monitoring_status)
             echo -e "${C_YELLOW}  8) Agent Monitoring (${monitoring_status})${C_RESET}"
-        fi
-
-        # Alert Module option — only for non-node mode
-        if [ "$IS_NODE" != "yes" ]; then
+        else
             local alert_status="not active"
             if [ -f "${ENV_FILE}" ] && grep -q '^ALERT_BOT_TOKEN=' "${ENV_FILE}"; then
                 alert_status="${C_GREEN}active${C_RESET}"
             fi
-            echo -e "  9) Manage Alert Module (${alert_status})"
-            echo -e " 10) Custom Modules & SHA-256 Audit"
+            echo -e "  7) Manage Alert Module (${alert_status})"
         fi
 
         echo "  0) Exit"
@@ -2348,10 +2340,23 @@ main_menu() {
             4) install_systemd_logic "root"; read -p "Press Enter..." ;;
             5) install_docker_logic "secure"; read -p "Press Enter..." ;;
             6) install_docker_logic "root"; read -p "Press Enter..." ;;
-            7) if [ "$IS_NODE" == "yes" ]; then install_node_logic; read -p "Press Enter..."; else msg_error "Option available in NODE mode only."; sleep 2; fi ;;
-            8) if [ "$IS_NODE" == "yes" ]; then toggle_agent_monitoring; read -p "Press Enter..."; fi ;;
-            9) if [ "$IS_NODE" != "yes" ]; then manage_alert_module; read -p "Press Enter..."; fi ;;
-            10) if [ "$IS_NODE" != "yes" ]; then manage_custom_modules; fi ;;
+            7)
+                if [ "$IS_NODE" == "yes" ]; then
+                    install_node_logic; read -p "Press Enter..."
+                else
+                    manage_alert_module; read -p "Press Enter..."
+                fi
+                ;;
+            8)
+                if [ "$IS_NODE" == "yes" ]; then
+                    toggle_agent_monitoring; read -p "Press Enter..."
+                fi
+                ;;
+            9)
+                if [ "$IS_NODE" != "yes" ]; then
+                    manage_alert_module; read -p "Press Enter..."
+                fi
+                ;;
             0) break ;;
         esac
     done
@@ -2372,7 +2377,7 @@ if [ "$INSTALL_TYPE" == "NONE" ]; then
     echo "  2) AGENT (Systemd - Root)    [Full access]"
     echo "  3) AGENT (Docker - Secure)   [Isolation]"
     echo "  4) AGENT (Docker - Root)     [Docker + Host]"
-    echo -e "${C_GREEN}  7) NODE (Client)${C_RESET}"
+    echo -e "${C_GREEN}  5) NODE (Client)${C_RESET}"
     echo "  0) Exit"
     echo "--------------------------------------------------------"
     read -p "$(echo -e "${C_BOLD}Your choice: ${C_RESET}")" ch
@@ -2381,7 +2386,7 @@ if [ "$INSTALL_TYPE" == "NONE" ]; then
         2) install_systemd_logic "root"; read -p "Press Enter..." ;;
         3) install_docker_logic "secure"; read -p "Press Enter..." ;;
         4) install_docker_logic "root"; read -p "Press Enter..." ;;
-        7) install_node_logic; read -p "Press Enter..." ;;
+        5|7) install_node_logic; read -p "Press Enter..." ;;
         0) exit 0 ;;
         *) msg_error "Invalid choice."; sleep 2 ;;
     esac
