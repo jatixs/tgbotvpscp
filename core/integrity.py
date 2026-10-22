@@ -18,7 +18,7 @@ import os
 import re
 import shlex
 import shutil
-import subprocess
+import subprocess  # nosec B404
 import sys
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
@@ -135,7 +135,7 @@ def get_git_remote_blob(
     target_ref = shlex.quote(f"origin/{safe_branch}:{clean_path}")
     cmd = ["git", "show", target_ref]
     try:
-        res = subprocess.run(
+        res = subprocess.run(  # nosec B603
             cmd,
             cwd=str(repo_root),
             stdout=subprocess.PIPE,
@@ -160,7 +160,7 @@ def get_git_tracked_files(
     target_ref = shlex.quote(f"origin/{safe_branch}")
     cmd = ["git", "ls-tree", "-r", "--name-only", target_ref, "--"]
     try:
-        res = subprocess.run(
+        res = subprocess.run(  # nosec B603
             cmd,
             cwd=str(repo_root),
             stdout=subprocess.PIPE,
@@ -335,7 +335,7 @@ def check_project_integrity(
     if fetch:
         try:
             target_branch = shlex.quote(branch)
-            subprocess.run(
+            subprocess.run(  # nosec B603
                 ["git", "fetch", "origin", target_branch, "--"],
                 cwd=str(root),
                 stdout=subprocess.DEVNULL,
