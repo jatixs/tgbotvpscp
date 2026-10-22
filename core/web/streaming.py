@@ -16,7 +16,7 @@ from aiohttp import web
 from .. import config as current_config
 from .. import metrics_history, nodes_db, shared_state
 from ..config import BASE_DIR, DEFAULT_LANGUAGE, DEPLOY_MODE
-from ..i18n import get_user_lang
+from ..i18n import get_user_lang, _
 from ..rbac import is_admin as _is_admin
 from ..utils import (
     decrypt_for_web,
@@ -81,8 +81,44 @@ def _encrypt_node_services_for_web(services: list[dict[str, Any]] | None) -> lis
     ]
 
 
+def _collect_local_ips() -> list[str]:
+    ips: list[str] = ["127.0.0.1", "localhost", "::1"]
+    try:
+        import netifaces  # type: ignore
+
+        for iface in netifaces.interfaces():
+            try:
+                addrs = netifaces.ifaddresses(iface)
+                if netifaces.AF_INET in addrs:
+                    for addr_info in addrs[netifaces.AF_INET]:
+                        ip = str(addr_info.get("addr", "")).strip()
+                        if ip and not ip.startswith("169.254."):
+                            ips.append(ip)
+            except Exception:
+                continue
+    except Exception:
+        pass
+    try:
+        import socket
+
+        hostname = socket.gethostname()
+        for addr in socket.getaddrinfo(hostname, None, socket.AF_INET):
+            ip = str(addr[4][0]).strip()
+            if ip and not ip.startswith("169.254."):
+                ips.append(ip)
+    except Exception:
+        pass
+    return list(dict.fromkeys(ips))
+
+
 def _safe_agent_ip() -> str:
-    return getattr(shared_state, "AGENT_IP_CACHE", "Loading...")
+    cached = str(getattr(shared_state, "AGENT_IP_CACHE", "")).strip()
+    if cached and cached not in {"Loading...", "Unknown", "-", "None"}:
+        return cached
+    local_ips = [ip for ip in _collect_local_ips() if ip not in {"127.0.0.1", "localhost", "::1"}]
+    if local_ips:
+        return local_ips[0]
+    return "127.0.0.1"
 
 
 def _safe_agent_ping() -> str:
@@ -99,7 +135,11 @@ def _normalize_host(host: str) -> str:
 
 def _is_local_terminal_stats_target(host: str, agent_ip: str) -> bool:
     normalized_host = _normalize_host(host)
-    if normalized_host in {_normalize_host(agent_ip), "127.0.0.1", "localhost"}:
+    if normalized_host in {_normalize_host(agent_ip), "127.0.0.1", "localhost", "::1", "0.0.0.0"}:
+        return True
+
+    local_ips = {_normalize_host(ip) for ip in _collect_local_ips()}
+    if normalized_host in local_ips:
         return True
 
     try:
@@ -110,18 +150,22 @@ def _is_local_terminal_stats_target(host: str, agent_ip: str) -> bool:
 
 async def _is_allowed_terminal_host(host: str) -> bool:
     normalized_host = _normalize_host(host)
-    if normalized_host == "127.0.0.1":
+    if normalized_host in {"127.0.0.1", "localhost", "::1", "0.0.0.0"}:
+        return True
+
+    local_ips = {_normalize_host(ip) for ip in _collect_local_ips()}
+    if normalized_host in local_ips:
         return True
 
     agent_ip = _safe_agent_ip()
-    if agent_ip not in {"", "Loading...", "Unknown"} and normalized_host == _normalize_host(agent_ip):
+    if agent_ip not in {"", "Loading...", "Unknown", "-"} and normalized_host == _normalize_host(agent_ip):
         return True
 
     all_nodes = await nodes_db.get_all_nodes()
     allowed_node_ips = {
         _normalize_host(str(node.get("ip", "")).strip())
         for node in all_nodes.values()
-        if str(node.get("ip", "")).strip() and str(node.get("ip", "")).strip() != "Unknown"
+        if str(node.get("ip", "")).strip() and str(node.get("ip", "")).strip() not in {"Unknown", "Loading...", "-"}
     }
     return normalized_host in allowed_node_ips
 
@@ -915,8 +959,8 @@ async def handle_get_terminal_creds(request: web.Request) -> web.StreamResponse:
         return web.json_response({"status": "error", "error": "Admin required"}, status=403)
 
     ip = str(request.query.get("ip", "")).strip()
-    if not ip:
-        return web.json_response({"status": "error", "error": "Missing IP"}, status=400)
+    if not ip or ip in {"Loading...", "Unknown", "-", "None"}:
+        return web.json_response({"status": "ok", "saved": False})
 
     try:
         creds = await current_config.get_bot_config("terminal_creds", {})
@@ -930,6 +974,7 @@ async def handle_get_terminal_creds(request: web.Request) -> web.StreamResponse:
                     "type": str(saved.get("type", "password")),
                     "user": str(saved.get("user", "root")),
                     "port": int(saved.get("port", 22)),
+                    "has_passphrase": bool(saved.get("passphrase")),
                 }
             )
         return web.json_response({"status": "ok", "saved": False})
@@ -947,7 +992,7 @@ async def handle_save_terminal_creds(request: web.Request) -> web.StreamResponse
     try:
         data = await request.json()
         ip = str(data.get("ip", "")).strip()
-        if not ip:
+        if not ip or ip in {"Loading...", "Unknown", "-", "None"}:
             return web.json_response({"status": "error", "error": "Missing IP"}, status=400)
 
         creds = await current_config.get_bot_config("terminal_creds", {})
@@ -958,12 +1003,18 @@ async def handle_save_terminal_creds(request: web.Request) -> web.StreamResponse
         if uid_str not in creds or not isinstance(creds.get(uid_str), dict):
             creds[uid_str] = {}
 
+        existing = creds[uid_str].get(ip, {})
+        passphrase = str(data.get("passphrase", ""))
+        if not passphrase and "passphrase" not in data and isinstance(existing, dict):
+            passphrase = str(existing.get("passphrase", ""))
+
         creds[uid_str][ip] = {
             "type": str(data.get("type", "password")),
             "user": str(data.get("user", "root")),
             "port": int(data.get("port", 22)),
             "password": str(data.get("password", "")),
             "private_key": str(data.get("private_key", "")),
+            "passphrase": passphrase,
         }
         await current_config.set_bot_config("terminal_creds", creds)
         return web.json_response({"status": "ok"})
@@ -979,7 +1030,7 @@ async def handle_terminal_stats(request: web.Request) -> web.StreamResponse:
         return web.json_response({"error": "Admin required"}, status=403)
 
     ip = str(request.query.get("ip", "")).strip()
-    if not ip:
+    if not ip or ip in {"Loading...", "Unknown", "-", "None"}:
         return web.json_response({"error": "Missing IP"}, status=400)
 
     try:
@@ -1041,25 +1092,32 @@ async def handle_terminal_ws(request: web.Request) -> web.StreamResponse:
     if not ws_ready.ok:
         return _build_websocket_notice(request.path)
 
-    public_base_url = _get_public_base_url()
     origin = request.headers.get("Origin", "")
-    try:
+    if origin:
+        try:
+            request_origin = urlsplit(origin)
+        except ValueError:
+            return web.Response(status=403, text="Invalid Origin")
+
+        public_base_url = _get_public_base_url()
         expected_origin = urlsplit(public_base_url) if public_base_url else None
-        request_origin = urlsplit(origin) if origin else None
-    except ValueError:
-        return web.Response(status=403, text="Invalid Origin")
-    if (
-        not expected_origin
-        or not request_origin
-        or request_origin.scheme != expected_origin.scheme
-        or request_origin.netloc.lower() != expected_origin.netloc.lower()
-    ):
-        return web.Response(status=403, text="Invalid Origin")
+
+        allowed_netlocs = {request.host.lower()}
+        host_hdr = request.headers.get("Host", "").strip()
+        if host_hdr:
+            allowed_netlocs.add(host_hdr.lower())
+        if expected_origin and expected_origin.netloc:
+            allowed_netlocs.add(expected_origin.netloc.lower())
+
+        if request_origin.netloc.lower() not in allowed_netlocs:
+            logging.warning("Terminal WS origin mismatch: %s not in %s", request_origin.netloc, allowed_netlocs)
+            return web.Response(status=403, text="Invalid Origin")
 
     user = get_current_user(request)
     if not user or not _is_admin(user):
         return web.Response(status=403)
 
+    lang = get_user_lang(int(user["id"]))
     ws_client = web.WebSocketResponse(heartbeat=30.0, autoping=True, autoclose=True)
     await ws_client.prepare(request)
 
@@ -1084,6 +1142,7 @@ async def handle_terminal_ws(request: web.Request) -> web.StreamResponse:
         use_saved = bool(message.get("use_saved", False))
         auth_type = str(message.get("auth_type", "password")).strip()
         password = str(message.get("password", ""))
+        passphrase = str(message.get("passphrase", "")).strip() or (password if auth_type == "key" else "")
         private_key = str(message.get("private_key", ""))
         cols = int(message.get("cols", 80))
         rows = int(message.get("rows", 24))
@@ -1100,14 +1159,17 @@ async def handle_terminal_ws(request: web.Request) -> web.StreamResponse:
                     password = password or str(saved_cred.get("password", ""))
                 else:
                     private_key = private_key or str(saved_cred.get("private_key", ""))
+                    passphrase = passphrase or str(saved_cred.get("passphrase", ""))
+
+        lang = get_user_lang(int(user["id"]))
 
         if not host or not username:
-            await ws_client.send_json({"type": "error", "message": "Missing host or username"})
+            await ws_client.send_json({"type": "error", "message": _("web_terminal_err_missing_host_user", lang)})
             await ws_client.close()
             return ws_client
 
         if not await _is_allowed_terminal_host(host):
-            await ws_client.send_json({"type": "error", "message": "Access denied: Unknown host"})
+            await ws_client.send_json({"type": "error", "message": _("web_terminal_err_access_denied", lang)})
             await ws_client.close()
             return ws_client
 
@@ -1122,10 +1184,30 @@ async def handle_terminal_ws(request: web.Request) -> web.StreamResponse:
 
         if auth_type == "key" and private_key:
             try:
-                key = asyncssh.import_private_key(private_key)
+                key = asyncssh.import_private_key(private_key, passphrase=passphrase if passphrase else None)
                 connect_kwargs["client_keys"] = [key]
             except Exception as exc:
-                await ws_client.send_json({"type": "error", "message": f"Invalid SSH Key: {exc}"})
+                exc_str = str(exc)
+                if "bcrypt" in exc_str.lower():
+                    await ws_client.send_json({
+                        "type": "error",
+                        "message": _("web_terminal_err_bcrypt_required", lang)
+                    })
+                else:
+                    is_passphrase_needed = (
+                        "passphrase" in exc_str.lower()
+                        or "encrypted" in exc_str.lower()
+                        or "encryption" in exc_str.lower()
+                        or "cipher" in exc_str.lower()
+                    )
+                    if is_passphrase_needed:
+                        await ws_client.send_json({
+                            "type": "error",
+                            "code": "passphrase_required",
+                            "message": _("web_terminal_err_passphrase_required", lang)
+                        })
+                    else:
+                        await ws_client.send_json({"type": "error", "message": f"{_('web_terminal_err_invalid_key', lang)}: {exc}"})
                 await ws_client.close()
                 return ws_client
         else:
@@ -1157,7 +1239,15 @@ async def handle_terminal_ws(request: web.Request) -> web.StreamResponse:
         logging.error("Terminal websocket error: %s", exc)
         if not ws_client.closed:
             try:
-                await ws_client.send_json({"type": "error", "message": str(exc)})
+                exc_str = str(exc)
+                if any(k in exc_str.lower() for k in ("passphrase", "encrypted", "cipher", "bad decrypt")):
+                    await ws_client.send_json({
+                        "type": "error",
+                        "code": "passphrase_required",
+                        "message": _("web_terminal_err_passphrase_required", lang)
+                    })
+                else:
+                    await ws_client.send_json({"type": "error", "message": str(exc)})
             except Exception:
                 pass
     finally:
