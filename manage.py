@@ -139,6 +139,7 @@ async def cmd_cleanlogs(args):
 
 
 async def cmd_tls_status(args):
+    from core import config, nodes_db
     await init_services()
     try:
         nodes = await nodes_db.get_all_nodes()
@@ -157,6 +158,7 @@ async def cmd_tls_status(args):
 
 
 async def cmd_tls_check(args):
+    from core import nodes_db
     await init_services()
     try:
         nodes = await nodes_db.get_all_nodes()
@@ -174,6 +176,7 @@ async def cmd_tls_check(args):
 
 
 async def cmd_tls_finalize(args):
+    from core import config, nodes_db
     if hasattr(os, "geteuid") and os.geteuid() != 0:
         raise PermissionError("Run `tgcp-bot tls finalize` as root")
     if not config.WEB_PUBLIC_URL.startswith("https://"):
