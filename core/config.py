@@ -1,6 +1,6 @@
 """
-Центральный модуль конфигурации.
-Загружает переменные окружения, настраивает пути и параметры безопасности (в т.ч. ключи шифрования).
+Central configuration module.
+Loads environment variables, configures paths, and sets security parameters (including encryption keys).
 """
 import asyncio
 import json

@@ -1966,9 +1966,28 @@ function updateNotifUI(list, count) {
     if (count > 0) {
         setSafeText(badge, count > 99 ? '99+' : String(count));
         badge.classList.remove('hidden');
-        if (lastUnreadCount !== -1 && count > lastUnreadCount && bellIcon) {
-            bellIcon.classList.add('notif-bell-shake');
-            setTimeout(() => bellIcon.classList.remove('notif-bell-shake'), 500);
+        if (lastUnreadCount !== -1 && count > lastUnreadCount) {
+            if (bellIcon) {
+                bellIcon.classList.add('notif-bell-shake');
+                setTimeout(() => bellIcon.classList.remove('notif-bell-shake'), 500);
+            }
+            if (document.visibilityState === 'hidden' && 'Notification' in window && Notification.permission === 'granted' && list && list.length > 0) {
+                try {
+                    const tempSpan = document.createElement('span');
+                    tempSpan.innerHTML = list[0].text || '';
+                    const cleanBody = tempSpan.textContent || tempSpan.innerText || '';
+                    if (window.swRegistration && window.swRegistration.showNotification) {
+                        window.swRegistration.showNotification(document.title || 'VPS Control Panel', {
+                            body: cleanBody,
+                            icon: '/static/favicons/android-chrome-192x192.png',
+                            badge: '/static/favicons/favicon-32x32.png',
+                            tag: 'vps-foreground-alert'
+                        });
+                    }
+                } catch (e) {
+                    console.debug('Foreground notif error:', e);
+                }
+            }
         }
     } else badge.classList.add('hidden');
 
@@ -2924,3 +2943,20 @@ window.closeDynamicModal = function(id) {
         }
     }
 };
+
+// --- SERVICE WORKER REGISTRATION (PWA & Web Push) ---
+(function initPwaServiceWorker() {
+    if ('serviceWorker' in navigator && (window.location.protocol === 'https:' || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
+        window.addEventListener('load', () => {
+            navigator.serviceWorker.register('/sw.js', { scope: '/' })
+                .then((registration) => {
+                    window.swRegistration = registration;
+                    window.dispatchEvent(new CustomEvent('swReady', { detail: registration }));
+                })
+                .catch((err) => {
+                    console.debug('ServiceWorker registration error:', err);
+                });
+        });
+    }
+})();
+

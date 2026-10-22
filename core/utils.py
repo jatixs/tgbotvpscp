@@ -1,6 +1,6 @@
 """
-Вспомогательные утилиты проекта.
-Содержит функции для работы с сетью, логированием, шифрованием и форматированием данных.
+Project helper utilities.
+Contains functions for networking, logging, encryption, and data formatting.
 """
 import asyncio
 import base64

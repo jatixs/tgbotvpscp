@@ -1,6 +1,6 @@
 """
-Контроллеры (Views) для HTML страниц веб-панели.
-Обрабатывают GET-запросы и рендерят шаблоны для дашборда, настроек и мониторинга.
+Controllers (Views) for WebUI HTML pages.
+Handles GET requests and renders templates for dashboard, settings, and node monitoring.
 """
 from __future__ import annotations
 
@@ -216,6 +216,18 @@ async def handle_manifest(request: web.Request) -> web.StreamResponse:
         "icons": [],
     }
     return web.json_response(manifest, content_type="application/manifest+json")
+
+
+@routes.get("/sw.js")
+async def handle_service_worker(request: web.Request) -> web.StreamResponse:
+    sw_path = Path(BASE_DIR) / "core" / "static" / "js" / "sw.js"
+    if sw_path.exists():
+        response = web.FileResponse(sw_path)
+        response.headers["Content-Type"] = "application/javascript; charset=utf-8"
+        response.headers["Service-Worker-Allowed"] = "/"
+        response.headers["Cache-Control"] = "no-cache"
+        return response
+    return web.Response(text="// Service Worker not found", status=404, content_type="application/javascript")
 
 
 @routes.get("/api/agent/ipv4")
@@ -1076,6 +1088,18 @@ async def handle_settings_page(request: web.Request) -> web.StreamResponse:
         "web_billing_status": _("web_billing_status", lang),
         "web_ping_target_internal": _("web_ping_target_internal", lang),
         "web_ping_target_no_nodes": _("web_ping_target_no_nodes", lang),
+        "web_push_title": _("web_push_title", lang),
+        "web_push_desc": _("web_push_desc", lang),
+        "web_push_status_active": _("web_push_status_active", lang),
+        "web_push_status_inactive": _("web_push_status_inactive", lang),
+        "web_push_status_blocked": _("web_push_status_blocked", lang),
+        "web_push_status_unsupported": _("web_push_status_unsupported", lang),
+        "web_push_btn_test": _("web_push_btn_test", lang),
+        "web_push_test_success": _("web_push_test_success", lang),
+        "web_push_test_fail": _("web_push_test_fail", lang),
+        "web_push_subscribed": _("web_push_subscribed", lang),
+        "web_push_unsubscribed": _("web_push_unsubscribed", lang),
+        "web_push_permission_denied": _("web_push_permission_denied", lang),
     }
     for btn_key, conf_key in BTN_CONFIG_MAP.items():
         i18n_data[f"lbl_{conf_key}"] = _(btn_key, lang)
@@ -1228,6 +1252,9 @@ async def handle_settings_page(request: web.Request) -> web.StreamResponse:
         "billing_toggle_reminder": _("billing_toggle_reminder", lang),
         "user_alerts": user_alerts,
         "user_alerts_json": json.dumps(user_alerts),
+        "web_push_title": _("web_push_title", lang),
+        "web_push_desc": _("web_push_desc", lang),
+        "web_push_btn_test": _("web_push_btn_test", lang),
         "i18n_json": json.dumps(i18n_data),
     }
 

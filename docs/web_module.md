@@ -47,10 +47,10 @@ core/messaging.py (Telegram уведомления)
 **Файл:** `/opt/tg-bot/core/web/api_system.py`
 
 ```python
-# Добавьте в конец файла перед определением маршрутов
+# Add to the end of the file before route definitions
 @routes.post("/api/my-feature")
 async def api_my_feature(request):
-    """Пример авторизованного JSON endpoint."""
+    """Example authorized JSON endpoint."""
     user = get_current_user(request)
     if not user:
         return web.json_response({"error": "Unauthorized"}, status=401)
@@ -114,19 +114,19 @@ async function callMyFeature() {
 </head>
 <body class="bg-gray-100 dark:bg-[#0b1120] min-h-screen transition-colors">
 
-    <!-- Навигация (копируйте из dashboard.html) -->
+    <!-- Navigation (copy from dashboard.html) -->
     <nav class="...">
         <!-- ... -->
     </nav>
 
-    <!-- Ваш контент -->
+    <!-- Custom content -->
     <main class="max-w-7xl mx-auto px-4 pt-20 pb-8">
         <div class="bg-white/60 dark:bg-white/5 backdrop-blur-md border border-white/40 dark:border-white/10 rounded-2xl p-6 shadow-lg dark:shadow-none">
             <h1 class="text-xl font-bold text-gray-900 dark:text-white mb-4">
                 {{ I18N.my_feature_title }}
             </h1>
             <div id="content">
-                <!-- Динамический контент -->
+                <!-- Dynamic content -->
             </div>
         </div>
     </main>
@@ -147,14 +147,14 @@ async function callMyFeature() {
 
 ```python
 async def my_feature_page(request):
-    """Страница вашей фичи."""
+    """Feature page view."""
     user = get_current_user(request)
     if not user:
         raise web.HTTPFound("/login")
 
     lang = get_user_lang(user["id"])
 
-    # Собираем строки для i18n на фронтенде
+    # Collect strings for frontend i18n
     i18n_keys = ["my_feature_title", "my_feature_desc"]
     i18n_data = {k: get_text(k, lang) for k in i18n_keys}
 
@@ -217,7 +217,7 @@ function renderContent(data) {
 ### Отправка уведомления из WebUI в Telegram
 
 ```python
-# В вашем API-хендлере (core/web/api_system.py)
+# In your API handler (core/web/api_system.py)
 from core.messaging import send_alert
 from core.rbac import is_admin
 from core.web.auth import get_current_user
@@ -241,18 +241,18 @@ async def api_my_action(request):
 ### Отправка данных из бота в WebUI (через SSE)
 
 ```python
-# В вашем модуле (modules/my_feature.py)
+# In your module (modules/my_feature.py)
 from core.shared_state import WEB_NOTIFICATIONS
 import time
 
 async def my_feature_handler(message):
-    # ... ваша логика ...
+    # ... your logic ...
 
-    # Отправляем событие в WebUI через SSE
+    # Send event to WebUI via SSE
     WEB_NOTIFICATIONS.append({
         "type": "my_feature",
-        "title": "Событие из бота",
-        "message": "Действие выполнено через Telegram",
+        "title": "Event from bot",
+        "message": "Action performed via Telegram",
         "timestamp": time.time()
     })
 ```
@@ -260,7 +260,7 @@ async def my_feature_handler(message):
 ### Чтение общего состояния
 
 ```python
-# В WebUI API (core/web/api_system.py)
+# In WebUI API (core/web/api_system.py)
 from core.shared_state import ALERTS_CONFIG, ALLOWED_USERS
 
 async def api_get_status(request):
@@ -275,10 +275,10 @@ async def api_get_status(request):
 ```
 
 ```python
-# В модуле бота (modules/my_feature.py)
+# In bot module (modules/my_feature.py)
 from core.shared_state import WEB_NOTIFICATIONS
 
-# Бот может читать уведомления WebUI и наоборот
+# Bot can read WebUI notifications and vice versa
 ```
 
 ---

@@ -420,7 +420,7 @@ async def cq_toggle_node_alert(callback: types.CallbackQuery):
 
 async def get_ip_data(ip: str):
     """
-    Получает флаг страны и смещение часового пояса (в секундах) для IP.
+    Retrieves country flag and timezone offset (in seconds) for an IP address.
     """
     if not ip or ip in ["localhost", "127.0.0.1", "::1"]:
         return "🏠", None

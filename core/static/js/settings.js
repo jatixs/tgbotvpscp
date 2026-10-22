@@ -43,8 +43,8 @@ window.initSettings = function () {
     initSystemSettingsTracking();
     renderKeyboardConfig();
     updateBulkButtonsUI();
-    initChangePasswordUI();
     fetchSessions();
+    initPushNotificationsUI();
 
     // initInputScrollLogic(); 
 
@@ -1029,6 +1029,232 @@ async function changePassword() {
     btn.disabled = false;
     btn.innerText = origText;
 }
+
+// --- WEB PUSH NOTIFICATIONS LOGIC ---
+
+function urlBase64ToUint8Array(base64String) {
+    const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
+    const base64 = (base64String + padding)
+        .replace(/\-/g, '+')
+        .replace(/_/g, '/');
+    const rawData = window.atob(base64);
+    const outputArray = new Uint8Array(rawData.length);
+    for (let i = 0; i < rawData.length; ++i) {
+        outputArray[i] = rawData.charCodeAt(i);
+    }
+    return outputArray;
+}
+
+function arrayBufferToBase64Url(buffer) {
+    if (!buffer) return '';
+    const bytes = new Uint8Array(buffer);
+    let binary = '';
+    for (let i = 0; i < bytes.byteLength; i++) {
+        binary += String.fromCharCode(bytes[i]);
+    }
+    return window.btoa(binary)
+        .replace(/\+/g, '-')
+        .replace(/\//g, '_')
+        .replace(/=+$/, '');
+}
+
+async function getSwRegistration() {
+    if (window.swRegistration) return window.swRegistration;
+    if ('serviceWorker' in navigator) {
+        try {
+            return await navigator.serviceWorker.ready;
+        } catch (e) {
+            console.debug('Failed to get SW ready:', e);
+        }
+    }
+    return null;
+}
+
+async function initPushNotificationsUI() {
+    const toggle = document.getElementById('pushNotificationToggle');
+    const badge = document.getElementById('pushStatusBadge');
+    const testBtn = document.getElementById('sendTestPushBtn');
+    const warning = document.getElementById('pushHintWarning');
+
+    if (!toggle || !badge) return;
+
+    const isSupported = ('serviceWorker' in navigator) && ('PushManager' in window) && ('Notification' in window);
+    const isSecure = window.isSecureContext || window.location.protocol === 'https:' || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+
+    if (!isSupported || !isSecure) {
+        toggle.disabled = true;
+        if (testBtn) testBtn.disabled = true;
+        badge.textContent = (typeof I18N !== 'undefined' && I18N.web_push_status_unsupported) ? I18N.web_push_status_unsupported : 'Unsupported / HTTPS required';
+        badge.className = 'px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400';
+        if (warning) {
+            warning.textContent = (typeof I18N !== 'undefined' && I18N.web_push_status_unsupported) ? I18N.web_push_status_unsupported : 'Web Push requires HTTPS or localhost';
+            warning.classList.remove('hidden');
+        }
+        return;
+    }
+
+    if (Notification.permission === 'denied') {
+        toggle.checked = false;
+        toggle.disabled = false;
+        if (testBtn) testBtn.disabled = true;
+        badge.textContent = (typeof I18N !== 'undefined' && I18N.web_push_status_blocked) ? I18N.web_push_status_blocked : 'Blocked';
+        badge.className = 'px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300';
+        if (warning) {
+            warning.textContent = (typeof I18N !== 'undefined' && I18N.web_push_permission_denied) ? I18N.web_push_permission_denied : 'Permission denied in browser settings';
+            warning.classList.remove('hidden');
+        }
+        return;
+    }
+
+    try {
+        const reg = await getSwRegistration();
+        const sub = reg ? await reg.pushManager.getSubscription() : null;
+        if (sub) {
+            toggle.checked = true;
+            if (testBtn) testBtn.disabled = false;
+            badge.textContent = (typeof I18N !== 'undefined' && I18N.web_push_status_active) ? I18N.web_push_status_active : 'Active';
+            badge.className = 'px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300';
+            if (warning) warning.classList.add('hidden');
+        } else {
+            toggle.checked = false;
+            if (testBtn) testBtn.disabled = true;
+            badge.textContent = (typeof I18N !== 'undefined' && I18N.web_push_status_inactive) ? I18N.web_push_status_inactive : 'Disabled';
+            badge.className = 'px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-gray-200 text-gray-600 dark:bg-gray-700 dark:text-gray-300';
+            if (warning) warning.classList.add('hidden');
+        }
+    } catch (e) {
+        console.debug('Error checking push subscription:', e);
+    }
+}
+window.initPushNotificationsUI = initPushNotificationsUI;
+
+async function togglePushNotifications(checkbox) {
+    const badge = document.getElementById('pushStatusBadge');
+    const testBtn = document.getElementById('sendTestPushBtn');
+    const warning = document.getElementById('pushHintWarning');
+
+    checkbox.disabled = true;
+
+    if (checkbox.checked) {
+        try {
+            const permission = await Notification.requestPermission();
+            if (permission !== 'granted') {
+                checkbox.checked = false;
+                checkbox.disabled = false;
+                if (badge) {
+                    badge.textContent = (typeof I18N !== 'undefined' && I18N.web_push_status_blocked) ? I18N.web_push_status_blocked : 'Blocked';
+                    badge.className = 'px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300';
+                }
+                if (window.showToast) window.showToast((typeof I18N !== 'undefined' && I18N.web_push_permission_denied) ? I18N.web_push_permission_denied : 'Permission denied', 'warning');
+                return;
+            }
+
+            const resp = await fetch('/api/push/vapid-key');
+            const data = await resp.json();
+            if (!data || !data.publicKey) {
+                throw new Error(data?.error || 'Failed to get VAPID key');
+            }
+
+            const reg = await getSwRegistration();
+            if (!reg) throw new Error('Service Worker not ready');
+
+            const sub = await reg.pushManager.subscribe({
+                userVisibleOnly: true,
+                applicationServerKey: urlBase64ToUint8Array(data.publicKey)
+            });
+
+            const subPayload = {
+                endpoint: sub.endpoint,
+                keys: {
+                    p256dh: arrayBufferToBase64Url(sub.getKey('p256dh')),
+                    auth: arrayBufferToBase64Url(sub.getKey('auth'))
+                }
+            };
+
+            const saveResp = await fetch('/api/push/subscribe', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(subPayload)
+            });
+
+            if (saveResp.ok) {
+                if (badge) {
+                    badge.textContent = (typeof I18N !== 'undefined' && I18N.web_push_status_active) ? I18N.web_push_status_active : 'Active';
+                    badge.className = 'px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300';
+                }
+                if (testBtn) testBtn.disabled = false;
+                if (warning) warning.classList.add('hidden');
+                if (window.showToast) window.showToast((typeof I18N !== 'undefined' && I18N.web_push_subscribed) ? I18N.web_push_subscribed : 'Push notifications enabled!');
+            } else {
+                throw new Error('Failed to save push subscription');
+            }
+        } catch (e) {
+            console.error('Push subscribe error:', e);
+            checkbox.checked = false;
+            if (window.showToast) window.showToast(String(e.message || e), 'error');
+        } finally {
+            checkbox.disabled = false;
+        }
+    } else {
+        try {
+            const reg = await getSwRegistration();
+            if (reg) {
+                const sub = await reg.pushManager.getSubscription();
+                if (sub) {
+                    const endpoint = sub.endpoint;
+                    await sub.unsubscribe();
+                    await fetch('/api/push/unsubscribe', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ endpoint })
+                    });
+                }
+            }
+            if (badge) {
+                badge.textContent = (typeof I18N !== 'undefined' && I18N.web_push_status_inactive) ? I18N.web_push_status_inactive : 'Disabled';
+                badge.className = 'px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-gray-200 text-gray-600 dark:bg-gray-700 dark:text-gray-300';
+            }
+            if (testBtn) testBtn.disabled = true;
+            if (window.showToast) window.showToast((typeof I18N !== 'undefined' && I18N.web_push_unsubscribed) ? I18N.web_push_unsubscribed : 'Push notifications disabled');
+        } catch (e) {
+            console.error('Push unsubscribe error:', e);
+            if (window.showToast) window.showToast(String(e.message || e), 'error');
+        } finally {
+            checkbox.disabled = false;
+        }
+    }
+}
+window.togglePushNotifications = togglePushNotifications;
+
+async function sendTestPushNotification(btn) {
+    if (!btn) return;
+    const origHtml = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = `<svg class="animate-spin h-3.5 w-3.5 text-blue-500 inline-block mr-1" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>...`;
+
+    try {
+        const resp = await fetch('/api/push/test', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({})
+        });
+        const data = await resp.json();
+        if (data && data.status === 'ok') {
+            if (window.showToast) window.showToast((typeof I18N !== 'undefined' && I18N.web_push_test_success) ? I18N.web_push_test_success : 'Test notification sent!');
+        } else if (data && data.status === 'no_subscriptions') {
+            if (window.showToast) window.showToast((typeof I18N !== 'undefined' && I18N.web_push_test_fail) ? I18N.web_push_test_fail : 'No active subscriptions', 'warning');
+        } else {
+            throw new Error(data?.error || 'Failed to send test push');
+        }
+    } catch (e) {
+        console.error('Test push error:', e);
+        if (window.showToast) window.showToast(String(e.message || e), 'error');
+    } finally {
+        btn.innerHTML = origHtml;
+        btn.disabled = false;
+    }
+}
+window.sendTestPushNotification = sendTestPushNotification;
 
 // --- NOTIFICATIONS MENU LOGIC ---
 let currentNodeForNotif = null;

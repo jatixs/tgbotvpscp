@@ -11,8 +11,8 @@ class EncryptionOperationError(ValueError):
 
 class EncryptedTextField(fields.TextField):
     """
-    Пользовательское поле Tortoise ORM для прозрачного шифрования текстовых данных.
-    Значения шифруются при записи в БД и расшифровываются при чтении.
+    Tortoise ORM custom field for transparent encryption of text data.
+    Values are encrypted when writing to the database and decrypted when reading.
     """
 
     def to_db_value(self, value, instance):
@@ -36,8 +36,8 @@ class EncryptedTextField(fields.TextField):
 
 class Node(models.Model):
     """
-    Модель узла (сервера), подключенного к мастер-боту.
-    Содержит информацию о конфигурации, статистике потребления ресурсов и биллинге.
+    Node (server) model connected to the master bot.
+    Contains configuration info, resource consumption stats, and billing details.
     """
     id = fields.IntField(pk=True)
     token_hash = fields.CharField(max_length=64, unique=True, index=True)
@@ -63,9 +63,9 @@ class Node(models.Model):
 
 class MetricSample(models.Model):
     """
-    Точка истории ресурсов агента или ноды.
-    res = 0 — сырой замер, 60/300 — усреднённые минутные/пятиминутные корзины.
-    rx/tx хранятся как скорость в байтах в секунду.
+    Resource history sample for an agent or node.
+    res = 0 — raw sample, 60/300 — averaged 1-minute/5-minute buckets.
+    rx/tx are stored as speed in bytes per second.
     """
     id = fields.BigIntField(pk=True)
     source = fields.CharField(max_length=32)
@@ -80,3 +80,21 @@ class MetricSample(models.Model):
     class Meta:
         table = "metric_samples"
         indexes = (("source", "res", "t"),)
+
+
+class WebPushSubscription(models.Model):
+    """
+    Browser / PWA subscription for Web Push notifications.
+    Stores push endpoint and cryptographic keys (p256dh, auth).
+    """
+    id = fields.IntField(pk=True)
+    user_id = fields.BigIntField(index=True)
+    endpoint = fields.TextField()
+    p256dh = fields.TextField()
+    auth = fields.TextField()
+    user_agent = fields.CharField(max_length=255, null=True)
+    created_at = fields.FloatField(default=time.time)
+
+    class Meta:
+        table = "web_push_subscriptions"
+

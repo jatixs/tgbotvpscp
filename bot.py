@@ -1,6 +1,6 @@
 """
-Главный файл запуска Telegram-бота.
-Инициализирует диспетчер, подключает middlewares, оркестратор и запускает поллинг.
+Main launch file for the Telegram bot.
+Initializes the dispatcher, attaches middlewares, orchestrator, and starts polling.
 """
 import asyncio
 import logging

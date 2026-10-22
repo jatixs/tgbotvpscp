@@ -1,6 +1,6 @@
 """
-Инициализация и запуск aiohttp веб-сервера (WebUI).
-Настраивает маршрутизацию, CORS, шаблонизатор Jinja2 и статические файлы.
+Initialization and startup of the aiohttp web server (WebUI).
+Configures routing, CORS, Jinja2 template engine, and static file serving.
 """
 from __future__ import annotations
 

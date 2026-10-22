@@ -1,6 +1,6 @@
 """
-REST API контроллеры для системных настроек.
-Обрабатывают изменение конфигурации панели, управление сессиями и аутентификацией.
+REST API controllers for system settings.
+Handles panel configuration changes, session management, and authentication.
 """
 from __future__ import annotations
 
@@ -500,6 +500,112 @@ async def api_reset_agent_uptime(request: web.Request) -> web.StreamResponse:
     except Exception as exc:
         logging.error("Internal API error: %s", exc)
         return encrypted_json_response({"error": "Internal Server Error"}, status=500)
+
+
+@routes.get("/api/push/vapid-key")
+async def api_get_vapid_key(request: web.Request) -> web.StreamResponse:
+    user = get_current_user(request)
+    if not user:
+        return encrypted_json_response({"error": "Unauthorized"}, status=401)
+
+    try:
+        from .webpush import get_vapid_public_key
+        public_key = await get_vapid_public_key()
+        return encrypted_json_response({"status": "ok", "publicKey": public_key})
+    except Exception as exc:
+        logging.error("Failed to get VAPID key: %s", exc)
+        return encrypted_json_response({"error": "Internal Server Error"}, status=500)
+
+
+@routes.post("/api/push/subscribe")
+async def api_push_subscribe(request: web.Request) -> web.StreamResponse:
+    user = get_current_user(request)
+    if not user:
+        return encrypted_json_response({"error": "Unauthorized"}, status=401)
+
+    try:
+        data = await decrypt_request_payload(request)
+        endpoint = (data.get("endpoint") or "").strip()
+        keys = data.get("keys") or {}
+        p256dh = (keys.get("p256dh") or "").strip()
+        auth = (keys.get("auth") or "").strip()
+
+        if not endpoint or not p256dh or not auth:
+            return encrypted_json_response({"error": "Missing subscription parameters"}, status=400)
+
+        user_id = int(user["id"])
+        ua = request.headers.get("User-Agent", "")[:250]
+
+        from ..models import WebPushSubscription
+        await WebPushSubscription.update_or_create(
+            endpoint=endpoint,
+            defaults={
+                "user_id": user_id,
+                "p256dh": p256dh,
+                "auth": auth,
+                "user_agent": ua,
+                "created_at": time.time(),
+            },
+        )
+        return encrypted_json_response({"status": "ok"})
+    except Exception as exc:
+        logging.error("Failed to subscribe push: %s", exc)
+        return encrypted_json_response({"error": "Internal Server Error"}, status=500)
+
+
+@routes.post("/api/push/unsubscribe")
+async def api_push_unsubscribe(request: web.Request) -> web.StreamResponse:
+    user = get_current_user(request)
+    if not user:
+        return encrypted_json_response({"error": "Unauthorized"}, status=401)
+
+    try:
+        data = await decrypt_request_payload(request)
+        endpoint = (data.get("endpoint") or "").strip()
+        if endpoint:
+            user_id = int(user["id"])
+            from ..models import WebPushSubscription
+            await WebPushSubscription.filter(endpoint=endpoint, user_id=user_id).delete()
+
+        return encrypted_json_response({"status": "ok"})
+    except Exception as exc:
+        logging.error("Failed to unsubscribe push: %s", exc)
+        return encrypted_json_response({"error": "Internal Server Error"}, status=500)
+
+
+@routes.post("/api/push/test")
+async def api_push_test(request: web.Request) -> web.StreamResponse:
+    user = get_current_user(request)
+    if not user:
+        return encrypted_json_response({"error": "Unauthorized"}, status=401)
+
+    try:
+        user_id = int(user["id"])
+        from .webpush import send_test_push_to_user
+        sent, total = await send_test_push_to_user(user_id)
+        if total == 0:
+            return encrypted_json_response({"status": "no_subscriptions", "sent": 0, "total": 0})
+        return encrypted_json_response({"status": "ok", "sent": sent, "total": total})
+    except Exception as exc:
+        logging.error("Failed to send test push: %s", exc)
+        return encrypted_json_response({"error": "Internal Server Error"}, status=500)
+
+
+@routes.get("/api/push/status")
+async def api_push_status(request: web.Request) -> web.StreamResponse:
+    user = get_current_user(request)
+    if not user:
+        return encrypted_json_response({"error": "Unauthorized"}, status=401)
+
+    try:
+        user_id = int(user["id"])
+        from ..models import WebPushSubscription
+        count = await WebPushSubscription.filter(user_id=user_id).count()
+        return encrypted_json_response({"status": "ok", "enabled": count > 0, "count": count})
+    except Exception as exc:
+        logging.error("Failed to check push status: %s", exc)
+        return encrypted_json_response({"error": "Internal Server Error"}, status=500)
+
 
 
 __all__ = [

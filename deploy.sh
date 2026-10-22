@@ -200,7 +200,7 @@ NODE_OP_UPDATE=""
 
 op_header() { echo -e "\n${C_BOLD}=== $1 ===${C_RESET}"; }
 
-# "НОДЫ" / "АГЕНТА" — genitive label of what is currently installed.
+# "NODE" / "AGENT" — label of what is currently installed.
 target_label() {
     if [ -f "${ENV_FILE}" ] && grep -q "MODE=node" "${ENV_FILE}"; then echo "НОДЫ"; else echo "АГЕНТА"; fi
 }
@@ -211,7 +211,7 @@ mode_label() {
     echo "${runtime} - ${m}"
 }
 
-# "Установка АГЕНТА (Systemd - Secure)" on a clean host, "Переустановка …" over an existing install.
+# "Install AGENT (Systemd - Secure)" on a clean host, "Reinstall …" over an existing install.
 agent_install_header() {
     local verb="Установка"
     if [ -d "${BOT_INSTALL_PATH}" ] && [ -f "${ENV_FILE}" ]; then verb="Переустановка"; fi
@@ -347,7 +347,7 @@ nginx_check() {
     output=$(sudo nginx -t 2>&1) || { printf '%s\n' "${output}" >&2; return 1; }
 }
 
-# Проверяет хост, срок действия и соответствие ключа сертификату.
+# Validates host, expiration, and key-certificate matching.
 tls_pair_valid() {
     local cert="$1" key="$2" seconds="$3" check_flag="-checkhost" cert_hash key_hash
     command -v openssl >/dev/null 2>&1 || return 1
@@ -360,7 +360,7 @@ tls_pair_valid() {
     [ -n "${cert_hash}" ] && [ "${cert_hash}" == "${key_hash}" ]
 }
 
-# Ищет готовую пару в конфигурации Nginx (включая свои и Cloudflare-сертификаты) и в Certbot.
+# Searches for a ready pair in Nginx configuration (including custom and Cloudflare certificates) and in Certbot.
 tls_find_certificate() {
     local min_seconds="$1" pair cert key
     local candidates=()
@@ -661,7 +661,7 @@ EOF
 
     local certbot_cmd="${CERTBOT_CMD:-$(command -v certbot 2>/dev/null || true)}"
     if [ "${TLS_KIND}" == "ip" ] && [ -x /snap/bin/certbot ]; then certbot_cmd="/snap/bin/certbot"; fi
-    # Внешние сертификаты (не из /etc/letsencrypt) продлеваются их владельцем.
+    # External certificates (not from /etc/letsencrypt) are renewed by their owner.
     if [[ "${TLS_CERT_FILE}" == /etc/letsencrypt/live/* ]] && [ -n "${certbot_cmd}" ]; then
         sudo mkdir -p /etc/letsencrypt/renewal-hooks/deploy
         sudo tee /etc/letsencrypt/renewal-hooks/deploy/50-tgbot-nginx-reload >/dev/null <<'EOF'
@@ -825,7 +825,7 @@ download_vendor_assets() {
             echo "  ⚠ CDN недоступен: ${url}" >> /tmp/${SERVICE_NAME}_install.log
         done
 
-        # 3. Если обновление с CDN не удалось, но у нас есть копия из репозитория — восстанавливаем её
+        # 3. If update from CDN fails, but we have a copy from the repository — restore it
         if [ "$updated" = false ]; then
             if [ -n "${backup_tmp}" ] && [ -s "${backup_tmp}" ]; then
                 sudo cp -f "${backup_tmp}" "${dest}" 2>/dev/null || true
@@ -2171,7 +2171,7 @@ manage_alert_module() {
     fi
 
     if [ -n "$current_token" ]; then
-        # Токен уже задан — предлагаем удалить модуль
+        # Token already set — prompt to remove module
         echo -e "  ${C_GREEN}✅ Alert Bot активен (токен задан)${C_RESET}"
         echo ""
         echo -e "  ${C_YELLOW}Вы хотите удалить (деактивировать) Alert-модуль?${C_RESET}"
@@ -2179,10 +2179,10 @@ manage_alert_module() {
         echo ""
         read -p "$(echo -e "${C_BOLD}Подтвердить удаление? (y/n): ${C_RESET}")" confirm
         if [[ "$confirm" =~ ^[Yy]$ ]]; then
-            # Удаляем строку ALERT_BOT_TOKEN из .env
+            # Remove ALERT_BOT_TOKEN line from .env
             sed -i '/^ALERT_BOT_TOKEN=/d' "${ENV_FILE}"
             msg_success "ALERT_BOT_TOKEN удалён из .env"
-            # Перезапускаем сервис для применения изменений
+            # Restart service to apply changes
             if systemctl is-active --quiet "${SERVICE_NAME}"; then
                 msg_info "Перезапуск сервиса ${SERVICE_NAME}..."
                 sudo systemctl restart "${SERVICE_NAME}"
@@ -2194,7 +2194,7 @@ manage_alert_module() {
             msg_info "Отменено."
         fi
     else
-        # Токен не задан — предлагаем установить
+        # Token not set — prompt to configure
         echo -e "  ${C_YELLOW}⚠️  Alert Bot не активирован (ALERT_BOT_TOKEN не задан)${C_RESET}"
         echo ""
         echo "  Для активации нужен токен отдельного Telegram-бота."
@@ -2205,15 +2205,15 @@ manage_alert_module() {
             msg_info "Отменено."
             return
         fi
-        # Базовая проверка формата токена (цифры:строка)
+        # Basic token format check (digits:string)
         if ! echo "$new_token" | grep -qE '^[0-9]+:[A-Za-z0-9_-]{35,}$'; then
             msg_error "Некорректный формат токена. Ожидается: 123456789:ABCdef..."
             return
         fi
-        # Сохраняем токен в .env
+        # Save token to .env
         echo "ALERT_BOT_TOKEN=\"${new_token}\"" >> "${ENV_FILE}"
         msg_success "ALERT_BOT_TOKEN сохранён в .env"
-        # Перезапускаем сервис
+        # Restart service
         if systemctl is-active --quiet "${SERVICE_NAME}"; then
             msg_info "Перезапуск сервиса ${SERVICE_NAME}..."
             sudo systemctl restart "${SERVICE_NAME}"
@@ -2342,7 +2342,7 @@ main_menu() {
             echo -e "${C_YELLOW}  8) Мониторинг агента (${monitoring_status})${C_RESET}"
         fi
 
-        # Пункт Alert-модуля — только для не-нодового режима
+        # Alert module menu item — non-node mode only
         if [ "$IS_NODE" != "yes" ]; then
             local alert_status="не активен"
             if [ -f "${ENV_FILE}" ] && grep -q '^ALERT_BOT_TOKEN=' "${ENV_FILE}"; then

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Утилита командной строки (CLI) для управления проектом.
-Позволяет добавлять администраторов, сбрасывать пароли, очищать логи и управлять системными службами.
+Command-line interface (CLI) utility for project management.
+Allows adding administrators, resetting passwords, clearing logs, and managing system services.
 """
 import argparse
 import asyncio

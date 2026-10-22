@@ -1,6 +1,6 @@
 """
-Утилита миграции базы данных и конфигурации.
-Обеспечивает безопасное обновление схемы БД и шифрование данных при апгрейде.
+Database and configuration migration utility.
+Ensures safe schema migrations and data encryption during upgrades.
 """
 import json
 import logging
@@ -36,8 +36,8 @@ def save_encrypted(path: str, data: dict):
 
 def cleanup_backups():
     """
-    Удаляет файлы .bak в папке config, если они существуют.
-    Вызывается только после успешной миграции.
+    Deletes .bak files in config directory if they exist.
+    Called only after a successful migration.
     """
     logger.info("🧹 Cleaning up backup files...")
     count = 0
@@ -96,8 +96,8 @@ def migrate_file(filename: str):
 
 def ensure_env_variables():
     """
-    Проверяет .env файл на наличие всех необходимых переменных.
-    Добавляет недостающие переменные с значениями по умолчанию.
+    Checks the .env file for all required variables.
+    Adds missing variables with default values.
     """
     env_file = os.path.join(config.BASE_DIR, ".env")
     
@@ -167,9 +167,9 @@ def ensure_env_variables():
 
 def migrate_metadata():
     """
-    Проверяет и восстанавливает WEB_METADATA в system_config.json.
-    Если структура нарушена или ключи отсутствуют - сбрасывает/дополняет до дефолтных.
-    Поддерживает флаг --reset-meta для принудительного сброса.
+    Validates and restores WEB_METADATA in system_config.json.
+    If the structure is corrupted or keys are missing, resets/supplements to defaults.
+    Supports --reset-meta flag for forced reset.
     """
     logger.info("🔍 Checking WebUI Metadata consistency...")
     force_reset = "--reset-meta" in sys.argv
