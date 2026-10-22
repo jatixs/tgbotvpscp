@@ -1286,7 +1286,11 @@
         }
         function openVncTerminal(ip) {
             closeVncModal();
-            window.open('/terminal?ip=' + encodeURIComponent(ip), '_blank');
+            if (!ip || ip === 'Loading...' || ip === 'Unknown' || ip === '-') {
+                window.open('/terminal', '_blank');
+            } else {
+                window.open('/terminal?ip=' + encodeURIComponent(ip), '_blank');
+            }
         }
     </script>
 </body>

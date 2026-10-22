@@ -72,11 +72,7 @@ def _get_avatar_html(user: dict[str, Any]) -> str:
     return f'<span class="text-lg leading-none select-none">{raw}</span>'
 
 
-def _agent_ip() -> str:
-    return str(getattr(shared_state, "AGENT_IP_CACHE", "Loading..."))
-
-
-def _collect_ipv4_addresses() -> list[str]:
+def _collect_raw_ipv4_addresses() -> list[str]:
     ips: list[str] = []
 
     try:
@@ -102,8 +98,23 @@ def _collect_ipv4_addresses() -> list[str]:
         except Exception:
             pass
 
+    return list(dict.fromkeys(ips))
+
+
+def _agent_ip() -> str:
+    cached = str(getattr(shared_state, "AGENT_IP_CACHE", "")).strip()
+    if cached and cached not in {"Loading...", "Unknown", "-", "None"}:
+        return cached
+    local_ips = _collect_raw_ipv4_addresses()
+    if local_ips:
+        return local_ips[0]
+    return "127.0.0.1"
+
+
+def _collect_ipv4_addresses() -> list[str]:
+    ips = _collect_raw_ipv4_addresses()
     primary_ip = _agent_ip()
-    if primary_ip not in {"", "Loading...", "Unknown", "-"}:
+    if primary_ip not in {"", "Loading...", "Unknown", "-", "None"}:
         ips.insert(0, primary_ip)
 
     return list(dict.fromkeys(ips))
@@ -236,7 +247,9 @@ async def handle_terminal_page(request: web.Request) -> web.StreamResponse:
         raise web.HTTPFound("/")
 
     lang = get_user_lang(int(user["id"]))
-    prefill_ip = request.query.get("ip", "")
+    prefill_ip = request.query.get("ip", "").strip()
+    if not prefill_ip or prefill_ip in {"Loading...", "Unknown", "-", "None"}:
+        prefill_ip = _agent_ip()
     custom_title = getattr(current_config, "WEB_METADATA", {}).get("title", "")
     page_title = custom_title if custom_title else f"{_('web_terminal_title', lang)} - {TG_BOT_NAME}"
 
@@ -259,11 +272,41 @@ async def handle_terminal_page(request: web.Request) -> web.StreamResponse:
         "web_terminal_key_auth": _("web_terminal_key_auth", lang),
         "web_terminal_key": _("web_terminal_key", lang),
         "web_terminal_key_select": _("web_terminal_key_select", lang),
+        "web_terminal_passphrase": _("web_terminal_passphrase", lang),
+        "web_terminal_passphrase_title": _("web_terminal_passphrase_title", lang),
+        "web_terminal_passphrase_desc": _("web_terminal_passphrase_desc", lang),
+        "web_terminal_passphrase_submit": _("web_terminal_passphrase_submit", lang),
+        "web_terminal_passphrase_set": _("web_terminal_passphrase_set", lang),
+        "web_terminal_passphrase_clear": _("web_terminal_passphrase_clear", lang),
+        "modal_btn_cancel": _("modal_btn_cancel", lang),
         "web_terminal_remember": _("web_terminal_remember", lang),
         "web_terminal_status_disconnected": _("web_terminal_status_disconnected", lang),
         "web_terminal_status_connecting": _("web_terminal_status_connecting", lang),
         "web_terminal_status_connected": _("web_terminal_status_connected", lang),
         "web_terminal_error": _("web_terminal_error", lang),
+        "web_terminal_copy": _("web_terminal_copy", lang),
+        "web_terminal_cut": _("web_terminal_cut", lang),
+        "web_terminal_paste": _("web_terminal_paste", lang),
+        "web_hotkey_rmb": _("web_hotkey_rmb", lang),
+        "web_hotkey_context_menu": _("web_hotkey_context_menu", lang),
+        "web_btn_got_it": _("web_btn_got_it", lang),
+        "web_optional": _("web_optional", lang),
+        "web_toggle_visibility": _("web_toggle_visibility", lang),
+        "web_terminal_banner": _("web_terminal_banner", lang),
+        "web_terminal_welcome_hint": _("web_terminal_welcome_hint", lang),
+        "web_terminal_connecting_to": _("web_terminal_connecting_to", lang),
+        "web_terminal_connection_closed": _("web_terminal_connection_closed", lang),
+        "web_terminal_err_ws": _("web_terminal_err_ws", lang),
+        "web_terminal_err_ws_short": _("web_terminal_err_ws_short", lang),
+        "web_terminal_err_invalid_ip": _("web_terminal_err_invalid_ip", lang),
+        "web_terminal_err_invalid_user": _("web_terminal_err_invalid_user", lang),
+        "web_terminal_err_missing_host_user": _("web_terminal_err_missing_host_user", lang),
+        "web_terminal_err_access_denied": _("web_terminal_err_access_denied", lang),
+        "web_terminal_err_invalid_key": _("web_terminal_err_invalid_key", lang),
+        "web_terminal_passphrase_placeholder": _("web_terminal_passphrase_placeholder", lang),
+        "web_terminal_unit_hour": _("web_terminal_unit_hour", lang),
+        "web_terminal_unit_min": _("web_terminal_unit_min", lang),
+        "asset_ver": ASSET_VER,
         "prefill_ip": prefill_ip,
     }
 
@@ -641,6 +684,13 @@ async def handle_nodes_monitor_page(request: web.Request) -> web.StreamResponse:
     from core.config import get_bot_config
     mb_config = await get_bot_config("master_billing") or {}
 
+    all_nodes = await nodes_db.get_all_nodes()
+    vnc_nodes = [{"name": _("web_notif_global_group_agent", lang), "ip": _agent_ip()}]
+    for node_token, node in all_nodes.items():
+        ip = str(node.get("ip", "")).strip()
+        if ip and ip not in {"Unknown", "Loading...", "-"}:
+            vnc_nodes.append({"name": node.get("name", "Unknown"), "ip": ip})
+
     settings_btn = ""
     if is_admin:
         settings_btn = f'<a href="/settings" class="flex items-center justify-center w-8 h-8 rounded-lg hover:bg-black/5 dark:hover:bg-white/10 transition text-gray-600 dark:text-gray-400" title="{_("web_settings_button", lang)}"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg></a>'
@@ -658,6 +708,9 @@ async def handle_nodes_monitor_page(request: web.Request) -> web.StreamResponse:
         "user_role_level": get_role_level(user_id),
         "user_is_admin": is_admin,
         "role_badge": role_badge_html,
+        "vnc_nodes": vnc_nodes,
+        "web_vnc_select_server": _("web_vnc_select_server", lang),
+        "web_vnc_terminal_title": _("web_vnc_terminal_title", lang),
         "web_monitor_title": _("web_nodes_monitor_title", lang),
         "web_mass_actions": _("web_nodes_monitor_mass_actions", lang),
         "web_select_all": _("web_nodes_monitor_select_all", lang),

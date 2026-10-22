@@ -4,6 +4,7 @@ aiosqlite==0.22.1
 aerich==0.9.2
 argon2-cffi==25.1.0
 asyncssh==2.24.0
+bcrypt==4.2.1
 cryptography==50.0.0
 docker==7.1.0
 Jinja2==3.1.6
