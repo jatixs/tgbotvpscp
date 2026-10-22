@@ -137,23 +137,31 @@ def _normalize_host(host: str) -> str:
 
 def _is_local_terminal_stats_target(host: str, agent_ip: str) -> bool:
     normalized_host = _normalize_host(host)
-    if normalized_host in {_normalize_host(agent_ip), "127.0.0.1", "localhost", "::1", "0.0.0.0"}:
-        return True
-
-    local_ips = {_normalize_host(ip) for ip in _collect_local_ips()}
-    if normalized_host in local_ips:
+    if normalized_host in {_normalize_host(agent_ip), "127.0.0.1", "localhost", "::1"}:
         return True
 
     try:
-        return ipaddress.ip_address(normalized_host).is_unspecified
+        ip = ipaddress.ip_address(normalized_host)
+        if ip.is_loopback or ip.is_unspecified:
+            return True
     except ValueError:
-        return False
+        pass
+
+    local_ips = {_normalize_host(ip) for ip in _collect_local_ips()}
+    return normalized_host in local_ips
 
 
 async def _is_allowed_terminal_host(host: str) -> bool:
     normalized_host = _normalize_host(host)
-    if normalized_host in {"127.0.0.1", "localhost", "::1", "0.0.0.0"}:
+    if normalized_host in {"127.0.0.1", "localhost", "::1"}:
         return True
+
+    try:
+        ip = ipaddress.ip_address(normalized_host)
+        if ip.is_loopback or ip.is_unspecified:
+            return True
+    except ValueError:
+        pass
 
     local_ips = {_normalize_host(ip) for ip in _collect_local_ips()}
     if normalized_host in local_ips:

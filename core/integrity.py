@@ -16,13 +16,13 @@ import json
 import logging
 import os
 import re
+import shlex
 import shutil
 import subprocess
 import sys
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
-import re
 
 logger = logging.getLogger("core.integrity")
 
@@ -75,8 +75,22 @@ def _sanitize_branch_name(branch: str) -> str:
     Falls back to 'main' for invalid values.
     """
     value = (branch or "").strip()
-    if not re.fullmatch(r"[A-Za-z0-9._/\-]+", value):
+    if not value or not re.fullmatch(r"[a-zA-Z0-9_][a-zA-Z0-9._/-]*", value):
         return "main"
+    if value.startswith("-") or ".." in value or ":" in value:
+        return "main"
+    return value
+
+
+def _sanitize_git_path(path: str) -> str:
+    """
+    Restrict relative repository paths to a safe subset.
+    """
+    value = (path or "").replace("\\", "/").strip()
+    if not value or not re.fullmatch(r"[a-zA-Z0-9._/-]+", value):
+        raise ValueError(f"Invalid git path: {path}")
+    if value.startswith("-") or ".." in value or ":" in value:
+        raise ValueError(f"Invalid git path traversal: {path}")
     return value
 
 
@@ -104,24 +118,22 @@ def compute_sha256(file_path: Path | str, normalize_text: bool = True) -> str:
     return hashlib.sha256(raw).hexdigest()
 
 
-def _sanitize_git_branch(branch: str) -> str:
-    """Allow only safe git branch/ref-name characters used by this project."""
-    value = (branch or "").strip()
-    if not value:
-        return "main"
-    if not re.fullmatch(r"[A-Za-z0-9._/\-]+", value):
-        return "main"
-    return value
-
-
 def get_git_remote_blob(
     rel_path: str, branch: str = "main", repo_root: Path | str = "."
 ) -> Optional[bytes]:
     """Retrieve raw file content from git upstream origin/{branch}:{rel_path}."""
-    branch = _sanitize_branch_name(branch)
-    git_path = rel_path.replace("\\", "/")
-    safe_branch = _sanitize_git_branch(branch)
-    cmd = ["git", "show", f"origin/{safe_branch}:{git_path}"]
+    safe_branch = _sanitize_branch_name(branch)
+    if not re.fullmatch(r"[a-zA-Z0-9_][a-zA-Z0-9._/-]*", safe_branch):
+        safe_branch = "main"
+
+    try:
+        clean_path = _sanitize_git_path(rel_path)
+    except ValueError as e:
+        logger.debug(f"Rejecting invalid path in get_git_remote_blob: {e}")
+        return None
+
+    target_ref = shlex.quote(f"origin/{safe_branch}:{clean_path}")
+    cmd = ["git", "show", target_ref]
     try:
         res = subprocess.run(
             cmd,
@@ -141,8 +153,12 @@ def get_git_tracked_files(
     repo_root: Path | str = ".", branch: str = "main"
 ) -> List[str]:
     """List tracked files from origin/{branch}."""
-    branch = _sanitize_branch_name(branch)
-    cmd = ["git", "ls-tree", "-r", "--name-only", f"origin/{branch}"]
+    safe_branch = _sanitize_branch_name(branch)
+    if not re.fullmatch(r"[a-zA-Z0-9_][a-zA-Z0-9._/-]*", safe_branch):
+        safe_branch = "main"
+
+    target_ref = shlex.quote(f"origin/{safe_branch}")
+    cmd = ["git", "ls-tree", "-r", "--name-only", target_ref, "--"]
     try:
         res = subprocess.run(
             cmd,
@@ -308,15 +324,19 @@ def check_project_integrity(
     """
     Perform a complete SHA-256 integrity check of local project files against origin/{branch}.
     """
-    branch = _sanitize_branch_name(branch)
+    safe_branch = _sanitize_branch_name(branch)
+    if not re.fullmatch(r"[a-zA-Z0-9_][a-zA-Z0-9._/-]*", safe_branch):
+        safe_branch = "main"
+    branch = safe_branch
     root = Path(repo_root).resolve()
     now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
     # Fetch latest upstream branch if requested
     if fetch:
         try:
+            target_branch = shlex.quote(branch)
             subprocess.run(
-                ["git", "fetch", "origin", branch],
+                ["git", "fetch", "origin", target_branch, "--"],
                 cwd=str(root),
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
