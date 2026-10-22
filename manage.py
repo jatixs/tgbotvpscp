@@ -365,7 +365,7 @@ def cmd_integrity(args):
         try:
             path = create_custom_module_template(name, repo_root=base_dir)
             print(f"✨ Создан шаблон кастомного модуля: {path}")
-            print(f"   Он автоматически подключится при запуске бота и изолирован от Git!")
+            print("   Он автоматически подключится при запуске бота и изолирован от Git!")
             return 0
         except Exception as e:
             print(f"❌ Ошибка создания модуля: {e}")
@@ -378,7 +378,7 @@ def cmd_integrity(args):
             return 1
         try:
             r_path, t_path = create_custom_web_page_template(name, repo_root=base_dir)
-            print(f"✨ Создан шаблон WebUI страницы:")
+            print("✨ Создан шаблон WebUI страницы:")
             print(f"   Маршрут: {r_path}")
             print(f"   Шаблон:  {t_path}")
             print(f"   URL:     /custom/{name}")

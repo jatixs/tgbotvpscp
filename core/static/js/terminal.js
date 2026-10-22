@@ -3,10 +3,10 @@
     const I18N = window.I18N || {};
 
     if (window.visualViewport) {
-        const updateViewport = () => {
+        function updateViewport() {
             document.body.style.height = window.visualViewport.height + 'px';
             window.scrollTo(0, 0);
-        };
+        }
         window.visualViewport.addEventListener('resize', updateViewport);
         window.visualViewport.addEventListener('scroll', updateViewport);
         updateViewport();
@@ -143,7 +143,7 @@
                         }
                     }
                 }
-            } catch (e) {
+            } catch {
                 // Ignore parse error
             }
         }

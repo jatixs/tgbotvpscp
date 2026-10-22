@@ -303,8 +303,8 @@ async def send_web_push_for_alert(
                     if kwargs:
                         try:
                             raw_text = raw_text.format(**kwargs)
-                        except Exception:
-                            pass
+                        except Exception as e:
+                            logger.debug(f"Failed to format push notification text: {e}")
 
                 body = clean_html_for_push(raw_text)
                 title = _resolve_alert_title(alert_type, lang)

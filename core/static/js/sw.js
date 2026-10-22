@@ -67,7 +67,7 @@ self.addEventListener('push', (event) => {
     if (event.data) {
         try {
             payload = event.data.json();
-        } catch (e) {
+        } catch {
             payload = {
                 title: 'VPS Control Panel',
                 body: event.data.text()

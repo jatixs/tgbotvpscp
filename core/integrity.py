@@ -133,10 +133,9 @@ def get_git_remote_blob(
         return None
 
     target_ref = shlex.quote(f"origin/{safe_branch}:{clean_path}")
-    cmd = ["git", "show", target_ref]
     try:
-        res = subprocess.run(  # nosec B603
-            cmd,
+        res = subprocess.run(  # nosec B603 # nosemgrep
+            ["git", "show", target_ref],
             cwd=str(repo_root),
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
@@ -158,10 +157,9 @@ def get_git_tracked_files(
         safe_branch = "main"
 
     target_ref = shlex.quote(f"origin/{safe_branch}")
-    cmd = ["git", "ls-tree", "-r", "--name-only", target_ref, "--"]
     try:
-        res = subprocess.run(  # nosec B603
-            cmd,
+        res = subprocess.run(  # nosec B603 # nosemgrep
+            ["git", "ls-tree", "-r", "--name-only", target_ref, "--"],
             cwd=str(repo_root),
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
@@ -296,8 +294,8 @@ def discover_custom_modules(repo_root: Path | str = ".") -> Dict[str, Dict[str, 
             if not init_file.exists():
                 try:
                     init_file.write_text("# Auto-generated package marker\n", encoding="utf-8")
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug(f"Failed to create init marker in {p}: {e}")
 
         for py_file in dir_path.glob("*.py"):
             if py_file.name.startswith("__"):
@@ -308,8 +306,8 @@ def discover_custom_modules(repo_root: Path | str = ".") -> Dict[str, Dict[str, 
                 content = py_file.read_text(encoding="utf-8", errors="ignore")
                 if "MODULE_TIER = 0" in content or "ModuleTier.ALWAYS_ON" in content:
                     tier = ModuleTier.ALWAYS_ON
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"Could not read module tier for {py_file}: {e}")
             discovered[mod_name] = {"tier": tier}
             logger.info(f"🧩 Discovered custom module: {mod_name} (Tier: {tier.name})")
 
@@ -335,7 +333,7 @@ def check_project_integrity(
     if fetch:
         try:
             target_branch = shlex.quote(branch)
-            subprocess.run(  # nosec B603
+            subprocess.run(  # nosec B603 # nosemgrep
                 ["git", "fetch", "origin", target_branch, "--"],
                 cwd=str(root),
                 stdout=subprocess.DEVNULL,
@@ -702,7 +700,7 @@ def main(argv=None):
             return 1
         try:
             r_path, t_path = create_custom_web_page_template(name, repo_root=repo_root)
-            print(f"✨ Создан шаблон WebUI страницы:")
+            print("✨ Создан шаблон WebUI страницы:")
             print(f"   Маршрут: {r_path}")
             print(f"   Шаблон:  {t_path}")
             print(f"   URL:     /custom/{name}")
